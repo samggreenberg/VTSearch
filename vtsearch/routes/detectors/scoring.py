@@ -72,6 +72,23 @@ def _dataset_supplies_detector_type(det_data: dict | None, snap: dict) -> bool:
     return detector_dataset_compatible(_detector_type(det_data), _dataset_bound_embedders(snap))
 
 
+def _compatible_detectors(detectors_to_run: list, snap: dict) -> list:
+    """Drop Auto-Find detectors whose locked type the active dataset can't supply.
+
+    Scoring an incompatible detector's labels in a foreign space would be
+    garbage, so they are skipped; a legacy/typeless detector stays (resolved via
+    the score precedence).  Each item is a ``(name, det_data, entry)`` triple.
+    Aborts 400 if the gate leaves nothing to run.
+    """
+    kept = [trip for trip in detectors_to_run if _dataset_supplies_detector_type(trip[1], snap)]
+    if not kept:
+        abort(
+            400,
+            message="No Auto-Find detectors are compatible with the active dataset's embedder types.",
+        )
+    return kept
+
+
 def _type_incompatible_message(det_data: dict | None) -> str:
     """Human-facing 409 message for a type-incompatible detector/dataset pair."""
     from vtscore.embedding.binding import EMBEDDER_TYPE_LABELS  # noqa: PLC0415
@@ -671,21 +688,8 @@ def auto_detect(body: dict):
         abort(400, message=f"No Auto-Find detectors found for media type: {media_type}")
 
     # Type gate: drop Auto-Find detectors whose locked embedder type the active
-    # dataset can't supply - scoring their labels in a foreign space would be
-    # garbage.  (A legacy/typeless detector stays, resolved via the precedence.)
-    detectors_to_run = [
-        (dname, ddata, entry)
-        for (dname, ddata, entry) in detectors_to_run
-        if _dataset_supplies_detector_type(ddata, snap)
-    ]
-    if not detectors_to_run:
-        abort(
-            400,
-            message=(
-                "No Auto-Find detectors are compatible with the active dataset's "
-                "embedder types."
-            ),
-        )
+    # dataset can't supply (see _compatible_detectors).
+    detectors_to_run = _compatible_detectors(detectors_to_run, snap)
 
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
     from vtscore.state.core import get_active_context  # noqa: PLC0415

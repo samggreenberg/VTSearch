@@ -91,9 +91,7 @@ def resolve_detector_embedder_type(requested: str) -> tuple[str, str | None]:
         if not resolved:
             return "", f"unknown embedder type {requested!r}"
         if supplied and resolved not in supplied:
-            return "", (
-                f"{EMBEDDER_TYPE_LABELS[resolved]} embedder type is not bound to this dataset"
-            )
+            return "", (f"{EMBEDDER_TYPE_LABELS[resolved]} embedder type is not bound to this dataset")
         return resolved, None
     if len(supplied) == 1:
         return next(iter(supplied)), None

@@ -233,9 +233,7 @@ class TestCompatibilityGate:
                 "labelset": {"labels": []},
             },
         )
-        entry = register_detector(
-            name="structural-det", media_type="image", embedder_type="structural"
-        )
+        entry = register_detector(name="structural-det", media_type="image", embedder_type="structural")
         # Active dataset binds only a semantic embedder → no structural slot.
         _activate_dataset(["siglip"])
         res = client.post("/api/find-label", json={"detector_id": entry["id"]})
