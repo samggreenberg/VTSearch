@@ -771,9 +771,15 @@ class DetectorLabelsDetailResponseSchema(Schema):
 
 
 class DetectorLabelVoteRequestSchema(Schema):
-    """Body for ``POST /api/detectors/<name>/labels/<element_id>/vote``."""
+    """Body for ``POST /api/detectors/<name>/labels/<element_id>/vote``.
 
-    vote = fields.String(required=True, validate=validate.OneOf(["good", "bad"]))
+    ``target`` is the absolute end state for the element, not a clicked
+    direction: ``"good"`` / ``"bad"`` set the element's label, ``"remove"``
+    drops it from the labelset. Sending an absolute target makes repeated
+    requests from stale tabs idempotent (logical-bug-audit H1).
+    """
+
+    target = fields.String(required=True, validate=validate.OneOf(["good", "bad", "remove"]))
 
 
 class DetectorLabelVoteResponseSchema(Schema):

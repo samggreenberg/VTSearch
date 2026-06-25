@@ -23,7 +23,7 @@ GET  /api/detectors/<name>/labels/<element_id>/thumbnail
     Stream a small thumbnail image for a saved labelset element.
 
 POST /api/detectors/<name>/labels/<element_id>/vote
-    Toggle the label on a saved labelset element.
+    Set a saved labelset element's label to an absolute target.
 
 Migrated to ``flask_smorest`` for the JSON-shaped routes (save, labels-detail,
 vote). ``import-labels`` keeps its plain-Flask route on the same smorest
@@ -578,22 +578,24 @@ def thumbnail_detector_label(name: str, element_id: str):
 @detectors_labels_bp.response(200, DetectorLabelVoteResponseSchema)
 @detectors_labels_bp.alt_response(404, description="Detector or label element not found.")
 def vote_detector_label(body: dict, name: str, element_id: str):
-    """Toggle the label on a saved labelset element.
+    """Set a saved labelset element's label to an absolute target.
 
-    Body: ``{"vote": "good"}`` or ``{"vote": "bad"}``.
+    Body: ``{"target": "good"}``, ``{"target": "bad"}``, or
+    ``{"target": "remove"}``.
 
-    Toggle semantics mirror :func:`~vtsearch.state.toggle_vote`: the same
-    vote on an element with that label removes the element; the opposite
-    vote flips it.  When the element resolves into the active dataset, the
-    detector's in-memory ``good_votes`` / ``bad_votes`` are kept in sync so
-    MLP retraining and learned-sort see the change.
+    Absolute-target semantics mirror :func:`~vtsearch.state.set_vote`:
+    ``"good"`` / ``"bad"`` set the element's label (a re-assert of the
+    current label is an idempotent no-op), ``"remove"`` drops the element.
+    When the element resolves into the active dataset, the detector's
+    in-memory ``good_votes`` / ``bad_votes`` are kept in sync so MLP
+    retraining and learned-sort see the change.
     """
     from vtscore.detectors.labelset_elements import (
         apply_element_vote_in_data,
         resolve_current_dataset_cid,
     )
 
-    vote = body["vote"]
+    target = body["target"]
 
     path = _detector_path(name)
     data = _read_detector(path)
@@ -611,7 +613,7 @@ def vote_detector_label(body: dict, name: str, element_id: str):
 
     cid_before = resolve_current_dataset_cid(pre_elem)
 
-    changed, _updated, action = apply_element_vote_in_data(data, element_id, vote)
+    changed, _updated, action = apply_element_vote_in_data(data, element_id, target)
     if not changed:
         return {"ok": True, "action": action}
 
@@ -619,10 +621,12 @@ def vote_detector_label(body: dict, name: str, element_id: str):
 
     # Mirror into in-memory votes when the element resolves into the active
     # dataset, so the MLP and learned-sort stay aligned with the labelset.
+    # ``set_vote`` takes the same absolute target ("remove" → "none"), so the
+    # mirror stays idempotent under stale-tab duplicates.
     if cid_before is not None:
-        from vtsearch.state import toggle_vote
+        from vtsearch.state import set_vote
 
-        toggle_vote(cid_before, vote)
+        set_vote(cid_before, "none" if target == "remove" else target)
 
     from vtscore.detectors.registry import find_by_name, update_detector
 

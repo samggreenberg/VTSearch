@@ -88,12 +88,12 @@ export class DetectorsCrudApiService {
   voteLabelElement(
     name: string,
     elementId: string,
-    vote: 'good' | 'bad',
+    target: 'good' | 'bad' | 'remove',
   ): Observable<DetectorLabelVoteResponse> {
     return voteDetectorLabel(this.http, this.config.rootUrl, {
       name,
       element_id: elementId,
-      body: { vote },
+      body: { target },
     }).pipe(map((r) => r.body));
   }
 

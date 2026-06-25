@@ -1875,16 +1875,17 @@
       "DetectorLabelVoteRequest": {
         "additionalProperties": false,
         "properties": {
-          "vote": {
+          "target": {
             "enum": [
               "good",
-              "bad"
+              "bad",
+              "remove"
             ],
             "type": "string"
           }
         },
         "required": [
-          "vote"
+          "target"
         ],
         "type": "object"
       },
@@ -10760,7 +10761,7 @@
         }
       ],
       "post": {
-        "description": "Body: ``{\"vote\": \"good\"}`` or ``{\"vote\": \"bad\"}``.\n\nToggle semantics mirror :func:`~vtsearch.state.toggle_vote`: the same\nvote on an element with that label removes the element; the opposite\nvote flips it.  When the element resolves into the active dataset, the\ndetector's in-memory ``good_votes`` / ``bad_votes`` are kept in sync so\nMLP retraining and learned-sort see the change.",
+        "description": "Body: ``{\"target\": \"good\"}``, ``{\"target\": \"bad\"}``, or\n``{\"target\": \"remove\"}``.\n\nAbsolute-target semantics mirror :func:`~vtsearch.state.set_vote`:\n``\"good\"`` / ``\"bad\"`` set the element's label (a re-assert of the\ncurrent label is an idempotent no-op), ``\"remove\"`` drops the element.\nWhen the element resolves into the active dataset, the detector's\nin-memory ``good_votes`` / ``bad_votes`` are kept in sync so MLP\nretraining and learned-sort see the change.",
         "operationId": "vote_detector_label",
         "requestBody": {
           "content": {
@@ -10793,7 +10794,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Toggle the label on a saved labelset element.",
+        "summary": "Set a saved labelset element's label to an absolute target.",
         "tags": [
           "detectors_labels"
         ]
