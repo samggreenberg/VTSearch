@@ -1119,30 +1119,35 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Button state ---
 
-  get isLoading(): boolean {
-    // Phase 2: the `activeContextGuard` owns the dataset/detector load
-    // path the Train/Find buttons used to drive locally. We mirror its
-    // signals (plus the per-button click-intent flags) here so
-    // dashboard controls stay disabled while the guard waits between
-    // click and route activation.
-    return (
-      this.trainLoading() ||
-      this.findLoading() ||
-      this.browsePrep.preparing ||
-      this.contextSwitch.switching ||
-      this.datasetState.loading
-    );
+  /** True only while the **active (dataset, detector) pair** is mid-switch:
+   *  a top-bar pulldown change, or a Train/Find click, that the
+   *  `activeContextGuard` is still promoting. That promotion is the
+   *  H25-critical window — the moment the HTTP interceptor's request
+   *  tagging is in transition — so the dashboard freezes its controls
+   *  while it lasts (a brief beat between click and route activation).
+   *
+   *  It deliberately EXCLUDES `datasetState.loading`. That flag is also
+   *  set, separately, for *background* work — dataset imports, registry
+   *  loads kicked off from a card, browse-prep of another row — which has
+   *  nothing to do with the active pair and must not freeze the rest of
+   *  the dashboard. (The same background load sets BOTH `datasetState.
+   *  loading` and `contextSwitch.switching` only when it's part of an
+   *  active-pair switch, so dropping the former loses no coverage of the
+   *  real switch window.) The upshot: on the GRID you can saturate the
+   *  concurrent-import slots and still start another import, create or
+   *  delete a detector, or change the selection — none of it is gated on
+   *  background work, only on the in-flight context switch. */
+  get isContextSwitching(): boolean {
+    return this.trainLoading() || this.findLoading() || this.contextSwitch.switching;
   }
 
-  /** True while one or more datasets are actively downloading/installing
-   *  (`datasetState.loading` is set from the count of active dataset
-   *  loading tasks). This is the slice of `isLoading` that disables the
-   *  `+` Add-dataset button while loads are in flight — saturate the
-   *  concurrent-download limit and several stay active, holding the
-   *  button disabled the whole time. Drives the `+` icon's waggle so the
-   *  disabled button reads as "busy, slots are full" rather than dead. */
-  get addDatasetBusy(): boolean {
-    return this.datasetState.loading;
+  /** Train/Find gate on this rather than `isContextSwitching` because they
+   *  must also wait out an in-flight browse-prep: when its projection build
+   *  finishes it fires a navigation to `/browse/:id`, and starting a Train/
+   *  Find navigation underneath it would race that redirect. Independent
+   *  actions don't care — to them browse-prep is just more background work. */
+  get isNavBusy(): boolean {
+    return this.isContextSwitching || this.browsePrep.preparing;
   }
 
   get labelEnabled(): boolean {

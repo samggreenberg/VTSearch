@@ -310,6 +310,49 @@ describe('DashboardComponent', () => {
     });
   });
 
+  describe('parallel-task gating (isContextSwitching / isNavBusy)', () => {
+    // Regression guard for the GRID parallelism fix. Background work
+    // (dataset imports, card-initiated loads, browse-prep of another row)
+    // sets `datasetState.loading`, but that must NOT freeze independent
+    // dashboard actions — on a big machine you can saturate the import
+    // slots and still start another import, create/delete a detector, or
+    // change the selection. Only an in-flight *active-pair switch* gates
+    // them, via `isContextSwitching`. Train/Find additionally wait out a
+    // browse-prep (whose completion fires a competing /browse navigation),
+    // via `isNavBusy`.
+
+    it('keeps independent actions live while only a background load runs', () => {
+      flushInitialRequests();
+      vi.spyOn(component.datasetState, 'loading', 'get').mockReturnValue(true);
+      // A background import/load is the ONLY thing in flight.
+      expect(component.isContextSwitching).toBe(false);
+      expect(component.isNavBusy).toBe(false);
+    });
+
+    it('gates the whole dashboard during an active-pair context switch', () => {
+      flushInitialRequests();
+      vi.spyOn(component['contextSwitch'], 'switching', 'get').mockReturnValue(true);
+      expect(component.isContextSwitching).toBe(true);
+      expect(component.isNavBusy).toBe(true);
+    });
+
+    it('gates on a Train or Find click intent', () => {
+      flushInitialRequests();
+      component.trainLoading.set(true);
+      expect(component.isContextSwitching).toBe(true);
+      component.trainLoading.set(false);
+      component.findLoading.set(true);
+      expect(component.isContextSwitching).toBe(true);
+    });
+
+    it('gates Train/Find during browse-prep but leaves independent actions live', () => {
+      flushInitialRequests();
+      vi.spyOn(component.browsePrep, 'preparing', 'get').mockReturnValue(true);
+      expect(component.isContextSwitching).toBe(false);
+      expect(component.isNavBusy).toBe(true);
+    });
+  });
+
   describe('label hints', () => {
     it('should hint about missing dataset', () => {
       flushInitialRequests();
