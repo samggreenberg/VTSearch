@@ -20,6 +20,23 @@ from vtscore.state.core import (
     get_active_detector_context,
 )
 
+# Above this item count the diversity tree is *not* built automatically at
+# dataset load: hierarchical k-means over millions of vectors costs minutes and
+# gigabytes, and the tree only feeds the labeling autopilot (which degrades
+# gracefully to score-only sampling when the tree is absent - see the
+# ``tree is None`` guards in this module).  Large datasets can build it
+# on demand via ``POST /api/datasets/registry/<id>/diversity-tree``.
+DIVERSITY_TREE_AUTO_THRESHOLD = 50_000
+
+
+def should_auto_build_diversity_tree(n: int) -> bool:
+    """Whether a dataset of *n* items should build its diversity tree at load.
+
+    Returns ``False`` past :data:`DIVERSITY_TREE_AUTO_THRESHOLD` so large
+    datasets load fast; the tree can then be built on demand.
+    """
+    return n <= DIVERSITY_TREE_AUTO_THRESHOLD
+
 
 def resync_diversity_tree_to_detector(
     ds_ctx: DatasetContext,
@@ -65,7 +82,7 @@ def build_diversity_tree(
     """
     import numpy as np
 
-    from vtscore.state.diversity_tree import DiversityTree
+    from vtscore.state.diversity_tree import DiversityTree, auto_max_depth
 
     with _state_lock:
         ds_ctx = get_active_context()
@@ -80,7 +97,12 @@ def build_diversity_tree(
             ds_ctx.diversity_tree = None
             return
 
-        tree = DiversityTree(vectors, k=3, on_progress=on_progress)
+        tree = DiversityTree(
+            vectors,
+            k=3,
+            max_depth=auto_max_depth(len(vectors), k=3),
+            on_progress=on_progress,
+        )
         ds_ctx.diversity_tree = tree
 
         # Replay existing labels so the tree reflects the current vote state.
@@ -99,7 +121,7 @@ def build_diversity_tree_for_context(
     """
     import numpy as np
 
-    from vtscore.state.diversity_tree import DiversityTree
+    from vtscore.state.diversity_tree import DiversityTree, auto_max_depth
 
     vectors: dict[int, np.ndarray] = {}
     for cid, media in ctx.medias.items():
@@ -111,7 +133,12 @@ def build_diversity_tree_for_context(
         ctx.diversity_tree = None
         return
 
-    tree = DiversityTree(vectors, k=3, on_progress=on_progress)
+    tree = DiversityTree(
+        vectors,
+        k=3,
+        max_depth=auto_max_depth(len(vectors), k=3),
+        on_progress=on_progress,
+    )
     ctx.diversity_tree = tree
     # Fresh context has no votes - nothing to replay.
 

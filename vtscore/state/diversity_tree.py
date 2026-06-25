@@ -28,7 +28,49 @@ from sklearn.cluster import KMeans
 DIVERSITY_TREE_DEFAULT_K = 2
 DIVERSITY_TREE_MAX_DEPTH = 10
 DIVERSITY_TREE_MIN_NODE_SIZE = 20
-_N_INIT = 10  # number of k-means initialisations per node
+_N_INIT = 10  # number of k-means initialisations per node (small nodes)
+
+# Soft ceiling on leaf count used by :func:`auto_max_depth` so a huge dataset
+# can't explode the tree into tens of thousands of nodes.
+_MAX_LEAVES = 4_000
+
+
+def _n_init_for(node_size: float) -> int:
+    """Number of k-means restarts to run for a node of *node_size* vectors.
+
+    Large nodes converge reliably from a single init, so spending 10 restarts
+    on them (the small-node default) is wasted compute that dominates build
+    time at scale.  Nodes of 1 000 or fewer keep the full ``_N_INIT`` restarts,
+    so trees over the test-sized datasets are bit-for-bit unchanged.
+    """
+    if node_size > 10_000:
+        return 3
+    if node_size > 1_000:
+        return 5
+    return _N_INIT
+
+
+def auto_max_depth(
+    n: int,
+    k: int = DIVERSITY_TREE_DEFAULT_K,
+    min_node_size: int = DIVERSITY_TREE_MIN_NODE_SIZE,
+) -> int:
+    """Depth cap that scales with *n* and bounds the leaf count at ``_MAX_LEAVES``.
+
+    The *natural* depth - ``ceil(log_k(n / min_node_size))`` - is where
+    :meth:`DiversityTree._build_node` already stops splitting (a node smaller
+    than ``min_node_size`` is never split), so capping at it is structurally a
+    no-op for any dataset whose natural depth is below
+    ``DIVERSITY_TREE_MAX_DEPTH``.  The separate ``_MAX_LEAVES`` cap only binds
+    for datasets large enough that the natural depth would otherwise blow the
+    node count up.  Always returns at least 1.
+    """
+    if n <= 0:
+        return DIVERSITY_TREE_MAX_DEPTH
+    base = max(k, 2)
+    natural = math.ceil(math.log(max(n / max(min_node_size, 1), 1.0), base))
+    cap = math.ceil(math.log(_MAX_LEAVES, base))
+    return max(1, min(DIVERSITY_TREE_MAX_DEPTH, natural, cap))
 
 
 class DiversityTree:
@@ -93,7 +135,16 @@ class DiversityTree:
                 num_levels = min(num_levels, max_depth)
             else:
                 num_levels = 0
-            self._estimated_total_work = max(num_levels * total * _N_INIT, 1)
+            # Per-level node size shrinks by ~k each level, so the k-means
+            # restart count (see ``_n_init_for``) drops as we descend.  Weight
+            # the estimate by the per-level restart count so the progress bar
+            # tracks wall-clock now that large nodes run fewer restarts.
+            estimated_work = 0.0
+            node_size = float(total)
+            for _ in range(num_levels):
+                estimated_work += total * _n_init_for(node_size)
+                node_size /= k
+            self._estimated_total_work = max(int(estimated_work), 1)
             self._work_done = 0
             if on_progress:
                 on_progress(0, self._estimated_total_work)
@@ -138,7 +189,8 @@ class DiversityTree:
         # at 0% until it finishes.
         best_labels = None
         best_inertia = float("inf")
-        for init_i in range(_N_INIT):
+        n_init = _n_init_for(len(ids))
+        for init_i in range(n_init):
             km = KMeans(
                 n_clusters=actual_k,
                 random_state=42 + init_i,
