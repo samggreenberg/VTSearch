@@ -15,7 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from vtscore.datasets.importers.base import ImporterBase, ImporterField
+from vtscore.datasets.importers.base import ImporterBase, PluginField
 from vtscore.datasets.loader import load_demo_dataset
 
 
@@ -37,13 +37,13 @@ class DemoDatasetImporter(ImporterBase):
     category = "demo"
 
     fields = [
-        ImporterField(
+        PluginField(
             key="name",
             label="Dataset",
             field_type="select",
             description="Which demo dataset to load.",
         ),
-        ImporterField(
+        PluginField(
             key="embedder",
             label="Embedder",
             field_type="text",
@@ -51,7 +51,7 @@ class DemoDatasetImporter(ImporterBase):
             required=False,
             include_in_origin=False,
         ),
-        ImporterField(
+        PluginField(
             key="converter",
             label="Converter",
             field_type="text",
@@ -90,6 +90,7 @@ class DemoDatasetImporter(ImporterBase):
         embedder_name = field_values.get("embedder", "") or ""
         converter_name = field_values.get("converter", "") or ""
         clipper_name = field_values.get("clipper", "") or ""
+        clipper_params = field_values.get("clipper_params") or None
 
         load_demo_dataset(
             dataset_name,
@@ -97,6 +98,7 @@ class DemoDatasetImporter(ImporterBase):
             embedder_name=embedder_name,
             converter_name=converter_name,
             clipper_name=clipper_name,
+            clipper_params=clipper_params,
         )
 
     def origin_display(self, origin: dict[str, Any]) -> str:
@@ -199,6 +201,7 @@ def _source_directory(source: str) -> Path | None:
             "gtzan": DATA_DIR / "gtzan" / "genres",
             "speech_commands_v2": DATA_DIR / "speech_commands_v2",
             "urbansound8k": DATA_DIR / "UrbanSound8K" / "audio",
+            "tut_sound_events_2017": DATA_DIR / "tut_sound_events_2017",
             # Video sources
             "ucf101": video_dir / "ucf101",
             "hmdb51": video_dir / "hmdb51",

@@ -22,6 +22,7 @@ from typing import Any, Callable
 import numpy as np
 
 from vtscore.datasets.labelset import LabeledElement, LabelSet
+from vtscore.embedding.media_vectors import media_embedding
 
 
 log = logging.getLogger(__name__)
@@ -32,22 +33,35 @@ ProgressCallback = Callable[[str, int, int], None]
 def _embedder_for_active_dataset(snap: dict[int, dict[str, Any]] | None) -> str:
     """Return the embedder name to use for fresh resolve+embed work.
 
-    Prefers the **score** embedder (patch-else-text; the v3 routing table)
-    *derived from the medias in snap* so that newly embedded cross-dataset
-    vectors line up with the in-dataset vectors the MLP is scored against.
-    Derived from the snap's own embedder names rather than the active context
-    so a non-active snapshot resolves correctly.  Falls back to the recorded
-    primary embedder for a slot-less single-vector dataset (where the two
-    coincide), and ``""`` when *snap* is empty.
+    Thin alias for the canonical model-keying marker
+    :func:`vtscore.embedding.binding.score_marker_embedder_for_snap`: the
+    **score** embedder (patch-else-text; the v3 routing table) derived from
+    the medias in *snap* so newly embedded cross-dataset vectors line up with
+    the in-dataset vectors the MLP is scored against, falling back to the
+    recorded primary embedder for a slot-less single-vector dataset and ``""``
+    when *snap* is empty.
     """
-    if not snap:
-        return ""
-    from vtscore.embedding.binding import derive_binding_from_names  # noqa: PLC0415
-    from vtscore.embedding.media_vectors import media_embedder_names  # noqa: PLC0415
+    from vtscore.embedding.binding import score_marker_embedder_for_snap  # noqa: PLC0415
 
-    first = next(iter(snap.values()), {})
-    text, patch = derive_binding_from_names(media_embedder_names(first))
-    return patch or text or first.get("embedder", "") or ""
+    return score_marker_embedder_for_snap(snap)
+
+
+def _detector_embedder(det_ctx, snap: dict[int, dict[str, Any]] | None) -> str:
+    """The embedder a *detector* resolves and embeds its labels in.
+
+    The concrete embedder of the detector's locked type (``det_ctx.embedder_type``)
+    that the active dataset supplies wins; otherwise the dataset's score
+    precedence (the legacy-migration default and the cross-dataset portability
+    fallback - re-embed against whatever space the new dataset uses).  This is
+    :func:`keying_embedder_for_snap`, so it agrees with the model-invalidation
+    and re-embed checks.  Keeping a detector's label cache keyed to its type
+    means switching the active dataset under the detector no longer invalidates
+    the cache as long as the new dataset binds the same concrete embedder of
+    that type.  See ``docs/plans/patch-embedder.md`` → "Per-detector embedder type".
+    """
+    from vtscore.embedding.binding import keying_embedder_for_snap
+
+    return keying_embedder_for_snap(det_ctx, snap)
 
 
 def _patch_pooled_from_file(
@@ -199,7 +213,10 @@ def _resolve_uncached_embedding(
         if cid is not None and cid in snap:
             media = snap[cid]
             pooled = pool_box_from_media(media, elem.region_box)
-            emb = pooled if pooled is not None else media.get("embedding")
+            # Read the in-dataset vector from the detector's primary space (the
+            # same space the cross-dataset path embeds into), not the media's
+            # generic primary - they diverge on a multi-embedder dataset.
+            emb = pooled if pooled is not None else media_embedding(media, embedder_name or None)
             if emb is not None:
                 return np.asarray(emb)
 
@@ -227,7 +244,7 @@ def populate_label_embeddings(
     Resolution per element (skipping if already cached):
 
     1. Element resolves to a cid in the active dataset → reuse
-       ``snap[cid]["embedding"]`` (no I/O).
+       ``snap[cid]``'s primary vector (no I/O).
     2. Element's origin can be resolved to a file via its importer → embed
        the file with the active dataset's embedder (or the media type's
        default).
@@ -239,7 +256,7 @@ def populate_label_embeddings(
     """
     from vtscore.detectors.labelset_elements import stable_element_id
 
-    embedder_name = _embedder_for_active_dataset(snap)
+    embedder_name = _detector_embedder(det_ctx, snap)
     _maybe_clear_cache_on_embedder_switch(det_ctx, embedder_name)
     cache: dict[str, np.ndarray] = det_ctx.label_embeddings
     region_cache: dict[str, tuple[float, float, float, float] | None] = det_ctx.label_embedding_regions
@@ -376,7 +393,7 @@ def populate_label_local_features(
     """
     from vtscore.detectors.labelset_elements import stable_element_id
 
-    embedder_name = _embedder_for_active_dataset(snap)
+    embedder_name = _detector_embedder(det_ctx, snap)
     embedder = None
     if embedder_name:
         from vtscore.media import get_embedder
@@ -503,7 +520,9 @@ def train_from_labelset(
 
     from vtscore.detectors.training import train_and_threshold
 
-    mlp, threshold = train_and_threshold(X_list, y_list, snap=snap)
+    # populate_label_embeddings stamped det_ctx.embedder with the space the
+    # labels were embedded in; score the safe-threshold pass in that same space.
+    mlp, threshold = train_and_threshold(X_list, y_list, snap=snap, embedder_name=det_ctx.embedder or None)
     det_ctx.model = mlp
     det_ctx.threshold = threshold
     return True
@@ -575,7 +594,7 @@ def update_cache_for_cid(
     target_key = media_element_key(media)
     if target_key is None:
         return
-    embedding = media.get("embedding")
+    embedding = media_embedding(media)
     if embedding is None:
         return
     for elem in labelset.elements:

@@ -373,6 +373,12 @@ class MediaType(ABC):
             clips: Dict to populate in-place.  The caller has already cleared
                 it.  Keys should be sequential integer clip IDs starting at 1.
             on_progress: Optional progress callback.
+            skip_embedding: When ``True`` (passed via ``**kwargs``), populate
+                each media with a deferred-embed placeholder (``embeddings={}``)
+                instead of embedding it here.  The demo loader sets this when a
+                clipper will split + re-embed every clip, so embedding the full
+                parent would be wasted (and, for audio, can fail on parents
+                longer than the embedder window before the clipper trims them).
 
         Returns:
             An optional external media directory path (absolute string) to
@@ -421,12 +427,21 @@ class MediaType(ABC):
         Resolution order:
 
         1. ``media_bytes`` - already in memory.
-        2. ``media_path`` - local file on disk (thin mode).
-        3. ``media_url`` - remote URL (URL-backed media, e.g. PullWrest).
+        2. *lazy clip* - a derived sub-media that carries a clip recipe in
+           ``origin.params`` instead of materialized bytes; its bytes are
+           sliced/cropped from the source on demand (see
+           :mod:`vtscore.media.lazy_clip`).
+        3. ``media_path`` - local file on disk (thin mode).
+        4. ``media_url`` - remote URL (URL-backed media, e.g. PullWrest).
         """
         media_bytes = media.get("media_bytes")
         if media_bytes is not None:
             return media_bytes
+        from vtscore.media.lazy_clip import lazy_clip_bytes  # noqa: PLC0415
+
+        clipped = lazy_clip_bytes(media)
+        if clipped is not None:
+            return clipped
         media_path = media.get("media_path")
         if media_path:
             path = Path(media_path)

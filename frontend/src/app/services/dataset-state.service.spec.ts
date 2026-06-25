@@ -1,4 +1,4 @@
-import { TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { DatasetStateService } from './dataset-state.service';
@@ -63,16 +63,15 @@ describe('DatasetStateService', () => {
     expect(service.detectors[0].name).toBe('detector1');
   });
 
-  it('rapid refresh should cancel stale in-flight requests', fakeAsync(() => {
-    // First refresh; will be cancelled by the second
+  it('rapid refresh should cancel stale in-flight requests', () => {
+    // First refresh; will be cancelled by the second. The switchMap subscribes
+    // to the forkJoin synchronously, so both registry GETs register at once.
     service.refresh();
-    tick();
     const staleDs = httpMock.expectOne('/api/datasets/registry');
     const staleDetectors = httpMock.expectOne('/api/detectors/registry');
 
     // Second refresh; this one should win
     service.refresh();
-    tick();
     const freshDs = httpMock.expectOne('/api/datasets/registry');
     const freshDetectors = httpMock.expectOne('/api/detectors/registry');
 
@@ -86,7 +85,7 @@ describe('DatasetStateService', () => {
 
     expect(service.datasets.length).toBe(1);
     expect(service.datasets[0].name).toBe('fresh');
-  }));
+  });
 
   it('setLoading and setProgressMessage should update state', () => {
     service.setLoading(true);
@@ -109,13 +108,16 @@ describe('DatasetStateService', () => {
   });
 
   it('refresh should record error on registry fetch failure and clear on retry success', () => {
+    // `error` is signal-backed; sample it after each step (the `error$`
+    // `toObservable` bridge emits asynchronously, so polling the synchronous
+    // getter is the deterministic way to capture the state transitions).
     const errors: (string | null)[] = [];
-    service.error$.subscribe((e) => errors.push(e));
 
     service.refresh();
     // forkJoin cancels the sibling detectors request when datasets errors.
     httpMock.expectOne('/api/detectors/registry');
     httpMock.expectOne('/api/datasets/registry').error(new ProgressEvent('Network error'));
+    errors.push(service.error);
     expect(service.error).toBe("Couldn't load datasets and detectors.");
 
     // A second refresh after the failure should still work; the
@@ -123,9 +125,10 @@ describe('DatasetStateService', () => {
     service.refresh();
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [{ id: '1', name: 'ok' }] });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
+    errors.push(service.error);
     expect(service.datasets.length).toBe(1);
     expect(service.error).toBeNull();
-    // Sanity: we saw both error and success emissions.
+    // Sanity: we saw both the error and the cleared (success) state.
     expect(errors).toContain("Couldn't load datasets and detectors.");
     expect(errors[errors.length - 1]).toBeNull();
   });

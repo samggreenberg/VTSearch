@@ -9,6 +9,7 @@ from vtscore.detectors.labeling_progress import (
     inject_live_model,
     invalidate_progress_cache_from,
 )
+from vtscore.embedding.media_vectors import media_embedding
 from vtsearch.state import (
     medias,
     label_history,
@@ -652,7 +653,7 @@ class TestStabilitySkipsUnchangedModel:
         rng = np.random.RandomState(42)
         clips = {}
         for i in range(10):
-            clips[i] = {"embedding": rng.randn(8).astype(np.float32)}
+            clips[i] = {"embeddings": {"clap": rng.randn(8).astype(np.float32)}, "embedder": "clap"}
 
         # Label history: vote good on 0, bad on 1, then vote good on 0 AGAIN
         # The third event doesn't change the training data (0 is already good).
@@ -682,7 +683,7 @@ class TestStabilitySkipsUnchangedModel:
         rng = np.random.RandomState(43)
         clips = {}
         for i in range(20):
-            clips[i] = {"embedding": rng.randn(8).astype(np.float32)}
+            clips[i] = {"embeddings": {"clap": rng.randn(8).astype(np.float32)}, "embedder": "clap"}
 
         # Each step changes the training data
         history = [
@@ -723,13 +724,14 @@ class TestLiveModelReuse:
         rng = np.random.RandomState(99)
         clips = {}
         for i in range(10):
-            clips[i] = {"embedding": rng.randn(8).astype(np.float32)}
+            clips[i] = {"embeddings": {"clap": rng.randn(8).astype(np.float32)}, "embedder": "clap"}
 
         # Train a live model for good={0,2}, bad={1}
         good = {0: None, 2: None}
         bad = {1: None}
         X = torch.tensor(
-            np.array([clips[0]["embedding"], clips[2]["embedding"], clips[1]["embedding"]]), dtype=torch.float32
+            np.array([media_embedding(clips[0]), media_embedding(clips[2]), media_embedding(clips[1])]),
+            dtype=torch.float32,
         )
         y = torch.tensor([1.0, 1.0, 0.0]).unsqueeze(1)
         live_model = train_model(X, y, 8)
@@ -764,13 +766,14 @@ class TestLiveModelReuse:
         rng = np.random.RandomState(99)
         clips = {}
         for i in range(10):
-            clips[i] = {"embedding": rng.randn(8).astype(np.float32)}
+            clips[i] = {"embeddings": {"clap": rng.randn(8).astype(np.float32)}, "embedder": "clap"}
 
         # Inject a live model for a DIFFERENT label set
         good = {5: None, 6: None}
         bad = {7: None}
         X = torch.tensor(
-            np.array([clips[5]["embedding"], clips[6]["embedding"], clips[7]["embedding"]]), dtype=torch.float32
+            np.array([media_embedding(clips[5]), media_embedding(clips[6]), media_embedding(clips[7])]),
+            dtype=torch.float32,
         )
         y = torch.tensor([1.0, 1.0, 0.0]).unsqueeze(1)
         live_model = train_model(X, y, 8)
@@ -839,7 +842,7 @@ class TestLiveModelReuse:
         rng = np.random.RandomState(42)
         clips = {}
         for i in range(20):
-            clips[i] = {"embedding": rng.randn(8).astype(np.float32)}
+            clips[i] = {"embeddings": {"clap": rng.randn(8).astype(np.float32)}, "embedder": "clap"}
 
         # Build a history with enough steps to have prior predictions
         history = [
@@ -853,7 +856,7 @@ class TestLiveModelReuse:
         # Inject a live model for step 4's label set
         good = {0: None, 2: None, 4: None}
         bad = {1: None, 3: None}
-        embs = [clips[i]["embedding"] for i in [0, 2, 4, 1, 3]]
+        embs = [media_embedding(clips[i]) for i in [0, 2, 4, 1, 3]]
         X = torch.tensor(np.array(embs), dtype=torch.float32)
         y = torch.tensor([1.0, 1.0, 1.0, 0.0, 0.0]).unsqueeze(1)
         live_model = train_model(X, y, 8)

@@ -41,14 +41,31 @@ def _fake_embedder(name: str, dim: int = 3):
 
 class TestOrderedLoadEmbedders:
     def test_fresh_create_uses_requested_only(self):
-        medias = {1: {"media_type": "audio", "embedding": None}}
-        assert _ordered_load_embedders(medias, "siglip") == ["siglip"]
+        medias = {1: {"media_type": "audio", "embeddings": {}}}
+        assert _ordered_load_embedders(medias, ["siglip"]) == ["siglip"]
 
     def test_fresh_create_no_pick_falls_back_to_blank(self):
         # No embedder anywhere → [""], which lets embed_missing resolve the
         # media-type default (single-embedder create path, unchanged).
-        medias = {1: {"media_type": "audio", "embedding": None}}
-        assert _ordered_load_embedders(medias, "") == [""]
+        medias = {1: {"media_type": "audio", "embeddings": {}}}
+        assert _ordered_load_embedders(medias, [""]) == [""]
+        assert _ordered_load_embedders(medias, []) == [""]
+
+    def test_fresh_create_trio_runs_all_picks_in_order(self):
+        # A v3 create with a text + patch + structural pick runs each in turn.
+        medias = {1: {"media_type": "image", "embeddings": {}}}
+        assert _ordered_load_embedders(medias, ["siglip", "dinov3_patch", "sift_vlad"]) == [
+            "siglip",
+            "dinov3_patch",
+            "sift_vlad",
+        ]
+
+    def test_requested_picks_dedupe(self):
+        medias = {1: {"media_type": "image", "embeddings": {}}}
+        assert _ordered_load_embedders(medias, ["siglip", "", "siglip", "dinov3_patch"]) == [
+            "siglip",
+            "dinov3_patch",
+        ]
 
     def test_reload_runs_present_embedders(self):
         # A reloaded two-embedder pickle: no requested pick, run both present.
@@ -58,11 +75,11 @@ class TestOrderedLoadEmbedders:
                 "embeddings": {"siglip": np.ones(3), "dinov3_patch": np.ones(3)},
             }
         }
-        assert _ordered_load_embedders(medias, "") == ["siglip", "dinov3_patch"]
+        assert _ordered_load_embedders(medias, [""]) == ["siglip", "dinov3_patch"]
 
     def test_requested_leads_then_present(self):
         medias = {1: {"embeddings": {"dinov3_patch": np.ones(3)}}}
-        assert _ordered_load_embedders(medias, "siglip") == ["siglip", "dinov3_patch"]
+        assert _ordered_load_embedders(medias, ["siglip"]) == ["siglip", "dinov3_patch"]
 
 
 # ---------------------------------------------------------------------------
@@ -76,14 +93,14 @@ class TestSecondEmbedderPass:
         patch_emb = _fake_embedder("emb_patch")
         by_name = {"emb_text": text_emb, "emb_patch": patch_emb}
 
-        medias = {i: {"media_type": "audio", "embedding": None, "media_path": f"/tmp/{i}.wav"} for i in range(1, 4)}
+        medias = {i: {"media_type": "audio", "embeddings": {}, "media_path": f"/tmp/{i}.wav"} for i in range(1, 4)}
 
         with (
             mock.patch("vtscore.media.get_embedder", side_effect=lambda n: by_name[n]),
             mock.patch("vtscore.media.embedders_for_type", return_value=[text_emb]),
         ):
             embed_missing(medias, "emb_text")
-            # Singular mirror + first key now belong to emb_text.
+            # Primary + first key now belong to emb_text.
             for m in medias.values():
                 assert m["embedder"] == "emb_text"
                 assert "emb_text" in m["embeddings"]
@@ -91,14 +108,14 @@ class TestSecondEmbedderPass:
 
             embed_missing(medias, "emb_patch")
 
-        # The second embedder ran over every item even though the singular
-        # mirror was already set (its missing-detection is per-embedder).
+        # The second embedder ran over every item even though the first
+        # embedder's key was already set (its missing-detection is per-embedder).
         assert patch_emb.embed_media_bulk.call_count == 1
         assert len(patch_emb.embed_media_bulk.call_args.args[0]) == 3
 
         for i, m in medias.items():
             assert set(m["embeddings"]) == {"emb_text", "emb_patch"}
-            # First embedder's vectors untouched; mirror still on the primary.
+            # First embedder's vectors untouched; primary still recorded.
             np.testing.assert_array_equal(m["embeddings"]["emb_text"], first_vecs[i])
             assert m["embedder"] == "emb_text"
             np.testing.assert_array_equal(media_embedding(m, "emb_text"), m["embeddings"]["emb_text"])
@@ -106,15 +123,15 @@ class TestSecondEmbedderPass:
 
     def test_single_embedder_path_unchanged(self):
         emb = _fake_embedder("solo")
-        medias = {i: {"media_type": "audio", "embedding": None, "media_path": f"/tmp/{i}.wav"} for i in range(1, 4)}
+        medias = {i: {"media_type": "audio", "embeddings": {}, "media_path": f"/tmp/{i}.wav"} for i in range(1, 4)}
 
         with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
             embed_missing(medias)
 
         assert emb.embed_media_bulk.call_count == 1
         for m in medias.values():
-            assert m["embedding"] is not None
-            assert m["embeddings"] == {"solo": m["embedding"]}
+            assert media_embedding(m) is not None
+            assert m["embeddings"] == {"solo": media_embedding(m)}
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +150,6 @@ def _two_embedder_text_media(mid: int) -> dict:
         "file_size": 10,
         "md5": f"md5{mid}",
         "embedder": "emb_text",
-        "embedding": a,
         "embeddings": {"emb_text": a, "emb_patch": b},
         "media_string": f"document {mid}",
         "filename": f"doc{mid}.txt",
@@ -161,31 +177,41 @@ class TestPersistenceRoundTrip:
             assert not np.allclose(ta, pa)
             np.testing.assert_allclose(np.linalg.norm(ta), 1.0, atol=1e-5)
 
-    def test_legacy_single_vector_pickle_has_no_dict(self, tmp_path):
-        # A media with only a singular vector writes no "embeddings" key; the
-        # embed stage's ensure_embeddings_dict materialises it later.
+    def test_legacy_single_vector_pickle_migrates_to_dict(self, tmp_path):
+        # A legacy on-disk pickle carries only the singular ``embedding`` +
+        # ``embedder`` name (the pre-v3 serialized form).  The loader re-keys it
+        # into the per-embedder ``embeddings`` dict on load; the live media has
+        # no singular ``embedding`` key afterward (Phase 2c — dict is the sole
+        # vector store).
+        import pickle
+
+        from vtscore.datasets.container import write_container
+
         rng = np.random.default_rng(7)
         v = rng.standard_normal(4).astype(np.float32)
-        media = {
+        legacy_entry = {
             "id": 1,
             "media_type": "text",
             "duration": 0,
             "file_size": 10,
             "md5": "m",
             "embedder": "solo",
-            "embedding": v,
+            "embedding": v,  # legacy singular form (serialized only)
             "media_string": "doc",
             "filename": "doc.txt",
             "category": "unknown",
         }
-        data = export_dataset_to_file({1: media}, embedder="solo", media_type="text", name="legacy")
         pkl = tmp_path / "legacy.pkl"
-        pkl.write_bytes(data)
+        write_container(pkl, pickle.dumps({"medias": {1: legacy_entry}}), {"format_version": 1})
 
         loaded: dict[int, dict] = {}
         load_dataset_from_pickle(pkl, loaded)
-        assert loaded[1].get("embeddings") is None
+        # The singular vector was re-keyed into the dict under its embedder name;
+        # the live media exposes no singular ``embedding`` key.
+        assert "embedding" not in loaded[1]
+        assert set(loaded[1]["embeddings"]) == {"solo"}
         assert media_embedder_names(loaded[1]) == ["solo"]
+        np.testing.assert_array_equal(media_embedding(loaded[1]), media_embedding(loaded[1], "solo"))
 
 
 def test_meta_records_binding_slots(tmp_path):
@@ -203,3 +229,4 @@ def test_meta_records_binding_slots(tmp_path):
     # exist so external readers can rely on the schema.
     assert "text_embedder" in meta
     assert "patch_embedder" in meta
+    assert "structural_embedder" in meta

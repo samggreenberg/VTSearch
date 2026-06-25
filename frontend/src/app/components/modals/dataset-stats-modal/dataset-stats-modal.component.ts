@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, OnInit, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
 import { DatasetsRegistryApiService } from '../../../services/datasets-registry-api.service';
@@ -6,6 +6,7 @@ import type { DatasetRegistryStatsResponse } from '../../../generated/api-client
 import { formatTimestamp as formatTs } from '../../../utils/format-date';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-dataset-stats-modal',
   standalone: true,
   imports: [CommonModule, ModalComponent],

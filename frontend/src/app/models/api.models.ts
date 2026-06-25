@@ -161,7 +161,7 @@ export interface SourceSpec {
 /** Saved per-mediaType defaults for the Add Dataset advanced panel:
  *  the embedder, clipper (+ params), and converter rows the user wants
  *  applied automatically every time they import a dataset whose output
- *  is the matching mediaType. Edited from Settings > Data Imports;
+ *  is the matching mediaType. Edited from Settings > Import Defaults;
  *  silently auto-filled into the importer form on importer selection. */
 export interface ImportDefaultsForMediaType {
   embedder?: string;
@@ -259,6 +259,10 @@ export interface DatasetRegistryEntry {
   readers?: string[];
   /** Name of the embedder this dataset's media were vectorised with. */
   embedder?: string;
+  /** The embedder *types* this dataset supplies ("semantic" / "patch_semantic"
+   *  / "structural"); a v3 trio dataset can supply several. Drives the
+   *  detector/dataset compatibility gate. */
+  embedder_types?: string[];
   /** Unix timestamp (seconds) at which this dataset ages off and is
    *  automatically removed; `null`/absent means it never expires. */
   expires_at?: number | null;
@@ -282,6 +286,10 @@ export interface DetectorRegistryEntry {
   /** Embedder this detector's label-vector cache is built against.
    *  Populated only for loaded detectors; empty for unloaded entries. */
   embedder?: string;
+  /** The detector's locked embedder type ("semantic" / "patch_semantic" /
+   *  "structural"). Immutable; drives the detector/dataset compatibility gate.
+   *  Empty for a legacy detector with neither a type nor a migratable primary. */
+  embedder_type?: string;
   /** Username of the detector's creator (shown in multi-user mode). */
   created_by?: string;
   /** Usernames granted access besides the creator; ``["*"]`` = public. */

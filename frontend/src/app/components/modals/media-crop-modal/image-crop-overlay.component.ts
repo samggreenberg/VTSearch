@@ -1,10 +1,11 @@
 import {
   AfterViewInit,
+  ChangeDetectionStrategy,
   Component,
   ElementRef,
-  ViewChild,
   input,
-  output
+  output,
+  ViewChild,
 } from '@angular/core';
 
 
@@ -18,6 +19,7 @@ type DragMode = 'none' | 'move' | 'tl' | 'tr' | 'bl' | 'br' | 'l' | 'r' | 't' | 
 const HANDLE_HIT_RADIUS = 12;
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-image-crop-overlay',
   standalone: true,
   imports: [],

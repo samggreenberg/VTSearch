@@ -11,7 +11,7 @@
     <ng-content select="[list-actions]"></ng-content>
   </div>
   <div class="vote-list" [class.grid-layout]="isGrid" [style.--grid-goal-width]="gridGoalWidth() + 'px'" #voteListContainer>
-    @for (entry of sortedEntries; track trackById($index, entry)) {
+    @for (entry of sortedEntries(); track trackById($index, entry)) {
       <div
         class="vote-entry"
         [class.vote-entry-grid]="isGrid"

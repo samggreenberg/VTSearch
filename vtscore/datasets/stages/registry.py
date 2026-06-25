@@ -59,6 +59,13 @@ def _auto_register_dataset(
     if not embedder:
         embedder = first.get("embedder", "")
 
+    # The full set of embedder types this dataset binds (a v3 trio dataset
+    # carries several), classified from the first media's bound embedders.
+    from vtscore.embedding.binding import dataset_supplied_types
+    from vtscore.embedding.media_vectors import media_embedder_names
+
+    embedder_types = sorted(dataset_supplied_types(media_embedder_names(first)))
+
     if not name:
         name = display_name or origin_str or "Untitled"
         if ":" in name:
@@ -129,6 +136,7 @@ def _auto_register_dataset(
             source=source,
             clipper=clipper,
             embedder=embedder,
+            embedder_types=embedder_types,
             created_by=created_by,
             file_type_counts=file_type_counts,
             ingest_started_at=ingest_started_at,

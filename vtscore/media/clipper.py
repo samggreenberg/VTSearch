@@ -172,7 +172,7 @@ class MediaClipper(ABC):
         Called by the load pipeline once per media, after
         :meth:`resolve_for_durations` and before :meth:`clip`.  Most
         clippers ignore *media* and return ``self``.  Auto-selecting
-        clippers (e.g. ``SoundAutoClipper``) override this to pick a
+        clippers (e.g. ``VideoAutoClipper``) override this to pick a
         different concrete clipper based on the item's own duration -
         e.g. pass-through for short clips, tiling for longer ones.
 

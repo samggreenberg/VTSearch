@@ -42,10 +42,10 @@ def _synth_dataset(
     neg = rng.standard_normal((n_neg, dim)).astype(np.float32) * 0.2
     neg[:, 0] -= 1.0
     for vec in pos:
-        clips[next_id] = {"embedding": vec, "category": category}
+        clips[next_id] = {"embeddings": {"emb": vec}, "category": category}
         next_id += 1
     for vec in neg:
-        clips[next_id] = {"embedding": vec, "category": "other"}
+        clips[next_id] = {"embeddings": {"emb": vec}, "category": "other"}
         next_id += 1
     return clips
 

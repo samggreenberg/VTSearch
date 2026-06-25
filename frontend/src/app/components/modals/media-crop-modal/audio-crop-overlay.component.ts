@@ -1,13 +1,15 @@
 import {
   AfterViewInit,
+  ChangeDetectionStrategy,
   Component,
   ElementRef,
   Input,
-  OnDestroy,
-  ViewChild,
   input,
-  output
+  OnDestroy,
+  output,
+  ViewChild,
 } from '@angular/core';
+import { decodeAudioBuffer } from '../../../utils/decode-audio';
 
 
 export interface AudioCropResult {
@@ -20,6 +22,7 @@ type DragMode = 'none' | 'start' | 'end' | 'move';
 const HANDLE_HIT_PX = 12;
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-audio-crop-overlay',
   standalone: true,
   imports: [],
@@ -53,17 +56,13 @@ export class AudioCropOverlayComponent implements AfterViewInit, OnDestroy {
     }
     try {
       const arrayBuffer = await audioFile.arrayBuffer();
-      const AudioCtx = (window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
-      const ctx = new AudioCtx();
-      const buffer = await ctx.decodeAudioData(arrayBuffer);
+      const buffer = await decodeAudioBuffer(arrayBuffer);
       this.duration = buffer.duration;
       this.start = 0;
       this.end = this.duration;
       this.peaks = this.computePeaks(buffer, 600);
       this.loading = false;
       requestAnimationFrame(() => this.draw());
-      ctx.close();
     } catch (e) {
       this.errorMsg = 'Could not decode audio waveform; you can still crop by dragging.';
       this.loading = false;
@@ -74,7 +73,8 @@ export class AudioCropOverlayComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    // No persistent resources beyond the AudioContext (already closed).
+    // No persistent resources to release: decoding uses a throwaway
+    // OfflineAudioContext (see decodeAudioBuffer) that needs no teardown.
   }
 
   /** Set duration from the <audio> element when it becomes available. */

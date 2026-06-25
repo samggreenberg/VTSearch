@@ -120,7 +120,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from vtscore.labels.importers.base import LabelImporter, LabelImporterField
+from vtscore.labels.importers.base import LabelImporter, PluginField
 
 
 class RedisStreamLabelImporter(LabelImporter):
@@ -131,21 +131,21 @@ class RedisStreamLabelImporter(LabelImporter):
     description = "Import labels from a Redis stream of JSON entries."
     icon = "\U0001f5c4"  # file cabinet
     fields = [
-        LabelImporterField(
+        PluginField(
             key="redis_url",
             label="Redis URL",
             field_type="url",
             description="redis:// or rediss:// URL.",
             required=True,
         ),
-        LabelImporterField(
+        PluginField(
             key="stream_name",
             label="Stream name",
             field_type="text",
             default="vtsearch:labels",
             required=True,
         ),
-        LabelImporterField(
+        PluginField(
             key="count",
             label="Max entries",
             field_type="number",

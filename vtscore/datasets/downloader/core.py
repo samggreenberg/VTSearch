@@ -62,6 +62,28 @@ REUTERS21578_URL = "http://kdd.ics.uci.edu/databases/reuters21578/reuters21578.t
 GTZAN_URL = "https://huggingface.co/datasets/marsyas/gtzan/resolve/main/data/genres.tar.gz"
 SPEECH_COMMANDS_V2_URL = "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz"
 URBANSOUND8K_URL = "https://zenodo.org/records/1203745/files/UrbanSound8K.tar.gz"
+# TUT Sound Events 2017 (DCASE): long-form (~4 min) binaural street recordings.
+# Unlike the other audio demos these are full uncut soundscapes, so a single
+# file contains many sound events scattered over time - ideal for hands-on
+# clipping practice.  The development set ships as two audio zips and the
+# evaluation set as one; each entry is ``(url, slug)`` where *slug* names the
+# per-archive extraction subdirectory.  Annotations (the ``meta`` zips) are
+# intentionally not downloaded: the demo treats every recording as one
+# undifferentiated "street" bucket so the user clips it themselves.
+TUT_SOUND_EVENTS_2017_ARCHIVES = (
+    (
+        "https://zenodo.org/records/400516/files/TUT-sound-events-2017-development.audio.1.zip",
+        "development_1",
+    ),
+    (
+        "https://zenodo.org/records/400516/files/TUT-sound-events-2017-development.audio.2.zip",
+        "development_2",
+    ),
+    (
+        "https://zenodo.org/records/1040179/files/TUT-sound-events-2017-evaluation.audio.zip",
+        "evaluation",
+    ),
+)
 OXFORD_FLOWERS_URL = "https://www.robots.ox.ac.uk/~vgg/data/flowers/102/102flowers.tgz"
 OXFORD_FLOWERS_LABELS_URL = "https://www.robots.ox.ac.uk/~vgg/data/flowers/102/imagelabels.mat"
 FOOD101_URL = "http://data.vision.ee.ethz.ch/cvl/food-101.tar.gz"
@@ -84,6 +106,15 @@ UCSF_IDL_DOWNLOAD_URL = "https://download.industrydocuments.ucsf.edu"
 # images with cleaned-up, ground-truth annotations shipped in a separate pickle).
 ROXFORD_IMAGES_URL = "https://thor.robots.ox.ac.uk/oxbuildings/oxbuild_images-v1.tgz"
 ROXFORD_GND_URL = "https://cmp.felk.cvut.cz/revisitop/data/datasets/roxford5k/gnd_roxford5k.pkl"
+
+# Visual Genome (v1.4): a multi-label scene dataset of ~108k dense-annotated
+# photos.  Images ship as two zips (the historical VG_100K / VG_100K_2 splits);
+# object annotations (per-object name + pixel bounding box) ship as a separate
+# JSON zip.  Unlike the other image demos this is multi-label ground truth — see
+# docs/plans/visual-genome-dataset.md.
+VISUAL_GENOME_IMAGES_URL = "https://cs.stanford.edu/people/rak248/VG_100K/images.zip"
+VISUAL_GENOME_IMAGES2_URL = "https://cs.stanford.edu/people/rak248/VG_100K_2/images2.zip"
+VISUAL_GENOME_OBJECTS_URL = "https://homes.cs.washington.edu/~ranjay/visualgenome/data/dataset/objects.json.zip"
 
 # HMDB51
 HMDB51_URL = "http://serre-lab.clps.brown.edu/wp-content/uploads/2013/10/hmdb51_org.rar"
@@ -111,6 +142,8 @@ REUTERS21578_DOWNLOAD_SIZE_MB = 8
 GTZAN_DOWNLOAD_SIZE_MB = 1200
 SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB = 2300
 URBANSOUND8K_DOWNLOAD_SIZE_MB = 6000
+# Dev audio.1 (~1.1 GB) + audio.2 (~213 MB) + eval audio (~388 MB).
+TUT_SOUND_EVENTS_2017_DOWNLOAD_SIZE_MB = 1730
 OXFORD_FLOWERS_DOWNLOAD_SIZE_MB = 330
 FOOD101_DOWNLOAD_SIZE_MB = 5000
 EUROSAT_DOWNLOAD_SIZE_MB = 90
@@ -118,6 +151,9 @@ STANFORD_DOGS_DOWNLOAD_SIZE_MB = 750
 PLACES365_DOWNLOAD_SIZE_MB = 501
 UCSF_IDL_DOWNLOAD_SIZE_MB = 50
 ROXFORD_IMAGES_DOWNLOAD_SIZE_MB = 1850
+VISUAL_GENOME_IMAGES_DOWNLOAD_SIZE_MB = 9700
+VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB = 5300
+VISUAL_GENOME_OBJECTS_DOWNLOAD_SIZE_MB = 110
 HMDB51_DOWNLOAD_SIZE_MB = 2000
 UCF101_FULL_DOWNLOAD_SIZE_MB = 6960
 KTH_DOWNLOAD_SIZE_MB = 1150
@@ -344,7 +380,51 @@ def _move_tree_contents(src: Path, dst: Path) -> None:
                     shutil.copy2(child, target)
 
 
-def _download_and_extract(  # noqa: C901
+def _extract_archive(
+    archive_path: Path, archive_name: str, dest_dir: Path, dataset_name: str, on_progress: ProgressCallback
+) -> None:
+    """Extract *archive_path* into *dest_dir*, dispatching by filename suffix.
+
+    Supports ``.tar.gz`` / ``.tgz`` (gzip tar), ``.tar`` (uncompressed tar), and
+    ``.zip`` archives.  Tar members are extracted with ``filter="data"`` (which
+    rejects unsafe absolute/traversal paths); zip members are validated against
+    *dest_dir* to guard against path traversal (zip-slip).  Raises ``ValueError``
+    for an unsupported archive format.
+    """
+    suffix = archive_name.lower()
+    if suffix.endswith((".tar.gz", ".tgz", ".tar")):
+        # Iterate lazily instead of calling getmembers() - the latter must
+        # decompress the entire gzip stream just to read tar headers, then
+        # extraction decompresses it *again*.  Lazy iteration decompresses
+        # once and avoids a minutes-long stall on multi-GB archives.
+        # Use "r:*" for gzip tars to auto-detect compression - some CDNs (e.g.
+        # HuggingFace Xet) transparently decompress .tar.gz files during transfer.
+        mode = "r:" if suffix.endswith(".tar") else "r:*"
+        total_bytes = archive_path.stat().st_size
+        with open(archive_path, "rb") as raw_f:
+            with tarfile.open(fileobj=raw_f, mode=mode) as tar_ref:
+                for i, member in enumerate(tar_ref):
+                    if i % 100 == 0:
+                        on_progress("downloading", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes)
+                    tar_ref.extract(member, dest_dir, filter="data")
+        on_progress("downloading", f"Extracting {dataset_name}...", total_bytes, total_bytes)
+    elif suffix.endswith(".zip"):
+        with zipfile.ZipFile(archive_path, "r") as zip_ref:
+            members = zip_ref.namelist()
+            total = len(members)
+            for i, member in enumerate(members):
+                if i % 100 == 0 or i == total - 1:
+                    on_progress("downloading", f"Extracting {dataset_name}...", i + 1, total)
+                # Guard against path traversal in zip entries
+                member_path = Path(dest_dir) / member
+                if not str(member_path.resolve()).startswith(str(Path(dest_dir).resolve())):
+                    raise ValueError(f"Path traversal detected in archive: {member}")
+                zip_ref.extract(member, dest_dir)
+    else:
+        raise ValueError(f"Unsupported archive format: {archive_name}")
+
+
+def _download_and_extract(
     *,
     url: str,
     archive_name: str,
@@ -400,45 +480,7 @@ def _download_and_extract(  # noqa: C901
         on_progress("downloading", f"Extracting {dataset_name}...", 0, 0)
         temp_extract.mkdir(parents=True, exist_ok=True)
 
-        suffix = archive_name.lower()
-        if suffix.endswith((".tar.gz", ".tgz")):
-            # Iterate lazily instead of calling getmembers() - the latter must
-            # decompress the entire gzip stream just to read tar headers, then
-            # extraction decompresses it *again*.  Lazy iteration decompresses
-            # once and avoids a minutes-long stall on multi-GB archives.
-            # Use "r:*" to auto-detect compression - some CDNs (e.g. HuggingFace
-            # Xet) transparently decompress .tar.gz files during transfer.
-            total_bytes = temp_archive.stat().st_size
-            with open(temp_archive, "rb") as raw_f:
-                with tarfile.open(fileobj=raw_f, mode="r:*") as tar_ref:
-                    for i, member in enumerate(tar_ref):
-                        if i % 100 == 0:
-                            on_progress("downloading", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes)
-                        tar_ref.extract(member, temp_extract, filter="data")
-            on_progress("downloading", f"Extracting {dataset_name}...", total_bytes, total_bytes)
-        elif suffix.endswith(".tar"):
-            total_bytes = temp_archive.stat().st_size
-            with open(temp_archive, "rb") as raw_f:
-                with tarfile.open(fileobj=raw_f, mode="r:") as tar_ref:
-                    for i, member in enumerate(tar_ref):
-                        if i % 100 == 0:
-                            on_progress("downloading", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes)
-                        tar_ref.extract(member, temp_extract, filter="data")
-            on_progress("downloading", f"Extracting {dataset_name}...", total_bytes, total_bytes)
-        elif suffix.endswith(".zip"):
-            with zipfile.ZipFile(temp_archive, "r") as zip_ref:
-                members = zip_ref.namelist()
-                total = len(members)
-                for i, member in enumerate(members):
-                    if i % 100 == 0 or i == total - 1:
-                        on_progress("downloading", f"Extracting {dataset_name}...", i + 1, total)
-                    # Guard against path traversal in zip entries
-                    member_path = Path(temp_extract) / member
-                    if not str(member_path.resolve()).startswith(str(Path(temp_extract).resolve())):
-                        raise ValueError(f"Path traversal detected in archive: {member}")
-                    zip_ref.extract(member, temp_extract)
-        else:
-            raise ValueError(f"Unsupported archive format: {archive_name}")
+        _extract_archive(temp_archive, archive_name, temp_extract, dataset_name, on_progress)
 
         # Another download may have finished while we were extracting.
         if check_path.exists():

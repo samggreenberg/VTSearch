@@ -1,4 +1,4 @@
-import { Component, OnDestroy, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, OnDestroy, signal } from '@angular/core';
 
 import { AsyncPipe } from '@angular/common';
 import { Toast, ToastService } from '../../services/toast.service';
@@ -10,6 +10,7 @@ import { Toast, ToastService } from '../../services/toast.service';
  * info actions (preserves the old global-error-banner UX).
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-toast-container',
   standalone: true,
   imports: [AsyncPipe],
@@ -40,6 +41,13 @@ export class ToastContainerComponent implements OnDestroy {
 
   dismiss(t: Toast): void {
     this.toastService.dismiss(t.id);
+  }
+
+  /** Clear the whole stack at once. Surfaced only when more than one toast
+   *  is showing, so a burst of errors (e.g. one backend condition surfacing
+   *  from several endpoints) doesn't force the user to close them one by one. */
+  dismissAll(): void {
+    this.toastService.dismissAll();
   }
 
   /** Fire a toast's action button. The toast is dismissed regardless of

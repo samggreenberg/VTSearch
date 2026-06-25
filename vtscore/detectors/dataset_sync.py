@@ -214,15 +214,24 @@ def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -
     return True
 
 
-def _embedder_of_active_dataset() -> str:
-    """Return the embedder name recorded on the active dataset's medias, or ``""``."""
+def _embedder_of_active_dataset(det_ctx=None) -> str:
+    """Return the active dataset's model-keying marker for *det_ctx*, or ``""``.
+
+    Under the per-detector primary model the marker is the detector's own
+    primary whenever the active dataset can supply it (so a valid cached model
+    survives a dataset switch), else the dataset score precedence (so a genuine
+    mismatch invalidates).  See :func:`keying_embedder_for_snap` and
+    patch-embedder.md → "Per-detector primary embedder".  For a single-embedder
+    dataset the primary *is* that one embedder, so this returns it unchanged -
+    byte-for-byte the pre-per-detector behaviour.
+    """
+    from vtscore.embedding.binding import keying_embedder_for_snap
     from vtscore.state.core import get_active_context
 
     ds_ctx = get_active_context()
     if not ds_ctx.dataset_id or not ds_ctx.medias:
         return ""
-    first = next(iter(ds_ctx.medias.values()), {})
-    return first.get("embedder", "") or ""
+    return keying_embedder_for_snap(det_ctx, ds_ctx.medias)
 
 
 def ensure_detector_model_matches_active_embedder() -> None:
@@ -246,7 +255,7 @@ def ensure_detector_model_matches_active_embedder() -> None:
     det_ctx = get_active_detector_context()
     if not det_ctx.detector_id:
         return
-    new_embedder = _embedder_of_active_dataset()
+    new_embedder = _embedder_of_active_dataset(det_ctx)
     invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder)
 
 

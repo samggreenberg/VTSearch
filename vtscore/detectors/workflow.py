@@ -164,7 +164,14 @@ def apply_and_retrain(  # noqa: C901
                     training[cid] = snap[cid]
             det_ctx.training_medias = training
             first = next(iter(snap.values()), {})
-            det_ctx.embedder = first.get("embedder", "")
+            # Stamp the *cache-space* marker with the space the MLP was actually
+            # trained in: the detector's chosen primary when this dataset
+            # supplies it, else the dataset score precedence
+            # (keying_embedder_for_snap).  Legacy detectors (no chosen primary)
+            # get the precedence, byte-for-byte the pre-per-detector behaviour.
+            from vtscore.embedding.binding import keying_embedder_for_snap
+
+            det_ctx.embedder = keying_embedder_for_snap(det_ctx, snap)
             det_ctx.media_type = first.get("media_type", "")
             from vtscore.detectors.registry import record_detector_embedder
 

@@ -18,6 +18,7 @@ from vtscore.datasets.loader import (
     load_dataset_from_folder_chunked,
     load_dataset_from_pickle_chunked,
 )
+from vtscore.embedding.media_vectors import media_embedding
 
 
 from helpers import make_wav_bytes as _make_wav_bytes, make_wav_file as _make_wav_file
@@ -34,6 +35,7 @@ def _make_pickle_with_base_freq(tmp_path: Path, num_clips: int, base_freq: float
             "duration": 0.1,
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes).hexdigest(),
+            "embedder": "clap",
             "embedding": np.random.RandomState(42).randn(512).tolist(),
             "filename": f"clip_{i}.wav",
             "category": f"cat_{i % 3}",
@@ -59,6 +61,7 @@ def _make_pickle(tmp_path: Path, num_clips: int, inline_bytes: bool = True) -> P
             "duration": 0.1,
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes).hexdigest(),
+            "embedder": "clap",
             "embedding": np.random.RandomState(42).randn(512).tolist(),
             "filename": f"clip_{i}.wav",
             "category": f"cat_{i % 3}",
@@ -131,7 +134,7 @@ class TestFolderChunked:
         _make_wav_file(tmp_path, "test.wav")
         chunks = list(load_dataset_from_folder_chunked(tmp_path, "audio", chunk_size=10, thin=True))
         media = chunks[0][1]
-        assert media["embedding"] is None
+        assert media_embedding(media) is None
 
     def test_all_files_covered(self, tmp_path):
         """The total number of medias across all chunks equals total files."""
@@ -219,7 +222,7 @@ class TestPickleChunked:
         pkl_path = _make_pickle(tmp_path, 2)
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=True))
         for media in chunks[0].values():
-            assert isinstance(media["embedding"], np.ndarray)
+            assert isinstance(media_embedding(media), np.ndarray)
 
     def test_all_clips_covered(self, tmp_path):
         pkl_path = _make_pickle(tmp_path, 7)
@@ -240,6 +243,7 @@ class TestPickleChunked:
         medias_data = {
             1: {
                 "media_type": "image",
+                "embedder": "siglip",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "media_bytes": b"\x89PNG fake",
                 "filename": "photo.png",
@@ -271,6 +275,7 @@ class TestPickleChunked:
         medias_data = {
             1: {
                 "media_type": "text",
+                "embedder": "e5",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "media_string": "Hello world",
                 "media_bytes": b"Hello world",
@@ -303,6 +308,7 @@ class TestPickleChunked:
         medias_data = {
             1: {
                 "media_type": "document",
+                "embedder": "e5",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "media_bytes": b"%PDF-1.4 fake",
                 "filename": "report.pdf",
@@ -331,6 +337,7 @@ class TestPickleChunked:
         medias_data = {
             1: {
                 "media_type": "audio",
+                "embedder": "clap",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "media_bytes": _make_wav_bytes(),
                 "filename": "clip.wav",
@@ -338,6 +345,7 @@ class TestPickleChunked:
             },
             2: {
                 "media_type": "image",
+                "embedder": "siglip",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "media_bytes": b"\x89PNG fake",
                 "filename": "pic.png",
@@ -364,6 +372,7 @@ class TestPickleChunked:
         medias_data = {
             1: {
                 "media_type": "document",
+                "embedder": "e5",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "filename": "report.pdf",
                 "category": "test",
@@ -397,6 +406,7 @@ class TestPickleChunked:
         medias_data = {
             1: {
                 "media_type": "text",
+                "embedder": "e5",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "media_string": "Some text paragraph",
                 "filename": "para.txt",
@@ -426,18 +436,18 @@ class TestBaseImporterChunkedDefault:
     delegates to run/run_cli and yields one chunk."""
 
     def test_default_run_chunked_yields_one_chunk(self, tmp_path):
-        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.importers.base import DatasetImporter, PluginField
 
         class DummyImporter(DatasetImporter):
             name = "dummy"
             display_name = "Dummy"
             description = "Test"
             icon = ""
-            fields: list[ImporterField] = []
+            fields: list[PluginField] = []
 
             def run(self, field_values, medias, thin=False):
-                medias[1] = {"id": 1, "media_type": "audio", "embedding": np.zeros(4)}
-                medias[2] = {"id": 2, "media_type": "audio", "embedding": np.ones(4)}
+                medias[1] = {"id": 1, "media_type": "audio", "embedder": "clap", "embeddings": {"clap": np.zeros(4)}}
+                medias[2] = {"id": 2, "media_type": "audio", "embedder": "clap", "embeddings": {"clap": np.ones(4)}}
 
         imp = DummyImporter()
         assert imp.supports_chunked is False

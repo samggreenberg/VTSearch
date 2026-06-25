@@ -166,25 +166,29 @@ def build_labels_detail(detector_data: dict[str, Any]) -> dict[str, Any]:
 def apply_element_vote_in_data(
     detector_data: dict[str, Any],
     target_id: str,
-    vote: str,
+    target: str,
 ) -> tuple[bool, LabeledElement | None, str]:
-    """Toggle the label on the element with stable id *target_id*.
+    """Set the label on the element with stable id *target_id* to *target*.
+
+    *target* is an **absolute** end state, one of ``"good"`` / ``"bad"``
+    (set the element's label) or ``"remove"`` (drop the element from the
+    labelset).
 
     Returns ``(changed, updated_element, action)`` where:
 
     * ``changed`` is ``True`` if the on-disk labelset must be re-written.
     * ``updated_element`` is the element after the operation, or ``None``
-      when the element was removed.
+      when the element was removed or the target is invalid / not found.
     * ``action`` is one of ``"removed"``, ``"flipped"``, ``"unchanged"``,
       or ``"not_found"``.
 
-    Toggle semantics mirror :func:`~vtsearch.state.toggle_vote`:
-
-    * Same vote on the same element → remove the element from the labelset.
-    * Opposite vote → flip the element's label.
-    * Vote that's neither ``"good"`` nor ``"bad"`` → unchanged.
+    Absolute-target semantics mirror :func:`~vtsearch.state.set_vote`:
+    behaviour is **idempotent**, so re-sending ``"good"`` on an
+    already-good element is an ``"unchanged"`` no-op rather than a removal.
+    A stale-view tab can no longer flip an element off the labelset by
+    re-asserting its current label (logical-bug-audit H1).
     """
-    if vote not in ("good", "bad"):
+    if target not in ("good", "bad", "remove"):
         return False, None, "unchanged"
 
     labelset = LabelSet.from_dict(detector_data.get("labelset") or {})
@@ -193,11 +197,14 @@ def apply_element_vote_in_data(
         return False, None, "not_found"
 
     idx, el = found
-    if el.label == vote:
+    if target == "remove":
         labelset.elements.pop(idx)
         detector_data["labelset"] = labelset.to_dict()
         return True, None, "removed"
 
-    el.label = vote
+    if el.label == target:
+        return False, el, "unchanged"
+
+    el.label = target
     detector_data["labelset"] = labelset.to_dict()
     return True, el, "flipped"

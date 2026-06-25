@@ -1,4 +1,4 @@
-import { Component, HostListener, Input, OnInit, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, inject, Input, input, OnInit, output, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -12,12 +12,18 @@ import { DatasetsUiApiService } from '../../../services/datasets-ui-api.service'
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { LabelImportersApiService } from '../../../services/label-importers-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
-import { EmbedderCapabilityService } from '../../../services/embedder-capability.service';
+import {
+  EmbedderCapabilityService,
+  EMBEDDER_TYPE_LABELS,
+  type EmbedderType,
+} from '../../../services/embedder-capability.service';
+import { MediaStateService } from '../../../services/media-state.service';
 import {
   DemoDataset,
   ImporterField,
   ImporterInfo,
   ImporterPickerTab,
+  Media,
   MediaTypeInfo,
 } from '../../../models/api.models';
 import type { LabelImporterEntry } from '../../../generated/api-client/models/label-importer-entry';
@@ -34,6 +40,7 @@ type ModalTab = 'blank' | 'trained';
 type TrainedSubView = 'picker' | 'form';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-new-detector-modal',
   standalone: true,
   imports: [FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, FieldHintIconComponent],
@@ -50,6 +57,7 @@ export class NewDetectorModalComponent implements OnInit {
   private labelImportersApi = inject(LabelImportersApiService);
   private settingsState = inject(SettingsStateService);
   private embedderCaps = inject(EmbedderCapabilityService);
+  private mediaState = inject(MediaStateService);
 
   /** Media type of the currently active dataset, if any. */
   @Input() defaultMediaType = '';
@@ -85,6 +93,12 @@ export class NewDetectorModalComponent implements OnInit {
   readonly mediaTypeInfos = signal<MediaTypeInfo[]>([]);
   readonly submitting = signal(false);
   readonly error = signal('');
+
+  /** The detector's locked embedder type (its scoring space *kind*). Only
+   *  meaningful when the active dataset supplies more than one type; on the
+   *  common single-type dataset the server auto-resolves it and the picker is
+   *  hidden. Empty until the user picks (or there is nothing to pick). */
+  readonly embedderType = signal<EmbedderType | ''>('');
   mediaTypeDropdownOpen = false;
   /** True when the media-type field is locked to the active dataset's type.
    *  Set on init whenever `defaultMediaType` is provided; cleared when the
@@ -210,6 +224,7 @@ export class NewDetectorModalComponent implements OnInit {
 
   ngOnInit(): void {
     this.embedderCaps.ensureLoaded();
+    this.ensureEmbedderTypeDefault();
     this.datasetsListingsApi.getMediaTypes().subscribe({
       next: (res) => {
         this.mediaTypeInfos.set(res.media_types || []);
@@ -356,8 +371,59 @@ export class NewDetectorModalComponent implements OnInit {
     return !!this.pendingText().trim();
   }
 
+  /** Embedder names the active dataset has vectors for (the keys of each
+   *  media's ``embeddings`` dict, surfaced as the ``embedders`` array). These
+   *  are the detector's eligible primary spaces. Falls back to the single
+   *  ``datasetEmbedder`` when the medias haven't loaded an array. */
+  get boundEmbedderNames(): string[] {
+    const medias = this.mediaState.mediasSignal() as Media[];
+    const first = medias.length > 0 ? medias[0] : null;
+    const names = first?.embedders ?? (first?.embedder ? [first.embedder] : []);
+    if (names.length > 0) return names;
+    return this.datasetEmbedder ? [this.datasetEmbedder] : [];
+  }
+
+  /** The embedder *types* the active dataset supplies — the detector's eligible
+   *  locked types ("semantic" / "patch_semantic" / "structural"). */
+  get embedderTypeOptions(): EmbedderType[] {
+    return this.embedderCaps.suppliedTypes(this.boundEmbedderNames);
+  }
+
+  /** Show the type picker only when the active dataset supplies more than one
+   *  type — otherwise the single type is the unambiguous default and the server
+   *  resolves it without a pick. */
+  get showEmbedderPicker(): boolean {
+    return this.embedderTypeOptions.length > 1;
+  }
+
+  embedderTypeLabel(type: EmbedderType | ''): string {
+    return type ? EMBEDDER_TYPE_LABELS[type] : '';
+  }
+
+  /** License notice of the concrete embedder backing the selected type, or
+   *  null. The user picks a type; the server resolves the concrete embedder,
+   *  but we surface its licence up front so the warning isn't a surprise. */
+  get primaryLicenseNotice(): string | null {
+    const concrete = this.embedderCaps.firstOfType(this.boundEmbedderNames, this.embedderType());
+    if (!concrete) return null;
+    return (this.embedderCaps.infos() ?? []).find((e) => e.name === concrete)?.license_notice ?? null;
+  }
+
+  onEmbedderTypeChange(type: EmbedderType | ''): void {
+    this.embedderType.set(type);
+  }
+
+  /** Default the picker to the first supplied type the first time it becomes
+   *  relevant, so a multi-type dataset lands on a valid pick. */
+  private ensureEmbedderTypeDefault(): void {
+    if (this.showEmbedderPicker && !this.embedderType()) {
+      this.embedderType.set(this.embedderTypeOptions[0]);
+    }
+  }
+
   get canSubmitBlank(): boolean {
-    return !!this.name().trim() && this.hasExample && !this.submitting();
+    const embedderOk = !this.showEmbedderPicker || !!this.embedderType();
+    return !!this.name().trim() && this.hasExample && embedderOk && !this.submitting();
   }
 
   get canSubmitTrained(): boolean {
@@ -916,6 +982,10 @@ export class NewDetectorModalComponent implements OnInit {
         text_query: textQuery,
         media_example: mediaExample,
         examples: examplesPayload,
+        // Empty when the dataset supplies a single (or no) type — the server
+        // auto-resolves it; a chosen type on a multi-type dataset selects the
+        // detector's scoring space kind.
+        embedder_type: this.showEmbedderPicker ? this.embedderType() : '',
       })
       .subscribe({
         next: (resp: any) => {

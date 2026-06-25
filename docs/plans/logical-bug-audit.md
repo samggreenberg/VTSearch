@@ -1,9 +1,12 @@
 # Logical-Bug Audit: 2026-05
 
-**Status:** Mostly resolved; C1–C12 (critical) and H1–H34 (high) are
-shipped; ~12 medium/low items remain open (M21–M24, M28–M34, L1–L9;
-M25 and M27 shipped, M26 was a false positive). Resolved findings are
-marked as struck-through headings.
+**Status:** Resolved. C1–C12 (critical) and H1–H34 (high) are shipped; the
+security trio M32–M34 and the data-integrity M21 shipped 2026-06-24, and the
+L1–L9 low batch was triaged the same day (L7/L9 fixed, the rest closed as
+stale / hypothetical / by-design). The last two open mediums — **M29** (audio
+context cleanup) and **M35** (one-vote eval metrics) — shipped 2026-06-25. No
+open findings remain; this doc is kept as the audit record. Resolved findings
+are marked as struck-through headings.
 
 **Scope:** Multi-agent audit (10 per-subsystem + 5 cross-section
 interaction passes) of the entire VTSearch codebase, focused on
@@ -822,8 +825,18 @@ Cross-section interaction agents:
   commit `0a11d8bd`) so the failure is visible in logs instead of silent.
   The originally-flagged "embedders ignore `clip_start`/`clip_end`"
   concern was resolved separately by that same tile-embedding fix.
-- **M21.** Empty paragraph clip survives to dataset with `None` embedding;
-  embedding-matrix builder later misbehaves.
+- ~~**M21.** Empty paragraph clip survives to dataset with `None` embedding;
+  embedding-matrix builder later misbehaves.~~ **Shipped.** The text
+  clippers already filter empty *sub*-paragraphs (`if p.strip()`), and the
+  M11 work added `_drop_none_embeddings_stage` (removes `None`-embedding
+  media during load) plus a loud `ValueError` in the matrix builder, so the
+  "misbehaves silently" symptom is gone. The residual hole was a
+  whitespace-only clip whose embedder happens to return a *non-`None`*
+  garbage vector for empty input — the `None`-drop net wouldn't catch it.
+  Closed at the source: `_clip_content_bytes` now treats empty/whitespace
+  text as "no content", so a blank clip is never embedded, keeps
+  `embedding=None`, and is dropped by the existing stage. Regression tests
+  in `tests_lib/io/test_clip_reembed_bulk.py::TestBlankTextClipNotEmbedded`.
 
 ### Auth / context
 
@@ -910,8 +923,19 @@ Cross-section interaction agents:
   `response.ok`, and logs the underlying error via `console.warn` instead of
   swallowing it. `AbortError` is suppressed so rapid swiping doesn't spam the
   console or overwrite the next media's canvas.
-- **M29.** `AudioContext` not cleaned up on rapid navigation → resource
-  exhaustion.
+- ~~**M29.** `AudioContext` not cleaned up on rapid navigation → resource
+  exhaustion.~~ **Shipped.** Root cause: both the audio player and the
+  audio-crop overlay spun up a full hardware `AudioContext` purely to decode
+  audio for a static waveform. Chrome caps live contexts at ~6 and `close()`
+  is async, so rapid media navigation could create them faster than they tear
+  down (`NotSupportedError: number of hardware contexts reached maximum`); the
+  crop overlay additionally leaked its context whenever `decodeAudioData`
+  threw (the `catch` never called `close()`). Both now decode via a shared
+  `decodeAudioBuffer` helper (`frontend/src/app/utils/decode-audio.ts`) backed
+  by a throwaway `OfflineAudioContext`, which is purely computational — no
+  hardware allocation, no per-page cap, nothing to clean up. The audio
+  player's persistent `audioCtx` field and its `ngOnDestroy` close were
+  dropped.
 - ~~**M30.** Autopilot phase transitions can oscillate
   (`hard → new → hard → new`) when smart/stable status flickers.~~
   **Won't fix.** Evaluated and closed. The current derivation in
@@ -937,40 +961,105 @@ Cross-section interaction agents:
 
 ### Security
 
-- **M32.** `sanitize_template_value` allows `...` (and worse: any non-`.` /
-  `..` token of dots).
-- **M33.** `rglob_follow_symlinks` doesn't detect cycles → CPU/RAM DoS on
-  circular link layouts.
-- **M34.** Email exporter validates "@" only; `"@example.com"` passes and
-  fails at SMTP time.
+- ~~**M32.** `sanitize_template_value` allows `...` (and worse: any non-`.` /
+  `..` token of dots).~~ **Shipped.** `sanitize_template_value` now collapses
+  empty **and any all-dots token** (`.`, `..`, `...`, …) to `_`, replacing the
+  old exact-match-on-`("", ".", "..")` check. Path separators / NUL are still
+  replaced; legitimate dotted names (`.hidden`, `v1.2.3`) pass through.
+  Tests in `tests_lib/io/test_template_sanitization.py`.
+- ~~**M33.** `rglob_follow_symlinks` doesn't detect cycles → CPU/RAM DoS on
+  circular link layouts.~~ **Shipped.** `iter_rglob_follow_symlinks` now
+  tracks the `(st_dev, st_ino)` of every directory it descends into and
+  prunes already-visited subdirectories in place, so a directory symlinked
+  back to an ancestor is walked at most once and the traversal terminates.
+  Tests in `tests_lib/io/test_importer_symlinks.py::TestRglobFollowSymlinks`.
+- ~~**M34.** Email exporter validates "@" only; `"@example.com"` passes and
+  fails at SMTP time.~~ **Shipped.** The `email_smtp` exporter now validates
+  both addresses against a pragmatic regex requiring a non-empty local part,
+  a single `@`, and a dotted domain — rejecting `"@example.com"`, `"foo@"`,
+  and `"foo@bar"` before the MX lookup. Tests in
+  `tests/io/test_exporters.py::TestEmailLabelsetExporter`.
 
 ### Eval / exporters
 
-- **M35.** `voting_iterations.py` reports F1/FPR with one good + one bad vote
-  as if reliable.
+- ~~**M35.** `voting_iterations.py` reports F1/FPR with one good + one bad vote
+  as if reliable.~~ **Shipped.** `simulate_voting_iterations` emits a metrics
+  row as soon as ≥1 good and ≥1 bad vote exist, but that 1-vs-1 row was
+  indistinguishable from a 50-vs-50 row in the output. Rather than silently
+  drop early rows (lossy), each row now carries `n_good`/`n_bad` (the per-class
+  vote counts behind it, summing to `t`), threaded through both DataFrame
+  builders and documented in `vtscore/docs/packages/eval.md`, so downstream
+  analysis can filter or weight by sample size. Test coverage in
+  `tests_lib/detectors/test_eval_voting_iterations.py`.
 
 ---
 
 ## Low: latent / cosmetic / hypothetical
 
-- **L1.** `_run_pipeline` returns `None` silently in text mode (no "done"
-  signal).
-- **L2.** Pipeline-vs-server logic in `app.py` L792 is masked by `sys.exit()`
-  but breaks if the function is ever refactored to return.
-- **L3.** Frontend cross-pane settings: `getViewMode()` falls back to
-  hard-coded defaults when the per-media-type entry isn't loaded.
-- **L4.** `get_settings_source_config` reads cache without re-checking sync
-  state.
-- **L5.** Frontend `clip_box` exports: list-of-floats CSV-joined without
-  quote-protection (edge case).
-- **L6.** Empty `Origin.params` not always dropped consistently across
-  importers.
-- **L7.** `eval/metrics.py` returns F1=0 for empty test set without flagging
-  the degenerate case.
-- **L8.** Logging of vote-related events truncates achievement traceback for
-  UI display.
-- **L9.** `get_param` returns `""` for unknown keys; silently swallows
-  renamed parameters.
+Triaged 2026-06-24. Two carried real, low-risk fixes (L7, L9); the rest
+were stale line references, hypothetical, or already-correct-by-design and
+are closed with rationale below.
+
+- ~~**L1.** `_run_pipeline` returns `None` silently in text mode (no "done"
+  signal).~~ **Closed — not a bug.** Every `_run_pipeline` branch emits a
+  terminal signal: the live and streaming paths run an exporter, and
+  `_run_exporter` (`vtscore/cli.py`) always emits an `export_complete`
+  progress event (defaulting to `"Export complete."` when the exporter
+  returns no message); the dry-run path prints its plan. There is no silent
+  return.
+- ~~**L2.** Pipeline-vs-server logic in `app.py` L792 is masked by `sys.exit()`
+  but breaks if the function is ever refactored to return.~~ **Closed —
+  hypothetical, and the line reference is stale** (`app.py` was split; the
+  dispatch now lives in `vtsearch/cli_main.py:main`). That dispatch is a
+  plain `if args.autodetect: … else: _run_server(…)` with no shared
+  fall-through, and the early-exit helpers (`_maybe_list_plugins`,
+  `_maybe_run_pipeline`) correctly `sys.exit(0)`. Nothing breaks unless a
+  future edit deliberately removes those exits, which the `if/else` would
+  still contain.
+- ~~**L3.** Frontend cross-pane settings: `getViewMode()` falls back to
+  hard-coded defaults when the per-media-type entry isn't loaded.~~
+  **Closed — by design.** The `'list'`/`'grid'` fallbacks match the
+  server-side defaults, and the component is recreated on dataset switch, so
+  the unloaded window is a benign transient that resolves on the first
+  settings emission. No correctness impact.
+- ~~**L4.** `get_settings_source_config` reads cache without re-checking sync
+  state.~~ **Closed — by design.** The getter only returns the configured
+  source descriptor; it makes no claim about sync freshness.
+  `set_settings_source_config` is what owns sync state and already drops it
+  (`_store.drop_sync_state`) when the source is cleared, so there is no stale
+  "still synced" signal for the getter to re-check.
+- ~~**L5.** Frontend `clip_box` exports: list-of-floats CSV-joined without
+  quote-protection (edge case).~~ **Closed — already protected.** The
+  comma-joined `clip_box` cell is written through `csv.writer.writerow`
+  (`vtscore/exporters/server_csv_file`), which quotes any field containing a
+  comma (`QUOTE_MINIMAL`) and round-trips correctly through `csv.DictReader`.
+  The join is not hand-concatenated into the row.
+- ~~**L6.** Empty `Origin.params` not always dropped consistently across
+  importers.~~ **Closed — consistent by construction.** `Origin.to_dict`
+  always serialises `params` (an empty `{}` when unset) and `from_dict`
+  defaults to `{}`, so empty-vs-absent round-trips identically. The one real
+  hazard — sharing a single origin dict by reference across sibling clips —
+  is already handled where it matters (`load_pipeline.py` copies per media,
+  with an inline comment explaining the aliasing risk).
+- ~~**L7.** `eval/metrics.py` returns F1=0 for empty test set without flagging
+  the degenerate case.~~ **Shipped.**
+  `compute_binary_classification_metrics` now logs a warning when the
+  prediction set is empty (`total == 0`), so the all-zero tuple isn't
+  mistaken for a real 0%-accurate evaluation. Tests in
+  `tests_lib/detectors/test_eval.py::TestBinaryClassification`.
+- ~~**L8.** Logging of vote-related events truncates achievement traceback for
+  UI display.~~ **Closed — stale / non-existent.** No vote-event logging path
+  truncates a traceback: `vtsearch/routes/media/list.py` and
+  `routes/labels/vote.py` log via `logger.exception(...)` (full traceback),
+  and `achievements.py` never logs vote errors. The "truncation" in
+  `tests/core/test_votes.py` refers to vote-*step* history truncation, an
+  unrelated concept.
+- ~~**L9.** `get_param` returns `""` for unknown keys; silently swallows
+  renamed parameters.~~ **Shipped.** `MediaConverter.get_param` still returns
+  `""` for an undeclared key (historical contract), but now logs a warning
+  naming the key and converter, so a typo'd or renamed field surfaces instead
+  of reading as empty forever. Tests in
+  `tests/converters/test_converter_selection.py`.
 
 ---
 
@@ -1074,37 +1163,29 @@ Cross-cutting open items that don't fit any single finding above:
   transparently) would neutralise the whole category and let the
   matrix accessor compare a single int instead of two id lists.
 
-- **M18 follow-ups: pickle peek hardening.** Two adjacent leaks
-  surfaced while closing M18 but were left out of scope:
-  (1) `_codecs.encode` is not on the `_PICKLE_SAFE_CLASSES` allowlist,
+- ~~**M18 follow-ups: pickle peek hardening.**~~ **Shipped 2026-06-25.**
+  Both adjacent leaks closed:
+  (1) `_codecs.encode` is now on the `_PICKLE_SAFE_CLASSES` allowlist,
   so protocol-0/1/2 pickles containing inline `bytes` (which pickle
-  serialises as `_codecs.encode(s, 'latin-1')`) fail outright in both
-  `_PeekUnpickler` and `RestrictedUnpickler` / `safe_pickle_load`.
-  The staging route now surfaces this as an `error` field (no longer
-  silent), but a user trying to load an externally-produced legacy
-  pickle still gets a hard reject. Add `_codecs.encode` to the
-  allowlist (low risk; it's a codec dispatcher, not RCE) if we want
-  to support those uploads.
-  (2) `BINUNICODE` / `BINUNICODE8` are not overridden, so a pickle
-  with a multi-MB inline `media_string` (a long document) is still
-  fully materialised during peek. A blanket override doesn't work
-  because the peek needs short unicode strings (dict keys, `"media_type"`
-  value); a size-bounded handler (e.g. truncate over N bytes) would
-  cap the worst case.
+  serialises as `_codecs.encode(s, 'latin-1')`) load through
+  `RestrictedUnpickler` / `safe_pickle_load` instead of being rejected
+  (it's a codec dispatcher, not an RCE vector).
+  (2) `_PeekUnpickler` overrides `BINUNICODE` / `BINUNICODE8` with a
+  size-bounded handler (`_PEEK_MAX_INLINE_STR = 4096`): short strings
+  (dict keys, `"media_type"`) decode normally, while an over-cap inline
+  `media_string` (a long document) is consumed in bounded chunks and
+  replaced by `""`, so the peek never materialises the whole body.
 
-- **H1 follow-up: labelset element vote endpoint still toggles.**
-  `POST /api/detectors/<name>/labels/<element_id>/vote` (and the
-  underlying `apply_element_vote_in_data` in
-  `vtscore/detectors/labelset_elements.py`) still takes
-  `vote: "good" | "bad"` with toggle-on-same-direction semantics; a
-  stale-view tab voting against an already-good labelset element
-  removes the element from the on-disk labelset, same kind of
-  inflation race the media-vote H1 fix eliminated.  Migrating that
-  endpoint to absolute-target (`target: "good" | "bad" | "remove"`)
-  would let the in-memory `set_vote()` mirror run idempotently too,
-  closing the same class of race on the labelset side.  Deferred
-  because the labelset element CRUD is a separate user surface
-  (`vt-labels-list` modal, not the centre-pane click flow that H1
-  was scoped to).  The on-disk labelset write is idempotent already
-  via `_write_detector`; the race is on the in-memory mirror and
-  the `num_training` registry counter.
+- ~~**H1 follow-up: labelset element vote endpoint still toggles.**~~
+  **Shipped 2026-06-25.** `POST /api/detectors/<name>/labels/<element_id>/vote`
+  and the underlying `apply_element_vote_in_data` in
+  `vtscore/detectors/labelset_elements.py` now take an absolute
+  `target: "good" | "bad" | "remove"` instead of a toggle `vote`.
+  Re-asserting an element's current label is an idempotent `"unchanged"`
+  no-op, so a stale-view tab can no longer flip an element off the
+  labelset by re-sending its current polarity — the same inflation race
+  the media-vote H1 fix eliminated. The in-memory mirror moved from
+  `toggle_vote()` to `set_vote()` with the same absolute target
+  (`"remove"` → `"none"`), so it stays idempotent too; the frontend
+  (`vt-labels-list` via `LabelsetStateService`) translates the clicked
+  direction into a target in one place, mirroring the centre-pane vote.

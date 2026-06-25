@@ -1,8 +1,10 @@
-"""Tests for the dict-keyed per-media embedding accessor (Phase 2 substrate).
+"""Tests for the dict-keyed per-media embedding accessor (Phase 2c).
 
-The accessor resolves a media's embedding from ``media["embeddings"]`` (the
-dict-keyed form) with a fallback to the legacy singular ``media["embedding"]``,
-so the two representations coexist during the migration.
+``media["embeddings"]`` (a dict keyed by embedder name) is the *only* per-media
+vector store; there is no singular ``media["embedding"]`` on a live media.  The
+accessor reads only the dict, ``set_media_embedding`` writes only the dict, and
+``ensure_embeddings_dict`` re-keys a legacy singular vector into the dict and
+then drops the singular key (the on-load migration for old pickles).
 """
 
 from __future__ import annotations
@@ -23,11 +25,12 @@ def _vec(seed: int, dim: int = 4) -> np.ndarray:
 
 
 class TestMediaEmbedding:
-    def test_legacy_singular_only(self):
-        v = _vec(1)
-        media = {"embedding": v, "embedder": "siglip"}
-        assert media_embedding(media) is v
-        assert media_embedding(media, "siglip") is v
+    def test_singular_is_not_read(self):
+        # A legacy-shaped media (singular only, no dict) is never read by the
+        # accessor: there is no fallback to media["embedding"].
+        media = {"embedding": _vec(1), "embedder": "siglip"}
+        assert media_embedding(media) is None
+        assert media_embedding(media, "siglip") is None
 
     def test_dict_entry_by_name(self):
         a, b = _vec(1), _vec(2)
@@ -45,41 +48,45 @@ class TestMediaEmbedding:
         media = {"embeddings": {"siglip": a}}
         assert media_embedding(media) is a
 
-    def test_ambiguous_multiple_entries_falls_back_to_singular(self):
-        a, b, s = _vec(1), _vec(2), _vec(3)
-        media = {"embeddings": {"x": a, "y": b}, "embedding": s}
-        # No recorded primary + >1 entry → legacy singular wins.
-        assert media_embedding(media) is s
+    def test_ambiguous_multiple_entries_returns_none(self):
+        a, b = _vec(1), _vec(2)
+        media = {"embeddings": {"x": a, "y": b}}
+        # No recorded primary + >1 entry → no unambiguous primary vector.
+        assert media_embedding(media) is None
 
-    def test_named_lookup_misses_when_embedder_differs(self):
-        s = _vec(1)
-        media = {"embedding": s, "embedder": "siglip"}
-        # Singular belongs to siglip; a request for a different embedder misses.
+    def test_named_lookup_misses_for_unbound_embedder(self):
+        a = _vec(1)
+        media = {"embeddings": {"siglip": a}, "embedder": "siglip"}
         assert media_embedding(media, "dinov3_patch") is None
-        assert media_embedding(media, "siglip") is s
+        assert media_embedding(media, "siglip") is a
 
     def test_missing_everything_returns_none(self):
         assert media_embedding({}) is None
         assert media_embedding({}, "siglip") is None
+        assert media_embedding({"embeddings": {}}) is None
 
 
 class TestEnsureEmbeddingsDict:
-    def test_materializes_from_singular(self):
+    def test_materializes_from_singular_and_drops_it(self):
         v = _vec(1)
         media = {"embedding": v, "embedder": "siglip"}
         ensure_embeddings_dict(media)
         assert media["embeddings"] == {"siglip": v}
+        assert "embedding" not in media
 
-    def test_idempotent(self):
-        a = _vec(1)
-        media = {"embeddings": {"siglip": a}, "embedder": "siglip"}
+    def test_idempotent_drops_stray_singular(self):
+        a, stray = _vec(1), _vec(2)
+        media = {"embeddings": {"siglip": a}, "embedding": stray, "embedder": "siglip"}
         ensure_embeddings_dict(media)
+        # The dict is authoritative; a stray singular is removed, not merged.
         assert media["embeddings"] == {"siglip": a}
+        assert "embedding" not in media
 
     def test_no_dict_when_embedder_unknown(self):
         media = {"embedding": _vec(1)}
         ensure_embeddings_dict(media)
         assert "embeddings" not in media
+        assert "embedding" not in media
 
     def test_no_op_without_vector(self):
         media = {"embedder": "siglip"}
@@ -88,23 +95,23 @@ class TestEnsureEmbeddingsDict:
 
 
 class TestSetMediaEmbedding:
-    def test_writes_dict_and_primary_mirror(self):
+    def test_writes_dict_only(self):
         v = _vec(1)
         media: dict = {}
         set_media_embedding(media, "siglip", v)
         assert media["embeddings"] == {"siglip": v}
-        assert media["embedding"] is v
+        assert "embedding" not in media
         assert media["embedder"] == "siglip"
 
-    def test_second_embedder_keeps_primary_mirror(self):
+    def test_second_embedder_adds_entry_keeps_primary_name(self):
         a, b = _vec(1), _vec(2)
         media: dict = {}
         set_media_embedding(media, "siglip", a)
         set_media_embedding(media, "dinov3_patch", b)
-        # Both stored; the singular mirror stays on the primary (first/recorded).
         assert media["embeddings"]["siglip"] is a
         assert media["embeddings"]["dinov3_patch"] is b
-        assert media["embedding"] is a
+        assert "embedding" not in media
+        # The recorded primary stays the first embedder written.
         assert media["embedder"] == "siglip"
 
 
@@ -118,8 +125,9 @@ class TestMediaEmbedderNames:
     def test_empty(self):
         assert media_embedder_names({}) == []
 
-    def test_singular_only(self):
-        assert media_embedder_names({"embedding": _vec(1), "embedder": "siglip"}) == ["siglip"]
+    def test_recorded_embedder_without_dict(self):
+        # No dict yet (un-embedded media): fall back to the recorded name.
+        assert media_embedder_names({"embedder": "siglip"}) == ["siglip"]
 
     def test_dict_keys(self):
         media = {"embeddings": {"siglip": _vec(1), "dinov3_patch": _vec(2)}}
@@ -132,7 +140,7 @@ class TestMediaEmbedderNames:
         }
         assert media_embedder_names(media) == ["dinov3_patch", "siglip"]
 
-    def test_dict_takes_precedence_over_singular_embedder(self):
+    def test_dict_takes_precedence_over_recorded_embedder(self):
         media = {"embeddings": {"a": _vec(1)}, "embedder": "siglip"}
         # "siglip" isn't a dict key, so it doesn't get prepended; the dict wins.
         assert media_embedder_names(media) == ["a"]

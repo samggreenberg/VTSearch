@@ -64,7 +64,8 @@ class TestBuildProjectionStage:
             ctx.medias[cid] = {
                 "id": cid,
                 "media_type": "audio",
-                "embedding": rng.standard_normal(8).astype(np.float32),
+                "embedder": "clap",
+                "embeddings": {"clap": rng.standard_normal(8).astype(np.float32)},
             }
         return ctx
 

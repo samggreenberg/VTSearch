@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, HostListener, Input, OnInit, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, HostListener, inject, Input, input, OnInit, output, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -19,6 +19,7 @@ import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeI
 import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-dataset-importer-modal',
   standalone: true,
   imports: [FormsModule, ModalComponent, ClipperChooserComponent, ImportAdvancedComponent, ImportConfigComponent, SourcePickerComponent, FieldHintIconComponent, FileBrowserComponent, FolderBrowserComponent],
@@ -70,6 +71,12 @@ export class DatasetImporterModalComponent implements OnInit {
   allEmbedders: EmbedderInfo[] = [];
   readonly availableEmbedders = signal<EmbedderInfo[]>([]);
   readonly selectedEmbedder = signal('');
+  // Optional v3 trio extras for each flow: a patch embedder (region search) and
+  // a structural embedder (instance match) bound alongside the primary above.
+  // Empty = not bound (the single-embedder path).  One pair per flow, mirroring
+  // the per-flow primary signals (form / demo / server-folder / local-*).
+  readonly selectedPatchEmbedder = signal('');
+  readonly selectedStructuralEmbedder = signal('');
 
   // Demo picker state
   readonly demos = signal<DemoDataset[]>([]);
@@ -79,9 +86,12 @@ export class DatasetImporterModalComponent implements OnInit {
   readonly demoLoading = signal(false);
   readonly demoEmbedders = signal<EmbedderInfo[]>([]);
   readonly selectedDemoEmbedder = signal('');
+  readonly selectedDemoPatchEmbedder = signal('');
+  readonly selectedDemoStructuralEmbedder = signal('');
   demoEmbedder = '';
   readonly demoClippers = signal<ClipperInfo[]>([]);
   readonly selectedDemoClipper = signal('');
+  readonly demoClipperParamValues = signal<Record<string, number | string>>({});
   /** Optional user-supplied dataset name for demo imports.  Empty means
    *  "use the demo entry's label". */
   demoDatasetName = '';
@@ -126,6 +136,8 @@ export class DatasetImporterModalComponent implements OnInit {
   lfMediaTypeOptions: string[] = [];
   readonly lfEmbedders = signal<EmbedderInfo[]>([]);
   readonly lfSelectedEmbedder = signal('');
+  readonly lfSelectedPatchEmbedder = signal('');
+  readonly lfSelectedStructuralEmbedder = signal('');
   readonly lfClippers = signal<ClipperInfo[]>([]);
   readonly lfSelectedClipper = signal('');
   lfClipperParams: ClipperParameter[] = [];
@@ -154,6 +166,8 @@ export class DatasetImporterModalComponent implements OnInit {
   sfMediaTypeOptions: string[] = [];
   readonly sfEmbedders = signal<EmbedderInfo[]>([]);
   readonly sfSelectedEmbedder = signal('');
+  readonly sfSelectedPatchEmbedder = signal('');
+  readonly sfSelectedStructuralEmbedder = signal('');
   readonly sfClippers = signal<ClipperInfo[]>([]);
   readonly sfSelectedClipper = signal('');
   sfClipperParams: ClipperParameter[] = [];
@@ -164,6 +178,9 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Whether archives inside the picked folder are extracted and imported.
    *  Also enables pointing the folder path directly at a single archive. */
   sfDigArchives = false;
+  /** Whether the dataset references the original files in place instead of
+   *  copying their bytes in (maps onto the loader's thin mode). */
+  sfReferenceFiles = false;
   /** Optional user-supplied dataset name for server-folder imports. */
   sfDatasetName = '';
   /** Whether the user has manually edited :prop:`sfDatasetName`. */
@@ -909,6 +926,11 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 
   private loadEmbedders(mediaType: string): void {
+    // The optional trio extras are role-typed to the current media type's
+    // embedders; clear them on every (re)load so an image patch/structural pick
+    // never carries into a different media type.
+    this.selectedPatchEmbedder.set('');
+    this.selectedStructuralEmbedder.set('');
     if (!mediaType) {
       this.availableEmbedders.set([]);
       this.selectedEmbedder.set('');
@@ -994,11 +1016,14 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 
   private loadDemoEmbedders(mediaType: string): void {
+    this.selectedDemoPatchEmbedder.set('');
+    this.selectedDemoStructuralEmbedder.set('');
     if (!mediaType) {
       this.demoEmbedders.set([]);
       this.selectedDemoEmbedder.set('');
       this.demoClippers.set([]);
       this.selectedDemoClipper.set('');
+      this.demoClipperParamValues.set({});
       return;
     }
     this.datasetsListingsApi.getEmbedders(mediaType).subscribe({
@@ -1010,7 +1035,7 @@ export class DatasetImporterModalComponent implements OnInit {
         // The initial demo fetch had no embedder/clipper context, so re-fetch
         // with the now-known defaults for authoritative status values.
         if (this.selectedDemoEmbedder()) {
-          this.refetchDemoStatuses(this.selectedDemoEmbedder(), this.selectedDemoClipper());
+          this.refetchDemoStatuses(this.selectedDemoEmbedder(), this.effectiveDemoClipper());
         }
       },
     });
@@ -1018,21 +1043,35 @@ export class DatasetImporterModalComponent implements OnInit {
       next: (clippers) => {
         this.demoClippers.set(clippers);
         this.selectedDemoClipper.set(clippers.length > 0 ? clippers[0].name : '');
+        this.demoClipperParamValues.set({});
       },
     });
+  }
+
+  /** The demo clipper the user actually chose, or ``''`` when it is a
+   *  no-op (the explicit "None"/``*_default`` choice).  Mirrors the
+   *  backend's ``_effective_clipper`` so status checks and the load request
+   *  agree on when clipping happens.  The pre-selected default a media type
+   *  offers (``clippers[0]``) can be a *real* clipper - audio defaults to
+   *  ``sound_tiling``, video to ``video_auto`` - so it is deliberately NOT
+   *  treated as a no-op; selecting it splits the media as intended. */
+  private effectiveDemoClipper(): string {
+    const name = this.selectedDemoClipper();
+    const isDefault = !name || name.endsWith('_default');
+    return isDefault ? '' : name;
   }
 
   onDemoEmbedderChange(embedder: string): void {
     this.selectedDemoEmbedder.set(embedder);
     this.demoEmbedder = embedder;
     this.updateDemoStatuses();
-    this.refetchDemoStatuses(embedder, this.selectedDemoClipper());
+    this.refetchDemoStatuses(embedder, this.effectiveDemoClipper());
   }
 
   onDemoClipperChange(clipper: string): void {
     this.selectedDemoClipper.set(clipper);
     this.updateDemoStatuses();
-    this.refetchDemoStatuses(this.selectedDemoEmbedder(), this.selectedDemoClipper());
+    this.refetchDemoStatuses(this.selectedDemoEmbedder(), this.effectiveDemoClipper());
   }
 
   /**
@@ -1046,7 +1085,7 @@ export class DatasetImporterModalComponent implements OnInit {
    */
   private updateDemoStatuses(): void {
     const emb = this.selectedDemoEmbedder();
-    const clip = this.selectedDemoClipper();
+    const clip = this.effectiveDemoClipper();
     for (const demo of this.demos()) {
       if (demo.media_type !== this.activeTab()) continue;
       if (demo.status === 'needs_download') continue;
@@ -1232,10 +1271,17 @@ export class DatasetImporterModalComponent implements OnInit {
     const demo = this.selectedDemo;
     if (!demo) return;
     const userName = (this.demoDatasetName || '').trim();
+    const demoEmbedders = this.composeEmbedders(
+      this.selectedDemoEmbedder(),
+      this.selectedDemoPatchEmbedder(),
+      this.selectedDemoStructuralEmbedder(),
+    );
+    const effClipper = this.effectiveDemoClipper();
     this.demoSelected.emit({
       ...demo,
       embedder: this.selectedDemoEmbedder(),
-      clipper: this.selectedDemoClipper(),
+      ...(demoEmbedders ? { embedders: demoEmbedders } : {}),
+      ...(effClipper ? { clipper: effClipper, clipper_params: { ...this.demoClipperParamValues() } } : {}),
       dataset_name: userName,
       build_projection: this.buildProjection,
     } as any);
@@ -1402,6 +1448,8 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 
   private lfLoadEmbedders(mediaType: string): void {
+    this.lfSelectedPatchEmbedder.set('');
+    this.lfSelectedStructuralEmbedder.set('');
     if (!mediaType) {
       this.lfEmbedders.set([]);
       this.lfSelectedEmbedder.set('');
@@ -1558,6 +1606,14 @@ export class DatasetImporterModalComponent implements OnInit {
     if (this.lfSelectedEmbedder()) {
       formData.append('embedder', this.lfSelectedEmbedder());
     }
+    const lfEmbedders = this.composeEmbedders(
+      this.lfSelectedEmbedder(),
+      this.lfSelectedPatchEmbedder(),
+      this.lfSelectedStructuralEmbedder(),
+    );
+    if (lfEmbedders) {
+      formData.append('embedders', JSON.stringify(lfEmbedders));
+    }
     if (this.lfSelectedClipper()) {
       formData.append('clipper', this.lfSelectedClipper());
       if (this.lfClipperParams.length > 0 && Object.keys(this.lfClipperParamValues()).length > 0) {
@@ -1577,6 +1633,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.sfSubmitting.set(false);
     this.sfRecursive = this.readRecursiveDefault(this.selectedImporter());
     this.sfDigArchives = false;
+    this.sfReferenceFiles = false;
     this.sfDatasetName = '';
     this.sfDatasetNameDirty = false;
     this.sfPathInputValue = '';
@@ -1607,6 +1664,30 @@ export class DatasetImporterModalComponent implements OnInit {
    *  the typed path input; ``sfApplyPathInput`` stores it in
    *  ``sfFolderPath`` for the submit + detection helpers to consume. */
   sfPathInputValue = '';
+
+  /** Called on every keystroke in the absolute-path input.  Commits the
+   *  typed value to ``sfFolderPath`` (so the Import button enables and the
+   *  Dataset Name auto-derives live, without the user having to blur the
+   *  field first) but defers the server-side media-type detection to
+   *  :meth:`sfApplyPathInput` on blur/enter so we don't fire a request per
+   *  keystroke. */
+  sfOnPathInput(value: string): void {
+    this.sfPathInputValue = value;
+    const raw = (value || '').trim();
+    if (!raw) {
+      this.sfFolderPath = '';
+      this.sfBrowseError.set('');
+      this.sfDetection.set(null);
+      if (!this.sfDatasetNameDirty) {
+        this.sfDatasetName = '';
+      }
+      return;
+    }
+    this.sfFolderPath = raw.replace(/\/+$/, '') || '/';
+    if (!this.sfDatasetNameDirty) {
+      this.sfDatasetName = this.sfDerivedDatasetName();
+    }
+  }
 
   /** Apply the value typed into the absolute-path input. The path is not
    *  verified here - the server validates it on submit. */
@@ -1900,6 +1981,8 @@ export class DatasetImporterModalComponent implements OnInit {
   onFormSpecsChange(specs: SourceSpec[]): void { this.formSourceSpecs = specs; }
 
   private sfLoadEmbedders(mediaType: string): void {
+    this.sfSelectedPatchEmbedder.set('');
+    this.sfSelectedStructuralEmbedder.set('');
     if (!mediaType) {
       this.sfEmbedders.set([]);
       this.sfSelectedEmbedder.set('');
@@ -1974,8 +2057,9 @@ export class DatasetImporterModalComponent implements OnInit {
       this.clipperParamValues.set({ ...selection.params });
     } else if (ctx === 'demo') {
       this.selectedDemoClipper.set(selection.name);
+      this.demoClipperParamValues.set({ ...selection.params });
       this.updateDemoStatuses();
-      this.refetchDemoStatuses(this.selectedDemoEmbedder(), this.selectedDemoClipper());
+      this.refetchDemoStatuses(this.selectedDemoEmbedder(), this.effectiveDemoClipper());
     } else if (ctx === 'sf') {
       this.sfSelectedClipper.set(selection.name);
       this.sfClipperParamValues.set({ ...selection.params });
@@ -1997,8 +2081,9 @@ export class DatasetImporterModalComponent implements OnInit {
       this.resetClipperParams();
     } else if (ctx === 'demo') {
       this.selectedDemoClipper.set(defaultName);
+      this.demoClipperParamValues.set({});
       this.updateDemoStatuses();
-      this.refetchDemoStatuses(this.selectedDemoEmbedder(), this.selectedDemoClipper());
+      this.refetchDemoStatuses(this.selectedDemoEmbedder(), this.effectiveDemoClipper());
     } else if (ctx === 'sf') {
       this.sfSelectedClipper.set(defaultName);
       this.sfResetClipperParams();
@@ -2017,6 +2102,7 @@ export class DatasetImporterModalComponent implements OnInit {
       media_type: this.sfMediaType(),
       recursive: this.sfRecursive,
       dig_archives: this.sfDigArchives,
+      reference_files: this.sfReferenceFiles,
     };
     const sfName = (this.sfDatasetName || '').trim();
     if (sfName) {
@@ -2024,6 +2110,14 @@ export class DatasetImporterModalComponent implements OnInit {
     }
     if (this.sfSelectedEmbedder()) {
       params['embedder'] = this.sfSelectedEmbedder();
+    }
+    const sfEmbedders = this.composeEmbedders(
+      this.sfSelectedEmbedder(),
+      this.sfSelectedPatchEmbedder(),
+      this.sfSelectedStructuralEmbedder(),
+    );
+    if (sfEmbedders) {
+      params['embedders'] = sfEmbedders;
     }
     if (this.sfSelectedClipper()) {
       params['clipper'] = this.sfSelectedClipper();
@@ -2077,6 +2171,19 @@ export class DatasetImporterModalComponent implements OnInit {
     return true;
   }
 
+  /** Compose the v3 embedder trio request value from a flow's three role picks.
+   *  Returns the deduped, non-empty union with the *primary* first, or ``null``
+   *  when only the primary is bound — then the single ``embedder`` field carries
+   *  it (the unchanged pre-trio single-embedder path). */
+  private composeEmbedders(primary: string, patch: string, structural: string): string[] | null {
+    const list: string[] = [];
+    for (const candidate of [primary, patch, structural]) {
+      const name = (candidate || '').trim();
+      if (name && !list.includes(name)) list.push(name);
+    }
+    return list.length > 1 ? list : null;
+  }
+
   submit(): void {
     if (!this.selectedImporter()) return;
     this.submitting.set(true);
@@ -2092,6 +2199,14 @@ export class DatasetImporterModalComponent implements OnInit {
     }
     if (this.selectedEmbedder()) {
       submitValues['embedder'] = this.selectedEmbedder();
+    }
+    const formEmbedders = this.composeEmbedders(
+      this.selectedEmbedder(),
+      this.selectedPatchEmbedder(),
+      this.selectedStructuralEmbedder(),
+    );
+    if (formEmbedders) {
+      submitValues['embedders'] = formEmbedders;
     }
     if (this.formSourceSpecs.length > 0) {
       submitValues['source_specs'] = this.formSourceSpecs;

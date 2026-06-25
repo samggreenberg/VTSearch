@@ -32,11 +32,11 @@ def _make_separable_clips(dim=16, n_per_cat=20, seed=0):
     media_id = 1
     for _ in range(n_per_cat):
         emb = rng.normal(1.0, 0.2, dim).astype(np.float32)
-        medias[media_id] = {"id": media_id, "embedding": emb, "category": "alpha"}
+        medias[media_id] = {"id": media_id, "embeddings": {"emb": emb}, "category": "alpha"}
         media_id += 1
     for _ in range(n_per_cat):
         emb = rng.normal(-1.0, 0.2, dim).astype(np.float32)
-        medias[media_id] = {"id": media_id, "embedding": emb, "category": "beta"}
+        medias[media_id] = {"id": media_id, "embeddings": {"emb": emb}, "category": "beta"}
         media_id += 1
     return medias
 
@@ -52,11 +52,11 @@ def _make_overlapping_clips(dim=16, n_per_cat=20, seed=0):
     media_id = 1
     for _ in range(n_per_cat):
         emb = rng.normal(0.3, 1.0, dim).astype(np.float32)
-        medias[media_id] = {"id": media_id, "embedding": emb, "category": "alpha"}
+        medias[media_id] = {"id": media_id, "embeddings": {"emb": emb}, "category": "alpha"}
         media_id += 1
     for _ in range(n_per_cat):
         emb = rng.normal(-0.3, 1.0, dim).astype(np.float32)
-        medias[media_id] = {"id": media_id, "embedding": emb, "category": "beta"}
+        medias[media_id] = {"id": media_id, "embeddings": {"emb": emb}, "category": "beta"}
         media_id += 1
     return medias
 
@@ -70,7 +70,7 @@ def _make_three_category_clips(dim=16, n_per_cat=15, seed=0):
     for cat, centre in centres.items():
         for _ in range(n_per_cat):
             emb = rng.normal(centre, 0.2, dim).astype(np.float32)
-            medias[media_id] = {"id": media_id, "embedding": emb, "category": cat}
+            medias[media_id] = {"id": media_id, "embeddings": {"emb": emb}, "category": cat}
             media_id += 1
     return medias
 
@@ -167,9 +167,38 @@ class TestSimulateVotingIterations:
             seed=42,
             dataset_name="test_ds",
         )
-        expected_keys = {"seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"}
+        expected_keys = {
+            "seed",
+            "dataset",
+            "category",
+            "t",
+            "n_good",
+            "n_bad",
+            "cost",
+            "fpr",
+            "fnr",
+            "elapsed_seconds",
+        }
         for row in rows:
             assert set(row.keys()) == expected_keys
+
+    def test_vote_counts_reported(self):
+        """Each row carries the good/bad vote counts the model was trained on.
+
+        The first scored row reflects the 1-good + 1-bad minimum, and the
+        counts never exceed the votes seen so far (t).
+        """
+        medias = _make_separable_clips(n_per_cat=10)
+        rows = simulate_voting_iterations(medias, "alpha", seed=42)
+        assert rows  # at least one scored step
+        first = rows[0]
+        assert first["n_good"] >= 1
+        assert first["n_bad"] >= 1
+        assert min(first["n_good"], first["n_bad"]) == 1  # earliest trainable step
+        for row in rows:
+            assert row["n_good"] + row["n_bad"] == row["t"]
+            assert row["n_good"] >= 1
+            assert row["n_bad"] >= 1
 
     def test_seed_determinism(self):
         medias = _make_separable_clips(n_per_cat=10)
@@ -224,10 +253,10 @@ class TestSimulateVotingIterations:
         """If all medias of target category land in sim, test set has no positives -> empty."""
         # Only 1 media of target category; likely all end up in sim with 50% split
         medias = {
-            1: {"id": 1, "embedding": np.ones(8, dtype=np.float32), "category": "rare"},
-            2: {"id": 2, "embedding": -np.ones(8, dtype=np.float32), "category": "common"},
-            3: {"id": 3, "embedding": -np.ones(8, dtype=np.float32) * 0.9, "category": "common"},
-            4: {"id": 4, "embedding": -np.ones(8, dtype=np.float32) * 0.8, "category": "common"},
+            1: {"id": 1, "embeddings": {"emb": np.ones(8, dtype=np.float32)}, "category": "rare"},
+            2: {"id": 2, "embeddings": {"emb": -np.ones(8, dtype=np.float32)}, "category": "common"},
+            3: {"id": 3, "embeddings": {"emb": -np.ones(8, dtype=np.float32) * 0.9}, "category": "common"},
+            4: {"id": 4, "embeddings": {"emb": -np.ones(8, dtype=np.float32) * 0.8}, "category": "common"},
         }
         rows = simulate_voting_iterations(medias, "rare", seed=42, sim_fraction=0.5)
         # Might be empty or not depending on split; just shouldn't crash
@@ -267,7 +296,18 @@ class TestRunVotingIterationsEval:
             categories={"ds1": ["alpha"]},
         )
         assert isinstance(df, pd.DataFrame)
-        assert list(df.columns) == ["seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"]
+        assert list(df.columns) == [
+            "seed",
+            "dataset",
+            "category",
+            "t",
+            "n_good",
+            "n_bad",
+            "cost",
+            "fpr",
+            "fnr",
+            "elapsed_seconds",
+        ]
 
     def test_multiple_seeds(self):
         medias = _make_separable_clips(n_per_cat=10)

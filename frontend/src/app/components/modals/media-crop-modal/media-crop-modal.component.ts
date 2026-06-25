@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, OnDestroy, OnInit, output } from '@angular/core';
 
 import { ModalComponent } from '../../modal/modal.component';
 import { ImageCropOverlayComponent, ImageCropResult } from './image-crop-overlay.component';
@@ -14,6 +14,7 @@ export interface MediaCropResult {
 type View = 'confirm' | 'cropping';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-media-crop-modal',
   standalone: true,
   imports: [ModalComponent, ImageCropOverlayComponent, AudioCropOverlayComponent],

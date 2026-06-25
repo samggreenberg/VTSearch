@@ -1,7 +1,7 @@
 """Tests for the Label Importer abstraction.
 
 Covers:
-- LabelImporterField and LabelImporter base classes
+- PluginField and LabelImporter base classes
 - Auto-discovery registry (list_label_importers, get_label_importer)
 - GET /api/label-importers endpoint
 - Built-in importers: server_json_file, server_csv_file
@@ -17,15 +17,15 @@ import app as app_module
 
 
 # ---------------------------------------------------------------------------
-# LabelImporterField
+# PluginField
 # ---------------------------------------------------------------------------
 
 
 class TestLabelImporterField:
     def test_to_dict_contains_required_keys(self):
-        from vtscore.labels.importers.base import LabelImporterField
+        from vtscore.labels.importers.base import PluginField
 
-        f = LabelImporterField(key="file", label="My File", field_type="file")
+        f = PluginField(key="file", label="My File", field_type="file")
         d = f.to_dict()
         assert d["key"] == "file"
         assert d["label"] == "My File"
@@ -38,9 +38,9 @@ class TestLabelImporterField:
         assert "placeholder" in d
 
     def test_defaults(self):
-        from vtscore.labels.importers.base import LabelImporterField
+        from vtscore.labels.importers.base import PluginField
 
-        f = LabelImporterField(key="x", label="X", field_type="text")
+        f = PluginField(key="x", label="X", field_type="text")
         assert f.required is True
         assert f.default == ""
         assert f.placeholder == ""
@@ -49,9 +49,9 @@ class TestLabelImporterField:
         assert f.accept == ""
 
     def test_custom_values(self):
-        from vtscore.labels.importers.base import LabelImporterField
+        from vtscore.labels.importers.base import PluginField
 
-        f = LabelImporterField(
+        f = PluginField(
             key="mode",
             label="Mode",
             field_type="select",
@@ -124,13 +124,13 @@ class TestLabelImporterBase:
         assert Custom().to_dict()["icon"] == "🔖"
 
     def test_validate_cli_field_values_raises_on_missing_required(self):
-        from vtscore.labels.importers.base import LabelImporter, LabelImporterField
+        from vtscore.labels.importers.base import LabelImporter, PluginField
 
         class Imp(LabelImporter):
             name = "t"
             display_name = "T"
             description = "T"
-            fields = [LabelImporterField("filepath", "File", "text", required=True)]
+            fields = [PluginField("filepath", "File", "text", required=True)]
 
             def run(self, field_values):
                 return []
@@ -140,13 +140,13 @@ class TestLabelImporterBase:
             imp.validate_cli_field_values({})
 
     def test_validate_cli_field_values_passes_when_provided(self):
-        from vtscore.labels.importers.base import LabelImporter, LabelImporterField
+        from vtscore.labels.importers.base import LabelImporter, PluginField
 
         class Imp(LabelImporter):
             name = "t"
             display_name = "T"
             description = "T"
-            fields = [LabelImporterField("filepath", "File", "text", required=True)]
+            fields = [PluginField("filepath", "File", "text", required=True)]
 
             def run(self, field_values):
                 return []
@@ -173,13 +173,13 @@ class TestLabelImporterBase:
     def test_add_cli_arguments_adds_text_field(self):
         import argparse
 
-        from vtscore.labels.importers.base import LabelImporter, LabelImporterField
+        from vtscore.labels.importers.base import LabelImporter, PluginField
 
         class Imp(LabelImporter):
             name = "t"
             display_name = "T"
             description = "T"
-            fields = [LabelImporterField("server", "Server", "text", description="DB host")]
+            fields = [PluginField("server", "Server", "text", description="DB host")]
 
             def run(self, field_values):
                 return []
@@ -192,13 +192,13 @@ class TestLabelImporterBase:
     def test_add_cli_arguments_select_adds_choices(self):
         import argparse
 
-        from vtscore.labels.importers.base import LabelImporter, LabelImporterField
+        from vtscore.labels.importers.base import LabelImporter, PluginField
 
         class Imp(LabelImporter):
             name = "t"
             display_name = "T"
             description = "T"
-            fields = [LabelImporterField("mode", "Mode", "select", options=["a", "b"], default="a")]
+            fields = [PluginField("mode", "Mode", "select", options=["a", "b"], default="a")]
 
             def run(self, field_values):
                 return []

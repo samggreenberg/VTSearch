@@ -566,7 +566,36 @@ class ImageFaceClipper(MediaClipper):
             model_selection=self._model_selection,
         )
 
-    def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:  # noqa: C901
+    def _box_from_detection(self, det: Any, w: int, h: int) -> tuple[int, int, int, int, float] | None:
+        """Turn one MediaPipe detection into a padded, clamped pixel box.
+
+        Returns ``(x1, y1, x2, y2, conf)`` in pixel coordinates of a ``w`` x
+        ``h`` image, or ``None`` when the detection has no usable score, falls
+        below :attr:`_threshold`, or is smaller than :attr:`_min_size` on
+        either axis after padding.
+        """
+        try:
+            conf = float(det.score[0])
+        except (AttributeError, IndexError, TypeError):
+            return None
+        if conf < self._threshold:
+            return None
+        rel = det.location_data.relative_bounding_box
+        fx1 = rel.xmin * w
+        fy1 = rel.ymin * h
+        fx2 = (rel.xmin + rel.width) * w
+        fy2 = (rel.ymin + rel.height) * h
+        pad_x = (fx2 - fx1) * self._padding
+        pad_y = (fy2 - fy1) * self._padding
+        x1 = max(0, int(round(fx1 - pad_x)))
+        y1 = max(0, int(round(fy1 - pad_y)))
+        x2 = min(w, int(round(fx2 + pad_x)))
+        y2 = min(h, int(round(fy2 + pad_y)))
+        if x2 - x1 < self._min_size or y2 - y1 < self._min_size:
+            return None
+        return (x1, y1, x2, y2, conf)
+
+    def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         from PIL import Image  # noqa: PLC0415
         import numpy as np  # noqa: PLC0415
 
@@ -589,26 +618,9 @@ class ImageFaceClipper(MediaClipper):
 
         boxes: list[tuple[int, int, int, int, float]] = []
         for det in detections:
-            try:
-                conf = float(det.score[0])
-            except (AttributeError, IndexError, TypeError):
-                continue
-            if conf < self._threshold:
-                continue
-            rel = det.location_data.relative_bounding_box
-            fx1 = rel.xmin * img_w
-            fy1 = rel.ymin * img_h
-            fx2 = (rel.xmin + rel.width) * img_w
-            fy2 = (rel.ymin + rel.height) * img_h
-            pad_x = (fx2 - fx1) * self._padding
-            pad_y = (fy2 - fy1) * self._padding
-            x1 = max(0, int(round(fx1 - pad_x)))
-            y1 = max(0, int(round(fy1 - pad_y)))
-            x2 = min(img_w, int(round(fx2 + pad_x)))
-            y2 = min(img_h, int(round(fy2 + pad_y)))
-            if x2 - x1 < self._min_size or y2 - y1 < self._min_size:
-                continue
-            boxes.append((x1, y1, x2, y2, conf))
+            box = self._box_from_detection(det, img_w, img_h)
+            if box is not None:
+                boxes.append(box)
 
         # Highest-confidence face first so clip_index=0 is the "primary" face.
         boxes.sort(key=lambda b: b[4], reverse=True)
@@ -626,10 +638,12 @@ class ImageFaceClipper(MediaClipper):
             clip["file_size"] = len(crop_bytes)
             clip["clip_index"] = idx
             clip["clip_box"] = [x1, y1, x2, y2]
-            # Drop parent-inherited md5 + embedding so the load pipeline's
+            # Reset parent-inherited embeddings + md5 so the load pipeline's
             # fixup recomputes them from the cropped bytes even in the
-            # single-face case (where is_real_clip is False).
-            clip.pop("embedding", None)
+            # single-face case (where is_real_clip is False).  A fresh dict
+            # (not a pop) is required because the clip is a shallow copy that
+            # shares the parent's ``embeddings`` dict by reference.
+            clip["embeddings"] = {}
             clip.pop("md5", None)
             results_list.append(clip)
         return results_list

@@ -443,7 +443,7 @@ load_dataset_from_folder(
     medias=medias,
     on_progress=lambda s, m, c, t: print(f"{m} {c}/{t}"),
 )
-# medias is now {1: {"id": 1, "embedding": ..., "media_bytes": ..., ...}, ...}
+# medias is now {1: {"id": 1, "embeddings": {name: ...}, "media_bytes": ..., ...}, ...}
 ```
 
 ### Progress tracking
@@ -467,10 +467,9 @@ and media sources) share a common `PluginBase` / `PluginField` /
 
 1. **Base class** (`PluginBase`) defines `name`, `display_name`, `fields`,
    and an abstract `run()`/`export()`/`load()`/`save()` method.
-2. **Field dataclass** (`PluginField`, aliased as `ImporterField`,
-   `ExporterField`, `LabelImporterField`, `SettingsImporterField`, etc.)
-   describes each user-configurable input with type, label, default,
-   validation, and placeholder.
+2. **Field dataclass** (`PluginField`, re-exported by every family's base
+   module) describes each user-configurable input with type, label,
+   default, validation, and placeholder.
 3. **Auto-discovery** via `PluginRegistry` scans sub-packages using
    direct filesystem scanning for a sentinel attribute (`IMPORTER`,
    `EXPORTER`, `LABEL_IMPORTER`, `SETTINGS_IMPORTER`, `SETTINGS_EXPORTER`,

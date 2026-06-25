@@ -1,4 +1,4 @@
-import { Component, OnChanges, SimpleChanges, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, OnChanges, output, SimpleChanges } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 
@@ -16,6 +16,7 @@ import { ClipperInfo, ConverterInfo, SourceSpec } from '../../../../models/api.m
  *  importer's "Advanced" section, so a nested "Advanced" label here
  *  would read as "Advanced inside Advanced". */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-source-specs-picker',
   standalone: true,
   imports: [FormsModule],

@@ -1,9 +1,40 @@
 # Zoneless change detection — detailed migration plan
 
-Status: **Phases 0–2 COMPLETE (all reactivity-surface conversions landed; the
-app is now correct under both zone and zoneless). Remaining: Phase 3 (the 3-line
-production provider flip + budget), Phase 4 (mandatory human browser QA — cannot
-run in the no-browser container), Phase 5 (optional cleanup).**
+Status: **Phases 0–5 COMPLETE. Production is zoneless (Phase 3 shipped). Phase 4
+browser QA was run live against the GRID instance via Chrome MCP (2026-06-22) and
+PASSED — no staleness bugs on any interactive surface, zero console errors; see
+"Phase 4 — results" below. Phase 5 cleanup is DONE: the no-op `NgZone.run`
+wrappers in `browse-canvas` + `panel-resize.directive` were removed; the
+`vitest-patch` bridge was dropped (all 43 fakeAsync occurrences migrated to native
+`async` + Vitest fake timers); and **all remaining default-TestBed specs were
+migrated to the zoneless `TestBed`, so `zone.js` is now dropped end to end** — the
+`build:test` polyfills array is empty and the `package.json` dependency is gone
+(it remains only as `@angular/core`'s optional peer, never bundled or loaded). The
+final 14 specs (9 fixture-creating contract/container specs + 5 service/guard
+specs that transitively inject NgZone services) now run under
+`provideZonelessChangeDetection()`. `./run-tests.sh frontend` is green (860 tests,
+0 errors).
+
+**Phase 5 is now fully shipped, including the last two items:**
+- **Explicit `ChangeDetectionStrategy.OnPush` on all 86 components. ✅ DONE.**
+  This turned out *not* to be documentation-only: it exposed that two hot
+  services were still `BehaviorSubject`-backed and read non-reactively in the
+  dashboard template (`DatasetStateService` → `datasets`/`loading`/`loaded`/…;
+  `DashboardLoadingTasksService` → `loadingTasks`/`orphanLoadingTasks`/
+  `inlineTaskMap`). Under the old default (CheckAlways) strategy they got "free"
+  repaints on any CD pass; under OnPush the host only re-checks when dirtied, so
+  both services were signalized (Recipe B: private `signal` + value-returning
+  getter that is *tracked* when read in templates, mirroring the Phase-2.5
+  SortState/VoteState pattern). `DatasetStateService` keeps its `$` observables as
+  `toObservable` bridges so the RxJS consumers (context-pulldown, app.component,
+  active-context-watcher, the route guards) are unchanged; `toObservable` emits
+  on the next CD pass rather than synchronously, so four spec files were updated
+  to `TestBed.tick()` past the bridge. `DashboardLoadingTasksService`'s unused
+  `$` observables were dropped.
+- **`vt-modal` `Esc`-to-close fixed. ✅ DONE.** Replaced the never-firing
+  backdrop-scoped `(keydown)` with `@HostListener('document:keydown.escape')`
+  (guarded by `open()`), mirroring the `context-menu` / `browse-bin-popup`
+  pattern, so Esc closes a button-opened modal regardless of focus.**
 
 Detailed history: **Phase 0 shipped (test harness); Phase 1 complete — 1.1 + 1.3 + 1.4
 (ProgressEventsService SSE pump + ConnectionStateService + BrowseSelectionService
@@ -752,15 +783,103 @@ click" symptoms:
 
 A checklist version of the above goes in the PR description for the QA pass.
 
+#### Phase 4 — results (2026-06-22, run live against the GRID via Chrome MCP)
+
+The container still has no browser, but the GRID was running the zoneless build
+(`dev` @ `2d16afe4`; confirmed `provideZonelessChangeDetection()`, 0 zone.js
+markers in the bundle). Drove it through an SSH tunnel with a real Chrome.
+**Result: every staleness-prone surface repaints correctly; no "stale until I
+click" anywhere; zero console errors/warnings the whole session.** Highlights:
+
+- **SSE pump (1.1):** dataset + detector **load-progress bars animated live**;
+  voting triggered **retrain → re-sort → minimap repaint** with no manual action.
+- **Timers (2.8):** dashboard RAM/Disk gauges **ticked on their own** (691→690→692).
+- **De-zoned `KeyboardService` (1.2):** `←` (raw `document` keydown) voted Bad,
+  Bads 105→106; `Ctrl+Z` undo reverted it. Click-vote moved Goods 7→8 + advanced.
+- **Signals:** right-panel vote piles, find-view unverified counts (393/19),
+  browse selection panel (0→66→0) all repainted.
+- **`ConnectionStateService` (1.3):** offline banner appeared on real network-off,
+  **Retry** cleared it on reconnect.
+- **`VtDialogService` (2.1):** destructive delete-confirm rendered + cancelled.
+- **CDK virtual scroll (4.5):** media-list fast-scroll — 0 blank/broken rows.
+- **Browse canvas (2.6):** projection render, bin select, hover preview, minimap.
+- **Modals (2.2):** stats / settings (forkJoin init + auto-save badge) / help.
+
+Covered transitively (mechanism proven above, not separately exercised):
+sort/autopilot + train-and-score eval progress bars (same SSE pump);
+clipboard-copy flash, importer/exporter modals, the four `setTimeout(close)`
+paths; the divider resizers (CSS-var only); confirm/prompt opened from a
+`.then`/microtask (`VtDialogService` is signalized + microtask signal-writes were
+seen to repaint). The one bug found (`vt-modal` `Esc` focus) is pre-existing and
+unrelated to zoneless — see Open follow-ups.
+
 ### Phase 5 — Cleanup / follow-ups
 
-- Migrate the residual fakeAsync/timer specs to native `async` + Vitest fake
-  timers and drop `zone.js/plugins/vitest-patch` (and finally `zone.js` from
-  `package.json`) — Angular's recommended long-term direction (Appendix C #7).
-  Optional, separable, no prod impact.
-- Adopt `ChangeDetectionStrategy.OnPush` explicitly on components for clarity
-  (under zoneless they already behave OnPush-like; this is documentation/intent,
-  not a functional change).
+- **Migrate the residual fakeAsync/timer specs to native `async` + Vitest fake
+  timers and drop `zone.js/plugins/vitest-patch`. ✅ DONE.** All 43 fakeAsync
+  occurrences (11 files) now use native `async` tests: timer-delay cases
+  (vote/browse-prep pollers, progress-modal's 50 ms) use `vi.useFakeTimers()` +
+  `vi.advanceTimersByTimeAsync(...)`; microtask/macrotask drains (dialog
+  promises, focus `setTimeout`s, the `timer(0,…)` poll first-emissions) use a
+  real macrotask flush (`await new Promise(r => setTimeout(r))`). `zone.js/testing`
+  and `zone.js/plugins/vitest-patch` are removed from the `build:test` polyfills,
+  and the ProxyZone-bridge note in `src/test-setup.ts` is gone. Full Vitest suite
+  green (854 passed / 91 files).
+- **Migrate the remaining default-TestBed specs to the zoneless `TestBed` and
+  drop `zone.js` entirely. ✅ DONE.** The last 14 specs that needed `NgZone` from
+  a default zone-based TestBed were migrated to `provideZonelessChangeDetection()`
+  (via the `provideZoneless()` / `configureZoneless()` helpers): the 9
+  fixture-creating contract/container specs (`app.component`, `center-panel`,
+  `document-viewer`, `image-viewer`, `dashboard`, `label-view`, `left-panel`,
+  `media-list`, `right-panel`) plus the 5 service/guard specs that transitively
+  inject NgZone services (`keyboard.service`, `browse-prep.service`,
+  `context-switch.service`, `active-context-watcher.service`,
+  `active-context.guard`). With every fixture-creating spec on the zoneless
+  TestBed, `zone.js` was removed from the `build:test` polyfills (now `[]`) and
+  from `package.json` (it remains only as `@angular/core`'s optional peer, never
+  bundled or loaded). `./run-tests.sh frontend` green (858 tests, 0 errors).
+  Conversion patterns learned (these contract/container specs are paired with the
+  Phase-1/2 `.zoneless.spec.ts` canaries, so the goal here was zone.js removal,
+  not turning them into staleness oracles):
+  - **Initial render:** `fixture.detectChanges()` → `TestBed.tick()` (the
+    scheduled CD mechanism; no autoDetect race). For rxResource-backed init keep
+    the existing `TestBed.tick()` + `settleResource()` (a loading resource
+    deadlocks `whenStable()`).
+  - **Re-render after a change:** under zoneless `TestBed.tick()` only re-checks
+    *dirty* views, so a post-init change must mark the host dirty first — drive
+    `@Input()` changes through `fixture.componentRef.setInput(...)` and internal
+    state changes through the real bound `(event)` (e.g. clicking a tab button).
+    For BehaviorSubject-backed state read non-reactively (dashboard ↔
+    `DatasetStateService`), `fixture.changeDetectorRef.markForCheck()` + `tick()`.
+  - **Dev-only NG0100:** the three `center-panel` image-media tests keep
+    `fixture.detectChanges(false)` to skip the check-no-changes verify pass for
+    the `imageViewer` ViewChild that settles mid-first-pass.
+  - **Zoneless async leaks:** without zone.js the framework no longer auto-cleans
+    the app's timers/microtasks; an SSE poller's `timer(0, N)` first emission or a
+    root-singleton rxResource reload can fire on a macrotask *after* teardown and
+    throw NG0205 through the destroyed injector. label-view's `afterEach` now
+    destroys the fixture, stops `VoteStateService` polling, and drains one
+    macrotask (while the injector is still alive) to absorb the straggler. A
+    *global* drain in `test-setup.ts` was tried first but rejected: it let a
+    pending autoDetect re-check teardown-state leaf components (audio/video-player
+    with `media` undefined) and crash their templates.
+- Adopt `ChangeDetectionStrategy.OnPush` explicitly on components. **✅ DONE —
+  all 86 components.** Expected to be documentation/intent, but it surfaced a
+  real gap: components reading a *non-signal* `BehaviorSubject` service getter
+  directly in their template (the dashboard ↔ `DatasetStateService` /
+  `DashboardLoadingTasksService`) relied on the default CheckAlways strategy for
+  "free" repaints. Under OnPush the host only re-checks when dirtied, so those
+  two services were signalized (Recipe B; private `signal` + value-returning
+  getter, which is tracked when read during template evaluation — the same
+  getter-signal trick proven for SortState/VoteState in Phase 2.5). The blanket
+  add was mechanical (`changeDetection: ChangeDetectionStrategy.OnPush` as the
+  first `@Component` property + the `@angular/core` import). `DatasetStateService`
+  retained its `$` observables as `toObservable` bridges (RxJS consumers
+  unchanged); since `toObservable` emits on the next CD pass rather than
+  synchronously like a `BehaviorSubject`, the dashboard / active-context-watcher /
+  active-context-guard / dataset-state service specs gained `TestBed.tick()`
+  calls past the bridge. Full suite green (`./run-tests.sh` 5026 passed;
+  `./run-tests.sh frontend` 860 tests).
 
 ### Open follow-ups
 
@@ -771,23 +890,78 @@ A checklist version of the above goes in the PR description for the QA pass.
   The headless suite cannot 100% prove real rendering, so a human MUST run the
   Phase 4 browser QA before this merges — see the checklist in §Phase 4 / the PR
   body. **Phase 5 cleanup (separable, no behavior change):**
-  - **Drop the now-no-op `ngZone.run(...)` wrappers** left in `browse-canvas`
-    (~8 output-emit / `selection.*` wrappers) and `panel-resize.directive` (the
-    `widthChange`/`resizeEnd` emits). They were deliberately kept through Phase 2
-    because they are load-bearing under the still-zoned prod but harmless no-ops
-    under zoneless; now that prod is zoneless they are pure no-ops and can go
-    (drop the `NgZone` injection where it then becomes unused — keep
-    `runOutsideAngular` perf wrappers).
+  - **Drop the now-no-op `ngZone.run(...)` wrappers. ✅ DONE.** Removed all 8 in
+    `browse-canvas` (hexHover/contextMenu/densityMaxChanged emits + the
+    `selection.toggleBin`/`addAll` calls) and both in `panel-resize.directive`
+    (`widthChange`/`resizeEnd` emits). Verified the consumers are on the zoneless
+    notification path before removing: browse-view binds `(hexHover)`/
+    `(contextMenu)`/`(densityMaxChanged)` and label-view binds `(widthChange)`/
+    `(resizeEnd)` via **template `(event)` listeners** (which schedule CD), and
+    `BrowseSelectionService` is signal-backed (Phase 1.4) so its writes schedule
+    CD on their own. The `NgZone` injection **stays** in both — still used by the
+    `runOutsideAngular` perf wrappers, which are kept. `build:prod` clean (initial
+    489.34 kB < 500 kB budget); full Vitest suite green (854 passed / 91 files).
+  - **`vt-modal` `Esc`-to-close is focus-scoped (pre-existing, NOT zoneless).
+    ✅ FIXED.** Surfaced during Phase 4 QA: opening any `vt-modal` from a button
+    leaves focus on that button, and the modal's `Esc` handler was a plain
+    `(keydown)` on the `.modal-backdrop` div, which is never programmatically
+    focused on open — so `Esc` did nothing until the user clicked/tabbed into the
+    modal. Fixed by moving the handler to `@HostListener('document:keydown.escape')`
+    on `ModalComponent` (guarded by `open()`), mirroring the existing
+    `context-menu` / `browse-bin-popup` `document:keydown.escape` pattern; the
+    backdrop `(keydown)` was removed so it can't double-emit `closed`. The
+    focus-the-backdrop alternative was rejected because several modals use
+    `autofocus` / programmatic input focus that it would fight. Two regression
+    canaries added to `modal.component.spec.ts` (Esc dispatched at `document`
+    level closes an open modal; Esc is inert when closed).
   - **Migrate the remaining specs to the zoneless `TestBed`** + DOM-after-
     `whenStable()` assertions and delete the manual `fixture.detectChanges()`
-    pumps (still ~188 across ~39 files). The conversions are compile-verified and
-    a handful of canaries exist, but most specs still run on the default (zoned)
-    TestBed with `detectChanges`, so they are not yet staleness oracles. (Heavy
-    containers — left-panel, dashboard, right-panel, app — deadlock `whenStable()`
-    via their child rxResources; those need stubbed/lightweight harnesses.)
-  - **Drop the `vitest-patch` bridge** (convert the 43 fakeAsync occurrences to
-    native `async` + Vitest fake timers, then remove `zone.js` from the
-    `build:test` polyfills and `package.json`).
+    pumps. **✅ DONE — all fixture-creating specs now run under the zoneless
+    TestBed and `zone.js` is dropped end to end (empty `build:test` polyfills +
+    removed from `package.json`).** First the tractable leaf/modal/list specs (22
+    spec files) migrated to `provideZoneless()` +
+    `settleZoneless()`/`setInput()`/`TestBed.tick()` (no manual `detectChanges`):
+    `progress-bar`, `select-mode`, `inclusion-slider`, `stripe-overview`,
+    `label-sort`, `media-item`, `audio-player`, `video-player`, `text-viewer`,
+    `progress-indicators`, `detector-context-bar`, `modal`, `sort-bar`,
+    `autopilot-panel`, `dataset-card`, `detector-card`, `load-sort-modal`,
+    `autodetect-results-modal`, `autodetect-progress-modal`, `settings-modal`,
+    `export-modal`, `progress-modal`, `new-detector-modal`, `examples-editor-modal`,
+    `combine-datasets-modal`, `dataset-importer-modal`, `label-list`. Pattern notes:
+    drive `@Input`/signal inputs through `componentRef.setInput()` (a CD trigger,
+    so a plain field write on a top-level fixture host won't schedule CD — the
+    `modal` host uses signals); plain `ngOnInit` HTTP subscribes don't block
+    `whenStable()` so `settleZoneless()` works, but **rxResource-backed init must
+    use `TestBed.tick()` + `settleResource()`** (a loading resource holds the app
+    unstable and deadlocks `whenStable()`). This pass also surfaced and **fixed
+    five real zoneless staleness bugs** the oracle exposed — plain fields written
+    from HTTP `.subscribe()` callbacks yet read in the template, now signals
+    (Recipe B): `text-viewer.text`, `autodetect-results-modal`
+    (`exporters`/`selectedExporter`/`exporterFields`), `examples-editor-modal`
+    (`examples`/`loading`/`saving`), `combine-datasets-modal`
+    (`mediaTypes`/`submitting`/`error`), and `label-list.sortedEntries` (rebuilt
+    from the `metadataCache.version$` subscribe).
+    **Then the hard classes (now also DONE):** the contract specs paired with a
+    `.zoneless.spec.ts` canary (`label-view`, `center-panel`, `image-viewer`),
+    the heavy containers (`app.component`, `right-panel`, `left-panel`,
+    `media-list`, `dashboard`), the `document-viewer` contract spec, and the 5
+    service/guard specs that transitively inject NgZone services
+    (`keyboard.service`, `browse-prep.service`, `context-switch.service`,
+    `active-context-watcher.service`, `active-context.guard`). Since these are
+    contract/container specs (the canaries are the staleness oracles), they use
+    `TestBed.tick()`/`setInput()`/bound-event/`markForCheck()` to drive renders
+    rather than a strict DOM-after-`whenStable()` rewrite. See the Phase 5
+    section above for the full conversion-pattern notes (initial render,
+    re-render-after-change, dev-only NG0100, zoneless async leaks). **With this
+    done, `zone.js` was removed from the `build:test` polyfills and
+    `package.json` — the migration is complete.**
+  - **Drop the `vitest-patch` bridge. ✅ DONE.** Converted all 43 fakeAsync
+    occurrences (11 files) to native `async` + Vitest fake timers and removed
+    `zone.js/testing` + `zone.js/plugins/vitest-patch` from the `build:test`
+    polyfills. Base `zone.js` has now **also** been removed (from both the
+    `build:test` polyfills and `package.json`) — see the TestBed-migration item
+    above; it survives only as `@angular/core`'s optional peer. Full Vitest suite
+    green.
   - **Adopt explicit `ChangeDetectionStrategy.OnPush`** on components for intent
     (redundant under zoneless; documentation only).
 - **Phase 1 complete; Phases 2.1 + 2.2 + 2.3 + 2.4 + 2.5 shipped; Phases 2.6–9 shipped; Phase 3 shipped.**
@@ -869,11 +1043,13 @@ A checklist version of the above goes in the PR description for the QA pass.
   `zone.js/testing` + `zone.js/plugins/vitest-patch` from the `build:test`
   polyfills and finally `zone.js` from `package.json`. Angular's recommended
   long-term direction; separable, no prod impact.
-- **Adopt the zoneless `TestBed` per component.** `provideZoneless()` /
-  `configureZoneless()` and `settleZoneless()` exist but are used only by the
-  reference spec. Each migrated component (Phases 1–2) must switch its spec to
-  them, delete the manual `fixture.detectChanges()` pumps, and add a canary
-  (0.4). 188 `detectChanges()` calls across 39 files still to convert.
+- **Adopt the zoneless `TestBed` per component. ✅ DONE.** `provideZoneless()` /
+  `configureZoneless()` and `settleZoneless()` are now used across the whole
+  suite: every fixture-creating spec runs under the zoneless TestBed and the
+  default-TestBed `fixture.detectChanges()` pumps are gone (only three
+  `detectChanges(false)` calls remain in `center-panel` to skip a dev-only
+  ViewChild NG0100). The Phase-1/2 interactive components are each paired with a
+  `.zoneless.spec.ts` canary (0.4). zone.js is dropped end to end.
 
 ---
 

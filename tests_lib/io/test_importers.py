@@ -21,6 +21,7 @@ import zipfile
 import pytest
 
 from helpers import make_raw_wav_bytes as _make_wav_bytes
+from vtscore.embedding.media_vectors import media_embedding, set_media_embedding
 
 
 # ---------------------------------------------------------------------------
@@ -359,14 +360,14 @@ class TestImporterDatasetName:
         from vtscore.datasets.importers.base import (
             DATASET_NAME_FIELD_KEY,
             DatasetImporter,
-            ImporterField,
+            PluginField,
         )
 
         class Imp(DatasetImporter):
             name = "imp"
             display_name = "Imp"
             description = "."
-            fields = [ImporterField("path", "Path", "text")]
+            fields = [PluginField("path", "Path", "text")]
 
             def run(self, field_values, medias):
                 pass
@@ -380,13 +381,13 @@ class TestImporterDatasetName:
     def test_class_fields_attribute_unchanged_by_to_dict(self):
         """to_dict() appends dataset_name only on the serialised payload;
         the class-level ``fields`` attribute remains as the developer wrote it."""
-        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.importers.base import DatasetImporter, PluginField
 
         class Imp(DatasetImporter):
             name = "imp2"
             display_name = "Imp"
             description = "."
-            fields = [ImporterField("path", "Path", "text")]
+            fields = [PluginField("path", "Path", "text")]
 
             def run(self, field_values, medias):
                 pass
@@ -877,6 +878,18 @@ class TestLocalArchiveImport:
         assert dig.field_type == "checkbox"
         assert str(dig.default).lower() == "false"
 
+    def test_server_folder_has_reference_files_field(self):
+        from vtscore.datasets.importers.server_folder import IMPORTER
+
+        ref = next((f for f in IMPORTER.fields if f.key == "reference_files"), None)
+        assert ref is not None
+        assert ref.field_type == "checkbox"
+        assert str(ref.default).lower() == "false"
+        # Storage choice, not source identity: must stay out of the origin.
+        assert ref.include_in_origin is False
+        origin = IMPORTER.build_origin({"path": "/data/audio", "media_type": "audio", "reference_files": "true"})
+        assert "reference_files" not in origin["params"]
+
     def test_server_folder_run_cli_rejects_missing_path(self):
         from vtscore.datasets.importers.server_folder import IMPORTER
 
@@ -951,7 +964,7 @@ class TestImporterBulkHooks:
         records = [{"name": "a"}, {"name": "b"}, {"name": "c"}]
 
         def fetch_one(record, _fv, _thin):
-            return {"media_type": "audio", "filename": record["name"], "embedding": None}
+            return {"media_type": "audio", "filename": record["name"], "embeddings": {}}
 
         imp = self._make_importer(records=records, fetch_one=fetch_one)
         medias: dict = {}
@@ -967,7 +980,7 @@ class TestImporterBulkHooks:
 
         def fetch_one(record, _fv, _thin):
             # fetch_record may omit origin / origin_name; run() fills them in.
-            return {"media_type": "audio", "filename": record["name"], "embedding": None}
+            return {"media_type": "audio", "filename": record["name"], "embeddings": {}}
 
         imp = self._make_importer(records=records, fetch_one=fetch_one)
         medias: dict = {}
@@ -982,7 +995,7 @@ class TestImporterBulkHooks:
         def fetch_one(record, _fv, _thin):
             if record == "skip":
                 return None
-            return {"media_type": "audio", "filename": record, "embedding": None}
+            return {"media_type": "audio", "filename": record, "embeddings": {}}
 
         imp = self._make_importer(records=records, fetch_one=fetch_one)
         medias: dict = {}
@@ -998,7 +1011,7 @@ class TestImporterBulkHooks:
 
         def fetch_one(record, _fv, _thin):
             seen.append(record)
-            return {"media_type": "audio", "filename": record, "embedding": None}
+            return {"media_type": "audio", "filename": record, "embeddings": {}}
 
         imp = self._make_importer(records=["x", "y"], fetch_one=fetch_one)
         out = imp.fetch_records_bulk(["x", "y"], {})
@@ -1014,11 +1027,11 @@ class TestImporterBulkHooks:
 
         def fetch_one(record, _fv, _thin):
             per_item_calls.append(record)
-            return {"media_type": "audio", "filename": record, "embedding": None}
+            return {"media_type": "audio", "filename": record, "embeddings": {}}
 
         def fetch_bulk(records, _fv, _thin):
             # Pretend we did one batched call.
-            return [{"media_type": "audio", "filename": f"bulk:{r}", "embedding": None} for r in records]
+            return [{"media_type": "audio", "filename": f"bulk:{r}", "embeddings": {}} for r in records]
 
         imp = self._make_importer(records=["a", "b"], fetch_one=fetch_one, fetch_bulk=fetch_bulk)
         medias: dict = {}
@@ -1162,7 +1175,7 @@ class TestReCallerMultiMedia:
                     "media_bytes": None,
                     "media_path": None,
                     "media_url": media.get("media_url"),
-                    "embedding": media["embedding"],
+                    "embeddings": {media["embedder"]: media_embedding(media)},
                     "embedder": media["embedder"],
                     "md5": f"{media['md5']}_{k}",
                     "duration": 0,
@@ -1225,16 +1238,14 @@ class TestIngestSpecStreamMediaType:
     @staticmethod
     def _make_importer(records: list[dict]):
         """Return a DatasetImporter subclass that yields *records* for any spec."""
-        from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
+        from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
 
         class _Imp(DatasetImporter):
             name = "test_stamp"
             display_name = "Test"
             description = "Test importer."
             fields = [
-                ImporterField(
-                    "media_type", "Media Type", "select", options=["image", "video", "audio"], default="image"
-                ),
+                PluginField("media_type", "Media Type", "select", options=["image", "video", "audio"], default="image"),
             ]
 
             def fetch_source_media(self, spec: SourceSpec, field_values: dict, thin: bool = False):
@@ -1333,7 +1344,7 @@ class TestIngestSpecStreamMediaType:
 
         assert len(medias) == 2
         assert all(m["media_type"] == "image" for m in medias.values())
-        assert all(m.get("embedding") is None for m in medias.values())
+        assert all(media_embedding(m) is None for m in medias.values())
 
         fake_emb = mock.MagicMock()
         fake_emb.name = "fake_image_emb"
@@ -1348,7 +1359,7 @@ class TestIngestSpecStreamMediaType:
             embed_missing(medias)
 
         fake_emb.embed_media_bulk.assert_called_once()
-        assert all(m["embedding"] is not None for m in medias.values())
+        assert all(media_embedding(m) is not None for m in medias.values())
 
 
 # ---------------------------------------------------------------------------
@@ -1366,16 +1377,14 @@ class TestIngestSpecStreamRequiredFields:
 
     @staticmethod
     def _make_importer(records: list[dict]):
-        from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
+        from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
 
         class _Imp(DatasetImporter):
             name = "test_fields"
             display_name = "Test"
             description = "Test importer."
             fields = [
-                ImporterField(
-                    "media_type", "Media Type", "select", options=["image", "video", "audio"], default="image"
-                ),
+                PluginField("media_type", "Media Type", "select", options=["image", "video", "audio"], default="image"),
             ]
 
             def fetch_source_media(self, spec: SourceSpec, field_values: dict, thin: bool = False):
@@ -1430,7 +1439,7 @@ class TestIngestSpecStreamRequiredFields:
         imp.run({"media_type": "image", "source_specs": source_specs}, medias)
 
         m = medias[1]
-        assert m.get("embedding") is None
+        assert media_embedding(m) is None
         assert m.get("embedder") == ""
         assert m.get("category") == "custom"
 
@@ -1511,14 +1520,14 @@ class TestConverterOutputEndToEnd:
 
     @staticmethod
     def _make_importer(records: list[dict]):
-        from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
+        from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
 
         class _Imp(DatasetImporter):
             name = "test_e2e"
             display_name = "Test"
             description = "Test importer."
             fields = [
-                ImporterField(
+                PluginField(
                     "media_type",
                     "Media Type",
                     "select",
@@ -1580,7 +1589,7 @@ class TestConverterOutputEndToEnd:
         medias = self._run_v2i(monkeypatch, [{"filename": "clip.mp4", "media_bytes": b"VID"}])
 
         rng = np.random.default_rng(1)
-        medias[1]["embedding"] = rng.standard_normal(512).astype(np.float32)
+        set_media_embedding(medias[1], "siglip", rng.standard_normal(512).astype(np.float32))
 
         data = export_dataset_to_file(medias)  # must not raise
         assert len(data) > 0
@@ -1593,7 +1602,7 @@ class TestConverterOutputEndToEnd:
 
         medias = self._run_v2i(monkeypatch, [{"filename": "clip.mp4", "media_bytes": b"VID"}])
         rng = np.random.default_rng(2)
-        medias[1]["embedding"] = rng.standard_normal(512).astype(np.float32)
+        set_media_embedding(medias[1], "siglip", rng.standard_normal(512).astype(np.float32))
 
         assert "duration" in medias[1]
         export_dataset_to_file(medias)  # hard access on media["duration"] must not KeyError
@@ -1618,7 +1627,7 @@ class TestConverterOutputEndToEnd:
         )
 
         rng = np.random.default_rng(3)
-        medias[1]["embedding"] = rng.standard_normal(128).astype(np.float32)
+        set_media_embedding(medias[1], "siglip", rng.standard_normal(128).astype(np.float32))
 
         pkl_path = tmp_path / "frames.pkl"
         pkl_path.write_bytes(export_dataset_to_file(medias))
@@ -1633,8 +1642,9 @@ class TestConverterOutputEndToEnd:
         assert m["md5"] == hashlib.md5(png).hexdigest()
         assert m["duration"] == 0
         assert m["category"] == "custom"
-        assert m["embedder"] == ""
-        assert m["embedding"] is not None
+        # set_media_embedding stamped the embedder name when storing the vector.
+        assert m["embedder"] == "siglip"
+        assert media_embedding(m) is not None
 
     # ------------------------------------------------------------------
     # Multiple frames from one video
@@ -1655,7 +1665,7 @@ class TestConverterOutputEndToEnd:
 
         rng = np.random.default_rng(4)
         for m in medias.values():
-            m["embedding"] = rng.standard_normal(64).astype(np.float32)
+            set_media_embedding(m, "siglip", rng.standard_normal(64).astype(np.float32))
 
         export_dataset_to_file(medias)  # must not raise
 
@@ -1768,7 +1778,7 @@ class TestConverterOutputEndToEnd:
         )
 
         rng = np.random.default_rng(5)
-        medias[1]["embedding"] = rng.standard_normal(64).astype(np.float32)
+        set_media_embedding(medias[1], "e5", rng.standard_normal(64).astype(np.float32))
         export_dataset_to_file(medias)  # must not raise
 
     # ------------------------------------------------------------------

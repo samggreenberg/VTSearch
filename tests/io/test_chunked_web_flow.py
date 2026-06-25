@@ -20,7 +20,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+from vtscore.datasets.importers.base import DatasetImporter, PluginField
 from vtscore.datasets.load_pipeline import auto_chunk_size, consume_chunks_into
 
 
@@ -88,7 +88,7 @@ class _DummyChunkedImporter(DatasetImporter):
     display_name = "Dummy Chunked"
     description = "Test importer"
     icon = ""
-    fields: list[ImporterField] = []
+    fields: list[PluginField] = []
 
     def __init__(self) -> None:
         super().__init__()
@@ -122,7 +122,7 @@ class _DummyNonChunkedImporter(DatasetImporter):
     display_name = "Dummy Non-Chunked"
     description = "Test importer (no chunked support)"
     icon = ""
-    fields: list[ImporterField] = []
+    fields: list[PluginField] = []
 
     def __init__(self) -> None:
         super().__init__()

@@ -194,6 +194,57 @@ _VIDEO_QUERIES = [
 ]
 
 # ------------------------------------------------------------------
+# Image (multi-label) eval queries  (Visual Genome)
+# Unlike the single-label image datasets, a VG image can be a positive
+# example of several of these targets at once; membership is decided by
+# ``media["categories"]`` (see vtscore/eval/labels.py).  Each target below
+# is one of the VG object vocab categories.
+# ------------------------------------------------------------------
+
+_VISUAL_GENOME_QUERIES = [
+    EvalQuery("a person", "person"),
+    EvalQuery("a man", "man"),
+    EvalQuery("a woman", "woman"),
+    EvalQuery("a car on the street", "car"),
+    EvalQuery("a bus", "bus"),
+    EvalQuery("a train", "train"),
+    EvalQuery("a truck", "truck"),
+    EvalQuery("a bicycle", "bike"),
+    EvalQuery("a boat on the water", "boat"),
+    EvalQuery("an airplane", "plane"),
+    EvalQuery("a dog", "dog"),
+    EvalQuery("a cat", "cat"),
+    EvalQuery("a horse", "horse"),
+    EvalQuery("an elephant", "elephant"),
+    EvalQuery("a giraffe", "giraffe"),
+    EvalQuery("a zebra", "zebra"),
+    EvalQuery("a cow", "cow"),
+    EvalQuery("a sheep", "sheep"),
+    EvalQuery("a bird", "bird"),
+    EvalQuery("a bear", "bear"),
+    EvalQuery("a building", "building"),
+    EvalQuery("a window", "window"),
+    EvalQuery("a tree", "tree"),
+    EvalQuery("a street sign", "sign"),
+    EvalQuery("a clock", "clock"),
+    EvalQuery("an umbrella", "umbrella"),
+    EvalQuery("a chair", "chair"),
+    EvalQuery("a table", "table"),
+    EvalQuery("a bench", "bench"),
+    EvalQuery("a bottle", "bottle"),
+    EvalQuery("a plate of food", "plate"),
+    EvalQuery("a pizza", "pizza"),
+    EvalQuery("a banana", "banana"),
+    EvalQuery("a laptop computer", "laptop"),
+    EvalQuery("a kite in the sky", "kite"),
+    EvalQuery("a skateboard", "skateboard"),
+    EvalQuery("a surfboard", "surfboard"),
+    EvalQuery("a person wearing a hat", "hat"),
+    EvalQuery("a person wearing a jacket", "jacket"),
+    EvalQuery("a snowy scene", "snow"),
+]
+
+# ------------------------------------------------------------------
 # Registry - keyed by demo dataset ID
 # ------------------------------------------------------------------
 
@@ -223,6 +274,15 @@ EVAL_DATASETS: dict[str, dict] = {
     "caltech256_a": {
         "demo_dataset": "caltech256_a",
         "queries": _IMAGES_L_QUERIES,
+    },
+    # Image (multi-label)
+    "visual_genome_s": {
+        "demo_dataset": "visual_genome_s",
+        "queries": _VISUAL_GENOME_QUERIES,
+    },
+    "visual_genome_m": {
+        "demo_dataset": "visual_genome_m",
+        "queries": _VISUAL_GENOME_QUERIES,
     },
     # Text
     "20newsgroups_s": {

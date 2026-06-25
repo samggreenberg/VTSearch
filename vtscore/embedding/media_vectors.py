@@ -1,16 +1,18 @@
-"""Per-media embedding vector access (dict-keyed, with legacy fallback).
+"""Per-media embedding vector access (dict-keyed).
 
 Phase 2 of the three-slot embedder work (``docs/plans/patch-embedder.md`` →
-"V3 — design") moves a media's embedding from a single ``media["embedding"]``
+"V3 — design") moved a media's embedding from a single ``media["embedding"]``
 ndarray to ``media["embeddings"]`` — a dict keyed by embedder name — so the
-vectors of multiple bound embedders can coexist on one media.
+vectors of multiple bound embedders can coexist on one media.  Phase 2c
+**dropped the singular mirror entirely**: ``media["embeddings"]`` is now the
+*only* per-media vector store, and there is no ``media["embedding"]`` on a
+live media.
 
-During the migration the singular ``media["embedding"]`` is kept as the
-**primary mirror / legacy fallback**: it always reflects the dataset's single
-bound embedder while only one is bound, so the many read sites not yet
-converted to this accessor keep working unchanged.  This module is the one
-place that knows how to resolve a vector from either shape; new and converted
-read sites go through :func:`media_embedding`.
+This module is the one place that resolves a vector for a media; every read
+site goes through :func:`media_embedding` and every write through
+:func:`set_media_embedding`.  Legacy single-vector pickles (which stored only
+``media["embedding"]``) are re-keyed into the dict by
+:func:`ensure_embeddings_dict` on load, which then deletes the singular key.
 
 Library-tier: imports only numpy, no Flask, no media registry.
 """
@@ -20,6 +22,15 @@ from __future__ import annotations
 from typing import Any
 
 EMBEDDINGS_KEY = "embeddings"
+
+#: Dict key for a pre-computed vector whose producing embedder is unknown — an
+#: externally-supplied ``content_vectors`` / ``custom_metadata_map`` /
+#: NPZ-vectors entry that ships a vector but no embedder name.  Kept distinct
+#: from a real embedder name (it is the empty string) so role derivation skips
+#: it (a nameless vector binds no role) and the embed stage's *named* "missing"
+#: check still treats the media as lacking that named embedder's vector, while
+#: :func:`media_embedding` still resolves this sole entry as the primary vector.
+UNKNOWN_EMBEDDER_KEY = ""
 
 
 def primary_embedder_name(media: dict[str, Any]) -> str | None:
@@ -41,9 +52,10 @@ def media_embedder_names(media: dict[str, Any]) -> list[str]:
     """Return every embedder name that has a vector on *media*, primary first.
 
     Reads the keys of ``media["embeddings"]`` (the dict-keyed form) and falls
-    back to the singular ``media["embedder"]`` when no dict is present.  The
-    recorded primary embedder is ordered first so role derivation and the
-    primary-vector mirror agree on which embedder leads.
+    back to the recorded ``media["embedder"]`` when no dict is present (e.g. an
+    un-embedded media whose vector hasn't been written yet).  The recorded
+    primary embedder is ordered first so role derivation and primary-vector
+    reads agree on which embedder leads.
     """
     embs = media.get(EMBEDDINGS_KEY)
     if isinstance(embs, dict) and embs:
@@ -57,70 +69,84 @@ def media_embedder_names(media: dict[str, Any]) -> list[str]:
     return [name] if name else []
 
 
+def init_embeddings(embedder_name: str | None, vec: Any) -> dict[str, Any]:
+    """Build a fresh ``embeddings`` dict for a media being created.
+
+    * ``vec is None`` → ``{}`` (the deferred-embed placeholder a creation site
+      uses when the vector is filled later by the embed stage via
+      :func:`set_media_embedding`).
+    * vector present, ``embedder_name`` set → ``{embedder_name: vec}``.
+    * vector present, ``embedder_name`` empty/``None`` → ``{UNKNOWN_EMBEDDER_KEY:
+      vec}``: a pre-computed externally-supplied vector (``content_vectors`` /
+      ``custom_metadata_map`` / NPZ) with no embedder name is still stored, not
+      dropped, under the sentinel key.
+
+    Construction-time counterpart of :func:`set_media_embedding`; use it in
+    media-dict literals in place of the old ``"embedding": vec`` field.
+    """
+    if vec is None:
+        return {}
+    return {embedder_name or UNKNOWN_EMBEDDER_KEY: vec}
+
+
 def media_embedding(media: dict[str, Any], embedder_name: str | None = None) -> Any:
     """Return the embedding vector for *embedder_name*, or the primary one.
 
     Resolution order:
 
-    * ``embedder_name`` given → ``media["embeddings"][embedder_name]`` when a
-      dict is present; otherwise the legacy singular vector, but only if it
-      belongs to that embedder (the media's recorded ``embedder`` matches or is
-      unset).  Returns ``None`` when no matching vector exists.
+    * ``embedder_name`` given → ``media["embeddings"][embedder_name]``, or
+      ``None`` when that embedder has no vector on this media.
     * ``embedder_name`` omitted → the primary vector: the recorded embedder's
-      entry in the dict, else the sole dict entry, else the legacy singular
-      ``media["embedding"]``.
+      entry in the dict, else the sole dict entry, else ``None``.
+
+    There is no singular ``media["embedding"]`` fallback: the dict is the only
+    per-media vector store (legacy pickles are re-keyed on load by
+    :func:`ensure_embeddings_dict`).
     """
     embs = media.get(EMBEDDINGS_KEY)
-    if embedder_name is not None:
-        if isinstance(embs, dict) and embedder_name in embs:
-            return embs[embedder_name]
-        # No dict entry: the legacy singular vector only answers for the
-        # media's own embedder.
-        if media.get("embedder") in (None, "", embedder_name):
-            return media.get("embedding")
+    if not isinstance(embs, dict) or not embs:
         return None
-
-    if isinstance(embs, dict) and embs:
-        name = media.get("embedder")
-        if name and name in embs:
-            return embs[name]
-        if len(embs) == 1:
-            return next(iter(embs.values()))
-        # Ambiguous (multiple entries, no recorded primary) → fall through.
-    return media.get("embedding")
+    if embedder_name is not None:
+        return embs.get(embedder_name)
+    name = media.get("embedder")
+    if name and name in embs:
+        return embs[name]
+    if len(embs) == 1:
+        return next(iter(embs.values()))
+    # Ambiguous (multiple entries, no recorded primary) → no primary vector.
+    return None
 
 
 def ensure_embeddings_dict(media: dict[str, Any]) -> None:
-    """Materialize ``media["embeddings"]`` from the legacy singular vector.
+    """Re-key a legacy singular ``media["embedding"]`` into the dict, then drop it.
 
     Idempotent.  A media that already carries a non-empty ``embeddings`` dict
-    is left untouched.  One with only a singular ``embedding`` *and* a known
-    embedder name gets a one-entry dict; a media whose embedder is unknown
-    stays singular-only (the accessor falls back to ``embedding``), so no
-    empty-string keys are minted.
+    has its stale singular ``embedding`` (if any) dropped.  A legacy media with
+    only a singular ``embedding`` *and* a known embedder name gets a one-entry
+    dict; a media whose embedder is unknown keeps no vector (no empty-string
+    keys are minted).  Either way ``media["embedding"]`` is removed so the dict
+    is the sole vector store afterward.
     """
-    if media.get(EMBEDDINGS_KEY):
-        return
-    vec = media.get("embedding")
-    name = media.get("embedder")
-    if vec is None or not name:
-        return
-    media[EMBEDDINGS_KEY] = {name: vec}
+    if not media.get(EMBEDDINGS_KEY):
+        vec = media.get("embedding")
+        name = media.get("embedder")
+        if vec is not None and name:
+            media[EMBEDDINGS_KEY] = {name: vec}
+    media.pop("embedding", None)
 
 
 def set_media_embedding(media: dict[str, Any], embedder_name: str, vec: Any) -> None:
-    """Store *vec* for *embedder_name* on *media*, maintaining the primary mirror.
+    """Store *vec* for *embedder_name* on *media* in the per-embedder dict.
 
-    Writes ``media["embeddings"][embedder_name]`` (creating the dict) and keeps
-    the legacy singular ``media["embedding"]`` pointing at the primary embedder's
-    vector so unconverted readers stay correct while only one embedder is bound.
+    Writes ``media["embeddings"][embedder_name]`` (creating the dict) and
+    records ``media["embedder"]`` as the primary embedder name when none is set
+    yet.  No singular ``media["embedding"]`` is written — the dict is the only
+    vector store.
     """
     embs = media.get(EMBEDDINGS_KEY)
     if not isinstance(embs, dict):
         embs = {}
         media[EMBEDDINGS_KEY] = embs
     embs[embedder_name] = vec
-    if media.get("embedder") in (None, "", embedder_name) or media.get("embedding") is None:
-        media["embedding"] = vec
-        if not media.get("embedder"):
-            media["embedder"] = embedder_name
+    if not media.get("embedder"):
+        media["embedder"] = embedder_name

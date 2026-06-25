@@ -127,7 +127,10 @@ export class DatasetsCrudApiService {
     return this.http.post<DatasetLoadStartedResponse>('/api/dataset/import-local-files', formData);
   }
 
-  loadDemo(name: string, params?: Record<string, string>): Observable<DatasetLoadStartedResponse> {
+  loadDemo(
+    name: string,
+    params?: Record<string, string | string[] | Record<string, number | string>>,
+  ): Observable<DatasetLoadStartedResponse> {
     const body: DatasetLoadDemoRequest = { name, ...params };
     return loadDemoDatasetRoute(this.http, this.config.rootUrl, { body }).pipe(map((r) => r.body));
   }

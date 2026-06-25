@@ -9,7 +9,7 @@ from typing import Any
 
 import requests
 
-from vtscore.exporters.base import ExporterField, LabelsetExporter
+from vtscore.exporters.base import PluginField, LabelsetExporter
 
 
 class WebhookLabelsetExporter(LabelsetExporter):
@@ -25,14 +25,14 @@ class WebhookLabelsetExporter(LabelsetExporter):
     description = "POST the results as JSON to a URL."
     icon = "\U0001f310"
     fields = [
-        ExporterField(
+        PluginField(
             key="url",
             label="Webhook URL",
             field_type="url",
             description="The URL to POST the results JSON to.",
             placeholder="https://example.com/webhook",
         ),
-        ExporterField(
+        PluginField(
             key="auth_header",
             label="Authorization Header",
             field_type="password",

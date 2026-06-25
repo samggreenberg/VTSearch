@@ -21,6 +21,12 @@ _PICKLE_SAFE_CLASSES: set[tuple[str, str]] = {
     ("builtins", "bytes"),
     ("builtins", "bytearray"),
     ("builtins", "complex"),
+    # Protocol 0/1/2 serialise inline ``bytes`` as ``_codecs.encode(s, 'latin1')``;
+    # without this, externally-produced legacy pickles carrying inline bytes
+    # (e.g. media blobs) are rejected outright.  ``codecs.encode`` only dispatches
+    # to registered text codecs - none execute arbitrary code, so it is not an
+    # RCE vector (logical-bug-audit M18 follow-up).
+    ("_codecs", "encode"),
     # collections
     ("collections", "OrderedDict"),
     # numpy – reconstruction helpers used by numpy's __reduce__
@@ -68,6 +74,14 @@ class _PeekStubArray(list):
 def _peek_stub_numpy(*args: Any, **kwargs: Any) -> _PeekStubArray:
     """Stand-in for numpy's array/scalar reconstruction during a peek."""
     return _PeekStubArray()
+
+
+# Inline unicode strings longer than this are consumed but not decoded/retained
+# during a peek. The summary only needs short keys and the first entry's
+# ``"media_type"`` value, so a multi-MB ``media_string`` (a long document) never
+# has to be materialised. Comfortably above any dict key / media-type / origin
+# string, well below a document body (M18 follow-up).
+_PEEK_MAX_INLINE_STR = 4096
 
 
 class RestrictedUnpickler(pickle.Unpickler):
@@ -136,6 +150,37 @@ class _PeekUnpickler(pickle._Unpickler):
         raise pickle.UnpicklingError(
             f"Forbidden pickle class: {module}.{name}. Only plain Python types and numpy arrays are allowed."
         )
+
+    def _bounded_unicode(self, size: int) -> str:
+        """Consume *size* string bytes; decode only when small enough to matter.
+
+        Strings at or under :data:`_PEEK_MAX_INLINE_STR` are decoded as usual
+        (dict keys, the ``"media_type"`` value).  Larger ones - a multi-MB
+        inline ``media_string`` - are skipped in bounded chunks (keeping the
+        pickle stream aligned) and replaced by ``""`` so the peek never holds
+        the whole document in memory.
+        """
+        if size <= _PEEK_MAX_INLINE_STR:
+            return str(self.read(size), "utf-8", "surrogatepass")
+        remaining = size
+        while remaining > 0:
+            chunk = self.read(min(remaining, 1 << 20))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+        return ""
+
+    def load_binunicode(self) -> None:
+        (size,) = struct.unpack("<I", self.read(4))
+        self.append(self._bounded_unicode(size))
+
+    dispatch[pickle.BINUNICODE[0]] = load_binunicode
+
+    def load_binunicode8(self) -> None:
+        (size,) = struct.unpack("<Q", self.read(8))
+        self.append(self._bounded_unicode(size))
+
+    dispatch[pickle.BINUNICODE8[0]] = load_binunicode8
 
     def load_binfloat(self) -> None:
         self.read(8)

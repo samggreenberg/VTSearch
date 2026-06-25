@@ -5,6 +5,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { MediaListComponent } from './media-list.component';
 import { Media } from '../../../models/api.models';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
 
 describe('MediaListComponent', () => {
   let component: MediaListComponent;
@@ -19,13 +20,13 @@ describe('MediaListComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [MediaListComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(MediaListComponent);
     component = fixture.componentInstance;
     component.medias = mockMedias;
-    fixture.detectChanges();
+    TestBed.tick();
   });
 
   it('should create', () => {
@@ -51,7 +52,7 @@ describe('MediaListComponent', () => {
     component.ngOnChanges({
       sortOrder: new SimpleChange(null, component.sortOrder, false),
     });
-    fixture.detectChanges();
+    TestBed.tick();
     const items = component.cachedOrderedItems;
     expect(items[0].media.id).toBe(3);
     expect(items[1].media.id).toBe(1);
@@ -69,7 +70,7 @@ describe('MediaListComponent', () => {
       sortOrder: new SimpleChange(null, component.sortOrder, false),
       threshold: new SimpleChange(null, component.threshold, false),
     });
-    fixture.detectChanges();
+    TestBed.tick();
     const items = component.cachedOrderedItems;
     // Threshold is at 0.4, so item with score 0.2 should have showThreshold
     expect(items[0].showThreshold).toBe(false);
@@ -92,8 +93,12 @@ describe('MediaListComponent', () => {
   });
 
   it('should show empty message when no medias', () => {
-    component.medias = [];
-    fixture.detectChanges();
+    // Drive the input through setInput so ngOnChanges rebuilds the ordered-items
+    // cache to empty (a direct field write leaves the cache stale, which under
+    // zoneless surfaces as an NG0100 during the verify pass) and the host view
+    // is marked dirty so the tick repaints.
+    fixture.componentRef.setInput('medias', []);
+    TestBed.tick();
     expect(fixture.nativeElement.querySelector('.empty-list')?.textContent).toContain('No media loaded');
   });
 
@@ -107,7 +112,7 @@ describe('MediaListComponent', () => {
       sortOrder: new SimpleChange(null, component.sortOrder, false),
       threshold: new SimpleChange(null, component.threshold, false),
     });
-    fixture.detectChanges();
+    TestBed.tick();
     expect(fixture.nativeElement.querySelector('.media-threshold-line')).toBeTruthy();
   });
 

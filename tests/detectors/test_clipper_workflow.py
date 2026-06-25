@@ -160,7 +160,7 @@ class TestApplyClipperMD5:
 
         clips_dict = {1: _make_audio_media(1)}
         parent_md5 = clips_dict[1]["md5"]
-        _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
+        _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0, "min_overlap": 0.0})
 
         assert len(clips_dict) == 3
         # All clip MD5s are recomputed from actual clip bytes, not the parent
@@ -682,7 +682,7 @@ class TestMultipleMediasClipped:
             1: _make_audio_media(1, duration=5.1),
             2: _make_audio_media(2, duration=4.1),
         }
-        _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
+        _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0, "min_overlap": 0.0})
 
         # Media 1 (5.1s): 3 clips, Media 2 (4.1s): 3 clips = 6 total
         assert len(clips_dict) == 6

@@ -443,7 +443,7 @@ class TestApplyClipperBackwardsCompat:
 
         calls: dict[str, int] = {"fixup": 0, "thumb": 0}
 
-        def fake_fixup(clips, recompute, media_type, on_progress=None):
+        def fake_fixup(clips, recompute, media_type, on_progress=None, embedder=None):
             calls["fixup"] += 1
 
         def fake_thumb(clips, recompute, media_type):
@@ -464,3 +464,123 @@ class TestApplyClipperBackwardsCompat:
             assert "clipper_chain" in params
         assert calls["fixup"] == 1
         assert calls["thumb"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Phase 2b: flat (run_converters_on_folder) converter origin replay
+# ---------------------------------------------------------------------------
+
+
+class _FakeDoc2Image:
+    """Deterministic converter stand-in: one image output per page."""
+
+    name = "doc2img"
+    source_type = "document"
+    target_type = "image"
+
+    def __init__(self, n_pages: int = 3) -> None:
+        self.n_pages = n_pages
+
+    def convert_normalized(self, media, params):
+        src = media.get("media_bytes") or b""
+        n = int(params.get("pages", self.n_pages))
+        return [
+            {"filename": f"page_{i}.png", "media_bytes": src + f"|page{i}".encode(), "duration": 0} for i in range(n)
+        ]
+
+
+class TestFlatConverterOriginToChain:
+    def test_builds_one_step_chain_with_disambiguators(self):
+        from vtscore.detectors.resolver import _converter_origin_to_chain
+
+        params = {
+            "converter": "doc2img",
+            "converter_param_pages": "3",
+            "converter_out_index": "2",
+            "converter_n_out": "3",
+            "converter_content_hash": "abc123def456",
+        }
+        chain = _converter_origin_to_chain(params)
+        assert chain == [
+            {
+                "kind": "converter",
+                "name": "doc2img",
+                "params": {"pages": "3"},
+                "out_index": 2,
+                "n_out": 3,
+                "content_hash": "abc123def456",
+            }
+        ]
+
+    def test_returns_none_without_converter(self):
+        from vtscore.detectors.resolver import _converter_origin_to_chain
+
+        assert _converter_origin_to_chain({"path": "/data"}) is None
+
+
+class TestEmbedResolvedLabelFlatConverter:
+    def test_replays_converter_and_embeds_right_page(self, tmp_path, monkeypatch):
+        """A flat converter origin re-runs the converter on the resolved
+        source file and embeds the recorded sub-output (the rendered page),
+        NOT the raw source file."""
+        from vtscore.datasets.clipper_chain import _content_hash
+        from vtscore.detectors import resolver as resolver_module
+        from vtscore.detectors.resolver import _embed_resolved_label
+
+        fake = _FakeDoc2Image(n_pages=3)
+        monkeypatch.setattr("vtscore.converters.get_converter", lambda name: fake if name == "doc2img" else None)
+
+        captured: dict = {}
+
+        def fake_embed_file(path, media_type, embedder_name=""):
+            captured["bytes"] = path.read_bytes()
+            captured["media_type"] = media_type
+            return np.ones(4, dtype=np.float32)
+
+        monkeypatch.setattr(resolver_module, "embed_file", fake_embed_file)
+
+        src = tmp_path / "doc.pdf"
+        src.write_bytes(b"PDF")
+        ch = _content_hash({"media_bytes": b"PDF|page2"})
+        origin = {
+            "importer": "converter",
+            "params": {
+                "converter": "doc2img",
+                "converter_out_index": "2",
+                "converter_n_out": "3",
+                "converter_content_hash": ch,
+                "converter_param_pages": "3",
+            },
+        }
+
+        embedding = _embed_resolved_label(src, "image", origin, "")
+        assert embedding is not None
+        # Embedded the rendered page, not the source PDF.
+        assert captured["bytes"] == b"PDF|page2"
+        assert captured["media_type"] == "image"
+
+    def test_falls_back_to_whole_file_when_replay_fails(self, tmp_path, monkeypatch):
+        """If the converter is gone, _embed_resolved_label falls back to a
+        whole-file embed rather than dropping the label."""
+        from vtscore.detectors import resolver as resolver_module
+        from vtscore.detectors.resolver import _embed_resolved_label
+
+        monkeypatch.setattr("vtscore.converters.get_converter", lambda name: None)
+
+        captured: dict = {}
+
+        def fake_embed_file(path, media_type, embedder_name=""):
+            captured["bytes"] = path.read_bytes()
+            return np.zeros(4, dtype=np.float32)
+
+        monkeypatch.setattr(resolver_module, "embed_file", fake_embed_file)
+
+        src = tmp_path / "doc.pdf"
+        src.write_bytes(b"RAWPDF")
+        origin = {
+            "importer": "converter",
+            "params": {"converter": "doc2img", "converter_out_index": "0", "converter_n_out": "1"},
+        }
+        embedding = _embed_resolved_label(src, "image", origin, "")
+        assert embedding is not None
+        assert captured["bytes"] == b"RAWPDF"  # whole-file fallback

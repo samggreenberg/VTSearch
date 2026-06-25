@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ProgressIndicatorsComponent } from './progress-indicators.component';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { settleZoneless } from '../../../testing/settle-resource';
 
 describe('ProgressIndicatorsComponent', () => {
   let component: ProgressIndicatorsComponent;
@@ -8,11 +10,12 @@ describe('ProgressIndicatorsComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ProgressIndicatorsComponent],
+      providers: [...provideZoneless()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ProgressIndicatorsComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
+    await settleZoneless(fixture);
   });
 
   it('should create', () => {
@@ -39,7 +42,6 @@ describe('ProgressIndicatorsComponent', () => {
       stable: { status: 'yellow' },
       span: { status: '' },
     };
-    fixture.detectChanges();
     expect(component.smartStatus).toBe('green');
     expect(component.stableStatus).toBe('yellow');
     expect(component.spanStatus).toBe('');
@@ -92,25 +94,25 @@ describe('ProgressIndicatorsComponent', () => {
     expect(component.spanSubtext).toBe('3/4');
   });
 
-  it('should show sort overlay when sortBusy is true', () => {
-    component.sortBusy = true;
-    component.sortStatus = 'Sorting...';
-    fixture.detectChanges();
+  it('should show sort overlay when sortBusy is true', async () => {
+    fixture.componentRef.setInput('sortBusy', true);
+    fixture.componentRef.setInput('sortStatus', 'Sorting...');
+    await settleZoneless(fixture);
     const overlay = fixture.nativeElement.querySelector('.sort-overlay');
     expect(overlay).toBeTruthy();
     expect(overlay.textContent).toContain('Sorting...');
     expect(fixture.nativeElement.querySelector('.labeling-indicator')).toBeNull();
   });
 
-  it('should show progress bar inside sort overlay when busy', () => {
-    component.sortBusy = true;
-    fixture.detectChanges();
+  it('should show progress bar inside sort overlay when busy', async () => {
+    fixture.componentRef.setInput('sortBusy', true);
+    await settleZoneless(fixture);
     expect(fixture.nativeElement.querySelector('.sort-overlay vt-progress-bar')).toBeTruthy();
   });
 
-  it('should show indicators when sortBusy is false', () => {
-    component.sortBusy = false;
-    fixture.detectChanges();
+  it('should show indicators when sortBusy is false', async () => {
+    fixture.componentRef.setInput('sortBusy', false);
+    await settleZoneless(fixture);
     expect(fixture.nativeElement.querySelector('.sort-overlay')).toBeNull();
     expect(fixture.nativeElement.querySelectorAll('.labeling-indicator').length).toBe(3);
   });
@@ -160,16 +162,16 @@ describe('ProgressIndicatorsComponent', () => {
     expect(buttons[2].getAttribute('title')).toContain('Diverse: your votes cover the dataset broadly.');
   });
 
-  it('should set data-status attribute on indicators', () => {
-    component.labelingStatus = {
+  it('should set data-status attribute on indicators', async () => {
+    fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,
       bad_count: 0,
       total_count: 0,
       smart: { status: 'green' },
       stable: { status: 'yellow' },
       span: { status: 'red' },
-    };
-    fixture.detectChanges();
+    });
+    await settleZoneless(fixture);
     const buttons = fixture.nativeElement.querySelectorAll('.labeling-indicator');
     expect(buttons[0].getAttribute('data-status')).toBe('green');
     expect(buttons[1].getAttribute('data-status')).toBe('yellow');

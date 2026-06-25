@@ -128,7 +128,7 @@ class TestRegionSimilarityDotProduct:
     def test_single_vector_cosine_equals_dot_for_unit_inputs(self):
         from vtscore.training.region_similarity import score_against_query
 
-        media = {"embedding": np.array([0.6, 0.8], dtype=np.float32)}
+        media = {"embeddings": {"fake": np.array([0.6, 0.8], dtype=np.float32)}}
         q = np.array([0.6, 0.8], dtype=np.float32)
         score, box = score_against_query(media, q)
         np.testing.assert_allclose(score, 1.0, atol=1e-6)
@@ -137,7 +137,7 @@ class TestRegionSimilarityDotProduct:
     def test_orthogonal_unit_vectors_score_zero(self):
         from vtscore.training.region_similarity import score_against_query
 
-        media = {"embedding": np.array([1.0, 0.0], dtype=np.float32)}
+        media = {"embeddings": {"fake": np.array([1.0, 0.0], dtype=np.float32)}}
         q = np.array([0.0, 1.0], dtype=np.float32)
         score, _ = score_against_query(media, q)
         np.testing.assert_allclose(score, 0.0, atol=1e-6)
@@ -145,7 +145,7 @@ class TestRegionSimilarityDotProduct:
     def test_zero_query_returns_zero(self):
         from vtscore.training.region_similarity import score_against_query
 
-        media = {"embedding": np.array([1.0, 0.0], dtype=np.float32)}
+        media = {"embeddings": {"fake": np.array([1.0, 0.0], dtype=np.float32)}}
         score, box = score_against_query(media, np.zeros(2, dtype=np.float32))
         assert score == 0.0
         assert box is None
@@ -156,7 +156,7 @@ class TestRegionSimilarityDotProduct:
         # raw dot product, not a cosine - proving the divide was removed.
         from vtscore.training.region_similarity import score_against_query
 
-        media = {"embedding": np.array([1.0, 0.0], dtype=np.float32)}
+        media = {"embeddings": {"fake": np.array([1.0, 0.0], dtype=np.float32)}}
         q = np.array([5.0, 0.0], dtype=np.float32)  # not unit-norm
         score, _ = score_against_query(media, q)
         np.testing.assert_allclose(score, 5.0, atol=1e-6)

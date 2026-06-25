@@ -23,7 +23,7 @@ GET  /api/detectors/<name>/labels/<element_id>/thumbnail
     Stream a small thumbnail image for a saved labelset element.
 
 POST /api/detectors/<name>/labels/<element_id>/vote
-    Toggle the label on a saved labelset element.
+    Set a saved labelset element's label to an absolute target.
 
 Migrated to ``flask_smorest`` for the JSON-shaped routes (save, labels-detail,
 vote). ``import-labels`` keeps its plain-Flask route on the same smorest
@@ -180,11 +180,52 @@ def save_detector_labels(name: str):
 # ---------------------------------------------------------------------------
 
 
+def _merge_entries_into_labelset(existing_ls, label_entries: list[dict]) -> tuple[int, int, list[dict]]:
+    """Merge imported label entries into ``existing_ls`` in place, deduping.
+
+    Iterates ``label_entries``, skipping entries whose label isn't ``good`` or
+    ``bad`` and entries whose ``(md5, label)`` pair already exists in the
+    labelset.  Each accepted entry is appended to ``existing_ls.elements`` and
+    recorded so the caller can resolve/apply it later.
+
+    Returns ``(applied, skipped, new_entries)`` matching the legacy counts and
+    list that the route built inline.
+    """
+    from vtscore.datasets.labelset import LabeledElement
+
+    # Build a set of existing (md5, label) pairs for dedup
+    existing_keys: set[tuple[str, str]] = set()
+    for el in existing_ls.elements:
+        if el.md5:
+            existing_keys.add((el.md5, el.label))
+
+    applied = 0
+    skipped = 0
+    new_entries: list[dict] = []
+    for entry in label_entries:
+        label = entry.get("label", "")
+        if label not in ("good", "bad"):
+            skipped += 1
+            continue
+        md5 = entry.get("md5", "")
+        if md5 and (md5, label) in existing_keys:
+            skipped += 1
+            continue
+        elem = LabeledElement.from_dict(entry)
+        existing_ls.elements.append(elem)
+        new_entries.append(entry)
+        if md5:
+            existing_keys.add((md5, label))
+        applied += 1
+
+    return applied, skipped, new_entries
+
+
 @detectors_labels_bp.route(
     "/api/detectors/<name>/import-labels/<importer_name>",
     methods=["POST"],
 )
-def import_labels_into_detector(name: str, importer_name: str):  # noqa: C901
+def import_labels_into_detector(name: str, importer_name: str):
     """Run a label importer and merge results into this detector's labelset.
 
     Unlike the regular ``/api/label-importers/import/`` route, this does
@@ -228,34 +269,11 @@ def import_labels_into_detector(name: str, importer_name: str):  # noqa: C901
     # ------------------------------------------------------------------
     # 1) Merge into the persisted labelset (always, whether loaded or not)
     # ------------------------------------------------------------------
-    from vtscore.datasets.labelset import LabeledElement, LabelSet
+    from vtscore.datasets.labelset import LabelSet
 
     existing_ls = LabelSet.from_dict(data.get("labelset") or {})
 
-    # Build a set of existing (md5, label) pairs for dedup
-    existing_keys: set[tuple[str, str]] = set()
-    for el in existing_ls.elements:
-        if el.md5:
-            existing_keys.add((el.md5, el.label))
-
-    applied = 0
-    skipped = 0
-    new_entries: list[dict] = []
-    for entry in label_entries:
-        label = entry.get("label", "")
-        if label not in ("good", "bad"):
-            skipped += 1
-            continue
-        md5 = entry.get("md5", "")
-        if md5 and (md5, label) in existing_keys:
-            skipped += 1
-            continue
-        elem = LabeledElement.from_dict(entry)
-        existing_ls.elements.append(elem)
-        new_entries.append(entry)
-        if md5:
-            existing_keys.add((md5, label))
-        applied += 1
+    applied, skipped, new_entries = _merge_entries_into_labelset(existing_ls, label_entries)
 
     data["labelset"] = existing_ls.to_dict()
     _write_detector(path, data)
@@ -560,22 +578,24 @@ def thumbnail_detector_label(name: str, element_id: str):
 @detectors_labels_bp.response(200, DetectorLabelVoteResponseSchema)
 @detectors_labels_bp.alt_response(404, description="Detector or label element not found.")
 def vote_detector_label(body: dict, name: str, element_id: str):
-    """Toggle the label on a saved labelset element.
+    """Set a saved labelset element's label to an absolute target.
 
-    Body: ``{"vote": "good"}`` or ``{"vote": "bad"}``.
+    Body: ``{"target": "good"}``, ``{"target": "bad"}``, or
+    ``{"target": "remove"}``.
 
-    Toggle semantics mirror :func:`~vtsearch.state.toggle_vote`: the same
-    vote on an element with that label removes the element; the opposite
-    vote flips it.  When the element resolves into the active dataset, the
-    detector's in-memory ``good_votes`` / ``bad_votes`` are kept in sync so
-    MLP retraining and learned-sort see the change.
+    Absolute-target semantics mirror :func:`~vtsearch.state.set_vote`:
+    ``"good"`` / ``"bad"`` set the element's label (a re-assert of the
+    current label is an idempotent no-op), ``"remove"`` drops the element.
+    When the element resolves into the active dataset, the detector's
+    in-memory ``good_votes`` / ``bad_votes`` are kept in sync so MLP
+    retraining and learned-sort see the change.
     """
     from vtscore.detectors.labelset_elements import (
         apply_element_vote_in_data,
         resolve_current_dataset_cid,
     )
 
-    vote = body["vote"]
+    target = body["target"]
 
     path = _detector_path(name)
     data = _read_detector(path)
@@ -593,7 +613,7 @@ def vote_detector_label(body: dict, name: str, element_id: str):
 
     cid_before = resolve_current_dataset_cid(pre_elem)
 
-    changed, _updated, action = apply_element_vote_in_data(data, element_id, vote)
+    changed, _updated, action = apply_element_vote_in_data(data, element_id, target)
     if not changed:
         return {"ok": True, "action": action}
 
@@ -601,10 +621,12 @@ def vote_detector_label(body: dict, name: str, element_id: str):
 
     # Mirror into in-memory votes when the element resolves into the active
     # dataset, so the MLP and learned-sort stay aligned with the labelset.
+    # ``set_vote`` takes the same absolute target ("remove" → "none"), so the
+    # mirror stays idempotent under stale-tab duplicates.
     if cid_before is not None:
-        from vtsearch.state import toggle_vote
+        from vtsearch.state import set_vote
 
-        toggle_vote(cid_before, vote)
+        set_vote(cid_before, "none" if target == "remove" else target)
 
     from vtscore.detectors.registry import find_by_name, update_detector
 

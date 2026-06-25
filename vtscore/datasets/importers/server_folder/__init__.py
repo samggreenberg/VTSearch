@@ -41,7 +41,7 @@ from vtscore.datasets.archive import (
     iter_archive_chunks,
     load_archive_into,
 )
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
+from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
 from vtscore.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
 from vtscore.datasets.pdf import load_pdf_images_into
 
@@ -128,7 +128,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
     picker_view = "server_folder"
     category = "server"
     fields = [
-        ImporterField(
+        PluginField(
             key="media_type",
             label="Dataset MediaType",
             field_type="select",
@@ -136,7 +136,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
             default="audio",
             required=False,
         ),
-        ImporterField(
+        PluginField(
             key="path",
             label="Folder or archive",
             field_type="folder",
@@ -145,7 +145,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
                 "archive file (.zip, .tar, .tar.gz, .tar.bz2, .tar.xz, .rar)."
             ),
         ),
-        ImporterField(
+        PluginField(
             key="recursive",
             label="Include subfolders",
             field_type="checkbox",
@@ -156,9 +156,9 @@ class ServerFolderDatasetImporter(DatasetImporter):
             default="true",
             required=False,
         ),
-        ImporterField(
+        PluginField(
             key="dig_archives",
-            label="Dig into archives",
+            label="Include archives' contents",
             field_type="checkbox",
             description=(
                 "When enabled, archives (.zip, .tar, .rar …) found inside the chosen "
@@ -167,6 +167,24 @@ class ServerFolderDatasetImporter(DatasetImporter):
             ),
             default="false",
             required=False,
+        ),
+        PluginField(
+            key="reference_files",
+            label="Reference files in place (don't copy)",
+            field_type="checkbox",
+            description=(
+                "When enabled, the dataset stores a path reference to each original "
+                "file on the server instead of copying its bytes in.  Saves storage, "
+                "but the dataset depends on the source files staying put — moving or "
+                "deleting them breaks it."
+            ),
+            default="false",
+            required=False,
+            # Reference mode is a storage choice, not part of the data source's
+            # identity: the same folder referenced or copied resolves to the same
+            # files, so it must not pollute the persisted origin (which drives
+            # dedup / reload matching).
+            include_in_origin=False,
         ),
     ]
 

@@ -21,7 +21,9 @@ from typing import Any
 
 import numpy as np
 
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.config import EVAL_DATASETS, EvalQuery
+from vtscore.eval.labels import media_is_positive
 from vtscore.eval.metrics import (
     DatasetResult,
     LearnedSortMetrics,
@@ -55,7 +57,7 @@ def _run_text_sort_query(
 
     results = []
     for media_id, media in medias.items():
-        sim = _cosine_similarity(media["embedding"], text_vec)
+        sim = _cosine_similarity(media_embedding(media), text_vec)
         results.append({"id": media_id, "similarity": sim})
 
     results.sort(key=lambda x: x["similarity"], reverse=True)
@@ -93,7 +95,7 @@ def eval_text_sort(
     for query in queries:
         ranked = _run_text_sort_query(query, medias, media_type, enrich=enrich)
         ranked_ids = [r["id"] for r in ranked]
-        relevant_ids = {cid for cid, c in medias.items() if c.get("category") == query.target_category}
+        relevant_ids = {cid for cid, c in medias.items() if media_is_positive(c, query.target_category)}
 
         qm = compute_metrics(ranked_ids, relevant_ids, query.text, query.target_category, k_values)
         if start_time is not None:
@@ -148,8 +150,8 @@ def eval_learned_sort(
 
     for query in queries:
         # Split medias into target vs. other
-        target_ids = [cid for cid, c in medias.items() if c.get("category") == query.target_category]
-        other_ids = [cid for cid, c in medias.items() if c.get("category") != query.target_category]
+        target_ids = [cid for cid, c in medias.items() if media_is_positive(c, query.target_category)]
+        other_ids = [cid for cid, c in medias.items() if not media_is_positive(c, query.target_category)]
 
         if len(target_ids) < 2 or len(other_ids) < 2:
             continue  # not enough data

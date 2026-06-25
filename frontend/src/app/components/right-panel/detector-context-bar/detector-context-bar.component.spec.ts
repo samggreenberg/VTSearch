@@ -1,5 +1,7 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { DetectorContextBarComponent } from './detector-context-bar.component';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { settleZoneless } from '../../../testing/settle-resource';
 
 describe('DetectorContextBarComponent', () => {
   let component: DetectorContextBarComponent;
@@ -8,50 +10,52 @@ describe('DetectorContextBarComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [DetectorContextBarComponent],
+      providers: [...provideZoneless()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DetectorContextBarComponent);
     component = fixture.componentInstance;
   });
 
-  it('should create', () => {
-    fixture.detectChanges();
+  it('should create', async () => {
+    await settleZoneless(fixture);
     expect(component).toBeTruthy();
   });
 
-  it('should not render when visible is false', () => {
-    component.visible = false;
-    fixture.detectChanges();
+  it('should not render when visible is false', async () => {
+    fixture.componentRef.setInput('visible', false);
+    await settleZoneless(fixture);
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.train-context-bar')).toBeFalsy();
   });
 
-  it('should render when visible is true', () => {
-    component.visible = true;
-    component.detectorName = 'My Detector';
-    fixture.detectChanges();
+  it('should render when visible is true', async () => {
+    fixture.componentRef.setInput('visible', true);
+    fixture.componentRef.setInput('detectorName', 'My Detector');
+    await settleZoneless(fixture);
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.train-context-bar')).toBeTruthy();
     expect(el.querySelector('.train-context-name')?.textContent).toContain('My Detector');
   });
 
-  it('should enter editing mode on startRename', fakeAsync(() => {
-    component.visible = true;
-    component.detectorName = 'Old Name';
-    fixture.detectChanges();
+  it('should enter editing mode on startRename', async () => {
+    fixture.componentRef.setInput('visible', true);
+    fixture.componentRef.setInput('detectorName', 'Old Name');
+    await settleZoneless(fixture);
 
     component.startRename();
-    tick();
-    fixture.detectChanges();
+    // Drain the focus setTimeout queued by startRename(), then settle so the
+    // editing input renders.
+    await settleZoneless(fixture);
 
     expect(component.editing).toBe(true);
     expect(component.editValue).toBe('Old Name');
-  }));
+  });
 
-  it('should not start rename if detectorName is empty', () => {
-    component.visible = true;
-    component.detectorName = '';
-    fixture.detectChanges();
+  it('should not start rename if detectorName is empty', async () => {
+    fixture.componentRef.setInput('visible', true);
+    fixture.componentRef.setInput('detectorName', '');
+    await settleZoneless(fixture);
 
     component.startRename();
     expect(component.editing).toBe(false);

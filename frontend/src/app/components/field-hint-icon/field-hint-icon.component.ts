@@ -1,9 +1,10 @@
 
-import { Component, ElementRef, HostListener, signal, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, inject, input, signal } from '@angular/core';
 
 const HOVER_DELAY_MS = 500;
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-field-hint-icon',
   standalone: true,
   imports: [],

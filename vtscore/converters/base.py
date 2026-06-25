@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -233,6 +234,17 @@ class MediaConverter(PluginBase, ABC):
         for f in self.fields:
             if f.key == key:
                 return f.default
+        # No field declares *key*. Returning "" keeps the historical contract,
+        # but a key that doesn't match any declared field is almost always a
+        # typo or a field that was renamed/removed out from under a caller —
+        # which would otherwise read as an empty string forever. Surface it
+        # (L9) instead of swallowing it silently.
+        logging.getLogger(__name__).warning(
+            "get_param(%r) on converter %r: no field declares that key; returning ''. "
+            "A renamed or removed field will silently read as empty.",
+            key,
+            self.name,
+        )
         return ""
 
     def to_dict(self) -> dict[str, Any]:

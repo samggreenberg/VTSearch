@@ -341,7 +341,8 @@ class TestSafeThresholdsEval:
                 emb = rng.randn(dim).astype(np.float32) - 1.0
             medias[i + 1] = {
                 "id": i + 1,
-                "embedding": emb,
+                "embedder": "e5",
+                "embeddings": {"e5": emb},
                 "category": cat,
             }
         return medias
@@ -561,7 +562,7 @@ class TestCalibrationFractionEval:
                 emb = rng.randn(dim).astype(np.float32) + 1.0
             else:
                 emb = rng.randn(dim).astype(np.float32) - 1.0
-            medias[i + 1] = {"id": i + 1, "embedding": emb, "category": cat}
+            medias[i + 1] = {"id": i + 1, "embedder": "e5", "embeddings": {"e5": emb}, "category": cat}
         return medias
 
     def test_simulate_voting_iterations_accepts_calibration_fraction(self):

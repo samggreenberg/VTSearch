@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostBinding, Input, NgZone, OnChanges, OnDestroy, OnInit, SimpleChanges, ViewChild, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostBinding, inject, Input, input, NgZone, OnChanges, OnDestroy, OnInit, output, SimpleChanges, ViewChild } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { BrowseViewportService, ViewportBounds } from '../../services/browse-viewport.service';
@@ -32,6 +32,7 @@ export const MINIMAP_MAX_HEIGHT = 450;
  * main canvas has already fetched and never holds its own copy.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-minimap',
   standalone: true,
   imports: [IconComponent],

@@ -23,7 +23,7 @@ from typing import Any
 import pytest
 
 from vtscore.converters.base import MediaConverter
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+from vtscore.datasets.importers.base import DatasetImporter
 from vtscore.plugins import PluginField
 from vtscore.plugins.uploads import (
     BytesIOUploadedFile,
@@ -192,7 +192,7 @@ class _FileImporter(DatasetImporter):
     name = "_file_importer"
     display_name = "_file_importer"
     description = ""
-    fields = [ImporterField(key="file", label="F", field_type="file")]
+    fields = [PluginField(key="file", label="F", field_type="file")]
 
     last_value: Any = None
 

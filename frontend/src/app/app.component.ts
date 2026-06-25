@@ -1,4 +1,4 @@
-import { Component, HostListener, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, HostListener, inject, signal } from '@angular/core';
 import { Router, RouterOutlet, NavigationEnd } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { combineLatest } from 'rxjs';
@@ -39,6 +39,7 @@ import type { RecentSession } from './generated/api-client/models/recent-session
 import { isPairCompatible } from './utils/context-compat';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-root',
   imports: [
     CommonModule,

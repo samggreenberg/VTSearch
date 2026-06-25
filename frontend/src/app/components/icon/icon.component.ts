@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, OnChanges, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, input, OnChanges } from '@angular/core';
 
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
@@ -25,7 +25,7 @@ const KNOWN_TYPES = new Set([
   'house', 'lightning', 'flask', 'cubes', 'database',
   'clock', 'running', 'calendar',
   'checkbox-checked', 'search', 'trophy',
-  'zoom-in', 'zoom-out', 'zoom-fit',
+  'zoom-in', 'zoom-out', 'zoom-fit', 'help',
 ]);
 
 function emojiToType(icon: string): string {
@@ -75,6 +75,7 @@ function emojiToType(icon: string): string {
 const sanitizedCache = new Map<string, SafeHtml>();
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-icon',
   standalone: true,
   imports: [],

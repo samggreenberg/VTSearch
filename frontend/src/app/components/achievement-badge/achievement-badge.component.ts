@@ -1,4 +1,4 @@
-import { Component, Input, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../icon/icon.component';
 
@@ -13,6 +13,7 @@ import { IconComponent } from '../icon/icon.component';
  * The base symbol comes from the existing vt-icon set via *iconType*.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-achievement-badge',
   standalone: true,
   imports: [CommonModule, IconComponent],

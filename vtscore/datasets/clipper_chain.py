@@ -424,7 +424,7 @@ def _entry_has_disambiguators(entry: ChainStep) -> bool:
     return any(entry.get(k) is not None for k in ("clip_start", "clip_end", "clip_box", "clip_index", "content_hash"))
 
 
-def _select_chain_output(  # noqa: C901
+def _select_chain_output(
     outputs: list[dict[str, Any]],
     entry: ChainStep,
 ) -> dict[str, Any] | None:

@@ -45,9 +45,9 @@ def _make_tracker():
 class TestCollapseDuplicatesStageInvalidatesMatrix:
     def test_cache_dropped_after_dedup(self):
         ctx = DatasetContext("test_dedup_cache")
-        ctx.medias[1] = {"id": 1, "md5": "aaa", "embedding": np.ones(4, dtype=np.float32)}
-        ctx.medias[2] = {"id": 2, "md5": "aaa", "embedding": np.full(4, 2.0, dtype=np.float32)}
-        ctx.medias[3] = {"id": 3, "md5": "bbb", "embedding": np.full(4, 3.0, dtype=np.float32)}
+        ctx.medias[1] = {"id": 1, "md5": "aaa", "embeddings": {"e5": np.ones(4, dtype=np.float32)}}
+        ctx.medias[2] = {"id": 2, "md5": "aaa", "embeddings": {"e5": np.full(4, 2.0, dtype=np.float32)}}
+        ctx.medias[3] = {"id": 3, "md5": "bbb", "embeddings": {"e5": np.full(4, 3.0, dtype=np.float32)}}
 
         _populate_matrix(ctx)
 
@@ -76,7 +76,8 @@ class TestApplyClipperStageInvalidatesMatrix:
                 "media_type": "audio",
                 "filename": f"a_{cid}.wav",
                 "md5": f"md5_{cid}",
-                "embedding": rng.standard_normal(4).astype(np.float32),
+                "embedder": "clap",
+                "embeddings": {"clap": rng.standard_normal(4).astype(np.float32)},
                 "origin": {"importer": "server_folder", "params": {"path": "/x"}},
                 "origin_name": f"a_{cid}.wav",
             }
@@ -95,7 +96,7 @@ class TestApplyClipperStageInvalidatesMatrix:
     def test_noop_when_no_clipper(self):
         """No clipper, no chain: stage is a no-op and must not touch the cache."""
         ctx = DatasetContext("test_noop_cache")
-        ctx.medias[1] = {"id": 1, "md5": "x", "embedding": np.ones(4, dtype=np.float32)}
+        ctx.medias[1] = {"id": 1, "md5": "x", "embeddings": {"e5": np.ones(4, dtype=np.float32)}}
 
         _populate_matrix(ctx)
         cached_matrix = ctx._emb_matrix
@@ -122,10 +123,10 @@ class TestDropNoneEmbeddingsStage:
 
     def test_drops_medias_with_none_embedding(self):
         ctx = DatasetContext("test_drop_none")
-        ctx.medias[1] = {"id": 1, "embedding": np.ones(4, dtype=np.float32)}
-        ctx.medias[2] = {"id": 2, "embedding": np.full(4, 2.0, dtype=np.float32)}
-        ctx.medias[3] = {"id": 3, "embedding": np.full(4, 3.0, dtype=np.float32)}
-        ctx.medias[4] = {"id": 4, "embedding": np.full(4, 4.0, dtype=np.float32)}
+        ctx.medias[1] = {"id": 1, "embeddings": {"e5": np.ones(4, dtype=np.float32)}}
+        ctx.medias[2] = {"id": 2, "embeddings": {"e5": np.full(4, 2.0, dtype=np.float32)}}
+        ctx.medias[3] = {"id": 3, "embeddings": {"e5": np.full(4, 3.0, dtype=np.float32)}}
+        ctx.medias[4] = {"id": 4, "embeddings": {"e5": np.full(4, 4.0, dtype=np.float32)}}
 
         # Cache must exist before the drop so we can verify invalidation.
         # The matrix builder itself now raises on None embeddings (M11
@@ -133,8 +134,8 @@ class TestDropNoneEmbeddingsStage:
         # first and only then simulate the silent re-embed failure.
         _populate_matrix(ctx)
 
-        ctx.medias[2]["embedding"] = None
-        ctx.medias[4]["embedding"] = None
+        ctx.medias[2]["embeddings"] = {}
+        ctx.medias[4]["embeddings"] = {}
 
         _drop_none_embeddings_stage(ctx, _make_tracker())
 
@@ -145,8 +146,8 @@ class TestDropNoneEmbeddingsStage:
 
     def test_no_op_when_all_embeddings_present(self):
         ctx = DatasetContext("test_drop_none_noop")
-        ctx.medias[1] = {"id": 1, "embedding": np.ones(4, dtype=np.float32)}
-        ctx.medias[2] = {"id": 2, "embedding": np.full(4, 2.0, dtype=np.float32)}
+        ctx.medias[1] = {"id": 1, "embeddings": {"e5": np.ones(4, dtype=np.float32)}}
+        ctx.medias[2] = {"id": 2, "embeddings": {"e5": np.full(4, 2.0, dtype=np.float32)}}
 
         cached_matrix = _populate_matrix(ctx)
 

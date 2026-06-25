@@ -13,69 +13,94 @@ import numpy as np
 import pytest
 
 from vtscore.embedding import binding as binding_mod
-from vtscore.embedding.binding import derive_binding, derive_binding_from_names, validate_binding
+from vtscore.embedding.binding import (
+    derive_binding,
+    derive_binding_from_names,
+    score_marker_embedder,
+    score_marker_embedder_for_snap,
+    validate_binding,
+)
 from vtscore.state.core import DatasetContext
 
-# embedder name -> (supports_text, supports_patch_regions)
+# embedder name -> (supports_text, supports_patch_regions, supports_geometric_verification)
 _FAKE_CAPS = {
-    "faketext": (True, False),
-    "fakepatch": (False, True),
-    "fakesingle": (False, False),
-    "fakeboth": (True, True),
+    "faketext": (True, False, False),
+    "fakepatch": (False, True, False),
+    "fakestructural": (False, False, True),
+    "fakesingle": (False, False, False),
+    "fakeboth": (True, True, False),
+    "fakeall": (True, True, True),
 }
 
 
 @pytest.fixture
 def fake_caps(monkeypatch):
-    monkeypatch.setattr(binding_mod, "_capabilities", lambda name: _FAKE_CAPS.get(name, (False, False)))
+    monkeypatch.setattr(binding_mod, "_capabilities", lambda name: _FAKE_CAPS.get(name, (False, False, False)))
 
 
 class TestDeriveBinding:
     def test_none_and_empty(self):
-        assert derive_binding(None) == (None, None)
-        assert derive_binding("") == (None, None)
+        assert derive_binding(None) == (None, None, None)
+        assert derive_binding("") == (None, None, None)
 
     def test_text_embedder_fills_text_slot(self, fake_caps):
-        assert derive_binding("faketext") == ("faketext", None)
+        assert derive_binding("faketext") == ("faketext", None, None)
 
     def test_patch_embedder_fills_patch_slot(self, fake_caps):
-        assert derive_binding("fakepatch") == (None, "fakepatch")
+        assert derive_binding("fakepatch") == (None, "fakepatch", None)
+
+    def test_structural_embedder_fills_structural_slot(self, fake_caps):
+        assert derive_binding("fakestructural") == (None, None, "fakestructural")
 
     def test_single_vector_fills_neither(self, fake_caps):
-        assert derive_binding("fakesingle") == (None, None)
+        assert derive_binding("fakesingle") == (None, None, None)
 
     def test_dual_capability_fills_both(self, fake_caps):
-        assert derive_binding("fakeboth") == ("fakeboth", "fakeboth")
+        assert derive_binding("fakeboth") == ("fakeboth", "fakeboth", None)
+
+    def test_triple_capability_fills_all(self, fake_caps):
+        assert derive_binding("fakeall") == ("fakeall", "fakeall", "fakeall")
 
     def test_unknown_name_fills_neither(self, fake_caps):
-        assert derive_binding("nope") == (None, None)
+        assert derive_binding("nope") == (None, None, None)
 
 
 class TestDeriveBindingFromNames:
     def test_empty_iterable(self):
-        assert derive_binding_from_names([]) == (None, None)
-        assert derive_binding_from_names([None, ""]) == (None, None)
+        assert derive_binding_from_names([]) == (None, None, None)
+        assert derive_binding_from_names([None, ""]) == (None, None, None)
 
     def test_text_plus_patch_fills_both_slots(self, fake_caps):
-        assert derive_binding_from_names(["faketext", "fakepatch"]) == ("faketext", "fakepatch")
+        assert derive_binding_from_names(["faketext", "fakepatch"]) == ("faketext", "fakepatch", None)
+
+    def test_full_trio_fills_all_slots(self, fake_caps):
+        assert derive_binding_from_names(["faketext", "fakepatch", "fakestructural"]) == (
+            "faketext",
+            "fakepatch",
+            "fakestructural",
+        )
 
     def test_order_independent(self, fake_caps):
-        assert derive_binding_from_names(["fakepatch", "faketext"]) == ("faketext", "fakepatch")
+        assert derive_binding_from_names(["fakestructural", "fakepatch", "faketext"]) == (
+            "faketext",
+            "fakepatch",
+            "fakestructural",
+        )
 
     def test_first_of_each_role_wins(self, fake_caps):
         # A second text-capable name does not displace the first.
-        assert derive_binding_from_names(["faketext", "fakeboth"]) == ("faketext", "fakeboth")
+        assert derive_binding_from_names(["faketext", "fakeboth"]) == ("faketext", "fakeboth", None)
 
     def test_single_vector_among_others_is_skipped(self, fake_caps):
-        assert derive_binding_from_names(["fakesingle", "faketext"]) == ("faketext", None)
+        assert derive_binding_from_names(["fakesingle", "faketext"]) == ("faketext", None, None)
 
 
 class TestValidateBinding:
     def test_none_slots_ok(self, fake_caps):
-        validate_binding(None, None)  # no raise
+        validate_binding(None, None, None)  # no raise
 
     def test_valid_roles_ok(self, fake_caps):
-        validate_binding("faketext", "fakepatch")  # no raise
+        validate_binding("faketext", "fakepatch", "fakestructural")  # no raise
 
     def test_text_slot_rejects_non_text(self, fake_caps):
         with pytest.raises(ValueError, match=r"text_embedder 'fakepatch' does not support text"):
@@ -84,6 +109,10 @@ class TestValidateBinding:
     def test_patch_slot_rejects_non_patch(self, fake_caps):
         with pytest.raises(ValueError, match=r"patch_embedder 'faketext' does not produce patch"):
             validate_binding(None, "faketext")
+
+    def test_structural_slot_rejects_non_structural(self, fake_caps):
+        with pytest.raises(ValueError, match=r"structural_embedder 'faketext' does not support geometric"):
+            validate_binding(None, None, "faketext")
 
     def test_unknown_name_rejected(self, fake_caps):
         with pytest.raises(ValueError):
@@ -153,6 +182,20 @@ class TestDatasetContextExplicitBinding:
         assert ctx.supports_text is True
         assert ctx.supports_patch_regions is True
 
+    def test_explicit_binds_full_trio(self, fake_caps):
+        ctx = _ctx_with_embedder("faketext")
+        ctx.bind_embedders(
+            text_embedder="faketext",
+            patch_embedder="fakepatch",
+            structural_embedder="fakestructural",
+        )
+        assert ctx.text_embedder == "faketext"
+        assert ctx.patch_embedder == "fakepatch"
+        assert ctx.structural_embedder == "fakestructural"
+        assert ctx.supports_text is True
+        assert ctx.supports_patch_regions is True
+        assert ctx.supports_geometric_verification is True
+
     def test_explicit_validates_roles(self, fake_caps):
         ctx = DatasetContext("bad")
         with pytest.raises(ValueError, match="does not support text"):
@@ -160,11 +203,18 @@ class TestDatasetContextExplicitBinding:
         # A rejected binding must not be stored - derivation still governs.
         assert ctx._binding_explicit is False
 
-    def test_explicit_empty_pair_overrides_derivation(self, fake_caps):
+    def test_explicit_validates_structural_role(self, fake_caps):
+        ctx = DatasetContext("bad")
+        with pytest.raises(ValueError, match="does not support geometric"):
+            ctx.bind_embedders(structural_embedder="faketext")
+        assert ctx._binding_explicit is False
+
+    def test_explicit_empty_triple_overrides_derivation(self, fake_caps):
         ctx = _ctx_with_embedder("faketext")
-        ctx.bind_embedders()  # both None, explicit
+        ctx.bind_embedders()  # all None, explicit
         assert ctx.text_embedder is None
         assert ctx.patch_embedder is None
+        assert ctx.structural_embedder is None
 
 
 class TestRoutedEmbedder:
@@ -191,6 +241,13 @@ class TestRoutedEmbedder:
         assert ctx.routed_embedder("patch") is None
         assert ctx.routed_embedder("score") is None
 
+    def test_structural_dataset_roles(self, fake_caps):
+        ctx = _ctx_with_embedder("fakestructural")
+        assert ctx.routed_embedder("text") is None
+        assert ctx.routed_embedder("patch") is None
+        assert ctx.routed_embedder("structural") == "fakestructural"
+        assert ctx.routed_embedder("score") == "fakestructural"
+
     def test_score_prefers_patch_over_text(self, fake_caps):
         ctx = DatasetContext("dual")
         ctx.bind_embedders(text_embedder="faketext", patch_embedder="fakepatch")
@@ -198,6 +255,19 @@ class TestRoutedEmbedder:
         assert ctx.routed_embedder("patch") == "fakepatch"
         # score = patch-if-set-else-text
         assert ctx.routed_embedder("score") == "fakepatch"
+
+    def test_score_prefers_structural_over_patch_and_text(self, fake_caps):
+        ctx = DatasetContext("trio")
+        ctx.bind_embedders(
+            text_embedder="faketext",
+            patch_embedder="fakepatch",
+            structural_embedder="fakestructural",
+        )
+        assert ctx.routed_embedder("text") == "faketext"
+        assert ctx.routed_embedder("patch") == "fakepatch"
+        assert ctx.routed_embedder("structural") == "fakestructural"
+        # score precedence: structural ▸ patch ▸ text
+        assert ctx.routed_embedder("score") == "fakestructural"
 
     def test_score_falls_back_to_text_when_no_patch(self, fake_caps):
         ctx = DatasetContext("texty")
@@ -208,6 +278,60 @@ class TestRoutedEmbedder:
         ctx = _ctx_with_embedder("faketext")
         with pytest.raises(ValueError, match="unknown embedder routing role"):
             ctx.routed_embedder("bogus")
+
+
+class TestScoreMarkerEmbedder:
+    """The v3 model-keying marker - the embedder component of the
+    ``(detector, dataset, embedder)`` MLP key (patch-embedder.md Phase 2b.5).
+
+    The marker must equal the **score** embedder (structural ▸ patch ▸ text)
+    the MLP is trained/scored against, falling back to the primary *name* for a
+    slot-less single-vector dataset so it is always a concrete string to compare
+    against ``DetectorContext.embedder``.
+    """
+
+    def _media(self, primary: str, names: list[str]) -> dict:
+        return {
+            "embedder": primary,
+            "embedding": np.ones(4, dtype=np.float32),
+            "embeddings": {n: np.ones(4, dtype=np.float32) for n in names},
+        }
+
+    def test_text_only_marks_text(self, fake_caps):
+        assert score_marker_embedder(self._media("faketext", ["faketext"])) == "faketext"
+
+    def test_patch_only_marks_patch(self, fake_caps):
+        assert score_marker_embedder(self._media("fakepatch", ["fakepatch"])) == "fakepatch"
+
+    def test_dual_marks_patch_not_primary(self, fake_caps):
+        # The crux of Phase 2b.5: a dual dataset's primary mirror is the text
+        # embedder, but the MLP scores against the patch embedder.  The marker
+        # must follow the scored space (patch), not media["embedder"] (text),
+        # or a stale cross-space MLP survives a dataset switch.
+        media = self._media("faketext", ["faketext", "fakepatch"])
+        assert media["embedder"] == "faketext"
+        assert score_marker_embedder(media) == "fakepatch"
+
+    def test_structural_wins_over_patch_and_text(self, fake_caps):
+        # On a full trio the score space is structural; the marker must follow it.
+        media = self._media("faketext", ["faketext", "fakepatch", "fakestructural"])
+        assert score_marker_embedder(media) == "fakestructural"
+
+    def test_single_vector_falls_back_to_primary_name(self, fake_caps):
+        # routed_embedder("score") is None here, but the marker is a concrete
+        # name (the primary) so the str-compare invalidation still works.
+        assert score_marker_embedder(self._media("fakesingle", ["fakesingle"])) == "fakesingle"
+
+    def test_no_embedder_marks_empty(self, fake_caps):
+        assert score_marker_embedder({}) == ""
+
+    def test_for_snap_empty(self):
+        assert score_marker_embedder_for_snap(None) == ""
+        assert score_marker_embedder_for_snap({}) == ""
+
+    def test_for_snap_uses_first_media(self, fake_caps):
+        snap = {7: self._media("faketext", ["faketext", "fakepatch"])}
+        assert score_marker_embedder_for_snap(snap) == "fakepatch"
 
 
 class TestRealRegisteredEmbedder:
@@ -233,3 +357,13 @@ class TestRealRegisteredEmbedder:
         ctx = _ctx_with_embedder(patch_emb.name)
         assert ctx.patch_embedder == patch_emb.name
         assert ctx.supports_patch_regions is True
+
+    def test_real_structural_embedder_binds_structural_slot(self):
+        from vtscore.media import all_embedders
+
+        struct_emb = next((e for e in all_embedders() if e.supports_geometric_verification), None)
+        if struct_emb is None:
+            pytest.skip("no structural embedder registered")
+        ctx = _ctx_with_embedder(struct_emb.name)
+        assert ctx.structural_embedder == struct_emb.name
+        assert ctx.supports_geometric_verification is True

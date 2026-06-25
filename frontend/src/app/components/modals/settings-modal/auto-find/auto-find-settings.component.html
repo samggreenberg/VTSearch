@@ -1,12 +1,13 @@
-<p class="info-text">
-  Detectors flagged here run automatically against each dataset as it is
-  imported (an &ldquo;Auto-Find&rdquo;). Choose a results exporter below to have
-  those results emailed, saved, or posted automatically when a run finishes.
-  These are your own settings; every user curates their own Auto-Find list.
-</p>
-
 <!-- Auto-Find detectors --------------------------------------------------- -->
-<h4 class="subhead" title="Detectors that auto-run against each newly imported dataset">Auto-Find detectors</h4>
+<h4 class="subhead">
+  Auto-Find detectors
+  <span
+    class="help-icon"
+    tabindex="0"
+    title="Detectors flagged here run automatically against each dataset as it is imported (an “Auto-Find”). These are your own settings; every user curates their own Auto-Find list.">
+    <vt-icon type="help" [size]="14"></vt-icon>
+  </span>
+</h4>
 @if (loadingDetectors) {
   <p class="empty-state">Loading detectors&hellip;</p>
 } @else if (detectors.length === 0) {
@@ -29,7 +30,15 @@
 }
 
 <!-- Results Exporter ------------------------------------------------------ -->
-<h4 class="subhead" title="What to do with results after an Auto-Find finishes">Results Exporter:</h4>
+<h4 class="subhead">
+  Results Exporter:
+  <span
+    class="help-icon"
+    tabindex="0"
+    title="Choose a results exporter to have Auto-Find results emailed, saved, or posted automatically when a run finishes. Pick “None” to keep results in the app.">
+    <vt-icon type="help" [size]="14"></vt-icon>
+  </span>
+</h4>
 @if (loadingExporters) {
   <p class="empty-state">Loading exporters&hellip;</p>
 } @else {
@@ -55,10 +64,7 @@
 
   <div class="view-tab-content">
     @if (activeExporter === '') {
-      <p class="form-hint">
-        Results stay in the app and are not exported automatically. Pick an
-        exporter above to email, save, or post them when an Auto-Find finishes.
-      </p>
+      <p class="form-hint">Results stay in the app; nothing is exported automatically.</p>
     } @else if (activeFields.length === 0) {
       <p class="form-hint">This exporter needs no configuration.</p>
     } @else {

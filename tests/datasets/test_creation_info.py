@@ -3,7 +3,7 @@
 import numpy as np
 
 from vtscore.datasets.importers import get_importer
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+from vtscore.datasets.importers.base import DatasetImporter, PluginField
 from vtscore.datasets.loader import export_dataset_to_file, load_dataset_from_pickle
 
 
@@ -17,8 +17,8 @@ class _DummyImporter(DatasetImporter):
     display_name = "Test Dummy"
     description = "A dummy importer for testing."
     fields = [
-        ImporterField("media_type", "Media Type", "select", options=["audio", "image"], default="audio"),
-        ImporterField("path", "Folder", "folder"),
+        PluginField("media_type", "Media Type", "select", options=["audio", "image"], default="audio"),
+        PluginField("path", "Folder", "folder"),
     ]
 
     def run(self, field_values, medias):
@@ -45,7 +45,7 @@ class TestBuildCliArgs:
             name = "file_test"
             display_name = "File Test"
             description = "test"
-            fields = [ImporterField("upload", "Upload", "file", accept=".pkl")]
+            fields = [PluginField("upload", "Upload", "file", accept=".pkl")]
 
             def run(self, _fv, _c):
                 pass
@@ -99,7 +99,8 @@ class TestPickleRoundTrip:
                 "duration": 1.0,
                 "file_size": 100,
                 "md5": "abc123",
-                "embedding": np.zeros(10),
+                "embedder": "clap",
+                "embeddings": {"clap": np.zeros(10)},
                 "filename": "clip_1.wav",
                 "category": "test",
                 "media_bytes": b"\x00" * 100,

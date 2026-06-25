@@ -183,7 +183,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-from vtscore.labels.sources.base import LabelsetSource, LabelsetSourceField
+from vtscore.labels.sources.base import LabelsetSource, PluginField
 from vtscore.security.path_validation import sanitize_template_value
 
 if TYPE_CHECKING:
@@ -213,13 +213,13 @@ class S3LabelsetSource(LabelsetSource):
     description = "Sync detector labels with a JSON object in an S3 bucket."
     icon = "☁️"  # cloud
     fields = [
-        LabelsetSourceField(
+        PluginField(
             key="bucket",
             label="S3 Bucket",
             field_type="text",
             required=True,
         ),
-        LabelsetSourceField(
+        PluginField(
             key="key",
             label="Object Key",
             field_type="text",

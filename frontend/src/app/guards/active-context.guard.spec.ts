@@ -18,6 +18,7 @@ import { ContextSwitchService } from '../services/context-switch.service';
 import { DatasetStateService } from '../services/dataset-state.service';
 import { ToastService } from '../services/toast.service';
 import { DatasetRegistryEntry, DetectorRegistryEntry } from '../models/api.models';
+import { configureZoneless } from '../testing/zoneless-testbed';
 
 describe('activeContextGuard', () => {
   let router: Router;
@@ -37,13 +38,18 @@ describe('activeContextGuard', () => {
     detectors: DetectorRegistryEntry[],
   ): void {
     const ds = datasetState as unknown as {
-      datasetsSubject: { next: (v: unknown) => void };
-      detectorsSubject: { next: (v: unknown) => void };
-      loadedSubject: { next: (v: unknown) => void };
+      _datasets: { set: (v: unknown) => void };
+      _detectors: { set: (v: unknown) => void };
+      _loaded: { set: (v: unknown) => void };
     };
-    ds.datasetsSubject.next(datasets);
-    ds.detectorsSubject.next(detectors);
-    ds.loadedSubject.next(true);
+    ds._datasets.set(datasets);
+    ds._detectors.set(detectors);
+    ds._loaded.set(true);
+    // `loaded$` is a `toObservable` bridge over the `_loaded` signal: its
+    // backing effect pushes the new value into the replayed stream on the next
+    // change-detection pass. Tick so the guard's `loaded$` subscription replays
+    // `true` synchronously when it subscribes below.
+    TestBed.tick();
   }
 
   function runGuard(datasetId: string, detectorId: string): MaybeAsync<GuardResult> {
@@ -64,7 +70,7 @@ describe('activeContextGuard', () => {
   }
 
   beforeEach(() => {
-    TestBed.configureTestingModule({
+    configureZoneless({
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),

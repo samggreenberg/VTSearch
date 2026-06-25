@@ -44,6 +44,63 @@ detector_scoring_bp = Blueprint(
 _HEAVYWEIGHT_KEYS = ("embedding", "media_bytes", "media_string", "thumbnail_bytes")
 
 
+def _detector_type(det_data: dict | None) -> str:
+    """The locked embedder type of a detector JSON (legacy-migrated)."""
+    from vtscore.detectors.embedder_type import detector_embedder_type_from_data  # noqa: PLC0415
+
+    return detector_embedder_type_from_data(det_data or {})
+
+
+def _dataset_bound_embedders(snap: dict) -> list[str]:
+    """The embedder names the active snap binds (keys of the first media's vectors)."""
+    from vtscore.embedding.media_vectors import media_embedder_names  # noqa: PLC0415
+
+    return media_embedder_names(next(iter(snap.values()), {})) if snap else []
+
+
+def _dataset_supplies_detector_type(det_data: dict | None, snap: dict) -> bool:
+    """Whether the active snap binds an embedder of the detector's locked type.
+
+    A detector scores its labels in the concrete embedder of its locked type the
+    active dataset supplies; when the dataset binds no embedder of that type the
+    labels would re-embed in a foreign space (garbage scores), so the pair is
+    incompatible.  A legacy/typeless detector is always compatible (resolved at
+    first train via the score precedence).
+    """
+    from vtscore.embedding.binding import detector_dataset_compatible  # noqa: PLC0415
+
+    return detector_dataset_compatible(_detector_type(det_data), _dataset_bound_embedders(snap))
+
+
+def _compatible_detectors(detectors_to_run: list, snap: dict) -> list:
+    """Drop Auto-Find detectors whose locked type the active dataset can't supply.
+
+    Scoring an incompatible detector's labels in a foreign space would be
+    garbage, so they are skipped; a legacy/typeless detector stays (resolved via
+    the score precedence).  Each item is a ``(name, det_data, entry)`` triple.
+    Aborts 400 if the gate leaves nothing to run.
+    """
+    kept = [trip for trip in detectors_to_run if _dataset_supplies_detector_type(trip[1], snap)]
+    if not kept:
+        abort(
+            400,
+            message="No Auto-Find detectors are compatible with the active dataset's embedder types.",
+        )
+    return kept
+
+
+def _type_incompatible_message(det_data: dict | None) -> str:
+    """Human-facing 409 message for a type-incompatible detector/dataset pair."""
+    from vtscore.embedding.binding import EMBEDDER_TYPE_LABELS  # noqa: PLC0415
+
+    det_type = _detector_type(det_data)
+    label = EMBEDDER_TYPE_LABELS.get(det_type, det_type or "compatible")
+    return (
+        f"This detector scores in a {label} embedder space, which the active "
+        "dataset doesn't provide. Load a dataset that binds a matching embedder type."
+    )
+
+
 def _media_info_for_response(media: dict) -> dict:
     """Return a copy of *media* without heavyweight fields."""
     return {k: v for k, v in media.items() if k not in _HEAVYWEIGHT_KEYS}
@@ -56,7 +113,7 @@ def _media_info_for_response(media: dict) -> dict:
 @detector_scoring_bp.alt_response(404, description="Detector not found.")
 @require_dataset_header
 @require_detector_header
-def find_label(body: dict):  # noqa: C901
+def find_label(body: dict):
     """Score all loaded medias with a detector and apply labels based on threshold.
 
     Resolves the detector from the registry, scores every loaded media, and
@@ -107,6 +164,12 @@ def find_label(body: dict):  # noqa: C901
     media_type = d.get("media_type", "") or next(iter(snap.values())).get("media_type", "image")
     det_path = _detector_path(d["name"])
     det_data = _read_detector(det_path)
+
+    # Type gate: the active dataset must bind an embedder of the detector's
+    # locked type before we spend a train/score in the wrong space.
+    if not _dataset_supplies_detector_type(det_data, snap):
+        update_find_progress("idle", "")
+        abort(409, message=_type_incompatible_message(det_data))
 
     mlp, threshold, diagnostic = resolve_or_train_detector(
         detector_id,
@@ -165,9 +228,17 @@ def find_label(body: dict):  # noqa: C901
     # Highlight overlay can outline it - matching the learned-sort path.  Plain
     # single-vector datasets take the cached embedding-matrix path inside and
     # gain no ``best_region`` field.
-    from vtscore.detectors.training import score_media_with_model
+    from types import SimpleNamespace
 
-    results = score_media_with_model(mlp, snap)
+    from vtscore.detectors.training import score_media_with_model
+    from vtscore.embedding.binding import keying_embedder_for_snap
+
+    # Score in the same space the MLP was trained in: the concrete embedder of
+    # the detector's locked type this dataset supplies, else the dataset score
+    # precedence (keying_embedder_for_snap) - matching resolve_or_train_detector's
+    # cold path and the learned-sort cache-space marker.
+    score_emb = keying_embedder_for_snap(SimpleNamespace(embedder_type=_detector_type(det_data)), snap)
+    results = score_media_with_model(mlp, snap, embedder_name=score_emb or None)
     update_find_progress(
         "running",
         f"Scoring {n_total} items…",
@@ -616,22 +687,52 @@ def auto_detect(body: dict):
             )
         abort(400, message=f"No Auto-Find detectors found for media type: {media_type}")
 
+    # Type gate: drop Auto-Find detectors whose locked embedder type the active
+    # dataset can't supply (see _compatible_detectors).
+    detectors_to_run = _compatible_detectors(detectors_to_run, snap)
+
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
     from vtscore.state.core import get_active_context  # noqa: PLC0415
 
-    all_ids, all_embs = get_embedding_matrix_for_snap(snap, get_active_context().routed_embedder("score"))
-    X_all = torch.from_numpy(all_embs)
+    # Each detector scores in the concrete embedder of its locked type, so build
+    # one matrix per distinct embedder the Auto-Find detectors call for
+    # (collapsing to a single shared matrix on the common single-embedder
+    # dataset, where every type resolves to the same name).  A legacy/typeless
+    # detector falls back to the dataset score precedence, matching
+    # resolve_or_train_detector's cold-train space.
+    from types import SimpleNamespace  # noqa: PLC0415
 
-    embed_dim = int(all_embs.shape[1]) if all_embs.ndim > 1 else 0
+    from vtscore.embedding.binding import keying_embedder_for_snap  # noqa: PLC0415
+
+    default_score = get_active_context().routed_embedder("score")
+    det_embedders: dict[str, str | None] = {}
+    for dname, ddata, _entry in detectors_to_run:
+        keyed = keying_embedder_for_snap(SimpleNamespace(embedder_type=_detector_type(ddata)), snap)
+        det_embedders[dname] = keyed or default_score
+    matrices: dict[str | None, tuple[list[int], Any]] = {}
+    for emb in set(det_embedders.values()):
+        ids, embs = get_embedding_matrix_for_snap(snap, emb)
+        matrices[emb] = (ids, torch.from_numpy(embs))
+
+    default_ids, default_X = matrices[default_score]
+    embed_dim = int(default_X.shape[1]) if default_X.ndim > 1 else 0
     worker_cap = cap_workers_by_memory(
-        len(all_ids),
+        len(default_ids),
         embed_dim,
         max_workers=min(len(detectors_to_run), 8),
     )
     results: dict[str, dict] = {}
     with ThreadPoolExecutor(max_workers=worker_cap) as pool:
         futures = [
-            pool.submit(_score_detector_for_auto_detect, name, data, entry, media_type, snap, all_ids, X_all)
+            pool.submit(
+                _score_detector_for_auto_detect,
+                name,
+                data,
+                entry,
+                media_type,
+                snap,
+                *matrices[det_embedders[name]],
+            )
             for name, data, entry in detectors_to_run
         ]
         for future in futures:
@@ -643,7 +744,7 @@ def auto_detect(body: dict):
     if results:
         from vtsearch.achievements import record_find  # noqa: PLC0415
 
-        record_find(len(all_ids) * len(results))
+        record_find(len(default_ids) * len(results))
 
     response = {
         "media_type": media_type,

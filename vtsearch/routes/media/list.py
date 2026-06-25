@@ -24,6 +24,7 @@ from typing import Any
 from flask import Response, jsonify, make_response, request, send_file
 from flask_smorest import Blueprint, abort
 
+from vtscore.embedding.media_vectors import init_embeddings, media_embedder_names
 from vtscore.media.audio.ffmpeg import get_ffmpeg_exe
 from vtscore.media.base import MediaResponse
 from vtsearch.schemas.media import (
@@ -62,6 +63,15 @@ medias_bp = Blueprint(
 
 # Extensions the browser's <video> element can play natively.
 _BROWSER_VIDEO_EXTS = {".mp4", ".m4v", ".webm", ".ogg", ".ogv"}
+
+# Image filename extension -> served mimetype. Unlisted extensions fall back to
+# ``image/jpeg`` (see :func:`_resolve_display_image`).
+_MIMETYPE_BY_EXT = {
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+}
 
 
 def _parse_region_box(raw: Any) -> tuple[float, float, float, float] | None:
@@ -277,6 +287,21 @@ def _flask_response(mr: MediaResponse) -> Response:
     return send_file(io.BytesIO(mr.data), mimetype=mr.mimetype, download_name=mr.download_name)
 
 
+def _attach_embedder_fields(out: dict[str, Any], media: dict[str, Any]) -> None:
+    """Copy a media's embedder identity onto a serialized payload *out*.
+
+    Sets the singular ``embedder`` (the recorded primary) when present and the
+    full ``embedders`` list (every bound embedder name, v3 trio) so the frontend
+    can resolve dataset capabilities across the whole binding, not just the
+    primary.  Both are omitted when the media carries no embedder.
+    """
+    if media.get("embedder"):
+        out["embedder"] = media["embedder"]
+    names = media_embedder_names(media)
+    if names:
+        out["embedders"] = names
+
+
 @medias_bp.route("/api/medias/ids")
 @medias_bp.response(200, MediaIdsListResponseSchema(many=True))
 def list_media_ids():
@@ -297,9 +322,7 @@ def list_media_ids():
     result: list[dict[str, Any]] = []
     for c in snapshot_medias().values():
         item: dict[str, Any] = {"id": c["id"], "media_type": c.get("media_type", "audio")}
-        embedder = c.get("embedder")
-        if embedder:
-            item["embedder"] = embedder
+        _attach_embedder_fields(item, c)
         result.append(item)
     return result
 
@@ -348,8 +371,7 @@ def batch_medias(body: dict):
             media_data["origin_name"] = c["origin_name"]
         if "description" in c:
             media_data["description"] = c["description"]
-        if c.get("embedder"):
-            media_data["embedder"] = c["embedder"]
+        _attach_embedder_fields(media_data, c)
         for clip_key in ("clip_start", "clip_end", "clip_index", "clip_box"):
             if clip_key in c:
                 media_data[clip_key] = c[clip_key]
@@ -432,7 +454,7 @@ def media_video(media_id: int):
     return _send_video_bytes(media_bytes, mimetype, f"media_{media_id}{ext}")
 
 
-def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:  # noqa: C901
+def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:
     """Resolve the displayable image for a media item.
 
     Returns ``(image_bytes, mimetype, download_name)`` for the bytes the
@@ -469,18 +491,10 @@ def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:  # noqa: C9
 
     # Determine mimetype based on filename extension
     filename = c.get("filename", "")
-    if filename.endswith(".png"):
-        mimetype = "image/png"
-    elif filename.endswith(".gif"):
-        mimetype = "image/gif"
-    elif filename.endswith(".webp"):
-        mimetype = "image/webp"
-    elif filename.endswith(".bmp"):
-        mimetype = "image/bmp"
-    else:
-        mimetype = "image/jpeg"
+    suffix = Path(filename).suffix if filename and Path(filename).suffix else ""
+    mimetype = _MIMETYPE_BY_EXT.get(suffix, "image/jpeg")
 
-    suffix = Path(filename).suffix if filename and Path(filename).suffix else ".jpg"
+    suffix = suffix or ".jpg"
     return media_bytes, mimetype, f"media_{media_id}{suffix}"
 
 
@@ -729,30 +743,79 @@ def vote_media_bulk(body: dict):
     return {"ok": True, "changed": changed, "missing": missing}
 
 
-@medias_bp.route("/api/medias/add-to-pile", methods=["POST"])
-@medias_bp.response(200, MediaAddToPileResponseSchema)
-@medias_bp.alt_response(
-    201,
-    schema=MediaAddToPileResponseSchema,
-    description="A new media was embedded and inserted before being voted.",
-)
-@medias_bp.alt_response(
-    400,
-    description=(
-        "Missing or malformed multipart body (no file / empty file / "
-        "invalid label), no dataset loaded, or no embedder available."
-    ),
-)
-@require_dataset_header
-@require_detector_header
-def add_media_to_pile():  # noqa: C901
-    """Upload a media file and add it directly to the Good or Bad pile.
+def _resolve_embedder(dataset_embedder_name: str, dataset_media_type: str):
+    """Resolve the embedder to use for an add-to-pile upload.
 
-    If a media with the same MD5 already exists in the dataset, the existing
-    media is voted accordingly. Otherwise the file is embedded using the
-    dataset's embedder, inserted as a new media item, and then voted. The
-    request body is multipart/form-data with ``file`` (the upload) and
-    ``label`` (``"good"`` or ``"bad"``).
+    Prefers the dataset's recorded embedder by name; falls back to the first
+    embedder registered for the dataset's media type.  Returns ``None`` when no
+    embedder is available (the caller ``abort``-s 400 in that case).
+    """
+    from vtscore.media import embedders_for_type, get_embedder  # noqa: PLC0415
+
+    if dataset_embedder_name:
+        try:
+            return get_embedder(dataset_embedder_name)
+        except KeyError:
+            pass
+    avail = embedders_for_type(dataset_media_type)
+    return avail[0] if avail else None
+
+
+def _embed_upload(embedder, file_bytes: bytes, original_filename: str):
+    """Embed an add-to-pile upload via a temporary file.
+
+    Writes *file_bytes* to a temp file (preserving the upload's suffix so the
+    embedder can sniff the format), embeds it, and cleans the temp file up.
+    ``abort``-s 400 when the embedder returns ``None``.
+    """
+    import tempfile  # noqa: PLC0415
+
+    suffix = Path(original_filename).suffix or ".bin"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(file_bytes)
+        tmp_path = Path(tmp.name)
+
+    from vtscore.media.embedder import media_from_path  # noqa: PLC0415
+
+    try:
+        embedding = embedder.embed_media(media_from_path(tmp_path))
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    if embedding is None:
+        abort(400, message="Failed to embed the uploaded file.")
+    return embedding
+
+
+def _make_pile_thumbnail(media_type: str, file_bytes: bytes) -> bytes | None:
+    """Precompute the grid/list thumbnail for an add-to-pile upload.
+
+    Dispatches per media type (audio waveform, video frame, image downscale) so
+    the request path never decodes the full-resolution upload on a cold tile
+    fetch.  Returns ``None`` for types without a thumbnail generator.
+    """
+    if media_type == "audio":
+        from vtscore.media.audio.media_type import generate_waveform_thumbnail  # noqa: PLC0415
+
+        return generate_waveform_thumbnail(file_bytes)
+    if media_type == "video":
+        from vtscore.media.video.media_type import generate_video_thumbnail  # noqa: PLC0415
+
+        return generate_video_thumbnail(file_bytes)
+    if media_type == "image":
+        from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
+
+        result = make_image_thumbnail(file_bytes)
+        return result[0] if result is not None else None
+    return None
+
+
+def _read_pile_upload():
+    """Parse and validate the add-to-pile multipart request.
+
+    Returns ``(file, file_bytes, label)`` where *file* is the Werkzeug
+    ``FileStorage``, *file_bytes* its non-empty contents, and *label* one of
+    ``"good"``/``"bad"``.  ``abort``-s 400 on any missing/empty/invalid field.
     """
     if "file" not in request.files:
         abort(400, message="No file provided")
@@ -769,6 +832,60 @@ def add_media_to_pile():  # noqa: C901
     if not file_bytes:
         abort(400, message="Empty file")
 
+    return file, file_bytes, label
+
+
+def _insert_or_collide(new_media: dict[str, Any], file_md5: str) -> tuple[list[int], int, bool]:
+    """Insert *new_media* under ``_state_lock``, deduping on a concurrent MD5.
+
+    Re-checks the MD5 lookup under the lock immediately before inserting.
+    Embedding ran without the lock (it can take seconds), so a concurrent
+    request uploading the same bytes may have inserted a media with this MD5 in
+    the meantime. Without this re-check, both requests would each insert a fresh
+    media, producing duplicates with identical md5/embedding/bytes.
+    (logical-bug-audit.md H32.)
+
+    Returns ``(target_cids, target_id, is_new)``: on a collision the existing
+    cids are returned with ``is_new=False``; otherwise the freshly-assigned id
+    is returned with ``is_new=True``.
+    """
+    with _state_lock:
+        _, md5_lookup_now, _ = build_media_lookup(medias)
+        collided_cids = md5_lookup_now.get(file_md5, [])
+        if collided_cids:
+            return list(collided_cids), collided_cids[0], False
+        target_id = next_media_id(medias)
+        new_media["id"] = target_id
+        medias[target_id] = new_media
+        return [target_id], target_id, True
+
+
+@medias_bp.route("/api/medias/add-to-pile", methods=["POST"])
+@medias_bp.response(200, MediaAddToPileResponseSchema)
+@medias_bp.alt_response(
+    201,
+    schema=MediaAddToPileResponseSchema,
+    description="A new media was embedded and inserted before being voted.",
+)
+@medias_bp.alt_response(
+    400,
+    description=(
+        "Missing or malformed multipart body (no file / empty file / "
+        "invalid label), no dataset loaded, or no embedder available."
+    ),
+)
+@require_dataset_header
+@require_detector_header
+def add_media_to_pile():
+    """Upload a media file and add it directly to the Good or Bad pile.
+
+    If a media with the same MD5 already exists in the dataset, the existing
+    media is voted accordingly. Otherwise the file is embedded using the
+    dataset's embedder, inserted as a new media item, and then voted. The
+    request body is multipart/form-data with ``file`` (the upload) and
+    ``label`` (``"good"`` or ``"bad"``).
+    """
+    file, file_bytes, label = _read_pile_upload()
     file_md5 = hashlib.md5(file_bytes).hexdigest()
 
     # First-pass MD5 lookup (outside _state_lock). When this hits we can
@@ -794,61 +911,22 @@ def add_media_to_pile():  # noqa: C901
     dataset_media_type = first_media.get("media_type", "audio")
     dataset_embedder_name = first_media.get("embedder", "")
 
-    from vtscore.media import embedders_for_type, get_embedder
-
-    embedder = None
-    if dataset_embedder_name:
-        try:
-            embedder = get_embedder(dataset_embedder_name)
-        except KeyError:
-            pass
-    if embedder is None:
-        avail = embedders_for_type(dataset_media_type)
-        embedder = avail[0] if avail else None
+    embedder = _resolve_embedder(dataset_embedder_name, dataset_media_type)
     if embedder is None:
         abort(400, message="No embedder available for the current dataset type.")
 
-    # Write to a temporary file for embedding
-    import tempfile
-
     original_filename = file.filename or "upload.bin"
-    suffix = Path(original_filename).suffix or ".bin"
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(file_bytes)
-        tmp_path = Path(tmp.name)
-
-    from vtscore.media.embedder import media_from_path  # noqa: PLC0415
-
-    try:
-        embedding = embedder.embed_media(media_from_path(tmp_path))
-    finally:
-        tmp_path.unlink(missing_ok=True)
-
-    if embedding is None:
-        abort(400, message="Failed to embed the uploaded file.")
+    embedding = _embed_upload(embedder, file_bytes, original_filename)
 
     # Precompute the grid/list thumbnail so the request path never decodes the
     # full-resolution upload on a cold tile fetch (matches the ingest path).
-    thumb = None
-    if dataset_media_type == "audio":
-        from vtscore.media.audio.media_type import generate_waveform_thumbnail  # noqa: PLC0415
-
-        thumb = generate_waveform_thumbnail(file_bytes)
-    elif dataset_media_type == "video":
-        from vtscore.media.video.media_type import generate_video_thumbnail  # noqa: PLC0415
-
-        thumb = generate_video_thumbnail(file_bytes)
-    elif dataset_media_type == "image":
-        from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
-
-        result = make_image_thumbnail(file_bytes)
-        thumb = result[0] if result is not None else None
+    thumb = _make_pile_thumbnail(dataset_media_type, file_bytes)
 
     new_media: dict[str, Any] = {
         "media_type": dataset_media_type,
         "embedder": dataset_embedder_name,
         "md5": file_md5,
-        "embedding": embedding,
+        "embeddings": init_embeddings(dataset_embedder_name, embedding),
         "media_bytes": file_bytes,
         "filename": original_filename,
         "file_size": len(file_bytes),
@@ -862,25 +940,7 @@ def add_media_to_pile():  # noqa: C901
     if thumb is not None:
         new_media["thumbnail_bytes"] = thumb
 
-    # Re-check the MD5 lookup under _state_lock immediately before inserting.
-    # Embedding above ran without the lock (it can take seconds), so a
-    # concurrent request uploading the same bytes may have inserted a media
-    # with this MD5 in the meantime. Without this re-check, both requests
-    # would each insert a fresh media, producing duplicates with identical
-    # md5/embedding/bytes. (logical-bug-audit.md H32.)
-    with _state_lock:
-        _, md5_lookup_now, _ = build_media_lookup(medias)
-        collided_cids = md5_lookup_now.get(file_md5, [])
-        if collided_cids:
-            target_cids: list[int] = list(collided_cids)
-            target_id = collided_cids[0]
-            is_new = False
-        else:
-            target_id = next_media_id(medias)
-            new_media["id"] = target_id
-            medias[target_id] = new_media
-            target_cids = [target_id]
-            is_new = True
+    target_cids, target_id, is_new = _insert_or_collide(new_media, file_md5)
 
     for cid in target_cids:
         apply_label(cid, label)

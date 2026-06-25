@@ -6,6 +6,7 @@ import shutil
 import pytest
 
 from tests import load_detector_and_wait as _load_detector_and_wait
+from vtscore.embedding.media_vectors import media_embedding
 from vtsearch.settings import get_detectors_dir
 
 
@@ -1024,7 +1025,7 @@ class TestLoadModelEndpoint:
                 "media_type": "audio",
                 "embedder": "clap",
                 "md5": hashlib.md5(f"ds_b_{cid}".encode()).hexdigest(),
-                "embedding": np.zeros(512, dtype=np.float32),
+                "embeddings": {"clap": np.zeros(512, dtype=np.float32)},
                 "media_bytes": b"fake-b",
                 "filename": f"ds_b_{cid}.wav",
                 "category": "test",
@@ -1173,7 +1174,7 @@ class TestEmbedderMismatchInvalidatesStaleModel:
                 "media_type": "audio",
                 "embedder": "shiny-new-embedder",
                 "md5": hashlib.md5(f"h5_b_{cid}".encode()).hexdigest(),
-                "embedding": np.zeros(512, dtype=np.float32),
+                "embeddings": {"shiny-new-embedder": np.zeros(512, dtype=np.float32)},
                 "media_bytes": b"fake-b",
                 "filename": f"h5_b_{cid}.wav",
                 "category": "test",
@@ -1621,7 +1622,7 @@ class TestSeedVotesFromExamples:
         assert new_media["origin"]["importer"] == "example_media"
         assert new_media["origin"]["params"]["filename"] == fname
         assert new_media["filename"] == fname
-        assert new_media["embedding"] is not None
+        assert media_embedding(new_media) is not None
 
     def test_seed_preserves_original_origins(self, client):
         """Seeded medias should keep their original dataset origins."""
@@ -1974,7 +1975,8 @@ class TestLoadModelCrossDatasetResolution:
             medias[1] = {
                 "id": 1,
                 "media_type": "audio",
-                "embedding": rng.standard_normal(512).astype(np.float32),
+                "embedder": "clap",
+                "embeddings": {"clap": rng.standard_normal(512).astype(np.float32)},
                 "md5": good_md5,  # same content as good_0.wav
                 "filename": "completely_different_name.wav",
                 "origin": {"importer": "server_folder", "params": {"path": "/other/place"}},
@@ -1983,7 +1985,8 @@ class TestLoadModelCrossDatasetResolution:
             medias[2] = {
                 "id": 2,
                 "media_type": "audio",
-                "embedding": rng.standard_normal(512).astype(np.float32),
+                "embedder": "clap",
+                "embeddings": {"clap": rng.standard_normal(512).astype(np.float32)},
                 "md5": bad_md5,  # same content as bad_0.wav
                 "filename": "another_file.wav",
                 "origin": {"importer": "server_folder", "params": {"path": "/other/place"}},
@@ -2061,7 +2064,8 @@ class TestLoadModelCrossDatasetResolution:
             medias[1] = {
                 "id": 1,
                 "media_type": "audio",
-                "embedding": rng.standard_normal(512).astype(np.float32),
+                "embedder": "clap",
+                "embeddings": {"clap": rng.standard_normal(512).astype(np.float32)},
                 "md5": "totally_different_md5",
                 "filename": "shared_name.wav",
                 "origin": {"importer": "server_folder", "params": {"path": "/different"}},

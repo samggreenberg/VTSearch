@@ -1,7 +1,7 @@
 """Tests for the Labelset Exporter abstraction.
 
 Covers:
-- ExporterField and LabelsetExporter base classes
+- PluginField and LabelsetExporter base classes
 - Auto-discovery registry
 - Built-in exporters: gui, server_json_file, server_csv_file, email_smtp
 - Flask API routes: GET /api/exporters, POST /api/exporters/export
@@ -73,15 +73,15 @@ def _multi_user_provider(user_dir: Path):
 
 
 # ---------------------------------------------------------------------------
-# ExporterField
+# PluginField
 # ---------------------------------------------------------------------------
 
 
 class TestExporterField:
     def test_to_dict_contains_required_keys(self):
-        from vtscore.exporters.base import ExporterField
+        from vtscore.exporters.base import PluginField
 
-        f = ExporterField(key="fp", label="File Path", field_type="text")
+        f = PluginField(key="fp", label="File Path", field_type="text")
         d = f.to_dict()
         assert d["key"] == "fp"
         assert d["label"] == "File Path"
@@ -93,9 +93,9 @@ class TestExporterField:
         assert "placeholder" in d
 
     def test_defaults(self):
-        from vtscore.exporters.base import ExporterField
+        from vtscore.exporters.base import PluginField
 
-        f = ExporterField(key="x", label="X", field_type="text")
+        f = PluginField(key="x", label="X", field_type="text")
         assert f.required is True
         assert f.default == ""
         assert f.placeholder == ""
@@ -103,9 +103,9 @@ class TestExporterField:
         assert f.description == ""
 
     def test_custom_values(self):
-        from vtscore.exporters.base import ExporterField
+        from vtscore.exporters.base import PluginField
 
-        f = ExporterField(
+        f = PluginField(
             key="mode",
             label="Mode",
             field_type="select",
@@ -135,14 +135,14 @@ class TestLabelsetExporterBase:
             exp.export({}, {})
 
     def test_to_dict_contains_standard_keys(self):
-        from vtscore.exporters.base import ExporterField, LabelsetExporter
+        from vtscore.exporters.base import PluginField, LabelsetExporter
 
         class Dummy(LabelsetExporter):
             name = "dummy"
             display_name = "Dummy"
             description = "A test exporter."
             icon = "🧪"
-            fields = [ExporterField(key="k", label="K", field_type="text")]
+            fields = [PluginField(key="k", label="K", field_type="text")]
 
             def export(self, results, field_values):
                 return {"message": "ok"}
@@ -418,6 +418,36 @@ class TestEmailLabelsetExporter:
         exp = get_exporter("email_smtp")
         with pytest.raises(ValueError, match="Sender"):
             exp.export(SAMPLE_RESULTS, {"from": "", "to": "you@example.com"})
+
+    @pytest.mark.parametrize(
+        "bad_addr",
+        ["@example.com", "you@", "you@localhost", "you example@x.com", "noatsign", "you@@x.com"],
+    )
+    def test_export_rejects_malformed_recipient(self, bad_addr):
+        """Addresses the bare ``"@" in`` check let through must now be rejected
+        before any MX lookup (M34)."""
+        from vtscore.exporters import get_exporter
+
+        exp = get_exporter("email_smtp")
+        with pytest.raises(ValueError, match="Recipient"):
+            exp.export(SAMPLE_RESULTS, {"from": "me@example.com", "to": bad_addr})
+
+    @pytest.mark.parametrize("bad_addr", ["@example.com", "me@", "me@localhost", "no domain@"])
+    def test_export_rejects_malformed_sender(self, bad_addr):
+        from vtscore.exporters import get_exporter
+
+        exp = get_exporter("email_smtp")
+        with pytest.raises(ValueError, match="Sender"):
+            exp.export(SAMPLE_RESULTS, {"from": bad_addr, "to": "you@example.com"})
+
+    def test_is_valid_email_accepts_normal_addresses(self):
+        from vtscore.exporters.email_smtp import _is_valid_email
+
+        assert _is_valid_email("you@example.com")
+        assert _is_valid_email("first.last+tag@sub.example.co.uk")
+        assert not _is_valid_email("@example.com")
+        assert not _is_valid_email("foo@bar")
+        assert not _is_valid_email("")
 
     def test_export_calls_smtp_via_mx(self):
         from vtscore.exporters import get_exporter

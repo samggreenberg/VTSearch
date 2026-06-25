@@ -44,7 +44,7 @@ def _make_snap(embedder: str) -> dict[int, dict]:
             "id": 1,
             "media_type": "audio",
             "embedder": embedder,
-            "embedding": rng.standard_normal(8).astype(np.float32),
+            "embeddings": {embedder: rng.standard_normal(8).astype(np.float32)},
         }
     }
 
@@ -190,12 +190,22 @@ class TestLoadEndpointReembedTask:
         return detector_id, det_ctx
 
     def _set_active_dataset_embedder(self, embedder: str):
-        """Replace every media item's ``embedder`` field so the active
-        dataset reports the requested embedder."""
+        """Replace every media item's embedder so the active dataset reports
+        the requested embedder.
+
+        Phase 2c keyed each media's vectors by embedder name in
+        ``media["embeddings"]`` and dropped the singular mirror, and the
+        score-marker derivation reads those keys (not just
+        ``media["embedder"]``).  Re-key the dict alongside the recorded
+        ``embedder`` field so the active dataset truly reports *embedder*."""
+        from vtscore.embedding.media_vectors import media_embedding
         from vtsearch.state import medias
 
         for cid in list(medias):
-            medias[cid]["embedder"] = embedder
+            media = medias[cid]
+            vec = media_embedding(media)
+            media["embedder"] = embedder
+            media["embeddings"] = {embedder: vec} if vec is not None else {}
 
     def _drain_detector_tasks(self, timeout: float = 5.0) -> list[dict]:
         """Block until every detector-load task settles, then return them."""

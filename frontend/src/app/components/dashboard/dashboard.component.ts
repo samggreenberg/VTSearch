@@ -1,4 +1,4 @@
-import { Component, HostListener, OnInit, OnDestroy, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, HostListener, inject, OnDestroy, OnInit, signal } from '@angular/core';
 
 import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angular/router';
 import { EMPTY, Subject, timer } from 'rxjs';
@@ -51,6 +51,7 @@ import { IconComponent } from '../icon/icon.component';
 import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-dashboard',
   standalone: true,
   imports: [
@@ -823,7 +824,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   loadDataset(dataset: DatasetRegistryEntry): void {
     this.datasetsRegistryApi.loadRegistered(dataset.id).subscribe({
-      next: (response) => this.loadingTasksSvc.startProgressPolling(response.task_id),
+      next: (response) =>
+        this.loadingTasksSvc.startProgressPolling(response.task_id, () =>
+          // Promote to active once the load has settled (never before, per
+          // the H25 intent/active ordering), keeping any active detector
+          // half, so the top-bar dataset selector reflects what was just
+          // loaded instead of staying on "Select a dataset".
+          this.activeContext.setActivePair(dataset.id, this.activeContext.modelId),
+        ),
     });
   }
 
@@ -859,7 +867,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   loadDetector(model: DetectorRegistryEntry): void {
     this.detectorsRegistryApi.loadDetector(model.id).subscribe({
-      next: () => this.loadingTasksSvc.startDetectorProgressPolling(),
+      next: () =>
+        this.loadingTasksSvc.startDetectorProgressPolling(() =>
+          // Promote to active once the detector load settles (per the H25
+          // ordering), keeping the active dataset half, so the top-bar
+          // detector selector reflects what was just loaded.
+          this.activeContext.setActivePair(this.activeContext.datasetId, model.id),
+        ),
     });
   }
 
@@ -993,13 +1007,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // through a permissive cast.
     const extras = demo as DemoDataset & {
       embedder?: string;
+      embedders?: string[];
       clipper?: string;
+      clipper_params?: Record<string, number | string>;
       dataset_name?: string;
       build_projection?: boolean;
     };
-    const params: Record<string, string> = {};
+    const params: Record<string, string | string[] | Record<string, number | string>> = {};
     if (extras.embedder) params['embedder'] = extras.embedder;
-    if (extras.clipper) params['clipper'] = extras.clipper;
+    if (extras.embedders && extras.embedders.length > 0) params['embedders'] = extras.embedders;
+    if (extras.clipper) {
+      params['clipper'] = extras.clipper;
+      if (extras.clipper_params && Object.keys(extras.clipper_params).length > 0) {
+        params['clipper_params'] = extras.clipper_params;
+      }
+    }
     const userName = (extras.dataset_name || '').trim();
     if (userName) params['dataset_name'] = userName;
     if (extras.build_projection) params['build_projection'] = 'true';

@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnInit, OnDestroy, NgZone, ViewChild, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subject } from 'rxjs';
@@ -39,6 +39,7 @@ import type { AppSettings } from '../../generated/api-client/models/app-settings
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-view',
   standalone: true,
   imports: [

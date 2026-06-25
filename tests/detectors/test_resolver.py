@@ -346,7 +346,7 @@ class TestDynamicImporterDispatch:
 
     def test_custom_importer_resolve_file_is_called(self, tmp_path):
         """A custom importer registered at runtime has its resolve_file called."""
-        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.importers.base import DatasetImporter, PluginField
 
         marker_file = tmp_path / "custom_media.wav"
         marker_file.write_bytes(b"custom_audio")
@@ -355,7 +355,7 @@ class TestDynamicImporterDispatch:
             name = "test_custom"
             display_name = "Test Custom"
             description = "A test importer"
-            fields = [ImporterField(key="path", label="Path", field_type="text")]
+            fields = [PluginField(key="path", label="Path", field_type="text")]
 
             def resolve_file(self, origin, origin_name="", filename="", **kw):
                 p = origin.get("params", {}).get("path", "")
@@ -541,6 +541,7 @@ class TestMultiFindCrossDatasetFallback:
             target_medias[i] = {
                 "id": i,
                 "media_type": "audio",
+                "embedder": "clap",
                 "embedding": emb,
                 "md5": f"target_md5_{i}",
                 "filename": f"target_{i}.wav",
@@ -650,6 +651,7 @@ class TestMultiFindCrossDatasetFallback:
             target_medias[i] = {
                 "id": i,
                 "media_type": "audio",
+                "embedder": "clap",
                 "embedding": emb,
                 "md5": f"mt_md5_{i}",
                 "filename": f"mt_{i}.wav",
@@ -740,6 +742,7 @@ class TestMultiFindCrossDatasetFallback:
             target_medias[i] = {
                 "id": i,
                 "media_type": "image",
+                "embedder": "siglip",
                 "embedding": emb,
                 "md5": f"nr_md5_{i}",
                 "filename": f"nr_{i}.jpg",

@@ -7,7 +7,31 @@ files, matches them to loaded dataset medias by MD5, and votes them good.
 from __future__ import annotations
 
 
-def seed_good_votes_from_examples(examples: list[dict]) -> int:  # noqa: C901
+def _ensure_embedder(embedder, dataset_embedder_name: str, dataset_media_type: str):
+    """Resolve an embedder for example media, loading it lazily.
+
+    Returns the already-loaded *embedder* if non-``None``; otherwise tries
+    the dataset's named embedder, then falls back to the first embedder
+    available for *dataset_media_type*.  Returns ``None`` when no embedder
+    is available.
+    """
+    if embedder is not None:
+        return embedder
+
+    from vtscore.media import embedders_for_type, get_embedder
+
+    if dataset_embedder_name:
+        try:
+            embedder = get_embedder(dataset_embedder_name)
+        except KeyError:
+            pass
+    if embedder is None:
+        avail = embedders_for_type(dataset_media_type)
+        embedder = avail[0] if avail else None
+    return embedder
+
+
+def seed_good_votes_from_examples(examples: list[dict]) -> int:
     """Seed good votes from a model's media examples.
 
     For each ``type: "media"`` example, reads the file from
@@ -80,20 +104,10 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:  # noqa: C901
             seeded += 1
         else:
             # Example is NOT in the dataset - embed and insert as new media.
+            embedder = _ensure_embedder(embedder, dataset_embedder_name, dataset_media_type)
             if embedder is None:
-                from vtscore.media import embedders_for_type, get_embedder
-
-                if dataset_embedder_name:
-                    try:
-                        embedder = get_embedder(dataset_embedder_name)
-                    except KeyError:
-                        pass
-                if embedder is None:
-                    avail = embedders_for_type(dataset_media_type)
-                    embedder = avail[0] if avail else None
-                if embedder is None:
-                    # No embedder available; skip remaining examples.
-                    continue
+                # No embedder available; skip remaining examples.
+                continue
 
             from vtscore.media.embedder import media_from_path  # noqa: PLC0415
 
@@ -109,7 +123,7 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:  # noqa: C901
                     "media_type": dataset_media_type,
                     "embedder": dataset_embedder_name,
                     "md5": file_md5,
-                    "embedding": embedding,
+                    "embeddings": {dataset_embedder_name: embedding},
                     "media_bytes": file_bytes,
                     "filename": filename,
                     "file_size": len(file_bytes),

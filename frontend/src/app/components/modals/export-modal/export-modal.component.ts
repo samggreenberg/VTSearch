@@ -1,12 +1,13 @@
 import {
+  ChangeDetectionStrategy,
   Component,
-  OnInit,
   computed,
   effect,
   inject,
-  signal,
   input,
-  output
+  OnInit,
+  output,
+  signal,
 } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
@@ -36,6 +37,7 @@ export interface ColumnDef {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-export-modal',
   standalone: true,
   imports: [

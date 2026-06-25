@@ -204,7 +204,7 @@ from typing import Any
 
 import requests
 
-from vtscore.exporters.base import ExporterField, LabelsetExporter
+from vtscore.exporters.base import PluginField, LabelsetExporter
 from vtscore.security.url_validation import validate_url
 
 
@@ -216,14 +216,14 @@ class SignedWebhookExporter(LabelsetExporter):
     description = "POST labels JSON to a URL with an HMAC-SHA256 signature."
     icon = "\U0001f510"  # closed lock with key
     fields = [
-        ExporterField(
+        PluginField(
             key="url",
             label="Webhook URL",
             field_type="url",
             description="The URL to POST labels to.",
             required=True,
         ),
-        ExporterField(
+        PluginField(
             key="hmac_secret",
             label="HMAC secret",
             field_type="password",

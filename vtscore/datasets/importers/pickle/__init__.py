@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from vtscore.config import DATA_DIR
-from vtscore.datasets.importers.base import ImporterBase, ImporterField
+from vtscore.datasets.importers.base import ImporterBase, PluginField
 from vtscore.datasets.loader import load_dataset_from_pickle, load_dataset_from_pickle_chunked
 
 
@@ -36,7 +36,7 @@ class PickleDatasetImporter(ImporterBase):
     ui_mode = "file_upload"
     hidden_from_picker = True
     fields = [
-        ImporterField(
+        PluginField(
             key="file",
             label="Upload a file",
             field_type="file",

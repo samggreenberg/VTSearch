@@ -1,10 +1,11 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { DashboardComponent } from './dashboard.component';
 import { LabelSessionService } from '../../services/label-session.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
+import { provideZoneless } from '../../testing/zoneless-testbed';
 
 describe('DashboardComponent', () => {
   let component: DashboardComponent;
@@ -14,7 +15,7 @@ describe('DashboardComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [DashboardComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DashboardComponent);
@@ -53,13 +54,19 @@ describe('DashboardComponent', () => {
     detectors: any[] = [],
     importers: any[] = [],
   ): void {
-    fixture.detectChanges();
+    TestBed.tick();
     httpMock.expectOne('/api/datasets/registry').flush({ datasets });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors });
     httpMock.expectOne('/api/dataset/all-importers').flush({ importers, tabs: [] });
-    // Auto-selecting a single dataset synchronously kicks off an embedder
-    // preload; drain it (and any usage polls already in flight) here so
-    // tests that don't assert on them stay clean.
+    // DatasetStateService is signal-backed and exposes `datasets$`/`detectors$`
+    // as `toObservable` bridges, which emit on the next change-detection pass
+    // (not synchronously when the signal is set). Tick once more so the
+    // dashboard's `datasets$`/`detectors$` subscriptions (registry auto-select)
+    // run before the test asserts on the resulting selection state.
+    TestBed.tick();
+    // Auto-selecting a single dataset kicks off an embedder preload; drain it
+    // (and any usage polls already in flight) here so tests that don't assert
+    // on them stay clean.
     drainBackgroundRequests();
   }
 
@@ -111,6 +118,8 @@ describe('DashboardComponent', () => {
       ],
     });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
+    // Let the `datasets$` bridge deliver the new registry to the auto-select sub.
+    TestBed.tick();
 
     expect(component.selectedDatasetIds.has('d1')).toBe(false);
     expect(component.selectedDatasetIds.has('d2')).toBe(true);
@@ -130,6 +139,8 @@ describe('DashboardComponent', () => {
         { id: 'm2', name: 'Second' },
       ],
     });
+    // Let the `detectors$` bridge deliver the new registry to the auto-select sub.
+    TestBed.tick();
 
     // Adding items after the initial load clears the prior selection and
     // selects only the new ones (same behavior as datasets above).
@@ -414,7 +425,7 @@ describe('DashboardComponent', () => {
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
   });
 
-  it('should delete a dataset after confirmation', fakeAsync(() => {
+  it('should delete a dataset after confirmation', async () => {
     const datasets = [{ id: 'd1', name: 'ToDelete', media_type: 'audio' }];
     flushInitialRequests(datasets);
     component.selectedDatasetIds.add('d1');
@@ -423,7 +434,8 @@ describe('DashboardComponent', () => {
     vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(true));
 
     component.deleteDataset(datasets[0]);
-    tick();
+    // Drain the confirm() promise continuation that issues the DELETE.
+    await new Promise<void>((resolve) => setTimeout(resolve));
 
     const req = httpMock.expectOne('/api/datasets/registry/d1');
     expect(req.request.method).toBe('DELETE');
@@ -433,7 +445,7 @@ describe('DashboardComponent', () => {
 
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
-  }));
+  });
 
   it('should open and close importer modal via NewThingFlowsService', () => {
     flushInitialRequests();
@@ -447,7 +459,12 @@ describe('DashboardComponent', () => {
 
   it('should render empty state when no datasets', () => {
     flushInitialRequests();
-    fixture.detectChanges();
+    // DatasetStateService is BehaviorSubject-backed, so the registry flush
+    // updates the dashboard's view state through plain (non-signal) reads that
+    // don't dirty the host under zoneless. markForCheck() marks it dirty so the
+    // subsequent tick repaints over the now-settled state in one clean pass.
+    fixture.changeDetectorRef.markForCheck();
+    TestBed.tick();
     const el = fixture.nativeElement as HTMLElement;
     const empty = el.querySelector('.empty-state');
     expect(empty).toBeTruthy();
@@ -457,7 +474,8 @@ describe('DashboardComponent', () => {
   it('should render dataset table when datasets exist', () => {
     const datasets = [{ id: 'd1', name: 'Test', media_type: 'audio', num_items: 5 }];
     flushInitialRequests(datasets);
-    fixture.detectChanges();
+    fixture.changeDetectorRef.markForCheck();
+    TestBed.tick();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.dash-table')).toBeTruthy();
   });
@@ -567,5 +585,62 @@ describe('DashboardComponent', () => {
     req.flush({ task_id: 't1' });
     // startProgressPolling subscribes to the SSE channel; no further HTTP
     // is issued until a loading-task event arrives, so nothing else to flush.
+  });
+
+  describe('loadDataset / loadDetector → active context', () => {
+    // Loading from a dashboard card should make the item the active context
+    // so the top-bar selector reflects it — but only *after* the load
+    // settles (the SSE task reaches idle without error), never before, so we
+    // don't reintroduce the H25 race where the interceptor tags requests
+    // with an id the backend hasn't finished loading.
+
+    it('promotes the loaded dataset to active only after the load settles', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'image' }];
+      flushInitialRequests(datasets);
+
+      const activeCtx = component['activeContext'];
+      const setActive = vi.spyOn(activeCtx, 'setActivePair');
+      // Capture the completion callback instead of running the real SSE poll.
+      let onComplete: (() => void) | undefined;
+      vi.spyOn(component['loadingTasksSvc'], 'startProgressPolling').mockImplementation(
+        (_taskId?: string, cb?: () => void) => {
+          onComplete = cb;
+        },
+      );
+
+      component.loadDataset(datasets[0] as any);
+      httpMock.expectOne('/api/datasets/registry/d1/load').flush({ task_id: 't1' });
+
+      // Still not active mid-load.
+      expect(setActive).not.toHaveBeenCalled();
+      expect(onComplete).toBeTypeOf('function');
+
+      onComplete!();
+      expect(setActive).toHaveBeenCalledWith('d1', '');
+    });
+
+    it('promotes the loaded detector to active (preserving the dataset half) after settle', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'image', loaded: true }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'image' }];
+      flushInitialRequests(datasets, models);
+
+      const activeCtx = component['activeContext'];
+      // A dataset is already active; loading a detector must keep it.
+      activeCtx.setActivePair('d1', '');
+      const setActive = vi.spyOn(activeCtx, 'setActivePair');
+      let onComplete: (() => void) | undefined;
+      vi.spyOn(component['loadingTasksSvc'], 'startDetectorProgressPolling').mockImplementation(
+        (cb?: () => void) => {
+          onComplete = cb;
+        },
+      );
+
+      component.loadDetector(models[0] as any);
+      httpMock.expectOne('/api/detectors/registry/load').flush({ task_id: 't2' });
+
+      expect(setActive).not.toHaveBeenCalled();
+      onComplete!();
+      expect(setActive).toHaveBeenCalledWith('d1', 'm1');
+    });
   });
 });

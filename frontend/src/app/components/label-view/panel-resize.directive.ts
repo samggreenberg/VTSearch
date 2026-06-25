@@ -5,10 +5,10 @@ import { Directive, ElementRef, HostBinding, HostListener, NgZone, OnDestroy, in
  *
  * The parent owns the panel widths; this directive translates mouse motion on
  * the divider into a stream of width values for the side it is bound to,
- * clamped to the available space. Listeners run outside Angular while the user
- * is dragging; only the per-move emission re-enters the zone, so the
- * mousemove handler does not trigger a full change-detection pass on every
- * pixel.
+ * clamped to the available space. The drag listeners run outside Angular so
+ * the mousemove handler does no per-pixel framework work; the parent's bound
+ * `(widthChange)`/`(resizeEnd)` template listeners schedule change detection
+ * when each value is emitted (under zoneless `NgZone.run` would be a no-op).
  *
  * Inputs:
  *   - `[vtPanelResize]`: `'left'` or `'right'`; controls which edge of the
@@ -70,13 +70,13 @@ export class PanelResizeDirective implements OnDestroy {
     const max = rect.width - this.dividerTotal() - this.centerMin() - this.opposingWidth();
     const width = Math.max(this.minWidth(), Math.min(max, raw));
     this.lastWidth = width;
-    this.ngZone.run(() => this.widthChange.emit(width));
+    this.widthChange.emit(width);
   }
 
   private onMouseUp(): void {
     this.dragging = false;
     document.removeEventListener('mousemove', this.boundMove);
     document.removeEventListener('mouseup', this.boundUp);
-    this.ngZone.run(() => this.resizeEnd.emit(this.lastWidth));
+    this.resizeEnd.emit(this.lastWidth);
   }
 }

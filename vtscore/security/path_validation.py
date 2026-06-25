@@ -91,10 +91,14 @@ def sanitize_template_value(value: str) -> str:
     escape the intended directory.
 
     Returns a value with path separators and parent-directory tokens
-    replaced by ``_``.  Empty / ``.`` / ``..`` collapse to ``_``.
+    replaced by ``_``.  Empty and any all-dots token (``.``, ``..``,
+    ``...``, …) collapse to ``_``: ``..`` addresses the parent directory
+    and ``.`` the current one, while longer dot runs are meaningless
+    path components that some shells / filesystems still treat specially,
+    so none of them belong in a single path segment.
     """
     sanitized = value.replace("/", "_").replace("\\", "_").replace("\0", "_")
-    if sanitized in ("", ".", ".."):
+    if not sanitized or set(sanitized) == {"."}:
         return "_"
     return sanitized
 
@@ -106,8 +110,36 @@ def iter_rglob_follow_symlinks(root: Path, pattern: str) -> Iterator[Path]:
     :func:`os.walk` discovers it, so the caller never holds the full file
     list in memory — essential when scanning a directory tree with more
     files than fit in RAM (see ``docs/plans/cli-stream-massive-images.md``).
+
+    Because ``followlinks=True`` makes :func:`os.walk` descend into
+    symlinked directories, a circular layout (a directory symlinked back
+    to one of its ancestors) would otherwise loop forever and exhaust
+    CPU/RAM.  We guard against that by tracking the ``(st_dev, st_ino)``
+    of every directory we descend into and pruning any subdirectory we've
+    already visited — so each real directory is walked at most once and a
+    cycle terminates.
     """
-    for dirpath, _dirnames, filenames in os.walk(root, followlinks=True):
+    seen_dirs: set[tuple[int, int]] = set()
+    try:
+        root_stat = os.stat(root)
+        seen_dirs.add((root_stat.st_dev, root_stat.st_ino))
+    except OSError:
+        return
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=True):
+        # Prune already-visited directories in place so os.walk won't
+        # descend into them again, breaking symlink cycles.
+        kept: list[str] = []
+        for d in dirnames:
+            try:
+                st = os.stat(os.path.join(dirpath, d))
+            except OSError:
+                continue
+            key = (st.st_dev, st.st_ino)
+            if key in seen_dirs:
+                continue
+            seen_dirs.add(key)
+            kept.append(d)
+        dirnames[:] = kept
         for filename in filenames:
             if fnmatch.fnmatch(filename, pattern):
                 yield Path(dirpath) / filename

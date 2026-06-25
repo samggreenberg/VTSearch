@@ -245,35 +245,23 @@ def import_labels(body: dict):
     return {"applied": applied, "skipped": skipped}
 
 
-@labels_bp.route("/api/labels/fill-from-sort", methods=["POST"])
-@labels_bp.arguments(FillFromSortRequestSchema)
-@labels_bp.response(200, FillFromSortResponseSchema)
-@require_dataset_header
-@require_detector_header
-def fill_labels_from_sort(body: dict):  # noqa: C901
-    """Fill labels from the current sort results.
+def _partition_candidates(
+    sort_results: list[dict],
+    thresh: float,
+    sides: str,
+    snap_good: dict[int, None],
+    snap_bad: dict[int, None],
+    snap_medias: dict,
+) -> tuple[list[dict], list[dict]]:
+    """Split sort results into (good, bad) candidate lists by threshold.
 
-    Assigns Good/Bad labels to currently-unlabeled medias based on their
-    position relative to the sort threshold. With ``confirm=false`` (the
-    default), returns counts only; with ``confirm=true``, applies the
-    labels and returns the resulting data as a results dict suitable for
-    any exporter.
+    Skips entries that are missing an id/score, carry a non-numeric score,
+    are already voted (in *snap_good* / *snap_bad*), or are absent from
+    *snap_medias*.  An entry scoring at or above *thresh* becomes a good
+    candidate; below it, a bad candidate.  The *sides* selector then clears
+    whichever list isn't wanted (``"good"`` drops bads, ``"bad"`` drops
+    goods, ``"both"`` keeps both).
     """
-    sort_results = body["sort_results"]
-    thresh = body["threshold"]
-    sides = body["sides"]
-    confirm = body["confirm"]
-
-    # Atomic snapshot so the membership checks below use the same dataset's
-    # cid space as the medias dict; a concurrent rehydrate on the detector
-    # against a different dataset can't make us think an A-cid is "already
-    # voted" when in fact we're scoring against B's medias.
-    vote_snap = validated_vote_snapshot()
-    snap_good = vote_snap.good_votes
-    snap_bad = vote_snap.bad_votes
-    snap_medias = vote_snap.medias
-
-    # Find unlabeled medias above/below threshold
     good_candidates = []
     bad_candidates = []
     for entry in sort_results:
@@ -297,6 +285,41 @@ def fill_labels_from_sort(body: dict):  # noqa: C901
     elif sides == "bad":
         good_candidates = []
     # "both" keeps both lists
+    return good_candidates, bad_candidates
+
+
+@labels_bp.route("/api/labels/fill-from-sort", methods=["POST"])
+@labels_bp.arguments(FillFromSortRequestSchema)
+@labels_bp.response(200, FillFromSortResponseSchema)
+@require_dataset_header
+@require_detector_header
+def fill_labels_from_sort(body: dict):
+    """Fill labels from the current sort results.
+
+    Assigns Good/Bad labels to currently-unlabeled medias based on their
+    position relative to the sort threshold. With ``confirm=false`` (the
+    default), returns counts only; with ``confirm=true``, applies the
+    labels and returns the resulting data as a results dict suitable for
+    any exporter.
+    """
+    sort_results = body["sort_results"]
+    thresh = body["threshold"]
+    sides = body["sides"]
+    confirm = body["confirm"]
+
+    # Atomic snapshot so the membership checks below use the same dataset's
+    # cid space as the medias dict; a concurrent rehydrate on the detector
+    # against a different dataset can't make us think an A-cid is "already
+    # voted" when in fact we're scoring against B's medias.
+    vote_snap = validated_vote_snapshot()
+    snap_good = vote_snap.good_votes
+    snap_bad = vote_snap.bad_votes
+    snap_medias = vote_snap.medias
+
+    # Find unlabeled medias above/below threshold
+    good_candidates, bad_candidates = _partition_candidates(
+        sort_results, thresh, sides, snap_good, snap_bad, snap_medias
+    )
 
     if not confirm:
         return {

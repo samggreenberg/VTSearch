@@ -158,7 +158,7 @@ def _fill_converter_output_fields(media: dict[str, Any]) -> None:
             media["md5"] = hashlib.md5((media["media_string"] or "").encode("utf-8")).hexdigest()
         else:
             media["md5"] = hashlib.md5(b"").hexdigest()
-    media.setdefault("embedding", None)
+    media.setdefault("embeddings", {})
     media.setdefault("embedder", "")
     media.setdefault("category", "custom")
     media.setdefault("duration", 0)

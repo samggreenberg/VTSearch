@@ -144,6 +144,18 @@ class TestRestrictedUnpicklerAllows:
         assert result["raw"] == b"\x00\x01\x02"
         assert result["ba"] == bytearray(b"\x03\x04")
 
+    @pytest.mark.parametrize("protocol", [0, 1, 2])
+    def test_legacy_protocol_inline_bytes(self, protocol):
+        """Protocols 0/1/2 predate the BINBYTES opcode and serialise inline
+        ``bytes`` as ``_codecs.encode(latin1_str, 'latin1')``.  Without that
+        callable on the allowlist, an externally-produced legacy pickle
+        carrying media blobs is rejected outright; M18 follow-up adds it."""
+        blob = b"\x00\x01\x02hello\xff\xfe"
+        raw = pickle.dumps({"media_type": "image", "image": blob}, protocol=protocol)
+        result = _safe_loads(raw)
+        assert result["image"] == blob
+        assert result["media_type"] == "image"
+
     def test_numpy_array(self):
         arr = np.array([1.0, 2.0, 3.0], dtype=np.float32)
         result = _safe_loads(_dumps(arr))
@@ -190,7 +202,8 @@ class TestSafePickleRoundTrip:
                 "duration": 1.0,
                 "file_size": 1024,
                 "md5": "abc123",
-                "embedding": np.random.RandomState(42).randn(512).astype(np.float32),
+                "embedder": "clap",
+                "embeddings": {"clap": np.random.RandomState(42).randn(512).astype(np.float32)},
                 "filename": "test.wav",
                 "category": "test",
                 "origin": {"importer": "test", "params": {}},
@@ -226,7 +239,8 @@ class TestSafePickleRoundTrip:
                 "file_size": 0,
                 "md5": "abc",
                 # Pass a plain list to prove the exporter coerces to float32.
-                "embedding": [float(j) for j in range(16)],
+                "embedder": "e5",
+                "embeddings": {"e5": [float(j) for j in range(16)]},
                 "filename": "t.txt",
                 "category": "test",
                 "media_string": "hi",
@@ -237,7 +251,7 @@ class TestSafePickleRoundTrip:
         pkl_path.write_bytes(export_dataset_to_file(medias))
 
         data, _meta = read_container(pkl_path)
-        emb = data["medias"][1]["embedding"]
+        emb = data["medias"][1]["embeddings"]["e5"]
         assert isinstance(emb, np.ndarray)
         assert emb.dtype == np.float32
         assert emb.shape == (16,)
@@ -252,7 +266,8 @@ class TestSafePickleRoundTrip:
                 "duration": 1.0,
                 "file_size": 1024,
                 "md5": f"md5_{i}",
-                "embedding": np.random.RandomState(42).randn(512).astype(np.float32),
+                "embedder": "clap",
+                "embeddings": {"clap": np.random.RandomState(42).randn(512).astype(np.float32)},
                 "filename": f"test_{i}.wav",
                 "category": "test",
                 "origin": None,
@@ -418,6 +433,35 @@ class TestPeekUnpicklerStripsAcrossProtocols:
         assert first["filename"] == "m_0.wav"
         # The array is replaced by an empty placeholder, never materialised.
         assert len(first["embedding"]) == 0
+
+    @pytest.mark.parametrize("protocol", [1, 2, 3, 4, 5])
+    def test_long_inline_string_truncated(self, protocol):
+        """A multi-MB inline ``media_string`` (a long document) is consumed but
+        not retained during peek; short keys and ``media_type`` survive.
+
+        At protocol >= 1 a long ``str`` serialises via the BINUNICODE opcode;
+        without the size-bounded override the peek materialised the whole
+        document as a live dict value (M18 follow-up)."""
+        from vtscore.security.pickle import peek_pickle_dataset_summary
+
+        long_doc = "lorem ipsum dolor " * 100_000  # ~1.8 MB, far over the cap
+        data = {
+            "medias": {
+                0: {
+                    "media_type": "text",
+                    "media_string": long_doc,
+                    "filename": "doc_0.txt",
+                }
+            }
+        }
+        raw = pickle.dumps(data, protocol=protocol)
+        peeked = peek_pickle_dataset_summary(io.BytesIO(raw))
+        first = peeked["medias"][0]
+        # Short strings (dict keys, media_type, filename) decode normally...
+        assert first["media_type"] == "text"
+        assert first["filename"] == "doc_0.txt"
+        # ...while the over-cap document body is dropped, not materialised.
+        assert first["media_string"] == ""
 
     def test_protocol_0_floats_stripped_quickly(self):
         """Protocol 0 ASCII floats fall through to the default handler if

@@ -1,5 +1,19 @@
 <div class="toast-stack" aria-live="assertive" aria-atomic="false">
-  @for (t of (toastService.toasts$ | async) ?? []; track trackById($index, t)) {
+  @if (((toastService.toasts$ | async) ?? []); as toasts) {
+    @if (toasts.length > 1) {
+      <div class="toast-stack__controls">
+        <button
+          type="button"
+          class="toast-stack__dismiss-all"
+          (click)="dismissAll()"
+          title="Dismiss all notifications"
+          aria-label="Dismiss all notifications"
+        >
+          Dismiss all ({{ toasts.length }})
+        </button>
+      </div>
+    }
+    @for (t of toasts; track trackById($index, t)) {
     <div class="toast" [class.toast--success]="t.level === 'success'" role="alert">
       <div class="toast__main">
         @if (t.level === 'success') {
@@ -75,5 +89,6 @@
         </div>
       }
     </div>
+    }
   }
 </div>

@@ -5,6 +5,7 @@ import wave
 
 import pytest
 
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.media.audio.audio_generator import generate_wav
 from vtscore.media.clipper import MediaClipper
 
@@ -2121,15 +2122,12 @@ class TestClipperParameters:
         assert "parameters" not in d
 
     def test_to_dict_includes_summary_template_when_overridden(self):
-        from vtscore.media.audio.clipper import SoundAutoClipper, SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         # SoundTilingClipper provides a templated summary distinct from its
         # description; that template should show up in to_dict().
         d = SoundTilingClipper(2.0).to_dict()
         assert d["summary_template"] == "Cut each audio file into {duration}s tiles (min overlap {min_overlap}s)."
-        # SoundAutoClipper too.
-        d = SoundAutoClipper().to_dict()
-        assert d["summary_template"] == "Cut into {tile_duration}s tiles when audio is over {threshold}s."
 
     def test_to_dict_omits_summary_template_when_equal_to_description(self):
         from vtscore.media.audio.clipper import SoundDefaultClipper
@@ -2189,8 +2187,8 @@ class TestApplyClipperWithParams:
             "origin": {"importer": "test", "params": {}},
         }
         clips = {1: media}
-        # With default 2s duration: ceil(10/2) = 5 tiles
-        _apply_clipper(clips, "sound_tiling")
+        # Explicit 2s clips, no overlap: ceil(10/2) = 5 tiles
+        _apply_clipper(clips, "sound_tiling", {"duration": 2.0, "min_overlap": 0.0})
         assert len(clips) == 5
 
     def test_apply_clipper_with_overridden_duration(self):
@@ -2206,25 +2204,27 @@ class TestApplyClipperWithParams:
             "origin": {"importer": "test", "params": {}},
         }
         clips = {1: media}
-        # Override to 5s duration: ceil(10/5) = 2 tiles
-        _apply_clipper(clips, "sound_tiling", {"duration": 5.0})
+        # Override to 5s duration, no overlap: ceil(10/5) = 2 tiles
+        _apply_clipper(clips, "sound_tiling", {"duration": 5.0, "min_overlap": 0.0})
         assert len(clips) == 2
 
     def test_apply_clipper_params_none_uses_defaults(self):
         from vtscore.media.audio.audio_generator import generate_wav
         from vtscore.datasets.stages.clipper import _apply_clipper
 
-        wav = generate_wav(440, 10.0)
+        wav = generate_wav(440, 30.0)
         media = {
             "id": 1,
             "media_type": "audio",
             "media_bytes": wav,
-            "duration": 10.0,
+            "duration": 30.0,
             "origin": {"importer": "test", "params": {}},
         }
         clips = {1: media}
+        # Registered default: 10s clips, 1s min overlap. max_stride = 9,
+        # ceil((30 - 10) / 9) + 1 = 4 tiles.
         _apply_clipper(clips, "sound_tiling", None)
-        assert len(clips) == 5  # default 2s → 5 tiles
+        assert len(clips) == 4
 
     def test_apply_clipper_with_min_overlap(self):
         from vtscore.media.audio.audio_generator import generate_wav
@@ -2245,123 +2245,25 @@ class TestApplyClipperWithParams:
 
 
 # ---------------------------------------------------------------------------
-# SoundAutoClipper / VideoAutoClipper
+# Audio clipper registry default / VideoAutoClipper
 # ---------------------------------------------------------------------------
 
 
-class TestSoundAutoClipper:
-    def test_identity(self):
-        from vtscore.media.audio.clipper import SoundAutoClipper
-
-        c = SoundAutoClipper()
-        assert c.name == "sound_auto"
-        assert c.media_type == "audio"
-        assert c.threshold == 30.0
-        assert c.tile_duration == 10.0
-        assert c.display_name == "Auto (recommended)"
-        assert isinstance(c, MediaClipper)
-
-    def test_rejects_non_positive_params(self):
-        from vtscore.media.audio.clipper import SoundAutoClipper
-
-        with pytest.raises(ValueError):
-            SoundAutoClipper(threshold=0)
-        with pytest.raises(ValueError):
-            SoundAutoClipper(threshold=-1)
-        with pytest.raises(ValueError):
-            SoundAutoClipper(tile_duration=0)
-        with pytest.raises(ValueError):
-            SoundAutoClipper(tile_duration=-1)
-
-    def test_resolve_for_media_short_returns_default(self):
-        from vtscore.media.audio.clipper import SoundAutoClipper, SoundDefaultClipper
-
-        media = {"id": 1, "media_type": "audio", "duration": 5.0}
-        resolved = SoundAutoClipper().resolve_for_media(media)
-        assert isinstance(resolved, SoundDefaultClipper)
-
-    def test_resolve_for_media_long_returns_tiling(self):
-        from vtscore.media.audio.clipper import SoundAutoClipper, SoundTilingClipper
-
-        media = {"id": 1, "media_type": "audio", "duration": 120.0}
-        resolved = SoundAutoClipper().resolve_for_media(media)
-        assert isinstance(resolved, SoundTilingClipper)
-        assert resolved.duration == 10.0
-
-    def test_resolve_for_media_uses_own_duration_not_dataset(self):
-        """Each media gets its own routing decision; no median trick."""
-        from vtscore.media.audio.clipper import (
-            SoundAutoClipper,
-            SoundDefaultClipper,
-            SoundTilingClipper,
-        )
-
-        c = SoundAutoClipper()
-        short = {"id": 1, "media_type": "audio", "duration": 5.0}
-        long_media = {"id": 2, "media_type": "audio", "duration": 120.0}
-        assert isinstance(c.resolve_for_media(short), SoundDefaultClipper)
-        assert isinstance(c.resolve_for_media(long_media), SoundTilingClipper)
-
-    def test_resolve_for_media_falls_back_to_wav_when_no_duration(self):
-        from vtscore.media.audio.clipper import SoundAutoClipper, SoundTilingClipper
-
-        long_wav = generate_wav(440, 5.0)
-        media = {"id": 1, "media_type": "audio", "media_bytes": long_wav}
-        resolved = SoundAutoClipper(threshold=3.0, tile_duration=1.0).resolve_for_media(media)
-        assert isinstance(resolved, SoundTilingClipper)
-
-    def test_resolve_for_durations_is_noop(self):
-        """Phase 2 routing is per-media; the per-dataset hook is a no-op."""
-        from vtscore.media.audio.clipper import SoundAutoClipper
-
-        c = SoundAutoClipper()
-        assert c.resolve_for_durations([1.0, 1000.0]) is c
-        assert c.resolve_for_durations([]) is c
-
-    def test_with_params_overrides_threshold(self):
-        from vtscore.media.audio.clipper import SoundAutoClipper, SoundTilingClipper
-
-        c = SoundAutoClipper().with_params({"threshold": 5.0, "tile_duration": 3.0})
-        assert c.threshold == 5.0
-        assert c.tile_duration == 3.0
-        # 10s exceeds 5s threshold → tiling with 3s segments
-        resolved = c.resolve_for_media({"id": 1, "media_type": "audio", "duration": 10.0})
-        assert isinstance(resolved, SoundTilingClipper)
-        assert resolved.duration == 3.0
-
-    def test_to_dict_exposes_params_and_strategy_fields(self):
-        from vtscore.media.audio.clipper import SoundAutoClipper
-
-        d = SoundAutoClipper().to_dict()
-        assert d["name"] == "sound_auto"
-        assert d["display_name"] == "Auto (recommended)"
-        assert d["media_type"] == "audio"
-        assert d["threshold"] == 30.0
-        assert d["tile_duration"] == 10.0
-        param_keys = [p["key"] for p in d["parameters"]]
-        assert "threshold" in param_keys
-        assert "tile_duration" in param_keys
-
-    def test_clip_routes_per_media(self):
-        """Direct .clip() use (outside the load pipeline) routes per-media."""
-        from vtscore.media.audio.clipper import SoundAutoClipper
-
-        c = SoundAutoClipper(threshold=3.0, tile_duration=1.0)
-        # Short clip → pass-through
-        short_wav = generate_wav(440, 2.0)
-        short = {"id": 1, "media_type": "audio", "media_bytes": short_wav, "duration": 2.0}
-        assert c.clip(short) == [short]
-        # Long clip → tiled
-        long_wav = generate_wav(440, 5.0)
-        long_media = {"id": 1, "media_type": "audio", "media_bytes": long_wav, "duration": 5.0}
-        result = c.clip(long_media)
-        assert len(result) > 1
-
-    def test_first_in_audio_clipper_registry(self):
+class TestAudioClipperRegistryDefault:
+    def test_tiling_is_first_in_audio_clipper_registry(self):
         from vtscore.media import clippers_for_type
 
         names = [c.name for c in clippers_for_type("audio")]
-        assert names[0] == "sound_auto"
+        assert names[0] == "sound_tiling"
+
+    def test_default_tiling_params_are_10s_min_overlap_1s(self):
+        """The registered audio default tiles into 10s clips with 1s overlap."""
+        from vtscore.media import clippers_for_type
+
+        tiling = clippers_for_type("audio")[0]
+        params = {p["key"]: p["default"] for p in tiling.parameters}
+        assert params["duration"] == 10.0
+        assert params["min_overlap"] == 1.0
 
 
 class TestVideoAutoClipper:
@@ -2431,100 +2333,6 @@ class TestVideoAutoClipper:
 
         names = [c.name for c in clippers_for_type("video")]
         assert names[0] == "video_auto"
-
-
-class TestApplyClipperResolvesAuto:
-    """_apply_clipper resolves auto clippers per-media and tags each
-    clip's origin with the resolved concrete clipper, not the auto one."""
-
-    def test_short_dataset_resolves_to_default(self):
-        from vtscore.datasets.stages.clipper import _apply_clipper
-
-        wav = generate_wav(440, 5.0)
-        media = {
-            "id": 1,
-            "media_type": "audio",
-            "media_bytes": wav,
-            "duration": 5.0,
-            "origin": {"importer": "test", "params": {}},
-        }
-        clips = {1: media}
-        _apply_clipper(clips, "sound_auto")
-        # 5s < 30s threshold → pass-through, one clip
-        assert len(clips) == 1
-        # Origin records the resolved concrete clipper.
-        clip = next(iter(clips.values()))
-        assert clip["origin"]["params"]["clipper"] == "sound_default"
-
-    def test_long_dataset_resolves_to_tiling(self):
-        from vtscore.datasets.stages.clipper import _apply_clipper
-
-        wav = generate_wav(440, 60.0)
-        media = {
-            "id": 1,
-            "media_type": "audio",
-            "media_bytes": wav,
-            "duration": 60.0,
-            "origin": {"importer": "test", "params": {}},
-        }
-        clips = {1: media}
-        _apply_clipper(clips, "sound_auto")
-        # 60s > 30s threshold → tiled with 10s segments → 6 tiles
-        assert len(clips) == 6
-        first = next(iter(clips.values()))
-        assert first["origin"]["params"]["clipper"] == "sound_tiling"
-        # Origin records the resolved clipper's parameter values.
-        assert first["origin"]["params"]["clipper_duration"] == "10.0"
-
-    def test_mixed_durations_resolve_per_media(self):
-        """A short and a long item in the same dataset take different
-        branches, and each clip records its own resolved concrete clipper."""
-        from vtscore.datasets.stages.clipper import _apply_clipper
-
-        short_wav = generate_wav(440, 2.0)
-        long_wav = generate_wav(440, 8.0)
-        clips = {
-            1: {
-                "id": 1,
-                "media_type": "audio",
-                "media_bytes": short_wav,
-                "duration": 2.0,
-                "origin": {"importer": "test", "params": {}},
-            },
-            2: {
-                "id": 2,
-                "media_type": "audio",
-                "media_bytes": long_wav,
-                "duration": 8.0,
-                "origin": {"importer": "test", "params": {}},
-            },
-        }
-        # Threshold 4s: short (2s) passes through, long (8s) tiles into 2s segments.
-        _apply_clipper(clips, "sound_auto", {"threshold": 4.0, "tile_duration": 2.0})
-        # 1 (pass-through) + 4 (8s / 2s) = 5 clips.
-        assert len(clips) == 5
-        resolved_names = [c["origin"]["params"]["clipper"] for c in clips.values()]
-        assert resolved_names.count("sound_default") == 1
-        assert resolved_names.count("sound_tiling") == 4
-
-    def test_user_threshold_override_propagates(self):
-        from vtscore.datasets.stages.clipper import _apply_clipper
-
-        wav = generate_wav(440, 8.0)
-        media = {
-            "id": 1,
-            "media_type": "audio",
-            "media_bytes": wav,
-            "duration": 8.0,
-            "origin": {"importer": "test", "params": {}},
-        }
-        clips = {1: media}
-        # Lower threshold so 8s triggers tiling, with 4s tiles → 2 tiles
-        _apply_clipper(clips, "sound_auto", {"threshold": 5.0, "tile_duration": 4.0})
-        assert len(clips) == 2
-        first = next(iter(clips.values()))
-        assert first["origin"]["params"]["clipper"] == "sound_tiling"
-        assert first["origin"]["params"]["clipper_duration"] == "4.0"
 
 
 # ---------------------------------------------------------------------------
@@ -2711,11 +2519,15 @@ class TestImageFaceClipper:
             "media_type": "image",
             "media_bytes": _make_image_bytes(640, 480),
             "md5": "deadbeef",
-            "embedding": np.zeros(8, dtype=np.float32),
+            "embedder": "siglip",
+            "embeddings": {"siglip": np.zeros(8, dtype=np.float32)},
         }
         clips = c.clip(media)
         assert len(clips) == 1
-        assert "embedding" not in clips[0]
+        # The crop must not inherit the parent's vector: the clip carries a
+        # fresh empty embeddings dict so the load-pipeline fixup re-embeds it.
+        assert clips[0]["embeddings"] == {}
+        assert media_embedding(clips[0]) is None
         assert "md5" not in clips[0]
 
     def test_with_params_overrides(self):

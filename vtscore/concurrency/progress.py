@@ -500,7 +500,25 @@ class LoadingTasksTracker:
             self._tasks.pop(task_id, None)
         self._notify()
 
-    def list_tasks(self) -> list[dict[str, Any]]:  # noqa: C901
+    @staticmethod
+    def _build_snapshot(task_id: str, entry: dict[str, Any]) -> dict[str, Any]:
+        """Build the public snapshot dict for one task entry.
+
+        Reads the task's :class:`ProgressTracker` and stamps on the
+        ``task_id``, ``name``, ``created_at`` identity plus any optional
+        association fields (``dataset_id``, ``detector_id``, ``media_type``,
+        ``embedder``) that are set.
+        """
+        snapshot = entry["tracker"].get()
+        snapshot["task_id"] = task_id
+        snapshot["name"] = entry["name"]
+        snapshot["created_at"] = entry["created_at"]
+        for key in ("dataset_id", "detector_id", "media_type", "embedder"):
+            if entry.get(key):
+                snapshot[key] = entry[key]
+        return snapshot
+
+    def list_tasks(self) -> list[dict[str, Any]]:
         """Return a snapshot of all active loading tasks.
 
         Each entry includes: ``task_id``, ``name``, ``created_at``, and
@@ -518,38 +536,12 @@ class LoadingTasksTracker:
         for task_id, entry in entries:
             finished = entry.get("finished_at")
             if finished is not None:
-                snapshot = entry["tracker"].get()
-                has_error = bool(snapshot.get("error"))
+                has_error = bool(entry["tracker"].get().get("error"))
                 max_age = 30 if has_error else 5
                 if (now - finished) > max_age:
                     stale.append(task_id)
                     continue
-                snapshot["task_id"] = task_id
-                snapshot["name"] = entry["name"]
-                snapshot["created_at"] = entry["created_at"]
-                if entry.get("dataset_id"):
-                    snapshot["dataset_id"] = entry["dataset_id"]
-                if entry.get("detector_id"):
-                    snapshot["detector_id"] = entry["detector_id"]
-                if entry.get("media_type"):
-                    snapshot["media_type"] = entry["media_type"]
-                if entry.get("embedder"):
-                    snapshot["embedder"] = entry["embedder"]
-                result.append(snapshot)
-            else:
-                snapshot = entry["tracker"].get()
-                snapshot["task_id"] = task_id
-                snapshot["name"] = entry["name"]
-                snapshot["created_at"] = entry["created_at"]
-                if entry.get("dataset_id"):
-                    snapshot["dataset_id"] = entry["dataset_id"]
-                if entry.get("detector_id"):
-                    snapshot["detector_id"] = entry["detector_id"]
-                if entry.get("media_type"):
-                    snapshot["media_type"] = entry["media_type"]
-                if entry.get("embedder"):
-                    snapshot["embedder"] = entry["embedder"]
-                result.append(snapshot)
+            result.append(self._build_snapshot(task_id, entry))
         if stale:
             with self._lock:
                 for tid in stale:

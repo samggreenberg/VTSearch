@@ -20,7 +20,7 @@
     [selectedDemoName]="selectedDemo?.name || ''"
     (demoSelected)="selectDemo($event)"
     [sfPathInputValue]="sfPathInputValue"
-    (sfPathInputValueChange)="sfPathInputValue = $event"
+    (sfPathInputValueChange)="sfOnPathInput($event)"
     (sfPathApplied)="sfApplyPathInput()"
     [lfPickerKind]="lfPickerKind"
     [lfFiles]="lfFiles"
@@ -65,9 +65,13 @@
             [sourceSpecs]="[]"
             [selectedEmbedder]="selectedDemoEmbedder()"
             (selectedEmbedderChange)="onDemoEmbedderChange($event)"
+            [selectedPatchEmbedder]="selectedDemoPatchEmbedder()"
+            (selectedPatchEmbedderChange)="selectedDemoPatchEmbedder.set($event)"
+            [selectedStructuralEmbedder]="selectedDemoStructuralEmbedder()"
+            (selectedStructuralEmbedderChange)="selectedDemoStructuralEmbedder.set($event)"
             [lockedEmbedder]="lockedEmbedderFor(activeTab(), demoEmbedders())"
             [selectedClipper]="selectedDemoClipper()"
-            [selectedClipperParams]="{}"
+            [selectedClipperParams]="demoClipperParamValues()"
             (clipperChooserRequested)="openClipperChooser('demo')"
             [buildProjection]="buildProjection"
             (buildProjectionChange)="buildProjection = $event"
@@ -132,7 +136,19 @@
             [ngModel]="sfDigArchives"
             (ngModelChange)="sfDigArchives = $event"
           />
-          Dig into archives
+          Include archives' contents
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="sf-reference-files" title="When enabled, the dataset stores a path reference to each original file on the server instead of copying its bytes in. Saves storage, but the dataset depends on the source files staying put — moving or deleting them breaks it.">
+          <input
+            id="sf-reference-files"
+            type="checkbox"
+            [ngModel]="sfReferenceFiles"
+            (ngModelChange)="sfReferenceFiles = $event"
+          />
+          Reference files in place (don't copy)
         </label>
       </div>
 
@@ -160,6 +176,10 @@
           (sourceSpecsChange)="onSfSpecsChange($event)"
           [selectedEmbedder]="sfSelectedEmbedder()"
           (selectedEmbedderChange)="sfSelectedEmbedder.set($event)"
+          [selectedPatchEmbedder]="sfSelectedPatchEmbedder()"
+          (selectedPatchEmbedderChange)="sfSelectedPatchEmbedder.set($event)"
+          [selectedStructuralEmbedder]="sfSelectedStructuralEmbedder()"
+          (selectedStructuralEmbedderChange)="sfSelectedStructuralEmbedder.set($event)"
           [lockedEmbedder]="lockedEmbedderFor(sfMediaType(), sfEmbedders())"
           [selectedClipper]="sfSelectedClipper()"
           [selectedClipperParams]="sfClipperParamValues()"
@@ -237,6 +257,10 @@
           (sourceSpecsChange)="onLfSpecsChange($event)"
           [selectedEmbedder]="lfSelectedEmbedder()"
           (selectedEmbedderChange)="lfSelectedEmbedder.set($event)"
+          [selectedPatchEmbedder]="lfSelectedPatchEmbedder()"
+          (selectedPatchEmbedderChange)="lfSelectedPatchEmbedder.set($event)"
+          [selectedStructuralEmbedder]="lfSelectedStructuralEmbedder()"
+          (selectedStructuralEmbedderChange)="lfSelectedStructuralEmbedder.set($event)"
           [lockedEmbedder]="lockedEmbedderFor(lfMediaType, lfEmbedders())"
           [selectedClipper]="lfSelectedClipper()"
           [selectedClipperParams]="lfClipperParamValues()"
@@ -270,6 +294,22 @@
                 <p class="form-hint">{{ field.hint }}</p>
               }
             }
+          } @else if (field.field_type === 'checkbox') {
+          <div class="form-group">
+            <label class="form-label" [for]="'field-' + field.key"
+              [title]="field.description || field.label || field.key">
+              <input
+                [id]="'field-' + field.key"
+                type="checkbox"
+                [checked]="formValues[field.key] === true || formValues[field.key] === 'true'"
+                (change)="formValues[field.key] = $any($event.target).checked ? 'true' : 'false'"
+              />
+              {{ field.label || field.key }}
+              @if (field.hint) {
+                <vt-field-hint-icon [hint]="field.hint"></vt-field-hint-icon>
+              }
+            </label>
+          </div>
           } @else {
           <div class="form-group">
             <label class="form-label" [for]="'field-' + field.key"
@@ -395,6 +435,10 @@
           (sourceSpecsChange)="onFormSpecsChange($event)"
           [selectedEmbedder]="selectedEmbedder()"
           (selectedEmbedderChange)="selectedEmbedder.set($event)"
+          [selectedPatchEmbedder]="selectedPatchEmbedder()"
+          (selectedPatchEmbedderChange)="selectedPatchEmbedder.set($event)"
+          [selectedStructuralEmbedder]="selectedStructuralEmbedder()"
+          (selectedStructuralEmbedderChange)="selectedStructuralEmbedder.set($event)"
           [lockedEmbedder]="lockedEmbedderFor(formOutputTypeId, availableEmbedders())"
           [selectedClipper]="selectedClipper()"
           [selectedClipperParams]="clipperParamValues()"

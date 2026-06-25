@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, OnChanges, SimpleChanges, ViewChild, ElementRef, AfterViewChecked, OnDestroy, inject, input, output } from '@angular/core';
+import { AfterViewChecked, ChangeDetectionStrategy, Component, ElementRef, inject, Input, input, OnChanges, OnDestroy, OnInit, output, signal, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -16,6 +16,7 @@ export interface LabelEntry {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-label-list',
   standalone: true,
   imports: [CommonModule],
@@ -60,7 +61,10 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
 
   @ViewChild('voteListContainer') voteListContainer?: ElementRef<HTMLDivElement>;
 
-  sortedEntries: LabelEntry[] = [];
+  // Signal: rebuilt from the metadataCache version$ subscribe (an unpatched
+  // callback, not a zoneless CD trigger) as well as from ngOnChanges, and read in
+  // the template, so it must repaint when the cache hydrates.
+  readonly sortedEntries = signal<LabelEntry[]>([]);
   private pendingScrollPct: number | null = null;
   /** Pre-built Map for O(1) media stub lookups by id (rebuilt when medias input changes). */
   private mediaMap = new Map<number, Media>();
@@ -69,12 +73,12 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
   ngOnInit(): void {
     this.mediaMap = new Map(this.medias.map(m => [m.id, m]));
     this.metadataCache.ensureLoaded(this.ids);
-    this.sortedEntries = this.buildSortedEntries();
+    this.sortedEntries.set(this.buildSortedEntries());
     // Re-render entry names when the cache hydrates voted items.
     this.metadataCache.version$
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => {
-        this.sortedEntries = this.buildSortedEntries();
+        this.sortedEntries.set(this.buildSortedEntries());
       });
   }
 
@@ -90,7 +94,7 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
     if (changes['ids']) {
       this.metadataCache.ensureLoaded(this.ids);
     }
-    this.sortedEntries = this.buildSortedEntries();
+    this.sortedEntries.set(this.buildSortedEntries());
   }
 
   ngOnDestroy(): void {

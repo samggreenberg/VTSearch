@@ -326,8 +326,8 @@ def plot_voting_iterations(
 
     Args:
         df: :class:`pandas.DataFrame` with columns
-            ``seed, dataset, category, t, cost, fpr, fnr`` as returned
-            by :func:`run_voting_iterations_eval`.
+            ``seed, dataset, category, t, n_good, n_bad, cost, fpr, fnr`` as
+            returned by :func:`run_voting_iterations_eval`.
         output_dir: Directory to write PNG files into (created if needed).
 
     Returns:

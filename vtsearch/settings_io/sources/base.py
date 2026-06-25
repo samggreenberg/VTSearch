@@ -16,9 +16,7 @@ from typing import Any
 from vtscore.plugins import PluginField
 from vtscore.sync import SyncSource
 
-SettingsSourceField = PluginField
-
-__all__ = ["SettingsSource", "SettingsSourceField"]
+__all__ = ["PluginField", "SettingsSource"]
 
 
 class SettingsSource(SyncSource[dict[str, Any], dict[str, Any]]):

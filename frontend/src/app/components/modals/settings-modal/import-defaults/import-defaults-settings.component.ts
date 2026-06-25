@@ -1,4 +1,4 @@
-import { Component, OnChanges, OnInit, SimpleChanges, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, OnChanges, OnInit, output, SimpleChanges } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 
@@ -19,7 +19,7 @@ import {
   ClipperSelection,
 } from '../../../dashboard/clipper-chooser/clipper-chooser.component';
 
-/** Settings tab body for "Data Imports": lets the user pick a
+/** Settings tab body for "Import Defaults": lets the user pick a
  *  per-mediaType default embedder, clipper, and converter-row set.
  *  Mirrors the Add Dataset modal's "Advanced ▾" block but standalone,
  *  always expanded, and not tied to a specific importer.  Whatever the
@@ -31,6 +31,7 @@ import {
  *  Edits are emitted as a full :type:`ImportDefaultsByMediaType` map so
  *  the parent can persist them with the rest of the settings dict. */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-import-defaults-settings',
   standalone: true,
   imports: [FormsModule, IconComponent, SourceSpecsPickerComponent, ClipperChooserComponent],

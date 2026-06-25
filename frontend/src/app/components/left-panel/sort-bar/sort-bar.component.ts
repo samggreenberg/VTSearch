@@ -1,10 +1,11 @@
-import { Component, Input, OnInit, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, input, OnInit, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { SortMode } from '../left-panel.component';
 import { LoadSortModalComponent } from '../../modals/load-sort-modal/load-sort-modal.component';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-sort-bar',
   standalone: true,
   imports: [FormsModule, LoadSortModalComponent],

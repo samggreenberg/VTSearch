@@ -10,7 +10,7 @@ import gc
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
-from vtscore.datasets.importers.base import ImporterBase, ImporterField
+from vtscore.datasets.importers.base import ImporterBase, PluginField
 
 
 def _get_progress():
@@ -126,7 +126,7 @@ class CombineDatasetsImporter(ImporterBase):
     ui_mode = "custom"
     hidden_from_picker = True
     fields = [
-        ImporterField(
+        PluginField(
             key="datasets",
             label="Dataset Files",
             field_type="text",
@@ -137,7 +137,7 @@ class CombineDatasetsImporter(ImporterBase):
             # comma-joined form ``_parse_dataset_paths`` already accepts.
             origin_serializer=lambda v: ",".join(v) if isinstance(v, list) else str(v),
         ),
-        ImporterField(
+        PluginField(
             key="name",
             label="Name",
             field_type="text",

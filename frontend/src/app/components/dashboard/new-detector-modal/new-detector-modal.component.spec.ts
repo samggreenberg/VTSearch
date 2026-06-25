@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { NewDetectorModalComponent } from './new-detector-modal.component';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
 
 describe('NewDetectorModalComponent', () => {
   let component: NewDetectorModalComponent;
@@ -11,13 +12,13 @@ describe('NewDetectorModalComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [NewDetectorModalComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(NewDetectorModalComponent);
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
-    fixture.detectChanges();
+    TestBed.tick(); // run ngOnInit under zoneless (issues the init GETs)
 
     // Flush the media types request from ngOnInit
     httpMock.expectOne('/api/media-types').flush({
@@ -227,14 +228,14 @@ describe('NewDetectorModalComponent with defaultMediaType', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [NewDetectorModalComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(NewDetectorModalComponent);
     component = fixture.componentInstance;
     component.defaultMediaType = 'image';
     httpMock = TestBed.inject(HttpTestingController);
-    fixture.detectChanges();
+    TestBed.tick(); // run ngOnInit under zoneless (issues the init GETs)
 
     httpMock.expectOne('/api/media-types').flush({
       media_types: [

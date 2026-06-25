@@ -17,6 +17,7 @@ from vtscore.datasets.loader import (
     load_dataset_from_folder,
     load_dataset_from_pickle,
 )
+from vtscore.embedding.media_vectors import media_embedding
 
 
 from helpers import make_wav_bytes as _make_wav_bytes, make_wav_file as _make_wav_file  # noqa: F401
@@ -64,7 +65,7 @@ class TestThinLoadFromFolder:
         medias: dict[int, dict[str, Any]] = {}
         load_dataset_from_folder(tmp_path, "audio", medias, thin=True)
         media = medias[1]
-        assert media["embedding"] is None
+        assert media_embedding(media) is None
 
     def test_thin_clips_have_correct_file_size(self, tmp_path):
         wav_path = _make_wav_file(tmp_path, "test.wav")
@@ -116,6 +117,7 @@ class TestThinLoadFromPickle:
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes).hexdigest(),
             "embedding": np.zeros(512).tolist(),
+            "embedder": "clap",
             "filename": "test.wav",
             "category": "test",
         }
@@ -146,7 +148,7 @@ class TestThinLoadFromPickle:
         pkl_path = self._make_pickle(tmp_path, inline_bytes=True)
         medias: dict[int, dict[str, Any]] = {}
         load_dataset_from_pickle(pkl_path, medias, thin=True)
-        assert isinstance(medias[1]["embedding"], np.ndarray)
+        assert isinstance(media_embedding(medias[1]), np.ndarray)
 
     def test_thin_pickle_resolves_media_path_from_audio_dir(self, tmp_path):
         audio_dir = tmp_path / "audio"
@@ -169,6 +171,65 @@ class TestThinLoadFromPickle:
         medias: dict[int, dict[str, Any]] = {}
         load_dataset_from_pickle(pkl_path, medias, thin=False)
         assert medias[1]["media_bytes"] is not None
+
+
+class TestFullModeMediaPathReference:
+    """Full-mode pickle load must honor a stored ``media_path`` reference.
+
+    A reference dataset (imported with ``reference_files`` / thin) is saved to
+    the registry pickle with ``media_bytes=None`` and a ``media_path`` pointing
+    at the original file.  Reopening from the dashboard loads that pickle in
+    *full* mode, which historically ignored ``media_path`` and dropped every
+    such media.  It must instead fall back to the reference and load it lazily,
+    so the reference dataset survives the save → reopen round-trip.
+    """
+
+    def _make_reference_pickle(self, tmp_path: Path, media_path: str | None) -> Path:
+        """Pickle one audio media with no inline bytes and a ``media_path``."""
+        wav_bytes = _make_wav_bytes()
+        media: dict[str, Any] = {
+            "id": 1,
+            "media_type": "audio",
+            "duration": 0.1,
+            "file_size": len(wav_bytes),
+            "md5": hashlib.md5(wav_bytes).hexdigest(),
+            "embedding": np.zeros(512).tolist(),
+            "embedder": "clap",
+            "filename": "test.wav",
+            "category": "test",
+            "media_bytes": None,
+            "media_path": media_path,
+        }
+        pkl_path = tmp_path / "ref.pkl"
+        from vtscore.datasets.container import write_container
+
+        write_container(pkl_path, pickle.dumps({"medias": {1: media}}), {"format_version": 1})
+        return pkl_path
+
+    def test_full_mode_keeps_media_when_path_exists(self, tmp_path):
+        src = _make_wav_file(tmp_path, "test.wav")
+        pkl_path = self._make_reference_pickle(tmp_path, str(src))
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(pkl_path, medias, thin=False)
+        assert len(medias) == 1
+        # Loaded lazily: no bytes in RAM, but the reference resolves on disk.
+        assert medias[1]["media_bytes"] is None
+        assert medias[1]["media_path"] == str(src)
+        assert Path(medias[1]["media_path"]).exists()
+        assert isinstance(media_embedding(medias[1]), np.ndarray)
+
+    def test_full_mode_drops_media_when_path_missing(self, tmp_path, capsys):
+        pkl_path = self._make_reference_pickle(tmp_path, str(tmp_path / "gone.wav"))
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(pkl_path, medias, thin=False)
+        assert medias == {}
+        assert "1 media files missing" in capsys.readouterr().out
+
+    def test_full_mode_drops_media_when_no_path(self, tmp_path):
+        pkl_path = self._make_reference_pickle(tmp_path, None)
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(pkl_path, medias, thin=False)
+        assert medias == {}
 
 
 class TestPickleNullEmbedding:
@@ -251,6 +312,7 @@ class TestPickleNullEmbedding:
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes).hexdigest(),
             "embedding": np.zeros(512).tolist(),
+            "embedder": "clap",
             "filename": "good.wav",
             "category": "test",
             "media_bytes": wav_bytes,
@@ -275,8 +337,8 @@ class TestPickleNullEmbedding:
         load_dataset_from_pickle(pkl_path, medias, thin=False)
         assert list(medias.keys()) == [1]
         # No poisoned 0-d object array snuck through.
-        assert medias[1]["embedding"].ndim >= 1
-        assert medias[1]["embedding"].dtype != object
+        assert media_embedding(medias[1]).ndim >= 1
+        assert media_embedding(medias[1]).dtype != object
 
     def test_chunked_loader_skips_null_embedding(self, tmp_path):
         from vtscore.datasets.loader import load_dataset_from_pickle_chunked
@@ -291,6 +353,7 @@ class TestPickleNullEmbedding:
                     "file_size": len(wav_bytes),
                     "md5": hashlib.md5(wav_bytes).hexdigest(),
                     "embedding": np.zeros(512).tolist(),
+                    "embedder": "clap",
                     "filename": "a.wav",
                     "category": "test",
                     "media_bytes": wav_bytes,
@@ -336,6 +399,7 @@ class TestPickleMD5Preservation:
                     "file_size": len(wav_bytes),
                     "md5": pre_md5,
                     "embedding": np.zeros(512).tolist(),
+                    "embedder": "clap",
                     "filename": "test.wav",
                     "category": "test",
                     "media_bytes": wav_bytes,
@@ -363,6 +427,7 @@ class TestPickleMD5Preservation:
                     "file_size": len(wav_bytes),
                     # no "md5" key
                     "embedding": np.zeros(512).tolist(),
+                    "embedder": "clap",
                     "filename": "test.wav",
                     "category": "test",
                     "media_bytes": wav_bytes,
@@ -391,6 +456,7 @@ class TestPickleMD5Preservation:
                     "file_size": len(wav_bytes),
                     "md5": pre_md5,
                     "embedding": np.zeros(512).tolist(),
+                    "embedder": "clap",
                     "filename": "test.wav",
                     "category": "test",
                     "media_bytes": wav_bytes,
@@ -443,6 +509,7 @@ class TestThinImporters:
                     "file_size": len(wav_bytes),
                     "md5": hashlib.md5(wav_bytes).hexdigest(),
                     "embedding": np.zeros(512).tolist(),
+                    "embedder": "clap",
                     "filename": "test.wav",
                     "category": "test",
                     "media_bytes": wav_bytes,

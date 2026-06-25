@@ -310,16 +310,18 @@ class DatasetContext:
         "_subset_ids",
         "_subset_job_id",
         "_subset_content_version",
-        # Role-typed embedder binding (v3 "three-slot" model; see
+        # Role-typed embedder binding (v3 "three-slot" trio; see
         # docs/plans/patch-embedder.md).  A dataset binds up to one
-        # text-capable embedder and up to one patch-capable embedder.  By
-        # default the binding is *derived* on demand from the dataset's
-        # medias (the single embedder a pre-v3 dataset was loaded with);
+        # text-capable embedder, up to one patch-capable embedder, and up to
+        # one structural (geometric-verification) embedder.  By default the
+        # binding is *derived* on demand from the dataset's medias (the
+        # single embedder a pre-v3 dataset was loaded with);
         # ``bind_embedders`` overrides that with an explicit, validated
-        # pair for genuinely multi-embedder datasets.  The values are
+        # triple for genuinely multi-embedder datasets.  The values are
         # embedder *names*, never vectors - no embeddings live here.
         "_text_embedder",
         "_patch_embedder",
+        "_structural_embedder",
         "_binding_explicit",
     )
 
@@ -350,18 +352,25 @@ class DatasetContext:
         # until either explicitly bound or derived from the medias.
         self._text_embedder: str | None = None
         self._patch_embedder: str | None = None
+        self._structural_embedder: str | None = None
         self._binding_explicit: bool = False
 
     # ------------------------------------------------------------------
     # Role-typed embedder binding
     # ------------------------------------------------------------------
 
-    def bind_embedders(self, *, text_embedder: str | None = None, patch_embedder: str | None = None) -> None:
+    def bind_embedders(
+        self,
+        *,
+        text_embedder: str | None = None,
+        patch_embedder: str | None = None,
+        structural_embedder: str | None = None,
+    ) -> None:
         """Explicitly bind role-typed embedders to this dataset.
 
         Validates that each slot points at an embedder with the matching
-        capability (text / patch) and then stores the pair, overriding the
-        default media-derived binding.  Use this for genuinely
+        capability (text / patch / structural) and then stores the triple,
+        overriding the default media-derived binding.  Use this for genuinely
         multi-embedder datasets; a single-embedder dataset can rely on the
         derived binding instead.
 
@@ -369,22 +378,23 @@ class DatasetContext:
         """
         from vtscore.embedding.binding import validate_binding  # noqa: PLC0415
 
-        validate_binding(text_embedder, patch_embedder)
+        validate_binding(text_embedder, patch_embedder, structural_embedder)
         self._text_embedder = text_embedder
         self._patch_embedder = patch_embedder
+        self._structural_embedder = structural_embedder
         self._binding_explicit = True
 
-    def _resolve_binding(self) -> tuple[str | None, str | None]:
-        """Return the ``(text_embedder, patch_embedder)`` pair for this dataset.
+    def _resolve_binding(self) -> tuple[str | None, str | None, str | None]:
+        """Return the ``(text_embedder, patch_embedder, structural_embedder)`` triple.
 
         An explicit binding (set via :meth:`bind_embedders`) wins; otherwise
-        the pair is derived from the dataset's medias - the single embedder a
-        pre-v3 dataset was loaded with, role-typed by its capabilities.
+        the triple is derived from the dataset's medias - the single embedder
+        a pre-v3 dataset was loaded with, role-typed by its capabilities.
         """
         if self._binding_explicit:
-            return (self._text_embedder, self._patch_embedder)
+            return (self._text_embedder, self._patch_embedder, self._structural_embedder)
         if not self.medias:
-            return (None, None)
+            return (None, None, None)
         from vtscore.embedding.binding import derive_binding_from_names  # noqa: PLC0415
         from vtscore.embedding.media_vectors import media_embedder_names  # noqa: PLC0415
 
@@ -401,6 +411,11 @@ class DatasetContext:
         """Name of the bound patch-capable embedder, or ``None``."""
         return self._resolve_binding()[1]
 
+    @property
+    def structural_embedder(self) -> str | None:
+        """Name of the bound structural (geometric-verification) embedder, or ``None``."""
+        return self._resolve_binding()[2]
+
     def routed_embedder(self, role: str) -> str | None:
         """Resolve which bound embedder serves *role* (the v3 routing table).
 
@@ -411,24 +426,30 @@ class DatasetContext:
         * ``"patch"`` - region similarity / voting (``/api/find-label`` region
           overlays, region votes): the patch slot, or ``None`` (the caller 400s;
           region ops need a patch embedder).
+        * ``"structural"`` - instance retrieval / geometric verification: the
+          structural slot, or ``None`` (the caller 400s; structural ops need a
+          structural embedder).
         * ``"score"`` - cosine example sort, the detector MLP (train + score),
-          and the diversity tree: the patch slot if bound, else the text slot,
-          else ``None``.  ``None`` means a slot-less single-vector dataset (e.g.
-          ``dinov2_single``); the matrix layer then reads each media's primary
-          vector, so cosine sort / MLP scoring keep working rather than 400-ing.
+          and the diversity tree: the structural slot if bound, else the patch
+          slot, else the text slot, else ``None``.  ``None`` means a slot-less
+          single-vector dataset (e.g.  ``dinov2_single``); the matrix layer then
+          reads each media's primary vector, so cosine sort / MLP scoring keep
+          working rather than 400-ing.
 
         Returns an embedder *name* (or ``None``).  Pass the result straight to
         the embedder-aware matrix layer: a name equal to the dataset's primary
         embedder collapses to the cached primary path there, so the
         single-embedder hot path is unchanged byte-for-byte.
         """
-        text, patch = self._resolve_binding()
+        text, patch, structural = self._resolve_binding()
         if role == "text":
             return text
         if role == "patch":
             return patch
+        if role == "structural":
+            return structural
         if role == "score":
-            return patch or text
+            return structural or patch or text
         raise ValueError(f"unknown embedder routing role: {role!r}")
 
     @property
@@ -440,6 +461,11 @@ class DatasetContext:
     def supports_patch_regions(self) -> bool:
         """Whether this dataset has region overlays / voting (patch slot is bound)."""
         return self.patch_embedder is not None
+
+    @property
+    def supports_geometric_verification(self) -> bool:
+        """Whether this dataset can do instance retrieval (structural slot is bound)."""
+        return self.structural_embedder is not None
 
 
 class DetectorContext:
@@ -454,7 +480,20 @@ class DetectorContext:
         "detector_id",
         "name",
         "media_type",
+        # The concrete space the label cache / MLP is *currently* built in (an
+        # adaptive marker, re-stamped when the active dataset's space changes).
+        # Distinct from ``embedder_type``: it names whichever concrete embedder
+        # of the detector's type the active dataset supplied, so the
+        # cache-invalidation compare stays honest across same-type swaps.
         "embedder",
+        # The detector's *locked* embedder type - ``"semantic"`` /
+        # ``"patch_semantic"`` / ``"structural"`` - persisted on the detector
+        # JSON and loaded here at detector load.  Immutable in memory (never
+        # re-stamped).  The detector scores in whatever concrete embedder of
+        # this type the active dataset binds.  Empty for a legacy detector,
+        # where routing falls back to the dataset score precedence.  See
+        # ``docs/plans/patch-embedder.md`` → "Per-detector embedder type".
+        "embedder_type",
         # Vote state
         "good_votes",
         "bad_votes",
@@ -552,11 +591,20 @@ class DetectorContext:
         "calibration_cache",  # tuple[Any, tuple[list, float | None]] | None
     )
 
-    def __init__(self, detector_id: str = "", *, name: str = "", media_type: str = "", embedder: str = "") -> None:
+    def __init__(
+        self,
+        detector_id: str = "",
+        *,
+        name: str = "",
+        media_type: str = "",
+        embedder: str = "",
+        embedder_type: str = "",
+    ) -> None:
         self.detector_id: str = detector_id
         self.name: str = name
         self.media_type: str = media_type
         self.embedder: str = embedder
+        self.embedder_type: str = embedder_type
         # Vote state
         self.good_votes: dict[int, None] = {}
         self.bad_votes: dict[int, None] = {}
@@ -655,6 +703,7 @@ class _RequestMissingDatasetContext(DatasetContext):
         object.__setattr__(self, "_region_index_per_row", None)
         object.__setattr__(self, "_text_embedder", None)
         object.__setattr__(self, "_patch_embedder", None)
+        object.__setattr__(self, "_structural_embedder", None)
         object.__setattr__(self, "_binding_explicit", False)
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -805,6 +854,7 @@ class _RequestMissingDetectorContext(DetectorContext):
         object.__setattr__(self, "name", "")
         object.__setattr__(self, "media_type", "")
         object.__setattr__(self, "embedder", "")
+        object.__setattr__(self, "embedder_type", "")
         object.__setattr__(self, "good_votes", _FrozenDict("detector"))
         object.__setattr__(self, "bad_votes", _FrozenDict("detector"))
         object.__setattr__(self, "label_history", _FrozenList("detector"))

@@ -10,9 +10,10 @@ wins** (the "shim" rename and the `labelset_ops` facade), and several
 `UserSettingsStore`; the `load_pipeline.py` stage extraction; the `app.py`
 CLI + port-preflight extraction; and the `importers/base.py` split into a
 `base/` package with a thin `ImporterBase` and the rich `DatasetImporter` —
-see the Theme B section). For the details of what landed, see the git
-history / merged PRs on `dev`. **Everything below is the remaining planned
-work.**
+see the Theme B section), and the **Theme F `PluginField` alias collapse**
+(the seven per-family `*Field` aliases removed; see Theme F). For the
+details of what landed, see the git history / merged PRs on `dev`.
+**Everything below is the remaining planned work.**
 
 This review asks: where have design decisions that were right at small scale
 been outgrown, and what is worth streamlining, abstracting, or reorganizing?
@@ -175,8 +176,13 @@ below is still open.)
 - **`SyncSource[LoadT, SaveT]`** (`vtscore/sync/`) has two subclasses, each
   with one concrete implementation. Don't add more indirection here until a
   third consumer appears.
-- **`PluginField` aliases.** Six no-op aliases (`ImporterField = PluginField`
-  …) imply field types differ per family. Collapse to `PluginField`.
+- ~~**`PluginField` aliases.** Six no-op aliases (`ImporterField = PluginField`
+  …) imply field types differ per family. Collapse to `PluginField`.~~
+  **Shipped.** Removed all seven per-family aliases (`ImporterField`,
+  `ExporterField`, `LabelImporterField`, `LabelsetSourceField`,
+  `SettingsSourceField`, `SettingsImporterField`, `SettingsExporterField`);
+  every plugin/test now uses `PluginField` directly, re-exported from each
+  family's base module. Docs updated to match.
 - **`loader.py` façade** re-exports its three sibling loaders without adding
   abstraction.
 
@@ -204,8 +210,8 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
    below) and the two frontend components.
 2. **Theme D** — converge frontend types onto the generated client.
 3. **Theme E** — `MediaSource` / `DatasetImporter` ingestion-concept overlap.
-4. **Theme F** — collapse `PluginField` aliases; revisit `SyncSource` if a
-   third consumer appears.
+4. **Theme F** — ~~collapse `PluginField` aliases~~ (shipped); revisit
+   `SyncSource` if a third consumer appears.
 5. **Theme C remaining** — state-proxy registry table; image single/patch
    base; downloaders base.
 6. **Theme B (deferred)** — `DetectorContext` sub-context split (~346 call

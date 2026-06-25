@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+from vtscore.datasets.importers.base import DatasetImporter
 from vtscore.plugins import PluginField
 
 
@@ -26,8 +26,8 @@ class _StubImporter(DatasetImporter):
     display_name = "Stub Dynamic"
     description = "Test importer with dynamic-options field."
     fields = [
-        ImporterField("media_type", "Media Type", "select", options=["audio", "image"], default="audio"),
-        ImporterField(
+        PluginField("media_type", "Media Type", "select", options=["audio", "image"], default="audio"),
+        PluginField(
             "query_id",
             "Query",
             "select",

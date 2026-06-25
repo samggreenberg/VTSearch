@@ -7,6 +7,7 @@ import { ActiveContextService } from './active-context.service';
 import { DatasetStateService } from './dataset-state.service';
 import { ToastService } from './toast.service';
 import { DatasetRegistryEntry, DetectorRegistryEntry } from '../models/api.models';
+import { configureZoneless } from '../testing/zoneless-testbed';
 
 describe('ActiveContextWatcherService', () => {
   let watcher: ActiveContextWatcherService;
@@ -22,19 +23,25 @@ describe('ActiveContextWatcherService', () => {
     return { id, name, media_type: 'audio' } as DetectorRegistryEntry;
   }
 
+  // DatasetStateService is signal-backed; `datasets$`/`detectors$` are
+  // `toObservable` bridges whose backing effects push into the stream on the
+  // next change-detection pass. Set the private signal, then tick so the
+  // watcher's `combineLatest` observes the new value before the test asserts
+  // (mirrors the old synchronous BehaviorSubject `.next()`).
   function setDatasets(entries: DatasetRegistryEntry[]): void {
-    // BehaviorSubject is private; cast through any for test setup.
-    (datasetState as unknown as { datasetsSubject: { next: (v: unknown) => void } })
-      .datasetsSubject.next(entries);
+    (datasetState as unknown as { _datasets: { set: (v: unknown) => void } })._datasets.set(entries);
+    TestBed.tick();
   }
 
   function setDetectors(entries: DetectorRegistryEntry[]): void {
-    (datasetState as unknown as { detectorsSubject: { next: (v: unknown) => void } })
-      .detectorsSubject.next(entries);
+    (datasetState as unknown as { _detectors: { set: (v: unknown) => void } })._detectors.set(
+      entries,
+    );
+    TestBed.tick();
   }
 
   beforeEach(() => {
-    TestBed.configureTestingModule({
+    configureZoneless({
       providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     });
     watcher = TestBed.inject(ActiveContextWatcherService);
@@ -46,6 +53,9 @@ describe('ActiveContextWatcherService', () => {
 
   it('does not toast when the registry is empty (initial-load state)', () => {
     activeContext.setActivePair('d1', 'm1');
+    // Flush the (empty) registry bridges so combineLatest fires; the active
+    // ids were never seen in the registry, so no phantom deletion toast.
+    TestBed.tick();
     // Registry still empty; could just be loading.
     expect(toast.toasts.length).toBe(0);
     expect(activeContext.datasetId).toBe('d1');

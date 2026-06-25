@@ -35,6 +35,10 @@ Files are deterministic for a given size and cached under `data/synthetic/<media
 | **urbansound8k_m** | Real urban field recordings across 10 UrbanSound8K categories (medium) |
 | **urbansound8k_l** | Real urban field recordings across 10 UrbanSound8K categories (large) |
 | **urbansound8k_a** | Real urban field recordings across 10 UrbanSound8K categories: air conditioner, car horn, children playing, dog bark, and more |
+| **tut_sound_events_2017_s** | Uncut ~4-minute TUT Sound Events 2017 street soundscapes, one "street" bucket (small slice of 32 recordings) |
+| **tut_sound_events_2017_m** | Uncut ~4-minute TUT street soundscapes, one "street" bucket (medium) |
+| **tut_sound_events_2017_l** | Uncut ~4-minute TUT street soundscapes, one "street" bucket (large) |
+| **tut_sound_events_2017_a** | All 32 uncut ~4-minute TUT Sound Events 2017 street recordings (dev + eval); long-form audio for hands-on clipping rather than a labeled classification set |
 
 ## Image
 
@@ -63,6 +67,10 @@ Files are deterministic for a given size and cached under `data/synthetic/<media
 | **ucsf_documents_a** | Scanned industry document pages from the UCSF Industry Documents Library: tobacco, food, drug, chemical, fossil fuel, and opioids |
 | **roxford5k_s** | ~500 Oxford Buildings photos (a 1/10 slice) for instance matching — same landmark across viewpoints; best paired with the SIFT/VLAD (instance matching) embedder |
 | **roxford5k_a** | All 5,063 Revisited Oxford Buildings photos across 11 landmarks plus distractors — the canonical instance-retrieval benchmark; pair with the SIFT/VLAD (instance matching) embedder |
+| **visual_genome_s** | Dense, busy scene photos from Visual Genome (a 1/50 slice) over the 100 most common object types. **Multi-label**: one photo is a positive example of several categories at once (a street scene is in `car`, `person`, `building`, `sign`…). Also carries ground-truth object bounding boxes (stored for future region voting) |
+| **visual_genome_m** | Visual Genome scenes (a 2/50 slice) — multi-label over 100 object types, with ground-truth boxes |
+| **visual_genome_l** | Visual Genome scenes (a 4/50 slice) — multi-label over 100 object types, with ground-truth boxes |
+| **visual_genome_a** | All Visual Genome scenes — multi-label over 100 object types, with ground-truth boxes (large; ~15 GB download) |
 
 ## Text
 

@@ -13,6 +13,7 @@ itself lives under :mod:`vtscore.datasets.stages`; the
 from __future__ import annotations
 
 import gc
+import json
 import time
 import traceback
 import threading
@@ -41,7 +42,7 @@ from vtscore.datasets.stages._common import (
     _TOTAL_LOAD_STEPS,
     _origin_to_str,
 )
-from vtscore.datasets.stages.clipper import _apply_clipper_stage
+from vtscore.datasets.stages.clipper import _apply_clipper_stage, _relazify_reference_clips_stage
 from vtscore.datasets.stages.embedding import embed_missing, _embed_missing_stage
 from vtscore.datasets.stages.finalize import (
     _build_diversity_tree_stage,
@@ -116,6 +117,38 @@ def _parse_bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value
     return str(value).strip().lower() == "true"
+
+
+def _parse_embedder_list(value: Any) -> list[str] | None:
+    """Coerce a request-supplied embedder list to ``list[str]`` (or ``None``).
+
+    The v3 create-time three-role picker sends the bound trio (text / patch /
+    structural picks, deduped) under the ``embedders`` field.  It arrives as a
+    native list on JSON-body routes and as a string on multipart routes (a JSON
+    array string, or a comma-separated fallback).  ``None`` / empty in →
+    ``None`` (the caller falls back to the single ``embedder`` field — the
+    pre-trio path).  Order is preserved and blanks/dupes are dropped.
+    """
+    if value is None:
+        return None
+    items: list[Any]
+    if isinstance(value, (list, tuple)):
+        items = list(value)
+    else:
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            parsed = json.loads(text)
+            items = parsed if isinstance(parsed, list) else [parsed]
+        except (TypeError, ValueError):
+            items = text.split(",")
+    out: list[str] = []
+    for item in items:
+        name = str(item).strip()
+        if name and name not in out:
+            out.append(name)
+    return out or None
 
 
 def _normalize_media_type(value: str) -> str:
@@ -332,6 +365,7 @@ def _run_origin_load_in_background(
     clipper_params: dict | None = None,
     chain_steps: list[dict] | None = None,
     embedder: str = "",
+    embedders: list[str] | None = None,
     created_by: str = "",
     media_type: str = "",
     build_projection: bool = False,
@@ -342,6 +376,13 @@ def _run_origin_load_in_background(
     and should populate it in-place.  Everything after (origin tagging,
     clipping, dedup, diversity tree, registry, embedder warm-up) is handled
     automatically.
+
+    *embedder* is the primary create-time embedder (recorded as each media's
+    primary and used for the per-media-type persistence hint / task display).
+    *embedders* is the optional v3 trio (text / patch / structural create-time
+    picks): when set, every name is embedded during ingest so a multi-embedder
+    dataset is produced.  ``None`` falls back to the single *embedder* — the
+    pre-trio create path, unchanged.
 
     The dataset context is NOT activated during loading.  It is activated
     only upon successful completion, and only if no other dataset is
@@ -441,8 +482,12 @@ def _run_origin_load_in_background(
                     apply_custom_metadata_md5(ctx.medias)
                     _tag_origins(ctx.medias, origin)
                     _apply_clipper_stage(ctx, tracker, clipper, clipper_params, chain_steps)
-                    _embed_missing_stage(ctx, tracker, embedder)
+                    _embed_missing_stage(ctx, tracker, embedders if embedders else [embedder])
                     _drop_none_embeddings_stage(ctx, tracker)
+                    # Re-lazify clips from reference (thin) parents now that
+                    # embedding is done: strip their materialized bytes so the
+                    # dataset stores recipes, not duplicated clip payloads.
+                    _relazify_reference_clips_stage(ctx, tracker)
                     _collapse_duplicates_stage(ctx, tracker)
                     _build_diversity_tree_stage(ctx, tracker)
                     tracker.check_cancelled()
@@ -541,6 +586,11 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     field_values = wrap_cli_file_fields(importer.fields, field_values)
     created_by = get_current_user()
     origin = importer.build_origin(field_values)
+    # Reference mode (server importers): store path references instead of
+    # copying media bytes.  Maps onto the loader's ``thin`` flag.  Popped so
+    # it isn't forwarded into the importer's field_values (run() takes ``thin``
+    # as a parameter, not a field).
+    reference_files = _parse_bool(field_values.pop("reference_files", None))
     clipper_name = field_values.pop("clipper", "") or ""
     clipper_params = field_values.pop("clipper_params", None)
     chain_steps = _parse_chain_field(field_values.pop("clipper_chain", None))
@@ -548,6 +598,12 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     # importer stores it in the container metadata for readiness tracking).
     field_values["clipper"] = clipper_name
     embedder_name = field_values.get("embedder", "")
+    embedders = _parse_embedder_list(field_values.pop("embedders", None))
+    # The primary picker's choice always leads the embed order (it becomes each
+    # media's recorded primary); the trio's patch/structural picks ride behind
+    # it.  Defensive: include the primary even if the client omitted it.
+    if embedders and embedder_name and embedder_name not in embedders:
+        embedders = [embedder_name, *embedders]
     build_projection = _parse_bool(field_values.pop("build_projection", None))
 
     # Extract media_type from field_values so in-progress tasks can expose it
@@ -559,9 +615,9 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
 
     def _load(target_medias):
         if use_chunked:
-            consume_chunks_into(target_medias, importer.run_chunked(field_values, chunk_size))
+            consume_chunks_into(target_medias, importer.run_chunked(field_values, chunk_size, thin=reference_files))
         else:
-            importer.run(field_values, target_medias)
+            importer.run(field_values, target_medias, thin=reference_files)
 
     return _run_origin_load_in_background(
         _load,
@@ -571,6 +627,7 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
         clipper_params=clipper_params,
         chain_steps=chain_steps,
         embedder=embedder_name,
+        embedders=embedders,
         created_by=created_by,
         media_type=media_type_hint,
         build_projection=build_projection,
@@ -607,7 +664,9 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
                 importer.run(field_values, temp_medias)
                 apply_custom_metadata_md5(temp_medias)
                 embed_missing(temp_medias, field_values.get("embedder", "") or "", on_progress=update_progress)
-                temp_medias = {mid: m for mid, m in temp_medias.items() if m.get("embedding") is not None}
+                from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
+
+                temp_medias = {mid: m for mid, m in temp_medias.items() if media_embedding(m) is not None}
 
                 if not temp_medias:
                     update_progress("idle", "", 0, 0, error="Import produced no medias.")

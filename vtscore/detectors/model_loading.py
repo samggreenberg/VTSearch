@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from vtscore.concurrency.progress import update_find_progress
+from vtscore.embedding.media_vectors import media_embedding
 
 
 def resolve_or_train_detector(  # noqa: C901
@@ -47,8 +48,14 @@ def resolve_or_train_detector(  # noqa: C901
         # Defense against H5: scoring Auto-Find detectors iterates contexts
         # that aren't the active one, so the before_request hook can't
         # have invalidated their stale MLPs.  Drop them here so the next
-        # branch trains fresh against *snap*'s embedder.
-        snap_embedder = next(iter(snap.values()), {}).get("embedder", "") or "" if snap else ""
+        # branch trains fresh against the detector's primary.  The keying
+        # marker returns the detector's primary when the active dataset can
+        # supply it (so a valid cached model survives), else the dataset score
+        # precedence (so a genuine mismatch invalidates).  See patch-embedder.md
+        # → "Per-detector primary embedder".
+        from vtscore.embedding.binding import keying_embedder_for_snap
+
+        snap_embedder = keying_embedder_for_snap(det_ctx, snap)
         invalidate_detector_model_on_embedder_mismatch(det_ctx, snap_embedder)
     if det_ctx is not None and det_ctx.model is not None:
         return det_ctx.model, det_ctx.threshold, None
@@ -72,18 +79,32 @@ def resolve_or_train_detector(  # noqa: C901
     from vtscore.detectors.resolver import resolve_label_embeddings
     from vtscore.detectors.training import train_and_threshold
 
+    # The space to cold-train the MLP in: the concrete embedder of the
+    # detector's locked type that this snap supplies, else the dataset score
+    # precedence (the legacy / cross-dataset-portability fallback).  Both the
+    # in-snap vectors and the origin-resolved label vectors are read/embedded in
+    # this one space so the cold-trained MLP never mixes embedder outputs.
+    # ``keying_embedder_for_snap`` is fed a throwaway carrier for the detector's
+    # type because an unloaded detector has no live context.
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    from vtscore.embedding.binding import keying_embedder_for_snap  # noqa: PLC0415
+
+    det_type = (det_data.get("embedder_type", "") or "") if det_data else ""
+    cold_embedder = keying_embedder_for_snap(SimpleNamespace(embedder_type=det_type), snap)
+
     X_list: list = []
     y_list: list[float] = []
     md5_to_emb = {}
     if snap:
-        md5_to_emb = {c["md5"]: c["embedding"] for c in snap.values()}
+        md5_to_emb = {c["md5"]: media_embedding(c, cold_embedder or None) for c in snap.values()}
 
-    # Match origin-resolved label vectors to the snap's embedder space so
-    # the two paths don't produce a mixed-space training set (silently
-    # garbage MLP).  Empty when the snap is empty or untyped, which falls
-    # back to the media type's default embedder.
-    dataset_embedder = ""
-    if snap:
+    # Match origin-resolved label vectors to the cold-train space so the two
+    # paths don't produce a mixed-space training set (silently garbage MLP).
+    # Empty when the snap is empty or untyped, which falls back to the media
+    # type's default embedder.
+    dataset_embedder = cold_embedder
+    if not dataset_embedder and snap:
         dataset_embedder = next(iter(snap.values()), {}).get("embedder", "") or ""
 
     unresolved: list[dict] = []
@@ -141,7 +162,7 @@ def resolve_or_train_detector(  # noqa: C901
             step=progress_step,
             total_steps=progress_total_steps,
         )
-        trained_mlp, threshold = train_and_threshold(X_list, y_list, snap=snap)
+        trained_mlp, threshold = train_and_threshold(X_list, y_list, snap=snap, embedder_name=cold_embedder or None)
         return trained_mlp, threshold, None
 
     diagnostic: dict = {

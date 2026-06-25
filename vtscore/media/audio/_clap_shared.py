@@ -24,6 +24,16 @@ from typing import Any, Optional
 import numpy as np
 
 from vtscore.config import CLAP_SAMPLE_RATE
+
+# CLAP embeds a single 10 s window (480000 samples at 48 kHz). The feature
+# extractor only knows how to *truncate* longer audio via "rand_trunc" (a
+# random crop) or "fusion" (4-channel, fusion checkpoints only) - and the
+# unfused HTSAT checkpoints we load support neither cleanly. A random crop
+# would also make re-embedding the same file non-deterministic, which breaks
+# the origin -> embedding rederivation contract. So we truncate to exactly
+# CLAP_MAX_SAMPLES ourselves (deterministic first window); the feature
+# extractor then takes its equal-length branch and never crops.
+CLAP_MAX_SAMPLES = 480000
 from vtscore.media.embedder import (
     MediaEmbedder,
     embedder_load_setup,
@@ -132,8 +142,8 @@ class _ClapBase(MediaEmbedder):
             sampling_rate=CLAP_SAMPLE_RATE,
             return_tensors="pt",
             padding="max_length",
-            max_length=480000,
-            truncation=True,
+            max_length=CLAP_MAX_SAMPLES,
+            truncation="rand_trunc",
         )
         self._on_progress("loading", f"Warming up {self.label} pipeline: running model…", 3, 3)
         device = next(self._model.parameters()).device
@@ -183,13 +193,19 @@ class _ClapBase(MediaEmbedder):
                 assert file_path is not None  # narrowed by the path_str check above
                 source = file_path
             audio_data, _sr = librosa.load(source, sr=CLAP_SAMPLE_RATE, mono=True)
+            # Deterministic truncation to a single 10 s window: drop everything
+            # past CLAP_MAX_SAMPLES so the feature extractor never reaches its
+            # random-crop ("rand_trunc") path. The explicit truncation string is
+            # a valid defensive value; it is not actually exercised here.
+            if audio_data.shape[0] > CLAP_MAX_SAMPLES:
+                audio_data = audio_data[:CLAP_MAX_SAMPLES]
             inputs = self._processor(
                 audio=audio_data,
                 sampling_rate=CLAP_SAMPLE_RATE,
                 return_tensors="pt",
                 padding="max_length",
-                max_length=480000,
-                truncation=True,
+                max_length=CLAP_MAX_SAMPLES,
+                truncation="rand_trunc",
             )
             device = next(self._model.parameters()).device
             inputs = {k: v.to(device) for k, v in inputs.items()}

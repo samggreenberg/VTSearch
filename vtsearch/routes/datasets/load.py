@@ -34,6 +34,7 @@ import vtscore.security.path_validation as _paths
 from vtscore.config import DATA_DIR
 from vtscore.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer
 from vtscore.datasets.load_pipeline import (
+    _parse_embedder_list,
     _run_importer_in_background,
     _run_origin_load_in_background,
     clear_dataset,
@@ -62,6 +63,20 @@ LOCAL_UPLOADS_DIR = DATA_DIR / "local_uploads"
 def _form_flag(raw: str | None) -> bool:
     """Parse a multipart checkbox value (``"true"``/``"false"``) to ``bool``."""
     return (raw or "").strip().lower() == "true"
+
+
+def _parse_form_embedders(form, primary: str) -> list[str] | None:
+    """Parse the multipart ``embedders`` field (v3 trio) into an ordered list.
+
+    The local-folder / local-files upload flows POST the bound trio as a JSON
+    array string under ``embedders``.  Returns ``None`` when absent (the caller
+    falls back to the single ``embedder`` field).  The *primary* embedder leads
+    the list even if the client omitted it from the array.
+    """
+    embedders = _parse_embedder_list(form.get("embedders"))
+    if embedders and primary and primary not in embedders:
+        embedders = [primary, *embedders]
+    return embedders
 
 
 def _parse_clipper_params(raw: str) -> dict | None:
@@ -215,6 +230,7 @@ def import_local_folder():
         clipper_params=clipper_params_out,
         chain_steps=chain_steps,
         embedder=field_values.get("embedder", ""),
+        embedders=_parse_form_embedders(request.form, field_values.get("embedder", "")),
         created_by=get_current_user(),
         media_type=_normalize_media_type(media_type),
         build_projection=_form_flag(request.form.get("build_projection")),
@@ -307,11 +323,28 @@ def import_local_files():
         clipper_params=clipper_params_out,
         chain_steps=chain_steps,
         embedder=field_values.get("embedder", ""),
+        embedders=_parse_form_embedders(request.form, field_values.get("embedder", "")),
         created_by=get_current_user(),
         media_type=_normalize_media_type(media_type),
         build_projection=_form_flag(request.form.get("build_projection")),
     )
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
+
+
+def _apply_demo_media_type_fields(field_values: dict, converter_name: str, demo_info: dict) -> None:
+    """Set ``media_type`` (and ``converter``) on *field_values* for a demo load.
+
+    With a converter the resulting dataset has the converter's *target* type,
+    not the demo's original type; without one it keeps the demo's native type.
+    """
+    if not converter_name:
+        field_values["media_type"] = demo_info.get("media_type", "")
+        return
+    from vtscore.converters import get_converter  # noqa: PLC0415
+
+    conv = get_converter(converter_name)
+    field_values["media_type"] = conv.target_type if conv is not None else demo_info.get("media_type", "")
+    field_values["converter"] = converter_name
 
 
 @datasets_load_bp.route("/api/dataset/load-demo", methods=["POST"])
@@ -330,6 +363,7 @@ def load_demo_dataset_route(body: dict):
     dataset_name = body.get("name")
     embedder_name = body.get("embedder", "")
     clipper_name = body.get("clipper", "")
+    clipper_params = body.get("clipper_params")
     converter_name = body.get("converter", "")
     user_dataset_name = (body.get("dataset_name") or "").strip()
 
@@ -348,23 +382,16 @@ def load_demo_dataset_route(body: dict):
         field_values["build_projection"] = "true"
     # Inject media_type so the loading task exposes it to the frontend,
     # allowing the "guessed type" logic to consider in-progress loads.
-    if converter_name:
-        # When a converter is used, the resulting dataset has the converter's
-        # target type, not the demo's original type.
-        from vtscore.converters import get_converter  # noqa: PLC0415
-
-        conv = get_converter(converter_name)
-        if conv is not None:
-            field_values["media_type"] = conv.target_type
-        else:
-            field_values["media_type"] = demo_info.get("media_type", "")
-        field_values["converter"] = converter_name
-    else:
-        field_values["media_type"] = demo_info.get("media_type", "")
+    _apply_demo_media_type_fields(field_values, converter_name, demo_info)
     if clipper_name:
         field_values["clipper"] = clipper_name
+        if clipper_params:
+            field_values["clipper_params"] = clipper_params
     if embedder_name:
         field_values["embedder"] = embedder_name
+    demo_embedders = body.get("embedders")
+    if demo_embedders:
+        field_values["embedders"] = demo_embedders
 
     task_id = _run_importer_in_background(importer, field_values)
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}

@@ -2,6 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { LoadSortModalComponent } from './load-sort-modal.component';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { settleZoneless } from '../../../testing/settle-resource';
 
 describe('LoadSortModalComponent', () => {
   let component: LoadSortModalComponent;
@@ -11,7 +13,7 @@ describe('LoadSortModalComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [LoadSortModalComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LoadSortModalComponent);
@@ -23,8 +25,8 @@ describe('LoadSortModalComponent', () => {
     httpMock.verify();
   });
 
-  function flushInit(): void {
-    fixture.detectChanges();
+  async function flushInit(): Promise<void> {
+    await settleZoneless(fixture);
     httpMock.expectOne('/api/server-media-files').flush({
       files: [
         { name: 'example', filename: 'example.wav', path: '/data/example.wav', size_bytes: 1000 },
@@ -37,15 +39,16 @@ describe('LoadSortModalComponent', () => {
         { id: 'm2', name: 'Untrained', media_type: 'audio', num_training: 0 },
       ],
     });
+    await settleZoneless(fixture);
   }
 
-  it('should create', () => {
-    flushInit();
+  it('should create', async () => {
+    await flushInit();
     expect(component).toBeTruthy();
   });
 
-  it('should load server files and registry models on init', () => {
-    flushInit();
+  it('should load server files and registry models on init', async () => {
+    await flushInit();
     expect(component.serverMediaFiles().length).toBe(2);
     expect(component.serverMediaFiles()[0].filename).toBe('example.wav');
     expect(component.registryModels().length).toBe(1);
@@ -53,8 +56,8 @@ describe('LoadSortModalComponent', () => {
     expect(component.loading()).toBe(false);
   });
 
-  it('should emit modelSelected and close when a registry model is loaded', () => {
-    flushInit();
+  it('should emit modelSelected and close when a registry model is loaded', async () => {
+    await flushInit();
     vi.spyOn(component.modelSelected, 'emit');
     vi.spyOn(component.closed, 'emit');
 
@@ -64,8 +67,8 @@ describe('LoadSortModalComponent', () => {
     expect(component.closed.emit).toHaveBeenCalled();
   });
 
-  it('should load server media and emit', () => {
-    flushInit();
+  it('should load server media and emit', async () => {
+    await flushInit();
     vi.spyOn(component.exampleSortStarted, 'emit');
     vi.spyOn(component.closed, 'emit');
 
@@ -76,16 +79,15 @@ describe('LoadSortModalComponent', () => {
     expect(component.closed.emit).toHaveBeenCalled();
   });
 
-  it('should render file lists', () => {
-    flushInit();
-    fixture.detectChanges();
+  it('should render file lists', async () => {
+    await flushInit();
     const el = fixture.nativeElement as HTMLElement;
     const items = el.querySelectorAll('.file-item');
     expect(items.length).toBe(3); // 1 trained model + 2 media files
   });
 
-  it('should emit closed on close', () => {
-    flushInit();
+  it('should emit closed on close', async () => {
+    await flushInit();
     vi.spyOn(component.closed, 'emit');
     component.close();
     expect(component.closed.emit).toHaveBeenCalled();

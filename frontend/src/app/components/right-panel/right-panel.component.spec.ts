@@ -1,8 +1,9 @@
-import { ComponentFixture, TestBed, fakeAsync, tick, discardPeriodicTasks } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { RightPanelComponent } from './right-panel.component';
 import { VoteStateService } from '../../services/vote-state.service';
+import { provideZoneless } from '../../testing/zoneless-testbed';
 
 describe('RightPanelComponent', () => {
   let component: RightPanelComponent;
@@ -12,7 +13,7 @@ describe('RightPanelComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [RightPanelComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(RightPanelComponent);
@@ -28,9 +29,11 @@ describe('RightPanelComponent', () => {
     httpMock.match(() => true); // discard any pending requests
   }
 
-  function flushInit(): void {
-    fixture.detectChanges();
-    tick(); // Allow timer(0, ...) to fire
+  async function flushInit(): Promise<void> {
+    TestBed.tick();
+    // Allow the votes poll's `timer(0, …)` first emission to fire on a real
+    // macrotask (and drain microtasks) so its GET is issued.
+    await new Promise<void>((resolve) => setTimeout(resolve));
     // Settings request
     TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({
@@ -46,19 +49,18 @@ describe('RightPanelComponent', () => {
     });
   }
 
-  it('should create', fakeAsync(() => {
-    flushInit();
+  it('should create', async () => {
+    await flushInit();
     expect(component).toBeTruthy();
     cleanup();
-  }));
+  });
 
-  // Real-async (not fakeAsync): the SettingsStateService rxResource has a
-  // promise-based loader whose value does not commit under fakeAsync's virtual
-  // clock, so a test that asserts a *settings-derived* value must drain real
-  // microtasks. See docs/plans/httpresource-migration.md.
+  // The SettingsStateService rxResource has a promise-based loader, so a test
+  // that asserts a *settings-derived* value must drain real microtasks before
+  // the value commits. See docs/plans/httpresource-migration.md.
   it('should load view mode from settings on init', async () => {
     component.medias = [{ id: 1, media_type: 'audio', filename: 'a.wav', md5: 'x', custom_metadata: {} }];
-    fixture.detectChanges();
+    TestBed.tick();
     TestBed.tick(); // run the rxResource loader effect so the GET is issued
     httpMock.expectOne('/api/settings').flush({ volume: 1, view_mode_right: { audio: 'list', image: 'grid' } });
     // Drain the resource's promise-based value commit, then flush effects so the
@@ -72,19 +74,19 @@ describe('RightPanelComponent', () => {
     cleanup();
   });
 
-  it('should default viewMode to grid when not in settings', fakeAsync(() => {
-    fixture.detectChanges();
-    tick();
+  it('should default viewMode to grid when not in settings', async () => {
+    TestBed.tick();
+    await new Promise<void>((resolve) => setTimeout(resolve));
     TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({ volume: 1 });
     httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
     expect(component.viewMode()).toBe('grid');
     cleanup();
-  }));
+  });
 
-  it('should poll for votes on init', fakeAsync(() => {
-    fixture.detectChanges();
-    tick();
+  it('should poll for votes on init', async () => {
+    TestBed.tick();
+    await new Promise<void>((resolve) => setTimeout(resolve));
     TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({ volume: 1 });
     httpMock.expectOne('/api/votes').flush({
@@ -99,26 +101,26 @@ describe('RightPanelComponent', () => {
     expect(component.clickTimes()).toEqual({ '1': 1, '2': 2, '3': 3 });
     expect(component.learnedScores()).toEqual({ '1': 0.9, '2': 0.8, '3': 0.1 });
     cleanup();
-  }));
+  });
 
-  it('should change sort mode', fakeAsync(() => {
-    flushInit();
+  it('should change sort mode', async () => {
+    await flushInit();
     component.onSortModeChange('name-asc');
     expect(component.sortMode).toBe('name-asc');
     cleanup();
-  }));
+  });
 
-  it('should emit mediaSelected', fakeAsync(() => {
-    flushInit();
+  it('should emit mediaSelected', async () => {
+    await flushInit();
     vi.spyOn(component.mediaSelected, 'emit');
     component.onMediaSelected(42);
     expect(component.mediaSelected.emit).toHaveBeenCalledWith(42);
     cleanup();
-  }));
+  });
 
-  it('should rename detector via detectors-registry-api', fakeAsync(() => {
+  it('should rename detector via detectors-registry-api', async () => {
     component.trainMode = { model: { name: 'Old', registry_id: 'r1' } };
-    flushInit();
+    await flushInit();
 
     component.onDetectorRenamed('New Name');
     const req = httpMock.expectOne('/api/detectors/registry/r1/rename');
@@ -128,60 +130,60 @@ describe('RightPanelComponent', () => {
 
     expect(component.trainMode.model.name).toBe('New Name');
     cleanup();
-  }));
+  });
 
-  it('should not rename if no registry_id', fakeAsync(() => {
+  it('should not rename if no registry_id', async () => {
     component.trainMode = { model: { name: 'Old' } };
-    flushInit();
+    await flushInit();
 
     component.onDetectorRenamed('New');
     cleanup();
-  }));
+  });
 
-  it('should not rename if no trainMode', fakeAsync(() => {
+  it('should not rename if no trainMode', async () => {
     component.trainMode = null;
-    flushInit();
+    await flushInit();
 
     component.onDetectorRenamed('New');
     cleanup();
-  }));
+  });
 
-  it('should render detector context bar when trainMode set', fakeAsync(() => {
+  it('should render detector context bar when trainMode set', async () => {
     component.trainMode = { model: { name: 'Test Detector', registry_id: 'r1' } };
-    flushInit();
-    fixture.detectChanges();
+    await flushInit();
+    TestBed.tick();
 
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.train-context-bar')).toBeTruthy();
     cleanup();
-  }));
+  });
 
-  it('should not render detector context bar when trainMode is null', fakeAsync(() => {
+  it('should not render detector context bar when trainMode is null', async () => {
     component.trainMode = null;
-    flushInit();
-    fixture.detectChanges();
+    await flushInit();
+    TestBed.tick();
 
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.train-context-bar')).toBeFalsy();
     cleanup();
-  }));
+  });
 
-  it('should render both good and bad label lists', fakeAsync(() => {
-    flushInit();
-    fixture.detectChanges();
+  it('should render both good and bad label lists', async () => {
+    await flushInit();
+    TestBed.tick();
 
     const el = fixture.nativeElement as HTMLElement;
     const labelLists = el.querySelectorAll('vt-label-list');
     expect(labelLists.length).toBe(2);
     cleanup();
-  }));
+  });
 
-  it('should render label sort dropdown', fakeAsync(() => {
-    flushInit();
-    fixture.detectChanges();
+  it('should render label sort dropdown', async () => {
+    await flushInit();
+    TestBed.tick();
 
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('vt-label-sort')).toBeTruthy();
     cleanup();
-  }));
+  });
 });

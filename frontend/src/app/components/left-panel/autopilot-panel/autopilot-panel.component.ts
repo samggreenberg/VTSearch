@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, OnInit, SimpleChanges, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, Input, input, OnChanges, OnInit, output, SimpleChanges } from '@angular/core';
 
 import type { LabelingStatusResponse } from '../../../generated/api-client/models/labeling-status-response';
 import {
@@ -30,6 +30,7 @@ export interface StepDisplay {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-autopilot-panel',
   standalone: true,
   imports: [],

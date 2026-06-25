@@ -21,6 +21,7 @@ import json
 from typing import Any, Callable, Optional
 
 from vtscore.state import next_media_id
+from vtscore.embedding.media_vectors import init_embeddings
 from vtscore.embedding.normalize import l2_normalize
 from vtscore.state.core import _state_lock
 
@@ -129,7 +130,7 @@ def _build_media_data(
         "media_type": media_type_id,
         "file_size": len(file_bytes),
         "md5": md5,
-        "embedding": None if embedding is None else l2_normalize(embedding),
+        "embeddings": init_embeddings(embedder_name, None if embedding is None else l2_normalize(embedding)),
         "embedder": embedder_name,
         "filename": entry.get("filename") or name,
         "category": entry.get("category", ""),
@@ -400,7 +401,96 @@ def _ingest_via_resolver(
     return ingested
 
 
-def ingest_missing_medias(  # noqa: C901
+def _wanted_keys(entries: list[dict[str, Any]]) -> tuple[set[str], set[str]]:
+    """Collect the ``origin_name`` and ``md5`` values we're looking for.
+
+    Returns ``(wanted_names, wanted_md5s)``; empty strings are skipped so a
+    media with a blank field can't match a blank wanted key.
+    """
+    wanted_names: set[str] = set()
+    wanted_md5s: set[str] = set()
+    for entry in entries:
+        name = entry.get("origin_name", "")
+        if name:
+            wanted_names.add(name)
+        md5 = entry.get("md5", "")
+        if md5:
+            wanted_md5s.add(md5)
+    return wanted_names, wanted_md5s
+
+
+def _normalize_temp_origins(temp_medias: dict[int, dict[str, Any]], origin_dict: dict[str, Any]) -> None:
+    """Backfill ``origin`` / ``origin_name`` on importer-produced medias.
+
+    Each media gets a fresh ``origin`` copy so a later mutation of one
+    media's ``origin.params`` cannot leak across siblings (and across pickle
+    round-trips).
+    """
+    for media in temp_medias.values():
+        if media.get("origin") is None:
+            media["origin"] = {
+                "importer": origin_dict.get("importer", ""),
+                "params": dict(origin_dict.get("params", {})),
+            }
+        if not media.get("origin_name"):
+            media["origin_name"] = media.get("filename", "")
+
+
+def _ingest_via_importer(
+    origin_dict: dict[str, Any],
+    entries: list[dict[str, Any]],
+    medias: dict[int, dict[str, Any]],
+) -> int:
+    """Try to ingest missing entries by running the full dataset importer.
+
+    Runs the importer for this origin into a temporary medias dict, then
+    cherry-picks the medias matching the wanted ``origin_name`` / ``md5``
+    sets and appends them to *medias* with fresh IDs.
+
+    Returns the number of successfully ingested medias, or -1 if no importer
+    is registered for this origin (the caller has no further fallback). A
+    failed importer run or zero matches counts as "applied" and returns 0.
+    """
+    from vtscore.datasets.importers import get_importer
+
+    importer_name = origin_dict.get("importer", "")
+    importer = get_importer(importer_name)
+    if importer is None:
+        return -1
+
+    params = origin_dict.get("params", {})
+    wanted_names, wanted_md5s = _wanted_keys(entries)
+
+    # Run the importer into a temporary medias dict
+    temp_medias: dict[int, dict[str, Any]] = {}
+    try:
+        importer.run_cli(params, temp_medias)
+    except Exception:
+        # If the importer fails (e.g. folder not found), skip this origin
+        return 0
+
+    _normalize_temp_origins(temp_medias, origin_dict)
+
+    ingested = 0
+
+    # Cherry-pick matching medias.  Allocate IDs and insert atomically
+    # under _state_lock so a concurrent ingest can't reuse the same ID.
+    # Snapshot the values up front: the importer may retain a reference to
+    # temp_medias and mutate it from a background thread.
+    for temp_clip in list(temp_medias.values()):
+        clip_origin_name = temp_clip.get("origin_name", "")
+        clip_md5 = temp_clip.get("md5", "")
+        if clip_origin_name in wanted_names or clip_md5 in wanted_md5s:
+            with _state_lock:
+                cid = next_media_id(medias)
+                temp_clip["id"] = cid
+                medias[cid] = temp_clip
+            ingested += 1
+
+    return ingested
+
+
+def ingest_missing_medias(
     missing_entries: list[dict[str, Any]],
     medias: dict[int, dict[str, Any]],
     on_progress: Optional[ProgressCallback] = None,
@@ -427,8 +517,6 @@ def ingest_missing_medias(  # noqa: C901
     Returns:
         The number of medias successfully ingested.
     """
-    from vtscore.datasets.importers import get_importer
-
     if on_progress is None:
         on_progress = _default_progress()
 
@@ -462,56 +550,10 @@ def ingest_missing_medias(  # noqa: C901
             continue
 
         # Legacy path: run the full importer
-        importer = get_importer(importer_name)
-        if importer is None:
+        importer_result = _ingest_via_importer(origin_dict, entries, medias)
+        if importer_result >= 0:
+            total_ingested += importer_result
             continue
-
-        params = origin_dict.get("params", {})
-
-        # Build a set of origin_names we're looking for
-        wanted_names: set[str] = set()
-        wanted_md5s: set[str] = set()
-        for entry in entries:
-            name = entry.get("origin_name", "")
-            if name:
-                wanted_names.add(name)
-            md5 = entry.get("md5", "")
-            if md5:
-                wanted_md5s.add(md5)
-
-        # Run the importer into a temporary medias dict
-        temp_medias: dict[int, dict[str, Any]] = {}
-        try:
-            importer.run_cli(params, temp_medias)
-        except Exception:
-            # If the importer fails (e.g. folder not found), skip this origin
-            continue
-
-        # Set origin on temp medias that don't have one.  Each media gets a
-        # fresh copy so a later mutation of one media's ``origin.params``
-        # cannot leak across siblings (and across pickle round-trips).
-        for media in temp_medias.values():
-            if media.get("origin") is None:
-                media["origin"] = {
-                    "importer": origin_dict.get("importer", ""),
-                    "params": dict(origin_dict.get("params", {})),
-                }
-            if not media.get("origin_name"):
-                media["origin_name"] = media.get("filename", "")
-
-        # Cherry-pick matching medias.  Allocate IDs and insert atomically
-        # under _state_lock so a concurrent ingest can't reuse the same ID.
-        # Snapshot the values up front: the importer may retain a reference to
-        # temp_medias and mutate it from a background thread.
-        for temp_clip in list(temp_medias.values()):
-            clip_origin_name = temp_clip.get("origin_name", "")
-            clip_md5 = temp_clip.get("md5", "")
-            if clip_origin_name in wanted_names or clip_md5 in wanted_md5s:
-                with _state_lock:
-                    cid = next_media_id(medias)
-                    temp_clip["id"] = cid
-                    medias[cid] = temp_clip
-                total_ingested += 1
 
     on_progress("idle", f"Ingested {total_ingested} media(s) from origins.", 0, 0)
     return total_ingested

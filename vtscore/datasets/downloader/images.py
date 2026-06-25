@@ -44,7 +44,24 @@ def download_cifar10(on_progress: Optional[ProgressCallback] = None) -> Path:
     return extract_dir
 
 
-def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:  # noqa: C901
+def _extract_members(members, extract_one, on_progress, message: str, *, start: int) -> None:
+    """Extract *members* one at a time, reporting progress every 100 items.
+
+    *extract_one* is called as ``extract_one(member)`` for each member (it
+    closes over the archive's own ``extract`` call and destination).  Indices
+    run from *start* (1 for the outer zip pass, 0 for the nested tar pass to
+    match the cadence each used inline); progress is pushed on every 100th
+    member and on the final one.
+    """
+    total = len(members)
+    for offset, member in enumerate(members):
+        i = offset + start
+        if i % 100 == 0 or i == total - (1 - start):
+            on_progress("downloading", message, offset + 1, total)
+        extract_one(member)
+
+
+def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
     """Download and extract the Caltech-101 image classification dataset.
 
     Downloads ``caltech-101.zip`` from the configured ``CALTECH101_URL``
@@ -93,17 +110,13 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
         on_progress("downloading", "Extracting Caltech-101 zip...", 0, 0)
         temp_extract.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(temp_archive, "r") as zip_ref:
-            members = zip_ref.namelist()
-            total = len(members)
-            for i, member in enumerate(members, 1):
-                if i % 100 == 0 or i == total:
-                    on_progress(
-                        "downloading",
-                        "Extracting Caltech-101 zip...",
-                        i,
-                        total,
-                    )
-                zip_ref.extract(member, temp_extract)
+            _extract_members(
+                zip_ref.namelist(),
+                lambda member, zip_ref=zip_ref: zip_ref.extract(member, temp_extract),
+                on_progress,
+                "Extracting Caltech-101 zip...",
+                start=1,
+            )
 
         # The zip contains 101_ObjectCategories.tar.gz (a nested archive).
         # Extract it to produce the actual category directories.
@@ -112,17 +125,13 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
             on_progress("downloading", "Extracting 101_ObjectCategories...", 0, 0)
             inner_dest = temp_extract / "caltech-101"
             with tarfile.open(inner_tar, "r:gz") as tar_ref:
-                members = tar_ref.getmembers()
-                total = len(members)
-                for i, member in enumerate(members):
-                    if i % 100 == 0 or i == total - 1:
-                        on_progress(
-                            "downloading",
-                            "Extracting 101_ObjectCategories...",
-                            i + 1,
-                            total,
-                        )
-                    tar_ref.extract(member, inner_dest, filter="data")
+                _extract_members(
+                    tar_ref.getmembers(),
+                    lambda member, tar_ref=tar_ref: tar_ref.extract(member, inner_dest, filter="data"),
+                    on_progress,
+                    "Extracting 101_ObjectCategories...",
+                    start=0,
+                )
             inner_tar.unlink(missing_ok=True)
 
         if categories_dir.exists():
@@ -455,3 +464,62 @@ def download_places365(on_progress: Optional[ProgressCallback] = None) -> Path:
                 filelist_archive.unlink()
 
     return extract_dir
+
+
+def download_visual_genome(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download and extract the Visual Genome dataset (images + object annotations).
+
+    Visual Genome ships its ~108k images as two zips (the historical
+    ``VG_100K`` / ``VG_100K_2`` splits) and its per-object annotations
+    (object name + pixel bounding box per region) as a separate
+    ``objects.json.zip``.  All three are extracted into ``data/visual_genome/``;
+    each archive is deleted after extraction to reclaim disk space.
+
+    Unlike the folder-per-class image demos, Visual Genome is **multi-label**:
+    one image is typically a positive example of several object categories at
+    once.  The category assignment and bounding-box normalization happen at
+    load time in :mod:`vtscore.media.image._demo_sources`, which reads the
+    extracted ``objects.json`` — this function only fetches the raw files.
+
+    Args:
+        on_progress: Optional progress callback.  Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``visual_genome/`` directory containing ``VG_100K/`` and
+        ``VG_100K_2/`` (the flat image folders) plus ``objects.json``.
+    """
+    if on_progress is None:
+        on_progress = _core._default_progress()
+
+    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+    vg_dir = _core.DATA_DIR / "visual_genome"
+
+    _core._download_and_extract(
+        url=_core.VISUAL_GENOME_IMAGES_URL,
+        archive_name="vg_images.zip",
+        extract_to=vg_dir,
+        check_path=vg_dir / "VG_100K",
+        download_size_mb=_core.VISUAL_GENOME_IMAGES_DOWNLOAD_SIZE_MB,
+        dataset_name="Visual Genome images (1/2)",
+        on_progress=on_progress,
+    )
+    _core._download_and_extract(
+        url=_core.VISUAL_GENOME_IMAGES2_URL,
+        archive_name="vg_images2.zip",
+        extract_to=vg_dir,
+        check_path=vg_dir / "VG_100K_2",
+        download_size_mb=_core.VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB,
+        dataset_name="Visual Genome images (2/2)",
+        on_progress=on_progress,
+    )
+    _core._download_and_extract(
+        url=_core.VISUAL_GENOME_OBJECTS_URL,
+        archive_name="vg_objects.json.zip",
+        extract_to=vg_dir,
+        check_path=vg_dir / "objects.json",
+        download_size_mb=_core.VISUAL_GENOME_OBJECTS_DOWNLOAD_SIZE_MB,
+        dataset_name="Visual Genome annotations",
+        on_progress=on_progress,
+    )
+    return vg_dir

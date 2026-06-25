@@ -8,7 +8,62 @@ resolving origin files for cross-dataset scenarios.
 from __future__ import annotations
 
 
-def restore_labels_from_detector(det_data: dict) -> int:  # noqa: C901
+def _resolve_unmatched(unresolved: list, md5_lookup: dict[str, list[int]]) -> int:
+    """Resolve unmatched labelset entries from their origin files.
+
+    When a detector was trained on Dataset A and we're now on Dataset B,
+    the origin+name keys won't match.  But if the same underlying file
+    exists in both datasets, resolving the origin file and computing its
+    MD5 lets us match by content hash.  Matched entries are labeled
+    silently.
+
+    Returns the number of labels restored via this fallback path.
+    """
+    import hashlib
+    import logging
+
+    from vtscore.detectors.resolver import resolve_file_context
+    from vtscore.state import apply_label
+
+    _log = logging.getLogger(__name__)
+
+    restored = 0
+    for elem in unresolved:
+        entry = elem.to_dict()
+        origin = entry.get("origin")
+        origin_name = entry.get("origin_name", "")
+        filename = entry.get("filename", "")
+        with resolve_file_context(origin, origin_name, filename) as resolved_path:
+            if resolved_path is None:
+                continue
+
+            # Compute MD5 of the resolved file and check against loaded medias
+            try:
+                h = hashlib.md5()
+                with open(resolved_path, "rb") as f:
+                    for chunk in iter(lambda: f.read(8192), b""):
+                        h.update(chunk)
+                resolved_md5 = h.hexdigest()
+            except OSError:
+                _log.debug("restore-labels: could not read resolved file %s", resolved_path)
+                continue
+
+            cids = md5_lookup.get(resolved_md5, [])
+            if cids:
+                for cid in cids:
+                    apply_label(cid, elem.label, silent=True)
+                restored += 1
+            else:
+                _log.debug(
+                    "restore-labels: resolved %s but MD5 %s not in loaded dataset",
+                    resolved_path,
+                    resolved_md5,
+                )
+
+    return restored
+
+
+def restore_labels_from_detector(det_data: dict) -> int:
     """Restore saved labels from a detector's labelset into votes.
 
     Matches labelset entries to loaded medias by origin+origin_name, MD5, and
@@ -60,48 +115,7 @@ def restore_labels_from_detector(det_data: dict) -> int:  # noqa: C901
             unresolved.append(elem)
 
     # Second pass: resolve unmatched labels from their origin files.
-    # When a detector was trained on Dataset A and we're now on Dataset B,
-    # the origin+name keys won't match.  But if the same underlying file
-    # exists in both datasets, resolving the origin file and computing its
-    # MD5 lets us match by content hash.
     if unresolved:
-        import hashlib
-        import logging
-
-        from vtscore.detectors.resolver import resolve_file_context
-
-        _log = logging.getLogger(__name__)
-
-        for elem in unresolved:
-            entry = elem.to_dict()
-            origin = entry.get("origin")
-            origin_name = entry.get("origin_name", "")
-            filename = entry.get("filename", "")
-            with resolve_file_context(origin, origin_name, filename) as resolved_path:
-                if resolved_path is None:
-                    continue
-
-                # Compute MD5 of the resolved file and check against loaded medias
-                try:
-                    h = hashlib.md5()
-                    with open(resolved_path, "rb") as f:
-                        for chunk in iter(lambda: f.read(8192), b""):
-                            h.update(chunk)
-                    resolved_md5 = h.hexdigest()
-                except OSError:
-                    _log.debug("restore-labels: could not read resolved file %s", resolved_path)
-                    continue
-
-                cids = md5_lookup.get(resolved_md5, [])
-                if cids:
-                    for cid in cids:
-                        apply_label(cid, elem.label, silent=True)
-                    restored += 1
-                else:
-                    _log.debug(
-                        "restore-labels: resolved %s but MD5 %s not in loaded dataset",
-                        resolved_path,
-                        resolved_md5,
-                    )
+        restored += _resolve_unmatched(unresolved, md5_lookup)
 
     return restored

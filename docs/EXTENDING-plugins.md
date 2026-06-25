@@ -36,8 +36,8 @@ architecture built on two base classes in `vtscore/plugins/__init__.py`:
 ### PluginField
 
 A dataclass describing a single user-configurable input. All plugin
-families use the same field type (aliased as `ImporterField`,
-`ExporterField`, `LabelImporterField`, `SettingsImporterField`, etc.).
+families share this one field type; each family's base module re-exports
+`PluginField` so you can import it alongside the family's base class.
 
 | Parameter     | Type        | Default  | Description                                             |
 |---------------|-------------|----------|---------------------------------------------------------|
@@ -194,7 +194,7 @@ Expose a module-level `IMPORTER` instance.
 ```python
 # vtscore/datasets/importers/s3/__init__.py
 
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+from vtscore.datasets.importers.base import DatasetImporter, PluginField
 from vtscore.media import all_folder_names
 
 
@@ -205,14 +205,14 @@ class S3Importer(DatasetImporter):
     icon = "☁️"
 
     fields = [
-        ImporterField(
+        PluginField(
             key="bucket",
             label="Bucket Name",
             field_type="text",
             description="The S3 bucket name.",
             required=True,
         ),
-        ImporterField(
+        PluginField(
             key="prefix",
             label="Key Prefix",
             field_type="text",
@@ -220,7 +220,7 @@ class S3Importer(DatasetImporter):
             required=False,
             default="",
         ),
-        ImporterField(
+        PluginField(
             key="media_type",
             label="Media Type",
             field_type="select",
@@ -233,7 +233,7 @@ class S3Importer(DatasetImporter):
         """Download files from S3, then load them into the dataset.
 
         Args:
-            field_values: Maps each ImporterField.key to the user's input.
+            field_values: Maps each PluginField.key to the user's input.
                 - "file" fields arrive as werkzeug FileStorage objects.
                 - All other fields arrive as plain strings.
             medias: The global medias dict.  Populate it **in-place**; do not
@@ -413,13 +413,14 @@ Most importers delegate to `load_dataset_from_folder()` after downloading
 files to a local directory.  However, importers whose data comes from
 API calls (not files on disk) can build media dicts directly in `run()`.
 
-**Importers do not embed.** Set `embedding=None` and `embedder=""`; the
-framework `embed_missing` stage embeds every item still at `None` after
-`run()` returns, using the user-selected embedder (or the default for
-the media type).  Only set `embedding` to a real vector when your data
+**Importers do not embed.** Set `embeddings={}` (an empty per-embedder dict)
+and `embedder=""`; the framework `embed_missing` stage embeds every item with
+no vector after `run()` returns, using the user-selected embedder (or the
+default for the media type).  Only pre-populate `embeddings` when your data
 source ships pre-computed vectors that are dimension-compatible with the
-embedder the user picked; in that case also set `embedder` to the name
-of that embedder.
+embedder the user picked: set `embeddings={"<name>": vec}` and `embedder="<name>"`
+naming that embedder.  (There is no singular `embedding` key any more —
+`media["embeddings"]` is the sole per-media vector store.)
 
 ```python
 def run(self, field_values, medias, thin=False):
@@ -429,7 +430,7 @@ def run(self, field_values, medias, thin=False):
             "media_type": "audio",
             "filename": item["id"],
             "md5": item["md5"],                  # pre-computed by the service
-            "embedding": None,                   # framework embed stage fills this in
+            "embeddings": {},                    # framework embed stage fills this in
             "embedder": "",                      # framework embed stage stamps this
             "media_bytes": data if not thin else None,
             "media_path": None,
@@ -480,7 +481,8 @@ class MyServiceImporter(DatasetImporter):
         return {
             "media_type": "audio",
             "filename": record["id"],
-            "embedding": _api.get_embedding(record["id"]),
+            "embeddings": {"my_embedder": _api.get_embedding(record["id"])},
+            "embedder": "my_embedder",
             "media_bytes": None if thin else _api.fetch_bytes(record["url"]),
             "media_url": record["url"],
             # origin / origin_name auto-filled from build_origin if omitted
@@ -496,7 +498,8 @@ class MyServiceImporter(DatasetImporter):
             blobs = ([] if thin else
                      list(pool.map(lambda r: _api.fetch_bytes(r["url"]), records)))
         return [
-            {"media_type": "audio", "filename": r["id"], "embedding": e,
+            {"media_type": "audio", "filename": r["id"],
+             "embeddings": {"my_embedder": e}, "embedder": "my_embedder",
              "media_bytes": (None if thin else b), "media_url": r["url"]}
             for r, e, b in zip(records, embeddings, blobs or [None] * len(records))
         ]
@@ -534,9 +537,9 @@ fields it depends on in `depends_on`.  Then implement
 class ReCallerImporter(DatasetImporter):
     name = "recaller"
     fields = [
-        ImporterField("media_type", "Media Type", "select",
+        PluginField("media_type", "Media Type", "select",
                       options=all_folder_names(), default="audio"),
-        ImporterField(
+        PluginField(
             "query_id", "Query ID", "select",
             dynamic_options=True,
             depends_on=["media_type"],   # re-fetch when media_type changes
@@ -645,8 +648,8 @@ loops `effective_source_specs()` and calls you once per spec.
 class DXImporter(DatasetImporter):
     name = "dx"
     fields = [
-        ImporterField(key="media_type", label="Output Media Type", field_type="select", ...),
-        ImporterField(key="dataset_id", ..., required=True),
+        PluginField(key="media_type", label="Output Media Type", field_type="select", ...),
+        PluginField(key="dataset_id", ..., required=True),
     ]
 
     def fetch_source_media(self, spec, field_values, thin=False):
@@ -823,7 +826,7 @@ Subclass `LabelsetExporter` from `vtscore.exporters.base`.
 ```python
 # vtscore/exporters/sftp/__init__.py
 
-from vtscore.exporters.base import LabelsetExporter, ExporterField
+from vtscore.exporters.base import LabelsetExporter, PluginField
 
 
 class SftpLabelsetExporter(LabelsetExporter):
@@ -832,10 +835,10 @@ class SftpLabelsetExporter(LabelsetExporter):
     description = "Upload results JSON to a remote SFTP server."
     icon = "📡"
     fields = [
-        ExporterField("host", "Hostname", "text"),
-        ExporterField("user", "Username", "text"),
-        ExporterField("password", "Password", "password"),
-        ExporterField(
+        PluginField("host", "Hostname", "text"),
+        PluginField("user", "Username", "text"),
+        PluginField("password", "Password", "password"),
+        PluginField(
             "path", "Remote Path", "text",
             default="/results/autodetect.json",
         ),
@@ -858,7 +861,7 @@ class SftpLabelsetExporter(LabelsetExporter):
                         }
                     }
                 }
-            field_values: Mapping of ExporterField.key to user-supplied value.
+            field_values: Mapping of PluginField.key to user-supplied value.
 
         Returns:
             A dict with a "message" key (shown as confirmation to the user).
@@ -998,7 +1001,7 @@ Subclass `LabelImporter` from `vtscore.labels.importers.base`. The
 ```python
 # vtscore/labels/importers/postgres/__init__.py
 
-from vtscore.labels.importers.base import LabelImporter, LabelImporterField
+from vtscore.labels.importers.base import LabelImporter, PluginField
 
 
 class PostgresLabelImporter(LabelImporter):
@@ -1007,9 +1010,9 @@ class PostgresLabelImporter(LabelImporter):
     description = "Import labels from a PostgreSQL database query."
     icon = "🐘"
     fields = [
-        LabelImporterField("host", "Hostname", "text"),
-        LabelImporterField("database", "Database", "text"),
-        LabelImporterField(
+        PluginField("host", "Hostname", "text"),
+        PluginField("database", "Database", "text"),
+        PluginField(
             "query", "SQL Query", "text",
             description="Must return md5 and label columns.",
         ),
@@ -1105,7 +1108,7 @@ The `run()` method must return a dict of settings key-value pairs.
 ```python
 # vtsearch/settings_io/importers/s3/__init__.py
 
-from vtsearch.settings_io.importers.base import SettingsImporter, SettingsImporterField
+from vtsearch.settings_io.importers.base import SettingsImporter, PluginField
 
 
 class S3SettingsImporter(SettingsImporter):
@@ -1114,8 +1117,8 @@ class S3SettingsImporter(SettingsImporter):
     description = "Import settings from an S3 object."
     icon = "☁️"
     fields = [
-        SettingsImporterField("bucket", "S3 Bucket", "text"),
-        SettingsImporterField("key", "Object Key", "text"),
+        PluginField("bucket", "S3 Bucket", "text"),
+        PluginField("key", "Object Key", "text"),
     ]
 
     def run(self, field_values: dict) -> dict:
@@ -1177,7 +1180,7 @@ dict with a `"message"` key.
 ```python
 # vtsearch/settings_io/exporters/s3/__init__.py
 
-from vtsearch.settings_io.exporters.base import SettingsExporter, SettingsExporterField
+from vtsearch.settings_io.exporters.base import SettingsExporter, PluginField
 
 
 class S3SettingsExporter(SettingsExporter):
@@ -1186,8 +1189,8 @@ class S3SettingsExporter(SettingsExporter):
     description = "Export settings to an S3 object."
     icon = "☁️"
     fields = [
-        SettingsExporterField("bucket", "S3 Bucket", "text"),
-        SettingsExporterField("key", "Object Key", "text"),
+        PluginField("bucket", "S3 Bucket", "text"),
+        PluginField("key", "Object Key", "text"),
     ]
 
     def export(self, settings_data: dict, field_values: dict) -> dict:

@@ -18,6 +18,7 @@ import unittest.mock as mock
 import numpy as np
 import pytest
 
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.media.audio.audio_generator import generate_wav
 
 
@@ -31,7 +32,8 @@ def _make_audio_media(media_id: int, duration: float = 5.1) -> dict:
         "media_bytes": wav,
         "duration": duration,
         "md5": hashlib.md5(wav).hexdigest(),
-        "embedding": rng.standard_normal(512).astype(np.float32),
+        "embedder": "clap",
+        "embeddings": {"clap": rng.standard_normal(512).astype(np.float32)},
         "origin": {"importer": "server_folder", "params": {"path": "/data/audio", "media_type": "audio"}},
         "origin_name": f"clip_{media_id}.wav",
     }
@@ -53,7 +55,8 @@ def _make_image_media(media_id: int, width: int = 300, height: int = 100) -> dic
         "width": width,
         "height": height,
         "md5": hashlib.md5(img_bytes).hexdigest(),
-        "embedding": rng.standard_normal(512).astype(np.float32),
+        "embedder": "siglip",
+        "embeddings": {"siglip": rng.standard_normal(512).astype(np.float32)},
         "origin": {"importer": "server_folder", "params": {"path": "/data/images", "media_type": "image"}},
         "origin_name": f"img_{media_id}.png",
     }
@@ -69,7 +72,8 @@ def _make_text_media(media_id: int, text: str = "First sentence. Second sentence
         "media_string": text,
         "media_bytes": text_bytes,
         "md5": hashlib.md5(text_bytes).hexdigest(),
-        "embedding": rng.standard_normal(512).astype(np.float32),
+        "embedder": "e5",
+        "embeddings": {"e5": rng.standard_normal(512).astype(np.float32)},
         "origin": {"importer": "server_folder", "params": {"path": "/data/texts", "media_type": "text"}},
         "origin_name": f"text_{media_id}.txt",
     }
@@ -141,7 +145,7 @@ class TestBulkClipReembed:
         ordered = list(clips_dict.values())
         for slot_idx, clip in enumerate(ordered):
             expected = np.full(512, float(slot_idx + 1), dtype=np.float32)
-            np.testing.assert_array_equal(clip["embedding"], expected)
+            np.testing.assert_array_equal(media_embedding(clip), expected)
 
 
 class TestClipReembedLoadingProgressPassthrough:
@@ -208,7 +212,7 @@ class TestBulkClipReembedFailureFallback:
         from vtscore.datasets.stages.clipper import _apply_clipper
 
         parent = _make_audio_media(1, duration=5.1)
-        parent_vec = parent["embedding"].copy()
+        parent_vec = media_embedding(parent).copy()
 
         emb = mock.MagicMock()
         emb._on_progress = lambda *a, **kw: None
@@ -220,13 +224,13 @@ class TestBulkClipReembedFailureFallback:
 
         assert emb.embed_media_bulk.call_count == 1
         for clip in clips_dict.values():
-            np.testing.assert_array_equal(clip["embedding"], parent_vec)
+            np.testing.assert_array_equal(media_embedding(clip), parent_vec)
 
     def test_bulk_exception_leaves_parent_embedding_intact(self):
         from vtscore.datasets.stages.clipper import _apply_clipper
 
         parent = _make_audio_media(1, duration=5.1)
-        parent_vec = parent["embedding"].copy()
+        parent_vec = media_embedding(parent).copy()
 
         emb = mock.MagicMock()
         emb._on_progress = lambda *a, **kw: None
@@ -237,20 +241,20 @@ class TestBulkClipReembedFailureFallback:
             _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
 
         for clip in clips_dict.values():
-            np.testing.assert_array_equal(clip["embedding"], parent_vec)
+            np.testing.assert_array_equal(media_embedding(clip), parent_vec)
 
     def test_no_embedders_registered_skips_bulk_and_keeps_parent(self):
         from vtscore.datasets.stages.clipper import _apply_clipper
 
         parent = _make_audio_media(1, duration=5.1)
-        parent_vec = parent["embedding"].copy()
+        parent_vec = media_embedding(parent).copy()
 
         clips_dict = {1: parent}
         with mock.patch("vtscore.media.embedders_for_type", return_value=[]):
             _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
 
         for clip in clips_dict.values():
-            np.testing.assert_array_equal(clip["embedding"], parent_vec)
+            np.testing.assert_array_equal(media_embedding(clip), parent_vec)
 
 
 class TestBulkClipReembedMD5UnchangedByRefactor:
@@ -339,6 +343,70 @@ class TestSingleOutputClipperMD5Recompute:
 
         assert clip["md5"] == expected_clip_md5
         assert clip["md5"] != parent_md5
+
+
+class TestBlankTextClipNotEmbedded:
+    """A blank / whitespace-only text clip has no embeddable content, so the
+    re-embed fixup must not hand it to the embedder (M21).  Leaving it at
+    ``embedding=None`` lets the load pipeline's ``_drop_none_embeddings_stage``
+    remove it cleanly, and — crucially — an embedder that returns a non-None
+    *garbage* vector for empty input can't sneak it past the None-drop net.
+    """
+
+    @pytest.mark.parametrize("blank", ["", "   ", "\n\t  \n", "\r\n"])
+    def test_blank_text_clip_is_not_embedded(self, blank):
+        from vtscore.datasets.stages.clipper import _fixup_clip_md5_and_embeddings
+
+        clip = {
+            "id": 1,
+            "media_type": "text",
+            "media_string": blank,
+            "embedding": None,
+            "filename": "blank.txt",
+            "origin_name": "blank.txt",
+        }
+
+        emb = _fake_bulk_embedder()
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
+            _fixup_clip_md5_and_embeddings([clip], needs_recompute=[False], media_type="text")
+
+        # Never embedded; stays None for the drop stage to remove.
+        emb.embed_media_bulk.assert_not_called()
+        assert media_embedding(clip) is None
+
+    def test_blank_clip_skipped_but_real_clip_still_embedded(self):
+        """A blank clip alongside a real one is skipped while the real clip is
+        embedded — the blank doesn't poison the batch or shift slots."""
+        from vtscore.datasets.stages.clipper import _fixup_clip_md5_and_embeddings
+
+        blank = {
+            "id": 1,
+            "media_type": "text",
+            "media_string": "   ",
+            "embedding": None,
+            "filename": "blank.txt",
+            "origin_name": "blank.txt",
+        }
+        real = {
+            "id": 2,
+            "media_type": "text",
+            "media_string": "a real paragraph with content",
+            "embedding": None,
+            "filename": "real.txt",
+            "origin_name": "real.txt",
+        }
+
+        emb = _fake_bulk_embedder()
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
+            _fixup_clip_md5_and_embeddings([blank, real], needs_recompute=[False, False], media_type="text")
+
+        # Exactly one media (the real clip) was sent to the embedder.
+        assert emb.embed_media_bulk.call_count == 1
+        sent = emb.embed_media_bulk.call_args.args[0]
+        assert len(sent) == 1
+        assert sent[0]["media_string"] == "a real paragraph with content"
+        assert media_embedding(blank) is None
+        assert media_embedding(real) is not None
 
 
 class TestBulkClipReembedNoTempfile:

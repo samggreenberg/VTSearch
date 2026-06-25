@@ -282,12 +282,18 @@ class AudioMediaType(MediaType):
         "street_music",
     ]
 
+    # TUT Sound Events 2017 ships uncut ~4-minute street soundscapes.  We don't
+    # use its event annotations: every recording goes into one "street" bucket
+    # so the user clips the long files themselves.
+    _TUT_CATEGORIES = ["street"]
+
     @property
     def demo_datasets(self) -> list:
         from vtscore.datasets.downloader import (  # noqa: PLC0415
             ESC50_DOWNLOAD_SIZE_MB,
             GTZAN_DOWNLOAD_SIZE_MB,
             SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
+            TUT_SOUND_EVENTS_2017_DOWNLOAD_SIZE_MB,
             URBANSOUND8K_DOWNLOAD_SIZE_MB,
         )
 
@@ -296,6 +302,10 @@ class AudioMediaType(MediaType):
         esc_desc = "Animals, nature, cities, & homes"
         sc_desc = "Spoken keyword utterances"
         us_desc = "Urban recordings"
+        # 24 development + 8 evaluation recordings, all one "street" bucket.
+        tut_folder = DATA_DIR / "tut_sound_events_2017"
+        tut_desc = "Long ~4min street soundscapes (clip them yourself)"
+        tut_total = 32
         return [
             DemoDataset(
                 id="esc50_s",
@@ -444,6 +454,54 @@ class AudioMediaType(MediaType):
                 items_per_category=873,
                 download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
             ),
+            DemoDataset(
+                id="tut_sound_events_2017_s",
+                label="TUT Sound Events 2017 (S)",
+                description=tut_desc,
+                categories=self._TUT_CATEGORIES,
+                source="tut_sound_events_2017",
+                required_folder=tut_folder,
+                slice_frac_start=0.0,
+                slice_frac_end=1 / 7,
+                items_per_category=tut_total,
+                download_size_mb=TUT_SOUND_EVENTS_2017_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="tut_sound_events_2017_m",
+                label="TUT Sound Events 2017 (M)",
+                description=tut_desc,
+                categories=self._TUT_CATEGORIES,
+                source="tut_sound_events_2017",
+                required_folder=tut_folder,
+                slice_frac_start=1 / 7,
+                slice_frac_end=3 / 7,
+                items_per_category=tut_total,
+                download_size_mb=TUT_SOUND_EVENTS_2017_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="tut_sound_events_2017_l",
+                label="TUT Sound Events 2017 (L)",
+                description=tut_desc,
+                categories=self._TUT_CATEGORIES,
+                source="tut_sound_events_2017",
+                required_folder=tut_folder,
+                slice_frac_start=3 / 7,
+                slice_frac_end=None,
+                items_per_category=tut_total,
+                download_size_mb=TUT_SOUND_EVENTS_2017_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="tut_sound_events_2017_a",
+                label="TUT Sound Events 2017 (A)",
+                description=tut_desc,
+                categories=self._TUT_CATEGORIES,
+                source="tut_sound_events_2017",
+                required_folder=tut_folder,
+                slice_frac_start=0.0,
+                slice_frac_end=None,
+                items_per_category=tut_total,
+                download_size_mb=TUT_SOUND_EVENTS_2017_DOWNLOAD_SIZE_MB,
+            ),
         ]
 
     # ------------------------------------------------------------------
@@ -503,22 +561,35 @@ class AudioMediaType(MediaType):
             by_cat = self._group_metadata_by_category(metadata, categories, filter_to_categories=True)
             return _sliced_by_category(by_cat), us8k_dir / "audio"
 
+        if source == "tut_sound_events_2017":
+            from vtscore.datasets.downloader import download_tut_sound_events_2017  # noqa: PLC0415
+
+            audio_dir = download_tut_sound_events_2017(on_progress=on_progress)
+            # No annotations: every recording is one undifferentiated bucket.
+            category = categories[0] if categories else "street"
+            by_cat = {category: [(p, {"category": category, "path": p}) for p in sorted(audio_dir.rglob("*.wav"))]}
+            return _sliced_by_category(by_cat), audio_dir
+
         if not source or source == "esc50":
             from vtscore.datasets.downloader import download_esc50  # noqa: PLC0415
             from vtscore.datasets.loader import load_esc50_metadata  # noqa: PLC0415
 
             audio_dir = download_esc50(on_progress=on_progress)
             esc_metadata = load_esc50_metadata(audio_dir.parent)
-
-            by_cat: dict[str, list] = {}
-            for audio_path in sorted(audio_dir.glob("*.wav")):
-                if audio_path.name in esc_metadata:
-                    cat = esc_metadata[audio_path.name]["category"]
-                    if cat in categories:
-                        by_cat.setdefault(cat, []).append((audio_path, esc_metadata[audio_path.name]))
+            by_cat = self._esc50_by_category(audio_dir, esc_metadata, categories)
             return _sliced_by_category(by_cat), audio_dir
 
         raise ValueError(f"Unsupported audio source: {source!r}")
+
+    @staticmethod
+    def _esc50_by_category(audio_dir: Path, esc_metadata: dict, categories: list) -> dict[str, list]:
+        """Group ESC-50 wav files by their category, keeping only *categories*."""
+        by_cat: dict[str, list] = {}
+        for audio_path in sorted(audio_dir.glob("*.wav")):
+            meta = esc_metadata.get(audio_path.name)
+            if meta is not None and meta["category"] in categories:
+                by_cat.setdefault(meta["category"], []).append((audio_path, meta))
+        return by_cat
 
     @staticmethod
     def _group_metadata_by_category(
@@ -546,6 +617,7 @@ class AudioMediaType(MediaType):
         embedder=None,
         slice_frac_start=None,
         slice_frac_end=None,
+        skip_embedding=False,
         **kwargs,
     ):
         import hashlib  # noqa: PLC0415
@@ -573,8 +645,9 @@ class AudioMediaType(MediaType):
             on_progress,
         )
 
-        # Load models
-        if getattr(embedder, "_model", None) is None:
+        # Load models (skipped when a clipper will re-embed every clip - see
+        # skip_embedding in load_demo_dataset).
+        if not skip_embedding and getattr(embedder, "_model", None) is None:
             on_progress("loading", "Loading audio embedding model…", 0, 0)
             original_cb = embedder._on_progress
             embedder._on_progress = on_progress
@@ -585,17 +658,23 @@ class AudioMediaType(MediaType):
 
         clip_id = max(clips.keys(), default=0) + 1
         total = len(audio_files)
-        on_progress("embedding", f"Starting embedding for {total} audio files...", 0, total)
+        status = "loading" if skip_embedding else "embedding"
+        verb = "Loading" if skip_embedding else "Embedding"
+        on_progress(status, f"{verb} {total} audio files...", 0, total)
         demo_origin: dict = {"importer": "demo", "params": {}}
 
         from vtscore.media.embedder import media_from_path  # noqa: PLC0415
 
         for i, (audio_path, meta) in enumerate(audio_files):
             rel_name = f"{meta['category']}/{audio_path.name}"
-            on_progress("embedding", f"Embedding {rel_name}", i + 1, total)
-            embedding = embedder.embed_media(media_from_path(audio_path))
-            if embedding is None:
-                continue
+            if skip_embedding:
+                on_progress("loading", f"Loading {rel_name}", i + 1, total)
+                embedding = None
+            else:
+                on_progress("embedding", f"Embedding {rel_name}", i + 1, total)
+                embedding = embedder.embed_media(media_from_path(audio_path))
+                if embedding is None:
+                    continue
 
             with open(audio_path, "rb") as f:
                 wav_bytes = f.read()
@@ -608,7 +687,7 @@ class AudioMediaType(MediaType):
                 "duration": media_fields["duration"],
                 "file_size": len(wav_bytes),
                 "md5": hashlib.md5(wav_bytes).hexdigest(),
-                "embedding": embedding,
+                "embeddings": {} if skip_embedding else {embedder.name: embedding},
                 "media_bytes": wav_bytes,
                 "thumbnail_bytes": media_fields.get("thumbnail_bytes"),
                 "filename": rel_name,

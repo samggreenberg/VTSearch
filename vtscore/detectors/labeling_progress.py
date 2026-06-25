@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.training.mlp import train_model
 from vtscore.training.thresholds import find_optimal_threshold
 
@@ -153,9 +154,9 @@ def inject_live_model(
 def _build_diversity_tree(clips_dict: dict[int, dict[str, Any]]) -> Any:
     """Build a DiversityTree from clip embeddings, or ``None`` if no embeddings."""
     vectors: dict[int, np.ndarray] = {
-        cid: np.asarray(media["embedding"], dtype=np.float32)
+        cid: np.asarray(media_embedding(media), dtype=np.float32)
         for cid, media in clips_dict.items()
-        if media.get("embedding") is not None
+        if media_embedding(media) is not None
     }
     if not vectors:
         return None
@@ -209,12 +210,12 @@ def _collect_training_data(
     X_list: list[np.ndarray] = []
     y_list: list[float] = []
     for cid in _cache_good_ids:
-        if cid in clips_dict and clips_dict[cid].get("embedding") is not None:
-            X_list.append(clips_dict[cid]["embedding"])
+        if cid in clips_dict and media_embedding(clips_dict[cid]) is not None:
+            X_list.append(media_embedding(clips_dict[cid]))
             y_list.append(1.0)
     for cid in _cache_bad_ids:
-        if cid in clips_dict and clips_dict[cid].get("embedding") is not None:
-            X_list.append(clips_dict[cid]["embedding"])
+        if cid in clips_dict and media_embedding(clips_dict[cid]) is not None:
+            X_list.append(media_embedding(clips_dict[cid]))
             y_list.append(0.0)
     return X_list, y_list
 
@@ -233,13 +234,13 @@ def _compute_step_stability(
 
     labeled_ids = _cache_good_ids | _cache_bad_ids
     unlabeled_ids = [
-        cid for cid in all_media_ids if cid not in labeled_ids and clips_dict.get(cid, {}).get("embedding") is not None
+        cid for cid in all_media_ids if cid not in labeled_ids and media_embedding(clips_dict.get(cid, {})) is not None
     ]
 
     if not unlabeled_ids:
         return {"time_index": t, "num_labels": num_labels, "num_flips": 0, "num_unlabeled": 0}
 
-    unlabeled_embs = np.array([clips_dict[cid]["embedding"] for cid in unlabeled_ids])
+    unlabeled_embs = np.array([media_embedding(clips_dict[cid]) for cid in unlabeled_ids])
     X_unlabeled = torch.tensor(unlabeled_embs, dtype=torch.float32)
 
     with torch.no_grad():
@@ -309,7 +310,51 @@ def _train_step(
     return model, threshold, stability
 
 
-def _ensure_cache(  # noqa: C901
+def _resolve_step_model(
+    clips_dict: dict[int, dict[str, Any]],
+    all_media_ids: list[int],
+    t: int,
+    num_labels: int,
+    inclusion_value: int,
+    good_ids: list[int],
+    bad_ids: list[int],
+    prev: Optional[dict[str, Any]],
+) -> tuple[Optional[nn.Sequential], Optional[float], Optional[dict[str, Any]]]:
+    """Resolve the model, threshold, and stability for one cache step.
+
+    Reuses the previous step's model when the training data is unchanged,
+    otherwise reuses a live model injected by ``train_and_score`` for this
+    exact label set, or trains a fresh one.  Returns ``(model, threshold,
+    stability)``.
+    """
+    # Check whether the training data actually changed compared to the
+    # previous step.  If the good/bad ID sets are identical, the model
+    # would be the same - skip training and stability recording so the
+    # line graph and Stable indicator only reflect genuine model updates.
+    training_data_changed = (
+        prev is None or set(good_ids) != set(prev["good_ids"]) or set(bad_ids) != set(prev["bad_ids"])
+    )
+
+    if not training_data_changed:
+        # Reuse previous model - no new training or stability entry.
+        model = prev["model"] if prev else None
+        threshold = prev["threshold"] if prev else None
+        return model, threshold, None
+
+    # Check whether train_and_score already produced a model for
+    # this exact label set during live sorting.  If so, reuse it
+    # (correct cross-calibrated threshold, zero compute cost).
+    live_key = (frozenset(_cache_good_ids), frozenset(_cache_bad_ids))
+    live = _live_models.get(live_key)
+    if live is not None:
+        model, threshold = live
+        stability = _compute_step_stability(model, threshold, clips_dict, all_media_ids, t, num_labels)
+        return model, threshold, stability
+
+    return _train_step(clips_dict, all_media_ids, t, num_labels, inclusion_value)
+
+
+def _ensure_cache(
     clips_dict: dict[int, dict[str, Any]],
     label_history: list[tuple[int, str, float]],
     inclusion_value: int,
@@ -355,31 +400,10 @@ def _ensure_cache(  # noqa: C901
         bad_ids = list(_cache_bad_ids)
         num_labels = len(good_ids) + len(bad_ids)
 
-        # Check whether the training data actually changed compared to the
-        # previous step.  If the good/bad ID sets are identical, the model
-        # would be the same - skip training and stability recording so the
-        # line graph and Stable indicator only reflect genuine model updates.
         prev = _cached_steps[-1] if _cached_steps else None
-        training_data_changed = (
-            prev is None or set(good_ids) != set(prev["good_ids"]) or set(bad_ids) != set(prev["bad_ids"])
+        model, threshold, stability = _resolve_step_model(
+            clips_dict, all_media_ids, t, num_labels, inclusion_value, good_ids, bad_ids, prev
         )
-
-        if training_data_changed:
-            # Check whether train_and_score already produced a model for
-            # this exact label set during live sorting.  If so, reuse it
-            # (correct cross-calibrated threshold, zero compute cost).
-            live_key = (frozenset(_cache_good_ids), frozenset(_cache_bad_ids))
-            live = _live_models.get(live_key)
-            if live is not None:
-                model, threshold = live
-                stability = _compute_step_stability(model, threshold, clips_dict, all_media_ids, t, num_labels)
-            else:
-                model, threshold, stability = _train_step(clips_dict, all_media_ids, t, num_labels, inclusion_value)
-        else:
-            # Reuse previous model - no new training or stability entry.
-            model = prev["model"] if prev else None
-            threshold = prev["threshold"] if prev else None
-            stability = None
 
         _cached_steps.append(
             {
@@ -398,7 +422,87 @@ def _ensure_cache(  # noqa: C901
 # ---------------------------------------------------------------------------
 
 
-def _eval_cached_models(  # noqa: C901
+def _score_step(
+    step: dict[str, Any],
+    X_eval: Any,
+    eval_labels: list[float],
+    total_positives: int,
+    total_negatives: int,
+    fpr_weight: float,
+    fnr_weight: float,
+    t: int,
+) -> dict[str, Any]:
+    """Score one cached step against the evaluation set (forward pass only).
+
+    Returns an error-cost dict for the step.  The caller guarantees
+    ``step["model"]`` is not ``None``.
+    """
+    import torch  # noqa: PLC0415
+
+    with torch.no_grad():
+        X_in = X_eval.to(next(step["model"].parameters()).device)
+        scores = torch.sigmoid(step["model"](X_in)).squeeze(1).cpu().tolist()
+
+    fp = fn = 0
+    for score, true_label in zip(scores, eval_labels, strict=True):
+        predicted = 1 if score >= step["threshold"] else 0
+        if predicted == 1 and true_label == 0:
+            fp += 1
+        elif predicted == 0 and true_label == 1:
+            fn += 1
+
+    fpr = fp / total_negatives if total_negatives > 0 else 0.0
+    fnr = fn / total_positives if total_positives > 0 else 0.0
+    error_cost = fpr_weight * fpr + fnr_weight * fnr
+
+    return {
+        "time_index": t,
+        "num_labels": len(step["good_ids"]) + len(step["bad_ids"]),
+        "error_cost": round(error_cost, 4),
+        "fpr": round(fpr, 4),
+        "fnr": round(fnr, 4),
+    }
+
+
+def _build_eval_set(
+    clips_dict: dict[int, dict[str, Any]],
+    current_good_votes: dict[int, None],
+    current_bad_votes: dict[int, None],
+) -> Optional[tuple[Any, list[float], int, int]]:
+    """Build the evaluation tensor and label set from the current votes.
+
+    Returns ``(X_eval, eval_labels, total_positives, total_negatives)`` or
+    ``None`` when there are no usable labeled medias to evaluate against.
+    """
+    # Build evaluation set from current votes
+    current_labels: dict[int, float] = {}
+    for cid in current_good_votes:
+        current_labels[cid] = 1.0
+    for cid in current_bad_votes:
+        current_labels[cid] = 0.0
+
+    if not current_labels:
+        return None
+
+    eval_embs: list[np.ndarray] = []
+    eval_labels: list[float] = []
+    for cid, lbl in current_labels.items():
+        if cid in clips_dict and media_embedding(clips_dict[cid]) is not None:
+            eval_embs.append(media_embedding(clips_dict[cid]))
+            eval_labels.append(lbl)
+
+    if not eval_embs:
+        return None
+
+    import torch  # noqa: PLC0415
+
+    X_eval = torch.tensor(np.array(eval_embs), dtype=torch.float32)
+    total_positives = sum(1 for lbl in eval_labels if lbl == 1)
+    total_negatives = len(eval_labels) - total_positives
+    return X_eval, eval_labels, total_positives, total_negatives
+
+
+def _eval_cached_models(
     clips_dict: dict[int, dict[str, Any]],
     current_good_votes: dict[int, None],
     current_bad_votes: dict[int, None],
@@ -418,31 +522,10 @@ def _eval_cached_models(  # noqa: C901
         fpr_weight = 2.0 ** (-inclusion_value)
         fnr_weight = 1.0
 
-    # Build evaluation set from current votes
-    current_labels: dict[int, float] = {}
-    for cid in current_good_votes:
-        current_labels[cid] = 1.0
-    for cid in current_bad_votes:
-        current_labels[cid] = 0.0
-
-    if not current_labels:
+    eval_set = _build_eval_set(clips_dict, current_good_votes, current_bad_votes)
+    if eval_set is None:
         return []
-
-    eval_embs: list[np.ndarray] = []
-    eval_labels: list[float] = []
-    for cid, lbl in current_labels.items():
-        if cid in clips_dict and clips_dict[cid].get("embedding") is not None:
-            eval_embs.append(clips_dict[cid]["embedding"])
-            eval_labels.append(lbl)
-
-    if not eval_embs:
-        return []
-
-    import torch  # noqa: PLC0415
-
-    X_eval = torch.tensor(np.array(eval_embs), dtype=torch.float32)
-    total_positives = sum(1 for lbl in eval_labels if lbl == 1)
-    total_negatives = len(eval_labels) - total_positives
+    X_eval, eval_labels, total_positives, total_negatives = eval_set
 
     if end is None:
         end = len(_cached_steps)
@@ -453,30 +536,8 @@ def _eval_cached_models(  # noqa: C901
         if step["model"] is None:
             continue
 
-        with torch.no_grad():
-            X_in = X_eval.to(next(step["model"].parameters()).device)
-            scores = torch.sigmoid(step["model"](X_in)).squeeze(1).cpu().tolist()
-
-        fp = fn = 0
-        for score, true_label in zip(scores, eval_labels, strict=True):
-            predicted = 1 if score >= step["threshold"] else 0
-            if predicted == 1 and true_label == 0:
-                fp += 1
-            elif predicted == 0 and true_label == 1:
-                fn += 1
-
-        fpr = fp / total_negatives if total_negatives > 0 else 0.0
-        fnr = fn / total_positives if total_positives > 0 else 0.0
-        error_cost = fpr_weight * fpr + fnr_weight * fnr
-
         results.append(
-            {
-                "time_index": t,
-                "num_labels": len(step["good_ids"]) + len(step["bad_ids"]),
-                "error_cost": round(error_cost, 4),
-                "fpr": round(fpr, 4),
-                "fnr": round(fnr, 4),
-            }
+            _score_step(step, X_eval, eval_labels, total_positives, total_negatives, fpr_weight, fnr_weight, t)
         )
 
     return results

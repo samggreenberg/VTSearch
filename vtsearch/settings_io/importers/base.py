@@ -15,9 +15,7 @@ from typing import Any
 
 from vtscore.plugins import PluginBase, PluginField
 
-SettingsImporterField = PluginField
-
-__all__ = ["SettingsImporter", "SettingsImporterField"]
+__all__ = ["PluginField", "SettingsImporter"]
 
 
 class SettingsImporter(PluginBase):

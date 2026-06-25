@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, OnDestroy, OnInit } from '@angular/core';
 
 import { Router } from '@angular/router';
 import { Subject, combineLatest } from 'rxjs';
@@ -18,6 +18,7 @@ import { DatasetRegistryEntry, DetectorRegistryEntry } from '../../models/api.mo
  * just renders the explanation given the current active pair.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-incompatible-pair-explainer',
   standalone: true,
   imports: [],

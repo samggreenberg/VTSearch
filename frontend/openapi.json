@@ -1105,6 +1105,13 @@
             "default": "",
             "type": "string"
           },
+          "clipper_params": {
+            "additionalProperties": {},
+            "default": null,
+            "description": "Optional parameter overrides for `clipper` (e.g. `{\"duration\": 5.0}`). Only applied when `clipper` names a real, non-default clipper.",
+            "nullable": true,
+            "type": "object"
+          },
           "converter": {
             "default": "",
             "type": "string"
@@ -1116,6 +1123,15 @@
           "embedder": {
             "default": "",
             "type": "string"
+          },
+          "embedders": {
+            "default": null,
+            "description": "v3 trio of create-time embedder picks (text / patch / structural). When set, every name is embedded so a multi-embedder dataset is produced; omitted falls back to the single `embedder`.",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
           },
           "name": {
             "minLength": 1,
@@ -1681,6 +1697,10 @@
       "DetectorCreateRequest": {
         "additionalProperties": false,
         "properties": {
+          "embedder_type": {
+            "default": "",
+            "type": "string"
+          },
           "examples": {
             "default": null,
             "items": {
@@ -1781,6 +1801,9 @@
           "created_at": {
             "type": "number"
           },
+          "embedder_type": {
+            "type": "string"
+          },
           "examples": {
             "items": {
               "additionalProperties": {},
@@ -1852,16 +1875,17 @@
       "DetectorLabelVoteRequest": {
         "additionalProperties": false,
         "properties": {
-          "vote": {
+          "target": {
             "enum": [
               "good",
-              "bad"
+              "bad",
+              "remove"
             ],
             "type": "string"
           }
         },
         "required": [
-          "vote"
+          "target"
         ],
         "type": "object"
       },
@@ -1980,6 +2004,10 @@
       "DetectorRegistryCreateRequest": {
         "additionalProperties": false,
         "properties": {
+          "embedder_type": {
+            "default": "",
+            "type": "string"
+          },
           "examples": {
             "default": null,
             "items": {
@@ -2060,6 +2088,9 @@
             "type": "boolean"
           },
           "embedder": {
+            "type": "string"
+          },
+          "embedder_type": {
             "type": "string"
           },
           "id": {
@@ -2251,6 +2282,9 @@
           "embedder": {
             "type": "string"
           },
+          "embedder_type": {
+            "type": "string"
+          },
           "last_trained_at": {
             "nullable": true
           },
@@ -2291,6 +2325,7 @@
           "clipper",
           "created_by",
           "embedder",
+          "embedder_type",
           "media_example",
           "media_type",
           "name",
@@ -3694,6 +3729,12 @@
           "embedder": {
             "type": "string"
           },
+          "embedders": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "filename": {
             "type": "string"
           },
@@ -3724,6 +3765,12 @@
         "properties": {
           "embedder": {
             "type": "string"
+          },
+          "embedders": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "id": {
             "type": "integer"
@@ -5201,6 +5248,9 @@
           "created_at": {
             "type": "number"
           },
+          "embedder_type": {
+            "type": "string"
+          },
           "examples": {
             "items": {
               "additionalProperties": {},
@@ -5597,6 +5647,10 @@
             "default": null,
             "nullable": true
           },
+          "embedders": {
+            "default": null,
+            "nullable": true
+          },
           "name": {
             "default": "",
             "type": "string"
@@ -5638,6 +5692,10 @@
             "default": "",
             "type": "string"
           },
+          "embedders": {
+            "default": null,
+            "nullable": true
+          },
           "name": {
             "enum": [
               "esc50_s",
@@ -5653,6 +5711,10 @@
               "urbansound8k_m",
               "urbansound8k_l",
               "urbansound8k_a",
+              "tut_sound_events_2017_s",
+              "tut_sound_events_2017_m",
+              "tut_sound_events_2017_l",
+              "tut_sound_events_2017_a",
               "caltech101_s",
               "caltech101_m",
               "caltech101_l",
@@ -5681,6 +5743,10 @@
               "roxford5k_s",
               "roxford5k_a",
               "ucsf_documents_a",
+              "visual_genome_s",
+              "visual_genome_m",
+              "visual_genome_l",
+              "visual_genome_a",
               "20newsgroups_s",
               "20newsgroups_m",
               "20newsgroups_l",
@@ -5758,6 +5824,10 @@
             "default": null,
             "nullable": true
           },
+          "embedders": {
+            "default": null,
+            "nullable": true
+          },
           "media_type": {
             "default": "audio",
             "enum": [
@@ -5806,6 +5876,10 @@
             "default": null,
             "nullable": true
           },
+          "embedders": {
+            "default": null,
+            "nullable": true
+          },
           "source_specs": {
             "default": null,
             "nullable": true
@@ -5833,6 +5907,10 @@
             "nullable": true
           },
           "embedder": {
+            "default": null,
+            "nullable": true
+          },
+          "embedders": {
             "default": null,
             "nullable": true
           },
@@ -5866,6 +5944,10 @@
             "nullable": true
           },
           "embedder": {
+            "default": null,
+            "nullable": true
+          },
+          "embedders": {
             "default": null,
             "nullable": true
           },
@@ -5917,6 +5999,10 @@
             "default": null,
             "nullable": true
           },
+          "embedders": {
+            "default": null,
+            "nullable": true
+          },
           "media_type": {
             "default": "audio",
             "enum": [
@@ -5931,6 +6017,9 @@
           },
           "paths_file": {
             "type": "string"
+          },
+          "reference_files": {
+            "default": null
           },
           "source_specs": {
             "default": null,
@@ -5968,6 +6057,10 @@
             "default": null,
             "nullable": true
           },
+          "embedders": {
+            "default": null,
+            "nullable": true
+          },
           "media_type": {
             "default": "audio",
             "enum": [
@@ -5984,6 +6077,9 @@
             "type": "string"
           },
           "recursive": {
+            "default": null
+          },
+          "reference_files": {
             "default": null
           },
           "source_specs": {
@@ -6016,6 +6112,10 @@
             "nullable": true
           },
           "embedder": {
+            "default": null,
+            "nullable": true
+          },
+          "embedders": {
             "default": null,
             "nullable": true
           },
@@ -6227,6 +6327,10 @@
               "urbansound8k_m",
               "urbansound8k_l",
               "urbansound8k_a",
+              "tut_sound_events_2017_s",
+              "tut_sound_events_2017_m",
+              "tut_sound_events_2017_l",
+              "tut_sound_events_2017_a",
               "caltech101_s",
               "caltech101_m",
               "caltech101_l",
@@ -6255,6 +6359,10 @@
               "roxford5k_s",
               "roxford5k_a",
               "ucsf_documents_a",
+              "visual_genome_s",
+              "visual_genome_m",
+              "visual_genome_l",
+              "visual_genome_a",
               "20newsgroups_s",
               "20newsgroups_m",
               "20newsgroups_l",
@@ -6426,6 +6534,9 @@
           "paths_file": {
             "type": "string"
           },
+          "reference_files": {
+            "default": null
+          },
           "source_specs": {
             "default": null,
             "nullable": true
@@ -6462,6 +6573,9 @@
             "type": "string"
           },
           "recursive": {
+            "default": null
+          },
+          "reference_files": {
             "default": null
           },
           "source_specs": {
@@ -10647,7 +10761,7 @@
         }
       ],
       "post": {
-        "description": "Body: ``{\"vote\": \"good\"}`` or ``{\"vote\": \"bad\"}``.\n\nToggle semantics mirror :func:`~vtsearch.state.toggle_vote`: the same\nvote on an element with that label removes the element; the opposite\nvote flips it.  When the element resolves into the active dataset, the\ndetector's in-memory ``good_votes`` / ``bad_votes`` are kept in sync so\nMLP retraining and learned-sort see the change.",
+        "description": "Body: ``{\"target\": \"good\"}``, ``{\"target\": \"bad\"}``, or\n``{\"target\": \"remove\"}``.\n\nAbsolute-target semantics mirror :func:`~vtsearch.state.set_vote`:\n``\"good\"`` / ``\"bad\"`` set the element's label (a re-assert of the\ncurrent label is an idempotent no-op), ``\"remove\"`` drops the element.\nWhen the element resolves into the active dataset, the detector's\nin-memory ``good_votes`` / ``bad_votes`` are kept in sync so MLP\nretraining and learned-sort see the change.",
         "operationId": "vote_detector_label",
         "requestBody": {
           "content": {
@@ -10680,7 +10794,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Toggle the label on a saved labelset element.",
+        "summary": "Set a saved labelset element's label to an absolute target.",
         "tags": [
           "detectors_labels"
         ]
@@ -11004,7 +11118,7 @@
     },
     "/api/example-sort-by-id": {
       "post": {
-        "description": "When ``crop_params`` is absent the existing ``media[\"embedding\"]``\nis reused (no fetch, no re-embed).  When set, the media's bytes are\nmaterialised, cropped, and re-embedded before sorting.",
+        "description": "When ``crop_params`` is absent the existing ``media[\"embeddings\"]``\nvector is reused (no fetch, no re-embed).  When set, the media's bytes are\nmaterialised, cropped, and re-embedded before sorting.",
         "operationId": "example_sort_by_id",
         "requestBody": {
           "content": {

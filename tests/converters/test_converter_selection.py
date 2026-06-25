@@ -19,6 +19,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from vtscore.datasets.importers.base import SourceSpec
+from vtscore.embedding.media_vectors import media_embedding
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -455,7 +456,7 @@ class TestRunConvertersOnFolder:
         assert media["media_type"] == "image"
 
         # Embedding is deferred to the framework embed stage.
-        assert media["embedding"] is None
+        assert media_embedding(media) is None
         # media_bytes flows through from the converter output so the
         # framework embed stage can embed without a tempfile.
         assert media["media_bytes"] is not None
@@ -508,6 +509,76 @@ class TestRunConvertersOnFolder:
         assert len(medias) == 3
         # All should have sequential IDs
         assert sorted(medias.keys()) == [1, 2, 3]
+
+    def test_stamps_sub_output_disambiguators(self, tmp_path):
+        """Every converter output records out_index / n_out / content_hash so
+        a lazy or cross-dataset replay can re-select the exact sub-output."""
+        from vtscore.datasets.clipper_chain import _content_hash
+        from vtscore.converters.runner import run_converters_on_folder
+
+        (tmp_path / "long_video.mp4").write_bytes(b"video-data")
+
+        fake_outputs = [
+            {"filename": f"frame_{i}.png", "media_bytes": _make_png_bytes(width=4 + i), "duration": 0} for i in range(3)
+        ]
+        mock_converter = self._mock_video2image_converter(convert_return=fake_outputs)
+
+        medias: dict = {}
+        with (
+            patch("vtscore.converters.get_converter", return_value=mock_converter),
+            patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
+        ):
+            run_converters_on_folder(
+                folder_path=tmp_path,
+                converter_specs=[SourceSpec(source_type="video", converter="video2image")],
+                target_media_type="image",
+                medias=medias,
+                on_progress=lambda *a: None,
+            )
+
+        assert len(medias) == 3
+        for i, mid in enumerate(sorted(medias)):
+            params = medias[mid]["origin"]["params"]
+            assert params["converter_out_index"] == str(i)
+            assert params["converter_n_out"] == "3"
+            assert params["converter_content_hash"] == _content_hash(fake_outputs[i])
+        # Per-output origins must be distinct objects, not one shared dict.
+        assert medias[1]["origin"] is not medias[2]["origin"]
+        # Non-thin import keeps inline bytes and stamps no lazy marker.
+        assert "_lazy_source" not in medias[1]
+
+    def test_thin_mode_tags_lazy_source_and_keeps_bytes(self, tmp_path):
+        """Reference (thin) mode tags each output with _lazy_source (for the
+        re-lazify stage) while keeping media_bytes for the embed stage."""
+        from vtscore.converters.runner import run_converters_on_folder
+
+        (tmp_path / "long_video.mp4").write_bytes(b"video-data")
+
+        fake_outputs = [
+            {"filename": f"frame_{i}.png", "media_bytes": _make_png_bytes(), "duration": 0} for i in range(2)
+        ]
+        mock_converter = self._mock_video2image_converter(convert_return=fake_outputs)
+
+        medias: dict = {}
+        with (
+            patch("vtscore.converters.get_converter", return_value=mock_converter),
+            patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
+        ):
+            run_converters_on_folder(
+                folder_path=tmp_path,
+                converter_specs=[SourceSpec(source_type="video", converter="video2image")],
+                target_media_type="image",
+                medias=medias,
+                on_progress=lambda *a: None,
+                thin=True,
+            )
+
+        resolved_source = str((tmp_path / "long_video.mp4").resolve())
+        assert len(medias) == 2
+        for media in medias.values():
+            assert media["_lazy_source"] == resolved_source
+            assert media["media_bytes"] is not None  # kept for the embed stage
+            assert media["media_path"] == resolved_source
 
     def test_converter_failure_skips_file(self, tmp_path):
         """If converter.convert() raises, that file is skipped."""
@@ -892,6 +963,30 @@ class TestConverterAcceptsParams:
         assert c.get_param({"n_clips": "30"}, "n_clips") == "30"
         # Default falls back to the field's declared default.
         assert c.get_param({}, "n_clips") == "10"
+
+    def test_get_param_unknown_key_returns_empty_and_warns(self, caplog):
+        """An undeclared key still returns "" (historical contract) but now
+        logs a warning so a renamed/typo'd field isn't swallowed silently (L9)."""
+        import logging
+
+        from vtscore.converters import get_converter
+
+        c = get_converter("video2image")
+        assert c is not None
+        with caplog.at_level(logging.WARNING, logger="vtscore.converters.base"):
+            assert c.get_param({}, "no_such_field") == ""
+        assert any("no field declares that key" in r.message for r in caplog.records)
+
+    def test_get_param_declared_key_does_not_warn(self, caplog):
+        import logging
+
+        from vtscore.converters import get_converter
+
+        c = get_converter("video2image")
+        assert c is not None
+        with caplog.at_level(logging.WARNING, logger="vtscore.converters.base"):
+            c.get_param({}, "n_clips")
+        assert not any("no field declares that key" in r.message for r in caplog.records)
 
 
 class TestImportAPISourceSpecs:

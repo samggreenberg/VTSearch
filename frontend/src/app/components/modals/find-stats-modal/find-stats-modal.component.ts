@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, OnInit, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsFindApiService } from '../../../services/detectors-find-api.service';
@@ -20,6 +20,7 @@ interface ChartPoint {
  * See docs/plans/find-verification-workflow.md.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-find-stats-modal',
   standalone: true,
   imports: [CommonModule, ModalComponent],

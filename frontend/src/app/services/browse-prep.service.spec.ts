@@ -1,4 +1,4 @@
-import { TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { Observable, Subject, of, throwError } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -8,6 +8,7 @@ import { ActiveContextService } from './active-context.service';
 import { ContextSwitchService } from './context-switch.service';
 import { ProgressEventsService } from './progress-events.service';
 import { ProjectionApiService } from './projection-api.service';
+import { configureZoneless } from '../testing/zoneless-testbed';
 import { LoadingTask } from '../models/api.models';
 import type { ProjectionBuildResponse, ProjectionMeta } from '../models/projection.models';
 
@@ -74,7 +75,7 @@ describe('BrowsePrepService', () => {
       build: (): Observable<ProjectionBuildResponse> => buildProvider(),
     };
 
-    TestBed.configureTestingModule({
+    configureZoneless({
       providers: [
         provideRouter([]),
         { provide: ContextSwitchService, useValue: contextSwitchStub },
@@ -100,25 +101,30 @@ describe('BrowsePrepService', () => {
     expect(service.preparing).toBe(false);
   });
 
-  it('builds the projection, polls until ready, then navigates', fakeAsync(() => {
-    // idle → build (building) → poll → ready
-    metaProvider = () => of(meta({ status: 'idle' }));
-    buildProvider = () => of({ status: 'building' });
+  it('builds the projection, polls until ready, then navigates', async () => {
+    vi.useFakeTimers();
+    try {
+      // idle → build (building) → poll → ready
+      metaProvider = () => of(meta({ status: 'idle' }));
+      buildProvider = () => of({ status: 'building' });
 
-    service.prepareAndBrowse(DS);
-    applyPair$.next();
+      service.prepareAndBrowse(DS);
+      applyPair$.next();
 
-    // After the build kicks off we are projecting and have not navigated.
-    expect(service.taskKind(DS)).toBe('projection');
-    expect(service.displayTask(DS)?.status).toBe('building');
-    expect(router.navigate).not.toHaveBeenCalled();
+      // After the build kicks off we are projecting and have not navigated.
+      expect(service.taskKind(DS)).toBe('projection');
+      expect(service.displayTask(DS)?.status).toBe('building');
+      expect(router.navigate).not.toHaveBeenCalled();
 
-    // Next poll reports the layout is ready.
-    metaProvider = () => of(meta({ status: 'ready', point_count: 7 }));
-    tick(1000);
+      // Next poll reports the layout is ready.
+      metaProvider = () => of(meta({ status: 'ready', point_count: 7 }));
+      await vi.advanceTimersByTimeAsync(1000);
 
-    expect(router.navigate).toHaveBeenCalledWith(['/browse', DS]);
-  }));
+      expect(router.navigate).toHaveBeenCalledWith(['/browse', DS]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('surfaces a projection build failure inline without navigating', () => {
     metaProvider = () => of(meta({ status: 'idle' }));

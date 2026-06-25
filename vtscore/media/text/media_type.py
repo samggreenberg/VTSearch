@@ -539,6 +539,7 @@ class TextMediaType(MediaType):
         embedder=None,
         slice_frac_start=None,
         slice_frac_end=None,
+        skip_embedding=False,
         **kwargs,
     ):
         import hashlib  # noqa: PLC0415
@@ -566,7 +567,9 @@ class TextMediaType(MediaType):
             on_progress,
         )
 
-        if getattr(embedder, "_model", None) is None:
+        # Load models (skipped when a clipper will re-embed every clip - see
+        # skip_embedding in load_demo_dataset).
+        if not skip_embedding and getattr(embedder, "_model", None) is None:
             on_progress("loading", "Loading text embedding model…", 0, 0)
             original_cb = embedder._on_progress
             embedder._on_progress = on_progress
@@ -577,21 +580,26 @@ class TextMediaType(MediaType):
 
         clip_id = max(clips.keys(), default=0) + 1
         total = len(selected_texts)
-        on_progress("embedding", f"Starting embedding for {total} paragraphs...", 0, total)
+        status = "loading" if skip_embedding else "embedding"
+        verb = "Loading" if skip_embedding else "Embedding"
+        on_progress(status, f"{verb} {total} paragraphs...", 0, total)
         demo_origin_template: dict = {"importer": "demo", "params": {}}
 
         for i, (text_content, category) in enumerate(zip(selected_texts, selected_categories)):
-            on_progress("embedding", f"Embedding {category}", i + 1, total)
+            on_progress(status, f"{verb} {category}", i + 1, total)
             text_content = text_content[:1000].strip()
             if not text_content:
                 continue
-            try:
-                embedding = cast(Any, embedder).embed_text_passage(text_content)
-            except Exception:
-                logging.getLogger(__name__).exception("Error embedding paragraph")
-                continue
-            if embedding is None:
-                continue
+            if skip_embedding:
+                embedding = None
+            else:
+                try:
+                    embedding = cast(Any, embedder).embed_text_passage(text_content)
+                except Exception:
+                    logging.getLogger(__name__).exception("Error embedding paragraph")
+                    continue
+                if embedding is None:
+                    continue
             word_count = len(text_content.split())
             character_count = len(text_content)
             text_bytes = text_content.encode("utf-8")
@@ -603,7 +611,7 @@ class TextMediaType(MediaType):
                 "duration": 0,
                 "file_size": len(text_bytes),
                 "md5": hashlib.md5(text_bytes).hexdigest(),
-                "embedding": embedding,
+                "embeddings": {} if skip_embedding else {embedder.name: embedding},
                 "media_bytes": None,
                 "media_string": text_content,
                 "filename": fname,

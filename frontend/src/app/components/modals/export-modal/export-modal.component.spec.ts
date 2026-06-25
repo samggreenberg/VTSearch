@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ExportModalComponent } from './export-modal.component';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleResource } from '../../../testing/settle-resource';
 
 describe('ExportModalComponent', () => {
@@ -25,7 +26,7 @@ describe('ExportModalComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ExportModalComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ExportModalComponent);
@@ -42,7 +43,10 @@ describe('ExportModalComponent', () => {
   // `detectChanges()`; tick to issue the GETs (the labels read also waits for
   // `ngOnInit` to set the input-derived filter), then settle before asserting.
   async function flushInit(): Promise<void> {
-    fixture.detectChanges();
+    // Zoneless + rxResource: TestBed.tick() runs ngOnInit and the resource
+    // loader effects to issue the GETs. whenStable() can't be used — a loading
+    // rxResource holds the app unstable — so the rxResource specs drive CD with
+    // tick()/settleResource() and never call detectChanges().
     TestBed.tick();
     // The eager status/exporter GETs fire on the tick; the labels GET is
     // released by `ngOnInit`'s signal flip a microtask later, so settle first

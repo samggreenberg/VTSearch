@@ -144,6 +144,23 @@ class TestBinaryClassification:
         acc, prec, rec, f1 = compute_binary_classification_metrics([], [])
         assert acc == 0.0
 
+    def test_empty_logs_degenerate_warning(self, caplog):
+        """An empty prediction set returns all-zero metrics, but logs a warning
+        so the zeros aren't mistaken for a real evaluation (L7)."""
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="vtscore.eval.metrics"):
+            acc, prec, rec, f1 = compute_binary_classification_metrics([], [])
+        assert (acc, prec, rec, f1) == (0.0, 0.0, 0.0, 0.0)
+        assert any("empty prediction set" in r.message for r in caplog.records)
+
+    def test_nonempty_does_not_warn(self, caplog):
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="vtscore.eval.metrics"):
+            compute_binary_classification_metrics([1, 0], [1, 0])
+        assert not any("empty prediction set" in r.message for r in caplog.records)
+
 
 # =====================================================================
 # Metrics: compute_metrics (integration)
@@ -306,7 +323,7 @@ class TestEvalTextSort:
         for _ in range(10):
             emb = cat_dir + rng.normal(0, 0.05, 16)
             emb /= np.linalg.norm(emb)
-            medias[media_id] = {"id": media_id, "embedding": emb, "category": "cat", "media_type": "image"}
+            medias[media_id] = {"id": media_id, "embeddings": {"siglip": emb}, "category": "cat", "media_type": "image"}
             media_id += 1
         # "dog" medias cluster around [0, 1, 0, ...]
         dog_dir = np.zeros(16)
@@ -314,7 +331,7 @@ class TestEvalTextSort:
         for _ in range(10):
             emb = dog_dir + rng.normal(0, 0.05, 16)
             emb /= np.linalg.norm(emb)
-            medias[media_id] = {"id": media_id, "embedding": emb, "category": "dog", "media_type": "image"}
+            medias[media_id] = {"id": media_id, "embeddings": {"siglip": emb}, "category": "dog", "media_type": "image"}
             media_id += 1
         return medias, cat_dir, dog_dir
 
@@ -395,11 +412,21 @@ class TestEvalLearnedSort:
         media_id = 1
         for _ in range(n_per_cat):
             emb = rng.normal(1.0, 0.3, dim).astype(np.float32)
-            medias[media_id] = {"id": media_id, "embedding": emb, "category": "cat_a", "media_type": "image"}
+            medias[media_id] = {
+                "id": media_id,
+                "embeddings": {"siglip": emb},
+                "category": "cat_a",
+                "media_type": "image",
+            }
             media_id += 1
         for _ in range(n_per_cat):
             emb = rng.normal(-1.0, 0.3, dim).astype(np.float32)
-            medias[media_id] = {"id": media_id, "embedding": emb, "category": "cat_b", "media_type": "image"}
+            medias[media_id] = {
+                "id": media_id,
+                "embeddings": {"siglip": emb},
+                "category": "cat_b",
+                "media_type": "image",
+            }
             media_id += 1
         return medias
 
@@ -425,8 +452,18 @@ class TestEvalLearnedSort:
     def test_learned_sort_skips_tiny_categories(self):
         """Categories with < 2 medias should be skipped."""
         medias = {
-            1: {"id": 1, "embedding": np.ones(8, dtype=np.float32), "category": "rare", "media_type": "image"},
-            2: {"id": 2, "embedding": -np.ones(8, dtype=np.float32), "category": "common", "media_type": "image"},
+            1: {
+                "id": 1,
+                "embeddings": {"siglip": np.ones(8, dtype=np.float32)},
+                "category": "rare",
+                "media_type": "image",
+            },
+            2: {
+                "id": 2,
+                "embeddings": {"siglip": -np.ones(8, dtype=np.float32)},
+                "category": "common",
+                "media_type": "image",
+            },
         }
         queries = [EvalQuery("rare stuff", "rare")]
         results = eval_learned_sort(medias, queries, train_fraction=0.5)
@@ -468,3 +505,97 @@ class TestFormatResults:
         assert isinstance(parsed, list)
         assert len(parsed) == 1
         assert parsed[0]["dataset_id"] == "test"
+
+
+# =====================================================================
+# Multi-label ground truth (Visual Genome)
+# =====================================================================
+
+
+class TestMediaIsPositive:
+    """The shared membership test used by every evaluator."""
+
+    def test_single_label_exact_match(self):
+        from vtscore.eval.labels import media_is_positive
+
+        media = {"category": "dog"}
+        assert media_is_positive(media, "dog") is True
+        assert media_is_positive(media, "cat") is False
+
+    def test_multi_label_set_membership(self):
+        from vtscore.eval.labels import media_is_positive
+
+        media = {"category": "man", "categories": ["man", "apple"]}
+        assert media_is_positive(media, "man") is True
+        assert media_is_positive(media, "apple") is True
+        # Closed-world: a category absent from the list is a negative.
+        assert media_is_positive(media, "banana") is False
+
+    def test_empty_categories_list_is_all_negative(self):
+        from vtscore.eval.labels import media_is_positive
+
+        # A present-but-empty list means the image positively matches nothing;
+        # it is NOT treated as single-label fallback.
+        media = {"category": "man", "categories": []}
+        assert media_is_positive(media, "man") is False
+
+
+class TestEvalMultiLabel:
+    """eval_text_sort / eval_learned_sort over multi-label medias."""
+
+    def _make_multilabel_clips(self, n_per_cat=30):
+        """man/apple images point one way, banana images another.
+
+        Each "man eating an apple" image is a positive for BOTH man and apple;
+        banana images are positive for banana only.  This is the wrinkle that
+        the single-label datasets can't express.  Clusters are well-separated
+        (mean +1 vs -1 across all dims) so the learned sort is reliable.
+        """
+        rng = np.random.RandomState(42)
+        medias = {}
+        media_id = 1
+        for _ in range(n_per_cat):
+            emb = rng.normal(1.0, 0.3, 16).astype(np.float32)
+            medias[media_id] = {
+                "id": media_id,
+                "embeddings": {"siglip": emb},
+                "category": "man",
+                "categories": ["man", "apple"],
+                "media_type": "image",
+            }
+            media_id += 1
+        for _ in range(n_per_cat):
+            emb = rng.normal(-1.0, 0.3, 16).astype(np.float32)
+            medias[media_id] = {
+                "id": media_id,
+                "embeddings": {"siglip": emb},
+                "category": "banana",
+                "categories": ["banana"],
+                "media_type": "image",
+            }
+            media_id += 1
+        return medias
+
+    def test_text_sort_counts_overlapping_positives(self):
+        medias = self._make_multilabel_clips()
+        # "man" and "apple" target the SAME 30 images even though they are
+        # different category strings — the multi-label win the single-label
+        # model can't represent.
+        queries = [EvalQuery("a man", "man"), EvalQuery("an apple", "apple")]
+
+        with patch("vtscore.embedding.helpers.embed_text_query", return_value=np.ones(16, dtype=np.float32)):
+            results = eval_text_sort(medias, queries, "image", k_values=[5])
+
+        assert len(results) == 2
+        for qm in results:
+            assert qm.num_relevant == 30
+            assert qm.average_precision > 0.9
+
+    def test_learned_sort_splits_on_multilabel(self):
+        medias = self._make_multilabel_clips()
+        # "apple" has 30 positives (the man+apple images) and 30 negatives
+        # (the banana images) under closed-world — the split is driven by the
+        # categories list, not the single "category" string.
+        results = eval_learned_sort(medias, [EvalQuery("an apple", "apple")], seed=42)
+        assert len(results) == 1
+        assert results[0].f1 > 0.7  # generous threshold for small synthetic data

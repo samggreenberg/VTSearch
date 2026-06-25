@@ -267,6 +267,29 @@
         />
       </div>
 
+      @if (tab === 'blank' && showEmbedderPicker) {
+        <div class="form-group">
+          <label class="col-label" for="detector-embedder-type"
+            title="The kind of embedder this detector trains and scores in. This dataset supplies more than one, so pick the type for this detector; it stays compatible with any dataset of the same type.">
+            Detector Embedder Type
+          </label>
+          <select
+            id="detector-embedder-type"
+            class="form-select"
+            name="detectorEmbedderType"
+            [ngModel]="embedderType()"
+            (ngModelChange)="onEmbedderTypeChange($event)"
+          >
+            @for (type of embedderTypeOptions; track type) {
+              <option [value]="type">{{ embedderTypeLabel(type) }}</option>
+            }
+          </select>
+          @if (primaryLicenseNotice; as notice) {
+            <div class="license-warning" role="note">⚠ {{ notice }}</div>
+          }
+        </div>
+      }
+
       @if (error()) {
         <p class="error-text">{{ error() }}</p>
       }

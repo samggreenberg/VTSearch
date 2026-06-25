@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from vtscore.datasets.importers._npz_vectors import read_npz_embedder_name, read_npz_filenames_and_vectors
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
+from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
 from vtscore.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
 
 logger = logging.getLogger(__name__)
@@ -202,7 +202,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
     picker_view = "form"
     category = "server"
     fields = [
-        ImporterField(
+        PluginField(
             key="media_type",
             label="Dataset MediaType",
             field_type="select",
@@ -214,7 +214,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
             default="audio",
             required=False,
         ),
-        ImporterField(
+        PluginField(
             key="paths_file",
             label="Paths file",
             field_type="server_path",
@@ -227,6 +227,23 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 "Symlinks are followed; directory entries are scanned recursively for media files."
             ),
             accept=".txt,.list,.npz",
+        ),
+        PluginField(
+            key="reference_files",
+            label="Reference files in place (don't copy)",
+            field_type="checkbox",
+            description=(
+                "When enabled, the dataset stores a path reference to each listed "
+                "file on the server instead of copying its bytes in.  Saves storage, "
+                "but the dataset depends on the listed files staying put — moving or "
+                "deleting them breaks it."
+            ),
+            default="false",
+            required=False,
+            # Reference mode is a storage choice, not part of the data source's
+            # identity (see server_folder for the rationale); keep it out of the
+            # persisted origin.
+            include_in_origin=False,
         ),
     ]
 

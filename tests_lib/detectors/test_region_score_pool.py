@@ -23,6 +23,7 @@ import torch.nn as nn
 
 from vtscore.detectors.training import _score_all_media
 from vtscore.embedding.matrix import get_region_matrix_for_snap, invalidate_embedding_matrix
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.media.patch_embed import RegionVector
 from vtscore.state.core import get_active_context
 
@@ -44,7 +45,7 @@ def _region_media(media_id: int, n_regions: int) -> dict:
         "media_type": "image",
         "embedder": "dinov3_patch",
         # Image-level embedding is the fallback row for region-less media.
-        "embedding": rng.standard_normal(DIM).astype(np.float32),
+        "embeddings": {"dinov3_patch": rng.standard_normal(DIM).astype(np.float32)},
         "patch_regions": regions,
     }
 
@@ -74,7 +75,7 @@ class TestRegionMaxPool:
             if regions:
                 vecs = np.stack([r.vec for r in regions]).astype(np.float32)
             else:
-                vecs = clips[cid]["embedding"][None, :].astype(np.float32)
+                vecs = media_embedding(clips[cid])[None, :].astype(np.float32)
             with torch.no_grad():
                 logits = model(torch.from_numpy(vecs)).squeeze(-1)
                 row_scores = torch.sigmoid(logits).numpy()

@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy, OnInit, inject, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, Input, OnDestroy, OnInit, output, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
@@ -17,6 +17,7 @@ import {
 import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-autodetect-results-modal',
   standalone: true,
   imports: [FormsModule, ModalComponent, ClipboardCopyComponent],
@@ -30,9 +31,11 @@ export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
   readonly closed = output<void>();
 
   exportSides: 'good' | 'bad' | 'both' = 'good';
-  exporters: ExporterEntry[] = [];
-  selectedExporter = '';
-  exporterFields: ImporterField[] = [];
+  // Signals: these are written from the getExporters() subscribe callback (not a
+  // zoneless CD trigger) yet read in the template, so they must repaint on emit.
+  readonly exporters = signal<ExporterEntry[]>([]);
+  readonly selectedExporter = signal('');
+  readonly exporterFields = signal<ImporterField[]>([]);
   exportFieldValues: Record<string, string> = {};
 
   /** Columns offered by the shared clipboard control (single-column list mode). */
@@ -49,9 +52,9 @@ export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.exportersApi.getExporters().pipe(takeUntil(this.destroy$)).subscribe({
       next: (list) => {
-        this.exporters = list;
+        this.exporters.set(list);
         if (list.length > 0) {
-          this.selectedExporter = list[0].name;
+          this.selectedExporter.set(list[0].name);
           this.updateExporterFields();
         }
       },
@@ -121,10 +124,11 @@ export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
   }
 
   private updateExporterFields(): void {
-    const exp = this.exporters.find((e) => e.name === this.selectedExporter);
-    this.exporterFields = (exp?.fields ?? []) as ImporterField[];
+    const exp = this.exporters().find((e) => e.name === this.selectedExporter());
+    const fields = (exp?.fields ?? []) as ImporterField[];
+    this.exporterFields.set(fields);
     this.exportFieldValues = {};
-    for (const field of this.exporterFields) {
+    for (const field of fields) {
       if (field.default) {
         this.exportFieldValues[field.key] = field.default;
       }

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from vtscore.config import DATA_DIR
-from vtscore.datasets.importers.base import ImporterBase, ImporterField
+from vtscore.datasets.importers.base import ImporterBase, PluginField
 from vtscore.datasets.loader import load_dataset_from_folder
 
 _SUPPORTED_MEDIA_TYPES = ["image", "audio", "video"]
@@ -42,7 +42,7 @@ class SyntheticDatasetImporter(ImporterBase):
     category = "demo"
 
     fields = [
-        ImporterField(
+        PluginField(
             key="media_type",
             label="Dataset MediaType",
             field_type="select",
@@ -51,7 +51,7 @@ class SyntheticDatasetImporter(ImporterBase):
             default="image",
             required=False,
         ),
-        ImporterField(
+        PluginField(
             key="size",
             label="Size",
             field_type="number",

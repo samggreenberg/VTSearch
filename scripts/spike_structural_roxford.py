@@ -85,7 +85,7 @@ def _compute_ap(ranked_ids: list[int], positives: set[int], junk: set[int]) -> f
     return ap / len(positives)
 
 
-def main() -> None:  # noqa: C901, PLR0915
+def main() -> None:  # noqa: PLR0915
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--max-db", type=int, default=0, help="Subsample the db to N images (0 = all).")
     parser.add_argument("--max-features", type=int, default=1024, help="SIFT keypoint cap per image.")

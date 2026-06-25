@@ -230,6 +230,14 @@ POST /api/dataset/load-demo
 
 **Body:** `{"name": "esc50_animals"}`
 
+Optional fields: `embedder`, `clipper`, `clipper_params`, `converter`,
+`dataset_name`, `build_projection`. When `clipper` names a real (non-default)
+clipper, every loaded media is split into sub-clips at load time and the clips
+are re-embedded; `clipper_params` (e.g. `{"duration": 5.0}`) overrides the
+clipper's defaults. The pre-selected default clipper for a media type is a
+no-op. Clipped clips inherit their parent media's category. Example:
+`{"name": "tut_sound_events_2017_a", "clipper": "sound_tiling", "clipper_params": {"duration": 5.0}}`.
+
 → `{"ok": true, "message": "Loading started"}`
 
 **From importer:**

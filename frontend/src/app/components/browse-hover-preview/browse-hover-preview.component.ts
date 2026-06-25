@@ -1,9 +1,10 @@
-import { Component, ElementRef, OnChanges, OnDestroy, SimpleChanges, ViewChild, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, inject, input, OnChanges, OnDestroy, signal, SimpleChanges, ViewChild } from '@angular/core';
 
 import { ActiveContextService } from '../../services/active-context.service';
 import type { HexHoverEvent } from '../browse-canvas/browse-canvas.component';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-hover-preview',
   standalone: true,
   imports: [],

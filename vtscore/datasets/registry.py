@@ -119,6 +119,7 @@ def register_dataset(
     num_dupes: int = 0,
     clipper: str = "",
     embedder: str = "",
+    embedder_types: list[str] | None = None,
     created_by: str = "default",
     readers: list[str] | None = None,
     file_type_counts: dict[str, int] | None = None,
@@ -141,6 +142,15 @@ def register_dataset(
     """
     import uuid
 
+    # The embedder *types* this dataset supplies (drives detector/dataset
+    # compatibility gating without loading the dataset).  Callers that know the
+    # full bound set pass it; otherwise classify the single primary embedder.
+    if embedder_types is None:
+        from vtscore.embedding.binding import embedder_type
+
+        t = embedder_type(embedder)
+        embedder_types = [t] if t else []
+
     now = time.time()
     entry: dict[str, Any] = {
         "id": uuid.uuid4().hex,
@@ -153,6 +163,7 @@ def register_dataset(
         "source": source,
         "clipper": clipper,
         "embedder": embedder,
+        "embedder_types": embedder_types,
         "created_by": created_by,
         "created_at": now,
         "readers": readers or [],
