@@ -684,7 +684,7 @@ class VideoMediaType(MediaType):
         "kth": "download_kth",
     }
 
-    def load_demo_source(
+    def load_demo_source(  # noqa: C901 - flat per-item embed/defer branching
         self,
         source,
         categories,
@@ -695,6 +695,7 @@ class VideoMediaType(MediaType):
         embedder=None,
         slice_frac_start=None,
         slice_frac_end=None,
+        skip_embedding=False,
         **kwargs,
     ):
         import hashlib  # noqa: PLC0415
@@ -740,7 +741,9 @@ class VideoMediaType(MediaType):
                 )
             )
 
-        if getattr(embedder, "_model", None) is None:
+        # Load models (skipped when a clipper will re-embed every clip - see
+        # skip_embedding in load_demo_dataset).
+        if not skip_embedding and getattr(embedder, "_model", None) is None:
             on_progress("loading", "Loading video embedding model\u2026", 0, 0)
             original_cb = embedder._on_progress
             embedder._on_progress = on_progress
@@ -751,17 +754,23 @@ class VideoMediaType(MediaType):
 
         clip_id = max(clips.keys(), default=0) + 1
         total = len(video_files)
-        on_progress("embedding", f"Starting embedding for {total} video files...", 0, total)
+        status = "loading" if skip_embedding else "embedding"
+        verb = "Loading" if skip_embedding else "Embedding"
+        on_progress(status, f"{verb} {total} video files...", 0, total)
         demo_origin_template: dict = {"importer": "demo", "params": {}}
 
         from vtscore.media.embedder import media_from_path  # noqa: PLC0415
 
         for i, (video_path, meta) in enumerate(video_files):
             rel_name = f"{meta['category']}/{video_path.name}"
-            on_progress("embedding", f"Embedding {rel_name}", i + 1, total)
-            embedding = embedder.embed_media(media_from_path(video_path))
-            if embedding is None:
-                continue
+            if skip_embedding:
+                on_progress("loading", f"Loading {rel_name}", i + 1, total)
+                embedding = None
+            else:
+                on_progress("embedding", f"Embedding {rel_name}", i + 1, total)
+                embedding = embedder.embed_media(media_from_path(video_path))
+                if embedding is None:
+                    continue
             with open(video_path, "rb") as f:
                 video_bytes = f.read()
             media_fields = self.load_media_data(video_path)
@@ -772,7 +781,7 @@ class VideoMediaType(MediaType):
                 "duration": media_fields["duration"],
                 "file_size": len(video_bytes),
                 "md5": hashlib.md5(video_bytes).hexdigest(),
-                "embeddings": {embedder.name: embedding},
+                "embeddings": {} if skip_embedding else {embedder.name: embedding},
                 "media_bytes": video_bytes,
                 "thumbnail_bytes": media_fields.get("thumbnail_bytes"),
                 "filename": rel_name,
