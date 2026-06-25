@@ -19,48 +19,6 @@
   min-width: 0;
 }
 
-// Status (left) + ETA (right) on one reserved-height line; the bar below never
-// shifts as the text changes length or appears/disappears.
-.sort-overlay-meta {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-sm);
-  min-height: 1.4em;
-}
-
-.sort-overlay-bar {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 0;
-
-  vt-progress-bar {
-    flex: 1;
-    min-width: 0;
-  }
-}
-
-.sort-overlay-status {
-  font-size: var(--font-xs);
-  line-height: 1.4;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-
-// The status text takes the slack; the ETA hugs the right edge.
-.sort-overlay-status:not(.sort-overlay-eta) {
-  flex: 1;
-}
-
-.sort-overlay-eta {
-  flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
-}
-
 .labeling-indicator {
   flex: 1;
   display: flex;
