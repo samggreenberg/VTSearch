@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, effect, inject, Input, input, OnChanges, OnDestroy, output, signal, SimpleChanges, untracked, ViewChild } from '@angular/core';
-import { KeyValuePipe } from '@angular/common';
+import { KeyValuePipe, TitleCasePipe } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { EmbedderInfo, Media } from '../../models/api.models';
 import { MediasApiService } from '../../services/medias-api.service';
@@ -22,6 +22,7 @@ import { prefersReducedMotion } from '../../utils/reduced-motion';
   standalone: true,
   imports: [
     KeyValuePipe,
+    TitleCasePipe,
     AudioPlayerComponent,
     ImageViewerComponent,
     VideoPlayerComponent,

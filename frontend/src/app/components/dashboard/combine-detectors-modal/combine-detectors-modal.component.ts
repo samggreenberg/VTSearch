@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, input, OnInit, output } from '@angular/core';
+import { TitleCasePipe } from '@angular/common';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -16,7 +17,7 @@ interface SourceRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-combine-detectors-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent],
+  imports: [FormsModule, ModalComponent, TitleCasePipe],
   templateUrl: './combine-detectors-modal.component.html',
   styleUrl: './combine-detectors-modal.component.scss',
 })

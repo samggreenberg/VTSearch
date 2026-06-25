@@ -47,7 +47,7 @@
           >
             <span class="row-glyph" [title]="glyphTitle(row)">{{ glyphFor(row) }}</span>
             <span class="row-name">{{ row.name }}</span>
-            <span class="row-type">· {{ row.mediaType }}</span>
+            <span class="row-type">· {{ row.mediaType | titlecase }}</span>
             @if (row.busy) {
               <span class="row-spinner" [title]="busyTitle(row)" aria-hidden="true">⟳</span>
             }
