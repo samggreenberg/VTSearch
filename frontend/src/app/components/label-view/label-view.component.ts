@@ -23,6 +23,7 @@ import { DatasetsRegistryApiService } from '../../services/datasets-registry-api
 import { LabelSessionService } from '../../services/label-session.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
+import { LabelsetStateService } from '../../services/labelset-state.service';
 import { SortStateService, SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
@@ -67,6 +68,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private labelSession = inject(LabelSessionService);
   mediaState = inject(MediaStateService);
   voteState = inject(VoteStateService);
+  private labelsetState = inject(LabelsetStateService);
   sortState = inject(SortStateService);
   private settingsState = inject(SettingsStateService);
   private autopilotStateService = inject(AutopilotStateService);
@@ -828,6 +830,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Local vote state is already reconciled from the POST response inside
     // submitToggleVote; loadVotes() only refreshes derived counters.
     this.voteState.loadVotes();
+    // In train mode the right pane's Good/Bad piles are sourced from the
+    // labelset (not the cid-based vote signals), and the labelset only repaints
+    // on its 1500ms poll — so a just-cast vote takes up to that long to land in
+    // a pile. Kick an immediate labelset refresh so the new label appears as
+    // soon as the server has it, instead of waiting for the next poll tick.
+    // No-op when no detector is being trained (refresh() bails on a null model).
+    this.labelsetState.refresh();
     this.autoSelectNext(event.id);
     if (this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable) {
       this.scheduleLearnedSort(false);
