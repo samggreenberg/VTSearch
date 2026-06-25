@@ -14,6 +14,7 @@ from __future__ import annotations
 
 # Re-export every public name from the library tier.
 from vtscore.state import (  # noqa: F401
+    DIVERSITY_TREE_AUTO_THRESHOLD,
     DatasetContext,
     DetectorContext,
     _core,
@@ -77,6 +78,7 @@ from vtscore.state import (  # noqa: F401
     set_thread_dataset_context,
     set_thread_detector_context,
     set_vote,
+    should_auto_build_diversity_tree,
     snapshot_medias,
     thread_dataset_context,
     thread_detector_context,

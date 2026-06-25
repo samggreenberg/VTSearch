@@ -16,6 +16,7 @@ Endpoints
 ---------
 GET    /api/datasets/registry                       List datasets visible to the user.
 POST   /api/datasets/registry/<id>/load             Load a registered dataset from its pkl.
+POST   /api/datasets/registry/<id>/diversity-tree   Build the diversity index on demand (large datasets).
 POST   /api/datasets/registry/<id>/unload           Unload a dataset from memory.
 DELETE /api/datasets/registry/<id>                  Remove a dataset from the registry.
 PUT    /api/datasets/registry/<id>/rename           Rename a registered dataset.
@@ -136,7 +137,11 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     """
     from vtsearch.auth import get_current_user
     from vtscore.concurrency.progress import clear_thread_progress, set_thread_progress
-    from vtsearch.state import build_diversity_tree_for_context, restore_diversity_tree_from_cache
+    from vtsearch.state import (
+        build_diversity_tree_for_context,
+        restore_diversity_tree_from_cache,
+        should_auto_build_diversity_tree,
+    )
 
     entry = _reg_get(dataset_id)
     if entry is None:
@@ -239,9 +244,13 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                 # set still matches the (post-dedup) medias; only rebuild the
                 # hierarchical k-means from scratch when there is no usable
                 # cache (older pickles, or a media set that shifted on load).
+                # Past the auto-build threshold a missing cache is left absent -
+                # the build would cost minutes/GBs and the user can trigger it
+                # on demand via the diversity-tree endpoint.
                 if not restore_diversity_tree_from_cache(ctx, cached_diversity_tree):
-                    _diversity_progress(0, 0)
-                    build_diversity_tree_for_context(ctx, on_progress=_diversity_progress)
+                    if should_auto_build_diversity_tree(len(ctx.medias)):
+                        _diversity_progress(0, 0)
+                        build_diversity_tree_for_context(ctx, on_progress=_diversity_progress)
                 _reg_add_loaded(dataset_id)
                 # Update item count and dupe count in case they changed
                 num_dupes = sum(
@@ -282,6 +291,92 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
 
     spawn(load_task, name=f"ds-load-{dataset_id[:8]}")
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
+
+
+@datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/diversity-tree", methods=["POST"])
+@datasets_registry_bp.response(200, DatasetRegistryLoadResponseSchema)
+@datasets_registry_bp.alt_response(400, description="Dataset is not currently loaded.")
+@datasets_registry_bp.alt_response(403, description="Access denied for the current user.")
+@datasets_registry_bp.alt_response(404, description="Dataset not found.")
+def build_dataset_diversity_tree(dataset_id: str):
+    """Build the diversity index for a loaded dataset in a background thread.
+
+    Datasets past ``should_auto_build_diversity_tree`` skip the automatic build
+    at load time so they load fast; this endpoint lets the user trigger that
+    build on demand.  The dataset must already be loaded in memory.  Progress
+    is reported via ``/api/progress`` under the returned ``task_id``; the build
+    is cancellable.  Calling it on a dataset that already has a tree rebuilds
+    it from scratch.
+    """
+    from vtsearch.auth import get_current_user
+    from vtsearch.state import (
+        build_diversity_tree_for_context,
+        get_active_detector_context,
+        get_context,
+        resync_diversity_tree_to_detector,
+    )
+    from vtscore.state.core import _state_lock
+
+    entry = _reg_get(dataset_id)
+    if entry is None:
+        abort(404, message="Dataset not found in registry")
+    if not _reg_can_access(dataset_id, get_current_user()):
+        abort(403, message="Access denied")
+    if not _reg_is_loaded(dataset_id):
+        abort(400, message="Load the dataset before building its diversity index")
+
+    ctx = get_context(dataset_id)
+    if ctx is None:
+        abort(400, message="This dataset is not currently loaded")
+
+    task_id = f"_divtree_{dataset_id[:8]}"
+    tracker = _loading_tasks.create_task(
+        task_id,
+        entry.get("name", dataset_id),
+        dataset_id=dataset_id,
+        media_type=entry.get("media_type", ""),
+        embedder=entry.get("embedder", ""),
+    )
+    tracker.update("loading", "Building diversity index…", 0, 0, step=1, total_steps=1)
+
+    _request_user = get_current_user()
+
+    def build_task():
+        from vtsearch.auth import thread_user
+
+        with thread_user(_request_user):
+            try:
+
+                def _progress(current: int, total: int) -> None:
+                    tracker.check_cancelled()
+                    tracker.update("loading", "Building diversity index…", current, total, step=1, total_steps=1)
+
+                _progress(0, 0)
+                build_diversity_tree_for_context(ctx, on_progress=_progress)
+
+                # Replay the active detector's votes into the fresh tree when
+                # they belong to this dataset, so seen-state is correct right
+                # away (mirrors the resync the detector-sync path performs).
+                det_ctx = get_active_detector_context()
+                if det_ctx is not None and getattr(det_ctx, "votes_dataset_id", None) == dataset_id:
+                    with _state_lock:
+                        resync_diversity_tree_to_detector(ctx, det_ctx)
+            except CancelledError:
+                ctx.diversity_tree = None
+                tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
+            except Exception as e:
+                import traceback as _tb
+
+                _tb.print_exc()
+                error_msg = str(e) or repr(e) or "Unknown error building diversity index"
+                tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
+            finally:
+                _loading_tasks.mark_finished(task_id)
+
+    from vtsearch.threading import spawn
+
+    spawn(build_task, name=f"divtree-{dataset_id[:8]}")
+    return {"ok": True, "message": "Diversity index build started", "task_id": str(task_id)}
 
 
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/unload", methods=["POST"])

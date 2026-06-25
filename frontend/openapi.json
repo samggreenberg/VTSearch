@@ -9130,6 +9130,51 @@
         }
       ]
     },
+    "/api/datasets/registry/{dataset_id}/diversity-tree": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "dataset_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Datasets past ``should_auto_build_diversity_tree`` skip the automatic build\nat load time so they load fast; this endpoint lets the user trigger that\nbuild on demand.  The dataset must already be loaded in memory.  Progress\nis reported via ``/api/progress`` under the returned ``task_id``; the build\nis cancellable.  Calling it on a dataset that already has a tree rebuilds\nit from scratch.",
+        "operationId": "build_dataset_diversity_tree",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetRegistryLoadResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Dataset is not currently loaded."
+          },
+          "403": {
+            "description": "Access denied for the current user."
+          },
+          "404": {
+            "description": "Dataset not found."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Build the diversity index for a loaded dataset in a background thread.",
+        "tags": [
+          "datasets_registry"
+        ]
+      }
+    },
     "/api/datasets/registry/{dataset_id}/load": {
       "parameters": [
         {

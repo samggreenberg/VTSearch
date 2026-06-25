@@ -11,7 +11,11 @@ from typing import TYPE_CHECKING
 
 from vtscore.embedding.matrix import invalidate_embedding_matrix
 from vtscore.embedding.media_vectors import media_embedding
-from vtscore.state import build_diversity_tree_for_context, collapse_duplicates
+from vtscore.state import (
+    build_diversity_tree_for_context,
+    collapse_duplicates,
+    should_auto_build_diversity_tree,
+)
 
 from vtscore.datasets.stages._common import _TOTAL_LOAD_STEPS
 
@@ -77,6 +81,19 @@ def _build_diversity_tree_stage(ctx: DatasetContext, tracker) -> None:
     # An upstream step (e.g. a pickle restore) may have already populated the
     # tree; skip the expensive hierarchical k-means rebuild when so.
     if ctx.diversity_tree is not None:
+        return
+
+    # Past the auto-build threshold the tree is deferred: the build would cost
+    # minutes/GBs and the autopilot degrades gracefully without it.  The user
+    # can trigger it later via POST /api/datasets/registry/<id>/diversity-tree.
+    if not should_auto_build_diversity_tree(len(ctx.medias)):
+        import logging  # noqa: PLC0415
+
+        logging.getLogger(__name__).info(
+            "Skipping automatic diversity-tree build for %d items (> threshold); "
+            "build on demand via the diversity-tree endpoint.",
+            len(ctx.medias),
+        )
         return
 
     def _progress(current: int, total: int) -> None:
