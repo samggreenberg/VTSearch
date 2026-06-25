@@ -67,4 +67,17 @@ describe('ProgressBarComponent', () => {
     const track = fixture.nativeElement.querySelector('.progress-track');
     expect(track.getAttribute('aria-valuenow')).toBeNull();
   });
+
+  it('should not apply the smooth modifier by default', async () => {
+    await settleZoneless(fixture);
+    const fill = fixture.nativeElement.querySelector('.progress-fill');
+    expect(fill.classList).not.toContain('progress-fill--smooth');
+  });
+
+  it('should apply the smooth modifier when [smooth] is set', async () => {
+    fixture.componentRef.setInput('smooth', true);
+    await settleZoneless(fixture);
+    const fill = fixture.nativeElement.querySelector('.progress-fill');
+    expect(fill.classList).toContain('progress-fill--smooth');
+  });
 });

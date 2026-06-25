@@ -47,6 +47,7 @@
           [value]="taskBar().value"
           [max]="taskBar().max"
           [indeterminate]="taskBar().indeterminate"
+          [smooth]="true"
         />
         @if (taskProgressInfo.eta) {
           <span class="progress-eta">{{ taskProgressInfo.eta }}</span>
