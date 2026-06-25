@@ -1058,7 +1058,9 @@ class TestEffectiveClipper:
     def test_real_clipper_passes_through(self):
         from vtscore.datasets.loader_demo import _effective_clipper
 
-        assert _effective_clipper("sound_tiling", "audio") == "sound_tiling"
+        # sound_silence is a real, non-default clipper (not first in the list),
+        # so it is never normalised away.
+        assert _effective_clipper("sound_silence", "audio") == "sound_silence"
 
 
 class TestDemoClipperApplied:
@@ -1107,12 +1109,14 @@ class TestDemoClipperApplied:
         return mock_clip, fake_embedder
 
     def test_real_clipper_is_applied_with_params_and_embedder(self, tmp_path):
-        mock_clip, fake_embedder = self._run(tmp_path, "sound_tiling", clipper_params={"duration": 5.0})
+        # sound_silence is a real, non-default clipper (sound_tiling is now the
+        # pre-selected first entry and so is treated as a no-op for demos).
+        mock_clip, fake_embedder = self._run(tmp_path, "sound_silence", clipper_params={"top_db": 30.0})
         mock_clip.assert_called_once()
         args, kwargs = mock_clip.call_args
         # _apply_clipper(medias, name, params, on_progress=..., embedder=...)
-        assert args[1] == "sound_tiling"
-        assert args[2] == {"duration": 5.0}
+        assert args[1] == "sound_silence"
+        assert args[2] == {"top_db": 30.0}
         assert kwargs["embedder"] is fake_embedder
 
     def test_default_clipper_is_a_noop(self, tmp_path):

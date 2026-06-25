@@ -1,5 +1,4 @@
 from vtscore.media.audio.clipper import (
-    SoundAutoClipper,
     SoundDefaultClipper,
     SoundSilenceClipper,
     SoundSpeechActivityClipper,
@@ -9,9 +8,8 @@ from vtscore.media.audio.media_type import AudioMediaType
 
 MEDIA_TYPE = AudioMediaType()
 CLIPPERS = [
-    SoundAutoClipper(),
+    SoundTilingClipper(10.0, 1.0),
     SoundDefaultClipper(),
-    SoundTilingClipper(2.0),
     SoundSilenceClipper(),
     SoundSpeechActivityClipper(),
 ]

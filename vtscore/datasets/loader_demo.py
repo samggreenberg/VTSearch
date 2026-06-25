@@ -35,7 +35,7 @@ def _effective_clipper(clipper_name: str, media_type_id: str) -> str:
     ends with ``_default``, or is the first clipper registered for the
     media type (the pre-selected default).  Normalising to ``""`` here also
     means legacy pickles that recorded the pre-selected default name (e.g.
-    ``"sound_auto"``) compare equal to "no clipper" and don't trigger a
+    ``"sound_tiling"``) compare equal to "no clipper" and don't trigger a
     needless re-embed.
     """
     if not clipper_name or clipper_name.endswith("_default"):
@@ -170,7 +170,7 @@ def load_demo_dataset(  # noqa: C901
         # A cached pickle built with a different clipper (or different clipper
         # params) no longer reflects the requested split, so rebuild it.  Both
         # names are normalised through _effective_clipper so the pre-selected
-        # default ("" vs e.g. "sound_auto") never counts as a mismatch.
+        # default ("" vs e.g. "sound_tiling") never counts as a mismatch.
         requested_clipper = _effective_clipper(clipper_name, media_type_id)
         cached_clipper = _effective_clipper(cached_meta.get("clipper") or "", media_type_id)
         requested_params = clipper_params or {}
