@@ -38,6 +38,7 @@ import time
 
 from flask_smorest import Blueprint, abort
 
+from vtscore.detectors.embedder_type import detector_embedder_type_from_data
 from vtscore.detectors.store import (
     _detector_path,
     _read_detector,
@@ -89,7 +90,7 @@ def _list_all() -> list[dict]:
                 "examples": data.get("examples", []),
                 "num_labels": len(labels),
                 "created_at": data.get("created_at", 0),
-                "primary_embedder": data.get("primary_embedder", "") or "",
+                "embedder_type": detector_embedder_type_from_data(data),
             }
         )
     return detectors
@@ -140,11 +141,11 @@ def create_detector(body: dict):
     if path.exists():
         abort(409, message=f"A detector named '{name}' already exists")
 
-    from vtscore.detectors.primary_embedder import resolve_detector_primary
+    from vtscore.detectors.embedder_type import resolve_detector_embedder_type
 
-    primary_embedder, primary_err = resolve_detector_primary(body.get("primary_embedder", ""))
-    if primary_err:
-        abort(400, message=primary_err)
+    embedder_type, type_err = resolve_detector_embedder_type(body.get("embedder_type", ""))
+    if type_err:
+        abort(400, message=type_err)
 
     # Build examples list; if text_query/media_example provided without
     # explicit examples, create a single example from it for backward compat.
@@ -160,7 +161,7 @@ def create_detector(body: dict):
         "media_type": media_type,
         "examples": examples or [],
         "created_at": time.time(),
-        "primary_embedder": primary_embedder,
+        "embedder_type": embedder_type,
         "labelset": {"labels": []},
     }
     _write_detector(path, detector_data)
@@ -190,6 +191,8 @@ def get_detector(name: str):
     data = _read_detector(path)
     if data is None:
         abort(404, message=f"Detector '{name}' not found")
+    # Reflect the effective (legacy-migrated) embedder type in the detail.
+    data["embedder_type"] = detector_embedder_type_from_data(data)
     return data
 
 
@@ -396,11 +399,11 @@ def combine_detectors(body: dict):  # noqa: C901
                 text_query = s["text_query"]
                 break
 
-    # Inherit the primary embedder only when every source agrees on it; a
+    # Inherit the embedder type only when every source agrees on it; a
     # disagreement (or any source without one) leaves it empty, resolved at
     # first train against a dataset.
-    source_primaries = {(s.get("primary_embedder", "") or "") for s in sources}
-    combined_primary = next(iter(source_primaries)) if len(source_primaries) == 1 else ""
+    source_types = {(s.get("embedder_type", "") or "") for s in sources}
+    combined_type = next(iter(source_types)) if len(source_types) == 1 else ""
 
     new_data = {
         "name": new_name,
@@ -409,7 +412,7 @@ def combine_detectors(body: dict):  # noqa: C901
         "media_type": media_type,
         "examples": merged_examples,
         "created_at": time.time(),
-        "primary_embedder": combined_primary,
+        "embedder_type": combined_type,
         "labelset": merged.to_dict(),
         "combined_from": list(names),
     }

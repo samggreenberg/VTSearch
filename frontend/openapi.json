@@ -1697,6 +1697,10 @@
       "DetectorCreateRequest": {
         "additionalProperties": false,
         "properties": {
+          "embedder_type": {
+            "default": "",
+            "type": "string"
+          },
           "examples": {
             "default": null,
             "items": {
@@ -1716,10 +1720,6 @@
           },
           "name": {
             "minLength": 1,
-            "type": "string"
-          },
-          "primary_embedder": {
-            "default": "",
             "type": "string"
           },
           "text_query": {
@@ -1801,6 +1801,9 @@
           "created_at": {
             "type": "number"
           },
+          "embedder_type": {
+            "type": "string"
+          },
           "examples": {
             "items": {
               "additionalProperties": {},
@@ -1818,9 +1821,6 @@
             "type": "string"
           },
           "name": {
-            "type": "string"
-          },
-          "primary_embedder": {
             "type": "string"
           },
           "text_query": {
@@ -2003,6 +2003,10 @@
       "DetectorRegistryCreateRequest": {
         "additionalProperties": false,
         "properties": {
+          "embedder_type": {
+            "default": "",
+            "type": "string"
+          },
           "examples": {
             "default": null,
             "items": {
@@ -2022,10 +2026,6 @@
           },
           "name": {
             "minLength": 1,
-            "type": "string"
-          },
-          "primary_embedder": {
-            "default": "",
             "type": "string"
           },
           "text_query": {
@@ -2089,6 +2089,9 @@
           "embedder": {
             "type": "string"
           },
+          "embedder_type": {
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
@@ -2113,9 +2116,6 @@
           },
           "num_training": {
             "type": "integer"
-          },
-          "primary_embedder": {
-            "type": "string"
           },
           "readers": {
             "items": {
@@ -2281,6 +2281,9 @@
           "embedder": {
             "type": "string"
           },
+          "embedder_type": {
+            "type": "string"
+          },
           "last_trained_at": {
             "nullable": true
           },
@@ -2321,6 +2324,7 @@
           "clipper",
           "created_by",
           "embedder",
+          "embedder_type",
           "media_example",
           "media_type",
           "name",
@@ -5243,6 +5247,9 @@
           "created_at": {
             "type": "number"
           },
+          "embedder_type": {
+            "type": "string"
+          },
           "examples": {
             "items": {
               "additionalProperties": {},
@@ -5261,9 +5268,6 @@
           },
           "num_labels": {
             "type": "integer"
-          },
-          "primary_embedder": {
-            "type": "string"
           },
           "text_query": {
             "type": "string"

@@ -480,19 +480,20 @@ class DetectorContext:
         "detector_id",
         "name",
         "media_type",
-        # The space the label cache / MLP is *currently* built in (an adaptive
-        # marker, re-stamped when the active dataset's space changes).  Distinct
-        # from ``primary_embedder``: on a dataset that can't supply the primary,
-        # this tracks whatever space the labels were re-embedded into so the
-        # cache-invalidation compare stays honest.
+        # The concrete space the label cache / MLP is *currently* built in (an
+        # adaptive marker, re-stamped when the active dataset's space changes).
+        # Distinct from ``embedder_type``: it names whichever concrete embedder
+        # of the detector's type the active dataset supplied, so the
+        # cache-invalidation compare stays honest across same-type swaps.
         "embedder",
-        # The detector's *chosen* primary embedder - the vector space it prefers
-        # to train/score in, persisted on the detector JSON and loaded here at
-        # detector load.  Immutable in memory (never re-stamped).  Empty for a
-        # legacy detector, where routing falls back to the dataset score
-        # precedence.  See ``docs/plans/patch-embedder.md`` → "Per-detector
-        # primary embedder".
-        "primary_embedder",
+        # The detector's *locked* embedder type - ``"semantic"`` /
+        # ``"patch_semantic"`` / ``"structural"`` - persisted on the detector
+        # JSON and loaded here at detector load.  Immutable in memory (never
+        # re-stamped).  The detector scores in whatever concrete embedder of
+        # this type the active dataset binds.  Empty for a legacy detector,
+        # where routing falls back to the dataset score precedence.  See
+        # ``docs/plans/patch-embedder.md`` → "Per-detector embedder type".
+        "embedder_type",
         # Vote state
         "good_votes",
         "bad_votes",
@@ -597,13 +598,13 @@ class DetectorContext:
         name: str = "",
         media_type: str = "",
         embedder: str = "",
-        primary_embedder: str = "",
+        embedder_type: str = "",
     ) -> None:
         self.detector_id: str = detector_id
         self.name: str = name
         self.media_type: str = media_type
         self.embedder: str = embedder
-        self.primary_embedder: str = primary_embedder
+        self.embedder_type: str = embedder_type
         # Vote state
         self.good_votes: dict[int, None] = {}
         self.bad_votes: dict[int, None] = {}
@@ -853,7 +854,7 @@ class _RequestMissingDetectorContext(DetectorContext):
         object.__setattr__(self, "name", "")
         object.__setattr__(self, "media_type", "")
         object.__setattr__(self, "embedder", "")
-        object.__setattr__(self, "primary_embedder", "")
+        object.__setattr__(self, "embedder_type", "")
         object.__setattr__(self, "good_votes", _FrozenDict("detector"))
         object.__setattr__(self, "bad_votes", _FrozenDict("detector"))
         object.__setattr__(self, "label_history", _FrozenList("detector"))

@@ -49,15 +49,15 @@ def _embedder_for_active_dataset(snap: dict[int, dict[str, Any]] | None) -> str:
 def _detector_embedder(det_ctx, snap: dict[int, dict[str, Any]] | None) -> str:
     """The embedder a *detector* resolves and embeds its labels in.
 
-    The detector's chosen primary (``det_ctx.primary_embedder``) wins when the
-    active dataset supplies it; otherwise the dataset's score precedence (the
-    legacy-migration default and the cross-dataset portability fallback -
-    re-embed against whatever space the new dataset uses).  This is
+    The concrete embedder of the detector's locked type (``det_ctx.embedder_type``)
+    that the active dataset supplies wins; otherwise the dataset's score
+    precedence (the legacy-migration default and the cross-dataset portability
+    fallback - re-embed against whatever space the new dataset uses).  This is
     :func:`keying_embedder_for_snap`, so it agrees with the model-invalidation
-    and re-embed checks.  Keeping a detector's label cache keyed to its own
-    primary means switching the active dataset under the detector no longer
-    invalidates the cache as long as the new dataset supplies that primary.  See
-    ``docs/plans/patch-embedder.md`` → "Per-detector primary embedder".
+    and re-embed checks.  Keeping a detector's label cache keyed to its type
+    means switching the active dataset under the detector no longer invalidates
+    the cache as long as the new dataset binds the same concrete embedder of
+    that type.  See ``docs/plans/patch-embedder.md`` → "Per-detector embedder type".
     """
     from vtscore.embedding.binding import keying_embedder_for_snap
 
