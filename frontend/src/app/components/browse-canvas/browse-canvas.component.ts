@@ -35,6 +35,11 @@ export interface BrowseContextMenuEvent {
   clientY: number;
   /** Member media ids of the bin under the cursor; empty over blank space. */
   members: number[];
+  /** The bin's representative id — the centroid clip whose thumbnail is drawn
+   *  on the canvas (see ``rep_id``). The popup opens on this item and scrolls
+   *  its 1-D member list to it, so the detail view starts on the same image the
+   *  user right-clicked. Null over blank space. */
+  repId: number | null;
   /** The canvas's bounding rect (viewport coords); the popup clamps inside it
    *  so it never spills onto the side panel or past the canvas edges. */
   bounds: DOMRect;
@@ -1639,6 +1644,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       clientX: event.clientX,
       clientY: event.clientY,
       members,
+      repId: cell ? cell.rep_id : null,
       bounds: rect,
     });
   }
