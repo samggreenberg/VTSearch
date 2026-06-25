@@ -684,7 +684,7 @@ class VideoMediaType(MediaType):
         "kth": "download_kth",
     }
 
-    def load_demo_source(
+    def load_demo_source(  # noqa: C901 - flat per-item embed/defer branching
         self,
         source,
         categories,
