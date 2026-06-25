@@ -21,7 +21,6 @@ from vtscore.state.diversity import (
 )
 from vtscore.state.diversity_tree import (
     DIVERSITY_TREE_MAX_DEPTH,
-    DIVERSITY_TREE_MIN_NODE_SIZE,
     DiversityTree,
     _MAX_LEAVES,
     _n_init_for,
