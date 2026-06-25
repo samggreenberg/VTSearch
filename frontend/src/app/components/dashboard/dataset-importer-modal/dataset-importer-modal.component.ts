@@ -1048,15 +1048,16 @@ export class DatasetImporterModalComponent implements OnInit {
     });
   }
 
-  /** The demo clipper the user actually chose, or ``''`` when it is the
-   *  pre-selected no-op default.  Mirrors the backend's
-   *  ``_effective_clipper`` and the form path's ``isDefaultClipper`` rule so
-   *  status checks and the load request agree on when clipping happens. */
+  /** The demo clipper the user actually chose, or ``''`` when it is a
+   *  no-op (the explicit "None"/``*_default`` choice).  Mirrors the
+   *  backend's ``_effective_clipper`` so status checks and the load request
+   *  agree on when clipping happens.  The pre-selected default a media type
+   *  offers (``clippers[0]``) can be a *real* clipper - audio defaults to
+   *  ``sound_tiling``, video to ``video_auto`` - so it is deliberately NOT
+   *  treated as a no-op; selecting it splits the media as intended. */
   private effectiveDemoClipper(): string {
     const name = this.selectedDemoClipper();
-    const clippers = this.demoClippers();
-    const isDefault =
-      !name || name.endsWith('_default') || (clippers.length > 0 && clippers[0].name === name);
+    const isDefault = !name || name.endsWith('_default');
     return isDefault ? '' : name;
   }
 

@@ -1039,7 +1039,7 @@ class TestDemoCacheEmbedderMismatch:
 
 
 class TestEffectiveClipper:
-    """`_effective_clipper` normalises the pre-selected default clipper to ''."""
+    """`_effective_clipper` normalises only the no-op (``*_default``) clipper to ''."""
 
     def test_empty_and_default_normalise_to_blank(self):
         from vtscore.datasets.loader_demo import _effective_clipper
@@ -1048,18 +1048,22 @@ class TestEffectiveClipper:
         # sound_default ends with _default → the explicit "import as-is" no-op.
         assert _effective_clipper("sound_default", "audio") == ""
 
-    def test_first_clipper_in_list_is_treated_as_default(self):
+    def test_first_clipper_in_list_is_a_real_clipper_and_passes_through(self):
         from vtscore.datasets.loader_demo import _effective_clipper
         from vtscore.media import clippers_for_type
 
+        # The pre-selected default for audio is a *real* clipper
+        # (``sound_tiling``); selecting it must still split the media, so it
+        # is NOT normalised away. Only ``*_default`` clippers are no-ops.
         first = clippers_for_type("audio")[0].name
-        assert _effective_clipper(first, "audio") == ""
+        assert first == "sound_tiling"
+        assert _effective_clipper(first, "audio") == first
 
     def test_real_clipper_passes_through(self):
         from vtscore.datasets.loader_demo import _effective_clipper
 
-        # sound_silence is a real, non-default clipper (not first in the list),
-        # so it is never normalised away.
+        # sound_silence is a real, non-default clipper, so it is never
+        # normalised away.
         assert _effective_clipper("sound_silence", "audio") == "sound_silence"
 
 
@@ -1109,8 +1113,7 @@ class TestDemoClipperApplied:
         return mock_clip, fake_embedder
 
     def test_real_clipper_is_applied_with_params_and_embedder(self, tmp_path):
-        # sound_silence is a real, non-default clipper (sound_tiling is now the
-        # pre-selected first entry and so is treated as a no-op for demos).
+        # sound_silence is a real, non-default clipper.
         mock_clip, fake_embedder = self._run(tmp_path, "sound_silence", clipper_params={"top_db": 30.0})
         mock_clip.assert_called_once()
         args, kwargs = mock_clip.call_args
@@ -1119,11 +1122,22 @@ class TestDemoClipperApplied:
         assert args[2] == {"top_db": 30.0}
         assert kwargs["embedder"] is fake_embedder
 
-    def test_default_clipper_is_a_noop(self, tmp_path):
+    def test_pre_selected_default_clipper_is_applied(self, tmp_path):
+        # The pre-selected default for audio (``sound_tiling``) is a real
+        # clipper, so loading a demo with it must split the media - it is
+        # NOT a no-op.
         from vtscore.media import clippers_for_type
 
         first = clippers_for_type("audio")[0].name
+        assert first == "sound_tiling"
         mock_clip, _ = self._run(tmp_path, first)
+        mock_clip.assert_called_once()
+        args, _kwargs = mock_clip.call_args
+        assert args[1] == first
+
+    def test_explicit_none_clipper_is_a_noop(self, tmp_path):
+        # The explicit "None" choice (``sound_default``) imports as-is.
+        mock_clip, _ = self._run(tmp_path, "sound_default")
         mock_clip.assert_not_called()
 
 
