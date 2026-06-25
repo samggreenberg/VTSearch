@@ -98,12 +98,13 @@
   to { transform: rotate(90deg); }
 }
 
-// The `+` Add-dataset glyph opts into the shared `.icon-waggle` while datasets
-// are downloading/installing (the button is disabled the whole time via
-// `isLoading`). `inline-block` is required for the waggle's transform to apply
-// to the otherwise-inline span. The `+`'s 90° rotational symmetry means its
-// start/end frames look identical, but `.icon-waggle`'s `ease-in-out` sweep
-// passes smoothly through `×` so the motion still reads.
+// The `+` Add-dataset / Add-detector glyph animates between `+` and `×` via the
+// `.plus-open` / `.plus-close` classes as its modal opens and closes.
+// `inline-block` is required for those rotation transforms to apply to the
+// otherwise-inline span. (The button no longer waggles during background
+// imports: it stays enabled now so a second import can start mid-load, and an
+// animating-but-clickable button would read as a pending action, not progress.
+// In-flight imports surface as their own progress rows in the table instead.)
 .plus-icon {
   display: inline-block;
 }
