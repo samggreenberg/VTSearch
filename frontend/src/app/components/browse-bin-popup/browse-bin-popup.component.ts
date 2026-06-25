@@ -116,6 +116,12 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
 
   /** Member media ids of the bin the popup was summoned over. */
   readonly memberIds = input<number[]>([]);
+  /** The bin's representative (centroid) id — the clip whose thumbnail is drawn
+   *  for the pile on the canvas. The popup opens its preview on this item and
+   *  scrolls the member grid to it, so the detail view starts on the same image
+   *  the user right-clicked rather than the 1-D list's first item. Null falls
+   *  back to the first member. */
+  readonly repId = input<number | null>(null);
   /** Active dataset media type, used for the view prefs, hover-to-hear, and placeholders. */
   readonly mediaType = input('');
   /** Viewport anchor (clientX/clientY) the popup opens at, then clamps inward. */
@@ -217,19 +223,24 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['memberIds']) {
+    if (changes['memberIds'] || changes['repId']) {
       this.ids = this.memberIds() ?? [];
       this.stopAudio();
-      // Open on the bin's representative so the pane is never blank (a singleton
-      // therefore lands straight on a large high-res view).
-      this.previewId = this.ids.length > 0 ? this.ids[0] : null;
+      // Open on the bin's representative (the centroid whose thumbnail the user
+      // right-clicked) so the pane is never blank and the detail view starts on
+      // the same image — not the 1-D list's first item, which differs.
+      this.previewId = this.representativeId();
       // A fresh bin is a fresh popup: forget any drag from the previous one so
       // it re-anchors to the new summon point.
       this.dragged = false;
       this.rebuildRows();
-      // A fresh bin: jump the list back to the top and prefetch its first window.
-      this.viewport?.scrollToIndex(0);
-      this.prefetchVisible();
+      // A fresh bin: scroll the list to the representative (centred) and prefetch
+      // the window around it. Deferred so the virtual viewport has the new rows
+      // (and, on first open, exists at all — it's created after ngOnChanges).
+      setTimeout(() => {
+        this.scrollToRep();
+        this.prefetchVisible();
+      });
     }
     if (changes['mediaType']) {
       // A new media type may carry a different remembered thumbnail size.
@@ -302,6 +313,43 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
       });
     }
     this.cdr.markForCheck();
+  }
+
+  /** The id the preview opens on and the grid scrolls to: the bin's
+   *  representative (centroid) when it's a member, else the first member so the
+   *  pane is never blank. */
+  private representativeId(): number | null {
+    const rep = this.repId();
+    if (rep != null && this.ids.includes(rep)) return rep;
+    return this.ids.length > 0 ? this.ids[0] : null;
+  }
+
+  /** Index of the representative within {@link ids} (the bin's 1-D order), or 0
+   *  when it isn't resolvable so we fall back to the top of the list. */
+  private repIndex(): number {
+    const rep = this.representativeId();
+    const idx = rep == null ? -1 : this.ids.indexOf(rep);
+    return idx >= 0 ? idx : 0;
+  }
+
+  /** True for the representative entry, so the grid can ring the item whose
+   *  thumbnail the user right-clicked (the one shown large in the preview). */
+  isRepresentative(id: number): boolean {
+    return id === this.representativeId();
+  }
+
+  /** Scroll the member grid so the representative's row sits roughly centred, so
+   *  the popup opens looking at the same item whose pile thumbnail was clicked
+   *  rather than the 1-D list's first item. No-op for a singleton bin (no grid)
+   *  or before the viewport exists. */
+  private scrollToRep(): void {
+    const vp = this.viewport;
+    if (!vp) return;
+    const row = Math.floor(this.repIndex() / Math.max(1, this.columns));
+    const viewportH = vp.elementRef.nativeElement.clientHeight || this.gridHeight;
+    // Centre the row in the visible window, clamped so we never scroll past 0.
+    const offset = row * this.rowSize - Math.max(0, viewportH - this.rowSize) / 2;
+    vp.scrollToOffset(Math.max(0, offset));
   }
 
   /** Recompute the column count + row chunking for the current thumbnail size. */
@@ -513,7 +561,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
    *  bin's representative so the pane stays populated. */
   onGridLeave(): void {
     this.stopAudio();
-    if (this.showPreview) this.previewId = this.ids.length > 0 ? this.ids[0] : null;
+    if (this.showPreview) this.previewId = this.representativeId();
   }
 
   private stopAudio(): void {

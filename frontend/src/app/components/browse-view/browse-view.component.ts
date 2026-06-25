@@ -192,6 +192,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   contextMenuX = 0;
   contextMenuY = 0;
   contextMembers: number[] = [];
+  /** Representative (centroid) id of the right-clicked bin — the popup opens on
+   *  it and scrolls its 1-D member list to it, so the detail view starts on the
+   *  same image whose thumbnail the user clicked. */
+  contextRepId: number | null = null;
   /** Canvas bounds the popup clamps inside, so it stays on the canvas rather
    *  than spilling onto the side panel or past the canvas edges. */
   contextBounds: DOMRect | null = null;
@@ -547,6 +551,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       return;
     }
     this.contextMembers = event.members;
+    this.contextRepId = event.repId;
     this.contextMenuX = event.clientX;
     this.contextMenuY = event.clientY;
     this.contextBounds = event.bounds;

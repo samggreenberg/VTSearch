@@ -210,6 +210,13 @@
     box-shadow: 0 0 0 2px var(--accent);
   }
 
+  // The bin's representative — the pile thumbnail the user right-clicked, shown
+  // large in the preview and scrolled into view here. A softer ring marks it in
+  // the 1-D list; the solid ``.selected`` ring takes over once it's selected.
+  &.representative:not(.selected) {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+
   &:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
