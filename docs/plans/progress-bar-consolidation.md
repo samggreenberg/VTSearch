@@ -53,8 +53,14 @@ job had, and there was no honest "% of the total job done".
 - **One bar + step count (frontend).**
   `progressBarState()` in `utils/format-progress.ts` is the shared resolver:
   prefer `overall` (one bar across the whole job) → else `current/total` → else
-  indeterminate. `formatProgressHeader` now surfaces `step S of T` in the
-  header. Wired into the dashboard loading rows (dataset-card, detector-card,
+  indeterminate. `formatProgressHeader` now surfaces a capitalized `Step S of T`
+  in the header (each `·`-separated segment is title-cased so the line reads as a
+  row of labels, e.g. `Loading dataset · Step 3 of 4 · Embedding files`), and the
+  per-item `detail` line drops the parentheses around the count and strips the
+  redundant leading verb (`012/345 cats/img.png`, not `(012/345) Embedding
+  cats/img.png`) so the narrow, ellipsized detail slot spends its characters on
+  the filename rather than repeating the phase the header already names. Wired
+  into the dashboard loading rows (dataset-card, detector-card,
   orphan-task rows), the Find/learned-sort overlay (find-view) and the
   left-panel sort indicator (via `SortStateService.sortOverall` /
   `sortEtaSeconds`).

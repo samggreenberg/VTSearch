@@ -30,11 +30,11 @@ import { ProgressBarState } from '../../utils/format-progress';
   host: { '[class.jp-host--cell]': 'cell' },
 })
 export class JobProgressComponent {
-  /** One-line title, e.g. "Loading dataset · step 2 of 4 · downloading source". */
+  /** One-line title, e.g. "Loading dataset · Step 2 of 4 · Downloading source". */
   @Input() header = '';
   /** Longer explanation surfaced behind the `(?)` chip; empty hides the chip. */
   @Input() description = '';
-  /** Per-item detail (left of the bar), e.g. "(012/345) FileABC.img". */
+  /** Per-item detail (left of the bar), e.g. "012/345 FileABC.img". */
   @Input() detail = '';
   /** Right-justified status, e.g. "~5.5 min left" or "45%". */
   @Input() eta = '';
