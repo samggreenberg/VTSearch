@@ -102,6 +102,13 @@ from vtscore.state.media_lookup import (  # noqa: F401
     resolve_media_ids,
 )
 
+# Re-export near-duplicate collapsing ---------------------------------------
+from vtscore.state.near_dupes import (  # noqa: F401
+    collapse_near_duplicates,
+    phash_image,
+    simhash_text,
+)
+
 
 # ---------------------------------------------------------------------------
 # Cross-cutting helpers

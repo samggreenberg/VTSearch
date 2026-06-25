@@ -47,6 +47,7 @@ from vtscore.datasets.stages.embedding import embed_missing, _embed_missing_stag
 from vtscore.datasets.stages.finalize import (
     _build_diversity_tree_stage,
     _collapse_duplicates_stage,
+    _collapse_near_duplicates_stage,
     _drop_none_embeddings_stage,
 )
 from vtscore.datasets.stages.projection import _build_projection_stage
@@ -369,6 +370,7 @@ def _run_origin_load_in_background(
     created_by: str = "",
     media_type: str = "",
     build_projection: bool = False,
+    merge_near_duplicates: bool = False,
 ) -> str:
     """Run a dataset load in a background thread with standard error handling.
 
@@ -428,6 +430,7 @@ def _run_origin_load_in_background(
         from vtscore.state.core import thread_dataset_context  # noqa: PLC0415
 
         ctx = DatasetContext(task_id)
+        ctx.merge_near_duplicates = merge_near_duplicates
         # Pin the in-flight context to this thread so importers, clippers,
         # dedup, diversity-tree, and label-sync helpers that resolve via
         # ``get_active_context()`` see the dataset being built, not the
@@ -489,6 +492,7 @@ def _run_origin_load_in_background(
                     # dataset stores recipes, not duplicated clip payloads.
                     _relazify_reference_clips_stage(ctx, tracker)
                     _collapse_duplicates_stage(ctx, tracker)
+                    _collapse_near_duplicates_stage(ctx, tracker)
                     _build_diversity_tree_stage(ctx, tracker)
                     tracker.check_cancelled()
                     context_id, registry_entry_id = _register_and_migrate(
@@ -605,6 +609,7 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     if embedders and embedder_name and embedder_name not in embedders:
         embedders = [embedder_name, *embedders]
     build_projection = _parse_bool(field_values.pop("build_projection", None))
+    merge_near_duplicates = _parse_bool(field_values.pop("merge_near_duplicates", None))
 
     # Extract media_type from field_values so in-progress tasks can expose it
     # to the frontend (used for guessing the type in subsequent add dialogs).
@@ -631,6 +636,7 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
         created_by=created_by,
         media_type=media_type_hint,
         build_projection=build_projection,
+        merge_near_duplicates=merge_near_duplicates,
     )
 
 

@@ -1012,6 +1012,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       clipper_params?: Record<string, number | string>;
       dataset_name?: string;
       build_projection?: boolean;
+      merge_near_duplicates?: boolean;
     };
     const params: Record<string, string | string[] | Record<string, number | string>> = {};
     if (extras.embedder) params['embedder'] = extras.embedder;
@@ -1025,6 +1026,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const userName = (extras.dataset_name || '').trim();
     if (userName) params['dataset_name'] = userName;
     if (extras.build_projection) params['build_projection'] = 'true';
+    if (extras.merge_near_duplicates) params['merge_near_duplicates'] = 'true';
     this.datasetsCrudApi.loadDemo(demo.name, params).subscribe({
       next: (response) => {
         this.loadingTasksSvc.startProgressPolling(response.task_id);

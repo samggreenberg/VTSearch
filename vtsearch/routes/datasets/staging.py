@@ -417,7 +417,15 @@ def import_dataset(importer_name: str):
     field_values = validate_plugin_args(
         importer,
         file_mode="bytesio",
-        extra_keys=("source_specs", "clipper", "embedder", "embedders", "dataset_name", "build_projection"),
+        extra_keys=(
+            "source_specs",
+            "clipper",
+            "embedder",
+            "embedders",
+            "dataset_name",
+            "build_projection",
+            "merge_near_duplicates",
+        ),
     )
 
     # ``clipper_params`` is multipart-encoded as a JSON string when the
@@ -459,6 +467,7 @@ register_plugin_typed_routes(
         "dataset_name",
         "clipper_params",
         "build_projection",
+        "merge_near_duplicates",
     ),
 )
 register_plugin_typed_routes(

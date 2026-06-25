@@ -323,6 +323,11 @@ class DatasetContext:
         "_patch_embedder",
         "_structural_embedder",
         "_binding_explicit",
+        # Transient create-time flag: when set, the finalize stage runs an
+        # extra near-duplicate collapse (images + text) after exact MD5
+        # dedup.  Never persisted - the *result* is baked into origins, so
+        # reloads default this off.  See docs/plans/near-duplicate-detection.md.
+        "merge_near_duplicates",
     )
 
     def __init__(self, dataset_id: str = "") -> None:
@@ -354,6 +359,7 @@ class DatasetContext:
         self._patch_embedder: str | None = None
         self._structural_embedder: str | None = None
         self._binding_explicit: bool = False
+        self.merge_near_duplicates: bool = False
 
     # ------------------------------------------------------------------
     # Role-typed embedder binding
@@ -705,6 +711,7 @@ class _RequestMissingDatasetContext(DatasetContext):
         object.__setattr__(self, "_patch_embedder", None)
         object.__setattr__(self, "_structural_embedder", None)
         object.__setattr__(self, "_binding_explicit", False)
+        object.__setattr__(self, "merge_near_duplicates", False)
 
     def __setattr__(self, name: str, value: Any) -> None:
         raise _frozen_mutation_error("dataset")
