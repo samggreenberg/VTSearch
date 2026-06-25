@@ -24,6 +24,21 @@ from vtscore.state import (
 )
 from vtscore.state.near_dupes import _hamming
 
+# A realistic document-length paragraph.  Near-dup text detection (tight
+# SimHash threshold) is meant to catch reformatted/re-encoded copies of a
+# document, not paraphrases: whitespace/punctuation reflows leave the hash
+# essentially unchanged, while genuine rewrites move well past the threshold.
+_DOC = (
+    "Machine learning models require careful evaluation across diverse datasets "
+    "to ensure that reported accuracy reflects genuine generalization rather than "
+    "overfitting to a particular benchmark distribution that may not represent "
+    "the real world conditions encountered after deployment in production systems"
+)
+# Same document, re-cased and reflowed with different whitespace/newlines (a
+# near-dup that exact-MD5 dedup would miss).  SimHash lowercases and splits on
+# whitespace, so an all-tokens-preserved reflow hashes identically.
+_DOC_REFLOWED = "\n    ".join(_DOC.upper().split())
+
 
 # --- helpers -------------------------------------------------------------
 def _ph(thumbnail_bytes: bytes) -> int:
@@ -38,7 +53,6 @@ def _sh(text: str) -> int:
     return h
 
 
-
 def _img_bytes(arr: np.ndarray) -> bytes:
     """Encode a uint8 HxW(xC) array as PNG bytes."""
     buf = io.BytesIO()
@@ -46,14 +60,30 @@ def _img_bytes(arr: np.ndarray) -> bytes:
     return buf.getvalue()
 
 
-def _gradient(seed: int, size: int = 64, jitter: float = 0.0) -> bytes:
-    """A smooth diagonal gradient (optionally jittered) -> stable pHash."""
+def _photo_arr(seed: int, size: int = 128) -> np.ndarray:
+    """A structured, photo-like RGB array (low-frequency noise upsampled).
+
+    Smooth gradients are a pathological pHash case (their low-freq DCT
+    coefficients all cluster near the median, so trivial perturbations flip
+    many bits).  Upsampled blocky noise has the broad coefficient spread real
+    photos do, so its pHash is stable under recompression/resize.
+    """
     rng = np.random.default_rng(seed)
-    yy, xx = np.mgrid[0:size, 0:size]
-    base = ((xx + yy) / (2 * size) * 255).astype(np.float64)
-    if jitter:
-        base = base + rng.standard_normal((size, size)) * jitter
-    return _img_bytes(np.clip(base, 0, 255).astype(np.uint8))
+    small = rng.integers(0, 256, (8, 8), dtype=np.uint8)
+    gray = np.asarray(Image.fromarray(small).resize((size, size), Image.Resampling.BICUBIC))
+    return np.stack([gray] * 3, axis=-1)
+
+
+def _photo(seed: int) -> bytes:
+    """PNG bytes of a structured photo-like image."""
+    return _img_bytes(_photo_arr(seed))
+
+
+def _recompress(arr: np.ndarray, quality: int = 70) -> bytes:
+    """Re-encode an array as JPEG (a lossy near-duplicate of the original)."""
+    buf = io.BytesIO()
+    Image.fromarray(arr).save(buf, format="JPEG", quality=quality)
+    return buf.getvalue()
 
 
 def _make_image_media(cid, thumb, *, md5=None, file_size=100, dim=4):
@@ -94,7 +124,7 @@ def _make_text_media(cid, text, *, md5=None, file_size=100):
 # --- pHash ---------------------------------------------------------------
 class TestPhash:
     def test_deterministic_and_64_bit(self):
-        b = _gradient(1)
+        b = _photo(1)
         assert phash_image(b) == phash_image(b)
         assert 0 <= _ph(b) < (1 << 64)
 
@@ -105,17 +135,11 @@ class TestPhash:
 
     def test_recompressed_image_is_near(self):
         """A re-encoded (JPEG) copy stays within the tight image threshold."""
-        arr = np.asarray(Image.open(io.BytesIO(_gradient(2))).convert("RGB"))
-        jpeg = io.BytesIO()
-        Image.fromarray(arr).save(jpeg, format="JPEG", quality=70)
-        assert _hamming(_ph(_gradient(2)), _ph(jpeg.getvalue())) <= 4
+        arr = _photo_arr(2)
+        assert _hamming(_ph(_img_bytes(arr)), _ph(_recompress(arr, 70))) <= 4
 
     def test_different_images_are_far(self):
-        a = _gradient(3)
-        # A distinct structural pattern (vertical bars) is far in pHash space.
-        bars = np.zeros((64, 64), dtype=np.uint8)
-        bars[:, ::4] = 255
-        assert _hamming(_ph(a), _ph(_img_bytes(bars))) > 4
+        assert _hamming(_ph(_photo(3)), _ph(_photo(4))) > 4
 
 
 # --- SimHash -------------------------------------------------------------
@@ -128,30 +152,28 @@ class TestSimhash:
         assert simhash_text(None) is None
         assert simhash_text("   ") is None
 
-    def test_near_identical_text_is_close(self):
-        a = "the quick brown fox jumps over the lazy dog near the river bank"
-        b = "the quick brown fox jumps over the lazy dog near the river side"
-        assert _hamming(_sh(a), _sh(b)) <= 3
+    def test_reflowed_document_is_close(self):
+        """A whitespace/punctuation-reflowed copy stays within the threshold."""
+        assert _hamming(_sh(_DOC), _sh(_DOC_REFLOWED)) <= 3
 
     def test_unrelated_text_is_far(self):
-        a = "the quick brown fox jumps over the lazy dog"
-        b = "completely unrelated sentence about astrophysics and quantum mechanics"
-        assert _hamming(_sh(a), _sh(b)) > 3
+        other = (
+            "An entirely different essay about coastal fermentation traditions and "
+            "the culinary history of preserved seafood across the northern islands"
+        )
+        assert _hamming(_sh(_DOC), _sh(other)) > 3
 
 
 # --- grouping / collapse -------------------------------------------------
 class TestCollapseNearDuplicates:
     def test_groups_near_dup_images(self):
-        thumb = _gradient(10)
-        arr = np.asarray(Image.open(io.BytesIO(thumb)).convert("RGB"))
-        jpeg = io.BytesIO()
-        Image.fromarray(arr).save(jpeg, format="JPEG", quality=75)
-        # A horizontal ramp is structurally distinct from the diagonal gradient.
-        distinct = _img_bytes(np.tile(np.arange(64, dtype=np.uint8), (64, 1)))
+        arr = _photo_arr(10)
+        # A JPEG recompression of the same photo is a near-duplicate; a
+        # different photo (seed 11) is not.
         media = {
-            1: _make_image_media(1, thumb),
-            2: _make_image_media(2, jpeg.getvalue()),
-            3: _make_image_media(3, distinct),
+            1: _make_image_media(1, _img_bytes(arr)),
+            2: _make_image_media(2, _recompress(arr, 75)),
+            3: _make_image_media(3, _photo(11)),
         }
         count = collapse_near_duplicates(media)
         assert count == 1
@@ -160,7 +182,7 @@ class TestCollapseNearDuplicates:
         assert 3 in media
 
     def test_representative_is_largest_file_size(self):
-        thumb = _gradient(11)
+        thumb = _photo(12)
         media = {
             1: _make_image_media(1, thumb, file_size=100),
             2: _make_image_media(2, thumb, file_size=500),  # largest -> representative
@@ -186,8 +208,8 @@ class TestCollapseNearDuplicates:
 
     def test_groups_near_dup_text(self):
         media = {
-            1: _make_text_media(1, "the quick brown fox jumps over the lazy dog by the river bank today"),
-            2: _make_text_media(2, "the quick brown fox jumps over the lazy dog by the river bank tonight"),
+            1: _make_text_media(1, _DOC),
+            2: _make_text_media(2, _DOC_REFLOWED),  # reflowed near-dup of 1
             3: _make_text_media(3, "an entirely different document discussing macroeconomic monetary policy at length"),
         }
         count = collapse_near_duplicates(media)
@@ -201,7 +223,7 @@ class TestCollapseNearDuplicates:
         The exact dupe_set's members are flattened into the near-dup group's
         member list (never nested), and each carries its own md5.
         """
-        thumb = _gradient(20)
+        thumb = _photo(20)
         media = {
             1: _make_image_media(1, thumb, md5="A", file_size=100),
             2: _make_image_media(2, thumb, md5="A", file_size=100),  # exact dup of 1
@@ -227,7 +249,7 @@ class TestCollapseNearDuplicates:
 # --- export expansion ----------------------------------------------------
 class TestNearDupeExportExpansion:
     def test_export_expands_with_per_member_md5(self):
-        thumb = _gradient(30)
+        thumb = _photo(30)
         media = {
             1: _make_image_media(1, thumb, md5="AAA", file_size=500),
             2: _make_image_media(2, thumb, md5="BBB", file_size=100),

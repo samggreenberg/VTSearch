@@ -42,7 +42,7 @@ import numpy as np
 # Per-modality Hamming thresholds (out of 64 bits).  Deliberately tight: a
 # positive should be a near-certain near-duplicate, so missed links fail
 # *negative*.  Not user-exposed - there is no "equalness points" slider.
-_THRESHOLDS: dict[str, int] = {"image": 4, "text": 3}
+_THRESHOLDS: dict[str, int] = {"image": 4, "text": 4}
 
 # --- Image pHash ---------------------------------------------------------
 _DCT_N = 32  # downsample square edge before the DCT

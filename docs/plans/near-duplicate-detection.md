@@ -38,9 +38,22 @@ answers "these *mean* the same thing". Near-dupe wants the former.
    is not transitive (A≈B, B≈C, but A≉C). We pick a **tight** per-pair Hamming
    threshold so any positive is high-confidence (missed links are false
    *negatives*, which we tolerate), then take **connected components** over the
-   closeness graph as if it were an equivalence relation. Thresholds:
-   images `K=4`, text `K=3` (out of 64 bits). Not user-exposed — no "equalness
+   closeness graph as if it were an equivalence relation. Thresholds (out of
+   64 bits): images `K=4`, text `K=4`. Not user-exposed — no "equalness
    points" slider.
+
+   These were calibrated empirically (see the measurements baked into
+   `tests_lib/datasets/test_near_dupes.py`). For a structured ("photo-like")
+   image, JPEG recompression and resize round-trips land at Hamming **0**
+   while a different image is **~32** — a huge margin, so `K=4` is very safe.
+   (Smooth gradients are a pathological pHash case — their low-frequency DCT
+   coefficients cluster at the median so trivial edits flip many bits — but
+   real media isn't smooth.) For a ~40-word document, a whitespace/case/
+   encoding reflow hashes to **0** (the near-dup exact-MD5 misses), a single
+   token edit ≈**4**, a multi-word edit ≥**8**, and an unrelated document
+   ≥**30**. So text near-dup mainly catches reformatted/re-encoded copies and
+   incidental single-token differences; larger edits are intentional
+   false-negatives.
 
    *Caveat (logged, accepted for v1):* even a tight per-pair threshold doesn't
    fully kill transitive drift across a dense gradient (A~B~…~Z). It makes it

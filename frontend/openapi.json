@@ -5651,6 +5651,10 @@
             "default": null,
             "nullable": true
           },
+          "merge_near_duplicates": {
+            "default": null,
+            "nullable": true
+          },
           "name": {
             "default": "",
             "type": "string"
@@ -5693,6 +5697,10 @@
             "type": "string"
           },
           "embedders": {
+            "default": null,
+            "nullable": true
+          },
+          "merge_near_duplicates": {
             "default": null,
             "nullable": true
           },
@@ -5840,6 +5848,10 @@
             ],
             "type": "string"
           },
+          "merge_near_duplicates": {
+            "default": null,
+            "nullable": true
+          },
           "source_specs": {
             "default": null,
             "nullable": true
@@ -5880,6 +5892,10 @@
             "default": null,
             "nullable": true
           },
+          "merge_near_duplicates": {
+            "default": null,
+            "nullable": true
+          },
           "source_specs": {
             "default": null,
             "nullable": true
@@ -5911,6 +5927,10 @@
             "nullable": true
           },
           "embedders": {
+            "default": null,
+            "nullable": true
+          },
+          "merge_near_duplicates": {
             "default": null,
             "nullable": true
           },
@@ -5963,6 +5983,10 @@
             ],
             "type": "string"
           },
+          "merge_near_duplicates": {
+            "default": null,
+            "nullable": true
+          },
           "query_id": {
             "type": "string"
           },
@@ -6014,6 +6038,10 @@
               ""
             ],
             "type": "string"
+          },
+          "merge_near_duplicates": {
+            "default": null,
+            "nullable": true
           },
           "paths_file": {
             "type": "string"
@@ -6073,6 +6101,10 @@
             ],
             "type": "string"
           },
+          "merge_near_duplicates": {
+            "default": null,
+            "nullable": true
+          },
           "path": {
             "type": "string"
           },
@@ -6128,6 +6160,10 @@
               ""
             ],
             "type": "string"
+          },
+          "merge_near_duplicates": {
+            "default": null,
+            "nullable": true
           },
           "size": {
             "default": 100,
