@@ -47,6 +47,8 @@ python -m vtscore.eval [OPTIONS]
 | `--safe-thresholds` | Blend cross-calibration threshold with GMM for robustness | off |
 | `--calibrate-count K` | Number of random Train/Calibrate splits for threshold calibration | `2` |
 | `--calibration-fraction F` | Fraction of training data reserved for calibration | `0.5` |
+| `--embedder NAME` | Build each demo dataset with this embedder (empty = media-type default) | `` |
+| `--region-voting` | Region-pool learned-sort Good votes from each media's ground-truth box (needs `--embedder <patch>` + a dataset with stored regions, e.g. Visual Genome) | off |
 | `--list` | List available eval datasets and exit | - |
 
 ### Examples
@@ -60,6 +62,12 @@ python -m vtscore.eval --mode learned --train-fraction 0.7 --seed 123 --plot-dir
 
 # Learned sort with safe thresholds and calibration tuning
 python -m vtscore.eval --mode learned --safe-thresholds --calibrate-count 4 --plot-dir eval_output
+
+# Region voting on Visual Genome: re-embed with a patch embedder, then have
+# each Good vote use the object's ground-truth box instead of the whole image.
+# Run once without and once with --region-voting and diff the F1s.
+python -m vtscore.eval --mode learned --datasets visual_genome_s --embedder dinov3_patch
+python -m vtscore.eval --mode learned --datasets visual_genome_s --embedder dinov3_patch --region-voting
 
 # List available eval datasets
 python -m vtscore.eval --list
@@ -258,6 +266,27 @@ paths = plot_voting_iterations(df, output_dir="eval_output")
 for p in paths:
     print(f"Saved: {p}")
 ```
+
+#### Region voting
+
+On a **patch-embedder** dataset that carries ground-truth boxes (Visual Genome,
+loaded with `embedder_name="dinov3_patch"`), pass `region_voting=True` to make
+each simulated Good vote train on the object's box instead of the whole image:
+
+```python
+medias = {}
+load_demo_dataset("visual_genome_s", medias, embedder_name="dinov3_patch")
+
+# Same dataset, two runs — the only difference is the Good-vote training vector.
+baseline = run_voting_iterations_eval({"vg": medias}, seeds=[1, 2, 3], region_voting=False)
+region   = run_voting_iterations_eval({"vg": medias}, seeds=[1, 2, 3], region_voting=True)
+```
+
+A Good vote uses the **minimal box covering every annotated instance** of the
+target category (two apples → one box around both); images with no annotated box
+fall back to the whole-image vector. Scoring is region-aware (max-pool over
+regions) in both runs, so the comparison isolates region voting's effect. Region
+voting is a no-op on single-vector datasets (no `patch_grid` to pool).
 
 ### Example: voting iterations from pickle files
 

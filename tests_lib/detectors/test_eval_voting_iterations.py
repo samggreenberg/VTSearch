@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from vtscore.eval.voting_iterations import (
+    _good_training_vec,
     _inclusion_weights,
     _make_vote_sequence,
     _split_media_ids,
@@ -367,3 +368,135 @@ class TestRunVotingIterationsEval:
         )
         combos = df.groupby(["seed", "dataset", "category"]).ngroups
         assert combos == 4  # 2 seeds x 1 dataset x 2 categories
+
+
+# ------------------------------------------------------------------
+# Region voting (patch datasets)
+# ------------------------------------------------------------------
+
+_PATCH_DIM = 8
+_GRID = 3  # 3x3 patch grid
+
+
+def _unit(v):
+    v = np.asarray(v, dtype=np.float32)
+    n = float(np.linalg.norm(v))
+    return v / n if n else v
+
+
+def _patch_media(media_id, positive, *, category, with_box=True):
+    """A synthetic patch-embedder media (``patch_grid`` + ``patch_regions``).
+
+    Positive media have grid cells pointing along ``+e0`` and a ground-truth
+    box; negatives point along ``-e0`` and carry no box.  Separable so the MLP
+    trains cleanly without flakiness.
+    """
+    from vtscore.media.patch_embed import RegionVector
+
+    rng = np.random.default_rng(media_id)
+    sign = 1.0 if positive else -1.0
+    grid = np.zeros((_GRID, _GRID, _PATCH_DIM), dtype=np.float32)
+    for r in range(_GRID):
+        for c in range(_GRID):
+            base = np.zeros(_PATCH_DIM, dtype=np.float32)
+            base[0] = sign
+            grid[r, c] = _unit(base + rng.standard_normal(_PATCH_DIM).astype(np.float32) * 0.05)
+    img_vec = _unit(grid.reshape(-1, _PATCH_DIM).mean(axis=0))
+
+    regions = [RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=img_vec)]
+    for r in range(_GRID):
+        for c in range(_GRID):
+            box = (c / _GRID, r / _GRID, (c + 1) / _GRID, (r + 1) / _GRID)
+            regions.append(RegionVector(box=box, vec=grid[r, c]))
+
+    media = {
+        "id": media_id,
+        "media_type": "image",
+        "embedder": "dinov3_patch",
+        "embeddings": {"dinov3_patch": img_vec},
+        "patch_grid": grid,
+        "patch_regions": regions,
+        "category": category,
+    }
+    if positive and with_box:
+        media["regions"] = [{"box": [0.0, 0.0, 2 / 3, 1.0], "label": category}]
+    return media
+
+
+def _make_patch_clips(n_per_cat=10):
+    medias = {}
+    media_id = 1
+    for _ in range(n_per_cat):
+        medias[media_id] = _patch_media(media_id, positive=True, category="apple")
+        media_id += 1
+    for _ in range(n_per_cat):
+        medias[media_id] = _patch_media(media_id, positive=False, category="other")
+        media_id += 1
+    return medias
+
+
+class TestGoodTrainingVec:
+    """The per-Good-vote training vector, region-pooled or whole-image."""
+
+    def test_image_level_when_region_voting_off(self):
+        from vtscore.embedding.media_vectors import media_embedding
+
+        media = _patch_media(1, positive=True, category="apple")
+        vec = _good_training_vec(media, "apple", region_voting=False)
+        np.testing.assert_allclose(vec, media_embedding(media))
+
+    def test_pools_box_when_region_voting_on(self):
+        from vtscore.media.patch_embed import box_to_vote_vector
+
+        media = _patch_media(1, positive=True, category="apple")
+        vec = _good_training_vec(media, "apple", region_voting=True)
+        expected = box_to_vote_vector(np.asarray(media["patch_grid"]), (0.0, 0.0, 2 / 3, 1.0))
+        np.testing.assert_allclose(vec, expected)
+
+    def test_falls_back_without_patch_grid(self):
+        from vtscore.embedding.media_vectors import media_embedding
+
+        media = _patch_media(1, positive=True, category="apple")
+        del media["patch_grid"]
+        vec = _good_training_vec(media, "apple", region_voting=True)
+        np.testing.assert_allclose(vec, media_embedding(media))
+
+    def test_falls_back_without_matching_box(self):
+        from vtscore.embedding.media_vectors import media_embedding
+
+        # Positive image but no annotated box for this category.
+        media = _patch_media(1, positive=True, category="apple", with_box=False)
+        vec = _good_training_vec(media, "apple", region_voting=True)
+        np.testing.assert_allclose(vec, media_embedding(media))
+
+
+class TestRegionVotingSimulate:
+    """End-to-end region voting on a synthetic patch dataset."""
+
+    def test_region_voting_produces_finite_rows(self):
+        medias = _make_patch_clips(n_per_cat=10)
+        rows = simulate_voting_iterations(medias, target_category="apple", seed=0, region_voting=True)
+        assert rows  # region-aware scoring path runs end-to-end
+        for row in rows:
+            assert np.isfinite(row["cost"])
+            assert np.isfinite(row["fpr"])
+            assert np.isfinite(row["fnr"])
+
+    def test_baseline_on_patch_data_also_scores_region_aware(self):
+        # region_voting=False still works on a patch dataset: Good votes train
+        # whole-image, but scoring max-pools over regions (the live inference).
+        medias = _make_patch_clips(n_per_cat=10)
+        rows = simulate_voting_iterations(medias, target_category="apple", seed=0, region_voting=False)
+        assert rows
+        assert all(np.isfinite(r["cost"]) for r in rows)
+
+    def test_run_eval_threads_region_voting_flag(self):
+        medias = _make_patch_clips(n_per_cat=8)
+        df = run_voting_iterations_eval(
+            dataset_clips={"vg": medias},
+            seeds=[0],
+            categories={"vg": ["apple"]},
+            region_voting=True,
+        )
+        assert not df.empty
+        assert (df["category"] == "apple").all()
