@@ -100,6 +100,9 @@ class AppSettingsSchema(Schema):
     # VTSBrowse bin-popup thumbnail size, per media type. Driven by the popup's
     # own size buttons and the Settings → Browser tab. (The popup is grid-only.)
     grid_icon_size_popup = _PerMediaTypeStringDict()
+    # VTSBrowse bin-popup detail-canvas (large single-item preview) size in CSS
+    # px, per media type. Driven by the popup's own top-left size buttons.
+    popup_preview_size = _PerMediaTypeIntDict()
 
     # Server-tier. These are fixed at server start (config file /
     # environment / CLI flags) and shared across all users; the frontend
@@ -204,6 +207,7 @@ class SettingsUpdateSchema(Schema):
     panel_pct_left = fields.Raw()
     panel_pct_right = fields.Raw()
     grid_icon_size_popup = fields.Raw()
+    popup_preview_size = fields.Raw()
 
     autopilot_enabled = fields.Boolean()
     hide_autopilot = fields.Boolean()

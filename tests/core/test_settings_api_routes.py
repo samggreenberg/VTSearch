@@ -422,6 +422,24 @@ class TestSettingsAPI:
         res = client.put("/api/settings", json={"grid_icon_size_popup": {"audio": "TINY"}})
         assert res.status_code == 400
 
+    def test_update_popup_preview_size_per_type(self, client):
+        res = client.put("/api/settings", json={"popup_preview_size": {"image": 320, "video": 480}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["popup_preview_size"]["image"] == 320
+        assert data["popup_preview_size"]["video"] == 480
+
+        res2 = client.get("/api/settings")
+        assert res2.get_json()["popup_preview_size"]["image"] == 320
+
+    def test_update_popup_preview_size_clamps_out_of_range(self, client):
+        # Values outside POPUP_PREVIEW_SIZE_PX (96..720) clamp rather than reject.
+        res = client.put("/api/settings", json={"popup_preview_size": {"image": 5000, "video": 1}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["popup_preview_size"]["image"] == 720
+        assert data["popup_preview_size"]["video"] == 96
+
     def test_update_focus_mode_left_per_type(self, client):
         res = client.put("/api/settings", json={"focus_mode_left": {"audio": "hover", "image": "click"}})
         assert res.status_code == 200

@@ -11,11 +11,28 @@
     class="bin-popup-header"
     [class.dragging]="dragging"
     (pointerdown)="onHeaderPointerDown($event)">
-    <span
-      class="bin-popup-title"
-      [title]="'Items in this bin (' + ids.length + ') — drag to move'">
-      {{ ids.length | number }} item{{ ids.length === 1 ? '' : 's' }}
-    </span>
+    @if (showPreview) {
+      <div class="bin-popup-size-group" role="group" aria-label="Detail image size">
+        <button
+          type="button"
+          class="bin-popup-size-btn"
+          [disabled]="atMinPreview"
+          (click)="bumpPreview(-1)"
+          title="Smaller detail image"
+          aria-label="Smaller detail image">
+          <vt-icon type="image" [size]="11" />
+        </button>
+        <button
+          type="button"
+          class="bin-popup-size-btn"
+          [disabled]="atMaxPreview"
+          (click)="bumpPreview(1)"
+          title="Bigger detail image"
+          aria-label="Bigger detail image">
+          <vt-icon type="image" [size]="18" />
+        </button>
+      </div>
+    }
     <vt-view-controls
       side="popup"
       [currentMediaType]="mediaType()"
@@ -47,10 +64,16 @@
     }
 
     @if (!previewOnly) {
-      <cdk-virtual-scroll-viewport
-        [itemSize]="rowSize"
-        class="bin-popup-scroll"
-        (mouseleave)="onGridLeave()">
+      <div class="bin-popup-grid-col">
+        <span
+          class="bin-popup-count"
+          [title]="'Items in this bin (' + ids.length + ')'">
+          {{ ids.length | number }} item{{ ids.length === 1 ? '' : 's' }}
+        </span>
+        <cdk-virtual-scroll-viewport
+          [itemSize]="rowSize"
+          class="bin-popup-scroll"
+          (mouseleave)="onGridLeave()">
         <div
           *cdkVirtualFor="let row of rows; trackBy: trackByRow"
           class="bin-popup-row"
@@ -85,7 +108,8 @@
             </div>
           }
         </div>
-      </cdk-virtual-scroll-viewport>
+        </cdk-virtual-scroll-viewport>
+      </div>
     }
   </div>
 

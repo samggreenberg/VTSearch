@@ -30,6 +30,7 @@ from vtscore.config import DATA_DIR, DEFAULT_CALIBRATE_COUNT
 
 __all__ = [
     "BROWSE_THUMBNAIL_BORDER_PX",
+    "POPUP_PREVIEW_SIZE_PX",
     "BinShape",
     "BrowseColormap",
     "BrowseIconSize",
@@ -82,6 +83,11 @@ VALID_PANEL_PX: tuple[int, int] = (150, 10000)
 # Allowed range (CSS px) for the VTSBrowse pile-thumbnail border width. ``0``
 # disables the border; values are clamped into this range on read/write.
 BROWSE_THUMBNAIL_BORDER_PX: tuple[int, int] = (0, 8)
+# Allowed range (CSS px) for the VTSBrowse bin-popup detail-canvas (the large
+# single-item preview) side. The popup's own size buttons drive it; values are
+# clamped into this range on read/write. The floor keeps a usable preview; the
+# ceiling matches the frontend's absolute preview cap.
+POPUP_PREVIEW_SIZE_PX: tuple[int, int] = (96, 720)
 
 
 def _clamp(lo: float, hi: float):
@@ -286,6 +292,14 @@ class UserSettings(BaseModel):
     # per-side machinery): the popup is a single, third context, so it uses the
     # generic Pydantic-driven accessors.
     grid_icon_size_popup: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
+    # VTSBrowse bin-popup detail-canvas size, per media type (CSS px). The popup
+    # opens its hovered/representative item in a large square preview pane beside
+    # the member grid; this is the user's chosen side for that pane, driven by the
+    # popup's own top-left size buttons (independent of the grid thumbnail size in
+    # ``grid_icon_size_popup``). Empty entries fall back on the frontend to a size
+    # derived from the main-canvas thumbnail radius. Clamped to
+    # ``POPUP_PREVIEW_SIZE_PX``.
+    popup_preview_size: dict[str, Annotated[int, _clamp(*POPUP_PREVIEW_SIZE_PX)]] = Field(default_factory=dict)
     panel_pct_left: dict[str, int] = Field(default_factory=dict)
     panel_pct_right: dict[str, int] = Field(default_factory=dict)
 

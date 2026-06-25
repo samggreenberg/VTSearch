@@ -7,8 +7,10 @@ import { MediaMetadataCacheService } from '../../services/media-metadata-cache.s
 import { ActiveContextService } from '../../services/active-context.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
+import { IconComponent } from '../icon/icon.component';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { usesThumbnails } from '../browse-canvas/hex-render.util';
+import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
 
 /** Vertical room (px) reserved under a grid thumbnail for its truncated name. */
 const GRID_LABEL_HEIGHT = 18;
@@ -51,6 +53,15 @@ const PREVIEW_OVERSIZE = 2.0;
  * {@link PREVIEW_OVERSIZE}.
  */
 const HOVER_EXTENT_PER_RADIUS = 3;
+/** Vertical room (px) the member-count label takes above the scrolling grid. */
+const COUNT_LABEL_HEIGHT = 22;
+/**
+ * Discrete ladder (px) of detail-canvas sizes the top-left size buttons step
+ * through. Each click moves to the next rung past the current size in the click
+ * direction, so the popup grows/shrinks in clean increments. Bounded by
+ * {@link MIN_PREVIEW_PX}..{@link MAX_PREVIEW_PX}.
+ */
+const PREVIEW_SIZE_STEPS = [120, 160, 208, 272, 352, 448, 560, 640, 720] as const;
 
 /**
  * The bin popup: a floating panel showing the media items in the bin the user
@@ -69,9 +80,16 @@ const HOVER_EXTENT_PER_RADIUS = 3;
  * The thumbnail size of the grid is remembered per media type under the
  * ``grid_icon_size_popup`` setting (independent of the left/right panels), so
  * tuning the popup while browsing one bin becomes the default for every future
- * popup of that media type. The in-header {@link ViewControlsComponent} writes
+ * popup of that media type. The top-right {@link ViewControlsComponent} writes
  * that setting (its Grid/List toggle is hidden here) and this component re-reads
  * it from {@link SettingsStateService}, keyed by the active dataset's media type.
+ *
+ * A second, top-left pair of size buttons controls the *detail canvas* (the
+ * large preview pane) rather than the grid thumbnails. Because the popup's
+ * height is the preview pane's height, growing/shrinking the detail canvas
+ * resizes the whole window. That size is likewise remembered per media type,
+ * under ``popup_preview_size`` (px); unset, the pane falls back to a size scaled
+ * from the main-canvas thumbnail radius ({@link hoverThumbRadius}).
  *
  * It shares the {@link BrowseSelectionService} instance provided by the browse
  * view, so toggling an item here is the same selection the canvas rings and the
@@ -84,7 +102,7 @@ const HOVER_EXTENT_PER_RADIUS = 3;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-bin-popup',
   standalone: true,
-  imports: [CommonModule, ScrollingModule, ViewControlsComponent],
+  imports: [CommonModule, ScrollingModule, ViewControlsComponent, IconComponent],
   templateUrl: './browse-bin-popup.component.html',
   styleUrl: './browse-bin-popup.component.scss',
 })
@@ -179,7 +197,15 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
       const settings = this.settingsState.settingsSignal();
       if (!settings) return;
       this.gridSizeDict = (settings.grid_icon_size_popup as Record<string, string>) ?? {};
+      this.previewSizeDict = (settings.popup_preview_size as Record<string, number>) ?? {};
       this.applyViewPrefs();
+      // A detail-canvas size change (the top-left buttons) resizes the preview
+      // pane, hence the whole popup, so re-clamp it back fully on-screen.
+      const override = this.previewOverride;
+      if (override !== this.lastPreviewOverride) {
+        this.lastPreviewOverride = override;
+        setTimeout(() => this.place());
+      }
     });
     // A selection change anywhere (here, the canvas, the panel) re-highlights.
     // An effect on the signal (rather than a `changed$` subscription) schedules
@@ -246,6 +272,12 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   }
 
   private gridSizeDict: Record<string, string> = {};
+  /** Per-media-type detail-canvas size (px) the user has chosen via the popup's
+   *  top-left buttons; absent entries fall back to the radius-derived default. */
+  private previewSizeDict: Record<string, number> = {};
+  /** Last applied preview override, so the settings effect only re-clamps the
+   *  popup when the detail-canvas size actually changed. */
+  private lastPreviewOverride: number | null = null;
 
   /** True for media types that carry real visual thumbnails (image / video):
    *  the ones that magnify on the main canvas and are worth a large preview. */
@@ -297,17 +329,65 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     return Math.min(Math.max(this.rows.length, 1) * this.rowSize, this.bodyCapPx);
   }
 
-  /** Target/minimum side (px) of the square preview pane: scaled up from the
-   *  item's on-canvas mouse-over break-out at the current main-canvas thumbnail
-   *  size, clamped to the room the visible region leaves. The rendered pane grows
-   *  to {@link previewPaneSize} (the full body height) when the member grid is
+  /** The user's chosen detail-canvas size (px) for the active media type, or
+   *  ``null`` when they haven't set one (and the radius-derived default is used). */
+  get previewOverride(): number | null {
+    const mediaType = this.mediaType();
+    const value = mediaType ? this.previewSizeDict[mediaType] : undefined;
+    return typeof value === 'number' ? value : null;
+  }
+
+  /** Detail-canvas side (px) the popup opens at before any user override:
+   *  scaled up from the item's on-canvas mouse-over break-out at the current
+   *  main-canvas thumbnail size. */
+  private previewDefault(): number {
+    return this.hoverThumbRadius() * HOVER_EXTENT_PER_RADIUS * PREVIEW_OVERSIZE;
+  }
+
+  /** Target/minimum side (px) of the square preview pane: the user's chosen size
+   *  (the top-left buttons) or, unset, a size scaled up from the item's
+   *  on-canvas mouse-over break-out at the current main-canvas thumbnail size.
+   *  Clamped to the room the visible region leaves. The rendered pane grows to
+   *  {@link previewPaneSize} (the full body height) when the member grid is
    *  taller. Zero when there is no preview. */
   get previewSize(): number {
     if (!this.showPreview) return 0;
-    const desired = this.hoverThumbRadius() * HOVER_EXTENT_PER_RADIUS * PREVIEW_OVERSIZE;
+    const desired = this.previewOverride ?? this.previewDefault();
     // Keep it within the vertical room the region leaves (which already folds in
     // the absolute MAX_PREVIEW_PX cap via ``previewCapPx``).
     return Math.round(Math.max(MIN_PREVIEW_PX, Math.min(desired, this.previewCapPx)));
+  }
+
+  /** Step the detail-canvas size to the next ladder rung past the current size in
+   *  the given direction and persist it (per media type, under
+   *  ``popup_preview_size``), so it becomes the default for future popups of this
+   *  type — mirroring how the grid thumbnail-size buttons persist. The settings
+   *  effect re-clamps the popup so growing the canvas can't push it off-screen. */
+  bumpPreview(delta: 1 | -1): void {
+    const mediaType = this.mediaType();
+    if (!this.showPreview || !mediaType) return;
+    const current = this.previewOverride ?? Math.round(this.previewDefault());
+    const next =
+      delta > 0
+        ? (PREVIEW_SIZE_STEPS.find((s) => s > current) ?? PREVIEW_SIZE_STEPS[PREVIEW_SIZE_STEPS.length - 1])
+        : ([...PREVIEW_SIZE_STEPS].reverse().find((s) => s < current) ?? PREVIEW_SIZE_STEPS[0]);
+    if (next === this.previewOverride) return;
+    const dict = { ...this.previewSizeDict, [mediaType]: next };
+    this.settingsState.update({ popup_preview_size: dict } as SettingsUpdate).subscribe();
+  }
+
+  /** True when the detail canvas is already at the smallest ladder rung. */
+  get atMinPreview(): boolean {
+    if (!this.showPreview) return true;
+    const current = this.previewOverride ?? Math.round(this.previewDefault());
+    return current <= PREVIEW_SIZE_STEPS[0];
+  }
+
+  /** True when the detail canvas is already at the largest ladder rung. */
+  get atMaxPreview(): boolean {
+    if (!this.showPreview) return true;
+    const current = this.previewOverride ?? Math.round(this.previewDefault());
+    return current >= PREVIEW_SIZE_STEPS[PREVIEW_SIZE_STEPS.length - 1];
   }
 
   /** True for a one-member bin that has a preview pane: the grid would just
@@ -317,11 +397,19 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     return this.showPreview && this.ids.length === 1;
   }
 
-  /** Height (px) of the body row: tall enough for the grid (capped to the
-   *  region), but at least the preview pane's height so the pane is shown in
-   *  full. The preview may exceed the grid's cap; both are region-bounded. */
+  /** Height (px) of the grid column: the scrolling grid (capped to the region)
+   *  plus the member-count label stacked above it. Zero for a singleton bin
+   *  (no grid column — only the preview). */
+  get gridColHeight(): number {
+    return this.previewOnly ? 0 : this.gridHeight + COUNT_LABEL_HEIGHT;
+  }
+
+  /** Height (px) of the body row: tall enough for the grid column (grid capped to
+   *  the region, plus its count label), but at least the preview pane's height so
+   *  the pane is shown in full. The preview may exceed the grid's cap; both are
+   *  region-bounded. */
   get bodyHeight(): number {
-    return Math.max(this.gridHeight, this.previewSize);
+    return Math.max(this.gridColHeight, this.previewSize);
   }
 
   /** Side (px) of the *rendered* square preview pane. {@link previewSize} is the
@@ -502,9 +590,42 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   // --- Positioning ---------------------------------------------------------
 
   /** Re-clamp the popup, anchoring at the summon point unless the user has
-   *  dragged it (then keep their spot, just nudged back on-screen if needed). */
+   *  dragged it (then keep their spot, just nudged back on-screen if needed).
+   *  The computed clamp derives the popup size from known widths/heights; once
+   *  it has laid out we additionally measure the real panel and correct any
+   *  residual overflow, so the window ends up entirely on-screen even if the
+   *  computed height drifts from what actually rendered. */
   private place(): void {
     this.clampInto(this.dragged ? this.left : this.x(), this.dragged ? this.top : this.y());
+    requestAnimationFrame(() => this.nudgeOnScreen());
+  }
+
+  /** Measure the rendered panel and slide it so its real rect sits inside the
+   *  visible region (canvas ∩ viewport), keeping the bottom (and the detail
+   *  image's bottom with it) on-screen. Purely corrective: a no-op when the
+   *  computed clamp already fits. */
+  private nudgeOnScreen(): void {
+    const panel = this.panelRef?.nativeElement;
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    const b = this.bounds();
+    const regionLeft = Math.max(b ? b.left : 0, 0);
+    const regionTop = Math.max(b ? b.top : 0, 0);
+    const regionRight = Math.min(b ? b.right : window.innerWidth, window.innerWidth);
+    const regionBottom = Math.min(b ? b.bottom : window.innerHeight, window.innerHeight);
+    let l = this.left;
+    let t = this.top;
+    // Pull in from the far edges first, then guarantee the near edges, so a popup
+    // larger than the region pins to top-left (losing the far edge, not the near).
+    if (rect.right > regionRight - EDGE_MARGIN) l -= rect.right - (regionRight - EDGE_MARGIN);
+    if (rect.bottom > regionBottom - EDGE_MARGIN) t -= rect.bottom - (regionBottom - EDGE_MARGIN);
+    l = Math.max(regionLeft + EDGE_MARGIN, l);
+    t = Math.max(regionTop + EDGE_MARGIN, t);
+    if (l !== this.left || t !== this.top) {
+      this.left = l;
+      this.top = t;
+      this.cdr.markForCheck();
+    }
   }
 
   /** Clamp ``(desiredLeft, desiredTop)`` so the *whole* popup sits inside the
@@ -532,7 +653,10 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     // Squeeze the scrolling body to whatever vertical room the region leaves, so
     // a short canvas can't make the popup taller than what's visible.
     const regionRoom = regionBottom - regionTop - 2 * EDGE_MARGIN - headerH;
-    this.bodyCapPx = Math.max(MIN_BODY_PX, Math.min(MAX_BODY_PX, regionRoom));
+    // The grid column also carries the member-count label above the scroll, so
+    // its cap leaves that label room; the scroll then fills what's left.
+    const gridRoom = regionRoom - COUNT_LABEL_HEIGHT;
+    this.bodyCapPx = Math.max(MIN_BODY_PX, Math.min(MAX_BODY_PX, gridRoom));
     // The preview gets its own, larger cap: it may grow past the grid's body cap,
     // bounded only by the visible region and the absolute MAX_PREVIEW_PX.
     this.previewCapPx = Math.max(MIN_PREVIEW_PX, Math.min(MAX_PREVIEW_PX, regionRoom));

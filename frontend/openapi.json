@@ -336,6 +336,12 @@
             },
             "type": "object"
           },
+          "popup_preview_size": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object"
+          },
           "safe_thresholds": {
             "type": "boolean"
           },
@@ -4583,6 +4589,7 @@
           "last_embedder_per_media_type": {},
           "panel_pct_left": {},
           "panel_pct_right": {},
+          "popup_preview_size": {},
           "safe_thresholds": {
             "type": "boolean"
           },
