@@ -55,22 +55,24 @@ def auto_max_depth(
     k: int = DIVERSITY_TREE_DEFAULT_K,
     min_node_size: int = DIVERSITY_TREE_MIN_NODE_SIZE,
 ) -> int:
-    """Depth cap that scales with *n* and bounds the leaf count at ``_MAX_LEAVES``.
+    """Depth cap that bounds the leaf count at ``_MAX_LEAVES`` for large *n*.
 
-    The *natural* depth - ``ceil(log_k(n / min_node_size))`` - is where
-    :meth:`DiversityTree._build_node` already stops splitting (a node smaller
-    than ``min_node_size`` is never split), so capping at it is structurally a
-    no-op for any dataset whose natural depth is below
-    ``DIVERSITY_TREE_MAX_DEPTH``.  The separate ``_MAX_LEAVES`` cap only binds
-    for datasets large enough that the natural depth would otherwise blow the
-    node count up.  Always returns at least 1.
+    ``min_node_size`` already bounds the leaf count at ``n / min_node_size``
+    (a node smaller than it is never split), so when that bound is within the
+    ``_MAX_LEAVES`` budget the cap is unnecessary and the full
+    ``DIVERSITY_TREE_MAX_DEPTH`` is returned - a structural no-op for normal
+    datasets, including the skewed k-means splits whose dense branches reach
+    deeper than a balanced tree would.  Only once ``n / min_node_size`` exceeds
+    the budget (very large datasets) is the depth clamped so ``k**depth`` stays
+    under ``_MAX_LEAVES``.  Always returns at least 1.
     """
     if n <= 0:
         return DIVERSITY_TREE_MAX_DEPTH
+    if n / max(min_node_size, 1) <= _MAX_LEAVES:
+        return DIVERSITY_TREE_MAX_DEPTH
     base = max(k, 2)
-    natural = math.ceil(math.log(max(n / max(min_node_size, 1), 1.0), base))
-    cap = math.ceil(math.log(_MAX_LEAVES, base))
-    return max(1, min(DIVERSITY_TREE_MAX_DEPTH, natural, cap))
+    cap = int(math.floor(math.log(_MAX_LEAVES, base)))
+    return max(1, min(DIVERSITY_TREE_MAX_DEPTH, cap))
 
 
 class DiversityTree:

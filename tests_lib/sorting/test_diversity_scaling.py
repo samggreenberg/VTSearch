@@ -68,19 +68,24 @@ class TestAutoMaxDepth:
         assert auto_max_depth(1, k=3) >= 1
 
     def test_leaf_count_bounded_for_huge_n(self):
-        # The cap term keeps k**depth from blowing past the soft leaf ceiling
-        # by more than one level.
+        # Once n/min_node_size exceeds the budget the depth is clamped so the
+        # full leaf count stays under the soft ceiling.
         depth = auto_max_depth(10_000_000, k=3)
-        assert 3 ** (depth - 1) <= _MAX_LEAVES
+        assert depth < DIVERSITY_TREE_MAX_DEPTH
+        assert 3**depth <= _MAX_LEAVES
+
+    def test_no_cap_until_leaf_budget_exceeded(self):
+        # n/min_node_size within budget -> full depth (behaviour-preserving).
+        assert auto_max_depth(4_000 * 20, k=3, min_node_size=20) == DIVERSITY_TREE_MAX_DEPTH
+        # Just past the budget -> clamped.
+        assert auto_max_depth(4_001 * 20, k=3, min_node_size=20) < DIVERSITY_TREE_MAX_DEPTH
 
     def test_does_not_cap_below_natural_depth(self):
         # For a small dataset the natural splitting depth (where _build_node
         # already stops via min_node_size) is below the global cap, so the
         # tree is structurally identical to one built with the default depth.
         vectors = _make_vectors(300)
-        capped = DiversityTree(
-            vectors, k=3, max_depth=auto_max_depth(len(vectors), k=3)
-        )
+        capped = DiversityTree(vectors, k=3, max_depth=auto_max_depth(len(vectors), k=3))
         full = DiversityTree(vectors, k=3, max_depth=DIVERSITY_TREE_MAX_DEPTH)
         assert capped.vector_to_leaf == full.vector_to_leaf
         assert set(capped.nodes) == set(full.nodes)

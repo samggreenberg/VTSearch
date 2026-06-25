@@ -29,7 +29,7 @@ def _make_media(media_id: int) -> dict:
         "duration": 1.0,
         "file_size": 100,
         "md5": hashlib.md5(f"divtree_{media_id}".encode()).hexdigest(),
-        "embedding": rng.standard_normal(64).astype(np.float32),
+        "embeddings": {"clap": rng.standard_normal(64).astype(np.float32)},
         "media_bytes": b"fake",
         "filename": f"divtree_{media_id}.wav",
         "category": "test",
@@ -81,9 +81,7 @@ class TestDiversityTreeEndpoint:
     def test_not_loaded_returns_400(self, client):
         from vtscore.datasets.registry import register_dataset
 
-        entry = register_dataset(
-            name="NotLoaded", media_type="audio", num_items=1, pkl_path="/tmp/divtree_nl.pkl"
-        )
+        entry = register_dataset(name="NotLoaded", media_type="audio", num_items=1, pkl_path="/tmp/divtree_nl.pkl")
         resp = client.post(f"/api/datasets/registry/{entry['id']}/diversity-tree")
         assert resp.status_code == 400
 

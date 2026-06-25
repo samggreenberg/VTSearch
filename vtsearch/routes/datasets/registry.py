@@ -349,9 +349,7 @@ def build_dataset_diversity_tree(dataset_id: str):
 
                 def _progress(current: int, total: int) -> None:
                     tracker.check_cancelled()
-                    tracker.update(
-                        "loading", "Building diversity index…", current, total, step=1, total_steps=1
-                    )
+                    tracker.update("loading", "Building diversity index…", current, total, step=1, total_steps=1)
 
                 _progress(0, 0)
                 build_diversity_tree_for_context(ctx, on_progress=_progress)
