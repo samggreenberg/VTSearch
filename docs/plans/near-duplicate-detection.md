@@ -1,6 +1,6 @@
 # Near-duplicate detection
 
-Status: **Phase 1 in progress** — images + text near-dupe merge, opt-in at dataset
+Status: **Phase 1 shipped** — images + text near-dupe merge, opt-in at dataset
 creation. Audio/video deferred (see Open follow-ups).
 
 ## Problem
