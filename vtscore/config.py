@@ -63,10 +63,7 @@ def _describe_cuda_mismatch(device: str) -> str:
         name = torch.cuda.get_device_name(idx)
         major, minor = torch.cuda.get_device_capability(idx)
         archs = ", ".join(torch.cuda.get_arch_list()) or "none"
-        return (
-            f" ({name}, compute capability {major}.{minor}; this torch build "
-            f"ships kernels for {archs})"
-        )
+        return f" ({name}, compute capability {major}.{minor}; this torch build ships kernels for {archs})"
     except Exception:
         return ""
 
