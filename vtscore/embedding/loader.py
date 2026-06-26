@@ -19,6 +19,13 @@ from typing import Any, cast
 
 _TIME_SUFFIX_RE = re.compile(r"\s*\(\d+s(?:,\s*\d+\s+modules)?\)$")
 
+#: Fixed column width for the label printed before a console progress bar.
+#: Padding every label to this width makes the ``[####…]`` bars line up
+#: vertically.  Sized to fit the longest common preload label
+#: ("Importing sentence_transformers…", 32 chars); longer labels simply
+#: push their own bar right rather than being truncated.
+_LABEL_WIDTH = 32
+
 
 def _strip_time_suffix(msg: str) -> str:
     return _TIME_SUFFIX_RE.sub("", msg) if msg else msg
@@ -243,6 +250,11 @@ def _make_console_progress(original_callback):
     instead of stacking new lines.  The progress line is terminated with a
     newline only when a different base message arrives, a phase message
     arrives, or the caller invokes ``cb.flush()``.
+
+    Every bar's label is left-padded to a fixed width (:data:`_LABEL_WIDTH`)
+    so successive bars line up vertically, and the elapsed-time/status suffix
+    is rendered after the percentage so its changing length (``1s`` → ``10s``)
+    never shifts the bar mid-progress.
     """
     _last_msg: list[str | None] = [None]
     _last_base: list[str | None] = [None]
@@ -253,7 +265,8 @@ def _make_console_progress(original_callback):
     def _complete_bar() -> None:
         """Overwrite the current progress line with a 100% bar."""
         if _last_base[0]:
-            sys.stdout.write(f"\r    {_last_base[0]} [{_FULL_BAR}] 100%\033[K")
+            label = f"{_last_base[0]:<{_LABEL_WIDTH}}"
+            sys.stdout.write(f"\r    {label} [{_FULL_BAR}] 100%\033[K")
 
     def _flush() -> None:
         if _on_progress_line[0]:
@@ -277,9 +290,15 @@ def _make_console_progress(original_callback):
             pct = min(100, current * 100 // total)
             filled = pct * 30 // 100
             bar = "#" * filled + "." * (30 - filled)
+            # Pad the base label to a fixed width so every bar starts at the
+            # same column and the bars line up vertically.  The elapsed-time /
+            # status suffix (e.g. "(3s, 247 modules)") goes *after* the
+            # percentage, where its changing length can't shift the bar.
+            suffix = message[len(base) :].strip()
+            tail = f" {suffix}" if suffix else ""
             # \033[K clears from cursor to end of line so a shorter message
             # doesn't leave trailing chars from a longer prior render.
-            line = f"\r    {message} [{bar}] {pct:>3}%\033[K"
+            line = f"\r    {base:<{_LABEL_WIDTH}} [{bar}] {pct:>3}%{tail}\033[K"
             sys.stdout.write(line)
             sys.stdout.flush()
             _on_progress_line[0] = True

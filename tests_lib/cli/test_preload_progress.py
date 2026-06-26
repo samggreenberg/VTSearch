@@ -121,6 +121,38 @@ class TestMakeConsoleProgress:
         captured = capsys.readouterr()
         assert "100%" in captured.out
 
+    def test_bars_align_across_different_labels(self, capsys):
+        """Bars for labels of different lengths should start at the same column."""
+        cb = _make_console_progress(lambda *a, **kw: None)
+
+        cb("loading", "Importing torch…", 1, 2)
+        cb("loading", "Importing transformers…", 2, 2)
+        cb("loading", "Loading weights", 5, 10)
+        cb.flush()
+
+        captured = capsys.readouterr()
+        # Each \r-overwrite is a separate render; the bar's open-bracket column
+        # must be identical for every label so the bars line up vertically.
+        renders = [seg for seg in captured.out.replace("\033[K", "").split("\r") if "[" in seg]
+        cols = {seg.index("[") for seg in renders}
+        assert len(cols) == 1, f"bars not aligned: columns were {cols}"
+
+    def test_elapsed_suffix_does_not_shift_bar(self, capsys):
+        """A growing elapsed-time suffix ('1s' -> '10s') must not move the bar."""
+        cb = _make_console_progress(lambda *a, **kw: None)
+
+        cb("loading", "Importing torch… (1s)", 1, 2)
+        cb("loading", "Importing torch… (10s)", 1, 2)
+        cb("loading", "Importing torch… (100s)", 1, 2)
+
+        captured = capsys.readouterr()
+        renders = [seg for seg in captured.out.replace("\033[K", "").split("\r") if "[" in seg]
+        cols = {seg.index("[") for seg in renders}
+        assert len(cols) == 1, f"bar shifted while suffix grew: columns were {cols}"
+        # The suffix is rendered after the percentage, not before the bar.
+        for seg in renders:
+            assert seg.index("s)") > seg.index("%")
+
     def test_phase_after_progress_starts_new_line(self, capsys):
         """A phase message arriving mid-progress-bar should start a new line."""
         cb = _make_console_progress(lambda *a, **kw: None)
