@@ -178,8 +178,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private boundPanelUp = this.onPanelMouseUp.bind(this);
 
   /**
-   * Per-click zoom step for the on-screen +/- buttons. Larger than the wheel's
-   * 1.15 per-tick factor so a single click makes a visible difference; button
+   * Per-click zoom step for the on-screen +/- buttons. Matches the wheel's
+   * per-notch factor so a single click makes a visible difference; button
    * zoom anchors at the viewport centre (no cursor to zoom toward).
    */
   private readonly ZOOM_BUTTON_FACTOR = 1.4;
