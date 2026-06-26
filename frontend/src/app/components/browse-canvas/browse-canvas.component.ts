@@ -851,22 +851,20 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   /**
    * Commit a zoom change after `transform` and `activeLevel` have been updated.
-   * Plays the picture-in-picture transition only when the pyramid level actually
-   * flipped (the moment bins re-lay-out) — within a level the bins just rescale,
-   * which already reads as a smooth zoom, so a plain redraw is enough. A zoom
-   * that lands mid-transition without crossing a level retargets the in-flight
-   * animation so it eases on to the latest view instead of snapping.
-   *
-   * @param prevLevel the active level *before* this zoom, for the cross check.
+   * Plays the picture-in-picture transition on every zoom, whether or not the
+   * pyramid level flipped: across a level the snapshot blit hides the re-lay-out
+   * of the bins, and within a level it smoothly scales the same bins to their new
+   * size — either way the eased grow/shrink reads as one consistent zoom gesture
+   * instead of a snap. A zoom that lands while a transition is already running
+   * retargets it so it eases on to the latest view instead of stopping short.
    */
-  private commitZoomChange(prevLevel: number): void {
-    const crossedLevel = this.activeLevel !== prevLevel;
-    if (crossedLevel && this.hasDrawn && this.width > 0 && !this.prefersReducedMotion()) {
-      this.startZoomAnim();
-    } else if (this.animActive) {
-      // Same level but the view moved while a transition runs: ease on to the
-      // new target rather than stopping short at the old one.
+  private commitZoomChange(): void {
+    if (this.animActive) {
+      // A transition is already running (e.g. a burst of wheel notches): ease on
+      // to the new target rather than stopping short at the old one.
       this.animTo = { ...this.transform };
+    } else if (this.hasDrawn && this.width > 0 && !this.prefersReducedMotion()) {
+      this.startZoomAnim();
     } else {
       this.requestRedraw();
     }
@@ -1721,9 +1719,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    */
   zoomToFit(): void {
     this.cancelSettle();
-    const prevLevel = this.activeLevel;
     this.fitToData();
-    this.commitZoomChange(prevLevel);
+    this.commitZoomChange();
     this.refreshHoverAfterZoom();
   }
 
@@ -1732,7 +1729,6 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // A zoom takes over from any in-flight snap-back; continue from where the
     // view visually is and reschedule the settle below.
     this.cancelSettle();
-    const prevLevel = this.activeLevel;
     const [projX, projY] = this.screenToProj(anchorX, anchorY);
     const rawZoom = Math.max(0.01, Math.min(100000, this.transform.zoom * factor));
     // Below the whole-projection fit the zoom-out is resisted, not blocked, and
@@ -1752,10 +1748,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
     // Zoom holds the thumbnail size (targetRadius) and re-selects the level, so
     // a smaller region is re-binned more finely while bins stay ~the same size.
-    // When that re-selection crosses a level, the picture-in-picture transition
-    // grows/shrinks the current frame into place before the rebin lands.
+    // The picture-in-picture transition eases the current frame into place on
+    // every notch — growing/shrinking it before any rebin lands when the
+    // re-selection crosses a level, and simply scaling it within a level.
     this.updateActiveLevel();
-    this.commitZoomChange(prevLevel);
+    this.commitZoomChange();
     this.refreshHoverAfterZoom();
     this.scheduleSettle();
   }
