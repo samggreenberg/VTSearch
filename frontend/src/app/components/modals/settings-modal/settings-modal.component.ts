@@ -259,19 +259,6 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  onViewModeChange(side: 'view_mode_left' | 'view_mode_right', typeId: string, value: string): void {
-    const dict = { ...((this.settings()[side] as Record<string, string>) || {}) };
-    dict[typeId] = value;
-    this.settings.update((s) => ({ ...(s as Record<string, unknown>), [side]: dict }) as AppSettings);
-    this.save();
-  }
-
-  getViewMode(side: 'view_mode_left' | 'view_mode_right', typeId: string): string {
-    const dict = this.settings()[side];
-    if (!dict) return side === 'view_mode_left' ? 'list' : 'grid';
-    return dict[typeId] ?? (side === 'view_mode_left' ? 'list' : 'grid');
-  }
-
   onGridIconSizeChange(side: 'grid_icon_size_left' | 'grid_icon_size_right', typeId: string, value: string): void {
     const dict = { ...((this.settings()[side] as Record<string, string>) || {}) };
     dict[typeId] = value;

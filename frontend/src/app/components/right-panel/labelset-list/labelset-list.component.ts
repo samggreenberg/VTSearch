@@ -1,4 +1,4 @@
-import { AfterViewChecked, ChangeDetectionStrategy, Component, ElementRef, inject, input, OnChanges, output, SimpleChanges, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, OnChanges, output, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import type { DetectorLabelView } from '../../../generated/api-client/models/detector-label-view';
 import { LabelSortMode } from '../label-sort/label-sort.component';
@@ -16,14 +16,13 @@ interface SortedElement extends DetectorLabelView {
   templateUrl: './labelset-list.component.html',
   styleUrls: ['../label-list/label-list.component.scss'],
 })
-export class LabelsetListComponent implements OnChanges, AfterViewChecked {
+export class LabelsetListComponent implements OnChanges {
   private detectorsCrudApi = inject(DetectorsCrudApiService);
 
   readonly label = input<'good' | 'bad'>('good');
   readonly elements = input<DetectorLabelView[]>([]);
   readonly modelName = input<string>('');
   readonly sortMode = input<LabelSortMode>('time-desc');
-  readonly viewMode = input<'grid' | 'list'>('grid');
   readonly gridGoalWidth = input<number>(80);
   readonly focusMode = input<'click' | 'hover'>('click');
   readonly elementSelected = output<DetectorLabelView>();
@@ -32,29 +31,11 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
     vote: 'good' | 'bad';
 }>();
 
-  @ViewChild('voteListContainer') voteListContainer?: ElementRef<HTMLDivElement>;
-
   sortedEntries: SortedElement[] = [];
-  private pendingScrollPct: number | null = null;
   private thumbnailFailedUrls = new Set<string>();
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['viewMode'] && !changes['viewMode'].firstChange && this.voteListContainer) {
-      const el = this.voteListContainer.nativeElement;
-      const maxScroll = el.scrollHeight - el.clientHeight;
-      this.pendingScrollPct = maxScroll > 0 ? el.scrollTop / maxScroll : 0;
-    }
+  ngOnChanges(_changes: SimpleChanges): void {
     this.sortedEntries = this.buildSorted();
-  }
-
-  ngAfterViewChecked(): void {
-    if (this.pendingScrollPct !== null && this.voteListContainer) {
-      const pct = this.pendingScrollPct;
-      this.pendingScrollPct = null;
-      const el = this.voteListContainer.nativeElement;
-      const maxScroll = el.scrollHeight - el.clientHeight;
-      el.scrollTop = pct * maxScroll;
-    }
   }
 
   private buildSorted(): SortedElement[] {
@@ -92,10 +73,6 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
         break;
     }
     return sorted;
-  }
-
-  get isGrid(): boolean {
-    return this.viewMode() === 'grid';
   }
 
   hasThumbnailUrl(entry: DetectorLabelView): boolean {

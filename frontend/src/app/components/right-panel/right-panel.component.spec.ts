@@ -38,7 +38,6 @@ describe('RightPanelComponent', () => {
     TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({
       volume: 1,
-      view_mode_right: { audio: 'grid', image: 'grid' },
     });
     // First votes poll
     httpMock.expectOne('/api/votes').flush({
@@ -52,35 +51,6 @@ describe('RightPanelComponent', () => {
   it('should create', async () => {
     await flushInit();
     expect(component).toBeTruthy();
-    cleanup();
-  });
-
-  // The SettingsStateService rxResource has a promise-based loader, so a test
-  // that asserts a *settings-derived* value must drain real microtasks before
-  // the value commits. See docs/plans/httpresource-migration.md.
-  it('should load view mode from settings on init', async () => {
-    component.medias = [{ id: 1, media_type: 'audio', filename: 'a.wav', md5: 'x', custom_metadata: {} }];
-    TestBed.tick();
-    TestBed.tick(); // run the rxResource loader effect so the GET is issued
-    httpMock.expectOne('/api/settings').flush({ volume: 1, view_mode_right: { audio: 'list', image: 'grid' } });
-    // Drain the resource's promise-based value commit, then flush effects so the
-    // settings effect runs and viewModeRightDict is populated. The votes poll
-    // request that the macrotask lets fire is discarded by cleanup().
-    await new Promise<void>((resolve) => setTimeout(resolve));
-    TestBed.tick();
-    // Trigger ngOnChanges by setting medias via input
-    component.ngOnChanges({ medias: { currentValue: component.medias, previousValue: [], firstChange: true, isFirstChange: () => true } });
-    expect(component.viewMode()).toBe('list');
-    cleanup();
-  });
-
-  it('should default viewMode to grid when not in settings', async () => {
-    TestBed.tick();
-    await new Promise<void>((resolve) => setTimeout(resolve));
-    TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
-    httpMock.expectOne('/api/settings').flush({ volume: 1 });
-    httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
-    expect(component.viewMode()).toBe('grid');
     cleanup();
   });
 

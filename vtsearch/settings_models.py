@@ -46,13 +46,10 @@ __all__ = [
     "VALID_GRID_ICON_SIZES",
     "VALID_PANEL_PX",
     "VALID_THEMES",
-    "VALID_VIEW_MODES",
-    "ViewMode",
 ]
 
 
 Theme = Literal["dark", "light", "highviz", "system"]
-ViewMode = Literal["grid", "list"]
 GridIconSize = Literal["XS", "S", "M", "L", "XL"]
 FocusMode = Literal["click", "hover"]
 BinShape = Literal["hex", "square"]
@@ -67,7 +64,6 @@ BrowseColormap = Literal["auto", "heat", "ocean", "gray"]
 BrowseIconSize = Literal["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"]
 
 VALID_THEMES: tuple[str, ...] = ("dark", "light", "highviz", "system")
-VALID_VIEW_MODES: tuple[str, ...] = ("grid", "list")
 VALID_GRID_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
 VALID_FOCUS_MODES: tuple[str, ...] = ("click", "hover")
 VALID_BIN_SHAPES: tuple[str, ...] = ("hex", "square")
@@ -273,8 +269,6 @@ class UserSettings(BaseModel):
     )
     browse_compact: dict[str, bool] = Field(default_factory=dict)
 
-    view_mode_left: dict[str, ViewMode] = Field(default_factory=dict)
-    view_mode_right: dict[str, ViewMode] = Field(default_factory=dict)
     grid_icon_size_left: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     grid_icon_size_right: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     focus_mode_left: dict[str, FocusMode] = Field(default_factory=dict)

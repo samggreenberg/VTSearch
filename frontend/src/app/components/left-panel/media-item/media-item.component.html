@@ -3,7 +3,6 @@
   [class.active]="active"
   [class.labeled-good]="voteLabel === 'good'"
   [class.labeled-bad]="voteLabel === 'bad'"
-  [class.grid-mode]="isGrid"
   role="option"
   [attr.aria-selected]="active"
   tabindex="0"
@@ -13,26 +12,14 @@
   (keydown.enter)="onClick()"
   (keydown.space)="onClick()"
 >
-  @if (isGrid) {
-    <div class="thumbnail-wrap">
-      @if (thumbnailUrl) {
-        <img class="media-thumbnail" [src]="thumbnailUrl" [alt]="displayName" loading="lazy" (error)="onThumbnailError()" />
-      } @else if (placeholderIcon) {
-        <span class="media-placeholder">{{ placeholderIcon }}</span>
-      }
-    </div>
-    <span class="media-name-grid">{{ displayName }}</span>
-  } @else {
-    <span class="label-indicator" [class.good]="voteLabel === 'good'" [class.bad]="voteLabel === 'bad'" [title]="voteLabel === 'good' ? 'Labeled good' : voteLabel === 'bad' ? 'Labeled bad' : ''">
-      @if (voteLabel === 'good') { &#x2713; } @else if (voteLabel === 'bad') { &#x2717; }
-    </span>
+  <div class="thumbnail-wrap">
     @if (thumbnailUrl) {
-      <span class="thumbnail-wrap thumbnail-wrap-list">
-        <img class="media-thumbnail" [src]="thumbnailUrl" [alt]="displayName" loading="lazy" (error)="onThumbnailError()" />
-      </span>
+      <img class="media-thumbnail" [src]="thumbnailUrl" [alt]="displayName" loading="lazy" (error)="onThumbnailError()" />
+    } @else if (placeholderIcon) {
+      <span class="media-placeholder">{{ placeholderIcon }}</span>
     }
-    <span class="media-name">{{ displayName }}</span>
-  }
+  </div>
+  <span class="media-name-grid">{{ displayName }}</span>
   @if (score !== null) {
     <span class="media-score" title="Detector confidence score">{{ score | number:'1.2-2' }}</span>
   }

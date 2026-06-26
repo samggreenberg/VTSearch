@@ -22,17 +22,17 @@ interface SelectionEntry {
 
 /**
  * The VTSBrowse selection panel: a docked, always-visible list of every media
- * item currently selected on the canvas, with the same Grid/List + size
- * controls as the Find view's labeled-item lists. Modeled on the Find "Good"
- * panel — but where that panel lists votes, this lists the live canvas
- * selection, and clicking an item removes it from the selection.
+ * item currently selected on the canvas, with the same thumbnail-size control
+ * as the Find view's labeled-item lists. Modeled on the Find "Good" panel — but
+ * where that panel lists votes, this lists the live canvas selection, and
+ * clicking an item removes it from the selection.
  *
  * Names and thumbnails are resolved lazily through
  * {@link MediaMetadataCacheService} (the browse view never loads the full media
  * list), so the panel renders ids immediately and fills in detail as the cache
- * hydrates. The Grid/List + thumbnail-size choice reuses the shared
- * ``view_mode_right`` / ``grid_icon_size_right`` per-media-type settings, so it
- * stays in step with the Find right panel.
+ * hydrates. The thumbnail-size choice reuses the shared
+ * ``grid_icon_size_right`` per-media-type setting, so it stays in step with the
+ * Find right panel.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -66,18 +66,16 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   /** Emitted when the user marks the selection Verified Bad. */
   readonly verifyBad = output<void>();
 
-  // These four are template-bound and written from the selection-refresh and
+  // These are template-bound and written from the selection-refresh and
   // settings `effect()`s and the metadata-cache `version$` subscribe — none of
   // which schedule CD for a plain field under zoneless — so they are signals.
   // (`sortMode` stays plain: it is only written from the bound `(ngModelChange)`.)
   readonly count = signal(0);
   sortMode: SelectionSortMode = 'time-desc';
-  readonly viewMode = signal<'grid' | 'list'>('grid');
   readonly gridGoalWidth = signal(80);
   readonly sortedEntries = signal<SelectionEntry[]>([]);
 
   private ids: number[] = [];
-  private viewModeRightDict: Record<string, 'grid' | 'list'> = {};
   private gridIconSizeRightDict: Record<string, string> = {};
   private readonly thumbnailFailedUrls = new Set<string>();
   private readonly subs: Subscription[] = [];
@@ -86,10 +84,6 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
     effect(() => {
       const settings = this.settingsState.settingsSignal();
       if (!settings) return;
-      const viewDict = settings.view_mode_right;
-      if (viewDict && typeof viewDict === 'object') {
-        this.viewModeRightDict = viewDict as Record<string, 'grid' | 'list'>;
-      }
       const sizeDict = settings.grid_icon_size_right;
       if (sizeDict && typeof sizeDict === 'object') {
         this.gridIconSizeRightDict = sizeDict as Record<string, string>;
@@ -129,7 +123,6 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   private applyViewPrefs(): void {
     const mediaType = this.mediaType();
     if (!mediaType) return;
-    this.viewMode.set(this.viewModeRightDict[mediaType] ?? 'grid');
     this.gridGoalWidth.set(iconSizeToGoalWidth(this.gridIconSizeRightDict[mediaType] ?? 'M'));
   }
 
@@ -171,10 +164,6 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   onSortChange(mode: SelectionSortMode): void {
     this.sortMode = mode;
     this.sortedEntries.set(this.buildSortedEntries());
-  }
-
-  get isGrid(): boolean {
-    return this.viewMode() === 'grid';
   }
 
   clear(): void {

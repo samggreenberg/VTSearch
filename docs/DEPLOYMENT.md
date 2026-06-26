@@ -333,8 +333,6 @@ and auto-saved on every change. Schema:
   "audio_playing": true,
   "show_animations": true,
   "show_metadata": true,
-  "view_mode_left": {},
-  "view_mode_right": {},
   "focus_mode_left": {},
   "focus_mode_right": {},
   "grid_icon_size_left": {},
@@ -380,7 +378,7 @@ Notable fields:
   bidirectional sync. Set to a plugin name + field values to auto-export
   every settings change and auto-import at startup. See `settings_io/sources/`.
 - `theme`: `"dark"`, `"light"`, or `"highviz"`
-- `view_mode_*`, `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*`:
+- `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*`:
   per-media-type UI layout preferences (keyed by media type ID)
 - `autopilot_enabled`: whether the autopilot feature is active
 

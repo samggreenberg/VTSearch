@@ -3,18 +3,17 @@ import type { AppSettings } from '../../generated/api-client/models/app-settings
 import { SettingsStateService } from '../../services/settings-state.service';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 
-type ViewMode = 'grid' | 'list';
 type FocusMode = 'click' | 'hover';
 
 /**
  * Per-media-type panel display preferences for `vt-label-view`.
  *
- * Tracks the six dicts (left view mode, left grid icon size, left/right focus
- * mode, left/right saved panel widths) that used to live inline on
- * `LabelViewComponent` and exposes them as computed getters keyed on the
- * currently-active media type.  `loadFromSettings` hydrates the dicts from
- * the loaded `AppSettings` blob; `savePanelPx` persists a width change for
- * the active media type back through `SettingsStateService`.
+ * Tracks the five dicts (left grid icon size, left/right focus mode, left/right
+ * saved panel widths) that used to live inline on `LabelViewComponent` and
+ * exposes them as computed getters keyed on the currently-active media type.
+ * `loadFromSettings` hydrates the dicts from the loaded `AppSettings` blob;
+ * `savePanelPx` persists a width change for the active media type back through
+ * `SettingsStateService`.
  *
  * The component still owns the layout math and the CSS-var writes; this
  * service only owns the per-media-type lookup tables and the persistence
@@ -24,7 +23,6 @@ type FocusMode = 'click' | 'hover';
 export class LabelViewPanelStateService {
   private settingsState = inject(SettingsStateService);
 
-  private viewModeLeftDict: Record<string, ViewMode> = {};
   private gridIconSizeLeftDict: Record<string, string> = {};
   private focusModeLeftDict: Record<string, FocusMode> = {};
   private focusModeRightDict: Record<string, FocusMode> = {};
@@ -39,10 +37,6 @@ export class LabelViewPanelStateService {
 
   get currentMediaType(): string {
     return this._currentMediaType;
-  }
-
-  get viewModeLeft(): ViewMode {
-    return this.viewModeLeftDict[this._currentMediaType] ?? 'list';
   }
 
   get gridGoalWidthLeft(): number {
@@ -73,8 +67,6 @@ export class LabelViewPanelStateService {
   }
 
   loadFromSettings(settings: AppSettings): void {
-    const vm = settings.view_mode_left;
-    if (vm && typeof vm === 'object') this.viewModeLeftDict = vm as Record<string, ViewMode>;
     const gs = settings.grid_icon_size_left;
     if (gs && typeof gs === 'object') this.gridIconSizeLeftDict = gs as Record<string, string>;
     const fl = settings.focus_mode_left;

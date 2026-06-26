@@ -107,17 +107,6 @@
               <div class="view-side-section">
                 <h4 class="subhead" title="Display settings for the left panel (unlabeled media list)">Left Side</h4>
                 <div class="form-group">
-                  <label class="form-label" title="Display media as a vertical list or a thumbnail grid">View Mode:</label>
-                  <div class="toggle-group">
-                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_left', activeViewTab()) === 'list'" (click)="onViewModeChange('view_mode_left', activeViewTab(), 'list')" title="Show items as a single-column list with names">
-                      <vt-icon type="list" [size]="14"></vt-icon> List
-                    </button>
-                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_left', activeViewTab()) === 'grid'" (click)="onViewModeChange('view_mode_left', activeViewTab(), 'grid')" title="Show items as a thumbnail grid">
-                      <vt-icon type="grid" [size]="14"></vt-icon> Grid
-                    </button>
-                  </div>
-                </div>
-                <div class="form-group">
                   <label class="form-label" title="How an item is selected for preview: click to select, or hover to preview on mouseover">Focus Mode:</label>
                   <div class="toggle-group">
                     <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_left', activeViewTab()) === 'click'" (click)="onFocusModeChange('focus_mode_left', activeViewTab(), 'click')" title="Click an item to preview it in the center panel">
@@ -129,7 +118,7 @@
                   </div>
                 </div>
                 <div class="form-group">
-                  <label class="form-label" title="Thumbnail size when in grid view mode">Grid Icon Size:</label>
+                  <label class="form-label" title="Thumbnail size in the media grid">Grid Icon Size:</label>
                   <select class="form-select" [ngModel]="getGridIconSize('grid_icon_size_left', activeViewTab())" (ngModelChange)="onGridIconSizeChange('grid_icon_size_left', activeViewTab(), $event)" title="Choose thumbnail size for the grid view" aria-label="Left grid icon size">
                     <option value="XS">XS</option>
                     <option value="S">S</option>
@@ -142,17 +131,6 @@
               <div class="view-side-section">
                 <h4 class="subhead" title="Display settings for the right panel (labeled goods and bads)">Right Side</h4>
                 <div class="form-group">
-                  <label class="form-label" title="Display labeled items as a vertical list or a thumbnail grid">View Mode:</label>
-                  <div class="toggle-group">
-                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_right', activeViewTab()) === 'list'" (click)="onViewModeChange('view_mode_right', activeViewTab(), 'list')" title="Show items as a single-column list with names">
-                      <vt-icon type="list" [size]="14"></vt-icon> List
-                    </button>
-                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_right', activeViewTab()) === 'grid'" (click)="onViewModeChange('view_mode_right', activeViewTab(), 'grid')" title="Show items as a thumbnail grid">
-                      <vt-icon type="grid" [size]="14"></vt-icon> Grid
-                    </button>
-                  </div>
-                </div>
-                <div class="form-group">
                   <label class="form-label" title="How an item is selected for preview: click to select, or hover to preview on mouseover">Focus Mode:</label>
                   <div class="toggle-group">
                     <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_right', activeViewTab()) === 'click'" (click)="onFocusModeChange('focus_mode_right', activeViewTab(), 'click')" title="Click an item to preview it in the center panel">
@@ -164,7 +142,7 @@
                   </div>
                 </div>
                 <div class="form-group">
-                  <label class="form-label" title="Thumbnail size when in grid view mode">Grid Icon Size:</label>
+                  <label class="form-label" title="Thumbnail size in the media grid">Grid Icon Size:</label>
                   <select class="form-select" [ngModel]="getGridIconSize('grid_icon_size_right', activeViewTab())" (ngModelChange)="onGridIconSizeChange('grid_icon_size_right', activeViewTab(), $event)" title="Choose thumbnail size for the grid view" aria-label="Right grid icon size">
                     <option value="XS">XS</option>
                     <option value="S">S</option>

@@ -214,79 +214,6 @@ class TestSettingsModule:
         settings_mod.reset()
         assert settings_mod.get_label_hint_dismissed() is True
 
-    def test_get_view_mode_left_default(self):
-        result = settings_mod.get_view_mode_left()
-        assert isinstance(result, dict)
-        # All types default to "list"
-        for v in result.values():
-            assert v == "list"
-
-    def test_get_view_mode_right_default(self):
-        result = settings_mod.get_view_mode_right()
-        assert isinstance(result, dict)
-        # All types default to "grid"
-        for v in result.values():
-            assert v == "grid"
-
-    def test_set_view_mode_left_per_type(self, isolated_settings):
-        settings_mod.set_view_mode_left({"audio": "grid", "image": "list"})
-        result = settings_mod.get_view_mode_left()
-        assert result["audio"] == "grid"
-        assert result["image"] == "list"
-
-        raw = json.loads(isolated_settings.read_text())
-        assert raw["view_mode_left"]["audio"] == "grid"
-        assert raw["view_mode_left"]["image"] == "list"
-
-    def test_set_view_mode_right_per_type(self, isolated_settings):
-        settings_mod.set_view_mode_right({"audio": "list", "video": "grid"})
-        result = settings_mod.get_view_mode_right()
-        assert result["audio"] == "list"
-        assert result["video"] == "grid"
-
-        raw = json.loads(isolated_settings.read_text())
-        assert raw["view_mode_right"]["audio"] == "list"
-
-    def test_view_mode_left_legacy_scalar(self, isolated_settings):
-        """Legacy string value is accepted and expanded to all types."""
-        settings_mod.set_view_mode_left("grid")
-        result = settings_mod.get_view_mode_left()
-        for v in result.values():
-            assert v == "grid"
-
-    def test_view_mode_right_legacy_scalar(self, isolated_settings):
-        """Legacy string value is accepted and expanded to all types."""
-        settings_mod.set_view_mode_right("list")
-        result = settings_mod.get_view_mode_right()
-        for v in result.values():
-            assert v == "list"
-
-    def test_view_mode_left_persists_across_reset(self, isolated_settings):
-        settings_mod.set_view_mode_left({"audio": "grid"})
-        settings_mod.reset()
-        assert settings_mod.get_view_mode_left()["audio"] == "grid"
-
-    def test_view_mode_right_persists_across_reset(self, isolated_settings):
-        settings_mod.set_view_mode_right({"audio": "list"})
-        settings_mod.reset()
-        assert settings_mod.get_view_mode_right()["audio"] == "list"
-
-    def test_view_mode_left_invalid_mode(self):
-        with pytest.raises(ValueError):
-            settings_mod.set_view_mode_left({"audio": "invalid"})
-
-    def test_view_mode_right_invalid_mode(self):
-        with pytest.raises(ValueError):
-            settings_mod.set_view_mode_right({"audio": "invalid"})
-
-    def test_view_mode_invalid_scalar(self):
-        with pytest.raises(ValueError):
-            settings_mod.set_view_mode_left("invalid")
-
-    def test_view_mode_invalid_media_type(self):
-        with pytest.raises(ValueError):
-            settings_mod.set_view_mode_left({"nonexistent_type": "grid"})
-
     def test_get_grid_icon_size_left_default(self):
         result = settings_mod.get_grid_icon_size_left()
         assert isinstance(result, dict)
@@ -529,12 +456,6 @@ class TestSettingsModule:
         assert defaults["calibration_fraction"] == 0.5
         assert defaults["safe_thresholds"] is False
         assert defaults["show_metadata"] is True
-        assert isinstance(defaults["view_mode_left"], dict)
-        for v in defaults["view_mode_left"].values():
-            assert v == "list"
-        assert isinstance(defaults["view_mode_right"], dict)
-        for v in defaults["view_mode_right"].values():
-            assert v == "grid"
         assert isinstance(defaults["grid_icon_size_left"], dict)
         for v in defaults["grid_icon_size_left"].values():
             assert v == "M"

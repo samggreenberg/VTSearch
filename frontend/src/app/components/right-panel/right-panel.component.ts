@@ -94,18 +94,16 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   readonly goodRegionBoxes = computed(() => this.voteState.goodRegionBoxes);
   // Template-bound and written from the LabelsetStateService `good$`/`bad$`/
   // `mediaType$` subscribes and the settings `effect()` (Recipe F for
-  // viewMode/gridGoalWidth) — none of which schedule CD for a plain field under
+  // gridGoalWidth) — none of which schedule CD for a plain field under
   // zoneless — so they are signals. (`sortMode` stays plain: only written from
   // the bound `(sortModeChange)` handler.)
   readonly goodElements = signal<DetectorLabelView[]>([]);
   readonly badElements = signal<DetectorLabelView[]>([]);
   sortMode: LabelSortMode = 'time-desc';
-  readonly viewMode = signal<'grid' | 'list'>('grid');
   readonly gridGoalWidth = signal(80);
   showLabelImport = false;
   showExport = false;
 
-  private viewModeRightDict: Record<string, 'grid' | 'list'> = {};
   private gridIconSizeRightDict: Record<string, string> = {};
   protected readonly currentMediaType = signal('');
   private destroy$ = new Subject<void>();
@@ -114,13 +112,6 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
     effect(() => {
       const settings = this.settingsState.settingsSignal();
       if (!settings) return;
-      const dict = settings.view_mode_right;
-      if (dict && typeof dict === 'object') {
-        this.viewModeRightDict = dict as Record<string, 'grid' | 'list'>;
-        if (this.currentMediaType()) {
-          this.viewMode.set(this.viewModeRightDict[this.currentMediaType()] ?? 'grid');
-        }
-      }
       const sizeDict = settings.grid_icon_size_right;
       if (sizeDict && typeof sizeDict === 'object') {
         this.gridIconSizeRightDict = sizeDict as Record<string, string>;
@@ -181,7 +172,6 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
       const newType = this.medias[0].media_type;
       if (newType !== this.currentMediaType()) {
         this.currentMediaType.set(newType);
-        this.viewMode.set(this.viewModeRightDict[newType] ?? 'grid');
         this.gridGoalWidth.set(iconSizeToGoalWidth(this.gridIconSizeRightDict[newType] ?? 'M'));
       }
     }
@@ -294,7 +284,6 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
       .subscribe((mt) => {
         if (this.useLabelset && mt && mt !== this.currentMediaType()) {
           this.currentMediaType.set(mt);
-          this.viewMode.set(this.viewModeRightDict[mt] ?? 'grid');
           this.gridGoalWidth.set(iconSizeToGoalWidth(this.gridIconSizeRightDict[mt] ?? 'M'));
         }
       });

@@ -14,8 +14,6 @@ describe('SettingsModalComponent', () => {
     volume: 50,
     theme: 'dark',
     show_animations: true,
-    view_mode_left: { audio: 'list', image: 'grid' },
-    view_mode_right: { audio: 'grid', image: 'list' },
     enrich_descriptions: false,
     safe_thresholds: false,
     calibrate_count: 50,
@@ -58,7 +56,7 @@ describe('SettingsModalComponent', () => {
     const mediaTypesReq = httpMock.expectOne('/api/media-types');
     const embeddersReq = httpMock.expectOne('/api/embedders');
     const versionReq = httpMock.expectOne('/api/version');
-    // Deep-clone so per-test component mutations (onViewModeChange, etc.)
+    // Deep-clone so per-test component mutations (onGridIconSizeChange, etc.)
     // never leak back into the shared mockSettings constant.
     settingsReq.flush(structuredClone(mockSettings));
     mediaTypesReq.flush(mockMediaTypes);
@@ -107,20 +105,6 @@ describe('SettingsModalComponent', () => {
     component.onNumberChange('calibrate_count', 100);
     expect(component.settings().calibrate_count).toBe(100);
     httpMock.expectOne('/api/settings').flush(mockSettings);
-  });
-
-  it('should update per-media-type view mode and save', async () => {
-    await flushInit();
-    component.onViewModeChange('view_mode_left', 'audio', 'grid');
-    const dict = component.settings().view_mode_left as Record<string, string>;
-    expect(dict['audio']).toBe('grid');
-    httpMock.expectOne('/api/settings').flush(mockSettings);
-  });
-
-  it('should get view mode for a media type', async () => {
-    await flushInit();
-    expect(component.getViewMode('view_mode_left', 'audio')).toBe('list');
-    expect(component.getViewMode('view_mode_right', 'audio')).toBe('grid');
   });
 
   it('should reset to defaults after confirmation', async () => {

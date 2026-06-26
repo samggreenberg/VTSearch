@@ -100,9 +100,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // zoneless when the state changes from async callbacks. The per-consumer
   // `toSignal` bridges this component used to carry are gone (Phase 2.5).
 
-  // Per-media-type panel preferences (view mode, grid size, focus mode, saved
-  // widths) live on `panelState`; the template reads getters on it directly.
-  get viewModeLeft(): 'grid' | 'list' { return this.panelState.viewModeLeft; }
+  // Per-media-type panel preferences (grid size, focus mode, saved widths) live
+  // on `panelState`; the template reads getters on it directly.
   get gridGoalWidthLeft(): number { return this.panelState.gridGoalWidthLeft; }
   get focusModeLeft(): 'click' | 'hover' { return this.panelState.focusModeLeft; }
   get focusModeRight(): 'click' | 'hover' { return this.panelState.focusModeRight; }
