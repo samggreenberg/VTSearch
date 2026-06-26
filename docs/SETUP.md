@@ -192,20 +192,27 @@ bash scripts/install-cpu.sh
 **For GPU** (NVIDIA CUDA-compatible systems):
 
 ```bash
-bash scripts/install-gpu.sh          # defaults to CUDA 12.4 (cu124; spans Volta..Hopper)
+bash scripts/install-gpu.sh          # auto-detects the right tag from your GPU
 bash scripts/install-gpu.sh cu118    # for CUDA 11.8 (older drivers)
 bash scripts/install-gpu.sh cu128    # for CUDA 12.8 (Blackwell; drops Volta)
 ```
 
-The CUDA tag picks a torch wheel that only ships kernels for certain GPU
-architectures, so match it to your hardware. There's a **floor** — newer GPUs
-need newer tags: Ampere/Ada on `cu118`+, Hopper (H100) on `cu121`+, Blackwell
-on `cu128`+ — and a **ceiling**: the newest wheels *drop* the oldest
-architectures, so "just use the latest tag" is wrong for old hardware. For
-example, `cu128` dropped Volta (`sm_70`), so a **Tesla V100 needs `cu124`**
-(or `cu121`/`cu118`), not `cu128`. Rule of thumb: pick the oldest tag your
-driver supports that still covers your GPU; `cu124` is a safe default spanning
-Volta through Hopper. A mismatched wheel imports fine and then raises
+With no argument the script **auto-detects** the right tag from your GPU's
+compute capability via `nvidia-smi` (`scripts/detect_cuda_tag.py`), so you
+don't have to know your hardware; pass an explicit tag only to override it. If
+`nvidia-smi` is unavailable it falls back to `cu124`. You can preview the
+choice without installing anything by running `python scripts/detect_cuda_tag.py`.
+
+Behind that detection: the CUDA tag picks a torch wheel that only ships kernels
+for certain GPU architectures, so it has to match your hardware. There's a
+**floor** — newer GPUs need newer tags: Ampere/Ada on `cu118`+, Hopper (H100)
+on `cu121`+, Blackwell on `cu128`+ — and a **ceiling**: the newest wheels
+*drop* the oldest architectures, so "just use the latest tag" is wrong for old
+hardware. For example, `cu128` dropped Volta (`sm_70`), so a **Tesla V100 needs
+`cu124`** (or `cu121`/`cu118`), not `cu128`. Rule of thumb: pick the oldest tag
+your driver supports that still covers your GPU; `cu124` is a safe default
+spanning Volta through Hopper (and what the auto-detect picks for those cards).
+A mismatched wheel imports fine and then raises
 `cudaErrorNoKernelImageForDevice` on the first GPU op; VTSearch detects this at
 runtime and falls back to CPU (with a warning) rather than crashing, but you
 only get GPU acceleration with a matching wheel.

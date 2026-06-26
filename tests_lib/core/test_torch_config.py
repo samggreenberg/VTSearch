@@ -177,6 +177,47 @@ def test_cuda_can_run_returns_false_when_launch_raises(monkeypatch):
     assert config._cuda_runnable["cuda"] is False
 
 
+def test_cuda_can_run_warning_reports_device_and_arch_mismatch(monkeypatch, caplog):
+    """The kernel-image warning names the GPU's compute capability and the
+    arch list the installed build was compiled for, and steers users toward an
+    older tag for old GPUs (cu128 dropped Volta) rather than just "the newest"."""
+    import logging
+
+    import vtscore.config as config
+
+    importlib.reload(config)
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("no kernel image is available for execution on the device")
+
+    with (
+        mock.patch.object(torch.cuda, "is_available", return_value=True),
+        mock.patch.object(torch, "zeros", side_effect=_boom),
+        mock.patch.object(torch.cuda, "get_device_name", return_value="Tesla V100S-PCIE-32GB"),
+        mock.patch.object(torch.cuda, "get_device_capability", return_value=(7, 0)),
+        mock.patch.object(torch.cuda, "get_arch_list", return_value=["sm_75", "sm_80", "sm_90"]),
+        caplog.at_level(logging.WARNING, logger="vtscore.config"),
+    ):
+        assert config._cuda_can_run("cuda") is False
+
+    msg = caplog.text
+    assert "Tesla V100S-PCIE-32GB" in msg
+    assert "compute capability 7.0" in msg
+    assert "sm_75" in msg
+    # Must NOT tell a Volta owner to "just use the newest" tag (cu128 drops sm_70).
+    assert "cu124" in msg
+    assert "OLDER tag" in msg
+
+
+def test_describe_cuda_mismatch_returns_empty_when_torch_unqueryable(monkeypatch):
+    """The diagnostic suffix degrades to an empty string if torch raises."""
+    import vtscore.config as config
+
+    importlib.reload(config)
+    with mock.patch.object(torch.cuda, "get_device_name", side_effect=RuntimeError("boom")):
+        assert config._describe_cuda_mismatch("cuda") == ""
+
+
 def test_cuda_can_run_false_without_cuda(monkeypatch):
     """No CUDA at all -> ``_cuda_can_run`` is False without launching anything."""
     import vtscore.config as config

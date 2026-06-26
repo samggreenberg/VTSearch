@@ -47,6 +47,27 @@ DEVICE = os.environ.get("VTSEARCH_DEVICE", "auto").lower()
 _cuda_runnable: dict[str, bool] = {}
 
 
+def _describe_cuda_mismatch(device: str) -> str:
+    """Best-effort diagnostic suffix naming the GPU and the build's arch list.
+
+    Returns a string like ``" (Tesla V100S-PCIE-32GB, compute capability 7.0;
+    this torch build ships kernels for sm_75, sm_80, ...)"`` so the kernel-image
+    warning pins the exact mismatch: what the GPU *is* versus what the installed
+    wheel was compiled *for*.  Returns ``""`` if torch can't be queried (the
+    warning still fires, just without the extra detail).
+    """
+    try:
+        import torch  # noqa: PLC0415
+
+        idx = torch.device(device).index or 0
+        name = torch.cuda.get_device_name(idx)
+        major, minor = torch.cuda.get_device_capability(idx)
+        archs = ", ".join(torch.cuda.get_arch_list()) or "none"
+        return f" ({name}, compute capability {major}.{minor}; this torch build ships kernels for {archs})"
+    except Exception:
+        return ""
+
+
 def _cuda_can_run(device: str = "cuda") -> bool:
     """Return ``True`` only if torch can actually launch a kernel on *device*.
 
@@ -83,13 +104,17 @@ def _cuda_can_run(device: str = "cuda") -> bool:
             ok = True
     except Exception:
         logging.getLogger(__name__).warning(
-            "CUDA reports a usable device but torch cannot run a kernel on %s "
-            "(the installed torch build likely lacks a kernel image for this "
-            "GPU's compute capability); falling back to CPU. Reinstall a torch "
-            "build that matches this GPU (see scripts/install-gpu.sh, e.g. a "
-            "newer CUDA tag such as cu124/cu128) or set VTSEARCH_DEVICE=cpu to "
-            "silence this warning.",
+            "CUDA reports a usable device but torch cannot run a kernel on %s%s "
+            "(the installed torch build lacks a kernel image for this GPU's "
+            "compute capability); falling back to CPU. Reinstall a torch build "
+            "whose CUDA tag covers this GPU's compute capability (see "
+            "scripts/install-gpu.sh). Note the right tag is not simply the "
+            "newest one: the newest wheels DROP the oldest architectures, so an "
+            "older GPU needs an OLDER tag (e.g. cu128 dropped Volta/sm_70, so a "
+            "V100 needs cu124, not cu128). Or set VTSEARCH_DEVICE=cpu to silence "
+            "this warning.",
             device,
+            _describe_cuda_mismatch(device),
             exc_info=True,
         )
         ok = False
