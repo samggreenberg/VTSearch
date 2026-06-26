@@ -93,7 +93,6 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
   gridRowHeight = GRID_ROW_HEIGHT_FALLBACK;
 
   private pendingScrollToSelected = false;
-  private pendingScrollPct: number | null = null;
   private readonly destroy$ = new Subject<void>();
   private scrollSubscribed = false;
   private resizeObserver?: ResizeObserver;
@@ -291,16 +290,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
       this.observedViewportEl = undefined;
     }
 
-    const scrollEl =
-      this.virtualViewport?.elementRef.nativeElement ?? this.listContainer?.nativeElement;
-
-    if (this.pendingScrollPct !== null && scrollEl) {
-      const pct = this.pendingScrollPct;
-      this.pendingScrollPct = null;
-      this.pendingScrollToSelected = false;
-      const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight;
-      scrollEl.scrollTop = pct * maxScroll;
-    } else if (this.pendingScrollToSelected) {
+    if (this.pendingScrollToSelected) {
       this.pendingScrollToSelected = false;
       const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth';
       if (this.useGridVirtual && this.virtualViewport) {
