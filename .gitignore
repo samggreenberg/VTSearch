@@ -57,3 +57,5 @@ model_cache/*
 
 # Spike / experiment scratch (codebook fits, ROxford caches, logs)
 scratch/
+
+docs/experiments/*

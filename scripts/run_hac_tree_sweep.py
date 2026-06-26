@@ -11,10 +11,15 @@ real-world scenes - indoor rooms, outdoor natural + man-made
 environments) than the cropped-object photos of caltech-101, so the
 visual review is more representative of what users will see.
 
-Embedder: DINOv2 ViT-B/14 (``facebook/dinov2-base``).  DINOv2 is the
-ungated patch-capable embedder; the HAC tree code does not depend on
-which patch embedder produced the ``PatchEmbedOutput`` so the (K, α)
-choice transfers to DINOv3 / EUPE.
+Embedder: selectable via ``--backbone`` (default ``dinov2``).  DINOv2
+ViT-B/14 (``facebook/dinov2-base``) is the ungated patch-capable
+embedder; ``dinov3`` (``facebook/dinov3-vitb16-pretrain-lvd1689m``) is
+**gated** and requires the ``HF_TOKEN`` env var set to a token that has
+accepted the DINOv3 licence on Hugging Face.  The HAC tree code does not
+depend on which patch embedder produced the ``PatchEmbedOutput`` so the
+(K, α) choice transfers across backbones; the per-backbone forward
+output is cached under ``<out-dir>/cache/<backbone>/`` so switching
+backbones never reuses the other's vectors.
 
 Usage::
 
@@ -22,7 +27,15 @@ Usage::
         --places-dir data/places365 \\
         --out-dir docs/experiments/hac-tree-sweep \\
         --num-images 30 \\
-        --seed 0
+        --seed 0 \\
+        --backbone dinov2 \\        # or: --backbone dinov3 (needs HF_TOKEN)
+        --resolution 224           # square input edge; grid = resolution // patch_size
+
+``--resolution`` defaults to the checkpoint's 224² (16×16 grid for DINOv2,
+14×14 for DINOv3).  Raising it to a multiple of the patch size (e.g. 448 →
+32×32 for DINOv2) gives a finer patch grid - and thus smaller localisable
+regions - at quadratically more compute.  Forward outputs are cached per
+resolution under ``<out-dir>/cache/<backbone>/r<resolution>/``.
 
 Designed to be deleted once the sweep results are committed.
 """
@@ -105,7 +118,7 @@ def sample_places365_paths(places_dir: Path, n: int, seed: int) -> list[tuple[Pa
 
 
 # ---------------------------------------------------------------------------
-# DINOv2 forward
+# Backbone forward (DINOv2 / DINOv3)
 # ---------------------------------------------------------------------------
 
 
@@ -113,31 +126,133 @@ def sample_places365_paths(places_dir: Path, n: int, seed: int) -> list[tuple[Pa
 class _Backbone:
     model: object
     processor: object
+    #: ``[CLS, R1..R_k, P1..P_N]`` register-token count to skip; 0 for
+    #: DINOv2, 4 for DINOv3.
+    num_register_tokens: int
+    #: Short slug used to namespace the forward-output cache (``dinov2`` /
+    #: ``dinov3``) so the two backbones never share cached vectors.
+    key: str
+    #: Human-readable backbone description for the report header.
+    label: str
+    #: ViT patch edge in pixels, fixed by the checkpoint (14 for DINOv2's
+    #: ViT-B/14, 16 for DINOv3's ViT-B/16).  The patch grid side is
+    #: ``resolution // patch_size``.
+    patch_size: int
+    #: Square input edge in pixels the processor is configured to emit.
+    resolution: int
+
+    @property
+    def grid_side(self) -> int:
+        """Patch-grid side length: ``resolution // patch_size``."""
+        return self.resolution // self.patch_size
 
 
-def load_dinov2() -> _Backbone:
+def _set_processor_resolution(processor: object, resolution: int) -> None:
+    """Force *processor* to emit exactly ``resolution×resolution`` pixel tensors.
+
+    HF image processors differ in their size schema: DINOv2's
+    ``BitImageProcessor`` resizes the shortest edge then center-crops to
+    ``crop_size``, while DINOv3's processor resizes directly to a
+    ``height``/``width``.  We mirror whichever keys the processor already uses
+    so resize (+ crop, when enabled) bottoms out at ``R×R``.  ``patch_forward``
+    asserts the resulting ``pixel_values`` shape, so a processor whose schema
+    we guessed wrong fails loudly rather than embedding at the wrong size.
+    """
+    size = getattr(processor, "size", None)
+    if isinstance(size, dict):
+        if "shortest_edge" in size:
+            processor.size = {"shortest_edge": resolution}
+        else:
+            processor.size = {"height": resolution, "width": resolution}
+    if getattr(processor, "do_center_crop", False) and hasattr(processor, "crop_size"):
+        processor.crop_size = {"height": resolution, "width": resolution}
+
+
+def load_backbone(name: str, resolution: int) -> _Backbone:
+    """Load DINOv2 or DINOv3 as a patch-capable backbone.
+
+    *resolution* is the square input edge in pixels the processor is
+    reconfigured to emit; it must be a positive multiple of the backbone's
+    patch size (14 for DINOv2, 16 for DINOv3) so the patch grid stays square.
+
+    DINOv3 weights are gated on Hugging Face: ``HF_TOKEN`` must be set to
+    a token that has accepted the licence, or the download 401s.
+    """
     from transformers import AutoImageProcessor, AutoModel
 
-    model_id = "facebook/dinov2-base"
+    from vtscore.config import DINOV2_MODEL_ID, DINOV3_MODEL_ID
+    from vtscore.media.embedder import hf_token
+
+    if name == "dinov2":
+        model_id, registers, token, patch_size, label = (
+            DINOV2_MODEL_ID,
+            0,
+            False,
+            14,
+            f"DINOv2 ViT-B/14 (`{DINOV2_MODEL_ID}`)",
+        )
+    elif name == "dinov3":
+        token = hf_token()
+        if not token:
+            raise SystemExit(
+                "--backbone dinov3 needs a Hugging Face token: set HF_TOKEN to a token "
+                "that has accepted the DINOv3 licence at "
+                "https://huggingface.co/facebook/dinov3-vitb16-pretrain-lvd1689m"
+            )
+        model_id, registers, patch_size, label = (
+            DINOV3_MODEL_ID,
+            4,
+            16,
+            f"DINOv3 ViT-B/16 (`{DINOV3_MODEL_ID}`)",
+        )
+    else:
+        raise SystemExit(f"unknown --backbone {name!r} (expected dinov2 or dinov3)")
+
+    if resolution <= 0 or resolution % patch_size != 0:
+        raise SystemExit(
+            f"--resolution {resolution} must be a positive multiple of the "
+            f"{name} patch size ({patch_size}px); e.g. "
+            f"{patch_size * 16} ({patch_size}×16) or {patch_size * 32}."
+        )
+
     print(f"  loading {model_id} (this may download ~350MB on first run)…", flush=True)
     # Force eager attention so output_attentions=True actually returns
     # weights - recent transformers default to SDPA which drops them.
     model = AutoModel.from_pretrained(
         model_id,
         low_cpu_mem_usage=True,
-        token=False,
+        token=token,
         attn_implementation="eager",
     )
     model.eval()
-    processor = AutoImageProcessor.from_pretrained(model_id, token=False)
-    return _Backbone(model=model, processor=processor)
+    processor = AutoImageProcessor.from_pretrained(model_id, token=token)
+    _set_processor_resolution(processor, resolution)
+    return _Backbone(
+        model=model,
+        processor=processor,
+        num_register_tokens=registers,
+        key=name,
+        label=label,
+        patch_size=patch_size,
+        resolution=resolution,
+    )
 
 
 def patch_forward(bb: _Backbone, image: Image.Image) -> PatchEmbedOutput | None:
     inputs = bb.processor(images=image.convert("RGB"), return_tensors="pt")
+    # Guard the resolution override: if the processor's size schema wasn't the
+    # one _set_processor_resolution handled, the pixel tensor won't be R×R and
+    # every downstream grid claim would be silently wrong.  Fail loudly instead.
+    pix_hw = tuple(inputs["pixel_values"].shape[-2:])
+    if pix_hw != (bb.resolution, bb.resolution):
+        raise SystemExit(
+            f"processor for backbone {bb.key!r} produced pixel_values of "
+            f"{pix_hw}, expected ({bb.resolution}, {bb.resolution}); "
+            "_set_processor_resolution did not match this processor's size schema."
+        )
     with torch.no_grad():
         outputs = bb.model(**inputs, output_attentions=True)
-    return hf_vit_to_patch_output(outputs, num_register_tokens=0)
+    return hf_vit_to_patch_output(outputs, num_register_tokens=bb.num_register_tokens)
 
 
 # ---------------------------------------------------------------------------
@@ -178,20 +293,22 @@ def _cell_mask_of(regions: list[RegionVector], idx: int) -> np.ndarray:
 
 
 def _render_cell_thumb(
-    image: Image.Image,
+    full_rgb: np.ndarray,
     cell_mask: np.ndarray,
     size: tuple[int, int],
     *,
     pad: tuple[int, int, int] = (250, 250, 250),
     dim_outside: tuple[int, int, int] = (210, 210, 210),
 ) -> Image.Image:
-    """Render *image* masked to *cell_mask* and sized to *size*.
+    """Render *full_rgb* masked to *cell_mask* and sized to *size*.
 
-    The mask is a ``(H_patch, W_patch)`` bool array over the patch grid.
-    We upsample it to image resolution by nearest-neighbour (every patch
-    cell is a regular rectangle), crop to the mask's tight bounding box,
-    desaturate / dim the *outside-mask* pixels so the eye locks onto the
-    cell union, then fit inside *size* with aspect-preserving resize.
+    *full_rgb* is an image-resolution ``(H, W, 3)`` uint8 array - either
+    the source image or a saliency heatmap.  The mask is a
+    ``(H_patch, W_patch)`` bool array over the patch grid.  We upsample
+    it to image resolution by nearest-neighbour (every patch cell is a
+    regular rectangle), crop to the mask's tight bounding box, desaturate
+    / dim the *outside-mask* pixels so the eye locks onto the cell union,
+    then fit inside *size* with aspect-preserving resize.
 
     This shows the union-of-cells footprint, not the loose bounding
     rectangle - so an L-shaped leaf actually looks L-shaped, and an
@@ -199,9 +316,9 @@ def _render_cell_thumb(
     visibly different from that child.
     """
     h_grid, w_grid = cell_mask.shape
-    w_img, h_img = image.size
+    h_img, w_img = full_rgb.shape[:2]
     # Upsample patch-grid mask to image resolution.
-    full = np.asarray(image.convert("RGB"), dtype=np.uint8).copy()
+    full = np.ascontiguousarray(full_rgb, dtype=np.uint8)
     # Patch i covers rows [i * h_img / h_grid, (i+1) * h_img / h_grid).
     row_edges = np.linspace(0, h_img, h_grid + 1).astype(int)
     col_edges = np.linspace(0, w_img, w_grid + 1).astype(int)
@@ -240,6 +357,41 @@ def _render_cell_thumb(
     oy = (target_h - new_h) // 2
     cell.paste(crop_img, (ox, oy))
     return cell
+
+
+def _saliency_full_rgb(image: Image.Image, saliency: np.ndarray) -> np.ndarray:
+    """Build an image-resolution ``(H, W, 3)`` uint8 attention overlay.
+
+    *saliency* is the ``(side, side)`` per-patch attention map.  It is
+    normalised by its own max to ``[0, 1]``, block-upsampled to the image
+    resolution (mirroring the ``linspace`` cell edges used elsewhere so a
+    patch maps to exactly the same pixels its cell mask does), colour-mapped
+    with ``inferno``, then alpha-blended over a desaturated grayscale of the
+    image so the underlying content stays visible beneath the attention.
+    """
+    from matplotlib import colormaps  # noqa: PLC0415
+
+    side_h, side_w = saliency.shape
+    w_img, h_img = image.size
+    sal01 = saliency.astype(np.float32)
+    sal01 = sal01 / max(float(sal01.max()), 1e-8)
+
+    # Block-upsample the patch-grid saliency to image resolution.
+    row_edges = np.linspace(0, h_img, side_h + 1).astype(int)
+    col_edges = np.linspace(0, w_img, side_w + 1).astype(int)
+    sal_full = np.zeros((h_img, w_img), dtype=np.float32)
+    for r in range(side_h):
+        for c in range(side_w):
+            sal_full[row_edges[r] : row_edges[r + 1], col_edges[c] : col_edges[c + 1]] = sal01[r, c]
+
+    heat = (colormaps["inferno"](sal_full)[:, :, :3] * 255.0).astype(np.uint8)
+    # Blend the heatmap over a dimmed grayscale image so the attention reads
+    # against the scene content underneath it.
+    gray = np.asarray(image.convert("L"), dtype=np.float32)
+    base = (gray * 0.55 + 40.0)[:, :, None].repeat(3, axis=2)
+    a = 0.6
+    blended = base * (1.0 - a) + heat.astype(np.float32) * a
+    return np.clip(blended, 0, 255).astype(np.uint8)
 
 
 def _layout_tree(regions: list[RegionVector], k: int) -> tuple[list[float], list[int], int]:
@@ -301,23 +453,24 @@ def _layout_tree(regions: list[RegionVector], k: int) -> tuple[list[float], list
     return col, depth, max_depth
 
 
-def render_config_tree(
-    image: Image.Image,
+def _render_tree_panel(
+    full_rgb: np.ndarray,
     regions: list[RegionVector],
     k: int,
     *,
+    corner_rgb: np.ndarray,
     title: str = "",
     thumb: int = 84,
     gap_x: int = 8,
     gap_y: int = 28,
     margin: int = 14,
 ) -> Image.Image:
-    """Render one HAC region tree as a stack:
+    """Render one HAC region tree panel as a stack:
 
-    * the full image in the top-left, scaled as large as possible without
-      growing the canvas past what the tree itself needs (the binary
-      tree leaves the upper-left corner empty, so the original image
-      tucks into that staircase),
+    * the *corner_rgb* image in the top-left, scaled as large as possible
+      without growing the canvas past what the tree itself needs (the
+      binary tree leaves the upper-left corner empty, so it tucks into
+      that staircase),
     * HAC internal merge nodes in the middle (each masked to the *union
       of patch cells* under the node - not its loose bounding box),
     * HAC leaves along the bottom (each masked to its cell footprint),
@@ -367,7 +520,7 @@ def render_config_tree(
     # s * img_h_orig.  Per node the max permissible s is
     # max(s_x_node, s_y_node) (either constraint suffices); the overall
     # cap is the min across nodes (every node must be respected).
-    full_orig = image.convert("RGB").copy()
+    full_orig = Image.fromarray(np.ascontiguousarray(corner_rgb, dtype=np.uint8), mode="RGB")
     img_w_orig, img_h_orig = full_orig.size
     img_origin_x = margin
     img_origin_y = tree_top
@@ -427,7 +580,7 @@ def render_config_tree(
         tx = cx - thumb // 2
         ty = cy - thumb // 2
         mask = _cell_mask_of(regions, i + 1)
-        canvas.paste(_render_cell_thumb(image, mask, (thumb, thumb)), (tx, ty))
+        canvas.paste(_render_cell_thumb(full_rgb, mask, (thumb, thumb)), (tx, ty))
         # Yellow ring for leaves, cyan ring for internals.
         color = (255, 215, 0) if i < k else (40, 170, 200)
         draw.rectangle((tx, ty, tx + thumb, ty + thumb), outline=color, width=2)
@@ -435,14 +588,81 @@ def render_config_tree(
     return canvas
 
 
+def _hstack_panels(panels: list[Image.Image], *, gap: int = 12) -> Image.Image:
+    """Concatenate equal-height *panels* left-to-right with a thin divider."""
+    h = max(p.height for p in panels)
+    total_w = sum(p.width for p in panels) + gap * (len(panels) - 1)
+    out = Image.new("RGB", (total_w, h), (250, 250, 250))
+    draw = ImageDraw.Draw(out)
+    x = 0
+    for i, p in enumerate(panels):
+        out.paste(p, (x, 0))
+        x += p.width
+        if i < len(panels) - 1:
+            draw.line([(x + gap // 2, 0), (x + gap // 2, h)], fill=(180, 180, 180), width=1)
+            x += gap
+    return out
+
+
+def render_config_tree(
+    image: Image.Image,
+    regions: list[RegionVector],
+    k: int,
+    *,
+    saliency: np.ndarray | None = None,
+    title: str = "",
+    thumb: int = 84,
+    gap_x: int = 8,
+    gap_y: int = 28,
+    margin: int = 14,
+) -> Image.Image:
+    """Render the HAC region tree as one or more side-by-side panels.
+
+    The first panel draws every node masked to its patch-cell union over
+    the **image** (the original single-tree view).  When *saliency* (the
+    ``(side, side)`` per-patch attention map) is supplied, a second panel
+    is appended to the right drawing the *same* tree from the attention
+    map (the ``inferno`` heatmap blended over the dimmed image).  Both
+    panels share identical tree geometry so a node can be compared
+    straight across.
+    """
+    panel_kwargs = {"thumb": thumb, "gap_x": gap_x, "gap_y": gap_y, "margin": margin}
+    img_rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
+    panels = [
+        _render_tree_panel(
+            img_rgb,
+            regions,
+            k,
+            corner_rgb=img_rgb,
+            title=f"{title} · image" if title else "image",
+            **panel_kwargs,
+        )
+    ]
+    if saliency is not None:
+        heat = _saliency_full_rgb(image, saliency)
+        panels.append(
+            _render_tree_panel(
+                heat,
+                regions,
+                k,
+                corner_rgb=heat,
+                title=f"{title} · attention" if title else "attention",
+                **panel_kwargs,
+            )
+        )
+    return _hstack_panels(panels)
+
+
 # ---------------------------------------------------------------------------
 # PatchEmbedOutput cache
 # ---------------------------------------------------------------------------
 
 
-def _cache_path(out_dir: Path, idx: int, label: str) -> Path:
+def _cache_path(out_dir: Path, backbone: str, resolution: int, idx: int, label: str) -> Path:
     safe_label = label.replace("/", "_")
-    return out_dir / "cache" / f"{idx:02d}_{safe_label}.npz"
+    # Resolution namespaces the cache: vectors at 224² and 448² are different
+    # forward outputs, so they must never collide under the same backbone dir.
+    return out_dir / "cache" / backbone / f"r{resolution}" / f"{idx:02d}_{safe_label}.npz"
 
 
 def load_or_compute_patch(
@@ -454,7 +674,9 @@ def load_or_compute_patch(
 
     The cache is throwaway - feel free to ``rm -rf docs/experiments/
     hac-tree-sweep/cache`` to force re-inference.  Cached arrays are
-    float32 (small enough - ~600 KB per image at 16×16×768).
+    float32; size scales with the patch grid (~600 KB per image at
+    16×16×768, quadratically larger at higher ``--resolution``).  Caches
+    are namespaced by resolution (``cache/<backbone>/r<resolution>/``).
     """
     if cache_path.exists():
         with np.load(cache_path) as z:
@@ -634,6 +856,25 @@ def main() -> None:
         default=0.5,
         help="α used for the single per-image tree render.",
     )
+    ap.add_argument(
+        "--backbone",
+        choices=("dinov2", "dinov3"),
+        default="dinov2",
+        help="Patch embedder to run. 'dinov3' is gated and needs HF_TOKEN set.",
+    )
+    ap.add_argument(
+        "--resolution",
+        type=int,
+        default=224,
+        help=(
+            "Square input edge in pixels (default 224, the checkpoint default). "
+            "Must be a multiple of the backbone's patch size (14 for dinov2, "
+            "16 for dinov3); the patch grid side is resolution // patch_size, so "
+            "larger values give a finer grid (e.g. dinov2 at 448 -> 32x32) at "
+            "quadratically more compute. Forward outputs are cached per "
+            "resolution under cache/<backbone>/r<resolution>/."
+        ),
+    )
     args = ap.parse_args()
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -654,8 +895,9 @@ def main() -> None:
     for path, cat in samples:
         print(f"  {cat}/{path.name}")
 
-    print("loading DINOv2…")
-    bb = load_dinov2()
+    print(f"loading backbone {args.backbone}…")
+    bb = load_backbone(args.backbone, args.resolution)
+    print(f"  input {bb.resolution}² → {bb.grid_side}×{bb.grid_side} patch grid (patch size {bb.patch_size}px)")
 
     cls_vectors: list[np.ndarray] = []
     image_labels: list[str] = []
@@ -668,7 +910,7 @@ def main() -> None:
     for idx, (path, category) in enumerate(samples):
         image = Image.open(path).convert("RGB")
         image_label = f"{category}/{path.stem}"
-        cache_path = _cache_path(args.out_dir, idx, image_label)
+        cache_path = _cache_path(args.out_dir, bb.key, bb.resolution, idx, image_label)
 
         t0 = time.perf_counter()
         cached = cache_path.exists()
@@ -693,6 +935,7 @@ def main() -> None:
             image,
             config_regions[default_key],
             k=args.default_k,
+            saliency=out.patch_saliency,
             title=f"K={args.default_k} alpha={args.default_alpha}",
         )
         tree_path = args.out_dir / "trees" / f"{idx:02d}_{category}_{path.stem}.jpg"
@@ -728,6 +971,9 @@ def main() -> None:
         agg_rows=agg_rows,
         clusters=clusters,
         mean_forward_s=float(np.mean(timings)),
+        backbone_label=bb.label,
+        resolution=bb.resolution,
+        grid_side=bb.grid_side,
     )
     print(f"wrote report -> {report_path}")
 
@@ -749,6 +995,9 @@ def write_report(
     agg_rows: list[tuple[int, float, dict[str, float]]],
     clusters: dict[int, list[str]],
     mean_forward_s: float,
+    backbone_label: str,
+    resolution: int,
+    grid_side: int,
 ) -> None:
     lines: list[str] = []
     lines.append("# HAC tree (K, α) sweep - Places365")
@@ -770,7 +1019,8 @@ def write_report(
     )
     lines.append("")
     lines.append(
-        f"Backbone: DINOv2 ViT-B/14 (`facebook/dinov2-base`) on CPU.  "
+        f"Backbone: {backbone_label} on CPU.  "
+        f"Input **{resolution}² → {grid_side}×{grid_side} patch grid**.  "
         f"Sample: **{num_images} images** spread across Places365 categories "
         f"(seed = 0, see `scripts/run_hac_tree_sweep.py`).  Mean forward "
         f"pass: **{mean_forward_s:.2f} s/image** on CPU."
@@ -810,6 +1060,18 @@ def write_report(
         'no "duplicate" merges to flag - the loose bounding '
         "rectangle occasionally lands on a child's rectangle, but "
         "that's a rectangle artifact, not something the model sees."
+    )
+    lines.append("")
+    lines.append(
+        "Each row below shows **two panels** of the *same* tree, side by "
+        "side: (1) **image** - each node masked to its patch-cell union "
+        "over the source image (the view described above); (2) "
+        "**attention** - the final-block CLS->patch attention (`inferno` "
+        "colormap) alpha-blended over a dimmed grayscale of the image, so "
+        "you can see both the content and where the model attends.  Both "
+        "panels share identical geometry, so a node lines up straight "
+        "across; the top-left corner inset is the whole-image version of "
+        "that panel's signal."
     )
     lines.append("")
     for i, label in enumerate(image_labels):
