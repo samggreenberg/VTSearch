@@ -159,7 +159,15 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['selectedId'] && !changes['selectedId'].firstChange) {
+    // Only autoscroll the newly-selected item into view in click mode. In hover
+    // mode the selection follows the cursor, so scrolling the item to the top
+    // would shift what's under the mouse, re-trigger selection, and scroll
+    // again — an infinite autoscroll loop. Let the hovered item stay put.
+    if (
+      changes['selectedId'] &&
+      !changes['selectedId'].firstChange &&
+      this.focusMode() === 'click'
+    ) {
       this.pendingScrollToSelected = true;
     }
 
