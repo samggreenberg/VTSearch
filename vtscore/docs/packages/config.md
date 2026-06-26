@@ -185,7 +185,7 @@ capability and the arch list the installed wheel was compiled for, so the
 mismatch is legible at a glance (e.g. *"Tesla V100S-PCIE-32GB, compute
 capability 7.0; this torch build ships kernels for sm_75, sm_80, ..."*). To
 actually use the GPU, reinstall a torch build whose CUDA tag covers its
-arch (see `scripts/install-gpu.sh`). The right tag is not simply the newest:
+arch (see `scripts/install.sh`). The right tag is not simply the newest:
 the newest wheels drop the oldest architectures, so an old GPU needs an
 *older* tag (`cu128` dropped Volta/`sm_70`, so a V100 needs `cu124`).
 

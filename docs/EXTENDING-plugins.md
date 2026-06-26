@@ -604,7 +604,7 @@ your `run()` expects non-string values (e.g. FileStorage objects).
 Add any extra packages to `[project.dependencies]` in the repo's
 `pyproject.toml`; that's the single source of truth and deptry verifies
 every import is declared there. They are picked up the next time you run
-`bash scripts/install-cpu.sh` (or any editable install).
+`bash scripts/install.sh` (or any editable install).
 
 ### Multi-media imports
 
@@ -977,7 +977,7 @@ endpoints:
 Add any extra packages to `[project.dependencies]` in the repo's
 `pyproject.toml`; that's the single source of truth and deptry verifies
 every import is declared there. They are picked up the next time you run
-`bash scripts/install-cpu.sh` (or any editable install).
+`bash scripts/install.sh` (or any editable install).
 
 ---
 

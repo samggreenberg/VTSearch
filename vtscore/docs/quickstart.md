@@ -21,7 +21,7 @@ vocabulary (`Media`, `Origin`, `LabelSet`, `Embedding`) is assumed below.
 ```bash
 git clone https://github.com/samggreenberg/vtsearch
 cd vtsearch
-bash scripts/install-cpu.sh   # or scripts/install-gpu.sh for CUDA
+bash scripts/install.sh   # auto-detects CPU vs GPU
 ```
 
 The first time you import an embedder, it downloads its model weights

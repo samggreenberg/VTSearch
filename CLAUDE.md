@@ -137,8 +137,7 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **CLI autodetect**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json>`
 - **CLI autodetect + exporter**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json> --exporter server_json_file --filepath results.json`
 - **CLI autodetect + importer**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio --settings <settings.json>`
-- **Install deps (CPU)**: `bash scripts/install-cpu.sh`
-- **Install deps (GPU)**: `bash scripts/install-gpu.sh` (or `bash scripts/install-gpu.sh cu121` for CUDA 12.1)
+- **Install deps**: `bash scripts/install.sh` (auto-detects CPU vs GPU; pass `cpu`/`gpu` to force, or a `cuXYZ` tag to override the GPU wheel, e.g. `bash scripts/install.sh cu121`)
 - **Build frontend**: `cd frontend && npm install && npm run build:prod` (builds Angular app to `static/`)
 - **Frontend dev server**: `cd frontend && npm start` (proxies `/api/*` to Flask at localhost:5000)
 - **Frontend audit**: `cd frontend && npm audit` (checks for known vulnerabilities in dependencies)

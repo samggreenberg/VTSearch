@@ -1,7 +1,7 @@
 """Tests for ``scripts/detect_cuda_tag.py``.
 
 The helper picks the right PyTorch CUDA wheel tag from the GPU's compute
-capability so ``install-gpu.sh`` doesn't make the user know their hardware (and
+capability so ``install.sh`` doesn't make the user know their hardware (and
 doesn't fall into the "newest tag is wrong for an old GPU" trap: cu128 dropped
 Volta, so a V100 needs cu124). The selection logic is pure; the nvidia-smi
 parsing is text-only. Both are covered here without a GPU.

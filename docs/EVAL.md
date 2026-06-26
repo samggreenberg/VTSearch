@@ -22,7 +22,7 @@ This will:
 Install dependencies (if you haven't already):
 
 ```bash
-bash scripts/install-cpu.sh
+bash scripts/install.sh
 ```
 
 Matplotlib and pandas are required for plot generation and are included in the dev dependencies.

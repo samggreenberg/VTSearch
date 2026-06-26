@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pick the right PyTorch CUDA wheel tag for the GPU(s) on this host.
 
-``scripts/install-gpu.sh`` calls this when invoked without an explicit tag, so
+``scripts/install.sh`` calls this on the GPU path when no explicit tag is given, so
 users don't have to know their GPU's compute capability (or that the *newest*
 CUDA tag is the wrong choice for an old GPU). It shells out to ``nvidia-smi``,
 reads each GPU's compute capability and the driver's max CUDA version, and

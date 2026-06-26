@@ -144,7 +144,7 @@ in the repo's `pyproject.toml`. `requests` is already declared.
 pyproject.toml is the single source of truth; deptry verifies every
 imported package is declared there.
 
-Re-run `bash scripts/install-cpu.sh` (or any editable install) to pick
+Re-run `bash scripts/install.sh` (or any editable install) to pick
 up the new dep.
 
 ---

@@ -29,7 +29,7 @@ editable mode for development:
 ```bash
 git clone https://github.com/samggreenberg/vtsearch
 cd vtsearch
-bash scripts/install-cpu.sh   # or scripts/install-gpu.sh for CUDA
+bash scripts/install.sh   # auto-detects CPU vs GPU
 ```
 
 A standalone `vtscore` PyPI distribution is deferred until a real

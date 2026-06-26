@@ -99,7 +99,7 @@ pre-commit, etc.) live under `[project.optional-dependencies].dev`.
 ```
 pyproject.toml                       # [project.dependencies] + [project.optional-dependencies].dev
 requirements/base.txt                # `--extra-index-url <cpu wheel index>` + `-e .[dev]`
-requirements/gpu.txt                 # `-e .[dev]` (install-gpu.sh / Dockerfile.gpu set --extra-index-url)
+requirements/gpu.txt                 # `-e .[dev]` (install.sh / Dockerfile.gpu set --extra-index-url)
 requirements/labbench.txt            # Standalone curated list for Dockerfile.labbench (image+SigLIP only)
 requirements/image-embedders*.txt    # Standalone curated lists for Dockerfile.image-embedders[.gpu]
 ```
@@ -112,7 +112,7 @@ images) and do **not** flow through pyproject.
 
 Add the extra packages to `[project.dependencies]` in `pyproject.toml`
 (or to `[project.optional-dependencies].dev` if they're test/lint-only),
-then re-run `bash scripts/install-cpu.sh` (or any editable install).
+then re-run `bash scripts/install.sh` (or any editable install).
 Failed imports of a plugin's sub-package emit a warning rather than
 crashing, so missing dependencies degrade gracefully; but deptry will
 flag any imported package missing from pyproject the next time `./run-tests.sh` runs.
