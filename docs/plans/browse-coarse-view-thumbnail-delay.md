@@ -1,73 +1,68 @@
-# Browse coarse-view thumbnail load delay (~3s grayscale bins)
+# Browse first-paint thumbnail load delay (~3s grayscale bins)
 
-**Status:** Investigation only — root cause hypothesized from code reading, NOT
-yet confirmed against a running app. The next contributor should **confirm via
-the DevTools Network tab first** (see "How to confirm"), then pick a fix.
+**Status:** Investigation only — cause NOT yet confirmed against a running app.
+An earlier draft of this plan blamed a "coarse-view full-resolution `/image`
+fetch"; that hypothesis was **wrong and has been retracted** (see "Retracted
+hypothesis" below). The next contributor should **confirm via the DevTools
+Network tab first** (see "How to confirm"), then pick a fix.
 
 ## Symptom
 
-When the VTSBrowse canvas first loads (the zoomed-out "top" overview), there's a
-solid ~3 seconds where only the grayscale/density-shaded hex bins are visible
-before any imagery paints in. The reporter's dataset shows only ~30 bins in that
-top view, so "hundreds of requests vs. the 6-connection limit" does **not**
-explain it — 30 small thumbnails through 6 connections would be ~250ms.
+When the VTSBrowse canvas first loads, there's a solid ~3 seconds where only the
+grayscale/density-shaded hex bins are visible before any imagery paints in. The
+reporter's dataset shows only ~30 bins in that view.
 
 The bins themselves paint instantly: they're drawn purely from tile cell data
 (`count` → colormap), no images involved. The delay is entirely the imagery
 filling those bins.
 
-## Primary hypothesis: the coarse view fetches full-res `/image`, not `/thumbnail`
+## The full-res switch is global, NOT per-pyramid-level (key correction)
 
-The browse canvas has a resolution-tier switch. When a hex is drawn wider than
-the thumbnail's native cap (384 device-px), it stops fetching the capped
-`/thumbnail` (which would just upscale a blurry 384px bitmap) and fetches the
-**full-resolution `/image`** instead.
+The browse canvas decides per-paint whether to fetch the capped `/thumbnail` or
+the full-resolution `/image`:
 
-- `frontend/src/app/components/browse-canvas/browse-canvas.component.ts:320-322`
-  — `useFullResThumbs` getter:
+- `browse-canvas.component.ts:320-322` — `useFullResThumbs`:
   ```ts
   private get useFullResThumbs(): boolean {
     return 2 * this.targetRadius * this.dpr > BrowseCanvasComponent.THUMB_NATIVE_MAX_DIM; // 384
   }
   ```
-- `browse-canvas.component.ts:84` — `THUMB_NATIVE_MAX_DIM = 384`.
-- `browse-canvas.component.ts:1428` — the per-cell fetch picks the endpoint:
-  ```ts
-  const endpoint = this.thumbsAreFullRes ? 'image' : 'thumbnail';
-  img.src = this.activeContext.mediaUrl(`/api/medias/${representativeId}/${endpoint}`);
-  ```
-- `getThumb()` (`:1405-1432`) is called from `drawHex` (`:1233`) on the **first**
-  `draw()` — there's no settle/debounce gating it, so the requests fire the
-  moment the bins paint.
 
-Why the *top* view specifically is the worst case: it's the coarsest pyramid
-level, so the fewest bins cover the whole canvas and each hex is **largest**. The
-switch trips when `targetRadius > THUMB_NATIVE_MAX_DIM / (2 * dpr)`. On a Retina
-display (`dpr = 2`) that's just `targetRadius > 96` CSS-px — which ~30 bins
-spread across a normal-width canvas easily exceeds. So every coarse-view cell
-requests `/image`.
+Crucially this reads **only `targetRadius` and `dpr`** — not zoom, not pyramid
+level. `targetRadius` is the thumbnail-size knob (default `28` px = the "M" size,
+`:79`), held constant across zoom. Level selection (`levelForEffZoom`,
+`:757-767`) picks whichever pyramid level keeps each bin near `targetRadius`, so
+the on-screen hex is ~28px at **every** zoom. The per-bin *mathematical* area
+shrinks going up the pyramid, but it's scaled to a constant *screen* size.
 
-What `/image` serves for an image-type item: the **original source bytes with no
-downscaling** —
-- `vtsearch/routes/media/list.py:501-513` (`media_image`) →
-- `vtsearch/routes/media/list.py:457-498` (`_resolve_display_image`) → for image
-  types, returns `_resolve_bytes(c)` verbatim (the raw file bytes).
+Therefore the full-res switch is the **same decision at every zoom level** — a
+global on/off, never a "top of the pyramid" effect. It trips only when
+`2 · targetRadius · dpr > 384`, i.e. `targetRadius > 192/dpr`:
 
-So if the source images are a few MB each, the coarse view is transferring and
-full-decoding ~30 multi-MB originals — that's the ~3s. This is the literal answer
-to the reporter's "(these are just thumbnails, not full images, right?)": at this
-particular zoom, **no — it's fetching full images.**
+| Display | targetRadius needed to trigger full-res | Default "M" = 28 |
+|---|---|---|
+| Standard (dpr=1) | > 192 px | 56 → **off** |
+| Retina (dpr=2)   | > 96 px  | 112 → **off** |
 
-Corollary prediction: zooming **in** (smaller hexes, below the 384 threshold)
-should flip back to the fast `/thumbnail` path and not show the delay. If the
-reporter sees the delay only at the most-zoomed-out view, that strongly supports
-this hypothesis.
+**Conclusion: at the default thumbnail size, the canvas fetches `/thumbnail`
+everywhere and never `/image`.** Full-res only engages if the user has enlarged
+the thumbnail size to roughly XL (`targetRadius` past ~96 on Retina, ~192
+otherwise). So unless the reporter has cranked the size knob up, full-res is not
+in play and is not the cause of the delay.
 
-## Secondary suspect: on-the-fly thumbnail generation (only if it's `/thumbnail`)
+### Retracted hypothesis
 
-If the Network tab shows the slow requests are actually `/thumbnail` (not
-`/image`), the cause is different: the thumbnails are being **generated per
-request** instead of served from precomputed bytes.
+The earlier "the coarse/top view has large hexes, so it crosses 384 and fetches
+multi-MB `/image` originals" theory was wrong twice over: (1) hex *screen* size
+is held ~constant across zoom by level selection, so the top view does not have
+larger hexes; (2) `useFullResThumbs` keys off the constant `targetRadius`, not
+the actual rendered radius, so it can't be a per-level effect. Do not resurrect
+it without first confirming the size knob is actually turned up.
+
+## Leading hypothesis: on-the-fly `/thumbnail` generation (no precomputed bytes)
+
+If the dataset's medias lack precomputed `thumbnail_bytes`, every `/thumbnail`
+request decodes the full source image and resizes it at request time:
 
 - `vtsearch/routes/media/list.py:548-552` — `media_thumbnail` serves precomputed
   `c["thumbnail_bytes"]` directly via `cached_thumbnail_response` (fast, no
@@ -76,94 +71,87 @@ request** instead of served from precomputed bytes.
   (`vtsearch/routes/_shared.py:57-103`, `make_image_thumbnail`).
 - Datasets missing `thumbnail_bytes`: old pickles, thin loads, undecodable SVGs
   (per the `media_thumbnail` docstring at `:529-533`).
-- The server runs **1 gunicorn worker** with `gthread` / 8 threads
+- The server runs **1 gunicorn worker**, `gthread`, 8 threads
   (`gunicorn.conf.py:28-30`). Pillow decode+resize is CPU work largely under the
-  GIL, so concurrent thumbnail generation across those threads **serializes** —
-  30 on-the-fly generations ≈ 30 sequential decode+resize ops, which can land
-  around ~3s.
+  GIL, so concurrent generation across those threads **serializes**. ~30
+  on-the-fly generations of large source photos ≈ ~30 sequential decode+resize
+  ops, which can land around ~3s.
 
-This suspect is independently worth checking because it would also make *every*
-zoom level's first paint slow, not just the coarse top view.
+This fits the symptom shape: slow on first paint, then fast (ETag 304 +
+in-memory `thumbCache`), and recurs when panning into not-yet-cached bins.
+
+**But note:** a normally-ingested dataset *does* get `thumbnail_bytes` at ingest
+(docstring `:529`), which would make this path fast. So this hypothesis hinges on
+the reporter's dataset actually lacking them — which the Network tab / a quick
+`get_media(id).keys()` check will reveal. If `thumbnail_bytes` is present and
+`/thumbnail` is still slow, the cause is elsewhere and needs fresh investigation
+(candidate avenues: first-thumbnail draw is gated on a late `mediaType()` signal;
+tiles contending for connections; projection/meta still settling on first paint).
 
 ## How to confirm (do this first, before any fix)
 
 Run the app against the reporter's dataset (or any image dataset) and watch the
-network while the top view loads:
+network while the view loads:
 
 1. `bash .claude/hooks/ensure-test-deps.sh && python app.py --local` and open the
-   browse view; or use the `/run` skill / `/verify` skill to drive it.
+   browse view; or use the `/run` or `/verify` skill to drive it.
 2. DevTools → Network, filter to `/api/medias/`, hard-reload the browse view.
-3. Inspect the requests that fill the coarse-view bins:
-   - **If they're `…/image`** and each is hundreds of KB–MBs and/or slow →
-     **primary hypothesis confirmed** (full-res switch). Note typical size and
-     time.
-   - **If they're `…/thumbnail`** and each is small but slow (high "Waiting/TTFB"
-     while the server generates) → **secondary suspect** (on-the-fly generation;
-     check whether the dataset's medias carry `thumbnail_bytes`).
-   - Note concurrency: are ~6 in flight at once (browser cap) or fewer?
-4. Confirm the zoom-dependence: zoom in until hexes are clearly small and reload
-   — does the delay vanish and switch to `/thumbnail`? That isolates the tier
-   switch as the trigger.
-5. (Optional) Add a temporary `console.debug` in `getThumb` logging `endpoint`
-   and `representativeId`, or log `this.thumbsAreFullRes` in
-   `syncThumbResolutionTier`, to see the tier the coarse view actually selects.
+3. Inspect the requests that fill the bins:
+   - **Endpoint:** `…/thumbnail` or `…/image`? (Expected: `/thumbnail` at default
+     size. If `/image`, the size knob is turned up — confirm and revisit the
+     full-res path.)
+   - **Timing:** is the time dominated by "Waiting (TTFB)" (server generating the
+     thumbnail) vs. "Content Download" (large bytes over the wire)? High TTFB on
+     small `/thumbnail` responses ⇒ on-the-fly generation.
+   - **Size:** small (KB, precomputed/capped) or large (MB, full source)?
+   - **Concurrency:** ~6 in flight (browser cap) or fewer/serialized?
+4. Check whether the dataset's medias carry `thumbnail_bytes`: in a Python shell
+   against the running context, `get_media(<id>).keys()` (or inspect the loader
+   for the source). Absent ⇒ leading hypothesis confirmed.
+5. Confirm whether the delay is first-paint-only: pan into fresh bins after the
+   first load — does the ~3s recur for newly revealed cells? (Expected yes for
+   on-the-fly generation, since only previously-fetched cells are cached.)
 
-Record the findings in this file (size/time per request, endpoint, tier) so the
-fix targets the real cause.
+Record the measured endpoint / TTFB / size / `thumbnail_bytes` presence in this
+file so the fix targets the real cause.
 
 ## Fix options (pick after confirming)
 
-If **primary hypothesis** (full-res `/image` at coarse view):
+If **on-the-fly generation** (no `thumbnail_bytes`):
 
-- **A. Add a bounded mid-res thumbnail tier.** Instead of jumping straight from
-  384px `/thumbnail` to unbounded full `/image`, introduce an intermediate
-  capped size (e.g. 768px or 1024px) so big coarse-view hexes get a sharp-enough
-  *but still small* image. Touches: the frontend endpoint/threshold selection in
-  `browse-canvas.component.ts` (`useFullResThumbs` / `:1428`) and a backend route
-  that serves a larger-capped thumbnail (parameterize `make_image_thumbnail`'s
-  `max_dim`, e.g. `/thumbnail?max=768`, and precompute/cache like
-  `thumbnail_bytes`). Keeps the overview fast and crisp. **Recommended.**
-- **B. Raise the full-res threshold (frontend-only quick win).** Bump
-  `THUMB_NATIVE_MAX_DIM` or the `useFullResThumbs` comparison so the overview
-  stays on `/thumbnail` longer. Big hexes look slightly soft (upscaled 384px) but
-  load fast. Smallest change; degrades sharpness at the coarsest zoom.
-- **C. Cap how many full-res cells load at once / prioritize center-out.** Only
-  fetch `/image` for the few cells nearest the viewport center first, or keep the
-  coarse overview on `/thumbnail` entirely and only use `/image` once the user
-  zooms past a tighter threshold. Bounds the burst regardless of source size.
+- **A. Ensure `thumbnail_bytes` is precomputed at ingest** for the dataset's
+  media type (the fast path at `media/list.py:548-550`). Best fix if the gap is a
+  loader that skips thumbnail generation.
+- **B. Process-scoped generated-thumbnail cache** on `DatasetContext` so the
+  first on-the-fly generation per item is paid once and reused, even for datasets
+  that can't precompute at ingest. Keep it in-memory/process-scoped per the
+  **No Persisted Vectors/MLPs** rule (that rule doesn't forbid a thumbnail cache,
+  but don't write it to disk beyond the existing dataset-pickle snapshot).
+- **C. Generate thumbnails off the request thread** / warm them ahead of the
+  first paint so the GIL-serialized decode isn't on the critical path.
 
-If **secondary suspect** (on-the-fly `/thumbnail` generation):
-
-- **D. Ensure `thumbnail_bytes` is precomputed for the dataset** at ingest (the
-  fast path at `media/list.py:548-550`), and/or add a process-scoped cache of
-  generated thumbnails on `DatasetContext` so the first generation is paid once.
-  Note the **No Persisted Vectors/MLPs** rule does not forbid a thumbnail-bytes
-  cache, but keep any in-memory cache process-scoped, not written to disk beyond
-  the existing dataset-pickle snapshot.
-
-A combined fix (mid-res tier that's precomputed and cached) addresses both
-suspects at once.
+If the Network tab shows something else entirely, investigate fresh — do not
+assume either of the above.
 
 ## Key file/line references
 
 | What | Location |
 |------|----------|
-| Tier switch (full-res trigger) | `frontend/.../browse-canvas/browse-canvas.component.ts:320-322` |
+| `useFullResThumbs` (global, keys off targetRadius) | `frontend/.../browse-canvas/browse-canvas.component.ts:320-322` |
+| `DEFAULT_TARGET_RADIUS = 28` ("M" size) | `browse-canvas.component.ts:79` |
 | `THUMB_NATIVE_MAX_DIM = 384` | `browse-canvas.component.ts:84` |
+| Level selection holds bin ~targetRadius across zoom | `browse-canvas.component.ts:757-767` |
 | Per-cell endpoint pick + fetch | `browse-canvas.component.ts:1428-1430` |
 | `getThumb` (fires on first draw) | `browse-canvas.component.ts:1405-1432` |
-| `drawHex` calls `getThumb` | `browse-canvas.component.ts:1233` |
-| `/image` route (raw source bytes) | `vtsearch/routes/media/list.py:501-513` |
-| `_resolve_display_image` | `vtsearch/routes/media/list.py:457-498` |
 | `/thumbnail` route (precomputed vs on-the-fly) | `vtsearch/routes/media/list.py:516-552` |
 | `cached_thumbnail_response` (fast path) | `vtsearch/routes/_shared.py:33-54` |
 | `image_thumbnail_response` (decode+resize) | `vtsearch/routes/_shared.py:57-103` |
+| `/image` route (raw source bytes) | `vtsearch/routes/media/list.py:501-513` |
 | Single worker + 8 threads (GIL serialization) | `gunicorn.conf.py:28-30` |
 
 ## Open follow-ups
 
-- Confirm hypothesis against a running app (see "How to confirm") and record the
-  measured endpoint/size/timing here before implementing.
-- Decide tier strategy (mid-res cap vs. threshold bump vs. center-out cap).
-- If a mid-res tier is added, precompute + cache it so it doesn't reintroduce
-  on-the-fly generation cost.
+- Confirm against a running app (see "How to confirm") and record measured
+  endpoint / TTFB / size / `thumbnail_bytes` presence here before implementing.
+- If `thumbnail_bytes` is present yet `/thumbnail` is slow, open a fresh
+  investigation into the non-generation candidates listed above.
