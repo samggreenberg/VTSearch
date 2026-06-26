@@ -191,8 +191,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private pendingToggleX = 0;
   private pendingToggleY = 0;
   private static readonly DBLCLICK_MS = 250;
+  // Per-notch wheel zoom factor. A pyramid level spans a full 2x of zoom, so
+  // this sets how many notches cross a bin layer: log_1.4(2) ≈ 2 notches.
+  private static readonly WHEEL_ZOOM_FACTOR = 1.4;
   // How hard a double-click zooms in about the cursor. Larger than the wheel's
-  // 1.15/tick so the gesture lands a decisive jump, matching the map idiom.
+  // per-notch factor so the gesture lands a decisive jump, matching the map idiom.
   private static readonly DOUBLE_CLICK_ZOOM = 2.0;
 
   // Shift+drag draws a marquee rectangle (canvas-relative screen coords) that
@@ -1799,7 +1802,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const rect = this.canvasRef.nativeElement.getBoundingClientRect();
     const mx = event.clientX - rect.left;
     const my = event.clientY - rect.top;
-    const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
+    const wheelFactor = BrowseCanvasComponent.WHEEL_ZOOM_FACTOR;
+    const factor = event.deltaY < 0 ? wheelFactor : 1 / wheelFactor;
     this.zoomBy(factor, mx, my);
   }
 
