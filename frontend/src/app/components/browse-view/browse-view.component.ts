@@ -179,10 +179,11 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   /**
    * Per-click zoom step for the on-screen +/- buttons. Matches the wheel's
-   * per-notch factor so a single click makes a visible difference; button
-   * zoom anchors at the viewport centre (no cursor to zoom toward).
+   * per-notch factor (√2, so two clicks = exactly one pyramid level) and makes
+   * a single click a visible difference; button zoom anchors at the viewport
+   * centre (no cursor to zoom toward).
    */
-  private readonly ZOOM_BUTTON_FACTOR = 1.4;
+  private readonly ZOOM_BUTTON_FACTOR = Math.SQRT2;
 
   /** Bin-popup state: open flag, the viewport anchor it opens at, and the
    *  member ids of the bin the user right-clicked. Right-clicking a bin pops a
