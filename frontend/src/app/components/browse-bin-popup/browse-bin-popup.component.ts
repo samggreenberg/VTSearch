@@ -246,16 +246,17 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
       // A new media type may carry a different remembered thumbnail size.
       this.applyViewPrefs();
     }
-    if (
-      changes['x'] ||
-      changes['y'] ||
-      changes['bounds'] ||
-      changes['memberIds'] ||
-      changes['hoverThumbRadius']
-    ) {
-      // Re-anchor to the summon point, unless the user has dragged the popup —
-      // then keep their spot (``place`` re-clamps it back on-screen if needed).
-      if (!this.dragged) {
+    // A genuine (re)summon — a fresh bin or a new anchor/region — re-seeds the
+    // position at the summon point (unless the user has dragged the popup). A
+    // pure size change (the main-canvas thumbnail radius) must NOT snap back to
+    // the cursor: it keeps the popup where it sits and only re-clamps it
+    // on-screen. Without this, the first resize after opening lurches the window
+    // from the cursor across to the clamped edge, because ``place`` was
+    // re-deriving the position from the raw summon point every time rather than
+    // from where the window had settled.
+    const resummoned = changes['x'] || changes['y'] || changes['bounds'] || changes['memberIds'];
+    if (resummoned || changes['hoverThumbRadius']) {
+      if (resummoned && !this.dragged) {
         this.left = this.x();
         this.top = this.y();
       }
@@ -637,14 +638,17 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
 
   // --- Positioning ---------------------------------------------------------
 
-  /** Re-clamp the popup, anchoring at the summon point unless the user has
-   *  dragged it (then keep their spot, just nudged back on-screen if needed).
-   *  The computed clamp derives the popup size from known widths/heights; once
-   *  it has laid out we additionally measure the real panel and correct any
-   *  residual overflow, so the window ends up entirely on-screen even if the
-   *  computed height drifts from what actually rendered. */
+  /** Re-clamp the popup to stay fully on-screen, anchored at its *current*
+   *  position. The summon point seeds {@link left}/{@link top} once, when the
+   *  popup opens (and on a genuine re-summon — see {@link ngOnChanges}); from
+   *  then on every re-clamp (size changes, the settings-driven detail-image
+   *  resize, region changes) keeps the popup where it sits rather than snapping
+   *  back to the cursor. The computed clamp derives the popup size from known
+   *  widths/heights; once it has laid out we additionally measure the real panel
+   *  and correct any residual overflow, so the window ends up entirely on-screen
+   *  even if the computed height drifts from what actually rendered. */
   private place(): void {
-    this.clampInto(this.dragged ? this.left : this.x(), this.dragged ? this.top : this.y());
+    this.clampInto(this.left, this.top);
     requestAnimationFrame(() => this.nudgeOnScreen());
   }
 
