@@ -331,6 +331,38 @@ def _assign_reps(
     return reps_by_level
 
 
+def _descent_resolved(
+    lc: _LevelCells,
+    coords: np.ndarray,
+    n_cells: int,
+    max_count: int,
+    prev_n_cells: int | None,
+    prev_max_count: int | None,
+) -> bool:
+    """Whether adaptive depth should stop descending after binning level *lc*.
+
+    Two terminal conditions:
+
+    - **Fully resolved:** every cell holds a single clip (``max_count <= 1``), so
+      deeper levels would only reproduce this one at finer (wasted) radii.
+    - **Co-located:** no progress across a radius halving — neither the cell count
+      nor the densest cell improved — *and* the densest cell's members are
+      genuinely coincident (zero spatial extent), so a finer radius can never
+      separate them.  The coincidence check matters because "no cell split" alone
+      does **not** imply co-location: a corner-anchored square cell wider than the
+      whole cloud holds every point for several levels before its boundaries fall
+      between them.  Only the spread test distinguishes "can't separate" from
+      "haven't separated yet"; without it the descent would stop short on tight
+      clouds under the square (quadtree) lattice.
+    """
+    if max_count <= 1:
+        return True
+    if n_cells == prev_n_cells and max_count == prev_max_count:
+        pile = coords[lc.members[int(np.argmax(lc.counts))]]
+        return float(np.max(pile.max(axis=0) - pile.min(axis=0))) == 0.0
+    return False
+
+
 def build_pyramid(
     projection: Projection,
     *,
@@ -406,24 +438,8 @@ def build_pyramid(
 
         if adaptive:
             max_count = int(lc.counts.max()) if lc.counts.size else 0
-            # Fully resolved: every hex holds a single clip, so deeper levels
-            # would only reproduce this one at finer (wasted) radii.
-            if max_count <= 1:
+            if _descent_resolved(lc, coords, n_cells, max_count, prev_n_cells, prev_max_count):
                 break
-            # No progress across a radius halving — neither the cell count nor
-            # the densest cell improved — *can* mean the remaining clips are
-            # co-located and will never separate (stop rather than grind to the
-            # cap), but it can also just mean the lattice is still too coarse to
-            # have reached the cloud: a corner-anchored square cell wider than
-            # the whole cloud holds every point for several levels before its
-            # boundaries finally fall between them.  Only stop if the densest
-            # cell's members are genuinely coincident (zero spatial extent);
-            # otherwise keep descending — a finer radius will split them.
-            if n_cells == prev_n_cells and max_count == prev_max_count:
-                densest = int(np.argmax(lc.counts))
-                pile = coords[lc.members[densest]]
-                if float(np.max(pile.max(axis=0) - pile.min(axis=0))) == 0.0:
-                    break
             prev_n_cells = n_cells
             prev_max_count = max_count
 
