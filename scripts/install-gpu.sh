@@ -25,17 +25,37 @@ set -euo pipefail
 # installed wheel can't run on the GPU, so a mismatch degrades instead of
 # crashing - but you only get GPU acceleration with a matching wheel.)
 #
+# With no argument the script AUTO-DETECTS the right tag from the GPU's compute
+# capability via nvidia-smi (scripts/detect_cuda_tag.py), so you don't have to
+# know your hardware. Pass an explicit tag to override the detection.
+#
 # Usage:
-#   bash scripts/install-gpu.sh              # defaults to cu124 (spans Volta..Hopper)
+#   bash scripts/install-gpu.sh              # auto-detect from nvidia-smi (falls back to cu124)
 #   bash scripts/install-gpu.sh cu118        # for CUDA 11.8 (older drivers)
 #   bash scripts/install-gpu.sh cu121        # for CUDA 12.1
 #   bash scripts/install-gpu.sh cu124        # for CUDA 12.4 (V100/Volta, A100, H100)
 #   bash scripts/install-gpu.sh cu128        # for CUDA 12.8 (Blackwell; drops Volta)
 
-CUDA_TAG="${1:-cu124}"
-EXTRA_INDEX="https://download.pytorch.org/whl/${CUDA_TAG}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Resolve the CUDA tag: an explicit argument wins; otherwise auto-detect from
+# the GPU. detect_cuda_tag.py prints the tag to stdout and its reasoning to
+# stderr (which flows straight to the terminal here); a non-zero exit means it
+# couldn't tell, so we fall back to the safe Volta..Hopper default.
+CUDA_TAG="${1:-}"
+if [ -z "$CUDA_TAG" ]; then
+    _vts_pybin="$(command -v python || command -v python3 || true)"
+    if [ -n "$_vts_pybin" ] && _detected="$("$_vts_pybin" "$SCRIPT_DIR/detect_cuda_tag.py")"; then
+        CUDA_TAG="$_detected"
+    else
+        CUDA_TAG="cu124"
+        echo "  (auto-detect failed; falling back to default tag cu124)" >&2
+    fi
+    unset _vts_pybin _detected
+fi
+
+EXTRA_INDEX="https://download.pytorch.org/whl/${CUDA_TAG}"
 
 # Shared progress-printing helpers.
 # shellcheck source=_progress.sh
