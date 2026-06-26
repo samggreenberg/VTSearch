@@ -69,20 +69,25 @@ def select_cuda_tag(
     if not compute_caps:
         return None
     lo, hi = min(compute_caps), max(compute_caps)
-    valid = [c for c in _CANDIDATES if c[2] <= lo and c[3] >= hi]
-    if driver_cuda is not None:
-        gated = [c for c in valid if c[1] <= driver_cuda]
-        # Only apply the driver ceiling if it leaves something runnable; if even
-        # the oldest covering wheel out-runs the driver, the driver is simply
-        # too old and the caller surfaces that rather than picking nothing.
-        if gated:
-            valid = gated
-    if not valid:
+    covering = [c for c in _CANDIDATES if c[2] <= lo and c[3] >= hi]
+    if not covering:
         return None
-    for tag, *_ in valid:
+
+    if driver_cuda is not None:
+        gated = [c for c in covering if c[1] <= driver_cuda]
+        if not gated:
+            # The driver is older than every covering wheel; best effort is the
+            # oldest covering wheel (lowest toolkit requirement, most likely to
+            # run). The caller surfaces the driver mismatch separately.
+            return min(covering, key=lambda c: c[1])[0]
+        covering = gated
+
+    # Prefer the safe anchor when it qualifies; otherwise the newest wheel that
+    # does (the only covering wheel for Blackwell, or the best the driver allows).
+    for tag, *_ in covering:
         if tag == DEFAULT_TAG:
             return DEFAULT_TAG
-    return max(valid, key=lambda c: c[1])[0]
+    return max(covering, key=lambda c: c[1])[0]
 
 
 def parse_compute_caps(query_output: str) -> list[tuple[int, int]]:
