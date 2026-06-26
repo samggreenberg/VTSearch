@@ -495,7 +495,7 @@ images) and do **not** flow through pyproject.
 ```
 pyproject.toml                       ← [project.dependencies] + [project.optional-dependencies].dev
 requirements/base.txt                ← --extra-index-url <cpu wheel index> + `-e .[dev]`
-requirements/gpu.txt                 ← `-e .[dev]` (install-gpu.sh / Dockerfile.gpu set --extra-index-url)
+requirements/gpu.txt                 ← `-e .[dev]` (install.sh / Dockerfile.gpu set --extra-index-url)
 requirements/labbench.txt            ← LabBench (SigLIP-only) image deps (standalone)
 requirements/image-embedders.txt     ← All-image-embedders image deps (CPU, standalone)
 requirements/image-embedders-gpu.txt ← All-image-embedders image deps (GPU, standalone)
@@ -504,11 +504,12 @@ requirements/image-embedders-gpu.txt ← All-image-embedders image deps (GPU, st
 Install commands:
 
 ```bash
-# CPU with all features + dev tools
-bash scripts/install-cpu.sh
+# Auto-detect CPU vs GPU (installs all features + dev tools)
+bash scripts/install.sh
 
-# GPU
-bash scripts/install-gpu.sh
+# Force one or the other
+bash scripts/install.sh cpu
+bash scripts/install.sh gpu
 ```
 
 ### Key dependencies
@@ -576,5 +577,5 @@ via the folder or pickle importer instead.
 
 **Fix**: Reinstall to ensure all dependencies are present:
 ```bash
-bash scripts/install-cpu.sh
+bash scripts/install.sh
 ```

@@ -74,7 +74,7 @@ deployments. Runs locally or in Docker.
 
 ```bash
 python3 -m venv venv && source venv/bin/activate
-bash scripts/install-cpu.sh
+bash scripts/install.sh      # auto-detects CPU vs GPU
 python app.py                # Flask dev server on 0.0.0.0:5000
 ```
 
@@ -206,7 +206,7 @@ graph, plugin directories) see
 ## Running the test suite
 
 ```bash
-bash scripts/install-cpu.sh   # installs pytest, ruff, etc. (skip if already installed)
+bash scripts/install.sh   # installs pytest, ruff, etc. (skip if already installed)
 
 # Fast CPU tests (~35s)
 python -m pytest tests/ tests_lib/ -v
@@ -269,7 +269,7 @@ Use this checklist when setting up VTSearch for a new environment.
 
 - [ ] Python 3.10+ available (or Docker installed)
 - [ ] System packages: `libsndfile1`, `ffmpeg`, `libgl1`, `libglib2.0-0`
-- [ ] `bash scripts/install-cpu.sh` (or build Docker image)
+- [ ] `bash scripts/install.sh` (or build Docker image)
 - [ ] `data/` directory writable (models, embeddings, settings stored here)
 - [ ] Port 5000 available (or configure as needed)
 - [ ] Run `python app.py` or `docker compose up`
@@ -285,7 +285,7 @@ Use this checklist when setting up VTSearch for a new environment.
 
 - [ ] NVIDIA GPU with CUDA support available
 - [ ] NVIDIA Container Toolkit installed (for Docker)
-- [ ] Use `docker/Dockerfile.gpu` or `bash scripts/install-gpu.sh`
+- [ ] Use `docker/Dockerfile.gpu` or `bash scripts/install.sh gpu`
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for full details.
 

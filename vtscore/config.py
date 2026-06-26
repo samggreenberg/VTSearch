@@ -108,7 +108,7 @@ def _cuda_can_run(device: str = "cuda") -> bool:
             "(the installed torch build lacks a kernel image for this GPU's "
             "compute capability); falling back to CPU. Reinstall a torch build "
             "whose CUDA tag covers this GPU's compute capability (see "
-            "scripts/install-gpu.sh). Note the right tag is not simply the "
+            "scripts/install.sh). Note the right tag is not simply the "
             "newest one: the newest wheels DROP the oldest architectures, so an "
             "older GPU needs an OLDER tag (e.g. cu128 dropped Volta/sm_70, so a "
             "V100 needs cu124, not cu128). Or set VTSEARCH_DEVICE=cpu to silence "

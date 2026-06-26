@@ -183,25 +183,31 @@ catches any drift. The labbench / image-embedders requirements files
 under `requirements/` are deliberately standalone; they pin a minimal
 subset for size-constrained Docker images.
 
-**For CPU only** (recommended if you don't have a compatible GPU):
+One script handles both CPU and GPU. With no argument it **auto-detects**
+whether this host has an NVIDIA GPU and installs the matching dependency set,
+so you don't have to know — or tell it — what hardware you have:
 
 ```bash
-bash scripts/install-cpu.sh
+bash scripts/install.sh              # auto-detect CPU vs GPU (recommended)
 ```
 
-**For GPU** (NVIDIA CUDA-compatible systems):
+To override the auto-detection, pass an argument:
 
 ```bash
-bash scripts/install-gpu.sh          # auto-detects the right tag from your GPU
-bash scripts/install-gpu.sh cu118    # for CUDA 11.8 (older drivers)
-bash scripts/install-gpu.sh cu128    # for CUDA 12.8 (Blackwell; drops Volta)
+bash scripts/install.sh cpu          # force the CPU-only install
+bash scripts/install.sh gpu          # force the GPU install (auto-detect the CUDA tag)
+bash scripts/install.sh cu118        # force the GPU install with an explicit tag (CUDA 11.8, older drivers)
+bash scripts/install.sh cu128        # ... CUDA 12.8 (Blackwell; drops Volta)
 ```
 
-With no argument the script **auto-detects** the right tag from your GPU's
-compute capability via `nvidia-smi` (`scripts/detect_cuda_tag.py`), so you
-don't have to know your hardware; pass an explicit tag only to override it. If
-`nvidia-smi` is unavailable it falls back to `cu124`. You can preview the
-choice without installing anything by running `python scripts/detect_cuda_tag.py`.
+GPU detection uses `nvidia-smi`: if it's absent or lists no device, you get the
+smaller CPU-only torch wheel (~200 MB vs ~2 GB). When a GPU is present, the
+script further **auto-detects** the right CUDA wheel tag from the GPU's compute
+capability via `scripts/detect_cuda_tag.py`, so you don't have to know your
+hardware; pass an explicit `cuXYZ` tag only to override it. If `nvidia-smi`
+reports a GPU but the tag can't be determined it falls back to `cu124`. You can
+preview the tag choice without installing anything by running
+`python scripts/detect_cuda_tag.py`.
 
 Behind that detection: the CUDA tag picks a torch wheel that only ships kernels
 for certain GPU architectures, so it has to match your hardware. There's a
@@ -217,7 +223,7 @@ A mismatched wheel imports fine and then raises
 runtime and falls back to CPU (with a warning) rather than crashing, but you
 only get GPU acceleration with a matching wheel.
 
-Both scripts run `pip install -r requirements/{base,gpu}.txt`, which
+Either path runs `pip install -r requirements/{base,gpu}.txt`, which
 installs every runtime + dev dep and editable-installs the `vtsearch`
 package itself.
 
@@ -447,7 +453,7 @@ with a shared filesystem.
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
-   bash scripts/install-gpu.sh cu124     # or cu118 / cu121 / cu128 to match your node's GPU
+   bash scripts/install.sh cu124         # or cu118 / cu121 / cu128 to match your node's GPU
    ```
 
    The scripts default to a venv named `.venv` in the project dir; override with
@@ -466,7 +472,7 @@ with a shared filesystem.
    > python3.12 -m venv .venv
    > source .venv/bin/activate
    > python --version                     # confirm 3.12.x before installing
-   > bash scripts/install-gpu.sh cu124
+   > bash scripts/install.sh cu124
    > ```
    >
    > A venv built this way is **not** self-contained — its `python` needs the
@@ -581,7 +587,7 @@ inline, e.g. `VTS_MEM=64G VTS_GPU=a100 vtsearch`:
 | `VTS_DIR` | `/exp/$USER/projects/VTSearch` | Project dir to drop into on the login node |
 | `VTS_PORT` | (cluster-computed) | Forwarded port; defaults to the same per-user value the launcher binds. Set it only if you overrode `VTS_PORT` on the cluster too |
 
-Adjust `VTS_GPU`, `VTS_PART`, and the CUDA wheel in `install-gpu.sh` to match
+Adjust `VTS_GPU`, `VTS_PART`, and the CUDA wheel passed to `install.sh` to match
 your cluster's hardware. To find the exact GPU type string for `VTS_GPU`, check
 a node's gres: `scontrol show node <node> | grep -i Gres` (e.g. `Gres=gpu:v100:8`
 → use `VTS_GPU=v100`) or list partition gres with `sinfo -o '%P %G'`. Note
@@ -591,7 +597,7 @@ launcher adds the `gpu:` prefix and `:1` count itself.
 ## Running the tests
 
 Dependencies (pytest, ruff, and the Angular build tools) are already
-installed if you ran `bash scripts/install-cpu.sh` above.  If not,
+installed if you ran `bash scripts/install.sh` above.  If not,
 `./run-tests.sh` installs them automatically on first run.
 
 The recommended way to run tests uses the helper script, which installs
