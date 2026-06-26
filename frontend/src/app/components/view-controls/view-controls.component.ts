@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, OnChanges, OnInit, signal, SimpleChanges } from '@angular/core';
 
 import { SettingsStateService } from '../../services/settings-state.service';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
@@ -42,9 +42,14 @@ export class ViewControlsComponent implements OnInit, OnChanges {
    */
   readonly showViewMode = input(true);
 
-  viewMode: 'grid' | 'list' = 'list';
-  focusMode: 'click' | 'hover' = 'click';
-  gridIconSize: IconSize = 'M';
+  // These are signals (not plain fields) so the OnPush template re-renders when
+  // the constructor effect's `refresh()` updates them after a settings change.
+  // With plain fields the controls would not repaint until the next unrelated
+  // change-detection pass, which is what made the Grid/List toggle take two
+  // clicks and left the thumbnail-size buttons looking stuck-disabled.
+  readonly viewMode = signal<'grid' | 'list'>('list');
+  readonly focusMode = signal<'click' | 'hover'>('click');
+  readonly gridIconSize = signal<IconSize>('M');
 
   private settings: AppSettings = { volume: 50 };
 
@@ -69,10 +74,10 @@ export class ViewControlsComponent implements OnInit, OnChanges {
 
   private refresh(): void {
     const type = this.currentMediaType();
-    this.viewMode = (this.getDict('view_mode')[type] as 'grid' | 'list') ?? this.defaultViewMode();
-    this.focusMode = (this.getDict('focus_mode')[type] as 'click' | 'hover') ?? 'click';
+    this.viewMode.set((this.getDict('view_mode')[type] as 'grid' | 'list') ?? this.defaultViewMode());
+    this.focusMode.set((this.getDict('focus_mode')[type] as 'click' | 'hover') ?? 'click');
     const size = this.getDict('grid_icon_size')[type] as IconSize | undefined;
-    this.gridIconSize = (size && ICON_SIZES.includes(size)) ? size : 'M';
+    this.gridIconSize.set((size && ICON_SIZES.includes(size)) ? size : 'M');
   }
 
   private defaultViewMode(): 'grid' | 'list' {
@@ -91,30 +96,32 @@ export class ViewControlsComponent implements OnInit, OnChanges {
   }
 
   setViewMode(mode: 'grid' | 'list'): void {
-    if (!this.currentMediaType() || this.viewMode === mode) return;
+    if (!this.currentMediaType() || this.viewMode() === mode) return;
+    // Reflect the change immediately so the toggle (and the thumbnail-size
+    // buttons it gates) update on the first click; `refresh()` reconciles with
+    // the persisted settings once the round-trip lands.
+    this.viewMode.set(mode);
     this.save('view_mode', mode);
   }
 
   setFocusMode(mode: 'click' | 'hover'): void {
-    if (!this.currentMediaType() || this.focusMode === mode) return;
+    if (!this.currentMediaType() || this.focusMode() === mode) return;
+    this.focusMode.set(mode);
     this.save('focus_mode', mode);
   }
 
   bumpSize(delta: 1 | -1): void {
-    if (!this.currentMediaType() || (this.viewMode === 'list' && !this.allowSizeInList())) return;
-    const idx = ICON_SIZES.indexOf(this.gridIconSize);
+    if (!this.currentMediaType() || (this.viewMode() === 'list' && !this.allowSizeInList())) return;
+    const idx = ICON_SIZES.indexOf(this.gridIconSize());
     const next = ICON_SIZES[Math.max(0, Math.min(ICON_SIZES.length - 1, idx + delta))];
-    if (next === this.gridIconSize) return;
+    if (next === this.gridIconSize()) return;
+    this.gridIconSize.set(next);
     this.save('grid_icon_size', next);
   }
 
-  get atMaxSize(): boolean {
-    return this.gridIconSize === ICON_SIZES[ICON_SIZES.length - 1];
-  }
+  readonly atMaxSize = computed(() => this.gridIconSize() === ICON_SIZES[ICON_SIZES.length - 1]);
 
-  get atMinSize(): boolean {
-    return this.gridIconSize === ICON_SIZES[0];
-  }
+  readonly atMinSize = computed(() => this.gridIconSize() === ICON_SIZES[0]);
 
   private save(prefix: 'view_mode' | 'focus_mode' | 'grid_icon_size', value: string): void {
     const key = this.key(prefix);
