@@ -64,7 +64,11 @@ describe('BrowseViewComponent (zoneless canary)', () => {
         >,
     };
     const settingsStub: Partial<SettingsStateService> = {
-      settingsSignal: signal(null) as SettingsStateService['settingsSignal'],
+      // Settings resolve (as they do in production): the browse view holds its
+      // first projection load until settings + media type are in, so it fetches
+      // the saved bin shape rather than flashing the default hex lattice.
+      settingsSignal: signal({}) as unknown as SettingsStateService['settingsSignal'],
+      error: signal(null) as unknown as SettingsStateService['error'],
       load: noop,
       update: () => of({}) as ReturnType<SettingsStateService['update']>,
     };
