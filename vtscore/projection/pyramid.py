@@ -273,14 +273,16 @@ def _assign_reps(
     order (0 coarsest … deepest finest); we walk it finest→coarsest:
 
     - **Deepest level:** a cell's rep is the member nearest its centroid.
-    - **Each coarser level:** the candidate reps are the reps the finer level
-      assigned to the cells beneath this one (``point_rep_fine`` carries, for
-      every point, the rep of its finer cell — so the candidates are exactly the
-      finer reps of this cell's members).  The cell adopts the candidate nearest
-      its own centroid.  Because every non-empty coarse cell has members, it
-      always has at least one inherited candidate; no fallback is needed and
-      ``reps(coarse) ⊆ reps(fine)`` holds by construction — the zoom-persistence
-      invariant.
+    - **Each coarser level:** a cell's candidates are its members that are *their
+      own* finer rep (``point_rep_fine[m] == m``) — i.e. the finer reps that
+      actually fall inside this cell.  The cell adopts the candidate nearest its
+      centroid, so ``reps(coarse) ⊆ reps(fine)`` (the zoom-persistence invariant)
+      **and** the rep is always a member of the bin — which the bin popup relies
+      on to open/scroll to it within the member list.  A coarse cell that
+      contains no finer rep at all (all finer cells beneath it straddle its
+      boundary, rep landing in a neighbour — rare, only for sparse boundary
+      cells) falls back to its own centroid-nearest member; that one rep is not
+      inherited, the single concession to keeping the rep in-bin.
 
     *prior_reps* (``{level: {(q, r): rep_id}}``) lets a re-bin **keep a surviving
     representative in place**: if a cell's prior rep id is still present, it is
@@ -308,9 +310,15 @@ def _assign_reps(
                     reps[h] = id_to_pos[pid]  # keep-put: surviving rep stays
                     continue
             mem = lc.members[h]
-            # Candidates: inherited finer reps of this cell's members (coarse
-            # levels), or the members themselves (deepest level).
-            pool = point_rep_fine[mem] if point_rep_fine is not None else mem
+            if point_rep_fine is None:
+                pool = mem  # deepest level: any member may win
+            else:
+                # Inherit: the members that are their own finer rep — these are
+                # the finer reps that fall inside this cell, so the choice both
+                # persists and stays in-bin.  Empty only for a cell with no
+                # interior finer rep; then fall back to all members.
+                inherited = mem[point_rep_fine[mem] == mem]
+                pool = inherited if inherited.size else mem
             d = np.sum((coords[pool] - lc.centroids[h]) ** 2, axis=1)
             reps[h] = int(pool[int(np.argmin(d))])
         reps_by_level[lc.level] = reps
