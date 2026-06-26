@@ -148,8 +148,16 @@ td.actions-col {
   justify-content: center;
   transition: color var(--transition-base), background var(--transition-base);
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: var(--btn-icon-hover-bg);
+  }
+
+  // While its projection pre-builds, the Browse eye keeps waggling but is
+  // `disabled` (the user is just waiting to enter the browse view). Dim it and
+  // drop the pointer/hover affordance so it reads as disabled, not clickable.
+  &:disabled {
+    cursor: default;
+    opacity: var(--opacity-disabled);
   }
 }
 
