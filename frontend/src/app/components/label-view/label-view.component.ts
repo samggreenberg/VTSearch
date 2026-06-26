@@ -36,7 +36,7 @@ import { ResortPromptModalComponent, ResortResult } from '../modals/resort-promp
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import type { LearnedSortResponse } from '../../generated/api-client/models/learned-sort-response';
 import { formatProgressMessage } from '../../utils/format-progress';
-import { snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
+import { snapPanelWidthToGridColumns, iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { PanelResizeDirective } from './panel-resize.directive';
 import { LabelViewPanelStateService } from './label-view-panel-state.service';
 import { buildMediaContextMenuItems } from './media-context-menu-items';
@@ -120,6 +120,28 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   readonly COLLAPSED_WIDTH = 48;
   private savedLeftWidth = 260;
+
+  // --- Auto-pop after an icon-size change ---
+  // Resizing the divider pops the panel tight to the grid columns on release.
+  // Changing icon size reflows the grid but leaves the panel at its old snapped
+  // width, so a gap remains. We re-pop tight once the user has *settled* on a
+  // size: a debounce coalesces a flurry of size bumps ("up, up, no — down") into
+  // a single pop, instead of lunging narrower on every click.
+  /** ms of no icon-size changes before a settled panel auto-pops tight. */
+  private readonly AUTO_POP_DELAY = 700;
+  /** Class-removal timeout for the animated pop; ≥ the SCSS transition so it
+   *  always completes before live dragging goes instant again. */
+  private readonly AUTO_POP_ANIM_MS = 220;
+  private leftPopTimer: ReturnType<typeof setTimeout> | null = null;
+  private rightPopTimer: ReturnType<typeof setTimeout> | null = null;
+  private animatePopTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Last grid goal width observed per side, used to detect icon-size changes.
+   *  Null until a baseline is captured for the active media type. */
+  private lastGoalWidthLeft: number | null = null;
+  private lastGoalWidthRight: number | null = null;
+  /** Media type the goal-width baselines above belong to. A change here means a
+   *  media-type switch (not a user resize), so we re-baseline without popping. */
+  private autoPopMediaType = '';
   readonly LEFT_MIN = 180;
   readonly RIGHT_MIN = 150;
   readonly CENTER_MIN = 100;
@@ -156,6 +178,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         this.panelState.loadFromSettings(settings);
         if (this.panelState.currentMediaType) {
           this.applyPanelPx();
+          // Detect an icon-size change (same media type) and debounce a re-pop.
+          // Skipped when the media type just switched: the media effect owns
+          // re-baselining in that case (a switch must never auto-pop).
+          if (this.panelState.currentMediaType === this.autoPopMediaType) {
+            this.maybeScheduleAutoPop('left', this.panelState.gridGoalWidthLeft);
+            this.maybeScheduleAutoPop('right', this.currentRightGoalWidth());
+          }
         }
         if (settings.autopilot_enabled != null) {
           this.autopilotEnabled.set(settings.autopilot_enabled);
@@ -189,6 +218,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           if (newType !== this.panelState.currentMediaType) {
             this.panelState.setMediaType(newType);
             this.applyPanelPx();
+            // Re-baseline the auto-pop tracking for the new media type so the
+            // legitimate goal-width change a switch carries doesn't pop, and the
+            // first real size change afterward does.
+            this.captureAutoPopBaseline();
           }
         }
         if (this.autopilotTextSortPending && medias.length > 0 && infos !== null) {
@@ -318,6 +351,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopScoringProgressPoll();
+    this.cancelAutoPop('left');
+    this.cancelAutoPop('right');
+    if (this.animatePopTimer) clearTimeout(this.animatePopTimer);
     this.destroy$.next();
     this.destroy$.complete();
     this.voteState.stopPolling();
@@ -332,6 +368,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onLeftWidthChange(width: number): void {
+    // Grabbing the divider supersedes any pending icon-size auto-pop.
+    this.cancelAutoPop('left');
     if (this.autopilotCollapsed() && width >= this.LEFT_MIN) {
       this.autopilotCollapsed.set(false);
       this.settingsState.update({ hide_autopilot: false }).subscribe();
@@ -341,39 +379,106 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onLeftResizeEnd(width: number): void {
+    this.cancelAutoPop('left');
     this.leftWidth.set(width);
-    const leftPanelEl = this.layoutRef.nativeElement.querySelector('vt-left-panel') as HTMLElement | null;
-    if (leftPanelEl) {
-      const snapped = snapPanelWidthToGridColumns(leftPanelEl, this.leftWidth());
-      if (snapped !== null) {
-        const leftMax = this.layoutRef.nativeElement.getBoundingClientRect().width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth();
-        const clamped = Math.max(this.leftMin, Math.min(leftMax, snapped));
-        this.leftWidth.set(clamped);
-        this.layoutRef.nativeElement.style.setProperty('--left-width', `${clamped}px`);
-      }
-    }
-    this.panelState.savePanelPx('left', this.leftWidth());
+    this.popPanelTight('left');
   }
 
   onRightWidthChange(width: number): void {
+    this.cancelAutoPop('right');
     this.rightWidth.set(width);
     this.layoutRef.nativeElement.style.setProperty('--right-width', `${width}px`);
   }
 
   onRightResizeEnd(width: number): void {
+    this.cancelAutoPop('right');
     this.rightWidth.set(width);
-    const rightPanelEl = this.layoutRef.nativeElement.querySelector('vt-right-panel') as HTMLElement | null;
-    if (rightPanelEl) {
-      const snapped = snapPanelWidthToGridColumns(rightPanelEl, this.rightWidth());
-      if (snapped !== null) {
-        const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width;
-        const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth();
-        const clamped = Math.max(this.RIGHT_MIN, Math.min(rightMax, snapped));
-        this.rightWidth.set(clamped);
-        this.layoutRef.nativeElement.style.setProperty('--right-width', `${clamped}px`);
+    this.popPanelTight('right');
+  }
+
+  /** Snap one panel down to the minimum width that still shows its current grid
+   *  column count, then clamp and persist. Shared by the divider drag-release
+   *  handlers and the icon-size auto-pop; both animate the snap so every pop
+   *  looks the same. No-op for the snap step when the panel isn't in grid mode;
+   *  the width is still persisted so drag-release always records where the user
+   *  left the divider. */
+  private popPanelTight(side: 'left' | 'right'): void {
+    const selector = side === 'left' ? 'vt-left-panel' : 'vt-right-panel';
+    const panelEl = this.layoutRef.nativeElement.querySelector(selector) as HTMLElement | null;
+    const currentWidth = side === 'left' ? this.leftWidth() : this.rightWidth();
+    const snapped = panelEl ? snapPanelWidthToGridColumns(panelEl, currentWidth) : null;
+    if (snapped !== null) {
+      const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width;
+      const otherWidth = side === 'left' ? this.rightWidth() : this.leftWidth();
+      const max = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - otherWidth;
+      const min = side === 'left' ? this.leftMin : this.RIGHT_MIN;
+      const clamped = Math.max(min, Math.min(max, snapped));
+      if (clamped !== currentWidth) {
+        this.animatePop();
+        const widthSignal = side === 'left' ? this.leftWidth : this.rightWidth;
+        widthSignal.set(clamped);
+        this.layoutRef.nativeElement.style.setProperty(`--${side}-width`, `${clamped}px`);
       }
     }
-    this.panelState.savePanelPx('right', this.rightWidth());
+    this.panelState.savePanelPx(side, side === 'left' ? this.leftWidth() : this.rightWidth());
+  }
+
+  // --- Icon-size auto-pop ---
+
+  /** Right-pane grid goal width for the active media type, read from the live
+   *  settings (the right pane owns its own size dict, unlike the left which is
+   *  mirrored on `panelState`). */
+  private currentRightGoalWidth(): number {
+    const settings = this.settingsState.settingsSignal();
+    const dict = (settings?.grid_icon_size_right ?? null) as Record<string, string> | null;
+    return iconSizeToGoalWidth(dict?.[this.panelState.currentMediaType] ?? 'M');
+  }
+
+  /** Record the current goal widths as the no-pop baseline for the active media
+   *  type, and drop any pending pops. Called on a media-type switch so the
+   *  goal-width change a switch carries is absorbed without popping. */
+  private captureAutoPopBaseline(): void {
+    this.autoPopMediaType = this.panelState.currentMediaType;
+    this.lastGoalWidthLeft = this.panelState.gridGoalWidthLeft;
+    this.lastGoalWidthRight = this.currentRightGoalWidth();
+    this.cancelAutoPop('left');
+    this.cancelAutoPop('right');
+  }
+
+  /** Compare the new goal width against the baseline for `side`; if it changed
+   *  (a real icon-size bump, not the first observation), debounce a re-pop. */
+  private maybeScheduleAutoPop(side: 'left' | 'right', goalWidth: number): void {
+    const last = side === 'left' ? this.lastGoalWidthLeft : this.lastGoalWidthRight;
+    if (side === 'left') this.lastGoalWidthLeft = goalWidth;
+    else this.lastGoalWidthRight = goalWidth;
+    if (last === null || last === goalWidth) return;
+    this.cancelAutoPop(side);
+    const timer = setTimeout(() => {
+      if (side === 'left') this.leftPopTimer = null;
+      else this.rightPopTimer = null;
+      this.popPanelTight(side);
+    }, this.AUTO_POP_DELAY);
+    if (side === 'left') this.leftPopTimer = timer;
+    else this.rightPopTimer = timer;
+  }
+
+  private cancelAutoPop(side: 'left' | 'right'): void {
+    const timer = side === 'left' ? this.leftPopTimer : this.rightPopTimer;
+    if (timer) clearTimeout(timer);
+    if (side === 'left') this.leftPopTimer = null;
+    else this.rightPopTimer = null;
+  }
+
+  /** Enable the grid-template-columns transition for one auto-pop, then strip it
+   *  so live divider dragging stays instant. */
+  private animatePop(): void {
+    const el = this.layoutRef.nativeElement;
+    el.classList.add('layout--animate-pop');
+    if (this.animatePopTimer) clearTimeout(this.animatePopTimer);
+    this.animatePopTimer = setTimeout(() => {
+      el.classList.remove('layout--animate-pop');
+      this.animatePopTimer = null;
+    }, this.AUTO_POP_ANIM_MS);
   }
 
   // --- Data loading ---
