@@ -332,7 +332,13 @@ projection:
   A rep is always one of the hex's own members (the bin popup opens/scrolls to
   it); a sparse boundary hex that contains no finer rep at all falls back to its
   centroid-nearest member (the single non-inherited case — measured a small
-  minority: ~77% of reps persist at the coarsest hop, 90-97% finer).
+  minority: ~77% of reps persist at the coarsest hop, 90-97% finer).  **This
+  fallback is hex-only.**  Because the hex lattice rounds to nearest center, a
+  fine hex can straddle a coarse boundary and land its rep in a neighbour,
+  leaving the coarse hex with no inherited candidate.  The **square** lattice is
+  a corner-anchored quadtree (see *§Bin shape*) where every fine cell nests
+  wholly inside one coarse cell, so the inherited pool is never empty and square
+  reps persist exactly (100% at every hop) — the fallback never fires.
   - **On removal** (`rebin_like`, the subset "Remove from Good" cull) the prior
     reps are fed back in so **surviving reps stay put** for a fast, stable
     repaint; only a removed rep forces a re-pick (from its surviving inherited
@@ -412,6 +418,18 @@ factoring binning out of the rest of the pipeline:
   share the renderer's level-of-detail picker and have a comparable on-screen
   footprint.  Every other knob (`base_radius`, `tile_span`, auto-depth) is
   shared.
+- **The square lattice is a quadtree; the hex lattice is not.**  Square cells
+  are **corner-anchored on a fixed data-space origin** (`q = floor(x/side)`),
+  and since the pyramid halves the side per level, a coarse cell of side `2s`
+  is *exactly* the union of the four fine cells of side `s` beneath it.  Every
+  fine cell nests wholly inside one coarse cell, so a child bin's rep is
+  provably a member of its parent and zoom persistence is **geometric, not
+  best-effort** (`reps(coarse) ⊆ reps(fine)` with no fallback — see the rep
+  section).  The hex lattice can't do this: hexagons don't tile 4-into-1
+  self-similarly, so it stays on round-to-nearest-center binning (which does
+  *not* nest — fine hexes straddle coarse boundaries) and accepts the small
+  non-persistent minority.  This is the one place the two shapes' binning math
+  genuinely differs, beyond cell geometry.
 - **The pyramid records its `bin_shape`** (in the dataclass, in `meta()`, and in
   the persisted JSON), so a loaded projection always knows which lattice it was
   binned with.  Containers written before the toggle have no `bin_shape` and are

@@ -279,10 +279,15 @@ def _assign_reps(
       centroid, so ``reps(coarse) ⊆ reps(fine)`` (the zoom-persistence invariant)
       **and** the rep is always a member of the bin — which the bin popup relies
       on to open/scroll to it within the member list.  A coarse cell that
-      contains no finer rep at all (all finer cells beneath it straddle its
-      boundary, rep landing in a neighbour — rare, only for sparse boundary
-      cells) falls back to its own centroid-nearest member; that one rep is not
-      inherited, the single concession to keeping the rep in-bin.
+      contains no finer rep at all (every finer cell beneath it straddles its
+      boundary, the rep landing in a neighbour) falls back to its own
+      centroid-nearest member; that one rep is not inherited, the single
+      concession to keeping the rep in-bin.  This fallback only fires for the
+      **hex** lattice, whose round-to-nearest-center cells do not nest under a
+      radius halving.  The **square** lattice is a corner-anchored quadtree
+      (see :mod:`vtscore.projection.squarebin`): every fine cell nests wholly
+      inside one coarse cell, so the inherited pool is never empty and square
+      reps persist by construction.
 
     *prior_reps* (``{level: {(q, r): rep_id}}``) lets a re-bin **keep a surviving
     representative in place**: if a cell's prior rep id is still present, it is
@@ -324,6 +329,38 @@ def _assign_reps(
         reps_by_level[lc.level] = reps
         point_rep_fine = reps[lc.inverse]  # carry this level's reps down to points
     return reps_by_level
+
+
+def _descent_resolved(
+    lc: _LevelCells,
+    coords: np.ndarray,
+    n_cells: int,
+    max_count: int,
+    prev_n_cells: int | None,
+    prev_max_count: int | None,
+) -> bool:
+    """Whether adaptive depth should stop descending after binning level *lc*.
+
+    Two terminal conditions:
+
+    - **Fully resolved:** every cell holds a single clip (``max_count <= 1``), so
+      deeper levels would only reproduce this one at finer (wasted) radii.
+    - **Co-located:** no progress across a radius halving — neither the cell count
+      nor the densest cell improved — *and* the densest cell's members are
+      genuinely coincident (zero spatial extent), so a finer radius can never
+      separate them.  The coincidence check matters because "no cell split" alone
+      does **not** imply co-location: a corner-anchored square cell wider than the
+      whole cloud holds every point for several levels before its boundaries fall
+      between them.  Only the spread test distinguishes "can't separate" from
+      "haven't separated yet"; without it the descent would stop short on tight
+      clouds under the square (quadtree) lattice.
+    """
+    if max_count <= 1:
+        return True
+    if n_cells == prev_n_cells and max_count == prev_max_count:
+        pile = coords[lc.members[int(np.argmax(lc.counts))]]
+        return float(np.max(pile.max(axis=0) - pile.min(axis=0))) == 0.0
+    return False
 
 
 def build_pyramid(
@@ -401,14 +438,7 @@ def build_pyramid(
 
         if adaptive:
             max_count = int(lc.counts.max()) if lc.counts.size else 0
-            # Fully resolved: every hex holds a single clip, so deeper levels
-            # would only reproduce this one at finer (wasted) radii.
-            if max_count <= 1:
-                break
-            # No progress across a radius halving — neither the hex count nor
-            # the densest cell improved — means the remaining co-located clips
-            # can never be separated; stop rather than grind to the cap.
-            if n_cells == prev_n_cells and max_count == prev_max_count:
+            if _descent_resolved(lc, coords, n_cells, max_count, prev_n_cells, prev_max_count):
                 break
             prev_n_cells = n_cells
             prev_max_count = max_count

@@ -104,6 +104,17 @@ def test_reps_are_well_formed_and_mostly_persist():
     assert min(_persistence_fractions(pyr)) >= 0.7
 
 
+def test_square_reps_persist_perfectly():
+    # The square lattice is a corner-anchored quadtree: every fine cell nests
+    # wholly inside one coarse cell, so the inherited-candidate pool is never
+    # empty and the centroid-nearest fallback never fires.  Persistence is
+    # therefore exact — every coarse rep is also a rep one level finer.
+    proj = _projection(_cluster_cloud())
+    pyr = build_pyramid(proj, n_levels=5, bin_shape="square")
+    _assert_reps_well_formed(pyr, proj)
+    assert min(_persistence_fractions(pyr)) == 1.0
+
+
 def test_deepest_rep_is_member_nearest_centroid():
     # At the deepest level there is nothing finer to inherit from, so the rep is
     # the member nearest the centroid (tie -> smallest id), unchanged behaviour.
