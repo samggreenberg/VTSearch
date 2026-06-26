@@ -279,10 +279,15 @@ def _assign_reps(
       centroid, so ``reps(coarse) ⊆ reps(fine)`` (the zoom-persistence invariant)
       **and** the rep is always a member of the bin — which the bin popup relies
       on to open/scroll to it within the member list.  A coarse cell that
-      contains no finer rep at all (all finer cells beneath it straddle its
-      boundary, rep landing in a neighbour — rare, only for sparse boundary
-      cells) falls back to its own centroid-nearest member; that one rep is not
-      inherited, the single concession to keeping the rep in-bin.
+      contains no finer rep at all (every finer cell beneath it straddles its
+      boundary, the rep landing in a neighbour) falls back to its own
+      centroid-nearest member; that one rep is not inherited, the single
+      concession to keeping the rep in-bin.  This fallback only fires for the
+      **hex** lattice, whose round-to-nearest-center cells do not nest under a
+      radius halving.  The **square** lattice is a corner-anchored quadtree
+      (see :mod:`vtscore.projection.squarebin`): every fine cell nests wholly
+      inside one coarse cell, so the inherited pool is never empty and square
+      reps persist by construction.
 
     *prior_reps* (``{level: {(q, r): rep_id}}``) lets a re-bin **keep a surviving
     representative in place**: if a cell's prior rep id is still present, it is
