@@ -11,9 +11,14 @@ pans and zooms.  Per *§Browse-canvas architecture* in
   roughly constant.
 - **Per hex** the server precomputes its axial key ``(q, r)`` and center, the
   **count** of points in it (the density channel), and a **representative**
-  media id — the clip whose projected point is nearest the cell's centroid,
-  which is what hover-to-hear auditions.  Representatives are per level, so the
-  audition clip generalizes as you zoom out.
+  media id — the clip the canvas shows as the bin's thumbnail and hover-to-hear
+  auditions.  Representatives are chosen **bottom-up for zoom persistence** (see
+  :func:`_assign_reps`): at the deepest level a cell's rep is the clip nearest
+  its centroid, and each coarser cell *inherits* the rep of one of the finer
+  cells beneath it — the one nearest the coarse cell's centroid.  So
+  ``reps(level z) ⊆ reps(level z+1)``: every thumbnail you see persists as you
+  zoom in (the eye can track it) while 3–4 genuinely new ones appear, instead of
+  the whole grid reshuffling each level.
 - **Tiles** group hexes into a spatial grid per level so the client fetches
   only the tiles covering its viewport.  Because the projection is frozen, a
   tile is immutable for the life of the dataset and trivially cacheable.
@@ -52,7 +57,8 @@ class HexCell:
     cx: float  # center in projection space
     cy: float
     count: int  # number of clips in this cell (density)
-    rep_id: int  # representative media id (nearest clip to the cell centroid)
+    rep_id: int  # representative media id (see _assign_reps: nearest clip to the
+    # cell centroid at the deepest level, an inherited finer rep above it)
 
     def to_payload(self) -> dict[str, Any]:
         """JSON-serializable form for the tile endpoint."""
@@ -188,15 +194,38 @@ def _geometry_for(bin_shape: str) -> _BinGeometry:
         raise ValueError(f"unknown bin_shape {bin_shape!r}; expected one of {tuple(_GEOMETRIES)}") from None
 
 
-def _build_level(
+@dataclass
+class _LevelCells:
+    """One level's binning, *without* representatives — the raw material both the
+    tile assembly and the bottom-up :func:`_assign_reps` pass consume.
+
+    All arrays are indexed by cell (``0 … n_cells-1``) except ``inverse``, which
+    is indexed by point and maps each of the projection's points to its cell at
+    this level.  ``members[h]`` are the point indices in cell ``h`` (ascending
+    id, since ids are sorted) so rep tie-breaks are deterministic.
+    """
+
+    level: int
+    radius: float
+    keys: np.ndarray  # (n_cells, 2) int — (q, r) per cell
+    centers_x: np.ndarray
+    centers_y: np.ndarray
+    counts: np.ndarray  # (n_cells,)
+    tx: np.ndarray  # (n_cells,)
+    ty: np.ndarray
+    members: list[np.ndarray]  # per cell: point indices, ascending id
+    centroids: np.ndarray  # (n_cells, 2) — mean of member coords
+    inverse: np.ndarray  # (n_points,) — point -> cell index
+
+
+def _level_cells(
     level: int,
     coords: np.ndarray,
-    ids: np.ndarray,
     radius: float,
     tile_span: float,
     geom: _BinGeometry,
-) -> list[Tile]:
-    """Aggregate *coords* into cells at one *level* and group them into tiles."""
+) -> _LevelCells:
+    """Bin *coords* into cells at one *level* (geometry + membership, no reps)."""
     q, r = geom.assign(coords, radius)
     keys = np.stack([q, r], axis=1)
     uniq, inverse = np.unique(keys, axis=0, return_inverse=True)
@@ -209,28 +238,92 @@ def _build_level(
     # sorted) so representative tie-breaks are deterministic.
     order = np.argsort(inverse, kind="stable")
     seg_starts = np.cumsum(counts) - counts
+    members = [order[seg_starts[h] : seg_starts[h] + counts[h]] for h in range(n_hexes)]
+    # Per-cell centroid in one vectorized pass: sum member coords by segment.
+    sums = np.add.reduceat(coords[order], seg_starts, axis=0)
+    centroids = sums / counts[:, None]
 
     centers_x, centers_y = geom.center(uniq[:, 0], uniq[:, 1], radius)
     tx_all, ty_all = geom.tile_index(uniq[:, 0], uniq[:, 1], tile_span)
 
-    tiles: dict[tuple[int, int], list[HexCell]] = {}
-    for h in range(n_hexes):
-        members = order[seg_starts[h] : seg_starts[h] + counts[h]]
-        pts = coords[members]
-        centroid = pts.mean(axis=0)
-        rep_local = int(np.argmin(np.sum((pts - centroid) ** 2, axis=1)))
-        rep_id = int(ids[members[rep_local]])
-        cell = HexCell(
-            q=int(uniq[h, 0]),
-            r=int(uniq[h, 1]),
-            cx=float(centers_x[h]),
-            cy=float(centers_y[h]),
-            count=int(counts[h]),
-            rep_id=rep_id,
-        )
-        tiles.setdefault((int(tx_all[h]), int(ty_all[h])), []).append(cell)
+    return _LevelCells(
+        level=level,
+        radius=radius,
+        keys=uniq,
+        centers_x=centers_x,
+        centers_y=centers_y,
+        counts=counts,
+        tx=tx_all,
+        ty=ty_all,
+        members=members,
+        centroids=centroids,
+        inverse=inverse,
+    )
 
-    return [Tile(level=level, tx=tx, ty=ty, cells=cells) for (tx, ty), cells in tiles.items()]
+
+def _assign_reps(
+    lcs: list[_LevelCells],
+    coords: np.ndarray,
+    ids: np.ndarray,
+    prior_reps: dict[int, dict[tuple[int, int], int]] | None = None,
+) -> dict[int, np.ndarray]:
+    """Pick each cell's representative point, **bottom-up**, for zoom persistence.
+
+    Returns ``{level: rep_point_index_per_cell}``.  *lcs* is in ascending level
+    order (0 coarsest … deepest finest); we walk it finest→coarsest:
+
+    - **Deepest level:** a cell's rep is the member nearest its centroid.
+    - **Each coarser level:** a cell's candidates are its members that are *their
+      own* finer rep (``point_rep_fine[m] == m``) — i.e. the finer reps that
+      actually fall inside this cell.  The cell adopts the candidate nearest its
+      centroid, so ``reps(coarse) ⊆ reps(fine)`` (the zoom-persistence invariant)
+      **and** the rep is always a member of the bin — which the bin popup relies
+      on to open/scroll to it within the member list.  A coarse cell that
+      contains no finer rep at all (all finer cells beneath it straddle its
+      boundary, rep landing in a neighbour — rare, only for sparse boundary
+      cells) falls back to its own centroid-nearest member; that one rep is not
+      inherited, the single concession to keeping the rep in-bin.
+
+    *prior_reps* (``{level: {(q, r): rep_id}}``) lets a re-bin **keep a surviving
+    representative in place**: if a cell's prior rep id is still present, it is
+    retained verbatim regardless of where the centroid now sits.  This is what
+    makes removing items a fast, stable repaint — thumbnails only move when the
+    rep itself is among the removed (then the cell re-picks from its surviving
+    inherited candidates, and that change propagates up only where a coarse cell
+    had inherited the now-dead rep).  A slightly off-centre surviving rep is
+    accepted on purpose; re-centring it is explicitly lower priority than not
+    churning the grid.
+    """
+    id_to_pos = {int(m): i for i, m in enumerate(ids.tolist())} if prior_reps else None
+    reps_by_level: dict[int, np.ndarray] = {}
+    # For each point, the rep point-index of the cell it fell in one level finer
+    # (None at the deepest level, where reps come straight from the centroid).
+    point_rep_fine: np.ndarray | None = None
+    for lc in reversed(lcs):
+        n = lc.keys.shape[0]
+        reps = np.empty(n, dtype=np.int64)
+        prior = prior_reps.get(lc.level) if prior_reps else None
+        for h in range(n):
+            if prior is not None:
+                pid = prior.get((int(lc.keys[h, 0]), int(lc.keys[h, 1])))
+                if pid is not None and id_to_pos is not None and pid in id_to_pos:
+                    reps[h] = id_to_pos[pid]  # keep-put: surviving rep stays
+                    continue
+            mem = lc.members[h]
+            if point_rep_fine is None:
+                pool = mem  # deepest level: any member may win
+            else:
+                # Inherit: the members that are their own finer rep — these are
+                # the finer reps that fall inside this cell, so the choice both
+                # persists and stays in-bin.  Empty only for a cell with no
+                # interior finer rep; then fall back to all members.
+                inherited = mem[point_rep_fine[mem] == mem]
+                pool = inherited if inherited.size else mem
+            d = np.sum((coords[pool] - lc.centroids[h]) ** 2, axis=1)
+            reps[h] = int(pool[int(np.argmin(d))])
+        reps_by_level[lc.level] = reps
+        point_rep_fine = reps[lc.inverse]  # carry this level's reps down to points
+    return reps_by_level
 
 
 def build_pyramid(
@@ -241,6 +334,7 @@ def build_pyramid(
     base_cols: float = 6.0,
     base_radius: float | None = None,
     tile_span: float = 16.0,
+    prior_reps: dict[int, dict[tuple[int, int], int]] | None = None,
 ) -> Pyramid:
     """Build the tile :class:`Pyramid` for a frozen *projection*.
 
@@ -271,6 +365,11 @@ def build_pyramid(
     tile.  All of these are tunable knobs, not baked constants (see
     *§Open problems* in the design doc).
 
+    *prior_reps* (``{level: {(q, r): rep_id}}``) is threaded to
+    :func:`_assign_reps` so a re-bin can keep surviving representatives in place
+    (see :func:`rebin_like`); leave it ``None`` for a fresh build, where reps are
+    chosen purely bottom-up.
+
     Empty projections yield a pyramid with no tiles (one level when auto).
     """
     if n_levels is not None and n_levels < 1:
@@ -285,9 +384,9 @@ def build_pyramid(
     adaptive = n_levels is None
     max_levels = max_useful_levels(int(coords.shape[0])) if adaptive else n_levels
 
+    # Phase 1: bin every level (geometry + membership), honouring adaptive depth.
     levels: list[LevelMeta] = []
-    tiles: dict[tuple[int, int, int], Tile] = {}
-
+    lcs: list[_LevelCells] = []
     prev_n_cells: int | None = None
     prev_max_count: int | None = None
     for level in range(max_levels):
@@ -295,14 +394,13 @@ def build_pyramid(
         if coords.shape[0] == 0:
             levels.append(LevelMeta(level=level, radius=radius, n_cells=0))
             continue
-        level_tiles = _build_level(level, coords, ids, radius, tile_span, geom)
-        n_cells = sum(len(t.cells) for t in level_tiles)
+        lc = _level_cells(level, coords, radius, tile_span, geom)
+        n_cells = int(lc.keys.shape[0])
         levels.append(LevelMeta(level=level, radius=radius, n_cells=n_cells))
-        for t in level_tiles:
-            tiles[(t.level, t.tx, t.ty)] = t
+        lcs.append(lc)
 
         if adaptive:
-            max_count = max((c.count for t in level_tiles for c in t.cells), default=0)
+            max_count = int(lc.counts.max()) if lc.counts.size else 0
             # Fully resolved: every hex holds a single clip, so deeper levels
             # would only reproduce this one at finer (wasted) radii.
             if max_count <= 1:
@@ -314,6 +412,26 @@ def build_pyramid(
                 break
             prev_n_cells = n_cells
             prev_max_count = max_count
+
+    # Phase 2: pick representatives bottom-up (coarse reps inherit from finer
+    # ones), then assemble the per-level tiles.
+    reps_by_level = _assign_reps(lcs, coords, ids, prior_reps) if lcs else {}
+    tiles: dict[tuple[int, int, int], Tile] = {}
+    for lc in lcs:
+        reps = reps_by_level[lc.level]
+        level_tiles: dict[tuple[int, int], list[HexCell]] = {}
+        for h in range(lc.keys.shape[0]):
+            cell = HexCell(
+                q=int(lc.keys[h, 0]),
+                r=int(lc.keys[h, 1]),
+                cx=float(lc.centers_x[h]),
+                cy=float(lc.centers_y[h]),
+                count=int(lc.counts[h]),
+                rep_id=int(ids[reps[h]]),
+            )
+            level_tiles.setdefault((int(lc.tx[h]), int(lc.ty[h])), []).append(cell)
+        for (tx, ty), cells in level_tiles.items():
+            tiles[(lc.level, tx, ty)] = Tile(level=lc.level, tx=tx, ty=ty, cells=cells)
 
     return Pyramid(
         projection_id=projection.projection_id,
@@ -327,7 +445,18 @@ def build_pyramid(
     )
 
 
-def rebin_like(projection: Projection, template: Pyramid) -> Pyramid:
+def _reps_by_level(pyr: Pyramid) -> dict[int, dict[tuple[int, int], int]]:
+    """``{level: {(q, r): rep_id}}`` — a pyramid's current representatives, the
+    ``prior_reps`` :func:`build_pyramid` honours on a re-bin."""
+    out: dict[int, dict[tuple[int, int], int]] = {}
+    for (level, _tx, _ty), tile in pyr.tiles.items():
+        cells = out.setdefault(level, {})
+        for c in tile.cells:
+            cells[(c.q, c.r)] = c.rep_id
+    return out
+
+
+def rebin_like(projection: Projection, template: Pyramid, *, preserve_reps: bool = True) -> Pyramid:
     """Re-bin *projection* onto *template*'s exact grid, without re-fitting UMAP.
 
     Reuses the template pyramid's ``base_radius``, ``tile_span``, ``bin_shape``,
@@ -337,6 +466,14 @@ def rebin_like(projection: Projection, template: Pyramid) -> Pyramid:
     representatives, and now-empty cells differ.  This is the cheap operation
     behind removing items from a subset browse: the 2-D layout is frozen; we
     just recompute which items fall in which (unchanged) bins.
+
+    With *preserve_reps* (the default), the template's representatives are fed
+    back in as ``prior_reps`` so every cell whose rep **survived the removal
+    keeps it** — the grid repaints without thumbnails jumping around.  Only
+    cells whose rep was among the removed re-pick (from their surviving
+    inherited candidates), and that change propagates upward just to the coarse
+    cells that had inherited the now-dead rep.  Pass ``preserve_reps=False`` to
+    re-derive reps from scratch (a fresh bottom-up pass).
     """
     pyr = build_pyramid(
         projection,
@@ -344,6 +481,7 @@ def rebin_like(projection: Projection, template: Pyramid) -> Pyramid:
         n_levels=len(template.levels),
         base_radius=template.base_radius,
         tile_span=template.tile_span,
+        prior_reps=_reps_by_level(template) if preserve_reps else None,
     )
     # Keep the original extent so the client never re-frames; bins are assigned
     # from absolute coords + radius (origin-independent), so a stable ``bounds``

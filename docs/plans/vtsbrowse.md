@@ -321,10 +321,24 @@ projection:
   boundary re-bins. (The canvas still pans continuously; it just swaps which
   precomputed level it draws as the scale crosses thresholds.)
 - **Per hex, the server precomputes:** axial coords (-> center), **count**
-  (for the density color), and a **representative media id** = the item
-  whose projected point is nearest the hex centroid (this is the item
-  hover-previews). Representative selection is per level, so the preview
-  naturally generalizes/specializes as you zoom.
+  (for the density color), and a **representative media id** (the item the hex
+  shows as its thumbnail and hover-previews). Reps are chosen **bottom-up for
+  zoom persistence** (`vtscore/projection/pyramid.py:_assign_reps`): at the
+  deepest level a hex's rep is the item nearest its centroid; each coarser hex
+  inherits the rep of one of the finer hexes beneath it — the inherited rep
+  nearest the coarse hex's centroid. So `reps(level z) ⊆ reps(level z+1)`: every
+  thumbnail you see persists as you zoom in (the eye can track it) while a few
+  genuinely new ones appear, instead of the whole grid reshuffling each level.
+  A rep is always one of the hex's own members (the bin popup opens/scrolls to
+  it); a sparse boundary hex that contains no finer rep at all falls back to its
+  centroid-nearest member (the single non-inherited case — measured a small
+  minority: ~77% of reps persist at the coarsest hop, 90-97% finer).
+  - **On removal** (`rebin_like`, the subset "Remove from Good" cull) the prior
+    reps are fed back in so **surviving reps stay put** for a fast, stable
+    repaint; only a removed rep forces a re-pick (from its surviving inherited
+    candidates), propagating up only to the coarse hexes that had inherited the
+    now-dead rep. A surviving rep left slightly off-centre after a lopsided
+    removal is accepted on purpose — see *Open follow-ups*.
 - **Tiles** group hexes into a spatial grid per level: a tile is
   `(level, tx, ty)` -> the list of non-empty hexes inside it. This makes the
   payload **viewport-bounded** (the client fetches only the tiles covering
@@ -696,6 +710,22 @@ in git history and the cited source files.
   `usesThumbnails` (image/video); documents render a grid thumbnail but get no
   large preview — if document detail-viewing is wanted, widen the gate and pick a
   full-res document endpoint.
+- ~~**Zoom-persistent bin representatives**~~ — bin reps are now chosen
+  bottom-up so a coarse bin inherits the rep of one of the finer bins beneath it
+  (the inherited rep nearest the coarse centroid), giving `reps(z) ⊆ reps(z+1)`:
+  thumbnails persist as you zoom in instead of the grid reshuffling per level.
+  Reps stay one of the bin's own members (a sparse boundary bin with no interior
+  finer rep falls back to its centroid-nearest member — a small minority).
+  `rebin_like` feeds prior reps back in so a removal keeps surviving reps put
+  (fast, stable repaint) and only re-picks a removed rep, propagating up just to
+  the coarse bins that had inherited it. See `_assign_reps` in
+  `vtscore/projection/pyramid.py` and `tests_lib/projection/test_rep_persistence.py`.
+  *Open follow-up:* re-centring a surviving rep after a lopsided partial removal
+  (hide a bin's Western kids → the rep should drift East). Deliberately deferred:
+  it was a lower priority than not churning the grid on every removal, so today a
+  surviving rep is left in place even if it ends up slightly off-centre. If
+  wanted, re-centre lazily (only the bins whose membership changed) so it never
+  blocks the repaint.
 
 **Active:**
 - **Dataset pickle size — drop inline `media_bytes` when the media is reachable
