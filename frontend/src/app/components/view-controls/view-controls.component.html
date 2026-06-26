@@ -3,7 +3,7 @@
     <button
       type="button"
       class="vc-btn vc-btn--size"
-      [disabled]="atMinSize || !currentMediaType() || (viewMode === 'list' && !allowSizeInList())"
+      [disabled]="atMinSize() || !currentMediaType() || (viewMode() === 'list' && !allowSizeInList())"
       (click)="bumpSize(-1)"
       title="Smaller thumbnails"
       aria-label="Smaller thumbnails">
@@ -12,7 +12,7 @@
     <button
       type="button"
       class="vc-btn vc-btn--size"
-      [disabled]="atMaxSize || !currentMediaType() || (viewMode === 'list' && !allowSizeInList())"
+      [disabled]="atMaxSize() || !currentMediaType() || (viewMode() === 'list' && !allowSizeInList())"
       (click)="bumpSize(1)"
       title="Bigger thumbnails"
       aria-label="Bigger thumbnails">
@@ -25,21 +25,21 @@
     <button
       type="button"
       class="vc-btn"
-      [class.vc-btn--active]="viewMode === 'list'"
+      [class.vc-btn--active]="viewMode() === 'list'"
       (click)="setViewMode('list')"
       title="Show items as a list"
       aria-label="List view"
-      [attr.aria-pressed]="viewMode === 'list'">
+      [attr.aria-pressed]="viewMode() === 'list'">
       <vt-icon type="list" [size]="13"></vt-icon>
     </button>
     <button
       type="button"
       class="vc-btn"
-      [class.vc-btn--active]="viewMode === 'grid'"
+      [class.vc-btn--active]="viewMode() === 'grid'"
       (click)="setViewMode('grid')"
       title="Show items as a grid"
       aria-label="Grid view"
-      [attr.aria-pressed]="viewMode === 'grid'">
+      [attr.aria-pressed]="viewMode() === 'grid'">
       <vt-icon type="grid" [size]="13"></vt-icon>
     </button>
   </div>
@@ -50,21 +50,21 @@
     <button
       type="button"
       class="vc-btn"
-      [class.vc-btn--active]="focusMode === 'click'"
+      [class.vc-btn--active]="focusMode() === 'click'"
       (click)="setFocusMode('click')"
       title="Click to preview"
       aria-label="Click focus mode"
-      [attr.aria-pressed]="focusMode === 'click'">
+      [attr.aria-pressed]="focusMode() === 'click'">
       <vt-icon type="cursor-click" [size]="13"></vt-icon>
     </button>
     <button
       type="button"
       class="vc-btn"
-      [class.vc-btn--active]="focusMode === 'hover'"
+      [class.vc-btn--active]="focusMode() === 'hover'"
       (click)="setFocusMode('hover')"
       title="Hover to preview"
       aria-label="Hover focus mode"
-      [attr.aria-pressed]="focusMode === 'hover'">
+      [attr.aria-pressed]="focusMode() === 'hover'">
       <vt-icon type="cursor-hover" [size]="13"></vt-icon>
     </button>
   </div>
