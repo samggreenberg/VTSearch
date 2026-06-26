@@ -4,10 +4,11 @@
   height: 100%;
   overflow: hidden;
 
-  // Smoothly animate the programmatic "pop tight" that follows an icon-size
-  // change. The component toggles this class on only for that one transition, so
-  // live divider dragging (which writes --left-width/--right-width every
-  // mousemove) stays instant.
+  // Smoothly animate every "pop tight" snap — both the divider drag-release pop
+  // and the icon-size auto-pop — so they look identical. The component toggles
+  // this class on only for the one transition that follows a snap, so live
+  // divider dragging (which writes --left-width/--right-width every mousemove)
+  // stays instant.
   &.layout--animate-pop {
     transition: grid-template-columns var(--transition-base);
   }

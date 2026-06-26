@@ -381,7 +381,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   onLeftResizeEnd(width: number): void {
     this.cancelAutoPop('left');
     this.leftWidth.set(width);
-    this.popPanelTight('left', false);
+    this.popPanelTight('left');
   }
 
   onRightWidthChange(width: number): void {
@@ -393,15 +393,16 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   onRightResizeEnd(width: number): void {
     this.cancelAutoPop('right');
     this.rightWidth.set(width);
-    this.popPanelTight('right', false);
+    this.popPanelTight('right');
   }
 
   /** Snap one panel down to the minimum width that still shows its current grid
    *  column count, then clamp and persist. Shared by the divider drag-release
-   *  handlers (instant) and the icon-size auto-pop (animated). No-op for the
-   *  snap step when the panel isn't in grid mode; the width is still persisted
-   *  so drag-release always records where the user left the divider. */
-  private popPanelTight(side: 'left' | 'right', animate: boolean): void {
+   *  handlers and the icon-size auto-pop; both animate the snap so every pop
+   *  looks the same. No-op for the snap step when the panel isn't in grid mode;
+   *  the width is still persisted so drag-release always records where the user
+   *  left the divider. */
+  private popPanelTight(side: 'left' | 'right'): void {
     const selector = side === 'left' ? 'vt-left-panel' : 'vt-right-panel';
     const panelEl = this.layoutRef.nativeElement.querySelector(selector) as HTMLElement | null;
     const currentWidth = side === 'left' ? this.leftWidth() : this.rightWidth();
@@ -413,7 +414,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       const min = side === 'left' ? this.leftMin : this.RIGHT_MIN;
       const clamped = Math.max(min, Math.min(max, snapped));
       if (clamped !== currentWidth) {
-        if (animate) this.animatePop();
+        this.animatePop();
         const widthSignal = side === 'left' ? this.leftWidth : this.rightWidth;
         widthSignal.set(clamped);
         this.layoutRef.nativeElement.style.setProperty(`--${side}-width`, `${clamped}px`);
@@ -455,7 +456,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const timer = setTimeout(() => {
       if (side === 'left') this.leftPopTimer = null;
       else this.rightPopTimer = null;
-      this.popPanelTight(side, true);
+      this.popPanelTight(side);
     }, this.AUTO_POP_DELAY);
     if (side === 'left') this.leftPopTimer = timer;
     else this.rightPopTimer = timer;
