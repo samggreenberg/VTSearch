@@ -410,11 +410,20 @@ def build_pyramid(
             # would only reproduce this one at finer (wasted) radii.
             if max_count <= 1:
                 break
-            # No progress across a radius halving — neither the hex count nor
-            # the densest cell improved — means the remaining co-located clips
-            # can never be separated; stop rather than grind to the cap.
+            # No progress across a radius halving — neither the cell count nor
+            # the densest cell improved — *can* mean the remaining clips are
+            # co-located and will never separate (stop rather than grind to the
+            # cap), but it can also just mean the lattice is still too coarse to
+            # have reached the cloud: a corner-anchored square cell wider than
+            # the whole cloud holds every point for several levels before its
+            # boundaries finally fall between them.  Only stop if the densest
+            # cell's members are genuinely coincident (zero spatial extent);
+            # otherwise keep descending — a finer radius will split them.
             if n_cells == prev_n_cells and max_count == prev_max_count:
-                break
+                densest = int(np.argmax(lc.counts))
+                pile = coords[lc.members[densest]]
+                if float(np.max(pile.max(axis=0) - pile.min(axis=0))) == 0.0:
+                    break
             prev_n_cells = n_cells
             prev_max_count = max_count
 
