@@ -3,6 +3,14 @@
   grid-template-columns: var(--left-width, 300px) 8px 1fr 8px var(--right-width, 300px);
   height: 100%;
   overflow: hidden;
+
+  // Smoothly animate the programmatic "pop tight" that follows an icon-size
+  // change. The component toggles this class on only for that one transition, so
+  // live divider dragging (which writes --left-width/--right-width every
+  // mousemove) stays instant.
+  &.layout--animate-pop {
+    transition: grid-template-columns var(--transition-base);
+  }
 }
 
 .panel-left {
