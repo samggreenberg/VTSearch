@@ -10,11 +10,10 @@
     </div>
     <ng-content select="[list-actions]"></ng-content>
   </div>
-  <div class="vote-list" [class.grid-layout]="isGrid" [style.--grid-goal-width]="gridGoalWidth() + 'px'" #voteListContainer>
+  <div class="vote-list" [style.--grid-goal-width]="gridGoalWidth() + 'px'">
     @for (entry of sortedEntries(); track trackById($index, entry)) {
       <div
         class="vote-entry"
-        [class.vote-entry-grid]="isGrid"
         [class.vote-entry-missing]="isMissing(entry.id)"
         [attr.title]="isMissing(entry.id) ? entry.name + ' (not in the current dataset)' : null"
         role="button"
@@ -32,11 +31,7 @@
         } @else if (placeholderIcon(entry.id)) {
           <span class="vote-placeholder">{{ placeholderIcon(entry.id) }}</span>
         }
-        @if (isGrid) {
-          <span class="vote-name-grid">{{ entry.name }}</span>
-        } @else {
-          <span class="vote-name">{{ entry.name }}</span>
-        }
+        <span class="vote-name-grid">{{ entry.name }}</span>
       </div>
     }
   </div>

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from marshmallow import Schema, fields, validate
 
-from vtsearch.settings_models import VALID_FOCUS_MODES, VALID_GRID_ICON_SIZES, VALID_THEMES, VALID_VIEW_MODES
+from vtsearch.settings_models import VALID_FOCUS_MODES, VALID_GRID_ICON_SIZES, VALID_THEMES
 
 
 class _PerMediaTypeStringDict(fields.Dict):
@@ -89,8 +89,6 @@ class AppSettingsSchema(Schema):
     browse_compact = _PerMediaTypeBooleanDict()
 
     # Per-user, per-media-type
-    view_mode_left = _PerMediaTypeStringDict()
-    view_mode_right = _PerMediaTypeStringDict()
     grid_icon_size_left = _PerMediaTypeStringDict()
     grid_icon_size_right = _PerMediaTypeStringDict()
     focus_mode_left = _PerMediaTypeStringDict()
@@ -198,8 +196,6 @@ class SettingsUpdateSchema(Schema):
     show_metadata = fields.Boolean()
     label_hint_dismissed = fields.Boolean()
 
-    view_mode_left = fields.Raw()
-    view_mode_right = fields.Raw()
     grid_icon_size_left = fields.Raw()
     grid_icon_size_right = fields.Raw()
     focus_mode_left = fields.Raw()
@@ -264,21 +260,19 @@ class SettingsUpdateSchema(Schema):
         unknown = "exclude"
 
 
-# Note: per-side dict fields (view_mode_left etc.) are declared as
+# Note: per-side dict fields (grid_icon_size_left etc.) are declared as
 # ``fields.Raw`` on the *update* schema because the existing setters
-# accept either ``"grid"``/``{media_type: "grid"}`` and the validators
+# accept either ``"M"``/``{media_type: "M"}`` and the validators
 # inside ``settings.py`` are the source of truth. Tightening these to
 # ``fields.Dict(...)`` is a follow-up once the per-side setters are
 # unified.
 
-# View modes / grid sizes / focus modes are re-exported for the few
-# call sites that import them from here when checking PUT body values
-# directly (test helpers).
+# Grid sizes / focus modes are re-exported for the few call sites that import
+# them from here when checking PUT body values directly (test helpers).
 __all__ = [
     "AppSettingsSchema",
     "SettingsUpdateSchema",
     "VALID_FOCUS_MODES",
     "VALID_GRID_ICON_SIZES",
     "VALID_THEMES",
-    "VALID_VIEW_MODES",
 ]

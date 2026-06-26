@@ -18,7 +18,6 @@ export class MediaItemComponent implements OnChanges {
   @Input() active = false;
   @Input() voteLabel: 'good' | 'bad' | null = null;
   @Input() score: number | null = null;
-  @Input() viewMode: 'grid' | 'list' = 'list';
   readonly focusMode = input<'click' | 'hover'>('click');
 
   readonly select = output<number>();
@@ -42,10 +41,6 @@ export class MediaItemComponent implements OnChanges {
     }
   }
 
-  get isGrid(): boolean {
-    return this.viewMode === 'grid';
-  }
-
   get thumbnailUrl(): string | null {
     if (this.thumbnailFailed) return null;
     if (this.media.media_type === 'image' || this.media.media_type === 'video' || this.media.media_type === 'document' || this.media.media_type === 'audio') {
@@ -59,7 +54,6 @@ export class MediaItemComponent implements OnChanges {
   }
 
   get placeholderIcon(): string | null {
-    if (!this.isGrid) return null;
     if (this.thumbnailUrl) return null;
     if (this.media.media_type === 'audio') return '\u266B';
     if (this.media.media_type === 'text') return '\u00B6';

@@ -148,29 +148,12 @@ describe('LabelListComponent', () => {
       expect(component.thumbnailUrl(3)).toBe('/api/medias/3/thumbnail');
     });
 
-    it('should be in grid mode when viewMode is grid', async () => {
-      await setInputs({ viewMode: 'grid' });
-      expect(component.isGrid).toBe(true);
-    });
-
-    it('should not be in grid mode when viewMode is list', async () => {
-      await setInputs({ viewMode: 'list' });
-      expect(component.isGrid).toBe(false);
-    });
-
-    it('should not show placeholder icon for audio in grid mode (has thumbnail)', async () => {
-      await setInputs({ viewMode: 'grid' });
+    it('should not show placeholder icon for audio (has thumbnail)', () => {
       expect(component.placeholderIcon(1)).toBeNull();
     });
 
-    it('should not show placeholder icon for image in grid mode', async () => {
-      await setInputs({ viewMode: 'grid' });
+    it('should not show placeholder icon for image (has thumbnail)', () => {
       expect(component.placeholderIcon(2)).toBeNull();
-    });
-
-    it('should not show placeholder icon in list mode', async () => {
-      await setInputs({ viewMode: 'list' });
-      expect(component.placeholderIcon(1)).toBeNull();
     });
   });
 

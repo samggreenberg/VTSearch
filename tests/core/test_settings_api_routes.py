@@ -305,63 +305,6 @@ class TestSettingsAPI:
         res2 = client.get("/api/settings")
         assert res2.get_json()["label_hint_dismissed"] is True
 
-    def test_update_view_mode_left_per_type(self, client):
-        res = client.put("/api/settings", json={"view_mode_left": {"audio": "grid", "image": "list"}})
-        assert res.status_code == 200
-        data = res.get_json()
-        assert data["view_mode_left"]["audio"] == "grid"
-        assert data["view_mode_left"]["image"] == "list"
-
-        # Verify it persisted
-        res2 = client.get("/api/settings")
-        assert res2.get_json()["view_mode_left"]["audio"] == "grid"
-
-    def test_update_view_mode_left_legacy_scalar(self, client):
-        res = client.put("/api/settings", json={"view_mode_left": "grid"})
-        assert res.status_code == 200
-        data = res.get_json()
-        # All types should now be "grid"
-        for v in data["view_mode_left"].values():
-            assert v == "grid"
-
-    def test_update_view_mode_left_invalid(self, client):
-        res = client.put("/api/settings", json={"view_mode_left": {"audio": "invalid"}})
-        assert res.status_code == 400
-
-    def test_update_view_mode_left_invalid_scalar(self, client):
-        res = client.put("/api/settings", json={"view_mode_left": "invalid"})
-        assert res.status_code == 400
-
-    def test_update_view_mode_right_per_type(self, client):
-        res = client.put("/api/settings", json={"view_mode_right": {"audio": "list", "video": "grid"}})
-        assert res.status_code == 200
-        data = res.get_json()
-        assert data["view_mode_right"]["audio"] == "list"
-        assert data["view_mode_right"]["video"] == "grid"
-
-        # Verify it persisted
-        res2 = client.get("/api/settings")
-        assert res2.get_json()["view_mode_right"]["audio"] == "list"
-
-    def test_update_view_mode_right_legacy_scalar(self, client):
-        res = client.put("/api/settings", json={"view_mode_right": "list"})
-        assert res.status_code == 200
-        data = res.get_json()
-        for v in data["view_mode_right"].values():
-            assert v == "list"
-
-    def test_update_view_mode_right_invalid(self, client):
-        res = client.put("/api/settings", json={"view_mode_right": {"audio": "invalid"}})
-        assert res.status_code == 400
-
-    def test_get_settings_includes_view_modes(self, client):
-        res = client.get("/api/settings")
-        assert res.status_code == 200
-        data = res.get_json()
-        assert "show_metadata" in data
-        assert "view_mode_left" in data
-        assert "view_mode_right" in data
-
     def test_update_grid_icon_size_left_per_type(self, client):
         res = client.put("/api/settings", json={"grid_icon_size_left": {"audio": "XS", "image": "XL"}})
         assert res.status_code == 200

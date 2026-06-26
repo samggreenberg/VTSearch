@@ -81,8 +81,8 @@ const PREVIEW_SIZE_STEPS = [120, 160, 208, 272, 352, 448, 560, 640, 720] as cons
  * ``grid_icon_size_popup`` setting (independent of the left/right panels), so
  * tuning the popup while browsing one bin becomes the default for every future
  * popup of that media type. The top-right {@link ViewControlsComponent} writes
- * that setting (its Grid/List toggle is hidden here) and this component re-reads
- * it from {@link SettingsStateService}, keyed by the active dataset's media type.
+ * that setting and this component re-reads it from {@link SettingsStateService},
+ * keyed by the active dataset's media type.
  *
  * A second, top-left pair of size buttons controls the *detail canvas* (the
  * large preview pane) rather than the grid thumbnails. Because the popup's

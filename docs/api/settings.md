@@ -22,8 +22,6 @@ GET /api/settings
   "audio_playing": true,
   "show_animations": true,
   "show_metadata": true,
-  "view_mode_left": {},
-  "view_mode_right": {},
   "focus_mode_left": {},
   "focus_mode_right": {},
   "grid_icon_size_left": {},
@@ -42,8 +40,8 @@ GET /api/settings
 }
 ```
 
-Per-media-type settings (`view_mode_*`, `focus_mode_*`, `grid_icon_size_*`,
-`panel_pct_*`) use dicts keyed by media type ID (e.g. `{"audio": "list"}`).
+Per-media-type settings (`focus_mode_*`, `grid_icon_size_*`,
+`panel_pct_*`) use dicts keyed by media type ID (e.g. `{"audio": "M"}`).
 
 ### Update settings
 
@@ -63,7 +61,7 @@ Supported keys: `volume` (number), `theme` (`"dark"` / `"light"` /
 `"highviz"`), `inclusion` (int, -10 to +10), `enrich_descriptions` (bool),
 `safe_thresholds` (bool), `calibrate_count` (int), `calibration_fraction`
 (number), `audio_playing` (bool), `show_animations` (bool),
-`show_metadata` (bool), `view_mode_left` (dict), `view_mode_right` (dict),
+`show_metadata` (bool),
 `focus_mode_left` (dict), `focus_mode_right` (dict), `grid_icon_size_left`
 (dict), `grid_icon_size_right` (dict), `panel_pct_left` (dict),
 `panel_pct_right` (dict),

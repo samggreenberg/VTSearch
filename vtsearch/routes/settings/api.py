@@ -170,7 +170,7 @@ _DICT_FIELD_NAMES = frozenset(
 def _coerce_dict_fields(data: dict) -> dict:
     """Replace any non-dict value in a schema dict field with ``{}``.
 
-    Mirrors how the per-side getters (``view_mode`` etc.) already coerce a
+    Mirrors how the per-side getters (``grid_icon_size`` etc.) already coerce a
     junk persisted value back to its default on read: a stale scalar left
     over from an older settings file resolves to "never set" rather than
     crashing the serializer. Mutates and returns *data*.

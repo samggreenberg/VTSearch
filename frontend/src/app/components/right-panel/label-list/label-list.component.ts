@@ -1,4 +1,4 @@
-import { AfterViewChecked, ChangeDetectionStrategy, Component, ElementRef, inject, Input, input, OnChanges, OnDestroy, OnInit, output, signal, SimpleChanges, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, Input, input, OnChanges, OnDestroy, OnInit, output, signal, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -23,7 +23,7 @@ export interface LabelEntry {
   templateUrl: './label-list.component.html',
   styleUrl: './label-list.component.scss',
 })
-export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterViewChecked {
+export class LabelListComponent implements OnInit, OnChanges, OnDestroy {
   private activeContext = inject(ActiveContextService);
   private metadataCache = inject(MediaMetadataCacheService);
 
@@ -50,7 +50,6 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
    */
   readonly regionBoxes = input<Record<string, number[]>>({});
   @Input() sortMode: LabelSortMode = 'time-desc';
-  @Input() viewMode: 'grid' | 'list' = 'grid';
   readonly gridGoalWidth = input<number>(80);
   readonly focusMode = input<'click' | 'hover'>('click');
   readonly mediaSelected = output<number>();
@@ -59,13 +58,10 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
     vote: 'good' | 'bad';
 }>();
 
-  @ViewChild('voteListContainer') voteListContainer?: ElementRef<HTMLDivElement>;
-
   // Signal: rebuilt from the metadataCache version$ subscribe (an unpatched
   // callback, not a zoneless CD trigger) as well as from ngOnChanges, and read in
   // the template, so it must repaint when the cache hydrates.
   readonly sortedEntries = signal<LabelEntry[]>([]);
-  private pendingScrollPct: number | null = null;
   /** Pre-built Map for O(1) media stub lookups by id (rebuilt when medias input changes). */
   private mediaMap = new Map<number, Media>();
   private readonly destroy$ = new Subject<void>();
@@ -83,11 +79,6 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['viewMode'] && !changes['viewMode'].firstChange && this.voteListContainer) {
-      const el = this.voteListContainer.nativeElement;
-      const maxScroll = el.scrollHeight - el.clientHeight;
-      this.pendingScrollPct = maxScroll > 0 ? el.scrollTop / maxScroll : 0;
-    }
     if (changes['medias']) {
       this.mediaMap = new Map(this.medias.map(m => [m.id, m]));
     }
@@ -104,16 +95,6 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
 
   private lookup(id: number): Media | undefined {
     return this.metadataCache.get(id) ?? this.mediaMap.get(id);
-  }
-
-  ngAfterViewChecked(): void {
-    if (this.pendingScrollPct !== null && this.voteListContainer) {
-      const pct = this.pendingScrollPct;
-      this.pendingScrollPct = null;
-      const el = this.voteListContainer.nativeElement;
-      const maxScroll = el.scrollHeight - el.clientHeight;
-      el.scrollTop = pct * maxScroll;
-    }
   }
 
   private buildSortedEntries(): LabelEntry[] {
@@ -160,10 +141,6 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
         break;
     }
     return sorted;
-  }
-
-  get isGrid(): boolean {
-    return this.viewMode === 'grid';
   }
 
   private thumbnailFailedUrls = new Set<string>();

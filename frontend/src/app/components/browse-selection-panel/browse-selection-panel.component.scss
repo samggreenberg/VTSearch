@@ -1,6 +1,6 @@
 // The selection panel fills the top region of the browse side panel: a header
-// with the count + Clear, a sort/view toolbar, then a scrolling Grid/List of
-// the selected items. Mirrors the Find right panel's labeled-item lists.
+// with the count + Clear, a sort/view toolbar, then a scrolling thumbnail grid
+// of the selected items. Mirrors the Find right panel's labeled-item lists.
 :host {
   display: flex;
   flex-direction: column;
@@ -145,14 +145,11 @@
   overflow-y: auto;
   scrollbar-gutter: stable;
   padding: var(--space-md) var(--space-lg);
-
-  &.grid-layout {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, var(--grid-goal-width, 80px));
-    gap: var(--space-xs);
-    align-content: start;
-    justify-content: end;
-  }
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--grid-goal-width, 80px));
+  gap: var(--space-xs);
+  align-content: start;
+  justify-content: end;
 }
 
 .bsp-empty {
@@ -160,24 +157,24 @@
   font-size: var(--font-xs);
   color: var(--text-muted);
   line-height: 1.4;
-
-  .grid-layout & {
-    grid-column: 1 / -1;
-  }
+  grid-column: 1 / -1;
 }
 
 .bsp-entry {
-  padding: var(--space-xs) 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-xs);
+  gap: var(--space-2xs);
+  border-radius: var(--radius-sm);
   font-size: var(--font-sm);
   cursor: pointer;
   color: var(--text-vote);
   line-height: 1.3;
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
 
   &:hover {
     color: var(--text-primary);
+    background: var(--bg-hover);
   }
 
   &:focus-visible {
@@ -187,74 +184,38 @@
   }
 }
 
-.bsp-entry-grid {
-  flex-direction: column;
-  align-items: center;
-  padding: var(--space-xs);
-  gap: var(--space-2xs);
-  border-radius: var(--radius-sm);
-
-  &:hover {
-    background: var(--bg-hover);
-  }
-}
-
 .bsp-thumb-wrap {
   display: block;
-  width: 28px;
-  height: 28px;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  min-height: 0;
   border-radius: var(--radius-sm);
   flex-shrink: 0;
-
-  .bsp-entry-grid & {
-    width: 100%;
-    height: auto;
-    aspect-ratio: 1;
-    min-height: 0;
-    overflow: hidden;
-  }
+  overflow: hidden;
 }
 
 .bsp-thumb {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   display: block;
-
-  .bsp-entry-grid & {
-    object-fit: contain;
-  }
 }
 
 .bsp-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 100%;
+  aspect-ratio: 1;
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--text-muted);
-  font-size: var(--font-xl);
+  font-size: var(--font-3xl);
   overflow: hidden;
   flex-shrink: 0;
-
-  .bsp-entry-grid & {
-    width: 100%;
-    height: auto;
-    aspect-ratio: 1;
-    font-size: var(--font-3xl);
-  }
-}
-
-.bsp-name {
-  display: block;
-  font-weight: var(--weight-medium);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .bsp-name-grid {

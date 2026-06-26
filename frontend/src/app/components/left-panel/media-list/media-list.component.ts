@@ -12,21 +12,12 @@ import { SortedItem } from '../left-panel.component';
 import { prefersReducedMotion } from '../../../utils/reduced-motion';
 
 /**
- * Item count above which list mode switches from plain DOM to CDK virtual
- * scrolling.  Each list row still mounts a thumbnail ``<img>`` and its
- * component, so a few hundred rendered at once blocks the main thread for
- * ~1s.  Kept low enough that entering a view or switching to list never
- * freezes; small lists stay plain DOM so ``scrollIntoView`` stays exact.
- */
-const VIRTUAL_SCROLL_THRESHOLD = 150;
-/**
- * Item count above which grid mode switches to CDK virtual scrolling.  Grid
- * cards are even heavier than list rows, so this is lower still — a few
- * hundred thumbnails rendered at once froze the gallery for ~1.8s.
+ * Item count above which the thumbnail grid switches to CDK virtual scrolling.
+ * Grid cards are heavy — a few hundred thumbnails rendered at once froze the
+ * gallery for ~1.8s — so small galleries stay plain DOM (keeping
+ * ``scrollIntoView`` exact) and larger ones virtualize.
  */
 const GRID_VIRTUAL_THRESHOLD = 80;
-/** Approximate height of a single media-item row in list mode (px). */
-const LIST_ITEM_HEIGHT = 28;
 /** Horizontal/vertical gap between grid cards (px); mirrors ``--space-xs``. */
 const GRID_GAP_PX = 4;
 /** Fallback grid-row stride before the first real card is measured (px). */
@@ -74,7 +65,6 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
   readonly selectedId = input<number | null>(null);
   @Input() goodVotes: Set<number> = new Set();
   @Input() badVotes: Set<number> = new Set();
-  readonly viewMode = input<'grid' | 'list'>('list');
   readonly gridGoalWidth = input<number>(80);
   readonly focusMode = input<'click' | 'hover'>('click');
   readonly showScores = input(true);
@@ -95,14 +85,12 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
   /** Cached ordered items, rebuilt only when inputs change, not on every CD cycle. */
   cachedOrderedItems: OrderedItem[] = [];
 
-  /** Grid mode only: ``cachedOrderedItems`` chunked into rows for virtual scrolling. */
+  /** ``cachedOrderedItems`` chunked into rows for virtual scrolling. */
   gridRows: GridRow[] = [];
   /** Number of cards per grid row, derived from the viewport width and goal width. */
   gridColumns = 1;
   /** Measured stride of one virtualized grid row (px); fed to CDK as ``itemSize``. */
   gridRowHeight = GRID_ROW_HEIGHT_FALLBACK;
-
-  readonly listItemHeight = LIST_ITEM_HEIGHT;
 
   private pendingScrollToSelected = false;
   private pendingScrollPct: number | null = null;
@@ -139,23 +127,13 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     this.destroy$.complete();
   }
 
-  /** Whether list mode is virtualizing (many lightweight rows). */
-  get useListVirtual(): boolean {
-    return this.viewMode() === 'list' && this.cachedOrderedItems.length > VIRTUAL_SCROLL_THRESHOLD;
-  }
-
-  /** Whether grid mode is virtualizing (many heavy thumbnail cards). */
-  get useGridVirtual(): boolean {
-    return this.viewMode() === 'grid' && this.cachedOrderedItems.length > GRID_VIRTUAL_THRESHOLD;
-  }
-
   /**
-   * Whether either mode is virtualizing via a ``CdkVirtualScrollViewport``.
-   * Shared plumbing (scroll restoration, ``scrollToIndex``, prefetch) keys off
-   * this; the list/grid getters above pick the specific index math.
+   * Whether the grid is virtualizing (many heavy thumbnail cards) via a
+   * ``CdkVirtualScrollViewport``.  Shared plumbing (scroll restoration,
+   * ``scrollToIndex``, prefetch) keys off this.
    */
-  get useVirtualScroll(): boolean {
-    return this.useListVirtual || this.useGridVirtual;
+  get useGridVirtual(): boolean {
+    return this.cachedOrderedItems.length > GRID_VIRTUAL_THRESHOLD;
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -171,13 +149,6 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
       this.pendingScrollToSelected = true;
     }
 
-    const scrollContainer = this.listContainer?.nativeElement ?? this.virtualViewport?.elementRef.nativeElement;
-    if (changes['viewMode'] && !changes['viewMode'].firstChange && scrollContainer) {
-      const el = scrollContainer;
-      const maxScroll = el.scrollHeight - el.clientHeight;
-      this.pendingScrollPct = maxScroll > 0 ? el.scrollTop / maxScroll : 0;
-    }
-
     // A wider/narrower goal width changes how many cards fit per grid row and
     // the height of each card, so recompute columns and re-measure the stride.
     if (changes['gridGoalWidth'] && !changes['gridGoalWidth'].firstChange) {
@@ -191,7 +162,6 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
       changes['sortOrder'] ||
       changes['threshold'] ||
       changes['showScores'] ||
-      changes['viewMode'] ||
       changes['gridGoalWidth']
     ) {
       this.rebuildOrderedItems();
@@ -254,10 +224,6 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
    * same stride so CDK's fixed-size strategy scrolls accurately.
    */
   private rebuildGridRows(): void {
-    if (this.viewMode() !== 'grid') {
-      this.gridRows = [];
-      return;
-    }
     const cols = Math.max(1, this.gridColumns);
     const rows: GridRow[] = [];
     let current: OrderedItem[] = [];
@@ -337,13 +303,12 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     } else if (this.pendingScrollToSelected) {
       this.pendingScrollToSelected = false;
       const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth';
-      if (this.useVirtualScroll && this.virtualViewport) {
-        // In virtual-scroll mode, find the index and scroll to it.  Grid items
+      if (this.useGridVirtual && this.virtualViewport) {
+        // In virtual-scroll mode, find the index and scroll to it.  Grid cards
         // are chunked into rows, so map the item index to its row first.
         const idx = this.cachedOrderedItems.findIndex((i) => i.media.id === this.selectedId());
         if (idx >= 0) {
-          const target = this.useGridVirtual ? this.itemIndexToRow(idx) : idx;
-          this.virtualViewport.scrollToIndex(target, behavior);
+          this.virtualViewport.scrollToIndex(this.itemIndexToRow(idx), behavior);
         }
       } else if (this.listContainer) {
         const activeEl = this.listContainer.nativeElement.querySelector('.media-item.active');
@@ -432,9 +397,8 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
 
   scrollToIndex(index: number): void {
     const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth';
-    if (this.useVirtualScroll && this.virtualViewport) {
-      const target = this.useGridVirtual ? this.itemIndexToRow(index) : index;
-      this.virtualViewport.scrollToIndex(target, behavior);
+    if (this.useGridVirtual && this.virtualViewport) {
+      this.virtualViewport.scrollToIndex(this.itemIndexToRow(index), behavior);
       // After scrolling, select the item at this index.
       const item = this.cachedOrderedItems[index];
       if (item) {
@@ -469,11 +433,11 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
    * viewport range.
    *
    * When the collection is small enough to skip virtual scrolling (plain DOM
-   * list or grid), every item is rendered, so every item is "visible";
-   * prefetch the lot. Without this, small datasets keep showing ``#284``
-   * placeholders forever because the only other hydration trigger is an
-   * explicit click via ``selectMedia()``.  When virtualized (list or grid),
-   * only the rows around the viewport are prefetched.
+   * grid), every item is rendered, so every item is "visible"; prefetch the
+   * lot. Without this, small datasets keep showing ``#284`` placeholders
+   * forever because the only other hydration trigger is an explicit click via
+   * ``selectMedia()``.  When virtualized, only the rows around the viewport are
+   * prefetched.
    *
    * ``MediaMetadataCacheService.ensureLoaded()`` already de-dupes
    * already-cached and already-pending ids, so calling it on every
@@ -483,7 +447,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     const total = this.cachedOrderedItems.length;
     if (total === 0) return;
 
-    if (!this.useVirtualScroll || !this.virtualViewport) {
+    if (!this.useGridVirtual || !this.virtualViewport) {
       const ids = this.cachedOrderedItems.map((item) => item.media.id);
       this.metadataCache.ensureLoaded(ids);
       return;
@@ -492,34 +456,19 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     const viewportEl = this.virtualViewport.elementRef.nativeElement;
     const viewportHeight = viewportEl.clientHeight || 600;
 
-    if (this.useGridVirtual) {
-      // Grid: the virtualized units are rows of ``gridColumns`` cards.
-      const startRow = this.virtualViewport.measureScrollOffset('top') / this.gridRowHeight;
-      const visibleRows = Math.ceil(viewportHeight / this.gridRowHeight);
-      const cols = Math.max(1, this.gridColumns);
-      const bufferRows = Math.ceil(PREFETCH_BUFFER / cols);
-      const fromRow = Math.max(0, Math.floor(startRow) - bufferRows);
-      const toRow = Math.min(this.gridRows.length, Math.ceil(startRow) + visibleRows + bufferRows);
-      const ids: number[] = [];
-      for (let r = fromRow; r < toRow; r++) {
-        const row = this.gridRows[r];
-        if (row.kind === 'items') {
-          for (const item of row.items) ids.push(item.media.id);
-        }
-      }
-      this.metadataCache.ensureLoaded(ids);
-      return;
-    }
-
-    const startIndex = this.virtualViewport.measureScrollOffset('top') / this.listItemHeight;
-    const visibleCount = Math.ceil(viewportHeight / this.listItemHeight);
-
-    const from = Math.max(0, Math.floor(startIndex) - PREFETCH_BUFFER);
-    const to = Math.min(total, Math.ceil(startIndex) + visibleCount + PREFETCH_BUFFER);
-
+    // The virtualized units are rows of ``gridColumns`` cards.
+    const startRow = this.virtualViewport.measureScrollOffset('top') / this.gridRowHeight;
+    const visibleRows = Math.ceil(viewportHeight / this.gridRowHeight);
+    const cols = Math.max(1, this.gridColumns);
+    const bufferRows = Math.ceil(PREFETCH_BUFFER / cols);
+    const fromRow = Math.max(0, Math.floor(startRow) - bufferRows);
+    const toRow = Math.min(this.gridRows.length, Math.ceil(startRow) + visibleRows + bufferRows);
     const ids: number[] = [];
-    for (let i = from; i < to; i++) {
-      ids.push(this.cachedOrderedItems[i].media.id);
+    for (let r = fromRow; r < toRow; r++) {
+      const row = this.gridRows[r];
+      if (row.kind === 'items') {
+        for (const item of row.items) ids.push(item.media.id);
+      }
     }
     this.metadataCache.ensureLoaded(ids);
   }

@@ -2,11 +2,10 @@
   <h3 [class]="label()" [title]="label() === 'good' ? 'Items you have marked as positive examples (' + elements().length + ')' : 'Items you have marked as negative examples (' + elements().length + ')'">
     {{ label() === 'good' ? 'Goods' : 'Bads' }} ({{ elements().length | number }})
   </h3>
-  <div class="vote-list" [class.grid-layout]="isGrid" [style.--grid-goal-width]="gridGoalWidth() + 'px'" #voteListContainer>
+  <div class="vote-list" [style.--grid-goal-width]="gridGoalWidth() + 'px'">
     @for (entry of sortedEntries; track trackById($index, entry)) {
       <div
         class="vote-entry"
-        [class.vote-entry-grid]="isGrid"
         [class.vote-entry-missing]="isMissing(entry)"
         [attr.title]="isMissing(entry) ? entry.name + ' (not in the current dataset)' : null"
         role="button"
@@ -24,11 +23,7 @@
         } @else if (placeholderIcon(entry)) {
           <span class="vote-placeholder">{{ placeholderIcon(entry) }}</span>
         }
-        @if (isGrid) {
-          <span class="vote-name-grid">{{ entry.name }}</span>
-        } @else {
-          <span class="vote-name">{{ entry.name }}</span>
-        }
+        <span class="vote-name-grid">{{ entry.name }}</span>
       </div>
     }
   </div>
