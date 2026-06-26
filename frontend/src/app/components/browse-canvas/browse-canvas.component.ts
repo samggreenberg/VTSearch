@@ -192,8 +192,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private pendingToggleY = 0;
   private static readonly DBLCLICK_MS = 250;
   // Per-notch wheel zoom factor. A pyramid level spans a full 2x of zoom, so
-  // this sets how many notches cross a bin layer: log_1.4(2) ≈ 2 notches.
-  private static readonly WHEEL_ZOOM_FACTOR = 1.4;
+  // this sets how many notches cross a bin layer. It is exactly √2, so two
+  // notches = exactly one level (and exactly one DOUBLE_CLICK_ZOOM). The earlier
+  // 1.4 was a hair under √2, making a level cost log_1.4(2) ≈ 2.06 notches; the
+  // 0.06 surplus accumulates, so when the whole-projection fit happens to land
+  // near the bottom edge of a level band the *first* flip from that overview
+  // rounds up to a 3rd notch (then ~2 thereafter) — felt as an inconsistent
+  // "three at the top, two after". Exact √2 makes every flip cost two notches.
+  private static readonly WHEEL_ZOOM_FACTOR = Math.SQRT2;
   // How hard a double-click zooms in about the cursor. Larger than the wheel's
   // per-notch factor so the gesture lands a decisive jump, matching the map idiom.
   private static readonly DOUBLE_CLICK_ZOOM = 2.0;
