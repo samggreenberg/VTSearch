@@ -18,12 +18,18 @@
   font-size: var(--font-md);
 
   // The Actions column hugs its inline icon buttons rather than flexing with
-  // the table. Worst case is three 22px icon buttons (Load when unloaded,
-  // Delete, ⋯) with two 4px gaps (74px) plus the cell's side padding. Pinned
-  // via this width — applied to the header and body cells below, and inherited
-  // by the card rows' own `td.actions-col` — instead of the resizable
-  // percentage system, so it stays narrow in both auto and fixed table-layout.
-  --actions-col-width: 6rem;
+  // the table. It carries two 22px buttons at rest (Delete, ⋯) — one 4px gap,
+  // ~48px + the cell's side padding — so it stays tight. When any row in the
+  // table is unloaded (`.actions-has-load`, set by the component) a third Load
+  // button appears, so the column widens to fit three buttons. Pinned via this
+  // width — applied to the header and body cells below, and inherited by the
+  // card rows' own `td.actions-col` — instead of the resizable percentage
+  // system, so it stays narrow in both auto and fixed table-layout.
+  --actions-col-width: 4.5rem;
+
+  &.actions-has-load {
+    --actions-col-width: 6rem;
+  }
 
   th, td {
     padding: var(--space-sm) var(--space-md);
