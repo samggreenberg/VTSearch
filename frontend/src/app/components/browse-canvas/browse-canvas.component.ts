@@ -165,6 +165,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   // the interpolated frame so a re-triggered transition can chain from what's
   // actually on screen. Seeds the "from" end of the zoom-in/out animation.
   private displayedTransform: ViewTransform = { centerX: 0, centerY: 0, zoom: 1 };
+  // The pyramid level the pixels currently on the canvas were binned at. Paired
+  // with `displayedTransform` so a zoom-out can re-render the off-screen margin
+  // (revealed as the frame shrinks) using the *source* level's bins, keeping the
+  // overscan continuous with the frozen centre. See {@link renderSnapshotBorder}.
+  private displayedLevel = 0;
   // Set once the first real frame has been painted. The zoom transition needs a
   // prior frame to snapshot, so it stays disabled until this is true.
   private hasDrawn = false;
@@ -262,6 +267,16 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   // Offscreen copy of the canvas backing store taken when a transition starts;
   // reused across transitions to avoid reallocating.
   private animSnapshot: HTMLCanvasElement | null = null;
+  // CSS-px footprint of `animSnapshot`. Normally the viewport (width×height),
+  // but a zoom-out overscans (snapshot bigger than the viewport) so the shrunk
+  // blit still covers the canvas instead of leaving black margins where the
+  // newly-revealed area sits. See {@link startZoomAnim} / {@link zoomBlitRect}.
+  private snapW = 0;
+  private snapH = 0;
+  // How far a zoom-out snapshot overscans the viewport, per axis. Caps the
+  // overscan buffer at 2×2 the canvas (4× the area / memory); a deeper zoom-out
+  // than this just falls back to a black falloff at the far edge.
+  private static readonly SNAP_OVERSCAN_MAX = 2;
   private animFrom: ViewTransform = { centerX: 0, centerY: 0, zoom: 1 };
   private animTo: ViewTransform = { centerX: 0, centerY: 0, zoom: 1 };
   private animStartTs = 0;
@@ -901,19 +916,52 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    */
   private startZoomAnim(): void {
     const canvasEl = this.canvasRef.nativeElement;
-    let snap = this.animSnapshot;
-    if (!snap) snap = document.createElement('canvas');
-    if (snap.width !== canvasEl.width || snap.height !== canvasEl.height) {
-      snap.width = canvasEl.width;
-      snap.height = canvasEl.height;
-    }
-    const sctx = snap.getContext('2d')!;
-    sctx.clearRect(0, 0, snap.width, snap.height);
-    sctx.drawImage(canvasEl, 0, 0);
-    this.animSnapshot = snap;
-
     this.animFrom = { ...this.displayedTransform };
     this.animTo = { ...this.transform };
+
+    // Zoom-out shrinks the frozen frame, exposing the area that was just off
+    // screen as a margin around it. With a plain viewport-sized snapshot that
+    // margin is bare background (the black border). Instead overscan: snapshot a
+    // buffer larger than the viewport — the frozen centre is the already-rendered
+    // canvas (free), and the extra ring is re-rendered from the source level's
+    // bins, painting the cached thumbnails the off-view prefetch already warmed.
+    // The shrunk blit then covers the canvas with real content. Zoom-in needs no
+    // overscan (the frame grows past the viewport), so it stays the cheap copy.
+    const overscan = Math.min(
+      BrowseCanvasComponent.SNAP_OVERSCAN_MAX,
+      this.animFrom.zoom / this.animTo.zoom,
+    );
+    const doOverscan = overscan > 1.01 && this.thumbnailMode;
+    this.snapW = doOverscan ? Math.ceil(this.width * overscan) : this.width;
+    this.snapH = doOverscan ? Math.ceil(this.height * overscan) : this.height;
+
+    let snap = this.animSnapshot;
+    if (!snap) snap = document.createElement('canvas');
+    // Match the live canvas exactly on the non-overscan path so the plain copy
+    // stays pixel-for-pixel (the device size may floor differently from snapW×dpr).
+    const wantW = doOverscan ? Math.round(this.snapW * this.dpr) : canvasEl.width;
+    const wantH = doOverscan ? Math.round(this.snapH * this.dpr) : canvasEl.height;
+    if (snap.width !== wantW || snap.height !== wantH) {
+      snap.width = wantW;
+      snap.height = wantH;
+    }
+    const sctx = snap.getContext('2d')!;
+    sctx.setTransform(1, 0, 0, 1, 0, 0);
+    sctx.clearRect(0, 0, snap.width, snap.height);
+    if (doOverscan) {
+      // Margin first (in CSS px via the dpr transform), then drop the frozen
+      // viewport copy into the centre so it overwrites any seam bins exactly.
+      sctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      this.renderSnapshotBorder(sctx);
+      sctx.setTransform(1, 0, 0, 1, 0, 0);
+      const ox = Math.round((this.snapW - this.width) * this.dpr * 0.5);
+      const oy = Math.round((this.snapH - this.height) * this.dpr * 0.5);
+      sctx.drawImage(canvasEl, ox, oy);
+    } else {
+      sctx.drawImage(canvasEl, 0, 0);
+    }
+    this.animSnapshot = snap;
+
     this.animStartTs = performance.now();
     this.animBg = this.themeColor('--bg-body');
 
@@ -925,6 +973,54 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.ngZone.runOutsideAngular(() => {
       this.animRafId = requestAnimationFrame(this.stepZoomAnim);
     });
+  }
+
+  /**
+   * Paint the overscan margin of a zoom-out snapshot: the source-level bins that
+   * sit just outside the frozen viewport. `sctx` is the snapshot context with a
+   * CSS-px (dpr) transform already applied and the buffer centred on
+   * {@link animFrom}'s centre. Only cells whose tile is already cached are drawn
+   * (and `getThumb` paints whatever the prefetch warmed), so the fill reaches as
+   * far as the cache does and falls off to background past it — never a network
+   * wait. The centre is left for the frozen viewport copy to overwrite.
+   */
+  private renderSnapshotBorder(sctx: CanvasRenderingContext2D): void {
+    const meta = this.meta();
+    if (!meta || meta.point_count === 0) return;
+    const from = this.animFrom;
+    const level = this.displayedLevel;
+    const radius = meta.base_radius / Math.pow(2, level);
+    const screenRadius = radius * from.zoom;
+    const geom = this.geom;
+    const tileSpan = meta.tile_span;
+    const tileW = tileSpan * geom.dx(radius);
+    const tileH = tileSpan * geom.dy(radius);
+
+    const halfWx = this.snapW / 2 / from.zoom;
+    const halfWy = this.snapH / 2 / from.zoom;
+    const txMin = Math.floor((from.centerX - halfWx) / tileW - 1);
+    const txMax = Math.ceil((from.centerX + halfWx) / tileW + 1);
+    const tyMin = Math.floor((from.centerY - halfWy) / tileH - 1);
+    const tyMax = Math.ceil((from.centerY + halfWy) / tileH + 1);
+
+    const cmap = resolveColormap(this.colormap(), this.effectiveTheme());
+    this.selAccent = this.themeColor('--accent-color') || '#4f9dff';
+    const selectionActive = this.selection.size > 0;
+    const cull = screenRadius * 2;
+
+    for (let tx = txMin; tx <= txMax; tx++) {
+      for (let ty = tyMin; ty <= tyMax; ty++) {
+        const cached = this.tileCache.getCached(level, tx, ty);
+        if (!cached) continue;
+        for (const cell of cached.cells) {
+          const bcx = (cell.cx - from.centerX) * from.zoom + this.snapW / 2;
+          const bcy = (cell.cy - from.centerY) * from.zoom + this.snapH / 2;
+          if (bcx < -cull || bcx > this.snapW + cull) continue;
+          if (bcy < -cull || bcy > this.snapH + cull) continue;
+          this.drawHex(sctx, bcx, bcy, screenRadius, cell, cmap, selectionActive);
+        }
+      }
+    }
   }
 
   /**
@@ -944,9 +1040,16 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const cux = from.centerX + (this.animTo.centerX - from.centerX) * e;
     const cuy = from.centerY + (this.animTo.centerY - from.centerY) * e;
     const scale = zu / z0;
-    const x = (this.width / 2) * (1 - scale) + (from.centerX - cux) * zu;
-    const y = (this.height / 2) * (1 - scale) + (from.centerY - cuy) * zu;
-    return { x, y, w: scale * this.width, h: scale * this.height };
+    // The snapshot is `snapW×snapH` CSS px centred on `from.center` (snapW/snapH
+    // equal the viewport unless a zoom-out overscanned them). Place that centre
+    // where the interpolated transform puts `from.center`, then size the blit by
+    // the snapshot's own footprint so the overscanned ring lands outside the
+    // viewport edges. With no overscan (snapW=width) this is the old identity.
+    const cxScreen = this.width / 2 + (from.centerX - cux) * zu;
+    const cyScreen = this.height / 2 + (from.centerY - cuy) * zu;
+    const w = scale * this.snapW;
+    const h = scale * this.snapH;
+    return { x: cxScreen - w / 2, y: cyScreen - h / 2, w, h };
   }
 
   /** One frame of the zoom transition: clear, blit the scaled snapshot, repeat
@@ -1186,6 +1289,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       centerY: this.transform.centerY,
       zoom: this.transform.zoom,
     };
+    this.displayedLevel = level;
     this.hasDrawn = true;
   }
 
