@@ -1,12 +1,14 @@
 import type { ContextMenuItem } from '../context-menu/context-menu.component';
 
 /**
- * Builds the right-click context-menu items for the dashboard's dataset and
- * detector rows.  Each item mirrors a button in the row's Actions column: same
- * icon, same label, same availability rules (Load only shows when the item is
- * unloaded; Edit-access only shows in multi-user mode and is disabled for
- * non-owners).  Keep this list and ordering in sync with the Actions column
- * markup in `dataset-card.component.html` / `detector-card.component.html`.
+ * Builds the action menu for the dashboard's dataset and detector rows. The
+ * same list backs both the right-click context menu and the ⋯ overflow button
+ * in the Actions column. The column itself renders only the high-traffic
+ * shortcuts inline (Load when unloaded, Browse); every action — including those
+ * shortcuts — lives here so the menu stays the complete, labelled list. Rename
+ * is additionally surfaced as a pencil next to the row name. Availability
+ * rules: Load only shows when the item is unloaded; Edit-access only shows in
+ * multi-user mode and is disabled for non-owners.
  */
 
 const svg = (body: string): string =>
@@ -54,6 +56,14 @@ const ICON = {
       '<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
   ),
 };
+
+/**
+ * Min width of the shared context menu, mirroring `.context-menu`'s `min-width`
+ * in `context-menu.component.scss`. Used to right-align the ⋯ overflow menu
+ * under its button so a menu opened at the rightmost Actions column never
+ * spills off the viewport's right edge.
+ */
+export const CARD_MENU_MIN_WIDTH = 200;
 
 export interface CardMenuAccess {
   /** True when running without real auth; access-control actions are hidden. */

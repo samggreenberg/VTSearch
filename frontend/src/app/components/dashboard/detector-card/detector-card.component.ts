@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostBinding, HostListener, Input, input, OnChanges, output, SimpleChanges, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostBinding, HostListener, Input, input, output, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
@@ -11,7 +11,7 @@ import {
 } from '../../../utils/format-progress';
 import { formatTimestamp } from '../../../utils/format-date';
 import { ContextMenuComponent, ContextMenuItem } from '../../context-menu/context-menu.component';
-import { buildDetectorCardMenuItems } from '../card-context-menu-items';
+import { buildDetectorCardMenuItems, CARD_MENU_MIN_WIDTH } from '../card-context-menu-items';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -21,7 +21,7 @@ import { buildDetectorCardMenuItems } from '../card-context-menu-items';
   templateUrl: './detector-card.component.html',
   styleUrl: './detector-card.component.scss',
 })
-export class DetectorCardComponent implements OnChanges {
+export class DetectorCardComponent {
   @Input() detector: any;
   readonly currentUser = input('');
   readonly isDefaultLogin = input(true);
@@ -50,13 +50,7 @@ export class DetectorCardComponent implements OnChanges {
     // there is nothing to act on.
     if (this.loadingTask) return;
     event.preventDefault();
-    this.contextMenuItems = buildDetectorCardMenuItems(this.detector, {
-      isDefaultLogin: this.isDefaultLogin(),
-      isOwner: this.isOwner,
-    });
-    this.contextMenuX = event.clientX;
-    this.contextMenuY = event.clientY;
-    this.contextMenuOpen = true;
+    this.openMenuAt(event.clientX, event.clientY);
   }
   readonly rename = output<string>();
   readonly delete = output<void>();
@@ -77,25 +71,11 @@ export class DetectorCardComponent implements OnChanges {
     return this.detector?.created_by === this.currentUser();
   }
 
-  onSecurity(event: MouseEvent): void {
-    event.stopPropagation();
-    this.security.emit();
-  }
-
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
-
-  readonly deleteConfirmOpen = input(false);
-  readonly addLabelsOpen = input(false);
-  readonly exportOpen = input(false);
-  readonly statsOpen = input(false);
 
   editing = false;
   wasEditing = false;
   editName = '';
-  wasDeleteOpen = false;
-  wasAddLabelsOpen = false;
-  wasExportOpen = false;
-  wasStatsOpen = false;
 
   contextMenuOpen = false;
   contextMenuX = 0;
@@ -113,6 +93,27 @@ export class DetectorCardComponent implements OnChanges {
     this.wasEditing = true;
     this.editName = this.detector.name;
     setTimeout(() => this.renameInput?.nativeElement.focus());
+  }
+
+  /** Open the shared action menu (right-click or ⋯ overflow) at a viewport
+   *  point. ``buildDetectorCardMenuItems`` is the single source of truth for
+   *  the action list. */
+  private openMenuAt(x: number, y: number): void {
+    this.contextMenuItems = buildDetectorCardMenuItems(this.detector, {
+      isDefaultLogin: this.isDefaultLogin(),
+      isOwner: this.isOwner,
+    });
+    this.contextMenuX = x;
+    this.contextMenuY = y;
+    this.contextMenuOpen = true;
+  }
+
+  /** Open the action menu from the ⋯ overflow button, right-aligned under it so
+   *  the menu never spills off the viewport's right edge. */
+  onOverflow(event: MouseEvent): void {
+    event.stopPropagation();
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    this.openMenuAt(Math.max(8, rect.right - CARD_MENU_MIN_WIDTH), rect.bottom + 4);
   }
 
   onContextMenuAction(id: string): void {
@@ -161,48 +162,9 @@ export class DetectorCardComponent implements OnChanges {
     this.editing = false;
   }
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['deleteConfirmOpen'] && !changes['deleteConfirmOpen'].currentValue && changes['deleteConfirmOpen'].previousValue) {
-      this.wasDeleteOpen = true;
-    }
-    if (changes['addLabelsOpen'] && !changes['addLabelsOpen'].currentValue && changes['addLabelsOpen'].previousValue) {
-      this.wasAddLabelsOpen = true;
-    }
-    if (changes['exportOpen'] && !changes['exportOpen'].currentValue && changes['exportOpen'].previousValue) {
-      this.wasExportOpen = true;
-    }
-    if (changes['statsOpen'] && !changes['statsOpen'].currentValue && changes['statsOpen'].previousValue) {
-      this.wasStatsOpen = true;
-    }
-  }
-
   onPencilAnimationEnd(): void {
     if (!this.editing) {
       this.wasEditing = false;
-    }
-  }
-
-  onTrashAnimationEnd(): void {
-    if (!this.deleteConfirmOpen()) {
-      this.wasDeleteOpen = false;
-    }
-  }
-
-  onCapAnimationEnd(): void {
-    if (!this.addLabelsOpen()) {
-      this.wasAddLabelsOpen = false;
-    }
-  }
-
-  onExportAnimationEnd(): void {
-    if (!this.exportOpen()) {
-      this.wasExportOpen = false;
-    }
-  }
-
-  onPieAnimationEnd(): void {
-    if (!this.statsOpen()) {
-      this.wasStatsOpen = false;
     }
   }
 
@@ -222,26 +184,6 @@ export class DetectorCardComponent implements OnChanges {
   onBrowse(event: MouseEvent): void {
     event.stopPropagation();
     this.browse.emit();
-  }
-
-  onStats(event: MouseEvent): void {
-    event.stopPropagation();
-    this.stats.emit();
-  }
-
-  onDelete(event: MouseEvent): void {
-    event.stopPropagation();
-    this.delete.emit();
-  }
-
-  onAddLabels(event: MouseEvent): void {
-    event.stopPropagation();
-    this.addLabels.emit();
-  }
-
-  onExport(event: MouseEvent): void {
-    event.stopPropagation();
-    this.export.emit();
   }
 
   onCheckboxClick(event: MouseEvent): void {
