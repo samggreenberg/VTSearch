@@ -8,3 +8,25 @@
 # pyproject.toml; `[project.dependencies]` plus the `dev` extra.
 
 -e .[dev]
+
+# --- GPU UMAP + k-means via cuML / RAPIDS ------------------------------------
+# cuML accelerates the VTSBrowse UMAP projection and the diversity-tree k-means
+# (~20-100x on large datasets); VTSearch auto-detects it at runtime and falls
+# back to the CPU umap-learn / scikit-learn paths when it's absent (see
+# vtscore/gpu_backends.py). `scripts/install.sh` installs it BY DEFAULT on GPU
+# hosts, but as a separate best-effort step (it's a multi-gigabyte RAPIDS stack
+# on a CUDA-major-pinned, separate index), so a failure there is non-fatal.
+#
+# It is intentionally NOT listed below as a hard requirement: pulling it into
+# this main pass would let a slow/unreachable NVIDIA index or a torch resolver
+# conflict abort the whole GPU install, and would break non-Linux / offline GPU
+# installs. docker/Dockerfile.gpu installs it in its own dedicated RUN layer
+# (fail-loud, since a build-once-ship image should surface a resolver conflict
+# rather than silently ship a CPU-only UMAP). To add it manually elsewhere
+# (air-gapped re-install, or after VTSEARCH_SKIP_CUML=1), install the wheel
+# matching your CUDA major version from the NVIDIA index, e.g. for CUDA 12:
+#
+#   pip install --extra-index-url https://pypi.nvidia.com cuml-cu12
+#
+# (use cuml-cu11 on CUDA 11 hosts). Output differs numerically from the CPU
+# path; this is safe because both consumers freeze/persist their result once.

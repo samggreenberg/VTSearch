@@ -66,6 +66,22 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
         --prefer-binary \
         -r requirements/gpu.txt
 
+# ---------- cuML / RAPIDS layer (GPU UMAP + k-means) ----------
+# cuML accelerates the VTSBrowse UMAP projection and the diversity-tree k-means
+# (~20-100x on large sets); without it the app falls back to CPU umap-learn /
+# scikit-learn (see vtscore/gpu_backends.py). The base image is CUDA 12, so we
+# install the cuml-cu12 wheel from the NVIDIA index. This is its own RUN layer
+# so it stays cache-friendly and doesn't disturb the pinned torch install above.
+#
+# Unlike scripts/install.sh (best-effort on heterogeneous hosts), this is
+# fail-loud on purpose: a build-once-ship image should break here if cuML can't
+# resolve against the pinned torch build, rather than silently shipping a 12 GB
+# GPU image that still runs UMAP on the CPU. Adds ~3-4 GB to the image.
+RUN pip install --no-cache-dir \
+        --extra-index-url https://pypi.nvidia.com \
+        --prefer-binary \
+        cuml-cu12
+
 # ---------- application layer ----------
 COPY . .
 

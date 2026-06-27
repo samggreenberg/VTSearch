@@ -168,6 +168,7 @@ DEP001 = [
     "torchvision",
     "safetensors",
     "huggingface_hub",
+    "cuml",
 ]
 # DEP003: imported as a transitive of another declared dependency.
 # ``safetensors`` and ``torchvision`` ship with ``transformers`` / ``torch``

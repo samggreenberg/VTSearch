@@ -1,8 +1,10 @@
 # GPU acceleration audit
 
 **Status: Phase 1 shipped (device-aware embedders + no-new-dep converter GPU
-paths). Phase 2 (new-dependency accelerators) and the deliberately-skipped
-signal-rewrite items are deferred; see Open follow-ups.**
+paths). Phase 2 partially shipped — GPU UMAP + GPU k-means via cuML landed
+(opt-in dependency); video frame decode (decord) is still deferred. The
+deliberately-skipped signal-rewrite items remain out of scope. See What shipped
+(Phase 2) and Open follow-ups.**
 
 VTSearch already had production-grade device infrastructure that nothing on the
 embedding side was using:
@@ -68,22 +70,57 @@ the call in the code:
   cost in spectrograms) stays on CPU regardless. Net: real risk, marginal/no
   payoff. Left on CPU on purpose.
 
-## Open follow-ups (Phase 2 — each needs a new heavyweight dependency)
+## What shipped (Phase 2 — cuML)
 
-Bigger speedups that were scoped out because they add optional GPU dependencies
-and touch the careful CPU/GPU install story (`scripts/install.sh`,
-`requirements/`, `docker/`):
+GPU UMAP and GPU k-means now run on the accelerator when cuML/RAPIDS is present,
+falling back to the CPU libraries otherwise:
+
+- **`vtscore/gpu_backends.py`** — new shared module centralising the cuML
+  backend story (mirrors how `to_compute_device` centralises the embedder
+  story). `cuml_enabled()` is true only when `resolve_device()` returns a usable
+  CUDA device *and* `cuml` imports; `make_umap(...)` / `make_kmeans(...)` build
+  the GPU estimator (`output_type="numpy"`) and degrade to `umap-learn` /
+  `sklearn.cluster.KMeans` on any hiccup.
+- **UMAP projection** (`vtscore/projection/umap_projection.py::_umap_layout`) —
+  constructs its reducer via `make_umap`; the heartbeat/threading wrapper is
+  unchanged. `cuml.manifold.UMAP` is ~20–100× on large sets.
+- **Diversity-tree k-means** (`vtscore/state/diversity_tree.py`) — the per-init
+  build loop constructs its estimator via `make_kmeans`. The eager top-level
+  `sklearn` import is retained to warm the CPU cold-import before the progress
+  bar (and as the fallback).
+- **Default best-effort dependency** — `scripts/install.sh` installs cuML by
+  default on GPU hosts via `vts_install_cuml`, but as a *separate, non-fatal*
+  step: it maps the CUDA tag to `cuml-cu11` / `cuml-cu12`, installs from the
+  NVIDIA index (`pypi.nvidia.com`), and warns-and-continues on failure so a
+  slow/unreachable index or a torch resolver conflict can't abort the whole GPU
+  install. Skip with `VTSEARCH_SKIP_CUML=1`. cuML is deliberately kept OUT of the
+  main `requirements/gpu.txt` pass (a hard requirement there would break
+  non-Linux/offline GPU installs and let an index hiccup abort everything).
+  `docker/Dockerfile.gpu` installs `cuml-cu12` in its own dedicated RUN layer
+  (~+3-4 GB, ~8.5 GB → ~12 GB image), fail-loud on purpose: a build-once-ship
+  image should surface a torch/cuML resolver conflict rather than silently ship
+  a CPU-only UMAP. The runtime detection (`vtscore/gpu_backends.py`) means a
+  missing cuML just uses the CPU fallback.
+- **GPU tests** (`tests_lib/gpu/test_gpu.py::TestCuMLBackends`) — exercise the
+  factory contract (works + returns numpy whether it resolves to cuML or the CPU
+  fallback) plus end-to-end `fit_projection` and `DiversityTree` builds, with the
+  cuML-specific assertions guarded by an import check.
+
+**Output note:** cuML is a separate implementation, so the projection
+coordinates and k-means labels differ numerically from the CPU path. This is
+safe because both consumers compute their result exactly once and then
+freeze/persist it (projection frozen per dataset; diversity tree cached in the
+dataset pickle), so the non-reproducibility never surfaces; the *structure* is
+preserved. CPU-only hosts (and GPU hosts without cuML) are byte-for-byte
+unchanged.
+
+## Open follow-ups (Phase 2 — remaining)
 
 - **Video frame decode** (`converters/video2image.py`, `media/video/_frame_sampling.py`)
   — currently OpenCV (CPU). `decord` / PyAV+NVDEC would give the largest
   converter win (multi-hour → minutes on large video sets). Needs `decord`.
-- **GPU UMAP** (`vtscore/projection/umap_projection.py`) — `umap-learn` is CPU
-  (30–60s on 100k). `cuml.manifold.UMAP` is API-compatible; ~20–100× on large
-  sets. Needs cuML/RAPIDS.
-- **GPU k-means for the diversity tree** (`vtscore/state/diversity_tree.py`) —
-  sklearn KMeans (CPU). `cuml.cluster.KMeans` would cut tree-build time on
-  50k+-item datasets. Needs cuML/RAPIDS.
 
-When picking up Phase 2: gate any new GPU dependency behind the existing
-CPU/GPU install split and keep a CPU fallback path, exactly as the embedder work
-does via `resolve_device()`.
+When picking up the remaining item: gate any new GPU dependency behind the
+existing CPU/GPU install split and keep a CPU fallback path, exactly as the
+embedder work does via `resolve_device()` and the cuML work does via
+`vtscore/gpu_backends.py`.

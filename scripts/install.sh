@@ -105,6 +105,50 @@ vts_install_cpu() {
     vts_progress_done "CPU dependencies installed successfully"
 }
 
+# --- optional cuML / RAPIDS accelerator (best-effort) ------------------------
+# cuML powers GPU UMAP (VTSBrowse projection) and GPU k-means (diversity tree);
+# VTSearch auto-detects it at runtime and falls back to the CPU umap-learn /
+# scikit-learn paths when it's absent (see vtscore/gpu_backends.py). We install
+# it by default on GPU hosts, but as an ISOLATED, NON-FATAL step:
+#
+#   - It's a multi-gigabyte RAPIDS stack (cudf, rmm, cupy, ...) and lives on a
+#     separate index (pypi.nvidia.com), so a slow/unreachable index or a
+#     resolver hiccup must NOT abort an otherwise-good GPU install.
+#   - The wheel is CUDA-major-pinned: cu11* tags -> cuml-cu11, cu12* -> cuml-cu12.
+#   - RAPIDS ships linux-only wheels for a fixed Python range; on an unsupported
+#     platform/Python this step just warns and the app uses the CPU fallback.
+#
+# Override/skip with VTSEARCH_SKIP_CUML=1 (e.g. air-gapped installs that can't
+# reach the NVIDIA index, or when you simply don't want the download).
+vts_install_cuml() {
+    local cuda_tag="$1"
+
+    if [ "${VTSEARCH_SKIP_CUML:-0}" = "1" ]; then
+        echo "  (skipped: VTSEARCH_SKIP_CUML=1; GPU UMAP/k-means will use the CPU fallback)"
+        return 0
+    fi
+
+    local cuml_pkg
+    case "$cuda_tag" in
+        cu11*) cuml_pkg="cuml-cu11" ;;
+        *) cuml_pkg="cuml-cu12" ;;  # cu12x and anything else: cuML's CUDA-12 wheel
+    esac
+
+    # Isolated pass against the NVIDIA index. Guarded so `set -e` can't abort the
+    # install on failure; the runtime cuML detection degrades to CPU either way.
+    if pip install --extra-index-url https://pypi.nvidia.com \
+        --prefer-binary \
+        "$cuml_pkg" \
+        --progress-bar on; then
+        echo "  cuML installed: GPU UMAP + k-means enabled."
+    else
+        echo "warning: cuML (${cuml_pkg}) install failed; GPU UMAP/k-means will fall" >&2
+        echo "         back to the CPU umap-learn / scikit-learn paths. This is" >&2
+        echo "         non-fatal. Re-run later with a reachable pypi.nvidia.com, or" >&2
+        echo "         set VTSEARCH_SKIP_CUML=1 to silence this step." >&2
+    fi
+}
+
 # --- GPU install -------------------------------------------------------------
 # The PyTorch extra-index (download.pytorch.org/whl/cu*) sometimes serves source
 # tarballs for packages like numpy and scipy, so we pre-install them as
@@ -114,7 +158,7 @@ vts_install_gpu() {
     local cuda_tag="$1"
     local extra_index="https://download.pytorch.org/whl/${cuda_tag}"
 
-    vts_progress_init 6 "Installing VTSearch GPU dependencies (CUDA tag: ${cuda_tag})"
+    vts_progress_init 7 "Installing VTSearch GPU dependencies (CUDA tag: ${cuda_tag})"
 
     vts_progress_step "Checking Python version (>= 3.10)"
     # shellcheck source=_check-python.sh
@@ -151,6 +195,9 @@ vts_install_gpu() {
       --prefer-binary \
       -r "$REPO_ROOT/requirements/gpu.txt" \
       --progress-bar on
+
+    vts_progress_step "Installing optional cuML/RAPIDS accelerator (best-effort; CUDA tag: ${cuda_tag})"
+    vts_install_cuml "$cuda_tag"
 
     vts_progress_step "Wiring up pre-commit git hook"
     vts_install_precommit
