@@ -17,6 +17,20 @@
   border-collapse: collapse;
   font-size: var(--font-md);
 
+  // The Actions column hugs its inline icon buttons rather than flexing with
+  // the table. It carries two 22px buttons at rest (Delete, ⋯) — one 4px gap,
+  // ~48px + the cell's side padding — so it stays tight. When any row in the
+  // table is unloaded (`.actions-has-load`, set by the component) a third Load
+  // button appears, so the column widens to fit three buttons. Pinned via this
+  // width — applied to the header and body cells below, and inherited by the
+  // card rows' own `td.actions-col` — instead of the resizable percentage
+  // system, so it stays narrow in both auto and fixed table-layout.
+  --actions-col-width: 4.5rem;
+
+  &.actions-has-load {
+    --actions-col-width: 6rem;
+  }
+
   th, td {
     padding: var(--space-sm) var(--space-md);
     text-align: left;
@@ -35,8 +49,11 @@
   }
 
   // Pinned columns: Select on the far left, Name next, Actions on the right.
+  // Actions is held to a fixed content width (see --actions-col-width) and is
+  // excluded from the drag-resize percentage flow, so it never widens.
   th.actions-col,
   td.actions-col {
+    width: var(--actions-col-width);
     text-align: right;
   }
 

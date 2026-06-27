@@ -46,7 +46,7 @@
       <p class="empty-state">No datasets yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
-        <table class="dash-table" [class.table-fixed]="datasetCols.tableFixed">
+        <table class="dash-table" [class.table-fixed]="datasetCols.tableFixed" [class.actions-has-load]="anyDatasetUnloaded">
           <thead>
             <tr>
               <th class="select-col" data-col="select" [style.width.%]="datasetCols.tableFixed ? datasetCols.colWidths['select'] : null">
@@ -90,7 +90,9 @@
                   (dragend)="datasetCols.onColDragEnd($event)"
                 ><div class="col-resize-handle" (mousedown)="datasetCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>{{ datasetCols.meta(col).label }}@if (datasetCols.meta(col).sortable) {<span class="sort-indicator" [class.active]="datasetCols.isSortActive(col)">{{ datasetCols.sortIndicator(col) }}</span>}</th>
               }
-              <th class="actions-col" data-col="actions" [title]="datasetCols.meta('actions').title" [style.width.%]="datasetCols.tableFixed ? datasetCols.colWidths['actions'] : null"><div class="col-resize-handle" (mousedown)="datasetCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>{{ datasetCols.meta('actions').label }}</th>
+              <!-- Actions is a fixed, content-width column (see --actions-col-width):
+                   no width binding, no resize handle — it stays pinned narrow. -->
+              <th class="actions-col" data-col="actions" [title]="datasetCols.meta('actions').title">{{ datasetCols.meta('actions').label }}</th>
             </tr>
           </thead>
           <tbody>
@@ -199,7 +201,7 @@
       <p class="empty-state">No detectors yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
-        <table class="dash-table" [class.table-fixed]="detectorCols.tableFixed">
+        <table class="dash-table" [class.table-fixed]="detectorCols.tableFixed" [class.actions-has-load]="anyDetectorUnloaded">
           <thead>
             <tr>
               <th class="select-col" data-col="select" [style.width.%]="detectorCols.tableFixed ? detectorCols.colWidths['select'] : null">
@@ -243,7 +245,9 @@
                   (dragend)="detectorCols.onColDragEnd($event)"
                 ><div class="col-resize-handle" (mousedown)="detectorCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>{{ detectorCols.meta(col).label }}@if (detectorCols.meta(col).sortable) {<span class="sort-indicator" [class.active]="detectorCols.isSortActive(col)">{{ detectorCols.sortIndicator(col) }}</span>}</th>
               }
-              <th class="actions-col" data-col="actions" [title]="detectorCols.meta('actions').title" [style.width.%]="detectorCols.tableFixed ? detectorCols.colWidths['actions'] : null"><div class="col-resize-handle" (mousedown)="detectorCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>{{ detectorCols.meta('actions').label }}</th>
+              <!-- Actions is a fixed, content-width column (see --actions-col-width):
+                   no width binding, no resize handle — it stays pinned narrow. -->
+              <th class="actions-col" data-col="actions" [title]="detectorCols.meta('actions').title">{{ detectorCols.meta('actions').label }}</th>
             </tr>
           </thead>
           <tbody>

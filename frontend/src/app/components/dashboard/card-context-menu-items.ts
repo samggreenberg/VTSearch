@@ -2,11 +2,13 @@ import type { ContextMenuItem } from '../context-menu/context-menu.component';
 
 /**
  * Builds the action menu for the dashboard's dataset and detector rows. The
- * same list backs both the right-click context menu and the ⋯ overflow button
- * in the Actions column. The column itself renders only the high-traffic
- * shortcuts inline (Load when unloaded, Browse); every action — including those
- * shortcuts — lives here so the menu stays the complete, labelled list. Rename
- * is additionally surfaced as a pencil next to the row name. Availability
+ * full list backs the right-click context menu, where being complete is the
+ * point. The Actions column renders only the two universal verbs inline (Load
+ * when unloaded, Delete); the ⋯ overflow button reuses this same list but drops
+ * those inline verbs (see ``overflowMenuItems``) so it reads as "more" — Browse,
+ * Rename, Stats, and detector-only Import Labels / Export, plus Edit-access in
+ * multi-user mode — rather than repeating icons already visible in the row.
+ * Rename is additionally surfaced as a pencil next to the row name. Availability
  * rules: Load only shows when the item is unloaded; Edit-access only shows in
  * multi-user mode and is disabled for non-owners.
  */
@@ -64,6 +66,19 @@ const ICON = {
  * spills off the viewport's right edge.
  */
 export const CARD_MENU_MIN_WIDTH = 200;
+
+/**
+ * Action ids the Actions column already renders as inline icon buttons (Load
+ * only when unloaded, Delete). ``overflowMenuItems`` strips these from the ⋯
+ * overflow menu so it shows only what isn't already one click away in the row.
+ * The right-click context menu keeps the complete list.
+ */
+const INLINE_CARD_ACTION_IDS: ReadonlySet<string> = new Set(['load', 'delete']);
+
+/** The ⋯ overflow subset of a card menu: the full list minus the inline verbs. */
+export function overflowMenuItems(items: ContextMenuItem[]): ContextMenuItem[] {
+  return items.filter((item) => !INLINE_CARD_ACTION_IDS.has(item.id));
+}
 
 export interface CardMenuAccess {
   /** True when running without real auth; access-control actions are hidden. */

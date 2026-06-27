@@ -1117,6 +1117,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** True when at least one dataset row shows its Load button (i.e. is
+   *  unloaded). The Actions column reserves room for the extra icon only then,
+   *  shrinking to the two always-present buttons (Delete, ⋯) otherwise. */
+  get anyDatasetUnloaded(): boolean {
+    return this.datasets.some((d) => !d.loaded);
+  }
+
+  /** Detector counterpart of {@link anyDatasetUnloaded}; unloaded detectors
+   *  show a Load button so the Actions column widens to fit it. */
+  get anyDetectorUnloaded(): boolean {
+    return this.detectors.some((d) => !d.detector_loaded);
+  }
+
   // --- Button state ---
 
   /** True only while the **active (dataset, detector) pair** is mid-switch:
