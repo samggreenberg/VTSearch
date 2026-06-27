@@ -561,6 +561,29 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     }
   }
 
+  /** True when the item currently shown in the preview pane is selected, so the
+   *  large detail image can render the same highlight ring as a grid entry. */
+  isPreviewSelected(): boolean {
+    return this.previewId != null && this.selection.has(this.previewId);
+  }
+
+  /** Toggle selection of the item shown in the preview pane (the hovered grid
+   *  item, or the lone member of a singleton bin). This is the only way to select
+   *  in a one-member popup, where the grid — and so every other select target —
+   *  is dropped; it also lets the user select by clicking the big detail image in
+   *  a multi-member popup. */
+  onPreviewClick(): void {
+    const id = this.previewId;
+    if (id != null) this.onEntryClick(id);
+  }
+
+  onPreviewKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.onPreviewClick();
+    }
+  }
+
   // --- Hover: preview the full-res original (image/video) + hear (audio) ----
 
   onEntryEnter(id: number): void {

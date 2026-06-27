@@ -50,7 +50,16 @@
 
   <div class="bin-popup-body" [style.height.px]="bodyHeight">
     @if (showPreview) {
-      <div class="bin-popup-preview" [style.width.px]="previewPaneSize">
+      <div
+        class="bin-popup-preview"
+        [class.selected]="isPreviewSelected()"
+        [style.width.px]="previewPaneSize"
+        role="button"
+        tabindex="0"
+        [attr.aria-pressed]="isPreviewSelected()"
+        [attr.aria-label]="(previewId != null ? name(previewId) : 'item') + (isPreviewSelected() ? ' (selected; click to deselect)' : ' (click to select)')"
+        (click)="onPreviewClick()"
+        (keydown)="onPreviewKeydown($event)">
         @if (previewUrl()) {
           <img
             class="bin-popup-preview-img"
