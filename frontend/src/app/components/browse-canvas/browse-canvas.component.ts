@@ -1519,9 +1519,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     }
     // Image/video datasets paint a thumbnail per cell; warm the ring's thumbnails
     // on idle so they're decoded before the cells scroll in. Pure-density media
-    // (audio/text) draw no thumbnails, and the full-res tier fetches whole-image
-    // bitmaps whose memory cost rules out speculative loading — skip both.
-    if (this.thumbnailMode && !this.thumbsAreFullRes) this.scheduleThumbPrefetch();
+    // (audio/text) draw no thumbnails, so there's nothing to warm. Warming follows
+    // the same resolution tier (capped /thumbnail vs full-res /image) and the same
+    // count-bounded LRU as on-demand loads, so it can't raise the memory ceiling —
+    // it only reaches it sooner, and visible thumbnails (which bump recency) are
+    // evicted last.
+    if (this.thumbnailMode) this.scheduleThumbPrefetch();
   }
 
   /**
@@ -1594,7 +1597,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * cache cap so a preload never evicts a visible thumbnail.
    */
   private runThumbPrefetch(): void {
-    if (!this.thumbnailMode || this.thumbsAreFullRes || !this.meta()) return;
+    if (!this.thumbnailMode || !this.meta()) return;
     const level = this.activeLevel;
     let budget = BrowseCanvasComponent.PRELOAD_MAX_PER_PASS;
     for (const { tx, ty } of this.offViewRing(this.getVisibleTiles())) {
