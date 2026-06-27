@@ -74,6 +74,19 @@ td.actions-col {
   }
 }
 
+// The rename pencil lives next to the row name and only surfaces on row hover
+// (or keyboard focus) so it stays out of the resting layout. Opacity (not
+// display) keeps the name cell's width stable, avoiding a shift on hover.
+.name-edit-btn {
+  opacity: 0;
+  transition: opacity var(--transition-base), background var(--transition-base);
+}
+
+:host:hover .name-edit-btn,
+.name-edit-btn:focus-visible {
+  opacity: 1;
+}
+
 @keyframes pencil-rotate-open {
   0% { transform: rotate(0deg); }
   50% { transform: rotate(22.5deg); }
@@ -83,18 +96,6 @@ td.actions-col {
 @keyframes pencil-rotate-close {
   0% { transform: rotate(45deg); }
   50% { transform: rotate(22.5deg); }
-  100% { transform: rotate(0deg); }
-}
-
-@keyframes icon-rotate-open {
-  0% { transform: rotate(0deg); }
-  50% { transform: rotate(45deg); }
-  100% { transform: rotate(90deg); }
-}
-
-@keyframes icon-rotate-close {
-  0% { transform: rotate(90deg); }
-  50% { transform: rotate(45deg); }
   100% { transform: rotate(0deg); }
 }
 
@@ -149,7 +150,7 @@ td.actions-col {
   }
 }
 
-.stats-btn {
+.overflow-btn {
   background: none;
   border: none;
   color: var(--text-primary);
@@ -163,14 +164,6 @@ td.actions-col {
 
   &:hover {
     background: var(--btn-icon-hover-bg);
-  }
-
-  .pie-active {
-    animation: icon-rotate-open var(--transition-slow) ease-in-out forwards;
-  }
-
-  .pie-inactive {
-    animation: icon-rotate-close var(--transition-slow) ease-in-out forwards;
   }
 }
 
@@ -186,82 +179,6 @@ td.actions-col {
     flex: 1;
     font-size: var(--font-md);
     color: var(--error-text);
-  }
-}
-
-.add-labels-btn {
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  cursor: pointer;
-  padding: var(--space-xs);
-  border-radius: var(--radius-md);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: color var(--transition-base), background var(--transition-base);
-
-  &:hover {
-    background: var(--btn-icon-hover-bg);
-  }
-
-  .cap-active {
-    animation: icon-rotate-open var(--transition-slow) ease-in-out forwards;
-  }
-
-  .cap-inactive {
-    animation: icon-rotate-close var(--transition-slow) ease-in-out forwards;
-  }
-}
-
-.export-btn {
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  cursor: pointer;
-  padding: var(--space-xs);
-  border-radius: var(--radius-md);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: color var(--transition-base), background var(--transition-base);
-
-  &:hover {
-    background: var(--btn-icon-hover-bg);
-  }
-
-  .export-active {
-    animation: icon-rotate-open var(--transition-slow) ease-in-out forwards;
-  }
-
-  .export-inactive {
-    animation: icon-rotate-close var(--transition-slow) ease-in-out forwards;
-  }
-}
-
-.delete-btn {
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  cursor: pointer;
-  padding: var(--space-xs);
-  border-radius: var(--radius-md);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: color var(--transition-base), background var(--transition-base);
-
-  &:hover {
-    color: var(--color-bad);
-    background: var(--btn-icon-hover-bg);
-  }
-
-  .trash-active {
-    animation: icon-rotate-open var(--transition-slow) ease-in-out forwards;
-  }
-
-  .trash-inactive {
-    animation: icon-rotate-close var(--transition-slow) ease-in-out forwards;
   }
 }
 
@@ -289,27 +206,5 @@ td.select-col {
 
   &:hover {
     background: var(--btn-icon-hover-bg);
-  }
-}
-
-.security-btn {
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  cursor: pointer;
-  padding: var(--space-xs);
-  border-radius: var(--radius-md);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: color var(--transition-base), background var(--transition-base);
-
-  &:hover:not(.disabled) {
-    background: var(--btn-icon-hover-bg);
-  }
-
-  &.disabled {
-    opacity: var(--opacity-disabled);
-    cursor: not-allowed;
   }
 }

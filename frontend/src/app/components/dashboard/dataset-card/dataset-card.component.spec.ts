@@ -113,12 +113,26 @@ describe('DatasetCardComponent', () => {
     expect(component.rename.emit).not.toHaveBeenCalled();
   });
 
-  it('should emit delete on delete button click', () => {
+  it('should emit delete from the overflow menu', async () => {
     vi.spyOn(component.delete, 'emit');
     const el = fixture.nativeElement as HTMLElement;
-    const deleteBtn = el.querySelector('.delete-btn') as HTMLElement;
-    deleteBtn.click();
+    (el.querySelector('.overflow-btn') as HTMLElement).click();
+    await settleZoneless(fixture);
+    const items = Array.from(el.querySelectorAll('.menu-item')) as HTMLElement[];
+    const deleteItem = items.find((b) => b.textContent?.includes('Delete'));
+    expect(deleteItem).toBeTruthy();
+    deleteItem!.click();
     expect(component.delete.emit).toHaveBeenCalled();
+  });
+
+  it('should open the overflow menu with the labelled action list', async () => {
+    const el = fixture.nativeElement as HTMLElement;
+    (el.querySelector('.overflow-btn') as HTMLElement).click();
+    await settleZoneless(fixture);
+    const labels = Array.from(el.querySelectorAll('.menu-item')).map((b) => b.textContent?.trim());
+    // Loaded, single-user dataset: Browse / Rename / Stats / Delete (no Load,
+    // no Edit-access).
+    expect(labels).toEqual(['Browse dataset', 'Rename', 'Stats', 'Delete']);
   });
 
   it('should emit browse on browse button click for audio datasets', () => {
