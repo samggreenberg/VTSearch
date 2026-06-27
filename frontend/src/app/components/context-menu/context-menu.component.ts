@@ -1,5 +1,5 @@
 
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, OnDestroy, OnInit, inject, input, output } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 export interface ContextMenuItem {
@@ -27,7 +27,7 @@ export interface ContextMenuItem {
   templateUrl: './context-menu.component.html',
   styleUrl: './context-menu.component.scss',
 })
-export class ContextMenuComponent {
+export class ContextMenuComponent implements OnInit, OnDestroy {
   private host = inject<ElementRef<HTMLElement>>(ElementRef);
   private sanitizer = inject(DomSanitizer);
 
@@ -49,18 +49,35 @@ export class ContextMenuComponent {
     return safe;
   }
 
-  @HostListener('document:click', ['$event'])
-  onDocumentClick(event: MouseEvent): void {
+  /**
+   * Dismiss on any click / right-click outside the menu. These run in the
+   * *capture* phase (note the `true` flag) rather than via a bubble-phase
+   * `@HostListener('document:click')`, because the element being clicked may
+   * `stopPropagation()` before the event bubbles to `document` — e.g. a
+   * dashboard card's ⋯ overflow button stops the click so it doesn't select
+   * the row. A bubble-phase listener never fires in that case, so an
+   * already-open menu would linger when the user clicked a *different* card's
+   * ⋯ button. Capture sees every event before any descendant can swallow it.
+   *
+   * The listeners are plain DOM listeners (not Angular `@HostListener`s) so
+   * they can opt into capture. They fire outside Angular, but the consumer's
+   * `(dismissed)` template binding still schedules change detection on emit
+   * under zoneless (the same mechanism `panel-resize.directive` relies on).
+   */
+  private readonly onDocumentPointer = (event: Event): void => {
     if (!this.host.nativeElement.contains(event.target as Node)) {
       this.dismissed.emit();
     }
+  };
+
+  ngOnInit(): void {
+    document.addEventListener('click', this.onDocumentPointer, true);
+    document.addEventListener('contextmenu', this.onDocumentPointer, true);
   }
 
-  @HostListener('document:contextmenu', ['$event'])
-  onDocumentContextMenu(event: MouseEvent): void {
-    if (!this.host.nativeElement.contains(event.target as Node)) {
-      this.dismissed.emit();
-    }
+  ngOnDestroy(): void {
+    document.removeEventListener('click', this.onDocumentPointer, true);
+    document.removeEventListener('contextmenu', this.onDocumentPointer, true);
   }
 
   @HostListener('document:keydown.escape')
