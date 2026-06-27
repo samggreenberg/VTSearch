@@ -95,10 +95,12 @@ falling back to the CPU libraries otherwise:
   slow/unreachable index or a torch resolver conflict can't abort the whole GPU
   install. Skip with `VTSEARCH_SKIP_CUML=1`. cuML is deliberately kept OUT of the
   main `requirements/gpu.txt` pass (a hard requirement there would break
-  non-Linux/offline GPU installs and let an index hiccup abort everything); that
-  file documents the manual one-liner for the Docker / air-gapped paths, which
-  keep cuML out to avoid multi-GB image bloat. The runtime detection
-  (`vtscore/gpu_backends.py`) means a missing cuML just uses the CPU fallback.
+  non-Linux/offline GPU installs and let an index hiccup abort everything).
+  `docker/Dockerfile.gpu` installs `cuml-cu12` in its own dedicated RUN layer
+  (~+3-4 GB, ~8.5 GB → ~12 GB image), fail-loud on purpose: a build-once-ship
+  image should surface a torch/cuML resolver conflict rather than silently ship
+  a CPU-only UMAP. The runtime detection (`vtscore/gpu_backends.py`) means a
+  missing cuML just uses the CPU fallback.
 - **GPU tests** (`tests_lib/gpu/test_gpu.py::TestCuMLBackends`) — exercise the
   factory contract (works + returns numpy whether it resolves to cuML or the CPU
   fallback) plus end-to-end `fit_projection` and `DiversityTree` builds, with the

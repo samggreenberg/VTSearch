@@ -20,10 +20,11 @@
 # It is intentionally NOT listed below as a hard requirement: pulling it into
 # this main pass would let a slow/unreachable NVIDIA index or a torch resolver
 # conflict abort the whole GPU install, and would break non-Linux / offline GPU
-# installs (e.g. this file is also consumed directly by docker/Dockerfile.gpu,
-# which keeps cuML out to avoid multi-GB image bloat). To add it manually
-# (Docker, air-gapped re-install, or after VTSEARCH_SKIP_CUML=1), install the
-# wheel matching your CUDA major version from the NVIDIA index, e.g. for CUDA 12:
+# installs. docker/Dockerfile.gpu installs it in its own dedicated RUN layer
+# (fail-loud, since a build-once-ship image should surface a resolver conflict
+# rather than silently ship a CPU-only UMAP). To add it manually elsewhere
+# (air-gapped re-install, or after VTSEARCH_SKIP_CUML=1), install the wheel
+# matching your CUDA major version from the NVIDIA index, e.g. for CUDA 12:
 #
 #   pip install --extra-index-url https://pypi.nvidia.com cuml-cu12
 #

@@ -28,9 +28,9 @@ separate *best-effort* step (``vts_install_cuml``): it is a multi-gigabyte
 RAPIDS stack on a CUDA-major-pinned, separate index (``pypi.nvidia.com``), so a
 slow/unreachable index or a torch resolver conflict must not abort an otherwise
 good GPU install.  It is deliberately kept out of the main ``requirements/gpu.txt``
-pass for the same reason (that file is also consumed directly by
-``docker/Dockerfile.gpu``, which keeps cuML out to avoid multi-GB image bloat).
-Skip it with ``VTSEARCH_SKIP_CUML=1``.  Whenever cuML is absent — skipped, failed
+pass for the same reason; ``docker/Dockerfile.gpu`` installs it in its own
+dedicated (fail-loud) layer instead.  Skip the host-script step with
+``VTSEARCH_SKIP_CUML=1``.  Whenever cuML is absent — skipped, failed
 to install, or an unsupported platform — everything falls back to the CPU
 libraries automatically.
 """
