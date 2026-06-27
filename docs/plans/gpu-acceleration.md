@@ -88,12 +88,17 @@ falling back to the CPU libraries otherwise:
   build loop constructs its estimator via `make_kmeans`. The eager top-level
   `sklearn` import is retained to warm the CPU cold-import before the progress
   bar (and as the fallback).
-- **Opt-in dependency** — cuML is documented as a commented opt-in in
-  `requirements/gpu.txt`, **not** auto-installed. It is multi-gigabyte and
-  pinned to a CUDA major version, so forcing it on every GPU install would break
-  the cu118/older-runtime and offline install paths for marginal gain on small
-  datasets. Users install `cuml-cu12` / `cuml-cu11` themselves; the code detects
-  it at runtime.
+- **Default best-effort dependency** — `scripts/install.sh` installs cuML by
+  default on GPU hosts via `vts_install_cuml`, but as a *separate, non-fatal*
+  step: it maps the CUDA tag to `cuml-cu11` / `cuml-cu12`, installs from the
+  NVIDIA index (`pypi.nvidia.com`), and warns-and-continues on failure so a
+  slow/unreachable index or a torch resolver conflict can't abort the whole GPU
+  install. Skip with `VTSEARCH_SKIP_CUML=1`. cuML is deliberately kept OUT of the
+  main `requirements/gpu.txt` pass (a hard requirement there would break
+  non-Linux/offline GPU installs and let an index hiccup abort everything); that
+  file documents the manual one-liner for the Docker / air-gapped paths, which
+  keep cuML out to avoid multi-GB image bloat. The runtime detection
+  (`vtscore/gpu_backends.py`) means a missing cuML just uses the CPU fallback.
 - **GPU tests** (`tests_lib/gpu/test_gpu.py::TestCuMLBackends`) — exercise the
   factory contract (works + returns numpy whether it resolves to cuML or the CPU
   fallback) plus end-to-end `fit_projection` and `DiversityTree` builds, with the

@@ -23,12 +23,16 @@ frozen per dataset; the diversity tree is cached in the dataset pickle), so the
 non-reproducibility never surfaces.  The *structure* (neighbourhoods / cluster
 topology) is preserved — that's the whole point of these algorithms.
 
-cuML is intentionally **not** in the default GPU install (``requirements/gpu.txt``)
-because it is multi-gigabyte and pinned to a CUDA major version; pulling it onto
-every GPU host would break the careful CPU/GPU install split for marginal benefit
-on small datasets.  Users who want the speedup install it explicitly (see the
-commented line in ``requirements/gpu.txt``); when it is absent everything falls
-back to the CPU libraries automatically.
+``scripts/install.sh`` installs cuML **by default** on GPU hosts, but as a
+separate *best-effort* step (``vts_install_cuml``): it is a multi-gigabyte
+RAPIDS stack on a CUDA-major-pinned, separate index (``pypi.nvidia.com``), so a
+slow/unreachable index or a torch resolver conflict must not abort an otherwise
+good GPU install.  It is deliberately kept out of the main ``requirements/gpu.txt``
+pass for the same reason (that file is also consumed directly by
+``docker/Dockerfile.gpu``, which keeps cuML out to avoid multi-GB image bloat).
+Skip it with ``VTSEARCH_SKIP_CUML=1``.  Whenever cuML is absent — skipped, failed
+to install, or an unsupported platform — everything falls back to the CPU
+libraries automatically.
 """
 
 from __future__ import annotations
