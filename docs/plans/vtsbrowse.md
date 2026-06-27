@@ -744,6 +744,24 @@ in git history and the cited source files.
   surviving rep is left in place even if it ends up slightly off-centre. If
   wanted, re-centre lazily (only the bins whose membership changed) so it never
   blocks the repaint.
+- ~~**Zoom-out border fill (overscanned snapshot)**~~ — the picture-in-picture
+  zoom transition froze a *viewport-sized* snapshot and scaled it; on zoom-out
+  the shrinking frame left the newly-revealed margin as a black border. The
+  snapshot now overscans on zoom-out (`BrowseCanvasComponent.SNAP_OVERSCAN_MAX`,
+  capped at 2× per axis): the already-rendered viewport stays the frozen centre
+  (a free `drawImage` of the live canvas) and the surrounding ring is
+  re-rendered from the **source** level's bins (`renderSnapshotBorder`,
+  `displayedLevel`), painting the thumbnails the off-view prefetch already
+  warmed in `thumbCache`. The shrunk blit then covers the canvas with real
+  content. The ring draws only from **cached** tiles (`tileCache.getCached`), so
+  the fill reaches as far as the cache does and falls off to background past it
+  — never a network wait, and the per-frame loop stays a single blit
+  (`zoomBlitRect` now sizes by the snapshot's own `snapW×snapH` footprint).
+  Zoom-in is unchanged (its frame already overfills the viewport), and the
+  overscan is gated on `thumbnailMode`. *Open follow-up:* a zoom-out deeper than
+  the 2× cap, or past uncached tiles, still shows a black falloff at the far
+  edge; widening the cap trades memory (the buffer is `(2×)²` = 4× the canvas)
+  for reach.
 
 **Active:**
 - **Dataset pickle size — drop inline `media_bytes` when the media is reachable
