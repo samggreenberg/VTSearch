@@ -340,9 +340,15 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     const rw = Math.abs(x1 - x0);
     const rh = Math.abs(y1 - y0);
     ctx.save();
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    // The default white marker is invisible on the grayscale map, whose ramp
+    // runs all the way through near-white — so against that achromatic field
+    // use the chromatic accent (and its pre-baked translucent fill), which the
+    // theme already adapts. Heat/Ocean never approach white, so white stays the
+    // cleanest neutral marker for them.
+    const gray = this.colormap() === 'gray';
+    ctx.fillStyle = gray ? this.themeColor('--accent-highlight-bg') : 'rgba(255, 255, 255, 0.15)';
     ctx.fillRect(rx, ry, rw, rh);
-    ctx.strokeStyle = '#ffffff';
+    ctx.strokeStyle = gray ? this.themeColor('--accent') : '#ffffff';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(rx, ry, rw, rh);
     ctx.restore();
