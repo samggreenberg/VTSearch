@@ -28,12 +28,12 @@ def _fake_whisper_module(transcribe_result: dict, load_model_calls: list | None 
     mod = types.ModuleType("whisper")
 
     class FakeModel:
+        last_kwargs: dict = {}
+        last_device: str | None = None
+
         def transcribe(self, _audio_path, **kwargs):
             FakeModel.last_kwargs = kwargs
             return transcribe_result
-
-    FakeModel.last_kwargs = {}
-    FakeModel.last_device = None
 
     def load_model(size: str, device=None):
         if load_model_calls is not None:
