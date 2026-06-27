@@ -111,7 +111,7 @@ class TestDeviceAwareEmbedding:
 def _cuml_installed() -> bool:
     """True when the optional cuML/RAPIDS stack is importable on this host."""
     try:
-        import cuml  # noqa: F401
+        import cuml  # noqa: F401  # pyright: ignore[reportMissingImports]
     except ImportError:
         return False
     return True

@@ -50,7 +50,7 @@ def cuml_enabled() -> bool:
     if not resolve_device().startswith("cuda"):
         return False
     try:
-        import cuml  # noqa: F401, PLC0415
+        import cuml  # noqa: F401, PLC0415  # pyright: ignore[reportMissingImports]
     except ImportError:
         return False
     return True
@@ -72,7 +72,7 @@ def make_umap(
     """
     if cuml_enabled():
         try:
-            from cuml.manifold import UMAP as CuUMAP  # noqa: PLC0415
+            from cuml.manifold import UMAP as CuUMAP  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
 
             return CuUMAP(
                 n_components=n_components,
@@ -105,7 +105,7 @@ def make_kmeans(*, n_clusters: int, random_state: int, n_init: int) -> Any:
     """
     if cuml_enabled():
         try:
-            from cuml.cluster import KMeans as CuKMeans  # noqa: PLC0415
+            from cuml.cluster import KMeans as CuKMeans  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
 
             return CuKMeans(
                 n_clusters=n_clusters,
@@ -118,4 +118,8 @@ def make_kmeans(*, n_clusters: int, random_state: int, n_init: int) -> Any:
 
     from sklearn.cluster import KMeans  # noqa: PLC0415
 
-    return KMeans(n_clusters=n_clusters, random_state=random_state, n_init=n_init)
+    return KMeans(
+        n_clusters=n_clusters,
+        random_state=random_state,
+        n_init=n_init,  # pyright: ignore[reportArgumentType]
+    )
