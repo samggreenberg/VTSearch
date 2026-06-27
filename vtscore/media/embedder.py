@@ -30,6 +30,7 @@ __all__ = [
     "media_from_path",
     "resolve_embed_batch_size",
     "timed_progress",
+    "to_compute_device",
 ]
 
 
@@ -98,6 +99,31 @@ def extract_tensor(output: object):
             return val
     # Final fallback: treat as tuple-like and return first element
     return output[0]  # type: ignore[index]
+
+
+def to_compute_device(model: Any) -> Any:
+    """Move a freshly loaded embedding *model* onto the resolved compute device.
+
+    Replaces the hardcoded ``model.to("cpu")`` every embedder used to run at
+    load time.  The target device comes from
+    :func:`vtscore.config.resolve_device`, which honours ``VTSEARCH_DEVICE`` and
+    smoke-tests CUDA before returning a CUDA device - falling back to ``"cpu"``
+    when the installed torch wheel can't actually launch a kernel on the visible
+    GPU.  The move is therefore always safe:
+
+    * On a CPU-only host (or one whose GPU the wheel can't drive) this is exactly
+      the old ``.to("cpu")``, still materialising any ``meta``-device tensors
+      left behind by ``low_cpu_mem_usage=True``.
+    * On a working CUDA / MPS host the model lands on the accelerator, and every
+      embedder's forward pass follows it automatically: each reads
+      ``next(self._model.parameters()).device`` and copies its inputs there,
+      pulling results back with ``.detach().cpu().numpy()``.
+
+    Returns the moved model so callers can write ``self._model = to_compute_device(self._model)``.
+    """
+    from vtscore.config import resolve_device  # noqa: PLC0415
+
+    return model.to(resolve_device())
 
 
 @contextlib.contextmanager

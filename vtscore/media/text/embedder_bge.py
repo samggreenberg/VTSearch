@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from vtscore.config import BGE_MODEL_ID
+from vtscore.config import BGE_MODEL_ID, resolve_device
 from vtscore.media.embedder import (
     MediaEmbedder,
     embedder_load_setup,
@@ -99,6 +99,7 @@ class TextBGEEmbedder(MediaEmbedder):
                 SentenceTransformer,
                 BGE_MODEL_ID,
                 cache_folder=cache_dir,
+                device=resolve_device(),
                 token=hf_token(),
                 on_progress=self._on_progress,
             )

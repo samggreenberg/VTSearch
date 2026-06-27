@@ -41,6 +41,7 @@ from vtscore.media.embedder import (
     intercept_tqdm_progress,
     load_pretrained_local_first,
     timed_progress,
+    to_compute_device,
 )
 
 
@@ -109,7 +110,7 @@ class _ClapBase(MediaEmbedder):
                 on_progress=self._on_progress,
             )
         # Materialize any tensors left on the ``meta`` device.
-        self._model = self._model.to("cpu")
+        self._model = to_compute_device(self._model)
         self._on_progress("loading", f"Loading {self.label} processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = load_pretrained_local_first(

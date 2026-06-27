@@ -22,6 +22,7 @@ from vtscore.media.embedder import (
     intercept_weight_loading_progress,
     load_pretrained_local_first,
     timed_progress,
+    to_compute_device,
 )
 from vtscore.media.image._image_bulk import bulk_embed_image_files
 
@@ -79,7 +80,7 @@ class ImageSiglip2Embedder(MediaEmbedder):
                 token=hf_token(),
                 on_progress=self._on_progress,
             )
-        self._model = self._model.to("cpu")
+        self._model = to_compute_device(self._model)
         self._on_progress("loading", "Loading SigLIP 2 processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = load_pretrained_local_first(

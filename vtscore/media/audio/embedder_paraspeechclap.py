@@ -46,6 +46,7 @@ from vtscore.media.embedder import (
     intercept_tqdm_progress,
     load_pretrained_local_first,
     timed_progress,
+    to_compute_device,
 )
 
 
@@ -136,7 +137,7 @@ class AudioParaSpeechClapEmbedder(MediaEmbedder):
                 len(result.missing_keys),
                 len(result.unexpected_keys),
             )
-        self._model = model.to("cpu")
+        self._model = to_compute_device(model)
         self._model.eval()
 
         self._on_progress("loading", "Loading ParaSpeechCLAP processors…", 0, 0)

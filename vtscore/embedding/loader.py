@@ -105,9 +105,11 @@ def default_concurrent_downloads() -> int:
 # A single CPU embed job holds an embedder model plus an N x D fp32 working
 # set; budgeting ~4 GiB of total RAM per concurrent job keeps memory-starved
 # boxes at one worker while letting roomy workstations run a few in parallel.
+# (Only consulted on CPU hosts; on an accelerator the embed default is 1 - see
+# ``default_concurrent_embeddings``.)
 _RAM_BYTES_PER_CPU_EMBED = 4 * 1024 * 1024 * 1024
 
-# Cores budgeted per concurrent embed job (embedders run on CPU today).
+# Cores budgeted per concurrent embed job on a CPU host.
 _CPUS_PER_CPU_EMBED = 4
 
 # Upper bound on the auto-derived embed default regardless of how big the box
@@ -149,27 +151,36 @@ def default_concurrent_embeddings() -> int:
     Honours ``VTSEARCH_MAX_CONCURRENT_EMBEDDINGS`` when set; otherwise derives
     from hardware.
 
-    The embed phase is **CPU- and RAM-bound today**: every embedder loads on CPU
-    regardless of an available GPU (see the ``DEVICE`` note in
-    ``vtscore/config.py`` - device-aware embedding is a future refactor). So the
-    default scales with the scarcer of cores and RAM and ignores GPU count:
-    roughly one job per :data:`_CPUS_PER_CPU_EMBED` cores and one per
+    **On an accelerator the default is 1.** Embedders are now device-aware (see
+    ``to_compute_device`` / ``resolve_device``), so on a CUDA/MPS host they share
+    a single GPU. Running several embed jobs at once would multiply resident model
+    weights on that one device and court OOM with no throughput win - the global
+    ``_embed_lock`` serialises forward passes on the device anyway. Power users
+    with VRAM headroom (or genuinely multi-GPU nodes) raise it via the env
+    override.
+
+    **On a CPU host the embed phase is CPU- and RAM-bound**, so the default
+    scales with the scarcer of cores and RAM and ignores GPU count: roughly one
+    job per :data:`_CPUS_PER_CPU_EMBED` cores and one per
     ``_RAM_BYTES_PER_CPU_EMBED`` of total RAM, whichever is smaller, capped at
     :data:`_MAX_CPU_EMBED_DEFAULT`. Constrained machines (few cores or little
     RAM) resolve to 1 - preserving the old fully-serial behaviour where a second
     concurrent embed would thrash or OOM - while workstations and fat cluster
     nodes get genuine parallel embedding with no config change. When total RAM
-    can't be read we fall back to 1 rather than guess generously.
-
-    A single-GPU SLURM allocation is exactly the case the old GPU branch got
-    wrong: it returned ``min(2, visible_gpus) == 1`` and serialised every embed
-    on an otherwise capable node. Scaling by the allocation's cores/RAM instead
-    lets such a node ingest several datasets at once; set
+    can't be read we fall back to 1 rather than guess generously. Set
     ``VTSEARCH_MAX_CONCURRENT_EMBEDDINGS`` past the auto cap to go further.
     """
     override = _env_concurrency_override("VTSEARCH_MAX_CONCURRENT_EMBEDDINGS")
     if override is not None:
         return override
+
+    # One embed job per GPU: the device is shared and forward passes serialise on
+    # it, so extra jobs only add VRAM pressure. resolve_device() returns "cpu"
+    # when torch is missing or no usable accelerator is present.
+    from vtscore.config import resolve_device  # noqa: PLC0415
+
+    if resolve_device() != "cpu":
+        return 1
 
     by_cpu = (os.cpu_count() or 1) // _CPUS_PER_CPU_EMBED
     total_ram = _total_memory_bytes()

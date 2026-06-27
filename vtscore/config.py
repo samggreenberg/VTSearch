@@ -37,8 +37,9 @@ TORCH_THREADS = max(1, int(os.environ.get("VTSEARCH_TORCH_THREADS", "1")))
 # explicit values like ``"cuda"``, ``"cuda:0"``, ``"cpu"``, or ``"mps"`` are
 # passed through unchanged.  Resolution is lazy; the env var stores the
 # user's intent, ``resolve_device()`` actually imports torch when called.
-# Currently advisory: every embedder still loads on CPU.  Reserved for the
-# upcoming device-aware embedder refactor.
+# Embedders (via ``to_compute_device``/``resolve_device``) and MLP
+# training/scoring both honour this, so a visible, usable GPU is used for
+# embedding and learned-sort automatically; CPU remains the safe fallback.
 DEVICE = os.environ.get("VTSEARCH_DEVICE", "auto").lower()
 
 

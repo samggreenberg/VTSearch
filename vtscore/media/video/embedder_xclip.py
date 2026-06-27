@@ -17,6 +17,7 @@ from vtscore.media.embedder import (
     intercept_weight_loading_progress,
     load_pretrained_local_first,
     timed_progress,
+    to_compute_device,
 )
 from vtscore.media.video._frame_sampling import sample_video_frames
 
@@ -85,7 +86,7 @@ class VideoXClipEmbedder(MediaEmbedder):
                 token=hf_token(),
                 on_progress=self._on_progress,
             )
-        self._model = self._model.to("cpu")
+        self._model = to_compute_device(self._model)
         self._on_progress("loading", "Loading X-CLIP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = load_pretrained_local_first(

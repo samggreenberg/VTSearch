@@ -16,6 +16,7 @@ from vtscore.media.embedder import (
     intercept_weight_loading_progress,
     load_pretrained_local_first,
     timed_progress,
+    to_compute_device,
 )
 from vtscore.media.video._frame_sampling import sample_video_frames
 
@@ -119,7 +120,7 @@ class VideoLanguageBindEmbedder(MediaEmbedder):
                 trust_remote_code=True,
                 on_progress=self._on_progress,
             )
-        self._model = self._model.to("cpu")
+        self._model = to_compute_device(self._model)
         self._on_progress("loading", "Loading LanguageBind tokenizer...", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._tokenizer = load_pretrained_local_first(

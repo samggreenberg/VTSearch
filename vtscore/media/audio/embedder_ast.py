@@ -22,6 +22,7 @@ from vtscore.media.embedder import (
     intercept_tqdm_progress,
     load_pretrained_local_first,
     timed_progress,
+    to_compute_device,
 )
 
 
@@ -84,7 +85,7 @@ class AudioASTEmbedder(MediaEmbedder):
                 token=hf_token(),
                 on_progress=self._on_progress,
             )
-        self._model = self._model.to("cpu")
+        self._model = to_compute_device(self._model)
         self._model.eval()
         self._on_progress("loading", "Loading AST feature extractor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
