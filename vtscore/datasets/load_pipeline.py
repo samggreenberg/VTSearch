@@ -37,6 +37,7 @@ from vtscore.datasets.registry import unregister_dataset as _reg_unregister
 from vtscore.state import DatasetContext, clear_all, register_context
 
 from vtscore.datasets.stages._common import (
+    FinalizeProgress,
     _LOAD_STEP_WEIGHTS,
     _STATUS_TO_STEP,
     _TOTAL_LOAD_STEPS,
@@ -486,17 +487,28 @@ def _run_origin_load_in_background(
                     _tag_origins(ctx.medias, origin)
                     _apply_clipper_stage(ctx, tracker, clipper, clipper_params, chain_steps)
                     _embed_missing_stage(ctx, tracker, embedders if embedders else [embedder])
-                    _drop_none_embeddings_stage(ctx, tracker)
+                    # Step 4 (finalize) bundles several sub-stages. Route them
+                    # through a FinalizeProgress proxy so each maps into its own
+                    # ordered slice of the step-4 bar instead of independently
+                    # filling (and pinning at 100%) the whole slice — keeps the
+                    # bar advancing and the ETA self-correcting through the
+                    # serialize/disk-write window. See FinalizeProgress.
+                    fin = FinalizeProgress(tracker)
+                    fin.begin("cleanup")
+                    _drop_none_embeddings_stage(ctx, fin)
                     # Re-lazify clips from reference (thin) parents now that
                     # embedding is done: strip their materialized bytes so the
                     # dataset stores recipes, not duplicated clip payloads.
-                    _relazify_reference_clips_stage(ctx, tracker)
-                    _collapse_duplicates_stage(ctx, tracker)
-                    _collapse_near_duplicates_stage(ctx, tracker)
-                    _build_diversity_tree_stage(ctx, tracker)
+                    _relazify_reference_clips_stage(ctx, fin)
+                    fin.begin("dedup")
+                    _collapse_duplicates_stage(ctx, fin)
+                    _collapse_near_duplicates_stage(ctx, fin)
+                    fin.begin("diversity")
+                    _build_diversity_tree_stage(ctx, fin)
                     tracker.check_cancelled()
+                    fin.begin("registry")
                     context_id, registry_entry_id = _register_and_migrate(
-                        ctx, tracker, task_id, origin, name, clipper, embedder, created_by, ingest_started_at
+                        ctx, fin, task_id, origin, name, clipper, embedder, created_by, ingest_started_at
                     )
                     # Opt-in: compute + persist the 2-D Browse projection now,
                     # so the Browse canvas opens instantly instead of building
@@ -505,8 +517,9 @@ def _run_origin_load_in_background(
                     # a failure (or a cancel during the fit) leaves it intact
                     # and just defers the projection to the lazy Browse path.
                     if build_projection:
+                        fin.begin("projection")
                         try:
-                            _build_projection_stage(ctx, tracker, context_id)
+                            _build_projection_stage(ctx, fin, context_id)
                         except Exception:
                             traceback.print_exc()
                     # Embedder warm-up is fire-and-forget so the dashboard row goes
