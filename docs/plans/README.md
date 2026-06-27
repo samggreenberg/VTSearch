@@ -25,6 +25,7 @@ it can't drift far. (Point-in-time UI review/audit reports live in
 - [scalability-plan.md](scalability-plan.md): phased implementation plan (§3.3, Phase 1.2 GMM subsampling, Phase 2.2 label-sync debounce, CLI streaming shipped; Phases 1.3/1.4/2.3 + 2.1 fast-builds open)
 - [cli-stream-massive-images.md](cli-stream-massive-images.md): CLI streaming for huge media sources (Phase 1 shipped)
 - [server-dedup-references.md](server-dedup-references.md): reference (no-copy) server import + lazy clips + lazy converter output (Phases 1, 2a, 2b all shipped; fast-follows open)
+- [near-duplicate-detection.md](near-duplicate-detection.md): collapse near-dupes (images + text) opt-in at dataset creation (Phase 1 shipped; audio/video deferred)
 
 ## Detectors / embedders / clippers
 
@@ -37,6 +38,7 @@ it can't drift far. (Point-in-time UI review/audit reports live in
 
 - [find-verification-workflow.md](find-verification-workflow.md): Find verify loop, frozen scores, Stats (Phases 1–4 shipped; follow-ups open)
 - [coverage-atlas.md](coverage-atlas.md): domain-shift + evidence-aware verification for transferred detectors (design/research writeup only)
+- [visual-genome-dataset.md](visual-genome-dataset.md): Visual Genome demo dataset — multi-label + region-annotation ground truth for eval (Phase 1 in progress; region-vote reporting / attributes open)
 
 ## Import / plugins
 
