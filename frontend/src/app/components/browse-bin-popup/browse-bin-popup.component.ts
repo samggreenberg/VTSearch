@@ -525,6 +525,27 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     return this.selection.has(id);
   }
 
+  /** Tri-state of the select-all control: how many members are selected, as
+   *  none / some / all — mirroring the dashboard's master-checkbox states. */
+  get selectionState(): 'none' | 'some' | 'all' {
+    const total = this.ids.length;
+    if (total === 0) return 'none';
+    const sel = this.selection.selectedCountIn(this.ids);
+    if (sel === 0) return 'none';
+    if (sel >= total) return 'all';
+    return 'some';
+  }
+
+  /** Select every member, or — when all are already selected — clear them.
+   *  Matches the dashboard's toggle-all semantics. */
+  toggleAll(): void {
+    if (this.selectionState === 'all') {
+      this.selection.removeAll(this.ids);
+    } else {
+      this.selection.addAll(this.ids);
+    }
+  }
+
   onEntryClick(id: number): void {
     if (this.selection.has(id)) {
       this.selection.remove(id);

@@ -153,7 +153,40 @@
   min-height: 0;
 }
 
-// Member-count label, top-left of the grid column.
+// Top row of the grid column: the select-all control on the left and the
+// member-count label pushed to the right. With a single member there is no
+// button, so `space-between` leaves the count alone at the left as before.
+.bin-popup-grid-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2xs);
+  padding: 0 var(--space-2xs) var(--space-2xs);
+}
+
+// Tri-state master checkbox, mirroring the dashboard's select-all button but
+// tuned to this window: smaller icon and tighter padding for the compact header.
+.bin-popup-select-all {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: var(--space-2xs);
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-base), background var(--transition-base);
+
+  &:hover {
+    background: var(--btn-icon-hover-bg);
+    color: var(--text-primary);
+  }
+}
+
+// Member-count label, right end of the header row.
 .bin-popup-count {
   flex-shrink: 0;
   font-size: var(--font-xs);
@@ -163,7 +196,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.4;
-  padding: 0 var(--space-2xs) var(--space-2xs);
 }
 
 // The scrolling thumbnail grid fills the column below the count label.
