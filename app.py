@@ -604,9 +604,8 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
                     flush=True,
                 )
 
-    print("  Loading ML libraries...", end="", flush=True)
-    initialize_models()
-    print(" done", flush=True)
+    print("  Loading ML libraries...", flush=True)
+    initialize_models(on_progress=lambda *a, **k: None)
     # ``--solo-media-type`` (process-level CLI fallback) tells us which
     # mediaType's default embedder to warm even if no datasets or detectors
     # are registered yet. Per-user explicit values are not consulted here

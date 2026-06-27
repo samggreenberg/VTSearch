@@ -24,7 +24,12 @@ from vtscore.media.embedder import (
     load_pretrained_local_first,
     timed_progress,
 )
-from vtscore.embedding.loader import _make_console_progress, predict_embedders_to_preload, preload_predicted_embedders
+from vtscore.embedding.loader import (
+    _make_console_progress,
+    initialize_models,
+    predict_embedders_to_preload,
+    preload_predicted_embedders,
+)
 
 
 class TestMakeConsoleProgress:
@@ -240,6 +245,51 @@ class TestPreloadConsoleOutput:
         assert result == []
         captured = capsys.readouterr()
         assert captured.out == ""
+
+
+class TestInitializeModelsProgress:
+    """``initialize_models`` renders progress bars for its heavy library imports."""
+
+    def test_no_callback_is_silent(self, capsys):
+        """Without an ``on_progress`` callback (tests/eval CLI), nothing prints."""
+        with (
+            patch("vtscore.embedding.loader._warm_threadpool_controller"),
+            patch("vtsearch.logging_config.install_transformers_logging_bridge"),
+        ):
+            initialize_models()
+
+        assert capsys.readouterr().out == ""
+
+    def test_callback_receives_import_steps(self):
+        """The callback is driven with one step per heavy import (sklearn, transformers)."""
+        calls = []
+
+        def cb(status, message="", current=0, total=0):
+            calls.append((status, message, current, total))
+
+        with (
+            patch("vtscore.embedding.loader._warm_threadpool_controller"),
+            patch("vtsearch.logging_config.install_transformers_logging_bridge"),
+        ):
+            initialize_models(on_progress=cb)
+
+        messages = [m for _, m, _, _ in calls]
+        assert any("scikit-learn" in m for m in messages)
+        assert any("transformers" in m for m in messages)
+
+    def test_callback_renders_console_bars(self, capsys):
+        """With a callback, both import steps render completed console bars."""
+        with (
+            patch("vtscore.embedding.loader._warm_threadpool_controller"),
+            patch("vtsearch.logging_config.install_transformers_logging_bridge"),
+        ):
+            initialize_models(on_progress=lambda *a, **kw: None)
+
+        out = capsys.readouterr().out
+        assert "Importing scikit-learn" in out
+        assert "Importing transformers" in out
+        # Both bars complete at 100% (the second via flush at the end).
+        assert out.count("100%") >= 2
 
 
 class TestPredictEmbeddersToPreload:

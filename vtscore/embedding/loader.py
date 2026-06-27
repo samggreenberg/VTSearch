@@ -32,6 +32,7 @@ def _strip_time_suffix(msg: str) -> str:
 
 
 from vtscore.config import MODELS_CACHE_DIR, resolve_device
+from vtscore.media.base import ProgressCallback
 from vtscore.media.torch_setup import ensure_torch_configured
 
 logger = logging.getLogger(__name__)
@@ -223,7 +224,7 @@ def _warm_threadpool_controller() -> None:
             pass
 
 
-def initialize_models() -> None:
+def initialize_models(on_progress: ProgressCallback | None = None) -> None:
     """Prepare the runtime environment for embedding models.
 
     Creates the model cache directory, configures PyTorch thread count
@@ -235,16 +236,42 @@ def initialize_models() -> None:
     path that actually imports torch.
 
     Models themselves are **not** loaded here.
+
+    The two heavy first-time imports this triggers - scikit-learn (pulled in
+    by the threadpool warm-up) and transformers (pulled in by the logging
+    bridge) - dominate the wall-clock cost and can take ~10s combined on a
+    cold start, during which the process looks frozen.  Pass *on_progress* to
+    render a live elapsed-time progress bar for each, matching the embedder
+    preload bars printed later in startup.  When ``None`` (the default, used
+    by tests and the eval CLI) the imports run silently as before.
     """
     MODELS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     ensure_torch_configured()
-    _warm_threadpool_controller()
-    try:
-        from vtsearch.logging_config import install_transformers_logging_bridge  # noqa: PLC0415
 
-        install_transformers_logging_bridge()
-    except Exception:
-        pass
+    def _warm() -> None:
+        _warm_threadpool_controller()
+
+    def _bridge() -> None:
+        try:
+            from vtsearch.logging_config import install_transformers_logging_bridge  # noqa: PLC0415
+
+            install_transformers_logging_bridge()
+        except Exception:
+            pass
+
+    if on_progress is None:
+        _warm()
+        _bridge()
+    else:
+        from vtscore.media.embedder import timed_progress  # noqa: PLC0415
+
+        console_cb = _make_console_progress(on_progress)
+        with timed_progress(console_cb, "loading", "Importing scikit-learn…", 1, 2):
+            _warm()
+        with timed_progress(console_cb, "loading", "Importing transformers…", 2, 2):
+            _bridge()
+        console_cb.flush()  # type: ignore[attr-defined]
+
     gc.collect()
 
 
