@@ -1,10 +1,14 @@
 # Browse first-paint thumbnail load delay (~3s grayscale bins)
 
-**Status:** Investigation only — cause NOT yet confirmed against a running app.
-An earlier draft of this plan blamed a "coarse-view full-resolution `/image`
-fetch"; that hypothesis was **wrong and has been retracted** (see "Retracted
-hypothesis" below). The next contributor should **confirm via the DevTools
-Network tab first** (see "How to confirm"), then pick a fix.
+**Status:** **CONFIRMED + FIXED (2026-06-26)** on branch
+`claude/thumbnail-memoise-on-the-fly` (off `dev`, NOT merged/deployed). Cause is
+on-the-fly `/thumbnail` generation because the medias carry **no precomputed
+`thumbnail_bytes`**, and the per-thumbnail cost scales with **source image
+resolution**. Two fixes landed: **B** (runtime memoise — each tile generated at
+most once, then streamed) and **A** (persist thumbnails at save — generate any
+missing image thumbnail at `export_dataset_to_file` so reloaded datasets stream
+bytes with zero regeneration and a fast first paint). See "Confirmed findings"
+and "Fix" below. The earlier full-res `/image` hypothesis stays retracted.
 
 ## Symptom
 
@@ -16,142 +20,152 @@ The bins themselves paint instantly: they're drawn purely from tile cell data
 (`count` → colormap), no images involved. The delay is entirely the imagery
 filling those bins.
 
-## The full-res switch is global, NOT per-pyramid-level (key correction)
+## Confirmed findings (2026-06-26, rack7n03:11850, Caltech-101 (L) demo)
 
-The browse canvas decides per-paint whether to fetch the capped `/thumbnail` or
-the full-resolution `/image`:
+Measured by driving the live GRID server (tunnel `localhost:11850`) and by
+introspecting the dataset pickle with the project loader.
 
-- `browse-canvas.component.ts:320-322` — `useFullResThumbs`:
-  ```ts
-  private get useFullResThumbs(): boolean {
-    return 2 * this.targetRadius * this.dpr > BrowseCanvasComponent.THUMB_NATIVE_MAX_DIM; // 384
-  }
-  ```
+**1. Default browse fetches `/thumbnail`, not `/image` (full-res retraction holds).**
+Thumbnail responses are small, 384px-capped JPEGs (6–13 KB; observed dims
+384×116, 384×144, …). No multi-MB `/image` originals were requested at the
+default thumbnail size. The retracted full-res theory is correctly dead.
 
-Crucially this reads **only `targetRadius` and `dpr`** — not zoom, not pyramid
-level. `targetRadius` is the thumbnail-size knob (default `28` px = the "M" size,
-`:79`), held constant across zoom. Level selection (`levelForEffZoom`,
-`:757-767`) picks whichever pyramid level keeps each bin near `targetRadius`, so
-the on-screen hex is ~28px at **every** zoom. The per-bin *mathematical* area
-shrinks going up the pyramid, but it's scaled to a constant *screen* size.
+**2. The medias have NO `thumbnail_bytes` — even this demo dataset.**
+Loading the saved pickle via `load_dataset_from_pickle` and sampling 120 medias:
+`thumbnail_bytes` is present as a key but `None` for **0/120**. So every
+`/thumbnail` request takes the on-the-fly fallback (`_resolve_display_image` +
+`make_image_thumbnail`, decode+resize at request time) — never the fast
+`cached_thumbnail_response` byte-stream path.
 
-Therefore the full-res switch is the **same decision at every zoom level** — a
-global on/off, never a "top of the pyramid" effect. It trips only when
-`2 · targetRadius · dpr > 384`, i.e. `targetRadius > 192/dpr`:
+**3. Root cause — external-dir datasets lose `thumbnail_bytes` on save and never
+regenerate them on load.** `_write_demo_cache` strips both `media_bytes` and
+`thumbnail_bytes` from the pickle when `store_external` is true
+(`vtscore/datasets/loader_demo.py:403`) — true for any image/audio/video
+dataset backed by an on-disk media dir (demos, **folder imports**). On load, the
+loader resolves `media_bytes` back from the external dir but does **not**
+regenerate `thumbnail_bytes`. Confirmed: after load, `media_bytes` is populated
+(5–16 KB each) while `thumbnail_bytes` is `None`. Ingest *does* generate
+thumbnails (`vtscore/media/image/media_type.py:160` via `make_image_thumbnail`),
+but that artifact is discarded for external-dir datasets and not rebuilt. This
+is the same gap as the docstring's "old pickles / thin loads", but broader: it
+hits **every external-dir-backed image dataset**, including the reporter's
+likely folder import.
 
-| Display | targetRadius needed to trigger full-res | Default "M" = 28 |
+**4. The delay magnitude is governed by source image resolution.**
+Caltech-101 sources are tiny (~0.04–0.11 MP, 402×135 etc.), so even the
+on-the-fly path is fast — and that is exactly why a quick test on a demo dataset
+*fails to reproduce* the reporter's ~3s. Measured on the live server:
+
+| Test (30 distinct cold thumbs, concurrent) | Wall-clock | per-thumb TTFB |
 |---|---|---|
-| Standard (dpr=1) | > 192 px | 56 → **off** |
-| Retina (dpr=2)   | > 96 px  | 112 → **off** |
+| `/thumbnail` (on-the-fly, Caltech 0.06 MP sources) | **0.24 s** | 40–86 ms |
+| `/thumbnail?region=…` (forces regen) | 0.22 s | 34–51 ms |
 
-**Conclusion: at the default thumbnail size, the canvas fetches `/thumbnail`
-everywhere and never `/image`.** Full-res only engages if the user has enlarged
-the thumbnail size to roughly XL (`targetRadius` past ~96 on Retina, ~192
-otherwise). So unless the reporter has cranked the size knob up, full-res is not
-in play and is not the cause of the delay.
+Generation cost vs. megapixels (`make_image_thumbnail`, single SLURM node,
+`VTSEARCH_TORCH_THREADS=1`):
 
-### Retracted hypothesis
+| Source MP | src KB | 1× decode+resize | 30× serial | 30× across 8 threads |
+|---|---|---|---|---|
+| 0.06 (Caltech) | 37 | 2.4 ms | 72 ms | 53 ms |
+| 0.5 | 307 | 21 ms | 637 ms | 153 ms |
+| 2.0 | 1214 | 66 ms | 1969 ms | 329 ms |
+| 6.0 | 3637 | 107 ms | 3219 ms | 580 ms |
+| 12.0 | 7263 | 187 ms | 5604 ms | 1188 ms |
+| 24.0 | 14549 | 366 ms | 10970 ms | 2022 ms |
 
-The earlier "the coarse/top view has large hexes, so it crosses 384 and fetches
-multi-MB `/image` originals" theory was wrong twice over: (1) hex *screen* size
-is held ~constant across zoom by level selection, so the top view does not have
-larger hexes; (2) `useFullResThumbs` keys off the constant `targetRadius`, not
-the actual rendered radius, so it can't be a per-level effect. Do not resurrect
-it without first confirming the size knob is actually turned up.
+PIL's libjpeg decode + LANCZOS resize release the GIL, so 8 threads give ~3–5×
+over serial — but the single-worker server still funnels ~30 multi-MP decodes
+into seconds. A dataset of ~6–24 MP photos reaches the reported ~3 s for ~30
+bins; real-world it's worse because every request also passes the
+`@app.before_request` `_state_lock` state-sync and the browser caps at ~6
+concurrent connections. (Caltech can't reproduce ~3 s; a large-photo dataset
+will.)
 
-## Leading hypothesis: on-the-fly `/thumbnail` generation (no precomputed bytes)
+**5. No server-side generated-thumbnail cache.** The on-the-fly branch in
+`media_thumbnail` regenerates from scratch every cold request — nothing is
+memoised back onto the media dict — so the cost recurs on every fresh
+browse-canvas zoom/pan into not-yet-fetched bins, not just first paint. (The
+only thing that makes the *second* fetch of the same item fast is the browser's
+ETag/304 + its own decoded-image cache, client-side.)
 
-If the dataset's medias lack precomputed `thumbnail_bytes`, every `/thumbnail`
-request decodes the full source image and resizes it at request time:
+## Retracted hypothesis (kept for the record)
 
-- `vtsearch/routes/media/list.py:548-552` — `media_thumbnail` serves precomputed
-  `c["thumbnail_bytes"]` directly via `cached_thumbnail_response` (fast, no
-  decode) **when present**; otherwise falls back to `_resolve_display_image` +
-  `image_thumbnail_response`, which decodes the full source and resizes it
-  (`vtsearch/routes/_shared.py:57-103`, `make_image_thumbnail`).
-- Datasets missing `thumbnail_bytes`: old pickles, thin loads, undecodable SVGs
-  (per the `media_thumbnail` docstring at `:529-533`).
-- The server runs **1 gunicorn worker**, `gthread`, 8 threads
-  (`gunicorn.conf.py:28-30`). Pillow decode+resize is CPU work largely under the
-  GIL, so concurrent generation across those threads **serializes**. ~30
-  on-the-fly generations of large source photos ≈ ~30 sequential decode+resize
-  ops, which can land around ~3s.
+The earlier "coarse/top view has large hexes, crosses 384, fetches multi-MB
+`/image` originals" theory was wrong twice over: (1) hex *screen* size is held
+~constant across zoom by level selection, so the top view does not have larger
+hexes; (2) `useFullResThumbs` keys off the constant `targetRadius`, not the
+rendered radius, so it can't be a per-level effect. Full-res only engages if the
+user enlarges the thumbnail-size knob past ~XL (`targetRadius > 192/dpr`). Do not
+resurrect it.
 
-This fits the symptom shape: slow on first paint, then fast (ETag 304 +
-in-memory `thumbCache`), and recurs when panning into not-yet-cached bins.
+## Fix (implemented)
 
-**But note:** a normally-ingested dataset *does* get `thumbnail_bytes` at ingest
-(docstring `:529`), which would make this path fast. So this hypothesis hinges on
-the reporter's dataset actually lacking them — which the Network tab / a quick
-`get_media(id).keys()` check will reveal. If `thumbnail_bytes` is present and
-`/thumbnail` is still slow, the cause is elsewhere and needs fresh investigation
-(candidate avenues: first-thumbnail draw is gated on a late `mediaType()` signal;
-tiles contending for connections; projection/meta still settling on first paint).
+The root cause is items 2–3: external-dir datasets serve every tile through
+request-time decode+resize. Two complementary fixes landed; **C** was considered
+and rejected in favour of **A** (persist beats rederive — see below).
 
-## How to confirm (do this first, before any fix)
+- **A. Persist thumbnails at save (chosen for first paint).**
+  `export_dataset_to_file` (`vtscore/datasets/loader.py`, the single choke point
+  for every `saved_datasets/*.pkl` write — registry, staging, promote) now
+  generates a `thumbnail_bytes` for any **image** media that lacks one, from the
+  in-memory `media_bytes`, right before serialising. Image *demos* never produce
+  `thumbnail_bytes` at build time (`load_demo_source` doesn't, only the real
+  `load_media_data` ingest does) and `_write_demo_cache` strips them, so this is
+  where the gap is closed. A re-saved dataset reloads straight onto the fast
+  `cached_thumbnail_response` byte-stream path → fast first paint, zero
+  load-time regeneration. One-time, offline cost at save. Thumbnails are tiny
+  (~10 KB) and immutable per source, so no staleness/invalidation and negligible
+  pickle growth. **Requires re-saving** to benefit existing datasets (covered at
+  runtime meanwhile by B). Test: `test_image_thumbnail_generated_at_export`.
+- **B. Lazy memoise on the request path (runtime, helps existing datasets).**
+  On the on-the-fly branch of `media_thumbnail`
+  (`vtsearch/routes/media/list.py`), generate once and cache the bytes back onto
+  the in-memory media dict's `thumbnail_bytes`, so subsequent cold fetches stream
+  instead of re-decoding. Bounds total work to one generation per *viewed* item
+  and kills the zoom/pan recurrence (item 5). In-memory only (respects No
+  Persisted Vectors/MLPs — the bytes ride only in the live context, never written
+  to disk unless the user exports). Does not fix the very first paint by itself;
+  A does. Test: `test_on_the_fly_thumbnail_is_memoised`.
+- **C. Background warm after load — rejected.** A daemon filling missing
+  `thumbnail_bytes` after load (mirroring `_warmup_embedder_async`) was the other
+  candidate for first paint, but it pays the decode cost on *every* load/dataset
+  switch and, being a background race, doesn't *guarantee* the first paint is
+  ready. Persisting at save (A) pays once, offline, and guarantees a fast reload.
+  Not implemented.
 
-Run the app against the reporter's dataset (or any image dataset) and watch the
-network while the view loads:
+## How this was confirmed (repro recipe)
 
-1. `bash .claude/hooks/ensure-test-deps.sh && python app.py --local` and open the
-   browse view; or use the `/run` or `/verify` skill to drive it.
-2. DevTools → Network, filter to `/api/medias/`, hard-reload the browse view.
-3. Inspect the requests that fill the bins:
-   - **Endpoint:** `…/thumbnail` or `…/image`? (Expected: `/thumbnail` at default
-     size. If `/image`, the size knob is turned up — confirm and revisit the
-     full-res path.)
-   - **Timing:** is the time dominated by "Waiting (TTFB)" (server generating the
-     thumbnail) vs. "Content Download" (large bytes over the wire)? High TTFB on
-     small `/thumbnail` responses ⇒ on-the-fly generation.
-   - **Size:** small (KB, precomputed/capped) or large (MB, full source)?
-   - **Concurrency:** ~6 in flight (browser cap) or fewer/serialized?
-4. Check whether the dataset's medias carry `thumbnail_bytes`: in a Python shell
-   against the running context, `get_media(<id>).keys()` (or inspect the loader
-   for the source). Absent ⇒ leading hypothesis confirmed.
-5. Confirm whether the delay is first-paint-only: pan into fresh bins after the
-   first load — does the ~3s recur for newly revealed cells? (Expected yes for
-   on-the-fly generation, since only previously-fetched cells are cached.)
-
-Record the measured endpoint / TTFB / size / `thumbnail_bytes` presence in this
-file so the fix targets the real cause.
-
-## Fix options (pick after confirming)
-
-If **on-the-fly generation** (no `thumbnail_bytes`):
-
-- **A. Ensure `thumbnail_bytes` is precomputed at ingest** for the dataset's
-  media type (the fast path at `media/list.py:548-550`). Best fix if the gap is a
-  loader that skips thumbnail generation.
-- **B. Process-scoped generated-thumbnail cache** on `DatasetContext` so the
-  first on-the-fly generation per item is paid once and reused, even for datasets
-  that can't precompute at ingest. Keep it in-memory/process-scoped per the
-  **No Persisted Vectors/MLPs** rule (that rule doesn't forbid a thumbnail cache,
-  but don't write it to disk beyond the existing dataset-pickle snapshot).
-- **C. Generate thumbnails off the request thread** / warm them ahead of the
-  first paint so the GIL-serialized decode isn't on the critical path.
-
-If the Network tab shows something else entirely, investigate fresh — do not
-assume either of the above.
+1. Tunnel up (`./vtsearch-tunnel.sh`), load the dataset via
+   `POST /api/datasets/registry/<id>/load`, then send requests with the
+   `X-Dataset-Id: <id>` header (the active context is a per-request header set
+   by `active-context.interceptor.ts`, **not** a server-side activate call — a
+   curl without it hits the empty default context and looks "not loaded").
+2. Fire N concurrent cold `/thumbnail` requests; watch wall-clock + per-request
+   `time_starttransfer`. Force the on-the-fly path with `?region=0,0,1,1`.
+3. Introspect `thumbnail_bytes` presence + source MP by loading the saved pkl
+   with `vtscore.datasets.loader_pickle.load_dataset_from_pickle` and a PIL
+   `Image.open` over `media_bytes`.
 
 ## Key file/line references
 
 | What | Location |
 |------|----------|
-| `useFullResThumbs` (global, keys off targetRadius) | `frontend/.../browse-canvas/browse-canvas.component.ts:320-322` |
-| `DEFAULT_TARGET_RADIUS = 28` ("M" size) | `browse-canvas.component.ts:79` |
-| `THUMB_NATIVE_MAX_DIM = 384` | `browse-canvas.component.ts:84` |
-| Level selection holds bin ~targetRadius across zoom | `browse-canvas.component.ts:757-767` |
-| Per-cell endpoint pick + fetch | `browse-canvas.component.ts:1428-1430` |
-| `getThumb` (fires on first draw) | `browse-canvas.component.ts:1405-1432` |
 | `/thumbnail` route (precomputed vs on-the-fly) | `vtsearch/routes/media/list.py:516-552` |
-| `cached_thumbnail_response` (fast path) | `vtsearch/routes/_shared.py:33-54` |
+| `cached_thumbnail_response` (fast byte-stream) | `vtsearch/routes/_shared.py:33-54` |
 | `image_thumbnail_response` (decode+resize) | `vtsearch/routes/_shared.py:57-103` |
-| `/image` route (raw source bytes) | `vtsearch/routes/media/list.py:501-513` |
-| Single worker + 8 threads (GIL serialization) | `gunicorn.conf.py:28-30` |
+| `make_image_thumbnail` (None only on decode fail) | `vtscore/media/image/thumbnail.py:63-104` |
+| Ingest sets `thumbnail_bytes` | `vtscore/media/image/media_type.py:134-161` |
+| External-dir save strips `thumbnail_bytes` | `vtscore/datasets/loader_demo.py:399-405` |
+| Embedder warmup pattern (mirror for C) | `vtscore/datasets/load_pipeline.py:_warmup_embedder_async` |
+| `useFullResThumbs` (global, keys off targetRadius) | `frontend/.../browse-canvas/browse-canvas.component.ts:320-322` |
 
 ## Open follow-ups
 
-- Confirm against a running app (see "How to confirm") and record measured
-  endpoint / TTFB / size / `thumbnail_bytes` presence here before implementing.
-- If `thumbnail_bytes` is present yet `/thumbnail` is slow, open a fresh
-  investigation into the non-generation candidates listed above.
+- **Deploy:** rebuild not needed (backend-only); restart `app.py` to pick up the
+  route change. To make *existing* registry datasets fast on first paint, re-save
+  them (re-promote the demo / re-export) so fix A embeds the thumbnails — until
+  then they ride fix B (one generation per viewed tile at runtime).
+- Audio/video external-dir datasets have the same strip-on-save gap, but their
+  thumbnails are waveforms/keyframes (not `make_image_thumbnail`). Fix A only
+  covers images; extend the export-time generation per media type if those show
+  the same first-paint lag.

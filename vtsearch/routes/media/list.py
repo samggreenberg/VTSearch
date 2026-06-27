@@ -549,6 +549,20 @@ def media_thumbnail(media_id: int):
     if thumb:
         return cached_thumbnail_response(thumb, f"thumb_{media_id}")
     data, src_mimetype, _ = _resolve_display_image(media_id)
+    # Memoise the generated full-frame thumbnail onto the in-memory media so
+    # subsequent cold fetches (each fresh browse-canvas zoom/pan) stream the
+    # bytes instead of re-decoding the full-resolution original every time.
+    # Datasets backed by an external media dir lose their ingest-time
+    # ``thumbnail_bytes`` on save and never regenerate them on load, so without
+    # this every tile pays a request-time decode+resize forever.  In-memory
+    # only -- the bytes ride in the existing dataset context and are never
+    # written to disk unless the user explicitly exports.
+    from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
+
+    result = make_image_thumbnail(data)
+    if result is not None:
+        c["thumbnail_bytes"] = result[0]
+        return cached_thumbnail_response(result[0], f"thumb_{media_id}")
     return image_thumbnail_response(data, src_mimetype, f"thumb_{media_id}")
 
 
