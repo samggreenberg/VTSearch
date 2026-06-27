@@ -7,7 +7,9 @@
 # your local machine (see scripts/slurm/vtsearch-tunnel.sh).
 #
 # Ctrl+C stops the APP but KEEPS the node, then offers to restart it (handy
-# after a git pull / code edit). Type q at that prompt to release the node and
+# after a git pull / code edit). At that prompt, type i to reinstall deps
+# (runs scripts/install.sh in the venv -- handy after a dependency change,
+# without re-sshing and re-activating by hand), or q to release the node and
 # quit.
 #
 # Install: copy this somewhere on your PATH on the cluster and make it
@@ -75,9 +77,26 @@ exec srun --job-name=vtsearch --pty \
             VTSEARCH_TORCH_THREADS=${SLURM_CPUS_ON_NODE:-8} python app.py
             echo
             echo ">>> app.py stopped. GPU node ($node) is still yours."
-            printf ">>> [Enter] = restart (picks up code changes)   |   q + [Enter] = quit & release node: "
-            read -r reply || break
-            [ "$reply" = "q" ] && break
+            # Inner prompt loop so "i" (reinstall) can re-prompt instead of
+            # auto-restarting -- you get to read the install output and then
+            # decide to restart or quit. Enter falls through to restart app.py.
+            while true; do
+                printf ">>> [Enter] = restart (picks up code changes)   |   i + [Enter] = reinstall deps   |   q + [Enter] = quit & release node: "
+                read -r reply || break 2          # EOF (e.g. Ctrl+D): release node
+                case "$reply" in
+                    q) break 2 ;;                 # quit both loops -> release node
+                    i)
+                        echo
+                        echo ">>> Reinstalling deps via scripts/install.sh (auto-detects CPU/GPU)..."
+                        echo ">>> (runs in the active venv: $VTS_VENV)"
+                        echo
+                        bash scripts/install.sh \
+                            || echo ">>> install.sh FAILED -- see output above; node kept, deps unchanged."
+                        echo
+                        ;;                        # loop back to the prompt
+                    *) break ;;                   # Enter/anything else -> restart app.py
+                esac
+            done
         done
         echo ">>> Releasing the allocation. Bye."
     '
