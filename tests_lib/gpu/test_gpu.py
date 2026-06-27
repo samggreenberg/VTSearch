@@ -104,6 +104,83 @@ class TestDeviceAwareEmbedding:
 
 
 # ---------------------------------------------------------------------------
+# 0b. cuML-accelerated UMAP + k-means backends
+# ---------------------------------------------------------------------------
+
+
+def _cuml_installed() -> bool:
+    """True when the optional cuML/RAPIDS stack is importable on this host."""
+    try:
+        import cuml  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+class TestCuMLBackends:
+    """The cuML backend selectors that accelerate UMAP + the diversity tree.
+
+    cuML is an *optional* GPU dependency, so these tests exercise the factory
+    contract on any CUDA host: the estimators must work (and return numpy)
+    whether they resolve to cuML or fall back to the CPU libraries.  The few
+    cuML-specific assertions are guarded by ``_cuml_installed()`` so a GPU box
+    without RAPIDS still passes.
+    """
+
+    def test_cuml_enabled_matches_install(self):
+        # On a CUDA host (guarded by the module marker) the device resolves to
+        # cuda, so cuml_enabled() tracks purely whether cuML is importable.
+        from vtscore.gpu_backends import cuml_enabled
+
+        assert cuml_enabled() == _cuml_installed()
+
+    def test_make_umap_produces_2d_numpy_layout(self):
+        from vtscore.gpu_backends import make_umap
+
+        rng = np.random.default_rng(0)
+        mat = rng.standard_normal((60, 16)).astype(np.float32)
+        reducer = make_umap(n_components=2, n_neighbors=15, min_dist=0.1, metric="euclidean", random_state=42)
+        coords = np.asarray(reducer.fit_transform(mat))
+        assert coords.shape == (60, 2)
+        assert np.isfinite(coords).all()
+
+    def test_make_kmeans_clusters_and_reports_inertia(self):
+        from vtscore.gpu_backends import make_kmeans
+
+        rng = np.random.default_rng(1)
+        vecs = np.vstack([rng.standard_normal((30, 8)) + 5.0, rng.standard_normal((30, 8)) - 5.0]).astype(np.float32)
+        km = make_kmeans(n_clusters=2, random_state=42, n_init=1)
+        labels = np.asarray(km.fit_predict(vecs))
+        assert labels.shape == (60,)
+        assert set(np.unique(labels).tolist()) <= {0, 1}
+        assert km.inertia_ is not None
+
+    def test_fit_projection_umap_path_on_gpu(self):
+        from vtscore.projection.umap_projection import fit_projection
+
+        rng = np.random.default_rng(2)
+        matrix = rng.standard_normal((60, 16)).astype(np.float32)
+        ids = list(range(60))
+        proj = fit_projection(matrix, ids, random_state=42)
+        assert proj.method == "umap"
+        assert proj.coords.shape == (60, 2)
+        assert proj.coords.dtype == np.float32
+        assert np.isfinite(proj.coords).all()
+
+    def test_diversity_tree_builds_on_gpu(self):
+        from vtscore.state.diversity_tree import DiversityTree
+
+        rng = np.random.default_rng(3)
+        vectors = {i: rng.standard_normal(8).astype(np.float32) for i in range(60)}
+        tree = DiversityTree(vectors, k=2, max_depth=4, min_node_size=20)
+        # Every vector lands in a leaf and the tree actually split the root.
+        assert len(tree.vector_to_leaf) == 60
+        assert tree.total_nodes > 1
+        for vid in vectors:
+            assert tree.lookup(vid) in tree.nodes
+
+
+# ---------------------------------------------------------------------------
 # 1. train_model on GPU
 # ---------------------------------------------------------------------------
 

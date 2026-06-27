@@ -133,10 +133,14 @@ def _umap_layout(
     so it runs on a worker thread and the caller's thread emits an
     elapsed-seconds heartbeat on each ``_HEARTBEAT_SECONDS`` tick.  Anything the
     worker raises is re-raised here.
-    """
-    import umap
 
-    reducer = umap.UMAP(
+    On a usable CUDA host with cuML installed the reducer is
+    ``cuml.manifold.UMAP`` (~20-100x faster on large sets); otherwise it is the
+    CPU ``umap-learn`` reducer.  See :mod:`vtscore.gpu_backends`.
+    """
+    from vtscore.gpu_backends import make_umap
+
+    reducer = make_umap(
         n_components=2,
         n_neighbors=min(n_neighbors, mat.shape[0] - 1),
         min_dist=min_dist,

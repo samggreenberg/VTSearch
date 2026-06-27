@@ -8,3 +8,18 @@
 # pyproject.toml; `[project.dependencies]` plus the `dev` extra.
 
 -e .[dev]
+
+# --- Optional: GPU UMAP + k-means via cuML / RAPIDS (opt-in) ------------------
+# VTSearch auto-detects cuML at runtime and uses it to accelerate the VTSBrowse
+# UMAP projection and the diversity-tree k-means (~20-100x on large datasets);
+# when cuML is absent it falls back to the CPU umap-learn / scikit-learn paths
+# automatically (see vtscore/gpu_backends.py). cuML is NOT installed by default
+# because it is multi-gigabyte and pinned to a CUDA major version, which would
+# break the CPU/GPU install split on cu118/older runtimes and offline installs.
+# To enable it, install the wheel matching your CUDA major version from the
+# NVIDIA index, e.g. for CUDA 12:
+#
+#   pip install --extra-index-url https://pypi.nvidia.com cuml-cu12
+#
+# (use cuml-cu11 on CUDA 11 hosts). Output differs numerically from the CPU
+# path; this is safe because both consumers freeze/persist their result once.

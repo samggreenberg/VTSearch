@@ -22,8 +22,13 @@ import numpy as np
 # Imported eagerly so the ~1s sklearn cold-import is paid *before* the
 # progress bar reports `(0, estimated_total_work)`.  When the import was
 # lazy (inside `_build_node`) the bar appeared stuck at `(0, N)` while
-# sklearn loaded on the first `_build_node` call.
-from sklearn.cluster import KMeans
+# sklearn loaded on the first `_build_node` call.  The estimator itself is
+# constructed via ``make_kmeans`` (see below), which routes to
+# ``cuml.cluster.KMeans`` on a usable GPU and falls back to this sklearn
+# import otherwise.
+from sklearn.cluster import KMeans  # noqa: F401 — warms the CPU cold-import; make_kmeans is the fallback
+
+from vtscore.gpu_backends import make_kmeans
 
 DIVERSITY_TREE_DEFAULT_K = 2
 DIVERSITY_TREE_MAX_DEPTH = 10
@@ -193,12 +198,12 @@ class DiversityTree:
         best_inertia = float("inf")
         n_init = _n_init_for(len(ids))
         for init_i in range(n_init):
-            km = KMeans(
+            km = make_kmeans(
                 n_clusters=actual_k,
                 random_state=42 + init_i,
-                n_init=1,  # pyright: ignore[reportArgumentType]
+                n_init=1,
             )
-            candidate_labels = km.fit_predict(vecs)
+            candidate_labels = np.asarray(km.fit_predict(vecs))
             inertia = km.inertia_
             if inertia is not None and inertia < best_inertia:
                 best_inertia = inertia
