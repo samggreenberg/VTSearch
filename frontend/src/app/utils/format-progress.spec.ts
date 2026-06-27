@@ -97,3 +97,28 @@ describe('formatProgressHeader detail line', () => {
     expect(detail).toBe('3/9 cats/img.png');
   });
 });
+
+describe('formatProgressHeader step-4 finalize phases', () => {
+  // The serialize → zip → write window of step 4 used to match no phase, so
+  // the header collapsed to a bare "Step 4 of 4" with no descriptor.
+  it.each([
+    ['Saving to registry…', 'saving dataset'],
+    ['Serializing dataset…', 'saving dataset'],
+    ['Packaging dataset…', 'saving dataset'],
+    ['Building diversity index…', 'building diversity index'],
+    ['Building 2-D projection…', 'building projection'],
+    ['Building tile pyramid…', 'building projection'],
+    ['Dropped 3 item(s) with failed embedding…', 'cleaning up'],
+  ])('labels %j as "%s"', (message, expectedPhase) => {
+    const { header, subtitle } = formatProgressHeader(
+      { status: 'loading', message, step: 4, total_steps: 4 },
+      'dataset',
+    );
+    expect(header).toBe(`Loading dataset · Step 4 of 4 · ${capitalizeFirst(expectedPhase)}`);
+    expect(subtitle).not.toBe('');
+  });
+});
+
+function capitalizeFirst(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}

@@ -197,3 +197,65 @@ class TestOverallEta:
         clock["now"] = 7.0
         t.update("embedding", "x", current=10, total=100, step=2, total_steps=2)
         assert t.get()["eta_seconds"] is not None
+
+
+class TestFinalizeProgress:
+    """The FinalizeProgress proxy maps each finalize sub-stage into its own
+    ordered slice of step 4, so no single sub-stage can pin the unified bar at
+    100% while later sub-stages are still running (the old "frozen at 100%
+    while saving to disk" bug)."""
+
+    def _finalize_tracker(self):
+        from vtscore.datasets.stages._common import _LOAD_STEP_WEIGHTS, _TOTAL_LOAD_STEPS
+
+        t = _tracker()
+        t.set_step_weights(_LOAD_STEP_WEIGHTS)
+        # Pretend steps 1-3 finished so the bar is parked at the start of the
+        # finalize slice, exactly where a cache-backed demo load lands.
+        t.update("embedding", "emb", current=1, total=1, step=3, total_steps=_TOTAL_LOAD_STEPS)
+        return t
+
+    def test_substages_advance_monotonically_within_step_four(self):
+        from vtscore.datasets.stages._common import FinalizeProgress
+
+        t = self._finalize_tracker()
+        start = t.get()["overall"]
+        fin = FinalizeProgress(t)
+        overalls = []
+
+        def rec():
+            overalls.append(t.get()["overall"])
+
+        fin.begin("dedup")
+        fin.update("loading", "Removing duplicates…", current=0, total=10)
+        rec()
+        fin.update("loading", "Removing duplicates…", current=10, total=10)
+        rec()
+        after_dedup = t.get()["overall"]
+        fin.begin("diversity")
+        fin.update("loading", "Building diversity index…", current=5, total=10)
+        rec()
+        fin.begin("registry")
+        fin.update("loading", "Saving to registry…", current=3, total=3)
+        rec()
+        fin.begin("projection")
+        fin.update("loading", "Projection ready", current=1, total=1)
+        rec()
+
+        # Never rewinds, starts no earlier than the finalize floor, ends full.
+        assert overalls == sorted(overalls)
+        assert start <= overalls[0]
+        assert overalls[-1] == pytest.approx(1.0)
+        # The key fix: finishing the first sub-stage (dedup) must NOT slam the
+        # whole bar to 100% — later sub-stages still have room to advance.
+        assert after_dedup < 1.0
+
+    def test_check_cancelled_forwards_to_real_tracker(self):
+        from vtscore.concurrency.progress import CancelledError
+        from vtscore.datasets.stages._common import FinalizeProgress
+
+        t = self._finalize_tracker()
+        fin = FinalizeProgress(t)
+        t.cancel()
+        with pytest.raises(CancelledError):
+            fin.check_cancelled()

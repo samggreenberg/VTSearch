@@ -303,15 +303,24 @@ export function formatProgressHeader(
   } else if (status === 'loading' && /text encoder|warming/i.test(message)) {
     phase = 'warming text encoder';
     subtitle = 'One-time warm-up so the first text search returns instantly.';
+  } else if (/failed embedding|dropped /i.test(message)) {
+    phase = 'cleaning up';
+    subtitle = 'Discarding items that could not be embedded.';
   } else if (/duplicates/i.test(message)) {
     phase = 'removing duplicates';
     subtitle = 'Collapsing media that share the same content fingerprint.';
   } else if (/diversity/i.test(message)) {
     phase = 'building diversity index';
     subtitle = 'Indexing for fast diverse browsing and autopilot guidance.';
-  } else if (/saving to registry/i.test(message)) {
-    phase = 'saving to registry';
-    subtitle = 'Persisting the dataset so it survives a restart.';
+  } else if (/projection|tile pyramid/i.test(message)) {
+    phase = 'building projection';
+    subtitle = 'Precomputing the 2-D Browse map so the canvas opens instantly.';
+  } else if (/saving to registry|serial|packaging|registering/i.test(message)) {
+    // The whole serialize → zip → write → register window of step 4. These
+    // messages used to match nothing, leaving a bare "Step 4 of 4" with no
+    // descriptor — the longest part of the load with the least to show for it.
+    phase = 'saving dataset';
+    subtitle = 'Writing the dataset to disk so it survives a restart.';
   } else if (/clipping/i.test(message)) {
     phase = 'slicing clips';
     subtitle = 'Cutting media into clips for finer-grained search.';
