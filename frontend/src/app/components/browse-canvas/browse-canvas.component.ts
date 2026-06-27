@@ -134,6 +134,25 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * full-res ``/image`` instead of the capped ``/thumbnail``; crossing the
    * threshold drops the cache so cells reload at the matching resolution. */
   private thumbsAreFullRes = false;
+  /** Cap on new thumbnail fetches kicked off per idle preload pass, so a fast
+   * pan can warm the just-revealed ring without flooding the network or filling
+   * the thumbnail cache in a single burst. */
+  private static readonly PRELOAD_MAX_PER_PASS = 64;
+  /** Handle for the pending idle thumbnail-preload pass (at most one in flight),
+   * with a flag recording whether it was scheduled via ``setTimeout`` (the
+   * fallback when ``requestIdleCallback`` is unavailable) so destroy cancels it
+   * the matching way. */
+  private thumbPrefetchHandle: number | null = null;
+  private thumbPrefetchIsTimeout = false;
+  /** Smoothed pan direction (projection units, magnitude < 1) and the view
+   * centre it was last measured from. Biases which off-view tiles warm first:
+   * the preload ring extends one tile further on the leading edges so a sustained
+   * pan stays ahead of the motion. Decays toward zero when the view holds still,
+   * so a stationary view warms its ring symmetrically. */
+  private panDirX = 0;
+  private panDirY = 0;
+  private lastDrawCenterX = Number.NaN;
+  private lastDrawCenterY = Number.NaN;
 
   private ctx!: CanvasRenderingContext2D;
   private width = 0;
@@ -452,6 +471,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (this.settleTimer) clearTimeout(this.settleTimer);
     if (this.hoverDebounceTimer) clearTimeout(this.hoverDebounceTimer);
     if (this.clickTimer) clearTimeout(this.clickTimer);
+    if (this.thumbPrefetchHandle !== null) {
+      if (this.thumbPrefetchIsTimeout) clearTimeout(this.thumbPrefetchHandle);
+      else if (typeof cancelIdleCallback === 'function') cancelIdleCallback(this.thumbPrefetchHandle);
+    }
     const el = this.canvasRef.nativeElement;
     el.removeEventListener('mousedown', this.boundMouseDown);
     el.removeEventListener('wheel', this.boundWheel);
@@ -1153,6 +1176,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // Publish the region now on screen so the minimap can draw its viewport box.
     this.viewport.setViewport(this.getVisibleBounds());
 
+    this.updatePanDirection();
     this.prefetchNeighbors(visibleTiles);
 
     // Record what's now on screen so a zoom transition can grow/shrink this
@@ -1405,15 +1429,41 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private getThumb(representativeId: number): HTMLImageElement | null {
     const cached = this.thumbCache.get(representativeId);
     if (cached) {
+      // Bump recency: re-insert so a thumbnail painted this frame becomes the
+      // newest entry. The cache is insertion-ordered (see {@link evictThumbs}),
+      // so this keeps currently-visible thumbnails last in line for eviction —
+      // off-view preloads (which never bump) are dropped first, so warming the
+      // ring can never evict something that's on screen.
+      this.thumbCache.delete(representativeId);
+      this.thumbCache.set(representativeId, cached);
       return cached.complete && cached.naturalWidth > 0 ? cached : null;
     }
-    if (this.thumbFailed.has(representativeId)) return null;
+    this.startThumbLoad(representativeId, false);
+    return null;
+  }
+
+  /**
+   * Kick off the thumbnail fetch for a representative id and stash the pending
+   * image in the cache. ``preload`` marks an off-view warm-up: it loads at low
+   * network priority and does not repaint when it lands (the cell isn't on
+   * screen), so it never competes with visible thumbnails. A no-op when the id
+   * is already cached or known-failed.
+   */
+  private startThumbLoad(representativeId: number, preload: boolean): void {
+    if (this.thumbCache.has(representativeId) || this.thumbFailed.has(representativeId)) return;
 
     if (this.thumbCache.size >= this.MAX_THUMBS) this.evictThumbs();
 
     const img = new Image();
     img.decoding = 'async';
-    img.onload = () => this.requestRedraw();
+    if (preload) {
+      // Idle warm-up: let the browser schedule it behind visible-thumbnail and
+      // tile requests, and skip the repaint — the cell is off-screen, so a later
+      // draw picks it up from the cache once the user pans to it.
+      img.setAttribute('fetchpriority', 'low');
+    } else {
+      img.onload = () => this.requestRedraw();
+    }
     img.onerror = () => {
       this.thumbCache.delete(representativeId);
       this.thumbFailed.add(representativeId);
@@ -1428,7 +1478,6 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const endpoint = this.thumbsAreFullRes ? 'image' : 'thumbnail';
     img.src = this.activeContext.mediaUrl(`/api/medias/${representativeId}/${endpoint}`);
     this.thumbCache.set(representativeId, img);
-    return null;
   }
 
   /** Drop the oldest quarter of cached thumbnails (insertion-ordered LRU). */
@@ -1456,16 +1505,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const meta = this.meta();
     if (!meta) return;
     const level = this.activeLevel;
-    const seen = new Set(visibleTiles.map((t) => `${t.tx}:${t.ty}`));
-    for (const { tx, ty } of visibleTiles) {
-      for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-        const nx = tx + dx;
-        const ny = ty + dy;
-        if (!seen.has(`${nx}:${ny}`)) {
-          this.tileCache.prefetch(level, nx, ny);
-          seen.add(`${nx}:${ny}`);
-        }
-      }
+    // Warm the geometry of the ring just beyond the drawn tiles (8-connected, so
+    // diagonals are covered, plus an extra tile in the direction of travel) so a
+    // pan into it never blanks while the tile fetch is in flight.
+    for (const { tx, ty } of this.offViewRing(visibleTiles)) {
+      this.tileCache.prefetch(level, tx, ty);
     }
     if (level > 0) {
       this.prefetchLevel(level - 1, visibleTiles);
@@ -1473,6 +1517,127 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (meta.levels.length > level + 1) {
       this.prefetchLevel(level + 1, visibleTiles);
     }
+    // Image/video datasets paint a thumbnail per cell; warm the ring's thumbnails
+    // on idle so they're decoded before the cells scroll in. Pure-density media
+    // (audio/text) draw no thumbnails, so there's nothing to warm. Warming follows
+    // the same resolution tier (capped /thumbnail vs full-res /image) and the same
+    // count-bounded LRU as on-demand loads, so it can't raise the memory ceiling —
+    // it only reaches it sooner, and visible thumbnails (which bump recency) are
+    // evicted last.
+    if (this.thumbnailMode) this.scheduleThumbPrefetch();
+  }
+
+  /**
+   * The ring of tiles just outside the drawn set: the bounding box of
+   * ``visibleTiles`` grown by one tile on every side (8-connected, so diagonals
+   * are included), minus the box itself. The growth is extended by a second tile
+   * on whichever sides the view is panning toward ({@link panDirX} /
+   * {@link panDirY}), so a sustained pan warms further ahead in the direction of
+   * travel. ``visibleTiles`` already carries a one-tile margin (see
+   * {@link getVisibleTiles}), so this ring sits one to two tiles beyond what's
+   * actually painted.
+   */
+  private offViewRing(visibleTiles: { tx: number; ty: number }[]): { tx: number; ty: number }[] {
+    if (visibleTiles.length === 0) return [];
+    let txMin = Infinity;
+    let txMax = -Infinity;
+    let tyMin = Infinity;
+    let tyMax = -Infinity;
+    for (const { tx, ty } of visibleTiles) {
+      if (tx < txMin) txMin = tx;
+      if (tx > txMax) txMax = tx;
+      if (ty < tyMin) tyMin = ty;
+      if (ty > tyMax) tyMax = ty;
+    }
+    // One ring on every side, plus a directional extra tile on the leading edges.
+    const DIR = 0.3;
+    const outTxMin = txMin - (this.panDirX < -DIR ? 2 : 1);
+    const outTxMax = txMax + (this.panDirX > DIR ? 2 : 1);
+    const outTyMin = tyMin - (this.panDirY < -DIR ? 2 : 1);
+    const outTyMax = tyMax + (this.panDirY > DIR ? 2 : 1);
+    const ring: { tx: number; ty: number }[] = [];
+    for (let tx = outTxMin; tx <= outTxMax; tx++) {
+      for (let ty = outTyMin; ty <= outTyMax; ty++) {
+        // Keep only the new border; the interior is the already-drawn box.
+        if (tx >= txMin && tx <= txMax && ty >= tyMin && ty <= tyMax) continue;
+        ring.push({ tx, ty });
+      }
+    }
+    return ring;
+  }
+
+  /**
+   * Queue a single low-priority pass that warms off-view thumbnails when the main
+   * thread is idle. At most one pass is in flight; it recomputes the ring from the
+   * live view when it runs, so a pan that continued after scheduling still warms
+   * the right tiles. The ``timeout`` guarantees it runs even under a steady pan
+   * (where the thread rarely goes fully idle), keeping the warm-up ahead of the
+   * motion rather than only after it stops.
+   */
+  private scheduleThumbPrefetch(): void {
+    if (this.thumbPrefetchHandle !== null) return;
+    const run = () => {
+      this.thumbPrefetchHandle = null;
+      this.runThumbPrefetch();
+    };
+    if (typeof requestIdleCallback === 'function') {
+      this.thumbPrefetchIsTimeout = false;
+      this.thumbPrefetchHandle = requestIdleCallback(run, { timeout: 500 });
+    } else {
+      this.thumbPrefetchIsTimeout = true;
+      this.thumbPrefetchHandle = window.setTimeout(run, 100);
+    }
+  }
+
+  /**
+   * Warm thumbnails for the cells of the off-view ring, bounded to
+   * {@link PRELOAD_MAX_PER_PASS} new fetches so one pass can't flood the network
+   * or the cache. Only tiles whose geometry is already cached are walked (one
+   * still loading is picked up by a later pass), and warming stops short of the
+   * cache cap so a preload never evicts a visible thumbnail.
+   */
+  private runThumbPrefetch(): void {
+    if (!this.thumbnailMode || !this.meta()) return;
+    const level = this.activeLevel;
+    let budget = BrowseCanvasComponent.PRELOAD_MAX_PER_PASS;
+    for (const { tx, ty } of this.offViewRing(this.getVisibleTiles())) {
+      if (budget <= 0) break;
+      const tile = this.tileCache.getCached(level, tx, ty);
+      if (!tile) continue;
+      for (const cell of tile.cells) {
+        if (budget <= 0) break;
+        if (this.thumbCache.has(cell.rep_id) || this.thumbFailed.has(cell.rep_id)) continue;
+        // Stop before the cache fills so a preload never forces an eviction; the
+        // free slots come from visible getThumb()s bumping past stale warms.
+        if (this.thumbCache.size >= this.MAX_THUMBS) return;
+        this.startThumbLoad(cell.rep_id, true);
+        budget--;
+      }
+    }
+  }
+
+  /**
+   * Track a smoothed pan direction from the frame-to-frame change in the view
+   * centre, used to bias which off-view tiles to warm first. The exponential
+   * smoothing keeps a single jittery frame from flipping the bias and lets the
+   * direction decay toward zero when the view holds still (so a stationary view
+   * warms its ring symmetrically).
+   */
+  private updatePanDirection(): void {
+    const cx = this.transform.centerX;
+    const cy = this.transform.centerY;
+    const SMOOTH = 0.4;
+    if (!Number.isNaN(this.lastDrawCenterX)) {
+      const dx = cx - this.lastDrawCenterX;
+      const dy = cy - this.lastDrawCenterY;
+      const mag = Math.hypot(dx, dy);
+      const ux = mag > 1e-6 ? dx / mag : 0;
+      const uy = mag > 1e-6 ? dy / mag : 0;
+      this.panDirX += (ux - this.panDirX) * SMOOTH;
+      this.panDirY += (uy - this.panDirY) * SMOOTH;
+    }
+    this.lastDrawCenterX = cx;
+    this.lastDrawCenterY = cy;
   }
 
   private prefetchLevel(targetLevel: number, sourceTiles: { tx: number; ty: number }[]): void {
