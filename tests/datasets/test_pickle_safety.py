@@ -226,6 +226,48 @@ class TestSafePickleRoundTrip:
         assert len(loaded) == 1
         assert loaded[1]["md5"] == "abc123"
 
+    def test_image_thumbnail_generated_at_export(self, tmp_path):
+        """An image media with no ``thumbnail_bytes`` gets one generated at
+        export so reloads stream the bytes instead of decoding the original on
+        every cold tile fetch (the browse first-paint delay).  Image demos and
+        external-dir builds never produce ``thumbnail_bytes`` at build time."""
+        from PIL import Image  # noqa: PLC0415
+        from vtscore.media.image.thumbnail import DEFAULT_MAX_DIM  # noqa: PLC0415
+
+        buf = io.BytesIO()
+        Image.new("RGB", (1200, 800), (123, 50, 200)).save(buf, "JPEG", quality=85)
+        src = buf.getvalue()
+        medias = {
+            1: {
+                "id": 1,
+                "media_type": "image",
+                "duration": 0,
+                "file_size": len(src),
+                "md5": "img123",
+                "embedder": "siglip",
+                "embeddings": {"siglip": np.zeros(8, dtype=np.float32)},
+                "filename": "a.jpg",
+                "category": "test",
+                "origin": None,
+                "origin_name": "a.jpg",
+                "media_bytes": src,
+                "media_string": None,
+                "media_path": None,
+                "width": 1200,
+                "height": 800,
+                "thumbnail_bytes": None,
+            },
+        }
+        pkl_path = tmp_path / "img.pkl"
+        pkl_path.write_bytes(export_dataset_to_file(medias, embedder="siglip", media_type="image"))
+
+        loaded = {}
+        load_dataset_from_pickle(pkl_path, loaded)
+        thumb = loaded[1].get("thumbnail_bytes")
+        assert isinstance(thumb, bytes) and len(thumb) > 0
+        with Image.open(io.BytesIO(thumb)) as img:
+            assert max(img.size) <= DEFAULT_MAX_DIM
+
     def test_embedding_stored_as_float32_array(self, tmp_path):
         """Embeddings must serialise as compact float32 ndarrays, not Python
         lists of boxed floats (smaller on disk, faster to load)."""

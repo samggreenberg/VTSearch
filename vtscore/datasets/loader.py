@@ -254,6 +254,18 @@ def export_dataset_to_file(
         }
         for field in extra_fields_by_type.get(media.get("media_type", ""), ()):
             entry[field] = media.get(field)
+        # Persist a precomputed grid/list thumbnail so reloads stream the bytes
+        # instead of decoding the full-resolution original on every cold tile
+        # fetch (the browse first-paint delay).  Image *demos* never generate
+        # ``thumbnail_bytes`` at build time and ``_write_demo_cache`` strips
+        # them, so any image media still missing one at save gets it generated
+        # here from the in-memory source bytes -- a one-time, offline cost.
+        if media.get("media_type") == "image" and not entry.get("thumbnail_bytes") and entry.get("media_bytes"):
+            from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
+
+            thumb = make_image_thumbnail(entry["media_bytes"])
+            if thumb is not None:
+                entry["thumbnail_bytes"] = thumb[0]
         return entry
 
     data: dict[str, Any] = {"medias": {cid: _serialize_media(cid, media) for cid, media in medias.items()}}
