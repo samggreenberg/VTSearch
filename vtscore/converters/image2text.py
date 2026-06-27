@@ -45,11 +45,32 @@ def _run_paddleocr(media_bytes: bytes, filename: str, language: str) -> list | N
         return None
 
     try:
-        model = PaddleOCR(use_angle_cls=True, lang=language, show_log=False)
+        model = _make_paddleocr(PaddleOCR, language)
         return model.ocr(np.array(image), cls=True)
     except Exception as e:
         print(f"Image2TextMediaConverter: PaddleOCR failed on {filename}: {e}")
         return None
+
+
+def _make_paddleocr(paddle_ocr_cls: Any, language: str) -> Any:
+    """Construct a PaddleOCR engine, requesting GPU when one is resolved.
+
+    Routes through :func:`vtscore.config.resolve_device` so the engine honours
+    ``VTSEARCH_DEVICE`` and the CUDA smoke-test fallback.  ``use_gpu`` only
+    actually offloads when ``paddlepaddle-gpu`` is installed; with the CPU build
+    it is a harmless no-op.  The kwarg was removed in PaddleOCR 3.x, so an
+    unsupported-argument error falls back to the plain (CPU/default) constructor
+    rather than breaking OCR entirely.
+    """
+    from vtscore.config import resolve_device  # noqa: PLC0415
+
+    kwargs = {"use_angle_cls": True, "lang": language, "show_log": False}
+    if resolve_device().startswith("cuda"):
+        try:
+            return paddle_ocr_cls(**kwargs, use_gpu=True)
+        except (TypeError, ValueError):
+            pass  # PaddleOCR build without a use_gpu kwarg; fall back to default.
+    return paddle_ocr_cls(**kwargs)
 
 
 def _extract_text_lines(results: list, threshold: float) -> list[str]:

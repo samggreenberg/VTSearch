@@ -40,6 +40,7 @@ from vtscore.media.embedder import (
     embedder_load_setup,
     intercept_tqdm_progress,
     timed_progress,
+    to_compute_device,
 )
 from vtscore.media.image._image_bulk import bulk_embed_image_files
 from vtscore.media.patch_embed import PatchEmbedOutput, eupe_features_to_patch_output
@@ -117,7 +118,7 @@ class _EupeBase(MediaEmbedder):
                 weights=EUPE_MODEL_ID,
                 trust_repo=True,  # pyright: ignore[reportArgumentType]  # bool is valid at runtime; stubs only list str
             )
-        self._model = self._model.to("cpu")
+        self._model = to_compute_device(self._model)
         self._model.eval()
 
         # EUPE doesn't ship a HF AutoImageProcessor, so build the

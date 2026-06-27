@@ -28,15 +28,17 @@ def _fake_whisper_module(transcribe_result: dict, load_model_calls: list | None 
     mod = types.ModuleType("whisper")
 
     class FakeModel:
+        last_kwargs: dict = {}
+        last_device: str | None = None
+
         def transcribe(self, _audio_path, **kwargs):
             FakeModel.last_kwargs = kwargs
             return transcribe_result
 
-    FakeModel.last_kwargs = {}
-
-    def load_model(size: str):
+    def load_model(size: str, device=None):
         if load_model_calls is not None:
             load_model_calls.append(size)
+        FakeModel.last_device = device
         return FakeModel()
 
     mod.load_model = load_model  # pyright: ignore[reportAttributeAccessIssue]
@@ -178,6 +180,21 @@ class TestAudio2TextMediaConverter:
             c.convert(media, {"model_size": "small"})
 
         assert load_calls == ["small"]
+
+    def test_convert_loads_on_resolved_device(self):
+        """Whisper loads on resolve_device()'s choice; on a CPU host that's
+        ``"cpu"`` with fp16 disabled (FP16 is enabled only on CUDA)."""
+        from vtscore.converters.audio2text import Audio2TextMediaConverter
+
+        media = {"filename": "x.wav", "media_bytes": _make_silent_wav()}
+        c = Audio2TextMediaConverter()
+        fake = _fake_whisper_module({"text": "Hi."})
+
+        with patch.dict(sys.modules, {"whisper": fake}):
+            c.convert(media)
+
+        assert fake._FakeModel.last_device == "cpu"  # pyright: ignore[reportAttributeAccessIssue]
+        assert fake._FakeModel.last_kwargs.get("fp16") is False  # pyright: ignore[reportAttributeAccessIssue]
 
     def test_convert_default_model_size_is_base(self):
         from vtscore.converters.audio2text import Audio2TextMediaConverter

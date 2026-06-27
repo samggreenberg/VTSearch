@@ -22,8 +22,9 @@ class Audio2TextMediaConverter(MediaConverter):
     The Whisper model files are downloaded on first use to the standard
     Whisper cache (``~/.cache/whisper``). The smallest (``tiny``) is
     ~75 MB on disk; ``base`` ~145 MB; ``small`` ~480 MB; ``medium``
-    ~1.5 GB; ``large`` ~3 GB. Inference runs on CPU by default and
-    automatically uses CUDA if a GPU is available.
+    ~1.5 GB; ``large`` ~3 GB. Inference runs on the device resolved from
+    ``VTSEARCH_DEVICE`` (CUDA when a usable GPU is visible, CPU otherwise; see
+    :func:`vtscore.config.resolve_device`), with FP16 enabled on CUDA.
 
     User-configurable parameters
     ----------------------------
@@ -89,8 +90,16 @@ class Audio2TextMediaConverter(MediaConverter):
                 audio_path.unlink(missing_ok=True)
             return []
 
+        # Resolve once, here, so Whisper honours VTSEARCH_DEVICE and the CUDA
+        # smoke-test fallback rather than its own naive is_available() check
+        # (which would pick a GPU the installed torch wheel can't run on).
+        from vtscore.config import resolve_device  # noqa: PLC0415
+
+        resolved = resolve_device()
+        whisper_device = resolved if resolved.startswith("cuda") else "cpu"
+
         try:
-            model = whisper.load_model(model_size)
+            model = whisper.load_model(model_size, device=whisper_device)
         except Exception as e:
             print(f"Audio2TextMediaConverter: failed to load Whisper model '{model_size}': {e}")
             if owns_temp:
@@ -98,7 +107,7 @@ class Audio2TextMediaConverter(MediaConverter):
             return []
 
         try:
-            kwargs: dict[str, Any] = {"fp16": False}
+            kwargs: dict[str, Any] = {"fp16": whisper_device.startswith("cuda")}
             if language:
                 kwargs["language"] = language
             result = model.transcribe(str(audio_path), **kwargs)

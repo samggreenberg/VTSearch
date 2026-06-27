@@ -29,6 +29,7 @@ from vtscore.media.embedder import (
     intercept_tqdm_progress,
     load_pretrained_local_first,
     timed_progress,
+    to_compute_device,
 )
 
 
@@ -93,7 +94,7 @@ class AudioWhisperEncoderEmbedder(MediaEmbedder):
             )
         # Encoder only - drop the decoder so we don't keep ~half the
         # weights in RSS for no benefit (we never invoke it).
-        full_model = full_model.to("cpu")
+        full_model = to_compute_device(full_model)
         self._model = full_model.encoder
         self._model.eval()
 

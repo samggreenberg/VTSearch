@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
-from vtscore.media.embedder import MediaEmbedder, timed_progress
+from vtscore.media.embedder import MediaEmbedder, timed_progress, to_compute_device
 from vtscore.media.image._image_bulk import bulk_embed_image_files
 
 if TYPE_CHECKING:
@@ -82,7 +82,7 @@ class ImageFaceEmbedder(MediaEmbedder):
 
             model = InceptionResnetV1(pretrained="vggface2")
             model.eval()
-            self._model = model.to("cpu")
+            self._model = to_compute_device(model)
 
     def _preprocess(self, image: "Image.Image") -> np.ndarray:
         """Resize to 160×160 RGB and normalise to ``(x − 127.5) / 128``.
