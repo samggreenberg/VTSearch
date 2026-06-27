@@ -88,16 +88,32 @@ describe('DetectorCardComponent', () => {
     expect(component.editing).toBe(false);
   });
 
-  it('should emit delete from the overflow menu', async () => {
+  it('should emit delete from the inline delete button', () => {
     vi.spyOn(component.delete, 'emit');
+    const el = fixture.nativeElement as HTMLElement;
+    (el.querySelector('.delete-btn') as HTMLElement).click();
+    expect(component.delete.emit).toHaveBeenCalled();
+  });
+
+  it('should drop the inline verbs from the overflow menu', async () => {
     const el = fixture.nativeElement as HTMLElement;
     (el.querySelector('.overflow-btn') as HTMLElement).click();
     await settleZoneless(fixture);
-    const items = Array.from(el.querySelectorAll('.menu-item')) as HTMLElement[];
-    const deleteItem = items.find((b) => b.textContent?.includes('Delete'));
-    expect(deleteItem).toBeTruthy();
-    deleteItem!.click();
-    expect(component.delete.emit).toHaveBeenCalled();
+    const overflow = Array.from(el.querySelectorAll('.menu-item')).map((b) => b.textContent?.trim());
+    // Browse and Delete are inline icons; the ⋯ menu omits them.
+    expect(overflow).not.toContain('Browse positives');
+    expect(overflow).not.toContain('Delete');
+    expect(overflow).toContain('Rename');
+  });
+
+  it('should still list the inline verbs in the right-click context menu', async () => {
+    const el = fixture.nativeElement as HTMLElement;
+    el.dispatchEvent(new MouseEvent('contextmenu', { clientX: 10, clientY: 10, bubbles: true }));
+    await settleZoneless(fixture);
+    const full = Array.from(el.querySelectorAll('.menu-item')).map((b) => b.textContent?.trim());
+    // Right-click stays complete: Browse and Delete return.
+    expect(full).toContain('Browse positives');
+    expect(full).toContain('Delete');
   });
 
   it('should surface export and import-labels actions in the overflow menu', async () => {

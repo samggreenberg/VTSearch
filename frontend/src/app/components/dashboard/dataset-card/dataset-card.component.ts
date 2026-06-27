@@ -12,7 +12,7 @@ import {
 } from '../../../utils/format-progress';
 import { formatTimestamp } from '../../../utils/format-date';
 import { ContextMenuComponent, ContextMenuItem } from '../../context-menu/context-menu.component';
-import { buildDatasetCardMenuItems, CARD_MENU_MIN_WIDTH } from '../card-context-menu-items';
+import { buildDatasetCardMenuItems, CARD_MENU_MIN_WIDTH, overflowMenuItems } from '../card-context-menu-items';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -53,7 +53,9 @@ export class DatasetCardComponent {
     // there is nothing to act on.
     if (this.loadingTask) return;
     event.preventDefault();
-    this.openMenuAt(event.clientX, event.clientY);
+    // Right-click gets the complete action list; the ⋯ button gets the overflow
+    // subset (see openMenuAt).
+    this.openMenuAt(event.clientX, event.clientY, false);
   }
   readonly rename = output<string>();
   readonly stats = output<void>();
@@ -93,25 +95,28 @@ export class DatasetCardComponent {
     setTimeout(() => this.renameInput?.nativeElement.focus());
   }
 
-  /** Open the shared action menu (right-click or ⋯ overflow) at a viewport
-   *  point. ``buildDatasetCardMenuItems`` is the single source of truth for
-   *  the action list. */
-  private openMenuAt(x: number, y: number): void {
-    this.contextMenuItems = buildDatasetCardMenuItems(this.dataset, {
+  /** Open the shared action menu at a viewport point.
+   *  ``buildDatasetCardMenuItems`` is the single source of truth for the action
+   *  list; ``overflow`` trims the verbs already shown as inline icons (Load,
+   *  Browse, Delete) so the ⋯ button reads as "more" while right-click stays
+   *  complete. */
+  private openMenuAt(x: number, y: number, overflow: boolean): void {
+    const items = buildDatasetCardMenuItems(this.dataset, {
       isDefaultLogin: this.isDefaultLogin(),
       isOwner: this.isOwner,
     });
+    this.contextMenuItems = overflow ? overflowMenuItems(items) : items;
     this.contextMenuX = x;
     this.contextMenuY = y;
     this.contextMenuOpen = true;
   }
 
-  /** Open the action menu from the ⋯ overflow button, right-aligned under it so
+  /** Open the overflow action menu from the ⋯ button, right-aligned under it so
    *  the menu never spills off the viewport's right edge. */
   onOverflow(event: MouseEvent): void {
     event.stopPropagation();
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    this.openMenuAt(Math.max(8, rect.right - CARD_MENU_MIN_WIDTH), rect.bottom + 4);
+    this.openMenuAt(Math.max(8, rect.right - CARD_MENU_MIN_WIDTH), rect.bottom + 4, true);
   }
 
   onContextMenuAction(id: string): void {
@@ -176,6 +181,11 @@ export class DatasetCardComponent {
   onBrowse(event: MouseEvent): void {
     event.stopPropagation();
     this.browse.emit();
+  }
+
+  onDelete(event: MouseEvent): void {
+    event.stopPropagation();
+    this.delete.emit();
   }
 
   onCheckboxClick(event: MouseEvent): void {

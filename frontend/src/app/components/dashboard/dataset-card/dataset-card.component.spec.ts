@@ -113,25 +113,30 @@ describe('DatasetCardComponent', () => {
     expect(component.rename.emit).not.toHaveBeenCalled();
   });
 
-  it('should emit delete from the overflow menu', async () => {
+  it('should emit delete from the inline delete button', () => {
     vi.spyOn(component.delete, 'emit');
     const el = fixture.nativeElement as HTMLElement;
-    (el.querySelector('.overflow-btn') as HTMLElement).click();
-    await settleZoneless(fixture);
-    const items = Array.from(el.querySelectorAll('.menu-item')) as HTMLElement[];
-    const deleteItem = items.find((b) => b.textContent?.includes('Delete'));
-    expect(deleteItem).toBeTruthy();
-    deleteItem!.click();
+    (el.querySelector('.delete-btn') as HTMLElement).click();
     expect(component.delete.emit).toHaveBeenCalled();
   });
 
-  it('should open the overflow menu with the labelled action list', async () => {
+  it('should drop the inline verbs from the overflow menu', async () => {
     const el = fixture.nativeElement as HTMLElement;
     (el.querySelector('.overflow-btn') as HTMLElement).click();
     await settleZoneless(fixture);
     const labels = Array.from(el.querySelectorAll('.menu-item')).map((b) => b.textContent?.trim());
-    // Loaded, single-user dataset: Browse / Rename / Stats / Delete (no Load,
-    // no Edit-access).
+    // Loaded, single-user dataset. The ⋯ overflow lists only the long tail —
+    // Browse/Delete are inline icons, Load is hidden (loaded), Edit-access is
+    // single-user-hidden.
+    expect(labels).toEqual(['Rename', 'Stats']);
+  });
+
+  it('should still list the inline verbs in the right-click context menu', async () => {
+    const el = fixture.nativeElement as HTMLElement;
+    el.dispatchEvent(new MouseEvent('contextmenu', { clientX: 10, clientY: 10, bubbles: true }));
+    await settleZoneless(fixture);
+    const labels = Array.from(el.querySelectorAll('.menu-item')).map((b) => b.textContent?.trim());
+    // Right-click stays complete: Browse and Delete return alongside the tail.
     expect(labels).toEqual(['Browse dataset', 'Rename', 'Stats', 'Delete']);
   });
 

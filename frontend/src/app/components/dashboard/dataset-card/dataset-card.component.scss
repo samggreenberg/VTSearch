@@ -162,6 +162,26 @@ td.actions-col {
   }
 }
 
+// Delete is inline (every dataset is removed eventually), but destructive, so
+// it reddens on hover to read as Delete rather than just another grey icon.
+.delete-btn {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-base), background var(--transition-base);
+
+  &:hover {
+    color: var(--color-bad);
+    background: var(--bad-bg);
+  }
+}
+
 .overflow-btn {
   background: none;
   border: none;
