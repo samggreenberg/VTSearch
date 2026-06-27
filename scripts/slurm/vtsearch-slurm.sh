@@ -50,9 +50,20 @@ echo ">>> (this may queue; once it lands, VTSearch starts and prints its node + 
 # app.py reads VTSEARCH_PORT for the dev server's bind port.
 export VTS_DIR="$DIR" VTS_VENV="$VENV" VTS_MODULE="$MODULE" VTSEARCH_PORT="$PORT"
 
-exec srun --job-name=vtsearch --pty \
-    -p "$PART" --gres=gpu:${GPU}:1 -c "$CPUS" --mem "$MEM" -t "$TIME" \
-    bash -lc '
+# The per-node script below is too long to pass as an inline `bash -lc '...'`
+# argument: this cluster's srun caps that single argument at 2000 chars and
+# rejects anything longer ("script argument list exceeds 2000 characters").
+# So write the body to a temp file on a SHARED filesystem -- the compute node
+# has to read it, so node-local /tmp won't do -- and have srun run that file.
+# This keeps the srun argv tiny no matter how long the body grows.
+RUNNER_DIR="/exp/$USER"; [ -d "$RUNNER_DIR" ] || RUNNER_DIR="$HOME"
+RUNNER=$(mktemp "$RUNNER_DIR/.vtsearch-run.XXXXXX") \
+    || { echo "could not create runner temp file in $RUNNER_DIR"; exit 1; }
+# Clean up the temp file on exit (normal quit, Ctrl+C, or kill).
+trap 'rm -f "$RUNNER"' EXIT INT TERM
+# Quoted heredoc: $VTS_DIR etc. stay literal here and expand on the compute
+# node, exactly as they did inside the old single-quoted `bash -lc '...'`.
+cat > "$RUNNER" <<'REMOTE'
         # A no-op INT handler keeps THIS wrapper alive on Ctrl+C while still
         # letting child processes (python) take the default SIGINT and die.
         trap ":" INT
@@ -99,4 +110,8 @@ exec srun --job-name=vtsearch --pty \
             done
         done
         echo ">>> Releasing the allocation. Bye."
-    '
+REMOTE
+
+srun --job-name=vtsearch --pty \
+    -p "$PART" --gres=gpu:${GPU}:1 -c "$CPUS" --mem "$MEM" -t "$TIME" \
+    bash -l "$RUNNER"
