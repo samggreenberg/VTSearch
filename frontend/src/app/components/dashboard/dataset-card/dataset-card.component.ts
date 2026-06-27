@@ -178,11 +178,6 @@ export class DatasetCardComponent {
     this.load.emit();
   }
 
-  onBrowse(event: MouseEvent): void {
-    event.stopPropagation();
-    this.browse.emit();
-  }
-
   onDelete(event: MouseEvent): void {
     event.stopPropagation();
     this.delete.emit();

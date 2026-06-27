@@ -55,7 +55,7 @@ export const DATASET_COL_META: Record<string, ColMeta> = {
   expires_at: { label: 'Age-Off', title: 'When this dataset ages off and is automatically removed (click to sort)', sortable: true },
   created_by: { label: 'Creator', title: 'User who created this dataset (click to sort)', sortable: true },
   readers: { label: 'Readers', title: 'Users with access to this dataset (click to sort)', sortable: true },
-  // Header label intentionally blank: the inline icon buttons (Browse, Delete,
+  // Header label intentionally blank: the inline icon buttons (Delete,
   // ⋯) are self-evident, so an "Actions" caption was just noise.
   actions: { label: '', title: 'Available operations for this dataset', sortable: false },
 };
@@ -68,7 +68,7 @@ export const DETECTOR_COL_META: Record<string, ColMeta> = {
   created_at: { label: 'Created', title: 'When the detector was created (click to sort)', sortable: true },
   created_by: { label: 'Creator', title: 'User who created this detector (click to sort)', sortable: true },
   readers: { label: 'Readers', title: 'Users with access to this detector (click to sort)', sortable: true },
-  // Header label intentionally blank: the inline icon buttons (Browse, Delete,
+  // Header label intentionally blank: the inline icon buttons (Delete,
   // ⋯) are self-evident, so an "Actions" caption was just noise.
   actions: { label: '', title: 'Available operations for this detector', sortable: false },
 };

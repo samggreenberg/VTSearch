@@ -37,6 +37,9 @@ td {
 }
 
 td.actions-col {
+  // Hug the inline action buttons; width is defined once on `.dash-table` and
+  // inherited here (see `_data-table.scss`).
+  width: var(--actions-col-width);
   text-align: right;
 }
 

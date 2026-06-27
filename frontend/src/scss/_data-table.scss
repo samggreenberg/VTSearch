@@ -17,6 +17,14 @@
   border-collapse: collapse;
   font-size: var(--font-md);
 
+  // The Actions column hugs its inline icon buttons rather than flexing with
+  // the table. Worst case is three 22px icon buttons (Load when unloaded,
+  // Delete, ⋯) with two 4px gaps (74px) plus the cell's side padding. Pinned
+  // via this width — applied to the header and body cells below, and inherited
+  // by the card rows' own `td.actions-col` — instead of the resizable
+  // percentage system, so it stays narrow in both auto and fixed table-layout.
+  --actions-col-width: 6rem;
+
   th, td {
     padding: var(--space-sm) var(--space-md);
     text-align: left;
@@ -35,8 +43,11 @@
   }
 
   // Pinned columns: Select on the far left, Name next, Actions on the right.
+  // Actions is held to a fixed content width (see --actions-col-width) and is
+  // excluded from the drag-resize percentage flow, so it never widens.
   th.actions-col,
   td.actions-col {
+    width: var(--actions-col-width);
     text-align: right;
   }
 

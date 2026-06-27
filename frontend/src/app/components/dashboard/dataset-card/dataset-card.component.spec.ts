@@ -125,38 +125,30 @@ describe('DatasetCardComponent', () => {
     (el.querySelector('.overflow-btn') as HTMLElement).click();
     await settleZoneless(fixture);
     const labels = Array.from(el.querySelectorAll('.menu-item')).map((b) => b.textContent?.trim());
-    // Loaded, single-user dataset. The ⋯ overflow lists only the long tail —
-    // Browse/Delete are inline icons, Load is hidden (loaded), Edit-access is
-    // single-user-hidden.
-    expect(labels).toEqual(['Rename', 'Stats']);
+    // Loaded, single-user dataset. Only Delete is inline (plus Load when
+    // unloaded), so the ⋯ overflow still carries Browse alongside the tail;
+    // Delete is dropped, Load is hidden (loaded), Edit-access is single-user-hidden.
+    expect(labels).toEqual(['Browse dataset', 'Rename', 'Stats']);
   });
 
-  it('should still list the inline verbs in the right-click context menu', async () => {
+  it('should still list the inline Delete verb in the right-click context menu', async () => {
     const el = fixture.nativeElement as HTMLElement;
     el.dispatchEvent(new MouseEvent('contextmenu', { clientX: 10, clientY: 10, bubbles: true }));
     await settleZoneless(fixture);
     const labels = Array.from(el.querySelectorAll('.menu-item')).map((b) => b.textContent?.trim());
-    // Right-click stays complete: Browse and Delete return alongside the tail.
+    // Right-click stays complete: Delete returns alongside the rest.
     expect(labels).toEqual(['Browse dataset', 'Rename', 'Stats', 'Delete']);
   });
 
-  it('should emit browse on browse button click for audio datasets', () => {
+  it('should emit browse from the overflow menu', async () => {
     vi.spyOn(component.browse, 'emit');
     const el = fixture.nativeElement as HTMLElement;
-    const browseBtn = el.querySelector('.browse-btn') as HTMLButtonElement;
-    expect(browseBtn.disabled).toBe(false);
-    browseBtn.click();
-    expect(component.browse.emit).toHaveBeenCalled();
-  });
-
-  it('should emit browse for non-audio datasets too', async () => {
-    fixture.componentRef.setInput('dataset', { ...mockDataset, media_type: 'image' });
+    (el.querySelector('.overflow-btn') as HTMLElement).click();
     await settleZoneless(fixture);
-    vi.spyOn(component.browse, 'emit');
-    const el = fixture.nativeElement as HTMLElement;
-    const browseBtn = el.querySelector('.browse-btn') as HTMLButtonElement;
-    expect(browseBtn.disabled).toBe(false);
-    browseBtn.click();
+    const items = Array.from(el.querySelectorAll('.menu-item')) as HTMLElement[];
+    const browseItem = items.find((b) => b.textContent?.includes('Browse dataset'));
+    expect(browseItem).toBeTruthy();
+    browseItem!.click();
     expect(component.browse.emit).toHaveBeenCalled();
   });
 
