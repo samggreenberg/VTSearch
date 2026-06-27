@@ -446,8 +446,12 @@ def clear_text_query_cache() -> None: ...
 def get_torch_device() -> torch.device:
     """Resolve config.DEVICE to a concrete torch.device."""
 
-def initialize_models() -> None:
-    """Set up the torch runtime: cache dir, thread limits, optional CUDA visibility."""
+def initialize_models(on_progress: ProgressCallback | None = None) -> None:
+    """Set up the torch runtime: cache dir, thread limits, optional CUDA visibility.
+
+    Pass on_progress to render console progress bars for the heavy sklearn /
+    transformers imports; omit it (default) to run silently.
+    """
 
 def predict_embedders_to_preload(
     datasets: Iterable[DatasetRegistryEntry],
