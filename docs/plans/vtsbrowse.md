@@ -649,6 +649,15 @@ in git history and the cited source files.
 ## Open follow-ups
 
 **Shipped (struck through):**
+- ~~**Configurable mouse-zooms per pyramid level**~~ — a per-media-type
+  `browse_mouse_zooms_per_level` setting (Settings → Browser, default 2, clamped
+  1..3) controls how many wheel notches / +/- button clicks cross one pyramid
+  level (a full 2× of zoom). The per-step width factor is `2 ** (1 / n)`: 1 ⇒ 2×
+  (one step per level), 2 ⇒ √2 (the previous fixed behavior), 3 ⇒ ∛2.
+  `BrowseViewComponent` mirrors the per-media value and derives the +/- button
+  factor from it; `BrowseCanvasComponent` takes it as a `zoomsPerLevel` input and
+  derives the wheel factor, so the two gestures stay in lock-step. The double-click
+  zoom stays a fixed 2× (one whole level) regardless of the setting.
 - ~~**Wider cell-size range + full-res at large zoom**~~ — the browse canvas's
   bigger/smaller buttons now walk nine named levels (`XS`..`XL`, then `2XL`..`5XL`)
   instead of five, so a user can blow a cell up close to the full media. Past the
