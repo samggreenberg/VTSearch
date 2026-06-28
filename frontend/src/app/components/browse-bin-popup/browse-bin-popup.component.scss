@@ -35,14 +35,55 @@
   }
 }
 
-.bin-popup-title {
-  font-size: var(--font-xs);
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+// Top-left detail-canvas (large preview) size buttons. A segmented pair that
+// mirrors the top-right grid-thumbnail size buttons (``vc-btn--size``), but
+// resizes the single large preview — and so the whole popup — instead of the
+// member thumbnails.
+.bin-popup-size-group {
+  display: inline-flex;
   flex-shrink: 0;
+}
+
+.bin-popup-size-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 var(--space-sm);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--transition-base), color var(--transition-base),
+    border-color var(--transition-base);
+
+  &:not(:first-child) {
+    margin-left: -1px;
+  }
+
+  &:first-child {
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  }
+
+  &:last-child {
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+
+  &:hover:not(:disabled) {
+    color: var(--text-primary);
+    border-color: var(--text-primary);
+    z-index: 1;
+  }
+
+  &:disabled {
+    opacity: var(--opacity-disabled);
+    cursor: not-allowed;
+  }
+
+  vt-icon {
+    line-height: 0;
+  }
 }
 
 .bin-popup-view-controls {
@@ -88,6 +129,24 @@
   border-radius: var(--radius-sm);
   background: var(--bg-body);
   overflow: hidden;
+  // Clicking the detail image toggles selection of the item it shows — the only
+  // way to select in a singleton popup (no grid), and a convenience in any popup.
+  cursor: pointer;
+
+  // A faint ring hints the image is clickable; the solid ``.selected`` ring
+  // (mirroring a grid entry's) takes over once the shown item is selected.
+  &:hover:not(.selected) {
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+
+  &.selected {
+    box-shadow: inset 0 0 0 2px var(--accent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
 }
 
 .bin-popup-preview-img {
@@ -100,12 +159,68 @@
   display: block;
 }
 
-// The scrolling thumbnail grid. Fixed-width column so the popup hugs it plus
-// the preview pane; height fills the bound body height so the viewport scrolls.
-.bin-popup-scroll {
+// The grid column: a fixed-width stack of the member-count label above the
+// scrolling thumbnail grid, so the popup hugs it plus the preview pane. The
+// count sits at the column's top-left; the grid fills the remaining height.
+.bin-popup-grid-col {
   width: 280px;
   height: 100%;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+// Top row of the grid column: the select-all control on the left and the
+// member-count label pushed to the right. With a single member there is no
+// button, so `space-between` leaves the count alone at the left as before.
+.bin-popup-grid-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2xs);
+  padding: 0 var(--space-2xs) var(--space-2xs);
+}
+
+// Tri-state master checkbox, mirroring the dashboard's select-all button but
+// tuned to this window: smaller icon and tighter padding for the compact header.
+.bin-popup-select-all {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: var(--space-2xs);
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-base), background var(--transition-base);
+
+  &:hover {
+    background: var(--btn-icon-hover-bg);
+    color: var(--text-primary);
+  }
+}
+
+// Member-count label, right end of the header row.
+.bin-popup-count {
+  flex-shrink: 0;
+  font-size: var(--font-xs);
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+// The scrolling thumbnail grid fills the column below the count label.
+.bin-popup-scroll {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-x: hidden;
 }
 
@@ -143,6 +258,13 @@
     color: var(--text-primary);
     // A ring (not the list's inset accent bar) reads better under a square thumb.
     box-shadow: 0 0 0 2px var(--accent);
+  }
+
+  // The bin's representative — the pile thumbnail the user right-clicked, shown
+  // large in the preview and scrolled into view here. A softer ring marks it in
+  // the 1-D list; the solid ``.selected`` ring takes over once it's selected.
+  &.representative:not(.selected) {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
   }
 
   &:focus-visible {

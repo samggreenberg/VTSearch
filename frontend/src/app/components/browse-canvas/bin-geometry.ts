@@ -110,7 +110,10 @@ const SQUARE_SINGLE_CORNER_RATIO = 0.35;
 
 // Square cell of side `radius·√3` (matching the hex column spacing so the two
 // lattices have a comparable on-screen footprint and share the level picker).
-// Centered on lattice points, so columns and rows are spaced one side apart.
+// The backend corner-anchors the lattice on a fixed origin (a quadtree, so reps
+// persist across zoom — see vtscore/projection/squarebin.py) and reports each
+// cell's true midpoint as `(cx, cy)`; here we just draw a side-`radius·√3`
+// square around that centre, so columns and rows are spaced one side apart.
 const SQUARE_GEOMETRY: BinGeometry = {
   shape: 'square',
   dx: (radius) => radius * SQRT3,

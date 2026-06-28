@@ -8,8 +8,9 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from vtscore.config import E5_MODEL_ID
+from vtscore.config import E5_MODEL_ID, resolve_device
 from vtscore.media.embedder import (
+    IMPORT_MODULE_ESTIMATES,
     MediaEmbedder,
     embedder_load_setup,
     hf_token,
@@ -84,13 +85,22 @@ class TextE5Embedder(MediaEmbedder):
         if self._model is not None:
             return
 
-        with timed_progress(self._on_progress, "loading", "Importing torch…", 1, 3):
+        with timed_progress(
+            self._on_progress, "loading", "Importing torch…", est_modules=IMPORT_MODULE_ESTIMATES["torch"]
+        ):
             import torch  # noqa: F401, PLC0415
 
-        with timed_progress(self._on_progress, "loading", "Importing transformers…", 2, 3):
+        with timed_progress(
+            self._on_progress, "loading", "Importing transformers…", est_modules=IMPORT_MODULE_ESTIMATES["transformers"]
+        ):
             from transformers import BertModel  # noqa: PLC0415
 
-        with timed_progress(self._on_progress, "loading", "Importing sentence_transformers…", 3, 3):
+        with timed_progress(
+            self._on_progress,
+            "loading",
+            "Importing sentence_transformers…",
+            est_modules=IMPORT_MODULE_ESTIMATES["sentence_transformers"],
+        ):
             from sentence_transformers import SentenceTransformer  # noqa: PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading E5 model…")
@@ -103,6 +113,7 @@ class TextE5Embedder(MediaEmbedder):
                 SentenceTransformer,
                 E5_MODEL_ID,
                 cache_folder=cache_dir,
+                device=resolve_device(),
                 token=hf_token(),
                 on_progress=self._on_progress,
             )

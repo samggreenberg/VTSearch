@@ -66,6 +66,123 @@ def _make_votes(good_ids: list[int], bad_ids: list[int]):
 
 
 # ---------------------------------------------------------------------------
+# 0. Device-aware embedding plumbing
+# ---------------------------------------------------------------------------
+
+
+class TestDeviceAwareEmbedding:
+    """The device-resolution machinery every embedder now loads through.
+
+    These exercise the mechanism the device-aware embedder refactor hinges on
+    (``resolve_device`` -> ``to_compute_device``) without touching the heavy
+    HF model downloads or the embedder registry (which the library-tier test
+    suite stubs out), so they stay fast and deterministic on any CUDA box.
+    """
+
+    def test_resolve_device_picks_cuda_when_usable(self):
+        from vtscore.config import resolve_device
+
+        # On a host where the marker's torch.cuda.is_available() guard let this
+        # test run, the smoke-test in resolve_device() should also pass.
+        assert resolve_device().startswith("cuda")
+
+    def test_to_compute_device_moves_model_to_gpu(self):
+        import torch.nn as nn
+
+        from vtscore.media.embedder import to_compute_device
+
+        model = to_compute_device(nn.Linear(8, 4))
+        assert next(model.parameters()).device.type == "cuda"
+
+    def test_concurrent_embeddings_default_is_one_on_gpu(self, monkeypatch):
+        # With a usable GPU resolved, the embed default collapses to 1 to avoid
+        # stacking model copies on a single shared device (env override aside).
+        from vtscore.embedding import loader
+
+        monkeypatch.delenv("VTSEARCH_MAX_CONCURRENT_EMBEDDINGS", raising=False)
+        assert loader.default_concurrent_embeddings() == 1
+
+
+# ---------------------------------------------------------------------------
+# 0b. cuML-accelerated UMAP + k-means backends
+# ---------------------------------------------------------------------------
+
+
+def _cuml_installed() -> bool:
+    """True when the optional cuML/RAPIDS stack is importable on this host."""
+    try:
+        import cuml  # noqa: F401  # pyright: ignore[reportMissingImports]
+    except ImportError:
+        return False
+    return True
+
+
+class TestCuMLBackends:
+    """The cuML backend selectors that accelerate UMAP + the diversity tree.
+
+    cuML is an *optional* GPU dependency, so these tests exercise the factory
+    contract on any CUDA host: the estimators must work (and return numpy)
+    whether they resolve to cuML or fall back to the CPU libraries.  The few
+    cuML-specific assertions are guarded by ``_cuml_installed()`` so a GPU box
+    without RAPIDS still passes.
+    """
+
+    def test_cuml_enabled_matches_install(self):
+        # On a CUDA host (guarded by the module marker) the device resolves to
+        # cuda, so cuml_enabled() tracks purely whether cuML is importable.
+        from vtscore.gpu_backends import cuml_enabled
+
+        assert cuml_enabled() == _cuml_installed()
+
+    def test_umap_fit_transform_produces_2d_numpy_layout(self):
+        from vtscore.gpu_backends import umap_fit_transform
+
+        rng = np.random.default_rng(0)
+        mat = rng.standard_normal((60, 16)).astype(np.float32)
+        coords = umap_fit_transform(
+            mat, n_components=2, n_neighbors=15, min_dist=0.1, metric="euclidean", random_state=42
+        )
+        assert isinstance(coords, np.ndarray)
+        assert coords.shape == (60, 2)
+        assert np.isfinite(coords).all()
+
+    def test_kmeans_fit_predict_clusters_and_reports_inertia(self):
+        from vtscore.gpu_backends import kmeans_fit_predict
+
+        rng = np.random.default_rng(1)
+        vecs = np.vstack([rng.standard_normal((30, 8)) + 5.0, rng.standard_normal((30, 8)) - 5.0]).astype(np.float32)
+        labels, inertia = kmeans_fit_predict(vecs, n_clusters=2, random_state=42, n_init=1)
+        assert isinstance(labels, np.ndarray)
+        assert labels.shape == (60,)
+        assert set(np.unique(labels).tolist()) <= {0, 1}
+        assert inertia is not None
+
+    def test_fit_projection_umap_path_on_gpu(self):
+        from vtscore.projection.umap_projection import fit_projection
+
+        rng = np.random.default_rng(2)
+        matrix = rng.standard_normal((60, 16)).astype(np.float32)
+        ids = list(range(60))
+        proj = fit_projection(matrix, ids, random_state=42)
+        assert proj.method == "umap"
+        assert proj.coords.shape == (60, 2)
+        assert proj.coords.dtype == np.float32
+        assert np.isfinite(proj.coords).all()
+
+    def test_diversity_tree_builds_on_gpu(self):
+        from vtscore.state.diversity_tree import DiversityTree
+
+        rng = np.random.default_rng(3)
+        vectors = {i: rng.standard_normal(8).astype(np.float32) for i in range(60)}
+        tree = DiversityTree(vectors, k=2, max_depth=4, min_node_size=20)
+        # Every vector lands in a leaf and the tree actually split the root.
+        assert len(tree.vector_to_leaf) == 60
+        assert tree.total_nodes > 1
+        for vid in vectors:
+            assert tree.lookup(vid) in tree.nodes
+
+
+# ---------------------------------------------------------------------------
 # 1. train_model on GPU
 # ---------------------------------------------------------------------------
 
@@ -473,17 +590,15 @@ class TestCLAPEmbeddingGPU:
     """
 
     def test_clap_model_loads_on_gpu(self, device):
-        from vtscore.media.audio.media_type import AudioMediaType
+        from transformers import ClapModel
 
-        # _model is set dynamically by load_models() on the subclass; not
-        # declared on the MediaType ABC, so pyright can't see it. cast keeps
-        # the runtime behaviour while satisfying the type-checker.
-        mt = cast(Any, AudioMediaType())
-        mt.load_models()
-        assert mt._model is not None
-        mt._model = mt._model.to(device)
-        # Verify model is on GPU
-        param = next(mt._model.parameters())
+        from vtscore.config import CLAP_MODEL_ID, MODELS_CACHE_DIR
+
+        model = ClapModel.from_pretrained(CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=str(MODELS_CACHE_DIR)).to(
+            device
+        )
+        # Mirrors what to_compute_device() does inside the CLAP embedder.
+        param = next(model.parameters())
         assert param.device.type == "cuda"
 
     def test_clap_text_embedding_on_gpu(self, device):
@@ -543,13 +658,15 @@ class TestXCLIPEmbeddingGPU:
     """Test X-CLIP (video) embedding model on GPU."""
 
     def test_xclip_model_loads_on_gpu(self, device):
-        from vtscore.media.video.media_type import VideoMediaType
+        from transformers import XCLIPModel
 
-        mt = cast(Any, VideoMediaType())  # see _model note above
-        mt.load_models()
-        assert mt._model is not None
-        mt._model = mt._model.to(device)
-        param = next(mt._model.parameters())
+        from vtscore.config import MODELS_CACHE_DIR, XCLIP_MODEL_ID
+
+        model = XCLIPModel.from_pretrained(XCLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=str(MODELS_CACHE_DIR)).to(
+            device
+        )
+        # Mirrors what to_compute_device() does inside the X-CLIP embedder.
+        param = next(model.parameters())
         assert param.device.type == "cuda"
 
     def test_xclip_text_embedding_on_gpu(self, device):

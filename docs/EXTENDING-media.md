@@ -259,8 +259,15 @@ embedder per media type should override the `is_default` property to return
 |------|----------|-----------|---------|
 | `audio/embedder_clap.py` | `AudioClapEmbedder` | audio | ✅ |
 | `audio/embedder_clap_music.py` | `AudioClapMusicEmbedder` | audio | |
+| `audio/embedder_clap_general.py` | `AudioClapGeneralEmbedder` | audio | |
 | `audio/embedder_paraspeechclap.py` | `AudioParaSpeechClapEmbedder` | audio | |
+| `audio/embedder_ast.py` | `AudioASTEmbedder` | audio | |
+| `audio/embedder_whisper.py` | `AudioWhisperEncoderEmbedder` | audio | |
 | `image/embedder_siglip.py` | `ImageSiglipEmbedder` | image | ✅ |
+| `image/embedder_siglip2.py` | `ImageSiglip2Embedder` | image | |
+| `image/embedder_clip.py` | `ImageClipEmbedder` | image | |
+| `image/embedder_sift_vlad.py` | `ImageSiftVladEmbedder` | image | |
+| `image/embedder_face.py` | `ImageFaceEmbedder` | image | |
 | `text/embedder_e5.py` | `TextE5Embedder` | text | ✅ |
 | `text/embedder_bge.py` | `TextBGEEmbedder` | text | |
 | `video/embedder_xclip.py` | `VideoXClipEmbedder` | video | ✅ |
@@ -478,11 +485,18 @@ loaded via `spec_from_file_location` so discovery still works.
 |----------|------|------------|-------|------------|
 | `AudioClapEmbedder` | `clap` | `audio` | LAION CLAP (laion/clap-htsat-unfused) | 512 |
 | `AudioClapMusicEmbedder` | `clap_music` | `audio` | CLAP Music & Speech (laion/larger_clap_music_and_speech) | 512 |
+| `AudioClapGeneralEmbedder` | `clap_general` | `audio` | CLAP General 2024 (laion/larger_clap_general) | 512 |
 | `AudioParaSpeechClapEmbedder` | `paraspeechclap` | `audio` | ParaSpeechCLAP speech-style (WavLM-Large + Granite, ajd12342/paraspeechclap-combined) | 768 |
+| `AudioASTEmbedder` | `ast` | `audio` | AST audio spectrogram (MIT/ast-finetuned-audioset-10-10-0.4593), audio-only | 768 |
+| `AudioWhisperEncoderEmbedder` | `whisper_encoder` | `audio` | Whisper-base encoder (openai/whisper-base), audio-only | 512 |
 | `ImageSiglipEmbedder` | `siglip` | `image` | SigLIP (google/siglip-base-patch16-224) | 768 |
+| `ImageSiglip2Embedder` | `siglip2` | `image` | SigLIP 2 (google/siglip2-base-patch16-224) | 768 |
+| `ImageClipEmbedder` | `clip` | `image` | CLIP (openai/clip-vit-base-patch32) | 512 |
 | `ImageDinov2SingleEmbedder` / `ImageDinov2PatchEmbedder` | `dinov2_single` / `dinov2_patch` | `image` | DINOv2 ViT-B/14 (facebook/dinov2-base), ungated | 768 |
 | `ImageDinov3SingleEmbedder` / `ImageDinov3PatchEmbedder` | `dinov3_single` / `dinov3_patch` | `image` | DINOv3 ViT-B/16 (facebook/dinov3-vitb16-pretrain-lvd1689m), HF-gated | 768 |
 | `ImageEupeSingleEmbedder` / `ImageEupePatchEmbedder` | `eupe_single` / `eupe_patch` | `image` | EUPE ViT-B/16 (facebookresearch/EUPE), FAIR Noncommercial Research Licence | 768 |
+| `ImageSiftVladEmbedder` | `sift_vlad` | `image` | SIFT/VLAD instance matching (classical, no text encoder) | 8192 (64 × 128) |
+| `ImageFaceEmbedder` | `face` | `image` | FaceNet identity (InceptionResnetV1, face crops, no text encoder) | 512 |
 | `TextE5Embedder` | `e5` | `text` | E5-base-v2 (intfloat/e5-base-v2) | 768 |
 | `TextBGEEmbedder` | `bge` | `text` | BGE-base-en-v1.5 (BAAI/bge-base-en-v1.5) | 768 |
 | `VideoXClipEmbedder` | `xclip` | `video` | X-CLIP (microsoft/xclip-base-patch32) | 768 |

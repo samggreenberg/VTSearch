@@ -22,7 +22,7 @@ This will:
 Install dependencies (if you haven't already):
 
 ```bash
-bash scripts/install-cpu.sh
+bash scripts/install.sh
 ```
 
 Matplotlib and pandas are required for plot generation and are included in the dev dependencies.
@@ -47,13 +47,15 @@ python -m vtscore.eval [OPTIONS]
 | `--safe-thresholds` | Blend cross-calibration threshold with GMM for robustness | off |
 | `--calibrate-count K` | Number of random Train/Calibrate splits for threshold calibration | `2` |
 | `--calibration-fraction F` | Fraction of training data reserved for calibration | `0.5` |
+| `--embedder NAME` | Build each demo dataset with this embedder (empty = media-type default) | `` |
+| `--region-voting` | Region-pool learned-sort Good votes from each media's ground-truth box (needs `--embedder <patch>` + a dataset with stored regions, e.g. Visual Genome) | off |
 | `--list` | List available eval datasets and exit | - |
 
 ### Examples
 
 ```bash
 # Text sort only, on image datasets, save JSON
-python -m vtscore.eval --mode text --datasets caltech101_s caltech256_l --output results.json --plot-dir eval_output
+python -m vtscore.eval --mode text --datasets caltech101_s caltech256_a --output results.json --plot-dir eval_output
 
 # Learned sort with a different train/test split
 python -m vtscore.eval --mode learned --train-fraction 0.7 --seed 123 --plot-dir eval_output
@@ -61,13 +63,19 @@ python -m vtscore.eval --mode learned --train-fraction 0.7 --seed 123 --plot-dir
 # Learned sort with safe thresholds and calibration tuning
 python -m vtscore.eval --mode learned --safe-thresholds --calibrate-count 4 --plot-dir eval_output
 
+# Region voting on Visual Genome: re-embed with a patch embedder, then have
+# each Good vote use the object's ground-truth box instead of the whole image.
+# Run once without and once with --region-voting and diff the F1s.
+python -m vtscore.eval --mode learned --datasets visual_genome_s --embedder dinov3_patch
+python -m vtscore.eval --mode learned --datasets visual_genome_s --embedder dinov3_patch --region-voting
+
 # List available eval datasets
 python -m vtscore.eval --list
 ```
 
 ## Available eval datasets
 
-Each eval dataset wraps a demo dataset and defines text queries targeting specific categories. The `_s`, `_m`, `_l` suffixes denote **small**, **medium**, and **large** size variants of the same dataset (more clips = slower evaluation but more statistically robust results).
+Each eval dataset wraps a demo dataset and defines text queries targeting specific categories. The `_s`, `_m`, `_l` suffixes denote **small**, **medium**, and **large** size variants of the same dataset (more clips = slower evaluation but more statistically robust results); `_a` denotes the **all** (full) variant.
 
 | Eval dataset ID | Media type | Demo dataset | Categories |
 |----------------|-----------|--------------|------------|
@@ -76,7 +84,9 @@ Each eval dataset wraps a demo dataset and defines text queries targeting specif
 | `esc50_l` | Audio | esc50_l | All 50 ESC-50 categories |
 | `caltech101_s` | Image | caltech101_s | 25 Caltech-101 categories (airplanes, bonsai, dolphin, helicopter, watch, etc.) |
 | `caltech101_m` | Image | caltech101_m | 25 Caltech-101 categories |
-| `caltech256_l` | Image | caltech256_l | 25 Caltech-256 categories |
+| `caltech256_a` | Image | caltech256_a | 25 Caltech-256 categories (backpack, butterfly, camel, giraffe, lighthouse, etc.) |
+| `visual_genome_s` | Image (multi-label) | visual_genome_s | ~40 Visual Genome object categories (person, car, dog, tree, building, etc.); an image can be a positive for several at once |
+| `visual_genome_m` | Image (multi-label) | visual_genome_m | ~40 Visual Genome object categories |
 | `20newsgroups_s` | Text | 20newsgroups_s | 15 topics (sports, science, cars, religion, politics, medicine, etc.) |
 | `20newsgroups_m` | Text | 20newsgroups_m | 15 topics |
 | `20newsgroups_l` | Text | 20newsgroups_l | 15 topics |
@@ -258,6 +268,27 @@ paths = plot_voting_iterations(df, output_dir="eval_output")
 for p in paths:
     print(f"Saved: {p}")
 ```
+
+#### Region voting
+
+On a **patch-embedder** dataset that carries ground-truth boxes (Visual Genome,
+loaded with `embedder_name="dinov3_patch"`), pass `region_voting=True` to make
+each simulated Good vote train on the object's box instead of the whole image:
+
+```python
+medias = {}
+load_demo_dataset("visual_genome_s", medias, embedder_name="dinov3_patch")
+
+# Same dataset, two runs — the only difference is the Good-vote training vector.
+baseline = run_voting_iterations_eval({"vg": medias}, seeds=[1, 2, 3], region_voting=False)
+region   = run_voting_iterations_eval({"vg": medias}, seeds=[1, 2, 3], region_voting=True)
+```
+
+A Good vote uses the **minimal box covering every annotated instance** of the
+target category (two apples → one box around both); images with no annotated box
+fall back to the whole-image vector. Scoring is region-aware (max-pool over
+regions) in both runs, so the comparison isolates region voting's effect. Region
+voting is a no-op on single-vector datasets (no `patch_grid` to pool).
 
 ### Example: voting iterations from pickle files
 

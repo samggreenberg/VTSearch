@@ -29,7 +29,9 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from vtscore.config import DATA_DIR, DEFAULT_CALIBRATE_COUNT
 
 __all__ = [
+    "BROWSE_MOUSE_ZOOMS_PER_LEVEL",
     "BROWSE_THUMBNAIL_BORDER_PX",
+    "POPUP_PREVIEW_SIZE_PX",
     "BinShape",
     "BrowseColormap",
     "BrowseIconSize",
@@ -45,13 +47,10 @@ __all__ = [
     "VALID_GRID_ICON_SIZES",
     "VALID_PANEL_PX",
     "VALID_THEMES",
-    "VALID_VIEW_MODES",
-    "ViewMode",
 ]
 
 
 Theme = Literal["dark", "light", "highviz", "system"]
-ViewMode = Literal["grid", "list"]
 GridIconSize = Literal["XS", "S", "M", "L", "XL"]
 FocusMode = Literal["click", "hover"]
 BinShape = Literal["hex", "square"]
@@ -66,7 +65,6 @@ BrowseColormap = Literal["auto", "heat", "ocean", "gray"]
 BrowseIconSize = Literal["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"]
 
 VALID_THEMES: tuple[str, ...] = ("dark", "light", "highviz", "system")
-VALID_VIEW_MODES: tuple[str, ...] = ("grid", "list")
 VALID_GRID_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
 VALID_FOCUS_MODES: tuple[str, ...] = ("click", "hover")
 VALID_BIN_SHAPES: tuple[str, ...] = ("hex", "square")
@@ -82,6 +80,17 @@ VALID_PANEL_PX: tuple[int, int] = (150, 10000)
 # Allowed range (CSS px) for the VTSBrowse pile-thumbnail border width. ``0``
 # disables the border; values are clamped into this range on read/write.
 BROWSE_THUMBNAIL_BORDER_PX: tuple[int, int] = (0, 8)
+# Allowed range for the VTSBrowse "mouse-zooms per pyramid level" setting: how
+# many wheel notches / +/- button clicks it takes to cross one pyramid level
+# (a full 2x of zoom). The per-click/per-notch width factor is ``2 ** (1 / n)``,
+# so ``1`` ⇒ 2x per step (one step = one level), ``2`` ⇒ √2 (the default, two
+# steps per level), ``3`` ⇒ ∛2 (three steps per level). Clamped on read/write.
+BROWSE_MOUSE_ZOOMS_PER_LEVEL: tuple[int, int] = (1, 3)
+# Allowed range (CSS px) for the VTSBrowse bin-popup detail-canvas (the large
+# single-item preview) side. The popup's own size buttons drive it; values are
+# clamped into this range on read/write. The floor keeps a usable preview; the
+# ceiling matches the frontend's absolute preview cap.
+POPUP_PREVIEW_SIZE_PX: tuple[int, int] = (96, 720)
 
 
 def _clamp(lo: float, hi: float):
@@ -259,6 +268,10 @@ class UserSettings(BaseModel):
     #   Stage-1 coordinates, which are computed once and frozen, so a change
     #   takes effect on the next fresh build or the Browser's Re-project action,
     #   not retroactively on an already-built layout. Defaults to on per type.
+    # - ``browse_mouse_zooms_per_level``: how many wheel notches / +/- button
+    #   clicks cross one pyramid level (a full 2x). The per-step width factor is
+    #   ``2 ** (1 / n)``, so 1 ⇒ 2x, 2 ⇒ √2 (default), 3 ⇒ ∛2. Clamped to 1..3;
+    #   empty entries fall back to 2 on the frontend.
     browse_bin_shape: dict[str, BinShape] = Field(default_factory=dict)
     browse_colormap: dict[str, BrowseColormap] = Field(default_factory=dict)
     browse_icon_size: dict[str, Annotated[BrowseIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
@@ -266,9 +279,10 @@ class UserSettings(BaseModel):
         default_factory=dict
     )
     browse_compact: dict[str, bool] = Field(default_factory=dict)
+    browse_mouse_zooms_per_level: dict[str, Annotated[int, _clamp(*BROWSE_MOUSE_ZOOMS_PER_LEVEL)]] = Field(
+        default_factory=dict
+    )
 
-    view_mode_left: dict[str, ViewMode] = Field(default_factory=dict)
-    view_mode_right: dict[str, ViewMode] = Field(default_factory=dict)
     grid_icon_size_left: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     grid_icon_size_right: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     focus_mode_left: dict[str, FocusMode] = Field(default_factory=dict)
@@ -286,6 +300,14 @@ class UserSettings(BaseModel):
     # per-side machinery): the popup is a single, third context, so it uses the
     # generic Pydantic-driven accessors.
     grid_icon_size_popup: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
+    # VTSBrowse bin-popup detail-canvas size, per media type (CSS px). The popup
+    # opens its hovered/representative item in a large square preview pane beside
+    # the member grid; this is the user's chosen side for that pane, driven by the
+    # popup's own top-left size buttons (independent of the grid thumbnail size in
+    # ``grid_icon_size_popup``). Empty entries fall back on the frontend to a size
+    # derived from the main-canvas thumbnail radius. Clamped to
+    # ``POPUP_PREVIEW_SIZE_PX``.
+    popup_preview_size: dict[str, Annotated[int, _clamp(*POPUP_PREVIEW_SIZE_PX)]] = Field(default_factory=dict)
     panel_pct_left: dict[str, int] = Field(default_factory=dict)
     panel_pct_right: dict[str, int] = Field(default_factory=dict)
 

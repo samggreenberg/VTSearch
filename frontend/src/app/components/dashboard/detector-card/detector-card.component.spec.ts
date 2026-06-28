@@ -88,12 +88,45 @@ describe('DetectorCardComponent', () => {
     expect(component.editing).toBe(false);
   });
 
-  it('should emit delete on delete button click', () => {
+  it('should emit delete from the inline delete button', () => {
     vi.spyOn(component.delete, 'emit');
     const el = fixture.nativeElement as HTMLElement;
-    const deleteBtn = el.querySelector('.delete-btn') as HTMLElement;
-    deleteBtn.click();
+    (el.querySelector('.delete-btn') as HTMLElement).click();
     expect(component.delete.emit).toHaveBeenCalled();
+  });
+
+  it('should drop the inline Delete verb from the overflow menu but keep Browse', async () => {
+    const el = fixture.nativeElement as HTMLElement;
+    (el.querySelector('.overflow-btn') as HTMLElement).click();
+    await settleZoneless(fixture);
+    const overflow = Array.from(el.querySelectorAll('.menu-item')).map((b) => b.textContent?.trim());
+    // Only Delete is inline (plus Load when unloaded); Browse stays in the ⋯ menu.
+    expect(overflow).not.toContain('Delete');
+    expect(overflow).toContain('Browse positives');
+    expect(overflow).toContain('Rename');
+  });
+
+  it('should still list the inline Delete verb in the right-click context menu', async () => {
+    const el = fixture.nativeElement as HTMLElement;
+    el.dispatchEvent(new MouseEvent('contextmenu', { clientX: 10, clientY: 10, bubbles: true }));
+    await settleZoneless(fixture);
+    const full = Array.from(el.querySelectorAll('.menu-item')).map((b) => b.textContent?.trim());
+    // Right-click stays complete: Delete returns alongside Browse.
+    expect(full).toContain('Browse positives');
+    expect(full).toContain('Delete');
+  });
+
+  it('should surface export and import-labels actions in the overflow menu', async () => {
+    vi.spyOn(component.export, 'emit');
+    const el = fixture.nativeElement as HTMLElement;
+    (el.querySelector('.overflow-btn') as HTMLElement).click();
+    await settleZoneless(fixture);
+    const items = Array.from(el.querySelectorAll('.menu-item')) as HTMLElement[];
+    expect(items.some((b) => b.textContent?.includes('Import Labels'))).toBe(true);
+    const exportItem = items.find((b) => b.textContent?.includes('Export'));
+    expect(exportItem).toBeTruthy();
+    exportItem!.click();
+    expect(component.export.emit).toHaveBeenCalled();
   });
 
   it('should format dates', () => {

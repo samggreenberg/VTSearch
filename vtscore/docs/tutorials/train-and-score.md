@@ -17,7 +17,7 @@ environmental sound - and you want a binary detector for "is this a
 dog bark?". Six labels is enough to get the MLP off the ground; a few
 dozen will make it good.
 
-You'll need `vtscore` installed (`bash scripts/install-cpu.sh` from the
+You'll need `vtscore` installed (`bash scripts/install.sh` from the
 repo root) and a CPU-only Python environment with PyTorch. GPU is fine
 too but not required.
 

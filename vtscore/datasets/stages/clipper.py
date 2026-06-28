@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Callable
 from vtscore.embedding.matrix import invalidate_embedding_matrix
 from vtscore.embedding.media_vectors import media_embedding
 
-from vtscore.datasets.stages._common import _TOTAL_LOAD_STEPS
+from vtscore.datasets.stages._common import _STATUS_TO_STEP, _TOTAL_LOAD_STEPS
 
 if TYPE_CHECKING:
     from vtscore.state import DatasetContext
@@ -524,8 +524,21 @@ def _apply_clipper_stage(
             # (e.g. "Loading CLAP model weights…", "Warming up audio
             # pipeline…") while the model loads on the first embed call.
             msg = phase
+        # Clipping is the embed phase for clipped datasets: it cuts segments
+        # and embeds the resulting clips (the standard `_embed_missing_stage`
+        # is a no-op afterwards). So it reports the *embedding* step, not the
+        # finalize step. Reporting finalize here ran the bar up to ~100% before
+        # embedding even began and then — because clipping runs *before* the
+        # embed step — tripped the "step went backwards = new job" reset, which
+        # visibly slammed the unified bar from ~100% back to mid-job. Keeping it
+        # on the embed step makes the whole-job fraction monotonic.
         tracker.update(
-            "loading", msg, current=current, total=total, step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS
+            "loading",
+            msg,
+            current=current,
+            total=total,
+            step=_STATUS_TO_STEP["embedding"],
+            total_steps=_TOTAL_LOAD_STEPS,
         )
 
     _clipper_progress(0, 0, "clipping")

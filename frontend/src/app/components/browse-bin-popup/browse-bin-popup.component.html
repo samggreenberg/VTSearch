@@ -11,17 +11,32 @@
     class="bin-popup-header"
     [class.dragging]="dragging"
     (pointerdown)="onHeaderPointerDown($event)">
-    <span
-      class="bin-popup-title"
-      [title]="'Items in this bin (' + ids.length + ') — drag to move'">
-      {{ ids.length | number }} item{{ ids.length === 1 ? '' : 's' }}
-    </span>
+    @if (showPreview) {
+      <div class="bin-popup-size-group" role="group" aria-label="Detail image size">
+        <button
+          type="button"
+          class="bin-popup-size-btn"
+          [disabled]="atMinPreview"
+          (click)="bumpPreview(-1)"
+          title="Smaller detail image"
+          aria-label="Smaller detail image">
+          <vt-icon type="image" [size]="11" />
+        </button>
+        <button
+          type="button"
+          class="bin-popup-size-btn"
+          [disabled]="atMaxPreview"
+          (click)="bumpPreview(1)"
+          title="Bigger detail image"
+          aria-label="Bigger detail image">
+          <vt-icon type="image" [size]="18" />
+        </button>
+      </div>
+    }
     <vt-view-controls
       side="popup"
       [currentMediaType]="mediaType()"
       [showFocus]="false"
-      [showViewMode]="false"
-      [allowSizeInList]="true"
       class="bin-popup-view-controls" />
     <button
       type="button"
@@ -35,7 +50,16 @@
 
   <div class="bin-popup-body" [style.height.px]="bodyHeight">
     @if (showPreview) {
-      <div class="bin-popup-preview" [style.width.px]="previewPaneSize">
+      <div
+        class="bin-popup-preview"
+        [class.selected]="isPreviewSelected()"
+        [style.width.px]="previewPaneSize"
+        role="button"
+        tabindex="0"
+        [attr.aria-pressed]="isPreviewSelected()"
+        [attr.aria-label]="(previewId != null ? name(previewId) : 'item') + (isPreviewSelected() ? ' (selected; click to deselect)' : ' (click to select)')"
+        (click)="onPreviewClick()"
+        (keydown)="onPreviewKeydown($event)">
         @if (previewUrl()) {
           <img
             class="bin-popup-preview-img"
@@ -47,10 +71,48 @@
     }
 
     @if (!previewOnly) {
-      <cdk-virtual-scroll-viewport
-        [itemSize]="rowSize"
-        class="bin-popup-scroll"
-        (mouseleave)="onGridLeave()">
+      <div class="bin-popup-grid-col">
+        <div class="bin-popup-grid-header">
+          @if (ids.length > 1) {
+            <button
+              type="button"
+              class="bin-popup-select-all"
+              role="checkbox"
+              (click)="toggleAll()"
+              [title]="selectionState === 'all' ? 'Deselect all' : 'Select all'"
+              [attr.aria-label]="selectionState === 'all' ? 'Deselect all' : 'Select all'"
+              [attr.aria-checked]="selectionState === 'all' ? 'true' : selectionState === 'some' ? 'mixed' : 'false'">
+              @switch (selectionState) {
+                @case ('all') {
+                  <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <polyline points="8 12 11 15 16 9"/>
+                  </svg>
+                }
+                @case ('some') {
+                  <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <line x1="8" y1="12" x2="16" y2="12"/>
+                  </svg>
+                }
+                @default {
+                  <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  </svg>
+                }
+              }
+            </button>
+          }
+          <span
+            class="bin-popup-count"
+            [title]="'Items in this bin (' + ids.length + ')'">
+            {{ ids.length | number }} item{{ ids.length === 1 ? '' : 's' }}
+          </span>
+        </div>
+        <cdk-virtual-scroll-viewport
+          [itemSize]="rowSize"
+          class="bin-popup-scroll"
+          (mouseleave)="onGridLeave()">
         <div
           *cdkVirtualFor="let row of rows; trackBy: trackByRow"
           class="bin-popup-row"
@@ -61,6 +123,7 @@
             <div
               class="bin-popup-entry"
               [class.selected]="isSelected(id)"
+              [class.representative]="isRepresentative(id)"
               role="button"
               tabindex="0"
               [attr.aria-pressed]="isSelected(id)"
@@ -85,7 +148,8 @@
             </div>
           }
         </div>
-      </cdk-virtual-scroll-viewport>
+        </cdk-virtual-scroll-viewport>
+      </div>
     }
   </div>
 

@@ -3,7 +3,7 @@
 # Install once after cloning:
 #   pre-commit install
 #
-# (scripts/install-cpu.sh runs this for you when a .git dir is present.)
+# (scripts/install.sh runs this for you when a .git dir is present.)
 #
 # Run manually against every file:
 #   pre-commit run --all-files

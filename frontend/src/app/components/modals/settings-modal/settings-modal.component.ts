@@ -259,19 +259,6 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  onViewModeChange(side: 'view_mode_left' | 'view_mode_right', typeId: string, value: string): void {
-    const dict = { ...((this.settings()[side] as Record<string, string>) || {}) };
-    dict[typeId] = value;
-    this.settings.update((s) => ({ ...(s as Record<string, unknown>), [side]: dict }) as AppSettings);
-    this.save();
-  }
-
-  getViewMode(side: 'view_mode_left' | 'view_mode_right', typeId: string): string {
-    const dict = this.settings()[side];
-    if (!dict) return side === 'view_mode_left' ? 'list' : 'grid';
-    return dict[typeId] ?? (side === 'view_mode_left' ? 'list' : 'grid');
-  }
-
   onGridIconSizeChange(side: 'grid_icon_size_left' | 'grid_icon_size_right', typeId: string, value: string): void {
     const dict = { ...((this.settings()[side] as Record<string, string>) || {}) };
     dict[typeId] = value;
@@ -374,6 +361,30 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     };
     dict[typeId] = n;
     this.settings.update((s) => ({ ...(s as Record<string, unknown>), browse_thumbnail_border: dict }) as AppSettings);
+    this.save();
+  }
+
+  /** Mouse-zooms per pyramid level for *typeId* (1..3), defaulting to 2 when
+   *  the user hasn't set one for this media type. This is how many wheel notches
+   *  / +/- clicks it takes to cross one pyramid level. */
+  getBrowseMouseZoomsPerLevel(typeId: string): number {
+    const dict = this.settings().browse_mouse_zooms_per_level as Record<string, number> | undefined;
+    const value = dict?.[typeId];
+    return value == null ? 2 : value;
+  }
+
+  /** Write the per-media-type mouse-zooms-per-level (clamped 1..3) and persist. */
+  onBrowseMouseZoomsPerLevelChange(typeId: string, value: number | string): void {
+    let n = typeof value === 'string' ? parseInt(value, 10) : value;
+    if (!Number.isFinite(n)) n = 2;
+    n = Math.max(1, Math.min(3, Math.round(n)));
+    const dict = {
+      ...((this.settings().browse_mouse_zooms_per_level as Record<string, number> | undefined) || {}),
+    };
+    dict[typeId] = n;
+    this.settings.update(
+      (s) => ({ ...(s as Record<string, unknown>), browse_mouse_zooms_per_level: dict }) as AppSettings,
+    );
     this.save();
   }
 

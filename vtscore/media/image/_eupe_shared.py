@@ -36,10 +36,12 @@ import numpy as np
 
 from vtscore.config import EUPE_MODEL_ID
 from vtscore.media.embedder import (
+    IMPORT_MODULE_ESTIMATES,
     MediaEmbedder,
     embedder_load_setup,
     intercept_tqdm_progress,
     timed_progress,
+    to_compute_device,
 )
 from vtscore.media.image._image_bulk import bulk_embed_image_files
 from vtscore.media.patch_embed import PatchEmbedOutput, eupe_features_to_patch_output
@@ -93,13 +95,19 @@ class _EupeBase(MediaEmbedder):
         if self._model is not None:
             return
 
-        with timed_progress(self._on_progress, "loading", "Importing torch…", 1, 3):
+        with timed_progress(
+            self._on_progress, "loading", "Importing torch…", est_modules=IMPORT_MODULE_ESTIMATES["torch"]
+        ):
             import torch  # noqa: F401, PLC0415
 
-        with timed_progress(self._on_progress, "loading", "Importing torchvision…", 2, 3):
+        with timed_progress(
+            self._on_progress, "loading", "Importing torchvision…", est_modules=IMPORT_MODULE_ESTIMATES["torchvision"]
+        ):
             from torchvision import transforms  # noqa: PLC0415
 
-        with timed_progress(self._on_progress, "loading", "Importing torch.hub…", 3, 3):
+        with timed_progress(
+            self._on_progress, "loading", "Importing torch.hub…", est_modules=IMPORT_MODULE_ESTIMATES["torch_hub"]
+        ):
             import torch.hub  # noqa: F401, PLC0415
 
         # Point torch.hub at our shared model cache so that pre-baked
@@ -117,7 +125,7 @@ class _EupeBase(MediaEmbedder):
                 weights=EUPE_MODEL_ID,
                 trust_repo=True,  # pyright: ignore[reportArgumentType]  # bool is valid at runtime; stubs only list str
             )
-        self._model = self._model.to("cpu")
+        self._model = to_compute_device(self._model)
         self._model.eval()
 
         # EUPE doesn't ship a HF AutoImageProcessor, so build the

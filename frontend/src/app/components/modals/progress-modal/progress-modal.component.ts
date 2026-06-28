@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, inject, Input, input, O
 
 import { Subject, takeUntil, timer, switchMap, filter, take } from 'rxjs';
 import { ModalComponent } from '../../modal/modal.component';
-import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
+import { JobProgressComponent } from '../../job-progress/job-progress.component';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { ChartsService } from '../../../services/charts.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
@@ -20,7 +20,7 @@ export type ProgressMetric = 'smart' | 'stable' | 'diverse';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-progress-modal',
   standalone: true,
-  imports: [ModalComponent, ProgressBarComponent],
+  imports: [ModalComponent, JobProgressComponent],
   templateUrl: './progress-modal.component.html',
   styleUrl: './progress-modal.component.scss',
 })

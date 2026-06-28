@@ -35,6 +35,11 @@ export interface BrowseContextMenuEvent {
   clientY: number;
   /** Member media ids of the bin under the cursor; empty over blank space. */
   members: number[];
+  /** The bin's representative id — the centroid clip whose thumbnail is drawn
+   *  on the canvas (see ``rep_id``). The popup opens on this item and scrolls
+   *  its 1-D member list to it, so the detail view starts on the same image the
+   *  user right-clicked. Null over blank space. */
+  repId: number | null;
   /** The canvas's bounding rect (viewport coords); the popup clamps inside it
    *  so it never spills onto the side panel or past the canvas edges. */
   bounds: DOMRect;
@@ -108,6 +113,15 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * regardless. Toggled by the region-select button in the browse toolbar.
    */
   readonly marqueeMode = input(false);
+  /**
+   * How many wheel notches cross one pyramid level (a full 2x of zoom) — the
+   * per-media ``browse_mouse_zooms_per_level`` setting. The per-notch width
+   * factor is ``2 ** (1 / n)``, so 1 ⇒ 2x (one notch per level), 2 ⇒ √2 (the
+   * default, two notches per level), 3 ⇒ ∛2. Clamped to 1..3 by
+   * {@link wheelZoomFactor}; the +/- buttons in the parent use the same factor
+   * so the two gestures stay in lock-step.
+   */
+  readonly zoomsPerLevel = input(2);
   readonly hexHover = output<HexHoverEvent | null>();
   /** A right-click on the canvas; the view opens the bin popup in response. */
   readonly contextMenu = output<BrowseContextMenuEvent>();
@@ -129,6 +143,30 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * full-res ``/image`` instead of the capped ``/thumbnail``; crossing the
    * threshold drops the cache so cells reload at the matching resolution. */
   private thumbsAreFullRes = false;
+  /** Cap on new thumbnail fetches kicked off per idle preload pass, so a fast
+   * pan can warm the just-revealed ring without flooding the network or filling
+   * the thumbnail cache in a single burst. */
+  private static readonly PRELOAD_MAX_PER_PASS = 64;
+  /** Fraction of {@link PRELOAD_MAX_PER_PASS} reserved for warming the *finer*
+   * level a zoom-in would reveal, so a wide pan ring can't starve the zoom path.
+   * Pan warms the rest first; whichever side has nothing left to warm hands its
+   * unused budget back to the other, so the split only bites when both compete. */
+  private static readonly THUMB_PRELOAD_ZOOM_SHARE = 0.5;
+  /** Handle for the pending idle thumbnail-preload pass (at most one in flight),
+   * with a flag recording whether it was scheduled via ``setTimeout`` (the
+   * fallback when ``requestIdleCallback`` is unavailable) so destroy cancels it
+   * the matching way. */
+  private thumbPrefetchHandle: number | null = null;
+  private thumbPrefetchIsTimeout = false;
+  /** Smoothed pan direction (projection units, magnitude < 1) and the view
+   * centre it was last measured from. Biases which off-view tiles warm first:
+   * the preload ring extends one tile further on the leading edges so a sustained
+   * pan stays ahead of the motion. Decays toward zero when the view holds still,
+   * so a stationary view warms its ring symmetrically. */
+  private panDirX = 0;
+  private panDirY = 0;
+  private lastDrawCenterX = Number.NaN;
+  private lastDrawCenterY = Number.NaN;
 
   private ctx!: CanvasRenderingContext2D;
   private width = 0;
@@ -141,6 +179,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   // the interpolated frame so a re-triggered transition can chain from what's
   // actually on screen. Seeds the "from" end of the zoom-in/out animation.
   private displayedTransform: ViewTransform = { centerX: 0, centerY: 0, zoom: 1 };
+  // The pyramid level the pixels currently on the canvas were binned at. Paired
+  // with `displayedTransform` so a zoom-out can re-render the off-screen margin
+  // (revealed as the frame shrinks) using the *source* level's bins, keeping the
+  // overscan continuous with the frozen centre. See {@link renderSnapshotBorder}.
+  private displayedLevel = 0;
   // Set once the first real frame has been painted. The zoom transition needs a
   // prior frame to snapshot, so it stays disabled until this is true.
   private hasDrawn = false;
@@ -186,8 +229,22 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private pendingToggleX = 0;
   private pendingToggleY = 0;
   private static readonly DBLCLICK_MS = 250;
+  // Per-notch wheel zoom factor. A pyramid level spans a full 2x of zoom, so the
+  // {@link zoomsPerLevel} setting (n) sets how many notches cross a bin layer:
+  // the factor is 2 ** (1 / n). At the default n=2 that is exactly √2, so two
+  // notches = exactly one level (and exactly one DOUBLE_CLICK_ZOOM). An exact
+  // power of 2 matters here: an earlier 1.4 was a hair under √2, making a level
+  // cost log_1.4(2) ≈ 2.06 notches; the 0.06 surplus accumulates, so when the
+  // whole-projection fit happens to land near the bottom edge of a level band
+  // the *first* flip from that overview rounds up to a 3rd notch (then ~2
+  // thereafter) — felt as an inconsistent "three at the top, two after". A clean
+  // 2 ** (1 / n) makes every flip cost exactly n notches.
+  private wheelZoomFactor(): number {
+    const n = Math.max(1, Math.min(3, Math.round(this.zoomsPerLevel())));
+    return Math.pow(2, 1 / n);
+  }
   // How hard a double-click zooms in about the cursor. Larger than the wheel's
-  // 1.15/tick so the gesture lands a decisive jump, matching the map idiom.
+  // per-notch factor so the gesture lands a decisive jump, matching the map idiom.
   private static readonly DOUBLE_CLICK_ZOOM = 2.0;
 
   // Shift+drag draws a marquee rectangle (canvas-relative screen coords) that
@@ -229,6 +286,16 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   // Offscreen copy of the canvas backing store taken when a transition starts;
   // reused across transitions to avoid reallocating.
   private animSnapshot: HTMLCanvasElement | null = null;
+  // CSS-px footprint of `animSnapshot`. Normally the viewport (width×height),
+  // but a zoom-out overscans (snapshot bigger than the viewport) so the shrunk
+  // blit still covers the canvas instead of leaving black margins where the
+  // newly-revealed area sits. See {@link startZoomAnim} / {@link zoomBlitRect}.
+  private snapW = 0;
+  private snapH = 0;
+  // How far a zoom-out snapshot overscans the viewport, per axis. Caps the
+  // overscan buffer at 2×2 the canvas (4× the area / memory); a deeper zoom-out
+  // than this just falls back to a black falloff at the far edge.
+  private static readonly SNAP_OVERSCAN_MAX = 2;
   private animFrom: ViewTransform = { centerX: 0, centerY: 0, zoom: 1 };
   private animTo: ViewTransform = { centerX: 0, centerY: 0, zoom: 1 };
   private animStartTs = 0;
@@ -438,6 +505,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (this.settleTimer) clearTimeout(this.settleTimer);
     if (this.hoverDebounceTimer) clearTimeout(this.hoverDebounceTimer);
     if (this.clickTimer) clearTimeout(this.clickTimer);
+    if (this.thumbPrefetchHandle !== null) {
+      if (this.thumbPrefetchIsTimeout) clearTimeout(this.thumbPrefetchHandle);
+      else if (typeof cancelIdleCallback === 'function') cancelIdleCallback(this.thumbPrefetchHandle);
+    }
     const el = this.canvasRef.nativeElement;
     el.removeEventListener('mousedown', this.boundMouseDown);
     el.removeEventListener('wheel', this.boundWheel);
@@ -837,22 +908,20 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   /**
    * Commit a zoom change after `transform` and `activeLevel` have been updated.
-   * Plays the picture-in-picture transition only when the pyramid level actually
-   * flipped (the moment bins re-lay-out) — within a level the bins just rescale,
-   * which already reads as a smooth zoom, so a plain redraw is enough. A zoom
-   * that lands mid-transition without crossing a level retargets the in-flight
-   * animation so it eases on to the latest view instead of snapping.
-   *
-   * @param prevLevel the active level *before* this zoom, for the cross check.
+   * Plays the picture-in-picture transition on every zoom, whether or not the
+   * pyramid level flipped: across a level the snapshot blit hides the re-lay-out
+   * of the bins, and within a level it smoothly scales the same bins to their new
+   * size — either way the eased grow/shrink reads as one consistent zoom gesture
+   * instead of a snap. A zoom that lands while a transition is already running
+   * retargets it so it eases on to the latest view instead of stopping short.
    */
-  private commitZoomChange(prevLevel: number): void {
-    const crossedLevel = this.activeLevel !== prevLevel;
-    if (crossedLevel && this.hasDrawn && this.width > 0 && !this.prefersReducedMotion()) {
-      this.startZoomAnim();
-    } else if (this.animActive) {
-      // Same level but the view moved while a transition runs: ease on to the
-      // new target rather than stopping short at the old one.
+  private commitZoomChange(): void {
+    if (this.animActive) {
+      // A transition is already running (e.g. a burst of wheel notches): ease on
+      // to the new target rather than stopping short at the old one.
       this.animTo = { ...this.transform };
+    } else if (this.hasDrawn && this.width > 0 && !this.prefersReducedMotion()) {
+      this.startZoomAnim();
     } else {
       this.requestRedraw();
     }
@@ -866,19 +935,52 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    */
   private startZoomAnim(): void {
     const canvasEl = this.canvasRef.nativeElement;
-    let snap = this.animSnapshot;
-    if (!snap) snap = document.createElement('canvas');
-    if (snap.width !== canvasEl.width || snap.height !== canvasEl.height) {
-      snap.width = canvasEl.width;
-      snap.height = canvasEl.height;
-    }
-    const sctx = snap.getContext('2d')!;
-    sctx.clearRect(0, 0, snap.width, snap.height);
-    sctx.drawImage(canvasEl, 0, 0);
-    this.animSnapshot = snap;
-
     this.animFrom = { ...this.displayedTransform };
     this.animTo = { ...this.transform };
+
+    // Zoom-out shrinks the frozen frame, exposing the area that was just off
+    // screen as a margin around it. With a plain viewport-sized snapshot that
+    // margin is bare background (the black border). Instead overscan: snapshot a
+    // buffer larger than the viewport — the frozen centre is the already-rendered
+    // canvas (free), and the extra ring is re-rendered from the source level's
+    // bins, painting the cached thumbnails the off-view prefetch already warmed.
+    // The shrunk blit then covers the canvas with real content. Zoom-in needs no
+    // overscan (the frame grows past the viewport), so it stays the cheap copy.
+    const overscan = Math.min(
+      BrowseCanvasComponent.SNAP_OVERSCAN_MAX,
+      this.animFrom.zoom / this.animTo.zoom,
+    );
+    const doOverscan = overscan > 1.01 && this.thumbnailMode;
+    this.snapW = doOverscan ? Math.ceil(this.width * overscan) : this.width;
+    this.snapH = doOverscan ? Math.ceil(this.height * overscan) : this.height;
+
+    let snap = this.animSnapshot;
+    if (!snap) snap = document.createElement('canvas');
+    // Match the live canvas exactly on the non-overscan path so the plain copy
+    // stays pixel-for-pixel (the device size may floor differently from snapW×dpr).
+    const wantW = doOverscan ? Math.round(this.snapW * this.dpr) : canvasEl.width;
+    const wantH = doOverscan ? Math.round(this.snapH * this.dpr) : canvasEl.height;
+    if (snap.width !== wantW || snap.height !== wantH) {
+      snap.width = wantW;
+      snap.height = wantH;
+    }
+    const sctx = snap.getContext('2d')!;
+    sctx.setTransform(1, 0, 0, 1, 0, 0);
+    sctx.clearRect(0, 0, snap.width, snap.height);
+    if (doOverscan) {
+      // Margin first (in CSS px via the dpr transform), then drop the frozen
+      // viewport copy into the centre so it overwrites any seam bins exactly.
+      sctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      this.renderSnapshotBorder(sctx);
+      sctx.setTransform(1, 0, 0, 1, 0, 0);
+      const ox = Math.round((this.snapW - this.width) * this.dpr * 0.5);
+      const oy = Math.round((this.snapH - this.height) * this.dpr * 0.5);
+      sctx.drawImage(canvasEl, ox, oy);
+    } else {
+      sctx.drawImage(canvasEl, 0, 0);
+    }
+    this.animSnapshot = snap;
+
     this.animStartTs = performance.now();
     this.animBg = this.themeColor('--bg-body');
 
@@ -890,6 +992,54 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.ngZone.runOutsideAngular(() => {
       this.animRafId = requestAnimationFrame(this.stepZoomAnim);
     });
+  }
+
+  /**
+   * Paint the overscan margin of a zoom-out snapshot: the source-level bins that
+   * sit just outside the frozen viewport. `sctx` is the snapshot context with a
+   * CSS-px (dpr) transform already applied and the buffer centred on
+   * {@link animFrom}'s centre. Only cells whose tile is already cached are drawn
+   * (and `getThumb` paints whatever the prefetch warmed), so the fill reaches as
+   * far as the cache does and falls off to background past it — never a network
+   * wait. The centre is left for the frozen viewport copy to overwrite.
+   */
+  private renderSnapshotBorder(sctx: CanvasRenderingContext2D): void {
+    const meta = this.meta();
+    if (!meta || meta.point_count === 0) return;
+    const from = this.animFrom;
+    const level = this.displayedLevel;
+    const radius = meta.base_radius / Math.pow(2, level);
+    const screenRadius = radius * from.zoom;
+    const geom = this.geom;
+    const tileSpan = meta.tile_span;
+    const tileW = tileSpan * geom.dx(radius);
+    const tileH = tileSpan * geom.dy(radius);
+
+    const halfWx = this.snapW / 2 / from.zoom;
+    const halfWy = this.snapH / 2 / from.zoom;
+    const txMin = Math.floor((from.centerX - halfWx) / tileW - 1);
+    const txMax = Math.ceil((from.centerX + halfWx) / tileW + 1);
+    const tyMin = Math.floor((from.centerY - halfWy) / tileH - 1);
+    const tyMax = Math.ceil((from.centerY + halfWy) / tileH + 1);
+
+    const cmap = resolveColormap(this.colormap(), this.effectiveTheme());
+    this.selAccent = this.themeColor('--accent-color') || '#4f9dff';
+    const selectionActive = this.selection.size > 0;
+    const cull = screenRadius * 2;
+
+    for (let tx = txMin; tx <= txMax; tx++) {
+      for (let ty = tyMin; ty <= tyMax; ty++) {
+        const cached = this.tileCache.getCached(level, tx, ty);
+        if (!cached) continue;
+        for (const cell of cached.cells) {
+          const bcx = (cell.cx - from.centerX) * from.zoom + this.snapW / 2;
+          const bcy = (cell.cy - from.centerY) * from.zoom + this.snapH / 2;
+          if (bcx < -cull || bcx > this.snapW + cull) continue;
+          if (bcy < -cull || bcy > this.snapH + cull) continue;
+          this.drawHex(sctx, bcx, bcy, screenRadius, cell, cmap, selectionActive);
+        }
+      }
+    }
   }
 
   /**
@@ -909,9 +1059,16 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const cux = from.centerX + (this.animTo.centerX - from.centerX) * e;
     const cuy = from.centerY + (this.animTo.centerY - from.centerY) * e;
     const scale = zu / z0;
-    const x = (this.width / 2) * (1 - scale) + (from.centerX - cux) * zu;
-    const y = (this.height / 2) * (1 - scale) + (from.centerY - cuy) * zu;
-    return { x, y, w: scale * this.width, h: scale * this.height };
+    // The snapshot is `snapW×snapH` CSS px centred on `from.center` (snapW/snapH
+    // equal the viewport unless a zoom-out overscanned them). Place that centre
+    // where the interpolated transform puts `from.center`, then size the blit by
+    // the snapshot's own footprint so the overscanned ring lands outside the
+    // viewport edges. With no overscan (snapW=width) this is the old identity.
+    const cxScreen = this.width / 2 + (from.centerX - cux) * zu;
+    const cyScreen = this.height / 2 + (from.centerY - cuy) * zu;
+    const w = scale * this.snapW;
+    const h = scale * this.snapH;
+    return { x: cxScreen - w / 2, y: cyScreen - h / 2, w, h };
   }
 
   /** One frame of the zoom transition: clear, blit the scaled snapshot, repeat
@@ -1141,6 +1298,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // Publish the region now on screen so the minimap can draw its viewport box.
     this.viewport.setViewport(this.getVisibleBounds());
 
+    this.updatePanDirection();
     this.prefetchNeighbors(visibleTiles);
 
     // Record what's now on screen so a zoom transition can grow/shrink this
@@ -1150,6 +1308,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       centerY: this.transform.centerY,
       zoom: this.transform.zoom,
     };
+    this.displayedLevel = level;
     this.hasDrawn = true;
   }
 
@@ -1393,15 +1552,41 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private getThumb(representativeId: number): HTMLImageElement | null {
     const cached = this.thumbCache.get(representativeId);
     if (cached) {
+      // Bump recency: re-insert so a thumbnail painted this frame becomes the
+      // newest entry. The cache is insertion-ordered (see {@link evictThumbs}),
+      // so this keeps currently-visible thumbnails last in line for eviction —
+      // off-view preloads (which never bump) are dropped first, so warming the
+      // ring can never evict something that's on screen.
+      this.thumbCache.delete(representativeId);
+      this.thumbCache.set(representativeId, cached);
       return cached.complete && cached.naturalWidth > 0 ? cached : null;
     }
-    if (this.thumbFailed.has(representativeId)) return null;
+    this.startThumbLoad(representativeId, false);
+    return null;
+  }
+
+  /**
+   * Kick off the thumbnail fetch for a representative id and stash the pending
+   * image in the cache. ``preload`` marks an off-view warm-up: it loads at low
+   * network priority and does not repaint when it lands (the cell isn't on
+   * screen), so it never competes with visible thumbnails. A no-op when the id
+   * is already cached or known-failed.
+   */
+  private startThumbLoad(representativeId: number, preload: boolean): void {
+    if (this.thumbCache.has(representativeId) || this.thumbFailed.has(representativeId)) return;
 
     if (this.thumbCache.size >= this.MAX_THUMBS) this.evictThumbs();
 
     const img = new Image();
     img.decoding = 'async';
-    img.onload = () => this.requestRedraw();
+    if (preload) {
+      // Idle warm-up: let the browser schedule it behind visible-thumbnail and
+      // tile requests, and skip the repaint — the cell is off-screen, so a later
+      // draw picks it up from the cache once the user pans to it.
+      img.setAttribute('fetchpriority', 'low');
+    } else {
+      img.onload = () => this.requestRedraw();
+    }
     img.onerror = () => {
       this.thumbCache.delete(representativeId);
       this.thumbFailed.add(representativeId);
@@ -1416,7 +1601,6 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const endpoint = this.thumbsAreFullRes ? 'image' : 'thumbnail';
     img.src = this.activeContext.mediaUrl(`/api/medias/${representativeId}/${endpoint}`);
     this.thumbCache.set(representativeId, img);
-    return null;
   }
 
   /** Drop the oldest quarter of cached thumbnails (insertion-ordered LRU). */
@@ -1444,16 +1628,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const meta = this.meta();
     if (!meta) return;
     const level = this.activeLevel;
-    const seen = new Set(visibleTiles.map((t) => `${t.tx}:${t.ty}`));
-    for (const { tx, ty } of visibleTiles) {
-      for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-        const nx = tx + dx;
-        const ny = ty + dy;
-        if (!seen.has(`${nx}:${ny}`)) {
-          this.tileCache.prefetch(level, nx, ny);
-          seen.add(`${nx}:${ny}`);
-        }
-      }
+    // Warm the geometry of the ring just beyond the drawn tiles (8-connected, so
+    // diagonals are covered, plus an extra tile in the direction of travel) so a
+    // pan into it never blanks while the tile fetch is in flight.
+    for (const { tx, ty } of this.offViewRing(visibleTiles)) {
+      this.tileCache.prefetch(level, tx, ty);
     }
     if (level > 0) {
       this.prefetchLevel(level - 1, visibleTiles);
@@ -1461,6 +1640,214 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (meta.levels.length > level + 1) {
       this.prefetchLevel(level + 1, visibleTiles);
     }
+    // Image/video datasets paint a thumbnail per cell; warm the off-view ring's
+    // thumbnails (a pan) and the finer level's centre thumbnails (a zoom-in) on
+    // idle so they're decoded before the cells appear. Pure-density media
+    // (audio/text) draw no thumbnails, so there's nothing to warm. Warming follows
+    // the same resolution tier (capped /thumbnail vs full-res /image) and the same
+    // count-bounded LRU as on-demand loads, so it can't raise the memory ceiling —
+    // it only reaches it sooner, and visible thumbnails (which bump recency) are
+    // evicted last. See {@link runThumbPrefetch} for the pan/zoom budget split.
+    if (this.thumbnailMode) this.scheduleThumbPrefetch();
+  }
+
+  /**
+   * The ring of tiles just outside the drawn set: the bounding box of
+   * ``visibleTiles`` grown by one tile on every side (8-connected, so diagonals
+   * are included), minus the box itself. The growth is extended by a second tile
+   * on whichever sides the view is panning toward ({@link panDirX} /
+   * {@link panDirY}), so a sustained pan warms further ahead in the direction of
+   * travel. ``visibleTiles`` already carries a one-tile margin (see
+   * {@link getVisibleTiles}), so this ring sits one to two tiles beyond what's
+   * actually painted.
+   */
+  private offViewRing(visibleTiles: { tx: number; ty: number }[]): { tx: number; ty: number }[] {
+    if (visibleTiles.length === 0) return [];
+    let txMin = Infinity;
+    let txMax = -Infinity;
+    let tyMin = Infinity;
+    let tyMax = -Infinity;
+    for (const { tx, ty } of visibleTiles) {
+      if (tx < txMin) txMin = tx;
+      if (tx > txMax) txMax = tx;
+      if (ty < tyMin) tyMin = ty;
+      if (ty > tyMax) tyMax = ty;
+    }
+    // One ring on every side, plus a directional extra tile on the leading edges.
+    const DIR = 0.3;
+    const outTxMin = txMin - (this.panDirX < -DIR ? 2 : 1);
+    const outTxMax = txMax + (this.panDirX > DIR ? 2 : 1);
+    const outTyMin = tyMin - (this.panDirY < -DIR ? 2 : 1);
+    const outTyMax = tyMax + (this.panDirY > DIR ? 2 : 1);
+    const ring: { tx: number; ty: number }[] = [];
+    for (let tx = outTxMin; tx <= outTxMax; tx++) {
+      for (let ty = outTyMin; ty <= outTyMax; ty++) {
+        // Keep only the new border; the interior is the already-drawn box.
+        if (tx >= txMin && tx <= txMax && ty >= tyMin && ty <= tyMax) continue;
+        ring.push({ tx, ty });
+      }
+    }
+    return ring;
+  }
+
+  /**
+   * Queue a single low-priority pass that warms off-view thumbnails when the main
+   * thread is idle. At most one pass is in flight; it recomputes the ring from the
+   * live view when it runs, so a pan that continued after scheduling still warms
+   * the right tiles. The ``timeout`` guarantees it runs even under a steady pan
+   * (where the thread rarely goes fully idle), keeping the warm-up ahead of the
+   * motion rather than only after it stops.
+   */
+  private scheduleThumbPrefetch(): void {
+    if (this.thumbPrefetchHandle !== null) return;
+    const run = () => {
+      this.thumbPrefetchHandle = null;
+      this.runThumbPrefetch();
+    };
+    if (typeof requestIdleCallback === 'function') {
+      this.thumbPrefetchIsTimeout = false;
+      this.thumbPrefetchHandle = requestIdleCallback(run, { timeout: 500 });
+    } else {
+      this.thumbPrefetchIsTimeout = true;
+      this.thumbPrefetchHandle = window.setTimeout(run, 100);
+    }
+  }
+
+  /**
+   * Warm off-view thumbnails on idle, bounded to {@link PRELOAD_MAX_PER_PASS}
+   * new fetches so one pass can't flood the network or the cache. The budget is
+   * split across the two ways the visible set changes:
+   *
+   * - **Pan** — the off-view ring at the current level (cells a pan scrolls in).
+   * - **Zoom-in** — the finer cells now centred under the view (cells a zoom-in
+   *   reveals). A zoom is no more surprising than a pan, but it swaps the whole
+   *   screen for a denser level, so warming only the pan ring leaves a zoom-in
+   *   facing a cold cache.
+   *
+   * Pan warms first up to its share; the zoom path takes the reserve plus any
+   * budget pan left unused, and a final pan sweep mops up anything the zoom path
+   * didn't need (e.g. no finer level, or its tiles already warm), so the split
+   * only bites when both genuinely compete. Both paths share the count-bounded
+   * LRU keyed by media id, so a thumbnail warmed for a zoom is reused if a pan
+   * reaches it instead. Only tiles whose geometry is already cached are walked
+   * (one still loading is picked up by a later pass), and warming stops short of
+   * the cache cap so a preload never evicts a visible thumbnail.
+   */
+  private runThumbPrefetch(): void {
+    const meta = this.meta();
+    if (!this.thumbnailMode || !meta) return;
+    const level = this.activeLevel;
+    const total = BrowseCanvasComponent.PRELOAD_MAX_PER_PASS;
+    const panRing = this.offViewRing(this.getVisibleTiles());
+    // Only reserve for zoom when there's a finer level to zoom into; otherwise
+    // pan gets the whole budget on the first sweep.
+    const canZoomIn = meta.levels.length > level + 1;
+    const zoomReserve = canZoomIn ? Math.floor(total * BrowseCanvasComponent.THUMB_PRELOAD_ZOOM_SHARE) : 0;
+
+    // Pan: the off-view ring at the current level, capped so the reserve stays
+    // for zoom.
+    let remaining = total - this.warmThumbsForTiles(level, panRing, total - zoomReserve);
+    // Zoom-in: the finer tiles centred under the view, newest-revealed first.
+    if (canZoomIn && remaining > 0) {
+      remaining -= this.warmThumbsForTiles(level + 1, this.finerTilesForZoom(), remaining);
+    }
+    // Hand any unspent budget back to the pan ring.
+    if (remaining > 0) this.warmThumbsForTiles(level, panRing, remaining);
+  }
+
+  /**
+   * Kick off idle thumbnail loads for the cells of ``tiles`` at ``level``, up to
+   * ``budget`` new fetches, and return how many were started. Tiles whose
+   * geometry isn't cached yet are skipped (a later pass catches them), already
+   * loaded/failed cells are skipped, and warming stops at the cache cap so a
+   * preload never evicts a visible thumbnail.
+   */
+  private warmThumbsForTiles(
+    level: number,
+    tiles: { tx: number; ty: number }[],
+    budget: number,
+  ): number {
+    let spent = 0;
+    for (const { tx, ty } of tiles) {
+      if (spent >= budget) break;
+      const tile = this.tileCache.getCached(level, tx, ty);
+      if (!tile) continue;
+      for (const cell of tile.cells) {
+        if (spent >= budget) break;
+        if (this.thumbCache.has(cell.rep_id) || this.thumbFailed.has(cell.rep_id)) continue;
+        // Stop before the cache fills so a preload never forces an eviction; the
+        // free slots come from visible getThumb()s bumping past stale warms.
+        if (this.thumbCache.size >= this.MAX_THUMBS) return spent;
+        this.startThumbLoad(cell.rep_id, true);
+        spent++;
+      }
+    }
+    return spent;
+  }
+
+  /**
+   * The tiles of the next finer level ({@link activeLevel} + 1) that cover the
+   * current viewport: what a zoom-in would render. A finer level halves the bin
+   * radius, so each visible tile maps to a 2×2 block of finer tiles; the union is
+   * returned sorted by distance from the view centre, since a zoom-in anchors
+   * near the centre (or cursor) and so reveals the central tiles first. Mirrors
+   * the geometry warmed by {@link prefetchLevel} for ``level + 1``, so the tiles
+   * walked here are the ones already being fetched.
+   */
+  private finerTilesForZoom(): { tx: number; ty: number }[] {
+    const meta = this.meta();
+    if (!meta) return [];
+    const finerLevel = this.activeLevel + 1;
+    const radius = meta.base_radius / Math.pow(2, finerLevel);
+    const tileW = meta.tile_span * this.geom.dx(radius);
+    const tileH = meta.tile_span * this.geom.dy(radius);
+    const [vxmin, vymin, vxmax, vymax] = this.getVisibleBounds();
+    // View centre in finer-tile coordinates, to rank tiles centre-out.
+    const ccx = (vxmin + vxmax) / 2 / tileW;
+    const ccy = (vymin + vymax) / 2 / tileH;
+    const seen = new Set<string>();
+    const tiles: { tx: number; ty: number; d2: number }[] = [];
+    for (const { tx, ty } of this.getVisibleTiles()) {
+      // Each current-level tile spans a 2×2 block at the finer level.
+      for (let dx = 0; dx <= 1; dx++) {
+        for (let dy = 0; dy <= 1; dy++) {
+          const ftx = tx * 2 + dx;
+          const fty = ty * 2 + dy;
+          const key = `${ftx}:${fty}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const ex = ftx + 0.5 - ccx;
+          const ey = fty + 0.5 - ccy;
+          tiles.push({ tx: ftx, ty: fty, d2: ex * ex + ey * ey });
+        }
+      }
+    }
+    tiles.sort((a, b) => a.d2 - b.d2);
+    return tiles.map(({ tx, ty }) => ({ tx, ty }));
+  }
+
+  /**
+   * Track a smoothed pan direction from the frame-to-frame change in the view
+   * centre, used to bias which off-view tiles to warm first. The exponential
+   * smoothing keeps a single jittery frame from flipping the bias and lets the
+   * direction decay toward zero when the view holds still (so a stationary view
+   * warms its ring symmetrically).
+   */
+  private updatePanDirection(): void {
+    const cx = this.transform.centerX;
+    const cy = this.transform.centerY;
+    const SMOOTH = 0.4;
+    if (!Number.isNaN(this.lastDrawCenterX)) {
+      const dx = cx - this.lastDrawCenterX;
+      const dy = cy - this.lastDrawCenterY;
+      const mag = Math.hypot(dx, dy);
+      const ux = mag > 1e-6 ? dx / mag : 0;
+      const uy = mag > 1e-6 ? dy / mag : 0;
+      this.panDirX += (ux - this.panDirX) * SMOOTH;
+      this.panDirY += (uy - this.panDirY) * SMOOTH;
+    }
+    this.lastDrawCenterX = cx;
+    this.lastDrawCenterY = cy;
   }
 
   private prefetchLevel(targetLevel: number, sourceTiles: { tx: number; ty: number }[]): void {
@@ -1639,6 +2026,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       clientX: event.clientX,
       clientY: event.clientY,
       members,
+      repId: cell ? cell.rep_id : null,
       bounds: rect,
     });
   }
@@ -1706,9 +2094,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    */
   zoomToFit(): void {
     this.cancelSettle();
-    const prevLevel = this.activeLevel;
     this.fitToData();
-    this.commitZoomChange(prevLevel);
+    this.commitZoomChange();
     this.refreshHoverAfterZoom();
   }
 
@@ -1717,7 +2104,6 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // A zoom takes over from any in-flight snap-back; continue from where the
     // view visually is and reschedule the settle below.
     this.cancelSettle();
-    const prevLevel = this.activeLevel;
     const [projX, projY] = this.screenToProj(anchorX, anchorY);
     const rawZoom = Math.max(0.01, Math.min(100000, this.transform.zoom * factor));
     // Below the whole-projection fit the zoom-out is resisted, not blocked, and
@@ -1737,10 +2123,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
     // Zoom holds the thumbnail size (targetRadius) and re-selects the level, so
     // a smaller region is re-binned more finely while bins stay ~the same size.
-    // When that re-selection crosses a level, the picture-in-picture transition
-    // grows/shrinks the current frame into place before the rebin lands.
+    // The picture-in-picture transition eases the current frame into place on
+    // every notch — growing/shrinking it before any rebin lands when the
+    // re-selection crosses a level, and simply scaling it within a level.
     this.updateActiveLevel();
-    this.commitZoomChange(prevLevel);
+    this.commitZoomChange();
     this.refreshHoverAfterZoom();
     this.scheduleSettle();
   }
@@ -1793,7 +2180,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const rect = this.canvasRef.nativeElement.getBoundingClientRect();
     const mx = event.clientX - rect.left;
     const my = event.clientY - rect.top;
-    const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
+    const wheelFactor = this.wheelZoomFactor();
+    const factor = event.deltaY < 0 ? wheelFactor : 1 / wheelFactor;
     this.zoomBy(factor, mx, my);
   }
 

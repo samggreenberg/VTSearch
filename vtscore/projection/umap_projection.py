@@ -133,23 +133,30 @@ def _umap_layout(
     so it runs on a worker thread and the caller's thread emits an
     elapsed-seconds heartbeat on each ``_HEARTBEAT_SECONDS`` tick.  Anything the
     worker raises is re-raised here.
-    """
-    import umap
 
-    reducer = umap.UMAP(
-        n_components=2,
-        n_neighbors=min(n_neighbors, mat.shape[0] - 1),
-        min_dist=min_dist,
-        metric="euclidean",
-        random_state=random_state,
-    )
+    On a usable CUDA host with cuML installed the reducer is
+    ``cuml.manifold.UMAP`` (~20-100x faster on large sets); otherwise it is the
+    CPU ``umap-learn`` reducer.  A cuML failure (including an nvrtc compile error
+    that only surfaces inside the fit) transparently degrades to the CPU reducer.
+    See :mod:`vtscore.gpu_backends`.
+    """
+    from vtscore.gpu_backends import umap_fit_transform
 
     fit_result: list[np.ndarray] = []
     fit_error: list[Exception] = []
 
     def _fit() -> None:
         try:
-            fit_result.append(np.asarray(reducer.fit_transform(mat)))
+            fit_result.append(
+                umap_fit_transform(
+                    mat,
+                    n_components=2,
+                    n_neighbors=min(n_neighbors, mat.shape[0] - 1),
+                    min_dist=min_dist,
+                    metric="euclidean",
+                    random_state=random_state,
+                )
+            )
         except Exception as exc:  # surfaced via fit_error below
             fit_error.append(exc)
 

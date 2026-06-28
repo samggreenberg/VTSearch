@@ -78,11 +78,9 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // schedule CD and the view would go stale (zoneless-migration.md, Phase 2.5,
   // Recipe B & F).
   readonly datasetName = signal('');
-  readonly viewModeLeft = signal<'grid' | 'list'>('list');
   readonly gridGoalWidthLeft = signal(80);
   readonly focusModeLeft = signal<'click' | 'hover'>('click');
   readonly focusModeRight = signal<'click' | 'hover'>('click');
-  private viewModeLeftDict: Record<string, 'grid' | 'list'> = {};
   private gridIconSizeLeftDict: Record<string, string> = {};
   private focusModeLeftDict: Record<string, 'click' | 'hover'> = {};
   private focusModeRightDict: Record<string, 'click' | 'hover'> = {};
@@ -136,13 +134,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     effect(() => {
       const settings = this.settingsState.settingsSignal();
       if (!settings) return;
-      const dict = settings.view_mode_left;
-      if (dict && typeof dict === 'object') {
-        this.viewModeLeftDict = dict as Record<string, 'grid' | 'list'>;
-        if (this.currentMediaType) {
-          this.viewModeLeft.set(this.viewModeLeftDict[this.currentMediaType] ?? 'list');
-        }
-      }
       const sizeDict = settings.grid_icon_size_left;
       if (sizeDict && typeof sizeDict === 'object') {
         this.gridIconSizeLeftDict = sizeDict as Record<string, string>;
@@ -188,7 +179,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         const newType = medias[0].media_type;
         if (newType !== this.currentMediaType) {
           this.currentMediaType = newType;
-          this.viewModeLeft.set(this.viewModeLeftDict[newType] ?? 'list');
           this.gridGoalWidthLeft.set(iconSizeToGoalWidth(this.gridIconSizeLeftDict[newType] ?? 'M'));
           this.focusModeLeft.set(this.focusModeLeftDict[newType] ?? 'click');
           this.focusModeRight.set(this.focusModeRightDict[newType] ?? 'click');

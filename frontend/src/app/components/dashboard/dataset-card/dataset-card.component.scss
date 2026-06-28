@@ -37,6 +37,9 @@ td {
 }
 
 td.actions-col {
+  // Hug the inline action buttons; width is defined once on `.dash-table` and
+  // inherited here (see `_data-table.scss`).
+  width: var(--actions-col-width);
   text-align: right;
 }
 
@@ -78,6 +81,19 @@ td.actions-col {
   }
 }
 
+// The rename pencil lives next to the row name and only surfaces on row hover
+// (or keyboard focus) so it stays out of the resting layout. Opacity (not
+// display) keeps the name cell's width stable, avoiding a shift on hover.
+.name-edit-btn {
+  opacity: 0;
+  transition: opacity var(--transition-base), background var(--transition-base);
+}
+
+:host:hover .name-edit-btn,
+.name-edit-btn:focus-visible {
+  opacity: 1;
+}
+
 @keyframes pencil-rotate-open {
   0% { transform: rotate(0deg); }
   50% { transform: rotate(22.5deg); }
@@ -87,18 +103,6 @@ td.actions-col {
 @keyframes pencil-rotate-close {
   0% { transform: rotate(45deg); }
   50% { transform: rotate(22.5deg); }
-  100% { transform: rotate(0deg); }
-}
-
-@keyframes icon-rotate-open {
-  0% { transform: rotate(0deg); }
-  50% { transform: rotate(45deg); }
-  100% { transform: rotate(90deg); }
-}
-
-@keyframes icon-rotate-close {
-  0% { transform: rotate(90deg); }
-  50% { transform: rotate(45deg); }
   100% { transform: rotate(0deg); }
 }
 
@@ -148,58 +152,21 @@ td.actions-col {
   justify-content: center;
   transition: color var(--transition-base), background var(--transition-base);
 
-  &:hover {
-    background: var(--btn-icon-hover-bg);
-  }
-}
-
-.security-btn {
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  cursor: pointer;
-  padding: var(--space-xs);
-  border-radius: var(--radius-md);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: color var(--transition-base), background var(--transition-base);
-
-  &:hover:not(.disabled) {
+  &:hover:not(:disabled) {
     background: var(--btn-icon-hover-bg);
   }
 
-  &.disabled {
+  // While its projection pre-builds, the Browse eye keeps waggling but is
+  // `disabled` (the user is just waiting to enter the browse view). Dim it and
+  // drop the pointer/hover affordance so it reads as disabled, not clickable.
+  &:disabled {
+    cursor: default;
     opacity: var(--opacity-disabled);
-    cursor: not-allowed;
   }
 }
 
-.stats-btn {
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  cursor: pointer;
-  padding: var(--space-xs);
-  border-radius: var(--radius-md);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: color var(--transition-base), background var(--transition-base);
-
-  &:hover {
-    background: var(--btn-icon-hover-bg);
-  }
-
-  .pie-active {
-    animation: icon-rotate-open var(--transition-slow) ease-in-out forwards;
-  }
-
-  .pie-inactive {
-    animation: icon-rotate-close var(--transition-slow) ease-in-out forwards;
-  }
-}
-
+// Delete is inline (every dataset is removed eventually), but destructive, so
+// it reddens on hover to read as Delete rather than just another grey icon.
 .delete-btn {
   background: none;
   border: none;
@@ -214,15 +181,38 @@ td.actions-col {
 
   &:hover {
     color: var(--color-bad);
-    background: var(--btn-icon-hover-bg);
+    background: var(--bad-bg);
   }
 
+  // The trash icon spins to 90° while its confirm dialog is up, then reverses
+  // back once it resolves (matches the bulk-delete button in the section header).
   .trash-active {
-    animation: icon-rotate-open var(--transition-slow) ease-in-out forwards;
+    animation: trash-rotate var(--transition-slow) ease-in-out forwards;
   }
 
   .trash-inactive {
-    animation: icon-rotate-close var(--transition-slow) ease-in-out forwards;
+    animation: trash-rotate var(--transition-slow) ease-in-out reverse forwards;
+  }
+}
+
+@keyframes trash-rotate {
+  to { transform: rotate(90deg); }
+}
+
+.overflow-btn {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-base), background var(--transition-base);
+
+  &:hover {
+    background: var(--btn-icon-hover-bg);
   }
 }
 
@@ -253,65 +243,17 @@ td.select-col {
   }
 }
 
-// Inline loading progress (replaces data columns while loading)
-.inline-loading-progress {
+// Inline loading progress now renders via the shared `vt-job-progress`
+// component; only the failed-row variant keeps bespoke styling here.
+.inline-loading-failed {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--space-xs);
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-md);
 
-  .progress-context {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2xs);
-  }
-
-  .progress-header {
-    font-size: var(--font-sm);
-    color: var(--text-primary);
-    font-weight: var(--weight-medium);
-  }
-
-  .progress-subtitle {
-    font-size: var(--font-xs);
-    color: var(--text-muted);
-  }
-
-  .progress-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-  }
-
-  .progress-msg {
-    font-size: var(--font-xs);
-    color: var(--text-muted);
-    white-space: nowrap;
-    flex-shrink: 0;
-    max-width: 240px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  vt-progress-bar {
+  .error-msg {
     flex: 1;
-  }
-
-  .progress-eta {
-    font-size: var(--font-xs);
-    color: var(--text-muted);
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-
-  &.inline-loading-failed {
-    flex-direction: row;
-    align-items: center;
-
-    .error-msg {
-      flex: 1;
-      font-size: var(--font-sm);
-      color: var(--error-text);
-    }
+    font-size: var(--font-sm);
+    color: var(--error-text);
   }
 }

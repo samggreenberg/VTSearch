@@ -86,7 +86,6 @@ describe('MediaItemComponent', () => {
   });
 
   it('should fall back to placeholder when thumbnail fails to load', () => {
-    component.viewMode = 'grid';
     expect(component.thumbnailUrl).toBe('/api/medias/1/thumbnail');
     component.onThumbnailError();
     expect(component.thumbnailUrl).toBeNull();

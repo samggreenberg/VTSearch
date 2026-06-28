@@ -14,12 +14,14 @@
           [value]="buildProgress()"
           [max]="buildTotal()"
         />
-        @if (buildTotal() > 0) {
-          <span class="browse-status-count">{{ buildProgress() }} / {{ buildTotal() }}</span>
-        }
-        @if (buildMessage()) {
-          <span class="browse-status-detail">{{ buildMessage() }}</span>
-        }
+        <!-- Reserved-height lines so the count/detail appearing or disappearing
+             doesn't re-center the column and shift the bar above it. -->
+        <span class="browse-status-count">
+          @if (buildTotal() > 0) {
+            {{ buildProgress() }} / {{ buildTotal() }}
+          }
+        </span>
+        <span class="browse-status-detail">{{ buildMessage() }}</span>
       </div>
     }
     @case ('error') {
@@ -73,6 +75,7 @@
             [mediaType]="mediaType()"
             [colormap]="colormap()"
             [thumbnailBorder]="thumbnailBorder()"
+            [zoomsPerLevel]="zoomsPerLevel()"
             [marqueeMode]="marqueeMode"
             (hexHover)="onHexHover($event)"
             (densityMaxChanged)="onDensityMaxChanged($event)"
@@ -88,6 +91,7 @@
               [y]="contextMenuY"
               [bounds]="contextBounds"
               [memberIds]="contextMembers"
+              [repId]="contextRepId"
               [mediaType]="mediaType()"
               [hoverThumbRadius]="thumbnailRadius"
               (dismissed)="dismissContextMenu()"

@@ -98,12 +98,13 @@
   to { transform: rotate(90deg); }
 }
 
-// The `+` Add-dataset glyph opts into the shared `.icon-waggle` while datasets
-// are downloading/installing (the button is disabled the whole time via
-// `isLoading`). `inline-block` is required for the waggle's transform to apply
-// to the otherwise-inline span. The `+`'s 90° rotational symmetry means its
-// start/end frames look identical, but `.icon-waggle`'s `ease-in-out` sweep
-// passes smoothly through `×` so the motion still reads.
+// The `+` Add-dataset / Add-detector glyph animates between `+` and `×` via the
+// `.plus-open` / `.plus-close` classes as its modal opens and closes.
+// `inline-block` is required for those rotation transforms to apply to the
+// otherwise-inline span. (The button no longer waggles during background
+// imports: it stays enabled now so a second import can start mid-load, and an
+// animating-but-clickable button would read as a pending action, not progress.
+// In-flight imports surface as their own progress rows in the table instead.)
 .plus-icon {
   display: inline-block;
 }
@@ -161,9 +162,23 @@
     font-weight: var(--weight-medium);
   }
 
+  // Reserve one line so a phase whose subtitle is empty doesn't shift the bar up.
   .progress-subtitle {
     font-size: var(--font-xs);
     color: var(--text-muted);
+    line-height: 1.4;
+    min-height: 1.4em;
+  }
+
+  // Detail (left) + ETA (right) share one reserved-height line above the bar so
+  // the bar never moves as the text changes length or appears/disappears.
+  .progress-meta {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-md);
+    font-size: var(--font-xs);
+    line-height: 1.4;
+    min-height: 1.4em;
   }
 
   .progress-row {
@@ -173,17 +188,19 @@
   }
 
   .progress-msg {
-    font-size: var(--font-xs);
-    max-width: 240px;
+    color: var(--text-muted);
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
   }
 
   .progress-eta {
-    font-size: var(--font-xs);
     color: var(--text-muted);
     white-space: nowrap;
     flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
   }
 }
 
@@ -223,14 +240,6 @@
     font-weight: var(--weight-medium);
     color: var(--text-primary);
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .loading-task-progress .progress-msg {
-    font-size: var(--font-xs);
-    flex-shrink: 0;
-    max-width: 300px;
     overflow: hidden;
     text-overflow: ellipsis;
   }

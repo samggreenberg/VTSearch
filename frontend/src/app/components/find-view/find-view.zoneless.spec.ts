@@ -11,7 +11,7 @@ import { settleResource, settleZoneless } from '../../testing/settle-resource';
 /**
  * Zoneless staleness canary for the Find view (docs/plans/zoneless-migration.md,
  * Phases 0.3/0.4 + 2.5). Phase 2.5 signalized find-view's own subscribe/effect
- * written template-bound state (`datasetName`, `viewModeLeft`, …, and the
+ * written template-bound state (`datasetName`, `gridGoalWidthLeft`, …, and the
  * `unverifiedSortOrder` computed) AND signalized the shared SortStateService /
  * VoteStateService it binds, so its `sortState.sortBusy`-style getter bindings
  * repaint under zoneless with no per-consumer bridge.

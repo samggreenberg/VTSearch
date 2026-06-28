@@ -121,6 +121,27 @@ def main() -> None:
         default=0.5,
         help="Fraction of training data used for calibration (default: 0.5).",
     )
+    parser.add_argument(
+        "--embedder",
+        type=str,
+        default="",
+        metavar="NAME",
+        help=(
+            "Embedder to build each demo dataset with (default: media type's "
+            "default). Pass a patch embedder (e.g. dinov3_patch) to enable "
+            "--region-voting."
+        ),
+    )
+    parser.add_argument(
+        "--region-voting",
+        action="store_true",
+        help=(
+            "Learned-sort Good votes are region-pooled from each media's "
+            "ground-truth box instead of the whole image. Needs a patch "
+            "embedder (--embedder) and a dataset with stored regions (Visual "
+            "Genome)."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -146,6 +167,8 @@ def main() -> None:
         safe_thresholds=args.safe_thresholds,
         calibrate_count=args.calibrate_count,
         calibration_fraction=args.calibration_fraction,
+        embedder_name=args.embedder,
+        region_voting=args.region_voting,
     )
 
     # Print summary

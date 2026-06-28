@@ -51,14 +51,12 @@ describe('isProgressIndeterminate', () => {
 });
 
 describe('formatProgressHeader step count', () => {
-  it('surfaces "step S of T" in the header for multi-step jobs', () => {
+  it('surfaces a capitalized "Step S of T" in the header for multi-step jobs', () => {
     const { header } = formatProgressHeader(
       { status: 'embedding', message: 'Embedding files', step: 3, total_steps: 4 },
       'dataset',
     );
-    expect(header).toContain('step 3 of 4');
-    expect(header).toContain('Loading dataset');
-    expect(header).toContain('embedding files');
+    expect(header).toBe('Loading dataset · Step 3 of 4 · Embedding files');
   });
 
   it('omits the step count for single-step jobs', () => {
@@ -66,6 +64,61 @@ describe('formatProgressHeader step count', () => {
       { status: 'downloading', message: 'Fetching', step: 1, total_steps: 1 },
       'dataset',
     );
-    expect(header).not.toContain('step 1 of 1');
+    expect(header).not.toContain('Step 1 of 1');
   });
 });
+
+describe('formatProgressHeader detail line', () => {
+  it('drops the parentheses around the count and strips the redundant verb', () => {
+    // Header already says "· Embedding files", so the per-item detail keeps only
+    // the count and the filename — no "(…)" and no repeated "Embedding".
+    const { header, detail } = formatProgressHeader(
+      { status: 'embedding', message: 'Embedding cats/img.png', current: 12, total: 345 },
+      'dataset',
+    );
+    expect(header).toContain('Embedding files');
+    expect(detail).toBe('12/345 cats/img.png');
+  });
+
+  it('shows the bare count when there is no per-item identifier', () => {
+    const { detail } = formatProgressHeader(
+      { status: 'embedding', message: 'Embedding files', current: 12, total: 345 },
+      'dataset',
+    );
+    // "Embedding files" → verb stripped → "files"; the count carries the signal.
+    expect(detail).toBe('12/345 files');
+  });
+
+  it('keeps a message that has no leading action verb intact', () => {
+    const { detail } = formatProgressHeader(
+      { status: 'loading', message: 'cats/img.png', current: 3, total: 9 },
+      'dataset',
+    );
+    expect(detail).toBe('3/9 cats/img.png');
+  });
+});
+
+describe('formatProgressHeader step-4 finalize phases', () => {
+  // The serialize → zip → write window of step 4 used to match no phase, so
+  // the header collapsed to a bare "Step 4 of 4" with no descriptor.
+  it.each([
+    ['Saving to registry…', 'saving dataset'],
+    ['Serializing dataset…', 'saving dataset'],
+    ['Packaging dataset…', 'saving dataset'],
+    ['Building diversity index…', 'building diversity index'],
+    ['Building 2-D projection…', 'building projection'],
+    ['Building tile pyramid…', 'building projection'],
+    ['Dropped 3 item(s) with failed embedding…', 'cleaning up'],
+  ])('labels %j as "%s"', (message, expectedPhase) => {
+    const { header, subtitle } = formatProgressHeader(
+      { status: 'loading', message, step: 4, total_steps: 4 },
+      'dataset',
+    );
+    expect(header).toBe(`Loading dataset · Step 4 of 4 · ${capitalizeFirst(expectedPhase)}`);
+    expect(subtitle).not.toBe('');
+  });
+});
+
+function capitalizeFirst(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}

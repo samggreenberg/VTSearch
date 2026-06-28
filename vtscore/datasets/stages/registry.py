@@ -176,10 +176,27 @@ def _register_and_migrate(
     exception propagates so we never leave an orphan on disk.
     """
 
+    # The registry save fires _on_stage roughly three times ("Saving to
+    # registry…", "Serializing dataset…", "Packaging dataset…"). Report an
+    # incrementing count so the finalize bar advances across that window
+    # instead of sitting frozen at the slot's floor through the long pickle +
+    # zip write. ``_STAGE_TOTAL`` is a rough denominator; the count is clamped
+    # so an extra message can't push past it.
+    _STAGE_TOTAL = 3
+    _stage_n = [0]
+
     def _on_stage(message: str) -> None:
         # Keep the dashboard row alive through the otherwise-silent
         # serialize → write → register window (the old "frozen bar" gap).
-        tracker.update("loading", message, step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS)
+        _stage_n[0] += 1
+        tracker.update(
+            "loading",
+            message,
+            current=min(_stage_n[0], _STAGE_TOTAL),
+            total=_STAGE_TOTAL,
+            step=_TOTAL_LOAD_STEPS,
+            total_steps=_TOTAL_LOAD_STEPS,
+        )
 
     # Cache the freshly-built diversity tree into the pickle so reloads skip
     # the expensive hierarchical k-means rebuild (it is re-derived only when

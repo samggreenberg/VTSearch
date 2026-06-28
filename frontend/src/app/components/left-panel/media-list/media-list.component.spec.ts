@@ -116,6 +116,24 @@ describe('MediaListComponent', () => {
     expect(fixture.nativeElement.querySelector('.media-threshold-line')).toBeTruthy();
   });
 
+  it('queues an autoscroll when the selection changes in click mode', () => {
+    fixture.componentRef.setInput('focusMode', 'click');
+    TestBed.tick();
+    component.ngOnChanges({ selectedId: new SimpleChange(null, 2, false) });
+    expect(component['pendingScrollToSelected']).toBe(true);
+  });
+
+  // Regression: in hover mode the selection follows the cursor. Scrolling the
+  // hovered item to the top shifts what's under the mouse, which re-selects and
+  // scrolls again — an infinite autoscroll loop. Hover selection must not queue
+  // an autoscroll.
+  it('does not queue an autoscroll on hover selection', () => {
+    fixture.componentRef.setInput('focusMode', 'hover');
+    TestBed.tick();
+    component.ngOnChanges({ selectedId: new SimpleChange(null, 2, false) });
+    expect(component['pendingScrollToSelected']).toBe(false);
+  });
+
   // Regression: small datasets used to never prefetch metadata, so the list
   // displayed ``#284`` placeholders forever; names only filled in when the
   // user clicked an item. Without virtual scroll active, every row is in the

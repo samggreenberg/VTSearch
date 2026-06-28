@@ -305,63 +305,6 @@ class TestSettingsAPI:
         res2 = client.get("/api/settings")
         assert res2.get_json()["label_hint_dismissed"] is True
 
-    def test_update_view_mode_left_per_type(self, client):
-        res = client.put("/api/settings", json={"view_mode_left": {"audio": "grid", "image": "list"}})
-        assert res.status_code == 200
-        data = res.get_json()
-        assert data["view_mode_left"]["audio"] == "grid"
-        assert data["view_mode_left"]["image"] == "list"
-
-        # Verify it persisted
-        res2 = client.get("/api/settings")
-        assert res2.get_json()["view_mode_left"]["audio"] == "grid"
-
-    def test_update_view_mode_left_legacy_scalar(self, client):
-        res = client.put("/api/settings", json={"view_mode_left": "grid"})
-        assert res.status_code == 200
-        data = res.get_json()
-        # All types should now be "grid"
-        for v in data["view_mode_left"].values():
-            assert v == "grid"
-
-    def test_update_view_mode_left_invalid(self, client):
-        res = client.put("/api/settings", json={"view_mode_left": {"audio": "invalid"}})
-        assert res.status_code == 400
-
-    def test_update_view_mode_left_invalid_scalar(self, client):
-        res = client.put("/api/settings", json={"view_mode_left": "invalid"})
-        assert res.status_code == 400
-
-    def test_update_view_mode_right_per_type(self, client):
-        res = client.put("/api/settings", json={"view_mode_right": {"audio": "list", "video": "grid"}})
-        assert res.status_code == 200
-        data = res.get_json()
-        assert data["view_mode_right"]["audio"] == "list"
-        assert data["view_mode_right"]["video"] == "grid"
-
-        # Verify it persisted
-        res2 = client.get("/api/settings")
-        assert res2.get_json()["view_mode_right"]["audio"] == "list"
-
-    def test_update_view_mode_right_legacy_scalar(self, client):
-        res = client.put("/api/settings", json={"view_mode_right": "list"})
-        assert res.status_code == 200
-        data = res.get_json()
-        for v in data["view_mode_right"].values():
-            assert v == "list"
-
-    def test_update_view_mode_right_invalid(self, client):
-        res = client.put("/api/settings", json={"view_mode_right": {"audio": "invalid"}})
-        assert res.status_code == 400
-
-    def test_get_settings_includes_view_modes(self, client):
-        res = client.get("/api/settings")
-        assert res.status_code == 200
-        data = res.get_json()
-        assert "show_metadata" in data
-        assert "view_mode_left" in data
-        assert "view_mode_right" in data
-
     def test_update_grid_icon_size_left_per_type(self, client):
         res = client.put("/api/settings", json={"grid_icon_size_left": {"audio": "XS", "image": "XL"}})
         assert res.status_code == 200
@@ -421,6 +364,24 @@ class TestSettingsAPI:
     def test_update_grid_icon_size_popup_invalid(self, client):
         res = client.put("/api/settings", json={"grid_icon_size_popup": {"audio": "TINY"}})
         assert res.status_code == 400
+
+    def test_update_popup_preview_size_per_type(self, client):
+        res = client.put("/api/settings", json={"popup_preview_size": {"image": 320, "video": 480}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["popup_preview_size"]["image"] == 320
+        assert data["popup_preview_size"]["video"] == 480
+
+        res2 = client.get("/api/settings")
+        assert res2.get_json()["popup_preview_size"]["image"] == 320
+
+    def test_update_popup_preview_size_clamps_out_of_range(self, client):
+        # Values outside POPUP_PREVIEW_SIZE_PX (96..720) clamp rather than reject.
+        res = client.put("/api/settings", json={"popup_preview_size": {"image": 5000, "video": 1}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["popup_preview_size"]["image"] == 720
+        assert data["popup_preview_size"]["video"] == 96
 
     def test_update_focus_mode_left_per_type(self, client):
         res = client.put("/api/settings", json={"focus_mode_left": {"audio": "hover", "image": "click"}})
@@ -766,6 +727,23 @@ class TestBrowserSettings:
         # Persists across a fresh read.
         assert client.get("/api/settings").get_json()["browse_compact"]["audio"] is False
 
+    def test_update_browse_mouse_zooms_per_level_per_type(self, client):
+        res = client.put("/api/settings", json={"browse_mouse_zooms_per_level": {"audio": 1, "image": 3}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_mouse_zooms_per_level"]["audio"] == 1
+        assert data["browse_mouse_zooms_per_level"]["image"] == 3
+        # Persists across a fresh read.
+        assert client.get("/api/settings").get_json()["browse_mouse_zooms_per_level"]["audio"] == 1
+
+    def test_update_browse_mouse_zooms_per_level_clamped(self, client):
+        # Out-of-range values are clamped into 1..3 rather than rejected.
+        res = client.put("/api/settings", json={"browse_mouse_zooms_per_level": {"audio": 0, "image": 9}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_mouse_zooms_per_level"]["audio"] == 1
+        assert data["browse_mouse_zooms_per_level"]["image"] == 3
+
     def test_get_settings_includes_browser_prefs(self, client):
         data = client.get("/api/settings").get_json()
         # Present as (possibly empty) dicts so the frontend can index by type.
@@ -775,6 +753,7 @@ class TestBrowserSettings:
             "browse_icon_size",
             "browse_thumbnail_border",
             "browse_compact",
+            "browse_mouse_zooms_per_level",
         ):
             assert key in data
             assert isinstance(data[key], dict)
@@ -787,5 +766,6 @@ class TestBrowserSettings:
             "browse_icon_size",
             "browse_thumbnail_border",
             "browse_compact",
+            "browse_mouse_zooms_per_level",
         ):
             assert data.get(key, {}) == {}

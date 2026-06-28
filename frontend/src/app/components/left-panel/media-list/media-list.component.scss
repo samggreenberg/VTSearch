@@ -84,33 +84,9 @@
   font-size: var(--font-md);
 }
 
-.media-list-skeleton {
-  // List-mode placeholder rows: each row holds a thumbnail-sized block + a
-  // text bar at the same dimensions as a real media-item, so swapping in
-  // real rows doesn't cause a layout shift.
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  padding: var(--space-xs) var(--space-md);
-
-  &.grid-layout {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, var(--grid-goal-width, 80px));
-    gap: var(--space-xs);
-    padding: var(--space-xs);
-    align-content: start;
-    justify-content: start;
-  }
-}
-
-.media-skeleton-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-height: 28px;
-}
-
 .media-skeleton-card {
+  // Grid placeholder card sized like a real media-item thumbnail, so swapping
+  // in real cards doesn't cause a layout shift.
   width: 100%;
   aspect-ratio: 1;
 }

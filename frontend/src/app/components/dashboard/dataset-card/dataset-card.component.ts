@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostBinding, HostListener, Input, input, OnChanges, output, SimpleChanges, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostBinding, HostListener, Input, input, output, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
-import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
+import { JobProgressComponent } from '../../job-progress/job-progress.component';
 import {
   ProgressBarState,
   ProgressHeader,
@@ -12,17 +12,17 @@ import {
 } from '../../../utils/format-progress';
 import { formatTimestamp } from '../../../utils/format-date';
 import { ContextMenuComponent, ContextMenuItem } from '../../context-menu/context-menu.component';
-import { buildDatasetCardMenuItems } from '../card-context-menu-items';
+import { buildDatasetCardMenuItems, CARD_MENU_MIN_WIDTH, overflowMenuItems } from '../card-context-menu-items';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-dataset-card',
   standalone: true,
-  imports: [CommonModule, FormsModule, ProgressBarComponent, ContextMenuComponent],
+  imports: [CommonModule, FormsModule, JobProgressComponent, ContextMenuComponent],
   templateUrl: './dataset-card.component.html',
   styleUrl: './dataset-card.component.scss',
 })
-export class DatasetCardComponent implements OnChanges {
+export class DatasetCardComponent {
   @Input() dataset: any;
   readonly currentUser = input('');
   readonly isDefaultLogin = input(true);
@@ -30,6 +30,20 @@ export class DatasetCardComponent implements OnChanges {
   @Input() @HostBinding('class.selected') selected = false;
   @Input() @HostBinding('class.dimmed') dimmed = false;
   @Input() loadingTask?: LoadingTask;
+
+  /** True while this row's delete-confirm dialog is open (driven by the
+   *  dashboard's `deletingDatasetId`). Spins the trash icon to 90° while open;
+   *  the reverse animation plays back to 0° once the dialog resolves. */
+  @Input()
+  set deleting(value: boolean) {
+    if (value && !this._deleting) this.wasDeleting = true;
+    this._deleting = value;
+  }
+  get deleting(): boolean {
+    return this._deleting;
+  }
+  private _deleting = false;
+  wasDeleting = false;
   /** Which progress vocabulary to render the inline row with. ``projection``
    *  is used while the Browse button pre-builds the dataset's projection. */
   readonly taskKind = input<ProgressKind>('dataset');
@@ -53,13 +67,9 @@ export class DatasetCardComponent implements OnChanges {
     // there is nothing to act on.
     if (this.loadingTask) return;
     event.preventDefault();
-    this.contextMenuItems = buildDatasetCardMenuItems(this.dataset, {
-      isDefaultLogin: this.isDefaultLogin(),
-      isOwner: this.isOwner,
-    });
-    this.contextMenuX = event.clientX;
-    this.contextMenuY = event.clientY;
-    this.contextMenuOpen = true;
+    // Right-click gets the complete action list; the ⋯ button gets the overflow
+    // subset (see openMenuAt).
+    this.openMenuAt(event.clientX, event.clientY, false);
   }
   readonly rename = output<string>();
   readonly stats = output<void>();
@@ -77,14 +87,9 @@ export class DatasetCardComponent implements OnChanges {
 
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
 
-  readonly statsOpen = input(false);
-  readonly deleteConfirmOpen = input(false);
-
   editing = false;
   wasEditing = false;
   editName = '';
-  wasStatsOpen = false;
-  wasDeleteOpen = false;
 
   contextMenuOpen = false;
   contextMenuX = 0;
@@ -102,6 +107,30 @@ export class DatasetCardComponent implements OnChanges {
     this.wasEditing = true;
     this.editName = this.dataset.name;
     setTimeout(() => this.renameInput?.nativeElement.focus());
+  }
+
+  /** Open the shared action menu at a viewport point.
+   *  ``buildDatasetCardMenuItems`` is the single source of truth for the action
+   *  list; ``overflow`` trims the verbs already shown as inline icons (Load,
+   *  Browse, Delete) so the ⋯ button reads as "more" while right-click stays
+   *  complete. */
+  private openMenuAt(x: number, y: number, overflow: boolean): void {
+    const items = buildDatasetCardMenuItems(this.dataset, {
+      isDefaultLogin: this.isDefaultLogin(),
+      isOwner: this.isOwner,
+    });
+    this.contextMenuItems = overflow ? overflowMenuItems(items) : items;
+    this.contextMenuX = x;
+    this.contextMenuY = y;
+    this.contextMenuOpen = true;
+  }
+
+  /** Open the overflow action menu from the ⋯ button, right-aligned under it so
+   *  the menu never spills off the viewport's right edge. */
+  onOverflow(event: MouseEvent): void {
+    event.stopPropagation();
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    this.openMenuAt(Math.max(8, rect.right - CARD_MENU_MIN_WIDTH), rect.bottom + 4, true);
   }
 
   onContextMenuAction(id: string): void {
@@ -144,30 +173,15 @@ export class DatasetCardComponent implements OnChanges {
     this.editing = false;
   }
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['statsOpen'] && !changes['statsOpen'].currentValue && changes['statsOpen'].previousValue) {
-      this.wasStatsOpen = true;
-    }
-    if (changes['deleteConfirmOpen'] && !changes['deleteConfirmOpen'].currentValue && changes['deleteConfirmOpen'].previousValue) {
-      this.wasDeleteOpen = true;
-    }
-  }
-
   onPencilAnimationEnd(): void {
     if (!this.editing) {
       this.wasEditing = false;
     }
   }
 
-  onPieAnimationEnd(): void {
-    if (!this.statsOpen()) {
-      this.wasStatsOpen = false;
-    }
-  }
-
-  onTrashAnimationEnd(): void {
-    if (!this.deleteConfirmOpen()) {
-      this.wasDeleteOpen = false;
+  onDeleteAnimationEnd(): void {
+    if (!this._deleting) {
+      this.wasDeleting = false;
     }
   }
 
@@ -179,24 +193,9 @@ export class DatasetCardComponent implements OnChanges {
     }
   }
 
-  onStats(event: MouseEvent): void {
-    event.stopPropagation();
-    this.stats.emit();
-  }
-
-  onSecurity(event: MouseEvent): void {
-    event.stopPropagation();
-    this.security.emit();
-  }
-
   onLoad(event: MouseEvent): void {
     event.stopPropagation();
     this.load.emit();
-  }
-
-  onBrowse(event: MouseEvent): void {
-    event.stopPropagation();
-    this.browse.emit();
   }
 
   onDelete(event: MouseEvent): void {
@@ -230,8 +229,8 @@ export class DatasetCardComponent implements OnChanges {
     return progressBarState(task);
   }
 
-  onCancelTask(event: MouseEvent): void {
-    event.stopPropagation();
+  // `vt-job-progress` stops the click before it reaches the row, so no event.
+  onCancelTask(): void {
     if (this.loadingTask) {
       this.cancelTask.emit(this.loadingTask.task_id);
     }

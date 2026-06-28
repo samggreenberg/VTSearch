@@ -23,12 +23,14 @@ import numpy as np
 
 from vtscore.config import WHISPER_MODEL_ID, WHISPER_SAMPLE_RATE
 from vtscore.media.embedder import (
+    IMPORT_MODULE_ESTIMATES,
     MediaEmbedder,
     embedder_load_setup,
     hf_token,
     intercept_tqdm_progress,
     load_pretrained_local_first,
     timed_progress,
+    to_compute_device,
 )
 
 
@@ -72,13 +74,19 @@ class AudioWhisperEncoderEmbedder(MediaEmbedder):
         if self._model is not None:
             return
 
-        with timed_progress(self._on_progress, "loading", "Importing torch…", 1, 3):
+        with timed_progress(
+            self._on_progress, "loading", "Importing torch…", est_modules=IMPORT_MODULE_ESTIMATES["torch"]
+        ):
             import torch  # noqa: F401, PLC0415
 
-        with timed_progress(self._on_progress, "loading", "Importing transformers…", 2, 3):
+        with timed_progress(
+            self._on_progress, "loading", "Importing transformers…", est_modules=IMPORT_MODULE_ESTIMATES["transformers"]
+        ):
             from transformers import WhisperFeatureExtractor, WhisperModel  # noqa: PLC0415
 
-        with timed_progress(self._on_progress, "loading", "Importing librosa…", 3, 3):
+        with timed_progress(
+            self._on_progress, "loading", "Importing librosa…", est_modules=IMPORT_MODULE_ESTIMATES["librosa"]
+        ):
             import librosa  # noqa: F401, PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading Whisper encoder weights…")
@@ -93,7 +101,7 @@ class AudioWhisperEncoderEmbedder(MediaEmbedder):
             )
         # Encoder only - drop the decoder so we don't keep ~half the
         # weights in RSS for no benefit (we never invoke it).
-        full_model = full_model.to("cpu")
+        full_model = to_compute_device(full_model)
         self._model = full_model.encoder
         self._model.eval()
 

@@ -24,7 +24,12 @@ from vtscore.media.embedder import (
     load_pretrained_local_first,
     timed_progress,
 )
-from vtscore.embedding.loader import _make_console_progress, predict_embedders_to_preload, preload_predicted_embedders
+from vtscore.embedding.loader import (
+    _make_console_progress,
+    initialize_models,
+    predict_embedders_to_preload,
+    preload_predicted_embedders,
+)
 
 
 class TestMakeConsoleProgress:
@@ -121,6 +126,38 @@ class TestMakeConsoleProgress:
         captured = capsys.readouterr()
         assert "100%" in captured.out
 
+    def test_bars_align_across_different_labels(self, capsys):
+        """Bars for labels of different lengths should start at the same column."""
+        cb = _make_console_progress(lambda *a, **kw: None)
+
+        cb("loading", "Importing torch…", 1, 2)
+        cb("loading", "Importing transformers…", 2, 2)
+        cb("loading", "Loading weights", 5, 10)
+        cb.flush()
+
+        captured = capsys.readouterr()
+        # Each \r-overwrite is a separate render; the bar's open-bracket column
+        # must be identical for every label so the bars line up vertically.
+        renders = [seg for seg in captured.out.replace("\033[K", "").split("\r") if "[" in seg]
+        cols = {seg.index("[") for seg in renders}
+        assert len(cols) == 1, f"bars not aligned: columns were {cols}"
+
+    def test_elapsed_suffix_does_not_shift_bar(self, capsys):
+        """A growing elapsed-time suffix ('1s' -> '10s') must not move the bar."""
+        cb = _make_console_progress(lambda *a, **kw: None)
+
+        cb("loading", "Importing torch… (1s)", 1, 2)
+        cb("loading", "Importing torch… (10s)", 1, 2)
+        cb("loading", "Importing torch… (100s)", 1, 2)
+
+        captured = capsys.readouterr()
+        renders = [seg for seg in captured.out.replace("\033[K", "").split("\r") if "[" in seg]
+        cols = {seg.index("[") for seg in renders}
+        assert len(cols) == 1, f"bar shifted while suffix grew: columns were {cols}"
+        # The suffix is rendered after the percentage, not before the bar.
+        for seg in renders:
+            assert seg.index("s)") > seg.index("%")
+
     def test_phase_after_progress_starts_new_line(self, capsys):
         """A phase message arriving mid-progress-bar should start a new line."""
         cb = _make_console_progress(lambda *a, **kw: None)
@@ -208,6 +245,51 @@ class TestPreloadConsoleOutput:
         assert result == []
         captured = capsys.readouterr()
         assert captured.out == ""
+
+
+class TestInitializeModelsProgress:
+    """``initialize_models`` renders progress bars for its heavy library imports."""
+
+    def test_no_callback_is_silent(self, capsys):
+        """Without an ``on_progress`` callback (tests/eval CLI), nothing prints."""
+        with (
+            patch("vtscore.embedding.loader._warm_threadpool_controller"),
+            patch("vtsearch.logging_config.install_transformers_logging_bridge"),
+        ):
+            initialize_models()
+
+        assert capsys.readouterr().out == ""
+
+    def test_callback_receives_import_steps(self):
+        """The callback is driven with one step per heavy import (sklearn, transformers)."""
+        calls = []
+
+        def cb(status, message="", current=0, total=0):
+            calls.append((status, message, current, total))
+
+        with (
+            patch("vtscore.embedding.loader._warm_threadpool_controller"),
+            patch("vtsearch.logging_config.install_transformers_logging_bridge"),
+        ):
+            initialize_models(on_progress=cb)
+
+        messages = [m for _, m, _, _ in calls]
+        assert any("scikit-learn" in m for m in messages)
+        assert any("transformers" in m for m in messages)
+
+    def test_callback_renders_console_bars(self, capsys):
+        """With a callback, both import steps render completed console bars."""
+        with (
+            patch("vtscore.embedding.loader._warm_threadpool_controller"),
+            patch("vtsearch.logging_config.install_transformers_logging_bridge"),
+        ):
+            initialize_models(on_progress=lambda *a, **kw: None)
+
+        out = capsys.readouterr().out
+        assert "Importing scikit-learn" in out
+        assert "Importing transformers" in out
+        # Both bars complete at 100% (the second via flush at the end).
+        assert out.count("100%") >= 2
 
 
 class TestPredictEmbeddersToPreload:
@@ -938,3 +1020,61 @@ class TestTimedProgress:
         captured = capsys.readouterr()
         # Should see the initial message and at least one elapsed update
         assert "Importing torch…" in captured.out
+
+    def test_est_modules_drives_bar_from_module_count(self):
+        """With est_modules the bar starts at 0 and is driven by the live
+        module-count delta, clamped one below the estimate so a running import
+        can never report 100% (the snap to done is signalled externally)."""
+        import sys
+        import time
+        import types
+
+        calls = []
+
+        def cb(status, message, current, total):
+            calls.append((current, total))
+
+        fake = [f"_vt_est_fake_mod_{i}" for i in range(5)]
+        try:
+            with timed_progress(cb, "loading", "Importing thing…", est_modules=3):
+                for name in fake:
+                    sys.modules[name] = types.ModuleType(name)
+                time.sleep(1.5)
+        finally:
+            for name in fake:
+                sys.modules.pop(name, None)
+
+        # The bar starts empty (0 of the estimate), not at the estimate.
+        assert calls[0] == (0, 3)
+        # Every emit reports the estimate as the denominator…
+        assert all(total == 3 for _, total in calls)
+        # …and never reaches it while running, even though 5 (> est) modules
+        # were registered — clamped to est - 1 = 2.
+        assert all(current <= 2 for current, _ in calls)
+        # The ticker did move the bar off zero once modules loaded.
+        assert any(current > 0 for current, _ in calls)
+
+    def test_est_modules_console_bar_never_full_while_running(self, capsys):
+        """A running est_modules import renders a climbing console bar that
+        never shows 100% (that only happens on completion, via the next phase
+        message or cb.flush())."""
+        import sys
+        import time
+        import types
+
+        cb = _make_console_progress(lambda *a, **kw: None)
+
+        fake = [f"_vt_est_con_mod_{i}" for i in range(8)]
+        try:
+            with timed_progress(cb, "loading", "Importing thing…", est_modules=4):
+                for name in fake:
+                    sys.modules[name] = types.ModuleType(name)
+                time.sleep(1.5)
+        finally:
+            for name in fake:
+                sys.modules.pop(name, None)
+
+        out = capsys.readouterr().out
+        assert "Importing thing…" in out
+        # Bar climbs (8 modules clamped to 3/4 = 75%) but never completes here.
+        assert "100%" not in out

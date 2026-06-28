@@ -78,7 +78,6 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   readonly sortOverall = input<number | null>(null);
   readonly sortEtaSeconds = input<number | null>(null);
   readonly labelingStatus = input<LabelingStatusResponse | null>(null);
-  readonly viewMode = input<'grid' | 'list'>('list');
   readonly gridGoalWidth = input<number>(80);
   readonly focusMode = input<'click' | 'hover'>('click');
   readonly loadSortLabel = input('');

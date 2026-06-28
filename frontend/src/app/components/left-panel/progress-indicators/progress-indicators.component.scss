@@ -9,27 +9,14 @@
 .sort-overlay {
   flex: 1;
   display: flex;
-  flex-direction: row;
-  align-items: center;
+  flex-direction: column;
   justify-content: center;
-  gap: var(--space-sm);
+  gap: var(--space-2xs);
   padding: var(--space-2xs) var(--space-sm);
   border: 1px solid var(--indicator-border);
   border-radius: var(--radius-md);
   background: var(--bg-panel);
   min-width: 0;
-
-  vt-progress-bar {
-    flex: 1;
-    min-width: 0;
-  }
-}
-
-.sort-overlay-status {
-  font-size: var(--font-xs);
-  color: var(--text-muted);
-  white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .labeling-indicator {

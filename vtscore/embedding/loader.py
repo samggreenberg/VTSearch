@@ -19,12 +19,20 @@ from typing import Any, cast
 
 _TIME_SUFFIX_RE = re.compile(r"\s*\(\d+s(?:,\s*\d+\s+modules)?\)$")
 
+#: Fixed column width for the label printed before a console progress bar.
+#: Padding every label to this width makes the ``[####…]`` bars line up
+#: vertically.  Sized to fit the longest common preload label
+#: ("Importing sentence_transformers…", 32 chars); longer labels simply
+#: push their own bar right rather than being truncated.
+_LABEL_WIDTH = 32
+
 
 def _strip_time_suffix(msg: str) -> str:
     return _TIME_SUFFIX_RE.sub("", msg) if msg else msg
 
 
 from vtscore.config import MODELS_CACHE_DIR, resolve_device
+from vtscore.media.base import ProgressCallback
 from vtscore.media.torch_setup import ensure_torch_configured
 
 logger = logging.getLogger(__name__)
@@ -98,9 +106,11 @@ def default_concurrent_downloads() -> int:
 # A single CPU embed job holds an embedder model plus an N x D fp32 working
 # set; budgeting ~4 GiB of total RAM per concurrent job keeps memory-starved
 # boxes at one worker while letting roomy workstations run a few in parallel.
+# (Only consulted on CPU hosts; on an accelerator the embed default is 1 - see
+# ``default_concurrent_embeddings``.)
 _RAM_BYTES_PER_CPU_EMBED = 4 * 1024 * 1024 * 1024
 
-# Cores budgeted per concurrent embed job (embedders run on CPU today).
+# Cores budgeted per concurrent embed job on a CPU host.
 _CPUS_PER_CPU_EMBED = 4
 
 # Upper bound on the auto-derived embed default regardless of how big the box
@@ -142,27 +152,36 @@ def default_concurrent_embeddings() -> int:
     Honours ``VTSEARCH_MAX_CONCURRENT_EMBEDDINGS`` when set; otherwise derives
     from hardware.
 
-    The embed phase is **CPU- and RAM-bound today**: every embedder loads on CPU
-    regardless of an available GPU (see the ``DEVICE`` note in
-    ``vtscore/config.py`` - device-aware embedding is a future refactor). So the
-    default scales with the scarcer of cores and RAM and ignores GPU count:
-    roughly one job per :data:`_CPUS_PER_CPU_EMBED` cores and one per
+    **On an accelerator the default is 1.** Embedders are now device-aware (see
+    ``to_compute_device`` / ``resolve_device``), so on a CUDA/MPS host they share
+    a single GPU. Running several embed jobs at once would multiply resident model
+    weights on that one device and court OOM with no throughput win - the global
+    ``_embed_lock`` serialises forward passes on the device anyway. Power users
+    with VRAM headroom (or genuinely multi-GPU nodes) raise it via the env
+    override.
+
+    **On a CPU host the embed phase is CPU- and RAM-bound**, so the default
+    scales with the scarcer of cores and RAM and ignores GPU count: roughly one
+    job per :data:`_CPUS_PER_CPU_EMBED` cores and one per
     ``_RAM_BYTES_PER_CPU_EMBED`` of total RAM, whichever is smaller, capped at
     :data:`_MAX_CPU_EMBED_DEFAULT`. Constrained machines (few cores or little
     RAM) resolve to 1 - preserving the old fully-serial behaviour where a second
     concurrent embed would thrash or OOM - while workstations and fat cluster
     nodes get genuine parallel embedding with no config change. When total RAM
-    can't be read we fall back to 1 rather than guess generously.
-
-    A single-GPU SLURM allocation is exactly the case the old GPU branch got
-    wrong: it returned ``min(2, visible_gpus) == 1`` and serialised every embed
-    on an otherwise capable node. Scaling by the allocation's cores/RAM instead
-    lets such a node ingest several datasets at once; set
+    can't be read we fall back to 1 rather than guess generously. Set
     ``VTSEARCH_MAX_CONCURRENT_EMBEDDINGS`` past the auto cap to go further.
     """
     override = _env_concurrency_override("VTSEARCH_MAX_CONCURRENT_EMBEDDINGS")
     if override is not None:
         return override
+
+    # One embed job per GPU: the device is shared and forward passes serialise on
+    # it, so extra jobs only add VRAM pressure. resolve_device() returns "cpu"
+    # when torch is missing or no usable accelerator is present.
+    from vtscore.config import resolve_device  # noqa: PLC0415
+
+    if resolve_device() != "cpu":
+        return 1
 
     by_cpu = (os.cpu_count() or 1) // _CPUS_PER_CPU_EMBED
     total_ram = _total_memory_bytes()
@@ -205,7 +224,7 @@ def _warm_threadpool_controller() -> None:
             pass
 
 
-def initialize_models() -> None:
+def initialize_models(on_progress: ProgressCallback | None = None) -> None:
     """Prepare the runtime environment for embedding models.
 
     Creates the model cache directory, configures PyTorch thread count
@@ -217,16 +236,52 @@ def initialize_models() -> None:
     path that actually imports torch.
 
     Models themselves are **not** loaded here.
+
+    The two heavy first-time imports this triggers - scikit-learn (pulled in
+    by the threadpool warm-up) and transformers (pulled in by the logging
+    bridge) - dominate the wall-clock cost and can take ~10s combined on a
+    cold start, during which the process looks frozen.  Pass *on_progress* to
+    render a live elapsed-time progress bar for each, matching the embedder
+    preload bars printed later in startup.  When ``None`` (the default, used
+    by tests and the eval CLI) the imports run silently as before.
     """
     MODELS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     ensure_torch_configured()
-    _warm_threadpool_controller()
-    try:
-        from vtsearch.logging_config import install_transformers_logging_bridge  # noqa: PLC0415
 
-        install_transformers_logging_bridge()
-    except Exception:
-        pass
+    def _warm() -> None:
+        _warm_threadpool_controller()
+
+    def _bridge() -> None:
+        try:
+            from vtsearch.logging_config import install_transformers_logging_bridge  # noqa: PLC0415
+
+            install_transformers_logging_bridge()
+        except Exception:
+            pass
+
+    if on_progress is None:
+        _warm()
+        _bridge()
+    else:
+        from vtscore.media.embedder import IMPORT_MODULE_ESTIMATES, timed_progress  # noqa: PLC0415
+
+        console_cb = _make_console_progress(on_progress)
+        with timed_progress(
+            console_cb, "loading", "Importing scikit-learn…", est_modules=IMPORT_MODULE_ESTIMATES["sklearn"]
+        ):
+            _warm()
+        # The transformers import here is only the lightweight logging bridge,
+        # not the full model classes, so it pulls in far fewer modules than an
+        # embedder's ``from transformers import …``.
+        with timed_progress(
+            console_cb,
+            "loading",
+            "Importing transformers…",
+            est_modules=IMPORT_MODULE_ESTIMATES["transformers_logging"],
+        ):
+            _bridge()
+        console_cb.flush()  # type: ignore[attr-defined]
+
     gc.collect()
 
 
@@ -243,6 +298,11 @@ def _make_console_progress(original_callback):
     instead of stacking new lines.  The progress line is terminated with a
     newline only when a different base message arrives, a phase message
     arrives, or the caller invokes ``cb.flush()``.
+
+    Every bar's label is left-padded to a fixed width (:data:`_LABEL_WIDTH`)
+    so successive bars line up vertically, and the elapsed-time/status suffix
+    is rendered after the percentage so its changing length (``1s`` → ``10s``)
+    never shifts the bar mid-progress.
     """
     _last_msg: list[str | None] = [None]
     _last_base: list[str | None] = [None]
@@ -253,7 +313,8 @@ def _make_console_progress(original_callback):
     def _complete_bar() -> None:
         """Overwrite the current progress line with a 100% bar."""
         if _last_base[0]:
-            sys.stdout.write(f"\r    {_last_base[0]} [{_FULL_BAR}] 100%\033[K")
+            label = f"{_last_base[0]:<{_LABEL_WIDTH}}"
+            sys.stdout.write(f"\r    {label} [{_FULL_BAR}] 100%\033[K")
 
     def _flush() -> None:
         if _on_progress_line[0]:
@@ -277,9 +338,15 @@ def _make_console_progress(original_callback):
             pct = min(100, current * 100 // total)
             filled = pct * 30 // 100
             bar = "#" * filled + "." * (30 - filled)
+            # Pad the base label to a fixed width so every bar starts at the
+            # same column and the bars line up vertically.  The elapsed-time /
+            # status suffix (e.g. "(3s, 247 modules)") goes *after* the
+            # percentage, where its changing length can't shift the bar.
+            suffix = message[len(base) :].strip()
+            tail = f" {suffix}" if suffix else ""
             # \033[K clears from cursor to end of line so a shorter message
             # doesn't leave trailing chars from a longer prior render.
-            line = f"\r    {message} [{bar}] {pct:>3}%\033[K"
+            line = f"\r    {base:<{_LABEL_WIDTH}} [{bar}] {pct:>3}%{tail}\033[K"
             sys.stdout.write(line)
             sys.stdout.flush()
             _on_progress_line[0] = True

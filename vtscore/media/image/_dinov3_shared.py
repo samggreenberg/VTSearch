@@ -24,6 +24,7 @@ import numpy as np
 
 from vtscore.config import DINOV3_MODEL_ID
 from vtscore.media.embedder import (
+    IMPORT_MODULE_ESTIMATES,
     MediaEmbedder,
     embedder_load_setup,
     hf_token,
@@ -31,6 +32,7 @@ from vtscore.media.embedder import (
     intercept_weight_loading_progress,
     load_pretrained_local_first,
     timed_progress,
+    to_compute_device,
 )
 from vtscore.media.image._image_bulk import bulk_embed_image_files
 from vtscore.media.patch_embed import PatchEmbedOutput, hf_vit_to_patch_output
@@ -74,10 +76,14 @@ class _Dinov3Base(MediaEmbedder):
         if self._model is not None:
             return
 
-        with timed_progress(self._on_progress, "loading", "Importing torch…", 1, 2):
+        with timed_progress(
+            self._on_progress, "loading", "Importing torch…", est_modules=IMPORT_MODULE_ESTIMATES["torch"]
+        ):
             import torch  # noqa: F401, PLC0415
 
-        with timed_progress(self._on_progress, "loading", "Importing transformers…", 2, 2):
+        with timed_progress(
+            self._on_progress, "loading", "Importing transformers…", est_modules=IMPORT_MODULE_ESTIMATES["transformers"]
+        ):
             from transformers import AutoImageProcessor, AutoModel  # noqa: PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading DINOv3 model weights…")
@@ -104,7 +110,7 @@ class _Dinov3Base(MediaEmbedder):
                 on_progress=self._on_progress,
                 **extra_kwargs,
             )
-        self._model = self._model.to("cpu")
+        self._model = to_compute_device(self._model)
         self._model.eval()
         self._on_progress("loading", "Loading DINOv3 image processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):

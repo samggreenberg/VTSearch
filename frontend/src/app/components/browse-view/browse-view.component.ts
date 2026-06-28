@@ -178,11 +178,24 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private boundPanelUp = this.onPanelMouseUp.bind(this);
 
   /**
-   * Per-click zoom step for the on-screen +/- buttons. Larger than the wheel's
-   * 1.15 per-tick factor so a single click makes a visible difference; button
-   * zoom anchors at the viewport centre (no cursor to zoom toward).
+   * How many +/- button clicks (and wheel notches) cross one pyramid level —
+   * the per-media ``browse_mouse_zooms_per_level`` setting, mirrored here and
+   * passed to the canvas so the wheel matches the buttons. A pyramid level spans
+   * a full 2x of zoom, so the per-step width factor is ``2 ** (1 / n)``: 1 ⇒ 2x
+   * (one click per level), 2 ⇒ √2 (the default, two clicks per level), 3 ⇒ ∛2.
+   * Clamped to 1..3; falls back to 2 when unset for the active media type.
    */
-  private readonly ZOOM_BUTTON_FACTOR = 1.4;
+  readonly zoomsPerLevel = signal(2);
+
+  /**
+   * Per-click zoom step for the on-screen +/- buttons, derived from
+   * {@link zoomsPerLevel}. Matches the wheel's per-notch factor so the two
+   * gestures stay in lock-step; button zoom anchors at the viewport centre
+   * (no cursor to zoom toward).
+   */
+  private get zoomButtonFactor(): number {
+    return Math.pow(2, 1 / this.zoomsPerLevel());
+  }
 
   /** Bin-popup state: open flag, the viewport anchor it opens at, and the
    *  member ids of the bin the user right-clicked. Right-clicking a bin pops a
@@ -192,6 +205,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   contextMenuX = 0;
   contextMenuY = 0;
   contextMembers: number[] = [];
+  /** Representative (centroid) id of the right-clicked bin — the popup opens on
+   *  it and scrolls its 1-D member list to it, so the detail view starts on the
+   *  same image whose thumbnail the user clicked. */
+  contextRepId: number | null = null;
   /** Canvas bounds the popup clamps inside, so it stays on the canvas rather
    *  than spilling onto the side panel or past the canvas edges. */
   contextBounds: DOMRect | null = null;
@@ -202,22 +219,55 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private pollErrors = 0;
   private static readonly MAX_POLL_ERRORS = 5;
 
+  /**
+   * Gate for the *first* projection load. Held until we know which bin shape to
+   * request, which needs two async facts: the saved settings and the dataset's
+   * media type (the ``browse_bin_shape`` pref is keyed per-media). Loading
+   * sooner would fetch+render the default hex lattice for ~a second and then
+   * re-bin to the user's saved square — a confusing wrong grid. We'd rather
+   * hold on the loading spinner until the right shape is known. Once true,
+   * later reloads (pair change, shape toggle) go through the normal paths.
+   */
+  private initialLoadStarted = false;
+  /** Set once the dataset-status fetch — which yields the media type the
+   *  per-media bin-shape pref is keyed on — has resolved or failed. */
+  private statusResolved = false;
+
   constructor() {
     effect(() => {
       const settings = this.settingsState.settingsSignal();
-      if (!settings) return;
-      this.lastSettings = settings;
-      if (settings.browse_panel_width != null) {
-        this.panelWidth.set(
-          this.clamp(
-            settings.browse_panel_width,
-            BrowseViewComponent.PANEL_MIN,
-            BrowseViewComponent.PANEL_MAX,
-          ),
-        );
+      // Also track the settings load error so this effect re-runs (and the
+      // gated initial load can proceed with defaults) if settings never load,
+      // rather than stranding the view on the loading spinner forever.
+      const settingsErrored = this.settingsState.error() != null;
+      if (settings) {
+        this.lastSettings = settings;
+        if (settings.browse_panel_width != null) {
+          this.panelWidth.set(
+            this.clamp(
+              settings.browse_panel_width,
+              BrowseViewComponent.PANEL_MIN,
+              BrowseViewComponent.PANEL_MAX,
+            ),
+          );
+        }
+        this.applyBrowsePrefsForMediaType();
       }
-      this.applyBrowsePrefsForMediaType();
+      if (settings || settingsErrored) this.maybeStartInitialLoad();
     });
+  }
+
+  /**
+   * Start the first projection load once — but only when the bin shape is
+   * known: the saved settings must be in (or their load have failed) AND the
+   * dataset's media type resolved. See {@link initialLoadStarted}.
+   */
+  private maybeStartInitialLoad(): void {
+    if (this.initialLoadStarted) return;
+    const settingsIn = this.lastSettings != null || this.settingsState.error() != null;
+    if (!settingsIn || !this.statusResolved) return;
+    this.initialLoadStarted = true;
+    this.loadProjection();
   }
 
   ngOnInit(): void {
@@ -252,19 +302,31 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
           if (!this.subset) this.datasetName.set(status.display_name || '');
           this.mediaType.set(status.media_type || '');
           this.applyBrowsePrefsForMediaType();
+          this.statusResolved = true;
+          this.maybeStartInitialLoad();
+        },
+        error: () => {
+          // Couldn't read the dataset status (media type unknown). Proceed with
+          // the default lattice rather than hang on the loading spinner.
+          this.statusResolved = true;
+          this.maybeStartInitialLoad();
         },
       });
 
-    this.loadProjection();
-
     // The full-dataset projection re-resolves when the active pair changes via
     // the top bar. A subset projection is tied to the ids that produced it, so
-    // ignore pair changes in subset mode.
+    // ignore pair changes in subset mode. The first (replayed) emission lands
+    // before settings/status are in, so it routes through the gated initial
+    // load; genuine later changes reload directly.
     if (!this.subset) {
       this.activeContext.pair$
         .pipe(takeUntil(this.destroy$))
         .subscribe(() => {
-          this.loadProjection();
+          if (this.initialLoadStarted) {
+            this.loadProjection();
+          } else {
+            this.maybeStartInitialLoad();
+          }
         });
     }
   }
@@ -377,7 +439,17 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.canvas?.setThumbnailRadius(this.thumbnailRadius, false);
 
     const shape: BinShape = this.perMediaValue(s.browse_bin_shape, mt) === 'square' ? 'square' : 'hex';
-    if (shape !== this.binShape()) this.switchBinShape(shape, false);
+    if (!this.initialLoadStarted) {
+      // Before the first projection load there's nothing on screen to re-bin —
+      // just record the resolved shape so the initial fetch uses the right
+      // lattice. Routing through switchBinShape() here would either no-op (when
+      // the saved shape equals the default) and strand the gated load, or kick
+      // a premature load off a half-resolved media type.
+      this.binShape.set(shape);
+      this.tileCache.setBinShape(shape);
+    } else if (shape !== this.binShape()) {
+      this.switchBinShape(shape, false);
+    }
 
     const borderMap = s.browse_thumbnail_border as { [key: string]: number } | undefined;
     const rawBorder = mt && borderMap ? borderMap[mt] : undefined;
@@ -385,6 +457,12 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       rawBorder == null
         ? DEFAULT_THUMBNAIL_BORDER
         : Math.max(0, Math.min(MAX_THUMBNAIL_BORDER, rawBorder)),
+    );
+
+    const zoomsMap = s.browse_mouse_zooms_per_level as { [key: string]: number } | undefined;
+    const rawZooms = mt && zoomsMap ? zoomsMap[mt] : undefined;
+    this.zoomsPerLevel.set(
+      rawZooms == null ? 2 : Math.max(1, Math.min(3, Math.round(rawZooms))),
     );
   }
 
@@ -524,12 +602,12 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   /** Zoom in one step (narrower span, cells keep their display size). */
   zoomIn(): void {
-    this.canvas?.zoomBy(this.ZOOM_BUTTON_FACTOR);
+    this.canvas?.zoomBy(this.zoomButtonFactor);
   }
 
   /** Zoom out one step. */
   zoomOut(): void {
-    this.canvas?.zoomBy(1 / this.ZOOM_BUTTON_FACTOR);
+    this.canvas?.zoomBy(1 / this.zoomButtonFactor);
   }
 
   /** Choose a zoom and pan so the current data just fits in view. */
@@ -547,6 +625,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       return;
     }
     this.contextMembers = event.members;
+    this.contextRepId = event.repId;
     this.contextMenuX = event.clientX;
     this.contextMenuY = event.clientY;
     this.contextBounds = event.bounds;

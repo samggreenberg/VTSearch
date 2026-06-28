@@ -4,10 +4,12 @@
 gallery now virtualizes both grid and list and no longer freezes the UI at a
 few hundred items (added §3.4/S17 as the deferred backend cancel/progress
 follow-up surfaced by that work).  **§1.2 (S9) GMM subsampling has shipped.**
-**§2.1 is partially shipped** — the diversity tree is now cached in the dataset
-pickle and restored on reload (skipping the rebuild), but the first build at
-dataset creation still pays full cost; the cap/defer/on-demand-endpoint scope
-remains open.
+**§2.1 has shipped** — reload caching plus Part A (smarter k-means
+defaults / auto-capped depth) and Part B (skip auto-build above 50k items + an
+on-demand `POST .../diversity-tree` endpoint); only the optional frontend
+"Build diversity index" button is deferred.  **§2.2 (S12) debounce label sync
+was already implemented** in `vtscore/labels/sync.py` (200ms per-detector
+timer).  Phase 2 is therefore effectively complete on the backend.
 Separately, the CLI-specific streaming work (lazy folder enumeration, per-chunk
 embed, and streaming export — partial fixes for S20/S15/S13 on the
 `--autodetect` target side) **has** shipped; see
@@ -267,7 +269,7 @@ medias) cannot happen because the epoch is only bumped on structural change.
 
 ## Phase 2: Medium effort, high leverage
 
-### 2.1  Cap and defer diversity tree construction (S2, S8) — ⏳ PARTIALLY SHIPPED
+### 2.1  Cap and defer diversity tree construction (S2, S8) — ✅ SHIPPED
 
 > **Reload caching shipped 2026-06-19** (commit 64cccd5e, PR #1987). The
 > diversity tree is now serialized into the dataset pickle at creation and
@@ -276,10 +278,26 @@ medias) cannot happen because the epoch is only bumped on structural change.
 > remap/dedup/drop falls back to a rebuild). `_build_diversity_tree_stage`
 > skips when a tree is already present; cache-less (pre-change) pickles keep
 > rebuilding eagerly and age off. This removes the rebuild cost on every
-> *reload*, but the **first** build at dataset creation still pays full cost.
-> **Still open below:** Part A (smarter k-means defaults / auto-capped depth)
-> and Part B (skip auto-build above a threshold + on-demand build endpoint),
-> which together address that first-build cost at scale.
+> *reload*, but the **first** build at dataset creation still paid full cost.
+>
+> **Part A + Part B shipped 2026-06-25** (backend only). Part A:
+> `_n_init_for(node_size)` scales k-means restarts down for large nodes (3 above
+> 10k, 5 above 1k, 10 otherwise) and `auto_max_depth(n, k, min_node_size)` caps
+> tree depth at the natural splitting depth bounded by `_MAX_LEAVES=4000`; both
+> live in `vtscore/state/diversity_tree.py` and are applied by the two build
+> helpers in `vtscore/state/diversity.py`. Because the small-node branch keeps
+> the full restart count and `auto_max_depth` never caps *below* the natural
+> depth (where `_build_node` already stops via `min_node_size`), trees over
+> normal/test-sized datasets are structurally unchanged. Part B:
+> `should_auto_build_diversity_tree(n)` (threshold
+> `DIVERSITY_TREE_AUTO_THRESHOLD=50_000`) gates the auto-build; the load
+> pipeline (`stages/finalize.py`) and the registry load path skip it above the
+> threshold, and `POST /api/datasets/registry/<id>/diversity-tree` builds it on
+> demand in a cancellable background job (resyncing the active detector's votes
+> when they belong to the dataset). **Deferred:** the frontend "Build diversity
+> index" button — the endpoint is reachable via API/CLI; tree absence already
+> degrades gracefully (autopilot falls back to score-only sampling). See Open
+> follow-ups.
 
 **Files:** `vtscore/state/diversity_tree.py`,
 `vtscore/datasets/load_pipeline.py:968–981`
@@ -346,7 +364,17 @@ acceptable and already handled by the `if tree is None` guard in
 
 ---
 
-### 2.2  Debounce label sync writes (S12)
+### 2.2  Debounce label sync writes (S12) — ✅ ALREADY SHIPPED
+
+> **Already implemented** in `vtscore/labels/sync.py`. `sync_to_labelset_source`
+> is debounced and asynchronous: each call schedules a per-detector
+> `threading.Timer` (`_DEBOUNCE_DELAY = 0.2s`, keyed by `detector_id`), so a
+> rapid voting burst collapses into a single background push that uses the
+> latest state. `flush_pending_label_syncs` drains synchronously for tests /
+> graceful shutdown, and an `atexit` hook flushes the last pending push on
+> normal exit. The shipped delay is 200ms rather than the 2s sketched below,
+> which keeps the on-disk labels within a UI tick while still coalescing
+> bursts. No further work needed.
 
 **File:** `vtscore/labels/sync.py` (`sync_to_labelset_source`)
 
@@ -683,6 +711,10 @@ Each phase needs targeted tests before merging:
 
 ## Open follow-ups
 
+- Frontend "Build diversity index" button (deferred from §2.1 Part B): surface a
+  trigger for `POST /api/datasets/registry/<id>/diversity-tree` when a loaded
+  dataset has no tree. No existing dataset/tree-status panel hosts it today, so
+  it needs a UI home; the endpoint is meanwhile reachable via API/CLI.
 - FAISS / HNSW replacement for diversity tree (long-term S2 fix)
 - Columnar `medias` storage (S4): deferred; requires redesign of every
   media-reading call site

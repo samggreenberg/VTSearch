@@ -102,12 +102,20 @@ VTSearch/
 │   │   ├── registry.py             In-memory detector registry
 │   │   ├── store.py                On-disk labelset/query store
 │   │   ├── training.py             Vote-aware training, origin-based training
+│   │   ├── learned_sort.py         Learned-sort scoring/ranking over a trained detector
+│   │   ├── model_loading.py        Build/restore in-memory MLP from labels (no persisted weights)
 │   │   ├── workflow.py             apply-labels-and-retrain orchestration (uses flask.g)
 │   │   ├── resolver.py             Origin → file + embedding resolution
+│   │   ├── embedder_sync.py        Reconcile detector labels against the active embedder
+│   │   ├── embedder_type.py        Embedder-type compatibility (semantic / patch / structural)
+│   │   ├── input_spec.py           Detector input spec (media type + embedder type)
 │   │   ├── label_sync.py           Sync labels to loaded detector
 │   │   ├── label_restoration.py    Label restoration
 │   │   ├── labelset_elements.py    Labelset element materialisation
+│   │   ├── labelset_ops.py         Labelset add/remove/merge operations
+│   │   ├── labelset_rename.py      Labelset / category rename
 │   │   ├── labelset_training.py    Cross-dataset MLP training
+│   │   ├── positives_browse.py     Browse the detector's positive examples
 │   │   ├── dataset_sync.py         Sync detectors when a dataset loads
 │   │   ├── media_seeding.py        Media seeding utilities
 │   │   └── labeling_progress.py    Per-step MLP cache + stability analysis
@@ -126,7 +134,7 @@ VTSearch/
 │   │   ├── downloader/             Demo dataset downloaders (audio, image, video, text, docs)
 │   │   ├── archive.py              Local zip/tar/rar extraction + cached loading (local_archive origin)
 │   │   ├── sources/                MediaSource abstraction (local_folder, local_archive, http_archive,
-│   │   │                           pullwrest); all fetch/resolve ops return FetchedItem (path +
+│   │   │                           server_files, pullwrest); all fetch/resolve ops return FetchedItem (path +
 │   │   │                           optional embedding, embedder_name, extra metadata)
 │   │   └── importers/              Plugin importers (server_folder, server_files, local_folder,
 │   │                               local_files, pickle, http_archive, combine_datasets,
@@ -147,10 +155,19 @@ VTSearch/
 │   │   ├── visualize.py            Matplotlib chart generation
 │   │   └── voting_iterations.py    Voting-iteration simulation
 │   │
+│   ├── projection/                 VTSBrowse browse canvas backend (Flask-free)
+│   │   ├── umap_projection.py      Stage 1: UMAP layout of the (N, d) embedding matrix
+│   │   ├── compaction.py           Stage 1.5: close empty regions in the layout
+│   │   ├── hexbin.py               Vectorized hex-grid binning of the 2-D points
+│   │   ├── squarebin.py            Vectorized square-grid binning of the 2-D points
+│   │   ├── pyramid.py              Stage 2: hex/square-tile zoom pyramid
+│   │   └── persistence.py          Projection (de)serialization (npz <-> meta)
+│   │
 │   ├── concurrency/                Async jobs, memory budgeting, progress tracking
 │   │   ├── async_jobs.py           AsyncJob, JobManager, eval_jobs, learned_sort_jobs
 │   │   ├── gate.py                 ConcurrencyGate (dynamic-limit semaphore for load phases)
 │   │   ├── memory_budget.py        cap_workers_by_memory
+│   │   ├── events.py               SSE channel registry feeding /api/events (push, replaces polling)
 │   │   └── progress.py             ProgressTracker, update_progress, cancel_dataset_progress
 │   │
 │   ├── state/                      Multi-dataset / multi-detector global state (library tier)
@@ -158,6 +175,8 @@ VTSearch/
 │   │   ├── votes.py                toggle_vote / apply_label / clear_votes
 │   │   ├── clicks.py               Vote click-time tracking
 │   │   ├── diversity.py            Diversity tree construction and sampling
+│   │   ├── diversity_tree.py       DiversityTree data structure (hierarchical k-means)
+│   │   ├── near_dupes.py           Near-duplicate detection / grouping
 │   │   └── media_lookup.py         Origin-keyed lookup, collapse_duplicates
 │   │
 │   ├── plugins/                    PluginBase, PluginField, PluginRegistry (shared plugin infra)
@@ -209,6 +228,7 @@ VTSearch/
 │       ├── jobs.py                 Job management (/api/jobs/*)
 │       ├── sessions.py             Session management (/api/sessions/*)
 │       ├── achievements.py         Achievement routes (/api/achievements/*)
+│       ├── projection.py           VTSBrowse projection routes (/api/projection/*)
 │       ├── datasets/               Dataset routes; listings, load, staging, registry, status, ui
 │       ├── detectors/              Detector routes; crud, labels, registry, scoring, find
 │       ├── processors/             Processor routes; crud, scoring (extractors/localizers)
@@ -366,7 +386,7 @@ thresholds.
 from vtscore.training.mlp import train_model
 from vtscore.training.thresholds import find_optimal_threshold
 
-model = train_model(X_train, y_train, input_dim=512, inclusion_value=0)
+model = train_model(X_train, y_train, input_dim=512, seed=42, hidden_dim=None)
 threshold = find_optimal_threshold(scores, labels, inclusion_value=0)
 ```
 
@@ -411,7 +431,7 @@ embedder.load_models()
 
 ### The plugin systems
 
-**Pattern:** Each of the ten plugin systems uses the same architecture:
+**Pattern:** Each of the nine plugin systems uses the same architecture:
 1. An abstract base class with `fields` (form descriptors) and a
    `run()`/`export()`/`load()`/`save()` method.
 2. Auto-discovery via `PluginRegistry` using direct filesystem scanning
@@ -545,7 +565,7 @@ tiers.  **Server tier** (shared, `data/settings.json`): `saved_datasets_dir`,
 **Per-user tier** (`<user_data_dir>/user_settings.json`): everything else;
 `volume`, `theme`, `inclusion`, `enrich_descriptions`, `safe_thresholds`,
 `calibrate_count`, `calibration_fraction`, `audio_playing`, `show_animations`,
-`show_metadata`, `view_mode_*`, `grid_icon_size_*`, `focus_mode_*`,
+`show_metadata`, `grid_icon_size_*`, `focus_mode_*`,
 `panel_pct_*`, `autopilot_*`, `solo_media_type`, `settings_source`,
 `achievement_state`, and the **Auto-Find** keys `autofind_detectors`,
 `autofind_exporter`, `autofind_exporter_field_values`.  The Auto-Find keys read

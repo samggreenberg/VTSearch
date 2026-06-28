@@ -7,7 +7,9 @@
 # your local machine (see scripts/slurm/vtsearch-tunnel.sh).
 #
 # Ctrl+C stops the APP but KEEPS the node, then offers to restart it (handy
-# after a git pull / code edit). Type q at that prompt to release the node and
+# after a git pull / code edit). At that prompt, type i to reinstall deps
+# (runs scripts/install.sh in the venv -- handy after a dependency change,
+# without re-sshing and re-activating by hand), or q to release the node and
 # quit.
 #
 # Install: copy this somewhere on your PATH on the cluster and make it
@@ -48,9 +50,20 @@ echo ">>> (this may queue; once it lands, VTSearch starts and prints its node + 
 # app.py reads VTSEARCH_PORT for the dev server's bind port.
 export VTS_DIR="$DIR" VTS_VENV="$VENV" VTS_MODULE="$MODULE" VTSEARCH_PORT="$PORT"
 
-exec srun --job-name=vtsearch --pty \
-    -p "$PART" --gres=gpu:${GPU}:1 -c "$CPUS" --mem "$MEM" -t "$TIME" \
-    bash -lc '
+# The per-node script below is too long to pass as an inline `bash -lc '...'`
+# argument: this cluster's srun caps that single argument at 2000 chars and
+# rejects anything longer ("script argument list exceeds 2000 characters").
+# So write the body to a temp file on a SHARED filesystem -- the compute node
+# has to read it, so node-local /tmp won't do -- and have srun run that file.
+# This keeps the srun argv tiny no matter how long the body grows.
+RUNNER_DIR="/exp/$USER"; [ -d "$RUNNER_DIR" ] || RUNNER_DIR="$HOME"
+RUNNER=$(mktemp "$RUNNER_DIR/.vtsearch-run.XXXXXX") \
+    || { echo "could not create runner temp file in $RUNNER_DIR"; exit 1; }
+# Clean up the temp file on exit (normal quit, Ctrl+C, or kill).
+trap 'rm -f "$RUNNER"' EXIT INT TERM
+# Quoted heredoc: $VTS_DIR etc. stay literal here and expand on the compute
+# node, exactly as they did inside the old single-quoted `bash -lc '...'`.
+cat > "$RUNNER" <<'REMOTE'
         # A no-op INT handler keeps THIS wrapper alive on Ctrl+C while still
         # letting child processes (python) take the default SIGINT and die.
         trap ":" INT
@@ -75,9 +88,30 @@ exec srun --job-name=vtsearch --pty \
             VTSEARCH_TORCH_THREADS=${SLURM_CPUS_ON_NODE:-8} python app.py
             echo
             echo ">>> app.py stopped. GPU node ($node) is still yours."
-            printf ">>> [Enter] = restart (picks up code changes)   |   q + [Enter] = quit & release node: "
-            read -r reply || break
-            [ "$reply" = "q" ] && break
+            # Inner prompt loop so "i" (reinstall) can re-prompt instead of
+            # auto-restarting -- you get to read the install output and then
+            # decide to restart or quit. Enter falls through to restart app.py.
+            while true; do
+                printf ">>> [Enter] = restart (picks up code changes)   |   i + [Enter] = reinstall deps   |   q + [Enter] = quit & release node: "
+                read -r reply || break 2          # EOF (e.g. Ctrl+D): release node
+                case "$reply" in
+                    q) break 2 ;;                 # quit both loops -> release node
+                    i)
+                        echo
+                        echo ">>> Reinstalling deps via scripts/install.sh (auto-detects CPU/GPU)..."
+                        echo ">>> (runs in the active venv: $VTS_VENV)"
+                        echo
+                        bash scripts/install.sh \
+                            || echo ">>> install.sh FAILED -- see output above; node kept, deps unchanged."
+                        echo
+                        ;;                        # loop back to the prompt
+                    *) break ;;                   # Enter/anything else -> restart app.py
+                esac
+            done
         done
         echo ">>> Releasing the allocation. Bye."
-    '
+REMOTE
+
+srun --job-name=vtsearch --pty \
+    -p "$PART" --gres=gpu:${GPU}:1 -c "$CPUS" --mem "$MEM" -t "$TIME" \
+    bash -l "$RUNNER"

@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, HostListener, inject, input, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { TitleCasePipe } from '@angular/common';
 
 import { Observable, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -45,7 +46,7 @@ interface PulldownRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-context-pulldown',
   standalone: true,
-  imports: [],
+  imports: [TitleCasePipe],
   templateUrl: './context-pulldown.component.html',
   styleUrl: './context-pulldown.component.scss',
 })

@@ -82,6 +82,48 @@ class TestOverallFraction:
         assert t.get()["overall"] is None
 
 
+class TestLoadStepMapping:
+    """The status→step map and clipper step keep the unified bar monotonic."""
+
+    def test_converting_shares_the_loading_step(self):
+        # Source→media conversion (document→image, video→frames) is pre-embed
+        # work; it must map to a real step so it does not null `overall` and
+        # bounce the bar onto the raw current/total scale.
+        from vtscore.datasets.stages._common import _STATUS_TO_STEP
+
+        assert _STATUS_TO_STEP["converting"] == _STATUS_TO_STEP["loading"]
+
+    def test_clipper_reports_embed_step_not_finalize(self):
+        # Clipping cuts + embeds clips and runs *before* the embed step. If it
+        # reported the finalize step the bar would run to ~100% and then the
+        # following embed step (a lower number) would trip the "new job" reset
+        # and slam the bar backwards. Pinning clipping to the embed step keeps
+        # the whole-job fraction monotonic across a clipped load.
+        from vtscore.datasets.stages._common import _STATUS_TO_STEP, _TOTAL_LOAD_STEPS
+
+        clip_step = _STATUS_TO_STEP["embedding"]
+        t = _tracker()
+        t.set_step_weights([0.25, 0.10, 0.55, 0.10])
+        overalls = []
+
+        def record(status, cur, total, step):
+            t.update(status, "x", current=cur, total=total, step=step, total_steps=_TOTAL_LOAD_STEPS)
+            overalls.append(t.get()["overall"])
+
+        # download → load → clip(+embed clips) → embed-missing(no-op) → finalize.
+        record("downloading", 100, 100, 1)
+        record("loading", 0, 0, 2)
+        for cur in (0, 5, 10):  # clipping/embedding clips, reported on the embed step
+            record("loading", cur, 10, clip_step)
+        record("loading", 0, 0, clip_step)  # embed-missing finds nothing to do
+        record("loading", 1, 1, _TOTAL_LOAD_STEPS)  # finalize
+
+        assert overalls == sorted(overalls)  # never rewinds
+        assert overalls[-1] == pytest.approx(1.0)
+        # The clip+embed slice really advanced the bar (not pinned at a floor).
+        assert max(overalls[2:5]) > overalls[1]
+
+
 class TestWeightedOverall:
     def test_weights_shape_the_fraction(self):
         t = _tracker()
@@ -155,3 +197,65 @@ class TestOverallEta:
         clock["now"] = 7.0
         t.update("embedding", "x", current=10, total=100, step=2, total_steps=2)
         assert t.get()["eta_seconds"] is not None
+
+
+class TestFinalizeProgress:
+    """The FinalizeProgress proxy maps each finalize sub-stage into its own
+    ordered slice of step 4, so no single sub-stage can pin the unified bar at
+    100% while later sub-stages are still running (the old "frozen at 100%
+    while saving to disk" bug)."""
+
+    def _finalize_tracker(self):
+        from vtscore.datasets.stages._common import _LOAD_STEP_WEIGHTS, _TOTAL_LOAD_STEPS
+
+        t = _tracker()
+        t.set_step_weights(_LOAD_STEP_WEIGHTS)
+        # Pretend steps 1-3 finished so the bar is parked at the start of the
+        # finalize slice, exactly where a cache-backed demo load lands.
+        t.update("embedding", "emb", current=1, total=1, step=3, total_steps=_TOTAL_LOAD_STEPS)
+        return t
+
+    def test_substages_advance_monotonically_within_step_four(self):
+        from vtscore.datasets.stages._common import FinalizeProgress
+
+        t = self._finalize_tracker()
+        start = t.get()["overall"]
+        fin = FinalizeProgress(t)
+        overalls = []
+
+        def rec():
+            overalls.append(t.get()["overall"])
+
+        fin.begin("dedup")
+        fin.update("loading", "Removing duplicates…", current=0, total=10)
+        rec()
+        fin.update("loading", "Removing duplicates…", current=10, total=10)
+        rec()
+        after_dedup = t.get()["overall"]
+        fin.begin("diversity")
+        fin.update("loading", "Building diversity index…", current=5, total=10)
+        rec()
+        fin.begin("registry")
+        fin.update("loading", "Saving to registry…", current=3, total=3)
+        rec()
+        fin.begin("projection")
+        fin.update("loading", "Projection ready", current=1, total=1)
+        rec()
+
+        # Never rewinds, starts no earlier than the finalize floor, ends full.
+        assert overalls == sorted(overalls)
+        assert start <= overalls[0]
+        assert overalls[-1] == pytest.approx(1.0)
+        # The key fix: finishing the first sub-stage (dedup) must NOT slam the
+        # whole bar to 100% — later sub-stages still have room to advance.
+        assert after_dedup < 1.0
+
+    def test_check_cancelled_forwards_to_real_tracker(self):
+        from vtscore.concurrency.progress import CancelledError
+        from vtscore.datasets.stages._common import FinalizeProgress
+
+        t = self._finalize_tracker()
+        fin = FinalizeProgress(t)
+        t.cancel()
+        with pytest.raises(CancelledError):
+            fin.check_cancelled()

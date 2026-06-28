@@ -12,8 +12,6 @@ describe('SettingsStateService', () => {
     volume: 0.8,
     theme: 'dark' as const,
     show_animations: true,
-    view_mode_left: { audio: 'grid' as const, image: 'grid' as const },
-    view_mode_right: { audio: 'list' as const, image: 'list' as const },
     inclusion: 0.5,
   };
 

@@ -321,10 +321,30 @@ projection:
   boundary re-bins. (The canvas still pans continuously; it just swaps which
   precomputed level it draws as the scale crosses thresholds.)
 - **Per hex, the server precomputes:** axial coords (-> center), **count**
-  (for the density color), and a **representative media id** = the item
-  whose projected point is nearest the hex centroid (this is the item
-  hover-previews). Representative selection is per level, so the preview
-  naturally generalizes/specializes as you zoom.
+  (for the density color), and a **representative media id** (the item the hex
+  shows as its thumbnail and hover-previews). Reps are chosen **bottom-up for
+  zoom persistence** (`vtscore/projection/pyramid.py:_assign_reps`): at the
+  deepest level a hex's rep is the item nearest its centroid; each coarser hex
+  inherits the rep of one of the finer hexes beneath it — the inherited rep
+  nearest the coarse hex's centroid. So `reps(level z) ⊆ reps(level z+1)`: every
+  thumbnail you see persists as you zoom in (the eye can track it) while a few
+  genuinely new ones appear, instead of the whole grid reshuffling each level.
+  A rep is always one of the hex's own members (the bin popup opens/scrolls to
+  it); a sparse boundary hex that contains no finer rep at all falls back to its
+  centroid-nearest member (the single non-inherited case — measured a small
+  minority: ~77% of reps persist at the coarsest hop, 90-97% finer).  **This
+  fallback is hex-only.**  Because the hex lattice rounds to nearest center, a
+  fine hex can straddle a coarse boundary and land its rep in a neighbour,
+  leaving the coarse hex with no inherited candidate.  The **square** lattice is
+  a corner-anchored quadtree (see *§Bin shape*) where every fine cell nests
+  wholly inside one coarse cell, so the inherited pool is never empty and square
+  reps persist exactly (100% at every hop) — the fallback never fires.
+  - **On removal** (`rebin_like`, the subset "Remove from Good" cull) the prior
+    reps are fed back in so **surviving reps stay put** for a fast, stable
+    repaint; only a removed rep forces a re-pick (from its surviving inherited
+    candidates), propagating up only to the coarse hexes that had inherited the
+    now-dead rep. A surviving rep left slightly off-centre after a lopsided
+    removal is accepted on purpose — see *Open follow-ups*.
 - **Tiles** group hexes into a spatial grid per level: a tile is
   `(level, tx, ty)` -> the list of non-empty hexes inside it. This makes the
   payload **viewport-bounded** (the client fetches only the tiles covering
@@ -398,6 +418,18 @@ factoring binning out of the rest of the pipeline:
   share the renderer's level-of-detail picker and have a comparable on-screen
   footprint.  Every other knob (`base_radius`, `tile_span`, auto-depth) is
   shared.
+- **The square lattice is a quadtree; the hex lattice is not.**  Square cells
+  are **corner-anchored on a fixed data-space origin** (`q = floor(x/side)`),
+  and since the pyramid halves the side per level, a coarse cell of side `2s`
+  is *exactly* the union of the four fine cells of side `s` beneath it.  Every
+  fine cell nests wholly inside one coarse cell, so a child bin's rep is
+  provably a member of its parent and zoom persistence is **geometric, not
+  best-effort** (`reps(coarse) ⊆ reps(fine)` with no fallback — see the rep
+  section).  The hex lattice can't do this: hexagons don't tile 4-into-1
+  self-similarly, so it stays on round-to-nearest-center binning (which does
+  *not* nest — fine hexes straddle coarse boundaries) and accepts the small
+  non-persistent minority.  This is the one place the two shapes' binning math
+  genuinely differs, beyond cell geometry.
 - **The pyramid records its `bin_shape`** (in the dataclass, in `meta()`, and in
   the persisted JSON), so a loaded projection always knows which lattice it was
   binned with.  Containers written before the toggle have no `bin_shape` and are
@@ -617,6 +649,15 @@ in git history and the cited source files.
 ## Open follow-ups
 
 **Shipped (struck through):**
+- ~~**Configurable mouse-zooms per pyramid level**~~ — a per-media-type
+  `browse_mouse_zooms_per_level` setting (Settings → Browser, default 2, clamped
+  1..3) controls how many wheel notches / +/- button clicks cross one pyramid
+  level (a full 2× of zoom). The per-step width factor is `2 ** (1 / n)`: 1 ⇒ 2×
+  (one step per level), 2 ⇒ √2 (the previous fixed behavior), 3 ⇒ ∛2.
+  `BrowseViewComponent` mirrors the per-media value and derives the +/- button
+  factor from it; `BrowseCanvasComponent` takes it as a `zoomsPerLevel` input and
+  derives the wheel factor, so the two gestures stay in lock-step. The double-click
+  zoom stays a fixed 2× (one whole level) regardless of the setting.
 - ~~**Wider cell-size range + full-res at large zoom**~~ — the browse canvas's
   bigger/smaller buttons now walk nine named levels (`XS`..`XL`, then `2XL`..`5XL`)
   instead of five, so a user can blow a cell up close to the full media. Past the
@@ -696,6 +737,40 @@ in git history and the cited source files.
   `usesThumbnails` (image/video); documents render a grid thumbnail but get no
   large preview — if document detail-viewing is wanted, widen the gate and pick a
   full-res document endpoint.
+- ~~**Zoom-persistent bin representatives**~~ — bin reps are now chosen
+  bottom-up so a coarse bin inherits the rep of one of the finer bins beneath it
+  (the inherited rep nearest the coarse centroid), giving `reps(z) ⊆ reps(z+1)`:
+  thumbnails persist as you zoom in instead of the grid reshuffling per level.
+  Reps stay one of the bin's own members (a sparse boundary bin with no interior
+  finer rep falls back to its centroid-nearest member — a small minority).
+  `rebin_like` feeds prior reps back in so a removal keeps surviving reps put
+  (fast, stable repaint) and only re-picks a removed rep, propagating up just to
+  the coarse bins that had inherited it. See `_assign_reps` in
+  `vtscore/projection/pyramid.py` and `tests_lib/projection/test_rep_persistence.py`.
+  *Open follow-up:* re-centring a surviving rep after a lopsided partial removal
+  (hide a bin's Western kids → the rep should drift East). Deliberately deferred:
+  it was a lower priority than not churning the grid on every removal, so today a
+  surviving rep is left in place even if it ends up slightly off-centre. If
+  wanted, re-centre lazily (only the bins whose membership changed) so it never
+  blocks the repaint.
+- ~~**Zoom-out border fill (overscanned snapshot)**~~ — the picture-in-picture
+  zoom transition froze a *viewport-sized* snapshot and scaled it; on zoom-out
+  the shrinking frame left the newly-revealed margin as a black border. The
+  snapshot now overscans on zoom-out (`BrowseCanvasComponent.SNAP_OVERSCAN_MAX`,
+  capped at 2× per axis): the already-rendered viewport stays the frozen centre
+  (a free `drawImage` of the live canvas) and the surrounding ring is
+  re-rendered from the **source** level's bins (`renderSnapshotBorder`,
+  `displayedLevel`), painting the thumbnails the off-view prefetch already
+  warmed in `thumbCache`. The shrunk blit then covers the canvas with real
+  content. The ring draws only from **cached** tiles (`tileCache.getCached`), so
+  the fill reaches as far as the cache does and falls off to background past it
+  — never a network wait, and the per-frame loop stays a single blit
+  (`zoomBlitRect` now sizes by the snapshot's own `snapW×snapH` footprint).
+  Zoom-in is unchanged (its frame already overfills the viewport), and the
+  overscan is gated on `thumbnailMode`. *Open follow-up:* a zoom-out deeper than
+  the 2× cap, or past uncached tiles, still shows a black falloff at the far
+  edge; widening the cap trades memory (the buffer is `(2×)²` = 4× the canvas)
+  for reach.
 
 **Active:**
 - **Dataset pickle size — drop inline `media_bytes` when the media is reachable

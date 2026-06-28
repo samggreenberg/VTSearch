@@ -74,7 +74,7 @@ deployments. Runs locally or in Docker.
 
 ```bash
 python3 -m venv venv && source venv/bin/activate
-bash scripts/install-cpu.sh
+bash scripts/install.sh      # auto-detects CPU vs GPU
 python app.py                # Flask dev server on 0.0.0.0:5000
 ```
 
@@ -126,7 +126,8 @@ Five media types are supported:
 | Text | E5 | `intfloat/e5-base-v2` | BGE (`BAAI/bge-base-en-v1.5`) |
 | Document | None (convert first) | N/A; use converters to transform to image/text | None |
 
-Models are loaded lazily on first use. Default models total ~3.1 GB.
+Models are loaded lazily on first use. The four default models total ~3.2 GB
+(`download_models.sh` also fetches the CLIP image alternative, ~3.8 GB all told).
 
 ### Converters
 
@@ -206,7 +207,7 @@ graph, plugin directories) see
 ## Running the test suite
 
 ```bash
-bash scripts/install-cpu.sh   # installs pytest, ruff, etc. (skip if already installed)
+bash scripts/install.sh   # installs pytest, ruff, etc. (skip if already installed)
 
 # Fast CPU tests (~35s)
 python -m pytest tests/ tests_lib/ -v
@@ -254,10 +255,12 @@ vulture vtsearch/ .vulture-whitelist.py --min-confidence 80   # dead code audit
 ```
 
 Configuration is in `pyproject.toml`. `pre-commit install` wires up
-ruff, codespell, and deptry as git hooks; the same checks plus
-`pip-audit` run on every push via the `Lint` and `Audit dependencies`
-workflows. See `docs/plans/python-quality-tools.md` for the rationale
-behind which security rules are enabled and which are ignored.
+ruff, codespell, and deptry as git hooks. There is **no CI**: VTSearch has
+no GitHub Actions workflows, so `./run-tests.sh` is the only gate — it runs
+ruff, `ruff format --check`, codespell, deptry, `pip-audit`, pyright, and the
+frontend build before pytest. Run it before pushing. See
+`docs/plans/python-quality-tools.md` for the rationale behind which security
+rules are enabled and which are ignored.
 
 ---
 
@@ -269,7 +272,7 @@ Use this checklist when setting up VTSearch for a new environment.
 
 - [ ] Python 3.10+ available (or Docker installed)
 - [ ] System packages: `libsndfile1`, `ffmpeg`, `libgl1`, `libglib2.0-0`
-- [ ] `bash scripts/install-cpu.sh` (or build Docker image)
+- [ ] `bash scripts/install.sh` (or build Docker image)
 - [ ] `data/` directory writable (models, embeddings, settings stored here)
 - [ ] Port 5000 available (or configure as needed)
 - [ ] Run `python app.py` or `docker compose up`
@@ -285,7 +288,7 @@ Use this checklist when setting up VTSearch for a new environment.
 
 - [ ] NVIDIA GPU with CUDA support available
 - [ ] NVIDIA Container Toolkit installed (for Docker)
-- [ ] Use `docker/Dockerfile.gpu` or `bash scripts/install-gpu.sh`
+- [ ] Use `docker/Dockerfile.gpu` or `bash scripts/install.sh gpu`
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for full details.
 

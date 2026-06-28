@@ -63,47 +63,34 @@ h3 {
   scrollbar-gutter: stable;
   flex: 1;
   min-height: 0;
-
-  &.grid-layout {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, var(--grid-goal-width, 80px));
-    gap: var(--space-xs);
-    align-content: start;
-    justify-content: end;
-  }
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--grid-goal-width, 80px));
+  gap: var(--space-xs);
+  align-content: start;
+  justify-content: end;
 }
 
 .vote-entry {
-  padding: var(--space-xs) 0;
-  font-size: var(--font-sm);
-  cursor: pointer;
-  color: var(--text-vote);
-  line-height: 1.3;
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-
-  &:hover {
-    color: var(--text-primary);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-    border-radius: var(--radius-sm);
-  }
-}
-
-.vote-entry-grid {
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: var(--space-xs);
   gap: var(--space-2xs);
   border-radius: var(--radius-sm);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  color: var(--text-vote);
+  line-height: 1.3;
 
   &:hover {
+    color: var(--text-primary);
     background: var(--bg-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
   }
 }
 
@@ -115,60 +102,36 @@ h3 {
 
 .vote-thumbnail-wrap {
   display: block;
-  width: 28px;
-  height: 28px;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  min-height: 0;
   border-radius: var(--radius-sm);
   flex-shrink: 0;
-
-  .vote-entry-grid & {
-    width: 100%;
-    height: auto;
-    aspect-ratio: 1;
-    min-height: 0;
-    overflow: hidden;
-  }
+  overflow: hidden;
 }
 
 .vote-thumbnail {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   display: block;
-
-  .vote-entry-grid & {
-    object-fit: contain;
-  }
 }
 
 .vote-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 100%;
+  aspect-ratio: 1;
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--text-muted);
-  font-size: var(--font-xl);
+  font-size: var(--font-3xl);
   overflow: hidden;
   flex-shrink: 0;
-
-  .vote-entry-grid & {
-    width: 100%;
-    height: auto;
-    aspect-ratio: 1;
-    font-size: var(--font-3xl);
-  }
-}
-
-.vote-name {
-  display: block;
-  font-weight: var(--weight-medium);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .vote-name-grid {

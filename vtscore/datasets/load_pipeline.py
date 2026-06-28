@@ -37,16 +37,18 @@ from vtscore.datasets.registry import unregister_dataset as _reg_unregister
 from vtscore.state import DatasetContext, clear_all, register_context
 
 from vtscore.datasets.stages._common import (
-    _LOAD_STEP_WEIGHTS,
+    FinalizeProgress,
     _STATUS_TO_STEP,
     _TOTAL_LOAD_STEPS,
     _origin_to_str,
+    load_step_weights,
 )
 from vtscore.datasets.stages.clipper import _apply_clipper_stage, _relazify_reference_clips_stage
 from vtscore.datasets.stages.embedding import embed_missing, _embed_missing_stage
 from vtscore.datasets.stages.finalize import (
     _build_diversity_tree_stage,
     _collapse_duplicates_stage,
+    _collapse_near_duplicates_stage,
     _drop_none_embeddings_stage,
 )
 from vtscore.datasets.stages.projection import _build_projection_stage
@@ -369,6 +371,7 @@ def _run_origin_load_in_background(
     created_by: str = "",
     media_type: str = "",
     build_projection: bool = False,
+    merge_near_duplicates: bool = False,
 ) -> str:
     """Run a dataset load in a background thread with standard error handling.
 
@@ -413,7 +416,7 @@ def _run_origin_load_in_background(
         name or _origin_to_str(origin),
         media_type=media_type,
         embedder=embedder,
-        step_weights=_LOAD_STEP_WEIGHTS,
+        step_weights=load_step_weights(),
     )
     tracker.update("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
 
@@ -428,6 +431,7 @@ def _run_origin_load_in_background(
         from vtscore.state.core import thread_dataset_context  # noqa: PLC0415
 
         ctx = DatasetContext(task_id)
+        ctx.merge_near_duplicates = merge_near_duplicates
         # Pin the in-flight context to this thread so importers, clippers,
         # dedup, diversity-tree, and label-sync helpers that resolve via
         # ``get_active_context()`` see the dataset being built, not the
@@ -483,16 +487,28 @@ def _run_origin_load_in_background(
                     _tag_origins(ctx.medias, origin)
                     _apply_clipper_stage(ctx, tracker, clipper, clipper_params, chain_steps)
                     _embed_missing_stage(ctx, tracker, embedders if embedders else [embedder])
-                    _drop_none_embeddings_stage(ctx, tracker)
+                    # Step 4 (finalize) bundles several sub-stages. Route them
+                    # through a FinalizeProgress proxy so each maps into its own
+                    # ordered slice of the step-4 bar instead of independently
+                    # filling (and pinning at 100%) the whole slice — keeps the
+                    # bar advancing and the ETA self-correcting through the
+                    # serialize/disk-write window. See FinalizeProgress.
+                    fin = FinalizeProgress(tracker)
+                    fin.begin("cleanup")
+                    _drop_none_embeddings_stage(ctx, fin)
                     # Re-lazify clips from reference (thin) parents now that
                     # embedding is done: strip their materialized bytes so the
                     # dataset stores recipes, not duplicated clip payloads.
-                    _relazify_reference_clips_stage(ctx, tracker)
-                    _collapse_duplicates_stage(ctx, tracker)
-                    _build_diversity_tree_stage(ctx, tracker)
+                    _relazify_reference_clips_stage(ctx, fin)
+                    fin.begin("dedup")
+                    _collapse_duplicates_stage(ctx, fin)
+                    _collapse_near_duplicates_stage(ctx, fin)
+                    fin.begin("diversity")
+                    _build_diversity_tree_stage(ctx, fin)
                     tracker.check_cancelled()
+                    fin.begin("registry")
                     context_id, registry_entry_id = _register_and_migrate(
-                        ctx, tracker, task_id, origin, name, clipper, embedder, created_by, ingest_started_at
+                        ctx, fin, task_id, origin, name, clipper, embedder, created_by, ingest_started_at
                     )
                     # Opt-in: compute + persist the 2-D Browse projection now,
                     # so the Browse canvas opens instantly instead of building
@@ -501,8 +517,9 @@ def _run_origin_load_in_background(
                     # a failure (or a cancel during the fit) leaves it intact
                     # and just defers the projection to the lazy Browse path.
                     if build_projection:
+                        fin.begin("projection")
                         try:
-                            _build_projection_stage(ctx, tracker, context_id)
+                            _build_projection_stage(ctx, fin, context_id)
                         except Exception:
                             traceback.print_exc()
                     # Embedder warm-up is fire-and-forget so the dashboard row goes
@@ -605,6 +622,7 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     if embedders and embedder_name and embedder_name not in embedders:
         embedders = [embedder_name, *embedders]
     build_projection = _parse_bool(field_values.pop("build_projection", None))
+    merge_near_duplicates = _parse_bool(field_values.pop("merge_near_duplicates", None))
 
     # Extract media_type from field_values so in-progress tasks can expose it
     # to the frontend (used for guessing the type in subsequent add dialogs).
@@ -631,6 +649,7 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
         created_by=created_by,
         media_type=media_type_hint,
         build_projection=build_projection,
+        merge_near_duplicates=merge_near_duplicates,
     )
 
 

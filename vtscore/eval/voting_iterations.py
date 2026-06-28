@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     import torch
 
 from vtscore.embedding.media_vectors import media_embedding
-from vtscore.eval.labels import media_is_positive
+from vtscore.eval.labels import media_is_positive, region_box_for_category
 from vtscore.training.mlp import train_model
 from vtscore.training.thresholds import (
     calculate_cross_calibration_threshold,
@@ -79,6 +79,59 @@ def _make_vote_sequence(
     return [votes[i] for i in order]
 
 
+def _good_training_vec(
+    media: dict[str, Any],
+    target_category: str,
+    region_voting: bool,
+) -> np.ndarray:
+    """Return the training vector for one Good vote on *media*.
+
+    With *region_voting* the simulated user drags the ground-truth box around
+    the object: when *media* carries a stored ``patch_grid`` and an annotated
+    region for *target_category*, the box is pooled on-the-fly via
+    :func:`vtscore.detectors.training.pool_box_from_media` (the same path the
+    live region-vote flow uses).  Falls back to the whole-image embedding when
+    region voting is off, the media has no patch grid (single-vector
+    embedders), or no box is annotated for this category - exactly an
+    image-level Good vote.
+    """
+    if region_voting:
+        from vtscore.detectors.training import pool_box_from_media  # noqa: PLC0415
+
+        pooled = pool_box_from_media(media, region_box_for_category(media, target_category))
+        if pooled is not None:
+            return pooled
+    return media_embedding(media)
+
+
+def _blend_safe_threshold(
+    threshold: float,
+    model: torch.nn.Sequential,
+    region_aware: bool,
+    sim_clips: dict[int, dict[str, Any]] | None,
+    X_all_clips: Any,
+    n_labels: int,
+) -> float:
+    """Blend *threshold* with a GMM threshold over the simulation set's scores.
+
+    Region-aware datasets score the sim set via region max-pool (matching the
+    test-set scoring); single-vector datasets use the pre-computed whole-image
+    matrix *X_all_clips*.  Kept separate so the per-step loop stays flat.
+    """
+    import torch  # noqa: PLC0415
+
+    if region_aware:
+        from vtscore.detectors.training import score_media_with_model  # noqa: PLC0415
+
+        assert sim_clips is not None
+        all_scores = [r["score"] for r in score_media_with_model(model, sim_clips)]
+    else:
+        with torch.no_grad():
+            X_eval = X_all_clips.to(next(model.parameters()).device)
+            all_scores = torch.sigmoid(model(X_eval)).squeeze(1).cpu().tolist()
+    return calculate_safe_threshold(threshold, all_scores, n_labels)
+
+
 def _evaluate_on_test(
     model: torch.nn.Sequential,
     threshold: float,
@@ -86,20 +139,35 @@ def _evaluate_on_test(
     test_ids: list[int],
     target_category: str,
     inclusion: int,
+    region_aware: bool = False,
 ) -> dict[str, float]:
-    """Score *test_ids* with *model* and return inclusion-weighted cost, FPR, FNR."""
+    """Score *test_ids* with *model* and return inclusion-weighted cost, FPR, FNR.
+
+    When *region_aware* the test media carry ``patch_regions`` (a patch
+    embedder), so scoring max-pools the MLP over every region of each image -
+    exactly the live detector's inference for patch datasets (an image scores
+    by its best-matching region).  Otherwise each media is scored by its single
+    whole-image vector, the fast path used for every single-vector dataset.
+    """
     import numpy as np  # noqa: PLC0415
     import torch  # noqa: PLC0415
 
     if not test_ids:
         return {"cost": float("nan"), "fpr": float("nan"), "fnr": float("nan")}
 
-    embs = np.array([media_embedding(clips_dict[cid]) for cid in test_ids])
-    X = torch.tensor(embs, dtype=torch.float32)
+    if region_aware:
+        from vtscore.detectors.training import score_media_with_model  # noqa: PLC0415
 
-    with torch.no_grad():
-        X = X.to(next(model.parameters()).device)
-        scores = torch.sigmoid(model(X)).squeeze(1).cpu().tolist()
+        test_clips = {cid: clips_dict[cid] for cid in test_ids}
+        score_map = {r["id"]: r["score"] for r in score_media_with_model(model, test_clips)}
+        scores = [score_map[cid] for cid in test_ids]
+    else:
+        embs = np.array([media_embedding(clips_dict[cid]) for cid in test_ids])
+        X = torch.tensor(embs, dtype=torch.float32)
+
+        with torch.no_grad():
+            X = X.to(next(model.parameters()).device)
+            scores = torch.sigmoid(model(X)).squeeze(1).cpu().tolist()
 
     true_labels = [1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0 for cid in test_ids]
 
@@ -138,6 +206,7 @@ def simulate_voting_iterations(
     safe_thresholds: bool = False,
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
+    region_voting: bool = False,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -154,6 +223,15 @@ def simulate_voting_iterations(
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for
             calibration in each split (default 0.5).
+        region_voting: When ``True``, each Good vote trains on the region-pooled
+            vector of the media's ground-truth box for *target_category* (the
+            minimal box covering every annotated instance), instead of the
+            whole-image vector - simulating a user who drags a region around the
+            object.  Requires a patch embedder: media without a ``patch_grid``
+            or without an annotated box fall back to the whole-image vector.
+            Scoring is unaffected by this flag - a patch dataset always scores
+            region-aware (max-pool over regions), so the only thing this toggles
+            is the Good-vote training vector, isolating region voting's effect.
 
     Returns:
         List of row dicts with keys ``seed, dataset, category, t, n_good,
@@ -171,21 +249,34 @@ def simulate_voting_iterations(
 
     sim_ids, test_ids = _split_media_ids(clips_dict, sim_fraction, rng)
 
-    # Ensure the test set has both positive and negative medias
-    test_pos = [cid for cid in test_ids if clips_dict[cid]["category"] == target_category]
-    test_neg = [cid for cid in test_ids if clips_dict[cid]["category"] != target_category]
+    # Ensure the test set has both positive and negative medias.  Routes through
+    # ``media_is_positive`` so multi-label (Visual Genome) images - where the
+    # target may be a non-primary category - are counted correctly.
+    test_pos = [cid for cid in test_ids if media_is_positive(clips_dict[cid], target_category)]
+    test_neg = [cid for cid in test_ids if not media_is_positive(clips_dict[cid], target_category)]
     if not test_pos or not test_neg:
         return []
+
+    # A patch dataset exposes ``patch_regions`` per media; such datasets are
+    # scored region-aware (max-pool over regions) the same way the live
+    # detector scores them, regardless of how the Good votes were assembled.
+    region_aware = any(clips_dict[cid].get("patch_regions") for cid in clips_dict)
 
     vote_seq = _make_vote_sequence(sim_ids, clips_dict, target_category, rng)
 
     # Pre-compute embeddings for safe-threshold GMM scoring.  Restrict to the
     # simulation set so the held-out ``test_ids`` never feed into the GMM that
     # picks the threshold - otherwise the test scores leak into calibration
-    # and the reported metrics are biased upward.
-    if safe_thresholds:
-        gmm_media_ids = sorted(sim_ids)
-        gmm_clip_embs = np.array([media_embedding(clips_dict[cid]) for cid in gmm_media_ids])
+    # and the reported metrics are biased upward.  Region-aware datasets keep a
+    # sim-set snapshot and score it per-step via region max-pool (to match how
+    # the test set is scored); single-vector datasets pre-stack whole-image
+    # embeddings once.
+    sim_clips: dict[int, dict[str, Any]] | None = None
+    X_all_clips: Any = None
+    if safe_thresholds and region_aware:
+        sim_clips = {cid: clips_dict[cid] for cid in sim_ids}
+    elif safe_thresholds:
+        gmm_clip_embs = np.array([media_embedding(clips_dict[cid]) for cid in sorted(sim_ids)])
         X_all_clips = torch.tensor(gmm_clip_embs, dtype=torch.float32)
 
     good_votes: dict[int, None] = {}
@@ -202,11 +293,14 @@ def simulate_voting_iterations(
         if not good_votes or not bad_votes:
             continue
 
-        # Build training data
+        # Build training data.  Good votes region-pool their ground-truth box
+        # when ``region_voting`` is on (and the media supports it); bad votes
+        # always train on the whole-image vector - matching the live detector,
+        # where only Yes-votes carry a region.
         X_list: list[np.ndarray] = []
         y_list: list[float] = []
         for vid in good_votes:
-            X_list.append(media_embedding(clips_dict[vid]))
+            X_list.append(_good_training_vec(clips_dict[vid], target_category, region_voting))
             y_list.append(1.0)
         for vid in bad_votes:
             X_list.append(media_embedding(clips_dict[vid]))
@@ -230,14 +324,14 @@ def simulate_voting_iterations(
 
         # Apply safe threshold blending if enabled
         if safe_thresholds:
-            with torch.no_grad():
-                X_eval = X_all_clips.to(next(model.parameters()).device)
-                all_scores = torch.sigmoid(model(X_eval)).squeeze(1).cpu().tolist()
-            n_labels = len(good_votes) + len(bad_votes)
-            threshold = calculate_safe_threshold(threshold, all_scores, n_labels)
+            threshold = _blend_safe_threshold(
+                threshold, model, region_aware, sim_clips, X_all_clips, len(good_votes) + len(bad_votes)
+            )
 
         # Evaluate on held-out test set
-        metrics = _evaluate_on_test(model, threshold, clips_dict, test_ids, target_category, inclusion)
+        metrics = _evaluate_on_test(
+            model, threshold, clips_dict, test_ids, target_category, inclusion, region_aware=region_aware
+        )
 
         rows.append(
             {
@@ -269,6 +363,7 @@ def run_voting_iterations_eval(
     safe_thresholds: bool = False,
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
+    region_voting: bool = False,
 ) -> pd.DataFrame:
     """Run the voting-iterations evaluation over multiple seeds/datasets/categories.
 
@@ -288,6 +383,9 @@ def run_voting_iterations_eval(
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for
             calibration in each split (default 0.5).
+        region_voting: When ``True``, Good votes train on the ground-truth
+            region-pooled vector for patch datasets (see
+            :func:`simulate_voting_iterations`).
 
     Returns:
         A :class:`~pandas.DataFrame` with columns ``seed, dataset, category,
@@ -298,11 +396,17 @@ def run_voting_iterations_eval(
     all_rows: list[dict[str, Any]] = []
 
     for ds_name, clips_dict in dataset_clips.items():
-        # Determine target categories
+        # Determine target categories.  For multi-label datasets each image's
+        # ``category`` is only its primary, so fall back to the union of every
+        # image's ``categories`` list when present.
         if categories and ds_name in categories:
             target_cats = categories[ds_name]
         else:
-            target_cats = sorted({clips_dict[cid]["category"] for cid in clips_dict})
+            cat_set: set[str] = set()
+            for cid in clips_dict:
+                media = clips_dict[cid]
+                cat_set.update(media.get("categories") or [media["category"]])
+            target_cats = sorted(cat_set)
 
         for seed in seeds:
             for cat in target_cats:
@@ -316,6 +420,7 @@ def run_voting_iterations_eval(
                     safe_thresholds=safe_thresholds,
                     calibrate_count=calibrate_count,
                     calibration_fraction=calibration_fraction,
+                    region_voting=region_voting,
                 )
                 all_rows.extend(rows)
 
@@ -336,6 +441,7 @@ def run_voting_iterations_eval_from_pickles(
     safe_thresholds: bool = False,
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
+    region_voting: bool = False,
 ) -> pd.DataFrame:
     """Convenience wrapper that loads datasets from pickle files.
 
@@ -350,6 +456,9 @@ def run_voting_iterations_eval_from_pickles(
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for
             calibration in each split (default 0.5).
+        region_voting: When ``True``, Good votes train on the ground-truth
+            region-pooled vector for patch datasets (see
+            :func:`simulate_voting_iterations`).
 
     Returns:
         A :class:`~pandas.DataFrame` identical to :func:`run_voting_iterations_eval`
@@ -373,4 +482,5 @@ def run_voting_iterations_eval_from_pickles(
         safe_thresholds=safe_thresholds,
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
+        region_voting=region_voting,
     )

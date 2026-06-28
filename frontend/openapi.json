@@ -215,6 +215,12 @@
             },
             "type": "object"
           },
+          "browse_mouse_zooms_per_level": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object"
+          },
           "browse_panel_width": {
             "type": "integer"
           },
@@ -336,6 +342,12 @@
             },
             "type": "object"
           },
+          "popup_preview_size": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object"
+          },
           "safe_thresholds": {
             "type": "boolean"
           },
@@ -370,18 +382,6 @@
               "system"
             ],
             "type": "string"
-          },
-          "view_mode_left": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object"
-          },
-          "view_mode_right": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object"
           },
           "volume": {
             "type": "number"
@@ -4546,6 +4546,7 @@
           "browse_colormap": {},
           "browse_compact": {},
           "browse_icon_size": {},
+          "browse_mouse_zooms_per_level": {},
           "browse_panel_width": {
             "type": "integer"
           },
@@ -4583,6 +4584,7 @@
           "last_embedder_per_media_type": {},
           "panel_pct_left": {},
           "panel_pct_right": {},
+          "popup_preview_size": {},
           "safe_thresholds": {
             "type": "boolean"
           },
@@ -4611,8 +4613,6 @@
             ],
             "type": "string"
           },
-          "view_mode_left": {},
-          "view_mode_right": {},
           "volume": {
             "type": "number"
           }
@@ -5651,6 +5651,10 @@
             "default": null,
             "nullable": true
           },
+          "merge_near_duplicates": {
+            "default": null,
+            "nullable": true
+          },
           "name": {
             "default": "",
             "type": "string"
@@ -5693,6 +5697,10 @@
             "type": "string"
           },
           "embedders": {
+            "default": null,
+            "nullable": true
+          },
+          "merge_near_duplicates": {
             "default": null,
             "nullable": true
           },
@@ -5840,6 +5848,10 @@
             ],
             "type": "string"
           },
+          "merge_near_duplicates": {
+            "default": null,
+            "nullable": true
+          },
           "source_specs": {
             "default": null,
             "nullable": true
@@ -5880,6 +5892,10 @@
             "default": null,
             "nullable": true
           },
+          "merge_near_duplicates": {
+            "default": null,
+            "nullable": true
+          },
           "source_specs": {
             "default": null,
             "nullable": true
@@ -5911,6 +5927,10 @@
             "nullable": true
           },
           "embedders": {
+            "default": null,
+            "nullable": true
+          },
+          "merge_near_duplicates": {
             "default": null,
             "nullable": true
           },
@@ -5963,6 +5983,10 @@
             ],
             "type": "string"
           },
+          "merge_near_duplicates": {
+            "default": null,
+            "nullable": true
+          },
           "query_id": {
             "type": "string"
           },
@@ -6014,6 +6038,10 @@
               ""
             ],
             "type": "string"
+          },
+          "merge_near_duplicates": {
+            "default": null,
+            "nullable": true
           },
           "paths_file": {
             "type": "string"
@@ -6073,6 +6101,10 @@
             ],
             "type": "string"
           },
+          "merge_near_duplicates": {
+            "default": null,
+            "nullable": true
+          },
           "path": {
             "type": "string"
           },
@@ -6128,6 +6160,10 @@
               ""
             ],
             "type": "string"
+          },
+          "merge_near_duplicates": {
+            "default": null,
+            "nullable": true
           },
           "size": {
             "default": 100,
@@ -9129,6 +9165,51 @@
           }
         }
       ]
+    },
+    "/api/datasets/registry/{dataset_id}/diversity-tree": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "dataset_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Datasets past ``should_auto_build_diversity_tree`` skip the automatic build\nat load time so they load fast; this endpoint lets the user trigger that\nbuild on demand.  The dataset must already be loaded in memory.  Progress\nis reported via ``/api/progress`` under the returned ``task_id``; the build\nis cancellable.  Calling it on a dataset that already has a tree rebuilds\nit from scratch.",
+        "operationId": "build_dataset_diversity_tree",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetRegistryLoadResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Dataset is not currently loaded."
+          },
+          "403": {
+            "description": "Access denied for the current user."
+          },
+          "404": {
+            "description": "Dataset not found."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Build the diversity index for a loaded dataset in a background thread.",
+        "tags": [
+          "datasets_registry"
+        ]
+      }
     },
     "/api/datasets/registry/{dataset_id}/load": {
       "parameters": [

@@ -3,6 +3,15 @@
   grid-template-columns: var(--left-width, 300px) 8px 1fr 8px var(--right-width, 300px);
   height: 100%;
   overflow: hidden;
+
+  // Smoothly animate every "pop tight" snap — both the divider drag-release pop
+  // and the icon-size auto-pop — so they look identical. The component toggles
+  // this class on only for the one transition that follows a snap, so live
+  // divider dragging (which writes --left-width/--right-width every mousemove)
+  // stays instant.
+  &.layout--animate-pop {
+    transition: grid-template-columns var(--transition-base);
+  }
 }
 
 .panel-left {

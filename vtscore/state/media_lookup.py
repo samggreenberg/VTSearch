@@ -179,6 +179,7 @@ def collapse_duplicates(
             media = media_dict[cid]
             members.append(
                 {
+                    "md5": media.get("md5", ""),
                     "origin": media.get("origin"),
                     "origin_name": media.get("origin_name", ""),
                     "filename": media.get("filename", ""),

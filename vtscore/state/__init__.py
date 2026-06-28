@@ -79,6 +79,7 @@ from vtscore.state.votes import (  # noqa: F401
 
 # Re-export diversity tree --------------------------------------------------
 from vtscore.state.diversity import (  # noqa: F401
+    DIVERSITY_TREE_AUTO_THRESHOLD,
     build_diversity_tree,
     build_diversity_tree_for_context,
     diversity_tree_label,
@@ -87,6 +88,7 @@ from vtscore.state.diversity import (  # noqa: F401
     get_diversity_tree,
     restore_diversity_tree_from_cache,
     resync_diversity_tree_to_detector,
+    should_auto_build_diversity_tree,
 )
 
 # Re-export media lookup ----------------------------------------------------
@@ -98,6 +100,13 @@ from vtscore.state.media_lookup import (  # noqa: F401
     get_dupe_count,
     next_media_id,
     resolve_media_ids,
+)
+
+# Re-export near-duplicate collapsing ---------------------------------------
+from vtscore.state.near_dupes import (  # noqa: F401
+    collapse_near_duplicates,
+    phash_image,
+    simhash_text,
 )
 
 

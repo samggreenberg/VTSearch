@@ -127,13 +127,49 @@ to handle TLS, gzip, and static-asset caching. Flask serves the Angular
 build from `static/` directly, but a dedicated reverse proxy is much
 more efficient for that traffic.
 
+A few VTSearch-specific points matter when configuring the proxy:
+
+- **TLS termination.** Terminate HTTPS at the proxy and forward plain HTTP to
+  gunicorn on the loopback / private network. Gunicorn itself is not configured
+  for TLS.
+- **Long-running requests vs. proxy read-timeouts.** Imports, embedding,
+  detector training, and evaluation routinely run for minutes. The bundled
+  `gunicorn.conf.py` sets `timeout = 0` (no worker timeout) precisely so these
+  don't get SIGKILLed — but the **proxy** has its own read timeout that will sever
+  the connection independently. nginx's default `proxy_read_timeout` is **60s**,
+  which will cut off any import or training run that takes longer. Raise it to
+  cover your longest operation (e.g. `proxy_read_timeout 1800s;`), matching the
+  same reasoning behind `VTSEARCH_TIMEOUT=0`.
+- **Server-Sent Events (`/api/events`).** VTSearch streams live progress over an
+  SSE endpoint. Proxy response buffering breaks SSE (events arrive only when the
+  buffer flushes), so disable it for the stream — `proxy_buffering off;` in nginx
+  (and the equivalent elsewhere) — and ensure the same long read-timeout applies,
+  since the connection stays open for the life of the page.
+- **Forwarded headers.** Pass `X-Forwarded-For`, `X-Forwarded-Proto`, and
+  `X-Forwarded-Host` (and `Host`) so the app sees the real client and external
+  scheme. For SSE/WebSocket-style streams also forward `Connection`/`Upgrade` if
+  your proxy requires it.
+
+Minimal nginx `location` for the API (illustrative):
+
+```nginx
+location /api/ {
+    proxy_pass http://127.0.0.1:5000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 1800s;   # cover long imports / training (gunicorn timeout is 0)
+    proxy_buffering off;        # required for /api/events SSE streaming
+}
+```
+
 ---
 
 ## Network dependencies
 
 ### Embedding models (HuggingFace Hub)
 
-VTSearch downloads four embedding models on first use. Each model is
+VTSearch downloads five embedding models on first use. Each model is
 lazy-loaded when a dataset of the corresponding media type is opened for
 the first time. At startup, VTSearch also runs a smart-preload pass that
 warms every embedder referenced by the dataset and detector registries
@@ -145,10 +181,13 @@ cost. On an empty registry, nothing is preloaded.
 |-------|-----------|----------------|-------------|
 | CLAP | Audio (default) | `laion/clap-htsat-unfused` | ~1.1 GB |
 | SigLIP | Image (default) | `google/siglip-base-patch16-224` | ~400 MB |
+| CLIP | Image (alternative) | `openai/clip-vit-base-patch32` | ~600 MB |
 | X-CLIP | Video (default) | `microsoft/xclip-base-patch32` | ~1.2 GB |
 | E5 | Text (default) | `intfloat/e5-base-v2` | ~440 MB |
 
-**Total: ~3.2 GB** for the four default models.
+**Total: ~3.8 GB** for the five models `download_models.sh` fetches (four
+defaults plus CLIP, the image alternative). At runtime, only the embedders a
+dataset or detector actually uses are loaded.
 
 #### Alternative embedders
 
@@ -217,7 +256,7 @@ Run the provided script on a machine with internet access:
 ./scripts/download_models.sh [CACHE_DIR]
 ```
 
-This downloads all four embedding models to `CACHE_DIR` (defaults to
+This downloads all five embedding models (CLAP, SigLIP, CLIP, X-CLIP, E5) to `CACHE_DIR` (defaults to
 `data/models`). The script prints instructions for offline use when
 finished.
 
@@ -333,8 +372,6 @@ and auto-saved on every change. Schema:
   "audio_playing": true,
   "show_animations": true,
   "show_metadata": true,
-  "view_mode_left": {},
-  "view_mode_right": {},
   "focus_mode_left": {},
   "focus_mode_right": {},
   "grid_icon_size_left": {},
@@ -373,14 +410,20 @@ Notable fields:
   clipping, dedup, and diversity-tree construction. Changes take
   effect on queued and future loads (running tasks are never
   preempted). Defaults derive from hardware on first read (and are
-  **not** persisted to disk): downloads = `min(4, cpu_count)`,
-  embeddings = `1` on CPU-only hosts else `min(2, gpu_count)`. An
+  **not** persisted to disk): downloads = `max(1, min(4, cpu_count))`;
+  embeddings = `1` on an accelerator (CUDA/MPS — embed jobs share the
+  one device and serialise on it, so extra workers only add VRAM
+  pressure), and on a CPU host the scarcer of `cores/4` and
+  `RAM/4 GiB` (cap 4, floor 1). See `default_concurrent_downloads` /
+  `default_concurrent_embeddings` in `vtscore/embedding/loader.py`.
+  These match the autodetect described under
+  [Dataset-ingest concurrency](#dataset-ingest-concurrency) above. An
   explicit value in `settings.json` always wins.
 - `settings_source` (not shown above; excluded from defaults): opt-in
   bidirectional sync. Set to a plugin name + field values to auto-export
   every settings change and auto-import at startup. See `settings_io/sources/`.
 - `theme`: `"dark"`, `"light"`, or `"highviz"`
-- `view_mode_*`, `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*`:
+- `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*`:
   per-media-type UI layout preferences (keyed by media type ID)
 - `autopilot_enabled`: whether the autopilot feature is active
 
@@ -478,6 +521,21 @@ docker compose \
 
 Add `--no-cache` after dependency changes to force a full rebuild.
 
+> **Note on the baked version string.** `vtsearch.__version__` is normally
+> derived from git at import time, but the Docker build context excludes `.git`,
+> so the Dockerfile reads the version from a build arg instead. None of the
+> `docker/compose/*.yml` files pass it, so a plain `docker compose build` bakes
+> the fallback `0.0.0-unknown` into the image. To stamp the real version, pass it
+> explicitly, e.g.:
+>
+> ```bash
+> docker compose -f docker/compose/docker-compose.yml build \
+>   --build-arg VTSEARCH_VERSION="$(TZ=UTC git log -1 --format=%cd --date=format:%Y-%m-%dT%H:%M:%SZ HEAD)"
+> ```
+>
+> The Dockerfile writes this into `vtsearch/_version.txt`; `__init__.py` reads it
+> when git is unavailable.
+
 ---
 
 ## Dependency structure
@@ -495,7 +553,7 @@ images) and do **not** flow through pyproject.
 ```
 pyproject.toml                       ← [project.dependencies] + [project.optional-dependencies].dev
 requirements/base.txt                ← --extra-index-url <cpu wheel index> + `-e .[dev]`
-requirements/gpu.txt                 ← `-e .[dev]` (install-gpu.sh / Dockerfile.gpu set --extra-index-url)
+requirements/gpu.txt                 ← `-e .[dev]` (install.sh / Dockerfile.gpu set --extra-index-url)
 requirements/labbench.txt            ← LabBench (SigLIP-only) image deps (standalone)
 requirements/image-embedders.txt     ← All-image-embedders image deps (CPU, standalone)
 requirements/image-embedders-gpu.txt ← All-image-embedders image deps (GPU, standalone)
@@ -504,11 +562,12 @@ requirements/image-embedders-gpu.txt ← All-image-embedders image deps (GPU, st
 Install commands:
 
 ```bash
-# CPU with all features + dev tools
-bash scripts/install-cpu.sh
+# Auto-detect CPU vs GPU (installs all features + dev tools)
+bash scripts/install.sh
 
-# GPU
-bash scripts/install-gpu.sh
+# Force one or the other
+bash scripts/install.sh cpu
+bash scripts/install.sh gpu
 ```
 
 ### Key dependencies
@@ -576,5 +635,92 @@ via the folder or pickle importer instead.
 
 **Fix**: Reinstall to ensure all dependencies are present:
 ```bash
-bash scripts/install-cpu.sh
+bash scripts/install.sh
 ```
+
+### GPU install prints a red "dependency conflicts" report (harmless)
+
+**Symptom**: The cuML step of `scripts/install.sh` ends with a wall of red
+text, then keeps going and reports success:
+
+```
+ERROR: pip's dependency resolver does not currently take into account all the
+packages that are installed. This behaviour is the source of the following
+dependency conflicts.
+torch 2.6.0+cu124 requires nvidia-cublas-cu12==12.4.5.8 ... but you have
+nvidia-cublas-cu12 12.9.2.10 which is incompatible.
+... (one line per nvidia-*-cu12 lib)
+Successfully installed nvidia-cublas-cu12-12.9.2.10 ...
+  cuML installed: GPU UMAP + k-means enabled.
+```
+
+**Cause**: cuML (RAPIDS 25.x) depends on **newer** `nvidia-*-cu12` runtime
+wheels than the torch build pins **exactly** (e.g. `cu124` torch pins
+`==12.4.x`). Installing cuML upgrades those libs, so pip's post-install
+consistency check flags torch's now-unsatisfied `==` pins. **This is cosmetic
+and non-fatal**: pip completes the install and rolls nothing back, and CUDA
+12.x minor runtimes are ABI-compatible across versions, so torch keeps working
+on the bumped libraries.
+
+**What to do**: nothing. `scripts/install.sh` prints a heads-up before the
+cuML step and runs a **GPU smoke test** at the end (a tiny torch CUDA matmul +
+a cuML import) that confirms the stack actually works — if that smoke test
+passes, the red report did not matter. Only act if the smoke test *fails*, or
+if your error is the **fatal** `cuda_fp8.hpp` / nvjitlink variant below (that
+one names `nvidia-nvjitlink-cu12 >= 12.9` and `cuml-cu12 >= 26`, and the
+install does **not** succeed) — that is a different problem with a real fix.
+
+### cuML crashes compiling a kernel (`cuda_fp8.hpp` / nvrtc errors)
+
+**Symptom**: A VTSBrowse projection or diversity-tree build dies with an
+nvrtc compile error like:
+
+```
+.../nvidia/cu13/include/cuda_fp8.hpp(...): error: this declaration has no
+storage class or type specifier  __NV_SILENCE_DEPRECATION_BEGIN
+... N errors detected in the compilation of ".../<hash>.cubin.cu".
+```
+
+**Cause**: a **RAPIDS release newer than your torch's CUDA**. cuML compiles
+its cuVS/raft kernels with nvrtc lazily, on the first UMAP/k-means `fit`.
+RAPIDS **26.x** (`cuml-cu12 >= 26`) raised its CUDA floor to require
+`nvidia-nvjitlink-cu12 >= 12.9`, but the torch CUDA wheels VTSearch pins
+(`cu124` = CUDA 12.4 ... `cu128` = CUDA 12.8) cap the CUDA libraries at 12.8 —
+and no torch wheel ships CUDA 12.9 yet. An **unpinned** `cuml-cu12` therefore
+floats up to 26.x, which fails the pip resolver:
+
+```
+cuml-cu12 26.6.0 requires nvidia-nvjitlink-cu12<13,>=12.9, but you have
+nvidia-nvjitlink-cu12 12.4.127 which is incompatible.
+```
+
+...and, if mismatched libraries land anyway, makes cupy's nvrtc compile the
+wrong-version fp8/fp6/fp4 headers (the `__NV_SILENCE_DEPRECATION_BEGIN` macro
+the resident nvrtc doesn't define), producing the `cuda_fp8.hpp` crash above.
+
+`scripts/install.sh` and `docker/Dockerfile.gpu` now **cap the wheel at
+`cuml-cu12<26`** (RAPIDS 25.x declares `cuda-toolkit==12.*` and resolves
+cleanly against the pinned torch), so fresh installs are unaffected. A venv
+that already pulled 26.x just needs the matching downgrade.
+
+VTSearch also now **degrades to the CPU UMAP/k-means path** whenever a cuML
+fit fails for any reason (logging a one-time warning) instead of crashing, so
+the run still completes — just slower, without GPU acceleration. To restore
+the GPU path:
+
+```bash
+# 1. Inspect the installed CUDA stack (look for cuml-cu12 / libcuml-cu12 26.x,
+#    and any stray *-cu13 wheels from an out-of-band install).
+pip list | grep -iE 'cu13|cupy|cuml|cuvs|libraft|pylibraft|nvidia-nvjitlink'
+
+# 2. Reinstall the RAPIDS stack capped below 26 so it matches the pinned torch.
+pip install --extra-index-url https://pypi.nvidia.com --prefer-binary "cuml-cu12<26"
+
+# 3. If step 1 showed stray CUDA-13 wheels, remove them and reinstall cleanly:
+pip uninstall -y $(pip list --format=freeze | grep -iE '(-cu13|cupy-cuda13x)' | cut -d= -f1)
+bash scripts/install.sh            # or: bash scripts/install.sh cu124
+```
+
+If you don't need GPU UMAP/k-means at all, set `VTSEARCH_SKIP_CUML=1`
+(skips the cuML install) and the CPU `umap-learn`/`scikit-learn` paths run
+without any toolchain risk.

@@ -51,7 +51,7 @@ Example – a minimal database label importer skeleton::
 
 If the importer needs extra packages (e.g. ``psycopg2-binary``), add them
 to ``[project.dependencies]`` in the repo's ``pyproject.toml``. They are
-picked up the next time you run ``bash scripts/install-cpu.sh`` (or any
+picked up the next time you run ``bash scripts/install.sh`` (or any
 editable install). pyproject.toml is the single source of truth - deptry
 verifies that every imported package is declared there.
 """

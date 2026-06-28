@@ -11,7 +11,12 @@ from typing import TYPE_CHECKING
 
 from vtscore.embedding.matrix import invalidate_embedding_matrix
 from vtscore.embedding.media_vectors import media_embedding
-from vtscore.state import build_diversity_tree_for_context, collapse_duplicates
+from vtscore.state import (
+    build_diversity_tree_for_context,
+    collapse_duplicates,
+    collapse_near_duplicates,
+    should_auto_build_diversity_tree,
+)
 
 from vtscore.datasets.stages._common import _TOTAL_LOAD_STEPS
 
@@ -73,10 +78,50 @@ def _collapse_duplicates_stage(ctx: DatasetContext, tracker) -> None:
     invalidate_embedding_matrix(ctx)
 
 
+def _collapse_near_duplicates_stage(ctx: DatasetContext, tracker) -> None:
+    """Opt-in pass: collapse near-duplicate images/text after exact dedup.
+
+    Gated on the transient ``ctx.merge_near_duplicates`` create-time flag
+    (set from the importer modal's "Merge near-duplicates" checkbox).  No-op
+    on every reload path, where the flag defaults off and the grouping is
+    already baked into origins.
+    """
+    if not getattr(ctx, "merge_near_duplicates", False):
+        return
+
+    def _progress(current: int, total: int) -> None:
+        tracker.check_cancelled()
+        tracker.update(
+            "loading",
+            "Merging near-duplicates…",
+            current=current,
+            total=total,
+            step=_TOTAL_LOAD_STEPS,
+            total_steps=_TOTAL_LOAD_STEPS,
+        )
+
+    _progress(0, 0)
+    collapse_near_duplicates(ctx.medias, on_progress=_progress)
+    invalidate_embedding_matrix(ctx)
+
+
 def _build_diversity_tree_stage(ctx: DatasetContext, tracker) -> None:
     # An upstream step (e.g. a pickle restore) may have already populated the
     # tree; skip the expensive hierarchical k-means rebuild when so.
     if ctx.diversity_tree is not None:
+        return
+
+    # Past the auto-build threshold the tree is deferred: the build would cost
+    # minutes/GBs and the autopilot degrades gracefully without it.  The user
+    # can trigger it later via POST /api/datasets/registry/<id>/diversity-tree.
+    if not should_auto_build_diversity_tree(len(ctx.medias)):
+        import logging  # noqa: PLC0415
+
+        logging.getLogger(__name__).info(
+            "Skipping automatic diversity-tree build for %d items (> threshold); "
+            "build on demand via the diversity-tree endpoint.",
+            len(ctx.medias),
+        )
         return
 
     def _progress(current: int, total: int) -> None:

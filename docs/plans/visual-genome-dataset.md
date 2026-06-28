@@ -126,11 +126,37 @@ Phase 1:
   download/collect/load + region normalization) and multi-label eval tests in
   `tests_lib/detectors/test_eval.py`.
 
+## Phase 2 — Region voting in evals (shipped)
+
+The stored ground-truth boxes now feed the eval harness as simulated region
+votes. `vtscore/eval/labels.py::region_box_for_category(media, category)`
+returns the **minimal box covering every annotated instance** of the category
+(multiple apples → one box around all of them; `None` when the image has no
+annotated box, so callers fall back to the whole-image vector — exactly an
+image-level Good vote). Both simulated-voting evaluators take a `region_voting`
+flag:
+
+- **Voting-iterations** (`vtscore/eval/voting_iterations.py`): each Good vote
+  region-pools its box from the media's `patch_grid` via
+  `pool_box_from_media` / `box_to_vote_vector`. Bad votes always stay
+  whole-image (matching the live detector, where only Yes-votes carry a
+  region). Scoring is **independent** of the flag — any patch dataset (media
+  with `patch_regions`) is scored region-aware (max-pool over regions) the same
+  way the live detector scores it, so the only variable `region_voting` toggles
+  is the Good-vote training vector, isolating its effect.
+- **Learned-sort** (`vtscore/eval/runner.py::eval_learned_sort`): passes the
+  per-Good `vote_region_boxes` map straight to `train_and_score`, which already
+  region-pools and region-max-pool-scores.
+- **CLI**: `python -m vtscore.eval --embedder dinov3_patch --region-voting`.
+  Region voting needs a **patch embedder** (DINOv2/v3/EUPE) — SigLIP, the
+  default VG embedder, produces no `patch_grid`, so `--embedder` re-embeds VG
+  in a patch space. No embedder is hardcoded; any patch embedder works.
+
 ## Open follow-ups
 
-- **Region consumers.** Region-level eval and seeding region votes from
-  ground-truth boxes are deferred. The boxes are stored now; wiring them into
-  the patch-embedder region-voting flow is the natural Phase 2.
+- **Region-vote eval reporting.** The boxes are consumed now; a dedicated
+  side-by-side image-vs-region report/plot (baseline vs `region_voting`) is not
+  yet built — callers run the eval twice (flag off/on) and diff the frames.
 - **Vocab matching quality.** Object→category matching is a case/plural-folding
   heuristic. VG synonyms/synsets (`names` has multiple aliases; `synsets` exists)
   are only partially exploited; a richer synonym map would recover more positives.

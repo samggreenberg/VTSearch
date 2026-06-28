@@ -59,8 +59,6 @@ export interface Helpers {
   leftTab(name: 'Autopilot' | 'Manual'): Promise<void>;
   /** Select the first media item so the centre viewer + vote buttons render. */
   serveItem(): Promise<void>;
-  /** Switch the left-panel media list to grid (thumbnail) layout. */
-  gridView(): Promise<void>;
   /** Open Browse for the fixture dataset and wait for the map to render. */
   openBrowse(): Promise<void>;
 }
@@ -89,8 +87,20 @@ export const SHOTS: Shot[] = [
     caption:
       'The VTSearch dashboard with a synthetic dataset loaded and a trained detector listed in the sidebar',
     themes: BOTH,
-    async recipe(_page, h) {
+    async recipe(page, h) {
       await h.dashboard();
+      // Clean overview, no selection: the fixture build leaves doc-demo selected
+      // (selection persists server-side), so deselect every checked row first.
+      for (const tag of ['vt-dataset-card', 'vt-detector-card']) {
+        const checked = `${tag} .select-checkbox[aria-checked="true"]`;
+        for (let guard = 0; guard < 20 && (await page.locator(checked).count()); guard++) {
+          await page.locator(checked).first().click();
+          await h.wait(250);
+        }
+      }
+      // Park the cursor on neutral chrome so no row carries a hover highlight.
+      await page.mouse.move(700, 120);
+      await h.wait(400);
     },
   },
   {
@@ -111,14 +121,18 @@ export const SHOTS: Shot[] = [
     id: 'importer-picker',
     embeddedIn: 'docs/user/USER_GUIDE.md#loading-a-dataset',
     caption:
-      'The Demo importer with the 🏭 Synthetic Media generator and the Downloaded Media catalogue',
+      'The Demo importer on Downloaded Media: the media-type selector and the demo-dataset catalogue with per-row readiness badges (the Synthetic Media source needs no download)',
     themes: BOTH,
-    annotations: [
-      { target: '.importer-subtab-bar', kind: 'highlight', label: 'Synthetic Media needs no download' },
-    ],
-    async recipe(_page, h) {
+    // Drill past the source picker (Downloaded vs Synthetic) into the
+    // Downloaded Media catalogue so the shot shows the media-type selector +
+    // the catalogue table the audit calls for — not the bare Demo landing that
+    // dataset-panel already covers. (Media types are a dropdown, not a tab bar.)
+    async recipe(page, h) {
       await h.dashboard();
       await h.openImporterDemo();
+      await page.getByRole('button', { name: 'Downloaded Media' }).first().click();
+      await page.waitForSelector('.demo-table', { timeout: 15000 });
+      await h.wait(900);
     },
   },
   {
@@ -172,7 +186,7 @@ export const SHOTS: Shot[] = [
   {
     id: 'autopilot-progress',
     embeddedIn: 'docs/user/USER_GUIDE.md#the-collapsed-bar',
-    caption: 'The Autopilot phase panel: the four phases (Good examples, Bad examples, Boundary refinement, Diversity) tracked in order',
+    caption: 'The Autopilot phase panel: the four phases (Find Initial Goods, Find Initial Bads, Refine Boundary, Explore Diversity) tracked in order',
     themes: BOTH,
     clip: { selector: '.autopilot-panel' },
     async recipe(_page, h) {
@@ -246,33 +260,36 @@ export const SHOTS: Shot[] = [
   {
     id: 'view-options',
     embeddedIn: 'docs/user/USER_GUIDE.md#view-options',
-    caption: 'The view settings: List vs. grid, grid icon size, and focus mode (Settings → Appearance → Scroll Style)',
+    caption: 'The in-panel view controls in the left-panel header: thumbnail size (smaller/bigger) and focus mode (click vs. hover preview)',
     themes: BOTH,
+    // The view controls are an inline `vt-view-controls` toolbar in the left
+    // panel header during the label view, not a Settings pane. Frame just that
+    // toolbar via clip.
+    clip: { selector: 'vt-view-controls' },
     async recipe(_page, h) {
-      await h.dashboard();
-      await h.openSettings();
+      await h.enterLabelView();
+      await h.leftTab('Manual');
     },
   },
   {
     id: 'results-grid',
     embeddedIn: 'docs/user/USER_GUIDE.md#view-options',
-    caption: 'The left-panel media list in grid view after training — ranked thumbnails',
+    caption: 'The left-panel media list after training — ranked thumbnails',
     themes: BOTH,
     clip: { selector: '.panel-left' },
     async recipe(page, h) {
       await h.enterLabelView();
       await h.leftTab('Manual');
-      // Rank by the trained detector and show the list as a thumbnail grid.
+      // The media list is always a thumbnail grid; just rank by the trained
+      // detector (the list/grid toggle was removed in 27854785).
       await page.locator('.sort-radio', { hasText: 'Learned' }).first().click();
       await h.wait(2500);
-      await h.gridView();
-      await h.wait(800);
     },
   },
   {
     id: 'settings-appearance',
     embeddedIn: 'docs/user/USER_GUIDE.md#solo-media-type--streamline-for-one-media-type',
-    caption: 'The Settings → Appearance pane: theme picker, Solo media type, and the per-type Scroll Style controls',
+    caption: 'The Settings → Appearance pane: theme picker, the animation / metadata-panel / achievements toggles, and the per-media-type Scroll Style controls (Solo media type lives on the Import Defaults tab)',
     themes: BOTH,
     async recipe(_page, h) {
       await h.dashboard();
@@ -285,12 +302,20 @@ export const SHOTS: Shot[] = [
     caption: 'A dataset row and a detector row selected, with the Train / Find action bar below the tables',
     themes: BOTH,
     annotations: [
-      { target: '.dashboard-actions', kind: 'highlight', label: 'Train opens labeling; Find scores the dataset' },
+      // Box (not highlight): this shot has two focal points — the open ⋯ menu
+      // and the Train/Find bar — so don't dim the rest of the dashboard.
+      { target: '.dashboard-actions', kind: 'box', label: 'Train opens labeling; Find scores the dataset' },
     ],
-    async recipe(_page, h) {
+    async recipe(page, h) {
       await h.dashboard();
       await h.selectDatasetRow('syn-imgs');
       await h.selectDetectorRow('doc-demo');
+      // Open the dataset row's ⋯ overflow menu so the shot shows where Browse,
+      // Stats, Rename, and (for detectors) Export now live.
+      await page.locator('vt-dataset-card', { hasText: 'syn-imgs' }).first()
+        .locator('.overflow-btn').first().click();
+      await page.waitForSelector('.context-menu', { timeout: 10000 });
+      await h.wait(400);
     },
   },
   {
@@ -301,8 +326,17 @@ export const SHOTS: Shot[] = [
     annotations: [
       { target: '.browse-side-meta', kind: 'box', label: 'Legend + minimap' },
     ],
-    async recipe(_page, h) {
+    async recipe(page, h) {
       await h.openBrowse();
+      // Switch to hex bins (matches the "hex-density" caption) and zoom out a
+      // couple of steps so more of the cloud is visible. NB: avoid "Zoom to
+      // fit" — with only 60 points it over-zooms the main canvas to blank.
+      await page.locator('button[title="Hexagon bins"]').first().click().catch(() => {});
+      await h.wait(500);
+      await page.locator('button[title="Zoom out"]').first().click().catch(() => {});
+      await h.wait(400);
+      await page.locator('button[title="Zoom out"]').first().click().catch(() => {});
+      await h.wait(1400);
     },
   },
   {
@@ -335,6 +369,73 @@ export const SHOTS: Shot[] = [
       }
       await page.waitForSelector('.file-item, .sort-section, vt-modal .media-picker', { timeout: 15000 });
       await h.wait(700);
+    },
+  },
+  {
+    id: 'new-detector',
+    embeddedIn: 'docs/user/USER_GUIDE.md#creating-a-detector',
+    caption:
+      'The New Detector modal on the Blank tab: seed a fresh detector from a text description or a media example, then pick the embedder type',
+    themes: BOTH,
+    async recipe(page, h) {
+      await h.dashboard();
+      await h.openNewDetector();
+      await page.waitForSelector('.tab-bar', { timeout: 15000 });
+      // Blank is the default tab; seed the text example so the field reads as a
+      // real description rather than placeholder text.
+      await page.locator('input[placeholder*="dog barking" i]').first().fill('colorful geometric pattern').catch(() => {});
+      await h.wait(600);
+    },
+  },
+  {
+    id: 'find-view',
+    embeddedIn: 'docs/user/USER_GUIDE.md#find--scoring-and-verifying',
+    caption:
+      'The Find verification view: the work queue (left), the viewer with Good/Bad (centre), and the Verified Good / Verified Bad piles plus their actions (right)',
+    themes: BOTH,
+    async recipe(page, h) {
+      await h.dashboard();
+      await h.selectDatasetRow('syn-imgs');
+      await h.selectDetectorRow('doc-demo');
+      // Find scores every item, then opens the three-pane verification view.
+      await page.getByRole('button', { name: 'Find', exact: true }).click();
+      await page.waitForSelector('.panel-right', { timeout: 60000 });
+      await page.getByText('Verified Good').first().waitFor({ timeout: 60000 });
+      await h.wait(2500);
+    },
+  },
+  {
+    id: 'find-stats',
+    embeddedIn: 'docs/user/USER_GUIDE.md#find--scoring-and-verifying',
+    caption:
+      "The Find view's Detector Stats modal: detector-vs-verified counts, a confusion matrix, and the false-positive / false-negative vs. inclusion tradeoff curve",
+    themes: BOTH,
+    clip: { selector: '.modal-content' },
+    async recipe(page, h) {
+      await h.dashboard();
+      await h.selectDatasetRow('syn-imgs');
+      await h.selectDetectorRow('doc-demo');
+      await page.getByRole('button', { name: 'Find', exact: true }).click();
+      await page.getByText('Verified Good').first().waitFor({ timeout: 60000 });
+      await h.wait(1500);
+      // Stats lives in the right-panel action row of the find view.
+      await page.locator('button[aria-label="Stats"]').first().click();
+      await page.waitForSelector('.stats-table', { timeout: 20000 });
+      await h.wait(1200);
+    },
+  },
+  {
+    id: 'achievements',
+    embeddedIn: 'docs/user/USER_GUIDE.md#achievements',
+    caption:
+      'The Achievements panel: a running total score and tiered usage milestones (Bronze / Silver / Gold / Platinum) each showing progress toward the next tier',
+    themes: BOTH,
+    async recipe(page, h) {
+      await h.dashboard();
+      // Trophy button in the top bar (requires Enable achievements, the default).
+      await page.locator('button[title^="Achievements:"]:visible').first().click();
+      await page.waitForSelector('.achievements-total, vt-achievements-tab', { timeout: 15000 });
+      await h.wait(800);
     },
   },
 ];

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from marshmallow import Schema, fields, validate
 
-from vtsearch.settings_models import VALID_FOCUS_MODES, VALID_GRID_ICON_SIZES, VALID_THEMES, VALID_VIEW_MODES
+from vtsearch.settings_models import VALID_FOCUS_MODES, VALID_GRID_ICON_SIZES, VALID_THEMES
 
 
 class _PerMediaTypeStringDict(fields.Dict):
@@ -87,10 +87,10 @@ class AppSettingsSchema(Schema):
     browse_thumbnail_border = _PerMediaTypeIntDict()
     # Whether (re)building the projection compacts the layout, per media type.
     browse_compact = _PerMediaTypeBooleanDict()
+    # Wheel notches / +/- clicks per pyramid level (1..3), per media type.
+    browse_mouse_zooms_per_level = _PerMediaTypeIntDict()
 
     # Per-user, per-media-type
-    view_mode_left = _PerMediaTypeStringDict()
-    view_mode_right = _PerMediaTypeStringDict()
     grid_icon_size_left = _PerMediaTypeStringDict()
     grid_icon_size_right = _PerMediaTypeStringDict()
     focus_mode_left = _PerMediaTypeStringDict()
@@ -100,6 +100,9 @@ class AppSettingsSchema(Schema):
     # VTSBrowse bin-popup thumbnail size, per media type. Driven by the popup's
     # own size buttons and the Settings → Browser tab. (The popup is grid-only.)
     grid_icon_size_popup = _PerMediaTypeStringDict()
+    # VTSBrowse bin-popup detail-canvas (large single-item preview) size in CSS
+    # px, per media type. Driven by the popup's own top-left size buttons.
+    popup_preview_size = _PerMediaTypeIntDict()
 
     # Server-tier. These are fixed at server start (config file /
     # environment / CLI flags) and shared across all users; the frontend
@@ -195,8 +198,6 @@ class SettingsUpdateSchema(Schema):
     show_metadata = fields.Boolean()
     label_hint_dismissed = fields.Boolean()
 
-    view_mode_left = fields.Raw()
-    view_mode_right = fields.Raw()
     grid_icon_size_left = fields.Raw()
     grid_icon_size_right = fields.Raw()
     focus_mode_left = fields.Raw()
@@ -204,6 +205,7 @@ class SettingsUpdateSchema(Schema):
     panel_pct_left = fields.Raw()
     panel_pct_right = fields.Raw()
     grid_icon_size_popup = fields.Raw()
+    popup_preview_size = fields.Raw()
 
     autopilot_enabled = fields.Boolean()
     hide_autopilot = fields.Boolean()
@@ -223,6 +225,7 @@ class SettingsUpdateSchema(Schema):
     browse_icon_size = fields.Raw()
     browse_thumbnail_border = fields.Raw()
     browse_compact = fields.Raw()
+    browse_mouse_zooms_per_level = fields.Raw()
 
     autofind_detectors = fields.List(fields.String())
     # Auto-Find results exporter. ``autofind_exporter`` is validated against the
@@ -260,21 +263,19 @@ class SettingsUpdateSchema(Schema):
         unknown = "exclude"
 
 
-# Note: per-side dict fields (view_mode_left etc.) are declared as
+# Note: per-side dict fields (grid_icon_size_left etc.) are declared as
 # ``fields.Raw`` on the *update* schema because the existing setters
-# accept either ``"grid"``/``{media_type: "grid"}`` and the validators
+# accept either ``"M"``/``{media_type: "M"}`` and the validators
 # inside ``settings.py`` are the source of truth. Tightening these to
 # ``fields.Dict(...)`` is a follow-up once the per-side setters are
 # unified.
 
-# View modes / grid sizes / focus modes are re-exported for the few
-# call sites that import them from here when checking PUT body values
-# directly (test helpers).
+# Grid sizes / focus modes are re-exported for the few call sites that import
+# them from here when checking PUT body values directly (test helpers).
 __all__ = [
     "AppSettingsSchema",
     "SettingsUpdateSchema",
     "VALID_FOCUS_MODES",
     "VALID_GRID_ICON_SIZES",
     "VALID_THEMES",
-    "VALID_VIEW_MODES",
 ]

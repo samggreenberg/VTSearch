@@ -149,10 +149,13 @@ model.to(dev)
 ## Runtime initialisation
 
 ```python
-def initialize_models() -> None: ...
+def initialize_models(on_progress: ProgressCallback | None = None) -> None: ...
 ```
 
-(`vtscore/embedding/loader.py:76`.) Sets up the runtime environment:
+(`vtscore/embedding/loader.py:76`.) Pass `on_progress` to render console
+progress bars for the two heavy first-time imports it triggers (scikit-learn
+and transformers, ~10s combined on a cold start); omit it (the default, used
+by tests and the eval CLI) to run silently. Sets up the runtime environment:
 
 1. Creates `vtscore.config.MODELS_CACHE_DIR` on disk.
 2. Calls `ensure_torch_configured()` which applies

@@ -1,12 +1,16 @@
 import type { ContextMenuItem } from '../context-menu/context-menu.component';
 
 /**
- * Builds the right-click context-menu items for the dashboard's dataset and
- * detector rows.  Each item mirrors a button in the row's Actions column: same
- * icon, same label, same availability rules (Load only shows when the item is
- * unloaded; Edit-access only shows in multi-user mode and is disabled for
- * non-owners).  Keep this list and ordering in sync with the Actions column
- * markup in `dataset-card.component.html` / `detector-card.component.html`.
+ * Builds the action menu for the dashboard's dataset and detector rows. The
+ * full list backs the right-click context menu, where being complete is the
+ * point. The Actions column renders only the two universal verbs inline (Load
+ * when unloaded, Delete); the ⋯ overflow button reuses this same list but drops
+ * those inline verbs (see ``overflowMenuItems``) so it reads as "more" — Browse,
+ * Rename, Stats, and detector-only Import Labels / Export, plus Edit-access in
+ * multi-user mode — rather than repeating icons already visible in the row.
+ * Rename is additionally surfaced as a pencil next to the row name. Availability
+ * rules: Load only shows when the item is unloaded; Edit-access only shows in
+ * multi-user mode and is disabled for non-owners.
  */
 
 const svg = (body: string): string =>
@@ -54,6 +58,27 @@ const ICON = {
       '<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
   ),
 };
+
+/**
+ * Min width of the shared context menu, mirroring `.context-menu`'s `min-width`
+ * in `context-menu.component.scss`. Used to right-align the ⋯ overflow menu
+ * under its button so a menu opened at the rightmost Actions column never
+ * spills off the viewport's right edge.
+ */
+export const CARD_MENU_MIN_WIDTH = 200;
+
+/**
+ * Action ids the Actions column already renders as inline icon buttons (Load
+ * only when unloaded, Delete). ``overflowMenuItems`` strips these from the ⋯
+ * overflow menu so it shows only what isn't already one click away in the row.
+ * The right-click context menu keeps the complete list.
+ */
+const INLINE_CARD_ACTION_IDS: ReadonlySet<string> = new Set(['load', 'delete']);
+
+/** The ⋯ overflow subset of a card menu: the full list minus the inline verbs. */
+export function overflowMenuItems(items: ContextMenuItem[]): ContextMenuItem[] {
+  return items.filter((item) => !INLINE_CARD_ACTION_IDS.has(item.id));
+}
 
 export interface CardMenuAccess {
   /** True when running without real auth; access-control actions are hidden. */
