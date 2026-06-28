@@ -589,31 +589,43 @@ storage class or type specifier  __NV_SILENCE_DEPRECATION_BEGIN
 ... N errors detected in the compilation of ".../<hash>.cubin.cu".
 ```
 
-**Cause**: a **mixed CUDA toolchain** in the venv. cuML compiles its
-cuVS/raft kernels with nvrtc lazily, on the first UMAP/k-means `fit`. When
-CUDA-13 NVIDIA wheels (`nvidia-*-cu13`, which install headers under
-`site-packages/nvidia/cu13/include/`) are present alongside a CUDA-12
-cuML/cupy stack, cupy's nvrtc ends up compiling the CUDA-13 fp8/fp6/fp4
-headers, which reference a `__NV_SILENCE_DEPRECATION_BEGIN` macro the
-CUDA-12 nvrtc doesn't define — so the parse fails. A clean
-`scripts/install.sh` does **not** produce this mix (it pins torch, `cuml-cu12`
-and `cupy-cuda12x` all to CUDA 12); it usually comes from an out-of-band
-`pip install` that pulled in a `cupy-cuda13x` or CUDA-13 `nvidia-*-cu13`
-wheel.
+**Cause**: a **RAPIDS release newer than your torch's CUDA**. cuML compiles
+its cuVS/raft kernels with nvrtc lazily, on the first UMAP/k-means `fit`.
+RAPIDS **26.x** (`cuml-cu12 >= 26`) raised its CUDA floor to require
+`nvidia-nvjitlink-cu12 >= 12.9`, but the torch CUDA wheels VTSearch pins
+(`cu124` = CUDA 12.4 ... `cu128` = CUDA 12.8) cap the CUDA libraries at 12.8 —
+and no torch wheel ships CUDA 12.9 yet. An **unpinned** `cuml-cu12` therefore
+floats up to 26.x, which fails the pip resolver:
 
-VTSearch now **degrades to the CPU UMAP/k-means path** when this happens
-(logging a one-time warning) instead of crashing, so the run still
-completes — just slower, without GPU acceleration. To restore the GPU path,
-repair the toolchain mix:
+```
+cuml-cu12 26.6.0 requires nvidia-nvjitlink-cu12<13,>=12.9, but you have
+nvidia-nvjitlink-cu12 12.4.127 which is incompatible.
+```
+
+...and, if mismatched libraries land anyway, makes cupy's nvrtc compile the
+wrong-version fp8/fp6/fp4 headers (the `__NV_SILENCE_DEPRECATION_BEGIN` macro
+the resident nvrtc doesn't define), producing the `cuda_fp8.hpp` crash above.
+
+`scripts/install.sh` and `docker/Dockerfile.gpu` now **cap the wheel at
+`cuml-cu12<26`** (RAPIDS 25.x declares `cuda-toolkit==12.*` and resolves
+cleanly against the pinned torch), so fresh installs are unaffected. A venv
+that already pulled 26.x just needs the matching downgrade.
+
+VTSearch also now **degrades to the CPU UMAP/k-means path** whenever a cuML
+fit fails for any reason (logging a one-time warning) instead of crashing, so
+the run still completes — just slower, without GPU acceleration. To restore
+the GPU path:
 
 ```bash
-# 1. See which CUDA majors are installed; a healthy GPU venv shows ONLY cu12.
-pip list | grep -iE 'cu13|cupy|cuml|cuvs|pylibraft|nvidia'
+# 1. Inspect the installed CUDA stack (look for cuml-cu12 / libcuml-cu12 26.x,
+#    and any stray *-cu13 wheels from an out-of-band install).
+pip list | grep -iE 'cu13|cupy|cuml|cuvs|libraft|pylibraft|nvidia-nvjitlink'
 
-# 2. Remove the stray CUDA-13 / mismatched wheels (adjust to what step 1 shows).
+# 2. Reinstall the RAPIDS stack capped below 26 so it matches the pinned torch.
+pip install --extra-index-url https://pypi.nvidia.com --prefer-binary "cuml-cu12<26"
+
+# 3. If step 1 showed stray CUDA-13 wheels, remove them and reinstall cleanly:
 pip uninstall -y $(pip list --format=freeze | grep -iE '(-cu13|cupy-cuda13x)' | cut -d= -f1)
-
-# 3. Reinstall a consistent CUDA-12 GPU stack.
 bash scripts/install.sh            # or: bash scripts/install.sh cu124
 ```
 

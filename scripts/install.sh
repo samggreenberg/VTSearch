@@ -115,6 +115,16 @@ vts_install_cpu() {
 #     separate index (pypi.nvidia.com), so a slow/unreachable index or a
 #     resolver hiccup must NOT abort an otherwise-good GPU install.
 #   - The wheel is CUDA-major-pinned: cu11* tags -> cuml-cu11, cu12* -> cuml-cu12.
+#   - The cu12 wheel is ALSO capped below RAPIDS 26 (see VTS_CUML_CU12_SPEC).
+#     RAPIDS 26.x raised its CUDA floor to require nvidia-nvjitlink-cu12>=12.9,
+#     but the torch CUDA wheels we pin (cu124 = CUDA 12.4 .. cu128 = CUDA 12.8)
+#     top out at 12.8 and no torch wheel ships 12.9 yet, so an UNpinned
+#     cuml-cu12 floats to 26.x and pip dies with an nvjitlink conflict (and
+#     cupy then JIT-compiles cuVS/raft kernels against mismatched CUDA-13 fp8
+#     headers -> "cuda_fp8.hpp: this declaration has no storage class" at fit
+#     time). 25.x declares cuda-toolkit==12.* and resolves cleanly against the
+#     pinned torch. Bump the cap once a torch wheel ships the CUDA minor 26.x
+#     needs. See docs/DEPLOYMENT.md "cuML crashes compiling a kernel".
 #   - RAPIDS ships linux-only wheels for a fixed Python range; on an unsupported
 #     platform/Python this step just warns and the app uses the CPU fallback.
 #
@@ -128,10 +138,14 @@ vts_install_cuml() {
         return 0
     fi
 
+    # The cu12 spec is capped below RAPIDS 26 (whose CUDA-12.9 floor outruns the
+    # torch CUDA wheels we pin); see the header comment above. Override the cap
+    # via VTS_CUML_CU12_SPEC, e.g. once a matching torch wheel exists:
+    #   VTS_CUML_CU12_SPEC='cuml-cu12' bash scripts/install.sh cu128
     local cuml_pkg
     case "$cuda_tag" in
         cu11*) cuml_pkg="cuml-cu11" ;;
-        *) cuml_pkg="cuml-cu12" ;;  # cu12x and anything else: cuML's CUDA-12 wheel
+        *) cuml_pkg="${VTS_CUML_CU12_SPEC:-cuml-cu12<26}" ;;  # cu12x + anything else
     esac
 
     # Isolated pass against the NVIDIA index. Guarded so `set -e` can't abort the
