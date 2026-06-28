@@ -30,6 +30,20 @@ export class DetectorCardComponent {
   @Input() @HostBinding('class.dimmed') dimmed = false;
   @Input() loadingTask?: LoadingTask;
 
+  /** True while this row's delete-confirm dialog is open (driven by the
+   *  dashboard's `deletingDetectorId`). Spins the trash icon to 90° while open;
+   *  the reverse animation plays back to 0° once the dialog resolves. */
+  @Input()
+  set deleting(value: boolean) {
+    if (value && !this._deleting) this.wasDeleting = true;
+    this._deleting = value;
+  }
+  get deleting(): boolean {
+    return this._deleting;
+  }
+  private _deleting = false;
+  wasDeleting = false;
+
   @HostBinding('class.loading-error')
   get hasLoadingError(): boolean {
     return !!this.loadingTask?.error;
@@ -170,6 +184,12 @@ export class DetectorCardComponent {
   onPencilAnimationEnd(): void {
     if (!this.editing) {
       this.wasEditing = false;
+    }
+  }
+
+  onDeleteAnimationEnd(): void {
+    if (!this._deleting) {
+      this.wasDeleting = false;
     }
   }
 

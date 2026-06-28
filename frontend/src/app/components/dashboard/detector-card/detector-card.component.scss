@@ -154,6 +154,20 @@ td.actions-col {
     color: var(--color-bad);
     background: var(--bad-bg);
   }
+
+  // The trash icon spins to 90° while its confirm dialog is up, then reverses
+  // back once it resolves (matches the bulk-delete button in the section header).
+  .trash-active {
+    animation: trash-rotate var(--transition-slow) ease-in-out forwards;
+  }
+
+  .trash-inactive {
+    animation: trash-rotate var(--transition-slow) ease-in-out reverse forwards;
+  }
+}
+
+@keyframes trash-rotate {
+  to { transform: rotate(90deg); }
 }
 
 .overflow-btn {
