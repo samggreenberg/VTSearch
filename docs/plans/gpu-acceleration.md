@@ -78,14 +78,21 @@ falling back to the CPU libraries otherwise:
 - **`vtscore/gpu_backends.py`** — new shared module centralising the cuML
   backend story (mirrors how `to_compute_device` centralises the embedder
   story). `cuml_enabled()` is true only when `resolve_device()` returns a usable
-  CUDA device *and* `cuml` imports; `make_umap(...)` / `make_kmeans(...)` build
-  the GPU estimator (`output_type="numpy"`) and degrade to `umap-learn` /
-  `sklearn.cluster.KMeans` on any hiccup.
+  CUDA device *and* `cuml` imports; `umap_fit_transform(...)` /
+  `kmeans_fit_predict(...)` construct **and fit** the GPU estimator
+  (`output_type="numpy"`) and degrade to `umap-learn` / `sklearn.cluster.KMeans`
+  on any hiccup. The fallback wraps the *whole* construct-and-fit, so a cuML
+  failure that only surfaces inside `fit` — e.g. the lazy nvrtc kernel compile
+  blowing up on a mismatched CUDA toolchain (CUDA-12 nvrtc parsing CUDA-13 fp8
+  headers) — degrades to CPU instead of crashing. The first such failure also
+  flips a process-global kill switch (`cuml_enabled()` returns `False`
+  thereafter) so the rest of the run skips cuML rather than re-paying the
+  multi-second compile failure on every call.
 - **UMAP projection** (`vtscore/projection/umap_projection.py::_umap_layout`) —
-  constructs its reducer via `make_umap`; the heartbeat/threading wrapper is
+  fits its reducer via `umap_fit_transform`; the heartbeat/threading wrapper is
   unchanged. `cuml.manifold.UMAP` is ~20–100× on large sets.
 - **Diversity-tree k-means** (`vtscore/state/diversity_tree.py`) — the per-init
-  build loop constructs its estimator via `make_kmeans`. The eager top-level
+  build loop fits via `kmeans_fit_predict`. The eager top-level
   `sklearn` import is retained to warm the CPU cold-import before the progress
   bar (and as the fallback).
 - **Default best-effort dependency** — `scripts/install.sh` installs cuML by
