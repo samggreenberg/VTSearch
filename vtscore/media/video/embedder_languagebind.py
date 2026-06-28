@@ -9,6 +9,7 @@ import numpy as np
 
 from vtscore.config import LANGUAGEBIND_VIDEO_MODEL_ID
 from vtscore.media.embedder import (
+    IMPORT_MODULE_ESTIMATES,
     MediaEmbedder,
     embedder_load_setup,
     hf_token,
@@ -100,10 +101,17 @@ class VideoLanguageBindEmbedder(MediaEmbedder):
         if self._model is not None:
             return
 
-        with timed_progress(self._on_progress, "loading", "Importing torch...", 1, 2):
+        with timed_progress(
+            self._on_progress, "loading", "Importing torch...", est_modules=IMPORT_MODULE_ESTIMATES["torch"]
+        ):
             import torch  # noqa: F401, PLC0415
 
-        with timed_progress(self._on_progress, "loading", "Importing transformers...", 2, 2):
+        with timed_progress(
+            self._on_progress,
+            "loading",
+            "Importing transformers...",
+            est_modules=IMPORT_MODULE_ESTIMATES["transformers"],
+        ):
             from transformers import AutoModel, AutoTokenizer  # noqa: PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading LanguageBind model weights...")

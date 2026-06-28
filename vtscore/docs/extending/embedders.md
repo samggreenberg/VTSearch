@@ -101,6 +101,11 @@ keep heavy loads non-blocking from the UI's point of view:
 - `timed_progress(on_progress, status, message, ...)` - context
   manager that appends an elapsed-time suffix to a long-running
   import or load step every second, so the UI doesn't look frozen.
+  Pass `est_modules=IMPORT_MODULE_ESTIMATES["<lib>"]` to *drive* the
+  bar from the live `sys.modules` delta: it starts at 0 %, climbs as
+  submodules load, and is clamped below 100 % until the import returns
+  (so a still-importing step never reads as done). Without it the
+  passed `current`/`total` are forwarded unchanged.
 - `load_pretrained_local_first(load_fn, *args, **kw)` - tries
   `local_files_only=True` first so a slow Hub round-trip doesn't
   stall a cached model load, then falls back to a network load with
@@ -178,6 +183,7 @@ from typing import Any, Optional
 import numpy as np
 
 from vtscore.media.embedder import (
+    IMPORT_MODULE_ESTIMATES,
     MediaEmbedder,
     embedder_load_setup,
     intercept_tqdm_progress,
@@ -216,7 +222,12 @@ class TextMiniLMEmbedder(MediaEmbedder):
     def _load_models_impl(self) -> None:
         if self._model is not None:
             return
-        with timed_progress(self._on_progress, "loading", "Importing sentence-transformers…", 1, 2):
+        with timed_progress(
+            self._on_progress,
+            "loading",
+            "Importing sentence-transformers…",
+            est_modules=IMPORT_MODULE_ESTIMATES["sentence_transformers"],
+        ):
             from sentence_transformers import SentenceTransformer  # noqa: PLC0415
         cache_dir = embedder_load_setup(self._on_progress, "Loading MiniLM weights…")
         with intercept_tqdm_progress(self._on_progress):

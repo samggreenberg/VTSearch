@@ -263,12 +263,22 @@ def initialize_models(on_progress: ProgressCallback | None = None) -> None:
         _warm()
         _bridge()
     else:
-        from vtscore.media.embedder import timed_progress  # noqa: PLC0415
+        from vtscore.media.embedder import IMPORT_MODULE_ESTIMATES, timed_progress  # noqa: PLC0415
 
         console_cb = _make_console_progress(on_progress)
-        with timed_progress(console_cb, "loading", "Importing scikit-learn…", 1, 2):
+        with timed_progress(
+            console_cb, "loading", "Importing scikit-learn…", est_modules=IMPORT_MODULE_ESTIMATES["sklearn"]
+        ):
             _warm()
-        with timed_progress(console_cb, "loading", "Importing transformers…", 2, 2):
+        # The transformers import here is only the lightweight logging bridge,
+        # not the full model classes, so it pulls in far fewer modules than an
+        # embedder's ``from transformers import …``.
+        with timed_progress(
+            console_cb,
+            "loading",
+            "Importing transformers…",
+            est_modules=IMPORT_MODULE_ESTIMATES["transformers_logging"],
+        ):
             _bridge()
         console_cb.flush()  # type: ignore[attr-defined]
 
