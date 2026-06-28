@@ -148,6 +148,19 @@ vts_install_cuml() {
         *) cuml_pkg="${VTS_CUML_CU12_SPEC:-cuml-cu12<26}" ;;  # cu12x + anything else
     esac
 
+    # Heads-up: cuML depends on NEWER nvidia-*-cu12 runtime wheels than the torch
+    # build pins exactly (e.g. cu124 torch pins ==12.4.x), so installing it upgrades
+    # those libs and pip prints a red "dependency conflicts" report naming torch's
+    # now-unsatisfied pins. This is distinct from the FATAL RAPIDS-26 nvjitlink/fp8
+    # break the cuml-cu12<26 cap above prevents -- this one is cosmetic. That is
+    # EXPECTED and non-fatal -- pip still completes the install and does not roll
+    # anything back, and CUDA 12.x runtimes are compatible across minor versions.
+    # The GPU smoke test at the end of this install confirms torch + cuML actually
+    # work together, so you don't have to guess whether the red text mattered.
+    echo "  Note: pip may print a red 'dependency conflicts' report below (torch pins"
+    echo "        older CUDA runtime libs than cuML wants). It is expected and"
+    echo "        non-fatal; the final GPU smoke test verifies they coexist."
+
     # Isolated pass against the NVIDIA index. Guarded so `set -e` can't abort the
     # install on failure; the runtime cuML detection degrades to CPU either way.
     if pip install --extra-index-url https://pypi.nvidia.com \
@@ -163,6 +176,71 @@ vts_install_cuml() {
     fi
 }
 
+# --- post-install GPU smoke test (best-effort) -------------------------------
+# After the GPU install, actually exercise the stack so the red pip "dependency
+# conflicts" report from the cuML step turns into a definitive pass/fail instead
+# of an ambiguous wall of text: import torch, run a tiny CUDA matmul, and import
+# cuML. This catches the one case where the conflict WOULD have mattered -- a
+# runtime-lib bump that breaks torch's GPU path -- at install time rather than
+# leaving a silent landmine. Diagnostic only and non-fatal: VTSearch smoke-tests
+# CUDA at runtime and falls back to CPU, so a failure here warns but never aborts.
+vts_smoke_test_gpu() {
+    local pybin
+    pybin="$(command -v python || command -v python3 || true)"
+    if [ -z "$pybin" ]; then
+        echo "  (skipped: no python on PATH to run the smoke test)"
+        return 0
+    fi
+
+    local rc=0
+    "$pybin" - <<'PY' || rc=$?
+import sys
+
+try:
+    import torch
+except Exception as e:  # noqa: BLE001 - report any import failure verbatim
+    print(f"  torch: IMPORT FAILED: {type(e).__name__}: {e}")
+    sys.exit(2)
+
+print(f"  torch {torch.__version__}")
+gpu_ok = False
+if not torch.cuda.is_available():
+    print("  torch.cuda.is_available() = False -> VTSearch will run on CPU.")
+    print("  (a driver/CUDA-tag mismatch, NOT the cuML dependency warning.)")
+else:
+    try:
+        x = torch.randn(256, 256, device="cuda")
+        checksum = (x @ x).sum().item()
+        print(f"  GPU op OK on {torch.cuda.get_device_name(0)} (matmul checksum {checksum:.1f})")
+        gpu_ok = True
+    except Exception as e:  # noqa: BLE001 - report any runtime failure verbatim
+        print(f"  GPU op FAILED: {type(e).__name__}: {e}")
+        print("  The installed CUDA runtime may be incompatible with this torch build.")
+        sys.exit(3)
+
+try:
+    import cuml
+
+    print(f"  cuML {getattr(cuml, '__version__', '?')} import OK -> GPU UMAP/k-means enabled.")
+except Exception:  # noqa: BLE001 - absence is fine; app uses the CPU fallback
+    print("  cuML not importable -> GPU UMAP/k-means will use the CPU fallback.")
+
+sys.exit(0 if gpu_ok else 1)
+PY
+
+    case "$rc" in
+        0) ;;  # GPU verified end-to-end; the python output already said so.
+        1) ;;  # torch fine but no usable CUDA -> CPU mode; python explained why.
+        *)
+            echo "warning: GPU smoke test did not pass (see above). The install may" >&2
+            echo "         still be usable -- VTSearch falls back to CPU automatically --" >&2
+            echo "         but you will NOT get GPU acceleration. If you expected it," >&2
+            echo "         re-check the driver and the CUDA tag (bash scripts/install.sh cuXYZ)." >&2
+            ;;
+    esac
+    return 0
+}
+
 # --- GPU install -------------------------------------------------------------
 # The PyTorch extra-index (download.pytorch.org/whl/cu*) sometimes serves source
 # tarballs for packages like numpy and scipy, so we pre-install them as
@@ -172,7 +250,7 @@ vts_install_gpu() {
     local cuda_tag="$1"
     local extra_index="https://download.pytorch.org/whl/${cuda_tag}"
 
-    vts_progress_init 7 "Installing VTSearch GPU dependencies (CUDA tag: ${cuda_tag})"
+    vts_progress_init 8 "Installing VTSearch GPU dependencies (CUDA tag: ${cuda_tag})"
 
     vts_progress_step "Checking Python version (>= 3.10)"
     # shellcheck source=_check-python.sh
@@ -212,6 +290,9 @@ vts_install_gpu() {
 
     vts_progress_step "Installing optional cuML/RAPIDS accelerator (best-effort; CUDA tag: ${cuda_tag})"
     vts_install_cuml "$cuda_tag"
+
+    vts_progress_step "Verifying the GPU stack (torch CUDA op + cuML import)"
+    vts_smoke_test_gpu
 
     vts_progress_step "Wiring up pre-commit git hook"
     vts_install_precommit

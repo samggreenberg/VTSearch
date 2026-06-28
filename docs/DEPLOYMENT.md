@@ -578,6 +578,38 @@ via the folder or pickle importer instead.
 bash scripts/install.sh
 ```
 
+### GPU install prints a red "dependency conflicts" report (harmless)
+
+**Symptom**: The cuML step of `scripts/install.sh` ends with a wall of red
+text, then keeps going and reports success:
+
+```
+ERROR: pip's dependency resolver does not currently take into account all the
+packages that are installed. This behaviour is the source of the following
+dependency conflicts.
+torch 2.6.0+cu124 requires nvidia-cublas-cu12==12.4.5.8 ... but you have
+nvidia-cublas-cu12 12.9.2.10 which is incompatible.
+... (one line per nvidia-*-cu12 lib)
+Successfully installed nvidia-cublas-cu12-12.9.2.10 ...
+  cuML installed: GPU UMAP + k-means enabled.
+```
+
+**Cause**: cuML (RAPIDS 25.x) depends on **newer** `nvidia-*-cu12` runtime
+wheels than the torch build pins **exactly** (e.g. `cu124` torch pins
+`==12.4.x`). Installing cuML upgrades those libs, so pip's post-install
+consistency check flags torch's now-unsatisfied `==` pins. **This is cosmetic
+and non-fatal**: pip completes the install and rolls nothing back, and CUDA
+12.x minor runtimes are ABI-compatible across versions, so torch keeps working
+on the bumped libraries.
+
+**What to do**: nothing. `scripts/install.sh` prints a heads-up before the
+cuML step and runs a **GPU smoke test** at the end (a tiny torch CUDA matmul +
+a cuML import) that confirms the stack actually works — if that smoke test
+passes, the red report did not matter. Only act if the smoke test *fails*, or
+if your error is the **fatal** `cuda_fp8.hpp` / nvjitlink variant below (that
+one names `nvidia-nvjitlink-cu12 >= 12.9` and `cuml-cu12 >= 26`, and the
+install does **not** succeed) — that is a different problem with a real fix.
+
 ### cuML crashes compiling a kernel (`cuda_fp8.hpp` / nvrtc errors)
 
 **Symptom**: A VTSBrowse projection or diversity-tree build dies with an
