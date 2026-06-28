@@ -105,17 +105,38 @@ still got "knocked around" between stages. Fixed the concrete jump sources:
   the real reported value, never ahead of it (no fake/timer-driven motion — that
   approach was explicitly rejected).
 
+## GPU pacing profile (shipped)
+
+The static load weights `[0.25, 0.10, 0.55, 0.10]` assumed embedding dominates
+wall-clock — true on a CPU host, false on a GPU one. On a GPU the embed phase is
+several times faster, but the finalize phase is **not** GPU-accelerated: the
+registry save (serialize → zip → disk write) is always CPU, and the
+diversity-tree k-means only moves to the GPU when cuML is installed (a
+best-effort RAPIDS dep that is frequently absent). So on a GPU host finalize
+dominated wall-clock while still getting only 10 % of the bar — the bar raced to
+~90 % during embed, then crawled through the last 10 % for 20+ seconds while the
+rate-based ETA (computed mostly from the fast embed phase) reported "< 5 sec
+left".
+
+Fixed by making the weights device-aware (`load_step_weights()` in
+`stages/_common.py`, resolved once at task creation): the CPU profile is
+unchanged, and a GPU profile `[0.20, 0.10, 0.30, 0.40]` shrinks embed and grows
+finalize so the bar paces by real time and the overall ETA has room to
+self-correct through the diversity-tree build + registry save. Detector-load
+weights are unaffected. Tests: `tests_lib/datasets/test_load_step_weights.py`.
+
 ## Open follow-ups
 
 - **Finalize lumps ~6 sub-stages into one step.** The finalize step (drop-none,
   relazify, collapse-dup, diversity-tree, registry, projection) is a single
-  weighted slice; each sub-stage reports its own `current/total` from 0→1, so the
-  monotonic clamp pins the bar at 100 % as soon as the first counted sub-stage
-  finishes, then holds while the rest (notably the expensive diversity-tree
-  build) run. Honest-smoothing this needs the finalize slice spread across its
-  real sub-stages (a nested weight model, since the sub-stages vary in presence
-  and cost). Deferred: it's the last ~10 % and brief, but a large dataset can sit
-  at 100 % for a few seconds during the diversity-tree build.
+  weighted slice. The `FinalizeProgress` proxy (`stages/_common.py`) now spreads
+  it across ordered sub-ranges (cleanup 0.05, dedup 0.15, diversity 0.30,
+  registry 0.45, projection 0.05) so finishing one sub-stage no longer pins the
+  bar at 100 % while the rest run — the bar advances once, monotonically, across
+  the phase. The remaining roughness is that those sub-slot shares are static
+  ballparks (e.g. on a non-cuML GPU host the diversity k-means can outweigh the
+  registry save), not measured; a future pass could record real per-sub-stage
+  durations and feed them back in, mirroring the device-aware top-level weights.
 - **Multi-embedder (v3 trio) holds mid-embed.** `_embed_missing_stage` loops
   over each bound embedder; each `embed_missing` call restarts its `current` at
   0, so after the first embedder fills the embed slice the clamp holds the bar

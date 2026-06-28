@@ -38,10 +38,10 @@ from vtscore.state import DatasetContext, clear_all, register_context
 
 from vtscore.datasets.stages._common import (
     FinalizeProgress,
-    _LOAD_STEP_WEIGHTS,
     _STATUS_TO_STEP,
     _TOTAL_LOAD_STEPS,
     _origin_to_str,
+    load_step_weights,
 )
 from vtscore.datasets.stages.clipper import _apply_clipper_stage, _relazify_reference_clips_stage
 from vtscore.datasets.stages.embedding import embed_missing, _embed_missing_stage
@@ -416,7 +416,7 @@ def _run_origin_load_in_background(
         name or _origin_to_str(origin),
         media_type=media_type,
         embedder=embedder,
-        step_weights=_LOAD_STEP_WEIGHTS,
+        step_weights=load_step_weights(),
     )
     tracker.update("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
 
