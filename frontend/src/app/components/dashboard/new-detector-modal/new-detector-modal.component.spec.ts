@@ -218,6 +218,31 @@ describe('NewDetectorModalComponent', () => {
     expect(component.pendingText()).toBe('cat meowing');
     expect(component.name()).toBe('Dog Barks');
   });
+
+  it('auto-selects the lone importer when a single-source category is opened', () => {
+    // "Files" has exactly one importer (server_folder), so opening it should
+    // skip the redundant one-button sub-tab bar and land on the path input.
+    component.mediaImporters.set([
+      { name: 'server_folder', picker_view: 'server_folder', category: 'server' },
+      { name: 'demo', picker_view: 'demo', category: 'demo' },
+    ]);
+
+    component.selectImporterTab('server');
+
+    expect(component.selectedImporter?.name).toBe('server_folder');
+    expect(component.activePickerView).toBe('server_folder');
+  });
+
+  it('does not auto-select when a category holds more than one importer', () => {
+    component.mediaImporters.set([
+      { name: 'server_folder', picker_view: 'server_folder', category: 'server' },
+      { name: 'server_other', picker_view: 'server_folder', category: 'server' },
+    ]);
+
+    component.selectImporterTab('server');
+
+    expect(component.selectedImporter).toBeNull();
+  });
 });
 
 describe('NewDetectorModalComponent with defaultMediaType', () => {
