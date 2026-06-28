@@ -178,6 +178,43 @@ annotations. README reuses guide shots rather than adding new ones. The
 `dashboard-loaded` (and optionally `results-grid`); demos.md embeds
 `importer-picker`.
 
+## Shot list (v2 — 2026-06-28)
+
+The list above is the original v1 (shipped 2026-06-10). After ~170 frontend
+commits the [2026-06-28 documentation audit](docs-audit-2026-06-28.md) retook 7
+drifted shots and added 4 new ones, taking the manifest to **20 logical shots ×
+2 themes = 40 PNGs**. The v1 rows still name every original shot; the deltas:
+
+**New shots (Part B) — 4 added to `screenshots.manifest.ts`:**
+
+| id | Doc · section | What it shows | Annotated |
+|----|---------------|---------------|-----------|
+| `new-detector` | Creating a detector | The **New Detector** modal on the Blank tab: Media Type, a seeded Text Example, the media-example drop zone, and the embedder-type picker | |
+| `find-view` | Find · scoring and verifying | The Find **three-pane verification view**: work queue (left), viewer with Good/Bad (centre), Verified Good / Verified Bad piles + actions (right) | |
+| `find-stats` | Find · scoring and verifying | The Find view's **Detector Stats** modal (clipped): counts, confusion matrix, false-pos/neg vs. inclusion curve | |
+| `achievements` | Achievements | The **Achievements** panel: total score + tiered milestones (Bronze/Silver/Gold/Platinum) with next-tier progress | |
+
+**Retake description corrections (v1 rows whose UI moved):**
+
+- `view-options` — *not* a modal; it's the inline `vt-view-controls` toolbar
+  (thumbnail size + focus mode). The list/grid toggle was removed; the shot is a
+  `clip` of that toolbar.
+- `settings-appearance` — the Appearance pane no longer hosts **Solo media
+  type** (it moved to the Import Defaults tab); the shot shows theme + the
+  animation/metadata/achievements toggles + per-type Scroll Style.
+- `importer-picker` — now drills into the **Downloaded Media catalogue** (media-
+  type selector + readiness-badge table), not the bare Demo landing.
+- `browse-view` — captured with **hex bins + two zoom-outs** (no hover popup;
+  `Zoom to fit` over-zooms 60 points to blank), plus legend + minimap.
+- `dashboard-manage` — annotation is a `box` (not `highlight`) so the open `⋯`
+  overflow menu, where Browse/Stats/Rename now live, stays visible.
+- `autopilot-progress` — caption now names the real phases (Find Initial Goods,
+  Find Initial Bads, Refine Boundary, Explore Diversity).
+
+Captured against a live GRID-hosted app over an SSH tunnel (browser local,
+embedders remote). The optional `browse-bin-popup` was not added — it has no
+USER_GUIDE anchor.
+
 **Determinism-risk shots (candidates for hand-capture fallback).** Two
 shots resist clean scripting:
 
