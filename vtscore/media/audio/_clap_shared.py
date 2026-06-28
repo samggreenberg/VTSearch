@@ -35,6 +35,7 @@ from vtscore.config import CLAP_SAMPLE_RATE
 # extractor then takes its equal-length branch and never crops.
 CLAP_MAX_SAMPLES = 480000
 from vtscore.media.embedder import (
+    IMPORT_MODULE_ESTIMATES,
     MediaEmbedder,
     embedder_load_setup,
     hf_token,
@@ -87,16 +88,24 @@ class _ClapBase(MediaEmbedder):
         if self._model is not None:
             return
 
-        with timed_progress(self._on_progress, "loading", "Importing torch…", 1, 4):
+        with timed_progress(
+            self._on_progress, "loading", "Importing torch…", est_modules=IMPORT_MODULE_ESTIMATES["torch"]
+        ):
             import torch  # noqa: F401, PLC0415
 
-        with timed_progress(self._on_progress, "loading", "Importing transformers…", 2, 4):
+        with timed_progress(
+            self._on_progress, "loading", "Importing transformers…", est_modules=IMPORT_MODULE_ESTIMATES["transformers"]
+        ):
             from transformers import ClapModel, ClapProcessor  # noqa: PLC0415
 
-        with timed_progress(self._on_progress, "loading", "Importing librosa…", 3, 4):
+        with timed_progress(
+            self._on_progress, "loading", "Importing librosa…", est_modules=IMPORT_MODULE_ESTIMATES["librosa"]
+        ):
             import librosa  # noqa: PLC0415
 
-        with timed_progress(self._on_progress, "loading", "Importing soundfile…", 4, 4):
+        with timed_progress(
+            self._on_progress, "loading", "Importing soundfile…", est_modules=IMPORT_MODULE_ESTIMATES["soundfile"]
+        ):
             import soundfile  # noqa: F401, PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, f"Loading {self.label} model weights…")

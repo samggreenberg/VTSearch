@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DEFAULT_EMBED_BATCH_SIZE",
+    "IMPORT_MODULE_ESTIMATES",
     "MediaEmbedder",
     "embedder_load_setup",
     "extract_tensor",
@@ -35,6 +36,29 @@ __all__ = [
 
 
 DEFAULT_EMBED_BATCH_SIZE = 32
+
+#: Rough module-count estimates used only to *pace* the "Importing …" progress
+#: bars: :func:`timed_progress` divides the live ``sys.modules`` delta by the
+#: matching value to fill the bar.  Python reports no advance count of how many
+#: submodules an ``import`` will pull in, and the delta is heavily
+#: context-dependent — a bare ``import torch`` is ~1000 modules, but
+#: ``from transformers import CLIPModel`` *after* torch is ~2600, while the
+#: startup logging-bridge import of transformers is only ~170.  So these are
+#: deliberately per-call-site approximations, not exact totals: the bar is
+#: clamped just below 100 % and only snapped to 100 % once the import actually
+#: returns (by the next phase message or ``cb.flush()``), so an off estimate
+#: merely paces the bar and can never report a still-running import as finished.
+IMPORT_MODULE_ESTIMATES: dict[str, int] = {
+    "torch": 1100,
+    "torch_hub": 50,
+    "torchvision": 1100,
+    "transformers": 2700,
+    "transformers_logging": 190,
+    "sentence_transformers": 3300,
+    "sklearn": 1700,
+    "librosa": 30,
+    "soundfile": 160,
+}
 
 
 def resolve_embed_batch_size(default: int = DEFAULT_EMBED_BATCH_SIZE) -> int:
@@ -133,6 +157,7 @@ def timed_progress(
     message: str,
     current: int = 0,
     total: int = 0,
+    est_modules: int | None = None,
 ) -> Any:
     """Show elapsed time in the progress message while a block executes.
 
@@ -149,11 +174,35 @@ def timed_progress(
     The initial progress update is sent immediately (without a time suffix).
     After the first second the background ticker appends the elapsed-time
     and module-count suffix until the ``with`` block exits.
+
+    When *est_modules* is given (a rough count of how many modules the wrapped
+    import pulls in, see :data:`IMPORT_MODULE_ESTIMATES`), the bar is *driven*
+    by that live module delta: it starts at 0 %, climbs as submodules load, and
+    is clamped to one below *est_modules* so it can never read 100 % while the
+    import is still running.  Completion is signalled by the surrounding layers
+    (the next phase message or ``cb.flush()`` on the console, the next job step
+    on the web), so a too-small or too-large estimate only paces the bar — it
+    never claims a still-running import has finished.  Without *est_modules* the
+    passed *current*/*total* are forwarded unchanged (e.g. a fixed step counter
+    or an indeterminate ``0/0`` phase message).
     """
     import sys  # noqa: PLC0415
 
     stop = threading.Event()
     baseline_modules = len(sys.modules)
+    est_total = est_modules if (est_modules is not None and est_modules > 0) else 0
+    use_est = est_total > 0
+    if use_est:
+        # The module-count delta is the progress signal; start the bar empty.
+        current, total = 0, est_total
+
+    def _bar_current(loaded: int) -> int:
+        if not use_est:
+            return current
+        # Clamp one below the estimate so a running import never fills the bar;
+        # the snap to 100 % happens when the block exits and the next message
+        # (or flush) completes the bar.
+        return max(0, min(loaded, est_total - 1))
 
     def _ticker() -> None:
         start = time.monotonic()
@@ -161,7 +210,7 @@ def timed_progress(
             elapsed = int(time.monotonic() - start)
             loaded = len(sys.modules) - baseline_modules
             suffix = f"({elapsed}s, {loaded} modules)" if loaded > 0 else f"({elapsed}s)"
-            on_progress(status, f"{message} {suffix}", current, total)
+            on_progress(status, f"{message} {suffix}", _bar_current(loaded), total)
 
     on_progress(status, message, current, total)
     t = threading.Thread(target=_ticker, daemon=True)

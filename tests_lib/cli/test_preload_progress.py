@@ -1020,3 +1020,61 @@ class TestTimedProgress:
         captured = capsys.readouterr()
         # Should see the initial message and at least one elapsed update
         assert "Importing torch…" in captured.out
+
+    def test_est_modules_drives_bar_from_module_count(self):
+        """With est_modules the bar starts at 0 and is driven by the live
+        module-count delta, clamped one below the estimate so a running import
+        can never report 100% (the snap to done is signalled externally)."""
+        import sys
+        import time
+        import types
+
+        calls = []
+
+        def cb(status, message, current, total):
+            calls.append((current, total))
+
+        fake = [f"_vt_est_fake_mod_{i}" for i in range(5)]
+        try:
+            with timed_progress(cb, "loading", "Importing thing…", est_modules=3):
+                for name in fake:
+                    sys.modules[name] = types.ModuleType(name)
+                time.sleep(1.5)
+        finally:
+            for name in fake:
+                sys.modules.pop(name, None)
+
+        # The bar starts empty (0 of the estimate), not at the estimate.
+        assert calls[0] == (0, 3)
+        # Every emit reports the estimate as the denominator…
+        assert all(total == 3 for _, total in calls)
+        # …and never reaches it while running, even though 5 (> est) modules
+        # were registered — clamped to est - 1 = 2.
+        assert all(current <= 2 for current, _ in calls)
+        # The ticker did move the bar off zero once modules loaded.
+        assert any(current > 0 for current, _ in calls)
+
+    def test_est_modules_console_bar_never_full_while_running(self, capsys):
+        """A running est_modules import renders a climbing console bar that
+        never shows 100% (that only happens on completion, via the next phase
+        message or cb.flush())."""
+        import sys
+        import time
+        import types
+
+        cb = _make_console_progress(lambda *a, **kw: None)
+
+        fake = [f"_vt_est_con_mod_{i}" for i in range(8)]
+        try:
+            with timed_progress(cb, "loading", "Importing thing…", est_modules=4):
+                for name in fake:
+                    sys.modules[name] = types.ModuleType(name)
+                time.sleep(1.5)
+        finally:
+            for name in fake:
+                sys.modules.pop(name, None)
+
+        out = capsys.readouterr().out
+        assert "Importing thing…" in out
+        # Bar climbs (8 modules clamped to 3/4 = 75%) but never completes here.
+        assert "100%" not in out

@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
-from vtscore.media.embedder import MediaEmbedder, timed_progress, to_compute_device
+from vtscore.media.embedder import IMPORT_MODULE_ESTIMATES, MediaEmbedder, timed_progress, to_compute_device
 from vtscore.media.image._image_bulk import bulk_embed_image_files
 
 if TYPE_CHECKING:
@@ -73,7 +73,9 @@ class ImageFaceEmbedder(MediaEmbedder):
     def _load_models_impl(self) -> None:
         if self._model is not None:
             return
-        with timed_progress(self._on_progress, "loading", "Importing torch…", 1, 2):
+        with timed_progress(
+            self._on_progress, "loading", "Importing torch…", est_modules=IMPORT_MODULE_ESTIMATES["torch"]
+        ):
             import torch  # noqa: F401, PLC0415
 
         with timed_progress(self._on_progress, "loading", "Loading FaceNet weights…", 2, 2):

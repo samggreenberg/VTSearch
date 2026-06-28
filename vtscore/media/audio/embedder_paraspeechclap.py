@@ -41,6 +41,7 @@ from vtscore.config import (
     PARASPEECHCLAP_TEXT_MODEL_ID,
 )
 from vtscore.media.embedder import (
+    IMPORT_MODULE_ESTIMATES,
     MediaEmbedder,
     embedder_load_setup,
     intercept_tqdm_progress,
@@ -89,16 +90,24 @@ class AudioParaSpeechClapEmbedder(MediaEmbedder):
         if self._model is not None:
             return
 
-        with timed_progress(self._on_progress, "loading", "Importing torch…", 1, 4):
+        with timed_progress(
+            self._on_progress, "loading", "Importing torch…", est_modules=IMPORT_MODULE_ESTIMATES["torch"]
+        ):
             import torch  # noqa: F401, PLC0415
 
-        with timed_progress(self._on_progress, "loading", "Importing transformers…", 2, 4):
+        with timed_progress(
+            self._on_progress, "loading", "Importing transformers…", est_modules=IMPORT_MODULE_ESTIMATES["transformers"]
+        ):
             from transformers import AutoTokenizer, Wav2Vec2FeatureExtractor  # noqa: PLC0415
 
-        with timed_progress(self._on_progress, "loading", "Importing librosa…", 3, 4):
+        with timed_progress(
+            self._on_progress, "loading", "Importing librosa…", est_modules=IMPORT_MODULE_ESTIMATES["librosa"]
+        ):
             import librosa  # noqa: F401, PLC0415
 
-        with timed_progress(self._on_progress, "loading", "Importing soundfile…", 4, 4):
+        with timed_progress(
+            self._on_progress, "loading", "Importing soundfile…", est_modules=IMPORT_MODULE_ESTIMATES["soundfile"]
+        ):
             import soundfile  # noqa: F401, PLC0415
 
         from huggingface_hub import hf_hub_download  # noqa: PLC0415
