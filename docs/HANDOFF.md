@@ -126,7 +126,8 @@ Five media types are supported:
 | Text | E5 | `intfloat/e5-base-v2` | BGE (`BAAI/bge-base-en-v1.5`) |
 | Document | None (convert first) | N/A; use converters to transform to image/text | None |
 
-Models are loaded lazily on first use. Default models total ~3.1 GB.
+Models are loaded lazily on first use. The four default models total ~3.2 GB
+(`download_models.sh` also fetches the CLIP image alternative, ~3.8 GB all told).
 
 ### Converters
 
@@ -254,10 +255,12 @@ vulture vtsearch/ .vulture-whitelist.py --min-confidence 80   # dead code audit
 ```
 
 Configuration is in `pyproject.toml`. `pre-commit install` wires up
-ruff, codespell, and deptry as git hooks; the same checks plus
-`pip-audit` run on every push via the `Lint` and `Audit dependencies`
-workflows. See `docs/plans/python-quality-tools.md` for the rationale
-behind which security rules are enabled and which are ignored.
+ruff, codespell, and deptry as git hooks. There is **no CI**: VTSearch has
+no GitHub Actions workflows, so `./run-tests.sh` is the only gate — it runs
+ruff, `ruff format --check`, codespell, deptry, `pip-audit`, pyright, and the
+frontend build before pytest. Run it before pushing. See
+`docs/plans/python-quality-tools.md` for the rationale behind which security
+rules are enabled and which are ignored.
 
 ---
 

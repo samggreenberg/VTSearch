@@ -55,6 +55,23 @@ GET /api/label-importers
 
 → JSON array of label importer objects.
 
+### Dynamic field options
+
+```
+POST /api/label-importers/field-options/{importer_name}
+```
+
+**Body:** `{"field_key": "...", "field_values": {...}}`
+
+Returns the dropdown options for a dynamic-options field on a label importer
+(used to populate dependent selects in the importer form).
+
+→ `{"options": [...]}`
+
+Errors: 400 (unknown/non-dynamic field key), 404 (unknown importer),
+501 (importer does not implement `get_field_options`),
+502 (remote service backing dynamic options failed).
+
 ### Run label import
 
 ```
@@ -91,27 +108,118 @@ Re-ingests medias from their recorded origins and applies labels.
 
 ---
 
-## Processor Importers
+## Pregen Processors
 
-### List processor importers
+Pregen processors are the built-in autorun processors VTSearch ships with: an
+OCR extractor (PaddleOCR), a Speech extractor (Whisper Tiny), and a Face
+localizer (MediaPipe). Adding them registers each into the autorun
+extractors / localizers stores so they run automatically after a dataset
+loads. They do **not** create detectors.
 
-```
-GET /api/processor-importers
-```
-
-→ JSON array of processor importer objects.
-
-### Run processor import
+### List pregen processors
 
 ```
-POST /api/processor-importers/import/{importer_name}
+GET /api/pregen-processors
 ```
 
-**Form or Body:** importer-specific fields. `name` is required.
+→ `{"processors": [{"name": "OCR (PaddleOCR)", "kind": "extractor", "processor_type": "ocr", "media_type": "image", "config": {...}}, ...]}`
 
-Runs the importer and saves the result as a registered detector.
+### Add all pregen processors
 
-→ `{"success": true, "name": "...", "media_type": "audio"}`
+```
+POST /api/pregen-processors/add
+```
+
+Registers every bundled pregen processor (OCR extractor, Speech extractor,
+Face localizer) into the autorun extractor / localizer stores.
+
+→ `{"success": true, "added": ["OCR (PaddleOCR)", "Speech (Whisper Tiny)", "Face (MediaPipe)"]}`
+
+---
+
+## Autorun Extractors
+
+Autorun extractors run after a dataset loads and attach free-form metadata
+records to each media (e.g. OCR text, speech transcripts, image classes).
+
+### List autorun extractors
+
+```
+GET /api/autorun-extractors
+```
+
+→ `{"extractors": [...]}`
+
+### Add an autorun extractor
+
+```
+POST /api/autorun-extractors
+```
+
+**Body:** `{"name": "...", "extractor_type": "ocr"|"speech"|"image_class", "media_type": "image", "config": {...}}`
+
+→ `{"success": true, "name": "..."}` (400 if the config can't be built).
+
+### Delete an autorun extractor
+
+```
+DELETE /api/autorun-extractors/{name}
+```
+
+→ `{"success": true}` (404 if not found).
+
+### Rename an autorun extractor
+
+```
+PUT /api/autorun-extractors/{name}/rename
+```
+
+**Body:** `{"new_name": "..."}`
+
+→ `{"success": true, "new_name": "..."}` (400 if not found or name taken).
+
+---
+
+## Autorun Localizers
+
+Autorun localizers run after a dataset loads and attach a list of
+`(box, confidence)` regions to each media (e.g. face detection).
+
+### List autorun localizers
+
+```
+GET /api/autorun-localizers
+```
+
+→ `{"localizers": [...]}`
+
+### Add an autorun localizer
+
+```
+POST /api/autorun-localizers
+```
+
+**Body:** `{"name": "...", "localizer_type": "face", "media_type": "image", "config": {...}}`
+
+→ `{"success": true, "name": "..."}` (400 if the config can't be built).
+
+### Delete an autorun localizer
+
+```
+DELETE /api/autorun-localizers/{name}
+```
+
+→ `{"success": true}` (404 if not found).
+
+### Rename an autorun localizer
+
+```
+PUT /api/autorun-localizers/{name}/rename
+```
+
+**Body:** `{"new_name": "..."}`
+
+→ `{"success": true, "new_name": "..."}` (400 if not found or name taken).
 
 ---
 

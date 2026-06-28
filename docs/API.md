@@ -12,10 +12,25 @@ unless otherwise noted. File uploads use `multipart/form-data`.
 | [Labeling & Diversity](api/labeling.md) | Inclusion, thresholds, labeling progress, diversity tree |
 | [Detectors](api/detectors.md) | Detector CRUD, detector registry, Auto-Find toggle, loading SSE |
 | [Datasets](api/datasets.md) | Loading, importers, demos, staging, registry, media types, embedders, clippers, converters, file browsing |
-| [Import & Export](api/io.md) | Result exporters, label importers, processor importers |
+| [Import & Export](api/io.md) | Result exporters, label importers, pregen processors, autorun extractors/localizers |
 | [Settings](api/settings.md) | App settings, autorun processors, settings sources, labelset sources |
-| [Dashboard & Lookup](api/dashboard.md) | Dashboard info, multi-dataset find, find progress |
+| [Dashboard & Lookup](api/dashboard.md) | Dashboard info (incl. disk/RAM usage), multi-dataset find (incl. cancel/stats/corrections), find progress |
 | [File Browser](api/file-browser.md) | Server filesystem browsing |
+
+### Not yet documented in depth
+
+The OpenAPI snapshot (`frontend/openapi.json`) is the ground truth and covers
+several endpoint families that the hand-written pages above don't yet describe
+in full. Use Swagger (`GET /api/docs`) for these:
+
+- **Achievements** — gamification unlock/state endpoints (see `vtsearch/achievements.py`).
+- **Projection / VTSBrowse** — `GET/POST /api/projection/*` (UMAP projection + hex-tile pyramid).
+- **Sessions** — session lifecycle endpoints.
+- **Jobs** — async job listing/status (backed by `vtscore.concurrency.async_jobs`).
+- **Find** — `cancel`, `stats`, and `corrections` companions to multi-dataset find.
+- **Dashboard usage** — disk-usage / RAM-usage probes.
+- **Health probes** — `GET /healthz`, `GET /readyz` (liveness / readiness).
+- **Version** — `GET /api/version` (returns the running build's version string).
 
 ## Conventions
 

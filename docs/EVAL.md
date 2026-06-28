@@ -55,7 +55,7 @@ python -m vtscore.eval [OPTIONS]
 
 ```bash
 # Text sort only, on image datasets, save JSON
-python -m vtscore.eval --mode text --datasets caltech101_s caltech256_l --output results.json --plot-dir eval_output
+python -m vtscore.eval --mode text --datasets caltech101_s caltech256_a --output results.json --plot-dir eval_output
 
 # Learned sort with a different train/test split
 python -m vtscore.eval --mode learned --train-fraction 0.7 --seed 123 --plot-dir eval_output
@@ -75,7 +75,7 @@ python -m vtscore.eval --list
 
 ## Available eval datasets
 
-Each eval dataset wraps a demo dataset and defines text queries targeting specific categories. The `_s`, `_m`, `_l` suffixes denote **small**, **medium**, and **large** size variants of the same dataset (more clips = slower evaluation but more statistically robust results).
+Each eval dataset wraps a demo dataset and defines text queries targeting specific categories. The `_s`, `_m`, `_l` suffixes denote **small**, **medium**, and **large** size variants of the same dataset (more clips = slower evaluation but more statistically robust results); `_a` denotes the **all** (full) variant.
 
 | Eval dataset ID | Media type | Demo dataset | Categories |
 |----------------|-----------|--------------|------------|
@@ -84,7 +84,9 @@ Each eval dataset wraps a demo dataset and defines text queries targeting specif
 | `esc50_l` | Audio | esc50_l | All 50 ESC-50 categories |
 | `caltech101_s` | Image | caltech101_s | 25 Caltech-101 categories (airplanes, bonsai, dolphin, helicopter, watch, etc.) |
 | `caltech101_m` | Image | caltech101_m | 25 Caltech-101 categories |
-| `caltech256_l` | Image | caltech256_l | 25 Caltech-256 categories |
+| `caltech256_a` | Image | caltech256_a | 25 Caltech-256 categories (backpack, butterfly, camel, giraffe, lighthouse, etc.) |
+| `visual_genome_s` | Image (multi-label) | visual_genome_s | ~40 Visual Genome object categories (person, car, dog, tree, building, etc.); an image can be a positive for several at once |
+| `visual_genome_m` | Image (multi-label) | visual_genome_m | ~40 Visual Genome object categories |
 | `20newsgroups_s` | Text | 20newsgroups_s | 15 topics (sports, science, cars, religion, politics, medicine, etc.) |
 | `20newsgroups_m` | Text | 20newsgroups_m | 15 topics |
 | `20newsgroups_l` | Text | 20newsgroups_l | 15 topics |

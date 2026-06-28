@@ -13,31 +13,41 @@
 ## Methodology
 
 The inventory was assembled by walking the library tree under `vtscore/` and
-identifying public symbols (no leading underscore) in each library subpackage,
-cross-referenced against each package's `__init__.py` re-exports. Every package below
-lives at its final library path. `vtsearch.state` is an app-tier shim that re-exports
-`vtscore.state` plus the proxy view (`medias`, `good_votes`, …); library callers
-should use `vtscore.state`, app callers may continue using either.
+identifying public symbols (no leading underscore) in each library subpackage.
+`vtsearch.state` is an app-tier shim that re-exports `vtscore.state` plus the
+proxy view (`medias`, `good_votes`, …); library callers should use
+`vtscore.state`, app callers may continue using either.
 
-| Library import path         | Notes                                                       |
-|------------------------------|-------------------------------------------------------------|
-| `vtscore.datasets.X`         |                                                             |
-| `vtscore.media.X`            |                                                             |
-| `vtscore.converters.X`       |                                                             |
-| `vtscore.labels.X`           |                                                             |
-| `vtscore.embedding.X`        |                                                             |
-| `vtscore.training.X`         |                                                             |
-| `vtscore.detectors.X`        |                                                             |
-| `vtscore.eval.X`             |                                                             |
-| `vtscore.state.X`            | Contexts + helpers; the `medias` / `good_votes` proxies are app-side in `vtsearch.state_proxies` |
-| `vtscore.plugins.X`          |                                                             |
-| `vtscore.sync.X`             |                                                             |
-| `vtscore.concurrency.X`      |                                                             |
-| `vtscore.security.X`         |                                                             |
-| `vtscore.utils.X`            |                                                             |
-| `vtscore.exporters.X`        |                                                             |
-| `vtscore.cli` etc.           |                                                             |
-| `vtscore.config`             |                                                             |
+### Import-path reality (read before copy-pasting)
+
+This sketch is a **logical inventory**, not a re-export contract. Most package
+`__init__.py` files do **not** re-export the full surface, and two subpackages
+have **no `__init__.py` at all** (PEP 420 namespace packages). Import from the
+**defining module**, using the real dotted path:
+
+| Logical group          | Import from (real path)                                         |
+|------------------------|----------------------------------------------------------------|
+| `vtscore.datasets`     | `vtscore.datasets` re-exports the loader/registry/`get_importer` surface; demo helpers live in their submodules. |
+| `vtscore.media`        | `vtscore.media` re-exports the registry helpers (`get`, `get_embedder`, `set_progress_callback`, …). |
+| `vtscore.converters`   | `vtscore.converters` (`get_converter`, `list_converters`).     |
+| `vtscore.labels`       | **No package-root re-exports.** Importers: `vtscore.labels.importers.get_label_importer` / `list_label_importers`. Sources: `vtscore.labels.sources.get_labelset_source` / `list_labelset_sources`. Sync: `vtscore.labels.sync`. |
+| `vtscore.embedding`    | `vtscore.embedding` re-exports the embed/loader helpers.        |
+| `vtscore.training`     | `vtscore.training` re-exports `build_model`/`train_model`/threshold helpers; `SVMClassifier` is at `vtscore.training.svm`, region helpers at `vtscore.training.region_similarity`. |
+| `vtscore.detectors`    | **`__init__` is a docstring only — no re-exports.** Use the submodule: `vtscore.detectors.registry.list_detectors`, `vtscore.detectors.workflow.apply_and_retrain`, etc. |
+| `vtscore.eval`         | `vtscore.eval` re-exports some runners/metrics; the dataclasses live at `vtscore.eval.metrics` (e.g. `vtscore.eval.metrics.QueryMetrics`). |
+| `vtscore.state`        | `vtscore.state` — contexts + helpers. The `medias` / `good_votes` proxies are app-side in `vtsearch.state_proxies`. |
+| `vtscore.plugins`      | `vtscore.plugins` (`PluginBase`, `PluginField`, `make_plugin_registry`). |
+| `vtscore.sync`         | `vtscore.sync` (`SyncSource`).                                  |
+| `vtscore.concurrency`  | **Namespace package (no `__init__.py`).** Always use the submodule: `vtscore.concurrency.progress.ProgressTracker`, `vtscore.concurrency.async_jobs.JobManager` / `eval_jobs` / `learned_sort_jobs`, `vtscore.concurrency.memory_budget.cap_workers_by_memory`. |
+| `vtscore.security`     | **Namespace package (no `__init__.py`).** Always use the submodule: `vtscore.security.pickle.safe_pickle_load` / `RestrictedUnpickler`, `vtscore.security.path_validation.validate_server_filepath`, `vtscore.security.url_validation.validate_url`. |
+| `vtscore.utils`        | `vtscore.utils` plus `vtscore.utils.synthetic`.                |
+| `vtscore.exporters`    | `vtscore.exporters` (`get_exporter`, `list_exporters`).        |
+| `vtscore.cli` etc.     | `vtscore.cli`, `vtscore.cli_pipeline`, `vtscore.cli_progress`. |
+| `vtscore.config`       | `vtscore.config`.                                               |
+
+The per-package sections below group symbols **by intent**; consult this table
+(or the `__init__.py` / source file) for the concrete import path of any given
+symbol.
 
 Symbols flagged **[SEAM]** import `flask` or `vtsearch.settings` today and must be
 detangled before they can ship in `vtscore`. They are listed here because they belong
@@ -173,7 +183,7 @@ def load_dataset_from_folder(
 
 def load_dataset_from_pickle(path: Path | str) -> tuple[list[Media], list[Embedding]]:
     """Restore a (media, embedding) snapshot previously written by export_dataset_to_file.
-    Uses vtscore.security.safe_pickle_load; no arbitrary code execution risk."""
+    Uses vtscore.security.pickle.safe_pickle_load; no arbitrary code execution risk."""
 
 def load_demo_dataset(dataset_id: str, *, progress=None) -> tuple[list[Media], list[Embedding]]:
     """Download (if needed) and load one of the built-in demo datasets keyed by
@@ -319,15 +329,17 @@ def all_demo_datasets() -> dict[str, DemoDataset]: ...
 def normalize_type_id(type_id: str) -> str: ...
 def set_progress_callback(cb: ProgressCallback) -> None:
     """Global default progress callback for media-registry operations.
-    A per-thread override via set_thread_progress_callback takes priority when set."""
+    This is the ONLY progress hook the media registry exposes today."""
 
-def set_thread_progress_callback(cb: ProgressCallback | None) -> None:
-    """Set a progress callback for the current thread only. Multi-threaded library
-    consumers (e.g. parallel evaluation harnesses) should use this to avoid one
-    thread clobbering another's callback. None clears the thread override and
-    falls back to the global. Mirrors vtscore.concurrency.progress.set_thread_progress."""
-
-def get_thread_progress_callback() -> ProgressCallback | None: ...
+# --- NOT IMPLEMENTED (Phase 1 decision #4, not yet shipped) ---
+# The plan calls for a per-thread override mirroring
+# vtscore.concurrency.progress.set_thread_progress, but
+# vtscore.media currently exposes ONLY set_progress_callback above.
+# These two names do not exist yet; do not import them:
+#   set_thread_progress_callback(cb: ProgressCallback | None) -> None
+#   get_thread_progress_callback() -> ProgressCallback | None
+# (For per-thread progress today, use
+#  vtscore.concurrency.progress.set_thread_progress / get_thread_progress.)
 ```
 
 ### Embedder registry

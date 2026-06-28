@@ -71,6 +71,14 @@ GET /api/labeling-status
 
 Each metric has a `status` of `"red"`, `"yellow"`, or `"green"`.
 
+> **Metric-id naming note.** The third indicator is keyed **`span`** in this
+> `labeling-status` response, but the `metric` query/body parameter on
+> `indicator-score-history` and `eval/train-and-score` (below) uses
+> **`diverse`** for the same concept. Both spellings are intentional in the
+> current code: use `span` when reading a status object, and `diverse` when
+> requesting the diversity metric. (`smart` and `stable` are spelled the same
+> in both places.)
+
 ### Indicator score history
 
 ```
@@ -90,10 +98,44 @@ polling).
 POST /api/eval/train-and-score
 ```
 
-**Body:** `{"metric": "smart"}` (or `"stable"` / `"diverse"`)
+**Body:** `{"metric": "smart"}` (or `"stable"` / `"diverse"`; optional `"wait": true`)
 
-→ `{"error_cost": [...]}` (smart), `{"stability": [...]}` (stable), or
-`{"diversity": [...]}` (diverse).
+The work retrains a small MLP at every step of the label history, so it runs
+on a background daemon thread. The route returns immediately with a `job_id`;
+poll `GET /api/eval/train-and-score/result` for the metric data and subscribe
+to the `eval` SSE channel for live progress. A signature cache short-circuits
+identical re-runs. Tests can pass `{"wait": true}` to block until done and get
+the data inline.
+
+→ `{"job_id": "...", "status": "running", "current": 0, "total": 10}`, or
+(cached / `wait=true`) `{"job_id": "...", "status": "done", "metric": "smart",
+"error_cost": [...]}`. The metric-specific key is `error_cost` (smart),
+`stability` (stable), or `diversity` (diverse).
+
+### Poll train-and-score result
+
+```
+GET /api/eval/train-and-score/result
+```
+
+**Query params:** `job_id`: the id returned by `train-and-score`.
+
+→ `running`: `{"job_id": "...", "status": "running", "current": 5, "total": 10}`;
+`done`: same shape as the cached/`wait` response above; `cancelled`:
+`{"job_id": "...", "status": "cancelled"}`. 404 if the job is unknown; 500 if
+the background job failed.
+
+### Cancel train-and-score
+
+```
+POST /api/eval/train-and-score/cancel/{job_id}
+```
+
+Sets the cancel flag on the background job; the per-step retrain loop polls it
+cooperatively. Returns 200 even when the job has already finished. 404 if the
+job is unknown.
+
+→ `{"ok": true}`
 
 ### Evaluation progress (SSE)
 

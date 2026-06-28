@@ -59,8 +59,6 @@ export interface Helpers {
   leftTab(name: 'Autopilot' | 'Manual'): Promise<void>;
   /** Select the first media item so the centre viewer + vote buttons render. */
   serveItem(): Promise<void>;
-  /** Switch the left-panel media list to grid (thumbnail) layout. */
-  gridView(): Promise<void>;
   /** Open Browse for the fixture dataset and wait for the map to render. */
   openBrowse(): Promise<void>;
 }
@@ -172,7 +170,7 @@ export const SHOTS: Shot[] = [
   {
     id: 'autopilot-progress',
     embeddedIn: 'docs/user/USER_GUIDE.md#the-collapsed-bar',
-    caption: 'The Autopilot phase panel: the four phases (Good examples, Bad examples, Boundary refinement, Diversity) tracked in order',
+    caption: 'The Autopilot phase panel: the four phases (Find Initial Goods, Find Initial Bads, Refine Boundary, Explore Diversity) tracked in order',
     themes: BOTH,
     clip: { selector: '.autopilot-panel' },
     async recipe(_page, h) {
@@ -246,27 +244,30 @@ export const SHOTS: Shot[] = [
   {
     id: 'view-options',
     embeddedIn: 'docs/user/USER_GUIDE.md#view-options',
-    caption: 'The view settings: List vs. grid, grid icon size, and focus mode (Settings → Appearance → Scroll Style)',
+    caption: 'The in-panel view controls in the left-panel header: thumbnail size (smaller/bigger) and focus mode (click vs. hover preview)',
     themes: BOTH,
+    // The view controls are an inline `vt-view-controls` toolbar in the left
+    // panel header during the label view, not a Settings pane. Frame just that
+    // toolbar via clip.
+    clip: { selector: 'vt-view-controls' },
     async recipe(_page, h) {
-      await h.dashboard();
-      await h.openSettings();
+      await h.enterLabelView();
+      await h.leftTab('Manual');
     },
   },
   {
     id: 'results-grid',
     embeddedIn: 'docs/user/USER_GUIDE.md#view-options',
-    caption: 'The left-panel media list in grid view after training — ranked thumbnails',
+    caption: 'The left-panel media list after training — ranked thumbnails',
     themes: BOTH,
     clip: { selector: '.panel-left' },
     async recipe(page, h) {
       await h.enterLabelView();
       await h.leftTab('Manual');
-      // Rank by the trained detector and show the list as a thumbnail grid.
+      // The media list is always a thumbnail grid; just rank by the trained
+      // detector (the list/grid toggle was removed in 27854785).
       await page.locator('.sort-radio', { hasText: 'Learned' }).first().click();
       await h.wait(2500);
-      await h.gridView();
-      await h.wait(800);
     },
   },
   {
@@ -287,10 +288,16 @@ export const SHOTS: Shot[] = [
     annotations: [
       { target: '.dashboard-actions', kind: 'highlight', label: 'Train opens labeling; Find scores the dataset' },
     ],
-    async recipe(_page, h) {
+    async recipe(page, h) {
       await h.dashboard();
       await h.selectDatasetRow('syn-imgs');
       await h.selectDetectorRow('doc-demo');
+      // Open the dataset row's ⋯ overflow menu so the shot shows where Browse,
+      // Stats, Rename, and (for detectors) Export now live.
+      await page.locator('vt-dataset-card', { hasText: 'syn-imgs' }).first()
+        .locator('.overflow-btn').first().click();
+      await page.waitForSelector('.context-menu', { timeout: 10000 });
+      await h.wait(400);
     },
   },
   {
