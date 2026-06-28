@@ -30,6 +30,20 @@ export class DatasetCardComponent {
   @Input() @HostBinding('class.selected') selected = false;
   @Input() @HostBinding('class.dimmed') dimmed = false;
   @Input() loadingTask?: LoadingTask;
+
+  /** True while this row's delete-confirm dialog is open (driven by the
+   *  dashboard's `deletingDatasetId`). Spins the trash icon to 90° while open;
+   *  the reverse animation plays back to 0° once the dialog resolves. */
+  @Input()
+  set deleting(value: boolean) {
+    if (value && !this._deleting) this.wasDeleting = true;
+    this._deleting = value;
+  }
+  get deleting(): boolean {
+    return this._deleting;
+  }
+  private _deleting = false;
+  wasDeleting = false;
   /** Which progress vocabulary to render the inline row with. ``projection``
    *  is used while the Browse button pre-builds the dataset's projection. */
   readonly taskKind = input<ProgressKind>('dataset');
@@ -162,6 +176,12 @@ export class DatasetCardComponent {
   onPencilAnimationEnd(): void {
     if (!this.editing) {
       this.wasEditing = false;
+    }
+  }
+
+  onDeleteAnimationEnd(): void {
+    if (!this._deleting) {
+      this.wasDeleting = false;
     }
   }
 
