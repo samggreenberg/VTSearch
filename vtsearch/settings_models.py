@@ -29,6 +29,7 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from vtscore.config import DATA_DIR, DEFAULT_CALIBRATE_COUNT
 
 __all__ = [
+    "BROWSE_MOUSE_ZOOMS_PER_LEVEL",
     "BROWSE_THUMBNAIL_BORDER_PX",
     "POPUP_PREVIEW_SIZE_PX",
     "BinShape",
@@ -79,6 +80,12 @@ VALID_PANEL_PX: tuple[int, int] = (150, 10000)
 # Allowed range (CSS px) for the VTSBrowse pile-thumbnail border width. ``0``
 # disables the border; values are clamped into this range on read/write.
 BROWSE_THUMBNAIL_BORDER_PX: tuple[int, int] = (0, 8)
+# Allowed range for the VTSBrowse "mouse-zooms per pyramid level" setting: how
+# many wheel notches / +/- button clicks it takes to cross one pyramid level
+# (a full 2x of zoom). The per-click/per-notch width factor is ``2 ** (1 / n)``,
+# so ``1`` ⇒ 2x per step (one step = one level), ``2`` ⇒ √2 (the default, two
+# steps per level), ``3`` ⇒ ∛2 (three steps per level). Clamped on read/write.
+BROWSE_MOUSE_ZOOMS_PER_LEVEL: tuple[int, int] = (1, 3)
 # Allowed range (CSS px) for the VTSBrowse bin-popup detail-canvas (the large
 # single-item preview) side. The popup's own size buttons drive it; values are
 # clamped into this range on read/write. The floor keeps a usable preview; the
@@ -261,6 +268,10 @@ class UserSettings(BaseModel):
     #   Stage-1 coordinates, which are computed once and frozen, so a change
     #   takes effect on the next fresh build or the Browser's Re-project action,
     #   not retroactively on an already-built layout. Defaults to on per type.
+    # - ``browse_mouse_zooms_per_level``: how many wheel notches / +/- button
+    #   clicks cross one pyramid level (a full 2x). The per-step width factor is
+    #   ``2 ** (1 / n)``, so 1 ⇒ 2x, 2 ⇒ √2 (default), 3 ⇒ ∛2. Clamped to 1..3;
+    #   empty entries fall back to 2 on the frontend.
     browse_bin_shape: dict[str, BinShape] = Field(default_factory=dict)
     browse_colormap: dict[str, BrowseColormap] = Field(default_factory=dict)
     browse_icon_size: dict[str, Annotated[BrowseIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
@@ -268,6 +279,9 @@ class UserSettings(BaseModel):
         default_factory=dict
     )
     browse_compact: dict[str, bool] = Field(default_factory=dict)
+    browse_mouse_zooms_per_level: dict[str, Annotated[int, _clamp(*BROWSE_MOUSE_ZOOMS_PER_LEVEL)]] = Field(
+        default_factory=dict
+    )
 
     grid_icon_size_left: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     grid_icon_size_right: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)

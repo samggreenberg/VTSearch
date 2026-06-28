@@ -113,6 +113,15 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * regardless. Toggled by the region-select button in the browse toolbar.
    */
   readonly marqueeMode = input(false);
+  /**
+   * How many wheel notches cross one pyramid level (a full 2x of zoom) — the
+   * per-media ``browse_mouse_zooms_per_level`` setting. The per-notch width
+   * factor is ``2 ** (1 / n)``, so 1 ⇒ 2x (one notch per level), 2 ⇒ √2 (the
+   * default, two notches per level), 3 ⇒ ∛2. Clamped to 1..3 by
+   * {@link wheelZoomFactor}; the +/- buttons in the parent use the same factor
+   * so the two gestures stay in lock-step.
+   */
+  readonly zoomsPerLevel = input(2);
   readonly hexHover = output<HexHoverEvent | null>();
   /** A right-click on the canvas; the view opens the bin popup in response. */
   readonly contextMenu = output<BrowseContextMenuEvent>();
@@ -215,15 +224,20 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private pendingToggleX = 0;
   private pendingToggleY = 0;
   private static readonly DBLCLICK_MS = 250;
-  // Per-notch wheel zoom factor. A pyramid level spans a full 2x of zoom, so
-  // this sets how many notches cross a bin layer. It is exactly √2, so two
-  // notches = exactly one level (and exactly one DOUBLE_CLICK_ZOOM). The earlier
-  // 1.4 was a hair under √2, making a level cost log_1.4(2) ≈ 2.06 notches; the
-  // 0.06 surplus accumulates, so when the whole-projection fit happens to land
-  // near the bottom edge of a level band the *first* flip from that overview
-  // rounds up to a 3rd notch (then ~2 thereafter) — felt as an inconsistent
-  // "three at the top, two after". Exact √2 makes every flip cost two notches.
-  private static readonly WHEEL_ZOOM_FACTOR = Math.SQRT2;
+  // Per-notch wheel zoom factor. A pyramid level spans a full 2x of zoom, so the
+  // {@link zoomsPerLevel} setting (n) sets how many notches cross a bin layer:
+  // the factor is 2 ** (1 / n). At the default n=2 that is exactly √2, so two
+  // notches = exactly one level (and exactly one DOUBLE_CLICK_ZOOM). An exact
+  // power of 2 matters here: an earlier 1.4 was a hair under √2, making a level
+  // cost log_1.4(2) ≈ 2.06 notches; the 0.06 surplus accumulates, so when the
+  // whole-projection fit happens to land near the bottom edge of a level band
+  // the *first* flip from that overview rounds up to a 3rd notch (then ~2
+  // thereafter) — felt as an inconsistent "three at the top, two after". A clean
+  // 2 ** (1 / n) makes every flip cost exactly n notches.
+  private wheelZoomFactor(): number {
+    const n = Math.max(1, Math.min(3, Math.round(this.zoomsPerLevel())));
+    return Math.pow(2, 1 / n);
+  }
   // How hard a double-click zooms in about the cursor. Larger than the wheel's
   // per-notch factor so the gesture lands a decisive jump, matching the map idiom.
   private static readonly DOUBLE_CLICK_ZOOM = 2.0;
@@ -2074,7 +2088,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const rect = this.canvasRef.nativeElement.getBoundingClientRect();
     const mx = event.clientX - rect.left;
     const my = event.clientY - rect.top;
-    const wheelFactor = BrowseCanvasComponent.WHEEL_ZOOM_FACTOR;
+    const wheelFactor = this.wheelZoomFactor();
     const factor = event.deltaY < 0 ? wheelFactor : 1 / wheelFactor;
     this.zoomBy(factor, mx, my);
   }
