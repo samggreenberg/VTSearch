@@ -97,12 +97,36 @@ describe('NewDetectorModalComponent', () => {
     expect(component.canSubmitBlank).toBe(true);
   });
 
-  it('should disable media buttons when text is entered', () => {
-    component.pendingText.set('');
-    expect(component.hasPendingText).toBe(false);
+  it('should default the example tab to text', () => {
+    expect(component.exampleTab()).toBe('text');
+  });
 
-    component.pendingText.set('some text');
-    expect(component.hasPendingText).toBe(true);
+  it('should switch between text and media example tabs', () => {
+    component.setExampleTab('media');
+    expect(component.exampleTab()).toBe('media');
+    component.setExampleTab('text');
+    expect(component.exampleTab()).toBe('text');
+  });
+
+  it('should label the media tab from the detector media type', () => {
+    component.mediaType.set('image');
+    expect(component.exampleMediaTabLabel).toBe('Image');
+    component.mediaType.set('audio');
+    expect(component.exampleMediaTabLabel).toBe('Audio');
+  });
+
+  it('should drop a selected media example when the user types text', () => {
+    component.exampleType.set('media');
+    component.exampleValue.set('file.wav');
+    component.exampleDisplay.set('file.wav');
+    component.exampleTab.set('media');
+    expect(component.hasMediaExample).toBe(true);
+
+    // Typing a text example is mutually exclusive with the media example.
+    component.onPendingTextInput('dog barking');
+
+    expect(component.hasMediaExample).toBe(false);
+    expect(component.pendingText()).toBe('dog barking');
   });
 
   it('should clear pending text when media example is set', () => {

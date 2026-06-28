@@ -148,6 +148,20 @@ Reads the manifest and, for each shot × theme:
 `check.sh` is the optional tripwire run before a release to catch shots
 that *should* have been refreshed but weren't.
 
+### The reshoot queue (for no-browser sessions)
+
+The everyday refresh above assumes a browser. The standard cloud container
+has none (CLAUDE.md → "No Chrome/Chromium available"), so a session that
+changes the GUI usually *can't* run `refresh.sh` itself. To keep that drift
+from going silently unrecorded, such a session records the affected shot
+id(s) in **`docs/user/screenshots-reshoot-queue.md`** — a tracked list of
+known-stale shots. `wiring-check.py` validates that every queued id is a real
+manifest id (invariant (c)), so the queue can't reference a renamed or
+deleted shot. A later browser-capable session **drains** the queue: run
+`refresh.sh`, commit the regenerated PNGs, and delete the drained rows
+(empty queue = no known-stale shots). CLAUDE.md → "Screenshot reshoots"
+points contributors here.
+
 ## Shot list (v1)
 
 All in **light + dark** (so ~2× the files). `*` = carries declarative

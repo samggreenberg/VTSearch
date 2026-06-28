@@ -75,6 +75,14 @@ Breaking backwards compatibility is acceptable; do not add shims, feature flags,
 
 VTSearch is a desktop web app. **Do not design, implement, or test for mobile or narrow viewports.** No responsive breakpoints, no touch-targeted controls, no mobile-only layouts, no concerns about portrait orientation. If a design discussion raises "what about mobile?", the answer is "we don't care." When evaluating a layout, assume a standard desktop viewport and skip mobile considerations entirely.
 
+## Screenshot reshoots (when you change the GUI)
+
+User-facing docs embed screenshots captured by a Playwright harness that **needs a real browser**, which the standard cloud container doesn't have (see "Environment Notes" below). So when your change alters a GUI surface that a doc screenshot frames, you usually can't reshoot it in the same session. **Do not let that drift go silently unrecorded.**
+
+Instead, add the affected shot id(s) to the **reshoot queue**: `docs/user/screenshots-reshoot-queue.md`. Each id must match an entry in `docs/user/screenshots.manifest.ts`; the wiring check (`scripts/screenshots/wiring-check.py`, gated in `run-tests.sh`) fails if a queued id has no matching shot, so the queue can't rot. To know whether a change touches a shot, scan the manifest's `embeddedIn` / `caption` fields for the surface you modified (e.g. a modal, a panel, a toolbar).
+
+If you *do* have a browser this session, drain the queue instead of growing it: run `scripts/screenshots/refresh.sh`, review `git diff docs/user/assets/`, commit the regenerated PNGs, and delete the drained rows. The full system (manifest, harness, determinism knobs, embedding convention) lives in `docs/plans/user-docs-screenshots.md`.
+
 ## No Persisted Vectors or MLPs (CRITICAL)
 
 **Embeddings and trained MLP weights are in-memory artifacts only.** Never serialize them to disk, to `data/settings.json`, to detector JSON files, or to any other persistent store. Origins are the canonical persisted form: the system rederives `origin → file → embedding → MLP` on demand.

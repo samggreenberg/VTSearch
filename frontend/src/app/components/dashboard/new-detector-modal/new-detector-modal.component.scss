@@ -76,15 +76,24 @@
   color: var(--text-warning);
 }
 
-// Two-column layout for text vs media example input
-.example-columns {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-xl);
-  margin-top: var(--space-xs);
+// Text vs media example input, behind a nested tab. The two are mutually
+// exclusive, so only one panel shows at a time.
+.example-group {
+  gap: var(--space-sm);
 }
 
-.example-col {
+// Nested tab bar (Text / Image) under the "Example" label. Tighter than the
+// top-level Blank/Trained tabs since it sits inside a form group.
+.example-tab-bar {
+  margin-bottom: var(--space-sm);
+
+  .tab-btn {
+    padding: var(--space-sm) var(--space-lg);
+    font-size: var(--font-md);
+  }
+}
+
+.example-panel {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
@@ -112,19 +121,16 @@
   text-align: center;
 }
 
-// In the example column the drop zone sits below the "Browse Media…" button,
+// In the example panel the drop zone sits below the "Browse Media…" button,
 // so use a more compact padding than the standalone version inside the media
-// picker; the column is short and we don't want it to dwarf the text input.
-.example-col vt-drop-zone ::ng-deep .drop-zone {
+// picker; the panel is short and we don't want it to dwarf the text input.
+.example-panel vt-drop-zone ::ng-deep .drop-zone {
   padding: var(--space-lg) var(--space-lg);
 }
-.example-col vt-drop-zone ::ng-deep .drop-zone-icon {
+.example-panel vt-drop-zone ::ng-deep .drop-zone-icon {
   width: 22px;
   height: 22px;
 }
-
-// Single example display
-.example-display { margin-top: var(--space-xs); }
 
 .example-row {
   display: flex;

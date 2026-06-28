@@ -89,6 +89,10 @@ export class NewDetectorModalComponent implements OnInit {
   nameTouched = false;
   readonly mediaType = signal('audio');
   readonly pendingText = signal('');
+  /** Which example kind the user is filling in. Text and media examples are
+   *  mutually exclusive, so the blank-detector form shows one at a time behind
+   *  a tab; this tracks the active tab. Defaults to text (the quick path). */
+  readonly exampleTab = signal<'text' | 'media'>('text');
   readonly mediaTypes = signal<string[]>([]);
   readonly mediaTypeInfos = signal<MediaTypeInfo[]>([]);
   readonly submitting = signal(false);
@@ -283,6 +287,7 @@ export class NewDetectorModalComponent implements OnInit {
           this.exampleMediaType = this.mediaType();
           this.exampleThumbFailed.set(false);
           this.pendingText.set('');
+          this.exampleTab.set('media');
           this.autoFillNameFromExample();
           this.submitting.set(false);
         },
@@ -325,6 +330,11 @@ export class NewDetectorModalComponent implements OnInit {
 
   onPendingTextInput(value: string): void {
     this.pendingText.set(value);
+    // Text and media examples are mutually exclusive — typing a text example
+    // drops any previously selected media example so the two never coexist.
+    if (this.hasMediaExample) {
+      this.clearMediaExample();
+    }
     if (!this.nameTouched) {
       this.name.set(this.sanitizeName(value));
     }
@@ -441,6 +451,20 @@ export class NewDetectorModalComponent implements OnInit {
     if (this.submitting()) return;
     this.tab = tab;
     this.error.set('');
+  }
+
+  /** Switch between the Text and media example tabs in the blank-detector form. */
+  setExampleTab(tab: 'text' | 'media'): void {
+    if (this.submitting()) return;
+    this.exampleTab.set(tab);
+    this.error.set('');
+  }
+
+  /** Label for the media example tab: "Image", "Audio", "Video", etc. (the
+   *  detector's media type), falling back to "Media". */
+  get exampleMediaTabLabel(): string {
+    const mediaType = this.mediaType();
+    return (mediaType ? this.getMediaTypeLabel(mediaType) : '') || 'Media';
   }
 
   // --- Media picker (shared structure with Add Dataset) ---
@@ -670,6 +694,7 @@ export class NewDetectorModalComponent implements OnInit {
         this.exampleMediaType = this.activeDemoTab || this.mediaType();
         this.exampleThumbFailed.set(false);
         this.pendingText.set('');
+        this.exampleTab.set('media');
         this.autoFillNameFromExample();
         this.demoFileLoading.set(false);
         this.view.set('main');
@@ -717,6 +742,7 @@ export class NewDetectorModalComponent implements OnInit {
         this.exampleMediaType = this.mediaType() || this.mediaTypeFromFilename(raw);
         this.exampleThumbFailed.set(false);
         this.pendingText.set('');
+        this.exampleTab.set('media');
         this.autoFillNameFromExample();
         this.sfFileSelecting.set(false);
         this.view.set('main');
@@ -763,6 +789,7 @@ export class NewDetectorModalComponent implements OnInit {
           this.exampleMediaType = mediaType || this.mediaType();
           this.exampleThumbFailed.set(false);
           this.pendingText.set('');
+          this.exampleTab.set('media');
           this.autoFillNameFromExample();
           // Close the picker if it was open so the user lands back on the form.
           if (this.view() === 'media-picker') this.view.set('main');
@@ -813,12 +840,19 @@ export class NewDetectorModalComponent implements OnInit {
   // --- Clear example ---
 
   clearExample(): void {
+    this.clearMediaExample();
+    this.pendingText.set('');
+  }
+
+  /** Reset only the media-example fields, leaving any pending text untouched.
+   *  Used both by the "Change" button and when the user starts typing a text
+   *  example (the two kinds are mutually exclusive). */
+  private clearMediaExample(): void {
     this.exampleType.set(null);
     this.exampleValue.set('');
     this.exampleDisplay.set('');
     this.exampleMediaType = '';
     this.exampleThumbFailed.set(false);
-    this.pendingText.set('');
   }
 
   // --- Trained tab: label importers ---
@@ -1005,13 +1039,6 @@ export class NewDetectorModalComponent implements OnInit {
       return mt.name.trim();
     }
     return typeId;
-  }
-
-  /** "Image Example", "Audio Example", "Media Example" as a fallback. */
-  get exampleColumnLabel(): string {
-    const mediaType = this.mediaType();
-    const name = mediaType ? this.getMediaTypeLabel(mediaType) : '';
-    return `${name || 'Media'} Example`;
   }
 
   /** "Browse Images...", "Browse Audio...", "Browse Media..." as a fallback. */

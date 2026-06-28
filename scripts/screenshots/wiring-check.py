@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Docs ⇄ screenshot-manifest wiring check (no browser needed).
 
-Asserts two invariants from docs/plans/user-docs-screenshots.md:
+Asserts three invariants from docs/plans/user-docs-screenshots.md:
 
   (a) every shot id in docs/user/screenshots.manifest.ts has BOTH theme files
       (`<id>.light.png` and `<id>.dark.png`) on disk under docs/user/assets/;
   (b) every screenshot the user-facing docs embed (USER_GUIDE.md, README.md,
       demos.md) — i.e. each `assets/<id>.<theme>.png` reference — resolves to a
-      real manifest id.
+      real manifest id;
+  (c) every shot id listed in the reshoot queue
+      (docs/user/screenshots-reshoot-queue.md) resolves to a real manifest id,
+      so the queue can't reference a renamed or deleted shot.
 
 This catches docs/manifest drift without rendering anything, so it is cheap
 enough to gate in run-tests.sh. It does NOT render or diff pixels (that is
@@ -23,6 +26,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "docs" / "user" / "screenshots.manifest.ts"
 ASSETS = ROOT / "docs" / "user" / "assets"
+RESHOOT_QUEUE = ROOT / "docs" / "user" / "screenshots-reshoot-queue.md"
 THEMES = ("light", "dark")
 DOCS = [
     ROOT / "docs" / "user" / "USER_GUIDE.md",
@@ -35,6 +39,10 @@ DOCS = [
 ID_RE = re.compile(r"^\s*id:\s*'([a-z0-9-]+)'", re.MULTILINE)
 # Any embedded asset reference, e.g. assets/dashboard-loaded.dark.png
 REF_RE = re.compile(r"assets/([a-z0-9-]+)\.(light|dark)\.png")
+# A reshoot-queue table row: the shot id is the first backticked token in a
+# Markdown table row (a line starting with `|`). The header and `|----|`
+# separator rows carry no backticks, so they don't match.
+QUEUE_ROW_RE = re.compile(r"^\|[^`|]*`([a-z0-9-]+)`", re.MULTILINE)
 
 
 def manifest_ids() -> list[str]:
@@ -66,13 +74,24 @@ def main() -> int:
             if ref_id not in id_set:
                 errors.append(f"{doc.relative_to(ROOT)} embeds 'assets/{ref_id}.*.png' with no matching manifest id")
 
+    # (c) every shot id queued for reshoot maps to a manifest id.
+    queued = 0
+    if RESHOOT_QUEUE.exists():
+        for match in QUEUE_ROW_RE.finditer(RESHOOT_QUEUE.read_text(encoding="utf-8")):
+            queued += 1
+            queue_id = match.group(1)
+            if queue_id not in id_set:
+                errors.append(
+                    f"{RESHOOT_QUEUE.relative_to(ROOT)} queues reshoot for '{queue_id}' with no matching manifest id"
+                )
+
     if errors:
         print("wiring-check FAILED:")
         for e in errors:
             print(f"  - {e}")
         return 1
 
-    print(f"wiring-check OK: {len(ids)} shots, both themes present, docs consistent.")
+    print(f"wiring-check OK: {len(ids)} shots, both themes present, docs consistent, {queued} reshoot(s) queued.")
     return 0
 
 
