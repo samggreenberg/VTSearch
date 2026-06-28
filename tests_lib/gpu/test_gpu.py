@@ -134,26 +134,28 @@ class TestCuMLBackends:
 
         assert cuml_enabled() == _cuml_installed()
 
-    def test_make_umap_produces_2d_numpy_layout(self):
-        from vtscore.gpu_backends import make_umap
+    def test_umap_fit_transform_produces_2d_numpy_layout(self):
+        from vtscore.gpu_backends import umap_fit_transform
 
         rng = np.random.default_rng(0)
         mat = rng.standard_normal((60, 16)).astype(np.float32)
-        reducer = make_umap(n_components=2, n_neighbors=15, min_dist=0.1, metric="euclidean", random_state=42)
-        coords = np.asarray(reducer.fit_transform(mat))
+        coords = umap_fit_transform(
+            mat, n_components=2, n_neighbors=15, min_dist=0.1, metric="euclidean", random_state=42
+        )
+        assert isinstance(coords, np.ndarray)
         assert coords.shape == (60, 2)
         assert np.isfinite(coords).all()
 
-    def test_make_kmeans_clusters_and_reports_inertia(self):
-        from vtscore.gpu_backends import make_kmeans
+    def test_kmeans_fit_predict_clusters_and_reports_inertia(self):
+        from vtscore.gpu_backends import kmeans_fit_predict
 
         rng = np.random.default_rng(1)
         vecs = np.vstack([rng.standard_normal((30, 8)) + 5.0, rng.standard_normal((30, 8)) - 5.0]).astype(np.float32)
-        km = make_kmeans(n_clusters=2, random_state=42, n_init=1)
-        labels = np.asarray(km.fit_predict(vecs))
+        labels, inertia = kmeans_fit_predict(vecs, n_clusters=2, random_state=42, n_init=1)
+        assert isinstance(labels, np.ndarray)
         assert labels.shape == (60,)
         assert set(np.unique(labels).tolist()) <= {0, 1}
-        assert km.inertia_ is not None
+        assert inertia is not None
 
     def test_fit_projection_umap_path_on_gpu(self):
         from vtscore.projection.umap_projection import fit_projection
