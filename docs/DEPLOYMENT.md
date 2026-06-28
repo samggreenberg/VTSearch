@@ -127,13 +127,49 @@ to handle TLS, gzip, and static-asset caching. Flask serves the Angular
 build from `static/` directly, but a dedicated reverse proxy is much
 more efficient for that traffic.
 
+A few VTSearch-specific points matter when configuring the proxy:
+
+- **TLS termination.** Terminate HTTPS at the proxy and forward plain HTTP to
+  gunicorn on the loopback / private network. Gunicorn itself is not configured
+  for TLS.
+- **Long-running requests vs. proxy read-timeouts.** Imports, embedding,
+  detector training, and evaluation routinely run for minutes. The bundled
+  `gunicorn.conf.py` sets `timeout = 0` (no worker timeout) precisely so these
+  don't get SIGKILLed — but the **proxy** has its own read timeout that will sever
+  the connection independently. nginx's default `proxy_read_timeout` is **60s**,
+  which will cut off any import or training run that takes longer. Raise it to
+  cover your longest operation (e.g. `proxy_read_timeout 1800s;`), matching the
+  same reasoning behind `VTSEARCH_TIMEOUT=0`.
+- **Server-Sent Events (`/api/events`).** VTSearch streams live progress over an
+  SSE endpoint. Proxy response buffering breaks SSE (events arrive only when the
+  buffer flushes), so disable it for the stream — `proxy_buffering off;` in nginx
+  (and the equivalent elsewhere) — and ensure the same long read-timeout applies,
+  since the connection stays open for the life of the page.
+- **Forwarded headers.** Pass `X-Forwarded-For`, `X-Forwarded-Proto`, and
+  `X-Forwarded-Host` (and `Host`) so the app sees the real client and external
+  scheme. For SSE/WebSocket-style streams also forward `Connection`/`Upgrade` if
+  your proxy requires it.
+
+Minimal nginx `location` for the API (illustrative):
+
+```nginx
+location /api/ {
+    proxy_pass http://127.0.0.1:5000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 1800s;   # cover long imports / training (gunicorn timeout is 0)
+    proxy_buffering off;        # required for /api/events SSE streaming
+}
+```
+
 ---
 
 ## Network dependencies
 
 ### Embedding models (HuggingFace Hub)
 
-VTSearch downloads four embedding models on first use. Each model is
+VTSearch downloads five embedding models on first use. Each model is
 lazy-loaded when a dataset of the corresponding media type is opened for
 the first time. At startup, VTSearch also runs a smart-preload pass that
 warms every embedder referenced by the dataset and detector registries
@@ -145,10 +181,13 @@ cost. On an empty registry, nothing is preloaded.
 |-------|-----------|----------------|-------------|
 | CLAP | Audio (default) | `laion/clap-htsat-unfused` | ~1.1 GB |
 | SigLIP | Image (default) | `google/siglip-base-patch16-224` | ~400 MB |
+| CLIP | Image (alternative) | `openai/clip-vit-base-patch32` | ~600 MB |
 | X-CLIP | Video (default) | `microsoft/xclip-base-patch32` | ~1.2 GB |
 | E5 | Text (default) | `intfloat/e5-base-v2` | ~440 MB |
 
-**Total: ~3.2 GB** for the four default models.
+**Total: ~3.8 GB** for the five models `download_models.sh` fetches (four
+defaults plus CLIP, the image alternative). At runtime, only the embedders a
+dataset or detector actually uses are loaded.
 
 #### Alternative embedders
 
@@ -217,7 +256,7 @@ Run the provided script on a machine with internet access:
 ./scripts/download_models.sh [CACHE_DIR]
 ```
 
-This downloads all four embedding models to `CACHE_DIR` (defaults to
+This downloads all five embedding models (CLAP, SigLIP, CLIP, X-CLIP, E5) to `CACHE_DIR` (defaults to
 `data/models`). The script prints instructions for offline use when
 finished.
 
@@ -371,8 +410,14 @@ Notable fields:
   clipping, dedup, and diversity-tree construction. Changes take
   effect on queued and future loads (running tasks are never
   preempted). Defaults derive from hardware on first read (and are
-  **not** persisted to disk): downloads = `min(4, cpu_count)`,
-  embeddings = `1` on CPU-only hosts else `min(2, gpu_count)`. An
+  **not** persisted to disk): downloads = `max(1, min(4, cpu_count))`;
+  embeddings = `1` on an accelerator (CUDA/MPS — embed jobs share the
+  one device and serialise on it, so extra workers only add VRAM
+  pressure), and on a CPU host the scarcer of `cores/4` and
+  `RAM/4 GiB` (cap 4, floor 1). See `default_concurrent_downloads` /
+  `default_concurrent_embeddings` in `vtscore/embedding/loader.py`.
+  These match the autodetect described under
+  [Dataset-ingest concurrency](#dataset-ingest-concurrency) above. An
   explicit value in `settings.json` always wins.
 - `settings_source` (not shown above; excluded from defaults): opt-in
   bidirectional sync. Set to a plugin name + field values to auto-export
@@ -475,6 +520,21 @@ docker compose \
 ```
 
 Add `--no-cache` after dependency changes to force a full rebuild.
+
+> **Note on the baked version string.** `vtsearch.__version__` is normally
+> derived from git at import time, but the Docker build context excludes `.git`,
+> so the Dockerfile reads the version from a build arg instead. None of the
+> `docker/compose/*.yml` files pass it, so a plain `docker compose build` bakes
+> the fallback `0.0.0-unknown` into the image. To stamp the real version, pass it
+> explicitly, e.g.:
+>
+> ```bash
+> docker compose -f docker/compose/docker-compose.yml build \
+>   --build-arg VTSEARCH_VERSION="$(TZ=UTC git log -1 --format=%cd --date=format:%Y-%m-%dT%H:%M:%SZ HEAD)"
+> ```
+>
+> The Dockerfile writes this into `vtsearch/_version.txt`; `__init__.py` reads it
+> when git is unavailable.
 
 ---
 

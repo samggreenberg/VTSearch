@@ -2,7 +2,7 @@
 
 How to add new detectors, localizers, and extractors (the three kinds
 of **Processor** in VTSearch). All three subclass `Processor` from
-`vtscore/media/base.py`.
+`vtscore/media/processors.py`.
 
 **Related docs:** [EXTENDING.md](EXTENDING.md) (index, checklists, auth,
 dependencies) · [EXTENDING-plugins.md](EXTENDING-plugins.md) (importers,
@@ -23,7 +23,7 @@ types, embedders, clippers, converters).
 
 Processors analyze media items. The hierarchy has a common base
 (`Processor`) with three concrete subtypes. All are defined in
-`vtscore/media/base.py`.
+`vtscore/media/processors.py`.
 
 ```
 Processor (ABC)
@@ -135,7 +135,12 @@ class ObjectExtractor(Extractor):
 |--------|------|-------------|
 | `name` | `str` (property) | Unique identifier |
 | `media_type` | `str` (property) | Which media type it operates on |
-| `process(media)` | `(dict) -> Any` | Run the processor (delegates to subclass) |
+
+`process(media)` is declared on the base, but each subtype
+(`Detector`/`Localizer`/`Extractor`) already provides a **concrete**
+`process()` that delegates to `detect()` / `localize()` / `extract()`.
+When you subclass one of those subtypes you implement only the
+subtype-specific method below — you do **not** override `process()`.
 
 **Processor (base class) - optional members:**
 

@@ -8,11 +8,16 @@
 4. [Autopilot - the guided workflow](#autopilot--the-guided-workflow) *(start here)*
 5. [Manual mode - for power users](#manual-mode--for-power-users)
 6. [Region voting on images](#region-voting-on-images)
-7. [View options](#view-options)
-8. [Dashboard - managing datasets and detectors](#dashboard--managing-datasets-and-detectors)
-9. [Browse - exploring a dataset spatially](#browse--exploring-a-dataset-spatially)
-10. [Exporting your work](#exporting-your-work)
-11. [Importing pre-trained detectors](#importing-pre-trained-detectors)
+7. [Creating a detector](#creating-a-detector)
+8. [Find - scoring and verifying](#find--scoring-and-verifying)
+9. [View options](#view-options)
+10. [Settings tabs](#settings-tabs)
+11. [Dashboard - managing datasets and detectors](#dashboard--managing-datasets-and-detectors)
+12. [Browse - exploring a dataset spatially](#browse--exploring-a-dataset-spatially)
+13. [Exporting your work](#exporting-your-work)
+14. [Importing pre-trained detectors](#importing-pre-trained-detectors)
+15. [Achievements](#achievements)
+16. [Tips and shortcuts](#tips-and-shortcuts)
 
 ---
 
@@ -27,8 +32,12 @@ you're looking for. There are two ways to search:
 1. **Train a new detector.** Vote a handful of items **good** or
    **bad** and a small neural net learns from your votes to rank the
    rest of the dataset. Detectors are reusable - once trained, you can
-   save one and re-apply it to any future dataset of the same media
-   type, or share it with another VTSearch user.
+   save one and re-apply it to any other dataset that shares its **media
+   type** *and* a **compatible embedder type** (semantic, patch, or
+   structural), or share it with another VTSearch user. A detector
+   trained in one embedding space can't score a dataset embedded in a
+   different one, so reuse is scoped to that pairing rather than to "any
+   future dataset of the same media type."
 2. **Use an existing detector.** Load one you (or someone else)
    trained earlier and score a fresh dataset with it. No new labeling
    required. Loaded detectors can also be re-trained against the new
@@ -71,9 +80,10 @@ dialog. It has three tabs, which boil down to two choices:
 
 - **Demo datasets** (the **Demo** tab) - VTSearch ships with a catalogue of open
   datasets across all five media types (audio, image, text, video,
-  document). Each demo downloads on first use (~15 MB to ~1.2 GB
-  depending on dataset) and is cached, so subsequent loads are
-  instant.
+  document). The demo importer groups them under a **per-media-type tab
+  bar**, so you can narrow the catalogue to just audio, just images, and
+  so on. Each demo downloads on first use (~15 MB to ~1.2 GB depending on
+  dataset) and is cached, so subsequent loads are instant.
 - **Import your own** (the **Files** and **Services** tabs) - Load a
   folder of files from the server, a VTSearch pickle file, a zipped HTTP
   archive, or combine several existing datasets. Each importer asks for
@@ -90,7 +100,7 @@ video on the fly:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/importer-picker.dark.png" />
-  <img src="assets/importer-picker.light.png" alt="The Demo importer with the Synthetic Media generator and the Downloaded Media catalogue" width="720" />
+  <img src="assets/importer-picker.light.png" alt="The Demo importer with its per-media-type tab bar, the Synthetic Media generator, and the Downloaded Media catalogue" width="720" />
 </picture>
 
 Each importer shows a small form for the fields it needs - here, the
@@ -100,6 +110,29 @@ Synthetic Media generator's media type and dataset size:
   <source media="(prefers-color-scheme: dark)" srcset="assets/importer-form.dark.png" />
   <img src="assets/importer-form.light.png" alt="A filled Synthetic Media importer form - media type and dataset size" width="720" />
 </picture>
+
+### Advanced import options
+
+The file importers expose a collapsible **Advanced** section. The most
+important control there is the embedder picker, which is actually a
+three-role picker:
+
+- **Embedder** - the primary embedding model used to score the dataset
+  (SigLIP for images, LAION-CLAP for audio, etc.).
+- **Region embedder (optional)** - a patch-region-aware model that
+  enables [region voting on images](#region-voting-on-images).
+- **Instance embedder (optional)** - a structural (SIFT/VLAD) model for
+  matching specific instances/patterns.
+
+Two more import toggles live nearby:
+
+- **Merge near-duplicates** - in addition to exact duplicates, fold in
+  visually/textually near-identical copies (resizes, recompressions,
+  trivial edits). VTSearch keeps the largest copy of each group, and
+  exporting one member exports the whole group.
+- **Reference files in place (don't copy)** - store a path reference to
+  each original file on the server instead of copying its bytes in. Saves
+  storage, but the dataset then depends on the source files staying put.
 
 Loading a dataset does three things: downloads or reads the media,
 generates an embedding for every item using the appropriate model
@@ -118,7 +151,7 @@ your own script using the same model VTSearch uses - you can skip the
 server-side re-embedding step by handing VTSearch a NumPy `.npz`
 archive of pre-computed vectors. The **Files → Manifest** importer
 accepts this: instead of a `.txt`/`.list` paths file, point the
-*Paths File* field at a `.npz`. The archive holds both the media-file
+*Paths file* field at a `.npz`. The archive holds both the media-file
 paths AND their vectors; VTSearch reads the paths from disk and reuses
 the supplied vectors.
 
@@ -153,14 +186,15 @@ Once a dataset is loaded, VTSearch shows three panels left to right:
 </picture>
 
 - **Left panel** - the sort bar, your selection-strategy controls,
-  the inclusion slider, and the **media list** (ranked by the current
+  the inclusion stepper, and the **media list** (ranked by the current
   sort). This is where you pick what to look at next.
 - **Centre panel** - the **media viewer**. The selected item plays
   (audio), displays (image, video, text, document page), and offers
   two big vote buttons: **Good** (green) and **Bad** (red).  On
-  image datasets that use a patch-region embedder
-  (DINOv2/DINOv3/EUPE `_patch`), the centre panel also supports
-  **region voting** - see "Region voting on images" below.
+  image datasets whose embedder supports regions - a patch-region
+  embedder (DINOv2/DINOv3/EUPE `_patch`) or a structural (SIFT/VLAD)
+  embedder - the centre panel also supports **region voting** - see
+  "Region voting on images" below.
 - **Right panel** - your **vote piles**. Everything you've voted good
   or bad is stacked here, most-recent first, so you can scan your
   work, un-vote, or re-vote.
@@ -187,27 +221,27 @@ just picks *which* items to show you and *when* each phase ends.
 
 ### The four phases
 
-1. **Good examples** - Vote some **good** items (default: 3). The
-   detector needs positive examples before it can learn anything.
+The phase panel labels them, in order:
+
+1. **Find Initial Goods.** - Vote some **good** items (default: 3).
+   The detector needs positive examples before it can learn anything.
    Autopilot offers strong candidates first via the same semantic
    ranking the Text sort uses. If you don't see anything good, type
    a text query into the sort bar to jump-start the ranking.
-2. **Bad examples** - Vote some **bad** items (default: 4). Now
+2. **Find Initial Bads.** - Vote some **bad** items (default: 4). Now
    the detector has both sides of the boundary. Autopilot flips to
    items ranked low, so finding clear bad examples is usually quick.
-3. **Boundary refinement (hard)** - Autopilot serves items the
-   detector is **uncertain about** - the hardest cases near the
-   decision boundary. Voting these teaches the detector fastest.
-   This phase continues until the detector's confidence stabilises
-   (the "smart" and "stable" indicators in the status bar both
-   turn green).
-4. **Diversity exploration (new)** - Autopilot serves items from
-   parts of the dataset the detector hasn't seen yet, using the
-   diversity tree. This catches edge cases the boundary phase
-   missed. Phase ends when the diversity coverage hits your goal
-   (default: 40%).
+3. **Refine Boundary.** - Autopilot serves items the detector is
+   **uncertain about** - the hardest cases near the decision boundary.
+   Voting these teaches the detector fastest. This phase continues
+   until the detector's confidence stabilises (the "smart" and
+   "stable" indicators in the status bar both turn green).
+4. **Explore Diversity.** - Autopilot serves items from parts of the
+   dataset the detector hasn't seen yet, using the diversity tree.
+   This catches edge cases the boundary phase missed. The phase ends
+   when the diversity coverage hits your goal (default: 40).
 
-When all four phases are done, Autopilot says **done**. You can
+When all four phases are done, Autopilot shows **Done!**. You can
 keep labeling if you want - the detector continues to improve - or
 move on to exporting results.
 
@@ -222,23 +256,25 @@ media list.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/autopilot-progress.dark.png" />
-  <img src="assets/autopilot-progress.light.png" alt="The Autopilot phase panel: the four phases (Good examples, Bad examples, Boundary refinement, Diversity) tracked in order" width="320" />
+  <img src="assets/autopilot-progress.light.png" alt="The Autopilot phase panel: the four phases (Find Initial Goods, Find Initial Bads, Refine Boundary, Explore Diversity) tracked in order" width="320" />
 </picture>
 
 ### Configuring Autopilot
 
-Most people never touch these, but the Settings modal (gear icon)
-exposes:
+Most people never touch these, but the **Autopilot** tab in the Settings
+modal (gear icon) exposes:
 
-- **Top greens** - how many good votes phase 1 requires (default 3).
-- **Hard reds** - how many bad votes phase 2 requires (default 4).
-- **Resort interval** - how often the learned detector is retrained
-  during phases 3 and 4 (default every 10 votes).
-- **Goal diversity** - the fraction of the dataset's diversity
-  tree that phase 4 must cover before finishing (default 40%).
+- **# Good to start** - how many good votes phase 1 requires (default 3).
+- **# Bad to start** - how many bad votes phase 2 requires (default 4).
+- **# Start to re-sort** - how many new votes to collect before the
+  learned detector is retrained and re-ranked during phases 3 and 4
+  (default 10).
+- **Goal Diversity** - the diversity coverage that phase 4 must reach
+  before finishing (default 40).
 
 Raising these numbers trains a more thorough detector at the cost of
-more labelling effort.
+more labelling effort. The same tab also has a **Hide autopilot panel**
+toggle.
 
 ---
 
@@ -254,23 +290,25 @@ The Manual tab shows three control rows above the media list.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/manual-controls.dark.png" />
-  <img src="assets/manual-controls.light.png" alt="The three Manual-mode control rows: Sort mode, Selection strategy, and the Inclusion slider" width="720" />
+  <img src="assets/manual-controls.light.png" alt="The three Manual-mode control rows: Sort mode, Selection strategy, and the Inclusion stepper" width="720" />
 </picture>
 
 ### 1. Sort mode
 
-Picks how the left-panel list is ordered.
+Picks how the left-panel list is ordered. The sort bar offers three
+modes, in order: **Text**, **Load**, **Learned**.
 
 - **Text** - Type a natural-language query (e.g. "dog barking",
   "aerial photo of farmland"). Items are ranked by semantic
   similarity to your query using the embedding model for this
   media type.
+- **Load** - Apply a previously saved detector. Opens a modal where
+  you can **Sort by Detector** (pick a saved detector from the
+  registry) or **Sort by Examples** (sort by similarity to one or
+  more example media items).
 - **Learned** - Trains a small neural net on your current good/bad
   votes and ranks items by its predictions. Needs at least one
   good vote and one bad vote before it works.
-- **Load** - Apply a previously saved detector (or one exported
-  from another VTSearch instance). Opens a modal to pick a
-  detector file or an example media item to sort by.
 
 You can freely switch modes - votes and the detector persist across
 switches.
@@ -289,101 +327,31 @@ Picks *which unlabeled item* the app highlights next.
 Autopilot cycles through these automatically in its four phases,
 but in Manual mode you choose directly.
 
-### 3. Inclusion slider
+### 3. Inclusion stepper
 
-A slider from **-10** (strict) to **+10** (lenient), default 0.
+A numeric stepper from **-10** (strict) to **+10** (lenient),
+default 0.
 
-Nudges the classification threshold after the learned detector runs.
+Nudges the classification threshold for the learned detector.
 Negative values mean "only call it good if you're very sure" -
 fewer positives, higher precision. Positive values mean "include
-borderline items" - more positives, higher recall. The slider
-re-ranks instantly; you don't need to re-train.
+borderline items" - more positives, higher recall. Changing it
+**triggers a retrain** of the learned sort so the new threshold is
+applied to the ranking.
 
 Leave at 0 unless you have a specific precision/recall trade-off
 in mind.
 
 ---
 
-## View options
-
-The **View** button above the media list opens the view-settings
-modal. All preferences are remembered per media type.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/view-options.dark.png" />
-  <img src="assets/view-options.light.png" alt="The view settings: List vs. grid, grid icon size, and focus mode (Settings, Appearance, Scroll Style)" width="720" />
-</picture>
-
-- **List vs. grid** - List shows one item per row with rank, score,
-  and a preview. Grid shows a wall of thumbnails. Grid is faster
-  for images; list is usually better for audio and text. After training,
-  grid view ranks the thumbnails by the detector's score, with a
-  threshold line marking the good/bad cut:
-
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/results-grid.dark.png" />
-    <img src="assets/results-grid.light.png" alt="The left-panel media list in grid view after training - ranked thumbnails" width="320" />
-  </picture>
-- **Grid icon size** - XS, S, M, L, XL. Larger icons = fewer per
-  screen but more readable.
-- **Focus mode** - Click-focus means you select an item by
-  clicking it. Hover-focus means just moving your cursor over
-  an item selects it (faster for scanning, more mis-clicks).
-
-There's a separate view modal for the right panel (vote piles),
-with the same controls.
-
-### Solo media type - streamline for one media type
-
-If you only ever work with one kind of media (e.g. you exclusively
-search images, optionally pulled in from videos and documents via
-the built-in converters), pick that type under **Appearance → Solo
-media type** in the Settings modal. Once set:
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/settings-appearance.dark.png" />
-  <img src="assets/settings-appearance.light.png" alt="The Settings, Appearance pane: theme picker, Solo media type, and the per-type Scroll Style controls" width="720" />
-</picture>
-
-- The dataset importer and new-detector dialogs stop asking which
-  media type you want - they lock to your chosen type.
-- Converter offerings filter to those that produce your type
-  (so picking "image" still lets you import videos-as-frames and
-  documents-as-pages, just not raw audio).
-- Your chosen type's default embedder is warmed at startup so the
-  first detector run is fast.
-
-Pick **Show everything** to opt back out. Operators can also pass
-`--solo-media-type image` (or any type id) on the command line as a
-fallback for new users - anyone who explicitly changes the setting
-overrides the CLI value for themselves.
-
-### Locking the embedder for a media type
-
-The dataset importer normally shows an **Advanced** dropdown so you
-can pick which embedding model is used (SigLIP for images, LAION-CLAP
-for audio, etc.). If you always pick the same one for a given type,
-lock it under **Appearance → Solo media embedder** in the Settings
-modal: pick one row per media type and the importer hides the
-dropdown for that type the next time you open it. Other media types
-keep the normal dropdown.
-
-Pick **Ask each time** for any type to opt back out. Operators can
-also pass `--solo-embedder image=siglip --solo-embedder audio=clap`
-on the command line as a fallback - anyone who picks their own value
-(or "Ask each time") in Settings overrides the CLI value for
-themselves, per media type.
-
----
-
 ## Region voting on images
 
-When the dataset's embedder is patch-region-aware (DINOv2, DINOv3,
-or EUPE with a `_patch` slug - set when the dataset was created),
-you can vote **good** on a *region* of the image instead of the
-whole image.  This tells the detector "this specific part is what I
-like", and the learned sort uses that hint to find similar regions
-elsewhere in the dataset.
+When the dataset's embedder supports regions - a patch-region-aware
+model (DINOv2, DINOv3, or EUPE with a `_patch` slug) or a structural
+(SIFT/VLAD) model, set when the dataset was created - you can vote
+**good** on a *region* of the image instead of the whole image. This
+tells the detector "this specific part is what I like", and the learned
+sort uses that hint to find similar regions elsewhere in the dataset.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/region-voting.dark.png" />
@@ -421,6 +389,13 @@ pan, or rotate before voting.  A click without dragging (a
 zero-area "click") restores the previously drawn rectangle rather
 than discarding it.  `Esc` clears the rectangle without voting.
 
+### The Highlight toggle
+
+The image controls also include a **Highlight** toggle ("Highlight:
+outline the region the detector matched best"). When on, VTSearch
+draws the region the current detector keyed off of for the displayed
+item, so you can see *why* it scored the way it did.
+
 ### Voting bad while a region is drawn
 
 A `←` press while a region is drawn would normally throw the
@@ -449,31 +424,179 @@ in this image is good" regardless of whether you drew a rectangle.
 Region voting is image-only.  Audio, text, video, and document
 media types have no region affordance.
 
+---
+
+## Creating a detector
+
+Every search starts from a detector. Click the **+** button on the
+**Detectors** card on the Dashboard to open the **New Detector** modal.
+It has two tabs:
+
+<!-- SCREENSHOT TODO (new-detector): The New Detector modal on the Blank tab, with the Text Example field and the media-example picker -->
+
+- **Blank** - start a fresh detector that learns from your votes as you
+  label. Give it a name, and seed it one of two ways: type a short
+  **Text Example** ("e.g. dog barking sounds"), or pick a **media
+  example** by browsing demos / server folders / uploading a file. When
+  the active dataset offers more than one kind of embedder, a **Detector
+  Embedder Type** picker appears so you can choose the scoring space:
+  **Semantic**, **Patch Semantic**, or **Structural**. That choice fixes
+  what the detector is compatible with later. If the dataset's embedder
+  can't search by text, you'll see a note that you can still create the
+  detector but must label a few examples to train it.
+- **Trained** - create a detector pre-trained on labels imported from an
+  external source. It opens a label-importer picker (file, URL, or
+  service); pick a source, fill its form, and VTSearch trains the
+  detector on the imported labels (the button reads **Create & Import**).
+
+You can also reach the Blank flow with an item pre-selected as the
+example via the right-click media context menu's **Use as detector
+seed** option (see [Tips and shortcuts](#tips-and-shortcuts)).
+
+---
+
+## Find - scoring and verifying
+
+**Find** scores an entire dataset with a detector and drops you into a
+dedicated **three-pane verification view** so you can confirm or correct
+the detector's calls before exporting. Start it from the Dashboard:
+select a dataset row and a detector row, then click **Find** in the
+action bar (VTSearch scores every item, showing progress while it runs).
+
+<!-- SCREENSHOT TODO (find-view): The Find verification view with the work queue (left), the viewer (centre), and the Verified Good / Verified Bad piles (right) -->
+
+- **Left pane** - the **work queue** of items the detector hasn't been
+  confirmed on yet, ranked by score, with the same inclusion stepper
+  you use while labeling.
+- **Centre pane** - the **viewer** with Good / Bad buttons, so you
+  verify the current item just like you vote during training.
+- **Right pane** - the **Verified Good** and **Verified Bad** piles,
+  where confirmed items accumulate.
+
+The verification view's action buttons let you act on the result:
+
+- **To Dataset** - promote the full good set (verified + unverified)
+  into its own new dataset.
+- **Add Corrections to Detector** - fold the items you changed from the
+  detector's call back into the detector's labelset and retrain it, so
+  the detector gets better at the cases it got wrong.
+- **Stats** - open the evaluation modal: a confusion matrix plus a
+  false-positive / false-negative curve across inclusion, which is the
+  clearest way to see the precision/recall trade-off the inclusion
+  stepper controls.
+- **Export** - send the good set to clipboard, a file, email, or a
+  webhook (see [Exporting your work](#exporting-your-work)).
+- **Browse** - open the positive items in the spatial
+  [Browse](#browse--exploring-a-dataset-spatially) view.
+
+<!-- SCREENSHOT TODO (find-stats): The Find Stats modal with the confusion matrix and the false-positive / false-negative vs. inclusion curve -->
+
+---
+
+## View options
+
+The controls above the media list are an inline toolbar (no "View"
+button and no separate view-settings modal). It carries just two
+controls, remembered per media type:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/view-options.dark.png" />
+  <img src="assets/view-options.light.png" alt="The inline view-controls toolbar: thumbnail size and focus mode" width="720" />
+</picture>
+
+- **Thumbnail size** - the two image icons shrink or grow the
+  thumbnails. Larger thumbnails = fewer per screen but more readable.
+  After training, the list ranks the thumbnails by the detector's score,
+  with a threshold line marking the good/bad cut:
+
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/results-grid.dark.png" />
+    <img src="assets/results-grid.light.png" alt="The left-panel media list after training - ranked thumbnails with a threshold line" width="320" />
+  </picture>
+- **Focus mode** - Click-focus means you select an item by
+  clicking it. Hover-focus means just moving your cursor over
+  an item selects it (faster for scanning, more mis-clicks).
+
+### Solo media type - streamline for one media type
+
+If you only ever work with one kind of media (e.g. you exclusively
+search images, optionally pulled in from videos and documents via
+the built-in converters), pick that type under the **Import Defaults**
+tab in the Settings modal (**Solo media type**). Once set:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/settings-appearance.dark.png" />
+  <img src="assets/settings-appearance.light.png" alt="The Settings, Appearance pane: theme picker, toggles, and the per-type Scroll Style controls" width="720" />
+</picture>
+
+- The dataset importer and new-detector dialogs stop asking which
+  media type you want - they lock to your chosen type.
+- Converter offerings filter to those that produce your type
+  (so picking "image" still lets you import videos-as-frames and
+  documents-as-pages, just not raw audio).
+- Your chosen type's default embedder is warmed at startup so the
+  first detector run is fast.
+
+Pick **Show everything** to opt back out. Operators can also pass
+`--solo-media-type image` (or any type id) on the command line as a
+fallback for new users - anyone who explicitly changes the setting
+overrides the CLI value for themselves.
+
+---
+
+## Settings tabs
+
+The Settings modal (gear icon) is organised into seven tabs:
+
+- **Appearance** - theme, animations, the metadata panel, the
+  **Enable achievements** toggle, and per-media-type Scroll Style
+  (focus mode and thumbnail size).
+- **Auto-Find** - detectors that auto-run on import, and what exporter
+  to send their results to.
+- **Autopilot** - the guided-workflow knobs described under
+  [Configuring Autopilot](#configuring-autopilot).
+- **Browser** - per-media-type look of the spatial Browse view (bin
+  shape, density colormap, cell size).
+- **Import Defaults** - default embedder, clipper, and converters per
+  media type, plus the **Solo media type** picker.
+- **Server** - read-only settings fixed when the server started and
+  shared by everyone.
+- **Sorting** - options that control how learned sorting and
+  calibration behave.
 
 ---
 
 ## Dashboard - managing datasets and detectors
 
 The Dashboard is your inventory view. Two tables stacked vertically
-and a pair of action buttons underneath.
+with bulk-action and per-card controls.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/dashboard-manage.dark.png" />
-  <img src="assets/dashboard-manage.light.png" alt="A dataset row and a detector row selected, with the Train / Find action bar below the tables" width="720" />
+  <img src="assets/dashboard-manage.light.png" alt="A dataset row and a detector row selected, with the per-row overflow (⋯) menu open" width="720" />
 </picture>
 
 - **Datasets** - every dataset on the server. Each row shows
-  media type, item count, duplicate count, creation date, origin,
-  clipper, and embedder. The **Loaded** column is a toggle:
-  click the **×** to load into memory (a checkmark appears when
-  it's in). Per-row icon buttons: **Browse** (eye - opens the spatial
-  map, see below), **Rename** (pencil), **Stats** (pie chart), and
-  **Delete** (trash).
-- **Detectors** - every saved detector. Each row shows media type,
-  training count, whether it's an **Auto-Find** detector (scored automatically
-  during CLI autodetect), last-trained / created dates, and loaded
-  state. Per-row icon buttons: **Rename**, **Add Labels** (import
-  labels into this detector), **Export**, and **Delete**.
+  **Type**, **# Items**, **Created**, **Age-Off**, **Creator**, and
+  **Readers**. A row that isn't in memory shows an inline **Load**
+  button, which disappears once the dataset is loaded. The name has a
+  pencil for **Rename**, **Delete** is an inline button, and the
+  remaining actions (**Browse**, **Stats**, and - on multi-user
+  deployments - access controls) live behind a **⋯** overflow menu.
+- **Detectors** - every saved detector. Like datasets, the name carries
+  a **Rename** pencil and **Delete** is inline; the **⋯** overflow menu
+  holds the rest, including **Import Labels** (import labels into this
+  detector) and **Export**.
+
+The **+** button on each card creates a new dataset (the Add Dataset
+dialog) or a new detector (the [New Detector](#creating-a-detector)
+modal).
+
+**Bulk actions.** Each table has a header **select-all** checkbox and,
+once you've selected rows, **Combine selected datasets** / **Combine
+selected detectors** and **Delete selected** buttons - so you can merge
+or clean up several at once. See
+[Combining datasets and detectors](#combining-datasets-and-detectors).
 
 **Starting a labeling session:** click a dataset row and a detector
 row to select them, then click the **Train** button in the action
@@ -481,21 +604,28 @@ bar below the two tables. That opens the three-panel labeling view
 against your selection.
 
 **Scoring a dataset:** select a dataset and a detector, then click
-**Find** in the action bar. VTSearch scores every item in the
-dataset with the detector and opens a ranked results modal.
+**Find** in the action bar to open the verification view (see
+[Find - scoring and verifying](#find--scoring-and-verifying)).
 
 You can keep multiple datasets and multiple detectors loaded at once.
 Loading just pulls them into memory; the Train / Find buttons work
 on whichever rows you currently have selected.
 
+### Combining datasets and detectors
+
+Selecting two or more rows and clicking **Combine selected datasets**
+merges them into a single new dataset; **Combine selected detectors**
+likewise merges detectors (pooling their labelsets). This is handy for
+stitching together work that started out split across several imports.
+
 ---
 
 ## Browse - exploring a dataset spatially
 
-Click the **Browse** (eye) button on any dataset row in the Dashboard to
-open a bird's-eye map of the whole collection. VTSearch projects every
-item's embedding down to two dimensions (a UMAP projection) and renders
-the result as a pannable, zoomable density map.
+Open Browse from a dataset row's **⋯** overflow menu (**Browse
+dataset**) to get a bird's-eye map of the whole collection. VTSearch
+projects every item's embedding down to two dimensions (a UMAP
+projection) and renders the result as a pannable, zoomable density map.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/browse-view.dark.png" />
@@ -545,37 +675,43 @@ returns you to the inventory.
 
 Click a tile (or drag a region) to add its items to the **Selection**
 panel on the right. The panel lists what you've picked - sortable by
-recency, name, or ID, in list or grid view - and clicking any entry drops
-it from the selection. **Clear** empties the whole selection. This is how
-you carve a region of interest out of a large collection by eye.
+recency, name, or ID - and clicking any entry drops it from the
+selection. **Clear** empties the whole selection. This is how you carve
+a region of interest out of a large collection by eye.
 
 Browse can also open **scoped to a Find result**: after scoring a dataset
-you can project just the matched items and use **Remove from Good** to
-lasso and prune false positives before exporting. (See
-[Dashboard](#dashboard--managing-datasets-and-detectors) for Find.)
+you can project just the matched items and use **Verified Good** /
+**Verified Bad** to lasso and prune false positives before exporting.
+(See [Find](#find--scoring-and-verifying).)
 
 ---
 
 ## Exporting your work
 
-From the Labeling view, the right panel's **Export** button saves
-your current labels. Formats:
+From the Labeling or Find view, the right panel's **Export** button
+saves your current labels. Formats (by their display names):
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/export-picker.dark.png" />
   <img src="assets/export-picker.light.png" alt="The exporter with a chosen format and its configuration form" width="720" />
 </picture>
 
-- **Clipboard** - copies a JSON list of `{id, label, score}` to
-  your clipboard.
-- **JSON file (server)** - saves to a file on the server via the
-  JSON exporter.
-- **CSV file (server)** - same but in CSV.
-- **Webhook** - POSTs the result to a URL you configure.
-- **Email (SMTP)** - emails the result if SMTP is configured.
+- **Server JSON File** - saves a JSON file on the server.
+- **Server CSV File** - same, but CSV.
+- **Webhook (HTTP POST)** - POSTs the result to a URL you configure.
+- **Send by Email** - emails the result if SMTP is configured.
+- **Display Results** and **Holder Package** are also available for
+  on-screen review and for bundling the matched media into a package.
 
-You can also export **detector weights** from the Detectors dashboard -
-useful for sharing a trained detector with another VTSearch instance.
+The exporter also offers a **Clipboard** copy. It copies a
+column-selected, delimited table (a header row plus one line per item),
+not a raw JSON list - the default columns are **Label**, **MD5**,
+**Filename**, and **Category**, and you can pick which columns and which
+delimiter to use.
+
+You can also export **detector weights** from the Detectors dashboard
+(the **Export** overflow item) - useful for sharing a trained detector
+with another VTSearch instance.
 
 ---
 
@@ -588,15 +724,66 @@ Two ways to bring in existing work:
   <img src="assets/import-detector.light.png" alt="The Load-sort detector picker: choose a saved detector to score a fresh dataset" width="720" />
 </picture>
 
-- **Labels** - the right panel's **Import Labels** button reads
-  a JSON or CSV of `{md5, label}` pairs and populates your vote
-  piles from it. Useful for continuing labelling across sessions
-  or merging work from multiple labellers.
-- **Detectors** - the **Load** sort mode and the Detectors
-  dashboard both have "import detector" options. A detector file
-  contains the trained detector weights plus the threshold and
-  metadata needed to score a new dataset. Once imported, you can
-  use it for Load-sort or for Auto-Find scoring.
+- **Labels** - the right panel's **Import Labels** button (also the
+  detector card's **Import Labels** overflow item) opens a label-importer
+  picker - a server-driven list of import sources, each with its own
+  small form - that populates your vote piles from the chosen source.
+  Useful for continuing labelling across sessions or merging work from
+  multiple labellers.
+- **Detectors** - the **Load** sort mode's **Sort by Detector** option
+  lists the saved detectors already in the registry, so you can score a
+  fresh dataset with one without retraining. (There is no separate
+  detector-file upload step in the labeling UI; detectors come in via the
+  registry and via [Find](#find--scoring-and-verifying).)
+
+---
+
+## Achievements
+
+VTSearch has an optional light gamification layer. When **Enable
+achievements** is on (Settings → Appearance), a **trophy button**
+appears; click it to open the **Achievements** panel, which lists the
+achievements and your tier progress on each. As you use the app, hitting
+a milestone fires a small **unlock toast**.
+
+<!-- SCREENSHOT TODO (achievements): The Achievements panel with tiered achievements and the code-phrase entry box -->
+
+A few achievements unlock via a **code phrase** rather than usage: docs
+(like this guide) hide a phrase, and pasting it into the panel's code box
+("Paste a code phrase") and clicking **Submit** unlocks the matching
+achievement. The footer line of this guide is one such phrase.
+
+Turning **Enable achievements** off zeros all counters and tier progress
+and hides the trophy button and unlock pop-ups until you turn it back on.
+
+---
+
+## Tips and shortcuts
+
+- **Top-bar dataset/detector pulldowns.** The pulldowns in the top bar
+  let you switch the active dataset or detector without going back to the
+  Dashboard, and offer an "Add New" shortcut to create one.
+- **Keyboard shortcuts and the in-app guide.** Press **`?`** any time to
+  open the help sheet. It has two tabs: a **Keyboard shortcuts**
+  reference and a **User guide** that renders this document inside the
+  app (matching your theme).
+- **Right-click a media item** for a context menu: **Sort by similarity
+  to this**, **Crop, then sort by similarity…** (audio/image), **Use as
+  detector seed**, and **Crop, then use as detector seed…**. The crop
+  options open the **crop modal**, where you trim an image region or
+  audio span before using the item as a sort example or detector seed.
+- **The Autopilot resort prompt.** When you sort by an example and then
+  move on, VTSearch may ask whether to update the sort to your new
+  example (**Update Sort Example?**) or **Keep Current**.
+- **Drag-and-drop upload.** Importer file fields are drop zones - drag
+  files (or a folder) onto them instead of clicking to browse.
+- **Login-gated deployments.** Some servers ask for your name on first
+  load before you can start.
+- **Offline banner.** If the app can't reach the server, a banner reads
+  "Can't reach the server. Background updates are paused." with a
+  **Retry** button.
+- **Toasts.** Transient confirmations and errors appear as toast
+  notifications in the corner.
 
 ---
 

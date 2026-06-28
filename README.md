@@ -7,6 +7,8 @@ A trainable media search tool. VTSearch searches collections of audio clips, ima
   <img src="docs/user/assets/dashboard-loaded.light.png" alt="The VTSearch dashboard with a synthetic dataset loaded and a trained detector listed in the sidebar" width="720" />
 </picture>
 
+> **New to VTSearch?** Read **[docs/user/USER_GUIDE.md](docs/user/USER_GUIDE.md)** for a walkthrough of loading a dataset, training a detector with Autopilot (or applying an existing one), and exporting the matches. Most users never need anything else.
+
 ## Setup and running tests
 
 See [docs/SETUP.md](docs/SETUP.md) for prerequisites, getting the code, virtual environment setup, installing dependencies, and running the test suite.
@@ -17,6 +19,12 @@ For development, start the Flask dev server:
 
 ```bash
 python app.py
+```
+
+Use `--local` to run in local development mode:
+
+```bash
+python app.py --local
 ```
 
 You should see output like:
@@ -37,77 +45,43 @@ VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
 
 See [docs/SETUP.md](docs/SETUP.md#running-the-app) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for details.
 
-> **New to VTSearch?** Read **[docs/user/USER_GUIDE.md](docs/user/USER_GUIDE.md)** for a walkthrough of loading a dataset, training a detector with Autopilot (or applying an existing one), and exporting the matches. Most users never need anything else.
+## Loading a demo dataset
+
+When the app is running, click the **+** button on the **Datasets** card to open the **Add Dataset** dialog, then pick the **Demo** tab. From there you can browse the available demo datasets and load one. Each demo is downloaded and embedded on first use, then cached for instant loading afterward.
+
+See [docs/demos.md](docs/demos.md) for the full list of available demo datasets.
+
+You can also load your own data from pickle files or folders via the same dialog.
+
+---
 
 ## Command-line interface
 
 VTSearch provides several CLI workflows for applying detectors to datasets, importing labels, and importing processors, all without starting the web server. See [docs/CLI.md](docs/CLI.md) for the full CLI reference.
 
-## Loading a demo dataset
-
-When the app is running, click the hamburger menu in the top-left corner to open the dataset panel. From there you can browse the available demo datasets and load one. Each demo is downloaded and embedded on first use, then cached for instant loading afterward.
-
-See [docs/demos.md](docs/demos.md) for the full list of available demo datasets.
-
-You can also load your own data from pickle files or folders via the same menu.
-
 ## Project structure
 
+VTSearch is split into two Python packages along an **app tier / library tier** line:
+
+- **`vtsearch/`** — the app tier: Flask routes, authentication, settings, the achievements state machine, and the CLI entry point (`vtsearch/cli_main.py`). Anything that depends on Flask/Werkzeug lives here.
+- **`vtscore/`** — the library tier: the ML (training, MLP, thresholds), embedding runtime, media-type plugins (audio, image, text, video, document), converters, datasets/importers, exporters, labels, evaluation, projection (VTSBrowse), concurrency, security, and the plugin/sync machinery. It is import-clean of Flask so it can be reused as a standalone library. The CLI orchestration (`vtscore/cli.py`, `cli_pipeline.py`, `cli_progress.py`) lives here too.
+
+The remaining top level:
+
 ```
-├── app.py                          # Flask entry point, registers blueprints, CLI arg parsing
-├── gunicorn.conf.py                # Gunicorn WSGI config (single worker + threads)
-├── vtsearch/                       # Main application package
-│   ├── config.py                   # Constants (paths, model IDs, sample rates)
-│   ├── cli.py                      # CLI utilities: autodetect workflow
-│   ├── cli_pipeline.py             # CLI orchestration shared by autodetect
-│   ├── cli_progress.py             # CLI progress bars
-│   ├── settings.py                 # Persistent settings (server tier + per-user tier)
-│   ├── settings_factory.py         # Accessor factories for the settings table
-│   ├── settings_models.py          # Settings dataclass schemas
-│   ├── achievements.py             # User-achievement state machine
-│   ├── logging_config.py           # Logging setup
-│   ├── auth/                       # Authentication (LoginProvider ABC, DefaultLoginProvider)
-│   ├── routes/                     # Flask blueprints (datasets, detectors, processors, media, settings, labels, …)
-│   ├── detectors/                  # Detector lifecycle: registry, store, training, label sync, restoration
-│   ├── training/                   # Generic learned-sort training primitives (MLP, thresholds, SVM, region-sim)
-│   ├── embedding/                  # Embedder façades, torch runtime, smart preload, cached embedding matrix
-│   ├── media/                      # Media type plugins (audio, image, text, video, document) + embedders, clippers
-│   ├── converters/                 # Media converters (document→image/text, video→audio/image, audio→image, image→text)
-│   ├── datasets/                   # Dataset loading, importers, origin tracking, labelsets, media sources
-│   ├── eval/                       # Evaluation framework (metrics, runner, visualisation, voting iterations)
-│   ├── exporters/                  # Results exporter plugins
-│   ├── labels/                     # Label importers and labelset sync sources
-│   ├── settings_io/                # Settings importers, exporters and sync sources
-│   ├── state/                      # Per-dataset / per-detector context registries; medias/votes proxies
-│   ├── plugins/                    # Plugin registry, PluginBase, sentinel-based discovery
-│   ├── sync/                       # Generic SyncSource base for settings + labelset sources
-│   ├── concurrency/                # Async job manager, memory-aware worker capping, progress trackers
-│   ├── security/                   # Path/URL/pickle safety validation
-│   ├── schemas/                    # JSON / OpenAPI schemas
-│   └── utils/                      # build_media_hit helper + offline synthetic-media generators
-├── static/                         # Angular build output (HTML, JS, CSS, assets)
-├── frontend/                       # Angular SPA source (TypeScript, SCSS); builds into static/
-├── tests/                          # Test suite (pytest); grouped by folder (core, api, sorting, datasets, io, …)
-├── docs/                           # Extended documentation
-│   ├── HANDOFF.md                  # Project handoff & orientation guide
-│   ├── DEPLOYMENT.md               # Deployment, offline mode, operations
-│   ├── ARCHITECTURE.md             # Architecture deep-dive
-│   ├── API.md                      # HTTP API reference (all REST endpoints)
-│   ├── EXTENDING.md                # Plugin authoring index (auth, deps, checklists)
-│   ├── EXTENDING-plugins.md        # Data/results/label/processor/settings importers & sources
-│   ├── EXTENDING-media.md          # Media types, embedders, clippers, converters, sources
-│   ├── EXTENDING-processors.md     # Detectors, localizers, extractors
-│   ├── EVAL.md                     # Evaluation framework guide
-│   ├── CLI.md                      # CLI reference
-│   ├── ML.md                       # ML model details
-│   ├── SETUP.md                    # Setup instructions
-│   ├── demos.md                    # Demo dataset listing
-│   ├── user/                       # End-user docs (rendered in-app via the Help window)
-│   │   └── USER_GUIDE.md           # End-user walkthrough (training detectors, applying detectors, exporting)
-│   ├── plans/                      # Open design plans (see plans/README.md)
-│   └── design/                     # Architecture design documents
-└── pyproject.toml                  # Project metadata and dependencies
+├── app.py            # Flask entry point: builds the app, registers blueprints, parses CLI args
+├── gunicorn.conf.py  # Gunicorn WSGI config (single worker + threads)
+├── vtsearch/         # App tier (Flask routes, auth, settings, CLI entry point)
+├── vtscore/          # Library tier (ML, embedding, media, datasets, plugins, projection)
+├── frontend/         # Angular SPA source (TypeScript, SCSS); builds into static/
+├── static/           # Angular build output (HTML, JS, CSS, assets)
+├── tests/            # App-tier test suite (pytest); grouped by folder (core, api, sorting, …)
+├── tests_lib/        # Library-tier test suite (mirrors tests/, import-clean of Flask)
+├── docs/             # Extended documentation (see docs/ARCHITECTURE.md for the full map)
+└── pyproject.toml    # Project metadata and dependencies
 ```
+
+For the complete directory map, dependency graph, and the app-tier/library-tier rules, see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ## HTTP API
 

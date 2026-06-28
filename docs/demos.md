@@ -1,23 +1,13 @@
 # Demo Datasets
 
-When the app is running, click the **+** button on the **Datasets** card to open the **Add Dataset** dialog, then pick the **Demo** tab. From there you can browse the available demo datasets and load one. Each demo is downloaded and embedded on first use, then cached for instant loading afterward.
+This is the reference catalogue of every demo dataset VTSearch can download and embed on demand. For the step-by-step loading walkthrough (opening the **Add Dataset** dialog, the **Demo** tab, and the **🏭 Synthetic Media** offline generator), see **[user/USER_GUIDE.md](user/USER_GUIDE.md)**.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="user/assets/importer-picker.dark.png" />
   <img src="user/assets/importer-picker.light.png" alt="The Demo importer with the Synthetic Media generator and the Downloaded Media catalogue" width="720" />
 </picture>
 
-## Synthetic (offline)
-
-If you don't have an internet connection (or just want a quick test fixture), pick **🏭 Synthetic Media** on the **Demo** tab of the dataset importer. Choose `image`, `audio`, or `video` and a size (e.g. 100, 1000, 10000) and the app will generate fake media on the fly:
-
-| Media type | Ideas it cycles through |
-|------------|-------------------------|
-| Image      | smiley faces (4 emotions, varied colors / sizes / backgrounds), 1–5 colored shapes (circle / square / triangle) |
-| Audio      | sine tones, chords (major / minor / dim / sus4), drums (kick / snare / hihat at varying BPMs), rain, wind, FM-swept bird chirps |
-| Video      | bouncing ball, walking smiley, rotating polygon, scrolling marquee |
-
-Files are deterministic for a given size and cached under `data/synthetic/<media_type>_<size>/`, so reloads skip regeneration. The clusters are coarse on purpose; they give CLAP / CLIP / X-CLIP something to actually distinguish when you're testing a sort.
+Datasets are grouped by media type below. Each demo comes in size variants — **S** / **M** / **L** (progressively larger samples) and **A** (all items in the underlying dataset). Sizes are downloaded once and cached, so reloads are instant.
 
 ## Audio
 
@@ -26,6 +16,7 @@ Files are deterministic for a given size and cached under `data/synthetic/<media
 | **esc50_s** | ~350 clips across all 50 ESC-50 sound categories: animals, nature, urban, domestic, and human sounds |
 | **esc50_m** | ~650 clips across all 50 ESC-50 sound categories |
 | **esc50_l** | ~1000 clips across all 50 ESC-50 sound categories |
+| **esc50_a** | All clips across the 50 ESC-50 sound categories: animals, nature, urban, domestic, and human sounds (all) |
 | **gtzan_a** | 30-second music excerpts across 10 GTZAN genres: blues, classical, country, disco, hiphop, jazz, metal, pop, reggae, and rock |
 | **speech_commands_v2_s** | One-second keyword utterances across 35 Google Speech Commands v2 categories (small) |
 | **speech_commands_v2_m** | One-second keyword utterances across 35 Speech Commands v2 categories (medium) |
@@ -44,9 +35,14 @@ Files are deterministic for a given size and cached under `data/synthetic/<media
 
 | Demo | Description |
 |------|-------------|
-| **caltech101_s** | ~500 photographs across 25 Caltech-101 categories: animals, vehicles, household objects, and nature |
-| **caltech101_m** | ~1,000 photographs across 25 Caltech-101 categories |
-| **caltech256_l** | ~2,000 photographs across 25 Caltech-256 categories: animals, landmarks, vehicles, and everyday objects |
+| **caltech101_s** | Centered single-object photographs across 25 Caltech-101 categories: animals, vehicles, household objects, and nature (small) |
+| **caltech101_m** | Centered single-object photographs across 25 Caltech-101 categories (medium) |
+| **caltech101_l** | Centered single-object photographs across 25 Caltech-101 categories (large) |
+| **caltech101_a** | Centered single-object photographs across 25 Caltech-101 categories (all) |
+| **caltech256_s** | Cluttered, off-center object photographs across 25 Caltech-256 categories: animals, landmarks, vehicles, and everyday objects (small) |
+| **caltech256_m** | Cluttered object photographs across 25 Caltech-256 categories (medium) |
+| **caltech256_l** | Cluttered object photographs across 25 Caltech-256 categories (large) |
+| **caltech256_a** | Cluttered object photographs across 25 Caltech-256 categories (all) |
 | **oxford_flowers_102_a** | Close-up flower photography across 102 Oxford Flowers species |
 | **food101_s** | Crowd-sourced food photos across Food-101 categories (small) |
 | **food101_m** | Crowd-sourced food photos across Food-101 categories (medium) |
@@ -79,6 +75,7 @@ Files are deterministic for a given size and cached under `data/synthetic/<media
 | **20newsgroups_s** | ~375 articles across 15 topics from 20 Newsgroups: sports, science, politics, religion, and more |
 | **20newsgroups_m** | ~750 articles across 15 topics from 20 Newsgroups |
 | **20newsgroups_l** | ~1875 articles across 15 topics from 20 Newsgroups |
+| **20newsgroups_a** | All articles across 15 topics from 20 Newsgroups: sports, science, politics, religion, and more (all) |
 | **ag_news_s** | Short news summaries across AG News categories (small) |
 | **ag_news_m** | Short news summaries across AG News categories (medium) |
 | **ag_news_l** | Short news summaries across AG News categories (large) |
@@ -88,6 +85,18 @@ Files are deterministic for a given size and cached under `data/synthetic/<media
 | **imdb_m** | Long-form movie reviews with positive/negative sentiment labels (medium) |
 | **imdb_l** | Long-form movie reviews with positive/negative sentiment labels (large) |
 | **imdb_a** | Long-form user-written movie reviews with binary positive/negative sentiment labels (all) |
+| **wikipedia_topics_s** | Wikipedia article abstracts across 14 DBpedia ontology classes: companies, artists, athletes, buildings, animals, plants, films, and more (small) |
+| **wikipedia_topics_m** | Wikipedia article abstracts across 14 DBpedia ontology classes (medium) |
+| **wikipedia_topics_l** | Wikipedia article abstracts across 14 DBpedia ontology classes (large) |
+| **wikipedia_topics_a** | Wikipedia article abstracts across 14 DBpedia ontology classes (all) |
+| **arxiv_abstracts_s** | arXiv paper titles and abstracts across 12 subject categories spanning CS, math, physics, biology, and statistics (small) |
+| **arxiv_abstracts_m** | arXiv titles and abstracts across 12 subject categories (medium) |
+| **arxiv_abstracts_l** | arXiv titles and abstracts across 12 subject categories (large) |
+| **arxiv_abstracts_a** | arXiv titles and abstracts across 12 subject categories (all) |
+| **reuters21578_s** | Financial newswire stories across 10 Reuters-21578 topics: earnings, acquisitions, money/fx, grain, crude, trade, and more (small) |
+| **reuters21578_m** | Financial newswire stories across 10 Reuters-21578 topics (medium) |
+| **reuters21578_l** | Financial newswire stories across 10 Reuters-21578 topics (large) |
+| **reuters21578_a** | Financial newswire stories across 10 Reuters-21578 topics (all) |
 
 ## Video
 
@@ -96,7 +105,20 @@ Files are deterministic for a given size and cached under `data/synthetic/<media
 | **ucf101_s** | ~150 clips across 10 UCF-101 action categories: personal activities and sports |
 | **ucf101_m** | ~250 clips across 10 UCF-101 action categories |
 | **ucf101_l** | ~600 clips across 10 UCF-101 action categories |
+| **ucf101_a** | All clips across the same 10-category UCF-101 subset (all) |
+| **ucf101_full_s** | YouTube action videos across all 101 UCF-101 categories (small) |
+| **ucf101_full_m** | YouTube action videos across all 101 UCF-101 categories (medium) |
+| **ucf101_full_l** | YouTube action videos across all 101 UCF-101 categories (large) |
+| **ucf101_full_a** | YouTube action videos across all 101 UCF-101 categories (all) |
+| **hmdb51_s** | Human-motion clips across 51 HMDB51 categories: facial actions, body movements, and human interactions (small) |
+| **hmdb51_m** | Human-motion clips across 51 HMDB51 categories (medium) |
+| **hmdb51_l** | Human-motion clips across 51 HMDB51 categories (large) |
+| **hmdb51_a** | Human-motion clips across 51 HMDB51 categories (all) |
+| **kth_s** | Simple human-action recordings across 6 KTH categories: boxing, handclapping, handwaving, jogging, running, and walking (small) |
+| **kth_m** | Simple human-action recordings across 6 KTH categories (medium) |
+| **kth_l** | Simple human-action recordings across 6 KTH categories (large) |
+| **kth_a** | Simple human-action recordings across 6 KTH categories (all) |
 
-> **Note:** UCF-101 demos are downloaded from HuggingFace Datasets. On some networks or air-gapped systems this may require manual setup; see [DEPLOYMENT.md](DEPLOYMENT.md) for offline deployment instructions.
+> **Note:** Video demos are downloaded from HuggingFace Datasets. On some networks or air-gapped systems this may require manual setup; see [DEPLOYMENT.md](DEPLOYMENT.md) for offline deployment instructions.
 
-You can also load your own data from pickle files or folders via the same menu.
+You can also load your own data from pickle files or folders via the same dialog.

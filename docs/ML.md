@@ -32,11 +32,11 @@ The model outputs raw logits (not probabilities) during training. This allows th
 
 ### Class Weighting
 
-Training uses inverse-frequency weighting to balance classes, with an additional `inclusion_value` parameter (range [-10, +10]) that lets users bias the model toward recall or precision:
+Training uses **inverse-frequency weighting only** to balance classes (`mlp.py:193-197`). Inclusion does **not** enter training — the trained model, and therefore every item's score, is independent of inclusion. Inclusion is applied later as a pure threshold knob in `find_optimal_threshold` (see [Threshold Calibration](#threshold-calibration) below).
 
-- **Base weights**: `weight_true = num_false / num_true`, `weight_false = 1.0`
-- **Inclusion >= 0**: `weight_true *= 2^inclusion_value` (include more items)
-- **Inclusion < 0**: `weight_false *= 2^(-inclusion_value)` (exclude more items)
+- **Weights**: `weight_true = num_false / num_true`, `weight_false = 1.0`
+
+Keeping the model inclusion-independent is what lets the calibration cache reuse fold scores across cutoff slides: when the user changes inclusion, the labels are unchanged, the fold models are unchanged, and only the cheap min-cost threshold search re-runs.
 
 ### Threshold Calibration
 
@@ -48,13 +48,19 @@ A decision threshold separating "good" from "bad" predictions is computed via **
 4. Repeat for `calibrate_count` independent random splits.
 5. Return the mean of all thresholds.
 
-The `calibrate_count` setting defaults to `2` but can be lowered (`VTSEARCH_CALIBRATE_COUNT`) to trade calibration quality for latency. When `safe_thresholds` is enabled and fewer than 6 labels exist, the cross-calibration step is skipped entirely; the `calculate_safe_threshold` blender weights the calibrated value at 0 in that regime, so paying for the fold trainings would be pure waste.
+The `calibrate_count` setting defaults to `1` (`DEFAULT_CALIBRATE_COUNT` in `vtscore/config.py`) and can be raised or lowered (`VTSEARCH_CALIBRATE_COUNT`) to trade calibration quality for latency. (The eval runner uses its own default of `2` for a separate, non-interactive path — see [`docs/EVAL.md`](EVAL.md).) When `safe_thresholds` is enabled and fewer than 6 labels exist, the cross-calibration step is skipped entirely; the `calculate_safe_threshold` blender weights the calibrated value at 0 in that regime, so paying for the fold trainings would be pure waste.
 
 **Why fold models use the full-data hidden_dim:** The hidden-layer width is normally auto-sized from the training-set size (`n_train // 3`, clamped to 4–32). Without intervention, each fold model would train on fewer examples and therefore get a smaller hidden layer than the final model. A smaller architecture produces a different score distribution, so thresholds found on fold models would not transfer faithfully to the final model. By forcing fold models to use the same `hidden_dim` as the final model, the architectures match: same capacity, same score distribution shape. The only difference is the fold models see less data, which is the whole point (you want held-out calibration data). Existing regularization (dropout 0.5, weight decay 1e-4) and the small max width (32) prevent the slightly "oversized" fold models from overfitting meaningfully.
 
 The **Calibration Fraction** setting (0–1, default 0.5) controls how much data is reserved for threshold calibration vs. model training in each split. For example, a value of 0.2 means 80% Train / 20% Calibrate. If the fraction is so extreme that a valid Train/Calibrate split cannot be formed (fewer than 2 training examples or fewer than 1 calibration example), the system returns a maximum threshold so that nothing is predicted as Good.
 
-The optimal threshold at each split minimizes a weighted combination of false-positive rate and false-negative rate, governed by the same `inclusion_value`.
+The optimal threshold at each split minimizes a weighted combination of false-positive rate (FPR) and false-negative rate (FNR), governed by the `inclusion_value` parameter (integer in range [-10, +10]). This is where inclusion biases the result toward recall or precision — at calibration/threshold time, **not** at training time:
+
+- **Inclusion = 0**: minimize `fpr + fnr` (equal weight).
+- **Inclusion > 0**: minimize `fpr + 2^inclusion_value * fnr` (prefer recall — include more items).
+- **Inclusion < 0**: minimize `2^(-inclusion_value) * fpr + fnr` (prefer precision — exclude more items).
+
+Because the fold models are inclusion-independent, the per-fold held-out scores can be cached once and re-thresholded at any inclusion (this powers the Find Stats sweep across all inclusion values).
 
 For semantic (text/example) sorts, a **GMM-based threshold** is used instead: a 2-component Gaussian Mixture Model is fitted to the score distribution and the midpoint between component means serves as the threshold.
 
@@ -78,11 +84,18 @@ Each media type uses a different pretrained model to produce fixed-size embeddin
 |------------------------|----------|-------|--------------|
 | Audio (`audio`) | `clap` (default) | LAION CLAP (`laion/clap-htsat-unfused`) | 512 |
 | Audio (`audio`) | `clap_music` | CLAP Music & Speech (`laion/larger_clap_music_and_speech`) | 512 |
+| Audio (`audio`) | `clap_general` | CLAP General 2024 (`laion/larger_clap_general`) | 512 |
 | Audio (`audio`) | `paraspeechclap` | ParaSpeechCLAP speech-style (WavLM + Granite, `ajd12342/paraspeechclap-combined`) | 768 |
+| Audio (`audio`) | `ast` | AST audio spectrogram (`MIT/ast-finetuned-audioset-10-10-0.4593`, audio-only) | 768 |
+| Audio (`audio`) | `whisper_encoder` | Whisper-base encoder (`openai/whisper-base`, audio-only) | 512 |
 | Image (`image`) | `siglip` (default) | SigLIP (`google/siglip-base-patch16-224`) | 768 |
+| Image (`image`) | `siglip2` | SigLIP 2 (`google/siglip2-base-patch16-224`) | 768 |
+| Image (`image`) | `clip` | CLIP (`openai/clip-vit-base-patch32`) | 512 |
 | Image (`image`) | `dinov2_single` / `dinov2_patch` | DINOv2 ViT-B/14 (`facebook/dinov2-base`) | 768 |
 | Image (`image`) | `dinov3_single` / `dinov3_patch` | DINOv3 ViT-B/16 (`facebook/dinov3-vitb16-pretrain-lvd1689m`, gated) | 768 |
 | Image (`image`) | `eupe_single` / `eupe_patch` | EUPE ViT-B/16 (`facebookresearch/EUPE`, FAIR Noncommercial) | 768 |
+| Image (`image`) | `sift_vlad` | SIFT/VLAD instance matching (classical, no text encoder) | 8192 (64 centroids × 128-dim SIFT) |
+| Image (`image`) | `face` | FaceNet identity (`InceptionResnetV1`, face crops, no text encoder) | 512 |
 | Video (`video`) | `xclip` (default) | Microsoft X-CLIP (`microsoft/xclip-base-patch32`) | 768 |
 | Text (`text`) | `e5` (default) | E5 (`intfloat/e5-base-v2`) | 768 |
 | Text (`text`) | `bge` | BGE (`BAAI/bge-base-en-v1.5`) | 768 |

@@ -21,8 +21,10 @@ GET /api/medias/ids
 ]
 ```
 
-Every stub carries `id` and `type`; `embedder` is included when the media
-has one.  Display-worthy metadata (`filename`, `md5`, `custom_metadata`,
+Every stub carries `id` and `media_type`; `embedder` (and the plural
+`embedders` array, when a media was embedded by more than one embedder, e.g.
+a semantic + region-patch pair) is included when present.  Display-worthy
+metadata (`filename`, `md5`, `custom_metadata`,
 `origin_name`, `description`, `clip_*`) is fetched on demand for the IDs
 the client actually needs via [Batch fetch](#batch-fetch-metadata); this
 keeps the listing payload bounded even for datasets with tens of
@@ -59,11 +61,12 @@ are silently omitted):
 ]
 ```
 
-Every returned item contains `id`, `type`, `filename`, `md5`, and
+Every returned item contains `id`, `media_type`, `filename`, `md5`, and
 `custom_metadata`.  The `custom_metadata` dict holds media-type-specific
 display fields (e.g.  `duration`/`frequency` for audio, `width`/`height`
 for images, `word_count` for text).  `origin_name`, `description`,
-`embedder`, and `clip_*` keys are included when present.
+`embedder`, `embedders` (plural array, when present), and `clip_*` keys are
+included when present.
 
 ### Stream audio
 
@@ -146,6 +149,42 @@ or switched good → bad.
 | `400` | Invalid `vote` value; `region_box` on a `bad` vote; `region_box` outside `[0, 1]` or not a 4-tuple. |
 | `404` | Media not found. |
 
+### Bulk vote
+
+```
+POST /api/medias/vote-bulk
+```
+
+**Body:** `{"ids": [1, 2, 3], "target": "good"}`
+
+Applies one absolute vote `target` (`"good"` / `"bad"`) to many medias in a
+single request, with the same idempotent semantics as the per-media vote
+(including Find-mode verification: a good/bad target marks the item verified).
+The detector labelset is persisted once rather than per id. Bulk votes are
+image-level (no region boxes). Powers the Browser's "Verified Good" /
+"Verified Bad" actions.
+
+→ `{"changed": 2, "missing": [3]}` — `changed` counts only ids whose state
+actually moved; ids not in the loaded dataset are reported in `missing`.
+400 if no ids supplied.
+
+### Thumbnail
+
+```
+GET /api/medias/{media_id}/thumbnail
+```
+
+**Query (optional):** `region=x0,y0,x1,y1` (normalised fractions in `[0, 1]`)
+crops the thumbnail to a sub-region (used so the Good pile shows a
+region-voted item's crop rather than the whole frame).
+
+Streams a downscaled thumbnail bounded to a fixed longest-side length, the
+same regardless of zoom level (an `ETag` lets the browser reuse it across
+scrolls/zoom). Grid and list tiles use this instead of `/image` so a gallery
+of high-resolution items doesn't decode every full-size bitmap at once.
+400 if the media is not an image and has no `image_response` delegate. 404 if
+not found or bytes unavailable.
+
 ---
 
 ## Sorting
@@ -218,6 +257,25 @@ Embeds the uploaded file and sorts by cosine similarity.
 
 `best_region` is included per-result on patch-region-aware datasets,
 same shape as text sort.
+
+### Example sort (by loaded media id)
+
+```
+POST /api/example-sort-by-id
+```
+
+**Body:** `{"media_id": 42}` (optionally `{"media_id": 42, "crop_params": {...}}`)
+
+Sorts all medias by similarity to an already-loaded media item. When
+`crop_params` is absent the media's existing embedding vector is reused (no
+fetch, no re-embed); when set, the media's bytes are materialised, cropped,
+and re-embedded before sorting. Powers the right-click "sort by similarity" /
+"crop then sort" context-menu actions.
+
+→ `{"results": [...], "threshold": 0.5123}`
+
+400 if no medias loaded or `media_id` not in the loaded snapshot. 404 if the
+media's bytes are unavailable when cropping is requested.
 
 ### Example sort (server file)
 

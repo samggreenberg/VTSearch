@@ -169,6 +169,20 @@ multi-minute embedding pass. `--import-labels-into ... --label-importer-file ...
 is announced as part of the plan but skipped (no detector JSON is
 modified).
 
+### Progress output format
+
+By default, `--autodetect` prints human-readable progress to the console. For
+scripted or CI callers, add `--progress-format json` to emit
+**newline-delimited JSON (NDJSON)** on stdout instead — one progress event per
+line, which is easy to parse from a wrapping script:
+
+```bash
+python app.py --autodetect --dataset data.pkl --settings settings.json --progress-format json
+```
+
+The two choices are `text` (default, prose) and `json` (NDJSON events). The
+event schema is defined in `vtscore.cli_progress`.
+
 ## Pipeline file
 
 For repeatable runs (cron, CI), put the whole autodetect invocation in a YAML
@@ -246,6 +260,16 @@ banner text (`LOCAL` vs. `PRODUCTION`); the bind address is the same either
 way. This entry point uses Flask's built-in dev server and is not
 recommended for production.
 
+**Port** (`--port`): bind the dev server to a port other than the default
+`5000`. Precedence is `--port` > `VTSEARCH_PORT` env var > `5000`. This lets
+several instances share a host (e.g. co-located single-GPU SLURM jobs on a
+multi-GPU node). Gunicorn ignores this flag; under WSGI use `VTSEARCH_BIND`
+instead.
+
+```bash
+python app.py --port 8080
+```
+
 **Verbose logging** (`-v` / `--verbose`): logging defaults to `WARNING`, which
 keeps the console quiet — including the per-request access log. Pass `-v` to
 raise the level to `INFO`, which turns on the dev-server access log (one
@@ -277,11 +301,21 @@ bundled Docker images already run gunicorn this way. See
 [DEPLOYMENT.md](DEPLOYMENT.md#tuning) for tuning.
 
 **Authentication mode** (`--login`): select the login provider (dev
-server only; set up the provider in code when running under gunicorn):
+server only; set up the provider in code when running under gunicorn).
+Two providers are accepted:
 
 ```bash
-python app.py --login trivial    # multi-user mode with simple username auth
+python app.py --login trivial    # multi-user mode with simple username auth (cookie-based, no password)
+python app.py --login api_key    # Bearer-key auth against data/api_keys.json
 ```
+
+- **`trivial`** shows a username prompt (no password) and tracks the user via a
+  cookie; useful for low-stakes multi-user setups.
+- **`api_key`** authenticates each request via an `Authorization: Bearer <key>`
+  header, checking the key against `data/api_keys.json`. This is the same key
+  store the CLI's `--user` + `--api-key` flags use (see [Which user's Auto-Find
+  list runs](#which-users-auto-find-list-runs) above), so a key minted for the
+  server also works for a per-user `--autodetect` run.
 
 Without `--login`, the app uses `DefaultLoginProvider` (single-user, always authenticated).
 

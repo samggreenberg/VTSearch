@@ -204,23 +204,14 @@ function makeHelpers(page: Page): Helpers {
       await page.waitForSelector('.btn-good', { timeout: 15000 }).catch(() => {});
       await wait(900);
     },
-    async gridView() {
-      const left = page.locator('.panel-left');
-      const candidates = [
-        left.locator('[title*="grid" i]'),
-        left.locator('[aria-label*="grid" i]'),
-        left.locator('.vc-btn').nth(1),
-      ];
-      for (const c of candidates) {
-        if (await c.count()) { await c.first().click().catch(() => {}); break; }
-      }
-      await wait(600);
-    },
     async openBrowse() {
       await h.dashboard();
-      // Browse (eye) button on the dataset card.
-      await page.locator('vt-dataset-card', { hasText: 'syn-imgs' }).first()
-        .locator('.browse-btn').first().click();
+      // Browse moved into the dataset row's ⋯ overflow menu (the inline eye is
+      // gone; it now only renders as a *disabled* projection-building button).
+      // Open the overflow menu, then click its "Browse dataset" item.
+      const card = page.locator('vt-dataset-card', { hasText: 'syn-imgs' }).first();
+      await card.locator('.overflow-btn').first().click();
+      await page.locator('.context-menu .menu-item', { hasText: 'Browse dataset' }).first().click();
       await page.waitForURL(/browse/i, { timeout: 15000 }).catch(() => {});
       // First visit builds the UMAP projection (progress bar); wait it out.
       await page.waitForSelector('.browse-content, canvas', { timeout: 180000 });
