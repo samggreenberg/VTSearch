@@ -147,6 +147,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * pan can warm the just-revealed ring without flooding the network or filling
    * the thumbnail cache in a single burst. */
   private static readonly PRELOAD_MAX_PER_PASS = 64;
+  /** Fraction of {@link PRELOAD_MAX_PER_PASS} reserved for warming the *finer*
+   * level a zoom-in would reveal, so a wide pan ring can't starve the zoom path.
+   * Pan warms the rest first; whichever side has nothing left to warm hands its
+   * unused budget back to the other, so the split only bites when both compete. */
+  private static readonly THUMB_PRELOAD_ZOOM_SHARE = 0.5;
   /** Handle for the pending idle thumbnail-preload pass (at most one in flight),
    * with a flag recording whether it was scheduled via ``setTimeout`` (the
    * fallback when ``requestIdleCallback`` is unavailable) so destroy cancels it
@@ -1635,13 +1640,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (meta.levels.length > level + 1) {
       this.prefetchLevel(level + 1, visibleTiles);
     }
-    // Image/video datasets paint a thumbnail per cell; warm the ring's thumbnails
-    // on idle so they're decoded before the cells scroll in. Pure-density media
+    // Image/video datasets paint a thumbnail per cell; warm the off-view ring's
+    // thumbnails (a pan) and the finer level's centre thumbnails (a zoom-in) on
+    // idle so they're decoded before the cells appear. Pure-density media
     // (audio/text) draw no thumbnails, so there's nothing to warm. Warming follows
     // the same resolution tier (capped /thumbnail vs full-res /image) and the same
     // count-bounded LRU as on-demand loads, so it can't raise the memory ceiling —
     // it only reaches it sooner, and visible thumbnails (which bump recency) are
-    // evicted last.
+    // evicted last. See {@link runThumbPrefetch} for the pan/zoom budget split.
     if (this.thumbnailMode) this.scheduleThumbPrefetch();
   }
 
@@ -1708,30 +1714,116 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   /**
-   * Warm thumbnails for the cells of the off-view ring, bounded to
-   * {@link PRELOAD_MAX_PER_PASS} new fetches so one pass can't flood the network
-   * or the cache. Only tiles whose geometry is already cached are walked (one
-   * still loading is picked up by a later pass), and warming stops short of the
-   * cache cap so a preload never evicts a visible thumbnail.
+   * Warm off-view thumbnails on idle, bounded to {@link PRELOAD_MAX_PER_PASS}
+   * new fetches so one pass can't flood the network or the cache. The budget is
+   * split across the two ways the visible set changes:
+   *
+   * - **Pan** — the off-view ring at the current level (cells a pan scrolls in).
+   * - **Zoom-in** — the finer cells now centred under the view (cells a zoom-in
+   *   reveals). A zoom is no more surprising than a pan, but it swaps the whole
+   *   screen for a denser level, so warming only the pan ring leaves a zoom-in
+   *   facing a cold cache.
+   *
+   * Pan warms first up to its share; the zoom path takes the reserve plus any
+   * budget pan left unused, and a final pan sweep mops up anything the zoom path
+   * didn't need (e.g. no finer level, or its tiles already warm), so the split
+   * only bites when both genuinely compete. Both paths share the count-bounded
+   * LRU keyed by media id, so a thumbnail warmed for a zoom is reused if a pan
+   * reaches it instead. Only tiles whose geometry is already cached are walked
+   * (one still loading is picked up by a later pass), and warming stops short of
+   * the cache cap so a preload never evicts a visible thumbnail.
    */
   private runThumbPrefetch(): void {
-    if (!this.thumbnailMode || !this.meta()) return;
+    const meta = this.meta();
+    if (!this.thumbnailMode || !meta) return;
     const level = this.activeLevel;
-    let budget = BrowseCanvasComponent.PRELOAD_MAX_PER_PASS;
-    for (const { tx, ty } of this.offViewRing(this.getVisibleTiles())) {
-      if (budget <= 0) break;
+    const total = BrowseCanvasComponent.PRELOAD_MAX_PER_PASS;
+    const panRing = this.offViewRing(this.getVisibleTiles());
+    // Only reserve for zoom when there's a finer level to zoom into; otherwise
+    // pan gets the whole budget on the first sweep.
+    const canZoomIn = meta.levels.length > level + 1;
+    const zoomReserve = canZoomIn ? Math.floor(total * BrowseCanvasComponent.THUMB_PRELOAD_ZOOM_SHARE) : 0;
+
+    // Pan: the off-view ring at the current level, capped so the reserve stays
+    // for zoom.
+    let remaining = total - this.warmThumbsForTiles(level, panRing, total - zoomReserve);
+    // Zoom-in: the finer tiles centred under the view, newest-revealed first.
+    if (canZoomIn && remaining > 0) {
+      remaining -= this.warmThumbsForTiles(level + 1, this.finerTilesForZoom(), remaining);
+    }
+    // Hand any unspent budget back to the pan ring.
+    if (remaining > 0) this.warmThumbsForTiles(level, panRing, remaining);
+  }
+
+  /**
+   * Kick off idle thumbnail loads for the cells of ``tiles`` at ``level``, up to
+   * ``budget`` new fetches, and return how many were started. Tiles whose
+   * geometry isn't cached yet are skipped (a later pass catches them), already
+   * loaded/failed cells are skipped, and warming stops at the cache cap so a
+   * preload never evicts a visible thumbnail.
+   */
+  private warmThumbsForTiles(
+    level: number,
+    tiles: { tx: number; ty: number }[],
+    budget: number,
+  ): number {
+    let spent = 0;
+    for (const { tx, ty } of tiles) {
+      if (spent >= budget) break;
       const tile = this.tileCache.getCached(level, tx, ty);
       if (!tile) continue;
       for (const cell of tile.cells) {
-        if (budget <= 0) break;
+        if (spent >= budget) break;
         if (this.thumbCache.has(cell.rep_id) || this.thumbFailed.has(cell.rep_id)) continue;
         // Stop before the cache fills so a preload never forces an eviction; the
         // free slots come from visible getThumb()s bumping past stale warms.
-        if (this.thumbCache.size >= this.MAX_THUMBS) return;
+        if (this.thumbCache.size >= this.MAX_THUMBS) return spent;
         this.startThumbLoad(cell.rep_id, true);
-        budget--;
+        spent++;
       }
     }
+    return spent;
+  }
+
+  /**
+   * The tiles of the next finer level ({@link activeLevel} + 1) that cover the
+   * current viewport: what a zoom-in would render. A finer level halves the bin
+   * radius, so each visible tile maps to a 2×2 block of finer tiles; the union is
+   * returned sorted by distance from the view centre, since a zoom-in anchors
+   * near the centre (or cursor) and so reveals the central tiles first. Mirrors
+   * the geometry warmed by {@link prefetchLevel} for ``level + 1``, so the tiles
+   * walked here are the ones already being fetched.
+   */
+  private finerTilesForZoom(): { tx: number; ty: number }[] {
+    const meta = this.meta();
+    if (!meta) return [];
+    const finerLevel = this.activeLevel + 1;
+    const radius = meta.base_radius / Math.pow(2, finerLevel);
+    const tileW = meta.tile_span * this.geom.dx(radius);
+    const tileH = meta.tile_span * this.geom.dy(radius);
+    const [vxmin, vymin, vxmax, vymax] = this.getVisibleBounds();
+    // View centre in finer-tile coordinates, to rank tiles centre-out.
+    const ccx = (vxmin + vxmax) / 2 / tileW;
+    const ccy = (vymin + vymax) / 2 / tileH;
+    const seen = new Set<string>();
+    const tiles: { tx: number; ty: number; d2: number }[] = [];
+    for (const { tx, ty } of this.getVisibleTiles()) {
+      // Each current-level tile spans a 2×2 block at the finer level.
+      for (let dx = 0; dx <= 1; dx++) {
+        for (let dy = 0; dy <= 1; dy++) {
+          const ftx = tx * 2 + dx;
+          const fty = ty * 2 + dy;
+          const key = `${ftx}:${fty}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const ex = ftx + 0.5 - ccx;
+          const ey = fty + 0.5 - ccy;
+          tiles.push({ tx: ftx, ty: fty, d2: ex * ex + ey * ey });
+        }
+      }
+    }
+    tiles.sort((a, b) => a.d2 - b.d2);
+    return tiles.map(({ tx, ty }) => ({ tx, ty }));
   }
 
   /**
