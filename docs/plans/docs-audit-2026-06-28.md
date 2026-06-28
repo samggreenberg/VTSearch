@@ -1,7 +1,13 @@
 # Documentation Audit — 2026-06-28
 
-**Status:** Audit complete; no fixes applied yet. This is the systemic
-review requested before re-shooting screenshots "in a better environment."
+**Status:** Audit complete. The Part C recipe fixes + Part E caption fixes
+landed with the audit (commit `3b172f0c`), and the **screenshots shipped
+2026-06-28**: the 7 Part A retakes were recaptured and the 4 Part B shots
+(`new-detector`, `find-view`, `find-stats`, `achievements`) were added to the
+manifest, captured in light+dark, and embedded at their USER_GUIDE anchors —
+driven against a live GRID-hosted app over an SSH tunnel from a RAM-tight
+laptop (browser local, embedders remote). The Part D prose pass also already
+landed in `3b172f0c`. See "Open follow-ups" for what remains.
 
 **Scope.** Every doc under `docs/` plus the root `README.md`, checked against
 the *current* frontend (`frontend/src/app`), backend routes (`vtsearch/`),
@@ -249,13 +255,40 @@ These will time out or click dead/disabled targets if run as-is:
 
 ## Open follow-ups (what's owed)
 
-1. Fix the capture recipes/helpers in Part C, then run
-   `scripts/screenshots/refresh.sh` in a browser-capable env.
-2. Retake the 7 stale shots (Part A) + capture the new shots (Part B).
-3. Apply the prose fixes (Part D) — these are independent of the browser and can
-   land now.
-4. Update `docs/plans/user-docs-screenshots.md` "Shot list" to 20-ish shots and
-   record the new manifest entries there.
+1. ~~Fix the capture recipes/helpers in Part C, then run the harness in a
+   browser-capable env.~~ **Done 2026-06-28.** Part C landed with the audit;
+   verified live and refined while capturing (see "What shipped 2026-06-28").
+2. ~~Retake the 7 stale shots (Part A) + capture the new shots (Part B).~~
+   **Done 2026-06-28** — all 7 retaken, all 4 Part B added/captured/embedded.
+3. ~~Apply the prose fixes (Part D).~~ **Already landed** in `3b172f0c`.
+4. Update `docs/plans/user-docs-screenshots.md` "Shot list" to the current
+   20 shots and record the 4 new manifest entries there. *(Still owed.)*
+5. **Optional `browse-bin-popup`** (Part B item 5) was **not** added — it has
+   no USER_GUIDE anchor/placeholder, so it stayed out of scope this pass.
+6. **Masking is now gauge-robust.** `maskVolatile` masks both the RAM *and*
+   disk usage gauges by selector and re-asserts right before capture (the disk
+   gauge previously slipped through and Angular's poll could re-render live
+   values). The earlier "disk gauge masking gap" follow-up is resolved.
+
+## What shipped 2026-06-28 (the capture run)
+
+- **Captured against a live GRID app over an SSH tunnel** (`localhost:PORT` →
+  compute node), browser running locally, embedders/projection on the GRID —
+  RAM-safe on a ~3.7 GB laptop (free RAM never dipped below ~650 MB).
+- **Part A retakes (7 logical / 14 PNGs):** `dashboard-loaded` (now deselects
+  any leftover fixture selection for a clean overview), `dashboard-manage`
+  (annotation switched `highlight`→`box` so the open ⋯ menu isn't dimmed),
+  `importer-picker` (now drills into the Downloaded Media catalogue + media-type
+  selector instead of the bare Demo landing), `browse-view` (hex bins + two
+  controlled zoom-outs — `Zoom to fit` over-zoomed 60 points to blank),
+  `view-options`, `results-grid`, `settings-appearance` (caption corrected:
+  Solo media type lives on Import Defaults, not Appearance).
+- **Part B new shots (4 logical / 8 PNGs):** `new-detector`, `find-view`,
+  `find-stats` (titled "Detector Stats" in-app), `achievements` — manifest
+  entries + recipes added and `<picture>` embeds wired at their USER_GUIDE
+  anchors (the `<!-- SCREENSHOT TODO -->` placeholders are gone).
+- Browse-view PNGs were 256-colour quantised to stay under the 500 KB
+  added-large-file cap (synthetic flat colours quantise without banding).
 
 ---
 

@@ -432,7 +432,10 @@ Every search starts from a detector. Click the **+** button on the
 **Detectors** card on the Dashboard to open the **New Detector** modal.
 It has two tabs:
 
-<!-- SCREENSHOT TODO (new-detector): The New Detector modal on the Blank tab, with the Text Example field and the media-example picker -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/new-detector.dark.png" />
+  <img src="assets/new-detector.light.png" alt="The New Detector modal on the Blank tab: seed from a text description or a media example, then pick the embedder type" width="720" />
+</picture>
 
 - **Blank** - start a fresh detector that learns from your votes as you
   label. Give it a name, and seed it one of two ways: type a short
@@ -463,7 +466,10 @@ the detector's calls before exporting. Start it from the Dashboard:
 select a dataset row and a detector row, then click **Find** in the
 action bar (VTSearch scores every item, showing progress while it runs).
 
-<!-- SCREENSHOT TODO (find-view): The Find verification view with the work queue (left), the viewer (centre), and the Verified Good / Verified Bad piles (right) -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/find-view.dark.png" />
+  <img src="assets/find-view.light.png" alt="The Find verification view: work queue (left), the viewer with Good/Bad (centre), and the Verified Good / Verified Bad piles (right)" width="720" />
+</picture>
 
 - **Left pane** - the **work queue** of items the detector hasn't been
   confirmed on yet, ranked by score, with the same inclusion stepper
@@ -489,7 +495,10 @@ The verification view's action buttons let you act on the result:
 - **Browse** - open the positive items in the spatial
   [Browse](#browse--exploring-a-dataset-spatially) view.
 
-<!-- SCREENSHOT TODO (find-stats): The Find Stats modal with the confusion matrix and the false-positive / false-negative vs. inclusion curve -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/find-stats.dark.png" />
+  <img src="assets/find-stats.light.png" alt="The Find view's Detector Stats modal: counts, a confusion matrix, and the false-positive / false-negative vs. inclusion curve" width="720" />
+</picture>
 
 ---
 
@@ -746,7 +755,10 @@ appears; click it to open the **Achievements** panel, which lists the
 achievements and your tier progress on each. As you use the app, hitting
 a milestone fires a small **unlock toast**.
 
-<!-- SCREENSHOT TODO (achievements): The Achievements panel with tiered achievements and the code-phrase entry box -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/achievements.dark.png" />
+  <img src="assets/achievements.light.png" alt="The Achievements panel: total score and tiered milestones (Bronze/Silver/Gold/Platinum) with progress to the next tier" width="720" />
+</picture>
 
 A few achievements unlock via a **code phrase** rather than usage: docs
 (like this guide) hide a phrase, and pasting it into the panel's code box
