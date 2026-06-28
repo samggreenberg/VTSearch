@@ -261,8 +261,9 @@ These will time out or click dead/disabled targets if run as-is:
 2. ~~Retake the 7 stale shots (Part A) + capture the new shots (Part B).~~
    **Done 2026-06-28** — all 7 retaken, all 4 Part B added/captured/embedded.
 3. ~~Apply the prose fixes (Part D).~~ **Already landed** in `3b172f0c`.
-4. Update `docs/plans/user-docs-screenshots.md` "Shot list" to the current
-   20 shots and record the 4 new manifest entries there. *(Still owed.)*
+4. ~~Update `docs/plans/user-docs-screenshots.md` "Shot list" to the current
+   20 shots and record the 4 new manifest entries there.~~ **Done 2026-06-28** —
+   added a "Shot list (v2 — 2026-06-28)" addendum there.
 5. **Optional `browse-bin-popup`** (Part B item 5) was **not** added — it has
    no USER_GUIDE anchor/placeholder, so it stayed out of scope this pass.
 6. **Masking is now gauge-robust.** `maskVolatile` masks both the RAM *and*
