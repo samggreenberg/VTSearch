@@ -77,10 +77,16 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
 # fail-loud on purpose: a build-once-ship image should break here if cuML can't
 # resolve against the pinned torch build, rather than silently shipping a 12 GB
 # GPU image that still runs UMAP on the CPU. Adds ~3-4 GB to the image.
+#
+# Capped below RAPIDS 26 to match scripts/install.sh: 26.x requires
+# nvidia-nvjitlink-cu12>=12.9, which the cu121 torch pinned above (CUDA 12.1)
+# can't satisfy, so an unpinned cuml-cu12 would fail this fail-loud layer. 25.x
+# declares cuda-toolkit==12.* and resolves cleanly. See docs/DEPLOYMENT.md
+# "cuML crashes compiling a kernel".
 RUN pip install --no-cache-dir \
         --extra-index-url https://pypi.nvidia.com \
         --prefer-binary \
-        cuml-cu12
+        "cuml-cu12<26"
 
 # ---------- application layer ----------
 COPY . .

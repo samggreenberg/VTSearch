@@ -26,7 +26,9 @@
 # (air-gapped re-install, or after VTSEARCH_SKIP_CUML=1), install the wheel
 # matching your CUDA major version from the NVIDIA index, e.g. for CUDA 12:
 #
-#   pip install --extra-index-url https://pypi.nvidia.com cuml-cu12
+#   pip install --extra-index-url https://pypi.nvidia.com "cuml-cu12<26"
 #
-# (use cuml-cu11 on CUDA 11 hosts). Output differs numerically from the CPU
+# (the <26 cap matches scripts/install.sh: RAPIDS 26.x needs CUDA 12.9, newer
+# than the torch CUDA wheels we pin -- see docs/DEPLOYMENT.md "cuML crashes
+# compiling a kernel". Use cuml-cu11 on CUDA 11 hosts). Output differs from CPU
 # path; this is safe because both consumers freeze/persist their result once.
