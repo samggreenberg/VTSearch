@@ -1,4 +1,5 @@
 import {
+  formatEta,
   formatProgressHeader,
   isProgressIndeterminate,
   progressBarState,
@@ -122,3 +123,28 @@ describe('formatProgressHeader step-4 finalize phases', () => {
 function capitalizeFirst(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+describe('formatEta', () => {
+  it('returns empty for null, non-finite, or non-positive values', () => {
+    expect(formatEta(null)).toBe('');
+    expect(formatEta(undefined)).toBe('');
+    expect(formatEta(0)).toBe('');
+    expect(formatEta(-5)).toBe('');
+    expect(formatEta(Infinity)).toBe('');
+  });
+
+  it('never claims finer than 10-second granularity sub-minute', () => {
+    // A few seconds left snaps below the 10s floor → "< 10 sec", never "< 5 sec".
+    expect(formatEta(3)).toBe('< 10 sec left');
+    expect(formatEta(4)).toBe('< 10 sec left');
+    // Just over the floor rounds to the nearest 10s, not 5s.
+    expect(formatEta(12)).toBe('~10 sec left');
+    expect(formatEta(18)).toBe('~20 sec left');
+    expect(formatEta(34)).toBe('~30 sec left');
+  });
+
+  it('switches to minutes and hours for larger estimates', () => {
+    expect(formatEta(330)).toBe('~5.5 min left');
+    expect(formatEta(7200)).toBe('~2 hr left');
+  });
+});
