@@ -64,8 +64,14 @@ async function maskVolatile(page: Page): Promise<void> {
     };
     // ISO-ish dates and date-times → fixed
     walk(/\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?Z?)?/g, () => fixedDate);
-    // RAM / disk gauges: "958 MB free of 3.7 GB", "1.9 GB free of 26.6 GB"
-    walk(/[\d.]+\s*[GM]B\s+free\s+of\s+[\d.]+\s*GB/gi, () => '— free of 3.7 GB');
+    // RAM / disk gauges ("958 MB free of 3.7 GB", "6.2 GB free of 50.0 GB"):
+    // mask the volatile *free* amount but keep each gauge's real total, so the
+    // disk and RAM bars stay individually correct. Target the label element
+    // directly (selector-based) rather than the generic text walk — the disk
+    // gauge slipped through the walk because Angular's usage poll re-renders it.
+    document.querySelectorAll('.usage-bar-label').forEach((el) => {
+      el.textContent = (el.textContent || '').replace(/[\d.]+\s*[GM]B\s+free\s+of/i, '— free of');
+    });
     // version stamp "v 2026-..." already covered by the date rule.
   });
 }
@@ -252,6 +258,10 @@ async function captureShot(browser: Browser, shot: Shot, theme: Theme): Promise<
     await maskVolatile(page);
     if (shot.annotations?.length) await annotate(page, shot.annotations);
     await page.waitForTimeout(300);
+    // Re-assert volatile-text masking right before capture: the dashboard usage
+    // gauges poll on an interval and re-render live values into the DOM after
+    // the first mask, so mask again once the frame has settled.
+    await maskVolatile(page);
     if (shot.clip) {
       await page.locator(shot.clip.selector).first().screenshot({ path: out });
     } else {
