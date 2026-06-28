@@ -30,8 +30,9 @@ _TOTAL_LOAD_STEPS = 4  # download, load model, embed, finalize
 
 # Rough typical wall-clock split across the four load phases, used to pace the
 # unified whole-job progress bar (see ProgressTracker.set_step_weights).
-# Embedding dominates almost any real dataset; the model load is a roughly
-# fixed one-time cost; finalize (dedup + diversity tree + registry) is short.
+# Embedding dominates almost any real dataset on a CPU host; the model load is a
+# roughly fixed one-time cost; finalize (dedup + diversity tree + registry) is
+# short *relative to a slow CPU embed*.
 #
 # The model-load slice is kept deliberately small: it is the one phase that
 # cannot report fine-grained progress, so the bar sits at its floor for the
@@ -40,8 +41,46 @@ _TOTAL_LOAD_STEPS = 4  # download, load model, embed, finalize
 # goes to embedding, the phase that *does* report per-item progress and so
 # advances the bar smoothly. These weights only shape pacing — the overall ETA
 # self-corrects from the real rate — so they need only be in the right ballpark.
-#               download  model  embed  finalize
-_LOAD_STEP_WEIGHTS = [0.25, 0.10, 0.55, 0.10]
+#                   download  model  embed  finalize
+_LOAD_STEP_WEIGHTS_CPU = [0.25, 0.10, 0.55, 0.10]
+
+# GPU profile. When embedding runs on a CUDA device it is several times faster,
+# so the embed phase shrinks while the *finalize* phase does not: the registry
+# save (serialize → zip → disk write) is never GPU-accelerated, and the
+# diversity-tree k-means only moves to the GPU when cuML is installed (a
+# best-effort RAPIDS dependency that is frequently absent — see
+# ``vtscore/gpu_backends.py``), so it usually still runs on CPU ``sklearn``.
+# The net effect on a GPU host is that finalize dominates wall-clock instead of
+# embedding, so it gets a much larger slice of the bar. Without this the bar
+# raced to ~90% during the fast embed phase and then crawled through the last
+# 10% for many seconds while reporting "< 5 sec left" (the rate-based ETA was
+# dominated by the fast embed phase). See ``load_step_weights``.
+#                   download  model  embed  finalize
+_LOAD_STEP_WEIGHTS_GPU = [0.20, 0.10, 0.30, 0.40]
+
+# Back-compat / CPU default alias. The detector-load weights and the progress
+# tests reference this; the dataset loader picks the right profile at task
+# creation via :func:`load_step_weights`.
+_LOAD_STEP_WEIGHTS = _LOAD_STEP_WEIGHTS_CPU
+
+
+def load_step_weights() -> list[float]:
+    """Return the dataset-load step weights for the active embedding device.
+
+    GPU hosts embed several times faster, so the un-accelerated finalize phase
+    (registry serialize/write, and CPU k-means when cuML is absent) becomes the
+    dominant cost and earns a larger slice of the unified bar. Falls back to the
+    CPU profile whenever the device can't be resolved (e.g. torch missing), so a
+    library-only caller never crashes here.
+    """
+    try:
+        from vtscore.config import resolve_device  # noqa: PLC0415
+
+        if resolve_device().startswith("cuda"):
+            return list(_LOAD_STEP_WEIGHTS_GPU)
+    except Exception:
+        pass
+    return list(_LOAD_STEP_WEIGHTS_CPU)
 
 
 class FinalizeProgress:
