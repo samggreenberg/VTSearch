@@ -557,6 +557,13 @@ export class NewDetectorModalComponent implements OnInit {
     this.selectedImporter = null;
     this.resetDemoPickerState();
     this.resetServerFolderState();
+    // A category with a single source has no meaningful sub-tab choice, so
+    // skip straight to that source's input (e.g. opening "Files" lands the
+    // user on the server-path entry instead of a one-button sub-tab bar).
+    const importers = this.importersForActiveTab;
+    if (importers.length === 1) {
+      this.selectImporter(importers[0]);
+    }
   }
 
   selectImporter(importer: ImporterInfo): void {
