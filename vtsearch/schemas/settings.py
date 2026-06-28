@@ -87,6 +87,8 @@ class AppSettingsSchema(Schema):
     browse_thumbnail_border = _PerMediaTypeIntDict()
     # Whether (re)building the projection compacts the layout, per media type.
     browse_compact = _PerMediaTypeBooleanDict()
+    # Wheel notches / +/- clicks per pyramid level (1..3), per media type.
+    browse_mouse_zooms_per_level = _PerMediaTypeIntDict()
 
     # Per-user, per-media-type
     grid_icon_size_left = _PerMediaTypeStringDict()
@@ -223,6 +225,7 @@ class SettingsUpdateSchema(Schema):
     browse_icon_size = fields.Raw()
     browse_thumbnail_border = fields.Raw()
     browse_compact = fields.Raw()
+    browse_mouse_zooms_per_level = fields.Raw()
 
     autofind_detectors = fields.List(fields.String())
     # Auto-Find results exporter. ``autofind_exporter`` is validated against the

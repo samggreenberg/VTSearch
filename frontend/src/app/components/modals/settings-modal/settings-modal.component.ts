@@ -364,6 +364,30 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
+  /** Mouse-zooms per pyramid level for *typeId* (1..3), defaulting to 2 when
+   *  the user hasn't set one for this media type. This is how many wheel notches
+   *  / +/- clicks it takes to cross one pyramid level. */
+  getBrowseMouseZoomsPerLevel(typeId: string): number {
+    const dict = this.settings().browse_mouse_zooms_per_level as Record<string, number> | undefined;
+    const value = dict?.[typeId];
+    return value == null ? 2 : value;
+  }
+
+  /** Write the per-media-type mouse-zooms-per-level (clamped 1..3) and persist. */
+  onBrowseMouseZoomsPerLevelChange(typeId: string, value: number | string): void {
+    let n = typeof value === 'string' ? parseInt(value, 10) : value;
+    if (!Number.isFinite(n)) n = 2;
+    n = Math.max(1, Math.min(3, Math.round(n)));
+    const dict = {
+      ...((this.settings().browse_mouse_zooms_per_level as Record<string, number> | undefined) || {}),
+    };
+    dict[typeId] = n;
+    this.settings.update(
+      (s) => ({ ...(s as Record<string, unknown>), browse_mouse_zooms_per_level: dict }) as AppSettings,
+    );
+    this.save();
+  }
+
   /** Whether the projection is compacted for *typeId* (oceans closed),
    *  defaulting to on when the user hasn't set one for this media type. */
   getBrowseCompact(typeId: string): boolean {

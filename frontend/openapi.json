@@ -215,6 +215,12 @@
             },
             "type": "object"
           },
+          "browse_mouse_zooms_per_level": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object"
+          },
           "browse_panel_width": {
             "type": "integer"
           },
@@ -4540,6 +4546,7 @@
           "browse_colormap": {},
           "browse_compact": {},
           "browse_icon_size": {},
+          "browse_mouse_zooms_per_level": {},
           "browse_panel_width": {
             "type": "integer"
           },

@@ -331,6 +331,20 @@
                   <option value="XL">XL</option>
                 </select>
               </div>
+              <div class="form-group">
+                <label class="form-label" title="How many mouse-wheel notches (and +/- button clicks) it takes to cross one zoom level of the bin pyramid">Mouse-zooms per level<vt-field-hint-icon hint="How many mouse-wheel notches (and +/- button clicks) it takes to step from one zoom level of the bin pyramid to the next. 1 zooms a full 2× per notch; 2 (the default) zooms √2 so two notches cross a level; 3 zooms ∛2 so three notches cross a level."></vt-field-hint-icon></label>
+                <div class="toggle-group">
+                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseMouseZoomsPerLevel(activeBrowseTab()) === 1" (click)="onBrowseMouseZoomsPerLevelChange(activeBrowseTab(), 1)" title="One notch per level (2× per zoom)">
+                    1
+                  </button>
+                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseMouseZoomsPerLevel(activeBrowseTab()) === 2" (click)="onBrowseMouseZoomsPerLevelChange(activeBrowseTab(), 2)" title="Two notches per level (√2 per zoom) — the default">
+                    2
+                  </button>
+                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseMouseZoomsPerLevel(activeBrowseTab()) === 3" (click)="onBrowseMouseZoomsPerLevelChange(activeBrowseTab(), 3)" title="Three notches per level (∛2 per zoom)">
+                    3
+                  </button>
+                </div>
+              </div>
             </div>
           } @else {
             <p class="empty-state">No media types registered.</p>

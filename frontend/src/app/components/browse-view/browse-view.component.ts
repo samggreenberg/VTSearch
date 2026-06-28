@@ -178,12 +178,24 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private boundPanelUp = this.onPanelMouseUp.bind(this);
 
   /**
-   * Per-click zoom step for the on-screen +/- buttons. Matches the wheel's
-   * per-notch factor (√2, so two clicks = exactly one pyramid level) and makes
-   * a single click a visible difference; button zoom anchors at the viewport
-   * centre (no cursor to zoom toward).
+   * How many +/- button clicks (and wheel notches) cross one pyramid level —
+   * the per-media ``browse_mouse_zooms_per_level`` setting, mirrored here and
+   * passed to the canvas so the wheel matches the buttons. A pyramid level spans
+   * a full 2x of zoom, so the per-step width factor is ``2 ** (1 / n)``: 1 ⇒ 2x
+   * (one click per level), 2 ⇒ √2 (the default, two clicks per level), 3 ⇒ ∛2.
+   * Clamped to 1..3; falls back to 2 when unset for the active media type.
    */
-  private readonly ZOOM_BUTTON_FACTOR = Math.SQRT2;
+  readonly zoomsPerLevel = signal(2);
+
+  /**
+   * Per-click zoom step for the on-screen +/- buttons, derived from
+   * {@link zoomsPerLevel}. Matches the wheel's per-notch factor so the two
+   * gestures stay in lock-step; button zoom anchors at the viewport centre
+   * (no cursor to zoom toward).
+   */
+  private get zoomButtonFactor(): number {
+    return Math.pow(2, 1 / this.zoomsPerLevel());
+  }
 
   /** Bin-popup state: open flag, the viewport anchor it opens at, and the
    *  member ids of the bin the user right-clicked. Right-clicking a bin pops a
@@ -446,6 +458,12 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         ? DEFAULT_THUMBNAIL_BORDER
         : Math.max(0, Math.min(MAX_THUMBNAIL_BORDER, rawBorder)),
     );
+
+    const zoomsMap = s.browse_mouse_zooms_per_level as { [key: string]: number } | undefined;
+    const rawZooms = mt && zoomsMap ? zoomsMap[mt] : undefined;
+    this.zoomsPerLevel.set(
+      rawZooms == null ? 2 : Math.max(1, Math.min(3, Math.round(rawZooms))),
+    );
   }
 
   /** Read a ``{media_type: value}`` setting for *mt*, or ``''`` when unset. */
@@ -584,12 +602,12 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   /** Zoom in one step (narrower span, cells keep their display size). */
   zoomIn(): void {
-    this.canvas?.zoomBy(this.ZOOM_BUTTON_FACTOR);
+    this.canvas?.zoomBy(this.zoomButtonFactor);
   }
 
   /** Zoom out one step. */
   zoomOut(): void {
-    this.canvas?.zoomBy(1 / this.ZOOM_BUTTON_FACTOR);
+    this.canvas?.zoomBy(1 / this.zoomButtonFactor);
   }
 
   /** Choose a zoom and pan so the current data just fits in view. */

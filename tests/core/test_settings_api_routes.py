@@ -727,6 +727,23 @@ class TestBrowserSettings:
         # Persists across a fresh read.
         assert client.get("/api/settings").get_json()["browse_compact"]["audio"] is False
 
+    def test_update_browse_mouse_zooms_per_level_per_type(self, client):
+        res = client.put("/api/settings", json={"browse_mouse_zooms_per_level": {"audio": 1, "image": 3}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_mouse_zooms_per_level"]["audio"] == 1
+        assert data["browse_mouse_zooms_per_level"]["image"] == 3
+        # Persists across a fresh read.
+        assert client.get("/api/settings").get_json()["browse_mouse_zooms_per_level"]["audio"] == 1
+
+    def test_update_browse_mouse_zooms_per_level_clamped(self, client):
+        # Out-of-range values are clamped into 1..3 rather than rejected.
+        res = client.put("/api/settings", json={"browse_mouse_zooms_per_level": {"audio": 0, "image": 9}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_mouse_zooms_per_level"]["audio"] == 1
+        assert data["browse_mouse_zooms_per_level"]["image"] == 3
+
     def test_get_settings_includes_browser_prefs(self, client):
         data = client.get("/api/settings").get_json()
         # Present as (possibly empty) dicts so the frontend can index by type.
@@ -736,6 +753,7 @@ class TestBrowserSettings:
             "browse_icon_size",
             "browse_thumbnail_border",
             "browse_compact",
+            "browse_mouse_zooms_per_level",
         ):
             assert key in data
             assert isinstance(data[key], dict)
@@ -748,5 +766,6 @@ class TestBrowserSettings:
             "browse_icon_size",
             "browse_thumbnail_border",
             "browse_compact",
+            "browse_mouse_zooms_per_level",
         ):
             assert data.get(key, {}) == {}
