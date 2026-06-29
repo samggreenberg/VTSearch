@@ -179,7 +179,7 @@ class TestMakeConsoleProgress:
         cb("loading", "model.safetensors", 75, 100)
 
         out = capsys.readouterr().out
-        assert "[\033[33m" in out
+        assert "[\033[93m" in out
         assert "\033[0m]" in out
 
     def test_bar_fill_is_colored_green_at_completion(self, capsys):

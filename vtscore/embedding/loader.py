@@ -31,7 +31,7 @@ _LABEL_WIDTH = 32
 #: past it, green only at completion.  ``_ANSI_RESET`` restores the default so
 #: the closing bracket and trailing percentage are uncolored.
 _ANSI_RED = "\033[31m"
-_ANSI_YELLOW = "\033[33m"
+_ANSI_YELLOW = "\033[93m"  # bright yellow; the dim \033[33m renders olive/brown
 _ANSI_GREEN = "\033[32m"
 _ANSI_RESET = "\033[0m"
 
