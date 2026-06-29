@@ -1,6 +1,8 @@
 # WebDataset-style tar-sharded import (microvent / multivent-raw)
 
-**Status:** Phase A shipped; Phase B planned (see Open follow-ups).
+**Status:** Phase A shipped; Phase B shipped (sub-file clip windows, windowed
+manifest import, archive-member `MediaSource`, audio-mimetype nuances); only the
+GUI/docs-polish follow-up (item 5) remains — see Open follow-ups.
 
 ## Problem
 
@@ -48,46 +50,60 @@ What landed:
 Net effect: a filtered subset of either corpus imports with **zero disk growth**
 and plays back whole chunks by streaming single members.
 
-## Open follow-ups (Phase B — sub-file clip windows + full re-derivation)
+## Phase B — shipped (sub-file clip windows + cross-dataset re-derivation)
+
+What landed:
+
+- **Sub-file clip windows (gap 3).** One member can yield multiple media
+  carrying `clip_start` / `clip_end`. Both players now seek/loop within the
+  window **display-only**: the video player already did
+  (`video-player.component.ts`); the audio player gained the same logic
+  (`audio-player.component.ts`, `(loadedmetadata)` + a 100 ms boundary poll).
+  We never byte-slice these AAC/MP4 members — `clip_recipe`
+  (`vtscore/media/lazy_clip.py`) now returns `None` for any archive-member
+  media, so the byte routes serve the **whole** member and the player handles
+  the window. `batch_medias` already passes `clip_start` / `clip_end` through.
+
+- **Windowed precomputed-embedding import (gap 4).** The manifest schema gained
+  optional `clip_start` / `clip_end` / `window_id` columns
+  (`_npz_vectors.read_npz_archive_member_rows`, broadcast like `archives`; a
+  `NaN`/blank extent means "whole-member row"). The importer fans one member
+  into N windowed media, each its own searchable item with its own precomputed
+  vector, carrying the clip fields top-level (player) **and** in `origin.params`
+  (survives the pickle + feeds the source). The synthesized md5 + `origin_name`
+  fold in a per-window suffix (`window_suffix`: `#<window_id>`, else
+  `@<clip_start>`) so dedup / voting / display stay unique per window.
+
+- **Archive-member `MediaSource` (gap, cross-dataset re-derivation).**
+  `vtscore/datasets/sources/local_archive_member.py` is a manifest-backed
+  source that re-supplies a member's (or a specific *window's*) precomputed
+  vector by `(archive, member[, window])`, returning a `FetchedItem` with
+  `path=None` + `embedding` set. `example_sort_origin`
+  (`vtsearch/routes/media/server.py`) now sorts directly on that vector when a
+  source returns no path (cropping is rejected — it needs bytes this path never
+  materialises). This closes the last unsupported flow (per-media cross-dataset
+  "Find" used to 400 with "no media source").
+
+- **Audio mimetype + container nuances (gap 4).** The `/audio` route now picks
+  an **audio** `Content-Type` per the member container
+  (`_audio_member_mimetype`): `.aac` → `audio/aac`, an MP4-container audio chunk
+  (`.mp4` / `.m4a`, which `mimetypes` would call `video/mp4`) → `audio/mp4`,
+  `audio/x-wav` normalised to `audio/wav`, unknown → `audio/wav`. multivent-raw
+  audio that rides inside the video MP4 is served (as today) through the
+  **video** element's audio track.
+
+## Open follow-ups
 
 Tracked here, not in the PR body.
 
-1. **Sub-file clip windows (gap 3).** Let one member yield multiple media items
-   carrying `clip_start` / `clip_end`. The serving + frontend side is largely
-   already present: the video player seeks/loops on `clip_*`
-   (`video-player.component.ts`) and `batch_medias` passes the fields through.
-   Audio should use the **same display-only seek** (serve the whole member, seek
-   in the player) rather than byte-slicing — the existing `lazy_clip` audio path
-   is WAV-only (`_wav_slice`) and these corpora are AAC/MP4, which we do not want
-   to decode server-side. Wire `lazy_clip._read_source_bytes` to an archive
-   member only if a future windowing recipe needs sliced bytes; for display-only
-   windowing nothing more than the clip fields is required.
+1. **GUI / docs polish (Phase B item 5).** The importer registers in the
+   server-tab picker with a `.npz` manifest field; add a short user-docs section
+   covering the windowed-manifest schema and the no-extraction import flow, and
+   (if a screenshot ever frames the importer picker) queue a reshoot in
+   `docs/user/screenshots-reshoot-queue.md`. No existing doc screenshot frames
+   this importer's form today, so nothing is queued.
 
-2. **Windowed precomputed-embedding import (gap 4).** Extend the manifest schema
-   with `clip_start` / `clip_end` (and optional `window_id`) so one member fans
-   out into N windowed items (≈14 × 10 s CLAP windows per chunk), each its own
-   searchable media with its own precomputed vector. The Phase A importer already
-   emits one row → one item; windowing is "many rows per member" + carrying the
-   clip fields onto each media. Keep md5 unique per *window* (fold the window id
-   into the synthesized hash).
-
-3. **Archive-member `MediaSource` for cross-dataset re-derivation.** The
-   `MediaSource` / `FetchedItem` contract is path-based, so archive members
-   (which have no on-disk path) currently have no source factory. Bytes already
-   re-derive via the origin (the byte routes), and a full pickle persists
-   embeddings, and the importer's `reload_from_origin` rebuilds the whole dataset
-   from the manifest — so the only unsupported flow is **per-media** cross-dataset
-   "Find" / example-sort-from-origin (`example_sort_origin` returns 400 "no media
-   source"). Closing it needs either a bytes-returning `FetchedItem` extension or
-   a manifest-backed source that re-supplies vectors by `(archive, member)`.
-
-4. **Audio mimetype + container nuances.** The `/audio` route now derives the
-   mimetype from the member extension (defaulting to `audio/wav`). microvent ships
-   demuxed AAC; multivent-raw audio rides in the video MP4 (no separate audio
-   dir), so most "audio events" are served through the **video** element's audio
-   track. Validate AAC/`audio/mp4` playback across browsers when wiring the GUI.
-
-5. **GUI / docs polish.** The importer registers in the server-tab picker with a
-   `.npz` manifest field; add a short user-docs section and (if a screenshot
-   frames the importer picker) queue a reshoot in
-   `docs/user/screenshots-reshoot-queue.md`.
+2. **Cross-browser AAC / `audio/mp4` validation.** The `/audio` route emits the
+   right mimetype, but actual AAC / MP4-audio-track playback across browsers
+   still needs a manual pass once the corpora are wired into a live GUI session
+   (no browser in the standard cloud container).
