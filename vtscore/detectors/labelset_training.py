@@ -522,7 +522,11 @@ def train_from_labelset(
 
     # populate_label_embeddings stamped det_ctx.embedder with the space the
     # labels were embedded in; score the safe-threshold pass in that same space.
-    mlp, threshold = train_and_threshold(X_list, y_list, snap=snap, embedder_name=det_ctx.embedder or None)
+    # Pass det_ctx so the fold orderings are cached for a no-retrain Inclusion
+    # slide (otherwise the slide can't move the cutoff — see train_and_threshold).
+    mlp, threshold = train_and_threshold(
+        X_list, y_list, snap=snap, embedder_name=det_ctx.embedder or None, det_ctx=det_ctx
+    )
     det_ctx.model = mlp
     det_ctx.threshold = threshold
     return True

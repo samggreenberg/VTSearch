@@ -94,6 +94,7 @@ def train_and_threshold(
     y_list: list[float],
     snap: dict | None = None,
     embedder_name: str | None = None,
+    det_ctx: Any = None,
 ) -> tuple[Any, float]:
     """Train an MLP and compute a calibrated threshold.
 
@@ -118,6 +119,14 @@ def train_and_threshold(
             safe-threshold scoring pass reads vectors from the same space the
             ``X_list`` were built in.  ``None`` falls back to the dataset score
             precedence for *snap* (the pre-per-detector behaviour).
+        det_ctx: When provided, the inclusion-independent K fold orderings are
+            cached on ``det_ctx.calibration_cache`` (and the fold models are
+            sized to match the final model).  This is what lets a later
+            Inclusion slide re-derive the threshold over the cached orderings
+            instead of being a no-op — see
+            :func:`vtscore.state.core.recompute_detector_thresholds_for_inclusion`
+            and docs/plans/find-verification-workflow.md.  ``None`` keeps the
+            legacy (uncached) behaviour for callers that don't own a context.
 
     Returns:
         ``(model, threshold)``
@@ -135,17 +144,37 @@ def train_and_threshold(
         calculate_safe_threshold,
         train_model,
     )
-    from vtscore.training.thresholds import NO_GOOD_THRESHOLD
+    from vtscore.training.mlp import _auto_hidden_dim
+    from vtscore.training.thresholds import NO_GOOD_THRESHOLD, cross_calibration_threshold_cached
 
     X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
+    # Size the hidden layer from the full label count (the same width
+    # train_model() picks by default), so when we cache the fold orderings
+    # below their models match the final model — keeping the cached
+    # re-thresholding consistent with this run's threshold.
+    hidden_dim = _auto_hidden_dim(len(X_list))
 
     safe = bool(get_safe_thresholds() and snap)
     # Below the safe-threshold ramp floor the cross-cal output is blended
     # away (pure GMM), so don't pay for the fold trainings.
     if safe and len(X_list) < 6:
         threshold = NO_GOOD_THRESHOLD
+    elif det_ctx is not None:
+        # Cache the K fold orderings on the context so an Inclusion slide can
+        # re-derive the cutoff without a no-op (the find-label / detector-load
+        # paths land here; without the cache the slide can't move the line).
+        threshold = cross_calibration_threshold_cached(
+            X_list,
+            y_list,
+            input_dim,
+            get_inclusion(),
+            calibrate_count=get_calibrate_count(),
+            calibration_fraction=get_calibration_fraction(),
+            hidden_dim=hidden_dim,
+            det_ctx=det_ctx,
+        )
     else:
         threshold = calculate_cross_calibration_threshold(
             X_list,
@@ -156,7 +185,7 @@ def train_and_threshold(
             calibration_fraction=get_calibration_fraction(),
         )
 
-    model = train_model(X, y, input_dim)
+    model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
 
     if safe:
         from vtscore.embedding.matrix import get_embedding_matrix_for_snap

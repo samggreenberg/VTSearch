@@ -608,14 +608,44 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * Ids of the unverified positives: the above-threshold items (``goodVotes``)
-   * the human hasn't acted on yet (``goodVotes − verifiedIds``). The left
-   * work-queue actions (Browse / To Dataset / Export) all scope over exactly
-   * this set, as opposed to the right panel's full-good-set actions.
+   * Ids of the unverified positives: the above-cutoff items the human hasn't
+   * acted on yet. The left work-queue actions (Browse / To Dataset / Export)
+   * all scope over exactly this set, as opposed to the right panel's
+   * full-good-set actions.
+   *
+   * Derived from the *frozen scores + current cutoff* (`sortOrder` + `threshold`)
+   * rather than the `goodVotes` signal, because those two move **synchronously**
+   * when the Inclusion slider does (`onInclusionChange` sets them on the POST
+   * response), whereas `goodVotes` only catches up on the follow-up
+   * `loadVotes()` GET. Reading `goodVotes` here let a Browse fired right after a
+   * slide pick up the *previous* cutoff's positives (the stale-superset bug);
+   * scoring against the live cutoff keeps Browse in lock-step with the green
+   * line the user sees. Falls back to `goodVotes` only when scores are absent
+   * (no scoring pass yet).
    */
   private unverifiedGoodIds(): number[] {
     const verified = this.voteState.verifiedIds;
+    const order = this.sortState.sortOrder;
+    const threshold = this.sortState.threshold;
+    if (order && threshold != null) {
+      return order
+        .filter((item) => item.score >= threshold && !verified.has(item.id))
+        .map((item) => item.id);
+    }
     return Array.from(this.voteState.goodVotes).filter((id) => !verified.has(id));
+  }
+
+  /**
+   * The full positive set of this Find run: every verified-good item (pinned by
+   * the human, wherever its score lands) plus the unverified positives (above
+   * the live cutoff). The unverified half rides {@link unverifiedGoodIds}, so it
+   * tracks the cutoff synchronously and never lags a slide; the verified half is
+   * cutoff-independent and read straight off the votes.
+   */
+  private goodIds(): number[] {
+    const verified = this.voteState.verifiedIds;
+    const verifiedGood = Array.from(this.voteState.goodVotes).filter((id) => verified.has(id));
+    return [...verifiedGood, ...this.unverifiedGoodIds()];
   }
 
   /**
@@ -624,7 +654,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * scopes to the unverified positives instead ({@link onBrowseUnverified}).
    */
   onBrowse(): void {
-    this.browseIds(Array.from(this.voteState.goodVotes), 'positives');
+    this.browseIds(this.goodIds(), 'positives');
   }
 
   /**
@@ -661,7 +691,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * positives instead ({@link onToDatasetUnverified}).
    */
   onToDataset(): void {
-    this.toDatasetFromIds(Array.from(this.voteState.goodVotes));
+    this.toDatasetFromIds(this.goodIds());
   }
 
   /** Promote only the unverified positives into their own dataset. */
