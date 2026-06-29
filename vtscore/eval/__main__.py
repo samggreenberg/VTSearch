@@ -22,6 +22,15 @@ Usage::
 
     # List available eval datasets
     python -m vtscore.eval --list
+    
+Matthew Usage::
+VG=/exp/scale26/datasets/external/VisualGenome
+mkdir -p "$TMPDIR/visual_genome/VG_100K"
+unzip -nq "$VG/images/images.zip"  -d "$TMPDIR/visual_genome/VG_100K"
+unzip -nq "$VG/images/images2.zip" -d "$TMPDIR/visual_genome"
+ln -s "$VG/annotations/objects.json" "$TMPDIR/visual_genome/objects.json"
+ln -sfn "$TMPDIR/visual_genome" data/visual_genome
+# then: python -m vtscore.eval --datasets visual_genome_m --mode text   (or --mode learned --embedder dinov2_patch --region-voting)
 """
 
 import argparse
