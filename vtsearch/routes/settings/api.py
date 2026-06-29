@@ -158,7 +158,7 @@ def _apply_dir(key: str, value: str, setter) -> None:
 #: embedder maps, ``import_defaults_by_media_type`` …). A persisted or
 #: hand-edited settings file from an older build can carry a stale scalar
 #: where one of these is now expected (e.g. a pre-per-media-type
-#: ``browse_bin_shape: "hex"``). Marshmallow's ``Dict`` field calls
+#: ``browse_colormap: "auto"``). Marshmallow's ``Dict`` field calls
 #: ``.items()`` while dumping, so a bare string there would 500 the entire
 #: settings endpoint. Derived from the schema so it stays in sync as
 #: fields are added.

@@ -8,11 +8,30 @@ import pytest
 from vtscore.projection.pyramid import (
     BIN_SHAPES,
     Pyramid,
+    bin_shape_for_media_type,
     build_pyramid,
     max_useful_levels,
     tile_member_ids,
 )
 from vtscore.projection.umap_projection import Projection
+
+
+@pytest.mark.parametrize(
+    ("media_type", "expected"),
+    [
+        ("image", "square"),
+        ("video", "square"),
+        ("document", "square"),
+        ("audio", "hex"),
+        ("text", "hex"),
+        ("", "hex"),
+        (None, "hex"),
+        ("something-unknown", "hex"),
+    ],
+)
+def test_bin_shape_for_media_type(media_type, expected):
+    """Browsable-thumbnail media tile as squares; everything else as hexes."""
+    assert bin_shape_for_media_type(media_type) == expected
 
 
 def _projection(coords: np.ndarray, ids: list[int] | None = None, pid: str = "pid-test") -> Projection:

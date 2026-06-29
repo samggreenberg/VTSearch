@@ -28,11 +28,6 @@ interface BrowsePrepState {
  *  dataset-load task. */
 const SENTINEL_PREFIX = '__browseprep__';
 
-/** Bin shape we pre-build. The 2-D UMAP layout is shared across shapes, so
- *  if the browse view later wants squares it re-bins the frozen layout in
- *  milliseconds rather than re-fitting UMAP. */
-const PREP_SHAPE = 'hex' as const;
-
 const MAX_POLL_ERRORS = 5;
 
 /**
@@ -170,7 +165,7 @@ export class BrowsePrepService {
     this.patch({ phase: 'projecting', current: 0, total: 0, message: 'Building projection…' });
     this.pollErrors = 0;
     this.projectionApi
-      .getMeta(PREP_SHAPE)
+      .getMeta()
       .pipe(take(1))
       .subscribe({
         next: (meta) => this.handleMeta(datasetId, meta),
@@ -200,7 +195,7 @@ export class BrowsePrepService {
     }
     // status === "idle": nothing built yet. Kick off the build.
     this.projectionApi
-      .build(PREP_SHAPE)
+      .build()
       .pipe(take(1))
       .subscribe({
         next: (resp) => {
@@ -220,7 +215,7 @@ export class BrowsePrepService {
     this.pollTimer = setTimeout(() => {
       if (!this.isCurrent(datasetId)) return;
       this.projectionApi
-        .getMeta(PREP_SHAPE)
+        .getMeta()
         .pipe(take(1))
         .subscribe({
           next: (meta) => {

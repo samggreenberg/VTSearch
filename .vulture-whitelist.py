@@ -138,7 +138,6 @@ get_show_animations  # noqa: F821
 get_hide_autopilot  # noqa: F821
 get_autopilot_resort_interval  # noqa: F821
 get_browse_panel_width  # noqa: F821
-get_browse_bin_shape  # noqa: F821
 get_browse_colormap  # noqa: F821
 get_browse_icon_size  # noqa: F821
 get_browse_thumbnail_border  # noqa: F821
@@ -147,7 +146,6 @@ set_audio_playing  # noqa: F821
 set_show_animations  # noqa: F821
 set_hide_autopilot  # noqa: F821
 set_browse_panel_width  # noqa: F821
-set_browse_bin_shape  # noqa: F821
 set_browse_colormap  # noqa: F821
 set_browse_icon_size  # noqa: F821
 set_browse_thumbnail_border  # noqa: F821

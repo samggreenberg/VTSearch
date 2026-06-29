@@ -299,7 +299,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
 
   /** Write a per-media-type browser setting and persist. */
   private setBrowsePref(
-    key: 'browse_bin_shape' | 'browse_colormap' | 'browse_icon_size',
+    key: 'browse_colormap' | 'browse_icon_size',
     typeId: string,
     value: string,
   ): void {
@@ -307,14 +307,6 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     dict[typeId] = value;
     this.settings.update((s) => ({ ...(s as Record<string, unknown>), [key]: dict }) as AppSettings);
     this.save();
-  }
-
-  getBrowseBinShape(typeId: string): string {
-    return this.getBrowsePref('browse_bin_shape', typeId, 'hex');
-  }
-
-  onBrowseBinShapeChange(typeId: string, value: string): void {
-    this.setBrowsePref('browse_bin_shape', typeId, value);
   }
 
   getBrowseColormap(typeId: string): string {
