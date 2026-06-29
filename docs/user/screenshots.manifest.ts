@@ -321,17 +321,17 @@ export const SHOTS: Shot[] = [
   {
     id: 'browse-view',
     embeddedIn: 'docs/user/USER_GUIDE.md#browse--exploring-a-dataset-spatially',
-    caption: 'The Browse map: a pannable hex-density UMAP of a synthetic image dataset, with the legend and minimap on the right',
+    caption: 'The Browse map: a pannable square-tile UMAP of a synthetic image dataset, with the legend and minimap on the right',
     themes: BOTH,
     annotations: [
       { target: '.browse-side-meta', kind: 'box', label: 'Legend + minimap' },
     ],
     async recipe(page, h) {
       await h.openBrowse();
-      // Switch to hex bins (matches the "hex-density" caption) and zoom out a
-      // couple of steps so more of the cloud is visible. NB: avoid "Zoom to
-      // fit" — with only 60 points it over-zooms the main canvas to blank.
-      await page.locator('button[title="Hexagon bins"]').first().click().catch(() => {});
+      // The bin shape is fixed by media type (image → squares); there is no
+      // shape toggle. Zoom out a couple of steps so more of the cloud is
+      // visible. NB: avoid "Zoom to fit" — with only 60 points it over-zooms
+      // the main canvas to blank.
       await h.wait(500);
       await page.locator('button[title="Zoom out"]').first().click().catch(() => {});
       await h.wait(400);

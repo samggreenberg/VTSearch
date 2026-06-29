@@ -8,9 +8,10 @@ The Flask-free core of the VTSBrowse browse canvas (see
 - :func:`build_pyramid` (Stage 2) aggregates that projection into a
   multi-resolution :class:`Pyramid` of :class:`Tile` / :class:`HexCell`
   records the canvas streams while panning and zooming.  The pyramid can tile
-  the projection as hexagons (default) or squares — see ``BIN_SHAPES`` and the
-  ``bin_shape`` argument; re-binning under the other shape is what backs the
-  Browse hex/square toggle without re-fitting UMAP.
+  the projection as hexagons or squares — see ``BIN_SHAPES`` and the
+  ``bin_shape`` argument.  The shape is chosen per media type, not by the user:
+  :func:`bin_shape_for_media_type` returns squares for browsable-thumbnail
+  media (image/video/document) and hexes for the rest (audio/text).
 
 Persistence of the projection + pyramid (the carve-out from the
 "No Persisted Vectors or MLPs" rule) and the HTTP endpoints live in the
@@ -24,10 +25,12 @@ from vtscore.projection.hexbin import hex_center, hexbin_assign
 from vtscore.projection.pyramid import (
     BIN_SHAPES,
     DEFAULT_BIN_SHAPE,
+    SQUARE_MEDIA_TYPES,
     HexCell,
     LevelMeta,
     Pyramid,
     Tile,
+    bin_shape_for_media_type,
     build_pyramid,
     max_useful_levels,
     rebin_like,
@@ -51,6 +54,8 @@ __all__ = [
     "tile_member_ids",
     "BIN_SHAPES",
     "DEFAULT_BIN_SHAPE",
+    "SQUARE_MEDIA_TYPES",
+    "bin_shape_for_media_type",
     "hexbin_assign",
     "hex_center",
     "squarebin_assign",

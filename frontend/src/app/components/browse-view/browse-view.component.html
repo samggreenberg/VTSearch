@@ -156,28 +156,6 @@
                 <vt-icon type="image" [size]="18"></vt-icon>
               </button>
             </div>
-            <div class="browse-shape" role="group" aria-label="Bin shape">
-              <button
-                type="button"
-                class="browse-size-btn browse-size-btn--glyph"
-                [class.browse-size-btn--active]="binShape() === 'hex'"
-                [attr.aria-pressed]="binShape() === 'hex'"
-                (click)="setBinShape('hex')"
-                title="Hexagon bins"
-                aria-label="Hexagon bins">
-                &#x2B22;
-              </button>
-              <button
-                type="button"
-                class="browse-size-btn browse-size-btn--glyph browse-size-btn--square-glyph"
-                [class.browse-size-btn--active]="binShape() === 'square'"
-                [attr.aria-pressed]="binShape() === 'square'"
-                (click)="setBinShape('square')"
-                title="Square bins"
-                aria-label="Square bins">
-                &#x25A0;
-              </button>
-            </div>
           </div>
           <div class="browse-info">
             <span class="browse-info-label">{{ datasetName() }}</span>

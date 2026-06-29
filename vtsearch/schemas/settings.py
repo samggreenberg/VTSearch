@@ -77,10 +77,10 @@ class AppSettingsSchema(Schema):
     # Settings-modal widget; the panel's draggable divider drives it.
     browse_panel_width = fields.Integer()
 
-    # VTSBrowse per-media-type display prefs (bin shape, density colormap,
-    # on-screen cell size). ``{media_type_id: value}`` dicts driven by the
-    # browse-canvas toolbar and the Settings → Browser tab.
-    browse_bin_shape = _PerMediaTypeStringDict()
+    # VTSBrowse per-media-type display prefs (density colormap, on-screen cell
+    # size). ``{media_type_id: value}`` dicts driven by the browse-canvas
+    # toolbar and the Settings → Browser tab. (Bin shape is not stored — it is
+    # fixed by media type; see ``vtscore.projection.bin_shape_for_media_type``.)
     browse_colormap = _PerMediaTypeStringDict()
     browse_icon_size = _PerMediaTypeStringDict()
     # Pile-thumbnail border width in CSS px, per media type (0 disables).
@@ -218,9 +218,8 @@ class SettingsUpdateSchema(Schema):
     browse_panel_width = fields.Integer()
 
     # Per-media-type dicts; the setters in ``settings.py`` validate each
-    # value against its enum (BinShape / BrowseColormap / BrowseIconSize),
-    # so these are declared ``Raw`` here like the other per-media settings.
-    browse_bin_shape = fields.Raw()
+    # value against its enum (BrowseColormap / BrowseIconSize), so these are
+    # declared ``Raw`` here like the other per-media settings.
     browse_colormap = fields.Raw()
     browse_icon_size = fields.Raw()
     browse_thumbnail_border = fields.Raw()

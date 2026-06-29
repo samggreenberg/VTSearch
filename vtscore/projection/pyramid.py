@@ -40,12 +40,32 @@ from vtscore.projection.hexbin import SQRT3, hex_center, hexbin_assign
 from vtscore.projection.squarebin import square_center, squarebin_assign
 from vtscore.projection.umap_projection import Projection
 
-#: The bin shapes VTSBrowse can tile a projection with.  ``"hex"`` is the
-#: default (d3-hexbin lattice); ``"square"`` is the rectangular-grid
-#: alternative.  Both share the per-level ``radius`` scale and pyramid
-#: structure — only the assignment / center / tile-index geometry differs.
+#: The bin shapes VTSBrowse can tile a projection with.  ``"square"`` is the
+#: rectangular-grid (quadtree) lattice; ``"hex"`` is the d3-hexbin lattice.
+#: Both share the per-level ``radius`` scale and pyramid structure — only the
+#: assignment / center / tile-index geometry differs.
 BIN_SHAPES: tuple[str, ...] = ("hex", "square")
 DEFAULT_BIN_SHAPE = "hex"
+
+#: Media types whose items have *browsable* thumbnails — a glance at the grid
+#: is enough to recognise the content — are tiled as **squares** so the
+#: thumbnails pack edge-to-edge with no wasted gaps (and the quadtree lattice
+#: keeps representatives perfectly zoom-persistent).  Every other media type
+#: (audio, text) has no usefully-browsable thumbnail, so it falls back to the
+#: **hex** density map.  Audio *does* have waveform thumbnails, but nobody
+#: browses by waveform, so it is intentionally excluded here.
+SQUARE_MEDIA_TYPES: frozenset[str] = frozenset({"image", "video", "document"})
+
+
+def bin_shape_for_media_type(media_type: str | None) -> str:
+    """Return the bin shape VTSBrowse tiles a *media_type* dataset with.
+
+    The shape is a fixed property of the media type, not a user choice:
+    media with browsable thumbnails (image / video / document) use squares;
+    everything else (audio / text) uses the hex density map.  See
+    :data:`SQUARE_MEDIA_TYPES`.
+    """
+    return "square" if media_type in SQUARE_MEDIA_TYPES else "hex"
 
 
 @dataclass(frozen=True)

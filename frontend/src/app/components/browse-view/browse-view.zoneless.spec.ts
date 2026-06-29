@@ -40,7 +40,6 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     };
     const tileCacheStub: Partial<TileCacheService> = {
       setSubset: noop,
-      setBinShape: noop,
       setProjectionId: noop,
       setContentVersion: noop,
       clear: noop,
@@ -65,8 +64,8 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     };
     const settingsStub: Partial<SettingsStateService> = {
       // Settings resolve (as they do in production): the browse view holds its
-      // first projection load until settings + media type are in, so it fetches
-      // the saved bin shape rather than flashing the default hex lattice.
+      // first projection load until settings + media type are in, so it applies
+      // the saved per-media display prefs before the first canvas fit.
       settingsSignal: signal({}) as unknown as SettingsStateService['settingsSignal'],
       error: signal(null) as unknown as SettingsStateService['error'],
       load: noop,

@@ -93,7 +93,6 @@ def build_positives_browse_context(
     embedder_name: str,
     cached_embeddings: dict[str, np.ndarray] | None = None,
     display_name: str = "",
-    bin_shape: str = "hex",
     on_progress: ProgressCb | None = None,
 ) -> DatasetContext:
     """Build a ready-to-browse ephemeral context over the positives.
@@ -104,8 +103,9 @@ def build_positives_browse_context(
     already holds a vector for an element built in that same space, so a
     detector loaded against its own dataset isn't re-embedded.
 
-    Builds the UMAP projection + *bin_shape* pyramid so the browse view finds
-    a ready projection on arrival. Raises :class:`ValueError` when no positive
+    Builds the UMAP projection + the media-type's pyramid (squares for
+    browsable-thumbnail media, hexes otherwise) so the browse view finds a
+    ready projection on arrival. Raises :class:`ValueError` when no positive
     could be resolved + embedded (nothing to browse).
     """
     media_type = detector_data.get("media_type", "") or ""
@@ -141,13 +141,13 @@ def build_positives_browse_context(
 
     # Project + tile up front so the browse view lands on a ready layout.
     from vtscore.embedding.matrix import get_embedding_matrix
-    from vtscore.projection import build_pyramid, fit_projection
+    from vtscore.projection import bin_shape_for_media_type, build_pyramid, fit_projection
 
     if on_progress is not None:
         on_progress(total, total, "Building projection…")
     sorted_ids, matrix = get_embedding_matrix(ctx, ctx.routed_embedder("score"))
     proj = fit_projection(matrix, sorted_ids)
-    pyr = build_pyramid(proj, bin_shape=bin_shape)
+    pyr = build_pyramid(proj, bin_shape=bin_shape_for_media_type(media_type))
     ctx._projection = proj
-    ctx._pyramids[bin_shape] = pyr
+    ctx._pyramids[pyr.bin_shape] = pyr
     return ctx

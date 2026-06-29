@@ -3,10 +3,12 @@
 Kick off a background UMAP + tile pyramid build for the active dataset,
 query its status/metadata, and stream tiles to the browse canvas.
 
-The pyramid can tile the projection as hexagons (default) or squares; the
-``bin_shape`` selector threads through every endpoint.  The UMAP projection
-itself is shape-independent and shared: switching shapes only re-bins the
-frozen 2-D coordinates (fast), never re-fits UMAP.
+The pyramid tiles the projection as hexagons or squares, but the shape is a
+fixed property of the dataset's **media type** — squares for browsable-thumbnail
+media (image/video/document), hexes for the rest (audio/text) — not a per-request
+choice.  Every endpoint derives the shape from the active dataset
+(:func:`_shape_for`); the client never sends it.  The meta response reports the
+resolved ``bin_shape`` so the canvas knows which lattice to draw.
 """
 
 from __future__ import annotations
@@ -32,20 +34,23 @@ projection_bp = Blueprint(
     description="VTSBrowse projection: UMAP layout + hex/square tile pyramid.",
 )
 
-#: Bin shapes the browse canvas can request.  Mirrors
-#: ``vtscore.projection.BIN_SHAPES``; kept as a local literal so the route
-#: validation does not import the (numba-pulling) projection package on the
-#: request path.
+#: Bin shapes a dataset can be tiled with.  Mirrors
+#: ``vtscore.projection.BIN_SHAPES``; kept as a local literal so probing the
+#: container for persisted coordinates does not import the (numba-pulling)
+#: projection package on the request path.
 _VALID_SHAPES = ("hex", "square")
-_DEFAULT_SHAPE = "hex"
 
 
-def _resolve_shape(value: str | None) -> str:
-    """Validate a requested bin shape, defaulting to hex."""
-    shape = value or _DEFAULT_SHAPE
-    if shape not in _VALID_SHAPES:
-        abort(400, message=f"Unknown bin shape {shape!r}; expected one of {_VALID_SHAPES}.")
-    return shape
+def _shape_for(ctx) -> str:
+    """The bin shape this dataset is tiled with, fixed by its media type.
+
+    Squares for browsable-thumbnail media (image/video/document), hexes for the
+    rest (audio/text).  Not a user choice — see
+    :func:`vtscore.projection.bin_shape_for_media_type`.
+    """
+    from vtscore.projection import bin_shape_for_media_type
+
+    return bin_shape_for_media_type(_media_type_for(ctx))
 
 
 def _is_subset(value: str | None) -> bool:
@@ -374,17 +379,16 @@ def _start_subset_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str,
 @projection_bp.response(200, ProjectionBuildResponseSchema)
 @projection_bp.alt_response(409, description="Dataset is empty or has no embeddings.")
 def build_projection():
-    """Kick off (or short-circuit) a build of the requested bin shape.
+    """Kick off (or short-circuit) a build of the dataset's projection.
 
-    Body: ``{"shape": "hex" | "square", "ids": [...]?, "force": bool?}``
-    (``shape`` defaults to hex).
+    Body: ``{"ids": [...]?, "force": bool?}``.  The bin shape is not a request
+    parameter — it is derived from the dataset's media type (see
+    :func:`_shape_for`).
 
-    Returns immediately.  If the pyramid for this shape is already cached or
-    persisted, returns ``"ready"``.  If the shared UMAP layout already exists
-    (e.g. the other shape was built first), the new shape is re-binned inline
-    and returned ready — no UMAP re-fit.  Only the first build of a dataset,
-    where no layout exists yet, runs UMAP in the background and returns a
-    ``job_id`` for polling via ``GET /api/projection/meta``.
+    Returns immediately.  If the pyramid is already cached or persisted, returns
+    ``"ready"``.  Only the first build of a dataset, where no layout exists yet,
+    runs UMAP in the background and returns a ``job_id`` for polling via
+    ``GET /api/projection/meta``.
 
     ``force`` overrides every short-circuit: it discards the existing layout
     (cached + persisted for a full build, or the in-memory subset layout for an
@@ -396,7 +400,7 @@ def build_projection():
 
     ctx = get_active_context()
     body = request.get_json(silent=True) or {}
-    shape = _resolve_shape(body.get("shape"))
+    shape = _shape_for(ctx)
     # ``force`` re-fits UMAP over the currently displayed items even when a
     # layout already exists, replacing it with a fresh arrangement.  Powers the
     # Browser's "Re-project" button (e.g. to re-spread the survivors after a
@@ -451,7 +455,7 @@ def remove_from_subset(body: dict):
     client re-frames to what's left (zoom-to-fit, minimap) instead of keeping
     dead space where the culled points were — safe because bin assignment is
     origin-independent; bounds only drive client framing.  Returns the updated
-    subset meta for *shape*.
+    subset meta for the dataset's shape.
 
     Powers the Browser's "Remove from Good" cull, which marks the items Bad via
     ``/api/medias/vote-bulk`` and then calls this to make them disappear.
@@ -463,7 +467,7 @@ def remove_from_subset(body: dict):
     from vtscore.state.core import get_active_context
 
     ctx = get_active_context()
-    shape = _resolve_shape(body.get("shape"))
+    shape = _shape_for(ctx)
     ids = body["ids"]
 
     proj = ctx._subset_projection
@@ -487,19 +491,18 @@ def remove_from_subset(body: dict):
 @projection_bp.route("/api/projection/meta", methods=["GET"])
 @projection_bp.response(200, ProjectionMetaSchema)
 def projection_meta():
-    """Return projection/pyramid metadata and build status for a bin shape.
+    """Return projection/pyramid metadata and build status for the dataset.
 
-    Query: ``?shape=hex|square`` (defaults to hex).
-
-    When the requested shape's pyramid is ready, includes bounds, zoom levels,
-    cell sizing, point count, the dataset's media type, and the ``bin_shape``
-    the canvas should render.
+    The bin shape is derived from the dataset's media type (see
+    :func:`_shape_for`), not a query parameter.  When the pyramid is ready,
+    includes bounds, zoom levels, cell sizing, point count, the dataset's media
+    type, and the ``bin_shape`` the canvas should render.
     """
     from vtscore.concurrency.async_jobs import projection_jobs
     from vtscore.state.core import get_active_context
 
     ctx = get_active_context()
-    shape = _resolve_shape(request.args.get("shape"))
+    shape = _shape_for(ctx)
 
     if _is_subset(request.args.get("subset")):
         return _subset_meta(ctx, shape)
@@ -534,21 +537,23 @@ def projection_meta():
 
 
 @projection_bp.route(
-    "/api/projection/tiles/<shape>/<int:level>/<int(signed=True):tx>/<int(signed=True):ty>",
+    "/api/projection/tiles/<int:level>/<int(signed=True):tx>/<int(signed=True):ty>",
     methods=["GET"],
 )
 @projection_bp.response(200, TileResponseSchema)
 @projection_bp.alt_response(404, description="Tile not found or projection not ready.")
-def get_tile(shape: str, level: int, tx: int, ty: int):
-    """Return the cells for one tile of the *shape* pyramid at ``(level, tx, ty)``.
+def get_tile(level: int, tx: int, ty: int):
+    """Return the cells for one tile of the dataset's pyramid at ``(level, tx, ty)``.
 
-    Because the projection is frozen at ingest, tiles are immutable for the
-    life of the dataset and can be cached aggressively by the client.
+    The bin shape is derived from the dataset's media type (see
+    :func:`_shape_for`).  Because the projection is frozen at ingest, tiles are
+    immutable for the life of the dataset and can be cached aggressively by the
+    client.
     """
     from vtscore.state.core import get_active_context
 
-    shape = _resolve_shape(shape)
     ctx = get_active_context()
+    shape = _shape_for(ctx)
     subset = _is_subset(request.args.get("subset"))
     if subset:
         pyr = ctx._subset_pyramids.get(shape)

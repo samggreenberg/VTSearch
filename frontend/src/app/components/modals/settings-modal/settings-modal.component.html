@@ -259,17 +259,6 @@
             </div>
             <div class="view-tab-content browser-tab-content">
               <div class="form-group">
-                <label class="form-label" title="Tile the projection as hexagons or squares">Bin shape</label>
-                <div class="toggle-group">
-                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseBinShape(activeBrowseTab()) === 'hex'" (click)="onBrowseBinShapeChange(activeBrowseTab(), 'hex')" title="Tile the projection with hexagons">
-                    Hexagons
-                  </button>
-                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseBinShape(activeBrowseTab()) === 'square'" (click)="onBrowseBinShapeChange(activeBrowseTab(), 'square')" title="Tile the projection with squares">
-                    Squares
-                  </button>
-                </div>
-              </div>
-              <div class="form-group">
                 <label class="form-label" title="Slide clusters together to close the empty space between them when the projection is built">Compaction<vt-field-hint-icon hint="Slides clusters together to close the empty “oceans” between them, keeping each cluster’s shape intact. Applies to the next projection build or Re-project."></vt-field-hint-icon></label>
                 <div class="toggle-group">
                   <button class="toggle-btn" [class.toggle-btn--active]="getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), true)" title="Close the empty space between clusters">
