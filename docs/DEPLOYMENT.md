@@ -638,6 +638,56 @@ via the folder or pickle importer instead.
 bash scripts/install.sh
 ```
 
+### `install.sh` installs CPU torch on a machine that has a GPU
+
+**Symptom**: On a GPU host (e.g. an AWS `g4dn` with a Tesla T4), `scripts/install.sh`
+detects the card has no driver and offers to fix it:
+
+```
+NOTICE: An NVIDIA GPU is physically present, but no usable driver was found ...
+
+What would you like to do?
+  [i] Install the NVIDIA driver now (needs sudo; may require a reboot) -- recommended
+  [c] Install CPU-only torch instead (no GPU acceleration)
+  [s] Stop and fix it yourself
+Choice [I/c/s]:
+```
+
+…or, on older versions, silently installed the CPU dependency set.
+
+**Cause**: The script's CPU-vs-GPU decision asks `nvidia-smi` whether a GPU is
+usable. On a fresh cloud GPU instance booted from a **base AMI** (anything but
+the AWS Deep Learning AMI), the card is attached but the **NVIDIA kernel driver
+isn't installed**, so `nvidia-smi` is absent and CUDA can't run. `pip` cannot
+fix this — the driver is a system package, not a Python wheel.
+
+**Fix**: Pick `[i]` (the default) and the installer installs the driver for you:
+a distro-aware, best-effort `sudo` install (`ubuntu-drivers` / `apt` on
+Debian-family, `cuda-drivers` via `dnf`/`yum` on RHEL-family), then it re-checks
+`nvidia-smi` and proceeds straight into the GPU install if the GPU came online.
+If the kernel module needs a **reboot** to load (common), it tells you to reboot
+and re-run `bash scripts/install.sh`. You can also do it by hand:
+
+```bash
+# Ubuntu / Debian:
+sudo apt-get update && sudo apt-get install -y nvidia-driver-535   # or newer
+sudo reboot                                                        # if needed
+
+nvidia-smi              # should list the GPU and a CUDA version
+bash scripts/install.sh # now auto-detects the GPU
+```
+
+On Amazon Linux / RHEL the manual route is
+[AWS's GPU-driver guide](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html),
+or use the **AWS Deep Learning AMI**, which ships the driver preinstalled.
+
+The installer detects the physical card via its PCI vendor ID (so it knows the
+GPU is there even without a driver). The other prompt choices: `[c]` installs
+CPU-only torch (same as `bash scripts/install.sh cpu`); `[s]` stops. On a
+**non-interactive** shell (CI, `curl … | bash`, Docker build) it can't prompt,
+so it stops — unless you set `VTSEARCH_AUTO_DRIVER=1` (auto-install the driver)
+or `VTSEARCH_ASSUME_CPU=1` (proceed CPU-only) to choose unattended.
+
 ### GPU install prints a red "dependency conflicts" report (harmless)
 
 **Symptom**: The cuML step of `scripts/install.sh` ends with a wall of red
