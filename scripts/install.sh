@@ -12,6 +12,13 @@ set -euo pipefail
 #     from the GPU's compute capability (scripts/detect_cuda_tag.py).
 #   - No GPU      -> the smaller CPU-only torch wheel (~200 MB vs ~2 GB).
 #
+# "GPU present" means nvidia-smi can actually see the card. If the GPU is
+# physically present (an NVIDIA PCI device) but nvidia-smi can't -- the usual
+# state on a fresh cloud GPU box like an AWS g4dn whose NVIDIA driver isn't
+# installed yet -- auto mode STOPS with instructions to install the driver
+# instead of silently installing CPU-only torch on hardware that wants GPU.
+# Override that with an explicit 'cpu' (or 'gpu'/'cuXYZ') argument below.
+#
 # Override the auto-detection by passing an argument:
 #   bash scripts/install.sh            # auto-detect CPU vs GPU (recommended)
 #   bash scripts/install.sh cpu        # force the CPU install
@@ -50,6 +57,66 @@ vts_have_gpu() {
     command -v nvidia-smi >/dev/null 2>&1 || return 1
     nvidia-smi -L >/dev/null 2>&1 || return 1
     [ -n "$(nvidia-smi -L 2>/dev/null)" ]
+}
+
+# True (exit 0) when an NVIDIA GPU is PHYSICALLY present, regardless of whether
+# the driver is installed. This is the key distinction nvidia-smi can't make:
+# on a fresh cloud GPU instance (e.g. an AWS g4dn with a Tesla T4) the card is
+# in the box but the kernel driver isn't installed yet, so nvidia-smi is absent
+# and vts_have_gpu() above returns false -- which would silently install the
+# CPU wheels even though the user wants GPU. We detect the hardware itself via
+# the PCI vendor ID 0x10de (NVIDIA) on a display/3D controller (class 0x03xxxx).
+# sysfs is read directly because it's always present on Linux, needs no driver,
+# and needs no lspci; lspci is only a last-resort fallback when sysfs is empty.
+vts_nvidia_hardware_present() {
+    local dev vendor class
+    for dev in /sys/bus/pci/devices/*; do
+        [ -r "$dev/vendor" ] && [ -r "$dev/class" ] || continue
+        read -r vendor < "$dev/vendor" || continue
+        [ "$vendor" = "0x10de" ] || continue
+        read -r class < "$dev/class" || continue
+        case "$class" in 0x03*) return 0 ;; esac  # 0x03xxxx = display controller
+    done
+    # Fallback for non-Linux / unusual sysfs layouts: ask lspci if it exists.
+    if command -v lspci >/dev/null 2>&1; then
+        lspci 2>/dev/null | grep -iE 'NVIDIA.*(VGA|3D|Display)' >/dev/null 2>&1 && return 0
+    fi
+    return 1
+}
+
+# Print actionable guidance when the GPU is physically present but unusable
+# because the driver is missing (nvidia-smi absent / not listing a device).
+# Installing the kernel driver is a system-level action pip can't do, so we
+# stop here rather than silently degrading to a CPU install the user didn't ask
+# for. The cpu / gpu / cuXYZ overrides still bypass this.
+vts_report_driver_missing() {
+    cat >&2 <<'EOF'
+ERROR: An NVIDIA GPU is physically present, but no usable driver was found
+       (nvidia-smi is absent or lists no device), so the GPU cannot be used yet.
+
+This is the common state on a fresh cloud GPU instance (e.g. an AWS g4dn with a
+Tesla T4) booted from a base AMI: the card is attached but the NVIDIA kernel
+driver isn't installed. pip cannot fix this -- the driver is a system package.
+
+To fix it, install the NVIDIA driver, then re-run this script:
+
+  # Ubuntu / Debian:
+  sudo apt-get update && sudo apt-get install -y nvidia-driver-535   # or newer
+  sudo reboot   # if nvidia-smi still fails after install
+
+  # Amazon Linux / RHEL: install the driver per AWS's GPU-instance guide:
+  #   https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html
+  # Or use the AWS Deep Learning AMI, which ships the driver preinstalled.
+
+Verify the driver is live (lists your GPU and a CUDA version), then re-run:
+
+  nvidia-smi
+  bash scripts/install.sh
+
+To proceed WITHOUT the GPU (CPU-only torch), re-run explicitly:
+
+  bash scripts/install.sh cpu
+EOF
 }
 
 # --- CUDA tag resolution -----------------------------------------------------
@@ -316,8 +383,14 @@ case "$MODE" in
         if vts_have_gpu; then
             echo "Detected an NVIDIA GPU -> installing the GPU dependency set." >&2
             vts_install_gpu "$(vts_resolve_cuda_tag)"
+        elif vts_nvidia_hardware_present; then
+            # Card is in the box but nvidia-smi can't see it -> driver missing.
+            # Don't silently install CPU; the user has GPU hardware and almost
+            # certainly wants it. Explain how to fix, and exit non-zero.
+            vts_report_driver_missing
+            exit 1
         else
-            echo "No NVIDIA GPU detected (nvidia-smi absent or lists no device) -> installing the CPU dependency set." >&2
+            echo "No NVIDIA GPU detected (no NVIDIA PCI device found) -> installing the CPU dependency set." >&2
             vts_install_cpu
         fi
         ;;

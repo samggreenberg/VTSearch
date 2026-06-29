@@ -638,6 +638,42 @@ via the folder or pickle importer instead.
 bash scripts/install.sh
 ```
 
+### `install.sh` installs CPU torch on a machine that has a GPU
+
+**Symptom**: On a GPU host (e.g. an AWS `g4dn` with a Tesla T4), `scripts/install.sh`
+prints something like:
+
+```
+An NVIDIA GPU is physically present, but no usable driver was found ...
+```
+
+…or, on older versions, silently installed the CPU dependency set.
+
+**Cause**: The script's CPU-vs-GPU decision asks `nvidia-smi` whether a GPU is
+usable. On a fresh cloud GPU instance booted from a **base AMI** (anything but
+the AWS Deep Learning AMI), the card is attached but the **NVIDIA kernel driver
+isn't installed**, so `nvidia-smi` is absent and CUDA can't run. `pip` cannot
+fix this — the driver is a system package, not a Python wheel.
+
+**Fix**: Install the NVIDIA driver, confirm `nvidia-smi` lists the GPU, then
+re-run the installer:
+
+```bash
+# Ubuntu / Debian:
+sudo apt-get update && sudo apt-get install -y nvidia-driver-535   # or newer
+sudo reboot                                                        # if needed
+
+nvidia-smi              # should list the GPU and a CUDA version
+bash scripts/install.sh # now auto-detects the GPU
+```
+
+On Amazon Linux / RHEL, follow
+[AWS's GPU-driver guide](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html),
+or use the **AWS Deep Learning AMI**, which ships the driver preinstalled. The
+installer detects the physical card via its PCI vendor ID (so it knows the GPU
+is there even without the driver) and **stops** rather than silently installing
+CPU-only torch. To proceed CPU-only anyway, run `bash scripts/install.sh cpu`.
+
 ### GPU install prints a red "dependency conflicts" report (harmless)
 
 **Symptom**: The cuML step of `scripts/install.sh` ends with a wall of red
