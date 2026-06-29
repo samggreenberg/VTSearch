@@ -37,3 +37,4 @@ An empty table means "no known-stale shots" — the desired resting state.
 | Shot id | Embedded in | Why it's stale | Flagged |
 |---------|-------------|----------------|---------|
 | `new-detector` | USER_GUIDE → "Creating a detector" | The New Detector modal's blank-detector example input changed from a side-by-side Text / media two-column layout to a Text / `<MediaType>` tabbed layout. | 2026-06-28 · PR #2107 |
+| `browse-view` | USER_GUIDE → "Browse — exploring a dataset spatially" | The hex/square bin-shape toggle was removed from the canvas toolbar (shape is now fixed by media type), and the framed image dataset now renders **square** tiles instead of hexagons. | 2026-06-29 · square-hex-thumbnails |

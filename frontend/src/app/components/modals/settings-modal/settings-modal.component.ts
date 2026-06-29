@@ -289,7 +289,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
 
   /** Read a per-media-type browser setting for *typeId*, or *fallback*. */
   private getBrowsePref(
-    key: 'browse_bin_shape' | 'browse_colormap' | 'browse_icon_size',
+    key: 'browse_colormap' | 'browse_icon_size',
     typeId: string,
     fallback: string,
   ): string {

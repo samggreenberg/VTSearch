@@ -672,9 +672,14 @@ The control cluster at the bottom-left of the canvas gives you:
 - **Zoom in / Zoom to fit / Zoom out** - or drag to pan and scroll to
   zoom directly on the canvas.
 - **Thumbnail size** - smaller or bigger tiles.
-- **Bin shape** - hexagons or squares.
 - **Region select** - the dashed-rectangle toggle (or `Shift`+drag) lets
   you drag a box to select every item inside it.
+
+The tiles are **squares** for media with browsable thumbnails (images,
+video, documents) so the thumbnails pack edge-to-edge, and **hexagons**
+for audio and text, where the tile is a density cell rather than a
+picture. The shape is chosen automatically from the dataset's media type -
+there's nothing to set.
 
 Top-left, **Re-project** shuffles the items into a fresh 2-D layout
 (handy when a cluster lands somewhere awkward), and **Back to Dashboard**
