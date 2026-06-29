@@ -1133,6 +1133,11 @@
             "nullable": true,
             "type": "array"
           },
+          "merge_near_duplicates": {
+            "default": "false",
+            "description": "When 'true', collapse near-duplicate media into dupe sets at ingest.",
+            "type": "string"
+          },
           "name": {
             "minLength": 1,
             "type": "string"

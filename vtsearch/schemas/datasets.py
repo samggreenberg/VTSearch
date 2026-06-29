@@ -368,6 +368,10 @@ class DatasetLoadDemoRequestSchema(Schema):
         load_default="false",
         metadata={"description": "When 'true', compute + persist the 2-D Browse projection at ingest."},
     )
+    merge_near_duplicates = fields.String(
+        load_default="false",
+        metadata={"description": "When 'true', collapse near-duplicate media into dupe sets at ingest."},
+    )
 
 
 class DatasetLoadFolderRequestSchema(Schema):

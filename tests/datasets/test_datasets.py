@@ -96,6 +96,22 @@ class TestDatasetEndpoints:
         # response carries ``error`` not ``message``.
         assert "error" in data
 
+    def test_load_demo_accepts_merge_near_duplicates(self, client):
+        """POST /api/dataset/load-demo accepts the ``merge_near_duplicates`` flag.
+
+        Regression for a 422 "Unknown field" on ``merge_near_duplicates``:
+        the handler always read the flag, but the request schema never
+        declared it, so marshmallow rejected the body before the handler
+        ran. With the field declared, an unknown demo name should now reach
+        the handler and fail with 400 "Invalid dataset name" instead.
+        """
+        resp = client.post(
+            "/api/dataset/load-demo",
+            json={"name": "nonexistent_demo", "merge_near_duplicates": "true"},
+        )
+        assert resp.status_code == 400
+        assert "Invalid dataset" in resp.get_json()["message"]
+
     def test_browse_media_files_unknown_source(self, client):
         """GET /api/browse-media-files with unknown source returns 404."""
         resp = client.get("/api/browse-media-files?source=demo:nonexistent_xyz&path=")
