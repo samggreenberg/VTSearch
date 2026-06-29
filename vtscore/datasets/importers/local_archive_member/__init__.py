@@ -135,6 +135,7 @@ class LocalArchiveMemberImporter(ImporterBase):
 
         rows = read_npz_archive_member_rows(manifest)
         embedder_name = read_npz_embedder_name(manifest)
+        manifest_path = str(manifest.resolve())
 
         next_id = max(medias.keys(), default=0) + 1
         skipped = 0
@@ -143,70 +144,11 @@ class LocalArchiveMemberImporter(ImporterBase):
         # ~14 times, and the size is identical for every window of it.
         size_cache: dict[tuple[str, str], int] = {}
         for row in rows:
-            archive = row["archive"]
-            member = row["member"]
-            cache_key = (archive, member)
-            if cache_key not in size_cache:
-                try:
-                    size_cache[cache_key] = member_size(archive, member)
-                except (ArchiveMemberError, OSError) as exc:
-                    # The manifest references a member we can't locate in its
-                    # shard (missing archive, renamed member). Skip it rather
-                    # than import a media whose bytes will never resolve.
-                    logger.warning("local_archive_member: skipping %s::%s (%s)", archive, member, exc)
-                    size_cache[cache_key] = -1
-            size = size_cache[cache_key]
+            size = self._member_size_cached(size_cache, row["archive"], row["member"])
             if size < 0:
                 skipped += 1
                 continue
-
-            clip_start = row.get("clip_start")
-            clip_end = row.get("clip_end")
-            window_id = row.get("window_id")
-            suffix = window_suffix(window_id, clip_start)
-
-            params: dict[str, Any] = {
-                "archive_path": archive,
-                "member": member,
-                "media_type": output_type,
-                "manifest": str(manifest.resolve()),
-                "embedder_name": embedder_name,
-            }
-            # Persist the window in origin.params (the channel that survives the
-            # pickle round-trip and re-derivation) so the manifest-backed source
-            # can re-supply *this* window's vector. clip_recipe() refuses to
-            # lazy-slice archive members, so carrying clip extents here never
-            # triggers server-side byte slicing.
-            if clip_start is not None:
-                params["clip_start"] = clip_start
-            if clip_end is not None:
-                params["clip_end"] = clip_end
-            if window_id:
-                params["window_id"] = window_id
-
-            media: dict[str, Any] = {
-                "id": next_id,
-                "media_type": output_type,
-                "embedder": embedder_name,
-                "file_size": size,
-                "md5": _synthetic_md5(archive, member, suffix),
-                "embeddings": init_embeddings(embedder_name, row["vector"]),
-                "filename": row["filename"],
-                "category": "custom",
-                "origin": {"importer": self.name, "params": params},
-                "origin_name": f"{archive}::{member}{suffix}",
-                "media_bytes": None,
-                "media_string": None,
-                "duration": 0,
-                "archive_member": {"path": archive, "member": member},
-            }
-            # Top-level clip extents drive the player's display-only seek/loop
-            # (passed through by /api/medias/batch).
-            if clip_start is not None:
-                media["clip_start"] = clip_start
-            if clip_end is not None:
-                media["clip_end"] = clip_end
-            medias[next_id] = media
+            medias[next_id] = self._build_media(next_id, row, size, output_type, embedder_name, manifest_path)
             next_id += 1
 
         if not medias:
@@ -214,6 +156,75 @@ class LocalArchiveMemberImporter(ImporterBase):
                 f"No importable members in {manifest}"
                 + (f" ({skipped} referenced member(s) could not be located)" if skipped else "")
             )
+
+    @staticmethod
+    def _member_size_cached(size_cache: dict[tuple[str, str], int], archive: str, member: str) -> int:
+        """Return *member*'s size (cached per shard member), or ``-1`` if unlocatable."""
+        cache_key = (archive, member)
+        if cache_key not in size_cache:
+            try:
+                size_cache[cache_key] = member_size(archive, member)
+            except (ArchiveMemberError, OSError) as exc:
+                # The manifest references a member we can't locate in its shard
+                # (missing archive, renamed member). Skip it rather than import a
+                # media whose bytes will never resolve.
+                logger.warning("local_archive_member: skipping %s::%s (%s)", archive, member, exc)
+                size_cache[cache_key] = -1
+        return size_cache[cache_key]
+
+    def _build_media(
+        self, media_id: int, row: dict, size: int, output_type: str, embedder_name: str, manifest_path: str
+    ) -> dict[str, Any]:
+        """Build one media dict from a manifest row (one whole member or one window)."""
+        archive = row["archive"]
+        member = row["member"]
+        clip_start = row.get("clip_start")
+        clip_end = row.get("clip_end")
+        window_id = row.get("window_id")
+        suffix = window_suffix(window_id, clip_start)
+
+        params: dict[str, Any] = {
+            "archive_path": archive,
+            "member": member,
+            "media_type": output_type,
+            "manifest": manifest_path,
+            "embedder_name": embedder_name,
+        }
+        # Persist the window in origin.params (the channel that survives the
+        # pickle round-trip and re-derivation) so the manifest-backed source can
+        # re-supply *this* window's vector. clip_recipe() refuses to lazy-slice
+        # archive members, so carrying clip extents here never triggers
+        # server-side byte slicing.
+        if clip_start is not None:
+            params["clip_start"] = clip_start
+        if clip_end is not None:
+            params["clip_end"] = clip_end
+        if window_id:
+            params["window_id"] = window_id
+
+        media: dict[str, Any] = {
+            "id": media_id,
+            "media_type": output_type,
+            "embedder": embedder_name,
+            "file_size": size,
+            "md5": _synthetic_md5(archive, member, suffix),
+            "embeddings": init_embeddings(embedder_name, row["vector"]),
+            "filename": row["filename"],
+            "category": "custom",
+            "origin": {"importer": self.name, "params": params},
+            "origin_name": f"{archive}::{member}{suffix}",
+            "media_bytes": None,
+            "media_string": None,
+            "duration": 0,
+            "archive_member": {"path": archive, "member": member},
+        }
+        # Top-level clip extents drive the player's display-only seek/loop
+        # (passed through by /api/medias/batch).
+        if clip_start is not None:
+            media["clip_start"] = clip_start
+        if clip_end is not None:
+            media["clip_end"] = clip_end
+        return media
 
     def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         manifest = Path(field_values["manifest"])
