@@ -5854,6 +5854,62 @@
         ],
         "type": "object"
       },
+      "import_dataset_LocalArchiveMemberImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
+          "clipper": {
+            "default": null,
+            "nullable": true
+          },
+          "clipper_params": {
+            "default": null,
+            "nullable": true
+          },
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "embedder": {
+            "default": null,
+            "nullable": true
+          },
+          "embedders": {
+            "default": null,
+            "nullable": true
+          },
+          "manifest": {
+            "type": "string"
+          },
+          "media_type": {
+            "default": "video",
+            "enum": [
+              "audio",
+              "document",
+              "image",
+              "text",
+              "video",
+              ""
+            ],
+            "type": "string"
+          },
+          "merge_near_duplicates": {
+            "default": null,
+            "nullable": true
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "manifest"
+        ],
+        "type": "object"
+      },
       "import_dataset_LocalFilesDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
@@ -6471,6 +6527,38 @@
         },
         "required": [
           "url"
+        ],
+        "type": "object"
+      },
+      "stage_import_LocalArchiveMemberImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "manifest": {
+            "type": "string"
+          },
+          "media_type": {
+            "default": "video",
+            "enum": [
+              "audio",
+              "document",
+              "image",
+              "text",
+              "video",
+              ""
+            ],
+            "type": "string"
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "manifest"
         ],
         "type": "object"
       },
@@ -8205,6 +8293,34 @@
         ]
       }
     },
+    "/api/dataset/import/local_archive_member": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "import_dataset__local_archive_member",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/import_dataset_LocalArchiveMemberImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer by name in a background thread.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
     "/api/dataset/import/local_files": {
       "post": {
         "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
@@ -8828,6 +8944,34 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/stage_import_HttpArchiveDatasetImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer in staging mode.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/stage-import/local_archive_member": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "stage_import__local_archive_member",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/stage_import_LocalArchiveMemberImporter_Args"
               }
             }
           },
