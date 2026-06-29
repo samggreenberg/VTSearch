@@ -705,6 +705,22 @@ installs the **precompiled, kABI-tracking** streams `nvidia-driver:latest` /
 `nvidia-driver:open` instead, which ship a prebuilt module (no DKMS, no `dkms`
 package) and only need a kernel whose kABI matches.
 
+There is a **fourth** RHEL failure mode, seen on a bare, unregistered RHEL 9
+g4dn where even the precompiled streams dead-end: `nvidia-driver:latest`
+resolves only to the `*-dkms` kmod (itself `filtered out by modular filtering`
+and still wanting `dkms >= 3.1.8`), and `nvidia-driver:open` reports `missing
+groups or modules: nvidia-driver:open`. At that point **every** dnf path is
+exhausted, so the installer falls back to **NVIDIA's self-contained `.run`
+installer** — the route [AWS itself documents](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html)
+for EC2. It needs no CUDA repo, no DNF module, no EPEL, and no `dkms`: it
+compiles the kernel module in place against the running kernel's source, so it
+only needs a C toolchain + kernel headers (installed best-effort first). By
+default the installer fetches the latest driver from AWS's public,
+credential-free S3 bucket (`ec2-linux-nvidia-drivers`, served over plain
+HTTPS); set `VTSEARCH_NVIDIA_RUNFILE_URL` to pin a version or point at the
+public Tesla compute driver instead. A reboot is usually required afterward so
+the freshly built `nvidia` module loads.
+
 You can also do it by hand:
 
 ```bash
@@ -724,6 +740,12 @@ sudo dnf config-manager --add-repo \
 sudo dnf module install -y nvidia-driver:latest-dkms              # builds via DKMS
 # ...or, if you can't get dkms, the precompiled (no-DKMS) stream instead:
 #   sudo dnf module install -y nvidia-driver:latest
+# ...or, if EVERY dnf path dead-ends (bare unregistered RHEL), use NVIDIA's
+# self-contained .run installer (needs only gcc/make + kernel-devel):
+#   sudo dnf install -y "kernel-devel-$(uname -r)" kernel-headers gcc make
+#   curl -fSL -o nvidia.run \
+#     https://us.download.nvidia.com/tesla/<ver>/NVIDIA-Linux-x86_64-<ver>.run
+#   sudo sh nvidia.run --silent --disable-nouveau
 
 sudo reboot                                                        # if needed
 
