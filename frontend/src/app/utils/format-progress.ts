@@ -49,12 +49,12 @@ function snapEta(value: number, minStep: number): number {
 /** Render a snapped magnitude with at most one decimal and no trailing ``.0``. */
 function etaUnit(value: number, unit: string): string {
   const text = Number.isInteger(value) ? String(value) : value.toFixed(1);
-  return `~${text} ${unit} left`;
+  return `${text} ${unit} left`;
 }
 
 /**
  * Format a remaining-seconds estimate into a deliberately humble, single-unit
- * chip: ``~35 sec left`` / ``~5.5 min left`` / ``~2 hr left``. The value is
+ * chip: ``35 sec left`` / ``5.5 min left`` / ``2 hr left``. The value is
  * rounded to a nice step that scales with its magnitude (see
  * ``ETA_ROUND_RATIO``), so we never claim more precision than a noisy estimate
  * deserves and never show an over-precise ``5 min 34 sec``-style breakdown.
@@ -87,12 +87,12 @@ export function formatEta(seconds: number | null | undefined): string {
 
 /**
  * Format a `ProgressEvent` into the canonical
- * ``[Step S/T] (C/T) message · ~ETA left`` string used by every progress consumer.
+ * ``[Step S/T] (C/T) message · ETA left`` string used by every progress consumer.
  *
  * Each piece is optional:
  *   - The ``[Step S/T]`` prefix appears only when ``total_steps > 1``.
  *   - The ``(C/T)`` fraction appears only when ``total > 0``.
- *   - The ``· ~5.5 min left`` tail appears only when ``eta_seconds > 0``; the
+ *   - The ``· 5.5 min left`` tail appears only when ``eta_seconds > 0``; the
  *     backend gates this on at least 5s of elapsed work, so it stays hidden
  *     for short bars.
  *   - When none are present, returns the bare ``message`` (or
@@ -195,7 +195,7 @@ export function isProgressIndeterminate(
  *     is omitted here; it is returned separately as ``eta`` so the UI can pin it
  *     to the right of the progress bar where it stays visible even when a long
  *     file path ellipsizes the detail.
- *   - ``eta``: the bare ``~5.5 min left`` chip, or empty when no estimate is available.
+ *   - ``eta``: the bare ``5.5 min left`` chip, or empty when no estimate is available.
  */
 export interface ProgressHeader {
   header: string;
