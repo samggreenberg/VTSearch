@@ -178,11 +178,25 @@ vts_enable_nvidia_cuda_repo() {
 #      filtering for argument: cuda-drivers" -- the package exists but is hidden
 #      behind a module that must be enabled first. This is the failure on a fresh
 #      RHEL 9 GPU box (e.g. an AWS g4dn) even after the repo is enabled. The fix
-#      is `dnf module install nvidia-driver:<stream>`: latest-dkms (proprietary,
-#      covers Turing/Ampere/Ada like the T4) first, then open-dkms as a fallback
-#      for newer datacenter GPUs (Hopper, Blackwell) that ONLY have an open
-#      kernel module. Both build via DKMS, so they need the kernel-devel/dkms
-#      packages the caller installs beforehand.
+#      is `dnf module install nvidia-driver:<stream>`. We try two flavors of
+#      stream in order:
+#        a. DKMS streams (latest-dkms, open-dkms): build the module from source,
+#           so they're kernel-agnostic -- but they require the `dkms` package,
+#           which on the RHEL family lives in EPEL, not the base repos. If dkms is
+#           missing the stream is REJECTED with "nothing provides dkms >= 3.1.8
+#           needed by kmod-nvidia-latest-dkms" -- the exact failure on a fresh,
+#           UNregistered RHEL 9 box where `dnf install epel-release` finds nothing
+#           (epel-release isn't in any enabled repo there). So we make sure dkms
+#           is actually installed first (vts_rhel_ensure_dkms, which bootstraps
+#           EPEL from its canonical URL when the packaged release isn't found) and
+#           skip the DKMS streams entirely if it still can't be had.
+#        b. Precompiled kABI-tracking streams (latest, open): ship a prebuilt
+#           module (kmod-nvidia-latest) that needs NO dkms, only a kernel whose
+#           kABI matches. They're the fallback for boxes where EPEL/dkms can't be
+#           reached at all. They need a matching kernel, so they're tried last.
+#      latest*/open* order within each flavor: proprietary first (covers
+#      Turing/Ampere/Ada like the T4), open as the fallback for newer datacenter
+#      GPUs (Hopper, Blackwell) that ONLY have an open kernel module.
 #   $1 = sudo prefix ("" or "sudo");  $2 = the dnf/yum command name.
 vts_rhel_install_driver_pkgs() {
     local sudo_cmd="$1" dnf="$2"
@@ -194,8 +208,21 @@ vts_rhel_install_driver_pkgs() {
     # here on dnf-based RHEL 8/9 where the modular path is the right one.
     echo "  'cuda-drivers' is hidden behind a dnf module (RHEL 8/9 modular repo);" >&2
     echo "  installing the nvidia-driver module stream instead." >&2
+
+    # The -dkms streams need `dkms` (from EPEL). Make it present before trying
+    # them; if it can't be installed, skip straight to the precompiled streams
+    # rather than letting each -dkms stream fail with "nothing provides dkms".
+    local streams
+    if vts_rhel_ensure_dkms "$sudo_cmd" "$dnf"; then
+        streams="latest-dkms open-dkms latest open"
+    else
+        echo "  dkms is unavailable -- skipping the DKMS streams and trying the" >&2
+        echo "  precompiled (kABI-tracking) streams, which need no dkms." >&2
+        streams="latest open"
+    fi
+
     local stream
-    for stream in latest-dkms open-dkms; do
+    for stream in $streams; do
         $sudo_cmd "$dnf" module reset -y nvidia-driver >/dev/null 2>&1 || true
         if $sudo_cmd "$dnf" module install -y "nvidia-driver:${stream}"; then
             echo "  Installed nvidia-driver:${stream}." >&2
@@ -204,6 +231,48 @@ vts_rhel_install_driver_pkgs() {
         echo "  nvidia-driver:${stream} stream failed; trying the next stream." >&2
     done
     return 1
+}
+
+# Make the `dkms` package available so the -dkms driver streams can build their
+# kernel module. On the RHEL family dkms ships from EPEL, NOT the base repos, so
+# a plain `dnf install dkms` finds nothing until EPEL is enabled. We try, in
+# order: (1) the packaged `epel-release` (present in the `extras` repo on
+# Rocky/Alma/CentOS Stream, and on Fedora/Amazon Linux dkms is in the base repos
+# so this is a harmless no-op); then if dkms still won't install, (2) bootstrap
+# EPEL straight from the project's canonical URL keyed to the RHEL major
+# (`rpm -E %rhel`) -- the case that matters on a fresh, UNregistered RHEL box
+# where epel-release is in no enabled repo. Returns 0 iff dkms ends up installed.
+# All steps are best-effort (|| true); the return value is the single source of
+# truth so the caller can choose the precompiled streams when this fails.
+#   $1 = sudo prefix ("" or "sudo");  $2 = the dnf/yum command name.
+vts_rhel_ensure_dkms() {
+    local sudo_cmd="$1" dnf="$2"
+    if command -v dkms >/dev/null 2>&1 || rpm -q dkms >/dev/null 2>&1; then
+        return 0
+    fi
+    $sudo_cmd "$dnf" install -y epel-release >/dev/null 2>&1 || true
+    $sudo_cmd "$dnf" install -y dkms >/dev/null 2>&1 || true
+    if command -v dkms >/dev/null 2>&1 || rpm -q dkms >/dev/null 2>&1; then
+        return 0
+    fi
+    # epel-release wasn't reachable as a package -> bootstrap EPEL from its URL.
+    # `rpm -E %rhel` yields the RHEL major (9 on RHEL/Rocky/Alma/CentOS 9); it's
+    # empty on Fedora (where dkms is in the base repos and we'd have it already)
+    # and unreliable on Amazon Linux (whose cuda-drivers is a plain package, so
+    # we never reach the dkms streams there). `dnf install <url.rpm>` does not
+    # GPG-check a directly-named package by default (localpkg_gpgcheck=False), so
+    # this needs no key pre-import; epel-release then ships EPEL's own key.
+    local rhelver
+    rhelver="$(rpm -E %rhel 2>/dev/null || true)"
+    case "$rhelver" in
+        [0-9]*)
+            local epel_url="https://dl.fedoraproject.org/pub/epel/epel-release-latest-${rhelver}.noarch.rpm"
+            echo "  Bootstrapping EPEL from ${epel_url} to satisfy dkms." >&2
+            $sudo_cmd "$dnf" install -y "$epel_url" >/dev/null 2>&1 || true
+            $sudo_cmd "$dnf" install -y dkms >/dev/null 2>&1 || true
+            ;;
+    esac
+    command -v dkms >/dev/null 2>&1 || rpm -q dkms >/dev/null 2>&1
 }
 
 # Best-effort, distro-aware NVIDIA driver install so we can fix the missing
@@ -267,13 +336,12 @@ vts_install_nvidia_driver() {
                 echo "  No dnf/yum found; cannot auto-install on this RPM distro." >&2
                 return 1
             fi
-            # cuda-drivers from NVIDIA's RHEL repo builds the kernel module via
-            # DKMS. Needs kernel headers/devel matching the running kernel, plus
-            # dkms itself -- which on the RHEL family lives in EPEL, not the base
-            # repos, so enable EPEL best-effort first (harmless/no-op on Fedora
-            # and Amazon Linux, where dkms is elsewhere).
-            $sudo_cmd "$dnf" install -y epel-release >/dev/null 2>&1 || true
-            $sudo_cmd "$dnf" install -y "kernel-devel-$(uname -r)" kernel-headers gcc make dkms \
+            # A DKMS-built driver needs the kernel headers/devel matching the
+            # running kernel plus a C toolchain; install them best-effort here.
+            # (The `dkms` package itself comes from EPEL and is handled inside
+            # vts_rhel_install_driver_pkgs -> vts_rhel_ensure_dkms, which knows
+            # how to bootstrap EPEL when the packaged epel-release isn't found.)
+            $sudo_cmd "$dnf" install -y "kernel-devel-$(uname -r)" kernel-headers gcc make \
                 >/dev/null 2>&1 || true
             # A base AMI doesn't have NVIDIA's CUDA repo (which provides
             # cuda-drivers), so the first install attempt typically fails with
