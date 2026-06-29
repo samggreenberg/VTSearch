@@ -167,6 +167,45 @@ vts_enable_nvidia_cuda_repo() {
     return 0
 }
 
+# Install the NVIDIA driver packages on the RHEL/Fedora/Amazon-Linux family,
+# coping with the two ways `cuda-drivers` can be unavailable:
+#
+#   1. The plain meta-package. On Fedora, Amazon Linux, and RHEL once the CUDA
+#      repo is enabled and NOT modular, `dnf install cuda-drivers` just works.
+#   2. The DNF *module*. On RHEL 8/9 (and Rocky/Alma/CentOS Stream) NVIDIA's CUDA
+#      repo ships the driver as a module stream, so a bare `dnf install
+#      cuda-drivers` is REJECTED with "All matches were filtered out by modular
+#      filtering for argument: cuda-drivers" -- the package exists but is hidden
+#      behind a module that must be enabled first. This is the failure on a fresh
+#      RHEL 9 GPU box (e.g. an AWS g4dn) even after the repo is enabled. The fix
+#      is `dnf module install nvidia-driver:<stream>`: latest-dkms (proprietary,
+#      covers Turing/Ampere/Ada like the T4) first, then open-dkms as a fallback
+#      for newer datacenter GPUs (Hopper, Blackwell) that ONLY have an open
+#      kernel module. Both build via DKMS, so they need the kernel-devel/dkms
+#      packages the caller installs beforehand.
+#   $1 = sudo prefix ("" or "sudo");  $2 = the dnf/yum command name.
+vts_rhel_install_driver_pkgs() {
+    local sudo_cmd="$1" dnf="$2"
+    if $sudo_cmd "$dnf" install -y cuda-drivers; then
+        return 0
+    fi
+    # `dnf module` doesn't exist under plain yum (RHEL 7), but there cuda-drivers
+    # is a plain package and the line above already succeeded, so we only reach
+    # here on dnf-based RHEL 8/9 where the modular path is the right one.
+    echo "  'cuda-drivers' is hidden behind a dnf module (RHEL 8/9 modular repo);" >&2
+    echo "  installing the nvidia-driver module stream instead." >&2
+    local stream
+    for stream in latest-dkms open-dkms; do
+        $sudo_cmd "$dnf" module reset -y nvidia-driver >/dev/null 2>&1 || true
+        if $sudo_cmd "$dnf" module install -y "nvidia-driver:${stream}"; then
+            echo "  Installed nvidia-driver:${stream}." >&2
+            return 0
+        fi
+        echo "  nvidia-driver:${stream} stream failed; trying the next stream." >&2
+    done
+    return 1
+}
+
 # Best-effort, distro-aware NVIDIA driver install so we can fix the missing
 # driver FOR the user instead of just telling them how. It's a privileged,
 # system-mutating step (kernel driver), so it only runs on an explicit choice
@@ -239,15 +278,18 @@ vts_install_nvidia_driver() {
             # A base AMI doesn't have NVIDIA's CUDA repo (which provides
             # cuda-drivers), so the first install attempt typically fails with
             # "No match for argument: cuda-drivers". Enable the repo and retry;
-            # this is the fix for the common fresh-RHEL-GPU-box failure.
-            if ! $sudo_cmd "$dnf" install -y cuda-drivers; then
+            # this is the fix for the common fresh-RHEL-GPU-box failure. The
+            # retry goes through vts_rhel_install_driver_pkgs, which ALSO handles
+            # the second RHEL failure mode -- "All matches were filtered out by
+            # modular filtering" -- by installing the nvidia-driver module stream.
+            if ! vts_rhel_install_driver_pkgs "$sudo_cmd" "$dnf"; then
                 echo "  cuda-drivers not available yet -- enabling NVIDIA's CUDA repo and retrying." >&2
                 if ! vts_enable_nvidia_cuda_repo "$sudo_cmd" "$dnf"; then
                     echo "  Could not enable NVIDIA's CUDA repo automatically; see AWS's guide:" >&2
                     echo "    https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html" >&2
                     return 1
                 fi
-                if ! $sudo_cmd "$dnf" install -y cuda-drivers; then
+                if ! vts_rhel_install_driver_pkgs "$sudo_cmd" "$dnf"; then
                     echo "  cuda-drivers install still failed after enabling NVIDIA's CUDA repo." >&2
                     echo "  See AWS's GPU-driver guide:" >&2
                     echo "    https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html" >&2
