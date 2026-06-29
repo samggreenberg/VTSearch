@@ -693,7 +693,9 @@ in git history and the cited source files.
   document-level keys (`@HostListener('document:keydown')`, gated by
   `shortcutsBlocked()` in `utils/keyboard-shortcuts.ts` — no typing target, no
   open modal). On the **canvas** (popup closed): arrows pan (`canvas.panByKey`,
-  hard-clamped like the minimap recenter), `+`/`-` zoom (the same `zoomIn`/
+  hard-clamped like the minimap recenter but eased over `PAN_ANIM_MS` via
+  `startPanAnim`/`stepPanAnim` so a N/E/S/W push glides like the zoom transition
+  instead of snapping; repeated presses retarget the glide), `+`/`-` zoom (the same `zoomIn`/
   `zoomOut` as the GUI buttons), Ctrl/Cmd-A selects every bin **fully** in view
   (`canvas.selectAllInView`, the viewport analogue of the marquee). In the
   **bin-details popup** (which then owns the keyboard; the view suppresses its
