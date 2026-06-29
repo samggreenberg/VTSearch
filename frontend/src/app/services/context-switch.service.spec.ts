@@ -174,15 +174,50 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
     expect(activeContext.datasetId).toBe('old-ds');
     expect(activeContext.modelId).toBe('old-det');
 
-    // HTTP load endpoint resolves, but the loading task is still
-    // non-idle, so active must stay pinned.
-    loadRegisteredSubjects.get('d1')!.next({});
+    // HTTP load endpoint resolves (with the background task's id), but the
+    // loading task is still non-idle, so active must stay pinned.
+    loadRegisteredSubjects.get('d1')!.next({ ok: true, message: '', task_id: 't' });
     loadRegisteredSubjects.get('d1')!.complete();
     expect(activeContext.datasetId).toBe('old-ds');
     expect(activeContext.modelId).toBe('old-det');
 
     // SSE channel goes idle; only now does active flip.
     loadingTasks$.next([]);
+    expect(activeContext.datasetId).toBe('d1');
+    expect(activeContext.modelId).toBe('m1');
+  });
+
+  it('does NOT flip active before the SSE load task appears (browse-on-unloaded race)', () => {
+    // Reproduces the production race the Browse button hit: the HTTP load
+    // response lands BEFORE the `loading-tasks` SSE frame for that load
+    // arrives, so the channel is momentarily empty. The waiter must not
+    // read that empty snapshot as "load already finished" — otherwise it
+    // promotes active and the caller fires requests (e.g. the projection
+    // build) against a still-loading dataset, which 409s. Unlike the H25
+    // tests below, we deliberately do NOT pre-seed a non-idle task.
+    activeContext.setActivePair('old-ds', 'old-det');
+    datasets = [makeDataset('d1', { loaded: false })]; // needs load
+    detectors = [makeDetector('m1', { detector_loaded: true })];
+
+    switcher.applyActivePair('d1', 'm1').subscribe();
+
+    // HTTP load endpoint resolves with the background task's id, but the
+    // SSE channel has not reported the task yet (still empty).
+    loadRegisteredSubjects.get('d1')!.next({ ok: true, message: '', task_id: 'task-d1' });
+    loadRegisteredSubjects.get('d1')!.complete();
+    expect(activeContext.datasetId).toBe('old-ds');
+    expect(activeContext.modelId).toBe('old-det');
+
+    // The task now appears, running. Active must still stay pinned.
+    loadingTasks$.next([
+      makeLoadingTask({ dataset_id: 'd1', task_id: 'task-d1', status: 'loading' }),
+    ]);
+    expect(activeContext.datasetId).toBe('old-ds');
+
+    // Task goes idle: only now does active flip.
+    loadingTasks$.next([
+      makeLoadingTask({ dataset_id: 'd1', task_id: 'task-d1', status: 'idle' }),
+    ]);
     expect(activeContext.datasetId).toBe('d1');
     expect(activeContext.modelId).toBe('m1');
   });
@@ -202,7 +237,7 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
     expect(activeContext.datasetId).toBe('old-ds');
     expect(activeContext.modelId).toBe('old-det');
 
-    loadDetectorSubjects.get('m1')!.next({});
+    loadDetectorSubjects.get('m1')!.next({ ok: true, task_id: 't' });
     loadDetectorSubjects.get('m1')!.complete();
     expect(activeContext.datasetId).toBe('old-ds');
     expect(activeContext.modelId).toBe('old-det');
