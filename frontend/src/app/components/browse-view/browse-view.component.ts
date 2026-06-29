@@ -145,6 +145,18 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   marqueeMode = false;
 
   /**
+   * Whether Shift is currently held. Shift+drag draws a region marquee, so while
+   * Shift is down we momentarily engage the region-select affordance — the
+   * toolbar button lights up and the canvas cursor switches to a crosshair — the
+   * same way holding Shift for region voting previews that mode. Reset on window
+   * blur so alt-tabbing away doesn't strand the view in the engaged state.
+   */
+  readonly shiftHeld = signal(false);
+  private keyDownHandler?: (e: KeyboardEvent) => void;
+  private keyUpHandler?: (e: KeyboardEvent) => void;
+  private blurHandler?: () => void;
+
+  /**
    * Subset mode: browse an ephemeral UMAP fit over just a handful of media
    * (the positives of a Find run) instead of the full dataset. Set from the
    * `?subset=1` query param plus a handoff from {@link BrowseSubsetService}.
@@ -263,6 +275,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.setupShiftListeners();
     this.settingsState.load();
 
     // Subset mode: the Find view handed off a set of positive ids to project
@@ -327,8 +340,43 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (this.pollTimer) clearTimeout(this.pollTimer);
     document.removeEventListener('mousemove', this.boundPanelMove);
     document.removeEventListener('mouseup', this.boundPanelUp);
+    this.removeShiftListeners();
     this.tileCache.clear();
     this.releaseEphemeralPositivesContext();
+  }
+
+  /**
+   * Track the Shift key at the window level so {@link regionDrawActive} reflects
+   * it. The canvas detects `event.shiftKey` directly when a drag starts, so this
+   * is purely for the affordance (button + cursor); the blur reset mirrors the
+   * image viewer's region-draw handling.
+   */
+  private setupShiftListeners(): void {
+    this.keyDownHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') this.shiftHeld.set(true);
+    };
+    this.keyUpHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') this.shiftHeld.set(false);
+    };
+    this.blurHandler = () => this.shiftHeld.set(false);
+    window.addEventListener('keydown', this.keyDownHandler);
+    window.addEventListener('keyup', this.keyUpHandler);
+    window.addEventListener('blur', this.blurHandler);
+  }
+
+  private removeShiftListeners(): void {
+    if (this.keyDownHandler) window.removeEventListener('keydown', this.keyDownHandler);
+    if (this.keyUpHandler) window.removeEventListener('keyup', this.keyUpHandler);
+    if (this.blurHandler) window.removeEventListener('blur', this.blurHandler);
+  }
+
+  /**
+   * Region-select armed: either the GUI toggle is on, or Shift is held. Drives
+   * both the toolbar button's engaged state and the canvas crosshair cursor, so
+   * holding Shift previews the Shift+drag region gesture.
+   */
+  get regionDrawActive(): boolean {
+    return this.marqueeMode || this.shiftHeld();
   }
 
   /** Free a detector-positives browse context (`__detpos__<detectorId>`) when

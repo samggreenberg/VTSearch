@@ -126,4 +126,33 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     expect(errEl).not.toBeNull();
     expect(errEl!.textContent).toContain('projection exploded');
   });
+
+  it('engages region-draw while Shift is held, releasing on keyup and blur', async () => {
+    await settleZoneless(fixture);
+    const component = fixture.componentInstance;
+
+    // Idle: neither the GUI toggle nor Shift is active.
+    expect(component.shiftHeld()).toBe(false);
+    expect(component.regionDrawActive).toBe(false);
+
+    // Holding Shift previews the region-select gesture (button + cursor).
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift' }));
+    expect(component.shiftHeld()).toBe(true);
+    expect(component.regionDrawActive).toBe(true);
+
+    // Releasing Shift disengages it again.
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift' }));
+    expect(component.shiftHeld()).toBe(false);
+    expect(component.regionDrawActive).toBe(false);
+
+    // A window blur (alt-tab) drops a stuck Shift so the view never strands.
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift' }));
+    expect(component.shiftHeld()).toBe(true);
+    window.dispatchEvent(new Event('blur'));
+    expect(component.shiftHeld()).toBe(false);
+
+    // The GUI toggle keeps engaging region-draw independently of Shift.
+    component.toggleMarqueeMode();
+    expect(component.regionDrawActive).toBe(true);
+  });
 });
