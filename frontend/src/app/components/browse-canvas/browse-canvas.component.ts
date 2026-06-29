@@ -1194,7 +1194,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    *  repaint, landing exactly on the clamped transform. */
   private readonly stepSettle = (now: number): void => {
     if (!this.settleActive) return;
-    const t = Math.min(1, (now - this.settleStartTs) / BrowseCanvasComponent.SETTLE_MS);
+    // Clamp to [0, 1]; the lower clamp guards the same frame-start vs. `performance.now()`
+    // timing skew described in {@link stepPanAnim} (here the rAF is scheduled from the
+    // mouseup/wheel-quiet handler), which would otherwise overshoot the snap-back backwards
+    // on the first frame. Matches the zoom transition's guard.
+    const t = Math.min(1, Math.max(0, (now - this.settleStartTs) / BrowseCanvasComponent.SETTLE_MS));
     const e = 1 - Math.pow(1 - t, 3);
     const from = this.settleFrom;
     const to = this.settleTo;
@@ -2205,7 +2209,15 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    *  exactly on the target. Zoom is constant across a pan, so it's left alone. */
   private readonly stepPanAnim = (now: number): void => {
     if (!this.panAnimActive) return;
-    const t = Math.min(1, (now - this.panAnimStartTs) / BrowseCanvasComponent.PAN_ANIM_MS);
+    // Clamp the elapsed fraction to [0, 1]. The lower clamp matters: `panAnimStartTs`
+    // is stamped with `performance.now()` synchronously inside the keydown handler,
+    // but the rAF callback is handed the *frame-start* timestamp. A keydown is
+    // dispatched mid-frame, so the rAF it schedules can run in that same frame with
+    // a `now` that predates the mid-frame stamp — `now - panAnimStartTs` then goes
+    // negative, and easeOutCubic turns a negative `t` into a negative `e`, kicking
+    // the view *backwards* (opposite the pan) for one frame before it glides forward
+    // — a visible "jump back" stutter. Mirror the same guard the zoom transition uses.
+    const t = Math.min(1, Math.max(0, (now - this.panAnimStartTs) / BrowseCanvasComponent.PAN_ANIM_MS));
     const e = 1 - Math.pow(1 - t, 3);
     const from = this.panAnimFrom;
     const to = this.panAnimTo;
