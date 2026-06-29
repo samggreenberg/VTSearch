@@ -253,27 +253,32 @@
     color: var(--text-primary);
   }
 
+  // Selection is the INNER ring: a solid accent ring drawn at the cell edge
+  // (not the list's inset accent bar — a ring reads better under a square thumb)
+  // plus an accent-tinted fill. The viewed item's ring (below) nests outside it.
   &.selected {
     background: color-mix(in srgb, var(--accent) 18%, transparent);
     color: var(--text-primary);
-    // A ring (not the list's inset accent bar) reads better under a square thumb.
     box-shadow: 0 0 0 2px var(--accent);
   }
 
   // The bin's representative — the pile thumbnail the user right-clicked, shown
-  // large in the preview and scrolled into view here. A softer ring marks it in
-  // the 1-D list; the solid ``.selected`` ring takes over once it's selected.
+  // large in the preview and scrolled into view here. A softer inner ring marks
+  // it; the solid ``.selected`` ring takes over once it's selected.
   &.representative:not(.selected) {
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
   }
 
-  // The viewed item (the one shown in the preview pane / walked by the arrow
-  // keys). A dashed accent ring distinguishes keyboard focus from the solid
-  // ``.selected`` ring and the softer ``.representative`` one; it's the only
-  // on-grid cue for non-thumbnail media, which has no preview pane.
-  &.focused:not(.selected) {
-    outline: 2px dashed var(--accent);
-    outline-offset: -2px;
+  // The viewed item (shown in the preview pane / walked by the arrow keys) is the
+  // OUTER ring: a lighter accent ring offset just beyond the cell. Drawn with
+  // ``outline`` (independent of the selection/representative box-shadow) so it
+  // layers on top of them — a selected item you're also viewing shows both rings
+  // nested (solid accent inside, lighter accent outside), where before the cue
+  // vanished. Only one item is ever "viewing", so the wider footprint is local.
+  // It's also the only on-grid cue for non-thumbnail media, which has no preview.
+  &.focused {
+    outline: 2px solid var(--accent-light);
+    outline-offset: 2px;
   }
 
   &:focus-visible {
