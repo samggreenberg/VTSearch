@@ -46,6 +46,31 @@ def _make_manifest(tmp_path: Path, archive: Path, *, scalar_archive: bool = True
     return manifest
 
 
+def _make_windowed_manifest(tmp_path: Path, archive: Path) -> Path:
+    """One member fanned into three 10 s windows, plus a second whole-member row."""
+    rows = [
+        ("chunk_a.mp4", 0.0, 10.0),
+        ("chunk_a.mp4", 10.0, 20.0),
+        ("chunk_a.mp4", 20.0, 30.0),
+    ]
+    members = [m for m, _, _ in rows] + ["sub/chunk_b.mp4"]
+    clip_starts = [s for _, s, _ in rows] + [float("nan")]  # NaN: whole-member row, no window
+    clip_ends = [e for _, _, e in rows] + [float("nan")]
+    rng = np.random.default_rng(11)
+    vectors = rng.standard_normal((len(members), DIM)).astype(np.float32)
+    manifest = tmp_path / "windowed.npz"
+    np.savez(
+        manifest,
+        vectors=vectors,
+        members=np.array(members),
+        archives=np.array(str(archive)),
+        clip_start=np.array(clip_starts, dtype=np.float32),
+        clip_end=np.array(clip_ends, dtype=np.float32),
+        embedder_name=np.array("largerclapgeneral"),
+    )
+    return manifest
+
+
 class TestManifestReader:
     def test_reads_rows_with_scalar_archive(self, tmp_path):
         archive = _make_tar(tmp_path)
@@ -141,3 +166,141 @@ class TestImporter:
         assert IMPORTER.can_reload_from_origin(origin)
         reloaded = IMPORTER.reload_from_origin(origin)
         assert reloaded == {"manifest": str(manifest.resolve()), "media_type": "video"}
+
+
+class TestWindowedManifest:
+    def test_reader_emits_clip_fields(self, tmp_path):
+        archive = _make_tar(tmp_path)
+        manifest = _make_windowed_manifest(tmp_path, archive)
+        rows = read_npz_archive_member_rows(manifest)
+        assert len(rows) == 4
+        windows = [r for r in rows if r["member"] == "chunk_a.mp4"]
+        assert {(r["clip_start"], r["clip_end"]) for r in windows} == {(0.0, 10.0), (10.0, 20.0), (20.0, 30.0)}
+        # The NaN-sentinel whole-member row carries no window.
+        whole = next(r for r in rows if r["member"] == "sub/chunk_b.mp4")
+        assert whole["clip_start"] is None
+        assert whole["clip_end"] is None
+
+    def test_importer_fans_member_into_windows(self, tmp_path):
+        archive = _make_tar(tmp_path)
+        manifest = _make_windowed_manifest(tmp_path, archive)
+        medias: dict[int, dict] = {}
+        IMPORTER.run({"manifest": str(manifest), "media_type": "video"}, medias)
+
+        # 3 windows of chunk_a + 1 whole chunk_b.
+        assert len(medias) == 4
+        windows = [m for m in medias.values() if m["archive_member"]["member"] == "chunk_a.mp4"]
+        assert len(windows) == 3
+        for m in windows:
+            assert m["clip_start"] is not None and m["clip_end"] is not None
+            # Display-only window persisted in origin.params too.
+            assert m["origin"]["params"]["clip_start"] == m["clip_start"]
+            assert m["origin"]["params"]["clip_end"] == m["clip_end"]
+        # Each window's synthesized md5 is unique despite sharing one member.
+        assert len({m["md5"] for m in windows}) == 3
+        # The whole-member row carries no clip fields.
+        whole = next(m for m in medias.values() if m["archive_member"]["member"] == "sub/chunk_b.mp4")
+        assert "clip_start" not in whole
+        assert "clip_start" not in whole["origin"]["params"]
+
+    def test_window_id_disambiguates_md5(self, tmp_path):
+        archive = _make_tar(tmp_path)
+        rng = np.random.default_rng(3)
+        manifest = tmp_path / "wid.npz"
+        np.savez(
+            manifest,
+            vectors=rng.standard_normal((2, DIM)).astype(np.float32),
+            members=np.array(["chunk_a.mp4", "chunk_a.mp4"]),
+            archives=np.array(str(archive)),
+            window_id=np.array(["w0", "w1"]),
+            embedder_name=np.array("largerclapgeneral"),
+        )
+        medias: dict[int, dict] = {}
+        IMPORTER.run({"manifest": str(manifest), "media_type": "video"}, medias)
+        assert len(medias) == 2
+        assert len({m["md5"] for m in medias.values()}) == 2
+        assert {m["origin"]["params"]["window_id"] for m in medias.values()} == {"w0", "w1"}
+
+
+class TestArchiveMemberClipRecipe:
+    def test_archive_member_audio_never_lazy_slices(self, tmp_path):
+        """A windowed audio archive member must not trigger WAV byte-slicing."""
+        from vtscore.media.lazy_clip import clip_recipe
+
+        archive = _make_tar(tmp_path)
+        media = {
+            "media_type": "audio",
+            "archive_member": {"path": str(archive), "member": "chunk_a.mp4"},
+            "origin": {
+                "importer": "local_archive_member",
+                "params": {"archive_path": str(archive), "member": "chunk_a.mp4", "clip_start": 0.0, "clip_end": 10.0},
+            },
+            "clip_start": 0.0,
+            "clip_end": 10.0,
+        }
+        assert clip_recipe(media) is None
+
+
+class TestLocalArchiveMemberSource:
+    def test_factory_resolves_origin(self, tmp_path):
+        from vtscore.datasets.sources import get_source_for_origin
+
+        archive = _make_tar(tmp_path)
+        manifest = _make_manifest(tmp_path, archive)
+        medias: dict[int, dict] = {}
+        IMPORTER.run({"manifest": str(manifest), "media_type": "video"}, medias)
+        origin = next(iter(medias.values()))["origin"]
+
+        source = get_source_for_origin(origin)
+        assert source is not None
+        assert source.name == "local_archive_member"
+
+    def test_fetch_item_resupplies_vector_no_path(self, tmp_path):
+        from vtscore.datasets.sources import get_source_for_origin
+
+        archive = _make_tar(tmp_path)
+        manifest = _make_manifest(tmp_path, archive)
+        medias: dict[int, dict] = {}
+        IMPORTER.run({"manifest": str(manifest), "media_type": "video"}, medias)
+        media = next(m for m in medias.values() if m["archive_member"]["member"] == "chunk_a.mp4")
+
+        source = get_source_for_origin(media["origin"])
+        assert source is not None
+        fetched = source.fetch_item("chunk_a.mp4")
+        assert fetched.path is None
+        assert fetched.embedding is not None
+        assert fetched.embedding.shape == (DIM,)
+        assert fetched.embedder_name == "largerclapgeneral"
+        # Re-supplied vector matches the in-memory embedding from import.
+        np.testing.assert_array_equal(fetched.embedding, media["embeddings"]["largerclapgeneral"])
+
+    def test_fetch_item_resolves_windowed_member(self, tmp_path):
+        from vtscore.datasets.sources import get_source_for_origin
+
+        archive = _make_tar(tmp_path)
+        manifest = _make_windowed_manifest(tmp_path, archive)
+        medias: dict[int, dict] = {}
+        IMPORTER.run({"manifest": str(manifest), "media_type": "video"}, medias)
+        window = next(
+            m for m in medias.values() if m["archive_member"]["member"] == "chunk_a.mp4" and m.get("clip_start") == 10.0
+        )
+
+        source = get_source_for_origin(window["origin"])
+        assert source is not None
+        # The window key is "member@start"; fetch by it returns that window's vector.
+        fetched = source.fetch_item("chunk_a.mp4@10")
+        assert fetched.embedding is not None
+        np.testing.assert_array_equal(fetched.embedding, window["embeddings"]["largerclapgeneral"])
+
+    def test_fetch_item_unknown_key_returns_pathless_empty(self, tmp_path):
+        from vtscore.datasets.sources import get_source_for_origin
+
+        archive = _make_tar(tmp_path)
+        manifest = _make_manifest(tmp_path, archive)
+        medias: dict[int, dict] = {}
+        IMPORTER.run({"manifest": str(manifest), "media_type": "video"}, medias)
+        source = get_source_for_origin(next(iter(medias.values()))["origin"])
+        assert source is not None
+        fetched = source.fetch_item("does/not/exist.mp4")
+        assert fetched.path is None
+        assert fetched.embedding is None
