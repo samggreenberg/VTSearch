@@ -17,8 +17,12 @@ interface ShortcutGroup {
   shortcuts: Shortcut[];
 }
 
-interface ShortcutSection {
-  header?: string;
+/** A keyboard-shortcuts context: one sub-tab under the "Keyboard shortcuts" tab.
+ *  Splitting the (growing) shortcut list by where the keys apply keeps each
+ *  panel short instead of one long scroll. */
+interface ShortcutContext {
+  id: string;
+  label: string;
   groups: ShortcutGroup[];
 }
 
@@ -56,15 +60,23 @@ export class KeyboardHelpModalComponent implements OnInit {
   private readonly themeService = inject(ThemeService);
 
   readonly activeTab = signal<Tab>('shortcuts');
+  /** Which shortcut context's panel is shown under the "Keyboard shortcuts" tab. */
+  readonly activeContext = signal<string>('find');
   readonly guideHtml = signal<SafeHtml | null>(null);
   readonly guideError = signal<string | null>(null);
   private guideLoaded = false;
   /** Raw markdown, cached so a theme switch re-renders without re-fetching. */
   private rawGuide: string | null = null;
 
-  readonly sections: ShortcutSection[] = [
+  /**
+   * Shortcuts grouped by the context they apply in. Each entry becomes a sub-tab
+   * under the "Keyboard shortcuts" tab so the sheet stays scannable as the list
+   * grows; the "General" context holds the keys that work anywhere.
+   */
+  readonly contexts: ShortcutContext[] = [
     {
-      header: 'In the Train / Find window only',
+      id: 'find',
+      label: 'Train / Find',
       groups: [
         {
           title: 'Voting',
@@ -95,10 +107,35 @@ export class KeyboardHelpModalComponent implements OnInit {
       ],
     },
     {
-      header: 'Anywhere',
+      id: 'browse',
+      label: 'Browser',
       groups: [
         {
-          title: 'General',
+          title: 'Navigating the map',
+          shortcuts: [
+            { keys: ['↑ ↓ ← →'], description: 'Pan the view' },
+            { keys: ['+'], description: 'Zoom in' },
+            { keys: ['-'], description: 'Zoom out' },
+            { keys: ['Ctrl', 'A'], description: 'Select every bin fully in view' },
+          ],
+        },
+        {
+          title: 'Bin details window',
+          shortcuts: [
+            { keys: ['↑ ↓ ← →'], description: 'Move the viewed item within the grid' },
+            { keys: ['+'], description: 'Make the detail image bigger' },
+            { keys: ['-'], description: 'Make the detail image smaller' },
+            { keys: ['Ctrl', 'A'], description: 'Select all items in this bin' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'general',
+      label: 'General',
+      groups: [
+        {
+          title: 'Anywhere',
           shortcuts: [
             { keys: ['?'], description: 'Show this help' },
             { keys: ['Esc'], description: 'Close modal or dropdown' },
@@ -107,6 +144,15 @@ export class KeyboardHelpModalComponent implements OnInit {
       ],
     },
   ];
+
+  selectContext(id: string): void {
+    this.activeContext.set(id);
+  }
+
+  /** Groups of the currently-selected context (the visible shortcut panel). */
+  get activeGroups(): ShortcutGroup[] {
+    return this.contexts.find((c) => c.id === this.activeContext())?.groups ?? [];
+  }
 
   constructor() {
     // Re-render the guide whenever the effective theme changes so embedded

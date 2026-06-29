@@ -2099,6 +2099,63 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.refreshHoverAfterZoom();
   }
 
+  /** Fraction of the viewport one arrow-key press pans. */
+  private static readonly KEY_PAN_FRACTION = 0.2;
+
+  /**
+   * Pan the view one step per arrow-key press, ``(dirX, dirY)`` each in
+   * ``{-1, 0, 1}``: +x pans right (reveals content to the right), +y pans down.
+   * Unlike a drag this hard-clamps to the content bounds (no rubber-band /
+   * settle) since a keypress is a discrete programmatic move, like the minimap
+   * recenter. Marks the view user-framed so a later size change won't re-fit
+   * over the pan.
+   */
+  panByKey(dirX: number, dirY: number): void {
+    const meta = this.meta();
+    if (!meta || meta.point_count === 0) return;
+    if (this.width <= 0 || this.height <= 0) return;
+    // A keyboard pan takes over from any in-flight zoom transition / snap-back.
+    if (this.animActive) this.endZoomAnim();
+    this.cancelSettle();
+    this.framedByUser = true;
+    const z = this.effZoom;
+    this.transform.centerX += (dirX * this.width * BrowseCanvasComponent.KEY_PAN_FRACTION) / z;
+    this.transform.centerY += (dirY * this.height * BrowseCanvasComponent.KEY_PAN_FRACTION) / z;
+    this.clampView();
+    this.updateActiveLevel();
+    this.requestRedraw();
+    this.refreshHoverAfterZoom();
+  }
+
+  /**
+   * Select every bin that lies *fully* within the current viewport — its whole
+   * silhouette on screen, not clipped at an edge — adding all their members to
+   * the selection. The ctrl-A affordance for the canvas; mirrors
+   * {@link commitMarquee} but bounds by the viewport rather than a drawn
+   * rectangle, and only walks tiles already cached (i.e. what's actually drawn).
+   */
+  selectAllInView(): void {
+    const meta = this.meta();
+    if (!meta || meta.point_count === 0) return;
+    const level = this.activeLevel;
+    const radius = meta.base_radius / Math.pow(2, level);
+    const screenRadius = radius * this.effZoom;
+    const ids: number[] = [];
+    for (const { tx, ty } of this.getVisibleTiles()) {
+      const tile = this.tileCache.getCached(level, tx, ty);
+      if (!tile) continue;
+      for (const cell of tile.cells) {
+        const [sx, sy] = this.projToScreen(cell.cx, cell.cy);
+        // Fully on-screen: the cell's whole extent (its circumradius) clears
+        // every edge, so a bin clipped by the viewport border is left out.
+        if (sx - screenRadius < 0 || sx + screenRadius > this.width) continue;
+        if (sy - screenRadius < 0 || sy + screenRadius > this.height) continue;
+        for (const id of this.cellMembers(cell)) ids.push(id);
+      }
+    }
+    if (ids.length > 0) this.selection.addAll(ids);
+  }
+
   zoomBy(factor: number, anchorX = this.width / 2, anchorY = this.height / 2): void {
     this.framedByUser = true;
     // A zoom takes over from any in-flight snap-back; continue from where the

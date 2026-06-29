@@ -34,20 +34,46 @@
 .kbd-help {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xl);
+  gap: var(--space-lg);
+}
+
+// Secondary tab row: one per shortcut context (Train/Find, Browser, General).
+// A lighter, pill-style variant of the top-level ``.help-tabs`` so the two
+// levels read as distinct.
+.kbd-context-tabs {
+  display: flex;
+  gap: var(--space-2xs);
+  flex-wrap: wrap;
+}
+
+.kbd-context-tab {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill, 999px);
+  padding: var(--space-2xs) var(--space-md);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+  }
+}
+
+.kbd-context-tab--active {
+  color: var(--text-primary);
+  border-color: var(--accent, var(--text-primary));
+  background: color-mix(in srgb, var(--accent, var(--text-primary)) 14%, transparent);
 }
 
 .kbd-section {
   display: flex;
   flex-direction: column;
   gap: var(--space-xl);
-}
-
-.kbd-section-header {
-  margin: 0;
-  font-size: var(--font-xl);
-  font-weight: 600;
-  color: var(--text-primary);
+  // Hold a stable minimum height so switching to a shorter context's panel
+  // doesn't make the modal jump in size.
+  min-height: 180px;
 }
 
 .kbd-group-title {

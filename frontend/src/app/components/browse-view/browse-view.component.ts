@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, ElementRef, HostListener, inject, NgZone, OnDestroy, OnInit, signal, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subject } from 'rxjs';
@@ -35,6 +35,7 @@ import {
   type BrowseColormapId,
 } from '../browse-canvas/hex-render.util';
 import type { ProjectionMeta } from '../../models/projection.models';
+import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
 
@@ -510,6 +511,57 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   /** Toggle region-select mode (drag-to-marquee without holding Shift). */
   toggleMarqueeMode(): void {
     this.marqueeMode = !this.marqueeMode;
+  }
+
+  /**
+   * Keyboard shortcuts for the browse canvas: arrow keys pan, ``+``/``-`` zoom
+   * (mirroring the on-screen buttons), and Ctrl/Cmd-A selects every bin fully in
+   * view. Suppressed while the projection isn't ready, while the bin-details
+   * popup is open (it has its own keys — see {@link BrowseBinPopupComponent}),
+   * and while typing or behind a modal ({@link shortcutsBlocked}).
+   */
+  @HostListener('document:keydown', ['$event'])
+  onKeydown(event: KeyboardEvent): void {
+    if (this.status() !== 'ready' || this.contextMenuOpen) return;
+    if (shortcutsBlocked()) return;
+
+    // Ctrl/Cmd-A: fully select every bin whose silhouette sits entirely in view.
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && (event.key === 'a' || event.key === 'A')) {
+      event.preventDefault();
+      this.canvas?.selectAllInView();
+      return;
+    }
+    // The remaining shortcuts take no modifiers.
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+    switch (event.key) {
+      case 'ArrowUp':
+        event.preventDefault();
+        this.canvas?.panByKey(0, -1);
+        break;
+      case 'ArrowDown':
+        event.preventDefault();
+        this.canvas?.panByKey(0, 1);
+        break;
+      case 'ArrowLeft':
+        event.preventDefault();
+        this.canvas?.panByKey(-1, 0);
+        break;
+      case 'ArrowRight':
+        event.preventDefault();
+        this.canvas?.panByKey(1, 0);
+        break;
+      case '+':
+      case '=':
+        event.preventDefault();
+        this.zoomIn();
+        break;
+      case '-':
+      case '_':
+        event.preventDefault();
+        this.zoomOut();
+        break;
+    }
   }
 
   /** Zoom in one step (narrower span, cells keep their display size). */

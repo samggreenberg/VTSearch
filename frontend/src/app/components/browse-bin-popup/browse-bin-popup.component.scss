@@ -267,6 +267,15 @@
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
   }
 
+  // The viewed item (the one shown in the preview pane / walked by the arrow
+  // keys). A dashed accent ring distinguishes keyboard focus from the solid
+  // ``.selected`` ring and the softer ``.representative`` one; it's the only
+  // on-grid cue for non-thumbnail media, which has no preview pane.
+  &.focused:not(.selected) {
+    outline: 2px dashed var(--accent);
+    outline-offset: -2px;
+  }
+
   &:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
