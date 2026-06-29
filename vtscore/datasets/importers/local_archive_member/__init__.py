@@ -62,7 +62,7 @@ def _synthetic_md5(archive: str, member: str, suffix: str = "") -> str:
     is *content*-based label transfer across unrelated datasets, which these
     precomputed-embedding corpora don't use.
     """
-    return hashlib.md5(f"{archive}::{member}{window_suffix}".encode()).hexdigest()
+    return hashlib.md5(f"{archive}::{member}{suffix}".encode()).hexdigest()
 
 
 class LocalArchiveMemberImporter(ImporterBase):
