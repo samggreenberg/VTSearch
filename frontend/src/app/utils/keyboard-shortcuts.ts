@@ -18,7 +18,11 @@ export function isTypingTarget(el: Element | null): boolean {
     if (type !== 'checkbox' && type !== 'radio' && type !== 'range') return true;
   }
   if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
-  return (el as HTMLElement).isContentEditable;
+  if ((el as HTMLElement).isContentEditable) return true;
+  // Fall back to the attribute: ``isContentEditable`` is unreliable outside a
+  // real browser (e.g. jsdom), where it stays undefined despite the attribute.
+  const ce = el.getAttribute('contenteditable');
+  return ce === '' || ce === 'true' || ce === 'plaintext-only';
 }
 
 /**
