@@ -61,6 +61,32 @@ def _fetch_media_url(url: str) -> bytes | None:
         return None
 
 
+def _resolve_archive_member_bytes(media: dict) -> bytes | None:
+    """Return a media's bytes by streaming its archive member, or ``None``.
+
+    For ``local_archive_member`` media (whose bytes live inside a tar/zip shard
+    that we deliberately never extract) this reads the whole member on demand
+    via :mod:`vtscore.datasets.archive_stream`.  Returns ``None`` for any media
+    that is not archive-member-backed, or when the member can't be read, so the
+    caller falls through to its remaining resolution order.
+
+    Callers serving Range requests (video/audio playback) should prefer the
+    route-level partial-read path so a large member is never fully buffered;
+    this whole-member read backs the non-streaming callers (thumbnails, image,
+    transcode of non-streamable containers).
+    """
+    from vtscore.datasets.archive_stream import ArchiveMemberError, archive_member_ref, read_member  # noqa: PLC0415
+
+    ref = archive_member_ref(media)
+    if ref is None:
+        return None
+    try:
+        return read_member(ref[0], ref[1])
+    except (ArchiveMemberError, OSError):
+        logging.getLogger(__name__).warning("Failed to read archive member %s::%s", ref[0], ref[1], exc_info=True)
+        return None
+
+
 def _noop_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
     """Default no-op progress callback used when no real reporter is set."""
 
@@ -442,6 +468,9 @@ class MediaType(ABC):
         clipped = lazy_clip_bytes(media)
         if clipped is not None:
             return clipped
+        archive_bytes = _resolve_archive_member_bytes(media)
+        if archive_bytes is not None:
+            return archive_bytes
         media_path = media.get("media_path")
         if media_path:
             path = Path(media_path)

@@ -35,6 +35,8 @@ import numpy as np
 _FILENAMES_KEYS = ("filenames", "names", "paths", "filename")
 _VECTORS_KEYS = ("vectors", "embeddings", "vecs", "embedding")
 _EMBEDDER_NAME_KEYS = ("embedder_name", "embedder")
+_MEMBERS_KEYS = ("members", "member")
+_ARCHIVES_KEYS = ("archives", "archive", "shards", "shard")
 
 
 def read_npz_embedder_name(npz_path: Path) -> str:
@@ -105,3 +107,103 @@ def read_npz_filenames_and_vectors(npz_path: Path) -> dict[str, np.ndarray]:
         for k in keys:
             mapping[k] = np.asarray(data[k])
         return mapping
+
+
+def read_npz_archive_member_rows(npz_path: Path) -> list[dict]:
+    """Read archive-member rows from an ``.npz`` manifest.
+
+    This is the no-extraction counterpart of
+    :func:`read_npz_filenames_and_vectors`: instead of mapping a filesystem
+    path to a vector, each row references a **member inside a tar/zip shard**
+    plus its pre-computed embedding, so a filtered subset of a WebDataset-style
+    corpus imports without ever extracting the shards.
+
+    Expected arrays (NumPy ``.npz``, ``allow_pickle=False``):
+
+    * ``vectors`` / ``embeddings`` - ``(N, D)`` float embeddings, one per row.
+    * ``members`` - ``(N,)`` member names within their archive.
+    * ``archives`` - ``(N,)`` archive paths, **or** a single scalar/1-element
+      value applied to every row (one-shard manifests).  Relative paths are
+      resolved against the manifest's directory.
+    * ``filenames`` *(optional)* - ``(N,)`` display names; defaults to the
+      member's basename.
+    * ``embedder_name`` *(optional)* - scalar embedder name (see
+      :func:`read_npz_embedder_name`).
+
+    Returns a list of ``{"archive", "member", "filename", "vector"}`` dicts
+    (archive paths resolved to absolute strings).  Raises ``ValueError`` for a
+    malformed manifest and ``FileNotFoundError`` if the file is missing.
+    """
+    p = Path(npz_path)
+    if not p.is_file():
+        raise FileNotFoundError(f"NPZ file not found: {p}")
+
+    base_dir = p.resolve().parent
+    with np.load(p, allow_pickle=False) as data:
+        key_set = set(data.files)
+        vectors_key = next((k for k in _VECTORS_KEYS if k in key_set), None)
+        members_key = next((k for k in _MEMBERS_KEYS if k in key_set), None)
+        archives_key = next((k for k in _ARCHIVES_KEYS if k in key_set), None)
+        filenames_key = next((k for k in _FILENAMES_KEYS if k in key_set), None)
+
+        if vectors_key is None or members_key is None:
+            raise ValueError(
+                f"NPZ manifest {p} must contain a vectors array (one of {_VECTORS_KEYS}) "
+                f"and a members array (one of {_MEMBERS_KEYS})"
+            )
+
+        vecs_arr = data[vectors_key]
+        members_arr = np.atleast_1d(data[members_key])
+        if members_arr.ndim != 1:
+            raise ValueError(f"NPZ '{members_key}' array must be 1-D, got shape {members_arr.shape}")
+        n = len(members_arr)
+        if len(vecs_arr) != n:
+            raise ValueError(
+                f"NPZ '{members_key}' and '{vectors_key}' have mismatched lengths ({n} vs {len(vecs_arr)})"
+            )
+
+        archives_arr = _broadcast_column(data[archives_key], n, "archives") if archives_key is not None else None
+        if archives_arr is None:
+            raise ValueError(f"NPZ manifest {p} must contain an archives array (one of {_ARCHIVES_KEYS})")
+        filenames_arr = _broadcast_column(data[filenames_key], n, "filenames") if filenames_key is not None else None
+
+        rows: list[dict] = []
+        for i in range(n):
+            member = str(members_arr[i]).strip()
+            if not member:
+                continue
+            archive = str(archives_arr[i]).strip()
+            if not archive:
+                raise ValueError(f"NPZ manifest {p} row {i} has an empty archive path")
+            archive_path = Path(archive)
+            if not archive_path.is_absolute():
+                archive_path = (base_dir / archive_path).resolve()
+            display = str(filenames_arr[i]).strip() if filenames_arr is not None else ""
+            rows.append(
+                {
+                    "archive": str(archive_path),
+                    "member": member,
+                    "filename": display or Path(member).name,
+                    "vector": np.asarray(vecs_arr[i]),
+                }
+            )
+        if not rows:
+            raise ValueError(f"NPZ manifest {p} produced no rows")
+        return rows
+
+
+def _broadcast_column(arr: np.ndarray, n: int, label: str) -> np.ndarray:
+    """Return a length-*n* 1-D view of *arr*, broadcasting a scalar/1-element.
+
+    A manifest whose every row shares one archive may store ``archives`` as a
+    single scalar (or 1-element array); this expands it to one entry per row.
+    Raises ``ValueError`` for any other length mismatch.
+    """
+    flat = np.atleast_1d(arr)
+    if flat.ndim != 1:
+        raise ValueError(f"NPZ '{label}' array must be 1-D, got shape {flat.shape}")
+    if len(flat) == n:
+        return flat
+    if len(flat) == 1:
+        return np.repeat(flat, n)
+    raise ValueError(f"NPZ '{label}' has length {len(flat)}, expected {n} or 1")

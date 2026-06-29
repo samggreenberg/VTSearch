@@ -372,9 +372,26 @@ def _media_extension(media: dict) -> str:
 def _resolve_media_bytes(media: dict) -> bytes | None:
     """Return the raw bytes for a loaded media item.
 
-    Mirrors :func:`vtsearch.routes.media.list._resolve_bytes` but is also
-    aware of text media (which stores its content as ``media_string``).
+    Delegates to the media type's resolver (inline bytes -> lazy clip ->
+    archive member -> local path -> remote URL) so it handles every backing
+    the byte routes do, then adds a text fallback (text media stores its
+    content as ``media_string``, which the byte resolver doesn't produce).
     """
+    from vtscore.media import get as get_media_type  # noqa: PLC0415
+
+    try:
+        mt = get_media_type(media.get("media_type", ""))
+    except KeyError:
+        mt = None
+    if mt is not None:
+        data = mt._resolve_media_bytes(media)
+        if data is not None:
+            return data
+
+    media_string = media.get("media_string")
+    if media_string is not None:
+        return media_string.encode("utf-8")
+
     media_bytes = media.get("media_bytes")
     if media_bytes is not None:
         return media_bytes
@@ -383,9 +400,6 @@ def _resolve_media_bytes(media: dict) -> bytes | None:
         p = Path(media_path)
         if p.exists():
             return p.read_bytes()
-    media_string = media.get("media_string")
-    if media_string is not None:
-        return media_string.encode("utf-8")
     return None
 
 

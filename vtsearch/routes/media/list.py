@@ -205,7 +205,23 @@ def _transcode_to_mp4(src_bytes: bytes, filename: str) -> bytes | None:  # noqa:
 
 
 def _resolve_bytes(media: dict) -> bytes | None:
-    """Return media bytes, lazy-loading from media_path if needed."""
+    """Return a media's full bytes via the media type's resolver.
+
+    Delegates to :meth:`MediaType._resolve_media_bytes` so every byte route
+    shares one resolution chain (inline bytes -> lazy clip -> archive member
+    -> local path -> remote URL) instead of the old path-only duplicate.  Media
+    whose type isn't registered fall back to the inline-bytes / local-path
+    pair.
+    """
+    from vtscore.media import get as get_media_type  # noqa: PLC0415
+
+    try:
+        mt = get_media_type(media.get("media_type", ""))
+    except KeyError:
+        mt = None
+    if mt is not None:
+        return mt._resolve_media_bytes(media)
+
     media_bytes = media.get("media_bytes")
     if media_bytes is not None:
         return media_bytes
@@ -216,6 +232,90 @@ def _resolve_bytes(media: dict) -> bytes | None:
             with open(p, "rb") as f:
                 return f.read()
     return None
+
+
+def _member_mimetype(filename: str, default: str) -> str:
+    """Guess a mimetype for an archive member from its name, else *default*."""
+    import mimetypes  # noqa: PLC0415
+
+    guessed, _ = mimetypes.guess_type(filename)
+    return guessed or default
+
+
+def _send_streamed_range(total, read_slice, mimetype: str, download_name: str) -> Response:
+    """Serve *total* bytes with HTTP Range support, reading only what's asked.
+
+    *read_slice(start, length)* returns the requested byte slice (``length``
+    is ``None`` for "to end").  Unlike :func:`_send_video_bytes` this never
+    buffers the whole payload for a partial request -- the backing reader
+    (an archive member) is seeked to *start* and only the served slice is
+    read, so playing a few seconds out of a large member transfers a few
+    seconds of bytes.
+    """
+    range_header = request.headers.get("Range")
+    if range_header:
+        try:
+            byte_range = range_header.replace("bytes=", "").strip()
+            parts = byte_range.split("-", 1)
+            start = int(parts[0])
+            end = int(parts[1]) if parts[1] else total - 1
+        except (ValueError, IndexError):
+            start, end = 0, total - 1
+        end = min(end, total - 1)
+        if start < 0 or start >= total or start > end:
+            resp = make_response(b"")
+            resp.status_code = 416
+            resp.headers["Content-Range"] = f"bytes */{total}"
+            resp.headers["Content-Length"] = "0"
+            resp.headers["Content-Type"] = mimetype
+            resp.headers["Accept-Ranges"] = "bytes"
+            return resp
+        data = read_slice(start, end - start + 1)
+        resp = make_response(data)
+        resp.status_code = 206
+        resp.headers["Content-Range"] = f"bytes {start}-{end}/{total}"
+        resp.headers["Content-Length"] = str(len(data))
+    else:
+        data = read_slice(0, None)
+        resp = make_response(data)
+        resp.headers["Content-Length"] = str(total)
+
+    resp.headers["Content-Type"] = mimetype
+    resp.headers["Accept-Ranges"] = "bytes"
+    resp.headers["Content-Disposition"] = f'inline; filename="{download_name}"'
+    return resp
+
+
+def _archive_member_response(media: dict, download_name: str, default_mimetype: str) -> Response | None:
+    """Serve an archive-member media by streaming a single member, or ``None``.
+
+    Returns ``None`` for media that aren't archive-member-backed (the caller
+    then falls through to its normal resolution), or when the member can't be
+    located in its shard.  Otherwise returns a Range-capable response that
+    reads only the requested bytes straight out of the tar/zip, never
+    extracting or fully buffering the member.
+    """
+    from vtscore.datasets.archive_stream import (  # noqa: PLC0415
+        ArchiveMemberError,
+        archive_member_ref,
+        member_size,
+        read_member_range,
+    )
+
+    ref = archive_member_ref(media)
+    if ref is None:
+        return None
+    archive_path, member = ref
+    try:
+        total = member_size(archive_path, member)
+    except (ArchiveMemberError, OSError):
+        return None
+
+    def read_slice(start, length):
+        return read_member_range(archive_path, member, start, length)
+
+    mimetype = _member_mimetype(media.get("filename") or member, default_mimetype)
+    return _send_streamed_range(total, read_slice, mimetype, download_name)
 
 
 def _send_video_bytes(data: bytes, mimetype: str, download_name: str) -> Response:
@@ -390,6 +490,10 @@ def media_audio(media_id: int):
     c = get_media(media_id)
     if not c:
         abort(404, message="not found")
+    ext = Path(c.get("filename", "")).suffix or ".wav"
+    streamed = _archive_member_response(c, f"media_{media_id}{ext}", "audio/wav")
+    if streamed is not None:
+        return streamed
     media_bytes = _resolve_bytes(c)
     if media_bytes is None:
         abort(404, message="media not available")
@@ -439,6 +543,12 @@ def media_video(media_id: int):
             415,
             message=f"Cannot play {ext} videos: install ffmpeg or opencv-python-headless to enable transcoding",
         )
+
+    # Archive-member video: stream the member with Range so the browser only
+    # downloads the bytes it plays -- never extracting or fully buffering it.
+    streamed = _archive_member_response(c, f"media_{media_id}{ext}", "video/mp4")
+    if streamed is not None:
+        return streamed
 
     media_bytes = _resolve_bytes(c)
     if media_bytes is None:
