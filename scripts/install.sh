@@ -16,8 +16,10 @@ set -euo pipefail
 # physically present (an NVIDIA PCI device) but nvidia-smi can't -- the usual
 # state on a fresh cloud GPU box like an AWS g4dn whose NVIDIA driver isn't
 # installed yet -- auto mode OFFERS TO INSTALL THE DRIVER FOR YOU (a distro-aware,
-# best-effort sudo install; default choice at the prompt), or to fall back to a
-# CPU-only install, or to stop. On a non-interactive shell it stops unless told
+# best-effort sudo install; default choice at the prompt; falls back to NVIDIA's
+# self-contained .run installer when the distro's package path dead-ends, e.g. on
+# a bare unregistered RHEL g4dn), or to fall back to a CPU-only install, or to
+# stop. On a non-interactive shell it stops unless told
 # otherwise: VTSEARCH_AUTO_DRIVER=1 auto-installs the driver, VTSEARCH_ASSUME_CPU=1
 # proceeds with CPU. An explicit 'cpu'/'gpu'/'cuXYZ' argument skips the check.
 #
@@ -275,6 +277,104 @@ vts_rhel_ensure_dkms() {
     command -v dkms >/dev/null 2>&1 || rpm -q dkms >/dev/null 2>&1
 }
 
+# Universal last-resort fallback: install the driver from NVIDIA's self-contained
+# `.run` installer instead of the distro's packages. This is the path AWS itself
+# documents for EC2 GPU instances, and it sidesteps EVERY failure mode of the
+# RPM/module/dkms route: it needs no CUDA repo, no `dnf` module stream, no EPEL,
+# and no `dkms` package. The installer compiles the kernel module in place against
+# the running kernel's source, so all it needs is a C toolchain + kernel headers.
+#
+# This is exactly what rescues a bare, UNregistered RHEL 9 GPU box (e.g. an AWS
+# g4dn) where the dnf path dead-ends completely: `cuda-drivers` is hidden behind
+# a module, the `*-dkms` streams can't get `dkms` (EPEL/base repos dark without a
+# subscription), AND the precompiled kABI streams have no satisfiable `nvidia-kmod`
+# provider either ("filtered out by modular filtering" / "missing module
+# nvidia-driver:open"). The `.run` installer doesn't care about any of that.
+#
+# The `.run` URL is resolved in this order:
+#   1. $VTSEARCH_NVIDIA_RUNFILE_URL, if set -- pin a version or point at the
+#      public Tesla compute driver, e.g.
+#      https://us.download.nvidia.com/tesla/<ver>/NVIDIA-Linux-x86_64-<ver>.run
+#   2. The latest driver in AWS's public, credential-free S3 bucket
+#      (ec2-linux-nvidia-drivers), which AWS keeps current for EC2 GPU instances
+#      and serves over plain HTTPS -- no AWS CLI, no AWS credentials needed.
+#   $1 = sudo prefix ("" or "sudo").
+vts_install_driver_runfile() {
+    local sudo_cmd="$1"
+
+    # A self-contained `.run` still compiles a kernel module, so it needs the
+    # kernel headers/devel for the RUNNING kernel plus a C toolchain. Install
+    # them best-effort with whatever package manager is present.
+    if command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
+        local dnf="dnf"
+        command -v dnf >/dev/null 2>&1 || dnf="yum"
+        $sudo_cmd "$dnf" install -y "kernel-devel-$(uname -r)" kernel-headers gcc make tar \
+            >/dev/null 2>&1 || true
+    elif command -v apt-get >/dev/null 2>&1; then
+        $sudo_cmd apt-get install -y "linux-headers-$(uname -r)" gcc make >/dev/null 2>&1 || true
+    fi
+
+    local url="${VTSEARCH_NVIDIA_RUNFILE_URL:-}"
+    if [ -z "$url" ]; then
+        # Discover the newest driver in AWS's public bucket. The S3 REST list
+        # endpoint is anonymous-readable, so a plain GET + a grep for the .run
+        # key works without the AWS CLI. Keys look like
+        # "latest/NVIDIA-Linux-x86_64-<ver>-grid-aws.run".
+        local arch_dir="x86_64"
+        case "$(uname -m)" in aarch64 | arm64) arch_dir="aarch64" ;; esac
+        local bucket="https://ec2-linux-nvidia-drivers.s3.amazonaws.com"
+        local listing="" key=""
+        if command -v curl >/dev/null 2>&1; then
+            listing="$(curl -fsSL "${bucket}/?list-type=2&prefix=latest/" 2>/dev/null || true)"
+        elif command -v wget >/dev/null 2>&1; then
+            listing="$(wget -qO- "${bucket}/?list-type=2&prefix=latest/" 2>/dev/null || true)"
+        fi
+        key="$(printf '%s' "$listing" \
+            | grep -oE "latest/NVIDIA-Linux-${arch_dir}-[0-9.]+(-grid-aws)?\.run" \
+            | sort -V | tail -n1 || true)"
+        [ -n "$key" ] && url="${bucket}/${key}"
+    fi
+    if [ -z "$url" ]; then
+        echo "  Could not determine an NVIDIA .run installer URL automatically." >&2
+        echo "  Set VTSEARCH_NVIDIA_RUNFILE_URL to a driver .run and re-run, e.g.:" >&2
+        echo "    VTSEARCH_NVIDIA_RUNFILE_URL=https://us.download.nvidia.com/tesla/<ver>/NVIDIA-Linux-x86_64-<ver>.run \\" >&2
+        echo "      bash scripts/install.sh" >&2
+        return 1
+    fi
+
+    echo "  Downloading NVIDIA .run installer:" >&2
+    echo "    $url" >&2
+    local runfile
+    runfile="$(mktemp --suffix=.run 2>/dev/null || mktemp)"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fSL -o "$runfile" "$url" \
+            || { echo "  Download failed (network/proxy/404?)." >&2; rm -f "$runfile"; return 1; }
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO "$runfile" "$url" \
+            || { echo "  Download failed (network/proxy/404?)." >&2; rm -f "$runfile"; return 1; }
+    else
+        echo "  Neither curl nor wget is available to download the .run installer." >&2
+        rm -f "$runfile"
+        return 1
+    fi
+
+    echo "  Running the NVIDIA installer (silent; compiles the kernel module against" >&2
+    echo "  kernel $(uname -r)). This takes a few minutes and disables nouveau." >&2
+    # --silent implies --no-questions/--ui=none. --disable-nouveau blacklists the
+    # conflicting OSS driver (a reboot then loads nvidia). --no-cc-version-check
+    # tolerates a gcc that differs from the one the kernel was built with.
+    $sudo_cmd sh "$runfile" --silent --disable-nouveau --no-cc-version-check
+    local rc=$?
+    rm -f "$runfile"
+    if [ "$rc" -ne 0 ]; then
+        echo "  The NVIDIA .run installer exited non-zero (see /var/log/nvidia-installer.log)." >&2
+        echo "  Most common cause: kernel headers/devel for the running kernel" >&2
+        echo "  ($(uname -r)) aren't installed and couldn't be fetched." >&2
+        return 1
+    fi
+    return 0
+}
+
 # Best-effort, distro-aware NVIDIA driver install so we can fix the missing
 # driver FOR the user instead of just telling them how. It's a privileged,
 # system-mutating step (kernel driver), so it only runs on an explicit choice
@@ -307,25 +407,29 @@ vts_install_nvidia_driver() {
     echo "  Installing the NVIDIA driver (distro: ${distro:-unknown}). This needs" >&2
     echo "  network access and a few minutes; you may be prompted for your password." >&2
 
+    # Set to 1 by any branch that gets the driver packages installed. When it
+    # stays 0, we fall through to the universal `.run` installer fallback below
+    # rather than giving up -- this is what saves a bare RHEL 9 box where every
+    # dnf path dead-ends.
+    local pkg_ok=0
     case "$distro" in
         *ubuntu* | *debian*)
-            $sudo_cmd apt-get update || { echo "  apt-get update failed." >&2; return 1; }
-            # ubuntu-drivers picks the recommended driver for THIS GPU; fall back
-            # to a recent fixed branch if the helper isn't installed.
-            if command -v ubuntu-drivers >/dev/null 2>&1; then
-                $sudo_cmd ubuntu-drivers install \
-                    || $sudo_cmd apt-get install -y nvidia-driver-535 \
-                    || { echo "  driver package install failed." >&2; return 1; }
-            else
-                $sudo_cmd apt-get install -y ubuntu-drivers-common >/dev/null 2>&1 || true
-                if command -v ubuntu-drivers >/dev/null 2>&1; then
-                    $sudo_cmd ubuntu-drivers install \
-                        || $sudo_cmd apt-get install -y nvidia-driver-535 \
-                        || { echo "  driver package install failed." >&2; return 1; }
-                else
-                    $sudo_cmd apt-get install -y nvidia-driver-535 \
-                        || { echo "  driver package install failed." >&2; return 1; }
+            if $sudo_cmd apt-get update; then
+                # ubuntu-drivers picks the recommended driver for THIS GPU; fall
+                # back to a recent fixed branch if the helper isn't installed.
+                if ! command -v ubuntu-drivers >/dev/null 2>&1; then
+                    $sudo_cmd apt-get install -y ubuntu-drivers-common >/dev/null 2>&1 || true
                 fi
+                if command -v ubuntu-drivers >/dev/null 2>&1; then
+                    if $sudo_cmd ubuntu-drivers install || $sudo_cmd apt-get install -y nvidia-driver-535; then
+                        pkg_ok=1
+                    fi
+                elif $sudo_cmd apt-get install -y nvidia-driver-535; then
+                    pkg_ok=1
+                fi
+                [ "$pkg_ok" -eq 1 ] || echo "  driver package install failed." >&2
+            else
+                echo "  apt-get update failed." >&2
             fi
             ;;
         *amzn* | *rhel* | *centos* | *rocky* | *almalinux* | *fedora*)
@@ -333,45 +437,52 @@ vts_install_nvidia_driver() {
             command -v dnf >/dev/null 2>&1 && dnf="dnf"
             [ -z "$dnf" ] && command -v yum >/dev/null 2>&1 && dnf="yum"
             if [ -z "$dnf" ]; then
-                echo "  No dnf/yum found; cannot auto-install on this RPM distro." >&2
-                return 1
-            fi
-            # A DKMS-built driver needs the kernel headers/devel matching the
-            # running kernel plus a C toolchain; install them best-effort here.
-            # (The `dkms` package itself comes from EPEL and is handled inside
-            # vts_rhel_install_driver_pkgs -> vts_rhel_ensure_dkms, which knows
-            # how to bootstrap EPEL when the packaged epel-release isn't found.)
-            $sudo_cmd "$dnf" install -y "kernel-devel-$(uname -r)" kernel-headers gcc make \
-                >/dev/null 2>&1 || true
-            # A base AMI doesn't have NVIDIA's CUDA repo (which provides
-            # cuda-drivers), so the first install attempt typically fails with
-            # "No match for argument: cuda-drivers". Enable the repo and retry;
-            # this is the fix for the common fresh-RHEL-GPU-box failure. The
-            # retry goes through vts_rhel_install_driver_pkgs, which ALSO handles
-            # the second RHEL failure mode -- "All matches were filtered out by
-            # modular filtering" -- by installing the nvidia-driver module stream.
-            if ! vts_rhel_install_driver_pkgs "$sudo_cmd" "$dnf"; then
-                echo "  cuda-drivers not available yet -- enabling NVIDIA's CUDA repo and retrying." >&2
-                if ! vts_enable_nvidia_cuda_repo "$sudo_cmd" "$dnf"; then
-                    echo "  Could not enable NVIDIA's CUDA repo automatically; see AWS's guide:" >&2
-                    echo "    https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html" >&2
-                    return 1
-                fi
-                if ! vts_rhel_install_driver_pkgs "$sudo_cmd" "$dnf"; then
-                    echo "  cuda-drivers install still failed after enabling NVIDIA's CUDA repo." >&2
-                    echo "  See AWS's GPU-driver guide:" >&2
-                    echo "    https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html" >&2
-                    return 1
+                echo "  No dnf/yum found; cannot install driver packages on this RPM distro." >&2
+            else
+                # A DKMS-built driver needs the kernel headers/devel matching the
+                # running kernel plus a C toolchain; install them best-effort here.
+                # (The `dkms` package itself comes from EPEL and is handled inside
+                # vts_rhel_install_driver_pkgs -> vts_rhel_ensure_dkms, which knows
+                # how to bootstrap EPEL when the packaged epel-release isn't found.)
+                $sudo_cmd "$dnf" install -y "kernel-devel-$(uname -r)" kernel-headers gcc make \
+                    >/dev/null 2>&1 || true
+                # A base AMI doesn't have NVIDIA's CUDA repo (which provides
+                # cuda-drivers), so the first install attempt typically fails with
+                # "No match for argument: cuda-drivers". Enable the repo and retry;
+                # this is the fix for the common fresh-RHEL-GPU-box failure. The
+                # retry goes through vts_rhel_install_driver_pkgs, which ALSO handles
+                # the second RHEL failure mode -- "All matches were filtered out by
+                # modular filtering" -- by installing the nvidia-driver module stream.
+                if vts_rhel_install_driver_pkgs "$sudo_cmd" "$dnf"; then
+                    pkg_ok=1
+                else
+                    echo "  cuda-drivers not available yet -- enabling NVIDIA's CUDA repo and retrying." >&2
+                    if vts_enable_nvidia_cuda_repo "$sudo_cmd" "$dnf" \
+                        && vts_rhel_install_driver_pkgs "$sudo_cmd" "$dnf"; then
+                        pkg_ok=1
+                    else
+                        echo "  cuda-drivers install still failed via dnf (repo/module/dkms)." >&2
+                    fi
                 fi
             fi
             ;;
         *)
-            echo "  Unrecognized distro -- cannot auto-install the driver here." >&2
-            echo "  See AWS's GPU-driver guide, or use the AWS Deep Learning AMI:" >&2
-            echo "    https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html" >&2
-            return 1
+            echo "  Unrecognized distro -- no package-manager path; will try the .run installer." >&2
             ;;
     esac
+
+    # Every package-manager path failed -> fall back to NVIDIA's self-contained
+    # `.run` installer, which needs no repo/module/dkms and is the route AWS
+    # documents for EC2. This is the rescue for a bare, unregistered RHEL 9 g4dn.
+    if [ "$pkg_ok" -ne 1 ]; then
+        echo "  Package-based driver install didn't complete; falling back to" >&2
+        echo "  NVIDIA's self-contained .run installer (the path AWS documents for EC2)." >&2
+        if ! vts_install_driver_runfile "$sudo_cmd"; then
+            echo "  The .run installer fallback did not succeed either. See AWS's guide:" >&2
+            echo "    https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html" >&2
+            return 1
+        fi
+    fi
 
     # Try to load the freshly built module without a reboot (best-effort).
     $sudo_cmd modprobe nvidia >/dev/null 2>&1 || true
