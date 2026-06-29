@@ -104,13 +104,38 @@ def _install_user(user: str | None) -> None:
 
 def _snapshot_state_contexts() -> tuple[Any, Any]:
     """Capture the active dataset + detector context as resolved on the
-    calling thread."""
-    # Library-tier import; keep deferred so the helper stays importable
+    calling thread.
+
+    When the current request named an *unloaded* dataset / detector via
+    ``X-Dataset-Id`` / ``X-Detector-Id`` (e.g. the active-context header
+    still points at a since-evicted id), the proxy resolver raises
+    ``DatasetNotLoadedError`` / ``DetectorNotLoadedError`` (the H16/H34
+    contract for data-serving routes). Snapshotting context to hand off
+    to a background thread is *not* a data-serving read, so that raise
+    must not 409 the request that called :func:`spawn` — most notably the
+    registry-load handler, whose whole job is to *recover* from an
+    unloaded dataset. Fall back to ``None`` for the offending half; the
+    spawned body either sets its own context (the load task creates a
+    fresh one) or harmlessly resolves to the empty fallback.
+    """
+    # Library-tier imports; keep deferred so the helper stays importable
     # in environments where ``vtscore.state`` hasn't been initialised
     # (notably the lib-clean test runner).
+    from vtscore.state.core import (  # noqa: PLC0415
+        DatasetNotLoadedError,
+        DetectorNotLoadedError,
+    )
     from vtsearch.state import get_active_context, get_active_detector_context  # noqa: PLC0415
 
-    return get_active_context(), get_active_detector_context()
+    try:
+        ds_ctx = get_active_context()
+    except DatasetNotLoadedError:
+        ds_ctx = None
+    try:
+        det_ctx = get_active_detector_context()
+    except DetectorNotLoadedError:
+        det_ctx = None
+    return ds_ctx, det_ctx
 
 
 def _install_state_contexts(ds_ctx: Any, det_ctx: Any) -> None:

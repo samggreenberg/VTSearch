@@ -135,6 +135,46 @@ class TestRequestScopedDataset:
         resp = client.get("/api/datasets/registry", headers={"X-Dataset-Id": "nope"})
         assert resp.status_code == 200
 
+    def test_registry_load_succeeds_with_stale_unloaded_header(self, client, tmp_path):
+        """Loading a dataset must not 409 because the active-context header
+        still points at a since-evicted dataset.
+
+        Reproduces the "browse an unloaded dataset" failure: the browse
+        flow fires ``POST /api/datasets/registry/<target>/load`` while the
+        active ``X-Dataset-Id`` header still names a previously-active
+        dataset that has since been unloaded. The load handler spawns a
+        background thread, and ``spawn`` snapshots the active context to
+        replay it on the new thread. That snapshot must tolerate the
+        unloaded header (snapshot ``None`` for that half) rather than
+        raising ``DatasetNotLoadedError`` and 409-ing the very request
+        whose job is to recover from the unloaded state.
+        """
+        import pickle
+
+        from vtscore.datasets.registry import register_dataset
+
+        pkl = tmp_path / "target.pkl"
+        with open(pkl, "wb") as f:
+            pickle.dump(
+                {1: {"id": 1, "media_type": "audio", "embedding": np.zeros(4, dtype=np.float32)}},
+                f,
+            )
+        entry = register_dataset(
+            name="Target",
+            media_type="audio",
+            num_items=1,
+            pkl_path=str(pkl),
+            embedder="",
+            created_by="default",
+        )
+
+        resp = client.post(
+            f"/api/datasets/registry/{entry['id']}/load",
+            headers={"X-Dataset-Id": "ghost_unloaded"},
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["ok"] is True
+
     def test_no_header_uses_global_active(self, client):
         """Without the header, behaviour is identical to before (global active)."""
         _make_dataset("req_global", [400])
