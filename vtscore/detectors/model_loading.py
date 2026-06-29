@@ -35,10 +35,12 @@ def resolve_or_train_detector(  # noqa: C901
     media via its origin importer.  Returns ``(None, _, diag)`` when training
     is not possible.
 
-    Inclusion changes don't need special handling here: ``set_inclusion``
-    invalidates every loaded context's cached MLP, so after a slider move the
-    ``det_ctx.model`` short-circuit below is skipped and the cold branch
-    retrains at the new (per-detector) inclusion.
+    Inclusion is a pure cutoff knob now (find-verification-workflow.md): a slide
+    does **not** retrain or drop the MLP, it re-derives the threshold over the
+    cached fold orderings.  So the cold branch passes ``det_ctx`` to
+    :func:`~vtscore.detectors.training.train_and_threshold`, which caches those
+    orderings on the context — without that cache a later Inclusion slide can't
+    move the cutoff (it would silently no-op).
     """
     from vtscore.detectors.dataset_sync import invalidate_detector_model_on_embedder_mismatch
     from vtscore.state.core import get_detector_context
