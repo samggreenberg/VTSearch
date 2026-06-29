@@ -281,9 +281,7 @@ class TestLocalArchiveMemberSource:
         medias: dict[int, dict] = {}
         IMPORTER.run({"manifest": str(manifest), "media_type": "video"}, medias)
         window = next(
-            m
-            for m in medias.values()
-            if m["archive_member"]["member"] == "chunk_a.mp4" and m.get("clip_start") == 10.0
+            m for m in medias.values() if m["archive_member"]["member"] == "chunk_a.mp4" and m.get("clip_start") == 10.0
         )
 
         source = get_source_for_origin(window["origin"])

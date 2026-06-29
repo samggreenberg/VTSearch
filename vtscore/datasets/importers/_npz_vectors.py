@@ -154,11 +154,7 @@ def read_npz_archive_member_rows(npz_path: Path) -> list[dict]:
     base_dir = p.resolve().parent
     with np.load(p, allow_pickle=False) as data:
         cols = _manifest_columns(data, p)
-        rows = [
-            row
-            for i in range(len(cols["members"]))
-            if (row := _manifest_row(i, cols, base_dir)) is not None
-        ]
+        rows = [row for i in range(len(cols["members"])) if (row := _manifest_row(i, cols, base_dir)) is not None]
         if not rows:
             raise ValueError(f"NPZ manifest {p} produced no rows")
         return rows
