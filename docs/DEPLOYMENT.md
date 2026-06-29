@@ -763,37 +763,51 @@ CPU-only torch (same as `bash scripts/install.sh cpu`); `[s]` stops. On a
 so it stops — unless you set `VTSEARCH_AUTO_DRIVER=1` (auto-install the driver)
 or `VTSEARCH_ASSUME_CPU=1` (proceed CPU-only) to choose unattended.
 
-### GPU install prints a red "dependency conflicts" report (harmless)
+**About the output.** The driver install is a *try-until-one-works* cascade, and
+on a bare cloud GPU box its early attempts are *expected* to fail (the dnf module
+is filtered, `dkms` is unreachable, etc.) before a later approach succeeds. By
+default each attempt runs under a **live heartbeat** with its output captured to
+a log, so instead of the raw `Problem 1..6 / nothing provides dkms` /
+`filtered out by modular filtering` / subscription-manager walls you see a moving
+`Installing … ` line followed by either a green `✓` or a dim *"not available
+here; trying another approach…"*. The captured output is shown only if a step
+genuinely fails. The heartbeat also keeps long, otherwise-silent steps (metadata
+refresh, the kernel-module compile, the torch import in the smoke test) visibly
+alive so they don't look frozen. To watch every command's raw, unfiltered output
+live (e.g. to debug a genuinely stuck install), re-run with
+`VTSEARCH_VERBOSE=1 bash scripts/install.sh`.
 
-**Symptom**: The cuML step of `scripts/install.sh` ends with a wall of red
-text, then keeps going and reports success:
-
-```
-ERROR: pip's dependency resolver does not currently take into account all the
-packages that are installed. This behaviour is the source of the following
-dependency conflicts.
-torch 2.6.0+cu124 requires nvidia-cublas-cu12==12.4.5.8 ... but you have
-nvidia-cublas-cu12 12.9.2.10 which is incompatible.
-... (one line per nvidia-*-cu12 lib)
-Successfully installed nvidia-cublas-cu12-12.9.2.10 ...
-  cuML installed: GPU UMAP + k-means enabled.
-```
+### GPU install's cuML step (the "dependency conflicts" report, captured by default)
 
 **Cause**: cuML (RAPIDS 25.x) depends on **newer** `nvidia-*-cu12` runtime
 wheels than the torch build pins **exactly** (e.g. `cu124` torch pins
 `==12.4.x`). Installing cuML upgrades those libs, so pip's post-install
-consistency check flags torch's now-unsatisfied `==` pins. **This is cosmetic
-and non-fatal**: pip completes the install and rolls nothing back, and CUDA
-12.x minor runtimes are ABI-compatible across versions, so torch keeps working
-on the bumped libraries.
+consistency check emits a red `ERROR: pip's dependency resolver ...` report
+flagging torch's now-unsatisfied `==` pins:
 
-**What to do**: nothing. `scripts/install.sh` prints a heads-up before the
-cuML step and runs a **GPU smoke test** at the end (a tiny torch CUDA matmul +
-a cuML import) that confirms the stack actually works — if that smoke test
-passes, the red report did not matter. Only act if the smoke test *fails*, or
-if your error is the **fatal** `cuda_fp8.hpp` / nvjitlink variant below (that
-one names `nvidia-nvjitlink-cu12 >= 12.9` and `cuml-cu12 >= 26`, and the
-install does **not** succeed) — that is a different problem with a real fix.
+```
+ERROR: pip's dependency resolver does not currently take into account all the
+packages that are installed. ... torch 2.6.0+cu124 requires
+nvidia-cublas-cu12==12.4.5.8 ... but you have nvidia-cublas-cu12 12.9.2.10
+which is incompatible. ... (one line per nvidia-*-cu12 lib)
+```
+
+**This is cosmetic and non-fatal**: pip completes the install and rolls nothing
+back, and CUDA 12.x minor runtimes are ABI-compatible across versions, so torch
+keeps working on the bumped libraries.
+
+**What you actually see**: by default `scripts/install.sh` runs the cuML step
+under a heartbeat with its output **captured to a log**, so that red wall does
+**not** scroll past — you see a live `Installing cuML/RAPIDS …` line and then a
+green `✓`. The raw report only surfaces if the step actually fails, or if you
+re-run with `VTSEARCH_VERBOSE=1` (which streams every step's raw output live).
+
+**What to do**: nothing. The installer runs a **GPU smoke test** at the end (a
+tiny torch CUDA matmul + a cuML import) that confirms the stack actually works.
+Only act if the smoke test *fails*, or if your error is the **fatal**
+`cuda_fp8.hpp` / nvjitlink variant below (that one names `nvidia-nvjitlink-cu12
+>= 12.9` and `cuml-cu12 >= 26`, and the install does **not** succeed) — that is
+a different problem with a real fix.
 
 ### cuML crashes compiling a kernel (`cuda_fp8.hpp` / nvrtc errors)
 

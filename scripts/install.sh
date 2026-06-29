@@ -46,6 +46,14 @@ set -euo pipefail
 # (VTSearch also smoke-tests CUDA at runtime and falls back to CPU if the
 # installed wheel can't run on the GPU, so a mismatch degrades instead of
 # crashing - but you only get GPU acceleration with a matching wheel.)
+#
+# OUTPUT / QUIET MODE: the driver install is a try-until-one-works cascade, and
+# its doomed early attempts (on a bare cloud GPU box) print scary-but-recoverable
+# dnf/pip error walls. By default those attempts run under a live heartbeat with
+# their output captured to a log, so you see "trying X… not available here, trying
+# the next approach" instead of a wall of red, and the raw output only surfaces if
+# a step actually fails. Set VTSEARCH_VERBOSE=1 to stream every command's raw
+# output live (no capture, no spinner) when debugging a genuinely stuck install.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -154,10 +162,12 @@ vts_enable_nvidia_cuda_repo() {
     # .repo file directly -- tool-agnostic and works under yum too.
     local repo_file="/etc/yum.repos.d/cuda-${slug}.repo"
     if command -v curl >/dev/null 2>&1; then
-        $sudo_cmd curl -fsSL -o "$repo_file" "$url" \
+        vts_run "Adding NVIDIA's CUDA repo (${slug})" \
+            ${sudo_cmd} curl -fsSL -o "$repo_file" "$url" \
             || { echo "  Failed to download the CUDA .repo file (network/proxy/404?)." >&2; return 1; }
     elif command -v wget >/dev/null 2>&1; then
-        $sudo_cmd wget -qO "$repo_file" "$url" \
+        vts_run "Adding NVIDIA's CUDA repo (${slug})" \
+            ${sudo_cmd} wget -qO "$repo_file" "$url" \
             || { echo "  Failed to download the CUDA .repo file (network/proxy/404?)." >&2; return 1; }
     else
         echo "  Neither curl nor wget is available to fetch the CUDA .repo file." >&2
@@ -165,7 +175,7 @@ vts_enable_nvidia_cuda_repo() {
     fi
 
     # Refresh metadata so the newly added repo is visible to the installer.
-    $sudo_cmd "$dnf" makecache >/dev/null 2>&1 || true
+    vts_try "Refreshing package metadata" ${sudo_cmd} "$dnf" makecache || true
     return 0
 }
 
@@ -202,14 +212,14 @@ vts_enable_nvidia_cuda_repo() {
 #   $1 = sudo prefix ("" or "sudo");  $2 = the dnf/yum command name.
 vts_rhel_install_driver_pkgs() {
     local sudo_cmd="$1" dnf="$2"
-    if $sudo_cmd "$dnf" install -y cuda-drivers; then
+    if vts_try "Installing NVIDIA driver (cuda-drivers package)" \
+        ${sudo_cmd} "$dnf" install -y cuda-drivers; then
         return 0
     fi
     # `dnf module` doesn't exist under plain yum (RHEL 7), but there cuda-drivers
     # is a plain package and the line above already succeeded, so we only reach
     # here on dnf-based RHEL 8/9 where the modular path is the right one.
-    echo "  'cuda-drivers' is hidden behind a dnf module (RHEL 8/9 modular repo);" >&2
-    echo "  installing the nvidia-driver module stream instead." >&2
+    echo "  (cuda-drivers is a dnf module here; using a driver module stream instead.)" >&2
 
     # The -dkms streams need `dkms` (from EPEL). Make it present before trying
     # them; if it can't be installed, skip straight to the precompiled streams
@@ -218,19 +228,17 @@ vts_rhel_install_driver_pkgs() {
     if vts_rhel_ensure_dkms "$sudo_cmd" "$dnf"; then
         streams="latest-dkms open-dkms latest open"
     else
-        echo "  dkms is unavailable -- skipping the DKMS streams and trying the" >&2
-        echo "  precompiled (kABI-tracking) streams, which need no dkms." >&2
+        echo "  (dkms unavailable; trying the precompiled kABI-tracking streams.)" >&2
         streams="latest open"
     fi
 
     local stream
     for stream in $streams; do
         $sudo_cmd "$dnf" module reset -y nvidia-driver >/dev/null 2>&1 || true
-        if $sudo_cmd "$dnf" module install -y "nvidia-driver:${stream}"; then
-            echo "  Installed nvidia-driver:${stream}." >&2
+        if vts_try "Installing NVIDIA driver module stream: ${stream}" \
+            ${sudo_cmd} "$dnf" module install -y "nvidia-driver:${stream}"; then
             return 0
         fi
-        echo "  nvidia-driver:${stream} stream failed; trying the next stream." >&2
     done
     return 1
 }
@@ -252,8 +260,8 @@ vts_rhel_ensure_dkms() {
     if command -v dkms >/dev/null 2>&1 || rpm -q dkms >/dev/null 2>&1; then
         return 0
     fi
-    $sudo_cmd "$dnf" install -y epel-release >/dev/null 2>&1 || true
-    $sudo_cmd "$dnf" install -y dkms >/dev/null 2>&1 || true
+    vts_try "Enabling EPEL (for dkms)" ${sudo_cmd} "$dnf" install -y epel-release || true
+    vts_try "Installing dkms" ${sudo_cmd} "$dnf" install -y dkms || true
     if command -v dkms >/dev/null 2>&1 || rpm -q dkms >/dev/null 2>&1; then
         return 0
     fi
@@ -269,9 +277,9 @@ vts_rhel_ensure_dkms() {
     case "$rhelver" in
         [0-9]*)
             local epel_url="https://dl.fedoraproject.org/pub/epel/epel-release-latest-${rhelver}.noarch.rpm"
-            echo "  Bootstrapping EPEL from ${epel_url} to satisfy dkms." >&2
-            $sudo_cmd "$dnf" install -y "$epel_url" >/dev/null 2>&1 || true
-            $sudo_cmd "$dnf" install -y dkms >/dev/null 2>&1 || true
+            vts_try "Bootstrapping EPEL from ${epel_url}" \
+                ${sudo_cmd} "$dnf" install -y "$epel_url" || true
+            vts_try "Installing dkms" ${sudo_cmd} "$dnf" install -y dkms || true
             ;;
     esac
     command -v dkms >/dev/null 2>&1 || rpm -q dkms >/dev/null 2>&1
@@ -308,10 +316,11 @@ vts_install_driver_runfile() {
     if command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
         local dnf="dnf"
         command -v dnf >/dev/null 2>&1 || dnf="yum"
-        $sudo_cmd "$dnf" install -y "kernel-devel-$(uname -r)" kernel-headers gcc make tar \
-            >/dev/null 2>&1 || true
+        vts_try "Installing kernel headers + build tools" \
+            ${sudo_cmd} "$dnf" install -y "kernel-devel-$(uname -r)" kernel-headers gcc make tar || true
     elif command -v apt-get >/dev/null 2>&1; then
-        $sudo_cmd apt-get install -y "linux-headers-$(uname -r)" gcc make >/dev/null 2>&1 || true
+        vts_try "Installing kernel headers + build tools" \
+            ${sudo_cmd} apt-get install -y "linux-headers-$(uname -r)" gcc make || true
     fi
 
     local url="${VTSEARCH_NVIDIA_RUNFILE_URL:-}"
@@ -358,13 +367,12 @@ vts_install_driver_runfile() {
         return 1
     fi
 
-    echo "  Running the NVIDIA installer (silent; compiles the kernel module against" >&2
-    echo "  kernel $(uname -r)). This takes a few minutes and disables nouveau." >&2
     # --silent implies --no-questions/--ui=none. --disable-nouveau blacklists the
     # conflicting OSS driver (a reboot then loads nvidia). --no-cc-version-check
     # tolerates a gcc that differs from the one the kernel was built with.
-    $sudo_cmd sh "$runfile" --silent --disable-nouveau --no-cc-version-check
-    local rc=$?
+    local rc=0
+    vts_run "Compiling the NVIDIA kernel module (a few minutes; kernel $(uname -r))" \
+        ${sudo_cmd} sh "$runfile" --silent --disable-nouveau --no-cc-version-check || rc=$?
     rm -f "$runfile"
     if [ "$rc" -ne 0 ]; then
         echo "  The NVIDIA .run installer exited non-zero (see /var/log/nvidia-installer.log)." >&2
@@ -407,6 +415,12 @@ vts_install_nvidia_driver() {
     echo "  Installing the NVIDIA driver (distro: ${distro:-unknown}). This needs" >&2
     echo "  network access and a few minutes; you may be prompted for your password." >&2
 
+    # Cache sudo credentials now (one prompt) and keep them warm for the duration,
+    # so the backgrounded heartbeat-wrapped steps below never stall invisibly on a
+    # password prompt. The RETURN trap stops the refresher on every exit path.
+    vts_sudo_keepalive "$sudo_cmd" || true
+    trap 'vts_sudo_keepalive_stop' RETURN
+
     # Set to 1 by any branch that gets the driver packages installed. When it
     # stays 0, we fall through to the universal `.run` installer fallback below
     # rather than giving up -- this is what saves a bare RHEL 9 box where every
@@ -414,17 +428,19 @@ vts_install_nvidia_driver() {
     local pkg_ok=0
     case "$distro" in
         *ubuntu* | *debian*)
-            if $sudo_cmd apt-get update; then
+            if vts_try "Refreshing apt package lists" ${sudo_cmd} apt-get update; then
                 # ubuntu-drivers picks the recommended driver for THIS GPU; fall
                 # back to a recent fixed branch if the helper isn't installed.
                 if ! command -v ubuntu-drivers >/dev/null 2>&1; then
-                    $sudo_cmd apt-get install -y ubuntu-drivers-common >/dev/null 2>&1 || true
+                    vts_try "Installing ubuntu-drivers-common" \
+                        ${sudo_cmd} apt-get install -y ubuntu-drivers-common || true
                 fi
                 if command -v ubuntu-drivers >/dev/null 2>&1; then
-                    if $sudo_cmd ubuntu-drivers install || $sudo_cmd apt-get install -y nvidia-driver-535; then
+                    if vts_try "Installing the recommended NVIDIA driver (ubuntu-drivers)" ${sudo_cmd} ubuntu-drivers install \
+                        || vts_try "Installing NVIDIA driver (nvidia-driver-535)" ${sudo_cmd} apt-get install -y nvidia-driver-535; then
                         pkg_ok=1
                     fi
-                elif $sudo_cmd apt-get install -y nvidia-driver-535; then
+                elif vts_try "Installing NVIDIA driver (nvidia-driver-535)" ${sudo_cmd} apt-get install -y nvidia-driver-535; then
                     pkg_ok=1
                 fi
                 [ "$pkg_ok" -eq 1 ] || echo "  driver package install failed." >&2
@@ -444,8 +460,8 @@ vts_install_nvidia_driver() {
                 # (The `dkms` package itself comes from EPEL and is handled inside
                 # vts_rhel_install_driver_pkgs -> vts_rhel_ensure_dkms, which knows
                 # how to bootstrap EPEL when the packaged epel-release isn't found.)
-                $sudo_cmd "$dnf" install -y "kernel-devel-$(uname -r)" kernel-headers gcc make \
-                    >/dev/null 2>&1 || true
+                vts_try "Installing kernel headers + build tools" \
+                    ${sudo_cmd} "$dnf" install -y "kernel-devel-$(uname -r)" kernel-headers gcc make || true
                 # A base AMI doesn't have NVIDIA's CUDA repo (which provides
                 # cuda-drivers), so the first install attempt typically fails with
                 # "No match for argument: cuda-drivers". Enable the repo and retry;
@@ -590,6 +606,9 @@ vts_install_precommit() {
 # `--extra-index-url <cpu wheel index>` + `-e .[dev]`.
 vts_install_cpu() {
     vts_progress_init 4 "Installing VTSearch CPU dependencies"
+    echo "Heads-up: the pip steps below show a download bar, but pip also goes quiet"
+    echo "for 10-30s at a time while it resolves dependency versions. That silence is"
+    echo "normal -- it is working, not frozen."
 
     vts_progress_step "Checking Python version (>= 3.10)"
     # shellcheck source=_check-python.sh
@@ -652,23 +671,23 @@ vts_install_cuml() {
 
     # Heads-up: cuML depends on NEWER nvidia-*-cu12 runtime wheels than the torch
     # build pins exactly (e.g. cu124 torch pins ==12.4.x), so installing it upgrades
-    # those libs and pip prints a red "dependency conflicts" report naming torch's
+    # those libs and pip emits a red "dependency conflicts" report naming torch's
     # now-unsatisfied pins. This is distinct from the FATAL RAPIDS-26 nvjitlink/fp8
     # break the cuml-cu12<26 cap above prevents -- this one is cosmetic. That is
     # EXPECTED and non-fatal -- pip still completes the install and does not roll
     # anything back, and CUDA 12.x runtimes are compatible across minor versions.
-    # The GPU smoke test at the end of this install confirms torch + cuML actually
-    # work together, so you don't have to guess whether the red text mattered.
-    echo "  Note: pip may print a red 'dependency conflicts' report below (torch pins"
-    echo "        older CUDA runtime libs than cuML wants). It is expected and"
-    echo "        non-fatal; the final GPU smoke test verifies they coexist."
+    # vts_run captures that report into a log instead of letting it scroll past as
+    # a scary red wall (it surfaces only if the install actually fails); the GPU
+    # smoke test below then confirms torch + cuML coexist. This is a multi-GB
+    # RAPIDS download, so the heartbeat's elapsed-time counter is the liveness cue.
+    echo "  (cuML is a large multi-GB download; the heartbeat below shows progress."
+    echo "   A cosmetic pip 'dependency conflicts' report is captured, not shown.)"
 
-    # Isolated pass against the NVIDIA index. Guarded so `set -e` can't abort the
-    # install on failure; the runtime cuML detection degrades to CPU either way.
-    if pip install --extra-index-url https://pypi.nvidia.com \
-        --prefer-binary \
-        "$cuml_pkg" \
-        --progress-bar on; then
+    # Isolated pass against the NVIDIA index. vts_run is guarded so `set -e` can't
+    # abort the install on failure; the runtime cuML detection degrades to CPU.
+    if vts_run "Installing cuML/RAPIDS (${cuml_pkg})" \
+        pip install --extra-index-url https://pypi.nvidia.com \
+            --prefer-binary "$cuml_pkg"; then
         echo "  cuML installed: GPU UMAP + k-means enabled."
     else
         echo "warning: cuML (${cuml_pkg}) install failed; GPU UMAP/k-means will fall" >&2
@@ -694,8 +713,12 @@ vts_smoke_test_gpu() {
         return 0
     fi
 
-    local rc=0
-    "$pybin" - <<'PY' || rc=$?
+    # Write the probe to a temp file so it can be run as a backgrounded command
+    # under a heartbeat (importing torch alone is a ~15s silent stretch that looks
+    # frozen); a heredoc on stdin can't be backgrounded with stdin from /dev/null.
+    local rc=0 pyfile log pid
+    pyfile="$(mktemp --suffix=.py 2>/dev/null || mktemp)"
+    cat >"$pyfile" <<'PY'
 import sys
 
 try:
@@ -730,6 +753,19 @@ except Exception:  # noqa: BLE001 - absence is fine; app uses the CPU fallback
 sys.exit(0 if gpu_ok else 1)
 PY
 
+    if [ "${VTSEARCH_VERBOSE:-0}" = "1" ]; then
+        "$pybin" "$pyfile" || rc=$?
+    else
+        log="$(_vts_mktemp)"
+        "$pybin" "$pyfile" >"$log" 2>&1 </dev/null &
+        pid=$!
+        _vts_spin "$pid" "Importing torch + exercising the GPU"
+        wait "$pid" || rc=$?
+        cat "$log"
+        rm -f "$log" 2>/dev/null || true
+    fi
+    rm -f "$pyfile" 2>/dev/null || true
+
     case "$rc" in
         0) ;;  # GPU verified end-to-end; the python output already said so.
         1) ;;  # torch fine but no usable CUDA -> CPU mode; python explained why.
@@ -753,6 +789,9 @@ vts_install_gpu() {
     local extra_index="https://download.pytorch.org/whl/${cuda_tag}"
 
     vts_progress_init 8 "Installing VTSearch GPU dependencies (CUDA tag: ${cuda_tag})"
+    echo "Heads-up: the pip steps below show a download bar, but pip also goes quiet"
+    echo "for 10-30s at a time while it resolves dependency versions. That silence is"
+    echo "normal -- it is working, not frozen."
 
     vts_progress_step "Checking Python version (>= 3.10)"
     # shellcheck source=_check-python.sh
@@ -832,6 +871,8 @@ case "$MODE" in
                         echo "driver installed but its module isn't loaded yet; otherwise the" >&2
                         echo "named repo/package error), resolve it, then re-run:" >&2
                         echo "  bash scripts/install.sh" >&2
+                        echo "For the full, unfiltered output of every step, re-run with:" >&2
+                        echo "  VTSEARCH_VERBOSE=1 bash scripts/install.sh" >&2
                         exit 1
                     fi
                     ;;
