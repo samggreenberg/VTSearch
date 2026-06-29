@@ -689,6 +689,22 @@ out, it falls back to `dnf module install nvidia-driver:latest-dkms`
 stream is unavailable it retries with `nvidia-driver:open-dkms` (the open kernel
 module, which newer datacenter GPUs such as Hopper and Blackwell require).
 
+There is a **third** RHEL failure mode, hit on a fresh box that is **not
+registered** with a subscription server (common on a bare RHEL 9 AMI): the
+`*-dkms` streams above are rejected with `nothing provides dkms >= 3.1.8 needed
+by kmod-nvidia-latest-dkms`. DKMS builds the kernel module from source, so the
+stream needs the `dkms` package — which on the RHEL family ships from **EPEL**,
+not the base repos. A plain `dnf install epel-release` finds nothing on an
+unregistered RHEL box (EPEL isn't in any enabled repo), so `dkms` never installs
+and every `*-dkms` stream fails dependency resolution. The installer handles this
+two ways: (1) before trying the DKMS streams it makes sure `dkms` is actually
+installed — trying the packaged `epel-release` first, then **bootstrapping EPEL
+from its canonical URL** (`epel-release-latest-$(rpm -E %rhel).noarch.rpm`) when
+that fails; and (2) if `dkms` still can't be had, it skips the DKMS streams and
+installs the **precompiled, kABI-tracking** streams `nvidia-driver:latest` /
+`nvidia-driver:open` instead, which ship a prebuilt module (no DKMS, no `dkms`
+package) and only need a kernel whose kABI matches.
+
 You can also do it by hand:
 
 ```bash
@@ -696,12 +712,18 @@ You can also do it by hand:
 sudo apt-get update && sudo apt-get install -y nvidia-driver-535   # or newer
 
 # RHEL 9 family (Rocky / Alma / CentOS Stream): enable the CUDA repo first.
-sudo dnf install -y epel-release                                   # for dkms
+# `dkms` lives in EPEL. On an unregistered RHEL box `dnf install epel-release`
+# finds nothing, so bootstrap EPEL from its URL instead:
+sudo dnf install -y \
+  "https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(rpm -E %rhel).noarch.rpm"
+sudo dnf install -y dkms                                           # for the DKMS streams
 sudo dnf config-manager --add-repo \
   https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo
 # The driver is a DNF module on RHEL 8/9, so `dnf install cuda-drivers` is
 # rejected with "filtered out by modular filtering" -- install the module:
 sudo dnf module install -y nvidia-driver:latest-dkms              # builds via DKMS
+# ...or, if you can't get dkms, the precompiled (no-DKMS) stream instead:
+#   sudo dnf module install -y nvidia-driver:latest
 
 sudo reboot                                                        # if needed
 
