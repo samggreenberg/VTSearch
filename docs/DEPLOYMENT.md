@@ -641,10 +641,11 @@ bash scripts/install.sh
 ### `install.sh` installs CPU torch on a machine that has a GPU
 
 **Symptom**: On a GPU host (e.g. an AWS `g4dn` with a Tesla T4), `scripts/install.sh`
-prints something like:
+pauses and asks:
 
 ```
-An NVIDIA GPU is physically present, but no usable driver was found ...
+NOTICE: An NVIDIA GPU is physically present, but no usable driver was found ...
+Install CPU-only torch now instead? You will NOT get GPU acceleration. [y/N]
 ```
 
 …or, on older versions, silently installed the CPU dependency set.
@@ -671,8 +672,11 @@ On Amazon Linux / RHEL, follow
 [AWS's GPU-driver guide](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html),
 or use the **AWS Deep Learning AMI**, which ships the driver preinstalled. The
 installer detects the physical card via its PCI vendor ID (so it knows the GPU
-is there even without the driver) and **stops** rather than silently installing
-CPU-only torch. To proceed CPU-only anyway, run `bash scripts/install.sh cpu`.
+is there even without the driver) and **pauses to ask** whether to install
+CPU-only torch now or stop to install the driver — rather than silently landing
+on CPU. Answer `y` (or run `bash scripts/install.sh cpu`) to proceed CPU-only.
+On a non-interactive shell (CI, `curl … | bash`, Docker build) it can't prompt,
+so it stops; set `VTSEARCH_ASSUME_CPU=1` to proceed with CPU unattended.
 
 ### GPU install prints a red "dependency conflicts" report (harmless)
 

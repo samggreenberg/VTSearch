@@ -15,9 +15,10 @@ set -euo pipefail
 # "GPU present" means nvidia-smi can actually see the card. If the GPU is
 # physically present (an NVIDIA PCI device) but nvidia-smi can't -- the usual
 # state on a fresh cloud GPU box like an AWS g4dn whose NVIDIA driver isn't
-# installed yet -- auto mode STOPS with instructions to install the driver
-# instead of silently installing CPU-only torch on hardware that wants GPU.
-# Override that with an explicit 'cpu' (or 'gpu'/'cuXYZ') argument below.
+# installed yet -- auto mode PAUSES and asks whether to install CPU-only torch
+# now or stop to install the driver, instead of silently landing on CPU. On a
+# non-interactive shell it stops (set VTSEARCH_ASSUME_CPU=1 to proceed with CPU
+# unattended). An explicit 'cpu'/'gpu'/'cuXYZ' argument skips the check.
 #
 # Override the auto-detection by passing an argument:
 #   bash scripts/install.sh            # auto-detect CPU vs GPU (recommended)
@@ -86,19 +87,17 @@ vts_nvidia_hardware_present() {
 
 # Print actionable guidance when the GPU is physically present but unusable
 # because the driver is missing (nvidia-smi absent / not listing a device).
-# Installing the kernel driver is a system-level action pip can't do, so we
-# stop here rather than silently degrading to a CPU install the user didn't ask
-# for. The cpu / gpu / cuXYZ overrides still bypass this.
+# Installing the kernel driver is a system-level action pip can't do.
 vts_report_driver_missing() {
     cat >&2 <<'EOF'
-ERROR: An NVIDIA GPU is physically present, but no usable driver was found
-       (nvidia-smi is absent or lists no device), so the GPU cannot be used yet.
+NOTICE: An NVIDIA GPU is physically present, but no usable driver was found
+        (nvidia-smi is absent or lists no device), so the GPU cannot be used yet.
 
 This is the common state on a fresh cloud GPU instance (e.g. an AWS g4dn with a
 Tesla T4) booted from a base AMI: the card is attached but the NVIDIA kernel
 driver isn't installed. pip cannot fix this -- the driver is a system package.
 
-To fix it, install the NVIDIA driver, then re-run this script:
+To get GPU acceleration, install the NVIDIA driver, then re-run this script:
 
   # Ubuntu / Debian:
   sudo apt-get update && sudo apt-get install -y nvidia-driver-535   # or newer
@@ -108,15 +107,46 @@ To fix it, install the NVIDIA driver, then re-run this script:
   #   https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html
   # Or use the AWS Deep Learning AMI, which ships the driver preinstalled.
 
-Verify the driver is live (lists your GPU and a CUDA version), then re-run:
+Verify the driver is live (lists your GPU and a CUDA version) with:
 
   nvidia-smi
-  bash scripts/install.sh
-
-To proceed WITHOUT the GPU (CPU-only torch), re-run explicitly:
-
-  bash scripts/install.sh cpu
 EOF
+}
+
+# The GPU is in the box but the driver is missing. Rather than silently install
+# CPU wheels (the user has GPU hardware and probably wants it) OR hard-abort
+# (forcing a re-run for someone who's fine with CPU), pause and ask: continue
+# with a CPU-only install now, or stop to install the driver and re-run.
+#
+# Returns 0 to proceed with the CPU install, non-zero to stop. On a
+# non-interactive shell (no TTY: CI, `curl ... | bash`, Docker build) there's no
+# one to prompt, so we default to STOP -- the notice above explains how to fix
+# the driver or force CPU explicitly with `bash scripts/install.sh cpu`. Set
+# VTSEARCH_ASSUME_CPU=1 to skip the prompt and proceed with CPU unattended.
+vts_prompt_driver_missing() {
+    vts_report_driver_missing
+
+    if [ "${VTSEARCH_ASSUME_CPU:-0}" = "1" ]; then
+        echo "" >&2
+        echo "VTSEARCH_ASSUME_CPU=1 set -> proceeding with a CPU-only install." >&2
+        return 0
+    fi
+
+    if [ ! -t 0 ]; then
+        echo "" >&2
+        echo "Non-interactive shell; not prompting. Stopping so this doesn't" >&2
+        echo "silently land on CPU. Re-run with 'cpu' to force a CPU install," >&2
+        echo "or set VTSEARCH_ASSUME_CPU=1 to proceed with CPU unattended." >&2
+        return 1
+    fi
+
+    local reply
+    printf '\nInstall CPU-only torch now instead? You will NOT get GPU acceleration. [y/N] ' >&2
+    read -r reply
+    case "$reply" in
+        [yY] | [yY][eE][sS]) return 0 ;;  # proceed with the CPU install
+        *) return 1 ;;                    # stop so the user can fix the driver
+    esac
 }
 
 # --- CUDA tag resolution -----------------------------------------------------
@@ -385,10 +415,16 @@ case "$MODE" in
             vts_install_gpu "$(vts_resolve_cuda_tag)"
         elif vts_nvidia_hardware_present; then
             # Card is in the box but nvidia-smi can't see it -> driver missing.
-            # Don't silently install CPU; the user has GPU hardware and almost
-            # certainly wants it. Explain how to fix, and exit non-zero.
-            vts_report_driver_missing
-            exit 1
+            # Pause and ask rather than silently installing CPU: continue with a
+            # CPU-only install now, or stop to install the driver and re-run.
+            if vts_prompt_driver_missing; then
+                echo "Proceeding with a CPU-only install." >&2
+                vts_install_cpu
+            else
+                echo "Stopping. Install the NVIDIA driver (see above) and re-run, or" >&2
+                echo "run 'bash scripts/install.sh cpu' to install CPU-only torch." >&2
+                exit 1
+            fi
         else
             echo "No NVIDIA GPU detected (no NVIDIA PCI device found) -> installing the CPU dependency set." >&2
             vts_install_cpu
