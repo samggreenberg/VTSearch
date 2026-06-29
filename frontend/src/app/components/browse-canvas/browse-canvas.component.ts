@@ -114,6 +114,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    */
   readonly marqueeMode = input(false);
   /**
+   * Whether Shift is currently held (tracked by the parent view). Shift+drag
+   * draws a region marquee, so while Shift is down the canvas shows the same
+   * crosshair cursor as {@link marqueeMode} to preview the gesture. The actual
+   * Shift+drag is detected from `event.shiftKey` at mousedown; this input only
+   * drives the cursor affordance.
+   */
+  readonly shiftHeld = input(false);
+  /**
    * How many wheel notches cross one pyramid level (a full 2x of zoom) — the
    * per-media ``browse_mouse_zooms_per_level`` setting. The per-notch width
    * factor is ``2 ** (1 / n)``, so 1 ⇒ 2x (one notch per level), 2 ⇒ √2 (the
