@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -154,13 +155,14 @@ def read_npz_archive_member_rows(npz_path: Path) -> list[dict]:
     base_dir = p.resolve().parent
     with np.load(p, allow_pickle=False) as data:
         cols = _manifest_columns(data, p)
-        rows = [row for i in range(len(cols["members"])) if (row := _manifest_row(i, cols, base_dir)) is not None]
+        n = len(cols["members"])  # always present (validated in _manifest_columns)
+        rows = [row for i in range(n) if (row := _manifest_row(i, cols, base_dir)) is not None]
         if not rows:
             raise ValueError(f"NPZ manifest {p} produced no rows")
         return rows
 
 
-def _manifest_columns(data, p: Path) -> dict[str, np.ndarray | None]:
+def _manifest_columns(data, p: Path) -> dict[str, Any]:
     """Resolve and validate every manifest column.
 
     Returns a dict with the required ``vectors`` / ``members`` / ``archives``

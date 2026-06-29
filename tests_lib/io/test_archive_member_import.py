@@ -265,6 +265,7 @@ class TestLocalArchiveMemberSource:
         media = next(m for m in medias.values() if m["archive_member"]["member"] == "chunk_a.mp4")
 
         source = get_source_for_origin(media["origin"])
+        assert source is not None
         fetched = source.fetch_item("chunk_a.mp4")
         assert fetched.path is None
         assert fetched.embedding is not None
@@ -285,6 +286,7 @@ class TestLocalArchiveMemberSource:
         )
 
         source = get_source_for_origin(window["origin"])
+        assert source is not None
         # The window key is "member@start"; fetch by it returns that window's vector.
         fetched = source.fetch_item("chunk_a.mp4@10")
         assert fetched.embedding is not None
@@ -298,6 +300,7 @@ class TestLocalArchiveMemberSource:
         medias: dict[int, dict] = {}
         IMPORTER.run({"manifest": str(manifest), "media_type": "video"}, medias)
         source = get_source_for_origin(next(iter(medias.values()))["origin"])
+        assert source is not None
         fetched = source.fetch_item("does/not/exist.mp4")
         assert fetched.path is None
         assert fetched.embedding is None
