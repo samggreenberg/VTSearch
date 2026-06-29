@@ -1,6 +1,6 @@
 import { Injectable, OnDestroy, inject, signal } from '@angular/core';
 import { EMPTY, Observable, Subject, timer } from 'rxjs';
-import { catchError, switchMap, takeUntil, tap } from 'rxjs/operators';
+import { catchError, map, switchMap, takeUntil, tap } from 'rxjs/operators';
 import type { MediaVoteResponse } from '../generated/api-client/models/media-vote-response';
 import { VotesResponse } from '../models/api.models';
 import { MediasApiService } from './medias-api.service';
@@ -70,6 +70,20 @@ export class VoteStateService implements OnDestroy {
   private readonly destroy$ = new Subject<void>();
   private readonly stopPolling$ = new Subject<void>();
   private polling = false;
+  /**
+   * Monotonic issue-order id for ``/api/votes`` reads, with the highest id whose
+   * response has been applied.  ``loadVotes()`` (fired on every vote) and the 2s
+   * poll both GET ``/api/votes`` independently, so under rapid "sit and vote"
+   * several reads are in flight at once and can resolve **out of order**: a poll
+   * GET that read the server *before* a vote committed can land *after* the
+   * post-vote ``loadVotes()``, overwriting the fresh state with stale server
+   * data — which wiped a just-verified id back out of the right pile until a
+   * manual browser refresh (the find-verification staleness report).  We stamp
+   * each read with an issue id and drop any response older than the newest one
+   * already applied, so a late stale read can no longer clobber newer state.
+   */
+  private votesSeq = 0;
+  private lastAppliedVotesSeq = 0;
   /**
    * Find-mode flag.  In Find the detector flood-fills *every* item into
    * ``goodVotes`` / ``badVotes`` (its presumption at the cutoff), so a raw
@@ -390,10 +404,11 @@ export class VoteStateService implements OnDestroy {
   }
 
   loadVotes(): void {
+    const seq = ++this.votesSeq;
     this.sortingApi
       .getVotes()
       .pipe(takeUntil(this.destroy$))
-      .subscribe((votes) => this.applyVotes(votes));
+      .subscribe((votes) => this.applyVotesFresh(votes, seq));
   }
 
   startPolling(intervalMs = 2000): void {
@@ -410,9 +425,27 @@ export class VoteStateService implements OnDestroy {
         // stuck at true so startPolling() can't re-arm. Emit EMPTY rather
         // than a stub VotesResponse so applyVotes() doesn't clobber
         // optimistic state on a failed tick.
-        switchMap(() => this.sortingApi.getVotes().pipe(catchError(() => EMPTY))),
+        switchMap(() => {
+          const seq = ++this.votesSeq;
+          return this.sortingApi.getVotes().pipe(
+            map((votes) => ({ votes, seq })),
+            catchError(() => EMPTY),
+          );
+        }),
       )
-      .subscribe((votes) => this.applyVotes(votes));
+      .subscribe(({ votes, seq }) => this.applyVotesFresh(votes, seq));
+  }
+
+  /**
+   * Apply a ``/api/votes`` response only when it is not older than the newest
+   * read already applied.  Out-of-order resolutions (a poll GET that read the
+   * server before a vote committed, landing after the post-vote loadVotes) are
+   * dropped so they cannot overwrite newer state — see {@link votesSeq}.
+   */
+  private applyVotesFresh(votes: VotesResponse, seq: number): void {
+    if (seq < this.lastAppliedVotesSeq) return;
+    this.lastAppliedVotesSeq = seq;
+    this.applyVotes(votes);
   }
 
   stopPolling(): void {
@@ -434,6 +467,11 @@ export class VoteStateService implements OnDestroy {
     this.pendingRegionBoxes.clear();
     this.past = [];
     this.future = [];
+    // Discard any /api/votes read issued before this clear (e.g. an in-flight
+    // poll from the previous dataset/detector context): treat everything up to
+    // the current issue id as already-superseded so a late pre-clear response
+    // can't repopulate the just-cleared piles.
+    this.lastAppliedVotesSeq = this.votesSeq;
   }
 
   /**
