@@ -99,6 +99,74 @@ driver isn't installed. pip cannot fix this -- the driver is a system package.
 EOF
 }
 
+# Drop NVIDIA's CUDA .repo into /etc/yum.repos.d so `cuda-drivers` becomes
+# installable. A base RHEL/Fedora/Amazon-Linux AMI does NOT ship this repo, so
+# a plain `dnf install cuda-drivers` fails with "No match for argument:
+# cuda-drivers" until it's enabled (the common state on a fresh RHEL GPU box).
+# The repo slug is keyed to the distro + major version (rhel9, fedora41,
+# amzn2023, ...) and the CPU arch (x86_64, or sbsa on arm64). Idempotent:
+# re-fetching the .repo just overwrites an identical file.
+#   $1 = sudo prefix ("" or "sudo");  $2 = the dnf/yum command name.
+vts_enable_nvidia_cuda_repo() {
+    local sudo_cmd="$1" dnf="$2"
+    local id="" version_id="" id_like=""
+    if [ -r /etc/os-release ]; then
+        # shellcheck disable=SC1091
+        id="$(. /etc/os-release && echo "${ID:-}")"
+        # shellcheck disable=SC1091
+        version_id="$(. /etc/os-release && echo "${VERSION_ID:-}")"
+        # shellcheck disable=SC1091
+        id_like="$(. /etc/os-release && echo "${ID_LIKE:-}")"
+    fi
+    local major="${version_id%%.*}"
+
+    # Map distro -> NVIDIA repo slug. Amazon Linux uses the full VERSION_ID
+    # (amzn2023, amzn2); the RHEL family uses just the major (rhel8, rhel9).
+    local slug=""
+    case "$id" in
+        rhel | centos | rocky | almalinux) slug="rhel${major}" ;;
+        fedora) slug="fedora${major}" ;;
+        amzn) slug="amzn${version_id}" ;;
+        *)
+            # Unrecognized ID: fall back to the RHEL slug for RHEL-likes.
+            case " $id_like " in
+                *rhel* | *centos* | *fedora*) slug="rhel${major}" ;;
+            esac
+            ;;
+    esac
+    if [ -z "$slug" ] || [ -z "$major" ]; then
+        echo "  Could not determine the NVIDIA CUDA repo for '${id:-unknown} ${version_id:-?}'." >&2
+        return 1
+    fi
+
+    local arch
+    arch="$(uname -m)"
+    case "$arch" in aarch64) arch="sbsa" ;; esac
+
+    local url="https://developer.download.nvidia.com/compute/cuda/repos/${slug}/${arch}/cuda-${slug}.repo"
+    echo "  Enabling NVIDIA's CUDA repo for ${slug} (${arch}):" >&2
+    echo "    $url" >&2
+
+    # `dnf config-manager` is the canonical tool, but its syntax differs between
+    # dnf4 (--add-repo) and dnf5 (addrepo --from-repofile), so just place the
+    # .repo file directly -- tool-agnostic and works under yum too.
+    local repo_file="/etc/yum.repos.d/cuda-${slug}.repo"
+    if command -v curl >/dev/null 2>&1; then
+        $sudo_cmd curl -fsSL -o "$repo_file" "$url" \
+            || { echo "  Failed to download the CUDA .repo file (network/proxy/404?)." >&2; return 1; }
+    elif command -v wget >/dev/null 2>&1; then
+        $sudo_cmd wget -qO "$repo_file" "$url" \
+            || { echo "  Failed to download the CUDA .repo file (network/proxy/404?)." >&2; return 1; }
+    else
+        echo "  Neither curl nor wget is available to fetch the CUDA .repo file." >&2
+        return 1
+    fi
+
+    # Refresh metadata so the newly added repo is visible to the installer.
+    $sudo_cmd "$dnf" makecache >/dev/null 2>&1 || true
+    return 0
+}
+
 # Best-effort, distro-aware NVIDIA driver install so we can fix the missing
 # driver FOR the user instead of just telling them how. It's a privileged,
 # system-mutating step (kernel driver), so it only runs on an explicit choice
@@ -161,14 +229,30 @@ vts_install_nvidia_driver() {
                 return 1
             fi
             # cuda-drivers from NVIDIA's RHEL repo builds the kernel module via
-            # DKMS. Needs kernel headers/devel matching the running kernel.
+            # DKMS. Needs kernel headers/devel matching the running kernel, plus
+            # dkms itself -- which on the RHEL family lives in EPEL, not the base
+            # repos, so enable EPEL best-effort first (harmless/no-op on Fedora
+            # and Amazon Linux, where dkms is elsewhere).
+            $sudo_cmd "$dnf" install -y epel-release >/dev/null 2>&1 || true
             $sudo_cmd "$dnf" install -y "kernel-devel-$(uname -r)" kernel-headers gcc make dkms \
                 >/dev/null 2>&1 || true
+            # A base AMI doesn't have NVIDIA's CUDA repo (which provides
+            # cuda-drivers), so the first install attempt typically fails with
+            # "No match for argument: cuda-drivers". Enable the repo and retry;
+            # this is the fix for the common fresh-RHEL-GPU-box failure.
             if ! $sudo_cmd "$dnf" install -y cuda-drivers; then
-                echo "  cuda-drivers install failed. Your RPM distro may need NVIDIA's" >&2
-                echo "  CUDA repo enabled first; see AWS's GPU-driver guide:" >&2
-                echo "    https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html" >&2
-                return 1
+                echo "  cuda-drivers not available yet -- enabling NVIDIA's CUDA repo and retrying." >&2
+                if ! vts_enable_nvidia_cuda_repo "$sudo_cmd" "$dnf"; then
+                    echo "  Could not enable NVIDIA's CUDA repo automatically; see AWS's guide:" >&2
+                    echo "    https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html" >&2
+                    return 1
+                fi
+                if ! $sudo_cmd "$dnf" install -y cuda-drivers; then
+                    echo "  cuda-drivers install still failed after enabling NVIDIA's CUDA repo." >&2
+                    echo "  See AWS's GPU-driver guide:" >&2
+                    echo "    https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html" >&2
+                    return 1
+                fi
             fi
             ;;
         *)
@@ -522,8 +606,10 @@ case "$MODE" in
                         echo "GPU is online -> installing the GPU dependency set." >&2
                         vts_install_gpu "$(vts_resolve_cuda_tag)"
                     else
-                        echo "Could not bring the GPU online in this session (see above)." >&2
-                        echo "Resolve the above (often just a reboot), then re-run:" >&2
+                        echo "Could not bring the GPU online in this session. See the" >&2
+                        echo "specific cause and next step printed above (a reboot if the" >&2
+                        echo "driver installed but its module isn't loaded yet; otherwise the" >&2
+                        echo "named repo/package error), resolve it, then re-run:" >&2
                         echo "  bash scripts/install.sh" >&2
                         exit 1
                     fi

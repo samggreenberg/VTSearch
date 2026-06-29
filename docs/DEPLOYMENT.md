@@ -666,19 +666,37 @@ a distro-aware, best-effort `sudo` install (`ubuntu-drivers` / `apt` on
 Debian-family, `cuda-drivers` via `dnf`/`yum` on RHEL-family), then it re-checks
 `nvidia-smi` and proceeds straight into the GPU install if the GPU came online.
 If the kernel module needs a **reboot** to load (common), it tells you to reboot
-and re-run `bash scripts/install.sh`. You can also do it by hand:
+and re-run `bash scripts/install.sh`.
+
+On the RHEL family, `cuda-drivers` lives in **NVIDIA's CUDA repo**, which a base
+AMI does not have enabled — so a bare `dnf install cuda-drivers` fails with
+`No match for argument: cuda-drivers`. The installer handles this: it tries the
+install, and on that failure it drops NVIDIA's `cuda-<slug>.repo` into
+`/etc/yum.repos.d` (keyed to the distro + major version, e.g. `rhel9`, plus the
+CPU arch) and retries. It also enables **EPEL** best-effort first, since `dkms`
+(used to build the kernel module) ships there rather than in the base RHEL repos.
+Note this is *not* something a reboot fixes — until the repo is enabled the
+package simply doesn't exist, so nothing got installed to take effect on boot.
+
+You can also do it by hand:
 
 ```bash
 # Ubuntu / Debian:
 sudo apt-get update && sudo apt-get install -y nvidia-driver-535   # or newer
+
+# RHEL 9 family (Rocky / Alma / CentOS Stream): enable the CUDA repo first.
+sudo dnf install -y epel-release                                   # for dkms
+sudo dnf config-manager --add-repo \
+  https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo
+sudo dnf install -y cuda-drivers                                   # builds via DKMS
+
 sudo reboot                                                        # if needed
 
 nvidia-smi              # should list the GPU and a CUDA version
 bash scripts/install.sh # now auto-detects the GPU
 ```
 
-On Amazon Linux / RHEL the manual route is
-[AWS's GPU-driver guide](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html),
+See also [AWS's GPU-driver guide](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html),
 or use the **AWS Deep Learning AMI**, which ships the driver preinstalled.
 
 The installer detects the physical card via its PCI vendor ID (so it knows the
