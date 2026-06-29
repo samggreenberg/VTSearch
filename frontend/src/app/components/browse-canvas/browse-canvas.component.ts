@@ -337,6 +337,22 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   // the snap-back is debounced: it fires only once the wheel has gone quiet.
   private settleTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // --- Directional (arrow-key) pan glide ------------------------------------
+  // A drag pan tracks the pointer (naturally smooth) and a zoom plays the
+  // picture-in-picture transition, but an arrow-key push used to snap the centre
+  // in one frame, which reads as a jarring jump. Instead ease the live transform
+  // from where it is to the clamped target over ~PAN_ANIM_MS with the same
+  // easeOutCubic the zoom/settle use, so a N/E/S/W push glides like a zoom does.
+  // Like the settle (and unlike the zoom blit) it walks the real transform and
+  // repaints each frame — a pan keeps the same bins, so there's nothing to
+  // freeze, and re-rendering folds in hover/selection/tile loads as they arrive.
+  private static readonly PAN_ANIM_MS = 220;
+  private panAnimActive = false;
+  private panAnimRafId = 0;
+  private panAnimFrom: ViewTransform = { centerX: 0, centerY: 0, zoom: 1 };
+  private panAnimTo: ViewTransform = { centerX: 0, centerY: 0, zoom: 1 };
+  private panAnimStartTs = 0;
+
   private resizeObserver: ResizeObserver | null = null;
   // Repaints when the document theme flips (explicit switch or an OS
   // dark/light change while on "system"), so the colormap and background
@@ -417,8 +433,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // jump the viewport centre there (keeping zoom) and redraw.
     this.recenterSub = this.viewport.recenter$.subscribe(({ x, y }) => {
       // A minimap jump is a programmatic move, not an elastic gesture: cancel any
-      // snap-back and hard-clamp straight to the bounds (no rubber-band here).
+      // snap-back / directional glide and hard-clamp straight to the bounds.
       this.cancelSettle();
+      this.cancelPanAnim();
       this.transform.centerX = x;
       this.transform.centerY = y;
       // A minimap click/drag can target a content edge; keep the viewport inside
@@ -455,9 +472,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       // Fresh meta re-bins (new projection, bin-shape toggle, cull). Any zoom
       // transition was easing the *old* data, so abandon it; the redraw below
       // paints the new state. A boundary settle would spring toward the old
-      // bounds, so stop it too.
+      // bounds, so stop it too — as would a directional pan glide.
       this.cancelZoomAnim();
       this.cancelSettle();
+      this.cancelPanAnim();
       this.tileCache.setProjectionId(meta.projection_id);
       // A bin-shape toggle delivers fresh meta for the *same* projection id
       // (hex and square share one UMAP layout). In that case keep the current
@@ -510,6 +528,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (this.rafId) cancelAnimationFrame(this.rafId);
     if (this.animRafId) cancelAnimationFrame(this.animRafId);
     if (this.settleRafId) cancelAnimationFrame(this.settleRafId);
+    if (this.panAnimRafId) cancelAnimationFrame(this.panAnimRafId);
     if (this.settleTimer) clearTimeout(this.settleTimer);
     if (this.hoverDebounceTimer) clearTimeout(this.hoverDebounceTimer);
     if (this.clickTimer) clearTimeout(this.clickTimer);
@@ -537,6 +556,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // re-establishes the correct framing.
     this.cancelZoomAnim();
     this.cancelSettle();
+    this.cancelPanAnim();
     const el = this.canvasRef.nativeElement.parentElement!;
     const rect = el.getBoundingClientRect();
     this.dpr = window.devicePixelRatio || 1;
@@ -900,7 +920,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // tile loads, hover and selection repaints that arrive mid-animation are
     // folded into the real frame it paints each step / when it lands (see
     // {@link endZoomAnim} and {@link stepSettle}).
-    if (this.animActive || this.settleActive) return;
+    if (this.animActive || this.settleActive || this.panAnimActive) return;
     if (this.needsRedraw) return;
     this.needsRedraw = true;
     this.rafId = requestAnimationFrame(() => {
@@ -1887,9 +1907,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // A new drag/marquee takes over from any zoom transition: settle it to the
     // real frame now so the pan/marquee starts from a correct, crisp view.
     if (this.animActive) this.endZoomAnim();
-    // A new gesture takes over from any boundary snap-back: stop it where it is
-    // (don't snap) so the pan/marquee continues from the current visual frame.
+    // A new gesture takes over from any boundary snap-back or directional glide:
+    // stop it where it is (don't snap) so the pan/marquee continues from the
+    // current visual frame.
     this.cancelSettle();
+    this.cancelPanAnim();
     // A fresh press settles any single-click toggle still waiting out the
     // double-click window (so quick clicks on different bins each register). The
     // second press of a double-click (detail >= 2) is exempt: flushing there
@@ -2102,6 +2124,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    */
   zoomToFit(): void {
     this.cancelSettle();
+    this.cancelPanAnim();
     this.fitToData();
     this.commitZoomChange();
     this.refreshHoverAfterZoom();
@@ -2113,10 +2136,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   /**
    * Pan the view one step per arrow-key press, ``(dirX, dirY)`` each in
    * ``{-1, 0, 1}``: +x pans right (reveals content to the right), +y pans down.
-   * Unlike a drag this hard-clamps to the content bounds (no rubber-band /
-   * settle) since a keypress is a discrete programmatic move, like the minimap
-   * recenter. Marks the view user-framed so a later size change won't re-fit
-   * over the pan.
+   * The move is eased (not snapped) so a N/E/S/W push glides like a zoom does;
+   * see {@link startPanAnim}. Unlike a drag it hard-clamps to the content bounds
+   * (no rubber-band / settle) since a keypress is a discrete programmatic move,
+   * like the minimap recenter. A burst of presses retargets the glide on to the
+   * further-out destination rather than restarting from the moving centre. Marks
+   * the view user-framed so a later size change won't re-fit over the pan.
    */
   panByKey(dirX: number, dirY: number): void {
     const meta = this.meta();
@@ -2127,12 +2152,87 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.cancelSettle();
     this.framedByUser = true;
     const z = this.effZoom;
-    this.transform.centerX += (dirX * this.width * BrowseCanvasComponent.KEY_PAN_FRACTION) / z;
-    this.transform.centerY += (dirY * this.height * BrowseCanvasComponent.KEY_PAN_FRACTION) / z;
-    this.clampView();
-    this.updateActiveLevel();
-    this.requestRedraw();
-    this.refreshHoverAfterZoom();
+    const stepX = (dirX * this.width * BrowseCanvasComponent.KEY_PAN_FRACTION) / z;
+    const stepY = (dirY * this.height * BrowseCanvasComponent.KEY_PAN_FRACTION) / z;
+    // Accumulate onto the in-flight glide's destination so a second press while
+    // the first is still easing keeps gliding further out, instead of snapping
+    // the base back to the (still-moving) live centre.
+    const base = this.panAnimActive ? this.panAnimTo : this.transform;
+    const target = this.clampedTransform({
+      centerX: base.centerX + stepX,
+      centerY: base.centerY + stepY,
+      zoom: this.transform.zoom,
+    });
+    this.startPanAnim(target);
+  }
+
+  /**
+   * Ease the live transform from where it is now to clamped `target` over
+   * {@link PAN_ANIM_MS} (easeOutCubic), repainting each frame — the directional
+   * pan's counterpart to the boundary {@link stepSettle}. A pan keeps the same
+   * zoom and bins, so `target.zoom` matches the current zoom and only the centre
+   * moves. Honours reduced-motion by jumping straight to the target.
+   */
+  private startPanAnim(target: ViewTransform): void {
+    const settled =
+      Math.abs(target.centerX - this.transform.centerX) < 1e-3 &&
+      Math.abs(target.centerY - this.transform.centerY) < 1e-3;
+    // Already hard against the edge in this direction (and nothing in flight) —
+    // there's nowhere to glide, so leave the view untouched.
+    if (settled && !this.panAnimActive) return;
+    if (this.prefersReducedMotion()) {
+      this.cancelPanAnim();
+      this.transform.centerX = target.centerX;
+      this.transform.centerY = target.centerY;
+      this.transform.zoom = target.zoom;
+      this.updateActiveLevel();
+      this.requestRedraw();
+      this.refreshHoverAfterZoom();
+      return;
+    }
+    this.panAnimFrom = { ...this.transform };
+    this.panAnimTo = target;
+    this.panAnimStartTs = performance.now();
+    if (this.panAnimRafId) cancelAnimationFrame(this.panAnimRafId);
+    this.panAnimActive = true;
+    this.ngZone.runOutsideAngular(() => {
+      this.panAnimRafId = requestAnimationFrame(this.stepPanAnim);
+    });
+  }
+
+  /** One frame of the directional-pan glide: interpolate the live centre from
+   *  the start toward the clamped target (easeOutCubic) and repaint, landing
+   *  exactly on the target. Zoom is constant across a pan, so it's left alone. */
+  private readonly stepPanAnim = (now: number): void => {
+    if (!this.panAnimActive) return;
+    const t = Math.min(1, (now - this.panAnimStartTs) / BrowseCanvasComponent.PAN_ANIM_MS);
+    const e = 1 - Math.pow(1 - t, 3);
+    const from = this.panAnimFrom;
+    const to = this.panAnimTo;
+    this.transform.centerX = from.centerX + (to.centerX - from.centerX) * e;
+    this.transform.centerY = from.centerY + (to.centerY - from.centerY) * e;
+    this.draw();
+    if (t < 1) {
+      this.panAnimRafId = requestAnimationFrame(this.stepPanAnim);
+    } else {
+      this.panAnimActive = false;
+      this.panAnimRafId = 0;
+      this.transform.centerX = to.centerX;
+      this.transform.centerY = to.centerY;
+      this.draw();
+      this.refreshHoverAfterZoom();
+    }
+  };
+
+  /** Stop a directional-pan glide in flight (without snapping to its target) —
+   *  used when a new gesture takes over, so it continues from the current frame. */
+  private cancelPanAnim(): void {
+    if (!this.panAnimActive) return;
+    this.panAnimActive = false;
+    if (this.panAnimRafId) {
+      cancelAnimationFrame(this.panAnimRafId);
+      this.panAnimRafId = 0;
+    }
   }
 
   /**
@@ -2166,9 +2266,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   zoomBy(factor: number, anchorX = this.width / 2, anchorY = this.height / 2): void {
     this.framedByUser = true;
-    // A zoom takes over from any in-flight snap-back; continue from where the
-    // view visually is and reschedule the settle below.
+    // A zoom takes over from any in-flight snap-back or directional glide;
+    // continue from where the view visually is and reschedule the settle below.
     this.cancelSettle();
+    this.cancelPanAnim();
     const [projX, projY] = this.screenToProj(anchorX, anchorY);
     const rawZoom = Math.max(0.01, Math.min(100000, this.transform.zoom * factor));
     // Below the whole-projection fit the zoom-out is resisted, not blocked, and
@@ -2214,6 +2315,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   setThumbnailRadius(radius: number, reframe: boolean): void {
     if (radius <= 0 || radius === this.targetRadius) return;
     this.cancelSettle();
+    this.cancelPanAnim();
     const meta = this.meta();
     if (reframe && meta && this.fittedAgainstRealSize) {
       this.framedByUser = true;
