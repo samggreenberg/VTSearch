@@ -162,7 +162,14 @@ def resolve_or_train_detector(  # noqa: C901
             step=progress_step,
             total_steps=progress_total_steps,
         )
-        trained_mlp, threshold = train_and_threshold(X_list, y_list, snap=snap, embedder_name=cold_embedder or None)
+        # Pass the detector's context so the K fold orderings get cached on it:
+        # a later Inclusion slide re-derives the threshold over the cache (and
+        # re-splits the Find good/bad) instead of being a no-op.  ``det_ctx`` is
+        # the loaded context for this detector (None only for a never-loaded
+        # detector, which simply skips the cache).  See train_and_threshold.
+        trained_mlp, threshold = train_and_threshold(
+            X_list, y_list, snap=snap, embedder_name=cold_embedder or None, det_ctx=det_ctx
+        )
         return trained_mlp, threshold, None
 
     diagnostic: dict = {
