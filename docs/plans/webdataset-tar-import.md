@@ -1,8 +1,11 @@
 # WebDataset-style tar-sharded import (microvent / multivent-raw)
 
 **Status:** Phase A shipped; Phase B shipped (sub-file clip windows, windowed
-manifest import, archive-member `MediaSource`, audio-mimetype nuances); only the
-GUI/docs-polish follow-up (item 5) remains — see Open follow-ups.
+manifest import, archive-member `MediaSource`, audio-mimetype nuances); the
+GUI/docs-polish follow-up (item 5) shipped — user-docs section for the
+windowed-manifest schema landed in `docs/user/USER_GUIDE.md`. Only the
+cross-browser AAC/`audio/mp4` validation pass (needs a live browser) remains —
+see Open follow-ups.
 
 ## Problem
 
@@ -96,12 +99,12 @@ What landed:
 
 Tracked here, not in the PR body.
 
-1. **GUI / docs polish (Phase B item 5).** The importer registers in the
-   server-tab picker with a `.npz` manifest field; add a short user-docs section
-   covering the windowed-manifest schema and the no-extraction import flow, and
-   (if a screenshot ever frames the importer picker) queue a reshoot in
-   `docs/user/screenshots-reshoot-queue.md`. No existing doc screenshot frames
-   this importer's form today, so nothing is queued.
+1. **GUI / docs polish (Phase B item 5).** *Shipped.* `docs/user/USER_GUIDE.md`
+   now carries an "Archive members, no extraction (WebDataset shards)" section
+   under "Loading a dataset" covering the windowed-manifest schema (the `.npz`
+   array table, clip windows, display-only playback) and the no-extraction
+   import flow. No existing doc screenshot frames this importer's form, so
+   nothing was queued in `docs/user/screenshots-reshoot-queue.md`.
 
 2. **Cross-browser AAC / `audio/mp4` validation.** The `/audio` route emits the
    right mimetype, but actual AAC / MP4-audio-track playback across browsers
