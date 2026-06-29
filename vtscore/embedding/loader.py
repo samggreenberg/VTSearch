@@ -26,6 +26,27 @@ _TIME_SUFFIX_RE = re.compile(r"\s*\(\d+s(?:,\s*\d+\s+modules)?\)$")
 #: push their own bar right rather than being truncated.
 _LABEL_WIDTH = 32
 
+#: ANSI colors for the bar fill *between* the brackets (the rest of the line
+#: keeps its default color).  Red while at or below the half-way mark, yellow
+#: past it, green only at completion.  ``_ANSI_RESET`` restores the default so
+#: the closing bracket and trailing percentage are uncolored.
+_ANSI_RED = "\033[31m"
+_ANSI_YELLOW = "\033[33m"
+_ANSI_GREEN = "\033[32m"
+_ANSI_RESET = "\033[0m"
+
+
+def _bar_color(pct: int) -> str:
+    """Return the ANSI color for a bar at *pct* percent (0-100).
+
+    Red for ``pct <= 50``, yellow for ``50 < pct < 100``, green at ``100``.
+    """
+    if pct >= 100:
+        return _ANSI_GREEN
+    if pct > 50:
+        return _ANSI_YELLOW
+    return _ANSI_RED
+
 
 def _strip_time_suffix(msg: str) -> str:
     return _TIME_SUFFIX_RE.sub("", msg) if msg else msg
@@ -314,7 +335,7 @@ def _make_console_progress(original_callback):
         """Overwrite the current progress line with a 100% bar."""
         if _last_base[0]:
             label = f"{_last_base[0]:<{_LABEL_WIDTH}}"
-            sys.stdout.write(f"\r    {label} [{_FULL_BAR}] 100%\033[K")
+            sys.stdout.write(f"\r    {label} [{_ANSI_GREEN}{_FULL_BAR}{_ANSI_RESET}] 100%\033[K")
 
     def _flush() -> None:
         if _on_progress_line[0]:
@@ -337,7 +358,9 @@ def _make_console_progress(original_callback):
                 sys.stdout.write("\n")
             pct = min(100, current * 100 // total)
             filled = pct * 30 // 100
-            bar = "#" * filled + "." * (30 - filled)
+            # Color only the fill between the brackets: red ≤50%, yellow >50%,
+            # green at 100%.  The rest of the line keeps its default color.
+            bar = f"{_bar_color(pct)}{'#' * filled}{'.' * (30 - filled)}{_ANSI_RESET}"
             # Pad the base label to a fixed width so every bar starts at the
             # same column and the bars line up vertically.  The elapsed-time /
             # status suffix (e.g. "(3s, 247 modules)") goes *after* the
