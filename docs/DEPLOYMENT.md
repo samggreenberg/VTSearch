@@ -678,6 +678,17 @@ CPU arch) and retries. It also enables **EPEL** best-effort first, since `dkms`
 Note this is *not* something a reboot fixes — until the repo is enabled the
 package simply doesn't exist, so nothing got installed to take effect on boot.
 
+There is a **second** RHEL failure mode, hit on RHEL 8/9 (and Rocky / Alma /
+CentOS Stream) once the repo *is* enabled: the CUDA repo packages the driver as
+a **DNF module**, so `dnf install cuda-drivers` is rejected with `All matches
+were filtered out by modular filtering for argument: cuda-drivers`. The package
+exists but is hidden behind a module stream that has to be enabled first. The
+installer handles this too: after the plain `cuda-drivers` install is filtered
+out, it falls back to `dnf module install nvidia-driver:latest-dkms`
+(proprietary DKMS — covers Turing/Ampere/Ada like the g4dn's T4), and if that
+stream is unavailable it retries with `nvidia-driver:open-dkms` (the open kernel
+module, which newer datacenter GPUs such as Hopper and Blackwell require).
+
 You can also do it by hand:
 
 ```bash
@@ -688,7 +699,9 @@ sudo apt-get update && sudo apt-get install -y nvidia-driver-535   # or newer
 sudo dnf install -y epel-release                                   # for dkms
 sudo dnf config-manager --add-repo \
   https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo
-sudo dnf install -y cuda-drivers                                   # builds via DKMS
+# The driver is a DNF module on RHEL 8/9, so `dnf install cuda-drivers` is
+# rejected with "filtered out by modular filtering" -- install the module:
+sudo dnf module install -y nvidia-driver:latest-dkms              # builds via DKMS
 
 sudo reboot                                                        # if needed
 
