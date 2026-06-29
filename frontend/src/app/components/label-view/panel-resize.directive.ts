@@ -52,6 +52,11 @@ export class PanelResizeDirective implements OnDestroy {
   onMouseDown(event: MouseEvent): void {
     event.preventDefault();
     this.dragging = true;
+    // Seed `lastWidth` with the current width so a mousedown→mouseup with no
+    // intervening move emits the panel's existing width on `resizeEnd`, not the
+    // 0 it would otherwise carry — which the parent would clamp/snap straight to
+    // the minimum, jumping the panel on a stray click of the divider.
+    this.lastWidth = this.computeWidth(event);
     this.ngZone.runOutsideAngular(() => {
       document.addEventListener('mousemove', this.boundMove);
       document.addEventListener('mouseup', this.boundUp);
@@ -63,12 +68,17 @@ export class PanelResizeDirective implements OnDestroy {
     document.removeEventListener('mouseup', this.boundUp);
   }
 
-  private onMouseMove(event: MouseEvent): void {
-    if (!this.dragging) return;
+  /** Translate a pointer position into a clamped width for this side. */
+  private computeWidth(event: MouseEvent): number {
     const rect = this.layoutEl().getBoundingClientRect();
     const raw = this.side() === 'left' ? event.clientX - rect.left : rect.right - event.clientX;
     const max = rect.width - this.dividerTotal() - this.centerMin() - this.opposingWidth();
-    const width = Math.max(this.minWidth(), Math.min(max, raw));
+    return Math.max(this.minWidth(), Math.min(max, raw));
+  }
+
+  private onMouseMove(event: MouseEvent): void {
+    if (!this.dragging) return;
+    const width = this.computeWidth(event);
     this.lastWidth = width;
     this.widthChange.emit(width);
   }
