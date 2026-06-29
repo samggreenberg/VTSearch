@@ -242,6 +242,34 @@ def _member_mimetype(filename: str, default: str) -> str:
     return guessed or default
 
 
+def _audio_member_mimetype(filename: str) -> str:
+    """Pick the ``Content-Type`` for an archive-member served via ``/audio``.
+
+    WebDataset-style audio events ship in a few container shapes:
+
+    * **demuxed AAC** (microvent) - ``.aac`` -> ``audio/aac``.
+    * **audio in an MP4 container** (multivent-raw rides the audio in the video
+      MP4; ``.m4a`` audio chunks) - ``mimetypes`` reports ``.mp4`` as
+      *``video/mp4``*, but when an ``<audio>`` element requests it we want the
+      audio mimetype so the browser plays the audio track.  Map any ``video/*``
+      container (mp4 / quicktime) to ``audio/mp4``.
+
+    Anything else keeps its guessed ``audio/*`` type, normalising the legacy
+    ``audio/x-wav`` to ``audio/wav``, and falls back to ``audio/wav`` when the
+    extension is unknown (the on-the-fly serving format).
+    """
+    import mimetypes  # noqa: PLC0415
+
+    guessed, _ = mimetypes.guess_type(filename)
+    if not guessed:
+        return "audio/wav"
+    if guessed == "audio/x-wav":
+        return "audio/wav"
+    if guessed.startswith("video/"):
+        return "audio/mp4"
+    return guessed
+
+
 def _send_streamed_range(total, read_slice, mimetype: str, download_name: str) -> Response:
     """Serve *total* bytes with HTTP Range support, reading only what's asked.
 
@@ -286,7 +314,9 @@ def _send_streamed_range(total, read_slice, mimetype: str, download_name: str) -
     return resp
 
 
-def _archive_member_response(media: dict, download_name: str, default_mimetype: str) -> Response | None:
+def _archive_member_response(
+    media: dict, download_name: str, default_mimetype: str, mimetype: str | None = None
+) -> Response | None:
     """Serve an archive-member media by streaming a single member, or ``None``.
 
     Returns ``None`` for media that aren't archive-member-backed (the caller
@@ -294,6 +324,11 @@ def _archive_member_response(media: dict, download_name: str, default_mimetype: 
     located in its shard.  Otherwise returns a Range-capable response that
     reads only the requested bytes straight out of the tar/zip, never
     extracting or fully buffering the member.
+
+    *mimetype*, when given, is used verbatim; otherwise it is guessed from the
+    member name (falling back to *default_mimetype*).  The audio route passes an
+    explicit value because audio events ride in containers ``mimetypes`` would
+    label ``video/*`` (see :func:`_audio_member_mimetype`).
     """
     from vtscore.datasets.archive_stream import (  # noqa: PLC0415
         ArchiveMemberError,
@@ -314,8 +349,8 @@ def _archive_member_response(media: dict, download_name: str, default_mimetype: 
     def read_slice(start, length):
         return read_member_range(archive_path, member, start, length)
 
-    mimetype = _member_mimetype(media.get("filename") or member, default_mimetype)
-    return _send_streamed_range(total, read_slice, mimetype, download_name)
+    resolved = mimetype or _member_mimetype(media.get("filename") or member, default_mimetype)
+    return _send_streamed_range(total, read_slice, resolved, download_name)
 
 
 def _send_video_bytes(data: bytes, mimetype: str, download_name: str) -> Response:
@@ -490,8 +525,11 @@ def media_audio(media_id: int):
     c = get_media(media_id)
     if not c:
         abort(404, message="not found")
-    ext = Path(c.get("filename", "")).suffix or ".wav"
-    streamed = _archive_member_response(c, f"media_{media_id}{ext}", "audio/wav")
+    filename = c.get("filename", "")
+    ext = Path(filename).suffix or ".wav"
+    streamed = _archive_member_response(
+        c, f"media_{media_id}{ext}", "audio/wav", mimetype=_audio_member_mimetype(filename or ext)
+    )
     if streamed is not None:
         return streamed
     media_bytes = _resolve_bytes(c)

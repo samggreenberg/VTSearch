@@ -97,3 +97,71 @@ class TestArchiveMemberAudio:
         resp = client.get(f"/api/medias/{_MEDIA_ID}/audio", headers={"Range": "bytes=3-10"})
         assert resp.status_code == 206
         assert resp.data == AUDIO_BYTES[3:11]
+
+
+class TestArchiveMemberExampleSortOrigin:
+    """Cross-dataset Find re-supplies the member's precomputed vector (no path)."""
+
+    def _make_manifest(self, tmp_path, archive, member):
+        rng = np.random.default_rng(5)
+        manifest = tmp_path / "manifest.npz"
+        np.savez(
+            manifest,
+            vectors=rng.standard_normal((1, 512)).astype(np.float32),
+            members=np.array([member]),
+            archives=np.array(str(archive)),
+            embedder_name=np.array("clap"),
+        )
+        return manifest
+
+    def _origin(self, tmp_path):
+        from vtscore.datasets.importers.local_archive_member import IMPORTER
+
+        archive = _make_shard(tmp_path)
+        manifest = self._make_manifest(tmp_path, archive, "clip.aac")
+        scratch: dict[int, dict] = {}
+        IMPORTER.run({"manifest": str(manifest), "media_type": "audio"}, scratch)
+        return next(iter(scratch.values()))["origin"]
+
+    def test_origin_sort_uses_precomputed_vector(self, client, tmp_path):
+        origin = self._origin(tmp_path)
+        resp = client.post(
+            "/api/example-sort-origin",
+            json={"origin": origin, "key": "clip.aac"},
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "results" in data
+        assert "threshold" in data
+
+    def test_crop_on_archive_member_returns_400(self, client, tmp_path):
+        origin = self._origin(tmp_path)
+        resp = client.post(
+            "/api/example-sort-origin",
+            json={"origin": origin, "key": "clip.aac", "crop_params": {"start": 0, "end": 1}},
+        )
+        assert resp.status_code == 400
+
+
+class TestArchiveMemberAudioMimetype:
+    """The /audio route picks an audio Content-Type per the member's container."""
+
+    def test_aac_member_serves_audio_aac(self, client, tmp_path):
+        archive = _make_shard(tmp_path)
+        _inject(archive, "clip.aac", "audio", "clip.aac")
+        resp = client.get(f"/api/medias/{_MEDIA_ID}/audio")
+        assert resp.status_code == 200
+        assert resp.headers["Content-Type"] == "audio/aac"
+
+    def test_mp4_audio_member_serves_audio_mp4(self, client, tmp_path):
+        # multivent-raw audio rides in an MP4 container; mimetypes would call
+        # that video/mp4, but the <audio> element needs an audio/* type.
+        archive = _make_shard(tmp_path)
+        with tarfile.open(archive, "a") as tf:
+            info = tarfile.TarInfo("clip_audio.mp4")
+            info.size = len(AUDIO_BYTES)
+            tf.addfile(info, io.BytesIO(AUDIO_BYTES))
+        _inject(archive, "clip_audio.mp4", "audio", "clip_audio.mp4")
+        resp = client.get(f"/api/medias/{_MEDIA_ID}/audio")
+        assert resp.status_code == 200
+        assert resp.headers["Content-Type"] == "audio/mp4"

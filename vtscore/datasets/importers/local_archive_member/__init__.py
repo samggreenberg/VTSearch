@@ -16,9 +16,15 @@ Because the embeddings are supplied, the framework embed stage is skipped: the
 import needs no GPU and reads no member bytes (it only walks each referenced
 shard's tar headers to confirm the member exists and record its size).
 
-Each row becomes one whole-member media.  Sub-file *windowing* (multiple 10 s
-clip items per member, carrying ``clip_start`` / ``clip_end``) is the planned
-Phase B extension -- see ``docs/plans/webdataset-tar-import.md``.
+Each manifest row becomes one media.  When a row carries ``clip_start`` /
+``clip_end``, the same member can appear in several rows as distinct **sub-file
+clip windows** (e.g. ≈14 × 10 s CLAP windows per chunk), each its own
+searchable media with its own pre-computed vector.  Windowed media are
+*display-only*: the byte routes serve the **whole** member and the player seeks
+/ loops within ``[clip_start, clip_end]`` -- we never byte-slice an AAC/MP4
+member server-side (see :func:`~vtscore.media.lazy_clip.clip_recipe`, which
+refuses to lazy-slice archive members).  Each window's synthesized content-id
+folds in the window so dedup / voting stay per-window unique.
 """
 
 from __future__ import annotations
@@ -33,25 +39,30 @@ from vtscore.datasets.archive_stream import (
     LOCAL_ARCHIVE_MEMBER_IMPORTER,
     member_size,
 )
-from vtscore.datasets.importers._npz_vectors import read_npz_archive_member_rows, read_npz_embedder_name
+from vtscore.datasets.importers._npz_vectors import (
+    read_npz_archive_member_rows,
+    read_npz_embedder_name,
+    window_suffix,
+)
 from vtscore.datasets.importers.base import ImporterBase, PluginField
 from vtscore.embedding.media_vectors import init_embeddings
 
 logger = logging.getLogger(__name__)
 
 
-def _synthetic_md5(archive: str, member: str) -> str:
-    """Return a stable content-id for a member without reading its bytes.
+def _synthetic_md5(archive: str, member: str, suffix: str = "") -> str:
+    """Return a stable content-id for a member/window without reading its bytes.
 
     The real point of this importer is to avoid touching member *data* (the
     corpora are far too large to hash in full), so the dedup/label key is
-    derived from the globally-unique ``archive::member`` pair instead of the
-    member's content.  This keeps in-dataset dedup, voting, and label
-    persistence working; the one thing it gives up is *content*-based label
-    transfer across unrelated datasets, which these precomputed-embedding
-    corpora don't use.
+    derived from the globally-unique ``archive::member`` pair (plus a
+    per-window suffix) instead of the member's content.  This keeps in-dataset
+    dedup, voting, and label persistence working -- and unique **per window**
+    when a member fans out into several clip windows; the one thing it gives up
+    is *content*-based label transfer across unrelated datasets, which these
+    precomputed-embedding corpora don't use.
     """
-    return hashlib.md5(f"{archive}::{member}".encode()).hexdigest()
+    return hashlib.md5(f"{archive}::{member}{window_suffix}".encode()).hexdigest()
 
 
 class LocalArchiveMemberImporter(ImporterBase):
@@ -95,6 +106,9 @@ class LocalArchiveMemberImporter(ImporterBase):
                 " • archives - (N,) archive paths (or a single value for one shard);\n"
                 "   relative paths resolve against the manifest's directory.\n"
                 " • filenames (optional) - (N,) display names.\n"
+                " • clip_start / clip_end (optional) - (N,) window extents in seconds;\n"
+                "   one member may repeat across rows as separate clip windows.\n"
+                " • window_id (optional) - (N,) per-window ids (default: the clip start).\n"
                 " • embedder_name (optional) - the embedder that produced the vectors.\n"
                 "Members are streamed on demand; the archives are never extracted."
             ),
@@ -124,45 +138,75 @@ class LocalArchiveMemberImporter(ImporterBase):
 
         next_id = max(medias.keys(), default=0) + 1
         skipped = 0
+        # Member sizes are read once per shard member (a tar-header lookup), not
+        # once per window: a heavily-windowed manifest references the same member
+        # ~14 times, and the size is identical for every window of it.
+        size_cache: dict[tuple[str, str], int] = {}
         for row in rows:
             archive = row["archive"]
             member = row["member"]
-            try:
-                size = member_size(archive, member)
-            except (ArchiveMemberError, OSError) as exc:
-                # The manifest references a member we can't locate in its shard
-                # (missing archive, renamed member). Skip it rather than import
-                # a media whose bytes will never resolve.
-                logger.warning("local_archive_member: skipping %s::%s (%s)", archive, member, exc)
+            cache_key = (archive, member)
+            if cache_key not in size_cache:
+                try:
+                    size_cache[cache_key] = member_size(archive, member)
+                except (ArchiveMemberError, OSError) as exc:
+                    # The manifest references a member we can't locate in its
+                    # shard (missing archive, renamed member). Skip it rather
+                    # than import a media whose bytes will never resolve.
+                    logger.warning("local_archive_member: skipping %s::%s (%s)", archive, member, exc)
+                    size_cache[cache_key] = -1
+            size = size_cache[cache_key]
+            if size < 0:
                 skipped += 1
                 continue
 
-            origin = {
-                "importer": self.name,
-                "params": {
-                    "archive_path": archive,
-                    "member": member,
-                    "media_type": output_type,
-                    "manifest": str(manifest.resolve()),
-                    "embedder_name": embedder_name,
-                },
+            clip_start = row.get("clip_start")
+            clip_end = row.get("clip_end")
+            window_id = row.get("window_id")
+            suffix = window_suffix(window_id, clip_start)
+
+            params: dict[str, Any] = {
+                "archive_path": archive,
+                "member": member,
+                "media_type": output_type,
+                "manifest": str(manifest.resolve()),
+                "embedder_name": embedder_name,
             }
-            medias[next_id] = {
+            # Persist the window in origin.params (the channel that survives the
+            # pickle round-trip and re-derivation) so the manifest-backed source
+            # can re-supply *this* window's vector. clip_recipe() refuses to
+            # lazy-slice archive members, so carrying clip extents here never
+            # triggers server-side byte slicing.
+            if clip_start is not None:
+                params["clip_start"] = clip_start
+            if clip_end is not None:
+                params["clip_end"] = clip_end
+            if window_id:
+                params["window_id"] = window_id
+
+            media: dict[str, Any] = {
                 "id": next_id,
                 "media_type": output_type,
                 "embedder": embedder_name,
                 "file_size": size,
-                "md5": _synthetic_md5(archive, member),
+                "md5": _synthetic_md5(archive, member, suffix),
                 "embeddings": init_embeddings(embedder_name, row["vector"]),
                 "filename": row["filename"],
                 "category": "custom",
-                "origin": origin,
-                "origin_name": f"{archive}::{member}",
+                "origin": {"importer": self.name, "params": params},
+                "origin_name": f"{archive}::{member}{suffix}",
                 "media_bytes": None,
                 "media_string": None,
                 "duration": 0,
                 "archive_member": {"path": archive, "member": member},
             }
+            # Top-level clip extents drive the player's display-only seek/loop
+            # (passed through by /api/medias/batch).
+            if clip_start is not None:
+                media["clip_start"] = clip_start
+            if clip_end is not None:
+                media["clip_end"] = clip_end
+            medias[next_id] = media
             next_id += 1
 
         if not medias:

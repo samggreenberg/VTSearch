@@ -314,7 +314,21 @@ def example_sort_origin(body: dict):
     crop_params = body.get("crop_params") if isinstance(body.get("crop_params"), dict) else None
 
     try:
-        file_path = source.fetch_item(key).path
+        fetched = source.fetch_item(key)
+
+        # Pathless sources (archive members) re-supply the item's precomputed
+        # vector instead of bytes; sort directly on it, exactly as
+        # ``example_sort_by_id`` reuses an in-memory embedding. Cropping needs
+        # the actual bytes, which this path deliberately never materialises.
+        if fetched.path is None and fetched.embedding is not None:
+            if crop_params:
+                abort(400, message="Cannot crop an archive-member example (no extracted bytes)")
+            from vtsearch.routes.sorting import _cosine_sort
+
+            results, thresh = _cosine_sort(fetched.embedding)
+            return {"results": results, "threshold": thresh}
+
+        file_path = fetched.path
         if file_path is None:
             abort(404, message=f"File not found: {key}")
 
