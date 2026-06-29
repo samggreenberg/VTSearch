@@ -683,11 +683,17 @@ class TestImporterResolveFileContract:
     #   streamed to a temp directory and re-imported through the regular
     #   `server_folder` importer, so resolution for those medias goes
     #   through `server_folder.resolve_file`.
+    # - local_archive_member: media have no on-disk path by design (their
+    #   bytes stream from a tar/zip member, never extracted); resolution goes
+    #   through the archive-member byte path (``archive_member_ref``), not a
+    #   disk Path. Cross-dataset re-derivation is a tracked Phase B follow-up
+    #   (docs/plans/webdataset-tar-import.md).
     _DELEGATE_IMPORTERS = {
         "pickle",
         "combine_datasets",
         "local_folder",
         "local_files",
+        "local_archive_member",
     }
 
     def test_all_disk_importers_override_resolve_file(self):

@@ -71,9 +71,7 @@ class TestArchiveMemberVideo:
     def test_unsatisfiable_range_returns_416(self, client, tmp_path):
         archive = _make_shard(tmp_path)
         _inject(archive, "clip.mp4", "video", "clip.mp4")
-        resp = client.get(
-            f"/api/medias/{_MEDIA_ID}/video", headers={"Range": f"bytes={len(VIDEO_BYTES) + 10}-"}
-        )
+        resp = client.get(f"/api/medias/{_MEDIA_ID}/video", headers={"Range": f"bytes={len(VIDEO_BYTES) + 10}-"})
         assert resp.status_code == 416
         assert resp.headers["Content-Range"] == f"bytes */{len(VIDEO_BYTES)}"
 

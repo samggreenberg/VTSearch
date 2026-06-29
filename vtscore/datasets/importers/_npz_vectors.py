@@ -140,56 +140,63 @@ def read_npz_archive_member_rows(npz_path: Path) -> list[dict]:
 
     base_dir = p.resolve().parent
     with np.load(p, allow_pickle=False) as data:
-        key_set = set(data.files)
-        vectors_key = next((k for k in _VECTORS_KEYS if k in key_set), None)
-        members_key = next((k for k in _MEMBERS_KEYS if k in key_set), None)
-        archives_key = next((k for k in _ARCHIVES_KEYS if k in key_set), None)
-        filenames_key = next((k for k in _FILENAMES_KEYS if k in key_set), None)
-
-        if vectors_key is None or members_key is None:
-            raise ValueError(
-                f"NPZ manifest {p} must contain a vectors array (one of {_VECTORS_KEYS}) "
-                f"and a members array (one of {_MEMBERS_KEYS})"
-            )
-
-        vecs_arr = data[vectors_key]
-        members_arr = np.atleast_1d(data[members_key])
-        if members_arr.ndim != 1:
-            raise ValueError(f"NPZ '{members_key}' array must be 1-D, got shape {members_arr.shape}")
-        n = len(members_arr)
-        if len(vecs_arr) != n:
-            raise ValueError(
-                f"NPZ '{members_key}' and '{vectors_key}' have mismatched lengths ({n} vs {len(vecs_arr)})"
-            )
-
-        archives_arr = _broadcast_column(data[archives_key], n, "archives") if archives_key is not None else None
-        if archives_arr is None:
-            raise ValueError(f"NPZ manifest {p} must contain an archives array (one of {_ARCHIVES_KEYS})")
-        filenames_arr = _broadcast_column(data[filenames_key], n, "filenames") if filenames_key is not None else None
-
-        rows: list[dict] = []
-        for i in range(n):
-            member = str(members_arr[i]).strip()
-            if not member:
-                continue
-            archive = str(archives_arr[i]).strip()
-            if not archive:
-                raise ValueError(f"NPZ manifest {p} row {i} has an empty archive path")
-            archive_path = Path(archive)
-            if not archive_path.is_absolute():
-                archive_path = (base_dir / archive_path).resolve()
-            display = str(filenames_arr[i]).strip() if filenames_arr is not None else ""
-            rows.append(
-                {
-                    "archive": str(archive_path),
-                    "member": member,
-                    "filename": display or Path(member).name,
-                    "vector": np.asarray(vecs_arr[i]),
-                }
-            )
+        vecs_arr, members_arr, archives_arr, filenames_arr = _manifest_columns(data, p)
+        rows = [
+            row
+            for i in range(len(members_arr))
+            if (row := _manifest_row(i, members_arr, archives_arr, filenames_arr, vecs_arr, base_dir)) is not None
+        ]
         if not rows:
             raise ValueError(f"NPZ manifest {p} produced no rows")
         return rows
+
+
+def _manifest_columns(data, p: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]:
+    """Resolve and validate the ``(vectors, members, archives, filenames?)`` columns."""
+    key_set = set(data.files)
+    vectors_key = next((k for k in _VECTORS_KEYS if k in key_set), None)
+    members_key = next((k for k in _MEMBERS_KEYS if k in key_set), None)
+    archives_key = next((k for k in _ARCHIVES_KEYS if k in key_set), None)
+    filenames_key = next((k for k in _FILENAMES_KEYS if k in key_set), None)
+
+    if vectors_key is None or members_key is None:
+        raise ValueError(
+            f"NPZ manifest {p} must contain a vectors array (one of {_VECTORS_KEYS}) "
+            f"and a members array (one of {_MEMBERS_KEYS})"
+        )
+
+    vecs_arr = data[vectors_key]
+    members_arr = np.atleast_1d(data[members_key])
+    if members_arr.ndim != 1:
+        raise ValueError(f"NPZ '{members_key}' array must be 1-D, got shape {members_arr.shape}")
+    n = len(members_arr)
+    if len(vecs_arr) != n:
+        raise ValueError(f"NPZ '{members_key}' and '{vectors_key}' have mismatched lengths ({n} vs {len(vecs_arr)})")
+    if archives_key is None:
+        raise ValueError(f"NPZ manifest {p} must contain an archives array (one of {_ARCHIVES_KEYS})")
+    archives_arr = _broadcast_column(data[archives_key], n, "archives")
+    filenames_arr = _broadcast_column(data[filenames_key], n, "filenames") if filenames_key is not None else None
+    return vecs_arr, members_arr, archives_arr, filenames_arr
+
+
+def _manifest_row(i, members_arr, archives_arr, filenames_arr, vecs_arr, base_dir: Path) -> dict | None:
+    """Build one ``{archive, member, filename, vector}`` row, or ``None`` to skip."""
+    member = str(members_arr[i]).strip()
+    if not member:
+        return None
+    archive = str(archives_arr[i]).strip()
+    if not archive:
+        raise ValueError(f"manifest row {i} has an empty archive path")
+    archive_path = Path(archive)
+    if not archive_path.is_absolute():
+        archive_path = (base_dir / archive_path).resolve()
+    display = str(filenames_arr[i]).strip() if filenames_arr is not None else ""
+    return {
+        "archive": str(archive_path),
+        "member": member,
+        "filename": display or Path(member).name,
+        "vector": np.asarray(vecs_arr[i]),
+    }
 
 
 def _broadcast_column(arr: np.ndarray, n: int, label: str) -> np.ndarray:

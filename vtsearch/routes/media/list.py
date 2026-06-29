@@ -526,23 +526,7 @@ def media_video(media_id: int):
     # For browser-incompatible formats (e.g. .avi), transcode to MP4 and
     # cache the result so subsequent requests are instant.
     if ext not in _BROWSER_VIDEO_EXTS:
-        cached = c.get("_transcoded_mp4")
-        if cached is not None:
-            return _send_video_bytes(cached, "video/mp4", f"media_{media_id}.mp4")
-
-        media_bytes = _resolve_bytes(c)
-        if media_bytes is None:
-            abort(404, message="media not available")
-
-        transcoded = _transcode_to_mp4(media_bytes, filename)
-        if transcoded is not None:
-            c["_transcoded_mp4"] = transcoded
-            return _send_video_bytes(transcoded, "video/mp4", f"media_{media_id}.mp4")
-        # ffmpeg and OpenCV both unavailable; cannot transcode
-        abort(
-            415,
-            message=f"Cannot play {ext} videos: install ffmpeg or opencv-python-headless to enable transcoding",
-        )
+        return _serve_transcoded_video(c, media_id, ext, filename)
 
     # Archive-member video: stream the member with Range so the browser only
     # downloads the bytes it plays -- never extracting or fully buffering it.
@@ -562,6 +546,31 @@ def media_video(media_id: int):
         mimetype = "video/mp4"
 
     return _send_video_bytes(media_bytes, mimetype, f"media_{media_id}{ext}")
+
+
+def _serve_transcoded_video(c: dict, media_id: int, ext: str, filename: str) -> Response:
+    """Serve a browser-incompatible video by transcoding it to MP4 (cached).
+
+    Resolves the source bytes (which may stream from an archive member),
+    transcodes to H.264 MP4, memoises the result on the in-memory media, and
+    ``abort``-s 415 when neither ffmpeg nor OpenCV is available.
+    """
+    cached = c.get("_transcoded_mp4")
+    if cached is not None:
+        return _send_video_bytes(cached, "video/mp4", f"media_{media_id}.mp4")
+
+    media_bytes = _resolve_bytes(c)
+    if media_bytes is None:
+        abort(404, message="media not available")
+
+    transcoded = _transcode_to_mp4(media_bytes, filename)
+    if transcoded is not None:
+        c["_transcoded_mp4"] = transcoded
+        return _send_video_bytes(transcoded, "video/mp4", f"media_{media_id}.mp4")
+    abort(
+        415,
+        message=f"Cannot play {ext} videos: install ffmpeg or opencv-python-headless to enable transcoding",
+    )
 
 
 def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:

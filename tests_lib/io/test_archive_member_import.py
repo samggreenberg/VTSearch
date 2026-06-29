@@ -118,9 +118,7 @@ class TestImporter:
 
     def test_skips_missing_members(self, tmp_path):
         archive = _make_tar(tmp_path)
-        manifest = _make_manifest(
-            tmp_path, archive, members=["chunk_a.mp4", "not_in_shard.mp4"]
-        )
+        manifest = _make_manifest(tmp_path, archive, members=["chunk_a.mp4", "not_in_shard.mp4"])
         medias: dict[int, dict] = {}
         IMPORTER.run({"manifest": str(manifest), "media_type": "video"}, medias)
         # The missing member is skipped; the real one still imports.
