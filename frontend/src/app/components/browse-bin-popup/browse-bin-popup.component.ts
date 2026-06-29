@@ -10,6 +10,7 @@ import { ViewControlsComponent } from '../view-controls/view-controls.component'
 import { IconComponent } from '../icon/icon.component';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { usesThumbnails } from '../browse-canvas/hex-render.util';
+import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
 
 /** Vertical room (px) reserved under a grid thumbnail for its truncated name. */
@@ -488,6 +489,102 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   @HostListener('document:keydown.escape')
   onEscape(): void {
     this.dismissed.emit();
+  }
+
+  /**
+   * Keyboard shortcuts while the popup is open: arrow keys walk the viewed item
+   * through the grid, ``+``/``-`` resize the detail image (mirroring the
+   * top-left buttons), and Ctrl/Cmd-A selects every item in the bin. The popup
+   * owns the keyboard whenever it's open, so this takes precedence over the
+   * canvas shortcuts (the browse view suppresses its own while the popup is up).
+   * Suppressed while typing or behind a modal ({@link shortcutsBlocked}).
+   */
+  @HostListener('document:keydown', ['$event'])
+  onKeydown(event: KeyboardEvent): void {
+    if (shortcutsBlocked()) return;
+
+    // Ctrl/Cmd-A: select every item in this bin (always select, never toggle).
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && (event.key === 'a' || event.key === 'A')) {
+      event.preventDefault();
+      this.selection.addAll(this.ids);
+      return;
+    }
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+    switch (event.key) {
+      case 'ArrowUp':
+        event.preventDefault();
+        this.moveFocus(0, -1);
+        break;
+      case 'ArrowDown':
+        event.preventDefault();
+        this.moveFocus(0, 1);
+        break;
+      case 'ArrowLeft':
+        event.preventDefault();
+        this.moveFocus(-1, 0);
+        break;
+      case 'ArrowRight':
+        event.preventDefault();
+        this.moveFocus(1, 0);
+        break;
+      case '+':
+      case '=':
+        event.preventDefault();
+        this.bumpPreview(1);
+        break;
+      case '-':
+      case '_':
+        event.preventDefault();
+        this.bumpPreview(-1);
+        break;
+    }
+  }
+
+  /**
+   * Move the viewed item one grid step: ``dCol`` along a row, ``dRow`` across
+   * rows (a row holds {@link columns} items). Updates the preview pane (image /
+   * video) and the grid's focus ring, and scrolls the target row into view.
+   * No-op for a singleton/preview-only bin, where there's no grid to walk.
+   */
+  private moveFocus(dCol: number, dRow: number): void {
+    if (this.previewOnly || this.ids.length <= 1) return;
+    const cur = this.focusIndex();
+    const next = Math.max(0, Math.min(this.ids.length - 1, cur + dCol + dRow * this.columns));
+    if (next === cur) return;
+    this.previewId = this.ids[next];
+    this.scrollRowIntoView(next);
+    this.cdr.markForCheck();
+  }
+
+  /** Index of the viewed item within {@link ids}, falling back to the
+   *  representative when nothing is currently viewed. */
+  private focusIndex(): number {
+    const idx = this.previewId == null ? -1 : this.ids.indexOf(this.previewId);
+    return idx >= 0 ? idx : this.repIndex();
+  }
+
+  /** True for the viewed item — the one shown in the preview pane and ringed in
+   *  the grid as arrow keys walk through it. */
+  isFocused(id: number): boolean {
+    return this.previewId != null && id === this.previewId;
+  }
+
+  /** Scroll the grid the minimum amount so the row holding ``index`` is fully
+   *  visible (no-op when it already is). */
+  private scrollRowIntoView(index: number): void {
+    const vp = this.viewport;
+    if (!vp) return;
+    const row = Math.floor(index / Math.max(1, this.columns));
+    const rowTop = row * this.rowSize;
+    const rowBottom = rowTop + this.rowSize;
+    const top = vp.measureScrollOffset('top');
+    const viewportH = vp.elementRef.nativeElement.clientHeight || this.gridHeight;
+    if (rowTop < top) {
+      vp.scrollToOffset(rowTop);
+    } else if (rowBottom > top + viewportH) {
+      vp.scrollToOffset(rowBottom - viewportH);
+    }
   }
 
   // --- Dragging (move the popup by its header) ------------------------------

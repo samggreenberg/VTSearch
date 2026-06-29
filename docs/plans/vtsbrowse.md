@@ -689,6 +689,22 @@ in git history and the cited source files.
   none/partial/full rendering; `member_ids` re-derived on demand
   (`tile_member_ids`, never persisted). *Still open:* act on the selection
   (export / seed detector / subset projection); minimap selection overlay.
+- ~~**Keyboard shortcuts**~~ — the browse view and its bin-details popup handle
+  document-level keys (`@HostListener('document:keydown')`, gated by
+  `shortcutsBlocked()` in `utils/keyboard-shortcuts.ts` — no typing target, no
+  open modal). On the **canvas** (popup closed): arrows pan (`canvas.panByKey`,
+  hard-clamped like the minimap recenter), `+`/`-` zoom (the same `zoomIn`/
+  `zoomOut` as the GUI buttons), Ctrl/Cmd-A selects every bin **fully** in view
+  (`canvas.selectAllInView`, the viewport analogue of the marquee). In the
+  **bin-details popup** (which then owns the keyboard; the view suppresses its
+  own while it's open): arrows walk the viewed item through the grid
+  (`moveFocus`, updating the preview pane + a dashed `.focused` grid ring and
+  scrolling the row into view), `+`/`-` resize the detail image (`bumpPreview`),
+  Ctrl/Cmd-A selects every item in the bin. The Help → Keyboard shortcuts sheet
+  was split into per-context sub-tabs (Train/Find · Browser · General) so the
+  growing list stays scannable. *Open follow-up:* keyboard nav doesn't move DOM
+  focus, so Enter/Space only toggles the *DOM-focused* entry (tab order), not the
+  arrow-walked one; a future pass could let Space toggle the viewed item too.
 - ~~**Double-click + right-click on the canvas**~~ — double-click zooms about the
   cursor (click toggle deferred by `DBLCLICK_MS`); right-click opens the shared
   `vt-media-context-menu`. *Still open:* the context menu is the home for the
