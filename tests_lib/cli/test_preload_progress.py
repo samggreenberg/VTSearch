@@ -158,6 +158,66 @@ class TestMakeConsoleProgress:
         for seg in renders:
             assert seg.index("s)") > seg.index("%")
 
+    def test_bar_fill_is_colored_red_at_or_below_half(self, capsys):
+        """A bar at ≤50% colors its fill red (between the brackets only)."""
+        cb = _make_console_progress(lambda *a, **kw: None)
+
+        cb("loading", "model.safetensors", 30, 100)
+        cb("loading", "model.safetensors", 50, 100)
+
+        out = capsys.readouterr().out
+        # Every render's bracketed fill opens with the red code and resets
+        # before the closing bracket; the percentage stays uncolored.
+        for seg in (s for s in out.split("\r") if "[" in s):
+            assert "[\033[31m" in seg
+            assert "\033[0m]" in seg
+
+    def test_bar_fill_is_colored_yellow_past_half(self, capsys):
+        """A bar in (50%, 100%) colors its fill yellow."""
+        cb = _make_console_progress(lambda *a, **kw: None)
+
+        cb("loading", "model.safetensors", 75, 100)
+
+        out = capsys.readouterr().out
+        assert "[\033[33m" in out
+        assert "\033[0m]" in out
+
+    def test_bar_fill_is_colored_green_at_completion(self, capsys):
+        """A 100% bar colors its fill green."""
+        cb = _make_console_progress(lambda *a, **kw: None)
+
+        cb("loading", "model.safetensors", 100, 100)
+
+        out = capsys.readouterr().out
+        assert "[\033[32m" in out
+        assert "\033[0m]" in out
+
+    def test_completed_bar_via_flush_is_green(self, capsys):
+        """The flush-finalized bar (snap to 100%) colors its fill green."""
+        cb = _make_console_progress(lambda *a, **kw: None)
+
+        cb("loading", "model.safetensors", 40, 100)
+        cb.flush()
+
+        out = capsys.readouterr().out
+        # The final overwrite is the full green bar at 100%.
+        assert "[\033[32m" + "#" * 30 + "\033[0m] 100%" in out
+
+    def test_color_codes_do_not_shift_bar_alignment(self, capsys):
+        """ANSI color codes live *inside* the brackets, so the open-bracket
+        column (and thus vertical alignment) is unaffected."""
+        cb = _make_console_progress(lambda *a, **kw: None)
+
+        cb("loading", "Importing torch…", 10, 100)
+        cb("loading", "Importing transformers…", 90, 100)
+        cb.flush()
+
+        out = capsys.readouterr().out
+        renders = [seg for seg in out.replace("\033[K", "").split("\r") if "[" in seg]
+        # The first "[" in each render is the bar's open bracket, not a code.
+        cols = {seg.index("[") for seg in renders}
+        assert len(cols) == 1, f"color codes shifted bars: columns were {cols}"
+
     def test_phase_after_progress_starts_new_line(self, capsys):
         """A phase message arriving mid-progress-bar should start a new line."""
         cb = _make_console_progress(lambda *a, **kw: None)
