@@ -416,7 +416,7 @@ def _run_origin_load_in_background(
         name or _origin_to_str(origin),
         media_type=media_type,
         embedder=embedder,
-        step_weights=load_step_weights(),
+        step_weights=load_step_weights(media_type),
     )
     tracker.update("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
 
