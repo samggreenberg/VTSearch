@@ -165,6 +165,18 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
+  /**
+   * Persist the "Show Animations" pulldown. "Show" forces decorative motion on
+   * (even against an OS reduce-motion request), "Hide" always suppresses it,
+   * and "OS Setting" defers to the platform preference; `SettingsStateService`
+   * mirrors the choice onto `<html>` for the global stylesheet.
+   */
+  onAnimationModeChange(mode: string): void {
+    const m = mode as AppSettings['show_animations'];
+    this.settings.update((s) => ({ ...s, show_animations: m }));
+    this.save();
+  }
+
   /** Value shown in the "Solo media type" select. Empty string means
    *  "Show everything"; otherwise it's the type_id. We display the
    *  user's explicit choice when set, falling back to the CLI's

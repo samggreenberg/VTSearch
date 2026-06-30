@@ -13,7 +13,7 @@ describe('SettingsModalComponent', () => {
   const mockSettings = {
     volume: 50,
     theme: 'dark',
-    show_animations: true,
+    show_animations: 'os',
     enrich_descriptions: false,
     safe_thresholds: false,
     calibrate_count: 50,
@@ -138,8 +138,15 @@ describe('SettingsModalComponent', () => {
 
   it('should toggle boolean setting and save', async () => {
     await flushInit();
-    component.onToggle('show_animations', false);
-    expect(component.settings().show_animations).toBe(false);
+    component.onToggle('show_metadata', false);
+    expect(component.settings().show_metadata).toBe(false);
+    httpMock.expectOne('/api/settings').flush(mockSettings);
+  });
+
+  it('should update the Show Animations pulldown and save', async () => {
+    await flushInit();
+    component.onAnimationModeChange('show');
+    expect(component.settings().show_animations).toBe('show');
     httpMock.expectOne('/api/settings').flush(mockSettings);
   });
 

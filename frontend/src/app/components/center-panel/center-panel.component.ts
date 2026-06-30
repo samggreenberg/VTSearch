@@ -101,7 +101,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
       if (!settings) return;
       this.volume.set(settings.volume ?? 1);
       this.audioPlaying.set(settings.audio_playing !== false);
-      this.showAnimations.set(settings.show_animations !== false);
+      this.showAnimations.set(settings.show_animations !== 'hide');
       this.showMetadata.set(settings.show_metadata !== false);
       this.labelHintDismissed.set(settings.label_hint_dismissed === true);
     });

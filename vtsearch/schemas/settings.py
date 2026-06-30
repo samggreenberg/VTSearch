@@ -14,7 +14,12 @@ from __future__ import annotations
 
 from marshmallow import Schema, fields, validate
 
-from vtsearch.settings_models import VALID_FOCUS_MODES, VALID_GRID_ICON_SIZES, VALID_THEMES
+from vtsearch.settings_models import (
+    VALID_ANIMATION_MODES,
+    VALID_FOCUS_MODES,
+    VALID_GRID_ICON_SIZES,
+    VALID_THEMES,
+)
 
 
 class _PerMediaTypeStringDict(fields.Dict):
@@ -62,7 +67,7 @@ class AppSettingsSchema(Schema):
     calibrate_count = fields.Integer()
     calibration_fraction = fields.Float()
     audio_playing = fields.Boolean()
-    show_animations = fields.Boolean()
+    show_animations = fields.String(validate=validate.OneOf(VALID_ANIMATION_MODES))
     show_metadata = fields.Boolean()
     label_hint_dismissed = fields.Boolean()
     autopilot_enabled = fields.Boolean()
@@ -194,7 +199,7 @@ class SettingsUpdateSchema(Schema):
     calibrate_count = fields.Integer()
     calibration_fraction = fields.Float()
     audio_playing = fields.Boolean()
-    show_animations = fields.Boolean()
+    show_animations = fields.String(validate=validate.OneOf(VALID_ANIMATION_MODES))
     show_metadata = fields.Boolean()
     label_hint_dismissed = fields.Boolean()
 
