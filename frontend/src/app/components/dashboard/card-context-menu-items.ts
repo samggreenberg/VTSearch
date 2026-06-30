@@ -132,6 +132,12 @@ export function buildDetectorCardMenuItems(
   items.push({ id: 'rename', label: 'Rename', title: 'Rename', iconSvg: ICON.rename });
   items.push({ id: 'add-labels', label: 'Import Labels', title: 'Import Labels', iconSvg: ICON.addLabels });
   items.push({ id: 'export', label: 'Export', title: 'Export', iconSvg: ICON.export });
+  items.push({
+    id: 'export-model',
+    label: 'Export model',
+    title: 'Export a portable, standalone scoring model (ONNX) to share with others',
+    iconSvg: ICON.export,
+  });
   items.push({ id: 'stats', label: 'Stats', title: 'Stats', iconSvg: ICON.stats });
   items.push({ id: 'delete', label: 'Delete', title: 'Delete', iconSvg: ICON.delete });
   return items;

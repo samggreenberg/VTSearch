@@ -48,6 +48,7 @@ import { LabelExporterModalComponent } from '../modals/label-exporter-modal/labe
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
 import { DetectorStatsModalComponent } from '../modals/detector-stats-modal/detector-stats-modal.component';
+import { DetectorPortableExportModalComponent } from '../modals/detector-portable-export-modal/detector-portable-export-modal.component';
 import { IconComponent } from '../icon/icon.component';
 import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
 
@@ -66,6 +67,7 @@ import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
     LabelImporterModalComponent,
     DatasetStatsModalComponent,
     DetectorStatsModalComponent,
+    DetectorPortableExportModalComponent,
     IconComponent,
     UsageBarComponent,
     SkeletonComponent
@@ -932,6 +934,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   openExportModal(model: DetectorRegistryEntry): void {
     this.modals.openExport(model.name);
+  }
+
+  openPortableExportModal(model: DetectorRegistryEntry): void {
+    this.modals.openPortableExport(model.id, model.name);
   }
 
   openAddLabelsModal(model: DetectorRegistryEntry): void {

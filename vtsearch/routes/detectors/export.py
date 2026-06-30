@@ -24,7 +24,7 @@ from types import SimpleNamespace
 from flask import send_file
 from flask_smorest import Blueprint, abort
 
-from vtsearch.routes._shared import require_dataset_header, require_detector_header
+from vtsearch.routes._shared import require_dataset_header
 from vtsearch.state import snapshot_medias
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,6 @@ detectors_export_bp = Blueprint(
 @detectors_export_bp.alt_response(404, description="Detector not found.")
 @detectors_export_bp.alt_response(409, description="The active dataset can't supply the detector's embedder type.")
 @require_dataset_header
-@require_detector_header
 def export_portable_bundle(detector_id: str):
     """Train the detector against the active dataset and stream its portable bundle.
 

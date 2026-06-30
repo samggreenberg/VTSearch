@@ -1,0 +1,44 @@
+.pexport {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 34rem;
+
+  h3 {
+    margin: 0;
+    font-size: 0.95rem;
+  }
+
+  &__warn {
+    padding: 0.75rem;
+    border: 1px solid var(--text-warning);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--text-warning) 12%, transparent);
+
+    p {
+      margin: 0.4rem 0 0;
+    }
+  }
+
+  &__list {
+    margin: 0;
+    padding-left: 1.2rem;
+  }
+
+  &__note {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    opacity: 0.75;
+  }
+
+  &__ok {
+    margin: 0;
+    color: var(--color-good);
+  }
+
+  &__err {
+    margin: 0;
+    color: var(--error-text);
+  }
+}
