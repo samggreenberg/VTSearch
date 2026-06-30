@@ -73,6 +73,7 @@ class TestPortableExport:
         snap = snapshot_medias()
         det_data = _read_detector(_detector_path("portable-parity"))
         mlp, _threshold, _diag = resolve_or_train_detector(detector_id, det_data, "audio", snap)
+        assert mlp is not None
         live = {r["id"]: r["score"] for r in score_media_with_model(mlp, snap, embedder_name="clap")}
 
         # Re-embed the same medias and run them through the exported graph.
