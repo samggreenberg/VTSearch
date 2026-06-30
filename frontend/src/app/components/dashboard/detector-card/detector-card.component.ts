@@ -71,6 +71,7 @@ export class DetectorCardComponent {
   readonly rename = output<string>();
   readonly delete = output<void>();
   readonly export = output<void>();
+  readonly exportModel = output<void>();
   readonly addLabels = output<void>();
   readonly load = output<void>();
   readonly unload = output<void>();
@@ -155,6 +156,9 @@ export class DetectorCardComponent {
         break;
       case 'export':
         this.export.emit();
+        break;
+      case 'export-model':
+        this.exportModel.emit();
         break;
       case 'stats':
         this.stats.emit();

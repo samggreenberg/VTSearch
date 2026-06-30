@@ -15,6 +15,7 @@ from vtsearch.routes.detectors import (
     detector_find_bp,
     detector_scoring_bp,
     detectors_crud_bp,
+    detectors_export_bp,
     detectors_labels_bp,
     detectors_registry_bp,
 )
@@ -45,6 +46,7 @@ __all__ = [
     "detector_find_bp",
     "detector_scoring_bp",
     "detectors_crud_bp",
+    "detectors_export_bp",
     "detectors_labels_bp",
     "detectors_registry_bp",
     "embed_bp",
