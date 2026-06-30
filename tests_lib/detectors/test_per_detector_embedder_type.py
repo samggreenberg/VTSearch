@@ -14,8 +14,10 @@ These cover the pure resolvers that route training/scoring through that choice:
   layer (delegates to keying).
 * ``_score_all_media`` region gating - region max-pool only when the detector
   scores in the dataset's *patch* slot.
-* ``resolve_detector_embedder_type`` - create-time validation against the
-  types the active dataset supplies.
+* ``resolve_detector_embedder_type`` - create-time resolution: an explicit type
+  (the user's declared intent) is accepted regardless of the active dataset's
+  bound embedders; an empty request auto-resolves a single-type dataset and is
+  rejected on a multi-type one.
 """
 
 from __future__ import annotations
@@ -227,17 +229,38 @@ class TestResolveDetectorEmbedderType:
         assert resolved == ""
         assert err is not None and "multiple" in err.lower()
 
-    def test_explicit_type_validated(self):
+    def test_explicit_type_accepted(self):
         from vtscore.detectors.embedder_type import resolve_detector_embedder_type
 
         with self._activate(["siglip", "dinov3_patch"]):
             resolved, err = resolve_detector_embedder_type("patch_semantic")
             assert err is None and resolved == "patch_semantic"
 
-            # An unsupplied type is rejected.
-            bad, bad_err = resolve_detector_embedder_type("structural")
-        assert bad == ""
-        assert bad_err is not None and "not bound" in bad_err.lower()
+            # An explicit, valid type the dataset doesn't bind is still accepted:
+            # the type is the user's declared intent (a detector can be created
+            # before any dataset exists), and it simply gates as incompatible on
+            # datasets that don't supply it.
+            other, other_err = resolve_detector_embedder_type("structural")
+        assert other == "structural"
+        assert other_err is None
+
+    def test_unknown_type_rejected(self):
+        from vtscore.detectors.embedder_type import resolve_detector_embedder_type
+
+        with self._activate(["siglip"]):
+            resolved, err = resolve_detector_embedder_type("nonsense")
+        assert resolved == ""
+        assert err is not None and "unknown" in err.lower()
+
+    def test_explicit_type_accepted_without_dataset(self):
+        from vtscore.detectors.embedder_type import resolve_detector_embedder_type
+
+        # No active dataset: an explicit type is the user's declared intent and
+        # is persisted as-is (resolved against whatever dataset is used later).
+        with self._activate([]):
+            resolved, err = resolve_detector_embedder_type("structural")
+        assert resolved == "structural"
+        assert err is None
 
     def test_concrete_name_is_classified(self):
         from vtscore.detectors.embedder_type import resolve_detector_embedder_type
