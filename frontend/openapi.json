@@ -10415,6 +10415,41 @@
         ]
       }
     },
+    "/api/detectors/{detector_id}/portable-bundle": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "The detector's MLP is (re)trained from its on-disk labelset in the active\ndataset's embedder space - exactly as Find does - then serialised to an ONNX\nscorer and zipped with a manifest and README.  No embeddings or raw media\nare written; only the trained classifier, the embedder name, and the\nthreshold travel in the bundle.",
+        "operationId": "export_portable_bundle",
+        "responses": {
+          "400": {
+            "description": "No medias loaded, or the detector has no labels for scoring."
+          },
+          "404": {
+            "description": "Detector not found."
+          },
+          "409": {
+            "description": "The active dataset can't supply the detector's embedder type."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Train the detector against the active dataset and stream its portable bundle.",
+        "tags": [
+          "detectors_export"
+        ]
+      }
+    },
     "/api/detectors/{detector_name}/labelset-source": {
       "get": {
         "operationId": "get_detector_labelset_source",
@@ -14372,6 +14407,10 @@
     {
       "description": "Run detectors against datasets and return merged hits / negative hits, plus a pre-flight label-resolution check.",
       "name": "detector_find"
+    },
+    {
+      "description": "Export a saved detector as a standalone, portable scoring bundle.",
+      "name": "detectors_export"
     },
     {
       "description": "On-demand embedding of a media file (multipart) or text snippet (JSON). The dispatch route is dual-mode and not described in the spec; see the module docstring.",
