@@ -1304,12 +1304,23 @@ The current, shipped behavior locks an embedder **type**, not a name:
   lock; `DetectorContext.embedder` stays the adaptive concrete cache marker.
   Legacy detectors with a `primary_embedder` name are migration-read via
   `detector_embedder_type_from_data` (classify the old name → type).
-- **Resolution at create.** `resolve_detector_embedder_type` validates/auto-
-  selects against the *types the active dataset supplies*: one type →
-  auto-select; multiple → the client must choose (400 listing the options);
-  none / no dataset → empty (resolved at first train). The new-detector modal's
-  picker is now a **Detector Embedder Type** dropdown, shown only when the
-  dataset supplies more than one type.
+- **Resolution at create.** `resolve_detector_embedder_type` resolves the type
+  to persist. An **explicit** type (the user's declared intent) is accepted as
+  long as it's one of the three valid types — **regardless of whether the active
+  dataset binds it** (only an unrecognized string is rejected). An **empty**
+  request still auto-resolves against the *types the active dataset supplies*:
+  one type → auto-select; multiple → the client must choose (400 listing the
+  options); none / no dataset → empty (resolved at first train). The
+  new-detector modal's **Detector Embedder Type** dropdown now lives in an
+  always-visible, collapsed **Advanced** section on both the blank and Trained
+  tabs and offers all three types (a detector can be created before any dataset
+  exists, so the picker can't infer the type from a dataset). The displayed type
+  defaults to the dataset's primary supplied type (else Semantic); an untouched
+  single-/no-dataset create sends an empty type and lets the server auto-resolve,
+  while a multi-type dataset sends the picker's defaulted (valid) type. Picking a
+  type the active dataset can't supply is allowed — the detector just gates as
+  incompatible there (see the compatibility gate below), and the modal shows an
+  inline heads-up. The Trained (from-labelset) route threads `embedder_type` too.
 - **Compatibility gate (the substantive change).** A detector is compatible
   with a dataset iff same `media_type` **and** the dataset binds an embedder of
   the detector's type. Find-label refuses an incompatible pair (409); Auto-Find
