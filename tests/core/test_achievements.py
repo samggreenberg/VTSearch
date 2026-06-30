@@ -385,6 +385,43 @@ class TestVoteStreak:
         streak = _by_id(achievements.get_full_state(), "vote_streak")
         assert streak["counter"] == 50
 
+    def test_bulk_votes_do_not_advance_streak(self):
+        # A batch of 500 non-individual votes (count_streak=False) must not
+        # manufacture a 500-long Marathoner streak, even though it credits
+        # every other vote achievement.
+        ts = _ts(2026, 5, 13, 12, 0, 0)
+        for _ in range(500):
+            achievements.record_vote("det", "audio", now=ts, count_streak=False)
+            ts += 1
+        state = achievements.get_full_state()
+        assert _by_id(state, "vote_streak")["counter"] == 0
+        assert _by_id(state, "votes_cast")["counter"] == 500
+
+    def test_bulk_votes_are_transparent_to_an_individual_streak(self):
+        # An individual hand-click on either side of a bulk batch forms one
+        # continuous streak: the bulk votes neither extend nor reset it, and
+        # leave the gap clock alone so the two hand-clicks read as consecutive.
+        base = _ts(2026, 5, 13, 12, 0, 0)
+        achievements.record_vote("det", "audio", now=base)
+        for i in range(100):
+            achievements.record_vote("det", "audio", now=base + 30 + i, count_streak=False)
+        achievements.record_vote("det", "audio", now=base + 200)
+        assert _by_id(achievements.get_full_state(), "vote_streak")["counter"] == 2
+
+    def test_bulk_vote_does_not_reset_a_live_streak(self):
+        # A bulk batch separated from a hand-click by more than the 10-min gap
+        # still must not reset the running streak — bulk is simply invisible.
+        base = _ts(2026, 5, 13, 12, 0, 0)
+        achievements.record_vote("det", "audio", now=base)
+        achievements.record_vote("det", "audio", now=base + 60)
+        # Bulk batch an hour later: would blow the gap if it touched the clock.
+        for i in range(10):
+            achievements.record_vote("det", "audio", now=base + 3600 + i, count_streak=False)
+        # Next hand-click is within 10 min of the *second hand-click*, so the
+        # streak continues to 3 rather than resetting.
+        achievements.record_vote("det", "audio", now=base + 120)
+        assert _by_id(achievements.get_full_state(), "vote_streak")["counter"] == 3
+
 
 class TestVoteStateRoundTrip:
     def test_new_state_keys_persisted(self, isolated_settings):
@@ -787,6 +824,36 @@ class TestActionHooks:
         client.post(f"/api/medias/{media_id}/vote", json={"target": "good"})
         client.post(f"/api/medias/{media_id}/vote", json={"target": "good"})
         assert _by_id(achievements.get_full_state(), "votes_cast")["counter"] == 1
+
+    def test_bulk_vote_credits_votes_but_not_streak(self, client):
+        """Bulk "Verified Good" over a hand-selected set must not build a
+        Marathoner streak.
+
+        The user-facing action selects multiple items in the Browser and marks
+        them good/bad in one request (``/api/medias/vote-bulk``).  That is not a
+        run of consecutive *individual* hand-clicks, so it credits votes_cast
+        (the votes were cast) but leaves the vote_streak watermark at zero.
+        """
+        ids = [m["id"] for m in client.get("/api/medias/ids").get_json()][:5]
+        assert len(ids) == 5
+        resp = client.post("/api/medias/vote-bulk", json={"target": "good", "ids": ids})
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()["changed"] == 5
+        state = achievements.get_full_state()
+        assert _by_id(state, "votes_cast")["counter"] == 5
+        assert _by_id(state, "vote_streak")["counter"] == 0
+
+    def test_bulk_vote_does_not_break_an_individual_streak(self, client):
+        """A single hand-click before and after a bulk batch still reads as a
+        2-long streak: the bulk votes are transparent to the streak clock."""
+        ids = [m["id"] for m in client.get("/api/medias/ids").get_json()]
+        # One real hand-click.
+        client.post(f"/api/medias/{ids[0]}/vote", json={"target": "good"})
+        # Bulk-verify a hand-selected set in between.
+        client.post("/api/medias/vote-bulk", json={"target": "good", "ids": ids[1:6]})
+        # Another real hand-click.
+        client.post(f"/api/medias/{ids[6]}/vote", json={"target": "good"})
+        assert _by_id(achievements.get_full_state(), "vote_streak")["counter"] == 2
 
     def test_find_label_does_not_credit_votes_cast(self, client):
         """Find-mode auto-labels must not count toward votes_cast or vote_streak.

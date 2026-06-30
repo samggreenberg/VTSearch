@@ -194,7 +194,7 @@ def rethreshold_unverified_find_items() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _record_vote_locked() -> None:
+def _record_vote_locked(count_streak: bool = True) -> None:
     """Credit one vote to the active detector's achievements.
 
     Must be called while ``_state_lock`` is held so the detector context
@@ -202,11 +202,16 @@ def _record_vote_locked() -> None:
     being credited (otherwise a concurrent context switch would credit the
     wrong detector).  Establishes the lock order ``_state_lock → _settings_lock``;
     no code path takes the locks in the reverse order.
+
+    *count_streak* is forwarded to :func:`record_vote`: pass False for bulk /
+    non-individual vote applications so they credit every other achievement but
+    do not inflate the Marathoner ``vote_streak`` (which counts consecutive
+    *individual* hand-clicks).
     """
     from vtsearch.achievements import record_vote  # noqa: PLC0415
 
     det_ctx = get_active_detector_context()
-    record_vote(det_ctx.detector_id, media_type=det_ctx.media_type)
+    record_vote(det_ctx.detector_id, media_type=det_ctx.media_type, count_streak=count_streak)
 
 
 def _current_label_locked(ctx, media_id: int) -> str:
@@ -222,12 +227,18 @@ def _set_vote_locked(
     media_id: int,
     target: str,
     region_box: tuple[float, float, float, float] | None = None,
+    *,
+    count_streak: bool = True,
 ) -> tuple[str, str, int | None]:
     """Set *media_id*'s vote to *target* under an already-held ``_state_lock``.
 
     Returns ``(old_label, new_label, click_time)`` where ``click_time`` is the
     ordinal assigned to a newly-labeled media (or ``None`` when *target* is
     ``"none"`` or the call was idempotent).
+
+    *count_streak* forwards to the achievement credit: pass False for bulk
+    votes (a single batch must not build a Marathoner streak); the default True
+    is the single hand-clicked vote.
 
     Does **not** acquire ``_progress_lock``.  The public wrappers
     (:func:`set_vote`, :func:`toggle_vote`) decide whether to invalidate the
@@ -284,7 +295,7 @@ def _set_vote_locked(
     # Counter increments only on a transition that produces a labeled state.
     # Un-vote (X→none) and idempotent re-apply (handled above) credit nothing.
     if target != "none":
-        _record_vote_locked()
+        _record_vote_locked(count_streak=count_streak)
 
     return (old, target, click_time)
 
@@ -325,6 +336,8 @@ def set_vote(
     media_id: int,
     target: str,
     region_box: tuple[float, float, float, float] | None = None,
+    *,
+    count_streak: bool = True,
 ) -> tuple[str, str, int | None]:
     """Atomically set a media's vote to an absolute target state.
 
@@ -349,6 +362,12 @@ def set_vote(
         region_box: Optional normalised ``(x0, y0, x1, y1)`` good-vote region.
             Only honoured when *target* is ``"good"`` (patch-embedder v2:
             no-votes are always image-level).
+        count_streak: Pass False for bulk applications (e.g. the
+            ``/api/medias/vote-bulk`` "Verified Good/Bad" action over a
+            hand-selected set) so the batch credits every other vote
+            achievement but does not inflate the Marathoner streak, which only
+            counts consecutive *individual* hand-clicks.  Defaults to True (the
+            single-item vote path).
 
     Returns:
         ``(old_label, new_label, click_time)``.  ``click_time`` is the
@@ -356,7 +375,7 @@ def set_vote(
         idempotent calls.
     """
     with _state_lock:
-        result = _set_vote_locked(media_id, target, region_box=region_box)
+        result = _set_vote_locked(media_id, target, region_box=region_box, count_streak=count_streak)
         _mark_verified_if_find_mode(get_active_detector_context(), media_id, result[1])
     # Progress-cache invalidation runs *after* ``_state_lock`` is released so
     # we never establish a ``_state_lock → _progress_lock`` ordering across
@@ -420,6 +439,7 @@ def apply_label(
     silent: bool = False,
     region_box: tuple[float, float, float, float] | None = None,
     record_achievement: bool = True,
+    count_streak: bool = True,
 ) -> None:
     """Atomically apply a label to a media (for imports).
 
@@ -447,6 +467,11 @@ def apply_label(
             system-driven label application that isn't a user vote action
             (e.g. auto-import from a labelset source, example-media seeding
             on detector load).
+        count_streak: Forwarded to the achievement credit (only when
+            *record_achievement* is True).  Pass False for bulk applications
+            such as label import, which credit the other vote achievements but
+            must not build a Marathoner streak out of one import.  Defaults to
+            True (e.g. a single add-to-pile upload is an individual vote).
     """
     with _state_lock:
         ctx = get_active_detector_context()
@@ -470,7 +495,7 @@ def apply_label(
         if not silent:
             diversity_tree_label(media_id)
             if record_achievement and not already:
-                _record_vote_locked()
+                _record_vote_locked(count_streak=count_streak)
 
 
 def apply_label_with_click_time(media_id: int, label: str) -> None:
@@ -480,7 +505,9 @@ def apply_label_with_click_time(media_id: int, label: str) -> None:
     label appears in the frontend's click-time timeline.  Credits one vote in
     the active detector's achievement counters - bulk fill-from-sort flows
     are user vote actions and must show up in ``votes_cast`` etc. (audit
-    finding C8).
+    finding C8).  It does *not* count toward the Marathoner ``vote_streak``:
+    fill-from-sort applies a whole sort-window at once, which is not the
+    consecutive-individual-hand-click effort the streak measures.
 
     Args:
         media_id: Integer ID of the media to label.
@@ -500,7 +527,9 @@ def apply_label_with_click_time(media_id: int, label: str) -> None:
             add_label_to_history(media_id, "bad")
         assign_click_time(media_id)
         diversity_tree_label(media_id)
-        _record_vote_locked()
+        # Bulk fill-from-sort: credit votes_cast/days/hours/types but never the
+        # individual-effort Marathoner streak.
+        _record_vote_locked(count_streak=False)
 
 
 def apply_labels_bulk_with_click_time(
@@ -518,6 +547,9 @@ def apply_labels_bulk_with_click_time(
     Set *record_achievement* to ``False`` when the labels are system-generated
     (e.g. Find-mode auto-scoring) rather than explicit user votes, so those
     labels do not count toward ``votes_cast`` or ``vote_streak`` achievements.
+    When *record_achievement* is True, the credited votes still never touch the
+    Marathoner ``vote_streak``: this applies a whole batch at once, which is
+    not the consecutive-individual-hand-click effort the streak measures.
 
     When *replace_all* is True, any pre-existing votes/click-times for IDs
     outside *labels* are cleared first.  This is what ``/api/find-label``
@@ -564,4 +596,5 @@ def apply_labels_bulk_with_click_time(
             if tree is not None and media_id in tree.vector_to_leaf:
                 tree.label(media_id)
             if not already and record_achievement:
-                _record_vote_locked()
+                # Bulk batch: never contributes to the individual-effort streak.
+                _record_vote_locked(count_streak=False)
