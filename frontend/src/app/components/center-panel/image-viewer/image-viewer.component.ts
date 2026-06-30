@@ -482,14 +482,20 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
       this.regionBox.set([x0, y0, x0 + w, y0 + h]);
       return;
     }
-    // resize
-    let [x0, y0, x1, y1] = d.startBox;
+    // resize: like draw, the dragged handle may cross the opposite edge and
+    // flip the box rather than hitting a wall. The edge(s) the handle does not
+    // control stay anchored at their start position; the controlled edge follows
+    // the cursor, and per-axis min/max re-normalisation swaps which side is which
+    // when the cursor crosses over. (e.g. drag the west handle past the east edge
+    // and the dragged handle becomes the new east edge.)
+    const [sx0, sy0, sx1, sy1] = d.startBox;
     const lx = clamp01(local.x);
     const ly = clamp01(local.y);
-    if (d.handle.includes('n')) y0 = Math.min(ly, y1 - MIN_BOX_SIZE);
-    if (d.handle.includes('s')) y1 = Math.max(ly, y0 + MIN_BOX_SIZE);
-    if (d.handle.includes('w')) x0 = Math.min(lx, x1 - MIN_BOX_SIZE);
-    if (d.handle.includes('e')) x1 = Math.max(lx, x0 + MIN_BOX_SIZE);
+    let [x0, y0, x1, y1] = d.startBox;
+    if (d.handle.includes('w')) [x0, x1] = [Math.min(lx, sx1), Math.max(lx, sx1)];
+    else if (d.handle.includes('e')) [x0, x1] = [Math.min(sx0, lx), Math.max(sx0, lx)];
+    if (d.handle.includes('n')) [y0, y1] = [Math.min(ly, sy1), Math.max(ly, sy1)];
+    else if (d.handle.includes('s')) [y0, y1] = [Math.min(sy0, ly), Math.max(sy0, ly)];
     this.regionBox.set([x0, y0, x1, y1]);
   }
 
@@ -511,6 +517,13 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
       // Don't emit: the parent's last-known state was already previousBox
       // (the transient zero-area draw was never emitted).
       this.regionBox.set(drag.previousBox);
+      return;
+    }
+    if (drag.kind === 'resize' && tooSmall) {
+      // The handle was released right at the flip point, collapsing the box to
+      // (near) zero area. Restore the pre-resize box; startBox was the parent's
+      // last-known state, so no emit is needed.
+      this.regionBox.set(drag.startBox);
       return;
     }
     this.regionBoxChange.emit(box);

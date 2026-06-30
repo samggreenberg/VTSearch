@@ -385,6 +385,96 @@ describe('ImageViewerComponent', () => {
     });
   });
 
+  /**
+   * Resize handles flip past the opposite edge instead of hitting a wall, matching
+   * the draw flow: drag the west handle past the east edge and the dragged handle
+   * becomes the new east edge (and parallel logic for corners).
+   */
+  describe('resize handle crossing (flip instead of wall)', () => {
+    function setupWrap(component: ImageViewerComponent) {
+      component.renderedW.set(100);
+      component.renderedH.set(100);
+      component.wrapRef = {
+        nativeElement: {
+          getBoundingClientRect: () => ({
+            left: 0,
+            top: 0,
+            width: 100,
+            height: 100,
+            right: 100,
+            bottom: 100,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+          }),
+        } as unknown as HTMLDivElement,
+      } as ElementRef<HTMLDivElement>;
+    }
+
+    function mouseEventAt(x: number, y: number): MouseEvent {
+      return {
+        button: 0,
+        clientX: x,
+        clientY: y,
+        preventDefault: () => {},
+        stopPropagation: () => {},
+      } as unknown as MouseEvent;
+    }
+
+    type Internals = {
+      onWindowMouseMove: (e: MouseEvent) => void;
+      onWindowMouseUp: () => void;
+    };
+
+    it('flips the box when the west handle is dragged past the east edge', () => {
+      setupWrap(component);
+      component.regionBox.set([0.2, 0.3, 0.6, 0.7]);
+
+      let lastEmitted: RegionBox | null | undefined = undefined;
+      component.regionBoxChange.subscribe((v) => (lastEmitted = v));
+
+      component.onResizeHandleMouseDown('w', mouseEventAt(20, 30));
+      // Drag the west handle to x=0.9, well past the east edge at 0.6.
+      (component as unknown as Internals).onWindowMouseMove(mouseEventAt(90, 50));
+      (component as unknown as Internals).onWindowMouseUp();
+
+      // The dragged handle became the new east edge; the former east edge is now west.
+      expect(component.regionBox()).toEqual([0.6, 0.3, 0.9, 0.7]);
+      expect(lastEmitted).toEqual([0.6, 0.3, 0.9, 0.7]);
+    });
+
+    it('flips both axes when a corner handle is dragged past the opposite corner', () => {
+      setupWrap(component);
+      component.regionBox.set([0.2, 0.3, 0.6, 0.7]);
+
+      // nw controls (x0, y0); their anchors are the start east (0.6) and south (0.7)
+      // edges. Drag to (0.9, 0.95) past both.
+      component.onResizeHandleMouseDown('nw', mouseEventAt(20, 30));
+      (component as unknown as Internals).onWindowMouseMove(mouseEventAt(90, 95));
+      (component as unknown as Internals).onWindowMouseUp();
+
+      expect(component.regionBox()).toEqual([0.6, 0.7, 0.9, 0.95]);
+    });
+
+    it('restores the pre-resize box when a handle collapses it to zero area', () => {
+      setupWrap(component);
+      const original: RegionBox = [0.2, 0.3, 0.6, 0.7];
+      component.regionBox.set(original);
+
+      let lastEmitted: RegionBox | null | undefined = undefined;
+      component.regionBoxChange.subscribe((v) => (lastEmitted = v));
+
+      // Release the east handle exactly on the west edge (0.2): zero width.
+      component.onResizeHandleMouseDown('e', mouseEventAt(60, 50));
+      (component as unknown as Internals).onWindowMouseMove(mouseEventAt(20, 50));
+      (component as unknown as Internals).onWindowMouseUp();
+
+      expect(component.regionBox()).toEqual(original);
+      // Restored to a state the parent already knew; no emit needed.
+      expect(lastEmitted).toBeUndefined();
+    });
+  });
+
   describe('marquee mode toggle', () => {
     function setupWrap(component: ImageViewerComponent) {
       component.renderedW.set(100);
