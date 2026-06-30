@@ -44,6 +44,21 @@ _TOTAL_LOAD_STEPS = 4  # download, load model, embed, finalize
 #                   download  model  embed  finalize
 _LOAD_STEP_WEIGHTS_CPU = [0.25, 0.10, 0.55, 0.10]
 
+# Image CPU profile. The generic CPU profile above assumes embedding dominates,
+# which holds for audio/video where each item is *seconds* of decode + a long
+# encoder pass. An image embed is a single ViT forward over one frame — far
+# cheaper per item — so on a CPU image import the embed phase no longer
+# dominates: archive download/extraction (many image demo sources are tens of MB
+# pulled over the network) and the un-accelerated finalize (dedup + diversity
+# k-means + registry serialize/zip/write) take a proportionally larger share.
+# With the generic 55%-embed profile the bar raced through embedding and then
+# crawled download/finalize. Shifting weight off embed and onto download +
+# finalize paces the image-on-CPU bar against its real phase split. (On a GPU
+# host the embed phase is fast for every media type, so the device profile below
+# already covers images — this override is CPU-only.)
+#                         download  model  embed  finalize
+_LOAD_STEP_WEIGHTS_CPU_IMAGE = [0.35, 0.10, 0.35, 0.20]
+
 # GPU profile. When embedding runs on a CUDA device it is several times faster,
 # so the embed phase shrinks while the *finalize* phase does not: the registry
 # save (serialize → zip → disk write) is never GPU-accelerated, and the
@@ -64,14 +79,20 @@ _LOAD_STEP_WEIGHTS_GPU = [0.20, 0.10, 0.30, 0.40]
 _LOAD_STEP_WEIGHTS = _LOAD_STEP_WEIGHTS_CPU
 
 
-def load_step_weights() -> list[float]:
-    """Return the dataset-load step weights for the active embedding device.
+def load_step_weights(media_type: str = "") -> list[float]:
+    """Return the dataset-load step weights for the active device and media type.
 
     GPU hosts embed several times faster, so the un-accelerated finalize phase
     (registry serialize/write, and CPU k-means when cuML is absent) becomes the
     dominant cost and earns a larger slice of the unified bar. Falls back to the
     CPU profile whenever the device can't be resolved (e.g. torch missing), so a
     library-only caller never crashes here.
+
+    On a CPU host the split also depends on *media_type*: an image embed is a
+    single cheap ViT forward per item, so embedding no longer dominates the way
+    it does for audio/video, and ``image`` gets a profile with weight shifted off
+    embed and onto download + finalize. The GPU profile is media-agnostic — a
+    fast embed phase already shrinks embed's slice for every media type.
     """
     try:
         from vtscore.config import resolve_device  # noqa: PLC0415
@@ -80,6 +101,8 @@ def load_step_weights() -> list[float]:
             return list(_LOAD_STEP_WEIGHTS_GPU)
     except Exception:
         pass
+    if media_type == "image":
+        return list(_LOAD_STEP_WEIGHTS_CPU_IMAGE)
     return list(_LOAD_STEP_WEIGHTS_CPU)
 
 

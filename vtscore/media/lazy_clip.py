@@ -189,7 +189,20 @@ def clip_recipe(media: dict[str, Any]) -> tuple | None:
     The converter branch is checked first and is keyed by the ``converter``
     param, not the target media type: a ``document2image`` output has
     ``media_type == "image"`` but is a converter output, not an image *clip*.
+
+    **Archive members never lazy-slice.** A ``local_archive_member`` media may
+    carry ``clip_start`` / ``clip_end`` (a windowed import), but its window is
+    *display-only*: the byte routes serve the whole member and the player seeks
+    within the window.  These corpora are AAC/MP4, which the WAV-only audio
+    slicer cannot cut and which we deliberately do not decode server-side, so we
+    return ``None`` here and let the caller fall through to whole-member byte
+    serving.
     """
+    from vtscore.datasets.archive_stream import archive_member_ref  # noqa: PLC0415
+
+    if archive_member_ref(media) is not None:
+        return None
+
     origin = media.get("origin")
     params = origin.get("params", {}) if isinstance(origin, dict) else {}
 

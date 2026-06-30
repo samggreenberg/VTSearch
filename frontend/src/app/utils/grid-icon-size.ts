@@ -16,11 +16,17 @@ const GRID_GAP = 4;
  * When the user releases the panel resize divider, snap the panel width down to
  * the minimum width that still shows the same number of grid columns.
  *
- * Finds the active grid container (.media-list.grid-layout, .vote-list.grid-layout,
- * .bsp-list.grid-layout, or the virtualized .media-list.grid-virtual viewport) inside
- * panelEl, reads the current column count from the live DOM (so scrollbar width and all
- * structural offsets are automatically accounted for), and returns the snapped panel
- * width. Returns null if the panel is not in grid mode or the element is not found.
+ * Finds the active grid container (.media-list.grid-layout, the virtualized
+ * .media-list.grid-virtual viewport, .vote-list, or .bsp-list) inside panelEl, reads the
+ * current column count from the live DOM (so scrollbar width and all structural offsets
+ * are automatically accounted for), and returns the snapped panel width. Returns null if
+ * no grid container is found.
+ *
+ * The right panel's `.vote-list` and the browse panel's `.bsp-list` are always grids
+ * (the old list view mode was removed), so they carry no `.grid-layout` marker class;
+ * they are matched by their base class alone. The left `.media-list` still carries
+ * `.grid-layout` (and `.grid-virtual` when virtualized) because that selector also has
+ * to exclude its skeleton/non-grid states.
  *
  * The left panel switches to a CDK virtual-scroll viewport (.grid-virtual) once a view
  * grows past its grid-virtualization threshold; that viewport carries the same
@@ -31,8 +37,8 @@ export function snapPanelWidthToGridColumns(panelEl: HTMLElement, currentPanelWi
   const gridEl = (
     panelEl.querySelector('.media-list.grid-layout') ??
     panelEl.querySelector('.media-list.grid-virtual') ??
-    panelEl.querySelector('.vote-list.grid-layout') ??
-    panelEl.querySelector('.bsp-list.grid-layout')
+    panelEl.querySelector('.vote-list') ??
+    panelEl.querySelector('.bsp-list')
   ) as HTMLElement | null;
   if (!gridEl) return null;
 

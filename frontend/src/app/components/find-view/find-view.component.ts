@@ -350,11 +350,12 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
           this.sortState.setLoadSortLabel(modelName);
           this.sortState.setSortStatus('');
           this.sortState.setSortProgress(0, 0);
-          // Seed the centre on the marginal positive (lowest item ≥ cutoff).
-          // With nothing verified yet this is the same rule auto-advance uses,
-          // so seed and advance unify.
+          // Seed the centre on the marginal positive (lowest item ≥ cutoff):
+          // a fresh score restarts the boundary walk on the `above` side, so
+          // the seed and the first auto-advance unify on the same item.
           this.queueEmptyNotified = false;
-          this.advanceToMarginalPositive();
+          this.nextFindSide = 'above';
+          this.advanceToBoundary();
           // Reload votes to reflect newly applied labels
           this.voteState.loadVotes();
         },
@@ -512,40 +513,81 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.voteState.setOptimisticVerified(event.id, verified);
     // Re-fetch labelset counters + the authoritative verified set.
     this.voteState.loadVotes();
-    // Auto-advance to the marginal positive (the lowest unverified item still
-    // above the cutoff), so "just sit and vote" walks the boundary upward.
-    this.advanceToMarginalPositive();
+    // Auto-advance to the next item on the boundary walk, so "just sit and
+    // vote" samples both faces of the cutoff instead of only the positives.
+    this.advanceToBoundary();
   }
 
   /**
-   * Select the next item to review: the lowest-scored unverified item still
-   * above the cutoff (the Unverified Good nearest the line). This is a cheap
-   * active-learning order — always the most marginal positive next. The queue
-   * is empty exactly when no unverified item remains above the cutoff; that is
-   * the done state.  Mirrors the initial seed in {@link runFindLabel}.
+   * Select the next item to review by walking *outward from the cutoff*,
+   * alternating sides: the nearest unverified item above the line, then the
+   * nearest below, then the next above, and so on. "Just sit and vote" then
+   * samples both faces of the decision boundary — the marginal positives the
+   * detector barely accepted and the marginal negatives it barely rejected —
+   * rather than only marching up the positive pile (the old marginal-positive
+   * order). A fresh score resets {@link nextFindSide} to `'above'`, so the
+   * initial seed in {@link runFindLabel} still lands on the marginal positive.
+   *
+   * The queue is empty only when no unverified item remains on *either* side;
+   * that is the done state.
    */
-  private advanceToMarginalPositive(): void {
+  private advanceToBoundary(): void {
     const order = this.sortState.sortOrder;
     const threshold = this.sortState.threshold;
     if (!order || threshold == null) return;
     const verified = this.voteState.verifiedIds;
-    let target: number | null = null;
+    // `order` is descending by score. The unverified item closest above the
+    // line is the *lowest* one still ≥ threshold (keep overwriting as we
+    // descend); the closest below is the *highest* one < threshold (the first
+    // sub-threshold item we hit). One pass finds both.
+    let closestAbove: number | null = null;
+    let closestBelow: number | null = null;
     for (const item of order) {
-      if (item.score < threshold) break; // below the cutoff: nothing left above
-      if (!verified.has(item.id)) target = item.id;
+      if (verified.has(item.id)) continue;
+      if (item.score >= threshold) {
+        closestAbove = item.id;
+      } else if (closestBelow == null) {
+        closestBelow = item.id;
+      }
     }
-    if (target != null) {
+    // Prefer the side it's this turn; fall back to the other side when the
+    // preferred one is exhausted so the walk continues until both are empty.
+    let target: number | null = null;
+    let took: 'above' | 'below' | null = null;
+    if (this.nextFindSide === 'above') {
+      if (closestAbove != null) {
+        [target, took] = [closestAbove, 'above'];
+      } else if (closestBelow != null) {
+        [target, took] = [closestBelow, 'below'];
+      }
+    } else {
+      if (closestBelow != null) {
+        [target, took] = [closestBelow, 'below'];
+      } else if (closestAbove != null) {
+        [target, took] = [closestAbove, 'above'];
+      }
+    }
+    if (target != null && took != null) {
+      // Flip so the next advance samples the opposite face of the boundary.
+      this.nextFindSide = took === 'above' ? 'below' : 'above';
       this.queueEmptyNotified = false;
       this.mediaState.selectMedia(target);
     } else if (!this.queueEmptyNotified) {
       this.queueEmptyNotified = true;
       this.toast.success({
-        message: 'All positives reviewed',
-        detail: 'Every item above the cutoff has been verified. Check Stats or Export your results.',
+        message: 'All items reviewed',
+        detail: 'Every item on both sides of the cutoff has been verified. Check Stats or Export your results.',
         dedupKey: 'find-queue-empty',
       });
     }
   }
+
+  /**
+   * Which face of the cutoff {@link advanceToBoundary} serves next. Starts on
+   * `'above'` (so the seed is the marginal positive) and flips after each pick,
+   * alternating above/below as the user votes down the boundary.
+   */
+  private nextFindSide: 'above' | 'below' = 'above';
 
   private queueEmptyNotified = false;
 
@@ -608,14 +650,44 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * Ids of the unverified positives: the above-threshold items (``goodVotes``)
-   * the human hasn't acted on yet (``goodVotes − verifiedIds``). The left
-   * work-queue actions (Browse / To Dataset / Export) all scope over exactly
-   * this set, as opposed to the right panel's full-good-set actions.
+   * Ids of the unverified positives: the above-cutoff items the human hasn't
+   * acted on yet. The left work-queue actions (Browse / To Dataset / Export)
+   * all scope over exactly this set, as opposed to the right panel's
+   * full-good-set actions.
+   *
+   * Derived from the *frozen scores + current cutoff* (`sortOrder` + `threshold`)
+   * rather than the `goodVotes` signal, because those two move **synchronously**
+   * when the Inclusion slider does (`onInclusionChange` sets them on the POST
+   * response), whereas `goodVotes` only catches up on the follow-up
+   * `loadVotes()` GET. Reading `goodVotes` here let a Browse fired right after a
+   * slide pick up the *previous* cutoff's positives (the stale-superset bug);
+   * scoring against the live cutoff keeps Browse in lock-step with the green
+   * line the user sees. Falls back to `goodVotes` only when scores are absent
+   * (no scoring pass yet).
    */
   private unverifiedGoodIds(): number[] {
     const verified = this.voteState.verifiedIds;
+    const order = this.sortState.sortOrder;
+    const threshold = this.sortState.threshold;
+    if (order && threshold != null) {
+      return order
+        .filter((item) => item.score >= threshold && !verified.has(item.id))
+        .map((item) => item.id);
+    }
     return Array.from(this.voteState.goodVotes).filter((id) => !verified.has(id));
+  }
+
+  /**
+   * The full positive set of this Find run: every verified-good item (pinned by
+   * the human, wherever its score lands) plus the unverified positives (above
+   * the live cutoff). The unverified half rides {@link unverifiedGoodIds}, so it
+   * tracks the cutoff synchronously and never lags a slide; the verified half is
+   * cutoff-independent and read straight off the votes.
+   */
+  private goodIds(): number[] {
+    const verified = this.voteState.verifiedIds;
+    const verifiedGood = Array.from(this.voteState.goodVotes).filter((id) => verified.has(id));
+    return [...verifiedGood, ...this.unverifiedGoodIds()];
   }
 
   /**
@@ -624,7 +696,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * scopes to the unverified positives instead ({@link onBrowseUnverified}).
    */
   onBrowse(): void {
-    this.browseIds(Array.from(this.voteState.goodVotes), 'positives');
+    this.browseIds(this.goodIds(), 'positives');
   }
 
   /**
@@ -661,7 +733,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * positives instead ({@link onToDatasetUnverified}).
    */
   onToDataset(): void {
-    this.toDatasetFromIds(Array.from(this.voteState.goodVotes));
+    this.toDatasetFromIds(this.goodIds());
   }
 
   /** Promote only the unverified positives into their own dataset. */

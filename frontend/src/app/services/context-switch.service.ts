@@ -212,8 +212,8 @@ export class ContextSwitchService {
           }),
         )
         .subscribe({
-          next: () => {
-            this.waitForDatasetLoad(current, datasetId).subscribe({
+          next: (resp) => {
+            this.waitForDatasetLoad(current, datasetId, resp?.task_id ?? '').subscribe({
               next: () => {
                 sub.next();
                 sub.complete();
@@ -237,8 +237,8 @@ export class ContextSwitchService {
           }),
         )
         .subscribe({
-          next: () => {
-            this.waitForDetectorLoad(current, detectorId).subscribe({
+          next: (resp) => {
+            this.waitForDetectorLoad(current, detectorId, resp?.task_id ?? '').subscribe({
               next: () => {
                 sub.next();
                 sub.complete();
@@ -249,15 +249,44 @@ export class ContextSwitchService {
     });
   }
 
-  private waitForDatasetLoad(current: ActiveSwitch, datasetId: string): Observable<void> {
+  /**
+   * Resolve once the dataset load identified by *taskId* has settled.
+   *
+   * Keying on the load's own ``task_id`` (not just ``dataset_id``) closes
+   * the SSE-lag race: ``loadRegistered`` resolves the moment the backend
+   * *kicks off* the background load, which is typically before the
+   * ``loading-tasks`` channel has reported the new task. A plain
+   * "no non-idle task for this dataset" check reads that empty window as
+   * "already finished" and promotes active early, so the next request
+   * (e.g. the projection build the Browse button fires) hits a dataset
+   * that isn't loaded yet and 409s. Instead we wait until the specific
+   * task has been *observed* in the stream and is no longer running —
+   * mirroring `DashboardLoadingTasksService`'s `awaitedTaskIds` guard.
+   *
+   * An empty ``taskId`` (the already-loaded / synchronous fast path that
+   * starts no tracked background task) falls back to the prior id-based
+   * "channel is quiet for this dataset" check, preserving that behavior.
+   */
+  private waitForDatasetLoad(
+    current: ActiveSwitch,
+    datasetId: string,
+    taskId: string,
+  ): Observable<void> {
     return new Observable<void>((sub) => {
+      let seen = false;
       this.progressEvents.loadingTasks$
         .pipe(
           takeUntil(current.cancellable),
-          filter(
-            (tasks: LoadingTask[]) =>
-              !tasks.some((t) => t.dataset_id === datasetId && t.status !== 'idle'),
-          ),
+          filter((tasks: LoadingTask[]) => {
+            if (!taskId) {
+              return !tasks.some((t) => t.dataset_id === datasetId && t.status !== 'idle');
+            }
+            const task = tasks.find((t) => t.task_id === taskId);
+            if (task) seen = true;
+            // Settled only once we've seen the task and it's no longer
+            // running (gone idle, or dropped from the stream entirely).
+            return seen && !(task && task.status !== 'idle');
+          }),
           take(1),
         )
         .subscribe({
@@ -270,15 +299,26 @@ export class ContextSwitchService {
     });
   }
 
-  private waitForDetectorLoad(current: ActiveSwitch, detectorId: string): Observable<void> {
+  /** Detector counterpart of {@link waitForDatasetLoad}; same SSE-lag race,
+   *  same task-id guard, same id-based fallback when no task is tracked. */
+  private waitForDetectorLoad(
+    current: ActiveSwitch,
+    detectorId: string,
+    taskId: string,
+  ): Observable<void> {
     return new Observable<void>((sub) => {
+      let seen = false;
       this.progressEvents.detectorLoadingTasks$
         .pipe(
           takeUntil(current.cancellable),
-          filter(
-            (tasks: LoadingTask[]) =>
-              !tasks.some((t) => t.detector_id === detectorId && t.status !== 'idle'),
-          ),
+          filter((tasks: LoadingTask[]) => {
+            if (!taskId) {
+              return !tasks.some((t) => t.detector_id === detectorId && t.status !== 'idle');
+            }
+            const task = tasks.find((t) => t.task_id === taskId);
+            if (task) seen = true;
+            return seen && !(task && task.status !== 'idle');
+          }),
           take(1),
         )
         .subscribe({

@@ -36,7 +36,7 @@ export class JobProgressComponent {
   @Input() description = '';
   /** Per-item detail (left of the bar), e.g. "012/345 FileABC.img". */
   @Input() detail = '';
-  /** Right-justified status, e.g. "~5.5 min left" or "45%". */
+  /** Right-justified status, e.g. "5.5 min left" or "45%". */
   @Input() eta = '';
   /** Bar fill state; defaults to an indeterminate spinner. */
   @Input() bar: ProgressBarState = { value: 0, max: 1, indeterminate: true };

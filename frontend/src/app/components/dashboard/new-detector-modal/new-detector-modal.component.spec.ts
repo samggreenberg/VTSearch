@@ -97,12 +97,36 @@ describe('NewDetectorModalComponent', () => {
     expect(component.canSubmitBlank).toBe(true);
   });
 
-  it('should disable media buttons when text is entered', () => {
-    component.pendingText.set('');
-    expect(component.hasPendingText).toBe(false);
+  it('should default the example tab to text', () => {
+    expect(component.exampleTab()).toBe('text');
+  });
 
-    component.pendingText.set('some text');
-    expect(component.hasPendingText).toBe(true);
+  it('should switch between text and media example tabs', () => {
+    component.setExampleTab('media');
+    expect(component.exampleTab()).toBe('media');
+    component.setExampleTab('text');
+    expect(component.exampleTab()).toBe('text');
+  });
+
+  it('should label the media tab from the detector media type', () => {
+    component.mediaType.set('image');
+    expect(component.exampleMediaTabLabel).toBe('Image');
+    component.mediaType.set('audio');
+    expect(component.exampleMediaTabLabel).toBe('Audio');
+  });
+
+  it('should drop a selected media example when the user types text', () => {
+    component.exampleType.set('media');
+    component.exampleValue.set('file.wav');
+    component.exampleDisplay.set('file.wav');
+    component.exampleTab.set('media');
+    expect(component.hasMediaExample).toBe(true);
+
+    // Typing a text example is mutually exclusive with the media example.
+    component.onPendingTextInput('dog barking');
+
+    expect(component.hasMediaExample).toBe(false);
+    expect(component.pendingText()).toBe('dog barking');
   });
 
   it('should clear pending text when media example is set', () => {
@@ -217,6 +241,31 @@ describe('NewDetectorModalComponent', () => {
     component.onPendingTextInput('cat meowing');
     expect(component.pendingText()).toBe('cat meowing');
     expect(component.name()).toBe('Dog Barks');
+  });
+
+  it('auto-selects the lone importer when a single-source category is opened', () => {
+    // "Files" has exactly one importer (server_folder), so opening it should
+    // skip the redundant one-button sub-tab bar and land on the path input.
+    component.mediaImporters.set([
+      { name: 'server_folder', picker_view: 'server_folder', category: 'server' },
+      { name: 'demo', picker_view: 'demo', category: 'demo' },
+    ]);
+
+    component.selectImporterTab('server');
+
+    expect(component.selectedImporter?.name).toBe('server_folder');
+    expect(component.activePickerView).toBe('server_folder');
+  });
+
+  it('does not auto-select when a category holds more than one importer', () => {
+    component.mediaImporters.set([
+      { name: 'server_folder', picker_view: 'server_folder', category: 'server' },
+      { name: 'server_other', picker_view: 'server_folder', category: 'server' },
+    ]);
+
+    component.selectImporterTab('server');
+
+    expect(component.selectedImporter).toBeNull();
   });
 });
 

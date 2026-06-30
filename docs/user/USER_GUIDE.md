@@ -174,6 +174,57 @@ is used for any file that doesn't have a pre-computed vector, and
 also acts as the model identifier recorded on each media. Pick an
 embedder that matches the vectors in your NPZ.
 
+### Archive members, no extraction (WebDataset shards)
+
+Some corpora are too large to unpack. WebDataset-style collections pack
+tens of thousands of audio/video chunks inside a handful of multi-GB
+`shard_*.tar` (or `.zip`) files - the multivent-raw `videos/` set alone
+is **4.1 TB across 667 shards** - so extracting a second on-disk copy
+is a non-starter. The **Server → Archive members (no extract)** importer
+(📦 in the importer picker) loads a chosen subset of those chunks
+**without unpacking anything**: each imported media records only
+`{archive path, member name}` and streams that single tar/zip member on
+demand (HTTP Range), so playing a clip transfers a few seconds of bytes
+rather than the whole shard. Nothing is written to disk, and no member
+data is read at import time - the importer only walks each referenced
+shard's tar headers to confirm the member exists and record its size.
+
+The importer has two fields:
+
+- **Dataset MediaType** - the kind of media the referenced members hold
+  (e.g. `video` or `audio`).
+- **Manifest (.npz)** - a server-path field pointing at a single `.npz`
+  manifest that pairs the chosen members with their **pre-computed**
+  vectors. Because the embeddings are supplied, the import needs no GPU
+  and skips the embed stage entirely.
+
+**Manifest schema.** The `.npz` holds these arrays, one entry per row:
+
+| Array | Shape | Required | Meaning |
+|-------|-------|----------|---------|
+| `vectors` (or `embeddings`) | *(N, D)* float | yes | one pre-computed vector per row |
+| `members` | *(N,)* string | yes | member name within its archive |
+| `archives` | *(N,)* string, or a single value | yes | archive path per row; a scalar is broadcast to every row (one-shard manifests). Relative paths resolve against the manifest's own directory |
+| `filenames` | *(N,)* string | no | display names (default: the member's basename) |
+| `clip_start` / `clip_end` | *(N,)* float seconds | no | sub-file **clip window** extents; a blank/`NaN` extent means a whole-member row |
+| `window_id` | *(N,)* | no | per-window id (default: the clip start) |
+| `embedder_name` | scalar string | no | the embedder that produced the vectors |
+
+**Clip windows.** When rows carry `clip_start` / `clip_end`, the *same*
+member can appear in several rows as distinct **sub-file clip windows**
+(e.g. ≈14 × 10 s CLAP windows per chunk), each becoming its own
+searchable media with its own pre-computed vector. Windowed media are
+**display-only**: the byte routes always serve the whole member and the
+player seeks/loops within `[clip_start, clip_end]` - VTSearch never
+slices an AAC/MP4 member server-side. Each window gets a content-id that
+folds in the window, so de-duplication, voting, and labels stay unique
+per window.
+
+The vector dimension and embedder must match what VTSearch uses for that
+media type, exactly as for the [`.npz` manifest importer](#pre-computed-embeddings-npz)
+above - pick an *Embedder* (or set `embedder_name` in the manifest) that
+matches the vectors you supplied.
+
 ---
 
 ## The three-panel layout
@@ -672,9 +723,14 @@ The control cluster at the bottom-left of the canvas gives you:
 - **Zoom in / Zoom to fit / Zoom out** - or drag to pan and scroll to
   zoom directly on the canvas.
 - **Thumbnail size** - smaller or bigger tiles.
-- **Bin shape** - hexagons or squares.
 - **Region select** - the dashed-rectangle toggle (or `Shift`+drag) lets
   you drag a box to select every item inside it.
+
+The tiles are **squares** for media with browsable thumbnails (images,
+video, documents) so the thumbnails pack edge-to-edge, and **hexagons**
+for audio and text, where the tile is a density cell rather than a
+picture. The shape is chosen automatically from the dataset's media type -
+there's nothing to set.
 
 Top-left, **Re-project** shuffles the items into a fresh 2-D layout
 (handy when a cluster lands somewhere awkward), and **Back to Dashboard**

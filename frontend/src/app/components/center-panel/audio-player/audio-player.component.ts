@@ -30,6 +30,14 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   // whenever the metadata cache hydrates; without this guard, every cache
   // refresh would re-`loadAudio()` and snap playback back to t=0.
   private lastMediaId: number | null = null;
+  private clipCheckInterval: ReturnType<typeof setInterval> | null = null;
+  // Whether (loadedmetadata) has fired for the current audioSrc. Clip bounds
+  // (clip_start/clip_end) often arrive via batch hydration *after* the audio
+  // has already loaded, on a later ngOnChanges with the same media id; in that
+  // case (loadedmetadata) does not fire again, so we (re)apply the bounds here.
+  // Mirrors VideoPlayerComponent: archive-member audio windows serve the whole
+  // member and seek/loop within [clip_start, clip_end] (display-only).
+  private metadataLoaded = false;
 
   ngAfterViewInit(): void {
     this.viewReady = true;
@@ -38,11 +46,20 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['media'] && this.media && this.media.id !== this.lastMediaId) {
-      this.lastMediaId = this.media.id;
-      this.audioSrc = this.activeContext.mediaUrl(`/api/medias/${this.media.id}/audio`);
-      if (this.viewReady) {
-        this.loadAudio();
+    if (changes['media'] && this.media) {
+      if (this.media.id !== this.lastMediaId) {
+        this.lastMediaId = this.media.id;
+        this.metadataLoaded = false;
+        this.stopClipEnforcement();
+        this.audioSrc = this.activeContext.mediaUrl(`/api/medias/${this.media.id}/audio`);
+        if (this.viewReady) {
+          this.loadAudio();
+        }
+      } else if (this.metadataLoaded) {
+        // Same media id, but metadata (e.g. clip_start/clip_end) may have just
+        // arrived via batch hydration. The audio already loaded, so
+        // (loadedmetadata) won't fire again; apply the clip window now.
+        this.applyClipBounds();
       }
     }
     if (changes['volume'] && this.audioRef?.nativeElement) {
@@ -54,6 +71,7 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   }
 
   ngOnDestroy(): void {
+    this.stopClipEnforcement();
     this.waveformAbort?.abort();
     this.waveformAbort = null;
     const audio = this.audioRef?.nativeElement;
@@ -61,6 +79,61 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
       audio.pause();
       audio.removeAttribute('src');
       audio.load();
+    }
+  }
+
+  onLoadedMetadata(): void {
+    const audio = this.audioRef?.nativeElement;
+    if (!audio) return;
+    this.metadataLoaded = true;
+    audio.volume = this.volume;
+    this.applyClipBounds();
+    this.syncPlaybackState();
+  }
+
+  // Seek into the clip window and (re)start boundary enforcement when the media
+  // carries clip extents; otherwise tear enforcement down. Safe to call both on
+  // (loadedmetadata) and on later metadata-enrichment ngOnChanges cycles.
+  private applyClipBounds(): void {
+    const audio = this.audioRef?.nativeElement;
+    if (!audio) return;
+
+    if (this.media?.clip_start != null) {
+      const clipStart = this.media.clip_start;
+      const clipEnd = this.media.clip_end;
+      // Snap into the window only when currently outside it, so we don't yank
+      // audio already looping correctly within its window.
+      if (audio.currentTime < clipStart || (clipEnd != null && audio.currentTime >= clipEnd)) {
+        audio.currentTime = clipStart;
+      }
+      this.startClipEnforcement();
+    } else {
+      this.stopClipEnforcement();
+    }
+  }
+
+  private startClipEnforcement(): void {
+    this.stopClipEnforcement();
+    if (this.media?.clip_start == null || this.media?.clip_end == null) return;
+
+    const clipStart = this.media.clip_start;
+    const clipEnd = this.media.clip_end;
+
+    // Poll every 100ms to enforce clip boundaries. When the audio reaches
+    // clip_end, loop back to clip_start instead of continuing.
+    this.clipCheckInterval = setInterval(() => {
+      const audio = this.audioRef?.nativeElement;
+      if (!audio || audio.paused) return;
+      if (audio.currentTime >= clipEnd || audio.currentTime < clipStart) {
+        audio.currentTime = clipStart;
+      }
+    }, 100);
+  }
+
+  private stopClipEnforcement(): void {
+    if (this.clipCheckInterval != null) {
+      clearInterval(this.clipCheckInterval);
+      this.clipCheckInterval = null;
     }
   }
 

@@ -77,6 +77,7 @@
             [thumbnailBorder]="thumbnailBorder()"
             [zoomsPerLevel]="zoomsPerLevel()"
             [marqueeMode]="marqueeMode"
+            [shiftHeld]="shiftHeld()"
             (hexHover)="onHexHover($event)"
             (densityMaxChanged)="onDensityMaxChanged($event)"
             (contextMenu)="onCanvasContextMenu($event)"
@@ -102,8 +103,8 @@
               <button
                 type="button"
                 class="browse-size-btn"
-                [class.browse-size-btn--active]="marqueeMode"
-                [attr.aria-pressed]="marqueeMode"
+                [class.browse-size-btn--active]="regionDrawActive"
+                [attr.aria-pressed]="regionDrawActive"
                 (click)="toggleMarqueeMode()"
                 title="Region select: drag to select a region (Shift+drag also works)"
                 aria-label="Region select: drag to select a region">
@@ -154,28 +155,6 @@
                 title="Bigger thumbnails"
                 aria-label="Bigger thumbnails">
                 <vt-icon type="image" [size]="18"></vt-icon>
-              </button>
-            </div>
-            <div class="browse-shape" role="group" aria-label="Bin shape">
-              <button
-                type="button"
-                class="browse-size-btn browse-size-btn--glyph"
-                [class.browse-size-btn--active]="binShape() === 'hex'"
-                [attr.aria-pressed]="binShape() === 'hex'"
-                (click)="setBinShape('hex')"
-                title="Hexagon bins"
-                aria-label="Hexagon bins">
-                &#x2B22;
-              </button>
-              <button
-                type="button"
-                class="browse-size-btn browse-size-btn--glyph browse-size-btn--square-glyph"
-                [class.browse-size-btn--active]="binShape() === 'square'"
-                [attr.aria-pressed]="binShape() === 'square'"
-                (click)="setBinShape('square')"
-                title="Square bins"
-                aria-label="Square bins">
-                &#x25A0;
               </button>
             </div>
           </div>

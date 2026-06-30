@@ -191,12 +191,6 @@
           "autopilot_top_greens": {
             "type": "integer"
           },
-          "browse_bin_shape": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object"
-          },
           "browse_colormap": {
             "additionalProperties": {
               "type": "string"
@@ -1132,6 +1126,11 @@
             },
             "nullable": true,
             "type": "array"
+          },
+          "merge_near_duplicates": {
+            "default": "false",
+            "description": "When 'true', collapse near-duplicate media into dupe sets at ingest.",
+            "type": "string"
           },
           "name": {
             "minLength": 1,
@@ -4542,7 +4541,6 @@
           "autopilot_top_greens": {
             "type": "integer"
           },
-          "browse_bin_shape": {},
           "browse_colormap": {},
           "browse_compact": {},
           "browse_icon_size": {},
@@ -4676,15 +4674,6 @@
             },
             "minItems": 1,
             "type": "array"
-          },
-          "shape": {
-            "default": "hex",
-            "description": "Bin shape whose updated meta to return (hex | square).",
-            "enum": [
-              "hex",
-              "square"
-            ],
-            "type": "string"
           }
         },
         "required": [
@@ -5865,6 +5854,62 @@
         ],
         "type": "object"
       },
+      "import_dataset_LocalArchiveMemberImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
+          "clipper": {
+            "default": null,
+            "nullable": true
+          },
+          "clipper_params": {
+            "default": null,
+            "nullable": true
+          },
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "embedder": {
+            "default": null,
+            "nullable": true
+          },
+          "embedders": {
+            "default": null,
+            "nullable": true
+          },
+          "manifest": {
+            "type": "string"
+          },
+          "media_type": {
+            "default": "video",
+            "enum": [
+              "audio",
+              "document",
+              "image",
+              "text",
+              "video",
+              ""
+            ],
+            "type": "string"
+          },
+          "merge_near_duplicates": {
+            "default": null,
+            "nullable": true
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "manifest"
+        ],
+        "type": "object"
+      },
       "import_dataset_LocalFilesDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
@@ -6482,6 +6527,38 @@
         },
         "required": [
           "url"
+        ],
+        "type": "object"
+      },
+      "stage_import_LocalArchiveMemberImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "manifest": {
+            "type": "string"
+          },
+          "media_type": {
+            "default": "video",
+            "enum": [
+              "audio",
+              "document",
+              "image",
+              "text",
+              "video",
+              ""
+            ],
+            "type": "string"
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "manifest"
         ],
         "type": "object"
       },
@@ -8216,6 +8293,34 @@
         ]
       }
     },
+    "/api/dataset/import/local_archive_member": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "import_dataset__local_archive_member",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/import_dataset_LocalArchiveMemberImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer by name in a background thread.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
     "/api/dataset/import/local_files": {
       "post": {
         "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
@@ -8839,6 +8944,34 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/stage_import_HttpArchiveDatasetImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer in staging mode.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/stage-import/local_archive_member": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "stage_import__local_archive_member",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/stage_import_LocalArchiveMemberImporter_Args"
               }
             }
           },
@@ -12979,7 +13112,7 @@
     },
     "/api/projection/build": {
       "post": {
-        "description": "Body: ``{\"shape\": \"hex\" | \"square\", \"ids\": [...]?, \"force\": bool?}``\n(``shape`` defaults to hex).\n\nReturns immediately.  If the pyramid for this shape is already cached or\npersisted, returns ``\"ready\"``.  If the shared UMAP layout already exists\n(e.g. the other shape was built first), the new shape is re-binned inline\nand returned ready \u2014 no UMAP re-fit.  Only the first build of a dataset,\nwhere no layout exists yet, runs UMAP in the background and returns a\n``job_id`` for polling via ``GET /api/projection/meta``.\n\n``force`` overrides every short-circuit: it discards the existing layout\n(cached + persisted for a full build, or the in-memory subset layout for an\n``ids`` build) and runs a fresh UMAP fit over the current items, returning a\nnew ``projection_id``.  This is the Browser's \"Re-project\" action.",
+        "description": "Body: ``{\"ids\": [...]?, \"force\": bool?}``.  The bin shape is not a request\nparameter \u2014 it is derived from the dataset's media type (see\n:func:`_shape_for`).\n\nReturns immediately.  If the pyramid is already cached or persisted, returns\n``\"ready\"``.  Only the first build of a dataset, where no layout exists yet,\nruns UMAP in the background and returns a ``job_id`` for polling via\n``GET /api/projection/meta``.\n\n``force`` overrides every short-circuit: it discards the existing layout\n(cached + persisted for a full build, or the in-memory subset layout for an\n``ids`` build) and runs a fresh UMAP fit over the current items, returning a\nnew ``projection_id``.  This is the Browser's \"Re-project\" action.",
         "operationId": "build_projection",
         "responses": {
           "200": {
@@ -12999,7 +13132,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Kick off (or short-circuit) a build of the requested bin shape.",
+        "summary": "Kick off (or short-circuit) a build of the dataset's projection.",
         "tags": [
           "projection"
         ]
@@ -13007,7 +13140,7 @@
     },
     "/api/projection/meta": {
       "get": {
-        "description": "Query: ``?shape=hex|square`` (defaults to hex).\n\nWhen the requested shape's pyramid is ready, includes bounds, zoom levels,\ncell sizing, point count, the dataset's media type, and the ``bin_shape``\nthe canvas should render.",
+        "description": "The bin shape is derived from the dataset's media type (see\n:func:`_shape_for`), not a query parameter.  When the pyramid is ready,\nincludes bounds, zoom levels, cell sizing, point count, the dataset's media\ntype, and the ``bin_shape`` the canvas should render.",
         "operationId": "projection_meta",
         "responses": {
           "200": {
@@ -13024,7 +13157,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Return projection/pyramid metadata and build status for a bin shape.",
+        "summary": "Return projection/pyramid metadata and build status for the dataset.",
         "tags": [
           "projection"
         ]
@@ -13032,7 +13165,7 @@
     },
     "/api/projection/subset/remove": {
       "post": {
-        "description": "Re-bins the frozen subset layout onto its existing grid minus the removed\npoints: the remaining points keep their exact 2-D positions and bins, only\ncounts/representatives change.  The ``projection_id`` (layout identity) is\npreserved and a bumped ``content_version`` busts the otherwise-immutable\ntile cache.  The served ``bounds`` shrink to the survivors' extent so the\nclient re-frames to what's left (zoom-to-fit, minimap) instead of keeping\ndead space where the culled points were \u2014 safe because bin assignment is\norigin-independent; bounds only drive client framing.  Returns the updated\nsubset meta for *shape*.\n\nPowers the Browser's \"Remove from Good\" cull, which marks the items Bad via\n``/api/medias/vote-bulk`` and then calls this to make them disappear.",
+        "description": "Re-bins the frozen subset layout onto its existing grid minus the removed\npoints: the remaining points keep their exact 2-D positions and bins, only\ncounts/representatives change.  The ``projection_id`` (layout identity) is\npreserved and a bumped ``content_version`` busts the otherwise-immutable\ntile cache.  The served ``bounds`` shrink to the survivors' extent so the\nclient re-frames to what's left (zoom-to-fit, minimap) instead of keeping\ndead space where the culled points were \u2014 safe because bin assignment is\norigin-independent; bounds only drive client framing.  Returns the updated\nsubset meta for the dataset's shape.\n\nPowers the Browser's \"Remove from Good\" cull, which marks the items Bad via\n``/api/medias/vote-bulk`` and then calls this to make them disappear.",
         "operationId": "remove_from_subset",
         "requestBody": {
           "content": {
@@ -13071,9 +13204,9 @@
         ]
       }
     },
-    "/api/projection/tiles/{shape}/{level}/{tx}/{ty}": {
+    "/api/projection/tiles/{level}/{tx}/{ty}": {
       "get": {
-        "description": "Because the projection is frozen at ingest, tiles are immutable for the\nlife of the dataset and can be cached aggressively by the client.",
+        "description": "The bin shape is derived from the dataset's media type (see\n:func:`_shape_for`).  Because the projection is frozen at ingest, tiles are\nimmutable for the life of the dataset and can be cached aggressively by the\nclient.",
         "operationId": "get_tile",
         "responses": {
           "200": {
@@ -13093,21 +13226,12 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Return the cells for one tile of the *shape* pyramid at ``(level, tx, ty)``.",
+        "summary": "Return the cells for one tile of the dataset's pyramid at ``(level, tx, ty)``.",
         "tags": [
           "projection"
         ]
       },
       "parameters": [
-        {
-          "in": "path",
-          "name": "shape",
-          "required": true,
-          "schema": {
-            "minLength": 1,
-            "type": "string"
-          }
-        },
         {
           "in": "path",
           "name": "level",

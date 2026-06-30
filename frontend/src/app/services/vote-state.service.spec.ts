@@ -342,6 +342,35 @@ describe('VoteStateService', () => {
       expect(service.goodVotes.has(5)).toBe(true);
       expect(service.clickTimes['5']).toBe(42);
     });
+
+    it('drops a stale /api/votes response that resolves after a fresher one (out-of-order race)', () => {
+      service.setFindMode(true);
+      // Flood-fill: 1, 2, 3 presumed good, none verified yet.
+      service.loadVotes();
+      httpMock
+        .expectOne('/api/votes')
+        .flush({ good: [1, 2, 3], bad: [], click_times: {}, learned_scores: {}, verified: [] });
+
+      // A read issued early (e.g. a poll that read the server before the vote
+      // commits) is still in flight; it will report the OLD verified set.
+      service.loadVotes(); // GET_stale
+
+      // The user verifies id 2; onMediaVoted optimistically marks it and fires
+      // its own post-vote read.
+      service.setOptimisticVerified(2, true);
+      service.loadVotes(); // GET_fresh
+
+      const [staleReq, freshReq] = httpMock.match('/api/votes');
+      // The fresher read lands first: the server now reports 2 as verified.
+      freshReq.flush({ good: [1, 2, 3], bad: [], click_times: {}, learned_scores: {}, verified: [1, 2] });
+      expect(service.verifiedIds.has(2)).toBe(true);
+
+      // The stale read lands later with the pre-vote verified set. It must be
+      // dropped, not applied — otherwise it wipes the just-verified id back out
+      // of the right pile (the find-verification staleness report).
+      staleReq.flush({ good: [1, 2, 3], bad: [], click_times: {}, learned_scores: {}, verified: [1] });
+      expect(service.verifiedIds.has(2)).toBe(true);
+    });
   });
 
   describe('undo / redo stack', () => {

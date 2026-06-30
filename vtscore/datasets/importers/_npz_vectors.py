@@ -27,7 +27,9 @@ loading arbitrary Python objects from untrusted archives.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -35,6 +37,11 @@ import numpy as np
 _FILENAMES_KEYS = ("filenames", "names", "paths", "filename")
 _VECTORS_KEYS = ("vectors", "embeddings", "vecs", "embedding")
 _EMBEDDER_NAME_KEYS = ("embedder_name", "embedder")
+_MEMBERS_KEYS = ("members", "member")
+_ARCHIVES_KEYS = ("archives", "archive", "shards", "shard")
+_CLIP_START_KEYS = ("clip_start", "clip_starts", "starts", "start")
+_CLIP_END_KEYS = ("clip_end", "clip_ends", "ends", "end")
+_WINDOW_ID_KEYS = ("window_id", "window_ids", "windows", "window")
 
 
 def read_npz_embedder_name(npz_path: Path) -> str:
@@ -105,3 +112,185 @@ def read_npz_filenames_and_vectors(npz_path: Path) -> dict[str, np.ndarray]:
         for k in keys:
             mapping[k] = np.asarray(data[k])
         return mapping
+
+
+def read_npz_archive_member_rows(npz_path: Path) -> list[dict]:
+    """Read archive-member rows from an ``.npz`` manifest.
+
+    This is the no-extraction counterpart of
+    :func:`read_npz_filenames_and_vectors`: instead of mapping a filesystem
+    path to a vector, each row references a **member inside a tar/zip shard**
+    plus its pre-computed embedding, so a filtered subset of a WebDataset-style
+    corpus imports without ever extracting the shards.
+
+    Expected arrays (NumPy ``.npz``, ``allow_pickle=False``):
+
+    * ``vectors`` / ``embeddings`` - ``(N, D)`` float embeddings, one per row.
+    * ``members`` - ``(N,)`` member names within their archive.
+    * ``archives`` - ``(N,)`` archive paths, **or** a single scalar/1-element
+      value applied to every row (one-shard manifests).  Relative paths are
+      resolved against the manifest's directory.
+    * ``filenames`` *(optional)* - ``(N,)`` display names; defaults to the
+      member's basename.
+    * ``clip_start`` / ``clip_end`` *(optional)* - ``(N,)`` window extents in
+      seconds.  When present, one member can appear in several rows, each a
+      distinct **sub-file clip window** (e.g. ≈14 × 10 s CLAP windows per
+      chunk); the importer fans them out into separate windowed media that the
+      player seeks/loops within (display-only, no byte slicing).
+    * ``window_id`` *(optional)* - ``(N,)`` per-window identifiers used to keep
+      each window's synthesized content-id unique; defaults to the clip start.
+    * ``embedder_name`` *(optional)* - scalar embedder name (see
+      :func:`read_npz_embedder_name`).
+
+    Returns a list of ``{"archive", "member", "filename", "vector",
+    "clip_start", "clip_end", "window_id"}`` dicts (the three clip fields are
+    ``None`` for an un-windowed manifest; archive paths resolved to absolute
+    strings).  Raises ``ValueError`` for a malformed manifest and
+    ``FileNotFoundError`` if the file is missing.
+    """
+    p = Path(npz_path)
+    if not p.is_file():
+        raise FileNotFoundError(f"NPZ file not found: {p}")
+
+    base_dir = p.resolve().parent
+    with np.load(p, allow_pickle=False) as data:
+        cols = _manifest_columns(data, p)
+        n = len(cols["members"])  # always present (validated in _manifest_columns)
+        rows = [row for i in range(n) if (row := _manifest_row(i, cols, base_dir)) is not None]
+        if not rows:
+            raise ValueError(f"NPZ manifest {p} produced no rows")
+        return rows
+
+
+def _manifest_columns(data, p: Path) -> dict[str, Any]:
+    """Resolve and validate every manifest column.
+
+    Returns a dict with the required ``vectors`` / ``members`` / ``archives``
+    columns and the optional ``filenames`` / ``clip_start`` / ``clip_end`` /
+    ``window_id`` columns (``None`` when the manifest omits them).  Every
+    optional column is broadcast to length *N* so a scalar can stand in for a
+    whole-manifest constant.
+    """
+    key_set = set(data.files)
+    vectors_key = next((k for k in _VECTORS_KEYS if k in key_set), None)
+    members_key = next((k for k in _MEMBERS_KEYS if k in key_set), None)
+    archives_key = next((k for k in _ARCHIVES_KEYS if k in key_set), None)
+
+    if vectors_key is None or members_key is None:
+        raise ValueError(
+            f"NPZ manifest {p} must contain a vectors array (one of {_VECTORS_KEYS}) "
+            f"and a members array (one of {_MEMBERS_KEYS})"
+        )
+
+    vecs_arr = data[vectors_key]
+    members_arr = np.atleast_1d(data[members_key])
+    if members_arr.ndim != 1:
+        raise ValueError(f"NPZ '{members_key}' array must be 1-D, got shape {members_arr.shape}")
+    n = len(members_arr)
+    if len(vecs_arr) != n:
+        raise ValueError(f"NPZ '{members_key}' and '{vectors_key}' have mismatched lengths ({n} vs {len(vecs_arr)})")
+    if archives_key is None:
+        raise ValueError(f"NPZ manifest {p} must contain an archives array (one of {_ARCHIVES_KEYS})")
+
+    return {
+        "vectors": vecs_arr,
+        "members": members_arr,
+        "archives": _broadcast_column(data[archives_key], n, "archives"),
+        "filenames": _optional_column(data, key_set, _FILENAMES_KEYS, n, "filenames"),
+        "clip_start": _optional_column(data, key_set, _CLIP_START_KEYS, n, "clip_start"),
+        "clip_end": _optional_column(data, key_set, _CLIP_END_KEYS, n, "clip_end"),
+        "window_id": _optional_column(data, key_set, _WINDOW_ID_KEYS, n, "window_id"),
+    }
+
+
+def _optional_column(data, key_set: set, keys: tuple, n: int, label: str) -> np.ndarray | None:
+    """Return a length-*n* broadcast of the first present *keys* column, else ``None``."""
+    key = next((k for k in keys if k in key_set), None)
+    if key is None:
+        return None
+    return _broadcast_column(data[key], n, label)
+
+
+def _manifest_row(i: int, cols: dict, base_dir: Path) -> dict | None:
+    """Build one window/member row, or ``None`` to skip an empty member."""
+    member = str(cols["members"][i]).strip()
+    if not member:
+        return None
+    archive = str(cols["archives"][i]).strip()
+    if not archive:
+        raise ValueError(f"manifest row {i} has an empty archive path")
+    archive_path = Path(archive)
+    if not archive_path.is_absolute():
+        archive_path = (base_dir / archive_path).resolve()
+    filenames_arr = cols["filenames"]
+    display = str(filenames_arr[i]).strip() if filenames_arr is not None else ""
+    return {
+        "archive": str(archive_path),
+        "member": member,
+        "filename": display or Path(member).name,
+        "vector": np.asarray(cols["vectors"][i]),
+        "clip_start": _row_float(cols["clip_start"], i),
+        "clip_end": _row_float(cols["clip_end"], i),
+        "window_id": _row_window_id(cols["window_id"], i),
+    }
+
+
+def _row_float(arr: np.ndarray | None, i: int) -> float | None:
+    """Return ``arr[i]`` as a float, or ``None`` when the column is absent/blank.
+
+    ``None`` covers three "no window for this row" encodings so a manifest can
+    mix windowed and whole-member rows in one float column: an absent column, a
+    blank string entry, and a ``NaN`` entry.
+    """
+    if arr is None:
+        return None
+    raw = arr[i]
+    if isinstance(raw, (bytes, np.bytes_, str, np.str_)) and not str(raw).strip():
+        return None
+    try:
+        val = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return None if math.isnan(val) else val
+
+
+def _row_window_id(arr: np.ndarray | None, i: int) -> str | None:
+    """Return ``arr[i]`` as a trimmed string id, or ``None`` when absent/blank."""
+    if arr is None:
+        return None
+    val = str(arr[i]).strip()
+    return val or None
+
+
+def window_suffix(window_id: str | None, clip_start: float | None) -> str:
+    """Return the per-window discriminator appended to a member's identity.
+
+    A windowed import fans one member into several media, so the member name
+    alone is no longer unique.  Prefer an explicit ``window_id``; otherwise key
+    on the window's start time; an un-windowed (whole-member) row contributes
+    the empty string.  Shared by the importer (synthesized md5 + ``origin_name``)
+    and the manifest-backed media source (re-supplying a specific window's
+    vector) so the two agree on a window's identity.
+    """
+    if window_id:
+        return f"#{window_id}"
+    if clip_start is not None:
+        return f"@{clip_start:g}"
+    return ""
+
+
+def _broadcast_column(arr: np.ndarray, n: int, label: str) -> np.ndarray:
+    """Return a length-*n* 1-D view of *arr*, broadcasting a scalar/1-element.
+
+    A manifest whose every row shares one archive may store ``archives`` as a
+    single scalar (or 1-element array); this expands it to one entry per row.
+    Raises ``ValueError`` for any other length mismatch.
+    """
+    flat = np.atleast_1d(arr)
+    if flat.ndim != 1:
+        raise ValueError(f"NPZ '{label}' array must be 1-D, got shape {flat.shape}")
+    if len(flat) == n:
+        return flat
+    if len(flat) == 1:
+        return np.repeat(flat, n)
+    raise ValueError(f"NPZ '{label}' has length {len(flat)}, expected {n} or 1")

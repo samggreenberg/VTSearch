@@ -60,7 +60,11 @@ def _build_projection_stage(ctx: DatasetContext, tracker, dataset_id: str) -> No
     reason.
     """
     from vtscore.embedding.matrix import get_embedding_matrix  # noqa: PLC0415
-    from vtscore.projection import build_pyramid, fit_projection  # noqa: PLC0415
+    from vtscore.projection import (  # noqa: PLC0415
+        bin_shape_for_media_type,
+        build_pyramid,
+        fit_projection,
+    )
 
     def _progress(current: int, total: int, message: str) -> None:
         tracker.check_cancelled()
@@ -88,9 +92,11 @@ def _build_projection_stage(ctx: DatasetContext, tracker, dataset_id: str) -> No
 
     proj = fit_projection(matrix, list(sorted_ids), on_progress=_on_fit_progress)
     _progress(0, 1, "Building tile pyramid…")
-    # Build the default (hex) binning at ingest; the square binning is derived
-    # lazily on first toggle in the browse view, then cached/persisted there.
-    pyr = build_pyramid(proj)
+    # The bin shape is a fixed property of the dataset's media type — squares
+    # for browsable-thumbnail media (image/video/document), hexes otherwise —
+    # so build exactly the one shape this dataset will ever use.
+    media_type = next(iter(ctx.medias.values())).get("media_type") if ctx.medias else None
+    pyr = build_pyramid(proj, bin_shape=bin_shape_for_media_type(media_type))
     _progress(1, 1, "Projection ready")
 
     ctx._projection = proj

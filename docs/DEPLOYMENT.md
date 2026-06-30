@@ -638,37 +638,176 @@ via the folder or pickle importer instead.
 bash scripts/install.sh
 ```
 
-### GPU install prints a red "dependency conflicts" report (harmless)
+### `install.sh` installs CPU torch on a machine that has a GPU
 
-**Symptom**: The cuML step of `scripts/install.sh` ends with a wall of red
-text, then keeps going and reports success:
+**Symptom**: On a GPU host (e.g. an AWS `g4dn` with a Tesla T4), `scripts/install.sh`
+detects the card has no driver and offers to fix it:
 
 ```
-ERROR: pip's dependency resolver does not currently take into account all the
-packages that are installed. This behaviour is the source of the following
-dependency conflicts.
-torch 2.6.0+cu124 requires nvidia-cublas-cu12==12.4.5.8 ... but you have
-nvidia-cublas-cu12 12.9.2.10 which is incompatible.
-... (one line per nvidia-*-cu12 lib)
-Successfully installed nvidia-cublas-cu12-12.9.2.10 ...
-  cuML installed: GPU UMAP + k-means enabled.
+NOTICE: An NVIDIA GPU is physically present, but no usable driver was found ...
+
+What would you like to do?
+  [i] Install the NVIDIA driver now (needs sudo; may require a reboot) -- recommended
+  [c] Install CPU-only torch instead (no GPU acceleration)
+  [s] Stop and fix it yourself
+Choice [I/c/s]:
 ```
+
+…or, on older versions, silently installed the CPU dependency set.
+
+**Cause**: The script's CPU-vs-GPU decision asks `nvidia-smi` whether a GPU is
+usable. On a fresh cloud GPU instance booted from a **base AMI** (anything but
+the AWS Deep Learning AMI), the card is attached but the **NVIDIA kernel driver
+isn't installed**, so `nvidia-smi` is absent and CUDA can't run. `pip` cannot
+fix this — the driver is a system package, not a Python wheel.
+
+**Fix**: Pick `[i]` (the default) and the installer installs the driver for you:
+a distro-aware, best-effort `sudo` install (`ubuntu-drivers` / `apt` on
+Debian-family, `cuda-drivers` via `dnf`/`yum` on RHEL-family), then it re-checks
+`nvidia-smi` and proceeds straight into the GPU install if the GPU came online.
+If the kernel module needs a **reboot** to load (common), it tells you to reboot
+and re-run `bash scripts/install.sh`.
+
+On the RHEL family, `cuda-drivers` lives in **NVIDIA's CUDA repo**, which a base
+AMI does not have enabled — so a bare `dnf install cuda-drivers` fails with
+`No match for argument: cuda-drivers`. The installer handles this: it tries the
+install, and on that failure it drops NVIDIA's `cuda-<slug>.repo` into
+`/etc/yum.repos.d` (keyed to the distro + major version, e.g. `rhel9`, plus the
+CPU arch) and retries. It also enables **EPEL** best-effort first, since `dkms`
+(used to build the kernel module) ships there rather than in the base RHEL repos.
+Note this is *not* something a reboot fixes — until the repo is enabled the
+package simply doesn't exist, so nothing got installed to take effect on boot.
+
+There is a **second** RHEL failure mode, hit on RHEL 8/9 (and Rocky / Alma /
+CentOS Stream) once the repo *is* enabled: the CUDA repo packages the driver as
+a **DNF module**, so `dnf install cuda-drivers` is rejected with `All matches
+were filtered out by modular filtering for argument: cuda-drivers`. The package
+exists but is hidden behind a module stream that has to be enabled first. The
+installer handles this too: after the plain `cuda-drivers` install is filtered
+out, it falls back to `dnf module install nvidia-driver:latest-dkms`
+(proprietary DKMS — covers Turing/Ampere/Ada like the g4dn's T4), and if that
+stream is unavailable it retries with `nvidia-driver:open-dkms` (the open kernel
+module, which newer datacenter GPUs such as Hopper and Blackwell require).
+
+There is a **third** RHEL failure mode, hit on a fresh box that is **not
+registered** with a subscription server (common on a bare RHEL 9 AMI): the
+`*-dkms` streams above are rejected with `nothing provides dkms >= 3.1.8 needed
+by kmod-nvidia-latest-dkms`. DKMS builds the kernel module from source, so the
+stream needs the `dkms` package — which on the RHEL family ships from **EPEL**,
+not the base repos. A plain `dnf install epel-release` finds nothing on an
+unregistered RHEL box (EPEL isn't in any enabled repo), so `dkms` never installs
+and every `*-dkms` stream fails dependency resolution. The installer handles this
+two ways: (1) before trying the DKMS streams it makes sure `dkms` is actually
+installed — trying the packaged `epel-release` first, then **bootstrapping EPEL
+from its canonical URL** (`epel-release-latest-$(rpm -E %rhel).noarch.rpm`) when
+that fails; and (2) if `dkms` still can't be had, it skips the DKMS streams and
+installs the **precompiled, kABI-tracking** streams `nvidia-driver:latest` /
+`nvidia-driver:open` instead, which ship a prebuilt module (no DKMS, no `dkms`
+package) and only need a kernel whose kABI matches.
+
+There is a **fourth** RHEL failure mode, seen on a bare, unregistered RHEL 9
+g4dn where even the precompiled streams dead-end: `nvidia-driver:latest`
+resolves only to the `*-dkms` kmod (itself `filtered out by modular filtering`
+and still wanting `dkms >= 3.1.8`), and `nvidia-driver:open` reports `missing
+groups or modules: nvidia-driver:open`. At that point **every** dnf path is
+exhausted, so the installer falls back to **NVIDIA's self-contained `.run`
+installer** — the route [AWS itself documents](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html)
+for EC2. It needs no CUDA repo, no DNF module, no EPEL, and no `dkms`: it
+compiles the kernel module in place against the running kernel's source, so it
+only needs a C toolchain + kernel headers (installed best-effort first). By
+default the installer fetches the latest driver from AWS's public,
+credential-free S3 bucket (`ec2-linux-nvidia-drivers`, served over plain
+HTTPS); set `VTSEARCH_NVIDIA_RUNFILE_URL` to pin a version or point at the
+public Tesla compute driver instead. A reboot is usually required afterward so
+the freshly built `nvidia` module loads.
+
+You can also do it by hand:
+
+```bash
+# Ubuntu / Debian:
+sudo apt-get update && sudo apt-get install -y nvidia-driver-535   # or newer
+
+# RHEL 9 family (Rocky / Alma / CentOS Stream): enable the CUDA repo first.
+# `dkms` lives in EPEL. On an unregistered RHEL box `dnf install epel-release`
+# finds nothing, so bootstrap EPEL from its URL instead:
+sudo dnf install -y \
+  "https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(rpm -E %rhel).noarch.rpm"
+sudo dnf install -y dkms                                           # for the DKMS streams
+sudo dnf config-manager --add-repo \
+  https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo
+# The driver is a DNF module on RHEL 8/9, so `dnf install cuda-drivers` is
+# rejected with "filtered out by modular filtering" -- install the module:
+sudo dnf module install -y nvidia-driver:latest-dkms              # builds via DKMS
+# ...or, if you can't get dkms, the precompiled (no-DKMS) stream instead:
+#   sudo dnf module install -y nvidia-driver:latest
+# ...or, if EVERY dnf path dead-ends (bare unregistered RHEL), use NVIDIA's
+# self-contained .run installer (needs only gcc/make + kernel-devel):
+#   sudo dnf install -y "kernel-devel-$(uname -r)" kernel-headers gcc make
+#   curl -fSL -o nvidia.run \
+#     https://us.download.nvidia.com/tesla/<ver>/NVIDIA-Linux-x86_64-<ver>.run
+#   sudo sh nvidia.run --silent --disable-nouveau
+
+sudo reboot                                                        # if needed
+
+nvidia-smi              # should list the GPU and a CUDA version
+bash scripts/install.sh # now auto-detects the GPU
+```
+
+See also [AWS's GPU-driver guide](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html),
+or use the **AWS Deep Learning AMI**, which ships the driver preinstalled.
+
+The installer detects the physical card via its PCI vendor ID (so it knows the
+GPU is there even without a driver). The other prompt choices: `[c]` installs
+CPU-only torch (same as `bash scripts/install.sh cpu`); `[s]` stops. On a
+**non-interactive** shell (CI, `curl … | bash`, Docker build) it can't prompt,
+so it stops — unless you set `VTSEARCH_AUTO_DRIVER=1` (auto-install the driver)
+or `VTSEARCH_ASSUME_CPU=1` (proceed CPU-only) to choose unattended.
+
+**About the output.** The driver install is a *try-until-one-works* cascade, and
+on a bare cloud GPU box its early attempts are *expected* to fail (the dnf module
+is filtered, `dkms` is unreachable, etc.) before a later approach succeeds. By
+default each attempt runs under a **live heartbeat** with its output captured to
+a log, so instead of the raw `Problem 1..6 / nothing provides dkms` /
+`filtered out by modular filtering` / subscription-manager walls you see a moving
+`Installing … ` line followed by either a green `✓` or a dim *"not available
+here; trying another approach…"*. The captured output is shown only if a step
+genuinely fails. The heartbeat also keeps long, otherwise-silent steps (metadata
+refresh, the kernel-module compile, the torch import in the smoke test) visibly
+alive so they don't look frozen. To watch every command's raw, unfiltered output
+live (e.g. to debug a genuinely stuck install), re-run with
+`VTSEARCH_VERBOSE=1 bash scripts/install.sh`.
+
+### GPU install's cuML step (the "dependency conflicts" report, captured by default)
 
 **Cause**: cuML (RAPIDS 25.x) depends on **newer** `nvidia-*-cu12` runtime
 wheels than the torch build pins **exactly** (e.g. `cu124` torch pins
 `==12.4.x`). Installing cuML upgrades those libs, so pip's post-install
-consistency check flags torch's now-unsatisfied `==` pins. **This is cosmetic
-and non-fatal**: pip completes the install and rolls nothing back, and CUDA
-12.x minor runtimes are ABI-compatible across versions, so torch keeps working
-on the bumped libraries.
+consistency check emits a red `ERROR: pip's dependency resolver ...` report
+flagging torch's now-unsatisfied `==` pins:
 
-**What to do**: nothing. `scripts/install.sh` prints a heads-up before the
-cuML step and runs a **GPU smoke test** at the end (a tiny torch CUDA matmul +
-a cuML import) that confirms the stack actually works — if that smoke test
-passes, the red report did not matter. Only act if the smoke test *fails*, or
-if your error is the **fatal** `cuda_fp8.hpp` / nvjitlink variant below (that
-one names `nvidia-nvjitlink-cu12 >= 12.9` and `cuml-cu12 >= 26`, and the
-install does **not** succeed) — that is a different problem with a real fix.
+```
+ERROR: pip's dependency resolver does not currently take into account all the
+packages that are installed. ... torch 2.6.0+cu124 requires
+nvidia-cublas-cu12==12.4.5.8 ... but you have nvidia-cublas-cu12 12.9.2.10
+which is incompatible. ... (one line per nvidia-*-cu12 lib)
+```
+
+**This is cosmetic and non-fatal**: pip completes the install and rolls nothing
+back, and CUDA 12.x minor runtimes are ABI-compatible across versions, so torch
+keeps working on the bumped libraries.
+
+**What you actually see**: by default `scripts/install.sh` runs the cuML step
+under a heartbeat with its output **captured to a log**, so that red wall does
+**not** scroll past — you see a live `Installing cuML/RAPIDS …` line and then a
+green `✓`. The raw report only surfaces if the step actually fails, or if you
+re-run with `VTSEARCH_VERBOSE=1` (which streams every step's raw output live).
+
+**What to do**: nothing. The installer runs a **GPU smoke test** at the end (a
+tiny torch CUDA matmul + a cuML import) that confirms the stack actually works.
+Only act if the smoke test *fails*, or if your error is the **fatal**
+`cuda_fp8.hpp` / nvjitlink variant below (that one names `nvidia-nvjitlink-cu12
+>= 12.9` and `cuml-cu12 >= 26`, and the install does **not** succeed) — that is
+a different problem with a real fix.
 
 ### cuML crashes compiling a kernel (`cuda_fp8.hpp` / nvrtc errors)
 

@@ -27,8 +27,8 @@ class TestSettingsAPI:
         """A stale scalar where a per-media-type dict is expected must not 500.
 
         Older settings files (or hand-edits) can carry e.g.
-        ``browse_bin_shape: "hex"`` from before the field became a
-        ``{media_type: shape}`` dict. Marshmallow's ``Dict`` field calls
+        ``browse_colormap: "auto"`` from before the field became a
+        ``{media_type: value}`` dict. Marshmallow's ``Dict`` field calls
         ``.items()`` while dumping, so the bare string used to crash the
         whole endpoint with ``AttributeError: 'str' object has no attribute
         'items'`` → 500. The read path now coerces it to ``{}`` (equivalent
@@ -39,12 +39,12 @@ class TestSettingsAPI:
         from vtsearch import settings as settings_mod
 
         isolated_settings._user.parent.mkdir(parents=True, exist_ok=True)
-        isolated_settings._user.write_text(_json.dumps({"browse_bin_shape": "hex"}) + "\n")
+        isolated_settings._user.write_text(_json.dumps({"browse_colormap": "auto"}) + "\n")
         settings_mod.reset()  # force the in-memory cache to re-read the corrupt file
 
         res = client.get("/api/settings")
         assert res.status_code == 200
-        assert res.get_json()["browse_bin_shape"] == {}
+        assert res.get_json()["browse_colormap"] == {}
 
     def test_update_volume(self, client):
         res = client.put(
@@ -643,23 +643,11 @@ class TestServerSettingsReadOnly:
 
 
 class TestBrowserSettings:
-    """Per-media-type VTSBrowse prefs: bin shape, colormap, and cell size."""
+    """Per-media-type VTSBrowse prefs: colormap and cell size.
 
-    def test_update_browse_bin_shape_per_type(self, client):
-        res = client.put("/api/settings", json={"browse_bin_shape": {"audio": "square", "image": "hex"}})
-        assert res.status_code == 200
-        data = res.get_json()
-        assert data["browse_bin_shape"]["audio"] == "square"
-        assert data["browse_bin_shape"]["image"] == "hex"
-
-        # Persisted, and a second key write merges rather than clobbers.
-        res2 = client.put("/api/settings", json={"browse_bin_shape": {"audio": "square", "video": "square"}})
-        assert res2.get_json()["browse_bin_shape"]["video"] == "square"
-        assert client.get("/api/settings").get_json()["browse_bin_shape"]["audio"] == "square"
-
-    def test_update_browse_bin_shape_invalid(self, client):
-        res = client.put("/api/settings", json={"browse_bin_shape": {"audio": "triangle"}})
-        assert res.status_code == 400
+    (Bin shape is *not* a stored preference — it is derived from the media
+    type — so there is nothing to update here for it.)
+    """
 
     def test_update_browse_colormap_per_type(self, client):
         res = client.put("/api/settings", json={"browse_colormap": {"audio": "ocean", "image": "heat"}})
@@ -748,7 +736,6 @@ class TestBrowserSettings:
         data = client.get("/api/settings").get_json()
         # Present as (possibly empty) dicts so the frontend can index by type.
         for key in (
-            "browse_bin_shape",
             "browse_colormap",
             "browse_icon_size",
             "browse_thumbnail_border",
@@ -761,7 +748,6 @@ class TestBrowserSettings:
     def test_defaults_have_empty_browser_prefs(self, client):
         data = client.get("/api/settings/defaults").get_json()
         for key in (
-            "browse_bin_shape",
             "browse_colormap",
             "browse_icon_size",
             "browse_thumbnail_border",

@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, of, Subject } from 'rxjs';
 import { tap, shareReplay, catchError } from 'rxjs/operators';
 import { ProjectionApiService } from './projection-api.service';
-import type { BinShape, TilePayload } from '../models/projection.models';
+import type { TilePayload } from '../models/projection.models';
 
 interface CacheEntry {
   tile: TilePayload;
@@ -29,10 +29,6 @@ export class TileCacheService {
   // (projectionId) is kept stable so the canvas doesn't re-frame, so this is
   // what distinguishes "same layout, different contents" for the tile cache.
   private contentVersion = 0;
-  // The bin shape (hex/square) tiles are currently fetched for. It is part of
-  // the cache key, so switching shapes keeps both binnings cached side by side
-  // (they share one projection id, so the id alone can't tell them apart).
-  private binShape: BinShape = 'hex';
   // Whether tiles are fetched from the ephemeral subset projection (the
   // positives of a Find run) rather than the full-dataset projection. The two
   // have distinct projection ids, so the cache invalidates on switch.
@@ -47,10 +43,6 @@ export class TileCacheService {
       this.projectionId = id;
       this.contentVersion = 0;
     }
-  }
-
-  setBinShape(shape: BinShape): void {
-    this.binShape = shape;
   }
 
   /**
@@ -81,7 +73,7 @@ export class TileCacheService {
 
     if (!this.projectionId) return null;
 
-    const req$ = this.projectionApi.getTile(this.binShape, level, tx, ty, this.subset, this.cacheToken()).pipe(
+    const req$ = this.projectionApi.getTile(level, tx, ty, this.subset, this.cacheToken()).pipe(
       tap((tile) => {
         this.inflight.delete(key);
         this.put(key, tile);
@@ -121,7 +113,7 @@ export class TileCacheService {
   }
 
   private key(level: number, tx: number, ty: number): string {
-    return `${this.binShape}:${this.contentVersion}:${level}:${tx}:${ty}`;
+    return `${this.contentVersion}:${level}:${tx}:${ty}`;
   }
 
   /** Cache-bust token for the tile URL: ``<projection_id>:<content_version>``. */

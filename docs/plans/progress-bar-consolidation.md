@@ -154,7 +154,13 @@ weights are unaffected. Tests: `tests_lib/datasets/test_load_step_weights.py`.
   but a phase with no `total` still can't animate within itself.
 - **Weights are static guesses.** The per-step weights are fixed ballparks, not
   learned. A future refinement could record real per-phase durations per
-  media-type/embedder and feed measured weights back in.
+  media-type/embedder and feed measured weights back in. **Specified in
+  `docs/plans/progress-weight-calibration.md`** — including making the weights
+  depend on dataset size `n` via an affine per-phase cost model (the fixed
+  model-load cost is why one static vector can't serve both small and large
+  datasets). Not yet run (needs a GPU host). A CPU **image** profile
+  (`_LOAD_STEP_WEIGHTS_CPU_IMAGE`) shipped as a stopgap: images embed cheaply, so
+  the generic 55%-embed CPU profile mispaced image imports.
 - **Dead dashboard fields.** `progressValue` / `progressTotal` /
   `progressIndeterminate` on `DashboardComponent` are set by the Find polling
   but never rendered; safe to remove in a cleanup pass.

@@ -60,11 +60,6 @@ class SubsetRemoveRequestSchema(Schema):
         validate=validate.Length(min=1),
         metadata={"description": "Media ids to drop from the current subset browse."},
     )
-    shape = fields.String(
-        load_default="hex",
-        validate=validate.OneOf(["hex", "square"]),
-        metadata={"description": "Bin shape whose updated meta to return (hex | square)."},
-    )
 
 
 class HexCellSchema(Schema):

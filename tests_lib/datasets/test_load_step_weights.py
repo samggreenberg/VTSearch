@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from vtscore.datasets.stages._common import (
     _LOAD_STEP_WEIGHTS_CPU,
+    _LOAD_STEP_WEIGHTS_CPU_IMAGE,
     _LOAD_STEP_WEIGHTS_GPU,
     _TOTAL_LOAD_STEPS,
     load_step_weights,
@@ -17,10 +18,19 @@ from vtscore.datasets.stages._common import (
 
 
 def test_profiles_are_well_formed():
-    for weights in (_LOAD_STEP_WEIGHTS_CPU, _LOAD_STEP_WEIGHTS_GPU):
+    for weights in (_LOAD_STEP_WEIGHTS_CPU, _LOAD_STEP_WEIGHTS_CPU_IMAGE, _LOAD_STEP_WEIGHTS_GPU):
         assert len(weights) == _TOTAL_LOAD_STEPS
         assert all(w >= 0 for w in weights)
         assert sum(weights) == 1.0
+
+
+def test_image_cpu_profile_shifts_off_embed_onto_download_and_finalize():
+    # An image embed is a single cheap ViT forward per item, so the image-on-CPU
+    # profile gives embed (index 2) a smaller slice than the generic CPU profile
+    # and download (0) + finalize (3) larger ones.
+    assert _LOAD_STEP_WEIGHTS_CPU_IMAGE[2] < _LOAD_STEP_WEIGHTS_CPU[2]
+    assert _LOAD_STEP_WEIGHTS_CPU_IMAGE[0] > _LOAD_STEP_WEIGHTS_CPU[0]
+    assert _LOAD_STEP_WEIGHTS_CPU_IMAGE[3] > _LOAD_STEP_WEIGHTS_CPU[3]
 
 
 def test_gpu_profile_weights_finalize_more_than_cpu():
@@ -36,6 +46,19 @@ def test_selects_cpu_profile_on_cpu_host(monkeypatch):
     # ``vtscore.config``, so patch it there.
     monkeypatch.setattr("vtscore.config.resolve_device", lambda: "cpu")
     assert load_step_weights() == _LOAD_STEP_WEIGHTS_CPU
+
+
+def test_selects_image_cpu_profile_for_image_media_on_cpu_host(monkeypatch):
+    monkeypatch.setattr("vtscore.config.resolve_device", lambda: "cpu")
+    assert load_step_weights("image") == _LOAD_STEP_WEIGHTS_CPU_IMAGE
+    # Non-image media types keep the generic CPU profile.
+    assert load_step_weights("audio") == _LOAD_STEP_WEIGHTS_CPU
+
+
+def test_image_media_type_does_not_override_gpu_profile(monkeypatch):
+    # The GPU profile is media-agnostic; image on a CUDA host still gets it.
+    monkeypatch.setattr("vtscore.config.resolve_device", lambda: "cuda")
+    assert load_step_weights("image") == _LOAD_STEP_WEIGHTS_GPU
 
 
 def test_selects_gpu_profile_on_cuda_host(monkeypatch):

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, ElementRef, HostListener, inject, NgZone, OnDestroy, OnInit, signal, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subject } from 'rxjs';
@@ -34,7 +34,8 @@ import {
   usesThumbnails,
   type BrowseColormapId,
 } from '../browse-canvas/hex-render.util';
-import type { BinShape, ProjectionMeta } from '../../models/projection.models';
+import type { ProjectionMeta } from '../../models/projection.models';
+import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
 
@@ -136,14 +137,6 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private lastSettings: AppSettings | null = null;
 
   /**
-   * Which lattice the projection is tiled with. Mirrored from the persisted
-   * ``browse_bin_shape`` setting and flipped by the hex/square toggle. Switching
-   * re-bins the (shared, frozen) UMAP layout — it never re-fits UMAP — and keeps
-   * the canvas mounted so pan/zoom survive the switch.
-   */
-  readonly binShape = signal<BinShape>('hex');
-
-  /**
    * Region-select mode: the GUI parallel to the Shift+drag hotkey. When on, a
    * plain left-drag on the canvas rubber-bands a selection marquee instead of
    * panning. The toolbar button surfaces (and toggles) it so the gesture is
@@ -151,6 +144,18 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * persisted — it's a transient interaction mode, reset on each visit.
    */
   marqueeMode = false;
+
+  /**
+   * Whether Shift is currently held. Shift+drag draws a region marquee, so while
+   * Shift is down we momentarily engage the region-select affordance — the
+   * toolbar button lights up and the canvas cursor switches to a crosshair — the
+   * same way holding Shift for region voting previews that mode. Reset on window
+   * blur so alt-tabbing away doesn't strand the view in the engaged state.
+   */
+  readonly shiftHeld = signal(false);
+  private keyDownHandler?: (e: KeyboardEvent) => void;
+  private keyUpHandler?: (e: KeyboardEvent) => void;
+  private blurHandler?: () => void;
 
   /**
    * Subset mode: browse an ephemeral UMAP fit over just a handful of media
@@ -220,17 +225,17 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private static readonly MAX_POLL_ERRORS = 5;
 
   /**
-   * Gate for the *first* projection load. Held until we know which bin shape to
-   * request, which needs two async facts: the saved settings and the dataset's
-   * media type (the ``browse_bin_shape`` pref is keyed per-media). Loading
-   * sooner would fetch+render the default hex lattice for ~a second and then
-   * re-bin to the user's saved square — a confusing wrong grid. We'd rather
-   * hold on the loading spinner until the right shape is known. Once true,
-   * later reloads (pair change, shape toggle) go through the normal paths.
+   * Gate for the *first* projection load. Held until the per-media display
+   * prefs (cell size, colormap) are known, which needs two async facts: the
+   * saved settings and the dataset's media type (those prefs are keyed
+   * per-media). Loading sooner would fit the canvas at the default ``M`` cell
+   * size and then re-frame once the saved size arrives — a visible jump. We'd
+   * rather hold on the loading spinner until the prefs are in. Once true, later
+   * reloads (pair change) go through the normal paths.
    */
   private initialLoadStarted = false;
   /** Set once the dataset-status fetch — which yields the media type the
-   *  per-media bin-shape pref is keyed on — has resolved or failed. */
+   *  per-media display prefs are keyed on — has resolved or failed. */
   private statusResolved = false;
 
   constructor() {
@@ -258,9 +263,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Start the first projection load once — but only when the bin shape is
-   * known: the saved settings must be in (or their load have failed) AND the
-   * dataset's media type resolved. See {@link initialLoadStarted}.
+   * Start the first projection load once — but only when the per-media display
+   * prefs are known: the saved settings must be in (or their load have failed)
+   * AND the dataset's media type resolved. See {@link initialLoadStarted}.
    */
   private maybeStartInitialLoad(): void {
     if (this.initialLoadStarted) return;
@@ -271,6 +276,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.setupShiftListeners();
     this.settingsState.load();
 
     // Subset mode: the Find view handed off a set of positive ids to project
@@ -287,12 +293,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         this.errorMessage.set(
           'This subset projection has expired. Re-run Find and click Browse to rebuild it.',
         );
-        this.tileCache.setBinShape(this.binShape());
         return;
       }
     }
     this.tileCache.setSubset(this.subset);
-    this.tileCache.setBinShape(this.binShape());
 
     this.datasetsRegistryApi
       .getStatus()
@@ -337,8 +341,43 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (this.pollTimer) clearTimeout(this.pollTimer);
     document.removeEventListener('mousemove', this.boundPanelMove);
     document.removeEventListener('mouseup', this.boundPanelUp);
+    this.removeShiftListeners();
     this.tileCache.clear();
     this.releaseEphemeralPositivesContext();
+  }
+
+  /**
+   * Track the Shift key at the window level so {@link regionDrawActive} reflects
+   * it. The canvas detects `event.shiftKey` directly when a drag starts, so this
+   * is purely for the affordance (button + cursor); the blur reset mirrors the
+   * image viewer's region-draw handling.
+   */
+  private setupShiftListeners(): void {
+    this.keyDownHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') this.shiftHeld.set(true);
+    };
+    this.keyUpHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') this.shiftHeld.set(false);
+    };
+    this.blurHandler = () => this.shiftHeld.set(false);
+    window.addEventListener('keydown', this.keyDownHandler);
+    window.addEventListener('keyup', this.keyUpHandler);
+    window.addEventListener('blur', this.blurHandler);
+  }
+
+  private removeShiftListeners(): void {
+    if (this.keyDownHandler) window.removeEventListener('keydown', this.keyDownHandler);
+    if (this.keyUpHandler) window.removeEventListener('keyup', this.keyUpHandler);
+    if (this.blurHandler) window.removeEventListener('blur', this.blurHandler);
+  }
+
+  /**
+   * Region-select armed: either the GUI toggle is on, or Shift is held. Drives
+   * both the toolbar button's engaged state and the canvas crosshair cursor, so
+   * holding Shift previews the Shift+drag region gesture.
+   */
+  get regionDrawActive(): boolean {
+    return this.marqueeMode || this.shiftHeld();
   }
 
   /** Free a detector-positives browse context (`__detpos__<detectorId>`) when
@@ -405,11 +444,12 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Re-resolve the per-media browser preferences (bin shape, colormap, icon
-   * size) for the active media type from the last settings snapshot. Called
-   * when settings arrive and again once the media type is known (it lands
-   * after the initial settings push), so a saved-per-type choice is applied
-   * even though the two facts arrive out of order.
+   * Re-resolve the per-media browser preferences (colormap, icon size) for the
+   * active media type from the last settings snapshot. Called when settings
+   * arrive and again once the media type is known (it lands after the initial
+   * settings push), so a saved-per-type choice is applied even though the two
+   * facts arrive out of order. (The bin shape is not a preference — it is fixed
+   * by media type and reported by the projection meta.)
    */
   private applyBrowsePrefsForMediaType(): void {
     const s = this.lastSettings;
@@ -438,19 +478,6 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     // and on first load the initial fit picks the matching level.
     this.canvas?.setThumbnailRadius(this.thumbnailRadius, false);
 
-    const shape: BinShape = this.perMediaValue(s.browse_bin_shape, mt) === 'square' ? 'square' : 'hex';
-    if (!this.initialLoadStarted) {
-      // Before the first projection load there's nothing on screen to re-bin —
-      // just record the resolved shape so the initial fetch uses the right
-      // lattice. Routing through switchBinShape() here would either no-op (when
-      // the saved shape equals the default) and strand the gated load, or kick
-      // a premature load off a half-resolved media type.
-      this.binShape.set(shape);
-      this.tileCache.setBinShape(shape);
-    } else if (shape !== this.binShape()) {
-      this.switchBinShape(shape, false);
-    }
-
     const borderMap = s.browse_thumbnail_border as { [key: string]: number } | undefined;
     const rawBorder = mt && borderMap ? borderMap[mt] : undefined;
     this.thumbnailBorder.set(
@@ -476,7 +503,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    *  other media types' choices are preserved, and update the local snapshot
    *  so subsequent reads stay consistent before the PUT round-trips. */
   private persistBrowsePref(
-    key: 'browse_bin_shape' | 'browse_colormap' | 'browse_icon_size',
+    key: 'browse_colormap' | 'browse_icon_size',
     value: string,
   ): void {
     const mt = this.mediaType();
@@ -529,75 +556,60 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.settingsState.update({ browse_panel_width: Math.round(this.panelWidth()) }).subscribe();
   }
 
-  /** Switch the bin shape from the toggle, persisting the choice. */
-  setBinShape(shape: BinShape): void {
-    this.switchBinShape(shape, true);
-  }
-
-  /**
-   * Re-resolve the projection for *shape*. When a projection is already on
-   * screen this re-bins in place (canvas stays mounted, pan/zoom preserved);
-   * otherwise it falls back to the normal load path. *persist* writes the
-   * choice to settings (true for the toggle, false when mirroring settings).
-   */
-  private switchBinShape(shape: BinShape, persist: boolean): void {
-    if (shape === this.binShape()) return;
-    this.binShape.set(shape);
-    if (persist) this.persistBrowsePref('browse_bin_shape', shape);
-    // Don't repoint the tile cache here. While ``ready``, the canvas stays
-    // mounted across the switch (so pan/zoom survive), and its redraw loop
-    // keeps fetching tiles. Flipping the cache to a shape whose pyramid isn't
-    // built yet would make those fetches 404 until the build lands. Instead,
-    // the cache is repointed only once the new shape is confirmed ready — in
-    // ``applyMeta``/``pollBuildStatus`` (keyed to the shape the meta is for).
-    if (this.status() === 'ready') {
-      this.ensureShape();
-    } else {
-      this.loadProjection();
-    }
-  }
-
-  /**
-   * Ensure the current bin shape's pyramid exists, then swap in its meta
-   * without leaving the ``ready`` state — so the canvas is never torn down and
-   * the user's pan/zoom carry across the toggle. The shared UMAP layout is
-   * reused, so the build call returns ready after a quick re-bin.
-   */
-  private ensureShape(): void {
-    this.buildRequest()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (resp) => {
-          if (resp.status === 'ready') {
-            const shape = this.binShape();
-            this.projectionApi
-              .getMeta(shape, this.subset)
-              .pipe(takeUntil(this.destroy$))
-              .subscribe({
-                next: (meta) => this.applyMeta(meta, shape),
-                error: () => this.loadProjection(),
-              });
-          } else {
-            // Rare: this shape needs a full UMAP fit (no shared layout yet).
-            this.status.set('building');
-            this.buildProgress.set(0);
-            this.buildTotal.set(0);
-            this.buildMessage.set('');
-            this.pollBuildStatus();
-          }
-        },
-        error: (err) => {
-          this.status.set('error');
-          this.errorMessage.set(
-            err?.error?.message || err?.error?.error || 'Failed to switch bin shape',
-          );
-        },
-      });
-  }
-
   /** Toggle region-select mode (drag-to-marquee without holding Shift). */
   toggleMarqueeMode(): void {
     this.marqueeMode = !this.marqueeMode;
+  }
+
+  /**
+   * Keyboard shortcuts for the browse canvas: arrow keys pan, ``+``/``-`` zoom
+   * (mirroring the on-screen buttons), and Ctrl/Cmd-A selects every bin fully in
+   * view. Suppressed while the projection isn't ready, while the bin-details
+   * popup is open (it has its own keys — see {@link BrowseBinPopupComponent}),
+   * and while typing or behind a modal ({@link shortcutsBlocked}).
+   */
+  @HostListener('document:keydown', ['$event'])
+  onKeydown(event: KeyboardEvent): void {
+    if (this.status() !== 'ready' || this.contextMenuOpen) return;
+    if (shortcutsBlocked()) return;
+
+    // Ctrl/Cmd-A: fully select every bin whose silhouette sits entirely in view.
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && (event.key === 'a' || event.key === 'A')) {
+      event.preventDefault();
+      this.canvas?.selectAllInView();
+      return;
+    }
+    // The remaining shortcuts take no modifiers.
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+    switch (event.key) {
+      case 'ArrowUp':
+        event.preventDefault();
+        this.canvas?.panByKey(0, -1);
+        break;
+      case 'ArrowDown':
+        event.preventDefault();
+        this.canvas?.panByKey(0, 1);
+        break;
+      case 'ArrowLeft':
+        event.preventDefault();
+        this.canvas?.panByKey(-1, 0);
+        break;
+      case 'ArrowRight':
+        event.preventDefault();
+        this.canvas?.panByKey(1, 0);
+        break;
+      case '+':
+      case '=':
+        event.preventDefault();
+        this.zoomIn();
+        break;
+      case '-':
+      case '_':
+        event.preventDefault();
+        this.zoomOut();
+        break;
+    }
   }
 
   /** Zoom in one step (narrower span, cells keep their display size). */
@@ -643,8 +655,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    */
   private buildRequest() {
     return this.subset
-      ? this.projectionApi.buildSubset(this.binShape(), this.subsetIds)
-      : this.projectionApi.build(this.binShape());
+      ? this.projectionApi.buildSubset(this.subsetIds)
+      : this.projectionApi.build();
   }
 
   onBuild(): void {
@@ -701,8 +713,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.buildTotal.set(0);
     this.buildMessage.set('');
     const request$ = this.subset
-      ? this.projectionApi.reprojectSubset(this.binShape(), this.subsetIds)
-      : this.projectionApi.reproject(this.binShape());
+      ? this.projectionApi.reprojectSubset(this.subsetIds)
+      : this.projectionApi.reproject();
     request$.pipe(takeUntil(this.destroy$)).subscribe({
       next: (resp) => {
         if (resp.status === 'ready') {
@@ -772,15 +784,14 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       this.status.set('done');
       return;
     }
-    const shape = this.binShape();
     this.projectionApi
-      .subsetRemove(shape, removedIds)
+      .subsetRemove(removedIds)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (meta) => {
           // Leave the viewport where the user had it; don't yank the camera to
           // re-fit the survivors. They can hit Zoom Fit if they want that.
-          this.applyMeta(meta, shape);
+          this.applyMeta(meta);
         },
         error: () =>
           this.toast.error({
@@ -822,12 +833,11 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private loadProjection(): void {
     this.status.set('loading');
     this.polling = false;
-    const shape = this.binShape();
     this.projectionApi
-      .getMeta(shape, this.subset)
+      .getMeta(this.subset)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (meta) => this.applyMeta(meta, shape),
+        next: (meta) => this.applyMeta(meta),
         error: (err) => {
           // The meta endpoint reports "idle" rather than 404/409, but treat a
           // missing projection defensively the same way: build it, don't ask.
@@ -845,13 +855,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   /**
    * Route a freshly-fetched meta to the right state, auto-building if absent.
-   * ``shape`` is the bin shape this meta was fetched for — passed explicitly
-   * (rather than read from ``this.binShape``) because ``applyBrowsePrefsFor‐
-   * MediaType`` below can switch the active shape mid-call; the tile cache must
-   * be pointed at the shape that is actually ready, not the one we're switching
-   * to.
    */
-  private applyMeta(meta: ProjectionMeta, shape: BinShape): void {
+  private applyMeta(meta: ProjectionMeta): void {
     this.meta.set(meta);
     if (meta.media_type) {
       this.mediaType.set(meta.media_type);
@@ -861,9 +866,6 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.tileCache.setContentVersion(meta.content_version ?? 0);
 
     if (meta.point_count > 0) {
-      // This shape's pyramid is built, so the canvas can render it without
-      // 404ing — only now is it safe to point the tile cache at it.
-      this.tileCache.setBinShape(shape);
       this.status.set('ready');
       return;
     }
@@ -889,10 +891,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (this.polling) return;
     this.polling = true;
     this.pollErrors = 0;
-    const shape = this.binShape();
     const poll = (): void => {
       this.projectionApi
-        .getMeta(shape, this.subset)
+        .getMeta(this.subset)
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: (meta) => {
@@ -904,9 +905,6 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
             }
             this.tileCache.setProjectionId(meta.projection_id);
             if (meta.point_count > 0) {
-              // Build finished — point the cache at the now-built shape before
-              // the canvas remounts and starts fetching its tiles.
-              this.tileCache.setBinShape(shape);
               this.polling = false;
               this.status.set('ready');
               return;

@@ -1,7 +1,12 @@
 """Tests for the VTSBrowse projection routes.
 
 ``POST /api/projection/build``, ``GET /api/projection/meta``, and
-``GET /api/projection/tiles/<shape>/<level>/<tx>/<ty>``.
+``GET /api/projection/tiles/<level>/<tx>/<ty>``.
+
+The bin shape is derived from the dataset's media type (squares for
+browsable-thumbnail media, hexes otherwise), not requested by the client. The
+test fixtures are audio, so the routes resolve to the hex lattice unless a test
+overrides the media type.
 """
 
 from __future__ import annotations
@@ -217,10 +222,10 @@ class TestProjectionPersistence:
 
 
 class TestProjectionTiles:
-    """``GET /api/projection/tiles/<shape>/<level>/<tx>/<ty>``."""
+    """``GET /api/projection/tiles/<level>/<tx>/<ty>``."""
 
     def test_404_when_not_built(self, client):
-        resp = client.get("/api/projection/tiles/hex/0/0/0")
+        resp = client.get("/api/projection/tiles/0/0/0")
         assert resp.status_code == 404
 
     def test_empty_tile_returns_empty_cells(self, client):
@@ -233,7 +238,7 @@ class TestProjectionTiles:
         ctx._projection = proj
         ctx._pyramids = {"hex": pyr}
 
-        resp = client.get("/api/projection/tiles/hex/0/999/999")
+        resp = client.get("/api/projection/tiles/0/999/999")
         assert resp.status_code == 200
         body = resp.get_json()
         assert body["cells"] == []
@@ -250,7 +255,7 @@ class TestProjectionTiles:
 
         found_cells = False
         for level, tx, ty in pyr.tiles:
-            resp = client.get(f"/api/projection/tiles/hex/{level}/{tx}/{ty}")
+            resp = client.get(f"/api/projection/tiles/{level}/{tx}/{ty}")
             assert resp.status_code == 200
             body = resp.get_json()
             assert body["level"] == level
@@ -289,7 +294,7 @@ class TestProjectionTiles:
         for level, tx, ty in pyr.tiles:
             if level != 0:
                 continue
-            resp = client.get(f"/api/projection/tiles/hex/{level}/{tx}/{ty}")
+            resp = client.get(f"/api/projection/tiles/{level}/{tx}/{ty}")
             assert resp.status_code == 200
             for cell in resp.get_json()["cells"]:
                 recovered.extend(cell["member_ids"])
@@ -304,7 +309,7 @@ class TestProjectionTiles:
         ctx._projection = proj
         ctx._pyramids = {"hex": build_pyramid(proj, n_levels=2)}
 
-        resp = client.get("/api/projection/tiles/hex/0/999/999")
+        resp = client.get("/api/projection/tiles/0/999/999")
         assert resp.status_code == 200
         # Frozen tiles are immutable for the dataset's life, so the browser may
         # reuse them without a round-trip — but only keyed by the dataset header.
@@ -315,84 +320,68 @@ class TestProjectionTiles:
     def test_not_built_404_is_not_cached(self, client):
         # A projection that isn't built yet will exist later, so the negative
         # response must not be frozen into the browser's cache.
-        resp = client.get("/api/projection/tiles/hex/0/0/0")
+        resp = client.get("/api/projection/tiles/0/0/0")
         assert resp.status_code == 404
         assert "immutable" not in resp.headers.get("Cache-Control", "")
 
 
-class TestBinShapeToggle:
-    """Hex/square bin-shape selection across build, meta, and tiles."""
+class TestBinShapeByMediaType:
+    """The bin shape is a fixed property of the dataset's media type.
 
-    def _seed_hex(self, ctx, pid: str = "shape-pid"):
-        """Cache a hex projection + pyramid on the context and return them.
+    Audio (no browsable thumbnail) → hex; image/video/document → square. The
+    client never sends a shape; the routes derive it from the active dataset.
+    """
 
-        The projection must span the *whole* embedding matrix (every media id),
-        since that's what the inline re-bin path checks before reusing the
-        shared layout for the other shape.
-        """
+    def test_audio_dataset_reports_hex(self, client):
+        """The audio test fixtures resolve to the hex lattice."""
+        ctx = get_active_context()
         rng = np.random.default_rng(13)
         ids = sorted(ctx.medias.keys())
         coords = rng.standard_normal((len(ids), 2)).astype(np.float32)
-        proj = Projection(pid, ids, coords, "pca")
-        pyr = build_pyramid(proj, bin_shape="hex", n_levels=2)
+        proj = Projection("audio-pid", ids, coords, "pca")
         ctx._projection = proj
-        ctx._pyramids = {"hex": pyr}
-        return proj, ids
+        ctx._pyramids = {"hex": build_pyramid(proj, bin_shape="hex", n_levels=2)}
 
-    def test_build_square_reuses_layout(self, client):
-        """Requesting square when only hex exists re-bins inline (no UMAP) and is ready."""
+        meta = client.get("/api/projection/meta").get_json()
+        assert meta["bin_shape"] == "hex"
+
+    @patch("vtsearch.routes.projection._media_type_for", return_value="image")
+    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
+    def test_image_dataset_builds_and_serves_square(self, _mock_fit, _mock_mt, client):
+        """An image dataset is tiled with squares end to end (build, meta, tiles)."""
         ctx = get_active_context()
-        proj, _ids = self._seed_hex(ctx)
 
-        # No fit_projection patch: a re-fit here would be a bug (and slow), so
-        # reaching ready proves the shared layout was reused.
-        resp = client.post("/api/projection/build", json={"shape": "square"})
+        resp = client.post("/api/projection/build")
         assert resp.status_code == 200
-        body = resp.get_json()
-        assert body["status"] == "ready"
-        assert body["projection_id"] == proj.projection_id
+        assert resp.get_json()["status"] in ("building", "ready")
+        _wait_projection()
+
         assert ctx._pyramids.get("square") is not None
         assert ctx._pyramids["square"].bin_shape == "square"
 
-    def test_meta_per_shape(self, client):
-        ctx = get_active_context()
-        self._seed_hex(ctx)
-        client.post("/api/projection/build", json={"shape": "square"})
+        meta = client.get("/api/projection/meta").get_json()
+        assert meta["status"] == "ready"
+        assert meta["bin_shape"] == "square"
+        assert meta["media_type"] == "image"
 
-        hex_meta = client.get("/api/projection/meta?shape=hex").get_json()
-        sq_meta = client.get("/api/projection/meta?shape=square").get_json()
-        assert hex_meta["bin_shape"] == "hex"
-        assert sq_meta["bin_shape"] == "square"
-        # Same frozen layout underlies both binnings.
-        assert hex_meta["projection_id"] == sq_meta["projection_id"]
-
-    def test_square_tiles_served(self, client):
-        ctx = get_active_context()
-        self._seed_hex(ctx)
-        client.post("/api/projection/build", json={"shape": "square"})
+        # Tiles are served at the shape-agnostic URL; the route resolves the
+        # square pyramid from the (image) media type.
         pyr = ctx._pyramids["square"]
-
         for level, tx, ty in pyr.tiles:
-            resp = client.get(f"/api/projection/tiles/square/{level}/{tx}/{ty}")
-            assert resp.status_code == 200
-            assert resp.get_json()["level"] == level
+            tile_resp = client.get(f"/api/projection/tiles/{level}/{tx}/{ty}")
+            assert tile_resp.status_code == 200
+            assert tile_resp.get_json()["level"] == level
             break
 
-    def test_unknown_shape_rejected(self, client):
-        ctx = get_active_context()
-        self._seed_hex(ctx)
-        assert client.get("/api/projection/meta?shape=triangle").status_code == 400
-        assert client.get("/api/projection/tiles/triangle/0/0/0").status_code == 400
-        assert client.post("/api/projection/build", json={"shape": "triangle"}).status_code == 400
-
+    @patch("vtsearch.routes.projection._media_type_for", return_value="image")
     @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
-    def test_square_persisted_alongside_hex(self, _mock_fit, client, tmp_path):
-        """Building both shapes leaves both pyramids readable from the container."""
+    def test_square_persisted_for_image_dataset(self, _mock_fit, _mock_mt, client, tmp_path):
+        """An image dataset's build persists its square pyramid into the container."""
         import pickle as _pickle
 
         from vtscore.datasets.container import read_projection, write_container
 
-        fake_pkl = tmp_path / "both_shapes.pkl"
+        fake_pkl = tmp_path / "image_square.pkl"
         pkl_bytes = _pickle.dumps({"medias": {}})
         write_container(fake_pkl, pkl_bytes, {"format_version": 1})
 
@@ -400,17 +389,14 @@ class TestBinShapeToggle:
             "vtsearch.routes.projection._pkl_path_for",
             return_value=str(fake_pkl),
         ):
-            client.post("/api/projection/build", json={"shape": "hex"})
+            client.post("/api/projection/build")
             _wait_projection()
-            resp = client.post("/api/projection/build", json={"shape": "square"})
-            assert resp.get_json()["status"] == "ready"
 
-        hex_loaded = read_projection(fake_pkl, "hex")
         sq_loaded = read_projection(fake_pkl, "square")
-        assert hex_loaded is not None
         assert sq_loaded is not None
-        assert hex_loaded[1].bin_shape == "hex"
         assert sq_loaded[1].bin_shape == "square"
+        # Only the one shape the media type uses is written.
+        assert read_projection(fake_pkl, "hex") is None
 
 
 class TestProjectionSubset:
@@ -470,12 +456,12 @@ class TestProjectionSubset:
 
         pyr = ctx._subset_pyramids["hex"]
         for level, tx, ty in pyr.tiles:
-            resp = client.get(f"/api/projection/tiles/hex/{level}/{tx}/{ty}?subset=1")
+            resp = client.get(f"/api/projection/tiles/{level}/{tx}/{ty}?subset=1")
             assert resp.status_code == 200
             assert resp.get_json()["level"] == level
             break
         # Without the subset flag the full pyramid isn't built, so 404.
-        assert client.get("/api/projection/tiles/hex/0/0/0").status_code == 404
+        assert client.get("/api/projection/tiles/0/0/0").status_code == 404
 
     def test_subset_empty_ids_returns_409(self, client):
         resp = client.post("/api/projection/build", json={"ids": []})
@@ -574,22 +560,6 @@ class TestSubsetRemove:
         assert m2["content_version"] == 2
         assert m2["projection_id"] == m1["projection_id"]
 
-    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
-    def test_remove_rebuilds_both_shapes(self, _mock_fit, client):
-        ctx = get_active_context()
-        ids = sorted(ctx.medias.keys())[:6]
-        client.post("/api/projection/build", json={"ids": ids})
-        _wait_projection()
-        # Build the square binning too, so both shapes are present.
-        client.post("/api/projection/build", json={"ids": ids, "shape": "square"})
-        _wait_projection()
-        assert set(ctx._subset_pyramids) == {"hex", "square"}
-
-        client.post("/api/projection/subset/remove", json={"ids": [ids[0]], "shape": "square"})
-        # Both shapes re-binned over the reduced layout.
-        assert ctx._subset_pyramids["hex"].point_count == len(ids) - 1
-        assert ctx._subset_pyramids["square"].point_count == len(ids) - 1
-
     def test_remove_without_subset_returns_409(self, client):
         resp = client.post("/api/projection/subset/remove", json={"ids": [1]})
         assert resp.status_code == 409
@@ -650,26 +620,39 @@ class TestForceReproject:
 
     @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
     def test_force_full_drops_stale_other_shape(self, _mock_fit, client, tmp_path):
+        """Re-project clears every persisted shape, including a legacy square one.
+
+        Containers written when the bin shape was user-toggleable can carry both
+        a hex and a square projection. A forced rebuild must drop all of them so
+        a stale entry can't resurrect the old (now-superseded) shared
+        coordinates.
+        """
         import pickle as _pickle
 
-        from vtscore.datasets.container import read_projection, write_container
+        from vtscore.datasets.container import append_projection, read_projection, write_container
+
+        ctx = get_active_context()
+        ids = sorted(ctx.medias.keys())
+        rng = np.random.default_rng(77)
+        coords = rng.standard_normal((len(ids), 2)).astype(np.float32)
+        legacy = Projection("legacy-pid", ids, coords, "pca")
 
         fake_pkl = tmp_path / "reproject_shapes.pkl"
         write_container(fake_pkl, _pickle.dumps({"medias": {}}), {"format_version": 1})
+        # Seed a legacy container with both shapes persisted.
+        append_projection(fake_pkl, legacy, build_pyramid(legacy, bin_shape="hex", n_levels=2))
+        append_projection(fake_pkl, legacy, build_pyramid(legacy, bin_shape="square", n_levels=2))
+        assert read_projection(fake_pkl, "square") is not None
 
         with patch("vtsearch.routes.projection._pkl_path_for", return_value=str(fake_pkl)):
-            client.post("/api/projection/build", json={"shape": "hex"})
-            _wait_projection()
-            client.post("/api/projection/build", json={"shape": "square"})
-            _wait_projection()
-            assert read_projection(fake_pkl, "square") is not None
-
-            # Force-rebuild hex: the stale square entry must be dropped so it
-            # can't resurrect the old (now-superseded) shared coordinates.
-            client.post("/api/projection/build", json={"shape": "hex", "force": True})
+            # Force-rebuild the (audio → hex) dataset: the stale square entry is
+            # dropped, and the fresh hex layout replaces the legacy one.
+            client.post("/api/projection/build", json={"force": True})
             _wait_projection()
             assert read_projection(fake_pkl, "square") is None
-            assert read_projection(fake_pkl, "hex") is not None
+            hex_after = read_projection(fake_pkl, "hex")
+            assert hex_after is not None
+            assert hex_after[0].projection_id != "legacy-pid"
 
     @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
     def test_force_subset_refits_same_ids(self, _mock_fit, client):

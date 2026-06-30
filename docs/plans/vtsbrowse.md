@@ -401,10 +401,22 @@ anyone.
 
 ### Bin shape (hex/square)
 
-Not everyone likes hexagons.  The pyramid can tile the projection as either
-**hexagons** (the default d3-hexbin lattice) or **squares**, and the browse
-canvas exposes a toggle to switch between them.  The design keeps this cheap by
-factoring binning out of the rest of the pipeline:
+The pyramid can tile the projection as either **hexagons** (the d3-hexbin
+lattice) or **squares**.  **The shape is a fixed property of the dataset's media
+type, not a user choice:** media with *browsable* thumbnails — image, video,
+document — tile as **squares** so the thumbnails pack edge-to-edge with no gaps
+(and the square quadtree makes representatives perfectly zoom-persistent);
+audio and text tile as **hexes** (a density map, since their "thumbnails" — e.g.
+audio waveforms — aren't worth browsing).  The single source of truth is
+`vtscore.projection.bin_shape_for_media_type(media_type)`; the backend derives
+the shape from the active dataset on every projection endpoint, and the meta
+response reports the resolved `bin_shape` so the canvas knows which lattice to
+draw.  There is no per-media-type `browse_bin_shape` setting and no on-canvas
+hex/square toggle (both removed).
+
+The design still keeps both lattices cheap by factoring binning out of the rest
+of the pipeline (a dataset only ever uses the one shape its media type dictates,
+but the machinery below is what makes that one shape correct and fast):
 
 - **The UMAP layout is shape-independent and computed once.**  Hex and square
   are two *binnings* of the same frozen `(N, 2)` coordinates, so switching only
@@ -432,28 +444,26 @@ factoring binning out of the rest of the pipeline:
   genuinely differs, beyond cell geometry.
 - **The pyramid records its `bin_shape`** (in the dataclass, in `meta()`, and in
   the persisted JSON), so a loaded projection always knows which lattice it was
-  binned with.  Containers written before the toggle have no `bin_shape` and are
-  hex by construction, so they default to hex.
+  binned with.  Legacy containers with no `bin_shape` are hex by construction, so
+  they default to hex.
 - **Persistence is per-shape.**  Each binning is stored in its own ZIP entry —
-  `projection.npz` for hex (unchanged legacy name) and `projection_{shape}.npz`
-  for the rest — sharing the coordinates (a small duplication next to the tile
-  JSON).  Hex and square coexist in one container; appending one leaves the
-  other intact.
-- **The context caches both.**  `DatasetContext._pyramids` maps `bin_shape →
-  Pyramid`, so toggling back and forth within a session is instant after the
-  first build of each shape.  Hex is built at ingest (the projection-at-creation
-  stage); square is derived lazily on first toggle, then cached and persisted.
-- **The HTTP surface is shape-keyed.**  `POST /api/projection/build` takes
-  `{"shape": ...}`, `GET /api/projection/meta?shape=...` reports that shape's
-  status/metadata (including `bin_shape`), and tiles move to
-  `GET /api/projection/tiles/<shape>/<level>/<tx>/<ty>`.  The client tile cache
-  keys on shape too, so both binnings stay cached side by side under the one
-  shared `projection_id`.
+  `projection.npz` for hex (the legacy name) and `projection_{shape}.npz` for the
+  rest — sharing the coordinates.  In practice a dataset only ever persists the
+  one shape its media type dictates, but the per-shape storage is what lets a
+  legacy container (written when the shape was user-toggleable) still carry both;
+  a forced re-project clears *every* persisted shape.
+- **The context caches per-shape.**  `DatasetContext._pyramids` maps `bin_shape →
+  Pyramid`.  The dataset's shape is built at ingest (the projection-at-creation
+  stage) from its media type.
+- **The HTTP surface is shape-agnostic.**  The shape is derived server-side from
+  the dataset's media type (`bin_shape_for_media_type`), so `POST
+  /api/projection/build`, `GET /api/projection/meta`, and `GET
+  /api/projection/tiles/<level>/<tx>/<ty>` take no `shape` parameter.  The meta
+  response still reports the resolved `bin_shape` so the canvas knows which
+  lattice to draw, and the client tile cache no longer keys on shape.
 - **Every other control is shape-agnostic.**  Pan, zoom, on-screen cell size,
   the minimap, and hover all run off the shared `radius`/`tile_span` metadata
-  and a shared `BinGeometry`, so they work identically in either mode.  Toggling
-  preserves the current pan/zoom: because the projection id is unchanged, the
-  canvas re-bins in place instead of re-framing to data.
+  and a shared `BinGeometry`, so they work identically in either mode.
 
 ### Stage 3 — Canvas renderer (client-side, **Canvas 2D**)
 
@@ -510,7 +520,7 @@ factoring binning out of the rest of the pipeline:
 | Sibling highlight | **On hover** | Hovering an item highlights the other items from the same source file wherever they fall on the canvas. Requires a per-point source-file group id; see *§Interaction model*. |
 | UMAP seeding | **Unseeded (fast)** | No `random_state`; numba parallelism stays on. Safe only because the projection is frozen at ingest, so the fit never re-runs for a given dataset. |
 | Projection lifetime | **Frozen at ingest, persisted** | UMAP + pyramid computed once and stored with the dataset artifact (carve-out from "No Persisted Vectors/MLPs"; covers 2D coords + pyramid only). Never recomputed; legacy datasets compute-once on first open. Dissolves tile-cache invalidation. |
-| Bin shape | **Hex (default) or square, user-toggleable** | The projection can be tiled as hexagons or squares. The UMAP layout is shape-independent and shared; switching only re-bins the frozen coords (no re-fit). Each binning is its own `Pyramid` (carrying `bin_shape`), cached per-shape on the context and persisted in its own container entry (`projection.npz` for hex, `projection_{shape}.npz` for square). See *§Bin shape (hex/square)*. |
+| Bin shape | **Fixed by media type (square for image/video/document, hex for audio/text)** | The shape is not a user choice — `bin_shape_for_media_type` derives it from the dataset's media type, the backend applies it on every projection endpoint, and the meta response reports the resolved `bin_shape` for the canvas. No `browse_bin_shape` setting and no on-canvas toggle. The pyramid still supports both lattices internally (each its own `Pyramid` carrying `bin_shape`, persisted in its own container entry). See *§Bin shape (hex/square)*. |
 
 ### Notes on frontend integration
 
@@ -622,10 +632,14 @@ in git history and the cited source files.
   registration.
 - ~~**Dataset age-off**~~ — `dataset_max_age_days` server setting → `expires_at`
   on container + registry; expired loads return 410 and auto-unregister.
-- ~~**Hex/square bin-shape toggle**~~ — `vtscore/projection/squarebin.py`,
+- ~~**Hex/square bin shape**~~ — `vtscore/projection/squarebin.py`,
   `build_pyramid(..., bin_shape=)`, per-shape container entries,
-  `DatasetContext._pyramids`, shape-keyed routes/tile-cache, `browse_bin_shape`
-  setting.
+  `DatasetContext._pyramids`. *Superseded:* the shape was originally a
+  user-toggleable per-media-type setting (`browse_bin_shape`) with shape-keyed
+  routes/tile-cache; it is now derived from the media type
+  (`bin_shape_for_media_type`: square for image/video/document, hex for
+  audio/text), the `browse_bin_shape` setting + on-canvas toggle are removed, and
+  the routes/tile-cache are shape-agnostic.
 - ~~**Per-theme density colormap + Browser settings tab**~~ — Heat/Ocean/Grayscale
   colormaps resolved against the live theme; per-media-type `browse_colormap` /
   `browse_icon_size` / `browse_bin_shape` settings surfaced in a new Browser tab.
@@ -675,6 +689,24 @@ in git history and the cited source files.
   none/partial/full rendering; `member_ids` re-derived on demand
   (`tile_member_ids`, never persisted). *Still open:* act on the selection
   (export / seed detector / subset projection); minimap selection overlay.
+- ~~**Keyboard shortcuts**~~ — the browse view and its bin-details popup handle
+  document-level keys (`@HostListener('document:keydown')`, gated by
+  `shortcutsBlocked()` in `utils/keyboard-shortcuts.ts` — no typing target, no
+  open modal). On the **canvas** (popup closed): arrows pan (`canvas.panByKey`,
+  hard-clamped like the minimap recenter but eased over `PAN_ANIM_MS` via
+  `startPanAnim`/`stepPanAnim` so a N/E/S/W push glides like the zoom transition
+  instead of snapping; repeated presses retarget the glide), `+`/`-` zoom (the same `zoomIn`/
+  `zoomOut` as the GUI buttons), Ctrl/Cmd-A selects every bin **fully** in view
+  (`canvas.selectAllInView`, the viewport analogue of the marquee). In the
+  **bin-details popup** (which then owns the keyboard; the view suppresses its
+  own while it's open): arrows walk the viewed item through the grid
+  (`moveFocus`, updating the preview pane + a dashed `.focused` grid ring and
+  scrolling the row into view), `+`/`-` resize the detail image (`bumpPreview`),
+  Ctrl/Cmd-A selects every item in the bin. The Help → Keyboard shortcuts sheet
+  was split into per-context sub-tabs (Train/Find · Browser · General) so the
+  growing list stays scannable. *Open follow-up:* keyboard nav doesn't move DOM
+  focus, so Enter/Space only toggles the *DOM-focused* entry (tab order), not the
+  arrow-walked one; a future pass could let Space toggle the viewed item too.
 - ~~**Double-click + right-click on the canvas**~~ — double-click zooms about the
   cursor (click toggle deferred by `DBLCLICK_MS`); right-click opens the shared
   `vt-media-context-menu`. *Still open:* the context menu is the home for the
