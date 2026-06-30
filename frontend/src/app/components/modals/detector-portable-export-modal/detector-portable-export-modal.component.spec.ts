@@ -20,9 +20,12 @@ describe('DetectorPortableExportModalComponent', () => {
     httpMock = TestBed.inject(HttpTestingController);
     fixture.componentRef.setInput('detectorId', 'det-123');
     fixture.componentRef.setInput('detectorName', 'My Detector');
-    // jsdom doesn't implement the object-URL APIs the download path uses.
+    // jsdom doesn't implement the object-URL APIs the download path uses, and
+    // anchor.click() on a blob: href triggers a jsdom "navigation not
+    // implemented" error — stub both so the download path is inert in tests.
     URL.createObjectURL = vi.fn(() => 'blob:mock');
     URL.revokeObjectURL = vi.fn();
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -54,8 +57,11 @@ describe('DetectorPortableExportModalComponent', () => {
       statusText: 'Bad Request',
     });
 
-    // readError reads the Blob asynchronously; let the microtask settle.
-    await new Promise((resolve) => setTimeout(resolve));
+    // readError reads the Blob via FileReader (extra async hops); poll until
+    // the error signal settles rather than guessing a fixed delay.
+    for (let i = 0; i < 50 && component.error() === ''; i++) {
+      await new Promise((resolve) => setTimeout(resolve));
+    }
     expect(component.error()).toBe('No medias loaded');
     expect(component.done()).toBe(false);
   });

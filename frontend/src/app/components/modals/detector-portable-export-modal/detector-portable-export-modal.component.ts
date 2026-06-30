@@ -77,14 +77,45 @@ export class DetectorPortableExportModalComponent {
   private async readError(err: unknown): Promise<string> {
     const fallback = 'Export failed. Make sure a compatible dataset is loaded, then try again.';
     const body = (err as { error?: unknown })?.error;
+
+    // Already-parsed object body (some HTTP layers/tests deliver this directly).
+    if (body && typeof body === 'object' && !(body instanceof Blob)) {
+      const obj = body as { message?: string; error?: string };
+      return obj.message || obj.error || fallback;
+    }
+
+    // The real runtime returns a Blob (the request used responseType: 'blob').
+    let text: string | undefined;
     if (body instanceof Blob) {
+      text = await this.blobText(body);
+    } else if (typeof body === 'string') {
+      text = body;
+    }
+    if (text) {
       try {
-        const parsed = JSON.parse(await body.text()) as { message?: string; error?: string };
+        const parsed = JSON.parse(text) as { message?: string; error?: string };
         return parsed.message || parsed.error || fallback;
       } catch {
         return fallback;
       }
     }
     return fallback;
+  }
+
+  /**
+   * Read a Blob to text. Prefers `Blob.text()` (browsers) and falls back to
+   * `FileReader` (jsdom, where `Blob.text` is absent), so error parsing works
+   * under unit tests too. Resolves to '' on any failure.
+   */
+  private blobText(blob: Blob): Promise<string> {
+    if (typeof blob.text === 'function') {
+      return blob.text().catch(() => '');
+    }
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ''));
+      reader.onerror = () => resolve('');
+      reader.readAsText(blob);
+    });
   }
 }
