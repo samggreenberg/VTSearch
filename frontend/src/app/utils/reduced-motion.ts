@@ -5,6 +5,45 @@
  */
 export const ANIMATIONS_OFF_CLASS = 'animations-off';
 
+/** The media query both the CSS blanket rule and the JS gates key off. */
+export const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+/**
+ * Returns true when the browser/OS itself is suppressing motion via the
+ * `prefers-reduced-motion: reduce` media query — independent of the app's
+ * "Show Animations" setting. This is the gate that *overrides* the in-app
+ * toggle: when it matches, motion stays off even with "Show Animations" on,
+ * which is why the toggle appears to do nothing. The Settings → Appearance
+ * status line reports this so a user whose animations vanished can see the
+ * block is coming from their browser/OS, not from VTSearch.
+ * Falls back to false where matchMedia is unavailable (SSR, jsdom tests).
+ */
+export function browserPrefersReducedMotion(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return false;
+  }
+  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
+}
+
+/**
+ * Subscribe to changes in the browser/OS `prefers-reduced-motion` preference.
+ * Invokes `onChange` with the new value whenever the user flips their OS or
+ * browser reduce-motion setting while the app is open, so live UI (the Settings
+ * status line) updates without a reload. Returns a teardown that removes the
+ * listener; a no-op where matchMedia is unavailable.
+ */
+export function onBrowserReducedMotionChange(
+  onChange: (reduced: boolean) => void,
+): () => void {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return () => {};
+  }
+  const mql = window.matchMedia(REDUCED_MOTION_QUERY);
+  const handler = (event: MediaQueryListEvent) => onChange(event.matches);
+  mql.addEventListener('change', handler);
+  return () => mql.removeEventListener('change', handler);
+}
+
 /**
  * Returns true when motion should be suppressed — either because the user (or
  * OS) asked for reduced motion, or because the app's "Show Animations" setting
@@ -20,8 +59,5 @@ export function prefersReducedMotion(): boolean {
   ) {
     return true;
   }
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-    return false;
-  }
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return browserPrefersReducedMotion();
 }
