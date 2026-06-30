@@ -50,6 +50,10 @@ describe('SettingsModalComponent', () => {
   // the flush). Settle again afterwards so the resolved signals repaint.
   async function flushInit(): Promise<void> {
     await settleZoneless(fixture);
+    // ngOnInit also refreshes HuggingFace sign-in status for the HuggingFace tab.
+    httpMock
+      .expectOne('/api/auth/huggingface/status')
+      .flush({ configured: false, authenticated: false, username: '', scopes: '' });
     // forkJoin makes all requests in parallel: settings, media types,
     // embedders, and version.
     const settingsReq = httpMock.expectOne('/api/settings');
@@ -158,6 +162,9 @@ describe('SettingsModalComponent', () => {
 
   it('should handle init error gracefully', async () => {
     await settleZoneless(fixture);
+    httpMock
+      .expectOne('/api/auth/huggingface/status')
+      .flush({ configured: false, authenticated: false, username: '', scopes: '' });
     const settingsReq = httpMock.expectOne('/api/settings');
     const mediaTypesReq = httpMock.expectOne('/api/media-types');
     const embeddersReq = httpMock.expectOne('/api/embedders');

@@ -16,6 +16,7 @@ import {
 import { ImportDefaultsByMediaType } from '../../../models/api.models';
 import { SettingsApiService } from '../../../services/settings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
+import { HuggingFaceAuthService } from '../../../services/huggingface-auth.service';
 import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
 import type { AppSettings } from '../../../generated/api-client/models/app-settings';
 import { EmbedderInfo, MediaTypeInfo } from '../../../models/api.models';
@@ -42,6 +43,10 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   private datasetsListingsApi = inject(DatasetsListingsApiService);
   private themeService = inject(ThemeService);
   private dialog = inject(VtDialogService);
+  private hfAuth = inject(HuggingFaceAuthService);
+
+  /** HuggingFace sign-in state, surfaced to the "HuggingFace" settings tab. */
+  readonly hfStatus = this.hfAuth.status;
 
   @Input() preselectedViewTab = '';
   readonly closed = output<void>();
@@ -74,6 +79,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.hfAuth.refresh();
     forkJoin({
       settings: this.settingsApi.getSettings(),
       mediaTypes: this.datasetsListingsApi.getMediaTypes(),
@@ -117,6 +123,16 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
         this.error.set('Failed to load settings');
       },
     });
+  }
+
+  /** Start the "Sign in with HuggingFace" OAuth handshake. */
+  hfLogin(): void {
+    this.hfAuth.login();
+  }
+
+  /** Sign out of HuggingFace (drops the server-held token). */
+  hfLogout(): void {
+    this.hfAuth.logout();
   }
 
   onThemeChange(theme: string): void {
