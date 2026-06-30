@@ -325,14 +325,16 @@ def record_vote(
     *,
     now: float | None = None,
     tz_offset_minutes: int | None = None,
+    count_streak: bool = True,
 ) -> None:
     """Record one user vote and credit every vote-driven achievement.
 
     Credits ``votes_cast`` always, ``detectors_trained`` on a detector's first
     vote, ``media_types_touched`` on a media type's first vote, ``days_active``
     on the first vote of each local calendar day, ``hours_voted`` on the first
-    vote within each local hour-of-day bucket, and updates the ``vote_streak``
-    watermark (longest run of consecutive votes with gaps ≤ 10 minutes).
+    vote within each local hour-of-day bucket, and (when *count_streak* is set)
+    updates the ``vote_streak`` watermark (longest run of consecutive votes
+    with gaps ≤ 10 minutes).
 
     Days and hours bucket by the voter's local wall-clock time, resolved from
     the request's timezone offset (see :func:`_user_tz_offset_minutes`), so the
@@ -349,6 +351,14 @@ def record_vote(
         tz_offset_minutes: Override the local-time offset (UTC minus local, in
             minutes) instead of reading it from the request header; only used
             by tests.  Default resolves :func:`_user_tz_offset_minutes`.
+        count_streak: When True (the default), this vote participates in the
+            Marathoner ``vote_streak`` watermark.  Bulk / non-individual vote
+            paths (Verified Good/Bad on a hand-selected set, fill-from-sort,
+            label import) pass False: they still credit every other vote
+            achievement, but a batch of N items must not manufacture an
+            N-long "consecutive individual votes" streak, and they leave the
+            running streak (and its ``last_vote_ts`` clock) untouched so a real
+            hand-clicked run on either side of them stays intact.
     """
     if _is_disabled():
         return
@@ -358,7 +368,7 @@ def record_vote(
     date_str = local_dt.strftime("%Y-%m-%d")
     hour = local_dt.hour
 
-    mutate_user(lambda cache: _credit_vote(cache, ts, detector_id, media_type, date_str, hour))
+    mutate_user(lambda cache: _credit_vote(cache, ts, detector_id, media_type, date_str, hour, count_streak))
 
 
 def _credit_vote(
@@ -368,6 +378,7 @@ def _credit_vote(
     media_type: str,
     date_str: str,
     hour: int,
+    count_streak: bool = True,
 ) -> None:
     """Apply one vote's credits to *cache* in place. See :func:`record_vote`."""
     state = _ensure_state(cache)
@@ -397,15 +408,20 @@ def _credit_vote(
         hours_seen.append(hour)
         counters["hours_voted"] += 1
 
-    last_ts = float(state.get("last_vote_ts") or 0.0)
-    if last_ts <= 0.0 or (ts - last_ts) > STREAK_GAP_SECONDS:
-        current = 1
-    else:
-        current = int(state.get("current_streak") or 0) + 1
-    state["current_streak"] = current
-    state["last_vote_ts"] = ts
-    if current > counters["vote_streak"]:
-        counters["vote_streak"] = current
+    # The Marathoner streak measures sustained *individual* hand-clicking, so
+    # bulk / non-individual votes are transparent to it: they neither advance
+    # nor reset the running streak, and they leave ``last_vote_ts`` alone so
+    # the gap is always measured between two real hand-clicks.
+    if count_streak:
+        last_ts = float(state.get("last_vote_ts") or 0.0)
+        if last_ts <= 0.0 or (ts - last_ts) > STREAK_GAP_SECONDS:
+            current = 1
+        else:
+            current = int(state.get("current_streak") or 0) + 1
+        state["current_streak"] = current
+        state["last_vote_ts"] = ts
+        if current > counters["vote_streak"]:
+            counters["vote_streak"] = current
 
 
 def record_dataset_load(importer_name: str) -> None:
