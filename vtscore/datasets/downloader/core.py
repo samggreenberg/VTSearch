@@ -200,7 +200,11 @@ def _open_validated_stream(session: requests.Session, url: str, headers: Optiona
     """
     current_url = url
     response = session.get(
-        current_url, stream=True, timeout=(10, 60), allow_redirects=False, headers=_request_headers(current_url, headers)
+        current_url,
+        stream=True,
+        timeout=(10, 60),
+        allow_redirects=False,
+        headers=_request_headers(current_url, headers),
     )
     redirects = 0
     while response.is_redirect or response.is_permanent_redirect:

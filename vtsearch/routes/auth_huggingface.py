@@ -37,6 +37,7 @@ from urllib.parse import urlencode, urljoin
 
 import requests
 from flask import Blueprint, current_app, jsonify, redirect, request, session
+from werkzeug.wrappers import Response
 
 from vtscore.security.hf_auth import clear_credential, get_status, set_credential
 
@@ -130,7 +131,7 @@ def hf_login():
     return jsonify({"configured": True, "authorize_url": f"{_AUTHORIZE_URL}?{urlencode(params)}"})
 
 
-def _finish_redirect(status: str, reason: str = "") -> object:
+def _finish_redirect(status: str, reason: str = "") -> Response:
     """Clear handshake state and bounce the browser back to the app root."""
     for key in (_SESS_STATE, _SESS_VERIFIER, _SESS_REDIRECT):
         session.pop(key, None)
