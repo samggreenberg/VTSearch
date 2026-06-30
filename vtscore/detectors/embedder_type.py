@@ -69,12 +69,17 @@ def resolve_detector_embedder_type(requested: str) -> tuple[str, str | None]:
     """Resolve the embedder type to persist for a new detector.
 
     Returns ``(embedder_type, error)`` - *error* is ``None`` on success, else a
-    message the route surfaces as HTTP 400.  Validation/resolution against the
-    types the active dataset's bound embedders supply:
+    message the route surfaces as HTTP 400.
 
     * non-empty *requested* (a type name, or a concrete embedder name we
-      classify) → must be one of the active dataset's supplied types (when a
-      dataset is loaded), else an error;
+      classify) → accepted as long as it is one of the three valid types,
+      **regardless of whether the active dataset binds it**.  The type is the
+      user's *declared intent*: a detector can be created before any dataset is
+      loaded (the create modal can't guess the type), and one bound to a type
+      the active dataset doesn't supply simply gates as incompatible there
+      (greyed "Sort by Learned", find-label 409) the same way it does on any
+      other dataset that lacks the type.  Only a string that maps to no known
+      type is rejected;
     * empty *requested* on a dataset supplying exactly one type → that type
       (zero-friction default);
     * empty *requested* on a dataset supplying more than one type → an error
@@ -83,16 +88,14 @@ def resolve_detector_embedder_type(requested: str) -> tuple[str, str | None]:
       resolved at first train via the legacy score precedence (migration).
     """
     requested = (requested or "").strip()
-    supplied = dataset_supplied_types(active_dataset_bound_embedders())
     if requested:
         # Accept a type name directly, or a concrete embedder name (classify it)
         # so a client that still sends an embedder name keeps working.
         resolved = requested if requested in EMBEDDER_TYPE_LABELS else embedder_type(requested)
         if not resolved:
             return "", f"unknown embedder type {requested!r}"
-        if supplied and resolved not in supplied:
-            return "", (f"{EMBEDDER_TYPE_LABELS[resolved]} embedder type is not bound to this dataset")
         return resolved, None
+    supplied = dataset_supplied_types(active_dataset_bound_embedders())
     if len(supplied) == 1:
         return next(iter(supplied)), None
     if len(supplied) > 1:

@@ -99,19 +99,22 @@ class TestCreateValidation:
         assert res.status_code == 400
         assert "multiple" in res.get_json()["message"].lower()
 
-    def test_multi_type_unsupplied_pick_rejected(self, client):
+    def test_unsupplied_pick_accepted(self, client):
+        # An explicit type the active dataset doesn't bind is the user's
+        # declared intent: it's accepted and persisted, and the detector simply
+        # gates as incompatible on this dataset (find-label 409s elsewhere).
         _activate_dataset(["siglip", "dinov3_patch"])
         res = client.post(
             "/api/detectors/registry",
             json={
-                "name": "multi-bad",
+                "name": "unsupplied-ok",
                 "media_type": "image",
                 "text_query": "x",
                 "embedder_type": "structural",
             },
         )
-        assert res.status_code == 400
-        assert "not bound" in res.get_json()["message"].lower()
+        assert res.status_code == 201, res.get_json()
+        assert _read_detector_json("unsupplied-ok")["embedder_type"] == "structural"
 
     def test_multi_type_explicit_pick_persists(self, client):
         _activate_dataset(["siglip", "dinov3_patch"])

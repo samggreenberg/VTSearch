@@ -352,3 +352,18 @@
   font-size: var(--font-sm);
   line-height: 1.35;
 }
+
+// Collapsible "Advanced" section holding the Detector Embedder Type picker.
+// Toggle mirrors the import-advanced affordance (transparent, muted, link-like).
+.advanced-toggle {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  padding: var(--space-2xs) 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+
+  &:hover { color: var(--text-primary); text-decoration: underline; }
+  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+}
