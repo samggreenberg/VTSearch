@@ -162,6 +162,9 @@ describe('SettingsModalComponent', () => {
 
   it('should handle init error gracefully', async () => {
     await settleZoneless(fixture);
+    httpMock
+      .expectOne('/api/auth/huggingface/status')
+      .flush({ configured: false, authenticated: false, username: '', scopes: '' });
     const settingsReq = httpMock.expectOne('/api/settings');
     const mediaTypesReq = httpMock.expectOne('/api/media-types');
     const embeddersReq = httpMock.expectOne('/api/embedders');
