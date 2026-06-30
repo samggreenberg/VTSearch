@@ -15,6 +15,7 @@ import { DatasetStateService } from '../../services/dataset-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { ContextSwitchService } from '../../services/context-switch.service';
 import { AuthService } from '../../services/auth.service';
+import { HuggingFaceAuthService } from '../../services/huggingface-auth.service';
 import { TopBarStateService } from '../../services/top-bar-state.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { DashboardModalsService } from '../../services/dashboard-modals.service';
@@ -86,6 +87,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private activeContext = inject(ActiveContextService);
   private contextSwitch = inject(ContextSwitchService);
   private authService = inject(AuthService);
+  private hfAuth = inject(HuggingFaceAuthService);
   private topBarState = inject(TopBarStateService);
   private newThingFlows = inject(NewThingFlowsService);
   modals = inject(DashboardModalsService);
@@ -1084,6 +1086,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   // --- Loading-task helpers (used by the orphan-task row template) ---
+
+  /** Whether a failed task's error is a HuggingFace gated-resource error, in
+   *  which case the row offers a "Sign in with HuggingFace" affordance. */
+  isHuggingFaceGatedError(task: LoadingTask): boolean {
+    return !!task.error && task.error.toLowerCase().includes('huggingface');
+  }
+
+  /** Start the "Sign in with HuggingFace" OAuth handshake from a failed-load row. */
+  signInToHuggingFace(): void {
+    this.hfAuth.login();
+  }
 
   taskProgressInfo(task: LoadingTask): ProgressHeader {
     return formatProgressHeader(task, 'dataset', task.embedder);

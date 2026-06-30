@@ -252,3 +252,26 @@
 
   &--visible { opacity: 1; }
 }
+
+.hf-help {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 var(--space-md);
+  max-width: 60ch;
+
+  code {
+    font-family: var(--font-mono, monospace);
+    font-size: var(--font-xs);
+  }
+}
+
+.hf-account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+
+  &__icon { color: var(--success-text, var(--text-primary)); flex-shrink: 0; }
+  &__label { font-size: var(--font-sm); color: var(--text-primary); }
+}

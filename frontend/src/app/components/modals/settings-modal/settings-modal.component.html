@@ -60,6 +60,14 @@
           <vt-icon type="sort-descending" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'sorting'"></vt-icon>
           Sorting
         </button>
+        <button
+          class="settings-tab"
+          [class.settings-tab--active]="activeSettingsTab() === 'huggingface'"
+          (click)="activeSettingsTab.set('huggingface')"
+          title="Sign in with HuggingFace to download gated demo datasets and gated model weights">
+          <vt-icon type="globe" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'huggingface'"></vt-icon>
+          HuggingFace
+        </button>
       </nav>
 
       <div class="settings-panel">
@@ -372,6 +380,41 @@
               <div class="server-value server-value--empty">None</div>
             }
           </div>
+        }
+
+        @if (activeSettingsTab() === 'huggingface') {
+          <h3>HuggingFace<vt-field-hint-icon hint="Signs the server's downloads to the HuggingFace Hub. Use it to fetch gated demo datasets and gated model weights that your account has been granted access to. Your token is held in memory only and never written to disk."></vt-field-hint-icon></h3>
+
+          @let hf = hfStatus();
+          @if (hf === null) {
+            <div class="server-value server-value--empty">Checking sign-in status…</div>
+          } @else if (!hf.configured) {
+            <p class="hf-help">
+              "Sign in with HuggingFace" isn't configured on this server. To enable it, register an
+              OAuth app at
+              <a href="https://huggingface.co/settings/applications/new" target="_blank" rel="noopener noreferrer">huggingface.co</a>
+              and set the <code>HF_OAUTH_CLIENT_ID</code> (and <code>HF_OAUTH_CLIENT_SECRET</code>) environment variables.
+              Alternatively, set the <code>HF_TOKEN</code> environment variable to a token with access.
+            </p>
+          } @else if (hf.authenticated) {
+            <div class="hf-account">
+              <vt-icon type="check" [size]="16" class="hf-account__icon"></vt-icon>
+              <span class="hf-account__label">
+                Signed in to HuggingFace@if (hf.username) { as <strong>{{ hf.username }}</strong> }.
+              </span>
+            </div>
+            <p class="hf-help">Gated datasets and models your account can access will now download.</p>
+            <button class="btn btn--secondary" (click)="hfLogout()" title="Sign out of HuggingFace">Sign out</button>
+          } @else {
+            <p class="hf-help">
+              Sign in to download gated demo datasets (and gated model weights) that your HuggingFace
+              account has access to.
+            </p>
+            <button class="btn btn--primary" (click)="hfLogin()" title="Sign in with HuggingFace">
+              <vt-icon type="globe" [size]="14"></vt-icon>
+              Sign in with HuggingFace
+            </button>
+          }
         }
 
       </div>

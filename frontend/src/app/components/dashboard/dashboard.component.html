@@ -105,8 +105,13 @@
                 <td [attr.colspan]="visibleDatasetColumns.length + 1">
                   @if (task.error) {
                     <div class="loading-task-failed">
-                      <span class="error-msg">Failed: {{ task.error }}</span>
-                      <button class="btn btn--cancel btn--sm" (click)="loadingTasksSvc.dismissLoadingTask(task.task_id)" title="Dismiss this error">Dismiss</button>
+                      <span class="error-msg" [title]="task.error">Failed: {{ task.error }}</span>
+                      <div class="loading-task-failed__actions">
+                        @if (isHuggingFaceGatedError(task)) {
+                          <button class="btn btn--primary btn--sm" (click)="signInToHuggingFace()" title="Sign in with HuggingFace, then retry the download">Sign in with HuggingFace</button>
+                        }
+                        <button class="btn btn--cancel btn--sm" (click)="loadingTasksSvc.dismissLoadingTask(task.task_id)" title="Dismiss this error">Dismiss</button>
+                      </div>
                     </div>
                   } @else {
                     @let info = taskProgressInfo(task);
