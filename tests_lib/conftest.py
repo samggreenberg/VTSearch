@@ -214,6 +214,10 @@ def reset_contexts(tmp_path, monkeypatch):
 
     medias.update({k: dict(v) for k, v in _test_medias_snapshot.items()})
 
+    from vtscore.security.hf_auth import clear_credential as _clear_hf_credential
+
+    _clear_hf_credential()
+
     clear_progress_cache()
 
     from vtscore.embedding.helpers import clear_text_query_cache as _clear_query_cache

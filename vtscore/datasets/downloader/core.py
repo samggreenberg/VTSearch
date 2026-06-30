@@ -184,7 +184,7 @@ def _request_headers(url: str, headers: Optional[dict]) -> dict:
     other HuggingFace hosts, never to a presigned CDN / Xet target."""
     merged = dict(headers or {})
     merged.update(auth_header_for_url(url))
-    return merged or None  # type: ignore[return-value]
+    return merged
 
 
 def _open_validated_stream(session: requests.Session, url: str, headers: Optional[dict] = None) -> requests.Response:
