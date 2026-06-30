@@ -14,6 +14,7 @@ import {
   usesThumbnails,
 } from './hex-render.util';
 import { binGeometry, BinGeometry } from './bin-geometry';
+import { prefersReducedMotion } from '../../utils/reduced-motion';
 import type {
   HexCellPayload,
   ProjectionMeta,
@@ -948,11 +949,6 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     });
   }
 
-  /** Honour the OS "reduce motion" setting: skip the zoom transition entirely. */
-  private prefersReducedMotion(): boolean {
-    return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-  }
-
   /**
    * Commit a zoom change after `transform` and `activeLevel` have been updated.
    * Plays the picture-in-picture transition on every zoom, whether or not the
@@ -967,7 +963,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       // A transition is already running (e.g. a burst of wheel notches): ease on
       // to the new target rather than stopping short at the old one.
       this.animTo = { ...this.transform };
-    } else if (this.hasDrawn && this.width > 0 && !this.prefersReducedMotion()) {
+    } else if (this.hasDrawn && this.width > 0 && !prefersReducedMotion()) {
       this.startZoomAnim();
     } else {
       this.requestRedraw();
@@ -1212,7 +1208,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       Math.abs(dest.zoom - cur.zoom) <= 1e-4 * cur.zoom;
     if (settled) return;
     // Honour reduced-motion: jump straight to the clamp instead of springing.
-    if (this.prefersReducedMotion()) {
+    if (prefersReducedMotion()) {
       this.transform = dest;
       this.updateActiveLevel();
       this.requestRedraw();
@@ -2227,7 +2223,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // there's nowhere to glide, so leave the view untouched.
     if (settled && !this.panAnimActive) return;
     // No prior frame to freeze (or motion disabled): jump straight to the target.
-    if (this.prefersReducedMotion() || !this.hasDrawn || this.width <= 0) {
+    if (prefersReducedMotion() || !this.hasDrawn || this.width <= 0) {
       this.cancelPanAnim();
       this.transform.centerX = target.centerX;
       this.transform.centerY = target.centerY;

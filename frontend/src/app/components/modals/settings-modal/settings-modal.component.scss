@@ -81,6 +81,42 @@
   cursor: pointer;
 }
 
+// "Browser motion: Allowed / Blocked" status line under the Show Animations
+// toggle. Always visible: it reports whether the browser/OS reduce-motion
+// gate (which overrides the toggle) is currently suppressing animations, so a
+// user whose animations vanished can confirm the block is theirs, not the
+// app's. Green = allowed; yellow = blocked, reusing the shared status palette.
+.motion-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-top: calc(-1 * var(--space-2xs));
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+
+  &__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--status-green-dot);
+  }
+
+  &__label {
+    color: var(--text-secondary);
+  }
+
+  &__value {
+    font-weight: var(--weight-medium);
+    color: var(--status-green-label);
+  }
+
+  &--blocked {
+    .motion-status__dot { background: var(--status-yellow-dot); }
+    .motion-status__value { color: var(--status-yellow-label); }
+  }
+}
+
 // Scroll Style's two-side layout sits inside the shared `.view-tab-content`
 // panel (base styling in `_components.scss`). Encapsulation scopes this
 // grid override to ScrollStyle's tab content only; other consumers

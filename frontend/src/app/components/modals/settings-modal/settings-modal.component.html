@@ -87,6 +87,21 @@
             <input type="checkbox" [ngModel]="settings().show_animations" (ngModelChange)="onToggle('show_animations', $event)" />
             Show Animations<vt-field-hint-icon hint="Turns decorative motion on or off everywhere at once: the swipe transition when you vote, icon spins/waggles/tilts on buttons and cards, toast and banner slide-ins, smooth scrolling, and projection-browser zoom tweens. (Your operating system’s “reduce motion” setting disables the same things.)"></vt-field-hint-icon>
           </label>
+          <div
+            class="motion-status"
+            [class.motion-status--blocked]="browserBlocksMotion()"
+            role="status"
+            aria-live="polite"
+            title="Whether your browser or operating system is currently suppressing animations">
+            <span class="motion-status__dot" aria-hidden="true"></span>
+            <span class="motion-status__label">Browser motion:</span>
+            @if (browserBlocksMotion()) {
+              <span class="motion-status__value">Blocked by your OS / browser</span>
+              <vt-field-hint-icon hint="Your operating system or browser is set to “reduce motion”, so VTSearch animations stay off no matter how the Show Animations toggle above is set — this is almost always why animations are missing. To re-enable: turn off “Reduce motion” in your OS accessibility settings (macOS: Accessibility → Display; Windows: Accessibility → Visual effects → Animation effects; GNOME: Accessibility → Reduce animation), or the equivalent browser flag, then reload."></vt-field-hint-icon>
+            } @else {
+              <span class="motion-status__value">Allowed</span>
+            }
+          </div>
           <label class="checkbox-row" title="Show the collapsible metadata tray below the media viewer (name, type, MD5, custom fields)">
             <input type="checkbox" [ngModel]="settings().show_metadata" (ngModelChange)="onToggle('show_metadata', $event)" />
             Show metadata panel

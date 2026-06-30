@@ -24,6 +24,10 @@ import { Theme, ThemeService } from '../../../services/theme.service';
 import { formatVersion } from '../../../utils/format-date';
 import { VtDialogService } from '../../../services/dialog.service';
 import {
+  browserPrefersReducedMotion,
+  onBrowserReducedMotionChange,
+} from '../../../utils/reduced-motion';
+import {
   DEFAULT_THUMBNAIL_BORDER,
   MAX_THUMBNAIL_BORDER,
   usesThumbnails,
@@ -70,16 +74,35 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   readonly savedVisible = signal(false);
   private savedTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /**
+   * Whether the browser/OS is suppressing motion via `prefers-reduced-motion`.
+   * Surfaced as the "Browser motion" status line under the Show Animations
+   * toggle so a user whose animations vanished can see the block is coming from
+   * their OS/browser (which overrides the toggle), not from VTSearch. Tracks
+   * live changes to the OS setting via `onBrowserReducedMotionChange`.
+   */
+  readonly browserBlocksMotion = signal(browserPrefersReducedMotion());
+  private reducedMotionCleanup: (() => void) | null = null;
+
   private destroy$ = new Subject<void>();
 
   ngOnDestroy(): void {
     if (this.savedTimer !== null) clearTimeout(this.savedTimer);
+    this.reducedMotionCleanup?.();
     this.destroy$.next();
     this.destroy$.complete();
   }
 
   ngOnInit(): void {
     this.hfAuth.refresh();
+
+    // Keep the "Browser motion" status line live if the user flips their OS
+    // reduce-motion setting while the modal is open.
+    this.browserBlocksMotion.set(browserPrefersReducedMotion());
+    this.reducedMotionCleanup = onBrowserReducedMotionChange((reduced) =>
+      this.browserBlocksMotion.set(reduced),
+    );
+
     forkJoin({
       settings: this.settingsApi.getSettings(),
       mediaTypes: this.datasetsListingsApi.getMediaTypes(),
