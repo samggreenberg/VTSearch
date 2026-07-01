@@ -94,6 +94,7 @@ class TestDemoImportSingleClip:
         only be prevented upstream at dispatch (see the suppression above).
         """
         from vtscore.datasets.stages import clipper as clipper_stage
+        from vtscore.state import DatasetContext
 
         class DummyTracker:
             def check_cancelled(self):
@@ -102,11 +103,8 @@ class TestDemoImportSingleClip:
             def update(self, *a, **k):
                 pass
 
-        class DummyCtx:
-            def __init__(self, medias):
-                self.medias = medias
-
-        ctx = DummyCtx({1: {"id": 1, "media_type": "audio", "embeddings": {"clap": [0.0]}}})
+        ctx = DatasetContext("test-double-clip")
+        ctx.medias = {1: {"id": 1, "media_type": "audio", "embeddings": {"clap": [0.0]}}}
 
         calls: list = []
 
