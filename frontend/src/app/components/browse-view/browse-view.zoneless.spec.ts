@@ -171,4 +171,27 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     component.toggleMarqueeMode();
     expect(component.regionDrawActive).toBe(true);
   });
+
+  it('drives preview-audio volume from the toolbar: slider lowers the level and mute round-trips', async () => {
+    await settleZoneless(fixture);
+    const component = fixture.componentInstance;
+
+    // Settings resolved to {} → volume defaults to full.
+    expect(component.volume()).toBe(1);
+
+    // Dragging the slider lowers the level (this signal feeds the `[volume]`
+    // inputs on the hover-preview + bin-popup, quieting a playing clip live).
+    component.onVolumeInput({ target: { value: '0.3' } } as unknown as Event);
+    expect(component.volume()).toBeCloseTo(0.3);
+
+    // Muting drops to 0; unmuting restores the pre-mute level, not full volume.
+    component.toggleMute();
+    expect(component.volume()).toBe(0);
+    component.toggleMute();
+    expect(component.volume()).toBeCloseTo(0.3);
+
+    // A committed (released) value clamps into [0, 1].
+    component.onVolumeCommit({ target: { value: '5' } } as unknown as Event);
+    expect(component.volume()).toBe(1);
+  });
 });

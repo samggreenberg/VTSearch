@@ -90,6 +90,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   // build poller, settings effect), so a signal so those writes repaint the
   // canvas/minimap inputs and the info row under zoneless.
   readonly mediaType = signal('');
+  /**
+   * Preview-audio volume (0–1) for the Browse view's hover/bin-popup playback,
+   * seeded from and written back to the shared ``volume`` setting so it stays in
+   * lockstep with the Find view's player. Only surfaced (as a toolbar mute +
+   * slider) for audio datasets — the only media type Browse plays sound for.
+   */
+  readonly volume = signal(1);
+  /** Last non-zero level, so the mute toggle can restore where the user was. */
+  private preMuteVolume = 1;
   hoverEvent: HexHoverEvent | null = null;
   /**
    * Top of the density scale for the legend: the densest cell currently in
@@ -272,6 +281,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       const settingsErrored = this.settingsState.error() != null;
       if (settings) {
         this.lastSettings = settings;
+        const vol = settings.volume ?? 1;
+        this.volume.set(vol);
+        if (vol > 0) this.preMuteVolume = vol;
         if (settings.browse_panel_width != null && !this.panelWidthInitialized) {
           this.panelWidth.set(
             this.clamp(
@@ -713,6 +725,46 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   /** Choose a zoom and pan so the current data just fits in view. */
   zoomToFit(): void {
     this.canvas?.zoomToFit();
+  }
+
+  // --- Preview-audio volume (audio datasets only) -------------------------
+
+  /** Live drag of the volume slider: update the level (and the playing preview,
+   *  via the ``[volume]`` inputs) on every ``input`` without hammering the
+   *  settings API — the write is deferred to {@link onVolumeCommit} on release. */
+  onVolumeInput(event: Event): void {
+    const v = this.clampVolume(+(event.target as HTMLInputElement).value);
+    this.volume.set(v);
+    if (v > 0) this.preMuteVolume = v;
+  }
+
+  /** Slider released (``change``): persist the settled level once. */
+  onVolumeCommit(event: Event): void {
+    const v = this.clampVolume(+(event.target as HTMLInputElement).value);
+    this.setVolume(v);
+  }
+
+  /** Mute toggle: drop to 0 (remembering where we were) or restore the last
+   *  non-zero level. Persists immediately since it's a discrete action. */
+  toggleMute(): void {
+    if (this.volume() > 0) {
+      this.preMuteVolume = this.volume();
+      this.setVolume(0);
+    } else {
+      this.setVolume(this.preMuteVolume > 0 ? this.preMuteVolume : 1);
+    }
+  }
+
+  private setVolume(v: number): void {
+    const clamped = this.clampVolume(v);
+    this.volume.set(clamped);
+    if (clamped > 0) this.preMuteVolume = clamped;
+    this.settingsState.update({ volume: clamped }).subscribe();
+  }
+
+  private clampVolume(v: number): number {
+    if (!Number.isFinite(v)) return this.volume();
+    return Math.max(0, Math.min(1, v));
   }
 
   // --- Right-click bin popup ----------------------------------------------

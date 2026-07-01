@@ -81,6 +81,7 @@
           <vt-browse-hover-preview
             [hover]="hoverEvent"
             [mediaType]="mediaType()"
+            [volume]="volume()"
           />
           @if (contextMenuOpen) {
             <vt-browse-bin-popup
@@ -90,6 +91,7 @@
               [memberIds]="contextMembers"
               [repId]="contextRepId"
               [mediaType]="mediaType()"
+              [volume]="volume()"
               [hoverThumbRadius]="thumbnailRadius"
               (dismissed)="dismissContextMenu()"
             />
@@ -153,6 +155,31 @@
                 <vt-icon type="image" [size]="18"></vt-icon>
               </button>
             </div>
+            @if (mediaType() === 'audio') {
+              <div class="browse-volume" role="group" aria-label="Preview volume">
+                <button
+                  type="button"
+                  class="browse-size-btn"
+                  (click)="toggleMute()"
+                  [attr.aria-pressed]="volume() === 0"
+                  [title]="volume() === 0 ? 'Unmute preview audio' : 'Mute preview audio'"
+                  [attr.aria-label]="volume() === 0 ? 'Unmute preview audio' : 'Mute preview audio'">
+                  <vt-icon [type]="volume() === 0 ? 'volume-mute' : 'volume'" [size]="15"></vt-icon>
+                </button>
+                <input
+                  type="range"
+                  class="browse-volume-slider"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  [value]="volume()"
+                  (input)="onVolumeInput($event)"
+                  (change)="onVolumeCommit($event)"
+                  title="Preview volume"
+                  aria-label="Preview volume"
+                />
+              </div>
+            }
           </div>
           <div class="browse-info">
             <span class="browse-info-label">{{ datasetName() }}</span>
