@@ -16,7 +16,7 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { ContextSwitchService } from '../../services/context-switch.service';
 import { AuthService } from '../../services/auth.service';
 import { HuggingFaceAuthService } from '../../services/huggingface-auth.service';
-import { TopBarStateService } from '../../services/top-bar-state.service';
+import { DashboardSelectionService } from '../../services/dashboard-selection.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { DashboardModalsService } from '../../services/dashboard-modals.service';
 import { DashboardLoadingTasksService } from '../../services/dashboard-loading-tasks.service';
@@ -90,7 +90,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private contextSwitch = inject(ContextSwitchService);
   private authService = inject(AuthService);
   private hfAuth = inject(HuggingFaceAuthService);
-  private topBarState = inject(TopBarStateService);
+  private dashSelection = inject(DashboardSelectionService);
   private newThingFlows = inject(NewThingFlowsService);
   modals = inject(DashboardModalsService);
   loadingTasksSvc = inject(DashboardLoadingTasksService);
@@ -212,6 +212,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // While the Dashboard is on screen the top-bar pulldowns mirror the
+    // table selection (rather than the loaded context); flag that here and
+    // push the current selection so the bar is correct on first paint.
+    this.dashSelection.setDashboardVisible(true);
+    this.pushTopBarLabels();
+    // Pulldown → table: a pick inside the top-bar pulldown selects the
+    // matching row exactly as a plain (non-additive) table click would.
+    this.dashSelection.selectRequest$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(({ kind, id }) => {
+        if (kind === 'dataset') this.applyDatasetSelection(id, false);
+        else this.applyDetectorSelection(id, false);
+      });
     this.authService.status$
       .pipe(takeUntil(this.destroy$))
       .subscribe((status) => {
@@ -391,6 +404,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    // Off the Dashboard there are no tables to mirror; the pulldown reverts
+    // to showing the active/loaded context.
+    this.dashSelection.setDashboardVisible(false);
     this.destroy$.next();
     this.destroy$.complete();
     this.findPolling$.next();
@@ -428,20 +444,29 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Dataset selection ---
 
+  /** Mirror the current table selection to the top-bar pulldowns. Called
+   *  after every selection mutation; the pulldowns resolve names/counts
+   *  from these id lists (filtered to ids still in the registry so a
+   *  pruned-away id can't inflate the "Multiple" count). */
   private pushTopBarLabels(): void {
-    const selDatasets = this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
-    if (selDatasets.length === 0) this.topBarState.setDatasetLabel('None');
-    else if (selDatasets.length === 1) this.topBarState.setDatasetLabel(selDatasets[0].name);
-    else this.topBarState.setDatasetLabel('Multiple');
-
-    const selModels = this.detectors.filter((d) => this.selectedDetectorIds.has(d.id));
-    if (selModels.length === 0) this.topBarState.setModelLabel('None');
-    else if (selModels.length === 1) this.topBarState.setModelLabel(selModels[0].name);
-    else this.topBarState.setModelLabel('Multiple');
+    this.dashSelection.setDatasetIds(
+      this.datasets.filter((d) => this.selectedDatasetIds.has(d.id)).map((d) => d.id),
+    );
+    this.dashSelection.setDetectorIds(
+      this.detectors.filter((d) => this.selectedDetectorIds.has(d.id)).map((d) => d.id),
+    );
   }
 
   toggleDatasetSelection(id: string, event: MouseEvent): void {
-    if (event.ctrlKey || event.metaKey) {
+    this.applyDatasetSelection(id, event.ctrlKey || event.metaKey);
+  }
+
+  /** Core dataset-selection logic shared by the table row handler and the
+   *  top-bar pulldown's pick request. `additive` (Ctrl/Cmd) toggles a
+   *  single id in/out of a multi-selection; otherwise it's a plain
+   *  single-select that toggles off when it's already the sole pick. */
+  private applyDatasetSelection(id: string, additive: boolean): void {
+    if (additive) {
       if (this.selectedDatasetIds.has(id)) {
         this.selectedDatasetIds.delete(id);
       } else {
@@ -588,7 +613,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Model selection ---
 
   toggleDetectorSelection(id: string, event: MouseEvent): void {
-    if (event.ctrlKey || event.metaKey) {
+    this.applyDetectorSelection(id, event.ctrlKey || event.metaKey);
+  }
+
+  /** Detector counterpart to `applyDatasetSelection`; see that method. */
+  private applyDetectorSelection(id: string, additive: boolean): void {
+    if (additive) {
       if (this.selectedDetectorIds.has(id)) {
         this.selectedDetectorIds.delete(id);
       } else {
