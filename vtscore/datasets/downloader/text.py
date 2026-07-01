@@ -18,6 +18,50 @@ from vtscore.datasets.downloader import core as _core
 from vtscore.datasets.downloader.core import ProgressCallback
 
 
+def _prefetch_20newsgroups_archive(on_progress: ProgressCallback) -> None:
+    """Pre-download the 20 Newsgroups tar into sklearn's cache with a timeout.
+
+    Fetches sklearn's ``20news-bydate.tar.gz`` archive via
+    :func:`~vtscore.datasets.downloader.core.download_file_with_progress`
+    (fail-fast connect/read timeout, retry with backoff, byte-level progress)
+    and drops it where :func:`sklearn.datasets.fetch_20newsgroups` expects it,
+    so the subsequent fetch reuses the checksum-matching file instead of
+    running its own no-timeout ``urlretrieve`` (which can hang forever on an
+    unresponsive host).
+
+    No-op when the parsed pickle cache or the archive already exists. Best
+    effort: if sklearn's private archive metadata cannot be imported (a future
+    reorg) the prefetch is skipped and ``fetch_20newsgroups`` falls back to its
+    built-in download.
+    """
+    try:
+        from sklearn.datasets import get_data_home
+        from sklearn.datasets._twenty_newsgroups import ARCHIVE, CACHE_NAME
+    except ImportError:
+        return
+
+    data_home = Path(get_data_home())
+    # sklearn writes a parsed pickle (CACHE_NAME) after the first successful
+    # load; once it exists, no download or extraction happens at all.
+    if (data_home / CACHE_NAME).exists():
+        return
+
+    twenty_home = data_home / "20news_home"
+    archive_path = twenty_home / ARCHIVE.filename
+    # A tar already sitting in the cache dir is extracted (and checksum-verified)
+    # by sklearn without any network access, so leave it be.
+    if archive_path.exists():
+        return
+
+    twenty_home.mkdir(parents=True, exist_ok=True)
+    _core.download_file_with_progress(
+        ARCHIVE.url,
+        archive_path,
+        _core.TWENTY_NEWSGROUPS_DOWNLOAD_SIZE_MB * 1024 * 1024,
+        on_progress,
+    )
+
+
 def download_20newsgroups(
     categories: list[str],
     on_progress: Optional[ProgressCallback] = None,
@@ -59,7 +103,19 @@ def download_20newsgroups(
 
     from sklearn.datasets import fetch_20newsgroups
 
-    on_progress("downloading", "Downloading 20 Newsgroups dataset...", 0, 0)
+    # sklearn's fetch_20newsgroups downloads the archive with
+    # urllib.urlretrieve, which has no timeout and whose retry loop only catches
+    # URLError/TimeoutError -- a silently stalled connection hangs forever with
+    # no progress (the "Downloading source" step never advances). We instead
+    # pre-fetch the archive through download_file_with_progress (fail-fast
+    # timeout, retry/backoff, byte-level progress, SSRF-safe redirect handling)
+    # into sklearn's own cache dir. fetch_20newsgroups then finds the
+    # checksum-matching tar already present and just extracts it, without
+    # touching the network. If sklearn's private archive metadata ever moves,
+    # the prefetch degrades gracefully to sklearn's built-in download.
+    _prefetch_20newsgroups_archive(on_progress)
+
+    on_progress("downloading", "Preparing 20 Newsgroups dataset...", 0, 0)
 
     # Map our category names to 20 newsgroups categories.
     # Covers all 20 newsgroups under shorter, friendlier aliases.

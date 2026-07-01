@@ -58,6 +58,13 @@ CIFAR10_URL = "https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz"
 CALTECH101_URL = "https://data.caltech.edu/records/mzrjq-6wc02/files/caltech-101.zip"
 CALTECH256_URL = "https://data.caltech.edu/records/nyy15-4j048/files/256_ObjectCategories.tar?download=1"
 UCF101_SUBSET_URL = "https://huggingface.co/datasets/sayakpaul/ucf101-subset/resolve/main/UCF101_subset.tar.gz"
+# 20 Newsgroups is fetched via scikit-learn, but we pre-download its archive
+# ourselves (through download_file_with_progress) so the transfer gets a
+# fail-fast timeout, retries, and byte-level progress instead of sklearn's
+# no-timeout urlretrieve. The URL/checksum/filename themselves come from
+# sklearn's own ARCHIVE metadata at runtime to stay in lock-step; this size is
+# only the progress-bar fallback when the server omits Content-Length.
+TWENTY_NEWSGROUPS_DOWNLOAD_SIZE_MB = 14
 BBC_NEWS_URL = "http://mlg.ucd.ie/files/datasets/bbc-fulltext.zip"
 AG_NEWS_URL = "https://raw.githubusercontent.com/mhjabreel/CharCnn_Keras/master/data/ag_news_csv/train.csv"
 IMDB_URL = "https://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz"
