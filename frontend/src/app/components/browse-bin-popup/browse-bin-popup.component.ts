@@ -78,6 +78,15 @@ const PREVIEW_OVERSIZE = 2.0;
 const HOVER_EXTENT_PER_RADIUS = 3;
 /** Vertical room (px) the member-count label takes above the scrolling grid. */
 const COUNT_LABEL_HEIGHT = 22;
+/** Vertical padding (px) inside ``.bin-popup-body`` (``var(--space-sm)`` = 6px,
+ *  top + bottom). The body's bound ``height`` is a *border-box* height (the app
+ *  sets ``box-sizing: border-box`` globally), so this padding must be added on
+ *  top of the content the flex columns need ({@link bodyHeight}); otherwise the
+ *  padding eats into the content area and each column's ``height: 100%`` resolves
+ *  to 12px less than {@link bodyHeight}. For audio (where the member grid is the
+ *  exact-fit element) that shortfall forces a stray scrollbar on even a single
+ *  row; for the square preview pane it renders the box 12px non-square. */
+const BODY_PADDING_Y = 12;
 /**
  * Discrete ladder (px) of detail-canvas sizes the top-left size buttons step
  * through. Each click moves to the next rung past the current size in the click
@@ -637,6 +646,17 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     return Math.max(this.gridColHeight, this.previewSize);
   }
 
+  /** Border-box height (px) bound to ``.bin-popup-body``: the content the flex
+   *  columns need ({@link bodyHeight}) plus the body's own vertical padding. Since
+   *  the body is ``box-sizing: border-box``, the bound ``height`` has to include
+   *  that padding for the content area to actually equal {@link bodyHeight};
+   *  without it every column's ``height: 100%`` comes up {@link BODY_PADDING_Y}px
+   *  short, which shows as a stray scrollbar on the audio member grid and a
+   *  slightly non-square preview pane. */
+  get bodyOuterHeight(): number {
+    return this.bodyHeight + BODY_PADDING_Y;
+  }
+
   /** Side (px) of the *rendered* square preview pane. {@link previewSize} is the
    *  pane's target/minimum side; here we grow it to the full body height so the
    *  pane is always square and the image scales to the largest size that fits.
@@ -1090,7 +1110,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     // plus a gap when shown.
     const metaW = this.showMetadataColumn ? METADATA_COLUMN_WIDTH + PREVIEW_GAP : 0;
     const width = Math.min(metaW + previewW + gridW, this.maxWidthPx);
-    const height = headerH + this.bodyHeight;
+    const height = headerH + this.bodyOuterHeight;
     let l = desiredLeft;
     let t = desiredTop;
     if (l + width + EDGE_MARGIN > regionRight) {
