@@ -12,7 +12,7 @@
     class="bin-popup-header"
     [class.dragging]="dragging"
     (pointerdown)="onHeaderPointerDown($event)">
-    @if (showPreview) {
+    @if (canToggleMetadata) {
       <button
         type="button"
         class="bin-popup-meta-toggle"
@@ -23,6 +23,8 @@
         [attr.aria-label]="showMetadataColumn ? 'Hide metadata' : 'Show metadata'">
         <vt-icon type="info" [size]="15" />
       </button>
+    }
+    @if (showPreview) {
       <div class="bin-popup-size-group" role="group" aria-label="Detail image size">
         <button
           type="button"

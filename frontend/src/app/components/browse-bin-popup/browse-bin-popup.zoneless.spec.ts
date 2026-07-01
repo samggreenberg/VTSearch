@@ -89,6 +89,13 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
 
   beforeEach(() => {
     settings = signal<Record<string, unknown> | null>({});
+    // jsdom doesn't implement Element.scrollTo; the CDK virtual viewport calls it
+    // when a grid-bearing popup (any multi-item bin, or a non-preview media type
+    // like audio, which always renders the member grid) scrolls to the
+    // representative. Stub it so those popups don't throw during placement.
+    if (!Element.prototype.scrollTo) {
+      (Element.prototype as unknown as { scrollTo: () => void }).scrollTo = () => {};
+    }
     // Run requestAnimationFrame callbacks on a microtask so `settleZoneless`'s
     // macrotask + `whenStable` drain them deterministically (jsdom's real rAF
     // fires on a ~16ms timer that would race the settle). Deferring rather than
@@ -117,6 +124,25 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     // read 5000px here.
     expect(parseFloat(panel.style.left)).toBeLessThan(400);
     expect(parseFloat(panel.style.top)).toBeLessThan(400);
+
+    fixture.destroy();
+  });
+
+  it('offers the metadata toggle and column for audio (no preview pane)', async () => {
+    // Audio is a non-thumbnailed type: no magnified preview pane on the canvas or
+    // in the popup. The metadata panel is media-agnostic, though, so the Info
+    // button and the (default-shown) metadata column must still be offered, so
+    // hovering a bin member surfaces its metadata just like it does for images.
+    const fixture = makeFixture();
+    fixture.componentRef.setInput('mediaType', 'audio');
+    fixture.componentRef.setInput('memberIds', [1, 2]);
+    fixture.componentRef.setInput('repId', 1);
+    await settlePasses(fixture);
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('.bin-popup-preview')).toBeNull();
+    expect(root.querySelector('.bin-popup-meta-toggle')).not.toBeNull();
+    expect(root.querySelector('.bin-popup-meta-col')).not.toBeNull();
 
     fixture.destroy();
   });
