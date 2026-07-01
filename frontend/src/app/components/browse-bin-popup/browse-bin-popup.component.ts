@@ -148,6 +148,12 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   /** Clamped on-screen position; starts at the anchor and is nudged inward. */
   left = 0;
   top = 0;
+  /** False until the popup has been clamped to its on-screen spot; the panel is
+   *  kept ``visibility: hidden`` until then so the user never sees it flash at the
+   *  raw summon point (which may be half off-screen) before it's placed. Reset on
+   *  every genuine re-summon so the move to a new bin also stays hidden until
+   *  re-clamped. */
+  placed = false;
   /** Max width (px) the popup may take; shrunk to fit a narrow visible region. */
   maxWidthPx = GRID_COLUMN_WIDTH;
   /** True once the user has dragged the popup by its header. While set, the
@@ -260,6 +266,9 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
       if (resummoned && !this.dragged) {
         this.left = this.x();
         this.top = this.y();
+        // Hide the popup until it's re-clamped at the new anchor, so it doesn't
+        // flash at the raw summon point (which may be half off-screen) first.
+        this.placed = false;
       }
       // Measure + clamp after the new content lays out.
       setTimeout(() => this.place());
@@ -783,7 +792,14 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
    *  and correct any residual overflow, so the window ends up entirely on-screen
    *  even if the computed height drifts from what actually rendered. */
   private place(): void {
+    // Before the panel exists there's nothing to measure/clamp; a later place()
+    // call (e.g. from ngAfterViewInit) will run once it's in the DOM. Staying
+    // unplaced keeps the popup hidden until then rather than showing it unclamped.
+    if (!this.panelRef?.nativeElement) return;
     this.clampInto(this.left, this.top);
+    // The clamp has settled the on-screen position, so reveal the popup now; the
+    // rAF nudge below is only a sub-pixel correction that won't visibly move it.
+    this.placed = true;
     requestAnimationFrame(() => this.nudgeOnScreen());
   }
 
