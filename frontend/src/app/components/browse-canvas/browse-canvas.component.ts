@@ -1424,14 +1424,18 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const meta = this.meta();
     if (!meta || meta.point_count === 0) return;
 
-    const thumbs = this.thumbnailMode;
-    if (thumbs && this.firstViewTimer === null) {
+    // Arm the backstop the first time we begin waiting: a tile or thumbnail that
+    // hard-fails to load caches nothing and fires no redraw, so without this the
+    // cover could strand. The timer releases it regardless (falling back to the
+    // old show-then-fill behaviour), and reportFirstView clears it on success.
+    if (this.firstViewTimer === null) {
       this.firstViewTimer = setTimeout(
         () => this.reportFirstView(),
         BrowseCanvasComponent.FIRST_VIEW_MAX_WAIT_MS,
       );
     }
 
+    const thumbs = this.thumbnailMode;
     const level = this.activeLevel;
     const radius = meta.base_radius / Math.pow(2, level);
     const screenRadius = radius * this.effZoom;

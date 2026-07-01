@@ -221,6 +221,12 @@ function makeHelpers(page: Page): Helpers {
       await page.waitForURL(/browse/i, { timeout: 15000 }).catch(() => {});
       // First visit builds the UMAP projection (progress bar); wait it out.
       await page.waitForSelector('.browse-content, canvas', { timeout: 180000 });
+      // The canvas mounts under an opaque cover that only lifts once the opening
+      // view's tiles + thumbnails have painted; wait for it to detach so the shot
+      // frames the finished map, not the "Loading thumbnails…" cover.
+      await page
+        .waitForSelector('.browse-preload-cover', { state: 'detached', timeout: 180000 })
+        .catch(() => {});
       await wait(3000);
     },
   };

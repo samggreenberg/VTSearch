@@ -127,6 +127,22 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     expect(errEl!.textContent).toContain('projection exploded');
   });
 
+  it('covers the canvas until it reports its opening view is painted', async () => {
+    await settleZoneless(fixture);
+    const component = fixture.componentInstance;
+
+    // On entry the canvas is covered so the user never sees a half-loaded grid.
+    expect(component.revealed()).toBe(false);
+    // The cover names the projection for pure-density media (the canary DS is
+    // audio); image/video datasets — the case this cover exists for — would read
+    // "Loading thumbnails…" instead.
+    expect(component.preloadMessage).toBe('Loading projection…');
+
+    // The canvas signals its opening view is fully painted → uncover it.
+    component.onCanvasFirstView();
+    expect(component.revealed()).toBe(true);
+  });
+
   it('engages region-draw while Shift is held, releasing on keyup and blur', async () => {
     await settleZoneless(fixture);
     const component = fixture.componentInstance;
