@@ -23,6 +23,16 @@ set -euo pipefail
 # otherwise: VTSEARCH_AUTO_DRIVER=1 auto-installs the driver, VTSEARCH_ASSUME_CPU=1
 # proceeds with CPU. An explicit 'cpu'/'gpu'/'cuXYZ' argument skips the check.
 #
+# PERSISTENCE (set-and-forget): a driver installed here is registered with DKMS
+# whenever dkms is available (the module then AUTO-REBUILDS on future kernel
+# upgrades instead of silently breaking on the next reboot), NVIDIA's persistence
+# daemon is enabled so the driver initializes at every boot, and every GPU install
+# reports whether the result is kernel-update-proof or still kernel-pinned. If the
+# driver is already up but NOT DKMS-managed, the installer OFFERS to convert it in
+# place (reinstall via .run --dkms); VTSEARCH_AUTO_DKMS=1 converts unattended and
+# VTSEARCH_SKIP_DKMS=1 skips the offer. See docs/DEPLOYMENT.md, "Making the GPU
+# driver survive reboots and kernel updates".
+#
 # Override the auto-detection by passing an argument:
 #   bash scripts/install.sh            # auto-detect CPU vs GPU (recommended)
 #   bash scripts/install.sh cpu        # force the CPU install
@@ -269,16 +279,25 @@ vts_rhel_ensure_dkms() {
     # `rpm -E %rhel` yields the RHEL major (9 on RHEL/Rocky/Alma/CentOS 9); it's
     # empty on Fedora (where dkms is in the base repos and we'd have it already)
     # and unreliable on Amazon Linux (whose cuda-drivers is a plain package, so
-    # we never reach the dkms streams there). `dnf install <url.rpm>` does not
-    # GPG-check a directly-named package by default (localpkg_gpgcheck=False), so
-    # this needs no key pre-import; epel-release then ships EPEL's own key.
+    # we never reach the dkms streams there).
     local rhelver
     rhelver="$(rpm -E %rhel 2>/dev/null || true)"
     case "$rhelver" in
         [0-9]*)
+            # Import EPEL's signing key FIRST. A base box may leave
+            # localpkg_gpgcheck ON (common on hardened / unregistered RHEL), and
+            # then `dnf install <epel url.rpm>` dies with "Public key ... is not
+            # installed / GPG check FAILED" instead of the no-check the default
+            # assumes. With the key imported the signed epel-release verifies; if
+            # the install still fails we retry once with --nogpgcheck as a last
+            # resort (the .rpm is fetched over HTTPS from Fedora's own host).
+            local epel_key="https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-${rhelver}"
             local epel_url="https://dl.fedoraproject.org/pub/epel/epel-release-latest-${rhelver}.noarch.rpm"
+            vts_try "Importing EPEL signing key" ${sudo_cmd} rpm --import "$epel_key" || true
             vts_try "Bootstrapping EPEL from ${epel_url}" \
-                ${sudo_cmd} "$dnf" install -y "$epel_url" || true
+                ${sudo_cmd} "$dnf" install -y "$epel_url" \
+                || vts_try "Bootstrapping EPEL (retry, skipping GPG check)" \
+                    ${sudo_cmd} "$dnf" install -y --nogpgcheck "$epel_url" || true
             vts_try "Installing dkms" ${sudo_cmd} "$dnf" install -y dkms || true
             ;;
     esac
@@ -312,15 +331,36 @@ vts_install_driver_runfile() {
 
     # A self-contained `.run` still compiles a kernel module, so it needs the
     # kernel headers/devel for the RUNNING kernel plus a C toolchain. Install
-    # them best-effort with whatever package manager is present.
+    # them best-effort with whatever package manager is present. We also try to
+    # get `dkms`: when it's present we hand the module to DKMS (--dkms below) so
+    # it AUTO-REBUILDS on future kernel upgrades. That is the difference between a
+    # set-and-forget install and one that silently dies on the box's next kernel
+    # bump -- the exact recurring breakage this fallback path otherwise causes.
     if command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
         local dnf="dnf"
         command -v dnf >/dev/null 2>&1 || dnf="yum"
         vts_try "Installing kernel headers + build tools" \
             ${sudo_cmd} "$dnf" install -y "kernel-devel-$(uname -r)" kernel-headers gcc make tar || true
+        # dkms lives in EPEL on RHEL, not the base repos, so a plain `dnf install
+        # dkms` finds nothing on a bare box. vts_rhel_ensure_dkms bootstraps EPEL
+        # first (even on an unregistered box) so the --dkms registration below can
+        # actually take -- the difference between a set-and-forget install and a
+        # kernel-pinned one on a bare RHEL g4dn.
+        vts_rhel_ensure_dkms "$sudo_cmd" "$dnf" || true
     elif command -v apt-get >/dev/null 2>&1; then
         vts_try "Installing kernel headers + build tools" \
             ${sudo_cmd} apt-get install -y "linux-headers-$(uname -r)" gcc make || true
+        vts_try "Installing dkms (so the module auto-rebuilds on kernel updates)" \
+            ${sudo_cmd} apt-get install -y dkms || true
+    fi
+
+    # Register the built module with DKMS (--dkms) when dkms is available so a
+    # later kernel upgrade triggers an automatic rebuild; without it the .run
+    # module is pinned to the current kernel and the next kernel bump breaks
+    # nvidia-smi. Unquoted so an empty value vanishes instead of passing "".
+    local dkms_flag=""
+    if command -v dkms >/dev/null 2>&1; then
+        dkms_flag="--dkms"
     fi
 
     local url="${VTSEARCH_NVIDIA_RUNFILE_URL:-}"
@@ -372,7 +412,7 @@ vts_install_driver_runfile() {
     # tolerates a gcc that differs from the one the kernel was built with.
     local rc=0
     vts_run "Compiling the NVIDIA kernel module (a few minutes; kernel $(uname -r))" \
-        ${sudo_cmd} sh "$runfile" --silent --disable-nouveau --no-cc-version-check || rc=$?
+        ${sudo_cmd} sh "$runfile" --silent --disable-nouveau --no-cc-version-check ${dkms_flag} || rc=$?
     rm -f "$runfile"
     if [ "$rc" -ne 0 ]; then
         echo "  The NVIDIA .run installer exited non-zero (see /var/log/nvidia-installer.log)." >&2
@@ -381,6 +421,170 @@ vts_install_driver_runfile() {
         return 1
     fi
     return 0
+}
+
+# Tell the user whether the currently-installed NVIDIA driver is SET-AND-FORGET
+# (survives future kernel upgrades on its own) or kernel-pinned (the next kernel
+# bump breaks nvidia-smi until the module is rebuilt). A DKMS-managed module is
+# rebuilt automatically for each new kernel; a precompiled/kABI-stream or plain
+# `.run` module is tied to the kernel it was built against -- the usual cause of
+# "GPU worked yesterday, gone today" after an unattended kernel update on a cloud
+# box. Detected via `dkms status` (readable without root). Purely informational.
+vts_report_driver_persistence() {
+    if command -v dkms >/dev/null 2>&1 && dkms status 2>/dev/null | grep -qi nvidia; then
+        echo "  GPU driver is DKMS-managed: it will auto-rebuild for new kernels, so a" >&2
+        echo "  routine kernel update won't break the GPU. Set and forget." >&2
+        return 0
+    fi
+    cat >&2 <<'EOF'
+  NOTE: the GPU driver is NOT DKMS-managed, so it is tied to the CURRENT kernel.
+  A later kernel upgrade (unattended-upgrades / dnf automatic) can stop the module
+  loading, and nvidia-smi will go dark until you re-run this installer. To make it
+  set-and-forget: install `dkms` and re-run this script (so the module auto-rebuilds
+  for new kernels), pin the kernel so it stops changing, or bake a custom AMI / use
+  the AWS Deep Learning AMI. See docs/DEPLOYMENT.md, "Making the GPU driver survive
+  reboots and kernel updates".
+EOF
+    return 0
+}
+
+# Decide whether to convert a working-but-kernel-pinned driver to a DKMS build.
+# Echo a single token on stdout: "convert" or "skip". Mirrors
+# vts_decide_driver_missing: an env override wins (VTSEARCH_AUTO_DKMS=1 ->
+# convert, VTSEARCH_SKIP_DKMS=1 -> skip), otherwise prompt on a TTY (default
+# yes, since the whole point of running the installer is a durable GPU), and on
+# a non-interactive shell SKIP -- a driver reinstall is privileged and implies a
+# reboot, so it must never happen silently. Human text goes to stderr.
+vts_decide_dkms_conversion() {
+    if [ "${VTSEARCH_AUTO_DKMS:-0}" = "1" ]; then
+        echo "  VTSEARCH_AUTO_DKMS=1 set -> converting the driver to a DKMS build." >&2
+        echo convert
+        return 0
+    fi
+    if [ "${VTSEARCH_SKIP_DKMS:-0}" = "1" ]; then
+        echo "  VTSEARCH_SKIP_DKMS=1 set -> leaving the current driver as-is." >&2
+        echo skip
+        return 0
+    fi
+    if [ ! -t 0 ]; then
+        echo "  Non-interactive shell; not converting automatically (a driver reinstall" >&2
+        echo "  is privileged and needs a reboot). Re-run with VTSEARCH_AUTO_DKMS=1 to" >&2
+        echo "  convert unattended, or leave it to keep the current kernel-pinned driver." >&2
+        echo skip
+        return 0
+    fi
+    local reply
+    cat >&2 <<'EOF'
+
+Convert it to a DKMS build now? This reinstalls the driver via NVIDIA's .run
+installer with --dkms (needs sudo; a reboot is recommended afterward so the
+freshly built module loads). Your GPU keeps working either way -- declining just
+leaves it kernel-pinned.
+EOF
+    printf 'Convert now? [Y/n]: ' >&2
+    read -r reply
+    case "$reply" in
+        "" | [yY] | [yY][eE][sS]) echo convert ;;
+        *) echo skip ;;
+    esac
+}
+
+# Make `dkms` available across package managers (best-effort). On RHEL this goes
+# through vts_rhel_ensure_dkms (which bootstraps EPEL, importing its GPG key);
+# on Debian/Ubuntu dkms is in the base repos. Returns 0 iff dkms ends up present.
+#   $1 = sudo prefix.
+vts_ensure_dkms_any() {
+    local sudo_cmd="$1"
+    command -v dkms >/dev/null 2>&1 && return 0
+    if command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
+        local dnf="dnf"
+        command -v dnf >/dev/null 2>&1 || dnf="yum"
+        vts_rhel_ensure_dkms "$sudo_cmd" "$dnf" || true
+    elif command -v apt-get >/dev/null 2>&1; then
+        vts_try "Installing dkms" ${sudo_cmd} apt-get install -y dkms || true
+    fi
+    command -v dkms >/dev/null 2>&1
+}
+
+# Reinstall the current driver as a DKMS build so it auto-rebuilds on future
+# kernel updates. Reuses vts_install_driver_runfile, which downloads the matching
+# .run and runs it with --dkms. Privileged; returns 0 on success. Sudo handling
+# mirrors vts_install_nvidia_driver.
+vts_convert_driver_to_dkms() {
+    local sudo_cmd=""
+    if [ "$(id -u)" -ne 0 ]; then
+        if command -v sudo >/dev/null 2>&1; then
+            sudo_cmd="sudo"
+        else
+            echo "  Cannot convert: need root and 'sudo' is not available." >&2
+            return 1
+        fi
+    fi
+    vts_sudo_keepalive "$sudo_cmd" || true
+    trap 'vts_sudo_keepalive_stop' RETURN
+
+    # dkms MUST be present or the .run --dkms registration is a no-op and we'd do
+    # a pointless (still kernel-pinned) reinstall. If it can't be installed -- the
+    # unregistered-RHEL / EPEL-unreachable case -- bail without touching the
+    # working driver and let the caller point at kernel-pinning instead.
+    if ! vts_ensure_dkms_any "$sudo_cmd"; then
+        echo "  Could not install dkms on this host (e.g. an unregistered RHEL box" >&2
+        echo "  where EPEL is unreachable), so a DKMS conversion isn't possible. The" >&2
+        echo "  current driver is untouched; pin the kernel instead so it keeps" >&2
+        echo "  matching. See docs/DEPLOYMENT.md, \"Making the GPU driver survive...\"." >&2
+        return 1
+    fi
+
+    # The .run installer refuses to replace a driver whose modules are LOADED
+    # (it aborts with "nvidia-modeset appears to be already loaded"), which is the
+    # normal state here since the driver is up. Stop the persistence daemon and
+    # unload the modules first (dependents before the base module). Best-effort:
+    # if something still holds a module, the .run install fails and we warn.
+    if command -v systemctl >/dev/null 2>&1; then
+        $sudo_cmd systemctl stop nvidia-persistenced >/dev/null 2>&1 || true
+    fi
+    $sudo_cmd rmmod nvidia_uvm nvidia_drm nvidia_modeset nvidia >/dev/null 2>&1 || true
+
+    vts_install_driver_runfile "$sudo_cmd" || return 1
+
+    # Best-effort: load the fresh module and (re-)enable the persistence daemon,
+    # same as a from-scratch driver install.
+    $sudo_cmd modprobe nvidia >/dev/null 2>&1 || true
+    if command -v systemctl >/dev/null 2>&1; then
+        $sudo_cmd systemctl enable --now nvidia-persistenced >/dev/null 2>&1 || true
+    fi
+    return 0
+}
+
+# When the driver is up (nvidia-smi works) but NOT DKMS-managed, it's pinned to
+# the running kernel and the next kernel update will break it. Offer to convert
+# it in place so it becomes set-and-forget. No-op when the driver is absent (the
+# driver-install path handles that) or already DKMS-managed (nothing to do).
+vts_maybe_convert_driver_to_dkms() {
+    vts_have_gpu || return 0
+    if command -v dkms >/dev/null 2>&1 && dkms status 2>/dev/null | grep -qi nvidia; then
+        return 0
+    fi
+    echo >&2
+    echo "The GPU driver works, but it is NOT DKMS-managed -- it's pinned to the" >&2
+    echo "running kernel ($(uname -r)), so the next kernel update will break it." >&2
+    case "$(vts_decide_dkms_conversion)" in
+        convert)
+            if vts_convert_driver_to_dkms; then
+                echo "  Driver reinstalled and registered with DKMS: it will now auto-rebuild" >&2
+                echo "  on kernel updates. Reboot soon so the fresh module loads (until then" >&2
+                echo "  the GPU smoke test below may report CPU)." >&2
+            else
+                echo "warning: DKMS conversion did not complete; the driver still works but" >&2
+                echo "         stays kernel-pinned. See the output above, retry later, or use" >&2
+                echo "         the manual steps in docs/DEPLOYMENT.md." >&2
+            fi
+            ;;
+        *)
+            echo "  Leaving the driver kernel-pinned. Set VTSEARCH_AUTO_DKMS=1 on a later" >&2
+            echo "  run to convert it, or see docs/DEPLOYMENT.md for the manual steps." >&2
+            ;;
+    esac
 }
 
 # Best-effort, distro-aware NVIDIA driver install so we can fix the missing
@@ -502,6 +706,13 @@ vts_install_nvidia_driver() {
 
     # Try to load the freshly built module without a reboot (best-effort).
     $sudo_cmd modprobe nvidia >/dev/null 2>&1 || true
+
+    # Enable NVIDIA's persistence daemon so the driver initializes at every boot
+    # without waiting for something to open the device first -- AWS's recommended
+    # setup for EC2 GPU instances. Best-effort: a missing unit / no systemd no-ops.
+    if command -v systemctl >/dev/null 2>&1; then
+        $sudo_cmd systemctl enable --now nvidia-persistenced >/dev/null 2>&1 || true
+    fi
 
     if vts_have_gpu; then
         echo "  Driver installed and the GPU is now visible to nvidia-smi." >&2
@@ -792,6 +1003,12 @@ vts_install_gpu() {
     echo "Heads-up: the pip steps below show a download bar, but pip also goes quiet"
     echo "for 10-30s at a time while it resolves dependency versions. That silence is"
     echo "normal -- it is working, not frozen."
+
+    # If the driver works but is kernel-pinned (non-DKMS), offer to convert it to
+    # a DKMS build now so tomorrow's kernel update doesn't take the GPU down; then
+    # report the (possibly updated) persistence status.
+    vts_maybe_convert_driver_to_dkms
+    vts_report_driver_persistence
 
     vts_progress_step "Checking Python version (>= 3.10)"
     # shellcheck source=_check-python.sh
