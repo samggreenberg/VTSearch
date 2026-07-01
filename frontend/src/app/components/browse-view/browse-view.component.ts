@@ -36,6 +36,7 @@ import {
   type BrowseColormapId,
 } from '../browse-canvas/hex-render.util';
 import type { ProjectionMeta } from '../../models/projection.models';
+import { snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
@@ -176,11 +177,23 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    */
   readonly panelWidth = signal(300);
   /** Clamp + divider geometry, mirroring the Find view's panel dividers. */
-  private static readonly PANEL_MIN = 160;
+  /** Absolute smallest the panel may become, used before the panel's content
+   *  has laid out (so {@link panelMin} can't measure yet) and as a hard floor
+   *  under the dynamic, content-derived minimum. */
+  private static readonly PANEL_FLOOR = 96;
   private static readonly PANEL_MAX = 800;
   private static readonly CANVAS_MIN = 200;
   private static readonly DIVIDER_WIDTH = 8;
+  /** Once the saved width has been applied to the live panel, the panel width
+   *  is owned by the user's divider drags: later settings pushes (our own save
+   *  round-trip, an unrelated per-media pref change, …) must not reset it, or
+   *  the panel "pops back" to the stored width right after a drag. */
+  private panelWidthInitialized = false;
   private dragging = false;
+  /** Dynamic minimum snapshotted at drag start, so the per-move handler reuses
+   *  it instead of re-measuring the DOM (and thrashing layout) on every move —
+   *  the thumbnail size and sort-control width can't change mid-drag anyway. */
+  private dragMin = BrowseViewComponent.PANEL_FLOOR;
   private boundPanelMove = this.onPanelMouseMove.bind(this);
   private boundPanelUp = this.onPanelMouseUp.bind(this);
 
@@ -249,14 +262,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       const settingsErrored = this.settingsState.error() != null;
       if (settings) {
         this.lastSettings = settings;
-        if (settings.browse_panel_width != null) {
+        if (settings.browse_panel_width != null && !this.panelWidthInitialized) {
           this.panelWidth.set(
             this.clamp(
               settings.browse_panel_width,
-              BrowseViewComponent.PANEL_MIN,
+              this.panelMin(),
               BrowseViewComponent.PANEL_MAX,
             ),
           );
+          this.panelWidthInitialized = true;
         }
         this.applyBrowsePrefsForMediaType();
       }
@@ -526,7 +540,54 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private panelMax(): number {
     const layoutWidth = this.content?.nativeElement.getBoundingClientRect().width ?? 0;
     const fit = layoutWidth - BrowseViewComponent.DIVIDER_WIDTH - BrowseViewComponent.CANVAS_MIN;
-    return Math.min(BrowseViewComponent.PANEL_MAX, Math.max(BrowseViewComponent.PANEL_MIN, fit));
+    return Math.min(BrowseViewComponent.PANEL_MAX, Math.max(this.panelMin(), fit));
+  }
+
+  /**
+   * Smallest the side panel may shrink to, measured from the live panel content
+   * so it tracks the current thumbnail size and the sort control's real width.
+   *
+   * The floor is the larger of two needs, exactly as requested: room for a
+   * single thumbnail column (so the user can always pick one image), and room
+   * for the "Sort: [select]" control to sit on its own row. Whichever is wider
+   * wins — tiny thumbnails floor on the sort control; thumbnails larger than the
+   * sort control floor on the thumbnail. Falls back to {@link PANEL_FLOOR}
+   * before the content has laid out.
+   */
+  private panelMin(): number {
+    const root = this.content?.nativeElement;
+    if (!root) return BrowseViewComponent.PANEL_FLOOR;
+    const current = this.panelWidth();
+
+    let oneColumn = BrowseViewComponent.PANEL_FLOOR;
+    const list = root.querySelector('.bsp-list') as HTMLElement | null;
+    if (list) {
+      const goal = parseFloat(getComputedStyle(list).getPropertyValue('--grid-goal-width')) || 80;
+      const style = getComputedStyle(list);
+      const padH = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+      const bounding = list.getBoundingClientRect().width;
+      const scrollbar = Math.max(0, bounding - list.clientWidth);
+      // Chrome between the panel edge and the grid element (0 today, but measured
+      // so any future wrapper padding is accounted for automatically).
+      const chrome = Math.max(0, current - bounding);
+      oneColumn = Math.ceil(goal + padH + scrollbar + chrome) + 1;
+    }
+
+    let sortRow = 0;
+    const sort = root.querySelector('.bsp-sort') as HTMLElement | null;
+    if (sort) {
+      const toolbar = sort.closest('.bsp-toolbar') as HTMLElement | null;
+      let toolbarChromeH = 0;
+      if (toolbar) {
+        const tstyle = getComputedStyle(toolbar);
+        const tpad = parseFloat(tstyle.paddingLeft) + parseFloat(tstyle.paddingRight);
+        const panelChrome = Math.max(0, current - toolbar.getBoundingClientRect().width);
+        toolbarChromeH = tpad + panelChrome;
+      }
+      sortRow = Math.ceil(sort.getBoundingClientRect().width + toolbarChromeH) + 1;
+    }
+
+    return Math.max(BrowseViewComponent.PANEL_FLOOR, oneColumn, sortRow);
   }
 
   // --- Side-panel divider drag (mirrors the Find view's panel dividers) ----
@@ -534,6 +595,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   onDividerMouseDown(event: MouseEvent): void {
     event.preventDefault();
     this.dragging = true;
+    this.dragMin = this.panelMin();
     this.ngZone.runOutsideAngular(() => {
       document.addEventListener('mousemove', this.boundPanelMove);
       document.addEventListener('mouseup', this.boundPanelUp);
@@ -544,7 +606,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (!this.dragging || !this.content) return;
     const rect = this.content.nativeElement.getBoundingClientRect();
     // The panel is on the right, so its width grows as the cursor moves left.
-    const width = this.clamp(rect.right - event.clientX, BrowseViewComponent.PANEL_MIN, this.panelMax());
+    const fit = rect.width - BrowseViewComponent.DIVIDER_WIDTH - BrowseViewComponent.CANVAS_MIN;
+    const max = Math.min(BrowseViewComponent.PANEL_MAX, Math.max(this.dragMin, fit));
+    const width = this.clamp(rect.right - event.clientX, this.dragMin, max);
     // `panelWidth` is a signal read in the template's `--browse-panel-width`
     // binding, so the `.set()` schedules CD on its own — no `ngZone.run`.
     this.panelWidth.set(width);
@@ -555,6 +619,18 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.dragging = false;
     document.removeEventListener('mousemove', this.boundPanelMove);
     document.removeEventListener('mouseup', this.boundPanelUp);
+    // Pop tight to the column count the user dragged to: snap away any trailing
+    // empty strip so releasing never leaves a ragged half-column, then re-clamp.
+    // The snap only ever shrinks toward the current columns — it can't pop the
+    // panel back out wider — and the dynamic floor keeps at least one column and
+    // the sort control on screen.
+    const side = this.content?.nativeElement.querySelector('.browse-side') as HTMLElement | null;
+    const snapped = side ? snapPanelWidthToGridColumns(side, this.panelWidth()) : null;
+    if (snapped !== null) {
+      this.panelWidth.set(this.clamp(snapped, this.panelMin(), this.panelMax()));
+    }
+    // The user now owns the width; block the settings round-trip from resetting it.
+    this.panelWidthInitialized = true;
     this.settingsState.update({ browse_panel_width: Math.round(this.panelWidth()) }).subscribe();
   }
 

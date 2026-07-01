@@ -109,6 +109,17 @@
   flex-shrink: 0;
 }
 
+// "Sort: [select]" travels as one unit so that, once the panel narrows enough
+// for the view controls to wrap below, the sort control sits alone on its own
+// row. The group keeps its natural width (no `min-width: 0`): the browse panel
+// floors its own minimum width at this group's measured width, so it is never
+// actually clipped — it just defines the narrowest the panel may become.
+.bsp-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
 .bsp-sort-label {
   font-size: var(--font-2xs);
   color: var(--text-dim);

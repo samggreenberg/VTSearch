@@ -35,20 +35,22 @@
   }
 
   <div class="bsp-toolbar">
-    <span class="bsp-sort-label" title="Choose how the selected items are ordered">Sort:</span>
-    <label for="bsp-sort-select" class="sr-only">Sort selected items</label>
-    <select
-      id="bsp-sort-select"
-      class="bsp-sort-select"
-      [ngModel]="sortMode"
-      (ngModelChange)="onSortChange($event)"
-      title="Order selected items by when they were selected, name, or ID">
-      <option value="time-desc">Newest first</option>
-      <option value="time-asc">Oldest first</option>
-      <option value="name-asc">Name A–Z</option>
-      <option value="name-desc">Name Z–A</option>
-      <option value="id-asc">ID ↑</option>
-    </select>
+    <div class="bsp-sort">
+      <span class="bsp-sort-label" title="Choose how the selected items are ordered">Sort:</span>
+      <label for="bsp-sort-select" class="sr-only">Sort selected items</label>
+      <select
+        id="bsp-sort-select"
+        class="bsp-sort-select"
+        [ngModel]="sortMode"
+        (ngModelChange)="onSortChange($event)"
+        title="Order selected items by when they were selected, name, or ID">
+        <option value="time-desc">Newest first</option>
+        <option value="time-asc">Oldest first</option>
+        <option value="name-asc">Name A–Z</option>
+        <option value="name-desc">Name Z–A</option>
+        <option value="id-asc">ID ↑</option>
+      </select>
+    </div>
     <vt-view-controls
       side="right"
       [currentMediaType]="mediaType()"
