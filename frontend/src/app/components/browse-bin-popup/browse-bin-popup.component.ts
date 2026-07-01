@@ -152,11 +152,14 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   /** Clamped on-screen position; starts at the anchor and is nudged inward. */
   left = 0;
   top = 0;
-  /** False until the popup has been clamped to its on-screen spot; the panel is
-   *  kept ``visibility: hidden`` until then so the user never sees it flash at the
-   *  raw summon point (which may be half off-screen) before it's placed. Reset on
-   *  every genuine re-summon so the move to a new bin also stays hidden until
-   *  re-clamped. */
+  /** False until the popup has been clamped *and* measured at its on-screen spot;
+   *  the panel is kept ``visibility: hidden`` until then so the user never sees it
+   *  flash at the raw summon point (which may be half off-screen) or at a computed
+   *  clamp that the post-render measurement then corrects. Flipped true only in
+   *  {@link nudgeOnScreen} (the rAF after {@link place}), once the rendered panel
+   *  has been measured and any residual overflow removed, and only once settings
+   *  have loaded so the size is final. Reset on every genuine re-summon so the
+   *  move to a new bin also stays hidden until re-placed. */
   placed = false;
   /** Max width (px) the popup may take; shrunk to fit a narrow visible region. */
   maxWidthPx = GRID_COLUMN_WIDTH;
@@ -920,9 +923,17 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     // unplaced keeps the popup hidden until then rather than showing it unclamped.
     if (!this.panelRef?.nativeElement) return;
     this.clampInto(this.left, this.top);
-    // The clamp has settled the on-screen position, so reveal the popup now; the
-    // rAF nudge below is only a sub-pixel correction that won't visibly move it.
-    this.placed = true;
+    // Flush the freshly-clamped position and the size caps clampInto just set
+    // (bodyCapPx/previewCapPx/maxWidthPx) to the DOM. This runs in a bare
+    // setTimeout, so under zoneless change detection nothing else schedules a
+    // render; without this markForCheck the clamp would never reach the DOM
+    // until some unrelated event happened to tick CD. The popup stays hidden
+    // (``placed`` is still false) — the actual reveal happens in nudgeOnScreen,
+    // on the next frame, once the *rendered* panel has been measured and any
+    // residual overflow corrected. Revealing here, before that measurement, was
+    // what let the popup flash at the computed clamp and then jump to the
+    // corrected spot.
+    this.cdr.markForCheck();
     requestAnimationFrame(() => this.nudgeOnScreen());
   }
 
@@ -939,17 +950,43 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     const regionTop = Math.max(b ? b.top : 0, 0);
     const regionRight = Math.min(b ? b.right : window.innerWidth, window.innerWidth);
     const regionBottom = Math.min(b ? b.bottom : window.innerHeight, window.innerHeight);
+    // Correct off the panel's measured *size* applied to its intended position
+    // (this.left/this.top), not the panel's currently-rendered absolute rect: the
+    // clamp from place() may not have painted yet, so rect.right/rect.bottom can
+    // still describe the previous spot. Using this.left + width keeps the
+    // correction right regardless of paint timing.
+    const width = rect.width;
+    const height = rect.height;
     let l = this.left;
     let t = this.top;
     // Pull in from the far edges first, then guarantee the near edges, so a popup
     // larger than the region pins to top-left (losing the far edge, not the near).
-    if (rect.right > regionRight - EDGE_MARGIN) l -= rect.right - (regionRight - EDGE_MARGIN);
-    if (rect.bottom > regionBottom - EDGE_MARGIN) t -= rect.bottom - (regionBottom - EDGE_MARGIN);
+    if (this.left + width > regionRight - EDGE_MARGIN) {
+      l -= this.left + width - (regionRight - EDGE_MARGIN);
+    }
+    if (this.top + height > regionBottom - EDGE_MARGIN) {
+      t -= this.top + height - (regionBottom - EDGE_MARGIN);
+    }
     l = Math.max(regionLeft + EDGE_MARGIN, l);
     t = Math.max(regionTop + EDGE_MARGIN, t);
-    if (l !== this.left || t !== this.top) {
-      this.left = l;
-      this.top = t;
+    const moved = l !== this.left || t !== this.top;
+    this.left = l;
+    this.top = t;
+    // Reveal now that the panel is measured and corrected, so the first painted
+    // frame is already at the final on-screen spot. Gate the first reveal on the
+    // settings being loaded: the popup's size (grid thumbnail size, whether the
+    // metadata column shows, the preview-pane size) all come from settings, so
+    // revealing before they arrive would show the popup at default sizes and then
+    // re-clamp/move it when they land. The settings effect calls place() again
+    // once settings resolve, which reveals then. Browse only ever mounts with
+    // settings present, so this never strands the popup permanently hidden.
+    const settingsReady = this.settingsState.settingsSignal() != null;
+    if (!this.placed) {
+      if (settingsReady) {
+        this.placed = true;
+        this.cdr.markForCheck();
+      }
+    } else if (moved) {
       this.cdr.markForCheck();
     }
   }
