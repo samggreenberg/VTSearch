@@ -1006,14 +1006,17 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // margin is bare background (the black border). Instead overscan: snapshot a
     // buffer larger than the viewport — the frozen centre is the already-rendered
     // canvas (free), and the extra ring is re-rendered from the source level's
-    // bins, painting the cached thumbnails the off-view prefetch already warmed.
-    // The shrunk blit then covers the canvas with real content. Zoom-in needs no
-    // overscan (the frame grows past the viewport), so it stays the cheap copy.
+    // bins, painting whatever the off-view prefetch already warmed: cached
+    // thumbnails in thumbnail mode, colour-mapped hexes in flat-density mode
+    // (audio/text). Both come straight from the tile cache, so the ring fills the
+    // margin for every media type rather than only thumbnail ones. The shrunk
+    // blit then covers the canvas with real content. Zoom-in needs no overscan
+    // (the frame grows past the viewport), so it stays the cheap copy.
     const overscan = Math.min(
       BrowseCanvasComponent.SNAP_OVERSCAN_MAX,
       this.animFrom.zoom / this.animTo.zoom,
     );
-    const doOverscan = overscan > 1.01 && this.thumbnailMode;
+    const doOverscan = overscan > 1.01;
     this.snapW = doOverscan ? Math.ceil(this.width * overscan) : this.width;
     this.snapH = doOverscan ? Math.ceil(this.height * overscan) : this.height;
 
@@ -2340,9 +2343,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const maxMarginY = (this.height * (BrowseCanvasComponent.SNAP_OVERSCAN_MAX - 1)) / 2;
     const marginX = Math.min(maxMarginX, Math.abs(target.centerX - this.panAnimFrom.centerX) * z);
     const marginY = Math.min(maxMarginY, Math.abs(target.centerY - this.panAnimFrom.centerY) * z);
-    // The overscan ring is only worth rendering in thumbnail mode (flat-density
-    // cells repaint cheaply and the real frame lands at the end either way).
-    const doBorder = this.thumbnailMode && (marginX > 1 || marginY > 1);
+    // Render the overscan ring for every media type: without it the revealed
+    // edge is bare background (a black gap) until the glide lands. The ring comes
+    // straight from the cached tiles — thumbnails in thumbnail mode, colour-mapped
+    // hexes in flat-density mode (audio/text) — so both slide in real content.
+    const doBorder = marginX > 1 || marginY > 1;
     this.panSnapW = this.width + 2 * Math.ceil(marginX);
     this.panSnapH = this.height + 2 * Math.ceil(marginY);
 
