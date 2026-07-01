@@ -1,5 +1,6 @@
 import {
   ANIMATIONS_OFF_CLASS,
+  ANIMATIONS_ON_CLASS,
   browserPrefersReducedMotion,
   onBrowserReducedMotionChange,
   prefersReducedMotion,
@@ -50,12 +51,12 @@ describe('reduced-motion utils', () => {
 
   beforeEach(() => {
     originalMatchMedia = window.matchMedia;
-    document.documentElement.classList.remove(ANIMATIONS_OFF_CLASS);
+    document.documentElement.classList.remove(ANIMATIONS_OFF_CLASS, ANIMATIONS_ON_CLASS);
   });
 
   afterEach(() => {
     (window as unknown as { matchMedia: typeof window.matchMedia }).matchMedia = originalMatchMedia;
-    document.documentElement.classList.remove(ANIMATIONS_OFF_CLASS);
+    document.documentElement.classList.remove(ANIMATIONS_OFF_CLASS, ANIMATIONS_ON_CLASS);
   });
 
   describe('browserPrefersReducedMotion', () => {
@@ -118,6 +119,19 @@ describe('reduced-motion utils', () => {
     it('is false when neither the class nor the OS query is set', () => {
       installStub(false);
       expect(prefersReducedMotion()).toBe(false);
+    });
+
+    it('is false when the animations-on class is present even though the OS query matches', () => {
+      installStub(true);
+      document.documentElement.classList.add(ANIMATIONS_ON_CLASS);
+      expect(prefersReducedMotion()).toBe(false);
+    });
+
+    it('lets animations-off win over animations-on (suppresses) when both are set', () => {
+      installStub(false);
+      document.documentElement.classList.add(ANIMATIONS_OFF_CLASS);
+      document.documentElement.classList.add(ANIMATIONS_ON_CLASS);
+      expect(prefersReducedMotion()).toBe(true);
     });
   });
 });

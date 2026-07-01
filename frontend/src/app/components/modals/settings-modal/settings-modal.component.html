@@ -83,10 +83,14 @@
               <option value="highviz">High Visibility</option>
             </select>
           </div>
-          <label class="checkbox-row" title="Turn decorative motion on or off across the whole app">
-            <input type="checkbox" [ngModel]="settings().show_animations" (ngModelChange)="onToggle('show_animations', $event)" />
-            Show Animations<vt-field-hint-icon hint="Turns decorative motion on or off everywhere at once: the swipe transition when you vote, icon spins/waggles/tilts on buttons and cards, toast and banner slide-ins, smooth scrolling, and projection-browser zoom tweens. (Your operating system’s “reduce motion” setting disables the same things.)"></vt-field-hint-icon>
-          </label>
+          <div class="form-group">
+            <label class="form-label" title="Choose whether decorative motion plays across the whole app">Show Animations<vt-field-hint-icon hint="Controls decorative motion everywhere at once: the swipe transition when you vote, icon spins/waggles/tilts on buttons and cards, toast and banner slide-ins, smooth scrolling, and projection-browser zoom tweens. “Show” forces motion on even if your OS asks to reduce it, “Hide” always turns it off, and “OS Setting” follows your operating system’s “reduce motion” preference."></vt-field-hint-icon></label>
+            <select class="form-select" [ngModel]="settings().show_animations" (ngModelChange)="onAnimationModeChange($event)" title="Choose whether decorative motion plays" aria-label="Show Animations">
+              <option value="show">Show</option>
+              <option value="hide">Hide</option>
+              <option value="os">OS Setting</option>
+            </select>
+          </div>
           <div
             class="motion-status"
             [class.motion-status--blocked]="browserBlocksMotion()"
@@ -97,7 +101,7 @@
             <span class="motion-status__label">Browser motion:</span>
             @if (browserBlocksMotion()) {
               <span class="motion-status__value">Blocked by your OS / browser</span>
-              <vt-field-hint-icon hint="Your operating system or browser is set to “reduce motion”, so VTSearch animations stay off no matter how the Show Animations toggle above is set — this is almost always why animations are missing. To re-enable: turn off “Reduce motion” in your OS accessibility settings (macOS: Accessibility → Display; Windows: Accessibility → Visual effects → Animation effects; GNOME: Accessibility → Reduce animation), or the equivalent browser flag, then reload."></vt-field-hint-icon>
+              <vt-field-hint-icon hint="Your operating system or browser is set to “reduce motion”, so VTSearch animations stay off while Show Animations is on “OS Setting” (the default) — this is almost always why animations are missing. Set Show Animations to “Show” above to force motion on anyway, or turn off “Reduce motion” in your OS accessibility settings (macOS: Accessibility → Display; Windows: Accessibility → Visual effects → Animation effects; GNOME: Accessibility → Reduce animation), or the equivalent browser flag, then reload."></vt-field-hint-icon>
             } @else {
               <span class="motion-status__value">Allowed</span>
             }

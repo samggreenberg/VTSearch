@@ -289,7 +289,7 @@ export const SHOTS: Shot[] = [
   {
     id: 'settings-appearance',
     embeddedIn: 'docs/user/USER_GUIDE.md#solo-media-type--streamline-for-one-media-type',
-    caption: 'The Settings → Appearance pane: theme picker, the animation / metadata-panel / achievements toggles, and the per-media-type Scroll Style controls (Solo media type lives on the Import Defaults tab)',
+    caption: 'The Settings → Appearance pane: theme picker, the Show Animations pulldown (Show / Hide / OS Setting), the metadata-panel / achievements toggles, and the per-media-type Scroll Style controls (Solo media type lives on the Import Defaults tab)',
     themes: BOTH,
     async recipe(_page, h) {
       await h.dashboard();

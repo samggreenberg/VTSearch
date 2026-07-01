@@ -350,7 +350,12 @@
             "type": "string"
           },
           "show_animations": {
-            "type": "boolean"
+            "enum": [
+              "show",
+              "hide",
+              "os"
+            ],
+            "type": "string"
           },
           "show_metadata": {
             "type": "boolean"
@@ -4590,7 +4595,12 @@
             "type": "string"
           },
           "show_animations": {
-            "type": "boolean"
+            "enum": [
+              "show",
+              "hide",
+              "os"
+            ],
+            "type": "string"
           },
           "show_metadata": {
             "type": "boolean"

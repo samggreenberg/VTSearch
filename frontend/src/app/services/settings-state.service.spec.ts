@@ -11,7 +11,7 @@ describe('SettingsStateService', () => {
   const mockSettings = {
     volume: 0.8,
     theme: 'dark' as const,
-    show_animations: true,
+    show_animations: 'os' as const,
     inclusion: 0.5,
   };
 
@@ -74,5 +74,40 @@ describe('SettingsStateService', () => {
   it('settingsSignal should expose the loaded settings', async () => {
     await load();
     expect(service.settingsSignal()).toEqual(mockSettings);
+  });
+
+  describe('Show Animations -> <html> class mirroring', () => {
+    afterEach(() => {
+      document.documentElement.classList.remove('animations-off', 'animations-on');
+    });
+
+    async function loadWith(mode: 'show' | 'hide' | 'os') {
+      service.load();
+      TestBed.tick();
+      httpMock.expectOne('/api/settings').flush({ ...mockSettings, show_animations: mode });
+      await settleResource();
+      TestBed.tick();
+    }
+
+    it('"hide" adds animations-off and not animations-on', async () => {
+      await loadWith('hide');
+      const cl = document.documentElement.classList;
+      expect(cl.contains('animations-off')).toBe(true);
+      expect(cl.contains('animations-on')).toBe(false);
+    });
+
+    it('"show" adds animations-on and not animations-off', async () => {
+      await loadWith('show');
+      const cl = document.documentElement.classList;
+      expect(cl.contains('animations-on')).toBe(true);
+      expect(cl.contains('animations-off')).toBe(false);
+    });
+
+    it('"os" leaves both classes off so the platform preference governs', async () => {
+      await loadWith('os');
+      const cl = document.documentElement.classList;
+      expect(cl.contains('animations-off')).toBe(false);
+      expect(cl.contains('animations-on')).toBe(false);
+    });
   });
 });

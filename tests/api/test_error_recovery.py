@@ -574,7 +574,7 @@ class TestSettingsEdgeCases:
             "/api/settings",
             json={
                 "volume": 0.7,
-                "show_animations": False,
+                "show_animations": "hide",
                 "enrich_descriptions": True,
             },
         )
