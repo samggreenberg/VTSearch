@@ -68,23 +68,23 @@
           <div class="bin-popup-meta-item">
             <span class="bin-popup-meta-label">Name</span>
             <div class="bin-popup-meta-value-row">
-              <span class="bin-popup-meta-value">{{ metadataName }}</span>
               <vt-copy-detail-button [value]="metadataName" label="Name" />
+              <span class="bin-popup-meta-value">{{ metadataName }}</span>
             </div>
           </div>
           <div class="bin-popup-meta-item">
             <span class="bin-popup-meta-label">Media Type</span>
             <div class="bin-popup-meta-value-row">
-              <span class="bin-popup-meta-value">{{ metadataMediaType | titlecase }}</span>
               <vt-copy-detail-button [value]="metadataMediaType | titlecase" label="Media Type" />
+              <span class="bin-popup-meta-value">{{ metadataMediaType | titlecase }}</span>
             </div>
           </div>
           @for (entry of metadataCustom | keyvalue; track entry.key) {
             <div class="bin-popup-meta-item">
               <span class="bin-popup-meta-label">{{ entry.key }}</span>
               <div class="bin-popup-meta-value-row">
-                <span class="bin-popup-meta-value">{{ formatMetadataValue(entry.key, entry.value) }}</span>
                 <vt-copy-detail-button [value]="formatMetadataValue(entry.key, entry.value)" [label]="entry.key" />
+                <span class="bin-popup-meta-value">{{ formatMetadataValue(entry.key, entry.value) }}</span>
               </div>
             </div>
           }
@@ -92,8 +92,8 @@
             <div class="bin-popup-meta-item">
               <span class="bin-popup-meta-label">MD5</span>
               <div class="bin-popup-meta-value-row">
-                <span class="bin-popup-meta-value bin-popup-meta-md5">{{ metadataMd5 }}</span>
                 <vt-copy-detail-button [value]="metadataMd5" label="MD5" />
+                <span class="bin-popup-meta-value bin-popup-meta-md5">{{ metadataMd5 }}</span>
               </div>
             </div>
           }

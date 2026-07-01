@@ -198,8 +198,9 @@
   min-width: 0;
 }
 
-// Value + per-item Copy button, aligned so the button sits beside the value
-// (the actual metadata) rather than the category label above it.
+// Per-item Copy button + value. The button leads the row so it always hugs the
+// left edge of the value (the actual metadata) at a fixed offset, instead of
+// floating to the far right of a wide cell where short values leave it stranded.
 .metadata-value-row {
   display: flex;
   flex-direction: row;
