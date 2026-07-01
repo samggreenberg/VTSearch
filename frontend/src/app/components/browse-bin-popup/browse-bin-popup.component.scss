@@ -247,38 +247,42 @@
   padding: 2px;
   border-radius: var(--radius-sm);
   width: var(--popup-cell, 80px);
+  // Animate the "viewed" enlarge (below) so items grow/settle smoothly rather
+  // than popping as focus walks the grid.
+  transition: transform var(--transition-base);
 
   &:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
   }
 
-  // Selection is the INNER ring: a solid accent ring drawn at the cell edge
-  // (not the list's inset accent bar — a ring reads better under a square thumb)
-  // plus an accent-tinted fill. The viewed item's ring (below) nests outside it.
+  // Two orthogonal per-thumb cues, so a thumbnail can show either or BOTH at
+  // once without them fighting. Selection is a BOUNDARY (a ring); "viewed" is a
+  // SIZE/depth cue (enlarge + lift). Different visual channels means a selected
+  // item you're also viewing reads unmistakably as ringed AND lifted.
+  //
+  // Selection: a solid accent ring at the cell edge (mirrors bin selection on
+  // the canvas) plus an accent-tinted fill.
   &.selected {
     background: color-mix(in srgb, var(--accent) 18%, transparent);
     color: var(--text-primary);
     box-shadow: 0 0 0 2px var(--accent);
   }
 
-  // The bin's representative — the pile thumbnail the user right-clicked, shown
-  // large in the preview and scrolled into view here. A softer inner ring marks
-  // it; the solid ``.selected`` ring takes over once it's selected.
-  &.representative:not(.selected) {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
-  }
-
-  // The viewed item (shown in the preview pane / walked by the arrow keys) is the
-  // OUTER ring: a lighter accent ring offset just beyond the cell. Drawn with
-  // ``outline`` (independent of the selection/representative box-shadow) so it
-  // layers on top of them — a selected item you're also viewing shows both rings
-  // nested (solid accent inside, lighter accent outside), where before the cue
-  // vanished. Only one item is ever "viewing", so the wider footprint is local.
-  // It's also the only on-grid cue for non-thumbnail media, which has no preview.
+  // The viewed item (shown in the preview pane / walked by the arrow keys) is
+  // ENLARGED and lifted, mirroring the canvas hover-enlarge. Done with
+  // ``transform`` (painted, not laid out) so the scale never reflows the grid,
+  // shifts row heights, or resizes the popup — layout stays pixel-stable, and
+  // ``z-index`` lifts the growing thumb above its neighbours. The lift uses
+  // ``filter: drop-shadow`` rather than ``box-shadow`` so the selection ring's
+  // box-shadow survives untouched when an item is both selected and viewed. The
+  // size/depth channel is the only on-grid cue for non-thumbnail media too,
+  // which has no preview.
   &.focused {
-    outline: 2px solid var(--accent-light);
-    outline-offset: 2px;
+    position: relative;
+    z-index: 1;
+    transform: scale(1.08);
+    filter: drop-shadow(0 3px 6px var(--shadow-dropdown));
   }
 
   &:focus-visible {

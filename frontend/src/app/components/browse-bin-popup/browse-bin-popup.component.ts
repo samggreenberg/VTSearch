@@ -334,12 +334,6 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     return idx >= 0 ? idx : 0;
   }
 
-  /** True for the representative entry, so the grid can ring the item whose
-   *  thumbnail the user right-clicked (the one shown large in the preview). */
-  isRepresentative(id: number): boolean {
-    return id === this.representativeId();
-  }
-
   /** Scroll the member grid so the representative's row sits roughly centred, so
    *  the popup opens looking at the same item whose pile thumbnail was clicked
    *  rather than the 1-D list's first item. No-op for a singleton bin (no grid)
