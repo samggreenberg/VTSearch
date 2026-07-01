@@ -329,8 +329,12 @@ vts_install_driver_runfile() {
         command -v dnf >/dev/null 2>&1 || dnf="yum"
         vts_try "Installing kernel headers + build tools" \
             ${sudo_cmd} "$dnf" install -y "kernel-devel-$(uname -r)" kernel-headers gcc make tar || true
-        vts_try "Installing dkms (so the module auto-rebuilds on kernel updates)" \
-            ${sudo_cmd} "$dnf" install -y dkms || true
+        # dkms lives in EPEL on RHEL, not the base repos, so a plain `dnf install
+        # dkms` finds nothing on a bare box. vts_rhel_ensure_dkms bootstraps EPEL
+        # first (even on an unregistered box) so the --dkms registration below can
+        # actually take -- the difference between a set-and-forget install and a
+        # kernel-pinned one on a bare RHEL g4dn.
+        vts_rhel_ensure_dkms "$sudo_cmd" "$dnf" || true
     elif command -v apt-get >/dev/null 2>&1; then
         vts_try "Installing kernel headers + build tools" \
             ${sudo_cmd} apt-get install -y "linux-headers-$(uname -r)" gcc make || true
