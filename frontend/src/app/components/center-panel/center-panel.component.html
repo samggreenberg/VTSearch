@@ -113,7 +113,7 @@
               <span class="metadata-label">MD5</span>
               <span class="metadata-value metadata-md5">{{ media.md5 }}</span>
             </div>
-            <vt-copy-detail-button [value]="media.md5" label="MD5" />
+            <vt-copy-detail-button [value]="media.md5 || ''" label="MD5" />
           </div>
         </div>
       }
