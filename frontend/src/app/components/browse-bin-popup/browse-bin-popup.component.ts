@@ -12,6 +12,7 @@ import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { usesThumbnails } from '../browse-canvas/hex-render.util';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
+import type { MediaBatchResponse } from '../../generated/api-client/models/media-batch-response';
 
 /** Vertical room (px) reserved under a grid thumbnail for its truncated name. */
 const GRID_LABEL_HEIGHT = 18;
@@ -22,6 +23,8 @@ const GRID_GAP = 4;
 const GRID_CONTENT_WIDTH = 256;
 /** Width (px) of the scrolling grid column; mirrors the historic popup width. */
 const GRID_COLUMN_WIDTH = 280;
+/** Width (px) of the optional metadata column shown left of the preview pane. */
+const METADATA_COLUMN_WIDTH = 200;
 /** Tallest the scrolling body grows before it caps and scrolls internally. */
 const MAX_BODY_PX = 400;
 /** Shortest the scrolling body is ever squeezed to when the visible region is
@@ -211,12 +214,17 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
       if (!settings) return;
       this.gridSizeDict = (settings.grid_icon_size_popup as Record<string, string>) ?? {};
       this.previewSizeDict = (settings.popup_preview_size as Record<string, number>) ?? {};
+      this.metadataShownDict = (settings.popup_metadata_shown as Record<string, boolean>) ?? {};
       this.applyViewPrefs();
       // A detail-canvas size change (the top-left buttons) resizes the preview
-      // pane, hence the whole popup, so re-clamp it back fully on-screen.
+      // pane, hence the whole popup, so re-clamp it back fully on-screen. Showing
+      // or hiding the metadata column likewise changes the popup's width, so it
+      // re-clamps too.
       const override = this.previewOverride;
-      if (override !== this.lastPreviewOverride) {
+      const metaShown = this.showMetadataColumn;
+      if (override !== this.lastPreviewOverride || metaShown !== this.lastMetadataShown) {
         this.lastPreviewOverride = override;
+        this.lastMetadataShown = metaShown;
         setTimeout(() => this.place());
       }
     });
@@ -300,11 +308,100 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   /** Last applied preview override, so the settings effect only re-clamps the
    *  popup when the detail-canvas size actually changed. */
   private lastPreviewOverride: number | null = null;
+  /** Per-media-type memory of whether the metadata column is shown, mirrored
+   *  from the ``popup_metadata_shown`` setting. Absent entries default to shown
+   *  (mirroring the Train/Find center panel's metadata default). */
+  private metadataShownDict: Record<string, boolean> = {};
+  /** Last applied column visibility, so the settings effect only re-clamps the
+   *  popup when it actually toggled. */
+  private lastMetadataShown: boolean | null = null;
 
   /** True for media types that carry real visual thumbnails (image / video):
    *  the ones that magnify on the main canvas and are worth a large preview. */
   get showPreview(): boolean {
     return usesThumbnails(this.mediaType());
+  }
+
+  // --- Metadata column ------------------------------------------------------
+  // A column left of the detail-canvas preview carrying the same fields the
+  // Train/Find center panel shows for the focused item (name, media type, custom
+  // metadata, MD5). It attaches to the preview pane — the popup's focused item —
+  // so it only exists for media types that have a preview (image / video).
+
+  /** Whether the user has the metadata column shown for the active media type.
+   *  Absent entries default to shown, mirroring the center panel's metadata
+   *  tray, which is expanded by default. */
+  get metadataShown(): boolean {
+    const mediaType = this.mediaType();
+    const value = mediaType ? this.metadataShownDict[mediaType] : undefined;
+    return value !== false;
+  }
+
+  /** Whether the metadata column actually renders: only when there is a preview
+   *  pane (the focused item it sits beside) and the user hasn't hidden it. */
+  get showMetadataColumn(): boolean {
+    return this.showPreview && this.metadataShown;
+  }
+
+  /** Fixed width (px) of the metadata column when shown. */
+  get metadataColWidth(): number {
+    return METADATA_COLUMN_WIDTH;
+  }
+
+  /** Toggle the metadata column for the active media type and persist it (per
+   *  media type, under ``popup_metadata_shown``), so it becomes the default for
+   *  future popups of this type — mirroring how the size buttons persist. The
+   *  settings effect re-clamps the popup, since the width changed. */
+  toggleMetadata(): void {
+    const mediaType = this.mediaType();
+    if (!this.showPreview || !mediaType) return;
+    const dict = { ...this.metadataShownDict, [mediaType]: !this.metadataShown };
+    this.settingsState.update({ popup_metadata_shown: dict } as SettingsUpdate).subscribe();
+  }
+
+  /** Cached metadata for the focused (previewed) item, or ``undefined`` before
+   *  it has loaded. Everything the column shows reads through this. */
+  private focusedMedia(): MediaBatchResponse | undefined {
+    return this.previewId == null ? undefined : this.metadataCache.get(this.previewId);
+  }
+
+  /** Display name of the focused item, matching the center panel's Name field. */
+  get metadataName(): string {
+    const media = this.focusedMedia();
+    if (!media) return this.previewId == null ? '' : `Media #${this.previewId}`;
+    return media.filename || `Media #${media.id}`;
+  }
+
+  /** Media type of the focused item, matching the center panel's Media Type
+   *  field. Falls back to the active dataset's media type before load. */
+  get metadataMediaType(): string {
+    return this.focusedMedia()?.media_type || this.mediaType();
+  }
+
+  /** MD5 of the focused item, matching the center panel's MD5 field. */
+  get metadataMd5(): string {
+    return this.focusedMedia()?.md5 ?? '';
+  }
+
+  /** Custom metadata of the focused item — the category name/value pairs the
+   *  center panel renders between Media Type and MD5. */
+  get metadataCustom(): Record<string, unknown> {
+    return (this.focusedMedia()?.custom_metadata as Record<string, unknown>) ?? {};
+  }
+
+  /** Format a custom-metadata value for display. Mirrors the center panel's
+   *  ``formatMetadataValue`` so the same categories read identically here. */
+  formatMetadataValue(label: string, value: unknown): string {
+    if (label === 'File Size' && typeof value === 'number') {
+      return (value / 1024).toFixed(1) + ' KB';
+    }
+    if (label === 'Duration' && typeof value === 'number') {
+      return value.toFixed(1) + 's';
+    }
+    if (label === 'Frequency' && typeof value === 'number') {
+      return value + ' Hz';
+    }
+    return String(value);
   }
 
   /** Pull the remembered thumbnail size for the active media type, rechunk the
@@ -869,7 +966,10 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     const gridW = this.previewOnly ? 0 : GRID_COLUMN_WIDTH;
     const paneW = this.previewPaneSize;
     const previewW = paneW ? paneW + (gridW ? PREVIEW_GAP : 0) : 0;
-    const width = Math.min(previewW + gridW, this.maxWidthPx);
+    // The optional metadata column sits left of the preview, adding its width
+    // plus a gap when shown.
+    const metaW = this.showMetadataColumn ? METADATA_COLUMN_WIDTH + PREVIEW_GAP : 0;
+    const width = Math.min(metaW + previewW + gridW, this.maxWidthPx);
     const height = headerH + this.bodyHeight;
     let l = desiredLeft;
     let t = desiredTop;

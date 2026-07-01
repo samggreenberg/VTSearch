@@ -383,6 +383,16 @@ class TestSettingsAPI:
         assert data["popup_preview_size"]["image"] == 720
         assert data["popup_preview_size"]["video"] == 96
 
+    def test_update_popup_metadata_shown_per_type(self, client):
+        res = client.put("/api/settings", json={"popup_metadata_shown": {"image": False, "video": True}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["popup_metadata_shown"]["image"] is False
+        assert data["popup_metadata_shown"]["video"] is True
+
+        res2 = client.get("/api/settings")
+        assert res2.get_json()["popup_metadata_shown"]["image"] is False
+
     def test_update_focus_mode_left_per_type(self, client):
         res = client.put("/api/settings", json={"focus_mode_left": {"audio": "hover", "image": "click"}})
         assert res.status_code == 200

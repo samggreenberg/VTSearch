@@ -315,6 +315,15 @@ class UserSettings(BaseModel):
     # derived from the main-canvas thumbnail radius. Clamped to
     # ``POPUP_PREVIEW_SIZE_PX``.
     popup_preview_size: dict[str, Annotated[int, _clamp(*POPUP_PREVIEW_SIZE_PX)]] = Field(default_factory=dict)
+    # VTSBrowse bin-popup metadata column, per media type. The popup can show a
+    # column to the left of the detail-canvas preview carrying the same
+    # name/media-type/custom-metadata/MD5 fields the Train/Find center panel
+    # shows for the focused item; this remembers whether that column is shown for
+    # each media type. Empty entries fall back on the frontend to shown (mirroring
+    # the center panel's default). Only image/video popups have a preview pane and
+    # thus a focused item to attach the column to, but the flag is stored per media
+    # type generically.
+    popup_metadata_shown: dict[str, bool] = Field(default_factory=dict)
     panel_pct_left: dict[str, int] = Field(default_factory=dict)
     panel_pct_right: dict[str, int] = Field(default_factory=dict)
 
