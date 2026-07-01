@@ -105,6 +105,20 @@
   width: 100%;
   height: 100%;
   overflow: hidden;
+  // Positioning context for the pre-reveal cover, which sits over the whole
+  // (already laid-out) grid while the canvas paints its opening view.
+  position: relative;
+}
+
+// Opaque cover over the canvas + panels until the opening view is ready. The
+// content underneath is fully laid out (so the canvas fits at its real size and
+// the reveal doesn't reflow); this just hides the mid-load grid and swallows
+// interaction until it's worth showing.
+.browse-preload-cover {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: var(--bg-body);
 }
 
 // Holds the canvas plus its on-canvas overlays (controls, info, hover
