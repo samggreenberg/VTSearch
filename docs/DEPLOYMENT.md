@@ -818,22 +818,42 @@ boot; and every GPU install prints whether the result is DKMS-managed
 distro's `nvidia-driver-*` packages are already DKMS builds, so they're covered
 too.
 
-**If the installer reports a NON-DKMS (kernel-pinned) driver** — this happens on a
-bare, unregistered RHEL box where `dkms` can't be reached and only the precompiled
-kABI-stream or a plain `.run` module could be installed — make it durable with one
-of:
+**If the driver is already up but reported NON-DKMS**, the installer *offers to
+convert it in place* — it reinstalls the driver via NVIDIA's `.run` installer
+with `--dkms` (bootstrapping EPEL + `dkms` first), then recommends a reboot so the
+freshly built module loads. Answer `Y` at the prompt, or drive it unattended with
+`VTSEARCH_AUTO_DKMS=1 bash scripts/install.sh` (`VTSEARCH_SKIP_DKMS=1` skips the
+offer). Your GPU keeps working either way; declining just leaves it kernel-pinned.
+
+**To make a NON-DKMS driver durable by hand** — e.g. on a bare, unregistered RHEL
+box where `dkms` can't be reached and only the precompiled kABI-stream or a plain
+`.run` module could be installed — use one of:
 
 - **Bake a custom AMI** (or use the **AWS Deep Learning AMI**, which ships the
   driver preinstalled and maintained). A stop/start then starts from a known-good
   driver. This is the most robust option and the recommendation for a fleet.
 - **Install `dkms` first, then re-run the installer** so the module becomes
-  DKMS-managed. On RHEL, `dkms` lives in EPEL:
+  DKMS-managed. On RHEL, `dkms` lives in EPEL — and on a **hardened or unregistered**
+  box `dnf install <epel-url.rpm>` fails the GPG check (`Public key ... is not
+  installed`) unless you import EPEL's key first:
   ```bash
+  sudo rpm --import "https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-$(rpm -E %rhel)"
   sudo dnf install -y \
     "https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(rpm -E %rhel).noarch.rpm"
   sudo dnf install -y dkms
   bash scripts/install.sh
   ```
+  If the driver is **already loaded** (nvidia-smi works), the `.run` reinstall aborts
+  with `nvidia-modeset appears to be already loaded` — stop the driver and unload the
+  modules first, then reinstall with `--dkms`:
+  ```bash
+  sudo systemctl stop nvidia-persistenced
+  sudo rmmod nvidia_uvm nvidia_drm nvidia_modeset nvidia   # dependents before the base module
+  lsmod | grep nvidia || echo "modules unloaded"           # confirm none remain
+  bash scripts/install.sh                                   # or: sudo sh nvidia.run --silent --dkms
+  sudo reboot
+  ```
+  (The installer's built-in DKMS conversion, above, does this stop/unload for you.)
 - **Pin the kernel** so it stops changing under the module (blocks kernel security
   updates until you unpin — a tradeoff):
   ```bash
