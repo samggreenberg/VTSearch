@@ -273,7 +273,7 @@ class TestNearDupeProgress:
         """
         import copy  # noqa: PLC0415
 
-        from vtscore.state import near_dupes as nd  # noqa: PLC0415
+        from vtscore.state import near_dupes  # noqa: PLC0415
 
         arr = _photo_arr(500)
         base = {
@@ -284,11 +284,11 @@ class TestNearDupeProgress:
             base[cid] = _make_image_media(cid, _photo(cid))
 
         inline = copy.deepcopy(base)
-        monkeypatch.setattr(nd, "_THREAD_MIN_IMAGES", 10**9)  # force the inline path
+        monkeypatch.setattr(near_dupes, "_THREAD_MIN_IMAGES", 10**9)  # force the inline path
         n_inline = collapse_near_duplicates(inline)
 
         threaded = copy.deepcopy(base)
-        monkeypatch.setattr(nd, "_THREAD_MIN_IMAGES", 1)  # force the thread pool
+        monkeypatch.setattr(near_dupes, "_THREAD_MIN_IMAGES", 1)  # force the thread pool
         n_threaded = collapse_near_duplicates(threaded)
 
         assert n_inline == n_threaded
