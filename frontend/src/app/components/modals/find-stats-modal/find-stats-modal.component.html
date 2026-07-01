@@ -33,20 +33,20 @@
       <thead>
         <tr>
           <th></th>
-          <th title="The detector's call at the default calibrated cutoff">Detector Good</th>
-          <th title="The detector's call at the default calibrated cutoff">Detector Bad</th>
+          <th title="The detector's call at its default cutoff">Detector Good</th>
+          <th title="The detector's call at its default cutoff">Detector Bad</th>
         </tr>
       </thead>
       <tbody>
         <tr>
           <th class="row-head">Kept Good</th>
-          <td class="cell agree" title="Confirmed positive (you and the detector agree)">{{ stats.confirmed_good | number }}</td>
-          <td class="cell correct" title="Rescued false negative (you promoted an item the detector dropped)">{{ stats.rescued_false_neg | number }}</td>
+          <td class="cell agree" title="A match you both agree on">{{ stats.confirmed_good | number }}</td>
+          <td class="cell correct" title="A match you rescued (the detector had dropped it)">{{ stats.rescued_false_neg | number }}</td>
         </tr>
         <tr>
           <th class="row-head">Marked Bad</th>
-          <td class="cell correct" title="Culled false positive (you dropped an item the detector kept)">{{ stats.culled_false_pos | number }}</td>
-          <td class="cell agree" title="Confirmed negative (you and the detector agree)">{{ stats.confirmed_bad | number }}</td>
+          <td class="cell correct" title="A wrong match you removed (the detector had kept it)">{{ stats.culled_false_pos | number }}</td>
+          <td class="cell agree" title="A non-match you both agree on">{{ stats.confirmed_bad | number }}</td>
         </tr>
       </tbody>
     </table>
@@ -58,20 +58,20 @@
           <td class="stat-value">{{ agreementPct }} <span class="muted">({{ stats.agreements | number }} agree / {{ stats.corrections | number }} corrections)</span></td>
         </tr>
         <tr>
-          <td class="stat-label" title="Of everything the detector called good, how much the adopted set keeps (inflated by unverified items)">Precision</td>
+          <td class="stat-label" title="Of everything the detector called good, how much you kept">Kept rate</td>
           <td class="stat-value">{{ precisionPct }}</td>
         </tr>
       </tbody>
     </table>
 
-    <h3 class="section-title" title="As inclusion rises the cutoff drops: false positives climb, false negatives fall. Read off the inclusion that best balances the two on your data.">False pos / false neg vs. inclusion</h3>
+    <h3 class="section-title" title="Raising inclusion keeps more items: you catch more real matches but also let in more wrong ones. Pick the point that best balances the two on your data.">Missed vs. wrong matches by inclusion</h3>
     <div class="chart-wrap">
       <svg
         class="fpfn-chart"
         [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight"
         preserveAspectRatio="none"
         role="img"
-        aria-label="False positive and false negative counts across inclusion -10 to 10"
+        aria-label="Missed matches and wrong matches across inclusion -10 to 10"
       >
         <!-- axes -->
         <line class="axis" [attr.x1]="axisLeft" [attr.y1]="axisTop" [attr.x2]="axisLeft" [attr.y2]="axisBottom" />
@@ -90,8 +90,8 @@
         <polyline class="line-fn" [attr.points]="fnPolyline" />
       </svg>
       <div class="chart-legend">
-        <span class="legend-item"><span class="swatch swatch-fp"></span>False positives</span>
-        <span class="legend-item"><span class="swatch swatch-fn"></span>False negatives</span>
+        <span class="legend-item"><span class="swatch swatch-fp"></span>Wrong matches</span>
+        <span class="legend-item"><span class="swatch swatch-fn"></span>Missed matches</span>
         <span class="legend-item"><span class="swatch swatch-current"></span>Current (incl {{ stats.inclusion }})</span>
       </div>
     </div>

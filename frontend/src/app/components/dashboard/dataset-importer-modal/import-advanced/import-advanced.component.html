@@ -4,7 +4,7 @@
     class="advanced-toggle"
     (click)="toggleAdvanced()"
     [attr.aria-expanded]="advancedOpen"
-    title="Show advanced options: included media types, embedding model, and pre-processing clipper"
+    title="Show advanced options: included media types, embedder, and pre-processing clipper"
   >
     Advanced {{ advancedOpen ? '▴' : '▾' }}
   </button>
@@ -26,7 +26,7 @@
 }
 
 @if (embedders().length > 1 && showEmbedderPicker) {
-  <label class="form-label" for="import-advanced-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
+  <label class="form-label" for="import-advanced-embedder" title="The embedder used to analyze each item so it can be searched">Embedder</label>
   <select
     id="import-advanced-embedder"
     class="form-select"
@@ -54,7 +54,7 @@
 }
 
 @if (advancedOpen && patchEmbedderOptions.length > 0) {
-  <label class="form-label" for="import-advanced-patch-embedder" title="Optionally bind a second, patch-based embedder (DINOv2/v3, EUPE) so the dataset also supports region search and region voting. Leave as None to skip.">Region embedder (optional)</label>
+  <label class="form-label" for="import-advanced-patch-embedder" title="Optionally add a region-aware embedder that lets you vote on parts of an image and search by region. Leave as None to skip.">Region embedder (optional)</label>
   <select
     id="import-advanced-patch-embedder"
     class="form-select"
@@ -72,7 +72,7 @@
 }
 
 @if (advancedOpen && structuralEmbedderOptions.length > 0) {
-  <label class="form-label" for="import-advanced-structural-embedder" title="Optionally bind a structural embedder (SIFT/VLAD) so the dataset also supports instance retrieval with geometric verification — finding a specific object or logo. Leave as None to skip.">Instance embedder (optional)</label>
+  <label class="form-label" for="import-advanced-structural-embedder" title="Optionally add a pattern-matching embedder that finds a specific object or logo. Leave as None to skip.">Instance embedder (optional)</label>
   <select
     id="import-advanced-structural-embedder"
     class="form-select"
@@ -90,25 +90,25 @@
 }
 
 @if (showStandaloneClipperButton) {
-  <label class="form-label" title="Pre-processing clipper applied before embedding (e.g. clips audio into shorter segments)">Clipper</label>
+  <label class="form-label" title="Pre-processing clipper applied before each item is analyzed (e.g. clips audio into shorter segments)">Clipper</label>
   <button
     class="btn btn--secondary clipper-btn"
     (click)="onClipperClick()"
-    title="Choose how to pre-process media before embedding (e.g. clip into shorter segments)"
+    title="Choose how to pre-process media before it's analyzed (e.g. clip into shorter segments)"
   >
     Details: {{ clipperDisplayName }}
   </button>
 }
 
 @if (advancedOpen) {
-  <label class="form-label" for="import-advanced-projection" title="Compute the 2-D Browse projection (UMAP layout + hex-tile map) while importing. Costs extra time up front but makes the Browse view open instantly. When off, the projection is built the first time you open Browse.">
+  <label class="form-label" for="import-advanced-projection" title="Build the Browse map now, while importing. Costs extra time up front but makes Browse open instantly. When off, the map is built the first time you open Browse.">
     <input
       id="import-advanced-projection"
       type="checkbox"
       [ngModel]="buildProjection()"
       (ngModelChange)="onBuildProjectionChange($event)"
     />
-    Build 2-D Browse projection now
+    Build Browse map now
   </label>
   <label class="form-label" for="import-advanced-near-dupes" title="Merge near-duplicate images and text (visually/textually near-identical copies — resizes, recompressions, trivial edits) in addition to exact duplicates. Keeps the largest copy of each group; exporting one member exports the whole group.">
     <input

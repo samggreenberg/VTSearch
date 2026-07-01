@@ -10,7 +10,7 @@
     />
     Top
   </label>
-  <label class="sort-radio" [class.active]="selectMode === 'hard'" title="Pick the item closest to the decision boundary. These uncertain cases improve detector accuracy fastest.">
+  <label class="sort-radio" [class.active]="selectMode === 'hard'" title="Pick the item closest to the good/bad cutoff. These uncertain cases improve the detector fastest.">
     <input
       type="radio"
       name="selectMode"
@@ -20,7 +20,7 @@
     />
     Hard
   </label>
-  <label class="sort-radio" [class.active]="selectMode === 'new'" title="Pick an item from an underexplored region of the dataset using diversity sampling. Ensures broad coverage.">
+  <label class="sort-radio" [class.active]="selectMode === 'new'" title="Pick an item unlike the ones you've seen so far, to cover a broad mix of your collection.">
     <input
       type="radio"
       name="selectMode"

@@ -57,7 +57,7 @@ describe('formatProgressHeader step count', () => {
       { status: 'embedding', message: 'Embedding files', step: 3, total_steps: 4 },
       'dataset',
     );
-    expect(header).toBe('Loading dataset · Step 3 of 4 · Embedding files');
+    expect(header).toBe('Loading dataset · Step 3 of 4 · Analyzing files');
   });
 
   it('omits the step count for single-step jobs', () => {
@@ -77,7 +77,7 @@ describe('formatProgressHeader detail line', () => {
       { status: 'embedding', message: 'Embedding cats/img.png', current: 12, total: 345 },
       'dataset',
     );
-    expect(header).toContain('Embedding files');
+    expect(header).toContain('Analyzing files');
     expect(detail).toBe('12/345 cats/img.png');
   });
 
@@ -107,8 +107,8 @@ describe('formatProgressHeader step-4 finalize phases', () => {
     ['Serializing dataset…', 'saving dataset'],
     ['Packaging dataset…', 'saving dataset'],
     ['Building diversity index…', 'building diversity index'],
-    ['Building 2-D projection…', 'building projection'],
-    ['Building tile pyramid…', 'building projection'],
+    ['Building 2-D projection…', 'building map'],
+    ['Building tile pyramid…', 'building map'],
     ['Dropped 3 item(s) with failed embedding…', 'cleaning up'],
   ])('labels %j as "%s"', (message, expectedPhase) => {
     const { header, subtitle } = formatProgressHeader(

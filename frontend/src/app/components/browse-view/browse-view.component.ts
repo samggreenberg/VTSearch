@@ -317,7 +317,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         // No handoff (e.g. a hard reload): the ephemeral subset is gone.
         this.status.set('error');
         this.errorMessage.set(
-          'This subset projection has expired. Re-run Find and click Browse to rebuild it.',
+          'This map has expired. Re-run Find and click Browse to rebuild it.',
         );
         return;
       }
@@ -752,7 +752,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       // Nothing to rebuild (e.g. Retry after the handoff expired).
       this.status.set('error');
       this.errorMessage.set(
-        'This subset projection has expired. Re-run Find and click Browse to rebuild it.',
+        'This map has expired. Re-run Find and click Browse to rebuild it.',
       );
       return;
     }
@@ -774,7 +774,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         error: (err) => {
           this.status.set('error');
           this.errorMessage.set(
-            err?.error?.message || err?.error?.error || 'Failed to start projection build',
+            err?.error?.message || err?.error?.error || 'Failed to build the map',
           );
         },
       });
@@ -818,7 +818,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         this.selection.consumeSurviveProjectionChange();
         this.status.set('error');
         this.errorMessage.set(
-          err?.error?.message || err?.error?.error || 'Failed to start re-projection',
+          err?.error?.message || err?.error?.error || 'Failed to build the map',
         );
       },
     });
@@ -949,7 +949,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   /** Message on the pre-reveal cover: names thumbnails for media that paint
    *  them (the case this cover exists for), the projection otherwise. */
   get preloadMessage(): string {
-    return usesThumbnails(this.mediaType()) ? 'Loading thumbnails…' : 'Loading projection…';
+    return usesThumbnails(this.mediaType()) ? 'Loading thumbnails…' : 'Loading map…';
   }
 
   private loadProjection(): void {
@@ -968,7 +968,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
           } else {
             this.status.set('error');
             this.errorMessage.set(
-              err?.error?.message || err?.error?.error || 'Failed to load projection',
+              err?.error?.message || err?.error?.error || 'Failed to build the map',
             );
           }
         },
@@ -993,7 +993,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     }
     if (meta.status === 'error') {
       this.status.set('error');
-      this.errorMessage.set(meta.error || 'Projection build failed');
+      this.errorMessage.set(meta.error || 'Failed to build the map');
       return;
     }
     if (meta.status === 'building') {
@@ -1034,7 +1034,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
             if (meta.status === 'error') {
               this.polling = false;
               this.status.set('error');
-              this.errorMessage.set(meta.error || 'Projection build failed');
+              this.errorMessage.set(meta.error || 'Failed to build the map');
               return;
             }
             this.buildProgress.set(meta.current ?? 0);
@@ -1049,7 +1049,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
               this.polling = false;
               this.status.set('error');
               this.errorMessage.set(
-                'Lost contact with the server while building the projection.',
+                'Lost contact with the server while building the map.',
               );
               return;
             }

@@ -164,7 +164,7 @@
         @if (lfPickerKind() === 'folder') {
           <label class="form-label" title="Choose a folder on your local machine. All files inside (including subdirectories) will be uploaded.">{{ lfFolderFieldLabel() }}<span class="required">*</span></label>
         } @else {
-          <label class="form-label" title="Choose a single file: a .txt/.list of paths, or a .npz archive of paths + pre-computed embedding vectors.">{{ lfFilesFieldLabel() }}<span class="required">*</span></label>
+          <label class="form-label" title="Choose a single file: a .txt/.list of paths, or a .npz archive of paths plus their pre-computed fingerprints.">{{ lfFilesFieldLabel() }}<span class="required">*</span></label>
         }
       }
       @if (lfPickerKind() === 'folder') {

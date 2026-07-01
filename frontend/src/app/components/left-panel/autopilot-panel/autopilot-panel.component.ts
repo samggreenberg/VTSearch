@@ -176,12 +176,12 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
         {
           color: st.smartStatus === 'green' ? 'green' : 'yellow',
           ariaLabel: `Smart: ${smartState}`,
-          title: `Smart: ${smartState}. Tracks detector accuracy over labeling steps. Green when error cost has leveled off (detector has converged). Yellow when still improving.`,
+          title: `Smart: ${smartState}. Tracks the detector's accuracy as you label. Green when its accuracy has settled and stopped improving. Yellow when it's still getting better.`,
         },
         {
           color: st.stableStatus === 'green' ? 'green' : 'yellow',
           ariaLabel: `Stable: ${stableState}`,
-          title: `Stable: ${stableState}. Tracks prediction stability. Green when predictions stop changing between labeling steps (detector is confident). Yellow when predictions are still shifting.`,
+          title: `Stable: ${stableState}. Tracks whether the detector keeps changing its mind. Green when it has stopped changing its calls between labeling steps. Yellow when its calls are still shifting.`,
         },
       ];
     }
@@ -191,7 +191,7 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
         {
           color: st.spanStatus === 'green' ? 'green' : 'yellow',
           ariaLabel: `Diversity: ${spanState}`,
-          title: `Diversity: ${spanState}. Tracks how much of the dataset your labels span. Green when your labels cover a diverse spread of items. Yellow when coverage is still concentrated.`,
+          title: `Diverse: ${spanState}. Tracks how much of your collection your votes cover. Green when your votes span a broad mix of items. Yellow when they're still bunched together.`,
         },
       ];
     }
@@ -201,9 +201,9 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
   private phaseHelpText(phase: AutopilotPhase): string {
     switch (phase) {
       case 'good': return 'Label a few examples of what you are looking for so the system can learn what "good" looks like.';
-      case 'bad': return 'Label examples that are not what you want, helping the system learn the boundary between good and bad.';
-      case 'hard': return 'The system shows you items near the decision boundary. Labeling these improves accuracy where it matters most.';
-      case 'new': return 'Explore diverse items the system is less certain about, ensuring nothing important is missed.';
+      case 'bad': return 'Label examples that are not what you want, helping the system learn the good/bad cutoff.';
+      case 'hard': return 'The system shows you items near the good/bad cutoff. Labeling these improves accuracy where it matters most.';
+      case 'new': return 'Explore a broad mix of items the system is less certain about, ensuring nothing important is missed.';
       case 'done': return 'All quality indicators are green. You can continue labeling or export your results.';
       default: return '';
     }
@@ -220,11 +220,11 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
       case 'good':
         return `Phase ${stepNumber}: Find initial goods. Label a few positives so the detector knows what "good" looks like.`;
       case 'bad':
-        return `Phase ${stepNumber}: Find initial bads. Label a few negatives so the detector has both sides of the boundary.`;
+        return `Phase ${stepNumber}: Find initial bads. Label a few negatives so the detector has both sides of the good/bad cutoff.`;
       case 'hard':
-        return `Phase ${stepNumber}: Boundary refinement. Votes on uncertain items train the model fastest.`;
+        return `Phase ${stepNumber}: Refine the cutoff. Votes on uncertain items train the detector fastest.`;
       case 'new':
-        return `Phase ${stepNumber}: Diversity exploration. Items from unseen parts of the dataset catch edge cases the boundary phase missed.`;
+        return `Phase ${stepNumber}: Cover a broad mix. Items from parts of your collection you haven't seen catch edge cases the cutoff phase missed.`;
       case 'done':
         return 'Done. All quality indicators are green. Keep labeling for more accuracy, or export your results.';
       default:

@@ -162,14 +162,14 @@ export class BrowsePrepService {
   // --- projection phase ---
 
   private startProjection(datasetId: string): void {
-    this.patch({ phase: 'projecting', current: 0, total: 0, message: 'Building projection…' });
+    this.patch({ phase: 'projecting', current: 0, total: 0, message: 'Building the map…' });
     this.pollErrors = 0;
     this.projectionApi
       .getMeta()
       .pipe(take(1))
       .subscribe({
         next: (meta) => this.handleMeta(datasetId, meta),
-        error: (err) => this.fail(datasetId, this.errMessage(err, 'Failed to load projection')),
+        error: (err) => this.fail(datasetId, this.errMessage(err, 'Failed to build the map')),
       });
   }
 
@@ -181,14 +181,14 @@ export class BrowsePrepService {
       return;
     }
     if (meta.status === 'error') {
-      this.fail(datasetId, meta.error || 'Projection build failed');
+      this.fail(datasetId, meta.error || 'Failed to build the map');
       return;
     }
     if (meta.status === 'building') {
       this.patch({
         current: meta.current ?? 0,
         total: meta.total ?? 0,
-        message: meta.message || 'Building projection…',
+        message: meta.message || 'Building the map…',
       });
       this.schedulePoll(datasetId);
       return;
@@ -206,7 +206,7 @@ export class BrowsePrepService {
           }
           this.schedulePoll(datasetId);
         },
-        error: (err) => this.fail(datasetId, this.errMessage(err, 'Failed to start projection build')),
+        error: (err) => this.fail(datasetId, this.errMessage(err, 'Failed to build the map')),
       });
   }
 
@@ -225,7 +225,7 @@ export class BrowsePrepService {
           error: () => {
             this.pollErrors += 1;
             if (this.pollErrors >= MAX_POLL_ERRORS) {
-              this.fail(datasetId, 'Lost contact with the server while building the projection.');
+              this.fail(datasetId, 'Lost contact with the server while building the map.');
               return;
             }
             this.schedulePoll(datasetId);

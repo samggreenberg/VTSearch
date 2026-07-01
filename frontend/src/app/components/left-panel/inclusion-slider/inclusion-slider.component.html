@@ -1,5 +1,5 @@
 <div class="inclusion-selector">
-  <label class="inclusion-label" for="inclusion-input" title="Adjust the inclusion bias. Positive values include more items (favor recall), negative values exclude more (favor precision). Triggers retraining of learned sort.">
+  <label class="inclusion-label" for="inclusion-input" title="Adjust how many items to include. Higher values include more items to catch everything, at the risk of some wrong matches. Lower values include fewer, keeping only the surest matches. Retrains the learned sort.">
     Inclusion
   </label>
   <input
@@ -10,7 +10,7 @@
     step="1"
     [value]="value()"
     (input)="onInput($event)"
-    title="Adjust inclusion bias. Positive favors recall, negative favors precision."
+    title="Higher includes more items (catch everything, some may be wrong); lower includes fewer (only the surest matches)."
     aria-label="Inclusion"
   />
 </div>

@@ -53,14 +53,14 @@
       [eta]="taskProgressInfo.eta"
       [bar]="taskBar"
       [smooth]="true"
-      [cancelTitle]="taskKind() === 'projection' ? 'Cancel building the projection' : 'Cancel this dataset load'"
+      [cancelTitle]="taskKind() === 'projection' ? 'Cancel building the map' : 'Cancel this dataset load'"
       (cancel)="onCancelTask()"
     />
   </td>
   @if (taskKind() === 'projection') {
     <td class="actions-col">
       <div class="actions-cell">
-        <button class="browse-btn" type="button" disabled aria-label="Building projection for browse" title="Building projection…">
+        <button class="browse-btn" type="button" disabled aria-label="Building the map for browse" title="Building the map…">
           <svg class="icon-waggle" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path>
             <circle cx="12" cy="12" r="3"></circle>

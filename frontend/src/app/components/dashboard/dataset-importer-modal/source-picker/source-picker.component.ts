@@ -233,7 +233,7 @@ export class SourcePickerComponent {
 
   statusBadgeLabel(status: string): string {
     if (status === 'ready') return 'Ready';
-    if (status === 'needs_embedding') return 'Needs Embed';
+    if (status === 'needs_embedding') return 'Needs setup';
     return 'Needs Download';
   }
 }
