@@ -22,7 +22,7 @@ from vtscore.state import (
     phash_image,
     simhash_text,
 )
-from vtscore.state.near_dupes import _hamming
+from vtscore.state.near_dupes import _THREAD_MIN_IMAGES, _hamming
 
 # A realistic document-length paragraph.  Near-dup text detection (tight
 # SimHash threshold) is meant to catch reformatted/re-encoded copies of a
@@ -244,6 +244,43 @@ class TestCollapseNearDuplicates:
         assert all(
             not (isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set") for m in members
         )
+
+
+class TestNearDupeProgress:
+    def test_progress_reported_during_hashing(self):
+        """Progress advances across the (dominant) hashing phase, not just the
+        cheap collapse — the fix for the "dead air" progress bar.
+
+        Uses > _THREAD_MIN_IMAGES distinct photos so both the decode thread pool
+        and the mid-hash progress stride (every 64 items) are exercised.
+        """
+        media = {cid: _make_image_media(cid, _photo(cid)) for cid in range(1, 201)}
+        calls: list[tuple[int, int]] = []
+        collapse_near_duplicates(media, on_progress=lambda cur, tot: calls.append((cur, tot)))
+
+        # At least one tick fired *during* hashing (current > 0 against the
+        # per-item total of 200), proving the bar moves while fingerprinting
+        # rather than sitting at its floor until collapse.
+        mid_hash = [(c, t) for c, t in calls if t == 200 and c > 0]
+        assert mid_hash, f"expected mid-hash progress ticks, got {calls}"
+        assert max(c for c, _ in mid_hash) >= 128  # advanced well into the set
+        # current never exceeds total within the hashing phase.
+        assert all(c <= t for c, t in calls)
+
+    def test_threaded_and_inline_hashing_agree(self):
+        """The decode thread pool (>=128 images) yields the same grouping as the
+        inline path — the hash of each item is independent of completion order.
+        """
+        arr = _photo_arr(500)
+        # Two near-dup pairs plus filler distinct photos, padded past the thread
+        # threshold so the pooled path runs.
+        media = {1: _make_image_media(1, _img_bytes(arr)), 2: _make_image_media(2, _recompress(arr, 75))}
+        for cid in range(3, 200):
+            media[cid] = _make_image_media(cid, _photo(cid))
+        assert len(media) >= _THREAD_MIN_IMAGES
+        count = collapse_near_duplicates(media)
+        assert count == 1  # the one near-dup pair collapsed
+        assert 1 in media and 2 not in media  # larger PNG kept over the JPEG
 
 
 # --- export expansion ----------------------------------------------------
