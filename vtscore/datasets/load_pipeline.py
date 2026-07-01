@@ -614,6 +614,18 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     # Keep clipper in field_values for importers that need it (e.g. demo
     # importer stores it in the container metadata for readiness tracking).
     field_values["clipper"] = clipper_name
+    # Importers that clip themselves (``handles_own_clipping``) own the full
+    # clip config: hand the params/chain back so their ``run`` clips with the
+    # user's real settings, and suppress the pipeline-level clipper so the
+    # media isn't clipped a second time on top of the importer's own pass.
+    if getattr(importer, "handles_own_clipping", False):
+        if clipper_params is not None:
+            field_values["clipper_params"] = clipper_params
+        if chain_steps is not None:
+            field_values["clipper_chain"] = chain_steps
+        pipeline_clipper, pipeline_clipper_params, pipeline_chain_steps = "", None, None
+    else:
+        pipeline_clipper, pipeline_clipper_params, pipeline_chain_steps = clipper_name, clipper_params, chain_steps
     embedder_name = field_values.get("embedder", "")
     embedders = _parse_embedder_list(field_values.pop("embedders", None))
     # The primary picker's choice always leads the embed order (it becomes each
@@ -641,9 +653,9 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
         _load,
         origin,
         name=importer.resolve_display_name(field_values),
-        clipper=clipper_name,
-        clipper_params=clipper_params,
-        chain_steps=chain_steps,
+        clipper=pipeline_clipper,
+        clipper_params=pipeline_clipper_params,
+        chain_steps=pipeline_chain_steps,
         embedder=embedder_name,
         embedders=embedders,
         created_by=created_by,
