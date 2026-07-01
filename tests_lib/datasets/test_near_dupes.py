@@ -22,7 +22,7 @@ from vtscore.state import (
     phash_image,
     simhash_text,
 )
-from vtscore.state.near_dupes import _THREAD_MIN_IMAGES, _hamming
+from vtscore.state.near_dupes import _hamming
 
 # A realistic document-length paragraph.  Near-dup text detection (tight
 # SimHash threshold) is meant to catch reformatted/re-encoded copies of a
@@ -267,20 +267,33 @@ class TestNearDupeProgress:
         # current never exceeds total within the hashing phase.
         assert all(c <= t for c, t in calls)
 
-    def test_threaded_and_inline_hashing_agree(self):
-        """The decode thread pool (>=128 images) yields the same grouping as the
-        inline path — the hash of each item is independent of completion order.
+    def test_threaded_and_inline_hashing_agree(self, monkeypatch):
+        """The decode thread pool yields the exact same grouping as the inline
+        path — each item's hash is independent of completion order.
         """
+        import copy  # noqa: PLC0415
+
+        from vtscore.state import near_dupes as nd  # noqa: PLC0415
+
         arr = _photo_arr(500)
-        # Two near-dup pairs plus filler distinct photos, padded past the thread
-        # threshold so the pooled path runs.
-        media = {1: _make_image_media(1, _img_bytes(arr)), 2: _make_image_media(2, _recompress(arr, 75))}
-        for cid in range(3, 200):
-            media[cid] = _make_image_media(cid, _photo(cid))
-        assert len(media) >= _THREAD_MIN_IMAGES
-        count = collapse_near_duplicates(media)
-        assert count == 1  # the one near-dup pair collapsed
-        assert 1 in media and 2 not in media  # larger PNG kept over the JPEG
+        base = {
+            1: _make_image_media(1, _img_bytes(arr), file_size=500),  # PNG
+            2: _make_image_media(2, _recompress(arr, 75), file_size=100),  # near-dup JPEG
+        }
+        for cid in range(3, 60):
+            base[cid] = _make_image_media(cid, _photo(cid))
+
+        inline = copy.deepcopy(base)
+        monkeypatch.setattr(nd, "_THREAD_MIN_IMAGES", 10**9)  # force the inline path
+        n_inline = collapse_near_duplicates(inline)
+
+        threaded = copy.deepcopy(base)
+        monkeypatch.setattr(nd, "_THREAD_MIN_IMAGES", 1)  # force the thread pool
+        n_threaded = collapse_near_duplicates(threaded)
+
+        assert n_inline == n_threaded
+        assert set(inline.keys()) == set(threaded.keys())
+        assert 2 not in inline  # the JPEG near-dup collapsed into the larger PNG
 
 
 # --- export expansion ----------------------------------------------------
