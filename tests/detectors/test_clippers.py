@@ -221,6 +221,61 @@ class TestSoundTilingClipper:
             assert overlap >= 1.0 - 0.01
 
 
+def _generate_wavex(freq: float, duration: float, sr: int = 48000) -> bytes:
+    """Generate a ``WAVE_FORMAT_EXTENSIBLE`` (tag 0xFFFE) WAV byte string.
+
+    UrbanSound8K and many real-world datasets ship WAVs in this container,
+    which stdlib ``wave`` rejects with ``unknown format: 65534``.  libsndfile's
+    ``WAVEX`` major format writes exactly that, so it reproduces the crash.
+    """
+    import numpy as np  # noqa: PLC0415
+    import soundfile as sf  # noqa: PLC0415
+
+    t = np.linspace(0, duration, int(sr * duration), endpoint=False)
+    samples = (np.sin(2 * np.pi * freq * t) * 16000).astype(np.int16)
+    buf = io.BytesIO()
+    sf.write(buf, samples, sr, format="WAVEX", subtype="PCM_16")
+    return buf.getvalue()
+
+
+class TestWaveFormatExtensible:
+    """Clippers must tolerate WAVE_FORMAT_EXTENSIBLE input (UrbanSound8K crash)."""
+
+    def test_wavex_is_not_readable_by_stdlib_wave(self):
+        # Guards the regression test below: confirm the fixture really is the
+        # extensible format that stdlib wave chokes on.
+        wavex = _generate_wavex(440, 3.0)
+        with pytest.raises(wave.Error, match="65534"):
+            wave.open(io.BytesIO(wavex), "rb")
+
+    def test_wav_duration_handles_extensible(self):
+        from vtscore.media.audio.clipper import _wav_duration
+
+        wavex = _generate_wavex(440, 3.0)
+        assert _wav_duration(wavex) == pytest.approx(3.0, abs=0.01)
+
+    def test_tiling_clipper_handles_extensible(self):
+        from vtscore.media.audio.clipper import SoundTilingClipper
+
+        wavex = _generate_wavex(440, 5.0)
+        media = {"id": 1, "media_type": "audio", "media_bytes": wavex, "duration": 5.0}
+        result = SoundTilingClipper(2.0).clip(media)
+        assert len(result) == 3
+        for tile in result:
+            # Emitted tiles are plain PCM that stdlib wave can read.
+            with wave.open(io.BytesIO(tile["media_bytes"]), "rb") as wf:
+                assert wf.getframerate() == 48000
+
+    def test_clip_clipper_handles_extensible(self):
+        from vtscore.media.audio.clipper import SoundClipClipper
+
+        wavex = _generate_wavex(440, 5.0)
+        media = {"id": 1, "media_type": "audio", "media_bytes": wavex, "duration": 5.0}
+        result = SoundClipClipper(1.0, 3.0).clip(media)
+        assert len(result) == 1
+        assert result[0]["duration"] == pytest.approx(2.0, abs=0.01)
+
+
 # ---------------------------------------------------------------------------
 # SoundClipClipper
 # ---------------------------------------------------------------------------
