@@ -123,6 +123,7 @@ export class KeyboardHelpModalComponent implements OnInit {
           title: 'Bin details window',
           shortcuts: [
             { keys: ['↑ ↓ ← →'], description: 'Move the viewed item within the grid' },
+            { keys: ['Space'], description: 'Select / deselect the viewed item' },
             { keys: ['+'], description: 'Make the detail image bigger' },
             { keys: ['-'], description: 'Make the detail image smaller' },
             { keys: ['Ctrl', 'A'], description: 'Select all items in this bin' },
