@@ -8,6 +8,7 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
 import { IconComponent } from '../icon/icon.component';
+import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { usesThumbnails } from '../browse-canvas/hex-render.util';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
@@ -106,7 +107,7 @@ const PREVIEW_SIZE_STEPS = [120, 160, 208, 272, 352, 448, 560, 640, 720] as cons
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-bin-popup',
   standalone: true,
-  imports: [CommonModule, ScrollingModule, ViewControlsComponent, IconComponent],
+  imports: [CommonModule, ScrollingModule, ViewControlsComponent, IconComponent, CopyDetailButtonComponent],
   templateUrl: './browse-bin-popup.component.html',
   styleUrl: './browse-bin-popup.component.scss',
 })

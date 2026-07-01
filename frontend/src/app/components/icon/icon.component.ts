@@ -25,7 +25,7 @@ const KNOWN_TYPES = new Set([
   'house', 'lightning', 'flask', 'cubes', 'database',
   'clock', 'running', 'calendar',
   'checkbox-checked', 'search', 'trophy',
-  'zoom-in', 'zoom-out', 'zoom-fit', 'help',
+  'zoom-in', 'zoom-out', 'zoom-fit', 'help', 'copy',
 ]);
 
 function emojiToType(icon: string): string {
