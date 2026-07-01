@@ -82,6 +82,7 @@ from vtscore.state.diversity import (  # noqa: F401
     DIVERSITY_TREE_AUTO_THRESHOLD,
     build_diversity_tree,
     build_diversity_tree_for_context,
+    build_diversity_tree_serializable,
     diversity_tree_label,
     diversity_tree_next_sample,
     diversity_tree_unlabel,

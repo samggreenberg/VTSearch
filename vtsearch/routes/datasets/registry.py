@@ -166,7 +166,7 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     if not pkl_path or not Path(pkl_path).is_file():
         abort(404, message=f"Saved dataset file not found: {pkl_path}")
 
-    _LOAD_STEPS = 2  # read pickle + process items, build diversity index
+    _LOAD_STEPS = 2  # step 1: load items (read + dedup); step 2: diversity index
 
     # Create a per-task tracker for this load operation.
     task_id = f"_regload_{dataset_id[:8]}"
@@ -177,6 +177,14 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
         media_type=entry.get("media_type", ""),
         embedder=entry.get("embedder", ""),
     )
+    # Pace the unified bar against the real phase split. Step 1 (pickle read +
+    # convert + the near-instant exact-dedup) is seconds at most; step 2 is the
+    # diversity index, which is instant when the cached tree restores but a
+    # minutes-long hierarchical-k-means rebuild when it doesn't. Weighting step 2
+    # as the dominant slice keeps a rebuild advancing the bar across its whole
+    # span instead of the old equal split, where the instant dedup drove step 2
+    # to ~100% and the bar then sat frozen there through the entire rebuild.
+    tracker.set_step_weights([0.15, 0.85])
     tracker.update("loading", "Loading dataset from file...", step=1, total_steps=_LOAD_STEPS)
 
     def _pickle_progress(status, message, current, total):
@@ -214,6 +222,10 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
 
                 tracker.check_cancelled()
 
+                # Exact-MD5 dedup is part of loading (step 1): the pickle was
+                # already deduped at import, so on reload this is a near-instant
+                # no-op — keeping it out of step 2 stops it from pre-filling the
+                # diversity slice and freezing the bar (see set_step_weights).
                 def _dedup_progress(current: int, total: int) -> None:
                     tracker.check_cancelled()
                     tracker.update(
@@ -221,7 +233,7 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                         "Removing duplicates…",
                         current=current,
                         total=total,
-                        step=2,
+                        step=1,
                         total_steps=_LOAD_STEPS,
                     )
 
@@ -251,6 +263,13 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                     if should_auto_build_diversity_tree(len(ctx.medias)):
                         _diversity_progress(0, 0)
                         build_diversity_tree_for_context(ctx, on_progress=_diversity_progress)
+                # Fill the diversity slice to completion in every branch (cache
+                # restore, rebuild, or deferred-above-threshold) so the unified
+                # bar reaches 100% cleanly instead of stalling at the step-1
+                # boundary when the tree restored without emitting any progress.
+                tracker.update(
+                    "loading", "Finalizing…", current=1, total=1, step=2, total_steps=_LOAD_STEPS
+                )
                 _reg_add_loaded(dataset_id)
                 # Update item count and dupe count in case they changed
                 num_dupes = sum(
