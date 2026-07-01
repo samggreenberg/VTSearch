@@ -17,6 +17,11 @@ import type { MediaBatchResponse } from '../../generated/api-client/models/media
 
 /** Vertical room (px) reserved under a grid thumbnail for its truncated name. */
 const GRID_LABEL_HEIGHT = 18;
+/** Goal width (px) at/above which grid thumbnails still show their name. Below
+ *  this (the XS/S icon sizes) the name truncates to a useless "a…", so the SCSS
+ *  hides it (``@container … (max-width: 60px)``) and {@link rowSize} drops the
+ *  reserved label height to match, keeping the grid gap-free. */
+const GRID_NAME_MIN_WIDTH = 65;
 /** Gap (px) between grid cells (and grid rows); matches ``--space-2xs``-ish. */
 const GRID_GAP = 4;
 /** Width (px) available to lay out cells inside the popup's scroll column (≈ its
@@ -497,9 +502,12 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     this.rows = rows;
   }
 
-  /** Pixel stride of one virtual grid row (a row of cells plus its labels). */
+  /** Pixel stride of one virtual grid row (a row of cells plus its labels). At
+   *  the smallest icon sizes the name is hidden (see {@link GRID_NAME_MIN_WIDTH}),
+   *  so its reserved height is dropped to keep rows flush. */
   get rowSize(): number {
-    return this.gridGoalWidth + GRID_LABEL_HEIGHT + GRID_GAP;
+    const labelHeight = this.gridGoalWidth >= GRID_NAME_MIN_WIDTH ? GRID_LABEL_HEIGHT : 0;
+    return this.gridGoalWidth + labelHeight + GRID_GAP;
   }
 
   /** Height (px) the grid takes: just enough for its rows, capped (to the room
