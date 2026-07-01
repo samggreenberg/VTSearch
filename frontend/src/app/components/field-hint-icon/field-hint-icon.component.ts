@@ -1,5 +1,14 @@
 
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  HostListener,
+  computed,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
 
 const HOVER_DELAY_MS = 500;
 
@@ -17,9 +26,9 @@ const HOVER_DELAY_MS = 500;
       (mouseenter)="onMouseEnter()"
       (mouseleave)="onMouseLeave()"
       (focus)="onMouseEnter()"
-      (blur)="hide()"
+      (blur)="onBlur()"
       (click)="onClick($event)"
-      (keydown.escape)="hide()"
+      (keydown.escape)="onEscape($event)"
       >
       <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false">
         <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.3" />
@@ -86,38 +95,66 @@ export class FieldHintIconComponent {
   readonly hint = input('');
   readonly ariaLabel = input('');
 
-  readonly visible = signal(false);
+  /** Sticky state set by clicking the icon; stays open until dismissed. */
+  private readonly pinned = signal(false);
+  /** Transient state driven by hover/focus; cleared as soon as you leave. */
+  private readonly hovered = signal(false);
+
+  /** The tooltip shows if it's pinned by a click OR currently hovered. */
+  readonly visible = computed(() => this.pinned() || this.hovered());
+
   private hoverTimer: ReturnType<typeof setTimeout> | null = null;
 
   onMouseEnter(): void {
+    // Already showing (pinned or hovered): nothing to schedule.
     if (this.visible()) return;
     this.clearTimer();
     this.hoverTimer = setTimeout(() => {
       this.hoverTimer = null;
-      this.visible.set(true);
+      this.hovered.set(true);
     }, HOVER_DELAY_MS);
   }
 
   onMouseLeave(): void {
+    // Only the transient hover ends here. A click-pinned tooltip stays open so
+    // the user can move the pointer off the icon to read it.
     this.clearTimer();
-    this.visible.set(false);
+    this.hovered.set(false);
   }
 
   onClick(event: MouseEvent): void {
     event.preventDefault();
     event.stopPropagation();
     this.clearTimer();
-    this.visible.set(true);
+    // Toggle immediately: show if hidden, dismiss if already showing (from
+    // either a previous click or an in-progress hover).
+    const willShow = !this.visible();
+    this.hovered.set(false);
+    this.pinned.set(willShow);
+  }
+
+  onBlur(): void {
+    this.hide();
+  }
+
+  onEscape(event: Event): void {
+    // Only consume Escape when we actually have a tooltip to close, so an
+    // Escape on an idle icon still bubbles up to close a parent modal.
+    if (this.visible()) {
+      event.stopPropagation();
+    }
+    this.hide();
   }
 
   hide(): void {
     this.clearTimer();
-    this.visible.set(false);
+    this.hovered.set(false);
+    this.pinned.set(false);
   }
 
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent): void {
-    if (!this.visible()) return;
+    if (!this.pinned()) return;
     if (!this.elementRef.nativeElement.contains(event.target as Node)) {
       this.hide();
     }
