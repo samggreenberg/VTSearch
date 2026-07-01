@@ -23,7 +23,7 @@
       [style.grid-template-columns]="row.kind === 'threshold' ? null : 'repeat(' + gridColumns + ', var(--grid-goal-width, 80px))'"
     >
       @if (row.kind === 'threshold') {
-        <div class="media-threshold-line" title="Decision boundary between predicted good and bad items" aria-label="Good/Bad threshold">
+        <div class="media-threshold-line" title="The line between the detector's good and bad matches" aria-label="Good/Bad threshold">
           <span class="threshold-label">threshold</span>
         </div>
       } @else {
@@ -47,7 +47,7 @@
   <div class="media-list grid-layout" [style.--grid-goal-width]="gridGoalWidth() + 'px'" role="listbox" aria-label="Media items" #listContainer>
     @for (item of cachedOrderedItems; track trackByMediaId($index, item)) {
       @if (item.showThreshold) {
-        <div class="media-threshold-line" title="Decision boundary between predicted good and bad items" aria-label="Good/Bad threshold">
+        <div class="media-threshold-line" title="The line between the detector's good and bad matches" aria-label="Good/Bad threshold">
           <span class="threshold-label">threshold</span>
         </div>
       }

@@ -1316,7 +1316,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       ctx.fillStyle = this.themeColor('--text-muted');
       ctx.font = '16px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('No projection data', this.width / 2, this.height / 2);
+      ctx.fillText('Nothing to show yet', this.width / 2, this.height / 2);
       return;
     }
 

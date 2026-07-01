@@ -12,7 +12,7 @@ export function buildMediaContextMenuItems(mediaType: string): ContextMenuItem[]
     {
       id: 'sort',
       label: 'Sort by similarity to this',
-      title: 'Sort all loaded items by similarity to this item, using its existing embedding.',
+      title: 'Sort all loaded items by similarity to this item, using this item as the example.',
     },
   ];
   if (cropAble) {

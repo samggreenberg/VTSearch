@@ -177,8 +177,8 @@ describe('AutopilotPanelComponent', () => {
     // span was reported yellow above, so the diversity dot is yellow.
     expect(newStep!.statusIcons[0].color).toBe('yellow');
     // Tooltip explains the diversity indicator, not just its raw colour.
-    expect(newStep!.statusIcons[0].title).toContain('Diversity');
-    expect(newStep!.statusIcons[0].title).toContain('span');
+    expect(newStep!.statusIcons[0].title).toContain('Diverse');
+    expect(newStep!.statusIcons[0].title).toContain('cover');
   });
 
   it('should deactivate autopilot', () => {
@@ -241,8 +241,8 @@ describe('AutopilotPanelComponent', () => {
     // Future steps show phase intent only
     expect(stepLabels[1].title).toContain('Phase 2');
     expect(stepLabels[1].title).toContain('Find initial bads');
-    expect(stepLabels[2].title).toContain('Boundary refinement');
-    expect(stepLabels[3].title).toContain('Diversity exploration');
+    expect(stepLabels[2].title).toContain('Refine the cutoff');
+    expect(stepLabels[3].title).toContain('Cover a broad mix');
   });
 
   it('should show phase intent tooltip on each collapsed-step dot', async () => {
@@ -254,7 +254,7 @@ describe('AutopilotPanelComponent', () => {
     expect(dots[0].title).toContain('Find initial goods');
     expect(dots[0].title).toContain('reselect');
     expect(dots[2].title).toContain('Phase 3');
-    expect(dots[2].title).toContain('Boundary refinement');
+    expect(dots[2].title).toContain('Refine the cutoff');
     expect(dots[2].title).toContain('uncertain items');
   });
 

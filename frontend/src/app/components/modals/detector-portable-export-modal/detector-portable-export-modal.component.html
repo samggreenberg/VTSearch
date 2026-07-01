@@ -5,8 +5,8 @@
       <p>
         VTSearch normally keeps trained models in memory only — this export is the
         deliberate exception. The bundle contains <em>no raw media and no
-        embeddings</em>: just the small trained classifier, the name of the
-        embedder to use, and the threshold. (A trained model can still reveal some
+        fingerprints</em>: just the small trained detector, the name of the
+        embedder to use, and the cutoff. (A trained model can still reveal some
         information about its training data, so share it only with parties you'd
         trust with the labels themselves.)
       </p>
@@ -14,8 +14,8 @@
 
     <h3>What you'll get</h3>
     <ul class="pexport__list">
-      <li><code>detector.onnx</code> — the trained scorer (runs anywhere via onnxruntime).</li>
-      <li><code>manifest.json</code> — the embedder, embedding size, and threshold.</li>
+      <li><code>detector.onnx</code> — the trained detector (runs anywhere).</li>
+      <li><code>manifest.json</code> — the embedder to use and the cutoff.</li>
       <li><code>README.md</code> — which embedder to use and a copy-paste scoring snippet.</li>
     </ul>
 

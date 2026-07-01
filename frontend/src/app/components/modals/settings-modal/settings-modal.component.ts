@@ -544,7 +544,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   async resetDefaults(): Promise<void> {
     const ok = await this.dialog.confirmDestructive(
       'Reset all settings to factory defaults?',
-      'Your current preferences (appearance, view modes, autopilot, calibration, and other per-user settings) will be overwritten and cannot be recovered.',
+      'Your current preferences (appearance, view modes, autopilot, sorting, and other per-user settings) will be overwritten and cannot be recovered.',
       'Reset',
     );
     if (!ok) return;

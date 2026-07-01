@@ -2,13 +2,13 @@
   @switch (status()) {
     @case ('loading') {
       <div class="browse-status">
-        <p class="browse-status-message">Loading projection…</p>
+        <p class="browse-status-message">Loading map…</p>
         <vt-progress-bar [indeterminate]="true" [value]="0" [max]="1" />
       </div>
     }
     @case ('building') {
       <div class="browse-status">
-        <p class="browse-status-message">Building projection…</p>
+        <p class="browse-status-message">Building the map…</p>
         <vt-progress-bar
           [indeterminate]="buildTotal() <= 0"
           [value]="buildProgress()"
@@ -59,10 +59,10 @@
               class="btn btn--secondary btn--sm browse-reproject"
               (click)="onReproject()"
               [title]="subset
-                ? 'Re-project the displayed items into a fresh 2-D layout'
-                : 'Re-project all items into a fresh 2-D layout'">
+                ? 'Rebuild the map from the items shown'
+                : 'Rebuild the map from all items'">
               <vt-icon type="shuffle" [size]="14"></vt-icon>
-              Re-project
+              Rebuild map
             </button>
           </div>
           <vt-browse-canvas

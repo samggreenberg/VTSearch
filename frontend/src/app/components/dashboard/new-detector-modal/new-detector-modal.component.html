@@ -284,14 +284,14 @@
           class="advanced-toggle"
           (click)="toggleAdvanced()"
           [attr.aria-expanded]="advancedOpen()"
-          title="Advanced options: the embedder type this detector trains and scores in."
+          title="Advanced options: the kind of embedder this detector works with."
         >
           Advanced {{ advancedOpen() ? '▴' : '▾' }}
         </button>
 
         @if (advancedOpen()) {
           <label class="col-label" for="detector-embedder-type"
-            title="The kind of embedder this detector trains and scores in. The detector stays compatible with any dataset that binds an embedder of this type. Pick the type you expect to use — you can create a detector before adding any dataset.">
+            title="The kind of embedder this detector works with. An embedder is the tool that analyzes your items so they can be searched. The detector stays compatible with any dataset that uses this kind of embedder. Pick the kind you expect to use — you can create a detector before adding any dataset.">
             Detector Embedder Type
           </label>
           <select

@@ -113,7 +113,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     // ngOnInit's loadProjection has issued getMeta but it hasn't emitted: the
     // view is in the `loading` state.
     expect(fixture.nativeElement.querySelector('.browse-status-message')!.textContent).toContain(
-      'Loading projection',
+      'Loading map',
     );
     expect(fixture.nativeElement.querySelector('.browse-status-error')).toBeNull();
 
@@ -136,7 +136,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     // The cover names the projection for pure-density media (the canary DS is
     // audio); image/video datasets — the case this cover exists for — would read
     // "Loading thumbnails…" instead.
-    expect(component.preloadMessage).toBe('Loading projection…');
+    expect(component.preloadMessage).toBe('Loading map…');
 
     // The canvas signals its opening view is fully painted → uncover it.
     component.onCanvasFirstView();
