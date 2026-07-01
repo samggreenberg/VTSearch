@@ -158,6 +158,8 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
    *  the hovered thumbnail breaks out from. The preview pane is sized relative
    *  to this so it tracks the main-canvas thumbnail-size setting. */
   readonly hoverThumbRadius = input(28);
+  /** Preview-audio volume (0–1), driven by the Browse toolbar's volume control. */
+  readonly volume = input(1);
 
   /** Emitted when the popup should close (outside click, Escape, or the X). */
   readonly dismissed = output<void>();
@@ -228,6 +230,13 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   private scrollSub: Subscription | null = null;
 
   constructor() {
+    // Keep the hover-to-hear preview element in step with the Browse toolbar's
+    // volume slider mid-playback; ``onEntryEnter`` also seeds it when a clip
+    // starts.
+    effect(() => {
+      const el = this.audioRef?.nativeElement;
+      if (el) el.volume = this.volume();
+    });
     // Re-read the popup's thumbnail size whenever settings change (this is how
     // the in-header size buttons take effect, and how a change on one popup
     // becomes the default for every future popup of this media type).
@@ -867,6 +876,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
       const el = this.audioRef?.nativeElement;
       if (!el) return;
       el.loop = true;
+      el.volume = this.volume();
       el.load();
       el.play().catch(() => {});
     });
