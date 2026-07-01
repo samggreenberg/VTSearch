@@ -134,7 +134,7 @@ class _ClapBase(MediaEmbedder):
         # different sample rate.  Without this, the first embed_media()
         # call stalls for 10-30 s while numba compiles resampling kernels,
         # making the embedding progress bar appear frozen.
-        self._on_progress("loading", f"Warming up {self.label} pipeline: resampling JIT…", 1, 3)
+        self._on_progress("loading", f"Warming up {self.label}: resampling JIT…", 1, 3)
         import io  # noqa: PLC0415
 
         import soundfile as sf  # noqa: PLC0415
@@ -145,7 +145,7 @@ class _ClapBase(MediaEmbedder):
         _warmup_buf.seek(0)
         librosa.load(_warmup_buf, sr=CLAP_SAMPLE_RATE, mono=True)
 
-        self._on_progress("loading", f"Warming up {self.label} pipeline: preprocessing…", 2, 3)
+        self._on_progress("loading", f"Warming up {self.label}: preprocessing…", 2, 3)
         dummy_audio = np.zeros(CLAP_SAMPLE_RATE, dtype=np.float32)
         inputs = self._processor(
             audio=dummy_audio,
@@ -155,7 +155,7 @@ class _ClapBase(MediaEmbedder):
             max_length=CLAP_MAX_SAMPLES,
             truncation="rand_trunc",
         )
-        self._on_progress("loading", f"Warming up {self.label} pipeline: running model…", 3, 3)
+        self._on_progress("loading", f"Warming up {self.label}: running model…", 3, 3)
         device = next(self._model.parameters()).device
         inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.no_grad():

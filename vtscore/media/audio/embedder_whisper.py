@@ -112,10 +112,10 @@ class AudioWhisperEncoderEmbedder(MediaEmbedder):
             )
 
         # Warmup: run a dummy forward pass.
-        self._on_progress("loading", "Warming up Whisper pipeline: preprocessing…", 1, 2)
+        self._on_progress("loading", "Warming up Whisper: preprocessing…", 1, 2)
         dummy_audio = np.zeros(WHISPER_SAMPLE_RATE, dtype=np.float32)
         inputs = self._processor(dummy_audio, sampling_rate=WHISPER_SAMPLE_RATE, return_tensors="pt")
-        self._on_progress("loading", "Warming up Whisper pipeline: running encoder…", 2, 2)
+        self._on_progress("loading", "Warming up Whisper: running encoder…", 2, 2)
         device = next(self._model.parameters()).device
         input_features = inputs.input_features.to(device)
         with torch.no_grad():

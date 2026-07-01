@@ -22,8 +22,9 @@ _TIME_SUFFIX_RE = re.compile(r"\s*\(\d+s(?:,\s*\d+\s+modules)?\)$")
 #: Fixed column width for the label printed before a console progress bar.
 #: Padding every label to this width makes the ``[####…]`` bars line up
 #: vertically.  Sized to fit the longest common preload label
-#: ("Importing sentence_transformers…", 32 chars); longer labels simply
-#: push their own bar right rather than being truncated.
+#: ("Importing sentence_transformers…", 32 chars).  Labels longer than this
+#: are truncated with an ellipsis (see :func:`_fit_label`) so the bar's open
+#: bracket always lands in the same column and the bars stay aligned.
 _LABEL_WIDTH = 32
 
 #: ANSI colors for the bar fill *between* the brackets (the rest of the line
@@ -50,6 +51,19 @@ def _bar_color(pct: int) -> str:
 
 def _strip_time_suffix(msg: str) -> str:
     return _TIME_SUFFIX_RE.sub("", msg) if msg else msg
+
+
+def _fit_label(base: str) -> str:
+    """Fit *base* to exactly :data:`_LABEL_WIDTH` columns.
+
+    Short labels are left-padded with spaces; labels longer than the width are
+    truncated and given a trailing ``…``.  Either way the result is always
+    ``_LABEL_WIDTH`` columns wide, so every bar's open bracket lands in the same
+    column and successive bars line up vertically regardless of label length.
+    """
+    if len(base) > _LABEL_WIDTH:
+        return base[: _LABEL_WIDTH - 1] + "…"
+    return f"{base:<{_LABEL_WIDTH}}"
 
 
 from vtscore.config import MODELS_CACHE_DIR, resolve_device
@@ -320,10 +334,12 @@ def _make_console_progress(original_callback):
     newline only when a different base message arrives, a phase message
     arrives, or the caller invokes ``cb.flush()``.
 
-    Every bar's label is left-padded to a fixed width (:data:`_LABEL_WIDTH`)
-    so successive bars line up vertically, and the elapsed-time/status suffix
-    is rendered after the percentage so its changing length (``1s`` → ``10s``)
-    never shifts the bar mid-progress.
+    Every bar's label is fitted to a fixed width (:data:`_LABEL_WIDTH`) via
+    :func:`_fit_label` - short labels padded, long labels truncated with an
+    ellipsis - so successive bars line up vertically regardless of label
+    length, and the elapsed-time/status suffix is rendered after the
+    percentage so its changing length (``1s`` → ``10s``) never shifts the bar
+    mid-progress.
     """
     _last_msg: list[str | None] = [None]
     _last_base: list[str | None] = [None]
@@ -334,7 +350,7 @@ def _make_console_progress(original_callback):
     def _complete_bar() -> None:
         """Overwrite the current progress line with a 100% bar."""
         if _last_base[0]:
-            label = f"{_last_base[0]:<{_LABEL_WIDTH}}"
+            label = _fit_label(_last_base[0])
             sys.stdout.write(f"\r    {label} [{_ANSI_GREEN}{_FULL_BAR}{_ANSI_RESET}] 100%\033[K")
 
     def _flush() -> None:
@@ -369,7 +385,7 @@ def _make_console_progress(original_callback):
             tail = f" {suffix}" if suffix else ""
             # \033[K clears from cursor to end of line so a shorter message
             # doesn't leave trailing chars from a longer prior render.
-            line = f"\r    {base:<{_LABEL_WIDTH}} [{bar}] {pct:>3}%{tail}\033[K"
+            line = f"\r    {_fit_label(base)} [{bar}] {pct:>3}%{tail}\033[K"
             sys.stdout.write(line)
             sys.stdout.flush()
             _on_progress_line[0] = True
