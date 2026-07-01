@@ -184,6 +184,9 @@
   cursor: pointer;
   color: var(--text-vote);
   line-height: 1.3;
+  // Query container so the name can hide itself at small icon sizes (below).
+  container-type: inline-size;
+  container-name: bsp-cell;
 
   &:hover {
     color: var(--text-primary);
@@ -241,4 +244,12 @@
   text-align: center;
   line-height: 1.2;
   flex-shrink: 0;
+}
+
+// At the two smallest icon sizes (XS/S, ~42px content-box) the name truncates to
+// a useless "a…", so hide it and let the grid pack tighter. M and up keep it.
+@container bsp-cell (max-width: 60px) {
+  .bsp-name-grid {
+    display: none;
+  }
 }

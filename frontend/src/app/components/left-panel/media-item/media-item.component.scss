@@ -9,6 +9,9 @@
   transition: background var(--transition-fast);
   min-width: 0;
   overflow: hidden;
+  // Query container so the name can hide itself at small icon sizes (below).
+  container-type: inline-size;
+  container-name: media-cell;
 
   &:hover {
     background: var(--bg-hover);
@@ -82,6 +85,15 @@
   width: 100%;
   text-align: center;
   line-height: 1.2;
+}
+
+// At the two smallest icon sizes (XS/S, whose cells resolve to a content-box
+// width of ~42-46px) the name truncates to a useless "a…", so hide it and let
+// the grid pack more thumbnails per row. M and up (content-box ≥72px) keep it.
+@container media-cell (max-width: 60px) {
+  .media-name-grid {
+    display: none;
+  }
 }
 
 .media-score {
