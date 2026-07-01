@@ -97,6 +97,16 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    */
   densityMax = 1;
   readonly status = signal<'loading' | 'building' | 'ready' | 'error' | 'done'>('loading');
+  /**
+   * Whether the canvas content is uncovered. The canvas is mounted (so it can
+   * lay out and fetch) as soon as {@link status} is ``ready``, but a cover stays
+   * over it until the canvas signals its opening view is fully painted — the
+   * fit ran and the top view's thumbnails decoded — so the user is shown the
+   * finished view instead of a thumbnail-less grid that then fills in. Reset to
+   * ``false`` each time a *fresh* canvas mounts (see {@link enterReady}); an
+   * in-place refresh of an already-ready canvas leaves it untouched.
+   */
+  readonly revealed = signal(false);
   readonly errorMessage = signal('');
   readonly buildProgress = signal(0);
   readonly buildTotal = signal(0);
@@ -648,7 +658,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    */
   @HostListener('document:keydown', ['$event'])
   onKeydown(event: KeyboardEvent): void {
-    if (this.status() !== 'ready' || this.contextMenuOpen) return;
+    if (this.status() !== 'ready' || !this.revealed() || this.contextMenuOpen) return;
     if (shortcutsBlocked()) return;
 
     // Ctrl/Cmd-A: fully select every bin whose silhouette sits entirely in view.
@@ -908,6 +918,31 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Enter the ready state, mounting the canvas. When we arrive from a non-ready
+   * status a *fresh* canvas is created, so drop the reveal cover and wait for
+   * its {@link BrowseCanvasComponent.firstViewReady}; an in-place refresh of an
+   * already-ready canvas (e.g. a subset cull re-binning in place) keeps the same
+   * canvas, so leave the cover state alone or it would strand a working view
+   * (the existing canvas won't re-emit the one-shot signal).
+   */
+  private enterReady(): void {
+    if (this.status() !== 'ready') this.revealed.set(false);
+    this.status.set('ready');
+  }
+
+  /** The canvas finished painting its opening view (fit + top-view thumbnails);
+   *  uncover it. */
+  onCanvasFirstView(): void {
+    this.revealed.set(true);
+  }
+
+  /** Message on the pre-reveal cover: names thumbnails for media that paint
+   *  them (the case this cover exists for), the projection otherwise. */
+  get preloadMessage(): string {
+    return usesThumbnails(this.mediaType()) ? 'Loading thumbnails…' : 'Loading projection…';
+  }
+
   private loadProjection(): void {
     this.status.set('loading');
     this.polling = false;
@@ -944,7 +979,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.tileCache.setContentVersion(meta.content_version ?? 0);
 
     if (meta.point_count > 0) {
-      this.status.set('ready');
+      this.enterReady();
       return;
     }
     if (meta.status === 'error') {
@@ -984,7 +1019,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
             this.tileCache.setProjectionId(meta.projection_id);
             if (meta.point_count > 0) {
               this.polling = false;
-              this.status.set('ready');
+              this.enterReady();
               return;
             }
             if (meta.status === 'error') {

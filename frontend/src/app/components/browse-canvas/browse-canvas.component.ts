@@ -141,6 +141,17 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * numbers that track pan/zoom.
    */
   readonly densityMaxChanged = output<number>();
+  /**
+   * Emitted once, after the opening view is fully painted with real content:
+   * the fit has run against the real canvas size, every density tile under the
+   * viewport is in, and — for image/video datasets — every on-screen
+   * representative thumbnail has decoded (or failed). The browse view keeps a
+   * cover over the canvas until this fires, so the user is shown the finished
+   * view rather than a thumbnail-less grey grid that then fills in. Fires
+   * exactly once per canvas instance (a later pan/zoom loads on demand as
+   * before). See {@link maybeReportFirstView}.
+   */
+  readonly firstViewReady = output<void>();
 
   /** Loaded representative thumbnails, keyed by media id (insertion-ordered LRU). */
   private thumbCache = new Map<number, HTMLImageElement>();
@@ -212,6 +223,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   // `resize()`; this flag stops later window resizes from clobbering the user's
   // pan/zoom.
   private fittedAgainstRealSize = false;
+  // Guards {@link firstViewReady} so the opening-view signal fires exactly once
+  // per canvas instance.
+  private firstViewReported = false;
+  // Backstop so a representative thumbnail that never resolves (a hung request)
+  // can't strand the reveal cover: armed the first time we begin waiting on the
+  // opening view's thumbnails, it releases the view after this long regardless.
+  private firstViewTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly FIRST_VIEW_MAX_WAIT_MS = 12000;
   // Whether the user has taken over the framing (panned, zoomed, or resized a
   // thumbnail). Until then the view stays auto-fit: applying a saved cell size
   // (which changes the bin radius and thus how far edge bins reach) re-fits so
@@ -556,6 +575,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       if (this.thumbPrefetchIsTimeout) clearTimeout(this.thumbPrefetchHandle);
       else if (typeof cancelIdleCallback === 'function') cancelIdleCallback(this.thumbPrefetchHandle);
     }
+    if (this.firstViewTimer !== null) clearTimeout(this.firstViewTimer);
     const el = this.canvasRef.nativeElement;
     el.removeEventListener('mousedown', this.boundMouseDown);
     el.removeEventListener('wheel', this.boundWheel);
@@ -1378,6 +1398,79 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     };
     this.displayedLevel = level;
     this.hasDrawn = true;
+
+    this.maybeReportFirstView();
+  }
+
+  /**
+   * Emit {@link firstViewReady} once the opening view is fully painted with real
+   * content. Called at the end of every {@link draw} until it fires. It holds
+   * until three facts are true: the fit ran against the *real* canvas size (the
+   * 800×600 fallback fit paints a framing {@link resize} immediately refits
+   * away), every tile under the viewport has loaded, and — for thumbnail media —
+   * every on-screen representative thumbnail has decoded or failed. Each pending
+   * tile / thumbnail lands with its own redraw, so a later draw re-runs this
+   * check until the view is whole; a one-shot timer, armed the first time we
+   * start waiting on thumbnails, releases the cover if an image hangs. Pure
+   * density media (audio/text) paint no thumbnails, so it fires as soon as the
+   * visible tiles are in.
+   */
+  private maybeReportFirstView(): void {
+    if (this.firstViewReported) return;
+    // Hold until the fit used the real canvas size: the fallback fit paints
+    // tiles/thumbnails for a framing the refit discards, so revealing then would
+    // flash the wrong view.
+    if (!this.fittedAgainstRealSize) return;
+    const meta = this.meta();
+    if (!meta || meta.point_count === 0) return;
+
+    // Arm the backstop the first time we begin waiting: a tile or thumbnail that
+    // hard-fails to load caches nothing and fires no redraw, so without this the
+    // cover could strand. The timer releases it regardless (falling back to the
+    // old show-then-fill behaviour), and reportFirstView clears it on success.
+    if (this.firstViewTimer === null) {
+      this.firstViewTimer = setTimeout(
+        () => this.reportFirstView(),
+        BrowseCanvasComponent.FIRST_VIEW_MAX_WAIT_MS,
+      );
+    }
+
+    const thumbs = this.thumbnailMode;
+    const level = this.activeLevel;
+    const radius = meta.base_radius / Math.pow(2, level);
+    const screenRadius = radius * this.effZoom;
+
+    for (const { tx, ty } of this.getVisibleTiles()) {
+      const tile = this.tileCache.getCached(level, tx, ty);
+      // Geometry still loading: a tileLoaded$ redraw re-runs this check.
+      if (!tile) return;
+      if (!thumbs) continue;
+      for (const cell of tile.cells) {
+        // Only cells actually on screen gate the reveal — the visible-tile set
+        // carries a one-tile margin, so mirror draw()'s per-cell cull exactly.
+        const [sx, sy] = this.projToScreen(cell.cx, cell.cy);
+        if (sx < -screenRadius * 2 || sx > this.width + screenRadius * 2) continue;
+        if (sy < -screenRadius * 2 || sy > this.height + screenRadius * 2) continue;
+        if (this.thumbFailed.has(cell.rep_id)) continue;
+        // draw() already kicked off the load for every drawn cell; here we only
+        // read whether it has decoded. A missing / still-decoding image holds
+        // the reveal (its onload fires a redraw that re-checks).
+        const img = this.thumbCache.get(cell.rep_id);
+        if (!img || !img.complete || img.naturalWidth === 0) return;
+      }
+    }
+    this.reportFirstView();
+  }
+
+  /** Fire {@link firstViewReady} once and cancel the backstop timer. */
+  private reportFirstView(): void {
+    if (this.firstViewReported) return;
+    this.firstViewReported = true;
+    if (this.firstViewTimer !== null) {
+      clearTimeout(this.firstViewTimer);
+      this.firstViewTimer = null;
+    }
+    this.firstViewReady.emit();
   }
 
   /** Selection state of a cell: 0 = none, 1 = partial, 2 = full. Memoized on
