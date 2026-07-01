@@ -114,6 +114,36 @@ lists are **merged** (flattened), never nested.
 - Pipeline + route + frontend wiring for the opt-in checkbox.
 - Library-tier tests.
 
+## Performance (shipped)
+
+The hashing phase — not the collapse — dominates near-dupe wall-clock, and it
+used to report **no progress at all**: `_find_near_dup_groups` computed every
+pHash/SimHash before `collapse_near_duplicates`'s `on_progress` fired (that
+callback only ticked during the cheap `_collapse_group` loop), so the bar sat at
+its floor through the whole expensive part and then filled in a burst. Fixed:
+
+- **Progress is now driven across the hashing phase** (`_find_near_dup_groups`
+  takes an `on_progress` and ticks every `_HASH_PROGRESS_STRIDE` items); the
+  collapse tail fires one final tick. No more "dead air" on the finalize bar.
+- **Vectorised hashing (CPU, bit-identical output).** `simhash_text`'s two
+  nested Python loops (shingles × 64 bits) became a single `np.unpackbits`/vote/
+  `np.packbits` reduction; `_pack_bits` is `np.packbits` instead of a 64-iter
+  shift loop. Verified bit-for-bit against the old loops.
+- **Threaded image decode.** pHash cost is PIL thumbnail *decode* + resize (GIL
+  released), so past `_THREAD_MIN_IMAGES` images it runs on a small
+  `ThreadPoolExecutor`. Grouping is order-independent, so results are identical
+  to the inline path (test: `test_threaded_and_inline_hashing_agree`).
+
+*GPU was considered and rejected:* the per-item cost is image **decode** (no
+torch GPU path for arbitrary JPEG/PNG) and, before vectorisation, Python loops —
+the 32×32 DCT is trivially cheap, so a device round-trip per item would lose. The
+CPU wins above are the right lever.
+
+Not addressed: the **registry/pickle reload** path (`registry.py`, "Step 2 of 2
+· Removing duplicates") never runs near-dupe — its "Removing duplicates" is the
+cheap exact-MD5 `collapse_duplicates`; any real cost there is the diversity-tree
+rebuild or pickle decompress, a separate concern from this pass.
+
 ## Open follow-ups
 
 - **Audio near-dupe** via Chromaprint/AcoustID (or constellation hashing).
