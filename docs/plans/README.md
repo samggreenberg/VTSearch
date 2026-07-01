@@ -33,6 +33,7 @@ it can't drift far. (Point-in-time UI review/audit reports live in
 - [structural-embedder.md](structural-embedder.md): structural (instance-matching) embedder — SIFT/VLAD + RANSAC re-rank (V1 + Stage-2 + Find re-rank shipped; larger VLAD codebook next)
 - [clipper-chain.md](clipper-chain.md): ordered converter/clipper chains (Phase 1 shipped)
 - [cli-detector-converter.md](cli-detector-converter.md): CLI autodetect with converters + clippers (Phase 1 shipped)
+- [mlp-hidden-layer-sizing.md](mlp-hidden-layer-sizing.md): empirical capacity sweep of the detector MLP hidden layer (investigation done; `MLP_HIDDEN_MIN 4→8` change proposed, not made — 32 cap confirmed correct)
 
 ## Find / verification
 
