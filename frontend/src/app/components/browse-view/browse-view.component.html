@@ -41,7 +41,7 @@
     @case ('ready') {
       <div class="browse-content" #content [style.--browse-panel-width]="panelWidth() + 'px'">
         <div class="browse-main">
-          <div class="browse-tools-left">
+          <div class="browse-tools-left" vtNoFocusSteal>
             @if (subset) {
               <button
                 type="button"
@@ -98,7 +98,7 @@
               (dismissed)="dismissContextMenu()"
             />
           }
-          <div class="browse-controls">
+          <div class="browse-controls" vtNoFocusSteal>
             <div class="browse-select" role="group" aria-label="Region select">
               <button
                 type="button"

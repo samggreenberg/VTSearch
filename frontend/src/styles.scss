@@ -10,6 +10,18 @@
   box-sizing: border-box;
 }
 
+// Buttons are controls, not prose: their labels should never be selectable.
+// Selectable button text lets a stray drag that begins on (or near) a button
+// pick up its label and hand it to the browser's native text drag-and-drop —
+// the origin of the VTSBrowse "dragging a transparent 'Re-project' layer"
+// glitch. Most UA stylesheets already set this on <button>, but app styles can
+// re-enable it by cascading `user-select` onto a shared ancestor, so pin it
+// explicitly. `[role="button"]` covers the handful of non-<button> controls.
+button,
+[role="button"] {
+  user-select: none;
+}
+
 html, body {
   margin: 0;
   padding: 0;

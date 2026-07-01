@@ -15,6 +15,7 @@ import { BrowseSelectionPanelComponent } from '../browse-selection-panel/browse-
 import { BrowseMinimapComponent } from '../browse-minimap/browse-minimap.component';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { IconComponent } from '../icon/icon.component';
+import { NoFocusStealDirective } from '../../directives/no-focus-steal.directive';
 import { ProjectionApiService } from '../../services/projection-api.service';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
@@ -53,6 +54,7 @@ import type { SettingsUpdate } from '../../generated/api-client/models/settings-
     ProgressBarComponent,
     IconComponent,
     BrowseBinPopupComponent,
+    NoFocusStealDirective,
   ],
   // Scoped per browse view so the canvas, its minimap, and the selection panel
   // share one viewport channel and one selection set without leaking across

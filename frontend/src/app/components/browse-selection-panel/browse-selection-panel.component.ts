@@ -7,6 +7,7 @@ import { MediaMetadataCacheService } from '../../services/media-metadata-cache.s
 import { ActiveContextService } from '../../services/active-context.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
+import { NoFocusStealDirective } from '../../directives/no-focus-steal.directive';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 
 /** Ordering for the selected-item list. No detector confidence in browse, so
@@ -38,7 +39,7 @@ interface SelectionEntry {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-selection-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule, ViewControlsComponent],
+  imports: [CommonModule, FormsModule, ViewControlsComponent, NoFocusStealDirective],
   templateUrl: './browse-selection-panel.component.html',
   styleUrl: './browse-selection-panel.component.scss',
 })
