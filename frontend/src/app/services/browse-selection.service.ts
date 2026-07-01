@@ -21,6 +21,7 @@ import { Injectable, signal } from '@angular/core';
 export class BrowseSelectionService {
   private selected = new Set<number>();
   private readonly _version = signal(0);
+  private readonly _allSelected = signal(false);
 
   /** How many items are currently selected. */
   get size(): number {
@@ -71,6 +72,32 @@ export class BrowseSelectionService {
     } else {
       this.addAll(ids);
     }
+  }
+
+  /**
+   * Whether the current selection is a *select-all-in-view* that hasn't been
+   * manually edited since — the latch behind the selection panel's tri-state
+   * checkbox's "all" ([x]) state.
+   *
+   * It is a latch, not a live geometric fact: {@link selectAllInView} turns it
+   * on, and the next selection mutation of any other kind ({@link add},
+   * {@link remove}, a marquee, a bin toggle, {@link clear}) turns it off via
+   * {@link bump}. Deliberately, panning and zooming — which never touch the
+   * set — leave it on, so the checkbox reads "your select-all is intact" rather
+   * than flickering to [-] the moment a new bin scrolls into view. That keeps
+   * the control cheap (no per-pan viewport recompute) and its meaning stable.
+   */
+  readonly allSelected = this._allSelected.asReadonly();
+
+  /**
+   * Add *ids* (the bins fully in view, computed by the canvas) and latch
+   * {@link allSelected} on, so the panel checkbox shows [x]. Mirrors ctrl-A;
+   * an empty view is a no-op that leaves the current state untouched.
+   */
+  selectAllInView(ids: number[]): void {
+    if (ids.length === 0) return;
+    this.addAll(ids); // bump() drops the latch; we re-arm it right after
+    this._allSelected.set(true);
   }
 
   /** Add every id in *ids* to the selection (marquee union). */
@@ -126,6 +153,9 @@ export class BrowseSelectionService {
   }
 
   private bump(): void {
+    // Any real mutation drops the select-all latch by default; the one caller
+    // that means to keep it ({@link selectAllInView}) re-arms it afterwards.
+    this._allSelected.set(false);
     this._version.update((v) => v + 1);
   }
 }

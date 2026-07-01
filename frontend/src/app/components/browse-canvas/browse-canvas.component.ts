@@ -2479,7 +2479,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
         for (const id of this.cellMembers(cell)) ids.push(id);
       }
     }
-    if (ids.length > 0) this.selection.addAll(ids);
+    // Latches the selection panel's tri-state checkbox to [x]; an empty view is
+    // a no-op inside the service.
+    this.selection.selectAllInView(ids);
   }
 
   zoomBy(factor: number, anchorX = this.width / 2, anchorY = this.height / 2): void {
