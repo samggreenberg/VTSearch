@@ -657,6 +657,10 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
         event.preventDefault();
         this.moveFocus(1, 0);
         break;
+      case ' ':
+        event.preventDefault();
+        this.onPreviewClick();
+        break;
       case '+':
       case '=':
         event.preventDefault();
