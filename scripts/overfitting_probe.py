@@ -44,6 +44,11 @@ Usage::
     python scripts/overfitting_probe.py --dataset caltech101_s --n-good 100 --n-bad 100
     python scripts/overfitting_probe.py --dataset esc50_s --category rain --seeds 1 2 3 42 100
 
+To instead answer "is the hidden-layer width right?", sweep capacity while
+holding the split/votes/seeds fixed and watch held-out AUC per width::
+
+    python scripts/overfitting_probe.py --sweep-hidden 4 8 16 32 64 128 256
+
 The defaults download a small demo dataset (cached after first run) and take a
 minute or two. This is a diagnostic / teaching script, not a CI gate.
 """
@@ -127,12 +132,17 @@ def _run_one(
     n_good: int,
     n_bad: int,
     inclusion: int,
+    hidden_dim: int | None = None,
 ) -> dict[str, float] | None:
     """One (experiment, seed) trial. Returns per-trial metrics or ``None``.
 
     Splits the dataset into a train pool and a held-out pool, labels **both**
     pools under *mode*, samples up to ``n_good``/``n_bad`` training votes, trains
-    the exact production MLP, and measures train-set vs held-out ranking.
+    the MLP, and measures train-set vs held-out ranking.
+
+    When *hidden_dim* is ``None`` the production auto-sizing applies
+    (``max(4, min(32, n_train//3))``); pass an explicit width to hold every
+    other variable fixed and isolate the effect of hidden-layer capacity.
     """
     import torch  # noqa: PLC0415
 
@@ -172,7 +182,7 @@ def _run_one(
     input_dim = X.shape[1]
 
     threshold = calculate_cross_calibration_threshold(X_list, y_list, input_dim, inclusion, rng=rng)
-    model = train_model(X, y, input_dim)
+    model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
 
     # In-sample: how well the model separates the votes it trained on.
     train_scores = _score(model, np.array(X_list))
@@ -216,6 +226,73 @@ def _mean(rows: list[dict[str, float]], key: str) -> float:
     return float(np.mean(vals)) if vals else float("nan")
 
 
+def _std(rows: list[dict[str, float]], key: str) -> float:
+    vals = [r[key] for r in rows if not np.isnan(r[key])]
+    return float(np.std(vals)) if vals else float("nan")
+
+
+def _run_hidden_sweep(
+    clips: dict[int, dict[str, Any]],
+    category: str,
+    seeds: list[int],
+    n_good: int,
+    n_bad: int,
+    inclusion: int,
+    hidden_sizes: list[int],
+) -> None:
+    """Sweep hidden-layer width and print held-out ranking per size.
+
+    For every width, both REAL and NOISE are re-run over all *seeds* on the
+    same splits/votes, varying only the hidden layer. Held-out ``test_auc`` is
+    the capacity signal (threshold-free, so it isolates ranking quality from
+    threshold calibration); its std across seeds flags instability that big
+    layers can introduce even when the mean looks fine.
+    """
+    header = (
+        f"{'hidden':>7} {'REAL_train':>11} {'REAL_test':>11} {'±std':>7} "
+        f"{'NOISE_train':>12} {'NOISE_test':>11} {'±std':>7}"
+    )
+    print(header)
+    print("-" * len(header))
+    for hd in hidden_sizes:
+        real = [
+            r
+            for s in seeds
+            if (r := _run_one(clips, category, "real", s, n_good, n_bad, inclusion, hidden_dim=hd)) is not None
+        ]
+        noise = [
+            r
+            for s in seeds
+            if (r := _run_one(clips, category, "noise", s, n_good, n_bad, inclusion, hidden_dim=hd)) is not None
+        ]
+        if not real or not noise:
+            print(f"{hd:>7} {'(no valid trials)':>60}")
+            continue
+        print(
+            f"{hd:>7} "
+            f"{_mean(real, 'train_auc'):>11.3f} {_mean(real, 'test_auc'):>11.3f} {_std(real, 'test_auc'):>7.3f} "
+            f"{_mean(noise, 'train_auc'):>12.3f} {_mean(noise, 'test_auc'):>11.3f} {_std(noise, 'test_auc'):>7.3f}"
+        )
+
+    print(
+        "\nHow to read this:\n"
+        "  * REAL_train stays ~1.0 at every width - training separation is not a\n"
+        "    capacity signal, so it can't tell you which width is right.\n"
+        "  * REAL_test is what matters. If it is flat across a wide band of widths,\n"
+        "    the task is (nearly) linearly separable in embedding space and the hidden\n"
+        "    layer is not the bottleneck - any width on the plateau is 'right', and the\n"
+        "    default cap of 32 sits safely on it. A peak that then declines would mean\n"
+        "    larger widths overfit; a rising curve would mean 32 is too small.\n"
+        "  * NOISE_test should sit at ~0.5 for every width: no capacity level can\n"
+        "    generalize a signal that isn't there. Watch NOISE_train instead climb\n"
+        "    toward 1.0 as width grows - that is pure memorization, exactly the thing\n"
+        "    held-out AUC refuses to reward.\n"
+        "  * Prefer the smallest width on the REAL_test plateau (also the lowest ±std):\n"
+        "    equal quality, less compute, more stable. That is the case for the 4-32\n"
+        "    auto-sizing - it tracks the bottom of the plateau."
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dataset", default="caltech101_s", help="Demo dataset id (default: caltech101_s)")
@@ -228,6 +305,15 @@ def main() -> None:
     parser.add_argument("--n-bad", type=int, default=100, help="Max Bad training votes (default: 100)")
     parser.add_argument("--inclusion", type=int, default=0, help="Inclusion value in [-10, 10] (default: 0)")
     parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3, 42, 100], help="Random seeds to average")
+    parser.add_argument(
+        "--sweep-hidden",
+        type=int,
+        nargs="+",
+        default=None,
+        metavar="N",
+        help="Instead of REAL-vs-NOISE, sweep these hidden-layer widths and report held-out AUC "
+        "per width (e.g. --sweep-hidden 4 8 16 32 64 128 256). Isolates MLP capacity.",
+    )
     args = parser.parse_args()
 
     from vtscore.embedding import initialize_models
@@ -251,6 +337,11 @@ def main() -> None:
     print(
         f"REAL category: '{category}'   |   votes: up to {args.n_good} good / {args.n_bad} bad   |   seeds: {args.seeds}\n"
     )
+
+    if args.sweep_hidden:
+        print(f"Sweeping hidden-layer widths: {args.sweep_hidden}\n")
+        _run_hidden_sweep(clips, category, args.seeds, args.n_good, args.n_bad, args.inclusion, args.sweep_hidden)
+        return
 
     results: dict[str, list[dict[str, float]]] = {"real": [], "noise": []}
     for mode in ("real", "noise"):
