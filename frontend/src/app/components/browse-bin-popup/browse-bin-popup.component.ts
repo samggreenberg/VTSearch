@@ -443,15 +443,30 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   /** Scroll the member grid so the representative's row sits roughly centred, so
    *  the popup opens looking at the same item whose pile thumbnail was clicked
    *  rather than the 1-D list's first item. No-op for a singleton bin (no grid)
-   *  or before the viewport exists. */
-  private scrollToRep(): void {
+   *  or before the viewport exists.
+   *
+   *  On open the virtual viewport may not have applied its scrollable content
+   *  size yet, so the browser clamps this first scroll back to 0 and a large bin
+   *  is left sitting at the top with the representative off-screen. When we meant
+   *  to scroll down but the offset didn't take, retry on the next frame (bounded)
+   *  until the viewport is scrollable and the target sticks. */
+  private scrollToRep(attempt = 0): void {
     const vp = this.viewport;
     if (!vp) return;
     const row = Math.floor(this.repIndex() / Math.max(1, this.columns));
     const viewportH = vp.elementRef.nativeElement.clientHeight || this.gridHeight;
-    // Centre the row in the visible window, clamped so we never scroll past 0.
-    const offset = row * this.rowSize - Math.max(0, viewportH - this.rowSize) / 2;
-    vp.scrollToOffset(Math.max(0, offset));
+    // The most we can scroll: content height (all rows) minus the visible window.
+    const maxOffset = Math.max(0, this.rows.length * this.rowSize - viewportH);
+    // Centre the row in the visible window, clamped to [0, maxOffset] so we never
+    // scroll past either end.
+    const target = Math.min(
+      maxOffset,
+      Math.max(0, row * this.rowSize - Math.max(0, viewportH - this.rowSize) / 2),
+    );
+    vp.scrollToOffset(target);
+    if (target > 0 && vp.measureScrollOffset('top') < target - 1 && attempt < 5) {
+      requestAnimationFrame(() => this.scrollToRep(attempt + 1));
+    }
   }
 
   /** Recompute the column count + row chunking for the current thumbnail size. */
