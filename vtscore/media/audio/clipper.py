@@ -12,9 +12,37 @@ from typing import Any
 from vtscore.media.clipper import MediaClipper
 
 
+def _to_pcm_wav(wav_bytes: bytes) -> bytes:
+    """Re-encode WAV bytes into plain PCM that stdlib ``wave`` can parse.
+
+    The stdlib ``wave`` module only understands ``WAVE_FORMAT_PCM`` (tag 1);
+    it raises ``wave.Error`` on ``WAVE_FORMAT_EXTENSIBLE`` (tag 0xFFFE, 65534),
+    which is what UrbanSound8K and many other real-world WAVs use.  ``soundfile``
+    reads those fine, so decode with it and re-write as 16-bit PCM.
+    """
+    import soundfile as sf  # noqa: PLC0415
+
+    data, sr = sf.read(io.BytesIO(wav_bytes), dtype="int16", always_2d=False)
+    buf = io.BytesIO()
+    sf.write(buf, data, sr, format="WAV", subtype="PCM_16")
+    return buf.getvalue()
+
+
+def _open_wav(wav_bytes: bytes) -> wave.Wave_read:
+    """Open WAV bytes for reading, tolerating non-PCM formats.
+
+    Falls back to re-encoding via :func:`_to_pcm_wav` when stdlib ``wave``
+    can't parse the container (e.g. ``WAVE_FORMAT_EXTENSIBLE``).
+    """
+    try:
+        return wave.open(io.BytesIO(wav_bytes), "rb")
+    except (wave.Error, EOFError):
+        return wave.open(io.BytesIO(_to_pcm_wav(wav_bytes)), "rb")
+
+
 def _wav_duration(wav_bytes: bytes) -> float:
     """Return the duration in seconds of a WAV byte string."""
-    with wave.open(io.BytesIO(wav_bytes), "rb") as wf:
+    with _open_wav(wav_bytes) as wf:
         return wf.getnframes() / wf.getframerate()
 
 
@@ -23,7 +51,7 @@ def _wav_slice(wav_bytes: bytes, start: float, end: float) -> bytes:
 
     Returns a new WAV byte string containing only the requested segment.
     """
-    with wave.open(io.BytesIO(wav_bytes), "rb") as wf:
+    with _open_wav(wav_bytes) as wf:
         sr = wf.getframerate()
         n_channels = wf.getnchannels()
         sampwidth = wf.getsampwidth()
