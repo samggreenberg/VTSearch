@@ -193,11 +193,11 @@ class UserSettings(BaseModel):
     audio_playing: bool = True
     # Master switch for decorative motion (vote swipe, icon spins/waggles/tilts,
     # toast/banner slide-ins, smooth scrolling, projection-browser zoom tweens).
-    # ``"show"`` forces motion on even against an OS reduce-motion request,
-    # ``"hide"`` always suppresses it, and ``"os"`` (the default) follows the
+    # ``"show"`` (the default) forces motion on even against an OS reduce-motion
+    # request, ``"hide"`` always suppresses it, and ``"os"`` follows the
     # platform ``prefers-reduced-motion`` preference. See the "Show Animations"
     # pulldown in the appearance settings.
-    show_animations: AnimationMode = "os"
+    show_animations: AnimationMode = "show"
     show_metadata: bool = True
     # Set to True once the user dismisses the zero-votes "Use ← / → or click"
     # hint that overlays the Good/Bad buttons when a fresh labeling session

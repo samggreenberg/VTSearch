@@ -20,7 +20,7 @@ GET /api/settings
   "calibrate_count": 2,
   "calibration_fraction": 0.5,
   "audio_playing": true,
-  "show_animations": "os",
+  "show_animations": "show",
   "show_metadata": true,
   "focus_mode_left": {},
   "focus_mode_right": {},
