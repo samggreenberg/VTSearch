@@ -23,6 +23,13 @@ set -euo pipefail
 # otherwise: VTSEARCH_AUTO_DRIVER=1 auto-installs the driver, VTSEARCH_ASSUME_CPU=1
 # proceeds with CPU. An explicit 'cpu'/'gpu'/'cuXYZ' argument skips the check.
 #
+# PERSISTENCE (set-and-forget): a driver installed here is registered with DKMS
+# whenever dkms is available (the module then AUTO-REBUILDS on future kernel
+# upgrades instead of silently breaking on the next reboot), NVIDIA's persistence
+# daemon is enabled so the driver initializes at every boot, and every GPU install
+# reports whether the result is kernel-update-proof or still kernel-pinned. See
+# docs/DEPLOYMENT.md, "Making the GPU driver survive reboots and kernel updates".
+#
 # Override the auto-detection by passing an argument:
 #   bash scripts/install.sh            # auto-detect CPU vs GPU (recommended)
 #   bash scripts/install.sh cpu        # force the CPU install
@@ -312,15 +319,32 @@ vts_install_driver_runfile() {
 
     # A self-contained `.run` still compiles a kernel module, so it needs the
     # kernel headers/devel for the RUNNING kernel plus a C toolchain. Install
-    # them best-effort with whatever package manager is present.
+    # them best-effort with whatever package manager is present. We also try to
+    # get `dkms`: when it's present we hand the module to DKMS (--dkms below) so
+    # it AUTO-REBUILDS on future kernel upgrades. That is the difference between a
+    # set-and-forget install and one that silently dies on the box's next kernel
+    # bump -- the exact recurring breakage this fallback path otherwise causes.
     if command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
         local dnf="dnf"
         command -v dnf >/dev/null 2>&1 || dnf="yum"
         vts_try "Installing kernel headers + build tools" \
             ${sudo_cmd} "$dnf" install -y "kernel-devel-$(uname -r)" kernel-headers gcc make tar || true
+        vts_try "Installing dkms (so the module auto-rebuilds on kernel updates)" \
+            ${sudo_cmd} "$dnf" install -y dkms || true
     elif command -v apt-get >/dev/null 2>&1; then
         vts_try "Installing kernel headers + build tools" \
             ${sudo_cmd} apt-get install -y "linux-headers-$(uname -r)" gcc make || true
+        vts_try "Installing dkms (so the module auto-rebuilds on kernel updates)" \
+            ${sudo_cmd} apt-get install -y dkms || true
+    fi
+
+    # Register the built module with DKMS (--dkms) when dkms is available so a
+    # later kernel upgrade triggers an automatic rebuild; without it the .run
+    # module is pinned to the current kernel and the next kernel bump breaks
+    # nvidia-smi. Unquoted so an empty value vanishes instead of passing "".
+    local dkms_flag=""
+    if command -v dkms >/dev/null 2>&1; then
+        dkms_flag="--dkms"
     fi
 
     local url="${VTSEARCH_NVIDIA_RUNFILE_URL:-}"
@@ -372,7 +396,7 @@ vts_install_driver_runfile() {
     # tolerates a gcc that differs from the one the kernel was built with.
     local rc=0
     vts_run "Compiling the NVIDIA kernel module (a few minutes; kernel $(uname -r))" \
-        ${sudo_cmd} sh "$runfile" --silent --disable-nouveau --no-cc-version-check || rc=$?
+        ${sudo_cmd} sh "$runfile" --silent --disable-nouveau --no-cc-version-check ${dkms_flag} || rc=$?
     rm -f "$runfile"
     if [ "$rc" -ne 0 ]; then
         echo "  The NVIDIA .run installer exited non-zero (see /var/log/nvidia-installer.log)." >&2
@@ -380,6 +404,31 @@ vts_install_driver_runfile() {
         echo "  ($(uname -r)) aren't installed and couldn't be fetched." >&2
         return 1
     fi
+    return 0
+}
+
+# Tell the user whether the currently-installed NVIDIA driver is SET-AND-FORGET
+# (survives future kernel upgrades on its own) or kernel-pinned (the next kernel
+# bump breaks nvidia-smi until the module is rebuilt). A DKMS-managed module is
+# rebuilt automatically for each new kernel; a precompiled/kABI-stream or plain
+# `.run` module is tied to the kernel it was built against -- the usual cause of
+# "GPU worked yesterday, gone today" after an unattended kernel update on a cloud
+# box. Detected via `dkms status` (readable without root). Purely informational.
+vts_report_driver_persistence() {
+    if command -v dkms >/dev/null 2>&1 && dkms status 2>/dev/null | grep -qi nvidia; then
+        echo "  GPU driver is DKMS-managed: it will auto-rebuild for new kernels, so a" >&2
+        echo "  routine kernel update won't break the GPU. Set and forget." >&2
+        return 0
+    fi
+    cat >&2 <<'EOF'
+  NOTE: the GPU driver is NOT DKMS-managed, so it is tied to the CURRENT kernel.
+  A later kernel upgrade (unattended-upgrades / dnf automatic) can stop the module
+  loading, and nvidia-smi will go dark until you re-run this installer. To make it
+  set-and-forget: install `dkms` and re-run this script (so the module auto-rebuilds
+  for new kernels), pin the kernel so it stops changing, or bake a custom AMI / use
+  the AWS Deep Learning AMI. See docs/DEPLOYMENT.md, "Making the GPU driver survive
+  reboots and kernel updates".
+EOF
     return 0
 }
 
@@ -502,6 +551,13 @@ vts_install_nvidia_driver() {
 
     # Try to load the freshly built module without a reboot (best-effort).
     $sudo_cmd modprobe nvidia >/dev/null 2>&1 || true
+
+    # Enable NVIDIA's persistence daemon so the driver initializes at every boot
+    # without waiting for something to open the device first -- AWS's recommended
+    # setup for EC2 GPU instances. Best-effort: a missing unit / no systemd no-ops.
+    if command -v systemctl >/dev/null 2>&1; then
+        $sudo_cmd systemctl enable --now nvidia-persistenced >/dev/null 2>&1 || true
+    fi
 
     if vts_have_gpu; then
         echo "  Driver installed and the GPU is now visible to nvidia-smi." >&2
@@ -792,6 +848,10 @@ vts_install_gpu() {
     echo "Heads-up: the pip steps below show a download bar, but pip also goes quiet"
     echo "for 10-30s at a time while it resolves dependency versions. That silence is"
     echo "normal -- it is working, not frozen."
+
+    # Report up front whether this box's driver will survive kernel updates on its
+    # own, so a non-DKMS install doesn't silently set up tomorrow's "GPU is gone".
+    vts_report_driver_persistence
 
     vts_progress_step "Checking Python version (>= 3.10)"
     # shellcheck source=_check-python.sh
