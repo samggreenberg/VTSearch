@@ -35,6 +35,9 @@ class DemoDatasetImporter(ImporterBase):
     ui_mode = "custom"
     picker_view = "demo"
     category = "demo"
+    # ``load_demo_dataset`` applies the clipper itself (and caches the
+    # clipped + embedded result), so the shared pipeline must not clip again.
+    handles_own_clipping = True
 
     fields = [
         PluginField(

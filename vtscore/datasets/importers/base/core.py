@@ -140,6 +140,17 @@ class ImporterBase(PluginBase):
     #: dataset-wide identifier).
     origin_suppressed: bool = False
 
+    #: When ``True``, the importer applies the clipper (and owns the
+    #: resulting clipped + embedded artifacts) inside its own :meth:`run`,
+    #: so the shared load pipeline must NOT run its ``_apply_clipper_stage``
+    #: on top — doing so would clip the already-clipped media a second time.
+    #: Set this on importers that self-clip (e.g. the demo importer, which
+    #: clips + embeds + caches the final dataset in ``load_demo_dataset``).
+    #: The dispatch (:func:`_run_importer_in_background`) keeps the full
+    #: clipper config in ``field_values`` for these importers and suppresses
+    #: the pipeline's clipper stage.
+    handles_own_clipping: bool = False
+
     def __init__(self) -> None:
         #: Mapping of filename to pre-computed embedding vector.  Importers
         #: that supply content vectors alongside media should populate this
