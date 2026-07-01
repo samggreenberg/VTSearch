@@ -12,6 +12,17 @@ import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleZoneless } from '../../testing/settle-resource';
 
 /**
+ * Drain several zoneless settle passes. The popup places itself across a chain
+ * of `setTimeout(place)` → `requestAnimationFrame(nudge)` → `markForCheck`, and
+ * the `setTimeout` is itself scheduled by the async CD tick that runs *after*
+ * the first settle's own macrotask — so a single `settleZoneless` can return
+ * before the reveal chain has run. A few passes flush it deterministically.
+ */
+async function settlePasses(fixture: ComponentFixture<unknown>, passes = 3): Promise<void> {
+  for (let i = 0; i < passes; i++) await settleZoneless(fixture);
+}
+
+/**
  * Zoneless positioning guard for the VTSBrowse bin detail popup.
  *
  * The popup opens hidden and reveals itself only after its position has been
@@ -94,7 +105,7 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
 
   it('reveals the popup at its clamped spot once measured, no manual detectChanges', async () => {
     const fixture = makeFixture();
-    await settleZoneless(fixture);
+    await settlePasses(fixture);
 
     const panel = fixture.nativeElement.querySelector('.bin-popup') as HTMLElement;
     expect(panel).not.toBeNull();
@@ -116,7 +127,7 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     // reveal at default sizes and then re-clamp when they arrive.
     settings.set(null);
     const fixture = makeFixture();
-    await settleZoneless(fixture);
+    await settlePasses(fixture);
 
     const panel = fixture.nativeElement.querySelector('.bin-popup') as HTMLElement;
     expect(panel.style.visibility).toBe('hidden');
@@ -124,7 +135,7 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     // Settings resolve through the same signal the app writes; the popup's
     // settings effect re-places and reveals.
     settings.set({});
-    await settleZoneless(fixture);
+    await settlePasses(fixture);
     expect(panel.style.visibility).toBe('visible');
 
     fixture.destroy();
