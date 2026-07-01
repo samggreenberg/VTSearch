@@ -102,10 +102,10 @@ class AudioASTEmbedder(MediaEmbedder):
 
         # Warmup: run a dummy forward pass so the first real embed_media
         # call runs at steady-state speed.
-        self._on_progress("loading", "Warming up AST pipeline: preprocessing…", 1, 2)
+        self._on_progress("loading", "Warming up AST: preprocessing…", 1, 2)
         dummy_audio = np.zeros(AST_SAMPLE_RATE, dtype=np.float32)
         inputs = self._processor(dummy_audio, sampling_rate=AST_SAMPLE_RATE, return_tensors="pt")
-        self._on_progress("loading", "Warming up AST pipeline: running model…", 2, 2)
+        self._on_progress("loading", "Warming up AST: running model…", 2, 2)
         device = next(self._model.parameters()).device
         inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.no_grad():

@@ -142,6 +142,30 @@ class TestMakeConsoleProgress:
         cols = {seg.index("[") for seg in renders}
         assert len(cols) == 1, f"bars not aligned: columns were {cols}"
 
+    def test_long_labels_are_truncated_to_keep_bars_aligned(self, capsys):
+        """A label longer than _LABEL_WIDTH must not push its bar right: it is
+        truncated with an ellipsis so every bar's open bracket stays aligned."""
+        from vtscore.embedding.loader import _LABEL_WIDTH
+
+        cb = _make_console_progress(lambda *a, **kw: None)
+
+        cb("loading", "Importing torch…", 1, 2)  # short, gets padded
+        # 40 chars, well over the 32-char width; must be truncated, not overflow.
+        cb("loading", "Warming up CLAP General: resampling JIT…", 2, 3)
+        cb.flush()
+
+        captured = capsys.readouterr()
+        renders = [seg for seg in captured.out.replace("\033[K", "").split("\r") if "[" in seg]
+        cols = {seg.index("[") for seg in renders}
+        assert len(cols) == 1, f"long label shifted the bar: columns were {cols}"
+        # The long label was truncated with a trailing ellipsis before the bar.
+        long_renders = [seg for seg in renders if "Warming up CLAP General" in seg]
+        assert long_renders
+        for seg in long_renders:
+            label = seg[: seg.index("[")].strip()
+            assert len(label) == _LABEL_WIDTH
+            assert label.endswith("…")
+
     def test_elapsed_suffix_does_not_shift_bar(self, capsys):
         """A growing elapsed-time suffix ('1s' -> '10s') must not move the bar."""
         cb = _make_console_progress(lambda *a, **kw: None)
