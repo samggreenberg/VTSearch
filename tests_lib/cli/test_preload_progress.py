@@ -271,10 +271,10 @@ class TestPreloadConsoleOutput:
             mock_emb._on_progress("loading", "Loading CLAP model weights...", 0, 0)
             mock_emb._on_progress("loading", "model.safetensors", 50, 100)
             mock_emb._on_progress("loading", "model.safetensors", 100, 100)
-            mock_emb._on_progress("loading", "Warming up audio pipeline: importing libraries...", 1, 4)
-            mock_emb._on_progress("loading", "Warming up audio pipeline: resampling JIT...", 2, 4)
-            mock_emb._on_progress("loading", "Warming up audio pipeline: preprocessing...", 3, 4)
-            mock_emb._on_progress("loading", "Warming up audio pipeline: running model...", 4, 4)
+            mock_emb._on_progress("loading", "Warming up CLAP: importing libs…", 1, 4)
+            mock_emb._on_progress("loading", "Warming up CLAP: resampling JIT…", 2, 4)
+            mock_emb._on_progress("loading", "Warming up CLAP: preprocessing…", 3, 4)
+            mock_emb._on_progress("loading", "Warming up CLAP: running model…", 4, 4)
 
         mock_emb.load_models = fake_load_models
         mock_get_embedder.return_value = mock_emb
@@ -286,7 +286,7 @@ class TestPreloadConsoleOutput:
         assert "Preloading clap embedder" in captured.out
         assert "Loading CLAP model weights..." in captured.out
         assert "model.safetensors" in captured.out
-        assert "Warming up audio pipeline: importing libraries..." in captured.out
+        assert "Warming up CLAP: importing libs…" in captured.out
 
     @patch("vtscore.embedding.loader.predict_embedders_to_preload", return_value=["clap"])
     @patch("vtscore.media.get_embedder")
