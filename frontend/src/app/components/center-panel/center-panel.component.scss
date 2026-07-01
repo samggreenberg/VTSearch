@@ -192,8 +192,18 @@
 
 .metadata-item {
   display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-2xs);
+}
+
+// Label + value stack, left of the per-item Copy button.
+.metadata-item-text {
+  display: flex;
   flex-direction: column;
   gap: var(--space-2xs);
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .metadata-label {

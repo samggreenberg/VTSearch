@@ -173,8 +173,18 @@
 
 .bin-popup-meta-item {
   display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-2xs);
+  min-width: 0;
+}
+
+// Label + value stack, left of the per-item Copy button.
+.bin-popup-meta-text {
+  display: flex;
   flex-direction: column;
   gap: 1px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -195,10 +205,10 @@
 }
 
 // MD5 is a long hex string; render it monospace so it reads as an opaque digest.
+// Match the size and color of the other values (only the fixed-width font sets
+// it apart) rather than dimming it.
 .bin-popup-meta-md5 {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-  font-size: var(--font-2xs);
-  color: var(--text-muted);
   word-break: break-all;
 }
 

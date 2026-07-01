@@ -1,0 +1,26 @@
+// Icon-only copy affordance beside a metadata detail. Muted by default so it
+// recedes next to the value text, brightening on hover; the ``.copied`` state
+// tints it with the accent while the check glyph shows.
+.copy-detail-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: var(--space-2xs);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 0;
+  transition: color var(--transition-base), background var(--transition-base);
+
+  &:hover {
+    color: var(--text-primary);
+    background: var(--btn-icon-hover-bg);
+  }
+
+  &.copied {
+    color: var(--accent);
+  }
+}
