@@ -833,6 +833,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * route here. Subset mode only — wired via the selection panel's ``canVerify``
    * affordance, itself gated on ``subset``.
    */
+  /**
+   * The selection panel's tri-state checkbox asked to select everything in
+   * view ([ ]/[-] → [x]). Forward it to the canvas, which owns the viewport;
+   * this is the mouse equivalent of the ctrl-A shortcut.
+   */
+  onSelectAllInView(): void {
+    this.canvas?.selectAllInView();
+  }
+
   onVerify(target: 'good' | 'bad'): void {
     const ids = this.selection.ids();
     if (ids.length === 0) return;
