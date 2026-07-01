@@ -733,8 +733,8 @@ picture. The shape is chosen automatically from the dataset's media type -
 there's nothing to set.
 
 Top-left, **Re-project** shuffles the items into a fresh 2-D layout
-(handy when a cluster lands somewhere awkward), and **Back to Dashboard**
-returns you to the inventory.
+(handy when a cluster lands somewhere awkward). To return to the
+inventory, use the **Dashboard** button in the top bar.
 
 ### Selecting items
 
