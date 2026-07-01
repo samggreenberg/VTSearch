@@ -64,35 +64,35 @@
       <div class="bin-popup-meta-col" [style.width.px]="metadataColWidth">
         <div class="bin-popup-meta-grid">
           <div class="bin-popup-meta-item">
-            <div class="bin-popup-meta-text">
-              <span class="bin-popup-meta-label">Name</span>
+            <span class="bin-popup-meta-label">Name</span>
+            <div class="bin-popup-meta-value-row">
               <span class="bin-popup-meta-value">{{ metadataName }}</span>
+              <vt-copy-detail-button [value]="metadataName" label="Name" />
             </div>
-            <vt-copy-detail-button [value]="metadataName" label="Name" />
           </div>
           <div class="bin-popup-meta-item">
-            <div class="bin-popup-meta-text">
-              <span class="bin-popup-meta-label">Media Type</span>
+            <span class="bin-popup-meta-label">Media Type</span>
+            <div class="bin-popup-meta-value-row">
               <span class="bin-popup-meta-value">{{ metadataMediaType | titlecase }}</span>
+              <vt-copy-detail-button [value]="metadataMediaType | titlecase" label="Media Type" />
             </div>
-            <vt-copy-detail-button [value]="metadataMediaType | titlecase" label="Media Type" />
           </div>
           @for (entry of metadataCustom | keyvalue; track entry.key) {
             <div class="bin-popup-meta-item">
-              <div class="bin-popup-meta-text">
-                <span class="bin-popup-meta-label">{{ entry.key }}</span>
+              <span class="bin-popup-meta-label">{{ entry.key }}</span>
+              <div class="bin-popup-meta-value-row">
                 <span class="bin-popup-meta-value">{{ formatMetadataValue(entry.key, entry.value) }}</span>
+                <vt-copy-detail-button [value]="formatMetadataValue(entry.key, entry.value)" [label]="entry.key" />
               </div>
-              <vt-copy-detail-button [value]="formatMetadataValue(entry.key, entry.value)" [label]="entry.key" />
             </div>
           }
           @if (metadataMd5) {
             <div class="bin-popup-meta-item">
-              <div class="bin-popup-meta-text">
-                <span class="bin-popup-meta-label">MD5</span>
+              <span class="bin-popup-meta-label">MD5</span>
+              <div class="bin-popup-meta-value-row">
                 <span class="bin-popup-meta-value bin-popup-meta-md5">{{ metadataMd5 }}</span>
+                <vt-copy-detail-button [value]="metadataMd5" label="MD5" />
               </div>
-              <vt-copy-detail-button [value]="metadataMd5" label="MD5" />
             </div>
           }
         </div>

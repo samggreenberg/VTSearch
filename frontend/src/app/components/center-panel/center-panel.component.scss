@@ -190,19 +190,21 @@
   padding: var(--space-2xs) 0;
 }
 
+// Label stacked above the value + Copy button row.
 .metadata-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  min-width: 0;
+}
+
+// Value + per-item Copy button, aligned so the button sits beside the value
+// (the actual metadata) rather than the category label above it.
+.metadata-value-row {
   display: flex;
   flex-direction: row;
   align-items: flex-start;
   gap: var(--space-2xs);
-}
-
-// Label + value stack, left of the per-item Copy button.
-.metadata-item-text {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2xs);
-  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -217,6 +219,8 @@
   font-size: var(--font-md);
   color: var(--text-primary);
   word-break: break-all;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .metadata-md5 {
