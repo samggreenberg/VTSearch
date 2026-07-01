@@ -862,8 +862,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.loadingTasksSvc.startProgressPolling(response.task_id, () =>
           // Promote to active once the load has settled (never before, per
           // the H25 intent/active ordering), keeping any active detector
-          // half, so the top-bar dataset selector reflects what was just
-          // loaded instead of staying on "Select a dataset".
+          // half. This drives the interceptor's X-Dataset-Id and the
+          // top-bar label on the label/find views; on the Dashboard itself
+          // the top bar mirrors the table selection instead.
           this.activeContext.setActivePair(dataset.id, this.activeContext.modelId),
         ),
     });
@@ -904,8 +905,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
       next: () =>
         this.loadingTasksSvc.startDetectorProgressPolling(() =>
           // Promote to active once the detector load settles (per the H25
-          // ordering), keeping the active dataset half, so the top-bar
-          // detector selector reflects what was just loaded.
+          // ordering), keeping the active dataset half. Drives the
+          // interceptor and the off-Dashboard top-bar label; on the
+          // Dashboard the top bar mirrors the table selection instead.
           this.activeContext.setActivePair(this.activeContext.datasetId, model.id),
         ),
     });
