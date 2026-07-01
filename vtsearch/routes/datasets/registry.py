@@ -267,9 +267,7 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                 # restore, rebuild, or deferred-above-threshold) so the unified
                 # bar reaches 100% cleanly instead of stalling at the step-1
                 # boundary when the tree restored without emitting any progress.
-                tracker.update(
-                    "loading", "Finalizing…", current=1, total=1, step=2, total_steps=_LOAD_STEPS
-                )
+                tracker.update("loading", "Finalizing…", current=1, total=1, step=2, total_steps=_LOAD_STEPS)
                 _reg_add_loaded(dataset_id)
                 # Update item count and dupe count in case they changed
                 num_dupes = sum(
