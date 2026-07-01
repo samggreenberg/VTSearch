@@ -428,7 +428,12 @@
   flex-shrink: 0;
 }
 
-// The name stacks under the thumbnail, truncated to the cell width.
+// The name stacks under the thumbnail, truncated to the cell width. Its
+// line-height is pinned (not left at the font's ``normal``, which varies by
+// platform font) so the rendered row height is deterministic and matches the
+// space reserved for it in ``rowSize`` (GRID_LABEL_HEIGHT). Without this the name
+// renders a couple px taller than its slot, forcing a stray scrollbar even on a
+// single row. 12px (``--font-xs``) × 1.25 = 15px == GRID_LABEL_HEIGHT.
 .bin-popup-name {
   flex: 0 0 auto;
   width: 100%;
@@ -437,6 +442,7 @@
   text-align: center;
   font-weight: var(--weight-normal);
   font-size: var(--font-xs);
+  line-height: 1.25;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
