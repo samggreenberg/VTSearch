@@ -143,6 +143,41 @@ def build_diversity_tree_for_context(
     # Fresh context has no votes - nothing to replay.
 
 
+def build_diversity_tree_serializable(
+    medias: dict[int, dict[str, Any]],
+    on_progress: Callable[[int, int], None] | None = None,
+) -> dict | None:
+    """Build a diversity tree over *medias* and return its cache payload.
+
+    Returns the :meth:`DiversityTree.to_serializable` dict for embedding in a
+    dataset pickle, or ``None`` when there are no usable vectors.  Unlike
+    :func:`build_diversity_tree_for_context` this touches no context and
+    replays no votes — it exists for *save* paths (e.g. dataset promote) that
+    want to cache the tree at creation so reloads restore it instead of paying
+    the hierarchical-k-means rebuild every time.
+    """
+    import numpy as np
+
+    from vtscore.state.diversity_tree import DiversityTree, auto_max_depth
+
+    vectors: dict[int, np.ndarray] = {}
+    for cid, media in medias.items():
+        emb = media_embedding(media)
+        if emb is not None:
+            vectors[cid] = np.asarray(emb, dtype=np.float32)
+
+    if not vectors:
+        return None
+
+    tree = DiversityTree(
+        vectors,
+        k=3,
+        max_depth=auto_max_depth(len(vectors), k=3),
+        on_progress=on_progress,
+    )
+    return tree.to_serializable()
+
+
 def restore_diversity_tree_from_cache(ctx: DatasetContext, cached: object) -> bool:
     """Adopt a cached diversity tree onto *ctx* when it matches the medias.
 

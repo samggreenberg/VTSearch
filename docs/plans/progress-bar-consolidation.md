@@ -125,6 +125,47 @@ finalize so the bar paces by real time and the overall ETA has room to
 self-correct through the diversity-tree build + registry save. Detector-load
 weights are unaffected. Tests: `tests_lib/datasets/test_load_step_weights.py`.
 
+## Registry-reload pacing + redundant rebuild (shipped)
+
+The registry/pickle **reload** path (`load_registered_dataset`,
+`vtsearch/routes/datasets/registry.py`) is its own 2-step mini-pipeline (read
+pickle → dedup + diversity), separate from the 4-step import. It had two bugs
+that made "Step 2 of 2 · Removing duplicates" appear to hang far past what the
+bar showed:
+
+1. **Frozen bar.** The reload set `total_steps=2` with **no** `set_step_weights`,
+   so step 2 was the last 50 % of the bar under equal weighting. Step 2 lumped
+   the near-instant exact-MD5 dedup with the diversity index. The dedup drove
+   step 2's within-fraction to ~1.0 in ~0.01 s, the monotonic clamp pinned the
+   overall bar at ~100 %, and it then **sat frozen there for the entire diversity
+   rebuild** (a hierarchical-k-means that measures ~45 s for 20 k items). Fixed
+   by (a) moving dedup into step 1 (it's part of loading, and a no-op on reload
+   since the pickle was already deduped at import) so it no longer pre-fills the
+   diversity slice, and (b) `set_step_weights([0.15, 0.85])` so the diversity
+   build — the only phase that can be slow — owns the bulk of the bar and paces
+   the rebuild across its whole span. A terminal `Finalizing…` update fills the
+   slice to 100 % in every branch (restore / rebuild / deferred-above-threshold).
+
+2. **Redundant rebuild.** Fresh-import datasets cache the diversity tree in their
+   pickle (`stages/registry.py`), so reload restores it in ~0 s. But **promoted**
+   datasets (`/api/dataset/promote`) omitted it, and the promote subset renumbers
+   IDs so the source tree can't be reused — so a promoted dataset rebuilt the
+   full k-means on *every* reload. Fixed by building + caching the tree at
+   promote time (`_diversity_tree_pickle_keys` +
+   `build_diversity_tree_serializable`), gated by the same
+   `should_auto_build_diversity_tree` threshold the load pipeline uses, so
+   reopening a promoted dataset restores instead of rebuilding. Measured costs
+   (20 k images): pickle read + convert ~0.7 s, dedup ~0.01 s, cache restore
+   instant, k-means rebuild ~45 s — i.e. the rebuild was ~60× everything else.
+
+Open follow-up: promote now builds the tree **synchronously** in the request
+(the app runs with `VTSEARCH_TIMEOUT=0`, so long creates are tolerated), which
+means no fine-grained progress during a large promote. If that becomes a pain,
+background the promote like the import pipeline. Other cache-miss reloads (old
+pickles predating tree caching, or a media set that shifts on load) still
+rebuild once; a "write the rebuilt tree back to the pickle on first reload" pass
+would cover those too.
+
 ## Open follow-ups
 
 - **Finalize lumps ~6 sub-stages into one step.** The finalize step (drop-none,

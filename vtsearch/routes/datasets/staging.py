@@ -108,6 +108,25 @@ def combine_datasets_route(body: dict):
     return {"ok": True, "message": "Combining datasets...", "task_id": str(task_id) if task_id else ""}
 
 
+def _diversity_tree_pickle_keys(subset: dict[int, dict]) -> dict | None:
+    """Return ``{"diversity_tree": <payload>}`` to cache in a promoted pickle.
+
+    Builds the tree over *subset* at creation, exactly like a fresh import
+    does, so reopening a promoted dataset restores the tree instead of paying
+    the hierarchical-k-means rebuild on every reload (the promote save used to
+    omit it, and the subset's renumbered IDs make the source tree unusable — so
+    a promoted dataset rebuilt from scratch each time). Returns ``None`` past
+    the auto-build threshold (matching the load pipeline's deferral) or when the
+    subset carries no usable vectors.
+    """
+    from vtscore.state import build_diversity_tree_serializable, should_auto_build_diversity_tree
+
+    if not should_auto_build_diversity_tree(len(subset)):
+        return None
+    payload = build_diversity_tree_serializable(subset)
+    return {"diversity_tree": payload} if payload is not None else None
+
+
 @datasets_staging_bp.route("/api/dataset/promote", methods=["POST"])
 @datasets_staging_bp.arguments(DatasetPromoteRequestSchema)
 @datasets_staging_bp.response(200, DatasetPromoteResponseSchema)
@@ -182,6 +201,7 @@ def promote_to_dataset(body: dict):
             name=name,
             created_at=now,
             expires_at=expires_at,
+            extra_pickle_keys=_diversity_tree_pickle_keys(subset),
         )
         Path(pkl_path).write_bytes(data_bytes)
         del data_bytes

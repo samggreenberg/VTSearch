@@ -66,11 +66,14 @@ _DCT_BASIS = _dct_basis(_DCT_N)
 
 
 def _pack_bits(flat: np.ndarray) -> int:
-    """Pack a 1-D boolean array (most-significant first) into an int."""
-    h = 0
-    for b in flat.tolist():
-        h = (h << 1) | (1 if b else 0)
-    return h
+    """Pack a 1-D boolean array of length 64 (most-significant first) into an int.
+
+    ``np.packbits`` packs MSB-first into bytes, so a big-endian
+    ``int.from_bytes`` of the 8 packed bytes reproduces the old
+    bit-by-bit shift loop exactly — but as one vectorised call instead of a
+    64-iteration Python loop per hash.
+    """
+    return int.from_bytes(np.packbits(flat).tobytes(), "big")
 
 
 def phash_image(thumbnail_bytes: bytes | None) -> int | None:
@@ -116,16 +119,17 @@ def simhash_text(text: str | None) -> int | None:
         shingles = set(words)
     if not shingles:
         return None
-    v = np.zeros(64, dtype=np.int64)
-    for sh in shingles:
-        digest = hashlib.blake2b(sh.encode("utf-8"), digest_size=8).digest()
-        hv = int.from_bytes(digest, "big")
-        for i in range(64):
-            v[i] += 1 if (hv >> i) & 1 else -1
-    h = 0
-    for i in range(63, -1, -1):
-        h = (h << 1) | (1 if v[i] > 0 else 0)
-    return h
+    # Hash every shingle to an 8-byte blake2b digest, then reduce the whole
+    # batch with numpy instead of two nested Python loops (shingles x 64 bits).
+    # ``np.unpackbits`` on the big-endian digest bytes yields, per shingle, the
+    # hash bits in most-significant-first order (bit 63 .. bit 0); mapping
+    # {0,1} -> {-1,+1}, summing across shingles, and thresholding >0 reproduces
+    # the classic SimHash bit vote bit-for-bit, and ``np.packbits`` re-packs it
+    # MSB-first into the same 64-bit integer the shift loop produced.
+    digests = b"".join(hashlib.blake2b(sh.encode("utf-8"), digest_size=8).digest() for sh in shingles)
+    bits = np.unpackbits(np.frombuffer(digests, dtype=np.uint8).reshape(len(shingles), 8), axis=1)
+    votes = (bits.astype(np.int32) * 2 - 1).sum(axis=0)  # order: bit 63 .. bit 0
+    return _pack_bits(votes > 0)
 
 
 # --- Grouping ------------------------------------------------------------
@@ -270,17 +274,84 @@ def _choose_representative(media_dict: dict[int, dict[str, Any]], comp: list[int
     return min(comp, key=sort_key)
 
 
-def _find_near_dup_groups(media_dict: dict[int, dict[str, Any]]) -> list[list[int]]:
-    """Return the near-dup groups (size >= 2) across supported media types."""
+# Report hashing progress every this many items (a whole-percent-ish stride so
+# the callback overhead stays negligible on large datasets).
+_HASH_PROGRESS_STRIDE = 64
+
+# Only spin up a decode thread pool past this many images: pool setup costs more
+# than it saves for the handful-of-items case (and the test suite's tiny groups).
+_THREAD_MIN_IMAGES = 128
+
+
+def _hash_media_items(
+    media_dict: dict[int, dict[str, Any]],
+    cids: list[int],
+    media_type: str,
+    on_tick: Callable[[], None],
+) -> dict[int, int]:
+    """Compute the 64-bit hash for every id in *cids*, calling *on_tick* per item.
+
+    Image pHash is dominated by PIL thumbnail *decode* + resize, which releases
+    the GIL, so past :data:`_THREAD_MIN_IMAGES` it runs on a small thread pool;
+    text SimHash is numpy-vectorised and cheap enough to stay inline.  The hash
+    of each item is independent, so results are order-independent and the
+    grouping stays deterministic regardless of completion order.
+    """
+    hashes: dict[int, int] = {}
+    if media_type == "image" and len(cids) >= _THREAD_MIN_IMAGES:
+        import os  # noqa: PLC0415
+        from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415
+
+        workers = min(8, (os.cpu_count() or 2))
+
+        def _one(cid: int) -> tuple[int, int | None]:
+            return cid, phash_image(media_dict[cid].get("thumbnail_bytes"))
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for cid, h in pool.map(_one, cids):
+                if h is not None:
+                    hashes[cid] = h
+                on_tick()
+    else:
+        for cid in cids:
+            h = _hash_for(media_dict[cid], media_type)
+            if h is not None:
+                hashes[cid] = h
+            on_tick()
+    return hashes
+
+
+def _find_near_dup_groups(
+    media_dict: dict[int, dict[str, Any]],
+    on_progress: Callable[[int, int], None] | None = None,
+) -> list[list[int]]:
+    """Return the near-dup groups (size >= 2) across supported media types.
+
+    *on_progress* (if given) is driven across the **hashing** phase — the
+    dominant cost — so the bar advances while every image/text is fingerprinted,
+    rather than sitting at its floor until the cheap collapse phase begins.
+    """
     by_type: dict[str, list[int]] = {}
     for cid, m in media_dict.items():
         mt = m.get("media_type")
         if mt in _THRESHOLDS:
             by_type.setdefault(mt, []).append(cid)
 
+    total = sum(len(cids) for cids in by_type.values())
+    done = 0
+
+    def tick() -> None:
+        nonlocal done
+        done += 1
+        if on_progress and done % _HASH_PROGRESS_STRIDE == 0:
+            on_progress(done, total)
+
+    if on_progress:
+        on_progress(0, total)
+
     groups: list[list[int]] = []
     for mt, cids in by_type.items():
-        hashes = {cid: h for cid in cids if (h := _hash_for(media_dict[cid], mt)) is not None}
+        hashes = _hash_media_items(media_dict, cids, mt, tick)
         groups.extend(comp for comp in _connected_components(hashes, _THRESHOLDS[mt]) if len(comp) >= 2)
     return groups
 
@@ -315,13 +386,14 @@ def collapse_near_duplicates(
 
     Only ``image`` and ``text`` media are considered; other types are left
     untouched.  Returns the number of near-dup groups collapsed.
+
+    *on_progress* is driven across the dominant **hashing** phase inside
+    :func:`_find_near_dup_groups`; the subsequent collapse is cheap dict surgery,
+    so the callback only fires once more (at completion) after it finishes.
     """
-    groups = _find_near_dup_groups(media_dict)
-    total = len(groups)
-    for idx, comp in enumerate(groups):
-        if on_progress and idx % 50 == 0:
-            on_progress(idx, total)
+    groups = _find_near_dup_groups(media_dict, on_progress=on_progress)
+    for comp in groups:
         _collapse_group(media_dict, comp)
     if on_progress:
-        on_progress(total, total)
-    return total
+        on_progress(1, 1)
+    return len(groups)
