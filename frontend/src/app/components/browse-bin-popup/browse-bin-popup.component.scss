@@ -86,9 +86,10 @@
   }
 }
 
-// Metadata-column toggle: a single square button beside the size group that
-// shows/hides the metadata column left of the preview. Active (column shown)
-// reads as a filled accent chip; inactive is a muted outline like the size buttons.
+// Metadata-column toggle: a single square button in the header that shows/hides
+// the metadata column (left of the preview for thumbnail media, left of the grid
+// otherwise). Active (column shown) reads as a filled accent chip; inactive is a
+// muted outline like the size buttons.
 .bin-popup-meta-toggle {
   display: inline-flex;
   align-items: center;
@@ -153,8 +154,9 @@
 
 // The metadata column: a fixed-width, vertically-scrolling stack of the focused
 // item's Train/Find fields (name, media type, custom-metadata categories, MD5),
-// sitting left of the preview pane. Its width is bound per render; it fills the
-// body height and scrolls internally when the fields overflow.
+// sitting left of the preview pane (thumbnail media) or the member grid (audio /
+// text / document). Its width is bound per render; it fills the body height and
+// scrolls internally when the fields overflow.
 .bin-popup-meta-col {
   height: 100%;
   flex-shrink: 0;

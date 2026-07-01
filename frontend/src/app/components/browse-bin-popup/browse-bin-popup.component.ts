@@ -332,10 +332,20 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   }
 
   // --- Metadata column ------------------------------------------------------
-  // A column left of the detail-canvas preview carrying the same fields the
-  // Train/Find center panel shows for the focused item (name, media type, custom
-  // metadata, MD5). It attaches to the preview pane — the popup's focused item —
-  // so it only exists for media types that have a preview (image / video).
+  // A column carrying the same fields the Train/Find center panel shows for the
+  // focused item (name, media type, custom metadata, MD5). For thumbnail media
+  // (image / video) it sits left of the detail-canvas preview; for non-preview
+  // media (audio / text / document) it sits left of the member grid and tracks
+  // the hovered/arrowed item, so the user can still read metadata for the item
+  // under the cursor even without a preview pane. It is offered for every media
+  // type, since the fields are media-agnostic.
+
+  /** Whether the metadata toggle (the Info button) is offered. The panel is
+   *  media-agnostic, so it's available for every media type — audio and the
+   *  other non-preview types included — as long as there's an active type. */
+  get canToggleMetadata(): boolean {
+    return !!this.mediaType();
+  }
 
   /** Whether the user has the metadata column shown for the active media type.
    *  Absent entries default to shown, mirroring the center panel's metadata
@@ -346,10 +356,10 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     return value !== false;
   }
 
-  /** Whether the metadata column actually renders: only when there is a preview
-   *  pane (the focused item it sits beside) and the user hasn't hidden it. */
+  /** Whether the metadata column actually renders: the metadata feature is
+   *  offered for this media type and the user hasn't hidden it. */
   get showMetadataColumn(): boolean {
-    return this.showPreview && this.metadataShown;
+    return this.canToggleMetadata && this.metadataShown;
   }
 
   /** Fixed width (px) of the metadata column when shown. */
@@ -363,7 +373,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
    *  settings effect re-clamps the popup, since the width changed. */
   toggleMetadata(): void {
     const mediaType = this.mediaType();
-    if (!this.showPreview || !mediaType) return;
+    if (!mediaType) return;
     const dict = { ...this.metadataShownDict, [mediaType]: !this.metadataShown };
     this.settingsState.update({ popup_metadata_shown: dict } as SettingsUpdate).subscribe();
   }
@@ -825,8 +835,11 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   // --- Hover: preview the full-res original (image/video) + hear (audio) ----
 
   onEntryEnter(id: number): void {
-    // Thumbnail media: paint the hovered item's full-res original into the pane.
-    if (this.showPreview) this.previewId = id;
+    // Follow the hover: paint the hovered item's full-res original into the pane
+    // (thumbnail media) and drive the metadata column + focus ring to it (every
+    // media type, so audio/text/document read metadata for the item under the
+    // cursor even without a preview pane).
+    this.previewId = id;
     if (this.mediaType() !== 'audio') return;
     const src = this.activeContext.mediaUrl(`/api/medias/${id}/audio`);
     if (this.audioSrc === src) return;
@@ -844,7 +857,10 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
    *  bin's representative so the pane stays populated. */
   onGridLeave(): void {
     this.stopAudio();
-    if (this.showPreview) this.previewId = this.representativeId();
+    // Fall the focus back to the bin's representative so the pane and metadata
+    // column stay populated (every media type, matching the hover-follow above).
+    this.previewId = this.representativeId();
+    this.cdr.markForCheck();
   }
 
   private stopAudio(): void {
