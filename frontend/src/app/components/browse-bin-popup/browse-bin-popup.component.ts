@@ -53,8 +53,22 @@ const MIN_BODY_PX = 80;
 const PREFETCH_BUFFER = 50;
 /** Gap (px) kept between the popup and the visible edge when clamping. */
 const EDGE_MARGIN = 8;
-/** Gap (px) between the preview pane and the scroll column. */
-const PREVIEW_GAP = 8;
+/** Gap (px) between the body's columns (metadata / preview / grid). Mirrors the
+ *  body's flex ``gap: var(--space-sm)`` (6px); used by {@link clampInto} to model
+ *  the popup's real width so the computed clamp matches what renders. */
+const COLUMN_GAP = 6;
+/** Horizontal/vertical padding (px) inside ``.bin-popup-body`` on each side
+ *  (``padding: var(--space-sm)`` = 6px). The body is ``box-sizing: border-box``,
+ *  so its bound ``height`` already includes the vertical padding, but its
+ *  fit-content *width* grows by this on each side; {@link clampInto} folds it in
+ *  so the modelled width equals the rendered box. */
+const BODY_PADDING = 6;
+/** Popup border (px) per side (``.bin-popup`` ``border: 1px``). Added to the
+ *  modelled width/height in {@link clampInto} so the computed clamp accounts for
+ *  the full rendered footprint rather than depending on {@link nudgeOnScreen} to
+ *  mop up the residual — the audio (no-preview) layout has no large preview pane
+ *  to anchor its size, so its clamp must be exact on its own. */
+const POPUP_BORDER = 1;
 /** Smallest the preview pane is squeezed to in a tight region. */
 const MIN_PREVIEW_PX = 96;
 /** Largest the preview pane grows, regardless of icon size, so an extreme
@@ -78,7 +92,7 @@ const PREVIEW_OVERSIZE = 2.0;
 const HOVER_EXTENT_PER_RADIUS = 3;
 /** Vertical room (px) the member-count label takes above the scrolling grid. */
 const COUNT_LABEL_HEIGHT = 22;
-/** Vertical padding (px) inside ``.bin-popup-body`` (``var(--space-sm)`` = 6px,
+/** Vertical padding (px) inside ``.bin-popup-body`` ({@link BODY_PADDING} on the
  *  top + bottom). The body's bound ``height`` is a *border-box* height (the app
  *  sets ``box-sizing: border-box`` globally), so this padding must be added on
  *  top of the content the flex columns need ({@link bodyHeight}); otherwise the
@@ -86,7 +100,7 @@ const COUNT_LABEL_HEIGHT = 22;
  *  to 12px less than {@link bodyHeight}. For audio (where the member grid is the
  *  exact-fit element) that shortfall forces a stray scrollbar on even a single
  *  row; for the square preview pane it renders the box 12px non-square. */
-const BODY_PADDING_Y = 12;
+const BODY_PADDING_Y = 2 * BODY_PADDING;
 /**
  * Discrete ladder (px) of detail-canvas sizes the top-left size buttons step
  * through. Each click moves to the next rung past the current size in the click
@@ -1091,8 +1105,16 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     // immediately; fall back to a sane default before the view exists.
     const headerH = this.headerRef?.nativeElement.getBoundingClientRect().height ?? 37;
     // Squeeze the scrolling body to whatever vertical room the region leaves, so
-    // a short canvas can't make the popup taller than what's visible.
-    const regionRoom = regionBottom - regionTop - 2 * EDGE_MARGIN - headerH;
+    // a short canvas can't make the popup taller than what's visible. The caps
+    // below bound the body *content* height ({@link bodyHeight}), so the room they
+    // work against must first give up everything the popup spends around that
+    // content — the body's own vertical padding and the popup's top/bottom border
+    // — or a cap-filling body (a large audio bin's grid, which pins right at the
+    // cap) renders BODY_PADDING_Y + 2*POPUP_BORDER taller than the region and its
+    // bottom edge slips off-screen. Image previews are radius-sized and usually
+    // sit below the cap, so they had slack that hid this; audio has none.
+    const chromeY = BODY_PADDING_Y + 2 * POPUP_BORDER;
+    const regionRoom = regionBottom - regionTop - 2 * EDGE_MARGIN - headerH - chromeY;
     // The grid column also carries the member-count label above the scroll, so
     // its cap leaves that label room; the scroll then fills what's left.
     const gridRoom = regionRoom - COUNT_LABEL_HEIGHT;
@@ -1105,12 +1127,23 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     // A singleton bin drops the grid column and shows only the preview pane.
     const gridW = this.previewOnly ? 0 : GRID_COLUMN_WIDTH;
     const paneW = this.previewPaneSize;
-    const previewW = paneW ? paneW + (gridW ? PREVIEW_GAP : 0) : 0;
+    const previewW = paneW ? paneW + (gridW ? COLUMN_GAP : 0) : 0;
     // The optional metadata column sits left of the preview, adding its width
     // plus a gap when shown.
-    const metaW = this.showMetadataColumn ? METADATA_COLUMN_WIDTH + PREVIEW_GAP : 0;
-    const width = Math.min(metaW + previewW + gridW, this.maxWidthPx);
-    const height = headerH + this.bodyOuterHeight;
+    const metaW = this.showMetadataColumn ? METADATA_COLUMN_WIDTH + COLUMN_GAP : 0;
+    // The columns span the body's content box; the body adds its own horizontal
+    // padding (BODY_PADDING each side) and the popup a 1px border, so the real
+    // rendered width is that much wider than the columns alone. Folding it in
+    // keeps the computed clamp exact instead of leaning on nudgeOnScreen to catch
+    // the residual — the no-preview (audio) layout has no preview pane sized to
+    // absorb the slop.
+    const width = Math.min(
+      metaW + previewW + gridW + 2 * BODY_PADDING + 2 * POPUP_BORDER,
+      this.maxWidthPx,
+    );
+    // ``bodyOuterHeight`` already folds the body's vertical padding into the
+    // content height; add the popup's own top/bottom border for the full extent.
+    const height = headerH + this.bodyOuterHeight + 2 * POPUP_BORDER;
     let l = desiredLeft;
     let t = desiredTop;
     if (l + width + EDGE_MARGIN > regionRight) {
