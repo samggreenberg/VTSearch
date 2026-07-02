@@ -49,11 +49,11 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
   get title(): string {
     switch (this.metric) {
       case 'smart':
-        return 'Smart: Error Cost Over Time';
+        return 'Smart: Detector Accuracy Over Time';
       case 'stable':
-        return 'Stable: Prediction Flips Over Time';
+        return 'Stable: How Often The Detector Changes Its Mind';
       case 'diverse':
-        return 'Diverse: Diversity Coverage Over Time';
+        return 'Diverse: How Much Of Your Collection Your Votes Cover';
     }
   }
 

@@ -190,10 +190,23 @@
   padding: var(--space-2xs) 0;
 }
 
+// Label stacked above the value + Copy button row.
 .metadata-item {
   display: flex;
   flex-direction: column;
   gap: var(--space-2xs);
+  min-width: 0;
+}
+
+// Per-item Copy button + value. The button leads the row so it always hugs the
+// left edge of the value (the actual metadata) at a fixed offset, instead of
+// floating to the far right of a wide cell where short values leave it stranded.
+.metadata-value-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-2xs);
+  min-width: 0;
 }
 
 .metadata-label {
@@ -207,6 +220,8 @@
   font-size: var(--font-md);
   color: var(--text-primary);
   word-break: break-all;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .metadata-md5 {

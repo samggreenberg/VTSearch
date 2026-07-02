@@ -24,6 +24,7 @@ import { DatasetStateService } from './services/dataset-state.service';
 import { ActiveContextService } from './services/active-context.service';
 import { RecentSessionsService } from './services/recent-sessions.service';
 import { AuthService } from './services/auth.service';
+import { HuggingFaceAuthService } from './services/huggingface-auth.service';
 import { AchievementsService } from './services/achievements.service';
 import { SettingsStateService } from './services/settings-state.service';
 import { ThemeService } from './services/theme.service';
@@ -71,6 +72,8 @@ export class AppComponent {
   private settingsState = inject(SettingsStateService);
   private themeService = inject(ThemeService);
   private newThingFlows = inject(NewThingFlowsService);
+  private hfAuth = inject(HuggingFaceAuthService);
+  private toast = inject(ToastService);
 
   title = 'VTSearch';
   menuOpen = false;
@@ -114,6 +117,8 @@ export class AppComponent {
     const activeContextWatcher = inject(ActiveContextWatcherService);
 
     this.auth.checkStatus();
+    this.hfAuth.refresh();
+    this.handleHuggingFaceRedirect();
     this.settingsState.load();
     effect(() => {
       this.achievementsDisabled.set(
@@ -155,6 +160,32 @@ export class AppComponent {
     this.newThingFlows.newDetector$.subscribe((state) => {
       this.newDetectorFlow.set(state);
     });
+  }
+
+  /**
+   * Surface the outcome of a "Sign in with HuggingFace" round-trip.  The OAuth
+   * callback redirects the browser to ``/?hf_auth=success|error``; we toast the
+   * result, refresh sign-in state, and strip the query params so a reload
+   * doesn't re-toast.
+   */
+  private handleHuggingFaceRedirect(): void {
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get('hf_auth');
+    if (!result) return;
+    if (result === 'success') {
+      this.hfAuth.refresh();
+      this.toast.success({ message: 'Signed in to HuggingFace.' });
+    } else {
+      this.toast.error({
+        message: 'HuggingFace sign-in failed.',
+        detail: params.get('hf_auth_reason') || undefined,
+      });
+    }
+    params.delete('hf_auth');
+    params.delete('hf_auth_reason');
+    const query = params.toString();
+    const newUrl = window.location.pathname + (query ? `?${query}` : '') + window.location.hash;
+    window.history.replaceState({}, '', newUrl);
   }
 
   private recomputeExplainer(): void {

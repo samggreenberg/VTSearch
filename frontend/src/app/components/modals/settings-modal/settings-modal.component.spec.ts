@@ -13,7 +13,7 @@ describe('SettingsModalComponent', () => {
   const mockSettings = {
     volume: 50,
     theme: 'dark',
-    show_animations: true,
+    show_animations: 'os',
     enrich_descriptions: false,
     safe_thresholds: false,
     calibrate_count: 50,
@@ -41,8 +41,47 @@ describe('SettingsModalComponent', () => {
     httpMock = TestBed.inject(HttpTestingController);
   });
 
+  // Minimal matchMedia stub so the "Browser motion" status line can be driven
+  // in jsdom (which omits matchMedia). Mirrors the shape ThemeService's spec
+  // uses: a matches flag plus a fire-change helper for the live listener.
+  interface StubMediaQueryList {
+    matches: boolean;
+    media: string;
+    addEventListener: (type: string, l: (e: MediaQueryListEvent) => void) => void;
+    removeEventListener: (type: string, l: (e: MediaQueryListEvent) => void) => void;
+    _listeners: Array<(e: MediaQueryListEvent) => void>;
+    _fireChange: (matches: boolean) => void;
+  }
+  let originalMatchMedia: typeof window.matchMedia;
+  function installMatchMedia(initialMatches: boolean): StubMediaQueryList {
+    const stub: StubMediaQueryList = {
+      matches: initialMatches,
+      media: '(prefers-reduced-motion: reduce)',
+      _listeners: [],
+      addEventListener(_type, l) {
+        this._listeners.push(l);
+      },
+      removeEventListener(_type, l) {
+        this._listeners = this._listeners.filter((x) => x !== l);
+      },
+      _fireChange(matches: boolean) {
+        this.matches = matches;
+        this._listeners.forEach((l) => l({ matches } as MediaQueryListEvent));
+      },
+    };
+    (window as unknown as { matchMedia: (q: string) => MediaQueryList }).matchMedia = () =>
+      stub as unknown as MediaQueryList;
+    return stub;
+  }
+
+  beforeEach(() => {
+    originalMatchMedia = window.matchMedia;
+  });
+
   afterEach(() => {
     httpMock.verify();
+    (window as unknown as { matchMedia: typeof window.matchMedia }).matchMedia =
+      originalMatchMedia;
   });
 
   // Settle runs ngOnInit, whose forkJoin issues the four parallel GETs (plain
@@ -50,6 +89,10 @@ describe('SettingsModalComponent', () => {
   // the flush). Settle again afterwards so the resolved signals repaint.
   async function flushInit(): Promise<void> {
     await settleZoneless(fixture);
+    // ngOnInit also refreshes HuggingFace sign-in status for the HuggingFace tab.
+    httpMock
+      .expectOne('/api/auth/huggingface/status')
+      .flush({ configured: false, authenticated: false, username: '', scopes: '' });
     // forkJoin makes all requests in parallel: settings, media types,
     // embedders, and version.
     const settingsReq = httpMock.expectOne('/api/settings');
@@ -95,8 +138,15 @@ describe('SettingsModalComponent', () => {
 
   it('should toggle boolean setting and save', async () => {
     await flushInit();
-    component.onToggle('show_animations', false);
-    expect(component.settings().show_animations).toBe(false);
+    component.onToggle('show_metadata', false);
+    expect(component.settings().show_metadata).toBe(false);
+    httpMock.expectOne('/api/settings').flush(mockSettings);
+  });
+
+  it('should update the Show Animations pulldown and save', async () => {
+    await flushInit();
+    component.onAnimationModeChange('show');
+    expect(component.settings().show_animations).toBe('show');
     httpMock.expectOne('/api/settings').flush(mockSettings);
   });
 
@@ -156,8 +206,43 @@ describe('SettingsModalComponent', () => {
     expect(component.closed.emit).toHaveBeenCalled();
   });
 
+  it('reports browser motion as allowed when matchMedia is unavailable', async () => {
+    (window as unknown as { matchMedia: unknown }).matchMedia = undefined;
+    await flushInit();
+    expect(component.browserBlocksMotion()).toBe(false);
+  });
+
+  it('reports browser motion as blocked when the OS prefers reduced motion', async () => {
+    installMatchMedia(true);
+    await flushInit();
+    expect(component.browserBlocksMotion()).toBe(true);
+  });
+
+  it('updates the status live when the OS preference flips', async () => {
+    const stub = installMatchMedia(false);
+    await flushInit();
+    expect(component.browserBlocksMotion()).toBe(false);
+
+    stub._fireChange(true);
+    expect(component.browserBlocksMotion()).toBe(true);
+
+    stub._fireChange(false);
+    expect(component.browserBlocksMotion()).toBe(false);
+  });
+
+  it('removes the matchMedia listener on destroy', async () => {
+    const stub = installMatchMedia(false);
+    await flushInit();
+    expect(stub._listeners.length).toBe(1);
+    component.ngOnDestroy();
+    expect(stub._listeners.length).toBe(0);
+  });
+
   it('should handle init error gracefully', async () => {
     await settleZoneless(fixture);
+    httpMock
+      .expectOne('/api/auth/huggingface/status')
+      .flush({ configured: false, authenticated: false, username: '', scopes: '' });
     const settingsReq = httpMock.expectOne('/api/settings');
     const mediaTypesReq = httpMock.expectOne('/api/media-types');
     const embeddersReq = httpMock.expectOne('/api/embedders');

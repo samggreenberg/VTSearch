@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostBinding, inject, Input, input, NgZone, OnChanges, OnDestroy, OnInit, output, SimpleChanges, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, ElementRef, HostBinding, inject, Input, input, NgZone, OnChanges, OnDestroy, OnInit, output, SimpleChanges, ViewChild } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { BrowseViewportService, ViewportBounds } from '../../services/browse-viewport.service';
+import { BrowseSelectionService } from '../../services/browse-selection.service';
 import {
   densityColor,
   resolveColormap,
@@ -43,7 +44,18 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   private ngZone = inject(NgZone);
   private tileCache = inject(TileCacheService);
   private viewport = inject(BrowseViewportService);
+  private selection = inject(BrowseSelectionService);
   private host = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  // Repaint whenever the selection mutates, so the overview's tristate tint
+  // (unselected / partial / full) tracks the canvas. Reading the version
+  // signal registers this effect as a dependency; the redraw is rAF-coalesced,
+  // so a marquee drag that fires many mutations still collapses to one paint
+  // per frame. Created in the injection context (field initializer).
+  private selectionEffect = effect(() => {
+    this.selection.version();
+    this.requestRedraw();
+  });
 
   @ViewChild('canvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
   readonly meta = input<ProjectionMeta | null>(null);
@@ -296,17 +308,40 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
       const geom = binGeometry(this.meta()!.bin_shape);
       const cellR = (this.meta()!.base_radius / Math.pow(2, level)) * f.scale;
       const cmap = resolveColormap(this.colormap(), this.effectiveTheme());
+      const selActive = this.selection.size > 0;
+      const selAccent = this.themeColor('--accent-color') || '#4f9dff';
       for (const cell of cells) {
         const [sx, sy] = this.projToMap(cell.cx, cell.cy, f);
         const single = cell.count === 1;
         geom.traceCell(ctx, sx, sy, cellR, single);
+        let baseFill: string;
         if (single) {
-          ctx.fillStyle = rgbString(cmap.single);
+          baseFill = rgbString(cmap.single);
         } else {
           const t = Math.log(cell.count) / Math.log(maxCount || 2);
-          ctx.fillStyle = densityColor(Math.max(0, Math.min(1, t)), cmap.ramp);
+          baseFill = densityColor(Math.max(0, Math.min(1, t)), cmap.ramp);
         }
-        ctx.fill();
+        // Tristate selection tint (unselected / partial / full), the overview
+        // analogue of the canvas's none/dashed-ring/solid-ring. At overview bin
+        // size a border or glyph would be illegible, so selection is encoded in
+        // the fill: full bins go solid accent, partial bins keep their density
+        // colour under a translucent accent wash.
+        const selState = selActive ? this.selStateFor(cell) : 0;
+        if (selState === 2) {
+          ctx.fillStyle = selAccent;
+          ctx.fill();
+        } else if (selState === 1) {
+          ctx.fillStyle = baseFill;
+          ctx.fill();
+          ctx.save();
+          ctx.globalAlpha = 0.45;
+          ctx.fillStyle = selAccent;
+          ctx.fill();
+          ctx.restore();
+        } else {
+          ctx.fillStyle = baseFill;
+          ctx.fill();
+        }
       }
       this.drawViewportRect(ctx, f);
     }
@@ -325,6 +360,27 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
       if (tile) out.push(...tile.cells);
     }
     return out;
+  }
+
+  /**
+   * Selection state of an overview cell: 0 = none, 1 = partial, 2 = full,
+   * derived from how many of its members are selected — the same rule the
+   * canvas uses, so the two views agree. Memoized on the cell against the
+   * selection version (in minimap-private fields, distinct from the canvas's)
+   * so a pan/zoom/theme repaint doesn't re-scan every overview bin's members
+   * when the selection hasn't changed.
+   */
+  private selStateFor(cell: HexCellPayload): 0 | 1 | 2 {
+    const memo = cell as HexCellPayload & { _mmSelVer?: number; _mmSelState?: 0 | 1 | 2 };
+    if (memo._mmSelVer === this.selection.version() && memo._mmSelState !== undefined) {
+      return memo._mmSelState;
+    }
+    const members = cell.member_ids && cell.member_ids.length > 0 ? cell.member_ids : [cell.rep_id];
+    const sel = this.selection.selectedCountIn(members);
+    const state: 0 | 1 | 2 = sel === 0 ? 0 : sel === members.length ? 2 : 1;
+    memo._mmSelVer = this.selection.version();
+    memo._mmSelState = state;
+    return state;
   }
 
   private drawViewportRect(

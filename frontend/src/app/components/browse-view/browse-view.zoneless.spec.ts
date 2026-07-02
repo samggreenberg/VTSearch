@@ -113,7 +113,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     // ngOnInit's loadProjection has issued getMeta but it hasn't emitted: the
     // view is in the `loading` state.
     expect(fixture.nativeElement.querySelector('.browse-status-message')!.textContent).toContain(
-      'Loading projection',
+      'Loading map',
     );
     expect(fixture.nativeElement.querySelector('.browse-status-error')).toBeNull();
 
@@ -125,6 +125,22 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     const errEl = fixture.nativeElement.querySelector('.browse-status-error');
     expect(errEl).not.toBeNull();
     expect(errEl!.textContent).toContain('projection exploded');
+  });
+
+  it('covers the canvas until it reports its opening view is painted', async () => {
+    await settleZoneless(fixture);
+    const component = fixture.componentInstance;
+
+    // On entry the canvas is covered so the user never sees a half-loaded grid.
+    expect(component.revealed()).toBe(false);
+    // The cover names the projection for pure-density media (the canary DS is
+    // audio); image/video datasets — the case this cover exists for — would read
+    // "Loading thumbnails…" instead.
+    expect(component.preloadMessage).toBe('Loading map…');
+
+    // The canvas signals its opening view is fully painted → uncover it.
+    component.onCanvasFirstView();
+    expect(component.revealed()).toBe(true);
   });
 
   it('engages region-draw while Shift is held, releasing on keyup and blur', async () => {
@@ -154,5 +170,28 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     // The GUI toggle keeps engaging region-draw independently of Shift.
     component.toggleMarqueeMode();
     expect(component.regionDrawActive).toBe(true);
+  });
+
+  it('drives preview-audio volume from the toolbar: slider lowers the level and mute round-trips', async () => {
+    await settleZoneless(fixture);
+    const component = fixture.componentInstance;
+
+    // Settings resolved to {} → volume defaults to full.
+    expect(component.volume()).toBe(1);
+
+    // Dragging the slider lowers the level (this signal feeds the `[volume]`
+    // inputs on the hover-preview + bin-popup, quieting a playing clip live).
+    component.onVolumeInput({ target: { value: '0.3' } } as unknown as Event);
+    expect(component.volume()).toBeCloseTo(0.3);
+
+    // Muting drops to 0; unmuting restores the pre-mute level, not full volume.
+    component.toggleMute();
+    expect(component.volume()).toBe(0);
+    component.toggleMute();
+    expect(component.volume()).toBeCloseTo(0.3);
+
+    // A committed (released) value clamps into [0, 1].
+    component.onVolumeCommit({ target: { value: '5' } } as unknown as Event);
+    expect(component.volume()).toBe(1);
   });
 });

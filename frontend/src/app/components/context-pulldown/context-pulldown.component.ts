@@ -9,12 +9,25 @@ import { ContextSwitchService } from '../../services/context-switch.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { PulldownControlService } from '../../services/pulldown-control.service';
 import { DashboardColumnsService } from '../../services/dashboard-columns.service';
+import { DashboardSelectionService } from '../../services/dashboard-selection.service';
 import { RunningJobsService, pairKey } from '../../services/running-jobs.service';
 import { SortState } from '../../utils/managed-columns';
 import { DatasetRegistryEntry, DetectorRegistryEntry } from '../../models/api.models';
 import { isPairCompatible } from '../../utils/context-compat';
 
 type PulldownKind = 'dataset' | 'detector';
+
+/** Wrap a possibly-empty id as a 0-or-1 element list, so intent-driven
+ *  (single) and selection-driven (multi) sources share one code path. */
+function idList(id: string): string[] {
+  return id ? [id] : [];
+}
+
+/** The lone id in a list, or '' when there are zero or many — used where an
+ *  unambiguous single partner is required (compatibility dimming). */
+function singleId(ids: string[]): string {
+  return ids.length === 1 ? ids[0] : '';
+}
 
 interface PulldownRow {
   id: string;
@@ -58,6 +71,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   private newThingFlows = inject(NewThingFlowsService);
   private pulldownControl = inject(PulldownControlService);
   private dashboardColumns = inject(DashboardColumnsService);
+  private dashSelection = inject(DashboardSelectionService);
   private runningJobs = inject(RunningJobsService);
   private cdr = inject(ChangeDetectorRef);
 
@@ -71,6 +85,12 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   activeName = '';
   activeRowExists = false;
   registryError: string | null = null;
+
+  /** Ids of this pulldown's rows that count as "active" — the selected
+   *  table rows while the Dashboard is on screen, otherwise the single
+   *  active/loaded id from `ActiveContextService`. Drives the ✓ glyph,
+   *  the closed-state label, and keyboard focus. */
+  private selectedIds: string[] = [];
 
   /** True between an "Add New" click in this pulldown and the resulting
    *  registry-update that auto-selects the new item. Reset on success
@@ -108,6 +128,19 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     // moment the user picks a row, rather than waiting for any
     // dataset/detector load to finish.
     this.activeContext.intentPair$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.rebuildRows());
+    // On the Dashboard the bar mirrors the table selection instead of the
+    // loaded context. Rebuild when visibility flips or either half's
+    // selection changes (both halves matter here because a row's
+    // compatibility/busy state depends on the *other* half's pick).
+    this.dashSelection.dashboardVisible$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.rebuildRows());
+    this.dashSelection.datasetIds$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.rebuildRows());
+    this.dashSelection.detectorIds$
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => this.rebuildRows());
     this.datasetState.error$.pipe(takeUntil(this.destroy$)).subscribe((err) => {
@@ -232,6 +265,15 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   }
 
   pickRow(row: PulldownRow): void {
+    // On the Dashboard the pulldown mirrors the tables: a pick is a plain
+    // single-select of that row (which toggles off if it was the sole
+    // pick), never a context load. Off the Dashboard it switches the
+    // active/loaded pair as before.
+    if (this.dashSelection.dashboardVisible) {
+      this.dashSelection.requestSelect(this.kind(), row.id);
+      this.close();
+      return;
+    }
     if (row.active) {
       this.close();
       return;
@@ -252,8 +294,13 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       this.knownIdsAtAddStart = new Set(this.datasetState.datasets.map((d) => d.id));
       this.newThingFlows.openImporter();
     } else {
-      const other = this.activeContext.intentDatasetId
-        ? this.datasetState.datasets.find((d) => d.id === this.activeContext.intentDatasetId)
+      // Seed the new-detector form's media type from the partner dataset:
+      // the single selected dataset on the Dashboard, else the active one.
+      const otherDsId = this.dashSelection.dashboardVisible
+        ? singleId(this.dashSelection.datasetIds)
+        : this.activeContext.intentDatasetId;
+      const other = otherDsId
+        ? this.datasetState.datasets.find((d) => d.id === otherDsId)
         : null;
       this.newThingFlows.openNewDetector({
         defaultMediaType: other?.media_type || '',
@@ -370,10 +417,9 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   }
 
   private findActiveIndex(): number {
-    const id = this.isDataset
-      ? this.activeContext.intentDatasetId
-      : this.activeContext.intentModelId;
-    return this.rows.findIndex((r) => r.id === id);
+    // First active row (there can be several under Dashboard multi-select);
+    // used only to seed keyboard focus, so the first is fine.
+    return this.rows.findIndex((r) => r.active);
   }
 
   private scrollFocusedIntoView(): void {
@@ -397,6 +443,13 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   }
 
   private switchToNewItem(id: string): void {
+    // On the Dashboard a freshly-added item becomes the selected row (the
+    // Dashboard also auto-selects new ids, so this just keeps them aligned)
+    // rather than being loaded as the active pair.
+    if (this.dashSelection.dashboardVisible) {
+      this.dashSelection.requestSelect(this.kind(), id);
+      return;
+    }
     if (this.isDataset) {
       this.contextSwitch.switchTo(id, this.activeContext.intentModelId);
     } else {
@@ -407,25 +460,43 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   private rebuildRows(): void {
     const datasets = this.datasetState.datasets;
     const detectors = this.datasetState.detectors;
-    // Highlight rows by intent (what the user picked), not by what's
-    // currently loaded; picking a row should feel instant even when
-    // a dataset/detector load is still running behind the scenes.
-    const activeDsId = this.activeContext.intentDatasetId;
-    const activeDetId = this.activeContext.intentModelId;
-    const activeDataset = activeDsId ? datasets.find((d) => d.id === activeDsId) : null;
-    const activeDetector = activeDetId ? detectors.find((d) => d.id === activeDetId) : null;
+    // Two sources for what counts as "active":
+    //  - On the Dashboard, the highlighted table rows (which can be more
+    //    than one — the closed label collapses that to "Multiple").
+    //  - Elsewhere, the single intent id (what the user picked), not what's
+    //    loaded, so picking a row feels instant while a load runs behind it.
+    const dashMode = this.dashSelection.dashboardVisible;
+    const dsIds = dashMode
+      ? this.dashSelection.datasetIds
+      : idList(this.activeContext.intentDatasetId);
+    const detIds = dashMode
+      ? this.dashSelection.detectorIds
+      : idList(this.activeContext.intentModelId);
 
+    // The row's own selected set (highlight + label) versus the *other*
+    // half's single active id (compat/busy). Compatibility dimming needs an
+    // unambiguous partner, so a multi-selected other half reads as "none".
+    this.selectedIds = this.isDataset ? dsIds : detIds;
+    const selected = new Set(this.selectedIds);
     if (this.isDataset) {
+      const activeDetId = singleId(detIds);
+      const activeDetector = activeDetId ? detectors.find((d) => d.id === activeDetId) : null;
       const sorted = this.applySort(datasets);
-      this.rows = sorted.map((d) => this.datasetRow(d, activeDsId, activeDetector));
+      this.rows = sorted.map((d) => this.datasetRow(d, selected, activeDetector));
     } else {
+      const activeDsId = singleId(dsIds);
+      const activeDataset = activeDsId ? datasets.find((d) => d.id === activeDsId) : null;
       const sorted = this.applySort(detectors);
-      this.rows = sorted.map((d) => this.detectorRow(d, activeDetId, activeDataset));
+      this.rows = sorted.map((d) => this.detectorRow(d, selected, activeDataset));
     }
 
-    const active = this.rows.find((r) => r.active);
-    this.activeRowExists = !!active;
-    this.activeName = active?.name || '';
+    // Closed-state label: nothing → placeholder; one → its name; many →
+    // "Multiple" (only reachable in Dashboard multi-select).
+    const activeRows = this.rows.filter((r) => r.active);
+    this.activeRowExists = activeRows.length > 0;
+    if (activeRows.length === 1) this.activeName = activeRows[0].name;
+    else if (activeRows.length > 1) this.activeName = 'Multiple';
+    else this.activeName = '';
     if (this.open) {
       const i = this.findActiveIndex();
       if (i !== -1) this.focusedIndex = i;
@@ -439,7 +510,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
 
   private datasetRow(
     dataset: DatasetRegistryEntry,
-    activeId: string,
+    activeIds: Set<string>,
     activeDetector: DetectorRegistryEntry | null | undefined,
   ): PulldownRow {
     const compatible = activeDetector
@@ -460,7 +531,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       name: dataset.name,
       mediaType: dataset.media_type,
       loaded: !!dataset.loaded,
-      active: dataset.id === activeId,
+      active: activeIds.has(dataset.id),
       compatibleWithOther: compatible,
       incompatReason: reason,
       busy: busyJobTypes.length > 0,
@@ -470,7 +541,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
 
   private detectorRow(
     detector: DetectorRegistryEntry,
-    activeId: string,
+    activeIds: Set<string>,
     activeDataset: DatasetRegistryEntry | null | undefined,
   ): PulldownRow {
     const compatible = activeDataset
@@ -487,7 +558,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       name: detector.name,
       mediaType: detector.media_type,
       loaded: !!detector.detector_loaded,
-      active: detector.id === activeId,
+      active: activeIds.has(detector.id),
       compatibleWithOther: compatible,
       incompatReason: reason,
       busy: busyJobTypes.length > 0,

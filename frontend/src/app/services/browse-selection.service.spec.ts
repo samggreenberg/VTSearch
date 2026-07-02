@@ -70,6 +70,45 @@ describe('BrowseSelectionService', () => {
     expect(service.version()).toBe(v1 + 1);
   });
 
+  it('selectAllInView adds ids and latches allSelected on', () => {
+    expect(service.allSelected()).toBe(false);
+    service.selectAllInView([1, 2, 3]);
+    expect(service.selectedCountIn([1, 2, 3])).toBe(3);
+    expect(service.allSelected()).toBe(true);
+  });
+
+  it('selectAllInView latches even when every id is already selected', () => {
+    service.addAll([1, 2, 3]);
+    expect(service.allSelected()).toBe(false);
+    service.selectAllInView([1, 2, 3]); // no set change, but still "all in view"
+    expect(service.allSelected()).toBe(true);
+  });
+
+  it('selectAllInView with an empty view is a no-op that leaves the latch', () => {
+    service.selectAllInView([1]);
+    expect(service.allSelected()).toBe(true);
+    service.selectAllInView([]); // nothing in view → leave state as-is
+    expect(service.allSelected()).toBe(true);
+    expect(service.size).toBe(1);
+  });
+
+  it('any other mutation drops the allSelected latch', () => {
+    service.selectAllInView([1, 2, 3]);
+    expect(service.allSelected()).toBe(true);
+    service.remove(2); // a manual edit
+    expect(service.allSelected()).toBe(false);
+
+    service.selectAllInView([1, 2, 3, 4]);
+    expect(service.allSelected()).toBe(true);
+    service.addAll([5]); // marquee union
+    expect(service.allSelected()).toBe(false);
+
+    service.selectAllInView([1, 2]);
+    expect(service.allSelected()).toBe(true);
+    service.clear();
+    expect(service.allSelected()).toBe(false);
+  });
+
   it('arms and consumes the one-shot survive-projection-change mark', () => {
     expect(service.consumeSurviveProjectionChange()).toBe(false);
     service.markSurviveProjectionChange();

@@ -236,6 +236,10 @@ def reset_state():
     from vtsearch.autorun_processors import clear_all_autorun
 
     clear_all_autorun()
+
+    from vtscore.security.hf_auth import clear_credential as _clear_hf_credential
+
+    _clear_hf_credential()
     clear_progress_cache()
 
     from vtscore.embedding.helpers import clear_text_query_cache as _clear_query_cache

@@ -20,9 +20,14 @@ from urllib.parse import urljoin
 import requests
 
 from vtscore.config import DATA_DIR
+from vtscore.security.hf_auth import GatedResourceError, auth_header_for_url
 from vtscore.security.url_validation import validate_url
 
 _MAX_REDIRECTS = 10
+# Statuses that mean "this resource is gated / needs credentials we don't have".
+# These are surfaced as a short, actionable GatedResourceError rather than a
+# raw HTTPError, and are never retried (retrying without auth can't succeed).
+_AUTH_REQUIRED_STATUS = frozenset({401, 403})
 
 # Large dataset archives are pulled from flaky third-party CDNs / object stores
 # (Caltech's OSN bucket, Zenodo, HuggingFace, university mirrors) that routinely
@@ -53,6 +58,13 @@ CIFAR10_URL = "https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz"
 CALTECH101_URL = "https://data.caltech.edu/records/mzrjq-6wc02/files/caltech-101.zip"
 CALTECH256_URL = "https://data.caltech.edu/records/nyy15-4j048/files/256_ObjectCategories.tar?download=1"
 UCF101_SUBSET_URL = "https://huggingface.co/datasets/sayakpaul/ucf101-subset/resolve/main/UCF101_subset.tar.gz"
+# 20 Newsgroups is fetched via scikit-learn, but we pre-download its archive
+# ourselves (through download_file_with_progress) so the transfer gets a
+# fail-fast timeout, retries, and byte-level progress instead of sklearn's
+# no-timeout urlretrieve. The URL/checksum/filename themselves come from
+# sklearn's own ARCHIVE metadata at runtime to stay in lock-step; this size is
+# only the progress-bar fallback when the server omits Content-Length.
+TWENTY_NEWSGROUPS_DOWNLOAD_SIZE_MB = 14
 BBC_NEWS_URL = "http://mlg.ucd.ie/files/datasets/bbc-fulltext.zip"
 AG_NEWS_URL = "https://raw.githubusercontent.com/mhjabreel/CharCnn_Keras/master/data/ag_news_csv/train.csv"
 IMDB_URL = "https://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz"
@@ -173,6 +185,15 @@ def _default_progress() -> ProgressCallback:
     return update_progress
 
 
+def _request_headers(url: str, headers: Optional[dict]) -> dict:
+    """Merge caller *headers* with a HuggingFace bearer token when *url* is a Hub
+    host.  The auth header is recomputed per hop so it follows redirects only to
+    other HuggingFace hosts, never to a presigned CDN / Xet target."""
+    merged = dict(headers or {})
+    merged.update(auth_header_for_url(url))
+    return merged
+
+
 def _open_validated_stream(session: requests.Session, url: str, headers: Optional[dict] = None) -> requests.Response:
     """GET *url* as a stream, following redirects manually so every hop is
     re-checked by :func:`validate_url`.
@@ -185,7 +206,13 @@ def _open_validated_stream(session: requests.Session, url: str, headers: Optiona
     Returns the final, non-redirect response; the caller owns closing it.
     """
     current_url = url
-    response = session.get(current_url, stream=True, timeout=(10, 60), allow_redirects=False, headers=headers)
+    response = session.get(
+        current_url,
+        stream=True,
+        timeout=(10, 60),
+        allow_redirects=False,
+        headers=_request_headers(current_url, headers),
+    )
     redirects = 0
     while response.is_redirect or response.is_permanent_redirect:
         if redirects >= _MAX_REDIRECTS:
@@ -198,7 +225,13 @@ def _open_validated_stream(session: requests.Session, url: str, headers: Optiona
         validate_url(next_url)
         response.close()
         current_url = next_url
-        response = session.get(current_url, stream=True, timeout=(10, 60), allow_redirects=False, headers=headers)
+        response = session.get(
+            current_url,
+            stream=True,
+            timeout=(10, 60),
+            allow_redirects=False,
+            headers=_request_headers(current_url, headers),
+        )
         redirects += 1
     return response
 
@@ -236,6 +269,34 @@ def _backoff_and_notify(
         total_size,
     )
     time.sleep(backoff)
+
+
+def _gated_error(url: str, status: int) -> GatedResourceError:
+    """Build a short, user-facing :class:`GatedResourceError` for a 401/403.
+
+    The wording is tailored to whether the request hit the HuggingFace Hub and
+    whether a token is already stored, so the message tells the user the right
+    next step (sign in, or request access) without dumping the URL or an HTTP
+    body that would overflow the UI.
+    """
+    from vtscore.security.hf_auth import is_authenticated  # noqa: PLC0415
+
+    is_hf = bool(auth_header_for_url(url) or "huggingface.co" in url or "hf.co" in url)
+    if is_hf:
+        if is_authenticated():
+            msg = (
+                "This dataset is gated on HuggingFace and your signed-in account "
+                "hasn't been granted access. Open the dataset page on huggingface.co, "
+                "accept its terms, then retry."
+            )
+        else:
+            msg = (
+                "This dataset is gated on HuggingFace. Sign in with HuggingFace "
+                "(in Settings) using an account that has access, then retry."
+            )
+    else:
+        msg = "Access denied: this dataset requires authentication that VTSearch doesn't have."
+    return GatedResourceError(msg, url=url, status=status)
 
 
 def download_file_with_progress(  # noqa: C901
@@ -298,6 +359,11 @@ def download_file_with_progress(  # noqa: C901
             if response.status_code in _RETRYABLE_STATUS and not last_attempt:
                 _backoff_and_notify(on_progress, dest_path, attempt, downloaded, total_size)
                 continue
+            # Auth-required: this is gated content we can't fetch with the
+            # credentials we have.  Surface a short, actionable message instead
+            # of a raw HTTPError, and don't retry (it can't succeed unchanged).
+            if response.status_code in _AUTH_REQUIRED_STATUS:
+                raise _gated_error(url, response.status_code)
             response.raise_for_status()
 
             if response.headers.get("Content-Encoding"):

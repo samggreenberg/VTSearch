@@ -1,0 +1,46 @@
+<vt-modal [title]="'Export model: ' + detectorName()" [open]="true" (closed)="close()">
+  <div class="pexport">
+    <div class="pexport__warn" role="note">
+      <strong>⚠ This writes a trained model to disk.</strong>
+      <p>
+        VTSearch normally keeps trained models in memory only — this export is the
+        deliberate exception. The bundle contains <em>no raw media and no
+        fingerprints</em>: just the small trained detector, the name of the
+        embedder to use, and the cutoff. (A trained model can still reveal some
+        information about its training data, so share it only with parties you'd
+        trust with the labels themselves.)
+      </p>
+    </div>
+
+    <h3>What you'll get</h3>
+    <ul class="pexport__list">
+      <li><code>detector.onnx</code> — the trained detector (runs anywhere).</li>
+      <li><code>manifest.json</code> — the embedder to use and the cutoff.</li>
+      <li><code>README.md</code> — which embedder to use and a copy-paste scoring snippet.</li>
+    </ul>
+
+    <p class="pexport__note">
+      The model is trained against the <strong>currently loaded dataset's</strong>
+      embedder, so a compatible dataset must be loaded.
+    </p>
+
+    @if (done()) {
+      <p class="pexport__ok">Bundle downloaded.</p>
+    }
+    @if (error()) {
+      <p class="pexport__err">{{ error() }}</p>
+    }
+  </div>
+
+  <div modal-footer>
+    <button class="btn btn--secondary" (click)="close()" title="Close without exporting">Cancel</button>
+    <button
+      class="btn btn--primary"
+      (click)="download()"
+      [disabled]="downloading()"
+      title="Download the portable detector bundle"
+    >
+      {{ downloading() ? 'Preparing…' : 'Download bundle' }}
+    </button>
+  </div>
+</vt-modal>

@@ -2,6 +2,7 @@
 
 from vtsearch.routes.achievements import achievements_bp
 from vtsearch.routes.auth import auth_bp
+from vtsearch.routes.auth_huggingface import hf_auth_bp
 from vtsearch.routes.datasets import (
     datasets_listings_bp,
     datasets_load_bp,
@@ -14,6 +15,7 @@ from vtsearch.routes.detectors import (
     detector_find_bp,
     detector_scoring_bp,
     detectors_crud_bp,
+    detectors_export_bp,
     detectors_labels_bp,
     detectors_registry_bp,
 )
@@ -34,6 +36,7 @@ from vtsearch.routes.sorting import sorting_bp
 __all__ = [
     "achievements_bp",
     "auth_bp",
+    "hf_auth_bp",
     "datasets_listings_bp",
     "datasets_load_bp",
     "datasets_registry_bp",
@@ -43,6 +46,7 @@ __all__ = [
     "detector_find_bp",
     "detector_scoring_bp",
     "detectors_crud_bp",
+    "detectors_export_bp",
     "detectors_labels_bp",
     "detectors_registry_bp",
     "embed_bp",

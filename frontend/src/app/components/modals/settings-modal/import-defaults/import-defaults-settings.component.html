@@ -40,7 +40,7 @@
 
       <!-- Embedder -->
       @if (activeEmbedders.length > 1) {
-        <label class="form-label" [for]="'import-default-embedder-' + activeType" title="Embedding model used to compute vector representations for {{ activeTypeLabel }} items">Embedder</label>
+        <label class="form-label" [for]="'import-default-embedder-' + activeType" title="The embedder used to analyze each {{ activeTypeLabel }} item so it can be searched">Embedder</label>
         <select
           [id]="'import-default-embedder-' + activeType"
           class="form-select"

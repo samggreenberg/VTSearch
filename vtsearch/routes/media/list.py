@@ -885,7 +885,10 @@ def vote_media_bulk(body: dict):
         if get_media(media_id) is None:
             missing.append(media_id)
             continue
-        old, new, _click_time = set_vote(media_id, target)
+        # Bulk "Verified Good/Bad" over a hand-selected set is not an
+        # individual hand-click, so it must not build a Marathoner streak;
+        # count_streak=False still credits the other vote achievements.
+        old, new, _click_time = set_vote(media_id, target, count_streak=False)
         if old != new:
             changed += 1
 

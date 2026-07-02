@@ -1,5 +1,6 @@
 // The selection panel fills the top region of the browse side panel: a header
-// with the count + Clear, a sort/view toolbar, then a scrolling thumbnail grid
+// with the count + tri-state select-all checkbox, a sort/view toolbar, then a
+// scrolling thumbnail grid
 // of the selected items. Mirrors the Find right panel's labeled-item lists.
 :host {
   display: flex;
@@ -33,25 +34,26 @@
   color: var(--text-primary);
 }
 
-.bsp-clear {
-  font-size: var(--font-xs);
-  line-height: 1;
-  padding: var(--space-2xs) var(--space-sm);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+// Tri-state master checkbox (empty / dash / check for none / partial / all),
+// mirroring the bin-popup and dashboard select-all controls. Replaces the old
+// text "Clear" button: [ ] and [-] select everything in view, [x] clears the
+// whole selection.
+.bsp-select-all {
+  flex-shrink: 0;
+  background: none;
+  border: none;
   color: var(--text-muted);
   cursor: pointer;
-  transition: color var(--transition-base), border-color var(--transition-base);
+  padding: var(--space-2xs);
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-base), background var(--transition-base);
 
-  &:hover:not(:disabled) {
+  &:hover {
+    background: var(--btn-icon-hover-bg);
     color: var(--text-primary);
-    border-color: var(--text-primary);
-  }
-
-  &:disabled {
-    opacity: var(--opacity-disabled);
-    cursor: not-allowed;
   }
 }
 
@@ -107,6 +109,17 @@
   padding: 0 var(--space-lg) var(--space-md);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+// "Sort: [select]" travels as one unit so that, once the panel narrows enough
+// for the view controls to wrap below, the sort control sits alone on its own
+// row. The group keeps its natural width (no `min-width: 0`): the browse panel
+// floors its own minimum width at this group's measured width, so it is never
+// actually clipped — it just defines the narrowest the panel may become.
+.bsp-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
 }
 
 .bsp-sort-label {
@@ -171,6 +184,9 @@
   cursor: pointer;
   color: var(--text-vote);
   line-height: 1.3;
+  // Query container so the name can hide itself at small icon sizes (below).
+  container-type: inline-size;
+  container-name: bsp-cell;
 
   &:hover {
     color: var(--text-primary);
@@ -228,4 +244,12 @@
   text-align: center;
   line-height: 1.2;
   flex-shrink: 0;
+}
+
+// At the two smallest icon sizes (XS/S, ~42px content-box) the name truncates to
+// a useless "a…", so hide it and let the grid pack tighter. M and up keep it.
+@container bsp-cell (max-width: 60px) {
+  .bsp-name-grid {
+    display: none;
+  }
 }

@@ -370,7 +370,7 @@ and auto-saved on every change. Schema:
   "calibrate_count": 2,
   "calibration_fraction": 0.5,
   "audio_playing": true,
-  "show_animations": true,
+  "show_animations": "show",
   "show_metadata": true,
   "focus_mode_left": {},
   "focus_mode_right": {},
@@ -776,6 +776,93 @@ refresh, the kernel-module compile, the torch import in the smoke test) visibly
 alive so they don't look frozen. To watch every command's raw, unfiltered output
 live (e.g. to debug a genuinely stuck install), re-run with
 `VTSEARCH_VERBOSE=1 bash scripts/install.sh`.
+
+### Making the GPU driver survive reboots and kernel updates
+
+**Symptom**: The GPU worked yesterday, but after a stop/start (or overnight) you
+have to re-run `scripts/install.sh` to get GPU support back. `nvidia-smi` is gone
+or `torch.cuda.is_available()` is `False`, even though the CUDA `torch` wheel is
+still installed.
+
+**Cause**: This is almost never the Python side. The CUDA `torch`/`torchvision`/
+`torchaudio` wheels live in your environment and **persist** across reboots — a
+`git pull` or a frontend build never touches them. What resets is the **NVIDIA
+kernel driver**, which is a *kernel module*, not a Python package, so a virtualenv
+fundamentally cannot hold it. On a cloud GPU box the driver **files** survive a
+stop/start on the EBS root volume, but if the OS pulled an **automatic kernel
+upgrade** while it was running (Ubuntu `unattended-upgrades`, Amazon Linux/`dnf`
+automatic updates), you boot into a *new kernel* and a **pre-built** `nvidia`
+module no longer matches it — so `nvidia-smi` goes dark until the module is
+rebuilt. Re-running the installer rebuilds it against the new kernel; that's why
+it "comes back every time."
+
+**Which half is resetting** — run these to confirm:
+
+```bash
+nvidia-smi                                                   # driver visible now?
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+#   2.x+cu124  True   -> both fine
+#   2.x+cu124  False  -> CUDA torch OK, the kernel MODULE broke (kernel update)
+#   2.x+cpu           -> the env got a CPU torch (env-recreation, a separate issue)
+dkms status | grep -i nvidia || echo "NOT dkms-managed -> kernel updates WILL break it"
+uname -r; ls /lib/modules/                                   # >1 kernel = an update happened
+```
+
+**What the installer now does for you**: `scripts/install.sh` makes the driver
+set-and-forget wherever it can — it registers the module with **DKMS** when `dkms`
+is available (including on the self-contained `.run` fallback path, via `--dkms`),
+so the module **auto-rebuilds for each new kernel**; it enables NVIDIA's
+**persistence daemon** (`nvidia-persistenced`) so the driver initializes at every
+boot; and every GPU install prints whether the result is DKMS-managed
+(kernel-update-proof) or still kernel-pinned. On the Debian/Ubuntu path the
+distro's `nvidia-driver-*` packages are already DKMS builds, so they're covered
+too.
+
+**If the driver is already up but reported NON-DKMS**, the installer *offers to
+convert it in place* — it reinstalls the driver via NVIDIA's `.run` installer
+with `--dkms` (bootstrapping EPEL + `dkms` first), then recommends a reboot so the
+freshly built module loads. Answer `Y` at the prompt, or drive it unattended with
+`VTSEARCH_AUTO_DKMS=1 bash scripts/install.sh` (`VTSEARCH_SKIP_DKMS=1` skips the
+offer). Your GPU keeps working either way; declining just leaves it kernel-pinned.
+
+**To make a NON-DKMS driver durable by hand** — e.g. on a bare, unregistered RHEL
+box where `dkms` can't be reached and only the precompiled kABI-stream or a plain
+`.run` module could be installed — use one of:
+
+- **Bake a custom AMI** (or use the **AWS Deep Learning AMI**, which ships the
+  driver preinstalled and maintained). A stop/start then starts from a known-good
+  driver. This is the most robust option and the recommendation for a fleet.
+- **Install `dkms` first, then re-run the installer** so the module becomes
+  DKMS-managed. On RHEL, `dkms` lives in EPEL — and on a **hardened or unregistered**
+  box `dnf install <epel-url.rpm>` fails the GPG check (`Public key ... is not
+  installed`) unless you import EPEL's key first:
+  ```bash
+  sudo rpm --import "https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-$(rpm -E %rhel)"
+  sudo dnf install -y \
+    "https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(rpm -E %rhel).noarch.rpm"
+  sudo dnf install -y dkms
+  bash scripts/install.sh
+  ```
+  If the driver is **already loaded** (nvidia-smi works), the `.run` reinstall aborts
+  with `nvidia-modeset appears to be already loaded` — stop the driver and unload the
+  modules first, then reinstall with `--dkms`:
+  ```bash
+  sudo systemctl stop nvidia-persistenced
+  sudo rmmod nvidia_uvm nvidia_drm nvidia_modeset nvidia   # dependents before the base module
+  lsmod | grep nvidia || echo "modules unloaded"           # confirm none remain
+  bash scripts/install.sh                                   # or: sudo sh nvidia.run --silent --dkms
+  sudo reboot
+  ```
+  (The installer's built-in DKMS conversion, above, does this stop/unload for you.)
+- **Pin the kernel** so it stops changing under the module (blocks kernel security
+  updates until you unpin — a tradeoff):
+  ```bash
+  # Ubuntu/Debian:
+  sudo apt-mark hold "linux-image-$(uname -r)" "linux-headers-$(uname -r)"
+  # RHEL/Amazon Linux:
+  sudo dnf install -y 'dnf-command(versionlock)'
+  sudo dnf versionlock add kernel kernel-core kernel-modules
+  ```
 
 ### GPU install's cuML step (the "dependency conflicts" report, captured by default)
 

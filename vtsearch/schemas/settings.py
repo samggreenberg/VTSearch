@@ -14,7 +14,12 @@ from __future__ import annotations
 
 from marshmallow import Schema, fields, validate
 
-from vtsearch.settings_models import VALID_FOCUS_MODES, VALID_GRID_ICON_SIZES, VALID_THEMES
+from vtsearch.settings_models import (
+    VALID_ANIMATION_MODES,
+    VALID_FOCUS_MODES,
+    VALID_GRID_ICON_SIZES,
+    VALID_THEMES,
+)
 
 
 class _PerMediaTypeStringDict(fields.Dict):
@@ -62,7 +67,7 @@ class AppSettingsSchema(Schema):
     calibrate_count = fields.Integer()
     calibration_fraction = fields.Float()
     audio_playing = fields.Boolean()
-    show_animations = fields.Boolean()
+    show_animations = fields.String(validate=validate.OneOf(VALID_ANIMATION_MODES))
     show_metadata = fields.Boolean()
     label_hint_dismissed = fields.Boolean()
     autopilot_enabled = fields.Boolean()
@@ -103,6 +108,10 @@ class AppSettingsSchema(Schema):
     # VTSBrowse bin-popup detail-canvas (large single-item preview) size in CSS
     # px, per media type. Driven by the popup's own top-left size buttons.
     popup_preview_size = _PerMediaTypeIntDict()
+    # VTSBrowse bin-popup metadata column visibility, per media type. Driven by
+    # the popup's own metadata toggle button; when shown, a column left of the
+    # detail preview carries the focused item's Train/Find metadata fields.
+    popup_metadata_shown = _PerMediaTypeBooleanDict()
 
     # Server-tier. These are fixed at server start (config file /
     # environment / CLI flags) and shared across all users; the frontend
@@ -194,7 +203,7 @@ class SettingsUpdateSchema(Schema):
     calibrate_count = fields.Integer()
     calibration_fraction = fields.Float()
     audio_playing = fields.Boolean()
-    show_animations = fields.Boolean()
+    show_animations = fields.String(validate=validate.OneOf(VALID_ANIMATION_MODES))
     show_metadata = fields.Boolean()
     label_hint_dismissed = fields.Boolean()
 
@@ -206,6 +215,7 @@ class SettingsUpdateSchema(Schema):
     panel_pct_right = fields.Raw()
     grid_icon_size_popup = fields.Raw()
     popup_preview_size = fields.Raw()
+    popup_metadata_shown = fields.Raw()
 
     autopilot_enabled = fields.Boolean()
     hide_autopilot = fields.Boolean()

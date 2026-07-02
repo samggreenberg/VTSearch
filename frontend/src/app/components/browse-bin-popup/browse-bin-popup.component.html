@@ -4,6 +4,7 @@
   [style.left.px]="left"
   [style.top.px]="top"
   [style.maxWidth.px]="maxWidthPx"
+  [style.visibility]="placed ? 'visible' : 'hidden'"
   role="dialog"
   aria-label="Bin items">
   <div
@@ -11,6 +12,18 @@
     class="bin-popup-header"
     [class.dragging]="dragging"
     (pointerdown)="onHeaderPointerDown($event)">
+    @if (canToggleMetadata) {
+      <button
+        type="button"
+        class="bin-popup-meta-toggle"
+        [class.active]="showMetadataColumn"
+        (click)="toggleMetadata()"
+        [attr.aria-pressed]="showMetadataColumn"
+        [title]="showMetadataColumn ? 'Hide metadata' : 'Show metadata'"
+        [attr.aria-label]="showMetadataColumn ? 'Hide metadata' : 'Show metadata'">
+        <vt-icon type="info" [size]="15" />
+      </button>
+    }
     @if (showPreview) {
       <div class="bin-popup-size-group" role="group" aria-label="Detail image size">
         <button
@@ -48,7 +61,45 @@
     </button>
   </div>
 
-  <div class="bin-popup-body" [style.height.px]="bodyHeight">
+  <div class="bin-popup-body" [style.height.px]="bodyOuterHeight">
+    @if (showMetadataColumn) {
+      <div class="bin-popup-meta-col" [style.width.px]="metadataColWidth">
+        <div class="bin-popup-meta-grid">
+          <div class="bin-popup-meta-item">
+            <span class="bin-popup-meta-label">Name</span>
+            <div class="bin-popup-meta-value-row">
+              <vt-copy-detail-button [value]="metadataName" label="Name" />
+              <span class="bin-popup-meta-value">{{ metadataName }}</span>
+            </div>
+          </div>
+          <div class="bin-popup-meta-item">
+            <span class="bin-popup-meta-label">Media Type</span>
+            <div class="bin-popup-meta-value-row">
+              <vt-copy-detail-button [value]="metadataMediaType | titlecase" label="Media Type" />
+              <span class="bin-popup-meta-value">{{ metadataMediaType | titlecase }}</span>
+            </div>
+          </div>
+          @for (entry of metadataCustom | keyvalue; track entry.key) {
+            <div class="bin-popup-meta-item">
+              <span class="bin-popup-meta-label">{{ entry.key }}</span>
+              <div class="bin-popup-meta-value-row">
+                <vt-copy-detail-button [value]="formatMetadataValue(entry.key, entry.value)" [label]="entry.key" />
+                <span class="bin-popup-meta-value">{{ formatMetadataValue(entry.key, entry.value) }}</span>
+              </div>
+            </div>
+          }
+          @if (metadataMd5) {
+            <div class="bin-popup-meta-item">
+              <span class="bin-popup-meta-label">MD5</span>
+              <div class="bin-popup-meta-value-row">
+                <vt-copy-detail-button [value]="metadataMd5" label="MD5" />
+                <span class="bin-popup-meta-value bin-popup-meta-md5">{{ metadataMd5 }}</span>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    }
     @if (showPreview) {
       <div
         class="bin-popup-preview"
@@ -123,7 +174,6 @@
             <div
               class="bin-popup-entry"
               [class.selected]="isSelected(id)"
-              [class.representative]="isRepresentative(id)"
               [class.focused]="isFocused(id)"
               role="button"
               tabindex="0"

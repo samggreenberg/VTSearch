@@ -245,17 +245,24 @@ _HF_RETRY_BACKOFF_BASE = 2  # seconds; delays will be 2, 4, 8, …
 
 
 def hf_token() -> str | bool:
-    """Token for HuggingFace Hub requests: ``HF_TOKEN`` env var when set, else ``False``.
+    """Token for HuggingFace Hub requests, else ``False``.
+
+    Resolution order: an interactive OAuth credential (from "Sign in with
+    HuggingFace") takes precedence, then the ``HF_TOKEN`` env var.  Signing in
+    therefore unlocks gated model weights (e.g. DINOv3) the same way it unlocks
+    gated demo datasets.
 
     All bundled models are public, so no token is *required*; ``False``
     explicitly tells the HF libraries not to look for (or warn about) a
-    missing one.  Setting ``HF_TOKEN`` opts into authenticated requests,
-    which matters behind shared egress IPs (e.g. clusters where many users
-    NAT through one address): the Hub rate-limits anonymous requests per IP
-    and can silently delay the first metadata call by minutes, while
-    authenticated requests are limited per account.
+    missing one.  An authenticated token also matters behind shared egress IPs
+    (e.g. clusters where many users NAT through one address): the Hub
+    rate-limits anonymous requests per IP and can silently delay the first
+    metadata call by minutes, while authenticated requests are limited per
+    account.
     """
-    return os.environ.get("HF_TOKEN") or False
+    from vtscore.security.hf_auth import get_token  # noqa: PLC0415
+
+    return get_token() or os.environ.get("HF_TOKEN") or False
 
 
 def _is_transient_hf_error(exc: Exception) -> bool:

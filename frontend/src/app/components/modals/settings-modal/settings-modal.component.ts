@@ -16,12 +16,17 @@ import {
 import { ImportDefaultsByMediaType } from '../../../models/api.models';
 import { SettingsApiService } from '../../../services/settings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
+import { HuggingFaceAuthService } from '../../../services/huggingface-auth.service';
 import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
 import type { AppSettings } from '../../../generated/api-client/models/app-settings';
 import { EmbedderInfo, MediaTypeInfo } from '../../../models/api.models';
 import { Theme, ThemeService } from '../../../services/theme.service';
 import { formatVersion } from '../../../utils/format-date';
 import { VtDialogService } from '../../../services/dialog.service';
+import {
+  browserPrefersReducedMotion,
+  onBrowserReducedMotionChange,
+} from '../../../utils/reduced-motion';
 import {
   DEFAULT_THUMBNAIL_BORDER,
   MAX_THUMBNAIL_BORDER,
@@ -42,6 +47,10 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   private datasetsListingsApi = inject(DatasetsListingsApiService);
   private themeService = inject(ThemeService);
   private dialog = inject(VtDialogService);
+  private hfAuth = inject(HuggingFaceAuthService);
+
+  /** HuggingFace sign-in state, surfaced to the "HuggingFace" settings tab. */
+  readonly hfStatus = this.hfAuth.status;
 
   @Input() preselectedViewTab = '';
   readonly closed = output<void>();
@@ -65,15 +74,35 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   readonly savedVisible = signal(false);
   private savedTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /**
+   * Whether the browser/OS is suppressing motion via `prefers-reduced-motion`.
+   * Surfaced as the "Browser motion" status line under the Show Animations
+   * toggle so a user whose animations vanished can see the block is coming from
+   * their OS/browser (which overrides the toggle), not from VTSearch. Tracks
+   * live changes to the OS setting via `onBrowserReducedMotionChange`.
+   */
+  readonly browserBlocksMotion = signal(browserPrefersReducedMotion());
+  private reducedMotionCleanup: (() => void) | null = null;
+
   private destroy$ = new Subject<void>();
 
   ngOnDestroy(): void {
     if (this.savedTimer !== null) clearTimeout(this.savedTimer);
+    this.reducedMotionCleanup?.();
     this.destroy$.next();
     this.destroy$.complete();
   }
 
   ngOnInit(): void {
+    this.hfAuth.refresh();
+
+    // Keep the "Browser motion" status line live if the user flips their OS
+    // reduce-motion setting while the modal is open.
+    this.browserBlocksMotion.set(browserPrefersReducedMotion());
+    this.reducedMotionCleanup = onBrowserReducedMotionChange((reduced) =>
+      this.browserBlocksMotion.set(reduced),
+    );
+
     forkJoin({
       settings: this.settingsApi.getSettings(),
       mediaTypes: this.datasetsListingsApi.getMediaTypes(),
@@ -119,10 +148,32 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Start the "Sign in with HuggingFace" OAuth handshake. */
+  hfLogin(): void {
+    this.hfAuth.login();
+  }
+
+  /** Sign out of HuggingFace (drops the server-held token). */
+  hfLogout(): void {
+    this.hfAuth.logout();
+  }
+
   onThemeChange(theme: string): void {
     const t = theme as Theme;
     this.settings.update((s) => ({ ...s, theme: t }));
     this.themeService.setTheme(t);
+    this.save();
+  }
+
+  /**
+   * Persist the "Show Animations" pulldown. "Show" forces decorative motion on
+   * (even against an OS reduce-motion request), "Hide" always suppresses it,
+   * and "OS Setting" defers to the platform preference; `SettingsStateService`
+   * mirrors the choice onto `<html>` for the global stylesheet.
+   */
+  onAnimationModeChange(mode: string): void {
+    const m = mode as AppSettings['show_animations'];
+    this.settings.update((s) => ({ ...s, show_animations: m }));
     this.save();
   }
 
@@ -493,7 +544,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   async resetDefaults(): Promise<void> {
     const ok = await this.dialog.confirmDestructive(
       'Reset all settings to factory defaults?',
-      'Your current preferences (appearance, view modes, autopilot, calibration, and other per-user settings) will be overwritten and cannot be recovered.',
+      'Your current preferences (appearance, view modes, autopilot, sorting, and other per-user settings) will be overwritten and cannot be recovered.',
       'Reset',
     );
     if (!ok) return;

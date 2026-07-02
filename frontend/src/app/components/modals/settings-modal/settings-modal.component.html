@@ -32,7 +32,7 @@
           class="settings-tab"
           [class.settings-tab--active]="activeSettingsTab() === 'browser'"
           (click)="activeSettingsTab.set('browser')"
-          title="VTSBrowse projection-browser look per media type: bin shape, density colormap, and cell size">
+          title="Browse map look per media type: bin shape, density colormap, and cell size">
           <vt-icon type="eye" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'browser'"></vt-icon>
           Browser
         </button>
@@ -56,9 +56,17 @@
           class="settings-tab"
           [class.settings-tab--active]="activeSettingsTab() === 'sorting'"
           (click)="activeSettingsTab.set('sorting')"
-          title="Options that control how learned sorting and calibration behave">
+          title="Options that control how sorting and detector tuning behave">
           <vt-icon type="sort-descending" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'sorting'"></vt-icon>
           Sorting
+        </button>
+        <button
+          class="settings-tab"
+          [class.settings-tab--active]="activeSettingsTab() === 'huggingface'"
+          (click)="activeSettingsTab.set('huggingface')"
+          title="Sign in with HuggingFace to download gated demo datasets and gated AI models">
+          <vt-icon type="globe" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'huggingface'"></vt-icon>
+          HuggingFace
         </button>
       </nav>
 
@@ -75,10 +83,29 @@
               <option value="highviz">High Visibility</option>
             </select>
           </div>
-          <label class="checkbox-row" title="Turn decorative motion on or off across the whole app">
-            <input type="checkbox" [ngModel]="settings().show_animations" (ngModelChange)="onToggle('show_animations', $event)" />
-            Show Animations<vt-field-hint-icon hint="Turns decorative motion on or off everywhere at once: the swipe transition when you vote, icon spins/waggles/tilts on buttons and cards, toast and banner slide-ins, smooth scrolling, and projection-browser zoom tweens. (Your operating system’s “reduce motion” setting disables the same things.)"></vt-field-hint-icon>
-          </label>
+          <div class="form-group">
+            <label class="form-label" title="Choose whether decorative motion plays across the whole app">Show Animations<vt-field-hint-icon hint="Controls decorative motion everywhere at once: the swipe transition when you vote, icon spins/waggles/tilts on buttons and cards, toast and banner slide-ins, smooth scrolling, and Browse map zoom tweens. “Show” forces motion on even if your OS asks to reduce it, “Hide” always turns it off, and “OS Setting” follows your operating system’s “reduce motion” preference."></vt-field-hint-icon></label>
+            <select class="form-select" [ngModel]="settings().show_animations" (ngModelChange)="onAnimationModeChange($event)" title="Choose whether decorative motion plays" aria-label="Show Animations">
+              <option value="show">Show</option>
+              <option value="hide">Hide</option>
+              <option value="os">OS Setting</option>
+            </select>
+          </div>
+          <div
+            class="motion-status"
+            [class.motion-status--blocked]="browserBlocksMotion()"
+            role="status"
+            aria-live="polite"
+            title="Whether your browser or operating system is currently suppressing animations">
+            <span class="motion-status__dot" aria-hidden="true"></span>
+            <span class="motion-status__label">Browser motion:</span>
+            @if (browserBlocksMotion()) {
+              <span class="motion-status__value">Blocked by your OS / browser</span>
+              <vt-field-hint-icon hint="Your operating system or browser is set to “reduce motion”, so VTSearch animations stay off while Show Animations is on “OS Setting” (the default) — this is almost always why animations are missing. Set Show Animations to “Show” above to force motion on anyway, or turn off “Reduce motion” in your OS accessibility settings (macOS: Accessibility → Display; Windows: Accessibility → Visual effects → Animation effects; GNOME: Accessibility → Reduce animation), or the equivalent browser flag, then reload."></vt-field-hint-icon>
+            } @else {
+              <span class="motion-status__value">Allowed</span>
+            }
+          </div>
           <label class="checkbox-row" title="Show the collapsible metadata tray below the media viewer (name, type, MD5, custom fields)">
             <input type="checkbox" [ngModel]="settings().show_metadata" (ngModelChange)="onToggle('show_metadata', $event)" />
             Show metadata panel
@@ -158,22 +185,22 @@
 
         <!-- Sorting & Calibration -->
         @if (activeSettingsTab() === 'sorting') {
-          <h3>Sorting &amp; Calibration</h3>
-          <label class="checkbox-row" title="Prepend item filenames to text-sort queries to improve semantic matching for named items">
+          <h3>Sorting &amp; Tuning</h3>
+          <label class="checkbox-row" title="Prepend item filenames to text-sort queries to improve matching for named items">
             <input type="checkbox" [ngModel]="settings().enrich_descriptions" (ngModelChange)="onToggle('enrich_descriptions', $event)" />
             Enrich descriptions
           </label>
-          <label class="checkbox-row" title="Blend the learned threshold toward 0.5 to reduce aggressive inclusion/exclusion. Useful when the detector has few training examples.">
+          <label class="checkbox-row" title="Soften the detector's cutoff when it has only a few examples, so it's less aggressive.">
             <input type="checkbox" [ngModel]="settings().safe_thresholds" (ngModelChange)="onToggle('safe_thresholds', $event)" />
             Safe thresholds
           </label>
           <div class="form-group">
-            <label class="form-label" title="Number of items to evaluate when calibrating the decision threshold after training">Calibrate count</label>
-            <input type="number" class="form-input" [ngModel]="settings().calibrate_count" (ngModelChange)="onNumberChange('calibrate_count', $event)" min="0" title="Number of items to evaluate during threshold calibration" />
+            <label class="form-label" title="Number of items to check when tuning the detector's cutoff after training">Tuning count</label>
+            <input type="number" class="form-input" [ngModel]="settings().calibrate_count" (ngModelChange)="onNumberChange('calibrate_count', $event)" min="0" title="Number of items to check when tuning the cutoff" />
           </div>
           <div class="form-group">
-            <label class="form-label" title="Fraction of labeled items to hold out for calibration (0 = none, 1 = all)">Calibration fraction</label>
-            <input type="number" class="form-input" [ngModel]="settings().calibration_fraction" (ngModelChange)="onNumberChange('calibration_fraction', $event)" min="0" max="1" step="0.05" title="Hold-out fraction for threshold calibration (0.0 to 1.0)" />
+            <label class="form-label" title="Fraction of labeled items to set aside for checking (0 = none, 1 = all)">Tuning fraction</label>
+            <input type="number" class="form-input" [ngModel]="settings().calibration_fraction" (ngModelChange)="onNumberChange('calibration_fraction', $event)" min="0" max="1" step="0.05" title="Fraction of labeled items to set aside for checking (0.0 to 1.0)" />
           </div>
         }
 
@@ -241,7 +268,7 @@
 
         <!-- Browser (VTSBrowse projection browser) -->
         @if (activeSettingsTab() === 'browser') {
-          <h3>Browser<vt-field-hint-icon hint="How the VTSBrowse projection browser looks, per media type. The same controls live on the browse canvas itself; changes here are remembered for next time."></vt-field-hint-icon></h3>
+          <h3>Browser<vt-field-hint-icon hint="How the Browse map looks, per media type. The same controls live on the browse canvas itself; changes here are remembered for next time."></vt-field-hint-icon></h3>
           @if (mediaTypes().length > 0) {
             <div class="view-tabs">
               @for (mt of mediaTypes(); track mt.type_id) {
@@ -259,12 +286,12 @@
             </div>
             <div class="view-tab-content browser-tab-content">
               <div class="form-group">
-                <label class="form-label" title="Slide clusters together to close the empty space between them when the projection is built">Compaction<vt-field-hint-icon hint="Slides clusters together to close the empty “oceans” between them, keeping each cluster’s shape intact. Applies to the next projection build or Re-project."></vt-field-hint-icon></label>
+                <label class="form-label" title="Slide clusters together to close the empty space between them when the map is built">Compaction<vt-field-hint-icon hint="Slides clusters together to close the empty “oceans” between them, keeping each cluster’s shape intact. Applies the next time the map is built or rebuilt."></vt-field-hint-icon></label>
                 <div class="toggle-group">
                   <button class="toggle-btn" [class.toggle-btn--active]="getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), true)" title="Close the empty space between clusters">
                     On
                   </button>
-                  <button class="toggle-btn" [class.toggle-btn--active]="!getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), false)" title="Keep UMAP's raw spacing">
+                  <button class="toggle-btn" [class.toggle-btn--active]="!getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), false)" title="Keep the map's original spacing">
                     Off
                   </button>
                 </div>
@@ -285,7 +312,7 @@
                 }
               </div>
               <div class="form-group">
-                <label class="form-label" title="On-screen size of the projection cells">Cell size</label>
+                <label class="form-label" title="On-screen size of the map cells">Cell size</label>
                 <select class="form-select" [ngModel]="getBrowseIconSize(activeBrowseTab())" (ngModelChange)="onBrowseIconSizeChange(activeBrowseTab(), $event)" aria-label="Browser cell size">
                   <option value="XS">XS</option>
                   <option value="S">S</option>
@@ -357,7 +384,7 @@
             <div class="server-value">{{ settings().max_concurrent_dataset_downloads ?? '—' }}</div>
           </div>
           <div class="form-group">
-            <label class="form-label" title="Maximum number of dataset embedding jobs the server runs in parallel">Max concurrent dataset embeddings</label>
+            <label class="form-label" title="How many datasets the server analyzes at once">Max datasets analyzed at once</label>
             <div class="server-value">{{ settings().max_concurrent_dataset_embeddings ?? '—' }}</div>
           </div>
           <div class="form-group">
@@ -372,6 +399,41 @@
               <div class="server-value server-value--empty">None</div>
             }
           </div>
+        }
+
+        @if (activeSettingsTab() === 'huggingface') {
+          <h3>HuggingFace<vt-field-hint-icon hint="Signs the server's downloads to the HuggingFace Hub. Use it to fetch gated demo datasets and gated AI models that your account has been granted access to. Your token is held in memory only and never written to disk."></vt-field-hint-icon></h3>
+
+          @let hf = hfStatus();
+          @if (hf === null) {
+            <div class="server-value server-value--empty">Checking sign-in status…</div>
+          } @else if (!hf.configured) {
+            <p class="hf-help">
+              "Sign in with HuggingFace" isn't configured on this server. To enable it, register an
+              OAuth app at
+              <a href="https://huggingface.co/settings/applications/new" target="_blank" rel="noopener noreferrer">huggingface.co</a>
+              and set the <code>HF_OAUTH_CLIENT_ID</code> (and <code>HF_OAUTH_CLIENT_SECRET</code>) environment variables.
+              Alternatively, set the <code>HF_TOKEN</code> environment variable to a token with access.
+            </p>
+          } @else if (hf.authenticated) {
+            <div class="hf-account">
+              <vt-icon type="check" [size]="16" class="hf-account__icon"></vt-icon>
+              <span class="hf-account__label">
+                Signed in to HuggingFace@if (hf.username) { as <strong>{{ hf.username }}</strong> }.
+              </span>
+            </div>
+            <p class="hf-help">Gated datasets and models your account can access will now download.</p>
+            <button class="btn btn--secondary" (click)="hfLogout()" title="Sign out of HuggingFace">Sign out</button>
+          } @else {
+            <p class="hf-help">
+              Sign in to download gated demo datasets (and gated AI models) that your HuggingFace
+              account has access to.
+            </p>
+            <button class="btn btn--primary" (click)="hfLogin()" title="Sign in with HuggingFace">
+              <vt-icon type="globe" [size]="14"></vt-icon>
+              Sign in with HuggingFace
+            </button>
+          }
         }
 
       </div>

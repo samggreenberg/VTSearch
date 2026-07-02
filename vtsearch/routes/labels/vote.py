@@ -231,7 +231,10 @@ def import_labels(body: dict):
             region_box = (float(rb_raw[0]), float(rb_raw[1]), float(rb_raw[2]), float(rb_raw[3]))
 
         for cid in cids:
-            apply_label(cid, label, region_box=region_box)
+            # Importing a labelset is a bulk action, not consecutive individual
+            # hand-clicks: credit the other vote achievements but not the
+            # Marathoner streak.
+            apply_label(cid, label, region_box=region_box, count_streak=False)
         applied += 1
 
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector

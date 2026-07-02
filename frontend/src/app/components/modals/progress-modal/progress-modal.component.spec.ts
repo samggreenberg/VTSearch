@@ -31,13 +31,13 @@ describe('ProgressModalComponent', () => {
 
   it('should set title based on metric', () => {
     component.metric = 'smart';
-    expect(component.title).toContain('Error Cost');
+    expect(component.title).toContain('Detector Accuracy');
 
     component.metric = 'stable';
-    expect(component.title).toContain('Prediction Flip');
+    expect(component.title).toContain('Changes Its Mind');
 
     component.metric = 'diverse';
-    expect(component.title).toContain('Diversity Coverage');
+    expect(component.title).toContain('Your Votes Cover');
   });
 
   it('should start in analyzing state', async () => {

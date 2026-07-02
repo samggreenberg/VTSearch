@@ -7,19 +7,19 @@
     <table class="stats-table">
       <tbody>
         <tr>
-          <td class="stat-label" title="Positively-labeled elements in this detector's labelset">Positives</td>
+          <td class="stat-label" title="Items you voted good in this detector">Positives</td>
           <td class="stat-value">{{ stats.num_positive | number }}</td>
         </tr>
         <tr>
-          <td class="stat-label" title="Negatively-labeled elements in this detector's labelset">Negatives</td>
+          <td class="stat-label" title="Items you voted bad in this detector">Negatives</td>
           <td class="stat-value">{{ stats.num_negative | number }}</td>
         </tr>
         <tr>
-          <td class="stat-label" title="Total labeled elements (positives + negatives)">Total labels</td>
+          <td class="stat-label" title="Total votes (positives + negatives)">Total labels</td>
           <td class="stat-value">{{ stats.num_total | number }}</td>
         </tr>
         <tr>
-          <td class="stat-label" title="How many positives currently resolve into the loaded dataset — the set the Browse button would project">In current dataset</td>
+          <td class="stat-label" title="How many positives are found in the loaded dataset — the set the Browse button would show on the map">In current dataset</td>
           <td class="stat-value">{{ resolvedSummary }}</td>
         </tr>
       </tbody>
@@ -33,11 +33,11 @@
           <td class="stat-value">{{ (stats.media_type | titlecase) || '-' }}</td>
         </tr>
         <tr>
-          <td class="stat-label" title="MediaEmbedder whose space the labels are resolved against">Embedder</td>
+          <td class="stat-label" title="The embedder this detector uses">Embedder</td>
           <td class="stat-value">{{ (stats.embedder | titlecase) || '-' }}</td>
         </tr>
         <tr>
-          <td class="stat-label" title="Clipper granularity this detector was trained on">Clipper</td>
+          <td class="stat-label" title="The clip size this detector was trained on">Clipper</td>
           <td class="stat-value">{{ stats.clipper || '-' }}</td>
         </tr>
         @if (stats.text_query) {
@@ -63,7 +63,7 @@
           <td class="stat-value">{{ formatTimestamp(stats.created_at) }}</td>
         </tr>
         <tr>
-          <td class="stat-label" title="When this detector's labelset was last trained">Last trained</td>
+          <td class="stat-label" title="When this detector was last trained on your votes">Last trained</td>
           <td class="stat-value">{{ formatTimestamp(stats.last_trained_at) }}</td>
         </tr>
         <tr>

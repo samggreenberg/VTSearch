@@ -142,6 +142,30 @@ class TestMakeConsoleProgress:
         cols = {seg.index("[") for seg in renders}
         assert len(cols) == 1, f"bars not aligned: columns were {cols}"
 
+    def test_long_labels_are_truncated_to_keep_bars_aligned(self, capsys):
+        """A label longer than _LABEL_WIDTH must not push its bar right: it is
+        truncated with an ellipsis so every bar's open bracket stays aligned."""
+        from vtscore.embedding.loader import _LABEL_WIDTH
+
+        cb = _make_console_progress(lambda *a, **kw: None)
+
+        cb("loading", "Importing torch…", 1, 2)  # short, gets padded
+        # 40 chars, well over the 32-char width; must be truncated, not overflow.
+        cb("loading", "Warming up CLAP General: resampling JIT…", 2, 3)
+        cb.flush()
+
+        captured = capsys.readouterr()
+        renders = [seg for seg in captured.out.replace("\033[K", "").split("\r") if "[" in seg]
+        cols = {seg.index("[") for seg in renders}
+        assert len(cols) == 1, f"long label shifted the bar: columns were {cols}"
+        # The long label was truncated with a trailing ellipsis before the bar.
+        long_renders = [seg for seg in renders if "Warming up CLAP General" in seg]
+        assert long_renders
+        for seg in long_renders:
+            label = seg[: seg.index("[")].strip()
+            assert len(label) == _LABEL_WIDTH
+            assert label.endswith("…")
+
     def test_elapsed_suffix_does_not_shift_bar(self, capsys):
         """A growing elapsed-time suffix ('1s' -> '10s') must not move the bar."""
         cb = _make_console_progress(lambda *a, **kw: None)
@@ -247,10 +271,10 @@ class TestPreloadConsoleOutput:
             mock_emb._on_progress("loading", "Loading CLAP model weights...", 0, 0)
             mock_emb._on_progress("loading", "model.safetensors", 50, 100)
             mock_emb._on_progress("loading", "model.safetensors", 100, 100)
-            mock_emb._on_progress("loading", "Warming up audio pipeline: importing libraries...", 1, 4)
-            mock_emb._on_progress("loading", "Warming up audio pipeline: resampling JIT...", 2, 4)
-            mock_emb._on_progress("loading", "Warming up audio pipeline: preprocessing...", 3, 4)
-            mock_emb._on_progress("loading", "Warming up audio pipeline: running model...", 4, 4)
+            mock_emb._on_progress("loading", "Warming up CLAP: importing libs…", 1, 4)
+            mock_emb._on_progress("loading", "Warming up CLAP: resampling JIT…", 2, 4)
+            mock_emb._on_progress("loading", "Warming up CLAP: preprocessing…", 3, 4)
+            mock_emb._on_progress("loading", "Warming up CLAP: running model…", 4, 4)
 
         mock_emb.load_models = fake_load_models
         mock_get_embedder.return_value = mock_emb
@@ -262,7 +286,7 @@ class TestPreloadConsoleOutput:
         assert "Preloading clap embedder" in captured.out
         assert "Loading CLAP model weights..." in captured.out
         assert "model.safetensors" in captured.out
-        assert "Warming up audio pipeline: importing libraries..." in captured.out
+        assert "Warming up CLAP: importing libs…" in captured.out
 
     @patch("vtscore.embedding.loader.predict_embedders_to_preload", return_value=["clap"])
     @patch("vtscore.media.get_embedder")

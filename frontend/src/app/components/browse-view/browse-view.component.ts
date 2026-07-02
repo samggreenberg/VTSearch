@@ -15,6 +15,7 @@ import { BrowseSelectionPanelComponent } from '../browse-selection-panel/browse-
 import { BrowseMinimapComponent } from '../browse-minimap/browse-minimap.component';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { IconComponent } from '../icon/icon.component';
+import { NoFocusStealDirective } from '../../directives/no-focus-steal.directive';
 import { ProjectionApiService } from '../../services/projection-api.service';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
@@ -35,6 +36,7 @@ import {
   type BrowseColormapId,
 } from '../browse-canvas/hex-render.util';
 import type { ProjectionMeta } from '../../models/projection.models';
+import { snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
@@ -53,6 +55,7 @@ import type { SettingsUpdate } from '../../generated/api-client/models/settings-
     ProgressBarComponent,
     IconComponent,
     BrowseBinPopupComponent,
+    NoFocusStealDirective,
   ],
   // Scoped per browse view so the canvas, its minimap, and the selection panel
   // share one viewport channel and one selection set without leaking across
@@ -87,6 +90,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   // build poller, settings effect), so a signal so those writes repaint the
   // canvas/minimap inputs and the info row under zoneless.
   readonly mediaType = signal('');
+  /**
+   * Preview-audio volume (0–1) for the Browse view's hover/bin-popup playback,
+   * seeded from and written back to the shared ``volume`` setting so it stays in
+   * lockstep with the Find view's player. Only surfaced (as a toolbar mute +
+   * slider) for audio datasets — the only media type Browse plays sound for.
+   */
+  readonly volume = signal(1);
+  /** Last non-zero level, so the mute toggle can restore where the user was. */
+  private preMuteVolume = 1;
   hoverEvent: HexHoverEvent | null = null;
   /**
    * Top of the density scale for the legend: the densest cell currently in
@@ -94,6 +106,16 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    */
   densityMax = 1;
   readonly status = signal<'loading' | 'building' | 'ready' | 'error' | 'done'>('loading');
+  /**
+   * Whether the canvas content is uncovered. The canvas is mounted (so it can
+   * lay out and fetch) as soon as {@link status} is ``ready``, but a cover stays
+   * over it until the canvas signals its opening view is fully painted — the
+   * fit ran and the top view's thumbnails decoded — so the user is shown the
+   * finished view instead of a thumbnail-less grid that then fills in. Reset to
+   * ``false`` each time a *fresh* canvas mounts (see {@link enterReady}); an
+   * in-place refresh of an already-ready canvas leaves it untouched.
+   */
+  readonly revealed = signal(false);
   readonly errorMessage = signal('');
   readonly buildProgress = signal(0);
   readonly buildTotal = signal(0);
@@ -174,11 +196,23 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    */
   readonly panelWidth = signal(300);
   /** Clamp + divider geometry, mirroring the Find view's panel dividers. */
-  private static readonly PANEL_MIN = 160;
+  /** Absolute smallest the panel may become, used before the panel's content
+   *  has laid out (so {@link panelMin} can't measure yet) and as a hard floor
+   *  under the dynamic, content-derived minimum. */
+  private static readonly PANEL_FLOOR = 96;
   private static readonly PANEL_MAX = 800;
   private static readonly CANVAS_MIN = 200;
   private static readonly DIVIDER_WIDTH = 8;
+  /** Once the saved width has been applied to the live panel, the panel width
+   *  is owned by the user's divider drags: later settings pushes (our own save
+   *  round-trip, an unrelated per-media pref change, …) must not reset it, or
+   *  the panel "pops back" to the stored width right after a drag. */
+  private panelWidthInitialized = false;
   private dragging = false;
+  /** Dynamic minimum snapshotted at drag start, so the per-move handler reuses
+   *  it instead of re-measuring the DOM (and thrashing layout) on every move —
+   *  the thumbnail size and sort-control width can't change mid-drag anyway. */
+  private dragMin = BrowseViewComponent.PANEL_FLOOR;
   private boundPanelMove = this.onPanelMouseMove.bind(this);
   private boundPanelUp = this.onPanelMouseUp.bind(this);
 
@@ -247,14 +281,18 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       const settingsErrored = this.settingsState.error() != null;
       if (settings) {
         this.lastSettings = settings;
-        if (settings.browse_panel_width != null) {
+        const vol = settings.volume ?? 1;
+        this.volume.set(vol);
+        if (vol > 0) this.preMuteVolume = vol;
+        if (settings.browse_panel_width != null && !this.panelWidthInitialized) {
           this.panelWidth.set(
             this.clamp(
               settings.browse_panel_width,
-              BrowseViewComponent.PANEL_MIN,
+              this.panelMin(),
               BrowseViewComponent.PANEL_MAX,
             ),
           );
+          this.panelWidthInitialized = true;
         }
         this.applyBrowsePrefsForMediaType();
       }
@@ -291,7 +329,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         // No handoff (e.g. a hard reload): the ephemeral subset is gone.
         this.status.set('error');
         this.errorMessage.set(
-          'This subset projection has expired. Re-run Find and click Browse to rebuild it.',
+          'This map has expired. Re-run Find and click Browse to rebuild it.',
         );
         return;
       }
@@ -524,7 +562,54 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private panelMax(): number {
     const layoutWidth = this.content?.nativeElement.getBoundingClientRect().width ?? 0;
     const fit = layoutWidth - BrowseViewComponent.DIVIDER_WIDTH - BrowseViewComponent.CANVAS_MIN;
-    return Math.min(BrowseViewComponent.PANEL_MAX, Math.max(BrowseViewComponent.PANEL_MIN, fit));
+    return Math.min(BrowseViewComponent.PANEL_MAX, Math.max(this.panelMin(), fit));
+  }
+
+  /**
+   * Smallest the side panel may shrink to, measured from the live panel content
+   * so it tracks the current thumbnail size and the sort control's real width.
+   *
+   * The floor is the larger of two needs, exactly as requested: room for a
+   * single thumbnail column (so the user can always pick one image), and room
+   * for the "Sort: [select]" control to sit on its own row. Whichever is wider
+   * wins — tiny thumbnails floor on the sort control; thumbnails larger than the
+   * sort control floor on the thumbnail. Falls back to {@link PANEL_FLOOR}
+   * before the content has laid out.
+   */
+  private panelMin(): number {
+    const root = this.content?.nativeElement;
+    if (!root) return BrowseViewComponent.PANEL_FLOOR;
+    const current = this.panelWidth();
+
+    let oneColumn = BrowseViewComponent.PANEL_FLOOR;
+    const list = root.querySelector('.bsp-list') as HTMLElement | null;
+    if (list) {
+      const goal = parseFloat(getComputedStyle(list).getPropertyValue('--grid-goal-width')) || 80;
+      const style = getComputedStyle(list);
+      const padH = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+      const bounding = list.getBoundingClientRect().width;
+      const scrollbar = Math.max(0, bounding - list.clientWidth);
+      // Chrome between the panel edge and the grid element (0 today, but measured
+      // so any future wrapper padding is accounted for automatically).
+      const chrome = Math.max(0, current - bounding);
+      oneColumn = Math.ceil(goal + padH + scrollbar + chrome) + 1;
+    }
+
+    let sortRow = 0;
+    const sort = root.querySelector('.bsp-sort') as HTMLElement | null;
+    if (sort) {
+      const toolbar = sort.closest('.bsp-toolbar') as HTMLElement | null;
+      let toolbarChromeH = 0;
+      if (toolbar) {
+        const tstyle = getComputedStyle(toolbar);
+        const tpad = parseFloat(tstyle.paddingLeft) + parseFloat(tstyle.paddingRight);
+        const panelChrome = Math.max(0, current - toolbar.getBoundingClientRect().width);
+        toolbarChromeH = tpad + panelChrome;
+      }
+      sortRow = Math.ceil(sort.getBoundingClientRect().width + toolbarChromeH) + 1;
+    }
+
+    return Math.max(BrowseViewComponent.PANEL_FLOOR, oneColumn, sortRow);
   }
 
   // --- Side-panel divider drag (mirrors the Find view's panel dividers) ----
@@ -532,6 +617,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   onDividerMouseDown(event: MouseEvent): void {
     event.preventDefault();
     this.dragging = true;
+    this.dragMin = this.panelMin();
     this.ngZone.runOutsideAngular(() => {
       document.addEventListener('mousemove', this.boundPanelMove);
       document.addEventListener('mouseup', this.boundPanelUp);
@@ -542,7 +628,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (!this.dragging || !this.content) return;
     const rect = this.content.nativeElement.getBoundingClientRect();
     // The panel is on the right, so its width grows as the cursor moves left.
-    const width = this.clamp(rect.right - event.clientX, BrowseViewComponent.PANEL_MIN, this.panelMax());
+    const fit = rect.width - BrowseViewComponent.DIVIDER_WIDTH - BrowseViewComponent.CANVAS_MIN;
+    const max = Math.min(BrowseViewComponent.PANEL_MAX, Math.max(this.dragMin, fit));
+    const width = this.clamp(rect.right - event.clientX, this.dragMin, max);
     // `panelWidth` is a signal read in the template's `--browse-panel-width`
     // binding, so the `.set()` schedules CD on its own — no `ngZone.run`.
     this.panelWidth.set(width);
@@ -553,6 +641,18 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.dragging = false;
     document.removeEventListener('mousemove', this.boundPanelMove);
     document.removeEventListener('mouseup', this.boundPanelUp);
+    // Pop tight to the column count the user dragged to: snap away any trailing
+    // empty strip so releasing never leaves a ragged half-column, then re-clamp.
+    // The snap only ever shrinks toward the current columns — it can't pop the
+    // panel back out wider — and the dynamic floor keeps at least one column and
+    // the sort control on screen.
+    const side = this.content?.nativeElement.querySelector('.browse-side') as HTMLElement | null;
+    const snapped = side ? snapPanelWidthToGridColumns(side, this.panelWidth()) : null;
+    if (snapped !== null) {
+      this.panelWidth.set(this.clamp(snapped, this.panelMin(), this.panelMax()));
+    }
+    // The user now owns the width; block the settings round-trip from resetting it.
+    this.panelWidthInitialized = true;
     this.settingsState.update({ browse_panel_width: Math.round(this.panelWidth()) }).subscribe();
   }
 
@@ -570,7 +670,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    */
   @HostListener('document:keydown', ['$event'])
   onKeydown(event: KeyboardEvent): void {
-    if (this.status() !== 'ready' || this.contextMenuOpen) return;
+    if (this.status() !== 'ready' || !this.revealed() || this.contextMenuOpen) return;
     if (shortcutsBlocked()) return;
 
     // Ctrl/Cmd-A: fully select every bin whose silhouette sits entirely in view.
@@ -627,6 +727,46 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.canvas?.zoomToFit();
   }
 
+  // --- Preview-audio volume (audio datasets only) -------------------------
+
+  /** Live drag of the volume slider: update the level (and the playing preview,
+   *  via the ``[volume]`` inputs) on every ``input`` without hammering the
+   *  settings API — the write is deferred to {@link onVolumeCommit} on release. */
+  onVolumeInput(event: Event): void {
+    const v = this.clampVolume(+(event.target as HTMLInputElement).value);
+    this.volume.set(v);
+    if (v > 0) this.preMuteVolume = v;
+  }
+
+  /** Slider released (``change``): persist the settled level once. */
+  onVolumeCommit(event: Event): void {
+    const v = this.clampVolume(+(event.target as HTMLInputElement).value);
+    this.setVolume(v);
+  }
+
+  /** Mute toggle: drop to 0 (remembering where we were) or restore the last
+   *  non-zero level. Persists immediately since it's a discrete action. */
+  toggleMute(): void {
+    if (this.volume() > 0) {
+      this.preMuteVolume = this.volume();
+      this.setVolume(0);
+    } else {
+      this.setVolume(this.preMuteVolume > 0 ? this.preMuteVolume : 1);
+    }
+  }
+
+  private setVolume(v: number): void {
+    const clamped = this.clampVolume(v);
+    this.volume.set(clamped);
+    if (clamped > 0) this.preMuteVolume = clamped;
+    this.settingsState.update({ volume: clamped }).subscribe();
+  }
+
+  private clampVolume(v: number): number {
+    if (!Number.isFinite(v)) return this.volume();
+    return Math.max(0, Math.min(1, v));
+  }
+
   // --- Right-click bin popup ----------------------------------------------
 
   /** Right-click on the canvas: pop the bin's item list at the cursor when it
@@ -664,7 +804,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       // Nothing to rebuild (e.g. Retry after the handoff expired).
       this.status.set('error');
       this.errorMessage.set(
-        'This subset projection has expired. Re-run Find and click Browse to rebuild it.',
+        'This map has expired. Re-run Find and click Browse to rebuild it.',
       );
       return;
     }
@@ -686,7 +826,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         error: (err) => {
           this.status.set('error');
           this.errorMessage.set(
-            err?.error?.message || err?.error?.error || 'Failed to start projection build',
+            err?.error?.message || err?.error?.error || 'Failed to build the map',
           );
         },
       });
@@ -730,7 +870,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         this.selection.consumeSurviveProjectionChange();
         this.status.set('error');
         this.errorMessage.set(
-          err?.error?.message || err?.error?.error || 'Failed to start re-projection',
+          err?.error?.message || err?.error?.error || 'Failed to build the map',
         );
       },
     });
@@ -745,6 +885,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * route here. Subset mode only — wired via the selection panel's ``canVerify``
    * affordance, itself gated on ``subset``.
    */
+  /**
+   * The selection panel's tri-state checkbox asked to select everything in
+   * view ([ ]/[-] → [x]). Forward it to the canvas, which owns the viewport;
+   * this is the mouse equivalent of the ctrl-A shortcut.
+   */
+  onSelectAllInView(): void {
+    this.canvas?.selectAllInView();
+  }
+
   onVerify(target: 'good' | 'bad'): void {
     const ids = this.selection.ids();
     if (ids.length === 0) return;
@@ -830,6 +979,31 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Enter the ready state, mounting the canvas. When we arrive from a non-ready
+   * status a *fresh* canvas is created, so drop the reveal cover and wait for
+   * its {@link BrowseCanvasComponent.firstViewReady}; an in-place refresh of an
+   * already-ready canvas (e.g. a subset cull re-binning in place) keeps the same
+   * canvas, so leave the cover state alone or it would strand a working view
+   * (the existing canvas won't re-emit the one-shot signal).
+   */
+  private enterReady(): void {
+    if (this.status() !== 'ready') this.revealed.set(false);
+    this.status.set('ready');
+  }
+
+  /** The canvas finished painting its opening view (fit + top-view thumbnails);
+   *  uncover it. */
+  onCanvasFirstView(): void {
+    this.revealed.set(true);
+  }
+
+  /** Message on the pre-reveal cover: names thumbnails for media that paint
+   *  them (the case this cover exists for), the projection otherwise. */
+  get preloadMessage(): string {
+    return usesThumbnails(this.mediaType()) ? 'Loading thumbnails…' : 'Loading map…';
+  }
+
   private loadProjection(): void {
     this.status.set('loading');
     this.polling = false;
@@ -846,7 +1020,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
           } else {
             this.status.set('error');
             this.errorMessage.set(
-              err?.error?.message || err?.error?.error || 'Failed to load projection',
+              err?.error?.message || err?.error?.error || 'Failed to build the map',
             );
           }
         },
@@ -866,12 +1040,12 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.tileCache.setContentVersion(meta.content_version ?? 0);
 
     if (meta.point_count > 0) {
-      this.status.set('ready');
+      this.enterReady();
       return;
     }
     if (meta.status === 'error') {
       this.status.set('error');
-      this.errorMessage.set(meta.error || 'Projection build failed');
+      this.errorMessage.set(meta.error || 'Failed to build the map');
       return;
     }
     if (meta.status === 'building') {
@@ -906,13 +1080,13 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
             this.tileCache.setProjectionId(meta.projection_id);
             if (meta.point_count > 0) {
               this.polling = false;
-              this.status.set('ready');
+              this.enterReady();
               return;
             }
             if (meta.status === 'error') {
               this.polling = false;
               this.status.set('error');
-              this.errorMessage.set(meta.error || 'Projection build failed');
+              this.errorMessage.set(meta.error || 'Failed to build the map');
               return;
             }
             this.buildProgress.set(meta.current ?? 0);
@@ -927,7 +1101,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
               this.polling = false;
               this.status.set('error');
               this.errorMessage.set(
-                'Lost contact with the server while building the projection.',
+                'Lost contact with the server while building the map.',
               );
               return;
             }

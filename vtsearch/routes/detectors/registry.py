@@ -225,15 +225,21 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
         return err
     assert importer is not None  # narrowed by err check
 
-    field_values = validate_plugin_args(importer, extra_keys=("name",))
+    field_values = validate_plugin_args(importer, extra_keys=("name", "embedder_type"))
 
-    # ``name`` is a pass-through key (not a declared plugin field) but is
-    # required by this route.  ``validate_plugin_args`` only keeps the
-    # keys we list in ``extra_keys``, so the route is in charge of
-    # enforcing presence.
+    # ``name`` and ``embedder_type`` are pass-through keys (not declared plugin
+    # fields) but are owned by this route.  ``validate_plugin_args`` only keeps
+    # the keys we list in ``extra_keys``, so the route enforces presence.
     name = str(field_values.pop("name", "") or "").strip()
     if not name:
         abort(422, message="Validation error", errors={"json": {"name": ["Missing data for required field."]}})
+
+    from vtscore.detectors.embedder_type import resolve_detector_embedder_type
+
+    requested_type = str(field_values.pop("embedder_type", "") or "").strip()
+    embedder_type_val, type_err = resolve_detector_embedder_type(requested_type)
+    if type_err:
+        abort(400, message=type_err)
 
     det_path = _detector_path(name)
     if det_path.exists():
@@ -293,6 +299,7 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
         "media_type": media_type,
         "examples": [],
         "created_at": time.time(),
+        "embedder_type": embedder_type_val,
         "labelset": labelset.to_dict(),
     }
     _write_detector(det_path, detector_data)
@@ -301,6 +308,7 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
         name=name,
         media_type=media_type,
         num_training=len(labelset),
+        embedder_type=embedder_type_val,
         created_by=get_current_user(),
     )
     update_detector(entry["id"], last_trained_at=time.time())

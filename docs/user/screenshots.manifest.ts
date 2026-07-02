@@ -289,7 +289,7 @@ export const SHOTS: Shot[] = [
   {
     id: 'settings-appearance',
     embeddedIn: 'docs/user/USER_GUIDE.md#solo-media-type--streamline-for-one-media-type',
-    caption: 'The Settings → Appearance pane: theme picker, the animation / metadata-panel / achievements toggles, and the per-media-type Scroll Style controls (Solo media type lives on the Import Defaults tab)',
+    caption: 'The Settings → Appearance pane: theme picker, the Show Animations pulldown (Show / Hide / OS Setting), the metadata-panel / achievements toggles, and the per-media-type Scroll Style controls (Solo media type lives on the Import Defaults tab)',
     themes: BOTH,
     async recipe(_page, h) {
       await h.dashboard();
@@ -321,7 +321,7 @@ export const SHOTS: Shot[] = [
   {
     id: 'browse-view',
     embeddedIn: 'docs/user/USER_GUIDE.md#browse--exploring-a-dataset-spatially',
-    caption: 'The Browse map: a pannable square-tile UMAP of a synthetic image dataset, with the legend and minimap on the right',
+    caption: 'The Browse map: a pannable square-tile map of a synthetic image dataset, with the legend and minimap on the right',
     themes: BOTH,
     annotations: [
       { target: '.browse-side-meta', kind: 'box', label: 'Legend + minimap' },
@@ -408,7 +408,7 @@ export const SHOTS: Shot[] = [
     id: 'find-stats',
     embeddedIn: 'docs/user/USER_GUIDE.md#find--scoring-and-verifying',
     caption:
-      "The Find view's Detector Stats modal: detector-vs-verified counts, a confusion matrix, and the false-positive / false-negative vs. inclusion tradeoff curve",
+      "The Find view's Detector Stats modal: detector-vs-verified counts, a breakdown of the detector's calls, and a chart of wrong matches vs. missed matches as inclusion changes",
     themes: BOTH,
     clip: { selector: '.modal-content' },
     async recipe(page, h) {

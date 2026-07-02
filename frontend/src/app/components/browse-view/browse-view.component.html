@@ -2,13 +2,13 @@
   @switch (status()) {
     @case ('loading') {
       <div class="browse-status">
-        <p class="browse-status-message">Loading projection…</p>
+        <p class="browse-status-message">Loading map…</p>
         <vt-progress-bar [indeterminate]="true" [value]="0" [max]="1" />
       </div>
     }
     @case ('building') {
       <div class="browse-status">
-        <p class="browse-status-message">Building projection…</p>
+        <p class="browse-status-message">Building the map…</p>
         <vt-progress-bar
           [indeterminate]="buildTotal() <= 0"
           [value]="buildProgress()"
@@ -39,9 +39,12 @@
       </div>
     }
     @case ('ready') {
-      <div class="browse-content" #content [style.--browse-panel-width]="panelWidth() + 'px'">
+      <div
+        class="browse-content"
+        #content
+        [style.--browse-panel-width]="panelWidth() + 'px'">
         <div class="browse-main">
-          <div class="browse-tools-left">
+          <div class="browse-tools-left" vtNoFocusSteal>
             @if (subset) {
               <button
                 type="button"
@@ -50,24 +53,16 @@
                 title="Return to the Find view (keeps any items you removed from Good)">
                 &larr; Back to Find
               </button>
-            } @else {
-              <button
-                type="button"
-                class="btn btn--secondary btn--sm browse-back"
-                (click)="back()"
-                title="Return to the dashboard">
-                &larr; Back to Dashboard
-              </button>
             }
             <button
               type="button"
               class="btn btn--secondary btn--sm browse-reproject"
               (click)="onReproject()"
               [title]="subset
-                ? 'Re-project the displayed items into a fresh 2-D layout'
-                : 'Re-project all items into a fresh 2-D layout'">
+                ? 'Rebuild the map from the items shown'
+                : 'Rebuild the map from all items'">
               <vt-icon type="shuffle" [size]="14"></vt-icon>
-              Re-project
+              Rebuild map
             </button>
           </div>
           <vt-browse-canvas
@@ -81,10 +76,12 @@
             (hexHover)="onHexHover($event)"
             (densityMaxChanged)="onDensityMaxChanged($event)"
             (contextMenu)="onCanvasContextMenu($event)"
+            (firstViewReady)="onCanvasFirstView()"
           />
           <vt-browse-hover-preview
             [hover]="hoverEvent"
             [mediaType]="mediaType()"
+            [volume]="volume()"
           />
           @if (contextMenuOpen) {
             <vt-browse-bin-popup
@@ -94,11 +91,12 @@
               [memberIds]="contextMembers"
               [repId]="contextRepId"
               [mediaType]="mediaType()"
+              [volume]="volume()"
               [hoverThumbRadius]="thumbnailRadius"
               (dismissed)="dismissContextMenu()"
             />
           }
-          <div class="browse-controls">
+          <div class="browse-controls" vtNoFocusSteal>
             <div class="browse-select" role="group" aria-label="Region select">
               <button
                 type="button"
@@ -157,6 +155,31 @@
                 <vt-icon type="image" [size]="18"></vt-icon>
               </button>
             </div>
+            @if (mediaType() === 'audio') {
+              <div class="browse-volume" role="group" aria-label="Preview volume">
+                <button
+                  type="button"
+                  class="browse-size-btn"
+                  (click)="toggleMute()"
+                  [attr.aria-pressed]="volume() === 0"
+                  [title]="volume() === 0 ? 'Unmute preview audio' : 'Mute preview audio'"
+                  [attr.aria-label]="volume() === 0 ? 'Unmute preview audio' : 'Mute preview audio'">
+                  <vt-icon [type]="volume() === 0 ? 'volume-mute' : 'volume'" [size]="15"></vt-icon>
+                </button>
+                <input
+                  type="range"
+                  class="browse-volume-slider"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  [value]="volume()"
+                  (input)="onVolumeInput($event)"
+                  (change)="onVolumeCommit($event)"
+                  title="Preview volume"
+                  aria-label="Preview volume"
+                />
+              </div>
+            }
           </div>
           <div class="browse-info">
             <span class="browse-info-label">{{ datasetName() }}</span>
@@ -176,6 +199,7 @@
             [canVerify]="subset"
             (verifyGood)="onVerify('good')"
             (verifyBad)="onVerify('bad')"
+            (selectAllInView)="onSelectAllInView()"
           />
           <div class="browse-side-meta">
             <div class="browse-side-minimap">
@@ -192,6 +216,18 @@
             />
           </div>
         </aside>
+
+        <!-- Cover the mounted-but-loading canvas until it signals its opening
+             view is fully painted (fit + top-view thumbnails), so the user is
+             shown the finished view rather than a thumbnail-less grid. -->
+        @if (!revealed()) {
+          <div class="browse-preload-cover">
+            <div class="browse-status">
+              <p class="browse-status-message">{{ preloadMessage }}</p>
+              <vt-progress-bar [indeterminate]="true" [value]="0" [max]="1" />
+            </div>
+          </div>
+        }
       </div>
     }
   }

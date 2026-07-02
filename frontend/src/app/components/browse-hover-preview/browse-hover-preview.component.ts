@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, inject, input, OnChanges, OnDestroy, signal, SimpleChanges, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, OnChanges, OnDestroy, signal, SimpleChanges, ViewChild } from '@angular/core';
 
 import { ActiveContextService } from '../../services/active-context.service';
 import type { HexHoverEvent } from '../browse-canvas/browse-canvas.component';
@@ -16,7 +16,18 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
 
   readonly hover = input<HexHoverEvent | null>(null);
   readonly mediaType = input('');
+  /** Preview-audio volume (0–1), driven by the Browse toolbar's volume control. */
+  readonly volume = input(1);
   @ViewChild('audioEl') audioRef?: ElementRef<HTMLAudioElement>;
+
+  constructor() {
+    // Keep the live element in sync when the toolbar slider moves mid-playback;
+    // ``playAudio`` also seeds it so a freshly-started clip honours the level.
+    effect(() => {
+      const el = this.audioRef?.nativeElement;
+      if (el) el.volume = this.volume();
+    });
+  }
 
   visible = false;
   left = 0;
@@ -93,6 +104,7 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
       const el = this.audioRef?.nativeElement;
       if (!el) return;
       el.loop = true;
+      el.volume = this.volume();
       el.load();
       el.play().catch(() => {});
     });

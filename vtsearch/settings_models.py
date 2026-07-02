@@ -32,6 +32,7 @@ __all__ = [
     "BROWSE_MOUSE_ZOOMS_PER_LEVEL",
     "BROWSE_THUMBNAIL_BORDER_PX",
     "POPUP_PREVIEW_SIZE_PX",
+    "AnimationMode",
     "BrowseColormap",
     "BrowseIconSize",
     "FocusMode",
@@ -39,6 +40,7 @@ __all__ = [
     "ServerSettings",
     "Theme",
     "UserSettings",
+    "VALID_ANIMATION_MODES",
     "VALID_BROWSE_COLORMAPS",
     "VALID_BROWSE_ICON_SIZES",
     "VALID_FOCUS_MODES",
@@ -49,6 +51,10 @@ __all__ = [
 
 
 Theme = Literal["dark", "light", "highviz", "system"]
+# Decorative-motion master switch. ``"show"`` forces animations on even when the
+# OS asks for reduced motion; ``"hide"`` always suppresses them; ``"os"`` defers
+# to the platform ``prefers-reduced-motion`` preference.
+AnimationMode = Literal["show", "hide", "os"]
 GridIconSize = Literal["XS", "S", "M", "L", "XL"]
 FocusMode = Literal["click", "hover"]
 # VTSBrowse density colormap preset. ``auto`` follows the active theme (Ocean
@@ -62,6 +68,7 @@ BrowseColormap = Literal["auto", "heat", "ocean", "gray"]
 BrowseIconSize = Literal["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"]
 
 VALID_THEMES: tuple[str, ...] = ("dark", "light", "highviz", "system")
+VALID_ANIMATION_MODES: tuple[str, ...] = ("show", "hide", "os")
 VALID_GRID_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
 VALID_FOCUS_MODES: tuple[str, ...] = ("click", "hover")
 VALID_BROWSE_COLORMAPS: tuple[str, ...] = ("auto", "heat", "ocean", "gray")
@@ -186,9 +193,11 @@ class UserSettings(BaseModel):
     audio_playing: bool = True
     # Master switch for decorative motion (vote swipe, icon spins/waggles/tilts,
     # toast/banner slide-ins, smooth scrolling, projection-browser zoom tweens).
-    # When False the frontend mirrors the OS "reduce motion" behavior. See the
-    # "Show Animations" checkbox in the appearance settings.
-    show_animations: bool = True
+    # ``"show"`` (the default) forces motion on even against an OS reduce-motion
+    # request, ``"hide"`` always suppresses it, and ``"os"`` follows the
+    # platform ``prefers-reduced-motion`` preference. See the "Show Animations"
+    # pulldown in the appearance settings.
+    show_animations: AnimationMode = "show"
     show_metadata: bool = True
     # Set to True once the user dismisses the zero-votes "Use ← / → or click"
     # hint that overlays the Good/Bad buttons when a fresh labeling session
@@ -306,6 +315,15 @@ class UserSettings(BaseModel):
     # derived from the main-canvas thumbnail radius. Clamped to
     # ``POPUP_PREVIEW_SIZE_PX``.
     popup_preview_size: dict[str, Annotated[int, _clamp(*POPUP_PREVIEW_SIZE_PX)]] = Field(default_factory=dict)
+    # VTSBrowse bin-popup metadata column, per media type. The popup can show a
+    # column to the left of the detail-canvas preview carrying the same
+    # name/media-type/custom-metadata/MD5 fields the Train/Find center panel
+    # shows for the focused item; this remembers whether that column is shown for
+    # each media type. Empty entries fall back on the frontend to shown (mirroring
+    # the center panel's default). Only image/video popups have a preview pane and
+    # thus a focused item to attach the column to, but the flag is stored per media
+    # type generically.
+    popup_metadata_shown: dict[str, bool] = Field(default_factory=dict)
     panel_pct_left: dict[str, int] = Field(default_factory=dict)
     panel_pct_right: dict[str, int] = Field(default_factory=dict)
 

@@ -10,6 +10,18 @@
   box-sizing: border-box;
 }
 
+// Buttons are controls, not prose: their labels should never be selectable.
+// Selectable button text lets a stray drag that begins on (or near) a button
+// pick up its label and hand it to the browser's native text drag-and-drop —
+// the origin of the VTSBrowse "dragging a transparent 'Re-project' layer"
+// glitch. Most UA stylesheets already set this on <button>, but app styles can
+// re-enable it by cascading `user-select` onto a shared ancestor, so pin it
+// explicitly. `[role="button"]` covers the handful of non-<button> controls.
+button,
+[role="button"] {
+  user-select: none;
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -49,14 +61,19 @@ html {
 
 // Honor OS-level "reduce motion" requests (also a useful escape hatch for
 // thin clients with no GPU compositing, where long CSS animations can pin a
-// software-rendered browser).
+// software-rendered browser). The `:not(.animations-on)` guard lets the
+// app-level "Show" mode (which adds `.animations-on` to <html>) force motion
+// back on even when the OS asks for reduced motion; "OS Setting" mode leaves
+// the class off so this rule governs.
 @media (prefers-reduced-motion: reduce) {
-  @include suppress-motion;
+  html:not(.animations-on) {
+    @include suppress-motion;
+  }
 }
 
-// App-level "Show Animations" setting. When the user turns it off,
+// App-level "Show Animations" setting. When the user picks "Hide",
 // SettingsStateService adds `.animations-off` to <html>, mirroring the
-// OS reduce-motion behavior above so one checkbox silences every decorative
+// OS reduce-motion behavior above so the one setting silences every decorative
 // animation and transition at once (vote swipe, icon spins/waggles/tilts,
 // toast/banner slide-ins, etc.). JS-driven motion gates on the matching
 // `prefersReducedMotion()` util.

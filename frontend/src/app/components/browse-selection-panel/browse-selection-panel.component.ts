@@ -7,6 +7,7 @@ import { MediaMetadataCacheService } from '../../services/media-metadata-cache.s
 import { ActiveContextService } from '../../services/active-context.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
+import { NoFocusStealDirective } from '../../directives/no-focus-steal.directive';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 
 /** Ordering for the selected-item list. No detector confidence in browse, so
@@ -38,7 +39,7 @@ interface SelectionEntry {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-selection-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule, ViewControlsComponent],
+  imports: [CommonModule, FormsModule, ViewControlsComponent, NoFocusStealDirective],
   templateUrl: './browse-selection-panel.component.html',
   styleUrl: './browse-selection-panel.component.scss',
 })
@@ -65,6 +66,14 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
 
   /** Emitted when the user marks the selection Verified Bad. */
   readonly verifyBad = output<void>();
+
+  /**
+   * Emitted when the header checkbox asks for a select-all-in-view (the [ ]/[-]
+   * → [x] click). The actual selection lives on the canvas — only it knows the
+   * viewport and which bins sit fully inside it — so the browse view forwards
+   * this to {@link BrowseCanvasComponent.selectAllInView}.
+   */
+  readonly selectAllInView = output<void>();
 
   // These are template-bound and written from the selection-refresh and
   // settings `effect()`s and the metadata-cache `version$` subscribe — none of
@@ -166,8 +175,30 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
     this.sortedEntries.set(this.buildSortedEntries());
   }
 
-  clear(): void {
-    this.selection.clear();
+  /**
+   * Tri-state of the header select-all checkbox: `none` when nothing is
+   * selected ([ ]), `all` when a select-all-in-view is active and untouched
+   * ([x] — see {@link BrowseSelectionService.allSelected}), or `some` for any
+   * other, partial selection ([-]). Both reads are signals, so the template
+   * binding re-evaluates when either the count or the latch changes.
+   */
+  checkState(): 'none' | 'some' | 'all' {
+    if (this.count() === 0) return 'none';
+    return this.selection.allSelected() ? 'all' : 'some';
+  }
+
+  /**
+   * The header checkbox click cycle: from [ ] or [-], select everything in view
+   * ([x]); from [x], clear the whole selection ([ ]). Select-all is the canvas's
+   * job (it owns the viewport), so we emit for the view to forward; clearing is
+   * a direct selection mutation.
+   */
+  onToggleCheckbox(): void {
+    if (this.checkState() === 'all') {
+      this.selection.clear();
+    } else {
+      this.selectAllInView.emit();
+    }
   }
 
   /** Ask the browse view to mark the selected items Verified Good and drop them. */

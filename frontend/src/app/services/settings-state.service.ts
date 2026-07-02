@@ -5,7 +5,7 @@ import { tap } from 'rxjs/operators';
 import type { AppSettings } from '../generated/api-client/models/app-settings';
 import type { SettingsUpdate } from '../generated/api-client/models/settings-update';
 import { SettingsApiService } from './settings-api.service';
-import { ANIMATIONS_OFF_CLASS } from '../utils/reduced-motion';
+import { ANIMATIONS_OFF_CLASS, ANIMATIONS_ON_CLASS } from '../utils/reduced-motion';
 
 /**
  * App-settings store, migrated onto Angular's reactive resource primitives
@@ -43,15 +43,20 @@ export class SettingsStateService {
 
   constructor() {
     // Reflect document-level effects of settings whenever the resolved value
-    // changes (load, update, or clear). Currently this mirrors the "Show
-    // Animations" toggle onto `<html>` as the `animations-off` class, which the
-    // global stylesheet and `prefersReducedMotion()` both honor so the one
-    // setting silences every decorative animation at once.
+    // changes (load, update, or clear). This mirrors the "Show Animations"
+    // pulldown onto `<html>`: "Hide" adds the `animations-off` class and "Show"
+    // adds the `animations-on` class (which forces motion on even against an OS
+    // reduce-motion request); "OS Setting" leaves both off so the platform
+    // preference governs. The global stylesheet and `prefersReducedMotion()`
+    // both honor these classes so the one setting governs every decorative
+    // animation at once.
     effect(() => {
       const settings = this.settingsSignal();
       if (typeof document !== 'undefined') {
-        const animationsOff = settings?.show_animations === false;
-        document.documentElement.classList.toggle(ANIMATIONS_OFF_CLASS, animationsOff);
+        const mode = settings?.show_animations;
+        const root = document.documentElement.classList;
+        root.toggle(ANIMATIONS_OFF_CLASS, mode === 'hide');
+        root.toggle(ANIMATIONS_ON_CLASS, mode === 'show');
       }
     });
   }

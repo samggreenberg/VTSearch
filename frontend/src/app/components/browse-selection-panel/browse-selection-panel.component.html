@@ -1,15 +1,38 @@
-<div class="bsp">
+<div class="bsp" vtNoFocusSteal>
   <div class="bsp-header">
     <h3 class="bsp-title" [title]="'Items you have selected on the canvas (' + count() + ')'">
       Selection ({{ count() | number }})
     </h3>
     <button
       type="button"
-      class="bsp-clear"
-      [disabled]="count() === 0"
-      (click)="clear()"
-      title="Clear the whole selection">
-      Clear
+      class="bsp-select-all"
+      role="checkbox"
+      [attr.aria-checked]="checkState() === 'all' ? 'true' : checkState() === 'some' ? 'mixed' : 'false'"
+      [attr.aria-label]="checkState() === 'all' ? 'Clear the whole selection' : 'Select everything in the current view'"
+      [title]="checkState() === 'all' ? 'Clear the whole selection' : 'Select everything in the current view'"
+      (click)="onToggleCheckbox()">
+      @switch (checkState()) {
+        @case ('all') {
+          <!-- Checked box: everything in view is selected. -->
+          <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <polyline points="8 12 11 15 16 9"/>
+          </svg>
+        }
+        @case ('some') {
+          <!-- Dashed box: a partial selection. -->
+          <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <line x1="8" y1="12" x2="16" y2="12"/>
+          </svg>
+        }
+        @default {
+          <!-- Empty box: nothing selected. -->
+          <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+          </svg>
+        }
+      }
     </button>
   </div>
 
@@ -35,20 +58,22 @@
   }
 
   <div class="bsp-toolbar">
-    <span class="bsp-sort-label" title="Choose how the selected items are ordered">Sort:</span>
-    <label for="bsp-sort-select" class="sr-only">Sort selected items</label>
-    <select
-      id="bsp-sort-select"
-      class="bsp-sort-select"
-      [ngModel]="sortMode"
-      (ngModelChange)="onSortChange($event)"
-      title="Order selected items by when they were selected, name, or ID">
-      <option value="time-desc">Newest first</option>
-      <option value="time-asc">Oldest first</option>
-      <option value="name-asc">Name A–Z</option>
-      <option value="name-desc">Name Z–A</option>
-      <option value="id-asc">ID ↑</option>
-    </select>
+    <div class="bsp-sort">
+      <span class="bsp-sort-label" title="Choose how the selected items are ordered">Sort:</span>
+      <label for="bsp-sort-select" class="sr-only">Sort selected items</label>
+      <select
+        id="bsp-sort-select"
+        class="bsp-sort-select"
+        [ngModel]="sortMode"
+        (ngModelChange)="onSortChange($event)"
+        title="Order selected items by when they were selected, name, or ID">
+        <option value="time-desc">Newest first</option>
+        <option value="time-asc">Oldest first</option>
+        <option value="name-asc">Name A–Z</option>
+        <option value="name-desc">Name Z–A</option>
+        <option value="id-asc">ID ↑</option>
+      </select>
+    </div>
     <vt-view-controls
       side="right"
       [currentMediaType]="mediaType()"

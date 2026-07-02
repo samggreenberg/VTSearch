@@ -60,7 +60,7 @@ describe('CenterPanelComponent (zoneless keyboard canary)', () => {
     // kicks the settings/embedders loads. The settings GET is driven by an
     // `rxResource`; while it is loading the zoneless app stays unstable, so we
     // must NOT `whenStable()` until it is flushed. Drain a macrotask + tick to
-    // let the GETs be issued, flush them, THEN settle. show_animations:false
+    // let the GETs be issued, flush them, THEN settle. show_animations:'hide'
     // takes the non-animated vote branch (no dangling timers) and is the
     // production path for "reduce motion".
     component.init();
@@ -69,7 +69,7 @@ describe('CenterPanelComponent (zoneless keyboard canary)', () => {
     // label_hint_dismissed:true so the first vote's hint-dismissal does not fire
     // a settings PUT we'd have to flush.
     for (const req of httpMock.match((r) => r.url.includes('settings'))) {
-      req.flush({ show_animations: false, label_hint_dismissed: true });
+      req.flush({ show_animations: 'hide', label_hint_dismissed: true });
     }
     for (const req of httpMock.match((r) => r.url.includes('embedders'))) {
       req.flush({ embedders: [] });
@@ -80,7 +80,7 @@ describe('CenterPanelComponent (zoneless keyboard canary)', () => {
   afterEach(() => {
     fixture.destroy();
     httpMock.verify();
-    // The settings effect mirrors show_animations:false onto <html>; undo it so
+    // The settings effect mirrors show_animations:'hide' onto <html>; undo it so
     // the class does not leak into other specs in the same jsdom document.
     document.documentElement.classList.remove(ANIMATIONS_OFF_CLASS);
   });

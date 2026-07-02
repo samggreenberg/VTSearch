@@ -30,24 +30,24 @@ that scores every item in the dataset by how well it matches what
 you're looking for. There are two ways to search:
 
 1. **Train a new detector.** Vote a handful of items **good** or
-   **bad** and a small neural net learns from your votes to rank the
+   **bad** and the detector learns from your votes to rank the
    rest of the dataset. Detectors are reusable - once trained, you can
    save one and re-apply it to any other dataset that shares its **media
-   type** *and* a **compatible embedder type** (semantic, patch, or
-   structural), or share it with another VTSearch user. A detector
-   trained in one embedding space can't score a dataset embedded in a
-   different one, so reuse is scoped to that pairing rather than to "any
-   future dataset of the same media type."
+   type** *and* a **compatible embedder** (the model that powers search
+   and matching), or share it with another VTSearch user. A detector
+   only works on a dataset set up with a compatible embedder, so reuse is
+   scoped to that pairing rather than to "any future dataset of the same
+   media type."
 2. **Use an existing detector.** Load one you (or someone else)
    trained earlier and score a fresh dataset with it. No new labeling
    required. Loaded detectors can also be re-trained against the new
    dataset's votes if you want to refine them further.
 
 A natural-language query ("dog barking", "red car in snow") seeds
-either flow: a pretrained embedding model ranks items by semantic
-similarity to your query, giving the detector a useful starting point.
-The text-similarity ranking also works as a quick stand-alone search
-when you don't need the precision of a trained detector.
+either flow: VTSearch ranks items by how well they match your words,
+giving the detector a useful starting point. This text ranking also
+works as a quick stand-alone search when you don't need the precision
+of a trained detector.
 
 VTSearch's **Autopilot** drives the training loop for you - picking
 which item to show next and when each phase ends - so most users never
@@ -90,8 +90,8 @@ dialog. It has three tabs, which boil down to two choices:
   the fields it needs (path, URL, media type) in a small form.
 
   The **Files → Manifest** importer also accepts a `.npz` archive of
-  pre-computed embedding vectors so you can import media you have
-  already embedded offline without paying for embedding twice. See
+  pre-computed fingerprints so you can import media you have already
+  processed offline without doing the work twice. See
   [Pre-computed embeddings (.npz)](#pre-computed-embeddings-npz) below.
 
 The quickest way to try VTSearch with no download is the **🏭 Synthetic
@@ -117,12 +117,12 @@ The file importers expose a collapsible **Advanced** section. The most
 important control there is the embedder picker, which is actually a
 three-role picker:
 
-- **Embedder** - the primary embedding model used to score the dataset
-  (SigLIP for images, LAION-CLAP for audio, etc.).
-- **Region embedder (optional)** - a patch-region-aware model that
-  enables [region voting on images](#region-voting-on-images).
-- **Instance embedder (optional)** - a structural (SIFT/VLAD) model for
-  matching specific instances/patterns.
+- **Embedder** - the main model that powers search and matching for the
+  dataset. VTSearch picks a sensible default for each media type.
+- **Region embedder (optional)** - a region-aware model that lets you
+  vote on parts of an image ([region voting on images](#region-voting-on-images)).
+- **Instance embedder (optional)** - a pattern-matching model for
+  finding a specific object or logo.
 
 Two more import toggles live nearby:
 
@@ -135,14 +135,13 @@ Two more import toggles live nearby:
   storage, but the dataset then depends on the source files staying put.
 
 Loading a dataset does three things: downloads or reads the media,
-generates an embedding for every item using the appropriate model
-(CLAP for audio, SigLIP for images, X-CLIP for video, E5 for text),
-and builds a **diversity tree** that groups similar items for later
-diverse sampling. Progress is shown in a modal while it runs.
+analyzes every item with the embedder so it can be searched, and groups
+similar items together so VTSearch can later suggest a broad mix.
+Progress is shown in a modal while it runs.
 
-If the model for your media type isn't cached yet, the first dataset
-of that type triggers a one-time download (e.g. CLAP is ~1.1 GB).
-Subsequent datasets of the same type reuse the cached model.
+If the model for your media type isn't downloaded yet, the first dataset
+of that type triggers a one-time download (around 1 GB). Subsequent
+datasets of the same type reuse the downloaded model.
 
 ### Pre-computed embeddings (.npz)
 
@@ -242,10 +241,9 @@ Once a dataset is loaded, VTSearch shows three panels left to right:
 - **Centre panel** - the **media viewer**. The selected item plays
   (audio), displays (image, video, text, document page), and offers
   two big vote buttons: **Good** (green) and **Bad** (red).  On
-  image datasets whose embedder supports regions - a patch-region
-  embedder (DINOv2/DINOv3/EUPE `_patch`) or a structural (SIFT/VLAD)
-  embedder - the centre panel also supports **region voting** - see
-  "Region voting on images" below.
+  image datasets whose embedder supports regions - a region-aware or
+  pattern-matching embedder - the centre panel also supports **region
+  voting** - see "Region voting on images" below.
 - **Right panel** - your **vote piles**. Everything you've voted good
   or bad is stacked here, most-recent first, so you can scan your
   work, un-vote, or re-vote.
@@ -275,22 +273,23 @@ just picks *which* items to show you and *when* each phase ends.
 The phase panel labels them, in order:
 
 1. **Find Initial Goods.** - Vote some **good** items (default: 3).
-   The detector needs positive examples before it can learn anything.
-   Autopilot offers strong candidates first via the same semantic
+   The detector needs good examples before it can learn anything.
+   Autopilot offers strong candidates first, using the same text
    ranking the Text sort uses. If you don't see anything good, type
    a text query into the sort bar to jump-start the ranking.
 2. **Find Initial Bads.** - Vote some **bad** items (default: 4). Now
-   the detector has both sides of the boundary. Autopilot flips to
-   items ranked low, so finding clear bad examples is usually quick.
+   the detector has examples of both what you want and what you don't.
+   Autopilot flips to items ranked low, so finding clear bad examples
+   is usually quick.
 3. **Refine Boundary.** - Autopilot serves items the detector is
-   **uncertain about** - the hardest cases near the decision boundary.
-   Voting these teaches the detector fastest. This phase continues
-   until the detector's confidence stabilises (the "smart" and
-   "stable" indicators in the status bar both turn green).
+   **uncertain about** - the borderline cases it can't yet call
+   confidently. Voting these teaches the detector fastest. This phase
+   continues until the detector's judgments settle down (the "smart"
+   and "stable" indicators in the status bar both turn green).
 4. **Explore Diversity.** - Autopilot serves items from parts of the
-   dataset the detector hasn't seen yet, using the diversity tree.
-   This catches edge cases the boundary phase missed. The phase ends
-   when the diversity coverage hits your goal (default: 40).
+   dataset the detector hasn't seen yet, so your votes cover a broad
+   mix. This catches edge cases the previous phase missed. The phase
+   ends when this coverage hits your goal (default: 40).
 
 When all four phases are done, Autopilot shows **Done!**. You can
 keep labeling if you want - the detector continues to improve - or
@@ -318,9 +317,8 @@ modal (gear icon) exposes:
 - **# Good to start** - how many good votes phase 1 requires (default 3).
 - **# Bad to start** - how many bad votes phase 2 requires (default 4).
 - **# Start to re-sort** - how many new votes to collect before the
-  learned detector is retrained and re-ranked during phases 3 and 4
-  (default 10).
-- **Goal Diversity** - the diversity coverage that phase 4 must reach
+  detector re-learns and re-ranks during phases 3 and 4 (default 10).
+- **Goal Diversity** - how much of your collection phase 4 must cover
   before finishing (default 40).
 
 Raising these numbers trains a more thorough detector at the cost of
@@ -350,15 +348,14 @@ Picks how the left-panel list is ordered. The sort bar offers three
 modes, in order: **Text**, **Load**, **Learned**.
 
 - **Text** - Type a natural-language query (e.g. "dog barking",
-  "aerial photo of farmland"). Items are ranked by semantic
-  similarity to your query using the embedding model for this
-  media type.
+  "aerial photo of farmland"). Items are ranked by how well they
+  match your query.
 - **Load** - Apply a previously saved detector. Opens a modal where
   you can **Sort by Detector** (pick a saved detector from the
   registry) or **Sort by Examples** (sort by similarity to one or
   more example media items).
-- **Learned** - Trains a small neural net on your current good/bad
-  votes and ranks items by its predictions. Needs at least one
+- **Learned** - Trains the detector on your current good/bad
+  votes and ranks items by its scores. Needs at least one
   good vote and one bad vote before it works.
 
 You can freely switch modes - votes and the detector persist across
@@ -370,10 +367,10 @@ Picks *which unlabeled item* the app highlights next.
 
 - **Top** - Pick the highest-ranked unlabeled item. Best for
   quickly finding strong matches.
-- **Hard** - Pick the item closest to the decision boundary.
-  These uncertain cases improve detector accuracy fastest.
-- **New** - Pick an item from an underexplored region of the
-  dataset using diversity sampling. Ensures broad coverage.
+- **Hard** - Pick the most borderline item - the one the detector
+  is least sure about. These uncertain cases improve the detector fastest.
+- **New** - Pick an item from a part of the dataset you haven't
+  covered yet. Ensures a broad mix.
 
 Autopilot cycles through these automatically in its four phases,
 but in Manual mode you choose directly.
@@ -383,24 +380,22 @@ but in Manual mode you choose directly.
 A numeric stepper from **-10** (strict) to **+10** (lenient),
 default 0.
 
-Nudges the classification threshold for the learned detector.
-Negative values mean "only call it good if you're very sure" -
-fewer positives, higher precision. Positive values mean "include
-borderline items" - more positives, higher recall. Changing it
-**triggers a retrain** of the learned sort so the new threshold is
-applied to the ranking.
+Nudges the detector's good/bad cutoff. Negative values mean "only
+call it good if you're very sure" - fewer matches, but the ones you
+get are more likely right. Positive values mean "include borderline
+items" - more matches, but more of them may be wrong. Changing it
+**re-runs the ranking** so the new cutoff takes effect.
 
-Leave at 0 unless you have a specific precision/recall trade-off
-in mind.
+Leave at 0 unless you want to deliberately lean toward catching
+everything or toward only the surest matches.
 
 ---
 
 ## Region voting on images
 
-When the dataset's embedder supports regions - a patch-region-aware
-model (DINOv2, DINOv3, or EUPE with a `_patch` slug) or a structural
-(SIFT/VLAD) model, set when the dataset was created - you can vote
-**good** on a *region* of the image instead of the whole image. This
+When the dataset's embedder supports regions - a region-aware or
+pattern-matching embedder, set when the dataset was created - you can
+vote **good** on a *region* of the image instead of the whole image. This
 tells the detector "this specific part is what I like", and the learned
 sort uses that hint to find similar regions elsewhere in the dataset.
 
@@ -467,8 +462,8 @@ need.
 
 ### What region voting does to the detector
 
-Region-voted good examples train the detector on the *region* (pooled
-from the patch grid) instead of the full image.  Bad votes are
+Region-voted good examples train the detector on the *region* you
+drew instead of the full image.  Bad votes are
 unaffected - VTSearch already treats every bad vote as "no region
 in this image is good" regardless of whether you drew a rectangle.
 
@@ -493,9 +488,9 @@ It has two tabs:
   **Text Example** ("e.g. dog barking sounds"), or pick a **media
   example** by browsing demos / server folders / uploading a file. When
   the active dataset offers more than one kind of embedder, a **Detector
-  Embedder Type** picker appears so you can choose the scoring space:
-  **Semantic**, **Patch Semantic**, or **Structural**. That choice fixes
-  what the detector is compatible with later. If the dataset's embedder
+  Embedder Type** picker appears so you can choose which one this detector
+  uses: **Semantic**, **Patch Semantic**, or **Structural**. That choice
+  fixes what the detector is compatible with later. If the dataset's embedder
   can't search by text, you'll see a note that you can still create the
   detector but must label a few examples to train it.
 - **Trained** - create a detector pre-trained on labels imported from an
@@ -535,12 +530,12 @@ The verification view's action buttons let you act on the result:
 - **To Dataset** - promote the full good set (verified + unverified)
   into its own new dataset.
 - **Add Corrections to Detector** - fold the items you changed from the
-  detector's call back into the detector's labelset and retrain it, so
+  detector's call back into the detector's examples and retrain it, so
   the detector gets better at the cases it got wrong.
-- **Stats** - open the evaluation modal: a confusion matrix plus a
-  false-positive / false-negative curve across inclusion, which is the
-  clearest way to see the precision/recall trade-off the inclusion
-  stepper controls.
+- **Stats** - open the results modal: a breakdown of the detector's
+  calls plus a chart of how wrong matches and missed matches change as
+  you adjust inclusion - the clearest way to see the trade-off the
+  inclusion stepper controls.
 - **Export** - send the good set to clipboard, a file, email, or a
   webhook (see [Exporting your work](#exporting-your-work)).
 - **Browse** - open the positive items in the spatial
@@ -548,7 +543,7 @@ The verification view's action buttons let you act on the result:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/find-stats.dark.png" />
-  <img src="assets/find-stats.light.png" alt="The Find view's Detector Stats modal: counts, a confusion matrix, and the false-positive / false-negative vs. inclusion curve" width="720" />
+  <img src="assets/find-stats.light.png" alt="The Find view's Detector Stats modal: counts, a breakdown of the detector's calls, and a chart of wrong matches vs. missed matches as inclusion changes" width="720" />
 </picture>
 
 ---
@@ -615,14 +610,13 @@ The Settings modal (gear icon) is organised into seven tabs:
   to send their results to.
 - **Autopilot** - the guided-workflow knobs described under
   [Configuring Autopilot](#configuring-autopilot).
-- **Browser** - per-media-type look of the spatial Browse view (bin
-  shape, density colormap, cell size).
+- **Browser** - per-media-type look of the spatial Browse view (tile
+  shape, colour scheme, cell size).
 - **Import Defaults** - default embedder, clipper, and converters per
   media type, plus the **Solo media type** picker.
 - **Server** - read-only settings fixed when the server started and
   shared by everyone.
-- **Sorting** - options that control how learned sorting and
-  calibration behave.
+- **Sorting** - options that control how the trained ranking behaves.
 
 ---
 
@@ -675,7 +669,7 @@ on whichever rows you currently have selected.
 
 Selecting two or more rows and clicking **Combine selected datasets**
 merges them into a single new dataset; **Combine selected detectors**
-likewise merges detectors (pooling their labelsets). This is handy for
+likewise merges detectors (pooling their votes). This is handy for
 stitching together work that started out split across several imports.
 
 ---
@@ -684,12 +678,12 @@ stitching together work that started out split across several imports.
 
 Open Browse from a dataset row's **⋯** overflow menu (**Browse
 dataset**) to get a bird's-eye map of the whole collection. VTSearch
-projects every item's embedding down to two dimensions (a UMAP
-projection) and renders the result as a pannable, zoomable density map.
+arranges every item on a two-dimensional map - similar items land near
+each other - and renders it as a pannable, zoomable density map.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/browse-view.dark.png" />
-  <img src="assets/browse-view.light.png" alt="The Browse map: a pannable hex-density UMAP of a synthetic image dataset, with the legend and minimap on the right" width="720" />
+  <img src="assets/browse-view.light.png" alt="The Browse map: a pannable hex-density map of a synthetic image dataset, with the legend and minimap on the right" width="720" />
 </picture>
 
 Browse is a way to *see
@@ -697,17 +691,17 @@ the shape* of a dataset - where the clusters are, how big they are, what
 sits between them - without training anything. It never votes, trains, or
 scores; it's a pure explorer.
 
-The first time you browse a dataset, VTSearch builds the projection (a
+The first time you browse a dataset, VTSearch builds the map (a
 progress bar shows the work). The layout is cached on the dataset, so
 later visits open instantly.
 
 ### Reading the map
 
 Each tile aggregates the items that landed in that part of the
-projection, and its **colour encodes how many** items are there - denser
+map, and its **colour encodes how many** items are there - denser
 regions are brighter. The **legend** on the right decodes the colour
 scale; the **minimap** above it shows where your current view sits within
-the whole projection.
+the whole map.
 
 Hovering a tile previews a representative item from that region:
 
@@ -732,9 +726,9 @@ for audio and text, where the tile is a density cell rather than a
 picture. The shape is chosen automatically from the dataset's media type -
 there's nothing to set.
 
-Top-left, **Re-project** shuffles the items into a fresh 2-D layout
-(handy when a cluster lands somewhere awkward), and **Back to Dashboard**
-returns you to the inventory.
+Top-left, **Rebuild map** shuffles the items into a fresh layout
+(handy when a cluster lands somewhere awkward). To return to the
+inventory, use the **Dashboard** button in the top bar.
 
 ### Selecting items
 
@@ -745,8 +739,8 @@ selection. **Clear** empties the whole selection. This is how you carve
 a region of interest out of a large collection by eye.
 
 Browse can also open **scoped to a Find result**: after scoring a dataset
-you can project just the matched items and use **Verified Good** /
-**Verified Bad** to lasso and prune false positives before exporting.
+you can map just the matched items and use **Verified Good** /
+**Verified Bad** to lasso and prune wrong matches before exporting.
 (See [Find](#find--scoring-and-verifying).)
 
 ---
@@ -774,7 +768,7 @@ not a raw JSON list - the default columns are **Label**, **MD5**,
 **Filename**, and **Category**, and you can pick which columns and which
 delimiter to use.
 
-You can also export **detector weights** from the Detectors dashboard
+You can also export a **detector** from the Detectors dashboard
 (the **Export** overflow item) - useful for sharing a trained detector
 with another VTSearch instance.
 

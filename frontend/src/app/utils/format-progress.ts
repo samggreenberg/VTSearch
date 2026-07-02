@@ -207,35 +207,6 @@ export interface ProgressHeader {
 /** Which load flow this progress event belongs to. */
 export type ProgressKind = 'dataset' | 'detector' | 'projection';
 
-const EMBEDDER_PRETTY: Record<string, string> = {
-  siglip: 'SigLIP',
-  siglip2: 'SigLIP 2',
-  clip: 'CLIP',
-  dinov2: 'DINOv2',
-  dinov2_patch: 'DINOv2',
-  dinov3: 'DINOv3',
-  dinov3_patch: 'DINOv3',
-  dinov3_single: 'DINOv3',
-  clap: 'LAION-CLAP',
-  clap_general: 'LAION-CLAP (general)',
-  clap_music: 'LAION-CLAP (music)',
-  xclip: 'X-CLIP',
-  'x-clip': 'X-CLIP',
-  whisper: 'Whisper',
-  whisper_encoder: 'Whisper',
-  paraspeechclap: 'ParaSpeechCLAP',
-  ast: 'AST',
-  e5: 'E5',
-  bge: 'BGE',
-  languagebind: 'LanguageBind',
-};
-
-function prettifyEmbedder(name: string | undefined): string {
-  if (!name) return '';
-  const key = name.toLowerCase().replace(/-/g, '_');
-  return EMBEDDER_PRETTY[key] ?? name;
-}
-
 /**
  * Strip a leading action verb (a gerund like "Embedding"/"Converting"/"Loading",
  * optionally "Re-…") from a per-item progress message. The structured header
@@ -273,7 +244,7 @@ export function formatProgressHeader(
     kind === 'detector'
       ? 'Loading detector'
       : kind === 'projection'
-        ? 'Building projection'
+        ? 'Building the map'
         : 'Loading dataset';
 
   let phase = '';
@@ -282,10 +253,10 @@ export function formatProgressHeader(
   if (kind === 'projection') {
     if (/pyramid|tiling|binning/i.test(message)) {
       phase = 'tiling layout';
-      subtitle = 'Binning the 2-D layout into the hex/square tile pyramid.';
+      subtitle = 'Grouping the items into map tiles.';
     } else {
-      phase = 'running UMAP';
-      subtitle = 'Projecting embeddings to 2-D so the dataset can be browsed as a map.';
+      phase = 'arranging';
+      subtitle = 'Arranging the items so the dataset can be browsed as a map.';
     }
   } else if (status === 'downloading') {
     if (/extract/i.test(message)) {
@@ -296,13 +267,10 @@ export function formatProgressHeader(
       subtitle = 'Fetching the dataset archive. Cached on disk for next time.';
     }
   } else if (status === 'embedding') {
-    phase = 'embedding files';
+    phase = 'analyzing files';
   } else if (status === 'loading' && /embedding model/i.test(message)) {
-    phase = 'embedding model';
-    const pretty = prettifyEmbedder(embedder);
-    subtitle = pretty
-      ? `Loading ${pretty} weights. First-time only; cached on disk afterwards.`
-      : 'Loading model weights. First-time only; cached on disk afterwards.';
+    phase = 'loading embedder';
+    subtitle = 'Loading the embedder. First-time only; cached on disk afterwards.';
   } else if (status === 'loading' && /text encoder|warming/i.test(message)) {
     phase = 'warming text encoder';
     subtitle = 'One-time warm-up so the first text search returns instantly.';
@@ -316,8 +284,8 @@ export function formatProgressHeader(
     phase = 'building diversity index';
     subtitle = 'Indexing for fast diverse browsing and autopilot guidance.';
   } else if (/projection|tile pyramid/i.test(message)) {
-    phase = 'building projection';
-    subtitle = 'Precomputing the 2-D Browse map so the canvas opens instantly.';
+    phase = 'building map';
+    subtitle = 'Building the Browse map so it opens instantly.';
   } else if (/saving to registry|serial|packaging|registering/i.test(message)) {
     // The whole serialize → zip → write → register window of step 4. These
     // messages used to match nothing, leaving a bare "Step 4 of 4" with no
@@ -328,8 +296,8 @@ export function formatProgressHeader(
     phase = 'slicing clips';
     subtitle = 'Cutting media into clips for finer-grained search.';
   } else if (/embedding clips/i.test(message)) {
-    phase = 'embedding clips';
-    subtitle = 'Computing a vector for each clip.';
+    phase = 'analyzing clips';
+    subtitle = 'Analyzing each clip so it can be searched.';
   } else if (/converting/i.test(message)) {
     phase = 'converting media';
     subtitle = 'Running the converter on each input file.';
@@ -343,11 +311,8 @@ export function formatProgressHeader(
     kind === 'detector' &&
     /embedding labels|re-?resolving labels|re-?embedding/i.test(message)
   ) {
-    phase = 'embedding labels';
-    const pretty = prettifyEmbedder(embedder);
-    subtitle = pretty
-      ? `Re-resolving label media into ${pretty} space so MLP training mixes only same-space vectors.`
-      : 'Re-resolving label media so MLP training mixes only same-space vectors.';
+    phase = 'analyzing labels';
+    subtitle = 'Analyzing your voted items with the embedder the labels use, so the detector trains on a consistent set.';
   } else if (status === 'loading' && /preparing|scanning|importing/i.test(message)) {
     phase = 'preparing';
     subtitle = /scanning/i.test(message)

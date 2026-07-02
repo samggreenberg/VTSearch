@@ -249,10 +249,30 @@
   }
 
   .loading-task-failed {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+
     .error-msg {
-      flex: 1;
+      // Take the remaining width but never push the action buttons out of
+      // view: min-width:0 lets the flex item shrink below its content size,
+      // and clamping the height keeps a pathologically long error (e.g. a
+      // stack-traced HTTP body) from growing the row tall enough to bury the
+      // buttons. Overflow scrolls instead.
+      flex: 1 1 auto;
+      min-width: 0;
+      max-height: 4.5em;
+      overflow-y: auto;
       font-size: var(--font-sm);
       color: var(--error-text);
+      overflow-wrap: anywhere;
+    }
+
+    &__actions {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
     }
   }
 }
