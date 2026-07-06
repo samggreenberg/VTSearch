@@ -1,7 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { of } from 'rxjs';
 
 import { BrowseHoverPreviewComponent } from './browse-hover-preview.component';
 import { ActiveContextService } from '../../services/active-context.service';
+import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import type { HexHoverEvent } from '../browse-canvas/browse-canvas.component';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleZoneless } from '../../testing/settle-resource';
@@ -43,10 +45,21 @@ describe('BrowseHoverPreviewComponent (zoneless canary)', () => {
     const activeContextStub: Partial<ActiveContextService> = {
       mediaUrl: (p: string) => p,
     };
+    // The audio hover path reads clip extents through the metadata cache; stub it
+    // so the component constructs without pulling the real root service (and its
+    // HttpClient dependency) into the test injector.
+    const metadataStub: Partial<MediaMetadataCacheService> = {
+      version$: of(0),
+      get: () => undefined,
+      ensureLoaded: () => {},
+    };
 
     await configureZoneless({
       imports: [BrowseHoverPreviewComponent],
-      providers: [{ provide: ActiveContextService, useValue: activeContextStub }],
+      providers: [
+        { provide: ActiveContextService, useValue: activeContextStub },
+        { provide: MediaMetadataCacheService, useValue: metadataStub },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(BrowseHoverPreviewComponent);

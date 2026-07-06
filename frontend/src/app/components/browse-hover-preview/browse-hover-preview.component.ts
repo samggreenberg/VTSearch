@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, OnChanges, OnDestroy, signal, SimpleChanges, ViewChild } from '@angular/core';
 
 import { ActiveContextService } from '../../services/active-context.service';
+import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
+import { applyClipWindow, clearClipWindow } from '../../utils/clip-window';
 import type { HexHoverEvent } from '../browse-canvas/browse-canvas.component';
 
 @Component({
@@ -13,6 +15,7 @@ import type { HexHoverEvent } from '../browse-canvas/browse-canvas.component';
 })
 export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   private activeContext = inject(ActiveContextService);
+  private metadataCache = inject(MediaMetadataCacheService);
 
   readonly hover = input<HexHoverEvent | null>(null);
   readonly mediaType = input('');
@@ -100,11 +103,18 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
     if (this.audioSrc === src) return;
     this.audioSrc = src;
 
+    // Kick off metadata hydration so the clip window (clip_start/clip_end) is
+    // available by the time the audio's loadedmetadata fires; the fetch runs
+    // while the element loads.
+    this.metadataCache.ensureLoaded([mediaId]);
+
     setTimeout(() => {
       const el = this.audioRef?.nativeElement;
       if (!el) return;
-      el.loop = true;
       el.volume = this.volume();
+      // Windowed archive-member clips serve the whole file: seek to clip_start
+      // and loop within [clip_start, clip_end] instead of playing it all.
+      applyClipWindow(el, () => this.metadataCache.get(mediaId));
       el.load();
       el.play().catch(() => {});
     });
@@ -113,6 +123,7 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   private stopAudio(): void {
     const el = this.audioRef?.nativeElement;
     if (el) {
+      clearClipWindow(el);
       el.pause();
       el.currentTime = 0;
     }

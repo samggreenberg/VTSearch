@@ -10,6 +10,7 @@ import { ViewControlsComponent } from '../view-controls/view-controls.component'
 import { IconComponent } from '../icon/icon.component';
 import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
+import { applyClipWindow, clearClipWindow } from '../../utils/clip-window';
 import { usesThumbnails } from '../browse-canvas/hex-render.util';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
@@ -909,8 +910,12 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     setTimeout(() => {
       const el = this.audioRef?.nativeElement;
       if (!el) return;
-      el.loop = true;
       el.volume = this.volume();
+      // Windowed archive-member clips serve the whole file: seek to clip_start
+      // and loop within [clip_start, clip_end]. The hovered item's metadata is
+      // already hydrated (prefetchVisible loads the visible window), and is read
+      // lazily inside the handlers regardless.
+      applyClipWindow(el, () => this.metadataCache.get(id));
       el.load();
       el.play().catch(() => {});
     });
@@ -929,6 +934,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   private stopAudio(): void {
     const el = this.audioRef?.nativeElement;
     if (el) {
+      clearClipWindow(el);
       el.pause();
       el.currentTime = 0;
     }
