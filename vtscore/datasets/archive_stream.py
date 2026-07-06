@@ -25,6 +25,7 @@ from __future__ import annotations
 import tarfile
 import threading
 import zipfile
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -58,6 +59,126 @@ _index_lock = threading.Lock()
 def _cache_key(path: Path) -> tuple[str, int, int]:
     st = path.stat()
     return (str(path), st.st_size, st.st_mtime_ns)
+
+
+#: Upper bound on simultaneously-open archive handles.  Reads seek within a
+#: reused handle instead of reopening the archive on every HTTP Range request,
+#: so a windowed-audio corpus no longer exhausts the process fd limit.  The
+#: least-recently-used archive is closed once the pool exceeds this size.
+_MAX_OPEN_ARCHIVES = 32
+
+
+class _PooledArchive:
+    """A reusable open handle to one tar/zip archive.
+
+    Holds a single ``tarfile.TarFile`` / ``zipfile.ZipFile`` open across many
+    range reads.  Reads on the same archive are serialised by ``_lock`` because
+    ``TarFile`` (and, pre-parallel, ``ZipFile``) share one underlying file
+    position across member file objects, so concurrent seeks would corrupt each
+    other.  Different archives use different instances and read in parallel.
+    """
+
+    def __init__(self, path: Path, is_zip: bool) -> None:
+        self.path = path
+        self.is_zip = is_zip
+        self._lock = threading.Lock()
+        self._handle: Any = _open_archive(path, is_zip)
+
+    def read(self, info: Any, start: int, length: int | None) -> bytes:
+        with self._lock:
+            handle = self._handle
+            if handle is not None:
+                return _read_from(handle, info, start, length, self.is_zip)
+            # Evicted/closed out from under a stale reference: fall back to a
+            # one-shot open/close for just this read so no fd is retained.
+            handle = _open_archive(self.path, self.is_zip)
+            try:
+                return _read_from(handle, info, start, length, self.is_zip)
+            finally:
+                handle.close()
+
+    def close(self) -> None:
+        """Close the underlying handle, waiting for any in-flight read first."""
+        with self._lock:
+            handle, self._handle = self._handle, None
+        if handle is not None:
+            try:
+                handle.close()
+            except Exception:  # noqa: BLE001 - best-effort fd release
+                pass
+
+
+# Process-scoped pool of open archive handles, keyed like ``_index_cache`` and
+# ordered least-recently-used first for eviction.
+_handle_cache: OrderedDict[tuple[str, int, int], _PooledArchive] = OrderedDict()
+_handle_lock = threading.Lock()
+
+
+def _open_archive(path: Path, is_zip: bool) -> Any:
+    if is_zip:
+        return zipfile.ZipFile(path, "r")
+    try:
+        return tarfile.open(path, "r:*")
+    except tarfile.TarError as exc:
+        raise ArchiveMemberError(f"Not a readable tar/zip archive: {path} ({exc})") from exc
+
+
+def _read_from(handle: Any, info: Any, start: int, length: int | None, is_zip: bool) -> bytes:
+    if is_zip:
+        with handle.open(info, "r") as f:
+            if start:
+                f.seek(start)
+            return f.read() if length is None else f.read(length)
+    extracted = handle.extractfile(info)
+    if extracted is None:
+        raise ArchiveMemberError(f"Member {info.name!r} is not a regular file")
+    with extracted as f:
+        if start:
+            f.seek(start)
+        return f.read() if length is None else f.read(length)
+
+
+def _pooled_archive(path: Path, is_zip: bool) -> _PooledArchive:
+    """Return the pooled handle for *path*, opening and caching it on first use.
+
+    Insertion may evict the least-recently-used archive; evictions are closed
+    outside ``_handle_lock`` (each ``close`` waits on its own read lock) so the
+    pool never blocks on a slow ``close`` and locks are never nested.
+    """
+    key = _cache_key(path)
+    with _handle_lock:
+        pooled = _handle_cache.get(key)
+        if pooled is not None:
+            _handle_cache.move_to_end(key)
+            return pooled
+
+    # Open outside the pool lock; another thread may race us to the same key.
+    opened = _PooledArchive(path, is_zip)
+    to_close: list[_PooledArchive] = []
+    with _handle_lock:
+        existing = _handle_cache.get(key)
+        if existing is not None:
+            _handle_cache.move_to_end(key)
+            pooled = existing
+            to_close.append(opened)
+        else:
+            _handle_cache[key] = opened
+            pooled = opened
+            while len(_handle_cache) > _MAX_OPEN_ARCHIVES:
+                _, evicted = _handle_cache.popitem(last=False)
+                to_close.append(evicted)
+    for handle in to_close:
+        handle.close()
+    return pooled
+
+
+def _reset_pool() -> None:
+    """Close and drop all pooled archive handles (test/shutdown hook)."""
+    with _handle_lock:
+        handles = list(_handle_cache.values())
+        _handle_cache.clear()
+    for handle in handles:
+        handle.close()
 
 
 def _is_zip(path: Path) -> bool:
@@ -137,30 +258,16 @@ def read_member_range(
     """Read *length* bytes of *member* starting at byte offset *start*.
 
     ``length=None`` reads to the end of the member.  The archive handle is
-    opened and closed within the call (each call gets its own handle, so
-    concurrent range requests don't share mutable archive state), and the
+    drawn from a bounded process-scoped pool (see :func:`_pooled_archive`) and
+    left open for reuse, so a burst of HTTP Range requests over a windowed-audio
+    corpus reuses a handful of fds instead of opening one per request.  The
     member's file object is *seeked* to *start* so only the requested slice is
     read -- the whole member is never materialised for a partial request.
     """
     path, info, is_zip = _resolve(archive_path, member)
     if start < 0:
         start = 0
-
-    if is_zip:
-        with zipfile.ZipFile(path, "r") as zf:
-            with zf.open(info, "r") as f:
-                if start:
-                    f.seek(start)
-                return f.read() if length is None else f.read(length)
-
-    with tarfile.open(path, "r:*") as tf:
-        extracted = tf.extractfile(info)
-        if extracted is None:
-            raise ArchiveMemberError(f"Member {member!r} is not a regular file in {path}")
-        with extracted as f:
-            if start:
-                f.seek(start)
-            return f.read() if length is None else f.read(length)
+    return _pooled_archive(path, is_zip).read(info, start, length)
 
 
 def archive_member_ref(media: dict[str, Any]) -> tuple[str, str] | None:

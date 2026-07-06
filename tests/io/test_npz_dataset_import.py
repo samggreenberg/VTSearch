@@ -297,7 +297,7 @@ class TestServerFilesNpzRunsEndToEnd:
             npz,
             filenames=np.array([str(src)]),
             vectors=vec[np.newaxis],
-            embedder_name=np.array("laion-clap"),
+            embedder_name=np.array("clap"),
         )
 
         imp = ServerFilesDatasetImporter()
@@ -306,8 +306,36 @@ class TestServerFilesNpzRunsEndToEnd:
 
         assert len(medias) == 1
         media = next(iter(medias.values()))
-        assert media["embedder"] == "laion-clap"
-        assert media["origin"]["params"]["embedder_name"] == "laion-clap"
+        assert media["embedder"] == "clap"
+        assert media["origin"]["params"]["embedder_name"] == "clap"
+
+    def test_unregistered_npz_embedder_name_raises_at_import(self, tmp_path):
+        """An NPZ embedder name VTSearch can't route is rejected up front, with
+        the valid options listed, rather than silently disabling text search."""
+        from helpers import make_raw_wav_bytes
+
+        src = tmp_path / "clip.wav"
+        src.write_bytes(make_raw_wav_bytes())
+
+        rng = np.random.default_rng(0)
+        vec = rng.standard_normal(512).astype(np.float32)
+        npz = tmp_path / "list.npz"
+        np.savez(
+            npz,
+            filenames=np.array([str(src)]),
+            vectors=vec[np.newaxis],
+            embedder_name=np.array("audemb_largerclapgeneral"),
+        )
+
+        imp = ServerFilesDatasetImporter()
+        medias: dict = {}
+        with pytest.raises(ValueError) as exc:
+            imp.run({"paths_file": str(npz), "media_type": "audio"}, medias)
+        msg = str(exc.value)
+        assert "audemb_largerclapgeneral" in msg
+        assert "audio" in msg
+        assert "clap" in msg  # the registered options are listed
+        assert medias == {}
 
     def test_npz_per_key_layout_is_accepted(self, tmp_path):
         from helpers import make_raw_wav_bytes
