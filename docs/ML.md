@@ -11,7 +11,7 @@ Linear(input_dim, hidden_dim) -> ReLU -> Dropout(p) -> Linear(hidden_dim, 1)
 ```
 
 - **Input dimension**: Dynamic, depends on the embedding model for the current media type (see [Embedding Models](#embedding-models) below).
-- **Hidden layer**: Width chosen automatically by `_auto_hidden_dim(n_train)`: `max(MLP_HIDDEN_MIN, min(MLP_HIDDEN_MAX, n_train // 3))`, i.e. 4–32 neurons depending on training set size. Dropout (`MLP_DROPOUT=0.5`) is applied after ReLU during training.
+- **Hidden layer**: Width chosen automatically by `_auto_hidden_dim(n_train)`: `max(MLP_HIDDEN_MIN, min(MLP_HIDDEN_MAX, n_train // 3))`, i.e. 8–32 neurons depending on training set size. Dropout (`MLP_DROPOUT=0.5`) is applied after ReLU during training.
 - **Output**: A single logit. `torch.sigmoid` is applied at inference time to produce a probability in [0, 1].
 
 The model outputs raw logits (not probabilities) during training. This allows the use of `BCEWithLogitsLoss`, which fuses the sigmoid and binary cross-entropy computation using the log-sum-exp trick for better numerical stability. At inference time, `torch.sigmoid()` is applied explicitly to convert logits to probabilities.

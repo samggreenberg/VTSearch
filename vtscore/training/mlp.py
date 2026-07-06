@@ -27,7 +27,8 @@ def _auto_hidden_dim(n_train: int) -> int:
 
     Keeps the model small when few votes are available to reduce
     overfitting, and grows (up to ``MLP_HIDDEN_MAX``) as more labels
-    arrive.
+    arrive.  The width is floored at ``MLP_HIDDEN_MIN`` (8): below ~8
+    neurons the detector underfits and destabilizes on harder tasks.
     """
     return max(MLP_HIDDEN_MIN, min(MLP_HIDDEN_MAX, n_train // 3))
 

@@ -149,7 +149,7 @@ when one is in scope). Tests rely on this: they override
 | `TRAIN_EPOCHS`           | `200`   | `VTSEARCH_TRAIN_EPOCHS`       | Upper bound on MLP training epochs. `vtscore.training.mlp.train_model` may early-stop sooner.                    |
 | `TRAIN_PATIENCE`         | `10`    | `VTSEARCH_TRAIN_PATIENCE`     | Epochs the training loss must fail to improve before early-stop fires. `0` disables early-stop.                  |
 | `DEFAULT_CALIBRATE_COUNT`| `1`     | `VTSEARCH_CALIBRATE_COUNT`    | First-run default for `CoreConfig.calibrate_count`. Min 1.                                                       |
-| `MLP_HIDDEN_MIN`         | `4`     | -                             | Auto-sizing floor for MLP hidden width.                                                                          |
+| `MLP_HIDDEN_MIN`         | `8`     | -                             | Auto-sizing floor for MLP hidden width.                                                                          |
 | `MLP_HIDDEN_MAX`         | `32`    | -                             | Auto-sizing ceiling for MLP hidden width.                                                                        |
 | `MLP_DROPOUT`            | `0.5`   | -                             | Dropout rate for trained MLPs.                                                                                   |
 
