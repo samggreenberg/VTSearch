@@ -14,7 +14,7 @@ it can't drift far. (Point-in-time UI review/audit reports live in
 ## VTSBrowse (UMAP hexbin dataset browser)
 
 - [vtsbrowse.md](vtsbrowse.md): core design + what shipped (the feature is live; thin open work — tuning, WebGL escape hatch)
-- [vtsbrowse-empirical-tuning.md](vtsbrowse-empirical-tuning.md): UMAP/pyramid/renderer tuning pass (not started — needs a browser)
+- [vtsbrowse-empirical-tuning.md](vtsbrowse-empirical-tuning.md): UMAP/pyramid/renderer tuning pass (Deliverable 1 shipped — UMAP knobs are settings + the persisted projection is keyed on them; the sweep + qualitative browser pass remain)
 - [vtsbrowse-toponymy.md](vtsbrowse-toponymy.md): named-region "street signs" (design only)
 - [vtsbrowser-hex-circle-radius.md](vtsbrowser-hex-circle-radius.md): singleton-circle radius investigation (needs visual verification)
 - [vtsbrowser-qa-followups.md](vtsbrowser-qa-followups.md): QA-drive follow-ups (deferred: startup wedge, tab crash; skipped: toolbar overlay)

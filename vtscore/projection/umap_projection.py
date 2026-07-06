@@ -32,6 +32,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from vtscore.config import PROJECTION_MIN_DIST, PROJECTION_N_NEIGHBORS
+
 # Matches the ingest progress-callback shape (status, message, current, total).
 ProgressCallback = Callable[[str, str, int, int], None]
 
@@ -58,6 +60,12 @@ class Projection:
     ids: list[int]
     coords: np.ndarray  # (N, 2) float32
     method: str
+    #: UMAP knobs this layout was fit under, stamped so a persisted
+    #: projection can be invalidated when the settings change.  ``None`` on
+    #: the PCA / trivial fallbacks (which ignore these knobs) and on legacy
+    #: containers written before the params were recorded.
+    n_neighbors: int | None = None
+    min_dist: float | None = None
 
     @property
     def bounds(self) -> tuple[float, float, float, float]:
@@ -89,7 +97,9 @@ def remove_ids(projection: Projection, remove: Iterable[int]) -> Projection:
         new_coords = np.ascontiguousarray(projection.coords[keep], dtype=np.float32)
     else:
         new_coords = projection.coords
-    return Projection(projection.projection_id, new_ids, new_coords, projection.method)
+    return Projection(
+        projection.projection_id, new_ids, new_coords, projection.method, projection.n_neighbors, projection.min_dist
+    )
 
 
 def _trivial_layout(n: int) -> np.ndarray:
@@ -178,8 +188,8 @@ def fit_projection(
     matrix: np.ndarray,
     ids: list[int],
     *,
-    n_neighbors: int = 15,
-    min_dist: float = 0.1,
+    n_neighbors: int = PROJECTION_N_NEIGHBORS,
+    min_dist: float = PROJECTION_MIN_DIST,
     min_n_for_umap: int = 10,
     random_state: int | None = None,
     compact: bool = True,
@@ -253,4 +263,4 @@ def fit_projection(
         _progress("projecting", "compacting layout", 0, 0)
         coords = compact_layout(coords)
 
-    return Projection(projection_id, list(ids), coords, "umap")
+    return Projection(projection_id, list(ids), coords, "umap", n_neighbors, min_dist)
