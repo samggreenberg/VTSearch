@@ -67,6 +67,42 @@ def read_npz_embedder_name(npz_path: Path) -> str:
     return ""
 
 
+def validate_manifest_embedder_name(
+    embedder_name: str, media_type_id: str, *, source_label: str = "NPZ manifest"
+) -> None:
+    """Reject a manifest *embedder_name* that VTSearch can't route to a real embedder.
+
+    An NPZ manifest may name the embedder that produced its vectors.  VTSearch
+    binds a dataset's text / region search slots by looking that name up in the
+    embedder registry (see :func:`vtscore.embedding.binding.derive_binding`), so a
+    name that is unregistered - or registered for a *different* media type - binds
+    no slot, and text queries later fail with a confusing 400 ("does not support
+    text queries").  Catch it here, at import, and point the user at the embedders
+    that are actually valid for this media type.
+
+    An empty / whitespace name is allowed: it simply means the manifest declares no
+    embedder (the importer falls back to the media type's default).  Raises
+    :class:`ValueError` for a non-empty name that is not a registered
+    *media_type_id* embedder.
+    """
+    name = (embedder_name or "").strip()
+    if not name:
+        return
+
+    from vtscore.media import embedders_for_type  # noqa: PLC0415 - avoid import cycle
+
+    valid = [e.name for e in embedders_for_type(media_type_id)]
+    if name in valid:
+        return
+    options = ", ".join(valid) if valid else "(none registered for this media type)"
+    raise ValueError(
+        f"{source_label} names embedder {name!r}, which is not a registered VTSearch "
+        f"{media_type_id} embedder. Text and region search bind by embedder name, so "
+        f"an unregistered name silently disables them. Set embedder_name to one of the "
+        f"registered {media_type_id} embedders: {options}."
+    )
+
+
 def read_npz_filenames_and_vectors(npz_path: Path) -> dict[str, np.ndarray]:
     """Return a ``{filename: vector}`` mapping read from *npz_path*.
 

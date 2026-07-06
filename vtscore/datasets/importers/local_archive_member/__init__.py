@@ -42,6 +42,7 @@ from vtscore.datasets.archive_stream import (
 from vtscore.datasets.importers._npz_vectors import (
     read_npz_archive_member_rows,
     read_npz_embedder_name,
+    validate_manifest_embedder_name,
     window_suffix,
 )
 from vtscore.datasets.importers.base import ImporterBase, PluginField
@@ -135,6 +136,7 @@ class LocalArchiveMemberImporter(ImporterBase):
 
         rows = read_npz_archive_member_rows(manifest)
         embedder_name = read_npz_embedder_name(manifest)
+        validate_manifest_embedder_name(embedder_name, output_type, source_label=f"manifest {manifest.name}")
         manifest_path = str(manifest.resolve())
 
         next_id = max(medias.keys(), default=0) + 1

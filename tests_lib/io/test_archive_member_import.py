@@ -30,19 +30,23 @@ def _make_tar(tmp_path: Path) -> Path:
     return archive
 
 
-def _make_manifest(tmp_path: Path, archive: Path, *, scalar_archive: bool = True, members=None) -> Path:
+def _make_manifest(
+    tmp_path: Path,
+    archive: Path,
+    *,
+    scalar_archive: bool = True,
+    members=None,
+    embedder_name: str | None = "xclip",
+) -> Path:
     members = members if members is not None else list(MEMBERS)
     rng = np.random.default_rng(7)
     vectors = rng.standard_normal((len(members), DIM)).astype(np.float32)
     manifest = tmp_path / "manifest.npz"
     archives = np.array(str(archive)) if scalar_archive else np.array([str(archive)] * len(members))
-    np.savez(
-        manifest,
-        vectors=vectors,
-        members=np.array(members),
-        archives=archives,
-        embedder_name=np.array("largerclapgeneral"),
-    )
+    arrays = {"vectors": vectors, "members": np.array(members), "archives": archives}
+    if embedder_name is not None:
+        arrays["embedder_name"] = np.array(embedder_name)
+    np.savez(manifest, **arrays)
     return manifest
 
 
@@ -66,7 +70,7 @@ def _make_windowed_manifest(tmp_path: Path, archive: Path) -> Path:
         archives=np.array(str(archive)),
         clip_start=np.array(clip_starts, dtype=np.float32),
         clip_end=np.array(clip_ends, dtype=np.float32),
-        embedder_name=np.array("largerclapgeneral"),
+        embedder_name=np.array("xclip"),
     )
     return manifest
 
@@ -113,8 +117,8 @@ class TestImporter:
             assert media["media_bytes"] is None
             assert "media_path" not in media or media["media_path"] is None
             # Precomputed embedding is carried, under the manifest's embedder.
-            assert media["embedder"] == "largerclapgeneral"
-            assert media["embeddings"]["largerclapgeneral"].shape == (DIM,)
+            assert media["embedder"] == "xclip"
+            assert media["embeddings"]["xclip"].shape == (DIM,)
             assert len(media["md5"]) == 32
             ref = media["archive_member"]
             assert Path(ref["path"]).name == "shard_000000.tar"
@@ -168,6 +172,54 @@ class TestImporter:
         assert reloaded == {"manifest": str(manifest.resolve()), "media_type": "video"}
 
 
+class TestEmbedderNameValidation:
+    """A manifest embedder_name that VTSearch can't route is rejected at import."""
+
+    def test_unregistered_embedder_name_raises_with_options(self, tmp_path):
+        archive = _make_tar(tmp_path)
+        # The exact symptom from the field report: a name from an external
+        # pipeline that isn't in VTSearch's registry.
+        manifest = _make_manifest(tmp_path, archive, embedder_name="audemb_largerclapgeneral")
+        medias: dict[int, dict] = {}
+        with pytest.raises(ValueError) as exc:
+            IMPORTER.run({"manifest": str(manifest), "media_type": "video"}, medias)
+        msg = str(exc.value)
+        assert "audemb_largerclapgeneral" in msg
+        # The error names the media type and lists the valid registered options.
+        assert "video" in msg
+        assert "xclip" in msg
+        # Nothing was imported.
+        assert medias == {}
+
+    def test_wrong_media_type_embedder_raises(self, tmp_path):
+        archive = _make_tar(tmp_path)
+        # ``clap_general`` is a registered *audio* embedder, so it can't bind
+        # this ``video`` dataset's slots either.
+        manifest = _make_manifest(tmp_path, archive, embedder_name="clap_general")
+        medias: dict[int, dict] = {}
+        with pytest.raises(ValueError) as exc:
+            IMPORTER.run({"manifest": str(manifest), "media_type": "video"}, medias)
+        assert "clap_general" in str(exc.value)
+        assert medias == {}
+
+    def test_registered_embedder_name_imports(self, tmp_path):
+        archive = _make_tar(tmp_path)
+        manifest = _make_manifest(tmp_path, archive, embedder_name="xclip")
+        medias: dict[int, dict] = {}
+        IMPORTER.run({"manifest": str(manifest), "media_type": "video"}, medias)
+        assert len(medias) == 2
+
+    def test_missing_embedder_name_is_allowed(self, tmp_path):
+        # A manifest that declares no embedder imports fine (the media just
+        # carries no embedder identity); validation only gates a *named* one.
+        archive = _make_tar(tmp_path)
+        manifest = _make_manifest(tmp_path, archive, embedder_name=None)
+        medias: dict[int, dict] = {}
+        IMPORTER.run({"manifest": str(manifest), "media_type": "video"}, medias)
+        assert len(medias) == 2
+        assert next(iter(medias.values()))["embedder"] == ""
+
+
 class TestWindowedManifest:
     def test_reader_emits_clip_fields(self, tmp_path):
         archive = _make_tar(tmp_path)
@@ -213,7 +265,7 @@ class TestWindowedManifest:
             members=np.array(["chunk_a.mp4", "chunk_a.mp4"]),
             archives=np.array(str(archive)),
             window_id=np.array(["w0", "w1"]),
-            embedder_name=np.array("largerclapgeneral"),
+            embedder_name=np.array("xclip"),
         )
         medias: dict[int, dict] = {}
         IMPORTER.run({"manifest": str(manifest), "media_type": "video"}, medias)
@@ -270,9 +322,9 @@ class TestLocalArchiveMemberSource:
         assert fetched.path is None
         assert fetched.embedding is not None
         assert fetched.embedding.shape == (DIM,)
-        assert fetched.embedder_name == "largerclapgeneral"
+        assert fetched.embedder_name == "xclip"
         # Re-supplied vector matches the in-memory embedding from import.
-        np.testing.assert_array_equal(fetched.embedding, media["embeddings"]["largerclapgeneral"])
+        np.testing.assert_array_equal(fetched.embedding, media["embeddings"]["xclip"])
 
     def test_fetch_item_resolves_windowed_member(self, tmp_path):
         from vtscore.datasets.sources import get_source_for_origin
@@ -290,7 +342,7 @@ class TestLocalArchiveMemberSource:
         # The window key is "member@start"; fetch by it returns that window's vector.
         fetched = source.fetch_item("chunk_a.mp4@10")
         assert fetched.embedding is not None
-        np.testing.assert_array_equal(fetched.embedding, window["embeddings"]["largerclapgeneral"])
+        np.testing.assert_array_equal(fetched.embedding, window["embeddings"]["xclip"])
 
     def test_fetch_item_unknown_key_returns_pathless_empty(self, tmp_path):
         from vtscore.datasets.sources import get_source_for_origin

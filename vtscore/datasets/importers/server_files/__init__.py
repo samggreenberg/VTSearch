@@ -33,7 +33,11 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from vtscore.datasets.importers._npz_vectors import read_npz_embedder_name, read_npz_filenames_and_vectors
+from vtscore.datasets.importers._npz_vectors import (
+    read_npz_embedder_name,
+    read_npz_filenames_and_vectors,
+    validate_manifest_embedder_name,
+)
 from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
 from vtscore.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
 
@@ -256,7 +260,9 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 f.options = all_folder_names()
                 break
 
-    def _stage_paths(self, field_values: dict[str, Any]) -> tuple[Path, dict[str, Path], dict[str, Any], str]:
+    def _stage_paths(
+        self, field_values: dict[str, Any], media_type_id: str
+    ) -> tuple[Path, dict[str, Path], dict[str, Any], str]:
         """Read the paths file and symlink each entry into a fresh temp dir.
 
         Returns ``(staging_dir, name_to_source, content_vectors, embedder_name)`` where:
@@ -279,6 +285,10 @@ class ServerFilesDatasetImporter(DatasetImporter):
         paths, path_to_vector, embedder_name = _read_paths_and_vectors(paths_file)
         if not paths:
             raise ValueError(f"No paths found in {paths_file}")
+        # Reject an unroutable NPZ embedder name before staging anything, so the
+        # failure is an actionable import-time error rather than a confusing
+        # "does not support text queries" 400 at search time.
+        validate_manifest_embedder_name(embedder_name, media_type_id, source_label=f"paths file {paths_file.name}")
 
         staging = Path(tempfile.mkdtemp(prefix="server_files_"))
         name_to_source = _symlink_paths(paths, staging)
@@ -365,7 +375,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
         specs = self.effective_source_specs(field_values)
         output_type = get_by_folder_name(field_values.get("media_type", "")).type_id
 
-        staging, name_to_source, npz_vectors, embedder_name = self._stage_paths(field_values)
+        staging, name_to_source, npz_vectors, embedder_name = self._stage_paths(field_values, output_type)
         # Merge npz-supplied vectors with any vectors set externally on
         # ``self.content_vectors``.  NPZ vectors take priority for keys
         # that overlap.
@@ -424,7 +434,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
         specs = self.effective_source_specs(field_values)
         output_type = get_by_folder_name(field_values.get("media_type", "")).type_id
 
-        staging, name_to_source, npz_vectors, embedder_name = self._stage_paths(field_values)
+        staging, name_to_source, npz_vectors, embedder_name = self._stage_paths(field_values, output_type)
         origin = self.build_origin(field_values)
         merged_vectors: dict[str, Any] = dict(self.content_vectors or {})
         merged_vectors.update(npz_vectors)
