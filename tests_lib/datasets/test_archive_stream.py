@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import io
 import tarfile
+import threading
 import zipfile
 from pathlib import Path
 
 import pytest
 
+from vtscore.datasets import archive_stream
 from vtscore.datasets.archive_stream import (
     LOCAL_ARCHIVE_MEMBER_IMPORTER,
     ArchiveMemberError,
@@ -92,6 +94,96 @@ class TestReadMember:
             info.size = len(new_payload)
             tf.addfile(info, io.BytesIO(new_payload))
         assert read_member(archive, "chunk_a.mp4") == new_payload
+
+
+def _make_one_member_tar(path: Path, payload: bytes = MEMBER_A, name: str = "m.bin") -> Path:
+    with tarfile.open(path, "w") as tf:
+        info = tarfile.TarInfo(name)
+        info.size = len(payload)
+        tf.addfile(info, io.BytesIO(payload))
+    return path
+
+
+class TestHandlePool:
+    def test_repeated_reads_reuse_one_handle(self, tmp_path):
+        archive_stream._reset_pool()
+        archive = _make_tar(tmp_path)
+        for _ in range(50):
+            assert read_member_range(archive, "chunk_a.mp4", 0, 5) == MEMBER_A[:5]
+        # A single pooled handle serves every request -- no fd-per-read leak.
+        assert len(archive_stream._handle_cache) == 1
+        pooled = archive_stream._handle_cache[archive_stream._cache_key(archive)]
+        assert pooled._handle is not None
+
+    def test_zip_reads_reuse_one_handle(self, tmp_path):
+        archive_stream._reset_pool()
+        archive = _make_zip(tmp_path)
+        for _ in range(20):
+            assert read_member(archive, "chunk_a.mp4") == MEMBER_A
+        assert len(archive_stream._handle_cache) == 1
+
+    def test_pool_bounds_open_handles_and_closes_evicted(self, tmp_path):
+        archive_stream._reset_pool()
+        first = _make_one_member_tar(tmp_path / "shard_0.tar")
+        assert read_member(first, "m.bin") == MEMBER_A
+        pooled_first = archive_stream._handle_cache[archive_stream._cache_key(first)]
+        assert pooled_first._handle is not None
+
+        # Fill the pool past its bound; the LRU archive (the first) is evicted.
+        for i in range(1, archive_stream._MAX_OPEN_ARCHIVES + 1):
+            a = _make_one_member_tar(tmp_path / f"shard_{i}.tar")
+            assert read_member(a, "m.bin") == MEMBER_A
+
+        assert len(archive_stream._handle_cache) == archive_stream._MAX_OPEN_ARCHIVES
+        assert archive_stream._cache_key(first) not in archive_stream._handle_cache
+        assert pooled_first._handle is None  # closed on eviction, fd released
+        # Re-reading an evicted archive transparently re-pools it.
+        assert read_member(first, "m.bin") == MEMBER_A
+
+    def test_read_through_closed_handle_falls_back(self, tmp_path):
+        archive_stream._reset_pool()
+        archive = _make_tar(tmp_path)
+        read_member(archive, "chunk_a.mp4")
+        pooled = archive_stream._handle_cache[archive_stream._cache_key(archive)]
+        pooled.close()  # simulate eviction under a stale reference
+        _path, info, _is_zip = archive_stream._resolve(archive, "chunk_a.mp4")
+        # A stale reference still returns correct bytes via a one-shot open.
+        assert pooled.read(info, 0, None) == MEMBER_A
+
+    def test_concurrent_range_reads_same_archive(self, tmp_path):
+        archive_stream._reset_pool()
+        archive = _make_tar(tmp_path)
+        results: dict[int, bytes] = {}
+        errors: list[Exception] = []
+
+        def worker(i: int) -> None:
+            try:
+                start = i % 10
+                results[i] = read_member_range(archive, "chunk_a.mp4", start, 12)
+            except Exception as exc:  # noqa: BLE001 - surfaced via `errors`
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(40)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors
+        for i, got in results.items():
+            start = i % 10
+            assert got == MEMBER_A[start : start + 12]
+        # Serialised reads share the single pooled handle.
+        assert len(archive_stream._handle_cache) == 1
+
+    def test_reset_pool_closes_handles(self, tmp_path):
+        archive_stream._reset_pool()
+        archive = _make_tar(tmp_path)
+        read_member(archive, "chunk_a.mp4")
+        pooled = archive_stream._handle_cache[archive_stream._cache_key(archive)]
+        archive_stream._reset_pool()
+        assert len(archive_stream._handle_cache) == 0
+        assert pooled._handle is None
 
 
 class TestArchiveMemberRef:
