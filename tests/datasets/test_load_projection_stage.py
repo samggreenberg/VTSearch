@@ -79,14 +79,15 @@ class TestBuildProjectionStage:
 
         assert ctx._projection is not None
         assert ctx._projection.projection_id == "fake-pid"
-        assert ctx._pyramids.get("hex") is not None
-        assert ctx._pyramids["hex"].projection_id == "fake-pid"
+        # The fixtures are audio, which tiles as squares (waveform thumbnails).
+        assert ctx._pyramids.get("square") is not None
+        assert ctx._pyramids["square"].projection_id == "fake-pid"
         mock_persist.assert_called_once()
         # dataset_id and the freshly-built artifacts are forwarded for persistence.
         args = mock_persist.call_args.args
         assert args[0] == "ds-123"
         assert args[1] is ctx._projection
-        assert args[2] is ctx._pyramids["hex"]
+        assert args[2] is ctx._pyramids["square"]
 
     def test_empty_dataset_is_noop(self):
         ctx = DatasetContext("proj_stage_empty")

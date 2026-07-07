@@ -47,25 +47,32 @@ from vtscore.projection.umap_projection import Projection
 BIN_SHAPES: tuple[str, ...] = ("hex", "square")
 DEFAULT_BIN_SHAPE = "hex"
 
-#: Media types whose items have *browsable* thumbnails — a glance at the grid
-#: is enough to recognise the content — are tiled as **squares** so the
-#: thumbnails pack edge-to-edge with no wasted gaps (and the quadtree lattice
-#: keeps representatives perfectly zoom-persistent).  Every other media type
-#: (audio, text) has no usefully-browsable thumbnail, so it falls back to the
-#: **hex** density map.  Audio *does* have waveform thumbnails, but nobody
-#: browses by waveform, so it is intentionally excluded here.
-SQUARE_MEDIA_TYPES: frozenset[str] = frozenset({"image", "video", "document"})
-
 
 def bin_shape_for_media_type(media_type: str | None) -> str:
     """Return the bin shape VTSBrowse tiles a *media_type* dataset with.
 
-    The shape is a fixed property of the media type, not a user choice:
-    media with browsable thumbnails (image / video / document) use squares;
-    everything else (audio / text) uses the hex density map.  See
-    :data:`SQUARE_MEDIA_TYPES`.
+    The shape is a fixed property of the media type, not a user choice: media
+    whose items have a *browsable thumbnail* (``MediaType.has_thumbnail`` —
+    image / video / document, and audio via its waveform PNG) tile as
+    **squares** so the thumbnails pack edge-to-edge with no wasted gaps (and
+    the quadtree lattice keeps representatives perfectly zoom-persistent).
+    Everything else (text) falls back to the **hex** density map.
+
+    ``has_thumbnail`` on the media type is the single source of truth for this
+    distinction (it is also surfaced to the frontend via
+    ``GET /api/media-types``).  We resolve it through a lazy registry lookup so
+    this projection module keeps its "pure NumPy, Flask-free" property and
+    takes no module-load dependency on the (heavy) media package.  Empty,
+    unknown, or unresolvable types fall back to hex.
     """
-    return "square" if media_type in SQUARE_MEDIA_TYPES else "hex"
+    if not media_type:
+        return "hex"
+    try:
+        from vtscore.media import get as _get_media_type
+
+        return "square" if _get_media_type(media_type).has_thumbnail else "hex"
+    except (KeyError, ImportError):
+        return "hex"
 
 
 @dataclass(frozen=True)

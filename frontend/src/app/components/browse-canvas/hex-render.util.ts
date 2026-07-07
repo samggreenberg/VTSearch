@@ -33,14 +33,20 @@ export const BROWSE_COLORMAP_IDS: readonly BrowseColormapId[] = ['auto', 'heat',
 
 /**
  * Media types whose browse cells are painted with the central item's thumbnail
- * (``image``, ``video``) rather than flat density shading. These are pinned to
- * the grayscale colormap: the colourful presets are fun for the abstract
- * density shading of non-thumbnail types, but under real thumbnails a neutral
- * ground reads best and a coloured tint would fight the image content. Callers
- * both force ``'gray'`` for these types and hide the colormap picker for them.
+ * (``image``, ``video``, ``document``, ``audio`` — audio via its waveform PNG)
+ * rather than flat density shading. These are pinned to the grayscale
+ * colormap: the colourful presets are fun for the abstract density shading of
+ * non-thumbnail types, but under real thumbnails a neutral ground reads best
+ * and a coloured tint would fight the image content. Callers both force
+ * ``'gray'`` for these types and hide the colormap picker for them.
+ *
+ * This mirrors the backend ``MediaType.has_thumbnail`` capability (the single
+ * source of truth, surfaced on ``MediaTypeInfo.has_thumbnail`` via
+ * ``GET /api/media-types``), which also drives the square-vs-hex bin shape.
+ * Keep the two in sync; a follow-up may data-drive this from that field.
  */
 export function usesThumbnails(mediaType: string): boolean {
-  return mediaType === 'image' || mediaType === 'video';
+  return mediaType === 'image' || mediaType === 'video' || mediaType === 'document' || mediaType === 'audio';
 }
 
 /**
