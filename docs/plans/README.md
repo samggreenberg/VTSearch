@@ -18,7 +18,7 @@ it can't drift far. (Point-in-time UI review/audit reports live in
 - [vtsbrowse-toponymy.md](vtsbrowse-toponymy.md): named-region "street signs" (design only)
 - [vtsbrowser-hex-circle-radius.md](vtsbrowser-hex-circle-radius.md): singleton-circle radius investigation (needs visual verification)
 - [vtsbrowser-qa-followups.md](vtsbrowser-qa-followups.md): QA-drive follow-ups (deferred: startup wedge, tab crash; skipped: toolbar overlay)
-- [browse-audio-player.md](browse-audio-player.md): audio bins as square waveform tiles + anchored hover player (play/pause/volume/play-point) (Phase 1 shipped: `has_thumbnail` capability + audio square tiles; Phase 2 anchored player deferred)
+- [browse-audio-player.md](browse-audio-player.md): audio bins as square waveform tiles + anchored hover player (play/pause/volume/play-point) (Phases 1 + 2 shipped: `has_thumbnail` capability + audio square tiles + anchored hover player; Phase 3 polish deferred)
 
 ## Scalability
 

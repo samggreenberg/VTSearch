@@ -1,10 +1,12 @@
 # Browse audio player: squares + anchored hover player
 
-**Status:** Phase 1 shipped (audio bins tile as square waveform thumbnails on
-the VTSBrowse map, via a new `MediaType.has_thumbnail` capability). Phase 2
-(anchored hover player) and Phase 3 (polish) deferred — see Open follow-ups.
-Scope confirmed with the user: *squares + hover player*, player *anchored to
-the tile*.
+**Status:** Phase 1 + Phase 2 shipped. Audio bins tile as square waveform
+thumbnails on the VTSBrowse map (Phase 1), and hovering an audio bin now opens
+an **anchored player** — the bin's waveform plus native `<audio>` controls
+(play/pause, volume, scrubber/play-point) — that opens on a dwell and stays open
+while the cursor is on it (Phase 2). Phase 3 (polish) deferred — see Open
+follow-ups. Scope confirmed with the user: *squares + hover player*, player
+*anchored to the tile*.
 
 ## What shipped (Phase 1)
 
@@ -24,9 +26,27 @@ the tile*.
   for audio (grayscale-pinned like other thumbnail types).
 - Side effect (desirable): clicking an audio bin now shows a preview pane in
   the bin popup, consistent with image/video.
-- **Not** changed in Phase 1: hovering an audio bin still auto-plays via a
-  hidden `<audio>` (the "sound from nowhere") — Phase 2 replaces that with the
-  anchored player.
+
+## What shipped (Phase 2)
+
+- **Anchored audio hover player** (`BrowseHoverPreviewComponent`). Hovering an
+  audio bin now opens a panel next to the tile with the bin's waveform PNG plus
+  a native `<audio controls>` element — play/pause, volume, and a scrubber (the
+  "current play-point"). This replaces the old `display:none` `<audio>` (the
+  "sound from nowhere").
+- **Dwell + debounce:** the player opens only after the cursor rests ~200ms on a
+  bin, and sweeping across bins re-arms the dwell, so a fast pass doesn't spawn a
+  burst of players/auditions.
+- **Hover-bridge:** the panel takes pointer events, and a short close-grace after
+  the bin-hover clears lets the cursor travel from the tile onto the controls
+  without the panel vanishing.
+- **Clip-aware:** windowed clips loop within `[clip_start, clip_end]` via the
+  shared `applyClipWindow` helper (lazy clip-extent lookup through the metadata
+  cache).
+- Implementation note: rather than embed the Train `AudioPlayerComponent` (which
+  wants a full `Media` object and re-decodes audio client-side per hover), the
+  hover player is a lightweight inline panel — the same waveform PNG already on
+  the tile + native controls. Visually equivalent, cheaper, no type-plumbing.
 
 ## Motivation
 
@@ -156,17 +176,28 @@ hardcoded list.
 - **Phase 1 — tiles (SHIPPED):** added the `has_thumbnail` capability +
   reconciled the shape/paint decisions so audio renders as square waveform
   tiles on the map. Visible tile change with the least new UI.
-- **Phase 2 — anchored player:** upgrade `BrowseHoverPreviewComponent` to
-  the debounced anchored `AudioPlayerComponent` with play/pause + volume +
-  scrubber; hover-bridge so controls are reachable.
+- **Phase 2 — anchored player (SHIPPED):** upgraded `BrowseHoverPreviewComponent`
+  to a debounced, hover-bridged anchored player (waveform + native play/pause +
+  volume + scrubber). Went with a lightweight inline panel rather than embedding
+  `AudioPlayerComponent` (see "What shipped (Phase 2)" above).
 - **Phase 3 — polish:** canvas playhead line; decide member-paging home;
   apply the same upgrade to the bin-popup hover-play.
 
 ## Open follow-ups
 
-- **Phase 2 (anchored hover player)** — the headline UX ask; not started.
-- **Phase 3 (polish)** — canvas playhead over the waveform (net-new; pattern
-  in `audio-crop-overlay`); member-paging home (anchored player vs bin popup).
+- **Phase 3 (polish)** — a moving playhead drawn over the waveform (net-new;
+  pattern in `audio-crop-overlay`); member-paging home (anchored player vs bin
+  popup, Problem 4); apply the anchored player to the bin-popup member hover
+  (`browse-bin-popup.component.ts` still uses the hidden-`<audio>` pattern).
+- **Panel positioning polish.** The player anchors at a fixed offset
+  (`screenX+16`), with no viewport clamping, so near a screen edge it can
+  overflow. Add clamping (the bin-popup already has a clamp helper to mirror).
+- **Autoplay-on-dwell.** The player currently auto-plays on dwell (preserving the
+  old audition workflow, now visible + controllable). If that reads as too eager,
+  switch to click-to-play.
+- **Wider waveform in the panel.** The panel stretches the 128px square
+  thumbnail PNG to its width (blurry). A dedicated wider waveform render (or the
+  client-decoded canvas) would look crisper.
 - **Data-drive the frontend from `has_thumbnail`.** Phase 1 added the capability
   to the API + `MediaTypeInfo`, but the frontend still hardcodes the thumbnail
   type set in several spots (`usesThumbnails`, and the per-item `hasThumbnailUrl`
