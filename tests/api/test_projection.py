@@ -726,3 +726,32 @@ class TestBrowseCompactSetting:
             client.post("/api/projection/build", json={"ids": ids})
             _wait_projection()
         assert captured["compact"] is False
+
+
+def test_projection_params_match(monkeypatch):
+    """The persisted-projection guard invalidates a layout when UMAP params change."""
+    import numpy as np
+
+    from vtsearch.routes import projection as proj_route
+    from vtscore.projection.umap_projection import Projection
+
+    coords = np.zeros((3, 2), dtype=np.float32)
+    ids = [0, 1, 2]
+    umap_default = Projection("p", ids, coords, "umap", 15, 0.1)
+    umap_changed = Projection("p", ids, coords, "umap", 30, 0.1)
+    pca = Projection("p", ids, coords, "pca", None, None)
+    legacy = Projection("p", ids, coords, "umap", None, None)
+
+    # Active settings at the config defaults.
+    monkeypatch.setattr(proj_route, "_umap_params", lambda: (15, 0.1))
+    assert proj_route._projection_params_match(umap_default) is True
+    assert proj_route._projection_params_match(umap_changed) is False
+    assert proj_route._projection_params_match(pca) is True
+    # Legacy None params are assumed to be the config defaults.
+    assert proj_route._projection_params_match(legacy) is True
+
+    # Operator tuned the setting away from the default -> stale layouts recompute.
+    monkeypatch.setattr(proj_route, "_umap_params", lambda: (30, 0.1))
+    assert proj_route._projection_params_match(legacy) is False
+    assert proj_route._projection_params_match(umap_changed) is True
+    assert proj_route._projection_params_match(pca) is True

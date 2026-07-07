@@ -187,3 +187,28 @@ def test_remove_projections_no_entries_is_noop(tmp_path):
     path = _make_container(tmp_path)
     remove_projections(path)  # must not raise
     assert read_projection(path) is None
+
+
+def test_umap_params_round_trip(tmp_path):
+    """A UMAP projection's stamped n_neighbors / min_dist survive persistence."""
+    path = _make_container(tmp_path)
+    base = _make_projection()
+    proj = Projection(base.projection_id, base.ids, base.coords, "umap", 30, 0.25)
+    append_projection(path, proj, build_pyramid(proj, n_levels=3))
+    loaded = read_projection(path)
+    assert loaded is not None
+    proj2, _ = loaded
+    assert proj2.method == "umap"
+    assert proj2.n_neighbors == 30
+    assert proj2.min_dist == 0.25
+
+
+def test_projection_without_params_reads_back_none(tmp_path):
+    """A layout stored with no stamped knobs (PCA fallback / legacy) reads None."""
+    path = _make_container(tmp_path)
+    proj = _make_projection()  # n_neighbors / min_dist default to None
+    append_projection(path, proj, build_pyramid(proj, n_levels=3))
+    loaded = read_projection(path)
+    assert loaded is not None
+    assert loaded[0].n_neighbors is None
+    assert loaded[0].min_dist is None

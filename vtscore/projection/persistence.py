@@ -21,6 +21,8 @@ def _pyramid_to_meta(projection: Projection, pyramid: Pyramid) -> dict[str, Any]
     return {
         "projection_id": projection.projection_id,
         "method": projection.method,
+        "n_neighbors": projection.n_neighbors,
+        "min_dist": projection.min_dist,
         "bin_shape": pyramid.bin_shape,
         "base_radius": pyramid.base_radius,
         "tile_span": pyramid.tile_span,
@@ -57,6 +59,8 @@ def _rebuild_from_npz_arrays(
         ids=ids,
         coords=coords,
         method=meta["method"],
+        n_neighbors=meta.get("n_neighbors"),
+        min_dist=meta.get("min_dist"),
     )
 
     levels = [LevelMeta(level=lm["level"], radius=lm["radius"], n_cells=lm["n_cells"]) for lm in meta["levels"]]

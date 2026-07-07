@@ -1,11 +1,13 @@
 # Plan: VTSBrowse empirical tuning pass
 
-> **Status:** Planned, not started. This is the deferred *§Open problems →
-> Empirical* work from `docs/plans/vtsbrowse.md`. It is written to be picked
-> up on a **stronger environment** (one with a browser for visual judgment,
-> and ideally GPU + real demo datasets downloaded) because the core
-> deliverable — choosing good defaults — requires *looking at the rendered
-> canvas*, which the headless cloud container can't do (no Chrome/Chromium).
+> **Status:** Deliverable 1 (knob plumbing + persistence-key correctness fix)
+> **shipped**; the quantitative sweep and qualitative pass remain. This is the
+> deferred *§Open problems → Empirical* work from `docs/plans/vtsbrowse.md`.
+> The remaining steps are written to be picked up on a **stronger environment**
+> (one with a browser for visual judgment, and ideally GPU + real demo datasets
+> downloaded) because the core deliverable — choosing good defaults — requires
+> *looking at the rendered canvas*, which the headless cloud container can't do
+> (no Chrome/Chromium).
 >
 > The other VTSBrowse follow-ups (sibling highlighting, text-seeded
 > navigation, detector handoff) have been **cut** — see *§Open follow-ups* in
@@ -128,6 +130,10 @@ projection's metadata and to the `_try_load_persisted` match**, so flipping a
 setting forces a recompute instead of serving a layout fit under the old
 params. (This is a real correctness fix the sweep depends on, not just tuning.)
 
+> **Done.** This gap is closed — see *Deliverables §1*. What remains under this
+> plan is the sweep (Phase A) and the qualitative pass (Phase B), both of which
+> can now retune purely by changing the two settings.
+
 ## Phase A — quantitative sweep (headless, scriptable)
 
 A standalone script (suggested: `scripts/projection_sweep.py`, dev-only, not
@@ -209,10 +215,16 @@ Capture before/after screenshots for the write-up.
 
 ## Deliverables
 
-1. **Knob plumbing** (impl, env-neutral): UMAP params reachable via settings +
-   build-route, persisted-projection match keyed on UMAP params so a setting
-   change forces recompute. Tests in `tests/api/test_projection.py` /
-   `tests_lib/projection/`.
+1. **Knob plumbing** (impl, env-neutral): **SHIPPED.** `projection_n_neighbors`
+   / `projection_min_dist` are `ServerSettings` (defaults in `vtscore.config`),
+   the build route passes them into `fit_projection`, the fit stamps them onto
+   the `Projection`, and `_try_load_persisted` / `_load_projection_coords` now
+   reject a persisted layout fit under different params (`_projection_params_match`)
+   so a setting change forces a recompute. Tests in `tests/api/test_projection.py`
+   + `tests_lib/projection/test_persistence.py` + `test_umap_projection.py`.
+   (The ingest-time pre-build stays on the `vtscore.config` defaults — core is
+   Flask-free — so a non-default deployment recomputes each dataset once on first
+   browse, which the params-match guard handles correctly.)
 2. **Sweep harness** `scripts/projection_sweep.py` + a short README block on
    running it. (Dev tool; keep it out of the shipped package and out of
    `deptry`'s prod-dependency surface — if it needs `sklearn.manifold` etc.,

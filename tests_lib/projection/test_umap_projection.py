@@ -181,3 +181,31 @@ def test_umap_fit_emits_elapsed_heartbeats(monkeypatch):
     heartbeats = [evt for evt in seen if "elapsed" in evt[1]]
     assert heartbeats
     assert all(total == 0 for *_rest, total in heartbeats)
+
+
+def test_umap_fit_stamps_params():
+    """A UMAP fit records the knobs it used on the returned projection."""
+    proj = fit_projection(_matrix(30, 16, seed=5), list(range(30)), n_neighbors=12, min_dist=0.3, random_state=1)
+    assert proj.method == "umap"
+    assert proj.n_neighbors == 12
+    assert proj.min_dist == 0.3
+
+
+def test_pca_fallback_leaves_params_none():
+    """The small-N PCA fallback ignores the knobs, so it stamps neither."""
+    proj = fit_projection(_matrix(6, 8, seed=3), list(range(6)), min_n_for_umap=10)
+    assert proj.method == "pca"
+    assert proj.n_neighbors is None
+    assert proj.min_dist is None
+
+
+def test_remove_ids_preserves_stamped_params():
+    """Culling ids keeps the layout's stamped UMAP knobs (no re-fit)."""
+    from vtscore.projection.umap_projection import remove_ids
+
+    coords = _matrix(5, 2, seed=1)
+    proj = Projection("pid", [0, 1, 2, 3, 4], coords, "umap", 20, 0.2)
+    culled = remove_ids(proj, [1, 3])
+    assert culled.n_neighbors == 20
+    assert culled.min_dist == 0.2
+    assert culled.ids == [0, 2, 4]
