@@ -30,11 +30,21 @@ def _export_good(client):
     return sum(1 for e in resp.get_json()["labels"] if e["label"] == "good")
 
 
+# 6 good / 6 bad, leaving ids 13–20 unlabeled as the haystack an Inclusion slide
+# re-splits. The label count matters: with a tiny set (e.g. 4 good / 5 bad) the
+# calibration folds are perfectly separable — at the optimal cut both FPR and
+# FNR are 0, so no Inclusion weighting can move the threshold and the slide is a
+# genuine (correct) no-op, which this regression can't observe. This split keeps
+# the folds non-separable so tightening Inclusion demonstrably raises the cutoff.
+_GOOD_IDS = [1, 2, 3, 4, 5, 6]
+_BAD_IDS = [7, 8, 9, 10, 11, 12]
+
+
 def _run_find(client):
     detector_id = setup_trainable_model_in_registry(
         "slide-regression",
-        good_ids=[1, 2, 3, 4],
-        bad_ids=[16, 17, 18, 19, 20],
+        good_ids=_GOOD_IDS,
+        bad_ids=_BAD_IDS,
         snap=snapshot_medias(),
     )
     load_detector_and_wait(client, detector_id)
