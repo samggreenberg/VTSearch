@@ -1,7 +1,32 @@
 # Browse audio player: squares + anchored hover player
 
-**Status:** design only (not started). Scope confirmed with the user:
-*squares + hover player*, player *anchored to the tile*.
+**Status:** Phase 1 shipped (audio bins tile as square waveform thumbnails on
+the VTSBrowse map, via a new `MediaType.has_thumbnail` capability). Phase 2
+(anchored hover player) and Phase 3 (polish) deferred — see Open follow-ups.
+Scope confirmed with the user: *squares + hover player*, player *anchored to
+the tile*.
+
+## What shipped (Phase 1)
+
+- **`MediaType.has_thumbnail`** capability (`vtscore/media/base.py`) — the
+  single source of truth for the thumbnail vs no-thumbnail distinction. Set
+  `True` on image/video/document/audio; `False` on text. Exposed on
+  `GET /api/media-types` (`to_dict`) and mirrored on the frontend
+  `MediaTypeInfo.has_thumbnail`.
+- **`bin_shape_for_media_type`** (`vtscore/projection/pyramid.py`) now derives
+  square-vs-hex from `has_thumbnail` via a lazy registry lookup (keeps the
+  projection layer Flask/media-free at import). The hardcoded
+  `SQUARE_MEDIA_TYPES` frozenset is gone. Audio → square.
+- **Frontend `usesThumbnails`** (`hex-render.util.ts`) now includes audio (and
+  document, fixing a pre-existing omission that left document square-tiled but
+  density-painted). Audio bins on the map paint their waveform PNG; the bin
+  popup gains a magnified-waveform preview pane; the colormap picker is hidden
+  for audio (grayscale-pinned like other thumbnail types).
+- Side effect (desirable): clicking an audio bin now shows a preview pane in
+  the bin popup, consistent with image/video.
+- **Not** changed in Phase 1: hovering an audio bin still auto-plays via a
+  hidden `<audio>` (the "sound from nowhere") — Phase 2 replaces that with the
+  anchored player.
 
 ## Motivation
 
@@ -128,9 +153,9 @@ hardcoded list.
 
 ## Suggested phasing
 
-- **Phase 1 — tiles:** add the media-type capability field + reconcile the
-  three lists so audio renders as square waveform tiles on the map. Ships
-  the visible tile change with the least new UI.
+- **Phase 1 — tiles (SHIPPED):** added the `has_thumbnail` capability +
+  reconciled the shape/paint decisions so audio renders as square waveform
+  tiles on the map. Visible tile change with the least new UI.
 - **Phase 2 — anchored player:** upgrade `BrowseHoverPreviewComponent` to
   the debounced anchored `AudioPlayerComponent` with play/pause + volume +
   scrubber; hover-bridge so controls are reachable.
@@ -139,8 +164,18 @@ hardcoded list.
 
 ## Open follow-ups
 
-- Member-paging: anchored player vs bin popup (Problem 4) — unresolved.
-- Canvas playhead over the waveform (Phase 3) — net-new, pattern exists in
-  `audio-crop-overlay`.
-- Whether `text` (the other hex type) ever gets an analogous treatment — out
-  of scope for now.
+- **Phase 2 (anchored hover player)** — the headline UX ask; not started.
+- **Phase 3 (polish)** — canvas playhead over the waveform (net-new; pattern
+  in `audio-crop-overlay`); member-paging home (anchored player vs bin popup).
+- **Data-drive the frontend from `has_thumbnail`.** Phase 1 added the capability
+  to the API + `MediaTypeInfo`, but the frontend still hardcodes the thumbnail
+  type set in several spots (`usesThumbnails`, and the per-item `hasThumbnailUrl`
+  helpers in bin-popup / selection-panel / label-list / media-item). They now
+  all agree on `{image,video,document,audio}`, but a follow-up should collapse
+  them onto the served `has_thumbnail` field so a new thumbnail type flips in one
+  place.
+- **Waveform PNG theming.** `generate_waveform_thumbnail` paints fixed dark
+  colors (`_BG_COLOR`/`_WAVE_COLOR`) regardless of light/dark theme, so audio
+  square tiles won't match a light-theme map. Consider theme-aware rendering.
+- Whether `text` (the last hex type) ever gets an analogous treatment — out of
+  scope for now.
