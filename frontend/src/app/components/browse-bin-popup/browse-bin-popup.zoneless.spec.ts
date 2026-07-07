@@ -128,13 +128,14 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     fixture.destroy();
   });
 
-  it('offers the metadata toggle and column for audio (no preview pane)', async () => {
-    // Audio is a non-thumbnailed type: no magnified preview pane on the canvas or
-    // in the popup. The metadata panel is media-agnostic, though, so the Info
+  it('offers the metadata toggle and column for text (no preview pane)', async () => {
+    // Text is a non-thumbnailed type: no magnified preview pane on the canvas or
+    // in the popup. (Audio now tiles as waveform thumbnails, so it is no longer
+    // this branch.) The metadata panel is media-agnostic, though, so the Info
     // button and the (default-shown) metadata column must still be offered, so
     // hovering a bin member surfaces its metadata just like it does for images.
     const fixture = makeFixture();
-    fixture.componentRef.setInput('mediaType', 'audio');
+    fixture.componentRef.setInput('mediaType', 'text');
     fixture.componentRef.setInput('memberIds', [1, 2]);
     fixture.componentRef.setInput('repId', 1);
     await settlePasses(fixture);
@@ -147,14 +148,14 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     fixture.destroy();
   });
 
-  it('reserves the body padding so a small audio bin grid does not scroll', async () => {
+  it('reserves the body padding so a small text bin grid does not scroll', async () => {
     // The body is ``box-sizing: border-box`` with 12px of vertical padding, so its
     // bound height must exceed the flex content it holds by that padding — else the
     // grid column's ``height: 100%`` content box comes up 12px short and the member
-    // grid gets a stray scrollbar even on a single row (the bug this guards). Audio
+    // grid gets a stray scrollbar even on a single row (the bug this guards). Text
     // has no preview pane, so the grid is the exact-fit element that reveals it.
     const fixture = makeFixture();
-    fixture.componentRef.setInput('mediaType', 'audio');
+    fixture.componentRef.setInput('mediaType', 'text');
     fixture.componentRef.setInput('memberIds', [1, 2]);
     fixture.componentRef.setInput('repId', 1);
     await settlePasses(fixture);
