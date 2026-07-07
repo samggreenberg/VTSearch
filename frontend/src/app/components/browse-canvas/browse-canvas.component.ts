@@ -46,7 +46,7 @@ export interface BrowseContextMenuEvent {
   bounds: DOMRect;
 }
 
-/** How much larger a hovered *flat-density* cell (audio/text — no thumbnail) is
+/** How much larger a hovered *flat-density* cell (text — no thumbnail) is
  *  drawn relative to its neighbours so it lifts off the grid. The border is
  *  reserved for selection state, so hover is signalled by this size bump + a
  *  soft drop shadow instead of a ring. Thumbnail cells ignore this and size
@@ -70,9 +70,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   @ViewChild('canvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
   readonly meta = input<ProjectionMeta | null>(null);
   /**
-   * Active dataset media type. For ``image`` and ``video`` the representative
-   * item's thumbnail is painted directly onto each hex; other types keep the
-   * flat density (darkred→yellow) shading.
+   * Active dataset media type. For thumbnail types (``usesThumbnails`` —
+   * image / video / document / audio, audio via its waveform PNG) the
+   * representative item's thumbnail is painted directly onto each tile; other
+   * types (text) keep the flat density (darkred→yellow) shading.
    */
   readonly mediaType = input('');
   /** On-screen bin radius (CSS px) the "M" thumbnail size targets, and the

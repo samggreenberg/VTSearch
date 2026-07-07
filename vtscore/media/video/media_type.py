@@ -203,6 +203,9 @@ class VideoMediaType(MediaType):
     Embedding is handled by :class:`~vtscore.media.video.embedder_xclip.VideoXClipEmbedder`.
     """
 
+    #: Video renders a poster-frame thumbnail: a browsable-thumbnail type.
+    has_thumbnail = True
+
     def __init__(self) -> None:
         self._on_progress: ProgressCallback = _noop_progress
 

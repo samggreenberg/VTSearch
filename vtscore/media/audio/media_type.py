@@ -96,6 +96,10 @@ class AudioMediaType(MediaType):
     Embedding is handled by :class:`~vtscore.media.audio.embedder_clap.AudioClapEmbedder`.
     """
 
+    #: Audio renders a waveform PNG (``generate_waveform_thumbnail``), so it is
+    #: a browsable-thumbnail type: square tiles on the VTSBrowse map.
+    has_thumbnail = True
+
     def __init__(self) -> None:
         self._on_progress: ProgressCallback = _noop_progress
 

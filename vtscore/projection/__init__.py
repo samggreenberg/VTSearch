@@ -25,7 +25,6 @@ from vtscore.projection.hexbin import hex_center, hexbin_assign
 from vtscore.projection.pyramid import (
     BIN_SHAPES,
     DEFAULT_BIN_SHAPE,
-    SQUARE_MEDIA_TYPES,
     HexCell,
     LevelMeta,
     Pyramid,
@@ -54,7 +53,6 @@ __all__ = [
     "tile_member_ids",
     "BIN_SHAPES",
     "DEFAULT_BIN_SHAPE",
-    "SQUARE_MEDIA_TYPES",
     "bin_shape_for_media_type",
     "hexbin_assign",
     "hex_center",

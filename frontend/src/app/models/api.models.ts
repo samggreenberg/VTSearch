@@ -237,6 +237,10 @@ export interface MediaTypeInfo {
   folder_import_name?: string;
   /** Glob patterns for files this media type claims, e.g. ``["*.jpg", "*.png"]``. */
   file_extensions?: string[];
+  /** Whether items of this type have a browsable thumbnail (image/video/document,
+   *  and audio via its waveform PNG). Drives the VTSBrowse square-vs-hex bin shape
+   *  and thumbnail painting; canonical source for ``usesThumbnails``. */
+  has_thumbnail?: boolean;
 }
 
 export interface MediaTypeDetectionResponse {
