@@ -1,6 +1,8 @@
 # MLP hidden-layer sizing
 
-**Status: investigation done; one code change proposed, not yet made.** This
+**Status: shipped.** The investigation is done and its one actionable
+finding — raising `MLP_HIDDEN_MIN` 4 -> 8 — has been applied to
+`vtscore/config.py` (+ docs). Two optional sweep extensions remain open. This
 doc records an empirical capacity sweep of the detector MLP's hidden layer and
 the one actionable finding it produced: the **lower bound** `MLP_HIDDEN_MIN = 4`
 underfits and is unstable on harder tasks, and the evidence supports raising it
@@ -115,8 +117,8 @@ Scope and risk:
 
 ## Open follow-ups
 
-- [ ] Apply the `MLP_HIDDEN_MIN = 4 → 8` change (above) if/when someone touches
-      training config; update `docs/ML.md` and `_auto_hidden_dim` docstring to match.
+- [x] Apply the `MLP_HIDDEN_MIN = 4 → 8` change (above); `docs/ML.md`,
+      `_auto_hidden_dim` docstring, and the config/training package docs updated to match.
 - [ ] Optional: extend the sweep to audio (`esc50_s` / CLAP) and video
       (`ucf101_s` / X-CLIP) to confirm the plateau shape holds across every
       modality, not just image + text. The probe already supports `--dataset`.

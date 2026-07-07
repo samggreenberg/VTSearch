@@ -70,7 +70,7 @@ hidden width from the number of training examples:
 return max(MLP_HIDDEN_MIN, min(MLP_HIDDEN_MAX, n_train // 3))
 ```
 
-With the default `MLP_HIDDEN_MIN=4` and `MLP_HIDDEN_MAX=32` (from
+With the default `MLP_HIDDEN_MIN=8` and `MLP_HIDDEN_MAX=32` (from
 `vtscore.config`), the heuristic keeps the model small when only a
 handful of labels exist - n_train=10 picks 4, n_train=60 picks 20,
 n_train=120 picks 32 (capped). The function is private but stable; the

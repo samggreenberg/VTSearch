@@ -188,7 +188,7 @@ TRAIN_PATIENCE = int(os.environ.get("VTSEARCH_TRAIN_PATIENCE", "10"))
 # labels, and a second fold mostly averages out per-split noise; bumping
 # back up is a one-setting change when the noise actually matters.
 DEFAULT_CALIBRATE_COUNT = max(1, int(os.environ.get("VTSEARCH_CALIBRATE_COUNT", "1")))
-MLP_HIDDEN_MIN = 4
+MLP_HIDDEN_MIN = 8
 MLP_HIDDEN_MAX = 32
 MLP_DROPOUT = 0.5
 
