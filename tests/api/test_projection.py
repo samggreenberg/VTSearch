@@ -5,8 +5,10 @@
 
 The bin shape is derived from the dataset's media type (squares for
 browsable-thumbnail media, hexes otherwise), not requested by the client. The
-test fixtures are audio, so the routes resolve to the hex lattice unless a test
-overrides the media type.
+generated fixtures are audio, which now tiles as *squares* (waveform
+thumbnails); an autouse fixture defaults the route's resolved media type to
+``text`` — the canonical hex type — so these lattice-agnostic tests stay on the
+hex path unless a test overrides the media type.
 """
 
 from __future__ import annotations
@@ -14,11 +16,27 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import numpy as np
+import pytest
 
 import app as app_module  # noqa: F401
 from vtscore.concurrency.async_jobs import projection_jobs
 from vtscore.projection import Projection, build_pyramid
 from vtscore.state.core import get_active_context
+
+
+@pytest.fixture(autouse=True)
+def _default_hex_media_type():
+    """Default the route's resolved media type to a hex-lattice type.
+
+    The bin shape is a property of the dataset's media type. The generated test
+    fixtures are audio, which now tiles as squares (waveform thumbnails), so
+    resolve to ``text`` — the canonical hex type — by default, keeping the many
+    lattice-agnostic tests below on the hex path. Tests that exercise a specific
+    media type (image → square, audio → square) patch ``_media_type_for``
+    themselves, which overrides this.
+    """
+    with patch("vtsearch.routes.projection._media_type_for", return_value="text"):
+        yield
 
 
 def _wait_projection(timeout: float = 30.0) -> None:
@@ -328,22 +346,25 @@ class TestProjectionTiles:
 class TestBinShapeByMediaType:
     """The bin shape is a fixed property of the dataset's media type.
 
-    Audio (no browsable thumbnail) → hex; image/video/document → square. The
-    client never sends a shape; the routes derive it from the active dataset.
+    Browsable-thumbnail media (image / video / document, and audio via its
+    waveform PNG) → square; text → hex. The client never sends a shape; the
+    routes derive it from the active dataset via ``MediaType.has_thumbnail``.
     """
 
-    def test_audio_dataset_reports_hex(self, client):
-        """The audio test fixtures resolve to the hex lattice."""
+    @patch("vtsearch.routes.projection._media_type_for", return_value="audio")
+    def test_audio_dataset_reports_square(self, _mock_mt, client):
+        """Audio resolves to the square lattice (its waveform thumbnails tile
+        as squares like image/video)."""
         ctx = get_active_context()
         rng = np.random.default_rng(13)
         ids = sorted(ctx.medias.keys())
         coords = rng.standard_normal((len(ids), 2)).astype(np.float32)
         proj = Projection("audio-pid", ids, coords, "pca")
         ctx._projection = proj
-        ctx._pyramids = {"hex": build_pyramid(proj, bin_shape="hex", n_levels=2)}
+        ctx._pyramids = {"square": build_pyramid(proj, bin_shape="square", n_levels=2)}
 
         meta = client.get("/api/projection/meta").get_json()
-        assert meta["bin_shape"] == "hex"
+        assert meta["bin_shape"] == "square"
 
     @patch("vtsearch.routes.projection._media_type_for", return_value="image")
     @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
@@ -683,6 +704,14 @@ class TestBrowseCompactSetting:
     setting for the dataset's media type and threads it into ``fit_projection``.
     Defaults to on; the Settings → Browser toggle can turn it off per type.
     """
+
+    @pytest.fixture(autouse=True)
+    def _audio_media_type(self):
+        """These tests set the compact preference for the fixtures' real media
+        type (audio) and assert the route reads it, so keep the route resolving
+        ``audio`` here — overriding the module-level hex default."""
+        with patch("vtsearch.routes.projection._media_type_for", return_value="audio"):
+            yield
 
     @staticmethod
     def _capturing_fake(captured: dict):

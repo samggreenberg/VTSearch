@@ -47,6 +47,7 @@ from vtscore.projection.umap_projection import Projection
 BIN_SHAPES: tuple[str, ...] = ("hex", "square")
 DEFAULT_BIN_SHAPE = "hex"
 
+
 def bin_shape_for_media_type(media_type: str | None) -> str:
     """Return the bin shape VTSBrowse tiles a *media_type* dataset with.
 
