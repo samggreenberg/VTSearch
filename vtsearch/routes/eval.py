@@ -37,7 +37,6 @@ from vtsearch.state import (
 )
 from vtscore.concurrency.progress import (
     CancelledError,
-    get_eval_progress,
     update_eval_progress,
 )
 
@@ -192,10 +191,16 @@ def eval_train_and_score(body: dict):
         return _eval_done_payload(cached)
 
     n_total = max(len(history) - 1, 0)
-    update_eval_progress("running", f"Computing {metric}...", 0, n_total)
 
     def _run(job):
         with thread_dataset_context(ds_ctx), thread_detector_context(det_ctx):
+            # Progress lives on the job, not on the global ``eval_progress``
+            # singleton, so overlapping evals don't decorrelate the poll from
+            # job identity.  The singleton is written only from the actually-
+            # running job (here, inside ``_run``) so the live SSE ``eval`` bar
+            # reflects the running job rather than a job still parked pending.
+            job.update_progress(0, n_total, f"Computing {metric}...")
+            update_eval_progress("running", f"Computing {metric}...", 0, n_total)
             try:
                 if metric == "smart":
                     data = calculate_error_cost_over_time(clips, history, good_snap, bad_snap, inclusion)
@@ -204,6 +209,7 @@ def eval_train_and_score(body: dict):
                 else:
                     data = calculate_diversity_level_over_time(clips, history, inclusion)
                 job.result = {"metric": metric, "data": data}
+                job.update_progress(n_total, n_total, "Done")
                 update_eval_progress("idle", "Done", n_total, n_total)
             except CancelledError:
                 # User cancelled a running job: not a failure.  Clear the
@@ -221,6 +227,11 @@ def eval_train_and_score(body: dict):
         dataset_id=ds_ctx.dataset_id,
         detector_id=det_ctx.detector_id,
     )
+    # Seed this job's own total so a poll that lands before ``_run`` starts
+    # (the job may be parked pending behind another in-flight eval) still
+    # reports this job's numbers, not a global singleton shared with the
+    # currently-running job.
+    job.total = n_total
 
     if wait:
         job.done_event.wait(timeout=300)
@@ -248,12 +259,13 @@ def eval_train_and_score_result(query: dict):
         abort(404, message="Job not found", job_id=job_id, status="missing")
 
     if job.status in ("running", "pending"):
-        prog = get_eval_progress()
+        # Read progress from the job itself (not the global ``eval_progress``
+        # singleton) so overlapping evals report their own numbers.
         return {
             "job_id": job.job_id,
             "status": "running",
-            "current": prog.get("current", 0),
-            "total": prog.get("total", 0),
+            "current": job.current,
+            "total": job.total,
         }
     if job.status == "error":
         abort(500, message=job.error or "Evaluation computation failed", job_id=job.job_id)

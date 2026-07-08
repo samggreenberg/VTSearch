@@ -497,10 +497,15 @@ class DatasetStageFileResponseSchema(Schema):
 
 class DatasetStagingStartedResponseSchema(Schema):
     """Response for ``POST /api/dataset/stage-demo/<name>`` and the
-    plugin-field staging routes that haven't migrated yet."""
+    plugin-field staging routes that haven't migrated yet.
+
+    ``task_id`` is the background staging-task tracker id (string) used by
+    the ``loading-tasks`` SSE channel to poll progress and pick up the final
+    ``staging_result``; it may be empty when no task was started."""
 
     ok = fields.Boolean(required=True)
     message = fields.String(required=True)
+    task_id = fields.String(required=True)
 
 
 class DatasetStageDemoRequestSchema(Schema):
