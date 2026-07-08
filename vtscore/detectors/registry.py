@@ -34,6 +34,11 @@ _entries: list[dict[str, Any]] | None = None
 # Set of detector IDs currently loaded in memory (each has a DetectorContext).
 _loaded_ids: set[str] = set()
 
+# Detector IDs whose background load is currently in flight.  Gates the
+# ``.../load`` handler's check-then-act (the loaded flag is only set at the end
+# of the loader, so two concurrent loads would otherwise both start).
+_loading_ids: set[str] = set()
+
 
 # ---------------------------------------------------------------------------
 # Persistence
@@ -308,6 +313,29 @@ def is_detector_loaded(detector_id: str) -> bool:
         return detector_id in _loaded_ids
 
 
+def begin_detector_load(detector_id: str) -> str:
+    """Atomically claim the right to load *detector_id*.
+
+    Mirrors :func:`vtscore.datasets.registry.begin_load`.  Returns ``"loaded"``
+    if the detector is already resident, ``"in_progress"`` if another loader is
+    already running (attach to its task), or ``"reserved"`` if the caller won
+    the race and must run the load then call :func:`end_detector_load`.
+    """
+    with _lock:
+        if detector_id in _loaded_ids:
+            return "loaded"
+        if detector_id in _loading_ids:
+            return "in_progress"
+        _loading_ids.add(detector_id)
+        return "reserved"
+
+
+def end_detector_load(detector_id: str) -> None:
+    """Release the load reservation taken by :func:`begin_detector_load`."""
+    with _lock:
+        _loading_ids.discard(detector_id)
+
+
 def get_loaded_detector_ids() -> set[str]:
     """Return a copy of all loaded detector IDs."""
     with _lock:
@@ -348,3 +376,4 @@ def reset_for_tests() -> None:
     with _lock:
         _entries = None
         _loaded_ids.clear()
+        _loading_ids.clear()

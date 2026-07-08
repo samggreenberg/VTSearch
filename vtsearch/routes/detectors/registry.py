@@ -354,8 +354,16 @@ def _run_detector_load_task(
     values are passed explicitly.
     """
     from vtscore.concurrency.progress import CancelledError, detector_loading_tasks
-    from vtscore.detectors.registry import add_loaded_detector_id, remove_loaded_detector_id
-    from vtscore.state.core import thread_dataset_context, thread_detector_context
+    from vtscore.detectors.registry import (
+        add_loaded_detector_id,
+        end_detector_load,
+        remove_loaded_detector_id,
+    )
+    from vtscore.state.core import (
+        register_detector_context,
+        thread_dataset_context,
+        thread_detector_context,
+    )
 
     try:
         with thread_dataset_context(thread_ds_ctx), thread_detector_context(det_ctx):
@@ -445,6 +453,10 @@ def _run_detector_load_task(
                 # subsequent dataset switches and re-derive against the new
                 # dataset's medias.
                 det_ctx.votes_dataset_id = thread_ds_ctx.dataset_id
+                # Publish the fully-populated context, THEN flip the loaded flag,
+                # so there is never a window where the detector is marked loaded
+                # but its context is absent or half-filled in the global store.
+                register_detector_context(det_ctx)
                 add_loaded_detector_id(detector_id)
                 tracker.update("idle", "", 0, 0, step=None, total_steps=None)
             except CancelledError:
@@ -464,6 +476,7 @@ def _run_detector_load_task(
                 error_msg = str(e) or repr(e) or "Unknown error during detector loading"
                 tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
     finally:
+        end_detector_load(detector_id)
         detector_loading_tasks.mark_finished(task_id)
 
 
@@ -489,6 +502,29 @@ def _unload_active_detector() -> dict:
     return {"ok": True, "labels_restored": 0, "examples_seeded": 0}
 
 
+def _reembed_or_ack_loaded_detector(detector_id: str, entry: dict) -> dict:
+    """Handle a load request for a detector already resident in memory.
+
+    Its cached label embeddings may have been built against a different embedder
+    than the currently-active dataset uses (e.g. the user switched from a SigLIP
+    image dataset to a CLIP one). Re-embed the labels in that case so MLP
+    training mixes only same-space vectors; the invalidation itself happens
+    inside ``populate_label_embeddings``, this just surfaces the work via a
+    progress task instead of letting it run lazily inside the next request.
+    Otherwise it's a no-op acknowledgement.
+    """
+    from vtscore.detectors.embedder_sync import maybe_start_label_reembed
+    from vtsearch.state import get_active_detector_context
+    from vtsearch.threading import spawn
+
+    det_ctx_existing = get_active_detector_context()
+    if det_ctx_existing.detector_id == detector_id:
+        task_id = maybe_start_label_reembed(det_ctx_existing, entry, spawn=spawn)
+        if task_id is not None:
+            return {"ok": True, "message": "Re-embedding labels", "task_id": task_id}
+    return {"ok": True, "labels_restored": 0, "examples_seeded": 0}
+
+
 @detectors_registry_bp.route("/api/detectors/registry/load", methods=["POST"])
 @detectors_registry_bp.arguments(DetectorRegistryLoadRequestSchema)
 @detectors_registry_bp.response(200, DetectorRegistryLoadResponseSchema)
@@ -501,16 +537,14 @@ def load_detector_route(body: dict):
     detector without loading another one.
     """
     from vtscore.detectors.registry import (
+        begin_detector_load,
         can_user_access_detector,
         get_detector,
-        is_detector_loaded,
     )
     from vtsearch.state import (
         DetectorContext,
         bad_votes,
-        get_active_detector_context,
         good_votes,
-        register_detector_context,
     )
 
     detector_id = body.get("detector_id")
@@ -528,40 +562,32 @@ def load_detector_route(body: dict):
     if detector_id is None:
         return _unload_active_detector()
 
-    if is_detector_loaded(detector_id):
-        # Detector is already in memory, but its cached label embeddings may
-        # have been built against a different embedder than the one the
-        # currently-active dataset uses (e.g. user switched from an image
-        # dataset embedded with SigLIP to one embedded with CLIP). Re-embed
-        # the labels in that case so MLP training mixes only same-space
-        # vectors. The cache invalidation itself happens inside
-        # ``populate_label_embeddings``; this branch just makes the work
-        # visible via a progress task instead of letting it run lazily
-        # inside the next vote or learned-sort request.
-        from vtscore.detectors.embedder_sync import maybe_start_label_reembed
-        from vtsearch.threading import spawn
+    # Atomically decide our role, closing the check-then-act race where two
+    # concurrent loads both saw the detector unloaded (the loaded flag is only
+    # set at the end of the loader) and spawned twin loaders.
+    load_role = begin_detector_load(detector_id)
+    if load_role == "in_progress":
+        return {
+            "ok": True,
+            "message": "Detector load already in progress",
+            "task_id": f"_detload_{detector_id}",
+        }
 
-        det_ctx_existing = get_active_detector_context()
-        if det_ctx_existing.detector_id == detector_id:
-            task_id = maybe_start_label_reembed(det_ctx_existing, entry, spawn=spawn)
-            if task_id is not None:
-                return {
-                    "ok": True,
-                    "message": "Re-embedding labels",
-                    "task_id": task_id,
-                }
-        return {"ok": True, "labels_restored": 0, "examples_seeded": 0}
+    if load_role == "loaded":
+        return _reembed_or_ack_loaded_detector(detector_id, entry)
 
     from vtscore.concurrency.progress import detector_loading_tasks
 
+    # Build the context but do NOT register it yet: the worker publishes it into
+    # the global store only after labels/embeddings/MLP are populated, so no
+    # concurrent request can observe a torn, empty-then-filling detector.
     det_ctx = DetectorContext(
         detector_id,
         name=entry.get("name", ""),
         media_type=entry.get("media_type", ""),
     )
-    register_detector_context(det_ctx)
 
-    task_id = f"_detload_{detector_id[:8]}"
+    task_id = f"_detload_{detector_id}"
     tracker = detector_loading_tasks.create_task(
         task_id,
         entry.get("name", detector_id),

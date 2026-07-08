@@ -48,7 +48,6 @@ from vtscore.detectors.labelset_training import (
     labelset_train_and_score,
     populate_label_embeddings,
     train_from_labelset,
-    update_cache_for_cid,
 )
 
 __all__ = [
@@ -72,5 +71,4 @@ __all__ = [
     "labelset_train_and_score",
     "populate_label_embeddings",
     "train_from_labelset",
-    "update_cache_for_cid",
 ]

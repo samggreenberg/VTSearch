@@ -367,13 +367,6 @@ but trains on the full labelset (cross-dataset labels) and scores only
 the active `clips_dict`. Returns the same `(results, threshold, model)`
 tuple.
 
-### `update_cache_for_cid(det_ctx, labelset, cid, snap)`
-
-`vtscore/detectors/labelset_training.py:316`. Refresh the cache entry
-for whichever labelset element corresponds to one cid. Called after a
-vote toggles a media item in the active dataset, so the labelset's
-training vector tracks the live embedding.
-
 ---
 
 ## Element identity (cross-dataset label restore)

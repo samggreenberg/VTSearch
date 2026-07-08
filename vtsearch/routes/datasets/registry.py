@@ -35,7 +35,9 @@ from vtscore.datasets.load_pipeline import _warmup_embedder_async
 from vtscore.datasets.loader import load_dataset_from_pickle
 from vtscore.datasets.registry import (
     add_loaded_id as _reg_add_loaded,
+    begin_load as _reg_begin_load,
     can_user_access as _reg_can_access,
+    end_load as _reg_end_load,
     get_dataset as _reg_get,
     is_loaded as _reg_is_loaded,
     is_owner as _reg_is_owner,
@@ -158,18 +160,29 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     if not _reg_can_access(dataset_id, get_current_user()):
         abort(403, message="Access denied")
 
-    # If already loaded in memory, nothing to do.
-    if _reg_is_loaded(dataset_id):
+    # Atomically decide our role.  This closes the check-then-act race where
+    # two concurrent loads both saw ``is_loaded()`` False (the flag is only set
+    # at the *end* of the loader) and spawned twin loaders sharing one task id.
+    # The task id is a pure function of the dataset id so a second caller that
+    # finds a load already in progress can attach to the same tracker.
+    task_id = f"_regload_{dataset_id}"
+    load_role = _reg_begin_load(dataset_id)
+    if load_role == "loaded":
         return {"ok": True, "message": "Dataset already loaded", "task_id": ""}
+    if load_role == "in_progress":
+        return {"ok": True, "message": "Dataset load already in progress", "task_id": task_id}
 
+    # load_role == "reserved": we own the load.  Release the reservation on any
+    # early failure below (and in the worker's ``finally``) so a retry isn't
+    # permanently blocked.
     pkl_path = entry.get("pkl_path", "")
     if not pkl_path or not Path(pkl_path).is_file():
+        _reg_end_load(dataset_id)
         abort(404, message=f"Saved dataset file not found: {pkl_path}")
 
     _LOAD_STEPS = 2  # step 1: load items (read + dedup); step 2: diversity index
 
     # Create a per-task tracker for this load operation.
-    task_id = f"_regload_{dataset_id[:8]}"
     tracker = _loading_tasks.create_task(
         task_id,
         entry.get("name", dataset_id),
@@ -203,8 +216,12 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
             try:
                 tracker.update("loading", "Preparing…", 0, 0, step=1, total_steps=_LOAD_STEPS)
                 # Create a fresh context for this dataset (don't activate yet).
+                # It is NOT registered until fully populated below: publishing an
+                # empty-then-growing ctx into the global store lets concurrent
+                # requests observe a torn, half-loaded dataset (or hit
+                # "dictionary changed size during iteration" while the loader
+                # mutates ctx.medias unlocked).
                 ctx = DatasetContext(dataset_id)
-                register_context(ctx)
                 gc.collect()
 
                 # Set thread-local progress for the pickle loader.
@@ -268,6 +285,10 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                 # bar reaches 100% cleanly instead of stalling at the step-1
                 # boundary when the tree restored without emitting any progress.
                 tracker.update("loading", "Finalizing…", current=1, total=1, step=2, total_steps=_LOAD_STEPS)
+                # Publish the fully-populated context, THEN flip the loaded flag,
+                # so there is never a moment where _loaded_ids says "loaded" but
+                # the context store lacks it (or holds a half-filled one).
+                register_context(ctx)
                 _reg_add_loaded(dataset_id)
                 # Update item count and dupe count in case they changed
                 num_dupes = sum(
@@ -302,6 +323,7 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                 tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
             finally:
                 clear_thread_progress()
+                _reg_end_load(dataset_id)
                 _loading_tasks.mark_finished(task_id)
 
     from vtsearch.threading import spawn

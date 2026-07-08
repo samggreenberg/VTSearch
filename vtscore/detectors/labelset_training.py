@@ -574,36 +574,3 @@ def labelset_train_and_score(
     # ``train_and_score``).  A no-op for every non-structural dataset.
     results, threshold = maybe_labelset_structural_rerank(det_ctx, labelset, results, threshold, clips_dict)
     return results, threshold, model
-
-
-def update_cache_for_cid(
-    det_ctx,
-    labelset: LabelSet,
-    cid: int,
-    snap: dict[int, dict[str, Any]],
-) -> None:
-    """Refresh the cache entry for whichever labelset element matches *cid*.
-
-    Called after a vote in the active dataset toggles a media item.  Looks
-    up which :class:`LabeledElement` has the same origin as ``snap[cid]``
-    and copies its embedding into the cache.  No-op if the cid isn't
-    represented in the labelset (e.g. the element was just removed).
-    """
-    from vtscore.datasets.labelset import element_key, media_element_key
-    from vtscore.detectors.labelset_elements import stable_element_id
-
-    media = snap.get(cid)
-    if not media:
-        return
-    target_key = media_element_key(media)
-    if target_key is None:
-        return
-    embedding = media_embedding(media)
-    if embedding is None:
-        return
-    for elem in labelset.elements:
-        if element_key(elem) == target_key:
-            eid = stable_element_id(elem)
-            det_ctx.label_embeddings[eid] = np.asarray(embedding)
-            det_ctx.label_embedding_regions[eid] = None
-            return

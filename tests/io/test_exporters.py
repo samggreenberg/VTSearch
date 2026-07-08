@@ -844,3 +844,68 @@ class TestGuiStreaming:
         assert "b9.wav" in captured.out
         assert "b4.wav" not in captured.out
         assert "2 hit(s)" in res["message"]
+
+
+class TestStreamingExportTempCollision:
+    """Regression (audit #14): two concurrent streaming exports to the same
+    destination path must not clobber each other's temp file.
+
+    Both exporters used to build a single fixed ``<name>.tmp`` sibling, so the
+    first export to finish renamed/deleted that shared temp out from under the
+    other — surfacing as ``FileNotFoundError`` from ``os.replace`` (or a
+    corrupted merged file). Each export now writes to a per-writer-unique
+    ``<name>.<pid>.<uuid>.tmp``.
+    """
+
+    def _run_collision(self, exporter_name: str, out: Path) -> None:
+        import threading
+
+        from vtscore.exporters import get_exporter
+
+        a_opened = threading.Event()
+        b_done = threading.Event()
+        a_result: dict[str, object] = {}
+        a_error: list[BaseException] = []
+
+        def a_records():
+            # By the time this iterator is first pulled, export A has already
+            # opened its temp file and written any header. Park here until
+            # export B has fully completed against the same path so we exercise
+            # the collision window.
+            a_opened.set()
+            b_done.wait(timeout=5)
+            yield "dog_bark", {"id": 1, "filename": "a1.wav", "category": "c", "score": 0.5, "label": "good"}
+
+        def run_a():
+            try:
+                a_result["res"] = get_exporter(exporter_name).export_cli_streaming(
+                    _STREAM_HEADER, a_records(), {"filepath": str(out)}
+                )
+            except BaseException as exc:  # noqa: BLE001 - re-raised via assertion
+                a_error.append(exc)
+
+        ta = threading.Thread(target=run_a)
+        ta.start()
+        assert a_opened.wait(timeout=5), "export A never started"
+
+        # Export B runs to completion while A is parked mid-stream.
+        b_res = get_exporter(exporter_name).export_cli_streaming(
+            _STREAM_HEADER, _stream_records(), {"filepath": str(out)}
+        )
+        b_done.set()
+        ta.join(timeout=5)
+
+        assert not a_error, f"export A failed on temp collision: {a_error[0]!r}"
+        assert "3 hit(s)" in b_res["message"]
+        assert "1 hit(s)" in a_result["res"]["message"]  # type: ignore[index]
+        # Destination is intact (last atomic replace wins) and no temp leaked.
+        assert out.exists()
+        assert list(out.parent.glob("*.tmp")) == []
+
+    def test_json_concurrent_exports_to_same_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._run_collision("server_json_file", Path(tmp) / "hits.ndjson")
+
+    def test_csv_concurrent_exports_to_same_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._run_collision("server_csv_file", Path(tmp) / "hits.csv")
