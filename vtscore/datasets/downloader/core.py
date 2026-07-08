@@ -119,6 +119,17 @@ UCSF_IDL_DOWNLOAD_URL = "https://download.industrydocuments.ucsf.edu"
 ROXFORD_IMAGES_URL = "https://thor.robots.ox.ac.uk/oxbuildings/oxbuild_images-v1.tgz"
 ROXFORD_GND_URL = "https://cmp.felk.cvut.cz/revisitop/data/datasets/roxford5k/gnd_roxford5k.pkl"
 
+# OpenLogo (QMUL-OpenLogo): the structural embedder's instance-matching *logo*
+# demo — 352 brands / 27k in-the-wild photos with ground-truth boxes, aggregated
+# from 7 logo datasets (FlickrLogos-27/32, Logo32plus, BelgaLogos, WebLogo-2M
+# test, Logo-in-the-Wild, SportsLogo).  It is distributed as a FiftyOne dataset
+# on HuggingFace: a flat ``data/`` media folder plus a ``samples.json`` carrying
+# per-image ``ground_truth`` detections (normalized ``[x, y, w, h]`` boxes).
+# Because the media is thousands of loose files (no single archive), it is pulled
+# with ``huggingface_hub.snapshot_download`` rather than the single-URL helper,
+# and parsed from ``samples.json`` with the stdlib (no ``fiftyone`` dependency).
+OPENLOGO_REPO_ID = "Voxel51/OpenLogo"
+
 # Visual Genome (v1.4): a multi-label scene dataset of ~108k dense-annotated
 # photos.  Images ship as two zips (the historical VG_100K / VG_100K_2 splits);
 # object annotations (per-object name + pixel bounding box) ship as a separate
@@ -163,6 +174,7 @@ STANFORD_DOGS_DOWNLOAD_SIZE_MB = 750
 PLACES365_DOWNLOAD_SIZE_MB = 501
 UCSF_IDL_DOWNLOAD_SIZE_MB = 50
 ROXFORD_IMAGES_DOWNLOAD_SIZE_MB = 1850
+OPENLOGO_DOWNLOAD_SIZE_MB = 4640
 VISUAL_GENOME_IMAGES_DOWNLOAD_SIZE_MB = 9700
 VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB = 5300
 VISUAL_GENOME_OBJECTS_DOWNLOAD_SIZE_MB = 110

@@ -394,6 +394,63 @@ def download_roxford5k(on_progress: Optional[ProgressCallback] = None) -> Path:
     return extract_dir
 
 
+def download_openlogo(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download the OpenLogo (QMUL-OpenLogo) logo dataset from HuggingFace.
+
+    OpenLogo is distributed as a `FiftyOne <https://voxel51.com>`_ dataset: a flat
+    ``data/`` folder of ~27k JPEGs plus a ``samples.json`` describing each image's
+    ``ground_truth`` detections (brand label + normalized ``[x, y, w, h]`` box).
+    Because the media is thousands of loose files with no single archive, it is
+    fetched with :func:`huggingface_hub.snapshot_download` rather than the
+    single-URL :func:`download_file_with_progress` helper.  The large preview GIF
+    is skipped.  The stored HuggingFace token (if the user signed in) is passed
+    through for rate-limit headroom, though the dataset is public.
+
+    This is the structural embedder's instance-matching *logo* demo: one boxed
+    example of a brand's logo should rank that brand's other in-the-wild photos
+    above the other brands, which a semantic embedder cannot do.  Labels are
+    parsed from ``samples.json`` with the stdlib, so ``fiftyone`` is not required.
+
+    Args:
+        on_progress: Optional progress callback. Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``openlogo/`` directory containing ``data/`` (the flat image
+        folder) and ``samples.json`` (the per-image detection annotations).
+    """
+    if on_progress is None:
+        on_progress = _core._default_progress()
+
+    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+
+    extract_dir = _core.DATA_DIR / "openlogo"
+    samples_json = extract_dir / "samples.json"
+    data_dir = extract_dir / "data"
+    if samples_json.exists() and data_dir.is_dir():
+        return extract_dir
+
+    from huggingface_hub import snapshot_download  # noqa: PLC0415
+
+    from vtscore.security.hf_auth import get_token  # noqa: PLC0415
+
+    _core.DATA_DIR.mkdir(exist_ok=True)
+    on_progress(
+        "downloading",
+        f"Downloading OpenLogo (~{_core.OPENLOGO_DOWNLOAD_SIZE_MB // 1024} GB) from HuggingFace...",
+        0,
+        0,
+    )
+    snapshot_download(
+        repo_id=_core.OPENLOGO_REPO_ID,
+        repo_type="dataset",
+        local_dir=str(extract_dir),
+        ignore_patterns=["*.gif"],
+        token=get_token(),
+    )
+    return extract_dir
+
+
 def download_places365(on_progress: Optional[ProgressCallback] = None) -> Path:
     """Download and extract the Places365 validation set.
 
