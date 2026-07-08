@@ -144,7 +144,11 @@ def test_unknown_n_returns_static_profile(monkeypatch):
 
 def test_no_matching_cost_model_row_returns_static(monkeypatch):
     monkeypatch.setattr("vtscore.config.resolve_device", lambda: "cpu")
-    _inject_row(monkeypatch, ("cuda", "image", "siglip"), {"a_model": 0.3, "a_embed": 1.0, "b_embed": 0.01, "a_fin": 1.0, "b_fin": 0.002})
+    _inject_row(
+        monkeypatch,
+        ("cuda", "image", "siglip"),
+        {"a_model": 0.3, "a_embed": 1.0, "b_embed": 0.01, "a_fin": 1.0, "b_fin": 0.002},
+    )
     # device cpu -> no ("cpu", image, x) row -> static image-CPU profile.
     assert load_step_weights("image", n=1000, download_size_mb=100.0, embedder="siglip") == _LOAD_STEP_WEIGHTS_CPU_IMAGE
 

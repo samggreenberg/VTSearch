@@ -419,9 +419,7 @@ def _run_origin_load_in_background(
         name or _origin_to_str(origin),
         media_type=media_type,
         embedder=embedder,
-        step_weights=load_step_weights(
-            media_type, n=n_hint, download_size_mb=download_size_mb_hint, embedder=embedder
-        ),
+        step_weights=load_step_weights(media_type, n=n_hint, download_size_mb=download_size_mb_hint, embedder=embedder),
     )
     # Env-gated per-phase timing recorder (VTSEARCH_PROFILE_LOAD); ``None`` and
     # zero-cost when off. Subscribed before the first phase fires. See
