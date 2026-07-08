@@ -304,7 +304,16 @@ def learned_sort(body: dict):
     ds_ctx = get_active_context()
     labelset, det_media_type = resolve_active_labelset(det_ctx)
 
-    _validate_learned_sort_inputs(labelset, good_votes, bad_votes)
+    # Freeze the votes at request time, exactly as region boxes already are.
+    # good_votes/bad_votes are lazy context proxies; if we passed them live,
+    # the signature would capture request-time membership while the background
+    # job's dict(good)/dict(bad) copy at run time could see a different set
+    # (a vote POST or an ensure_votes_match_active_dataset rehydrate in
+    # between), poisoning _last_done: key says V1, result trained on V2.
+    good_snapshot = dict(good_votes)
+    bad_snapshot = dict(bad_votes)
+
+    _validate_learned_sort_inputs(labelset, good_snapshot, bad_snapshot)
 
     inclusion_value = get_inclusion()
     safe_thresholds_value = get_safe_thresholds()
@@ -317,8 +326,8 @@ def learned_sort(body: dict):
         ds_ctx=ds_ctx,
         snap=snap,
         labelset=labelset,
-        good=good_votes,
-        bad=bad_votes,
+        good=good_snapshot,
+        bad=bad_snapshot,
         region_boxes_snapshot=region_boxes_snapshot,
         inclusion_value=inclusion_value,
         safe_thresholds_value=safe_thresholds_value,
@@ -340,8 +349,8 @@ def learned_sort(body: dict):
             snap=snap,
             labelset=labelset,
             det_media_type=det_media_type,
-            good=good_votes,
-            bad=bad_votes,
+            good=good_snapshot,
+            bad=bad_snapshot,
             region_boxes_snapshot=region_boxes_snapshot,
             inclusion_value=inclusion_value,
             safe_thresholds_value=safe_thresholds_value,

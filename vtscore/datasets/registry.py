@@ -48,6 +48,12 @@ _entries: list[dict[str, Any]] | None = None
 # The set of dataset IDs that are currently loaded in memory.
 _loaded_ids: set[str] = set()
 
+# The set of dataset IDs whose background load is currently in flight.  Used
+# to gate the ``.../load`` handler's check-then-act: without it two concurrent
+# requests both pass the ``is_loaded`` check (the flag is only set at the *end*
+# of the loader) and spawn twin loaders against the same id.
+_loading_ids: set[str] = set()
+
 
 # ---------------------------------------------------------------------------
 # Persistence
@@ -257,6 +263,35 @@ def is_loaded(dataset_id: str) -> bool:
         return dataset_id in _loaded_ids
 
 
+def begin_load(dataset_id: str) -> str:
+    """Atomically claim the right to load *dataset_id*.
+
+    This closes the check-then-act race in the ``.../load`` handler: the
+    decision to load and the reservation happen under a single lock, so two
+    concurrent requests can't both start a loader.
+
+    Returns:
+        ``"loaded"`` – already resident in memory; the caller should no-op.
+        ``"in_progress"`` – another loader is already running; the caller
+            should attach to the existing task instead of spawning a twin.
+        ``"reserved"`` – the caller won the race and must run the load, then
+            call :func:`end_load` once it settles (success or failure).
+    """
+    with _lock:
+        if dataset_id in _loaded_ids:
+            return "loaded"
+        if dataset_id in _loading_ids:
+            return "in_progress"
+        _loading_ids.add(dataset_id)
+        return "reserved"
+
+
+def end_load(dataset_id: str) -> None:
+    """Release the load reservation taken by :func:`begin_load`."""
+    with _lock:
+        _loading_ids.discard(dataset_id)
+
+
 def find_by_pkl_path(pkl_path: str) -> dict[str, Any] | None:
     """Return the entry whose ``pkl_path`` matches, or ``None``."""
     with _lock:
@@ -333,3 +368,4 @@ def reset_for_tests() -> None:
     with _lock:
         _entries = None
         _loaded_ids.clear()
+        _loading_ids.clear()

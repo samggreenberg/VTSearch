@@ -689,9 +689,6 @@ def labelset_train_and_score(
     dataset: DatasetContext,
 ) -> dict[int, float]:
     """Like train_and_score but uses ctx.labelset, not the live vote dicts."""
-
-def update_cache_for_cid(ctx: DetectorContext, cid: int) -> None:
-    """Refresh the label embedding for one media after a vote change."""
 ```
 
 ### Labelset element identity (for cross-dataset label restore)

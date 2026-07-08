@@ -111,7 +111,6 @@ default_concurrent_embeddings  # noqa: F821
 # ---------------------------------------------------------------------------
 find_by_pkl_path  # noqa: F821 - vtscore.datasets.registry
 recreate_model_at_time  # noqa: F821 - vtscore.detectors.labeling_progress
-update_cache_for_cid  # noqa: F821 - vtscore.detectors.labelset_training
 collect_media_origins  # noqa: F821 - vtscore.detectors.training
 train_detector_from_origins  # noqa: F821 - vtscore.detectors.training
 

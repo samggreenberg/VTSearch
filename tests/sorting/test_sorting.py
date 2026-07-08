@@ -900,3 +900,46 @@ class TestLoadEmbedderConcurrentCallback:
                 _load_embedder_with_progress("audio", 5)
 
         assert mock_emb._on_progress is original_cb
+
+
+class TestLearnedSortVoteSnapshot:
+    """Regression (audit #6): the learned-sort job must train on the votes as
+    they were at *request* time, not whatever the live vote proxy holds when
+    the background job happens to run.
+
+    The signature is computed at request time; if the job re-read the live
+    proxy at run time, a vote change (or an ``ensure_votes_match_active_dataset``
+    rehydrate) in between would cache a result trained on V2 under the key for
+    V1 — poisoning ``_last_done`` for later identical-signature requests.
+    """
+
+    def test_job_uses_request_time_snapshot_not_live_votes(self, client, monkeypatch):
+        from vtscore.concurrency.async_jobs import learned_sort_jobs
+        from vtscore.detectors import learned_sort as ls_mod
+
+        learned_sort_jobs.reset_for_tests()
+        app_module.good_votes.clear()
+        app_module.bad_votes.clear()
+        app_module.good_votes.update({1: None, 2: None})
+        app_module.bad_votes.update({3: None})
+
+        captured: dict[str, dict] = {}
+
+        def fake_run(*, good, bad, **_kwargs):
+            # Simulate a vote landing after the request computed its signature
+            # but before/while the job runs: mutate the live proxy.
+            app_module.good_votes[99] = None
+            captured["good"] = dict(good)
+            captured["bad"] = dict(bad)
+            return {1: 0.9, 2: 0.8, 3: 0.1}, 0.5
+
+        monkeypatch.setattr(ls_mod, "run_learned_sort", fake_run)
+
+        resp = client.post("/api/learned-sort", json={"wait": True})
+        assert resp.status_code == 200
+
+        # The job trained on the frozen request-time votes, not the live proxy
+        # that gained id 99 mid-run.
+        assert captured["good"] == {1: None, 2: None}
+        assert 99 not in captured["good"]
+        assert captured["bad"] == {3: None}
