@@ -19,7 +19,7 @@ class TestDownloadOpenlogo:
         """download_openlogo pulls the snapshot and returns the openlogo/ directory."""
         from vtscore.datasets import downloader as dl_module
 
-        def fake_snapshot(*, repo_id, repo_type, local_dir, ignore_patterns, token):
+        def fake_snapshot(*, repo_id, repo_type, local_dir, ignore_patterns, token, tqdm_class=None):
             d = Path(local_dir)
             (d / "data").mkdir(parents=True, exist_ok=True)
             (d / "data" / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
@@ -35,6 +35,40 @@ class TestDownloadOpenlogo:
         assert result.name == "openlogo"
         assert (result / "data").is_dir()
         assert (result / "samples.json").exists()
+
+    def test_reports_measurable_file_progress(self, tmp_path):
+        """The tqdm_class handed to snapshot_download forwards a live file count.
+
+        Every other downloader streams byte-level progress so the UI leads with a
+        count ("497/1.10GB ..."); OpenLogo is thousands of loose files, so it must
+        drive snapshot_download's over-the-files bar instead. Simulate that bar and
+        assert the callback sees a measurable (current, total), not just total=0.
+        """
+        from vtscore.datasets import downloader as dl_module
+
+        events: list = []
+
+        def fake_snapshot(*, repo_id, repo_type, local_dir, ignore_patterns, token, tqdm_class):
+            d = Path(local_dir)
+            (d / "data").mkdir(parents=True, exist_ok=True)
+            (d / "data" / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+            (d / "samples.json").write_text('{"samples": []}')
+            # Mimic how snapshot_download drives the over-the-files bar.
+            bar = tqdm_class(total=3)
+            for _ in range(3):
+                bar.update(1)
+            bar.close()
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
+            patch("huggingface_hub.snapshot_download", fake_snapshot),
+        ):
+            dl_module.download_openlogo(on_progress=lambda *a: events.append(a))
+
+        measurable = [e for e in events if e[0] == "downloading" and e[3] > 0]
+        assert measurable, f"expected a measurable download event, got {events}"
+        assert measurable[-1] == ("downloading", "Downloading OpenLogo logos", 3, 3)
 
     def test_cached_snapshot_skips_download(self, tmp_path):
         """If samples.json and data/ already exist, snapshot_download is not called."""
