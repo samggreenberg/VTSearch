@@ -34,8 +34,11 @@ import logging
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Iterator, Optional
+
+from vtscore.concurrency.progress import CancelledError
 
 
 @dataclass
@@ -75,6 +78,61 @@ class AsyncJob:
         self.total = total
         if message:
             self.message = message
+
+
+# ---------------------------------------------------------------------- #
+# Cooperative cancellation of *running* jobs
+# ---------------------------------------------------------------------- #
+#
+# The heavy work a job performs (MLP epoch loops in ``train_model``, eval
+# retraining over label history) is GIL-bound Python/torch, so cancelling
+# the parked pending slot - which this module already does - does nothing
+# for a job that is *already running*.  To make cancel real, the running
+# job is bound to its worker thread here and the deep compute loops poll
+# :func:`check_job_cancelled` at their natural boundaries (epoch, eval
+# step).  When the job's ``cancel_event`` is set, the next poll raises
+# :class:`CancelledError`, which unwinds the training/eval stack and is
+# caught in :meth:`JobManager._run_inner` to mark the job ``cancelled``.
+#
+# The binding is thread-local and restored on scope exit, and every job
+# runs on its own fresh daemon thread, so no cancellation state leaks
+# across jobs or into the synchronous request handlers, tests, and CLI
+# paths that share the same training code.  Outside a bound job
+# :func:`check_job_cancelled` is a no-op.
+_thread_state = threading.local()
+
+
+@contextmanager
+def bind_job_cancellation(job: AsyncJob) -> Iterator[None]:
+    """Bind *job* as the current worker thread's cancellable job.
+
+    Deep compute loops call :func:`check_job_cancelled` to observe the
+    binding.  The previous binding (normally ``None``) is restored on exit.
+    """
+    prev = getattr(_thread_state, "job", None)
+    _thread_state.job = job
+    try:
+        yield
+    finally:
+        _thread_state.job = prev
+
+
+def current_job() -> Optional[AsyncJob]:
+    """Return the :class:`AsyncJob` bound to the current thread, or ``None``."""
+    return getattr(_thread_state, "job", None)
+
+
+def check_job_cancelled() -> None:
+    """Raise :class:`CancelledError` if the current thread's job was cancelled.
+
+    A no-op when no job is bound to the calling thread (synchronous request
+    handlers, tests, the CLI), so shared library code that runs both inside
+    and outside a background job can call it unconditionally at loop
+    boundaries.
+    """
+    job = getattr(_thread_state, "job", None)
+    if job is not None and job.is_cancelled:
+        raise CancelledError("Job cancelled by user")
 
 
 class JobManager:
@@ -245,6 +303,9 @@ class JobManager:
         ds_ctx = get_context(job.dataset_id) if job.dataset_id else None
         det_ctx = get_detector_context(job.detector_id) if job.detector_id else None
         with ExitStack() as stack:
+            # Bind the job so ``check_job_cancelled`` in the deep training /
+            # eval loops can honour a cancel of this *running* job.
+            stack.enter_context(bind_job_cancellation(job))
             if job.user is not None:
                 stack.enter_context(thread_user(job.user))
             if ds_ctx is not None:
@@ -256,6 +317,17 @@ class JobManager:
     def _run_inner(self, job: AsyncJob, target: Callable[[AsyncJob], Any]) -> None:
         try:
             target(job)
+        except CancelledError:
+            # A poll of ``check_job_cancelled`` inside the training / eval
+            # loop unwound the stack: this is a user cancel of a running
+            # job, not a failure.  Mark it terminal-cancelled (never cache
+            # its half-built result) and hand off to any parked pending.
+            with self._lock:
+                if job.status == "running":
+                    job.status = "cancelled"
+                job.done_event.set()
+            self._promote_pending_if_any()
+            return
         except Exception as exc:  # noqa: BLE001
             logging.getLogger(__name__).exception("%s job failed", self._name)
             with self._lock:

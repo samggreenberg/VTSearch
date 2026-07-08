@@ -16,8 +16,18 @@ The manager must guarantee:
 from __future__ import annotations
 
 import threading
+import time
 
-from vtscore.concurrency.async_jobs import AsyncJob, JobManager
+import pytest
+
+from vtscore.concurrency.async_jobs import (
+    AsyncJob,
+    JobManager,
+    bind_job_cancellation,
+    check_job_cancelled,
+    current_job,
+)
+from vtscore.concurrency.progress import CancelledError
 from vtscore.state.core import (
     DatasetContext,
     DetectorContext,
@@ -481,3 +491,118 @@ class TestThreadContextPropagation:
         finally:
             unregister_context("ds-ctx-B")
             unregister_detector_context("det-ctx-B")
+
+
+def _cancellable_target(started: threading.Event, marker: list):
+    """Return a target that polls ``check_job_cancelled`` until cancelled.
+
+    The loop is unbounded, so it exits *only* via ``CancelledError`` (never
+    by running out of iterations before the cancel arrives) - the pattern
+    CLAUDE.md prescribes for interruptible work.
+    """
+
+    def target(job: AsyncJob) -> None:
+        started.set()
+        marker.append("start")
+        while True:  # exits only via CancelledError
+            check_job_cancelled()
+            time.sleep(0.01)
+
+    return target
+
+
+class TestCheckJobCancelledPrimitive:
+    """Unit coverage for the thread-local cancellation binding used by the
+    deep training / eval loops."""
+
+    def test_noop_without_binding(self):
+        assert current_job() is None
+        check_job_cancelled()  # must not raise when nothing is bound
+
+    def test_bound_uncancelled_job_does_not_raise(self):
+        job = AsyncJob(job_id="j")
+        with bind_job_cancellation(job):
+            assert current_job() is job
+            check_job_cancelled()  # not cancelled → no raise
+        assert current_job() is None  # binding restored on exit
+
+    def test_bound_cancelled_job_raises(self):
+        job = AsyncJob(job_id="j")
+        job.cancel()
+        with bind_job_cancellation(job):  # noqa: SIM117
+            with pytest.raises(CancelledError):
+                check_job_cancelled()
+
+    def test_binding_restored_after_exception(self):
+        job = AsyncJob(job_id="j")
+        try:
+            with bind_job_cancellation(job):
+                raise RuntimeError("boom")
+        except RuntimeError:
+            pass
+        assert current_job() is None
+
+    def test_nested_binding_restores_outer(self):
+        outer = AsyncJob(job_id="outer")
+        inner = AsyncJob(job_id="inner")
+        with bind_job_cancellation(outer):
+            assert current_job() is outer
+            with bind_job_cancellation(inner):
+                assert current_job() is inner
+            assert current_job() is outer
+
+
+class TestRunningJobCancellation:
+    """Cancelling a *running* job must actually stop it - the job's target
+    polls ``check_job_cancelled`` (as the real training / eval loops now do),
+    transitions to ``cancelled`` (not ``error`` or ``done``), never caches
+    its half-built result, and hands off to any parked pending.
+    """
+
+    def test_running_job_transitions_to_cancelled(self):
+        mgr = JobManager("cancel-test")
+        started = threading.Event()
+        marker: list = []
+
+        job = mgr.start("sig-A", _cancellable_target(started, marker))
+        assert started.wait(timeout=5)
+        assert job.status == "running"
+
+        job.cancel()
+        assert job.done_event.wait(timeout=5)
+        assert job.status == "cancelled"
+        # A cancelled job's partial result is never promoted to the cache.
+        assert mgr.cached_for("sig-A") is None
+
+    def test_cancelled_running_job_promotes_pending(self):
+        mgr = JobManager("cancel-test")
+        started = threading.Event()
+        marker: list = []
+
+        running = mgr.start(
+            "sig-A",
+            _cancellable_target(started, marker),
+            dataset_id="ds-1",
+            detector_id="det-1",
+        )
+        assert started.wait(timeout=5)
+
+        # Park a pending job for the same requester context.
+        pending_release = threading.Event()
+        pending_release.set()
+        pending = mgr.start(
+            "sig-B",
+            _make_target(pending_release, threading.Event(), marker),
+            dataset_id="ds-1",
+            detector_id="det-1",
+        )
+        assert pending.status == "pending"
+
+        # Cancelling the running job must let the pending one run.
+        running.cancel()
+        assert running.done_event.wait(timeout=5)
+        assert running.status == "cancelled"
+        assert pending.done_event.wait(timeout=5)
+        assert pending.status == "done"
+        assert pending.result == {"signature": "sig-B"}
+        assert marker == ["start", "sig-B"]
