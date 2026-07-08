@@ -431,7 +431,7 @@ def download_openlogo(on_progress: Optional[ProgressCallback] = None) -> Path:
         return extract_dir
 
     from huggingface_hub import snapshot_download  # noqa: PLC0415
-    from huggingface_hub.utils import tqdm as _hf_tqdm  # noqa: PLC0415
+    from huggingface_hub.utils.tqdm import tqdm as _hf_tqdm  # noqa: PLC0415
 
     from vtscore.security.hf_auth import get_token  # noqa: PLC0415
 
