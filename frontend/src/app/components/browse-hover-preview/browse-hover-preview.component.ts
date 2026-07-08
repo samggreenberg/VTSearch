@@ -1,40 +1,36 @@
-import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, OnChanges, OnDestroy, signal, SimpleChanges, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, input, OnChanges, OnDestroy, output, signal, SimpleChanges } from '@angular/core';
 
 import { ActiveContextService } from '../../services/active-context.service';
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import { applyClipWindow, clearClipWindow } from '../../utils/clip-window';
 import type { HexHoverEvent } from '../browse-canvas/browse-canvas.component';
 
-/** The open anchored audio player (``null`` when none is shown). */
-interface AudioPanel {
+/** A clip currently auditioning from a VTSBrowse hover (a canvas bin here, or a
+ *  bin-popup member — see `browse-bin-popup.component.ts`), or ``null`` when
+ *  nothing is playing. Drives the now-playing waveform anchored at the
+ *  top-left of the canvas, alongside the volume control. */
+export interface NowPlaying {
   mediaId: number;
-  /** The bin's waveform PNG — the same thumbnail painted on the tile. */
+  /** The clip's waveform PNG — the same thumbnail painted on its tile. */
   waveUrl: string;
-  audioSrc: string;
-  left: number;
-  top: number;
-  count: number;
 }
 
-/** How long (ms) the cursor must rest on an audio bin before its player opens,
- *  so sweeping across bins doesn't spawn a burst of players. */
+/** How long (ms) the cursor must rest on an audio bin before its clip starts
+ *  auditioning, so sweeping across bins doesn't fire a burst of plays. */
 const AUDIO_DWELL_MS = 200;
-/** Grace (ms) after the bin-hover clears before the player closes, giving the
- *  cursor time to travel from the tile onto the player without it vanishing —
- *  the classic hover-bridge. */
-const AUDIO_HIDE_GRACE_MS = 140;
 
 /**
  * The VTSBrowse hover preview.
  *
- * For **audio** it opens an anchored player next to the hovered bin — the bin's
- * waveform plus native ``<audio>`` controls (play/pause, volume, scrubber /
- * play-point) — so the audition is visible and controllable instead of "sound
- * from nowhere". The player opens on a short dwell (debounced against sweeps)
- * and stays open while the cursor is on it (so the controls are reachable).
+ * For **audio** it starts auditioning the hovered bin's clip after a short
+ * dwell. There is no on-canvas UI of its own: the bin itself lifts (the
+ * canvas's hover-enlarge, shared with every thumbnail type — see
+ * `usesThumbnails()`), and the now-playing waveform + volume control anchored
+ * at the top-left of the canvas (`browse-view.component`) is the only visible
+ * feedback that sound is playing. Hover clearing stops it immediately.
  *
- * For **text** it shows the small paragraph popup; **image/video** paint their
- * thumbnail on the tile, so nothing pops up.
+ * For **text** it shows the small paragraph popup; **image/video** paint
+ * their thumbnail on the tile, so nothing pops up.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -52,14 +48,19 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   readonly mediaType = input('');
   /** Preview-audio volume (0–1), driven by the Browse toolbar's volume control. */
   readonly volume = input(1);
-  @ViewChild('audioEl') audioRef?: ElementRef<HTMLAudioElement>;
+  /** The clip now auditioning (for the top-left now-playing indicator), or
+   *  ``null`` once the hover clears. */
+  readonly nowPlaying = output<NowPlaying | null>();
+
+  /** Never mounted in the DOM — audio here is heard, not shown; the top-left
+   *  indicator is the only visual feedback that it's playing. */
+  private readonly audioEl = new Audio();
 
   constructor() {
     // Keep the live element's volume in sync when the toolbar slider moves
-    // mid-playback; opening a player also seeds it so a fresh clip honours it.
+    // mid-playback; starting a clip also seeds it.
     effect(() => {
-      const el = this.audioRef?.nativeElement;
-      if (el) el.volume = this.volume();
+      this.audioEl.volume = this.volume();
     });
   }
 
@@ -73,14 +74,10 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   readonly textContent = signal('');
   private textLoadAbort: AbortController | null = null;
 
-  // --- Anchored audio player -------------------------------------------------
-  /** The open audio player, or ``null``. A signal so the dwell / hide timers
-   *  (which fire outside a CD context) repaint under zoneless. */
-  readonly player = signal<AudioPanel | null>(null);
+  // --- Audio audition state machine -------------------------------------------
   private dwellTimer: ReturnType<typeof setTimeout> | null = null;
-  private hideTimer: ReturnType<typeof setTimeout> | null = null;
-  private pointerInPanel = false;
-  private pendingTarget: Omit<AudioPanel, 'waveUrl' | 'audioSrc'> | null = null;
+  private pendingMediaId: number | null = null;
+  private playingMediaId: number | null = null;
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['hover']) {
@@ -94,9 +91,8 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.clearTimers();
+    this.cancelDwell();
     this.stopAudio();
-    this.player.set(null);
     this.textLoadAbort?.abort();
   }
 
@@ -110,7 +106,7 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
     }
 
     if (mediaType === 'audio') {
-      this.scheduleAudioPlayer(event);
+      this.scheduleAudio(event.cell.rep_id);
       return;
     }
 
@@ -134,113 +130,58 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
     this.textLoadAbort = null;
     this.textContent.set('');
 
-    // Audio player: cancel a pending open, then close after a grace period so
-    // the cursor can bridge from the tile onto the player. If it's already on
-    // the player, leave it open — the panel's mouseleave closes it instead.
+    // Audio: cancel a pending audition and stop anything already playing. There
+    // is no panel to bridge the cursor onto, so hover-off silences it at once.
     this.cancelDwell();
-    this.pendingTarget = null;
-    if (this.player() && !this.pointerInPanel) {
-      this.scheduleHide();
-    }
+    this.stopAudio();
   }
 
-  // --- Audio player state machine --------------------------------------------
+  // --- Audio audition state machine -------------------------------------------
 
-  private scheduleAudioPlayer(event: HexHoverEvent): void {
-    this.cancelHide();
-    const target = {
-      mediaId: event.cell.rep_id,
-      left: event.screenX + 16,
-      top: event.screenY - 8,
-      count: event.cell.count,
-    };
-    // Already showing this exact clip: keep it (don't restart the audition).
-    if (this.player()?.mediaId === target.mediaId) return;
+  private scheduleAudio(mediaId: number): void {
+    // Already auditioning this exact clip: keep it (don't restart).
+    if (this.playingMediaId === mediaId) return;
 
     // Debounce: (re)arm the dwell so a sweep across bins keeps resetting it and
-    // only the bin the cursor settles on opens.
-    this.pendingTarget = target;
+    // only the bin the cursor settles on actually plays.
+    this.pendingMediaId = mediaId;
     this.cancelDwell();
     this.dwellTimer = setTimeout(() => {
       this.dwellTimer = null;
-      const t = this.pendingTarget;
-      this.pendingTarget = null;
-      if (t) this.openAudioPlayer(t);
+      const id = this.pendingMediaId;
+      this.pendingMediaId = null;
+      if (id != null) this.playAudio(id);
     }, AUDIO_DWELL_MS);
   }
 
-  private openAudioPlayer(target: Omit<AudioPanel, 'waveUrl' | 'audioSrc'>): void {
-    // Replacing an open player: stop the old element before its src changes.
-    this.stopAudio();
-    const mediaId = target.mediaId;
-    this.player.set({
-      ...target,
-      waveUrl: this.activeContext.mediaUrl(`/api/medias/${mediaId}/thumbnail`),
-      audioSrc: this.activeContext.mediaUrl(`/api/medias/${mediaId}/audio`),
-    });
+  private playAudio(mediaId: number): void {
+    this.playingMediaId = mediaId;
+    const waveUrl = this.activeContext.mediaUrl(`/api/medias/${mediaId}/thumbnail`);
     // Hydrate clip extents (clip_start/clip_end) so windowed clips loop within
     // their window; applyClipWindow reads them lazily as they land.
     this.metadataCache.ensureLoaded([mediaId]);
-    // The <audio> mounts with the player signal; grab it after the render the
-    // signal write schedules, then start the audition.
-    setTimeout(() => {
-      const el = this.audioRef?.nativeElement;
-      if (!el || this.player()?.mediaId !== mediaId) return;
-      el.volume = this.volume();
-      applyClipWindow(el, () => this.metadataCache.get(mediaId));
-      el.load();
-      el.play().catch(() => {});
-    });
+    this.audioEl.volume = this.volume();
+    applyClipWindow(this.audioEl, () => this.metadataCache.get(mediaId));
+    this.audioEl.src = this.activeContext.mediaUrl(`/api/medias/${mediaId}/audio`);
+    this.audioEl.load();
+    this.audioEl.play().catch(() => {});
+    this.nowPlaying.emit({ mediaId, waveUrl });
   }
 
-  /** The cursor entered the player panel — keep it open and reachable. */
-  onPanelEnter(): void {
-    this.pointerInPanel = true;
-    this.cancelHide();
-  }
-
-  /** The cursor left the player panel — close it (unless it lands back on a bin,
-   *  whose hover event will reopen the right one). */
-  onPanelLeave(): void {
-    this.pointerInPanel = false;
-    this.scheduleHide();
-  }
-
-  private scheduleHide(): void {
-    this.cancelHide();
-    this.hideTimer = setTimeout(() => {
-      this.hideTimer = null;
-      if (this.pointerInPanel) return;
-      this.stopAudio();
-      this.player.set(null);
-    }, AUDIO_HIDE_GRACE_MS);
+  private stopAudio(): void {
+    this.pendingMediaId = null;
+    if (this.playingMediaId == null) return;
+    this.playingMediaId = null;
+    clearClipWindow(this.audioEl);
+    this.audioEl.pause();
+    this.audioEl.currentTime = 0;
+    this.nowPlaying.emit(null);
   }
 
   private cancelDwell(): void {
     if (this.dwellTimer) {
       clearTimeout(this.dwellTimer);
       this.dwellTimer = null;
-    }
-  }
-
-  private cancelHide(): void {
-    if (this.hideTimer) {
-      clearTimeout(this.hideTimer);
-      this.hideTimer = null;
-    }
-  }
-
-  private clearTimers(): void {
-    this.cancelDwell();
-    this.cancelHide();
-  }
-
-  private stopAudio(): void {
-    const el = this.audioRef?.nativeElement;
-    if (el) {
-      clearClipWindow(el);
-      el.pause();
-      el.currentTime = 0;
     }
   }
 

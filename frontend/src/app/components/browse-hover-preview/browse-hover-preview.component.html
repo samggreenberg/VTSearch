@@ -1,22 +1,3 @@
-@if (player(); as p) {
-  <div
-    class="hover-player"
-    [style.left.px]="p.left"
-    [style.top.px]="p.top"
-    (mouseenter)="onPanelEnter()"
-    (mouseleave)="onPanelLeave()"
-  >
-    <div class="hover-player-head">{{ p.count }} {{ p.count === 1 ? 'item' : 'items' }}</div>
-    <img class="hover-player-wave" [src]="p.waveUrl" alt="" aria-hidden="true" />
-    <audio
-      #audioEl
-      class="hover-player-audio"
-      [src]="p.audioSrc"
-      controls
-      controlsList="nodownload"
-    ></audio>
-  </div>
-}
 @if (visible) {
   <div
     class="hover-popup"

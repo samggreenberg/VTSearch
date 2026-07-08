@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 
-import { BrowseHoverPreviewComponent } from './browse-hover-preview.component';
+import { BrowseHoverPreviewComponent, NowPlaying } from './browse-hover-preview.component';
 import { ActiveContextService } from '../../services/active-context.service';
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import type { HexHoverEvent } from '../browse-canvas/browse-canvas.component';
@@ -15,21 +15,21 @@ import { settleZoneless } from '../../testing/settle-resource';
  * signalized `textContent`, written from the async paragraph `fetch().then()`
  * continuation — an un-patched microtask that must still schedule CD.
  *
- * The audio path (docs/plans/browse-audio-player.md, Phase 2) opens an anchored
- * player on a dwell and keeps it open while the cursor is on it. Those
- * transitions run from `setTimeout` callbacks that write the `player` signal, so
- * they are the same zoneless-staleness oracle: assert on rendered DOM after
- * `settleZoneless`, never a forced `detectChanges`.
+ * The audio path (docs/plans/browse-audio-player.md, Phase 4) auditions the
+ * hovered bin's clip on a dwell with no on-canvas UI of its own; it emits
+ * `nowPlaying` for the top-left indicator (`browse-view.component`) to render.
+ * Those transitions run from `setTimeout` callbacks that emit the output, so
+ * they are the same zoneless-staleness oracle: assert after `settleZoneless`,
+ * never a forced `detectChanges`.
  */
 describe('BrowseHoverPreviewComponent (zoneless canary)', () => {
   let fixture: ComponentFixture<BrowseHoverPreviewComponent>;
   let resolveFetch: (body: unknown) => void;
   let originalFetch: typeof globalThis.fetch;
+  let playSpy: ReturnType<typeof vi.spyOn>;
 
-  // Dwell + hide-grace mirror the component's constants; the waits below clear
-  // them with margin.
+  // Mirrors the component's dwell constant; the waits below clear it with margin.
   const DWELL_MS = 200;
-  const GRACE_MS = 140;
 
   function hoverEvent(mediaId: number): HexHoverEvent {
     return {
@@ -53,7 +53,7 @@ describe('BrowseHoverPreviewComponent (zoneless canary)', () => {
 
     // jsdom has no real media pipeline; keep play()/load() quiet so the audio
     // path's audition kick-off doesn't spam "Not implemented".
-    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    playSpy = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
 
     const activeContextStub: Partial<ActiveContextService> = {
@@ -104,31 +104,35 @@ describe('BrowseHoverPreviewComponent (zoneless canary)', () => {
     );
   });
 
-  it('opens the anchored audio player only after the dwell elapses', async () => {
+  it('auditions an audio bin only after the dwell elapses, with no floating panel', async () => {
     fixture.componentRef.setInput('mediaType', 'audio');
+    let emitted: NowPlaying | null | undefined;
+    fixture.componentInstance.nowPlaying.subscribe((e) => (emitted = e));
+
     fixture.componentRef.setInput('hover', hoverEvent(7));
     await settleZoneless(fixture);
 
-    const root = fixture.nativeElement as HTMLElement;
-    // Before the dwell: no player, no "sound from nowhere".
-    expect(root.querySelector('.hover-player')).toBeNull();
+    // Before the dwell: nothing auditioning yet. No panel/controls appear in
+    // the canvas either way — the bin's own hover-enlarge is the only visual
+    // feedback that a bin is under the cursor.
+    expect(emitted).toBeUndefined();
+    expect(playSpy).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('.hover-player')).toBeNull();
 
     await wait(DWELL_MS + 60);
     await settleZoneless(fixture);
 
-    // After the dwell: the anchored player mounts with the bin's waveform and an
-    // <audio> element wired to the clip.
-    const panel = root.querySelector('.hover-player');
-    expect(panel).not.toBeNull();
-    expect(root.querySelector('.hover-player-wave')!.getAttribute('src')).toContain(
-      '/api/medias/7/thumbnail',
-    );
-    expect(root.querySelector('audio')!.getAttribute('src')).toContain('/api/medias/7/audio');
+    // After the dwell: playback starts and `nowPlaying` carries the clip's
+    // waveform for the top-left indicator — still no panel in the canvas.
+    expect(playSpy).toHaveBeenCalled();
+    expect(emitted).toEqual({ mediaId: 7, waveUrl: '/api/medias/7/thumbnail' });
+    expect(fixture.nativeElement.querySelector('.hover-player')).toBeNull();
   });
 
-  it('debounces the dwell so sweeping across bins opens only the settled one', async () => {
+  it('debounces the dwell so sweeping across bins plays only the settled one', async () => {
     fixture.componentRef.setInput('mediaType', 'audio');
-    const root = fixture.nativeElement as HTMLElement;
+    let emitted: NowPlaying | null | undefined;
+    fixture.componentInstance.nowPlaying.subscribe((e) => (emitted = e));
 
     // Sweep 1 → 2 → 3 faster than the dwell; each hover re-arms it.
     fixture.componentRef.setInput('hover', hoverEvent(1));
@@ -138,37 +142,29 @@ describe('BrowseHoverPreviewComponent (zoneless canary)', () => {
     fixture.componentRef.setInput('hover', hoverEvent(3));
     await settleZoneless(fixture);
 
-    // Mid-sweep the dwell never completed, so no player opened.
-    expect(root.querySelector('.hover-player')).toBeNull();
+    // Mid-sweep the dwell never completed, so nothing started playing.
+    expect(emitted).toBeUndefined();
 
-    // Settling on bin 3 lets the dwell fire → only bin 3's player opens.
+    // Settling on bin 3 lets the dwell fire → only bin 3 plays.
     await wait(DWELL_MS + 60);
     await settleZoneless(fixture);
-    expect(root.querySelector('audio')!.getAttribute('src')).toContain('/api/medias/3/audio');
+    expect(emitted?.mediaId).toBe(3);
   });
 
-  it('bridges: keeps the player open when the cursor moves onto it, closes on leave', async () => {
+  it('stops the audition and emits nowPlaying(null) as soon as the hover clears', async () => {
     fixture.componentRef.setInput('mediaType', 'audio');
+    let emitted: NowPlaying | null | undefined;
+    fixture.componentInstance.nowPlaying.subscribe((e) => (emitted = e));
+
     fixture.componentRef.setInput('hover', hoverEvent(5));
     await wait(DWELL_MS + 60);
     await settleZoneless(fixture);
+    expect(emitted?.mediaId).toBe(5);
 
-    const root = fixture.nativeElement as HTMLElement;
-    const panel = root.querySelector('.hover-player') as HTMLElement;
-    expect(panel).not.toBeNull();
-
-    // Cursor leaves the bin (hover → null) but bridges onto the panel within the
-    // grace window: the player must stay open so its controls are reachable.
+    // No hover-bridge grace period: there's no panel to travel onto, so the
+    // clip stops the instant the bin is no longer hovered.
     fixture.componentRef.setInput('hover', null);
-    panel.dispatchEvent(new MouseEvent('mouseenter'));
-    await wait(GRACE_MS + 60);
     await settleZoneless(fixture);
-    expect(root.querySelector('.hover-player')).not.toBeNull();
-
-    // Leaving the panel closes it.
-    panel.dispatchEvent(new MouseEvent('mouseleave'));
-    await wait(GRACE_MS + 60);
-    await settleZoneless(fixture);
-    expect(root.querySelector('.hover-player')).toBeNull();
+    expect(emitted).toBeNull();
   });
 });
