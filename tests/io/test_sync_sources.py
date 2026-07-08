@@ -655,7 +655,7 @@ class TestApplySettings:
         assert settings.get_settings_source_config() is None
 
     def test_setter_map_contains_only_schema_keys(self):
-        """Every applyable key must be a real server/user-tier schema key."""
+        """Every importable key must be a real server/user-tier schema key."""
         from vtsearch import settings
 
         schema_keys = set(settings._all_defaults())
