@@ -27,12 +27,37 @@ from typing import Optional
 
 # key: (device, media_type, embedder) -> affine coefficients (seconds).
 # ``device`` is normalized to "cuda" / "cpu"; ``embedder`` is the encoder name.
-# POPULATED FROM CALIBRATION (see module docstring). Empty => always fall back.
-LOAD_COST_MODEL: dict[tuple[str, str, str], dict[str, float]] = {}
+# POPULATED FROM CALIBRATION (HLTCOE Grid, a100; see plan Results). Cells with no
+# row fall back to the static per-(device, media) profiles in ``_common``.
+LOAD_COST_MODEL: dict[tuple[str, str, str], dict[str, float]] = {
+    ("cpu", "image", "siglip"): {
+        "a_model": 0.5,
+        "a_embed": 1.971,
+        "b_embed": 0.292716,
+        "a_fin": 0.4663,
+        "b_fin": 0.002124,
+    },
+    ("cpu", "audio", "clap"): {"a_model": 0.5, "a_embed": 0.0, "b_embed": 0.184566, "a_fin": 0.0, "b_fin": 0.002525},
+    ("cuda", "image", "siglip"): {
+        "a_model": 0.5,
+        "a_embed": 2.1194,
+        "b_embed": 0.006784,
+        "a_fin": 8.0066,
+        "b_fin": 0.000195,
+    },
+    ("cuda", "audio", "clap"): {
+        "a_model": 0.5,
+        "a_embed": 0.6868,
+        "b_embed": 0.036626,
+        "a_fin": 0.0,
+        "b_fin": 0.003618,
+    },
+}
 
-# Cold-download bandwidth (archive MB per second) over the measured hosts.
-# 0 disables the download term (weights then reflect only model+embed+finalize).
-DOWNLOAD_MB_PER_S: float = 0.0
+# Cold-download bandwidth (archive MB per second) over the measured hosts
+# (device-pooled; the two devices agreed within ~10%). 0 disables the download
+# term (weights then reflect only model+embed+finalize).
+DOWNLOAD_MB_PER_S: float = 10.05
 
 
 def normalize_device(device: str) -> str:

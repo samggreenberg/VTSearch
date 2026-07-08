@@ -24,6 +24,13 @@ import statistics
 import sys
 from collections import defaultdict
 
+# Warm model-load floor (seconds). Warm loads skip the model-load phase (the
+# encoder is already resident, so no "loading model" status fires), so there is
+# usually no warm row to fit; a small floor keeps the model slice present but
+# tiny — matching the "model kept deliberately small" pacing design. The cold
+# first-load model cost is recorded separately as a note, not paced against.
+_WARM_MODEL_FLOOR_S = 0.5
+
 
 def _load_rows(paths: list[str]) -> list[dict]:
     rows: list[dict] = []
@@ -65,9 +72,7 @@ def main() -> int:
     rows = _load_rows(sys.argv[1:])
 
     # Group phase-seconds by (device, media, embedder).
-    groups: dict[tuple[str, str, str], dict[str, list[tuple[float, float]]]] = defaultdict(
-        lambda: defaultdict(list)
-    )
+    groups: dict[tuple[str, str, str], dict[str, list[tuple[float, float]]]] = defaultdict(lambda: defaultdict(list))
     dl_by_device: dict[str, list[tuple[float, float]]] = defaultdict(list)  # (size_mb, seconds)
     for r in rows:
         key = (r["device"], r["media_type"], r["embedder"])
@@ -99,9 +104,12 @@ def main() -> int:
     for key in sorted(groups):
         dev, media, emb = key
         g = groups[key]
-        warm = g.get("model_warm") or g.get("model_cold") or [(0, 0.0)]
-        a_model = statistics.median([s for _, s in warm])
-        cold_model = statistics.median([s for _, s in g.get("model_cold", [(0, a_model)])])
+        # Warm loads skip the model phase, so a warm row is rare; floor when
+        # absent. Never fall back to the (large) cold value for pacing.
+        warm = g.get("model_warm")
+        a_model = statistics.median([s for _, s in warm]) if warm else _WARM_MODEL_FLOOR_S
+        cold_rows = g.get("model_cold")
+        cold_model = statistics.median([s for _, s in cold_rows]) if cold_rows else a_model
         e_xs = [n for n, _ in g.get("embed", [])]
         e_ys = [s for _, s in g.get("embed", [])]
         a_e, b_e, r2_e = _affine_fit(e_xs, e_ys)
