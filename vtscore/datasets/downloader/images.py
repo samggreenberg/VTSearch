@@ -463,6 +463,11 @@ def download_openlogo(on_progress: Optional[ProgressCallback] = None) -> Path:
                 on_progress("downloading", "Downloading OpenLogo logos", int(self.n), total)
             return displayed
 
+    # ~27k loose files means the wall-clock cost is dominated by per-file request
+    # latency (resolve -> 302 -> CDN GET), not bandwidth, so fetch many at once.
+    # snapshot_download defaults to 8 workers; widen it to parallelize across the
+    # round trips. The dataset is public, so this is bounded by HF rate limits
+    # rather than auth — 16 is a comfortable margin below where those bite.
     snapshot_download(
         repo_id=_core.OPENLOGO_REPO_ID,
         repo_type="dataset",
@@ -470,6 +475,7 @@ def download_openlogo(on_progress: Optional[ProgressCallback] = None) -> Path:
         ignore_patterns=["*.gif"],
         token=get_token(),
         tqdm_class=_OpenlogoProgress,
+        max_workers=_core.OPENLOGO_DOWNLOAD_WORKERS,
     )
     return extract_dir
 

@@ -19,7 +19,7 @@ class TestDownloadOpenlogo:
         """download_openlogo pulls the snapshot and returns the openlogo/ directory."""
         from vtscore.datasets import downloader as dl_module
 
-        def fake_snapshot(*, repo_id, repo_type, local_dir, ignore_patterns, token, tqdm_class=None):
+        def fake_snapshot(*, repo_id, repo_type, local_dir, ignore_patterns, token, tqdm_class=None, max_workers=8):
             d = Path(local_dir)
             (d / "data").mkdir(parents=True, exist_ok=True)
             (d / "data" / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
@@ -36,6 +36,34 @@ class TestDownloadOpenlogo:
         assert (result / "data").is_dir()
         assert (result / "samples.json").exists()
 
+    def test_forwards_widened_worker_count(self, tmp_path):
+        """The download parallelizes across OpenLogo's ~27k tiny files.
+
+        With no single archive to stream, wall-clock is dominated by per-file
+        request latency, so we widen snapshot_download's default of 8 workers.
+        Assert the configured count is forwarded rather than left at the default.
+        """
+        from vtscore.datasets import downloader as dl_module
+
+        captured: dict = {}
+
+        def fake_snapshot(*, repo_id, repo_type, local_dir, ignore_patterns, token, tqdm_class=None, max_workers=8):
+            captured["max_workers"] = max_workers
+            d = Path(local_dir)
+            (d / "data").mkdir(parents=True, exist_ok=True)
+            (d / "data" / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+            (d / "samples.json").write_text('{"samples": []}')
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
+            patch("huggingface_hub.snapshot_download", fake_snapshot),
+        ):
+            dl_module.download_openlogo(on_progress=lambda *a: None)
+
+        assert captured["max_workers"] == dl_module.core.OPENLOGO_DOWNLOAD_WORKERS
+        assert captured["max_workers"] > 8
+
     def test_reports_measurable_file_progress(self, tmp_path):
         """The tqdm_class handed to snapshot_download forwards a live file count.
 
@@ -48,7 +76,7 @@ class TestDownloadOpenlogo:
 
         events: list = []
 
-        def fake_snapshot(*, repo_id, repo_type, local_dir, ignore_patterns, token, tqdm_class):
+        def fake_snapshot(*, repo_id, repo_type, local_dir, ignore_patterns, token, tqdm_class, max_workers=8):
             d = Path(local_dir)
             (d / "data").mkdir(parents=True, exist_ok=True)
             (d / "data" / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
