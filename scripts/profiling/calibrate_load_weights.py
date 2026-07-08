@@ -33,6 +33,13 @@ import shutil
 import sys
 import tempfile
 import time
+from pathlib import Path
+
+# Ensure the repo root (where app.py lives) is importable no matter the cwd:
+# ``python scripts/profiling/x.py`` only puts the script's own dir on sys.path.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 # media_type -> demo source id stem (size suffix appended: _s/_m/_l/_a).
 _SOURCE_BY_MEDIA = {
