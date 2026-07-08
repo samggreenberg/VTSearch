@@ -186,10 +186,19 @@ DEP001 = [
 # anything: the install path already pins them through the parent.
 # ``huggingface_hub`` ships with ``transformers`` and is imported directly by
 # the ParaSpeechCLAP embedder (``hf_hub_download`` for its checkpoint file).
+# ``cuml`` is the optional GPU backend imported by ``vtscore.gpu_backends``
+# (guarded by try/except; see its DEP001 ignore for the CPU-only dev box where
+# it isn't installed at all). On a GRID RAPIDS venv cuml *is* installed — pulled
+# in transitively by the RAPIDS stack rather than declared here — so deptry
+# reclassifies the same import from DEP001 (missing) to DEP003 (transitive).
+# Ignoring both rules keeps the gate green in either environment; declaring cuml
+# as a first-party dep is wrong (it's GPU-only, best-effort, and installed off a
+# separate CUDA-pinned index — see ``scripts/install.sh``).
 DEP003 = [
     "safetensors",
     "torchvision",
     "huggingface_hub",
+    "cuml",
 ]
 # DEP002: declared but not imported. Tools we run via their CLIs
 # (pytest, ruff, …), runtime helpers loaded by name (gunicorn), or
