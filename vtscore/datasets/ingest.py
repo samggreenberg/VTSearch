@@ -250,9 +250,17 @@ def _ingest_via_source(
         return -1
 
     media_type_id = _media_type_from_origin(origin_dict)
-    embedder_name = _embedder_name_for_type(medias, media_type_id) if media_type_id else ""
+    if not media_type_id:
+        source.cleanup()
+        return -1
+    embedder_name = _embedder_name_for_type(medias, media_type_id)
 
     ingested = 0
+    # cids inserted so far, so a mid-loop fallback (-1) can roll them back.
+    # Without the rollback, the caller re-runs the *entire* entry group
+    # through the resolver/importer path and the entries this loop already
+    # inserted end up in the dataset twice under fresh ids.
+    inserted_cids: list[int] = []
 
     try:
         pairs = [(e.get("origin_name", ""), e.get("filename", "")) for e in entries]
@@ -265,10 +273,6 @@ def _ingest_via_source(
             if item.path is None:
                 continue
 
-            if not media_type_id:
-                source.cleanup()
-                return -1
-
             # When the source returns a pre-computed embedding (and there are
             # no clip params that would require re-embedding a sub-segment),
             # skip the local embed step entirely.
@@ -280,11 +284,15 @@ def _ingest_via_source(
             else:
                 # Resolve embedding + clip-aware bytes/md5 - if any step fails,
                 # fall back to the legacy full-import path so we don't produce
-                # medias with mismatched embedding/MD5/bytes triples.
+                # medias with mismatched embedding/MD5/bytes triples.  Undo
+                # this group's partial inserts first: the fallback re-ingests
+                # the whole group.
                 effective_embedder = embedder_name
                 resolved = _resolve_clip_content_and_embedding(item.path, media_type_id, origin_dict, embedder_name)
                 if resolved is None:
-                    source.cleanup()
+                    with _state_lock:
+                        for cid in inserted_cids:
+                            medias.pop(cid, None)
                     return -1  # Signal caller to use legacy full-import path
                 embedding, file_bytes, md5 = resolved
 
@@ -312,6 +320,7 @@ def _ingest_via_source(
                 cid = next_media_id(medias)
                 media_data["id"] = cid
                 medias[cid] = media_data
+                inserted_cids.append(cid)
             ingested += 1
 
             on_progress(

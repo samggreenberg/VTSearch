@@ -6,6 +6,7 @@ import { IconComponent } from '../../icon/icon.component';
 import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.service';
 import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
 import { DatasetRegistryEntry, MediaTypeInfo } from '../../../models/api.models';
+import { apiErrorMessage } from '../../../utils/api-error';
 
 interface CombineRow {
   id: string;
@@ -121,7 +122,7 @@ export class CombineDatasetsModalComponent implements OnInit {
       },
       error: (err) => {
         this.submitting.set(false);
-        this.error.set((err?.error?.error as string) || 'Combine failed');
+        this.error.set(apiErrorMessage(err, 'Combine failed'));
       },
     });
   }

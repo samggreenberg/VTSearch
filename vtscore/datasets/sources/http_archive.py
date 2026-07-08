@@ -57,10 +57,17 @@ class HttpArchiveSource(MediaSource):
         if self._inner is not None:
             return self._inner
 
+        import hashlib
+
         from vtscore.datasets.sources.local_folder import LocalFolderSource
 
         url_filename = self._url.split("?")[0].rstrip("/").rsplit("/", 1)[-1] or "archive"
-        cached_dir = DATA_DIR / f"http_archive_resolve_{url_filename}"
+        # Key the cache on the *full* URL, not just its basename: two archives
+        # whose URLs share a final segment (siteA/images.zip vs siteB/images.zip)
+        # must not silently serve each other's extraction.  The basename is
+        # kept in the dir name purely for human readability.
+        url_hash = hashlib.sha256(self._url.encode("utf-8")).hexdigest()[:16]
+        cached_dir = DATA_DIR / f"http_archive_resolve_{url_hash}_{url_filename}"
 
         # Fast path: a previous run already published a cached extraction.
         if cached_dir.is_dir():

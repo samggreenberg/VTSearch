@@ -303,6 +303,134 @@ class TestDownloadAndExtract:
         assert last_cur == last_tot, "Final progress should show completion"
 
 
+class TestZipTraversalRejection:
+    """_extract_archive's zip branch must reject traversal members with the
+    same strict check as archive.py.
+
+    Regression: the previous inline ``startswith`` prefix test lacked a
+    trailing separator, so a member resolving to a *sibling* directory whose
+    name merely starts with the destination path (``/x/dest-evil`` vs
+    ``/x/dest``) passed validation.
+    """
+
+    def test_dotdot_member_rejected(self, tmp_path):
+        from vtscore.datasets.downloader import core as dl_core
+
+        zip_path = tmp_path / "evil.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("../escape.txt", "gotcha")
+        dest = tmp_path / "dest"
+        dest.mkdir()
+
+        with pytest.raises(ValueError, match="Path traversal"):
+            dl_core._extract_archive(zip_path, "evil.zip", dest, "Test", lambda *a: None)
+        assert not (tmp_path / "escape.txt").exists()
+
+    def test_prefix_sibling_member_rejected(self, tmp_path):
+        """A member escaping to a sibling dir sharing the dest's name prefix."""
+        from vtscore.datasets.downloader import core as dl_core
+
+        zip_path = tmp_path / "evil.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("../dest-evil/escape.txt", "gotcha")
+        dest = tmp_path / "dest"
+        dest.mkdir()
+
+        with pytest.raises(ValueError, match="Path traversal"):
+            dl_core._extract_archive(zip_path, "evil.zip", dest, "Test", lambda *a: None)
+        assert not (tmp_path / "dest-evil").exists()
+
+    def test_benign_zip_still_extracts(self, tmp_path):
+        from vtscore.datasets.downloader import core as dl_core
+
+        zip_path = _make_zip(tmp_path, arcname="ok")
+        dest = tmp_path / "dest"
+        dest.mkdir()
+
+        dl_core._extract_archive(zip_path, "test.zip", dest, "Test", lambda *a: None)
+        assert (dest / "ok" / "file.txt").read_text() == "hello"
+
+
+class TestValidateArchiveHeaderRead:
+    """_validate_archive must read only the archive's magic bytes.
+
+    The memory regression (read_bytes() materialising a multi-GB archive to
+    inspect 4 bytes) can't be asserted directly, but the behaviour contract
+    can: validation decisions are identical and made from the first 4 bytes.
+    """
+
+    def test_valid_zip_header_passes(self, tmp_path):
+        from vtscore.datasets.downloader import core as dl_core
+
+        zip_path = _make_zip(tmp_path)
+        dl_core._validate_archive(zip_path, "test.zip", "Test")
+        assert zip_path.exists()
+
+    def test_html_error_page_rejected_and_deleted(self, tmp_path):
+        from vtscore.datasets.downloader import core as dl_core
+
+        bad = tmp_path / "fake.zip"
+        bad.write_bytes(b"<html>503 Service Unavailable</html>")
+        with pytest.raises(RuntimeError, match="invalid file"):
+            dl_core._validate_archive(bad, "fake.zip", "Test")
+        assert not bad.exists()
+
+
+class TestDownloadFileAtomic:
+    """download_file_atomic must never leave partial bytes at the final path.
+
+    download_file_with_progress deliberately leaves partial bytes at its
+    destination on failure (resume support), so exists()-gated callers that
+    downloaded straight to the final path cached truncated files forever.
+    """
+
+    def test_success_publishes_final_path(self, tmp_path):
+        from vtscore.datasets.downloader import core as dl_core
+
+        final = tmp_path / "labels.mat"
+
+        def fake_download(url, dest, size, cb):
+            dest.write_bytes(b"complete-content")
+
+        with patch.object(dl_core, "download_file_with_progress", fake_download):
+            dl_core.download_file_atomic("http://example.com/labels.mat", final, 0, lambda *a: None)
+
+        assert final.read_bytes() == b"complete-content"
+        # No temp litter.
+        assert [p.name for p in tmp_path.iterdir()] == ["labels.mat"]
+
+    def test_failure_leaves_no_file_at_final_path(self, tmp_path):
+        from vtscore.datasets.downloader import core as dl_core
+
+        final = tmp_path / "labels.mat"
+
+        def fake_download(url, dest, size, cb):
+            dest.write_bytes(b"partial")  # simulate bytes written before the failure
+            raise ConnectionError("network died")
+
+        with patch.object(dl_core, "download_file_with_progress", fake_download):
+            with pytest.raises(ConnectionError):
+                dl_core.download_file_atomic("http://example.com/labels.mat", final, 0, lambda *a: None)
+
+        assert not final.exists(), "a truncated file at the final path poisons the exists() cache gate"
+        assert list(tmp_path.iterdir()) == [], "temp file must be cleaned up"
+
+    def test_concurrent_winner_is_preserved(self, tmp_path):
+        from vtscore.datasets.downloader import core as dl_core
+
+        final = tmp_path / "labels.mat"
+
+        def fake_download(url, dest, size, cb):
+            dest.write_bytes(b"mine")
+            final.write_bytes(b"other-download-won")  # a rival completed first
+
+        with patch.object(dl_core, "download_file_with_progress", fake_download):
+            dl_core.download_file_atomic("http://example.com/labels.mat", final, 0, lambda *a: None)
+
+        assert final.read_bytes() == b"other-download-won"
+        assert [p.name for p in tmp_path.iterdir()] == ["labels.mat"]
+
+
 class TestCorruptArchiveValidation:
     """Corrupt or non-archive downloads are detected and cleaned up."""
 

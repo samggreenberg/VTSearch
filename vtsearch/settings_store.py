@@ -99,7 +99,11 @@ _path_locks_guard = threading.Lock()
 
 
 def _path_lock_for(path: Path) -> threading.Lock:
-    key = str(path.resolve()) if path.exists() else str(path)
+    # resolve() is non-strict (works for not-yet-created files), so the same
+    # settings path maps to one lock across its whole lifetime.  Keying on
+    # the raw string pre-creation and the resolved string post-creation gave
+    # a relative/symlinked path two different locks.
+    key = str(path.resolve())
     with _path_locks_guard:
         lock = _path_locks.get(key)
         if lock is None:

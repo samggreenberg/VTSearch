@@ -174,22 +174,26 @@ class TestDownloadUcsfDocuments:
 
         def fake_download(url, dest, size, cb):
             dest.write_bytes(b"%PDF-1.0 stub")
-            downloads.append(dest.name)
+            downloads.append(url)
 
         with (
             patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(dl_module.core, "download_file_with_progress", fake_download),
             patch("requests.get", return_value=mock_response),
         ):
-            dl_module.download_ucsf_documents(
+            result = dl_module.download_ucsf_documents(
                 categories=["Tobacco"],
                 docs_per_category=5,
                 on_progress=lambda *a: None,
             )
 
-        # Only the valid 4+ char ID should be downloaded.
+        # Only the valid 4+ char ID should be downloaded.  The stubbed
+        # downloader sees a temp path (the atomic temp+rename wrapper), so
+        # assert on the URL and the published file instead of the dest name.
         assert len(downloads) == 1
-        assert "abcd0001.pdf" in downloads
+        assert downloads[0].endswith("/abcd0001.pdf")
+        published = list(result.rglob("abcd0001.pdf"))
+        assert published, "the downloaded PDF must be published at its final path"
 
     def test_handles_api_failure_gracefully(self, tmp_path):
         """If the Solr API request fails, the category is skipped."""

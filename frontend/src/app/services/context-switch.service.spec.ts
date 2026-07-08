@@ -43,6 +43,8 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
   let loadDetectorSubjects: Map<string, Subject<unknown>>;
   let loadingTasks$: BehaviorSubject<LoadingTask[]>;
   let detectorLoadingTasks$: BehaviorSubject<LoadingTask[]>;
+  let cancelledTaskIds: string[];
+  let cancelledDetectorTaskIds: string[];
 
   function makeDataset(
     id: string,
@@ -84,6 +86,8 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
     loadDetectorSubjects = new Map();
     loadingTasks$ = new BehaviorSubject<LoadingTask[]>([]);
     detectorLoadingTasks$ = new BehaviorSubject<LoadingTask[]>([]);
+    cancelledTaskIds = [];
+    cancelledDetectorTaskIds = [];
 
     const datasetStateStub = {
       get datasets(): DatasetRegistryEntry[] {
@@ -106,7 +110,10 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
         loadRegisteredSubjects.set(id, s);
         return s;
       },
-      cancelTask: (_taskId: string): Subject<unknown> => new Subject<unknown>(),
+      cancelTask: (taskId: string): Subject<unknown> => {
+        cancelledTaskIds.push(taskId);
+        return new Subject<unknown>();
+      },
     };
 
     const detectorsRegistryApiStub = {
@@ -115,8 +122,10 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
         loadDetectorSubjects.set(id, s);
         return s;
       },
-      cancelDetectorLoadingTask: (_taskId: string): Subject<unknown> =>
-        new Subject<unknown>(),
+      cancelDetectorLoadingTask: (taskId: string): Subject<unknown> => {
+        cancelledDetectorTaskIds.push(taskId);
+        return new Subject<unknown>();
+      },
     };
 
     const progressEventsStub = {
@@ -304,6 +313,85 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
 
     expect(activeContext.datasetId).toBe('d2');
     expect(activeContext.modelId).toBe('m2');
+  });
+
+  it('does not promote the pair when the dataset load kick-off fails', () => {
+    activeContext.setActivePair('old-ds', 'old-det');
+    datasets = [makeDataset('d1', { loaded: false })];
+    detectors = [makeDetector('m1', { detector_loaded: true })];
+
+    let emitted = false;
+    let completed = false;
+    switcher.applyActivePair('d1', 'm1').subscribe({
+      next: () => (emitted = true),
+      complete: () => (completed = true),
+    });
+
+    // The load POST fails (e.g. 500). Regression: this used to count as a
+    // completed load and promote the unloaded pair to active, re-opening
+    // the H25 cascade of 409 dataset_not_loaded from the very view the
+    // guard was about to activate.
+    loadRegisteredSubjects.get('d1')!.error(new Error('500'));
+
+    expect(activeContext.datasetId).toBe('old-ds');
+    expect(activeContext.modelId).toBe('old-det');
+    // The pulldown highlight rolls back to the still-active pair.
+    expect(activeContext.intentDatasetId).toBe('old-ds');
+    // Completion completes WITHOUT emitting → the guard's defaultIfEmpty
+    // denies navigation cleanly.
+    expect(emitted).toBe(false);
+    expect(completed).toBe(true);
+    expect(switcher.switching).toBe(false);
+  });
+
+  it('does not promote the pair when the background load task errors', () => {
+    activeContext.setActivePair('old-ds', 'old-det');
+    datasets = [makeDataset('d1', { loaded: false })];
+    detectors = [makeDetector('m1', { detector_loaded: true })];
+
+    let emitted = false;
+    switcher.applyActivePair('d1', 'm1').subscribe({ next: () => (emitted = true) });
+
+    loadRegisteredSubjects.get('d1')!.next({ ok: true, message: '', task_id: 'task-d1' });
+    loadRegisteredSubjects.get('d1')!.complete();
+    loadingTasks$.next([
+      makeLoadingTask({ dataset_id: 'd1', task_id: 'task-d1', status: 'loading' }),
+    ]);
+
+    // The background load dies (OOM, bad pickle, …): the task settles
+    // idle WITH an error. The pair must not be promoted.
+    loadingTasks$.next([
+      makeLoadingTask({ dataset_id: 'd1', task_id: 'task-d1', status: 'idle', error: 'boom' }),
+    ]);
+
+    expect(activeContext.datasetId).toBe('old-ds');
+    expect(activeContext.modelId).toBe('old-det');
+    expect(emitted).toBe(false);
+    expect(switcher.switching).toBe(false);
+  });
+
+  it('cancels only the superseded switch\'s own loading tasks on cancel-and-replace', () => {
+    activeContext.setActivePair('old-ds', 'old-det');
+    datasets = [makeDataset('d1'), makeDataset('d2', { loaded: true }), makeDataset('d3')];
+    detectors = [
+      makeDetector('m1', { detector_loaded: true }),
+      makeDetector('m2', { detector_loaded: true }),
+    ];
+    // d1's load task (owned by the switch about to be superseded) plus an
+    // unrelated in-flight load of d3 (e.g. a dashboard-initiated import).
+    loadingTasks$.next([
+      makeLoadingTask({ dataset_id: 'd1', task_id: 'task-d1', status: 'loading' }),
+      makeLoadingTask({ dataset_id: 'd3', task_id: 'task-d3', status: 'loading' }),
+    ]);
+
+    switcher.applyActivePair('d1', 'm1').subscribe();
+    // Rapid re-click: replace d1/m1 with d2/m2.
+    switcher.applyActivePair('d2', 'm2').subscribe();
+
+    // Regression: cancel-and-replace used to POST a cancel for EVERY
+    // non-idle task, killing the unrelated d3 load mid-flight.
+    expect(cancelledTaskIds).toEqual(['task-d1']);
+    expect(cancelledDetectorTaskIds).toEqual([]);
   });
 
   it('promotes intent to active via the completion observable returned to the route guard', () => {

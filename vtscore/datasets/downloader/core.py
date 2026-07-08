@@ -403,6 +403,37 @@ def download_file_with_progress(  # noqa: C901
                 response.close()
 
 
+def download_file_atomic(
+    url: str,
+    final_path: Path,
+    expected_size: int,
+    on_progress: ProgressCallback,
+) -> None:
+    """Download *url* to *final_path* via a unique temp file + atomic rename.
+
+    :func:`download_file_with_progress` deliberately leaves partial bytes at
+    its destination when every retry fails (its resume feature depends on
+    that), so callers that gate the download on ``final_path.exists()`` must
+    never point it at the final path directly - a failed run would leave a
+    truncated file that every subsequent run treats as a complete cached
+    copy.  This wrapper downloads to a sibling temp file and only publishes
+    the final path once the stream completed cleanly.  A concurrent
+    completed download wins; the temp file is always removed.
+    """
+    final_path.parent.mkdir(parents=True, exist_ok=True)
+    unique_id = uuid.uuid4().hex[:8]
+    temp_path = final_path.parent / f".dl_{unique_id}_{final_path.name}"
+    try:
+        download_file_with_progress(url, temp_path, expected_size, on_progress)
+        if not final_path.exists():
+            try:
+                os.rename(temp_path, final_path)
+            except OSError:
+                pass  # Another download finished first
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
 _GZIP_MAGIC = b"\x1f\x8b"
 _ZIP_MAGIC = b"PK"
 # Uncompressed tar: first 257 bytes contain "ustar" at offset 257,
@@ -419,7 +450,10 @@ def _validate_archive(archive_path: Path, archive_name: str, dataset_name: str) 
     """
     suffix = archive_name.lower()
     try:
-        header = archive_path.read_bytes()[:4]
+        # Read only the magic bytes - read_bytes() would materialise the
+        # whole (potentially multi-GB) archive in memory to inspect 4 bytes.
+        with open(archive_path, "rb") as f:
+            header = f.read(4)
     except OSError:
         return  # file vanished – let the caller deal with it
 
@@ -487,16 +521,20 @@ def _extract_archive(
                     tar_ref.extract(member, dest_dir, filter="data")
         on_progress("downloading", f"Extracting {dataset_name}...", total_bytes, total_bytes)
     elif suffix.endswith(".zip"):
+        from vtscore.datasets.archive import _reject_traversal
+
+        dest_resolved = Path(dest_dir).resolve()
         with zipfile.ZipFile(archive_path, "r") as zip_ref:
             members = zip_ref.namelist()
             total = len(members)
             for i, member in enumerate(members):
                 if i % 100 == 0 or i == total - 1:
                     on_progress("downloading", f"Extracting {dataset_name}...", i + 1, total)
-                # Guard against path traversal in zip entries
-                member_path = Path(dest_dir) / member
-                if not str(member_path.resolve()).startswith(str(Path(dest_dir).resolve())):
-                    raise ValueError(f"Path traversal detected in archive: {member}")
+                # Guard against path traversal in zip entries.  Shares the
+                # strict check with archive.py: the previous inline
+                # startswith() prefix test lacked a trailing separator, so
+                # a sibling dir with the dest as a name prefix passed.
+                _reject_traversal(dest_resolved, member)
                 zip_ref.extract(member, dest_dir)
     else:
         raise ValueError(f"Unsupported archive format: {archive_name}")

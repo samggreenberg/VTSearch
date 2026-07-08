@@ -225,12 +225,13 @@ def download_oxford_flowers(on_progress: Optional[ProgressCallback] = None) -> P
         on_progress=on_progress,
     )
 
-    # Download labels file if not present.
+    # Download labels file if not present.  Atomic (temp + rename): a
+    # partial file left at labels_path would pass the exists() gate forever.
     labels_path = extract_dir / "imagelabels.mat"
     if not labels_path.exists():
         _core.DATA_DIR.mkdir(exist_ok=True)
         on_progress("downloading", "Downloading Oxford Flowers labels...", 0, 0)
-        _core.download_file_with_progress(_core.OXFORD_FLOWERS_LABELS_URL, labels_path, 1024 * 1024, on_progress)
+        _core.download_file_atomic(_core.OXFORD_FLOWERS_LABELS_URL, labels_path, 1024 * 1024, on_progress)
 
     return extract_dir
 
@@ -385,11 +386,13 @@ def download_roxford5k(on_progress: Optional[ProgressCallback] = None) -> Path:
     )
 
     # Pull the (small) revisited ground-truth pickle alongside the images.
+    # Atomic (temp + rename): a partial file left at gnd_path would pass the
+    # exists() gate forever.
     gnd_path = extract_dir / "gnd_roxford5k.pkl"
     if not gnd_path.exists():
         extract_dir.mkdir(parents=True, exist_ok=True)
         on_progress("downloading", "Downloading ROxford5k ground truth...", 0, 0)
-        _core.download_file_with_progress(_core.ROXFORD_GND_URL, gnd_path, 1024 * 1024, on_progress)
+        _core.download_file_atomic(_core.ROXFORD_GND_URL, gnd_path, 1024 * 1024, on_progress)
 
     return extract_dir
 

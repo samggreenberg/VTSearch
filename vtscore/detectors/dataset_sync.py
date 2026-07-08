@@ -58,15 +58,20 @@ def ensure_votes_match_active_dataset() -> None:
         _state_lock,
         get_active_context,
         get_active_detector_context,
+        is_request_missing_dataset_context,
     )
 
     det_ctx = get_active_detector_context()
     if not det_ctx.detector_id:
         return
     ds_ctx = get_active_context()
-    if not ds_ctx.dataset_id:
+    if not ds_ctx.dataset_id or is_request_missing_dataset_context(ds_ctx):
         # No active dataset; preserve whatever the detector last saw so a
         # request that happens to omit the dataset header doesn't wipe state.
+        # The request-missing sentinel carries the truthy id
+        # "__request_missing__", so the emptiness check alone would fall
+        # through and wipe the detector's in-memory session (find scores,
+        # verified ids, label history) against an empty medias dict.
         return
 
     from vtscore.detectors.registry import get_detector

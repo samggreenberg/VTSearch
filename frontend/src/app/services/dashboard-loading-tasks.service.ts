@@ -53,6 +53,20 @@ export class DashboardLoadingTasksService {
   private datasetPollingActive = false;
   private detectorPollingActive = false;
 
+  /**
+   * Completion callbacks registered by `startProgressPolling` /
+   * `startDetectorProgressPolling` callers, fired (and cleared) when the
+   * polling loop settles.  Kept as lists on the service (not closure
+   * parameters of the loop) so a caller whose `startProgressPolling` call
+   * early-returns because polling is already active still gets its
+   * callback invoked - dropping it silently left `setActivePair` never
+   * firing when a dataset was loaded while another import was running.
+   * Each dataset callback carries the task id it belongs to (when known)
+   * so an *unrelated* task's failure doesn't suppress it.
+   */
+  private datasetPollCallbacks: Array<{ taskId: string; cb: () => void }> = [];
+  private detectorPollCallbacks: Array<() => void> = [];
+
   constructor() {
     // SSE pushes the initial snapshot on connect, so the first event on
     // each channel tells us whether there's anything in flight; auto-
@@ -78,6 +92,8 @@ export class DashboardLoadingTasksService {
     this.awaitedTaskIds.clear();
     this.completedTaskIds.clear();
     this.completedModelTaskIds.clear();
+    this.datasetPollCallbacks = [];
+    this.detectorPollCallbacks = [];
     this.datasetPollingActive = false;
     this.detectorPollingActive = false;
     this._loadingTasks.set([]);
@@ -124,6 +140,11 @@ export class DashboardLoadingTasksService {
     // comment on `awaitedTaskIds` for why this is needed.
     if (awaitTaskId) {
       this.awaitedTaskIds.add(awaitTaskId);
+    }
+    // Registered on the service (not captured by the loop) so it fires
+    // even when the early-return below is taken - see the field comment.
+    if (onComplete) {
+      this.datasetPollCallbacks.push({ taskId: awaitTaskId ?? '', cb: onComplete });
     }
     // If polling is already active, don't restart; the existing loop
     // already covers all tasks.  This avoids clearing completedTaskIds
@@ -179,8 +200,17 @@ export class DashboardLoadingTasksService {
             if (justFinished.length === 0) {
               this.datasetState.refresh();
             }
-            if (onComplete && failed.length === 0) {
-              onComplete();
+            // Fire every registered completion callback whose own task
+            // didn't fail.  Callbacks without a task id (legacy callers)
+            // keep the old "any failure suppresses" gate.
+            const callbacks = this.datasetPollCallbacks;
+            this.datasetPollCallbacks = [];
+            const failedIds = new Set(failed.map((t) => t.task_id));
+            for (const entry of callbacks) {
+              const suppressed = entry.taskId ? failedIds.has(entry.taskId) : failed.length > 0;
+              if (!suppressed) {
+                entry.cb();
+              }
             }
           }
         },
@@ -188,6 +218,11 @@ export class DashboardLoadingTasksService {
   }
 
   startDetectorProgressPolling(onComplete?: () => void): void {
+    // Registered on the service so it fires even when polling is already
+    // active - see the field comment on `detectorPollCallbacks`.
+    if (onComplete) {
+      this.detectorPollCallbacks.push(onComplete);
+    }
     if (this.detectorPollingActive) {
       return;
     }
@@ -222,8 +257,12 @@ export class DashboardLoadingTasksService {
             if (justFinished.length === 0) {
               this.datasetState.refresh();
             }
-            if (onComplete && failed.length === 0) {
-              onComplete();
+            const callbacks = this.detectorPollCallbacks;
+            this.detectorPollCallbacks = [];
+            if (failed.length === 0) {
+              for (const cb of callbacks) {
+                cb();
+              }
             }
           }
         },

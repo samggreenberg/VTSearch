@@ -97,10 +97,12 @@ export class VoteStateService implements OnDestroy {
   /**
    * Optimistic post-vote state per media, used to preserve the user's click
    * across a polling response that raced ahead of the vote POST.  Cleared
-   * deterministically on every vote POST response; the server's reply IS
-   * the authoritative state, so there is no longer a "permanently stuck"
-   * desync if our prediction disagreed with the server (the persistent-desync
-   * half of logical-bug-audit H1).
+   * deterministically on every vote POST *resolution*: on success the
+   * server's reply is the authoritative state ({@link reconcileVoteResponse});
+   * on failure the entry is rolled back and server state re-read
+   * ({@link rollbackOptimistic}).  Either way there is no "permanently
+   * stuck" desync if our prediction disagreed with the server (the
+   * persistent-desync half of logical-bug-audit H1).
    */
   private pendingOptimistic = new Map<number, { state: VoteState; clickTime: number | null }>();
 
@@ -269,8 +271,28 @@ export class VoteStateService implements OnDestroy {
     const effectiveBox = target === 'good' && regionBox && regionBox.length === 4 ? regionBox : null;
     this.applyOptimisticRegionBox(id, effectiveBox);
     return this.mediasApi.vote(id, target, effectiveBox).pipe(
-      tap((resp) => this.reconcileVoteResponse(id, resp)),
+      tap({
+        next: (resp) => this.reconcileVoteResponse(id, resp),
+        // A failed POST means the server never saw the vote. Without the
+        // rollback, the pending entries pin the optimistic state over every
+        // subsequent /api/votes poll forever: the item shows as voted while
+        // the server (and training) never has it.
+        error: () => this.rollbackOptimistic(id),
+      }),
     );
+  }
+
+  /**
+   * Discard every pending optimistic entry for *id* and re-read the server's
+   * vote state.  Called when a vote POST fails: the prediction never became
+   * server truth, so leaving the entries in place would have
+   * {@link applyVotes} re-impose the phantom vote on every poll.
+   */
+  private rollbackOptimistic(id: number): void {
+    this.pendingOptimistic.delete(id);
+    this.pendingVerified.delete(id);
+    this.pendingRegionBoxes.delete(id);
+    this.loadVotes();
   }
 
   /**
@@ -536,7 +558,10 @@ export class VoteStateService implements OnDestroy {
     this.applyOptimisticRegionBox(entry.mediaId, box);
     this.mediasApi.vote(entry.mediaId, target, box).subscribe({
       next: (resp) => this.reconcileVoteResponse(entry.mediaId, resp),
-      error: () => this.loadVotes(),
+      // rollbackOptimistic (not a bare loadVotes): the pending entries set
+      // by the optimistic apply above would override the reloaded server
+      // state in applyVotes, so they must be dropped first.
+      error: () => this.rollbackOptimistic(entry.mediaId),
     });
     this.toastSubject.next({ action: 'undo', mediaName: entry.mediaName });
   }
@@ -557,7 +582,8 @@ export class VoteStateService implements OnDestroy {
     this.applyOptimisticRegionBox(entry.mediaId, box);
     this.mediasApi.vote(entry.mediaId, target, box).subscribe({
       next: (resp) => this.reconcileVoteResponse(entry.mediaId, resp),
-      error: () => this.loadVotes(),
+      // See undo(): drop the pending entries before reloading server state.
+      error: () => this.rollbackOptimistic(entry.mediaId),
     });
     this.toastSubject.next({ action: 'redo', mediaName: entry.mediaName });
   }

@@ -104,7 +104,9 @@ def download_ucsf_documents(  # noqa: C901
             url = f"{_core.UCSF_IDL_DOWNLOAD_URL}/{doc_id[0]}/{doc_id[1]}/{doc_id[2]}/{doc_id[3]}/{doc_id}/{doc_id}.pdf"
 
             try:
-                _core.download_file_with_progress(url, pdf_path, 0, on_progress)
+                # Atomic (temp + rename): a partial PDF left at pdf_path by a
+                # hard kill would pass the exists() cache gate forever.
+                _core.download_file_atomic(url, pdf_path, 0, on_progress)
                 downloaded += 1
                 on_progress("downloading", f"Downloaded {doc_id}.pdf", downloaded, total_docs)
             except Exception:

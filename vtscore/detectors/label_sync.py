@@ -13,11 +13,22 @@ label, or removed when the user has untoggled the vote.
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from typing import Any
 
 from vtscore.datasets.labelset import LabelSet
 from vtscore.state.core import DetectorContext
+
+# Serialises the read → merge → write pass in
+# :func:`sync_labels_to_loaded_detector`.  Two concurrent syncs on the same
+# detector from *different dataset contexts* each merge against a stale base
+# and the last writer drops the other dataset's just-written cross-dataset
+# entries (lost update).  The write itself is atomic (os.replace), but
+# atomicity doesn't serialise the read-modify-write.  Acquired *before*
+# ``_state_lock`` (via ``validated_vote_snapshot`` inside the body); no other
+# code takes this lock, so no ordering cycle is possible.
+_label_sync_write_lock = threading.Lock()
 
 
 def _get_loaded_detector_state() -> tuple[dict[str, Any], Path, dict[str, Any], DetectorContext] | None:
@@ -117,6 +128,12 @@ def sync_labels_to_loaded_detector() -> None:
     because the global votes reflect scoring results on a different dataset,
     not the detector's original training labels.
     """
+    with _label_sync_write_lock:
+        _sync_labels_to_loaded_detector_locked()
+
+
+def _sync_labels_to_loaded_detector_locked() -> None:
+    """Body of :func:`sync_labels_to_loaded_detector`; caller holds the lock."""
     state = _get_loaded_detector_state()
     if state is None:
         return
