@@ -129,6 +129,10 @@ ROXFORD_GND_URL = "https://cmp.felk.cvut.cz/revisitop/data/datasets/roxford5k/gn
 # with ``huggingface_hub.snapshot_download`` rather than the single-URL helper,
 # and parsed from ``samples.json`` with the stdlib (no ``fiftyone`` dependency).
 OPENLOGO_REPO_ID = "Voxel51/OpenLogo"
+# Parallel workers for the OpenLogo snapshot. With ~27k tiny files the download is
+# latency-bound on per-file round trips, so we widen snapshot_download's default of
+# 8 to fetch many concurrently. Kept modest to stay under HF's public rate limits.
+OPENLOGO_DOWNLOAD_WORKERS = 16
 
 # Visual Genome (v1.4): a multi-label scene dataset of ~108k dense-annotated
 # photos.  Images ship as two zips (the historical VG_100K / VG_100K_2 splits);
