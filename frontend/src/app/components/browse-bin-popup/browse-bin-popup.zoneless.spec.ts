@@ -4,6 +4,7 @@ import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BrowseBinPopupComponent } from './browse-bin-popup.component';
+import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
@@ -166,6 +167,36 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     // (count label + rows) plus the body's own 12px vertical padding on top.
     expect(parseFloat(body.style.height)).toBe(cmp.gridColHeight + 12);
 
+    fixture.destroy();
+  });
+
+  it('auto-plays the representative clip when an audio bin opens', async () => {
+    // Opening the detail popup is an "intense hover": for audio it should start
+    // auditioning the bin's representative straight away, with no grid-row hover
+    // — the behavior a singleton audio bin (no member grid) relies on entirely.
+    // jsdom doesn't implement the media element's play/load, so stub them; the
+    // now-playing emit happens before the deferred play() regardless.
+    const playStub = vi
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockResolvedValue(undefined);
+    const loadStub = vi
+      .spyOn(HTMLMediaElement.prototype, 'load')
+      .mockImplementation(() => {});
+
+    const fixture = makeFixture();
+    fixture.componentRef.setInput('mediaType', 'audio');
+    fixture.componentRef.setInput('memberIds', [7, 8, 9]);
+    fixture.componentRef.setInput('repId', 8);
+    const played: (NowPlaying | null)[] = [];
+    fixture.componentInstance.nowPlaying.subscribe((v) => played.push(v));
+    await settlePasses(fixture);
+
+    // The window opened auditioning the representative (id 8), not the list's
+    // first member (id 7), and surfaced it on the shared now-playing indicator.
+    expect(played.at(-1)).toEqual({ mediaId: 8, waveUrl: '/api/medias/8/thumbnail' });
+
+    playStub.mockRestore();
+    loadStub.mockRestore();
     fixture.destroy();
   });
 
