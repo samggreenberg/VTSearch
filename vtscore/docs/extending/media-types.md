@@ -87,7 +87,6 @@ Optional overrides:
 |--------|---------|---------|
 | `folder_import_name` | `type_id` | Alias used by folder-style importers |
 | `dir_key` | `type_id + "_dir"` | Key in pickle files for external directories |
-| `legacy_bytes_keys` | `[]` | Legacy keys to honour when unpickling old datasets |
 | `pickle_extra_fields` | `[]` | Custom clip-dict keys to preserve through pickle round-trip |
 | `display_metadata(media)` | base fields | Extra fields surfaced in the labeling UI |
 
@@ -162,8 +161,8 @@ class Mesh3DMediaType(MediaType):
         # Preserve our custom vertex / face counts across pickle round-trip.
         return ["vertex_count", "face_count"]
 
-    def load_media_data(self, file_path: Path) -> dict:
-        raw = file_path.read_bytes()
+    def load_media_data(self, file_path: Path, media_bytes: bytes | None = None) -> dict:
+        raw = media_bytes if media_bytes is not None else file_path.read_bytes()
         # Toy counts; a real impl would parse properly.
         text = raw.decode("ascii", errors="replace")
         vertex_count = text.count("\nv ") + text.count("\nvertex ")

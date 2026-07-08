@@ -610,8 +610,9 @@ dependencies automatically and supports grouped test subsets:
 ```
 
 Available groups: `core`, `api`, `sorting`, `datasets`, `io`, `detectors`,
-`downloads`, `integration`, `cli`, `converters`. See [`CLAUDE.md`](../CLAUDE.md) for the
-full group-to-file mapping.
+`downloads`, `integration`, `cli`, `converters`, `projection`, `frontend`
+(plus `gpu` and `vtscore-clean`, which run separately). See
+[`CLAUDE.md`](../CLAUDE.md) for the full group-to-file mapping.
 
 You can also run pytest directly:
 

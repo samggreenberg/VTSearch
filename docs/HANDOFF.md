@@ -64,7 +64,7 @@ deployments. Runs locally or in Docker.
 | [demos.md](demos.md) | Available demo datasets |
 | [plans/README.md](plans/README.md) | Filename index of open design plans (multi-media import, patch embedders, clipper chain, etc.) |
 | [../vtscore/docs/README.md](../vtscore/docs/README.md) | Developer documentation for the `vtscore` library (the Flask-free reusable core extracted from VTSearch) |
-| [design/cli-detector-converter.md](design/cli-detector-converter.md) | CLI autodetect with converters/clippers (**Design proposal**, not yet implemented) |
+| [plans/cli-detector-converter.md](plans/cli-detector-converter.md) | CLI autodetect with converters/clippers (**Design proposal**, not yet implemented) |
 
 ---
 

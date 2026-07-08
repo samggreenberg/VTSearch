@@ -1,16 +1,20 @@
-# Dashboard & Lookup
+# Dashboard
 
 [← Back to API index](../API.md)
 
----
+Metadata and resource-usage probes for the Dashboard view. For running
+detectors against data (multi-dataset Find, Find Label, Auto-Detect), see
+[Find, Auto-Detect & Scoring](find.md).
 
-## Dashboard
+---
 
 ### Dataset info
 
 ```
 GET /api/dashboard/dataset-info
 ```
+
+Metadata about the currently loaded dataset.
 
 → ```json
 {
@@ -23,6 +27,8 @@ GET /api/dashboard/dataset-info
 }
 ```
 
+**404** if no dataset is loaded.
+
 ### Rename dataset
 
 ```
@@ -31,105 +37,29 @@ PUT /api/dashboard/dataset-rename
 
 **Body:** `{"name": "My Custom Name"}`
 
+Sets a custom display name for the currently loaded dataset.
+
 → `{"success": true, "name": "My Custom Name"}`
 
----
+**400** if the name is empty after trimming.
 
-## Multi-dataset Find
-
-### Check label resolution (pre-flight)
+### Disk usage
 
 ```
-POST /api/find/check-labels
+GET /api/dashboard/disk-usage
 ```
 
-**Body:** `{"dataset_ids": ["id1", "id2"], "detector_ids": ["m1"]}`
+Free/used/total bytes for the partition holding `DATA_DIR`.
 
-Pre-flight check that reports how many detector labels can be resolved
-for the given detectors and datasets. Call this before starting a Find to
-warn the user about unresolved labels.
+→ `{"total": 500107862016, "used": 210000000000, "free": 290107862016, "path": "/app/data"}`
 
-→ ```json
-{
-  "warnings": [
-    {
-      "detector_name": "Mammals",
-      "total_labels": 82,
-      "resolved_labels": 60,
-      "failed_labels": 22
-    }
-  ]
-}
-```
-
-`warnings` only contains entries for detectors with at least one unresolved
-label. An empty `warnings` list means everything is fine.
-
-### Run find
+### RAM usage
 
 ```
-POST /api/find
+GET /api/dashboard/ram-usage
 ```
 
-**Body:** `{"dataset_ids": ["id1", "id2"], "detector_ids": ["m1"]}`
+System RAM total/used/free in bytes, read from `/proc/meminfo` (Linux). `free`
+is `MemAvailable`; `used` is `total − free`. (No `path` key, unlike disk usage.)
 
-→ ```json
-{
-  "results": [...],
-  "negative_results": [...],
-  "datasets": ["ESC-50", "Speech Commands"],
-  "detectors": ["Dog Barks"],
-  "media_type": "audio",
-  "multiple_datasets": true,
-  "multiple_detectors": false,
-  "total_hits": 42
-}
-```
-
-### Find progress (SSE)
-
-Find progress streams on the `find` channel of
-[`/api/events`](events.md):
-
-```json
-{
-  "status": "running",
-  "message": "Scoring with \"ModelName\" on \"DatasetName\"...",
-  "current": 150,
-  "total": 300,
-  "step": 2,
-  "total_steps": 3,
-  "error": null
-}
-```
-
-`status` is `"idle"` or `"running"`. `step` / `total_steps` track the
-high-level Find phases (prepare detectors, load data, score), and `overall`
-(0..1) plus `eta_seconds` give a single whole-job progress fraction and ETA
-across all phases (see [Events](events.md#progress-object-shape)).
-
-### Apply labels from detector (Find Label)
-
-```
-POST /api/find-label
-```
-
-**Body:** `{"detector_id": "abc123"}` (optionally include `"dataset_id"`
-to override the request-scoped dataset context).
-
-Resolves the detector from the registry, scores every loaded media using
-the detector's MLP, and applies Good/Bad labels for **all** elements
-based on the threshold. If no trained MLP is cached in the detector's
-context, trains on-the-fly from the detector's labelset (resolving label
-origins as needed).
-
-→ ```json
-{
-  "results": [{"id": 0, "score": 0.9812}, ...],
-  "threshold": 0.5,
-  "applied": 42,
-  "total_scored": 500
-}
-```
-
-404 if detector not found. 400 if `detector_id` is missing.
+→ `{"total": 16777216000, "used": 8388608000, "free": 8388608000}`

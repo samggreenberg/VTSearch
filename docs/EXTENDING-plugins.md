@@ -43,7 +43,7 @@ families share this one field type; each family's base module re-exports
 |---------------|-------------|----------|---------------------------------------------------------|
 | `key`         | `str`       |:        | Field identifier (dict key in `field_values`)           |
 | `label`       | `str`       |:        | Display label in the UI                                 |
-| `field_type`  | `FieldType` |:        | `"text"`, `"url"`, `"folder"`, `"file"`, `"password"`, `"email"`, `"select"`, or `"server_path"` |
+| `field_type`  | `FieldType` |:        | `"text"`, `"url"`, `"folder"`, `"file"`, `"password"`, `"email"`, `"number"`, `"select"`, `"server_path"`, or `"checkbox"` |
 | `description` | `str`       | `""`     | Helper text shown below the field                       |
 | `accept`      | `str`       | `""`     | For `"file"` fields: comma-separated extensions (e.g. `".pkl"`) |
 | `options`     | `list[str]` | `[]`     | For `"select"` fields: allowed dropdown values          |
@@ -1276,14 +1276,18 @@ class S3SettingsSource(SettingsSource):
         PluginField("key", "Object Key", "text"),
     ]
 
-    def load(self, field_values: dict) -> dict:
+    # Override the underscored template methods, NOT load() / save().
+    # The public load() / save() are framework wrappers that normalize
+    # field_values before dispatching here (see vtscore/sync/__init__.py).
+
+    def _do_load(self, field_values: dict) -> dict:
         """Read settings from S3. Return a settings dict."""
         import boto3, json
         s3 = boto3.client("s3")
         obj = s3.get_object(Bucket=field_values["bucket"], Key=field_values["key"])
         return json.loads(obj["Body"].read())
 
-    def save(self, settings_data: dict, field_values: dict) -> None:
+    def _do_save(self, settings_data: dict, field_values: dict) -> None:
         """Write settings to S3."""
         import boto3, json
         s3 = boto3.client("s3")
@@ -1298,6 +1302,9 @@ SETTINGS_SOURCE = S3SettingsSource()
 ```
 
 The sentinel `SETTINGS_SOURCE` at module level is required for auto-discovery.
+Override `_do_load` / `_do_save` (not `load` / `save`): `SyncSource`'s public
+`load` / `save` normalize `field_values` and then dispatch to the underscored
+hooks, so a subclass that overrides `load` / `save` directly is never called.
 
 ### Template variables
 
@@ -1389,12 +1396,14 @@ class DatabaseLabelsetSource(LabelsetSource):
         PluginField("table", "Table Name", "text", default="labels"),
     ]
 
-    def load(self, field_values: dict) -> list[dict]:
+    # Override the underscored template methods, NOT load() / save().
+
+    def _do_load(self, field_values: dict) -> list[dict]:
         """Read labels from database. Return list of label dicts."""
         # Each dict should have: "name" (media name/hash), "label" ("Good"/"Bad")
         ...
 
-    def save(self, labelset: LabelSet, field_values: dict) -> None:
+    def _do_save(self, labelset: LabelSet, field_values: dict) -> None:
         """Write labelset to database."""
         for elem in labelset.elements:
             # Upsert each element...
@@ -1405,6 +1414,9 @@ LABELSET_SOURCE = DatabaseLabelsetSource()
 ```
 
 The sentinel `LABELSET_SOURCE` at module level is required for auto-discovery.
+As with settings sources, override `_do_load` / `_do_save` (not `load` /
+`save`): the public methods normalize `field_values` before dispatching to
+these hooks, so a direct `load` / `save` override never runs.
 
 ### Template variables
 

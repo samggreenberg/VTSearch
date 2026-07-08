@@ -2,6 +2,9 @@
 
 [← Back to API index](../API.md)
 
+> These endpoints read/mutate the active dataset and detector via the
+> [`X-Dataset-Id` / `X-Detector-Id` context headers](../API.md#context-headers-x-dataset-id--x-detector-id).
+
 ---
 
 ## Inclusion & Thresholds

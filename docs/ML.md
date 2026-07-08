@@ -24,7 +24,7 @@ The model outputs raw logits (not probabilities) during training. This allows th
 | **Optimizer** | Adam | `lr=0.001`, `weight_decay=1e-4` |
 | **Epochs (cap)** | 200 | Configurable via `TRAIN_EPOCHS` in `config.py` or the `VTSEARCH_TRAIN_EPOCHS` env var |
 | **Early-stop patience** | 10 | Training halts when the loss fails to improve for this many consecutive epochs (configurable via `TRAIN_PATIENCE` / `VTSEARCH_TRAIN_PATIENCE`; set 0 to disable) |
-| **Hidden layer** | 4–32 neurons | `max(4, min(32, n_train // 3))` via `_auto_hidden_dim()` |
+| **Hidden layer** | 8–32 neurons | `max(MLP_HIDDEN_MIN, min(MLP_HIDDEN_MAX, n_train // 3))` (i.e. `max(8, min(32, n_train // 3))`) via `_auto_hidden_dim()` |
 | **Dropout** | 0.5 | Applied after ReLU, active only during training |
 | **Batching** | Full-batch | All labeled data in every forward pass |
 | **Reproducibility** | Local `torch.Generator` | Per-model seed (default 42) for thread-safe deterministic init |
