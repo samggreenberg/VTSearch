@@ -14,7 +14,13 @@ Regression coverage for two search-space bugs:
 
 from __future__ import annotations
 
-from vtscore.training.thresholds import NO_GOOD_THRESHOLD, find_optimal_threshold
+import pytest
+
+from vtscore.training.thresholds import (
+    NO_GOOD_THRESHOLD,
+    find_optimal_threshold,
+    threshold_from_fold_orderings,
+)
 
 
 class TestBasics:
@@ -103,3 +109,49 @@ class TestTiedScores:
         labels = [1.0, 1.0, 1.0, 0.0, 0.0]
         t = find_optimal_threshold(scores, labels, inclusion_value=0)
         assert t == 1.0
+
+
+class TestFoldAggregationAbstain:
+    """``threshold_from_fold_orderings`` treats an abstaining fold as a *vote*,
+    not a numeric 2.0 to average.  The ensemble abstains only under a strict
+    majority; otherwise it averages the folds that produced a real cut.
+    """
+
+    # At inclusion=-3, a lone top-scored negative makes the fold abstain, while
+    # a perfectly separable fold yields a concrete cut (0.9).
+    ABSTAIN = ([0.9, 0.1], [0.0, 1.0])
+    FINITE = ([0.9, 0.1], [1.0, 0.0])
+    INCL = -3
+
+    def test_single_fold_abstains(self):
+        assert threshold_from_fold_orderings([self.ABSTAIN], self.INCL) == NO_GOOD_THRESHOLD
+
+    def test_lone_abstain_of_two_is_ignored(self):
+        """1 of 2 abstaining is not a strict majority: use the finite fold."""
+        t = threshold_from_fold_orderings([self.ABSTAIN, self.FINITE], self.INCL)
+        assert t == 0.9
+
+    def test_lone_abstain_never_exceeds_sigmoid_range(self):
+        """Regression: the old numeric mean pushed a lone abstain to
+        (0.9 + 2.0)/2 = 1.45, i.e. an out-of-range 'threshold' that abstained
+        by accident and depended on the other fold's magnitude."""
+        t = threshold_from_fold_orderings([self.ABSTAIN, self.FINITE], self.INCL)
+        assert t <= 1.0
+
+    def test_both_of_two_abstain(self):
+        assert threshold_from_fold_orderings([self.ABSTAIN, self.ABSTAIN], self.INCL) == NO_GOOD_THRESHOLD
+
+    def test_minority_abstain_of_three_averages_finite(self):
+        """1 of 3 abstaining: average the two folds that produced a cut."""
+        t = threshold_from_fold_orderings([self.ABSTAIN, self.FINITE, self.FINITE], self.INCL)
+        assert t == 0.9
+
+    def test_majority_abstain_of_three(self):
+        t = threshold_from_fold_orderings([self.ABSTAIN, self.ABSTAIN, self.FINITE], self.INCL)
+        assert t == NO_GOOD_THRESHOLD
+
+    def test_all_finite_folds_are_meaned(self):
+        a = ([0.9, 0.1], [1.0, 0.0])  # -> 0.9
+        b = ([0.8, 0.2], [1.0, 0.0])  # -> 0.8
+        t = threshold_from_fold_orderings([a, b], self.INCL)
+        assert t == pytest.approx(0.85)

@@ -310,17 +310,21 @@ class TestTrainModelEpochs:
             config.TRAIN_PATIENCE = saved_patience
 
 
-class TestCalibrationSkippedForTinyLabels:
-    """``train_and_score`` should skip cross-calibration when there are
-    too few labels for the result to be useful; regardless of
-    ``safe_thresholds``.  Calibration costs two 200-epoch trainings per
-    call, and below the blend's ramp floor those trainings are either
-    discarded (safe_thresholds=True) or trained on too little data to
-    be reliable (safe_thresholds=False)."""
+class TestCalibrationAtTinyLabelCounts:
+    """Below the safe-threshold ramp floor (6 labels), calibration runs only
+    when its output is actually used.
+
+    With ``safe_thresholds=True`` the calibrated value is discarded by the
+    pure-GMM blend (label_weight=0), so the two 200-epoch fold trainings are
+    skipped as pure waste.  With ``safe_thresholds=False`` the cross-cal
+    threshold *is* what the detector uses, so it is computed at every label
+    count - keeping the vote/labelset path consistent with the Find path
+    (``train_and_threshold``), which has always cross-calibrated below 6 when
+    safe-thresholds is off."""
 
     def test_skips_calibration_when_safe_and_under_six_labels(self):
-        """With safe_thresholds=True and n_labels<6, calculate_cross_calibration_threshold
-        must not be invoked; its output is entirely discarded by the blender."""
+        """With safe_thresholds=True and n_labels<6, the fold trainings must
+        not run; their output is entirely discarded by the blender."""
         from vtscore.detectors import training as detector_training
         from vtscore.training import thresholds
 
@@ -329,8 +333,8 @@ class TestCalibrationSkippedForTinyLabels:
 
         with unittest.mock.patch.object(
             thresholds,
-            "calculate_cross_calibration_threshold",
-            side_effect=AssertionError("calibration should be skipped for tiny label sets"),
+            "compute_fold_orderings",
+            side_effect=AssertionError("calibration should be skipped when safe & tiny"),
         ) as patched:
             _, threshold, _model = detector_training.train_and_score(
                 app_module.medias,
@@ -341,20 +345,20 @@ class TestCalibrationSkippedForTinyLabels:
         patched.assert_not_called()
         assert 0.0 <= threshold <= 1.0
 
-    def test_skips_calibration_when_safe_off_and_under_six_labels(self):
-        """With safe_thresholds=False and n_labels<6, calibration is still
-        skipped; fold trainings are unreliable with so few labels, and the
-        gate is purely a function of n_labels."""
+    def test_calibrates_when_safe_off_and_under_six_labels(self):
+        """With safe_thresholds=False and n_labels<6, cross-calibration now
+        runs: the threshold is the value the detector uses, so both training
+        entry points agree instead of one hard-coding 0.5."""
         from vtscore.detectors import training as detector_training
         from vtscore.training import thresholds
 
         app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4, 5]})
+        app_module.bad_votes.update({k: None for k in [3, 4, 5]})  # 5 labels < 6
 
         with unittest.mock.patch.object(
             thresholds,
-            "calculate_cross_calibration_threshold",
-            side_effect=AssertionError("calibration should be skipped for tiny label sets"),
+            "compute_fold_orderings",
+            wraps=thresholds.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
                 app_module.medias,
@@ -362,7 +366,7 @@ class TestCalibrationSkippedForTinyLabels:
                 app_module.bad_votes,
                 safe_thresholds=False,
             )
-        patched.assert_not_called()
+        assert patched.call_count == 1
 
     def test_still_calibrates_when_enough_labels(self):
         """With safe_thresholds=True and n_labels>=6, calibration still runs."""
