@@ -684,20 +684,11 @@ class _FakeStagingImporter:
         base = int(field_values["_base_id"])
         for i in range(int(field_values.get("_count", 2))):
             mid = base + i
-            raw = _unique_bytes(mid)
-            temp_medias[mid] = {
-                "id": mid,
-                "media_type": "audio",
-                "filename": f"c{mid}.wav",
-                "md5": hashlib.md5(raw).hexdigest(),
-                "embeddings": {"clap": np.array([float(mid), 0.5], dtype=np.float32)},
-                "embedder": "clap",
-                "media_bytes": raw,
-                "media_string": None,
-                "media_path": None,
-                "origin": None,
-                "origin_name": f"c{mid}.wav",
-            }
+            clip = _make_audio_clip(mid)
+            # ``media_embedding`` reads the ``embeddings`` dict, so a
+            # pre-embedded staging clip needs it to survive the drop-none filter.
+            clip["embeddings"] = {"clap": np.array([float(mid), 0.5], dtype=np.float32)}
+            temp_medias[mid] = clip
 
 
 def _sync_thread_factory(store: list):
