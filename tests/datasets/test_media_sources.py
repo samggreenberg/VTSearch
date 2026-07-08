@@ -257,6 +257,80 @@ class TestHttpArchiveSource:
 
             shutil.rmtree(cached_a, ignore_errors=True)
 
+    def test_stale_cache_invalidated_on_signature_mismatch(self, tmp_path):
+        """A cached extraction with a recorded signature that no longer
+        matches the remote is invalidated and re-downloaded.
+
+        Regression: the resolve cache never invalidated at all once
+        published, so a replaced remote archive served stale bytes forever.
+        """
+        from vtscore.datasets.sources.http_archive import HttpArchiveSource, _write_signature
+
+        url = "https://example.com/stale-sig.zip"
+        cached = self._cached_dir_for(url)
+        cached.mkdir(parents=True, exist_ok=True)
+        (cached / "old.wav").write_bytes(b"old_audio")
+        _write_signature(cached, "old-etag|old-date|100")
+
+        zip_path = tmp_path / "fresh.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("new.wav", b"new_audio")
+
+        try:
+            source = HttpArchiveSource(url)
+            with (
+                patch(
+                    "vtscore.datasets.downloader.core.fetch_remote_signature",
+                    return_value="new-etag|new-date|200",
+                ),
+                patch("vtscore.security.url_validation.validate_url"),
+                patch("vtscore.datasets.downloader.download_file_with_progress"),
+                patch(
+                    "vtscore.datasets.archive.extract_archive",
+                    side_effect=lambda _archive, dest: zipfile.ZipFile(zip_path).extractall(dest),
+                ),
+            ):
+                inner = source._ensure_extracted()
+                items = list(inner.list_items())
+                assert any(i.filename == "new.wav" for i in items)
+                assert not any(i.filename == "old.wav" for i in items)
+        finally:
+            import shutil
+
+            from vtscore.datasets.sources.http_archive import _signature_path
+
+            shutil.rmtree(cached, ignore_errors=True)
+            _signature_path(cached).unlink(missing_ok=True)
+
+    def test_signature_probe_failure_trusts_existing_cache(self, tmp_path):
+        """When the remote signature probe fails (offline/flaky CDN), a
+        cache carrying a recorded signature is still trusted rather than
+        blocking or forcing a re-download."""
+        from vtscore.datasets.sources.http_archive import HttpArchiveSource, _write_signature
+
+        url = "https://example.com/probe-fail.zip"
+        cached = self._cached_dir_for(url)
+        cached.mkdir(parents=True, exist_ok=True)
+        (cached / "clip.wav").write_bytes(b"audio")
+        _write_signature(cached, "etag|date|10")
+
+        try:
+            source = HttpArchiveSource(url)
+            with patch(
+                "vtscore.datasets.downloader.core.fetch_remote_signature",
+                return_value=None,
+            ):
+                item = source.resolve_path(origin_name="clip.wav")
+            assert item.path is not None
+            assert item.path.name == "clip.wav"
+        finally:
+            import shutil
+
+            from vtscore.datasets.sources.http_archive import _signature_path
+
+            shutil.rmtree(cached, ignore_errors=True)
+            _signature_path(cached).unlink(missing_ok=True)
+
     def test_delegates_to_local_folder(self, tmp_path):
         """After extraction, fetch_item delegates to LocalFolderSource."""
         from vtscore.datasets.sources.http_archive import HttpArchiveSource
