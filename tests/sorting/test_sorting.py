@@ -734,6 +734,49 @@ class TestEvalTrainAndScoreAsync:
         resp = client.post("/api/eval/train-and-score", json={"metric": "bogus", "wait": True})
         assert resp.status_code == 422
 
+    def test_result_reports_job_progress_not_singleton(self, client):
+        """The poll endpoint must report the polled job's own progress, not
+        the global ``eval_progress`` singleton (which an overlapping eval can
+        pollute, decorrelating the bar from job identity)."""
+        import threading
+
+        from tests.conftest import _wait_for_job
+        from vtscore.concurrency.async_jobs import eval_jobs
+        from vtscore.concurrency.progress import update_eval_progress
+
+        self._seed_history()  # 4 labels -> n_total == 3
+        entered = threading.Event()
+        release = threading.Event()
+
+        def blocking_stable(*args, **kwargs):
+            entered.set()
+            release.wait(timeout=10)
+            return []
+
+        with unittest.mock.patch(
+            "vtsearch.routes.eval.calculate_prediction_stability_over_time",
+            side_effect=blocking_stable,
+        ):
+            envelope = client.post("/api/eval/train-and-score", json={"metric": "stable"}).get_json()
+            assert envelope["status"] == "running"
+            assert envelope["total"] == 3
+            job_id = envelope["job_id"]
+
+            # The job thread is now inside the (blocked) computation with its
+            # own current=0 / total=3 recorded.
+            assert entered.wait(timeout=10)
+
+            # Simulate a concurrent/overlapping eval clobbering the singleton.
+            update_eval_progress("running", "other eval", 99, 12345)
+
+            result = client.get(f"/api/eval/train-and-score/result?job_id={job_id}").get_json()
+            assert result["status"] == "running"
+            assert result["total"] == 3, "must report the job's own total, not the singleton's 12345"
+            assert result["current"] == 0
+
+            release.set()
+            _wait_for_job(eval_jobs)
+
 
 class TestExampleSort:
     def test_sort_with_audio_file(self, client):

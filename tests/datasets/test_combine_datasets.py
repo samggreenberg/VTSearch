@@ -664,3 +664,98 @@ class TestProgressStagingResult:
         # Clean up; explicitly clear staging_result (update has merge semantics)
         update_progress("idle", "", 0, 0, staging_result=None)
         assert get_progress()["staging_result"] is None
+
+
+class _FakeStagingImporter:
+    """Minimal importer stub for exercising ``_stage_importer_in_background``.
+
+    Populates ``temp_medias`` with pre-embedded clips whose IDs start at
+    ``_base_id`` so two concurrent stagings produce disjoint, identifiable
+    outputs.
+    """
+
+    name = "fake_stage"
+    fields: list = []
+
+    def resolve_display_name(self, field_values: dict) -> str:
+        return field_values.get("name", "fake")
+
+    def run(self, field_values: dict, temp_medias: dict, thin: bool = False) -> None:
+        base = int(field_values["_base_id"])
+        for i in range(int(field_values.get("_count", 2))):
+            mid = base + i
+            raw = _unique_bytes(mid)
+            temp_medias[mid] = {
+                "id": mid,
+                "media_type": "audio",
+                "filename": f"c{mid}.wav",
+                "md5": hashlib.md5(raw).hexdigest(),
+                "embeddings": {"clap": np.array([float(mid), 0.5], dtype=np.float32)},
+                "embedder": "clap",
+                "media_bytes": raw,
+                "media_string": None,
+                "media_path": None,
+                "origin": None,
+                "origin_name": f"c{mid}.wav",
+            }
+
+
+def _sync_thread_factory(store: list):
+    """Return a ``threading.Thread`` replacement that runs the target inline."""
+    from unittest import mock as _mock
+
+    def fake_thread(target, daemon=True, name=None):
+        store.append(target)
+        t = _mock.MagicMock()
+        t.start = target  # run synchronously on .start()
+        return t
+
+    return fake_thread
+
+
+class TestStagingPerTaskIsolation:
+    """Two concurrent staging imports must each publish their own
+    ``staging_result`` on their own per-task tracker; the terminal result is
+    no longer last-writer-wins on the global ``dataset_progress`` singleton
+    (which orphaned the loser's staged pkl)."""
+
+    def test_concurrent_stagings_keep_distinct_results(self, isolated_settings):
+        from pathlib import Path
+        from unittest import mock
+
+        from vtscore.concurrency.progress import loading_tasks
+        from vtscore.datasets.load_pipeline import _stage_importer_in_background
+
+        importer = _FakeStagingImporter()
+
+        # Patch the embedder (medias are pre-embedded) and run the daemon
+        # threads inline so both stagings complete deterministically.
+        with (
+            mock.patch("vtscore.datasets.load_pipeline.embed_missing", lambda *a, **k: None),
+            mock.patch(
+                "vtscore.datasets.load_pipeline.threading.Thread",
+                side_effect=_sync_thread_factory([]),
+            ),
+        ):
+            task_a = _stage_importer_in_background(importer, {"name": "A", "_base_id": 100, "_count": 2})
+            task_b = _stage_importer_in_background(importer, {"name": "B", "_base_id": 200, "_count": 3})
+
+        assert task_a and task_b and task_a != task_b, "each staging must get its own task id"
+
+        tasks = {t["task_id"]: t for t in loading_tasks.list_tasks()}
+        assert task_a in tasks and task_b in tasks
+
+        res_a = tasks[task_a]["staging_result"]
+        res_b = tasks[task_b]["staging_result"]
+        assert res_a is not None and res_b is not None, "both stagings must publish a staging_result"
+        assert res_a["path"] != res_b["path"], "results must not collide"
+        assert res_a["count"] == 2 and res_b["count"] == 3
+        assert res_a["name"] == "A" and res_b["name"] == "B"
+
+        # Neither staged pkl was orphaned: both exist on disk.
+        try:
+            assert Path(res_a["path"]).exists(), "staging A's pkl must not be orphaned"
+            assert Path(res_b["path"]).exists(), "staging B's pkl must not be orphaned"
+        finally:
+            Path(res_a["path"]).unlink(missing_ok=True)
+            Path(res_b["path"]).unlink(missing_ok=True)

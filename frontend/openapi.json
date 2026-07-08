@@ -1459,11 +1459,15 @@
           },
           "ok": {
             "type": "boolean"
+          },
+          "task_id": {
+            "type": "string"
           }
         },
         "required": [
           "message",
-          "ok"
+          "ok",
+          "task_id"
         ],
         "type": "object"
       },
