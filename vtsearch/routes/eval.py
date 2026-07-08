@@ -36,6 +36,7 @@ from vtsearch.state import (
     snapshot_medias,
 )
 from vtscore.concurrency.progress import (
+    CancelledError,
     get_eval_progress,
     update_eval_progress,
 )
@@ -204,6 +205,12 @@ def eval_train_and_score(body: dict):
                     data = calculate_diversity_level_over_time(clips, history, inclusion)
                 job.result = {"metric": metric, "data": data}
                 update_eval_progress("idle", "Done", n_total, n_total)
+            except CancelledError:
+                # User cancelled a running job: not a failure.  Clear the
+                # progress bar and re-raise so the JobManager marks the job
+                # ``cancelled`` rather than ``error``.
+                update_eval_progress("idle", "Cancelled", 0, 0)
+                raise
             except Exception:
                 update_eval_progress("idle", "Error", 0, 0)
                 raise

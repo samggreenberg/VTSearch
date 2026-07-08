@@ -1,8 +1,9 @@
 # Comprehensive interface audit — July 2026
 
 **Status: initial fix pass shipped; second follow-up pass shipped
-(#2, #6, #10, #14 of the original open list); remaining open follow-ups
-below.**
+(#2, #6, #10, #14 of the original open list); third follow-up pass shipped
+(JobManager cancellation now stops running jobs — was open #2 of the
+renumbered list); remaining open follow-ups below.**
 
 A full-codebase audit focused on interface boundaries: frontend ↔ backend
 API contract, route layer ↔ state system, app tier ↔ `vtscore` library,
@@ -166,64 +167,85 @@ up any of these areas sees the known-weak spots.
   Switched to the house-style `<name>.<pid>.<uuid>.tmp` and added an fsync
   before the atomic replace.  Tests in `tests/io/test_exporters.py`.
 
+### Third follow-up pass (drained from the open list)
+
+- **JobManager cancellation now stops running jobs** (was renumbered open
+  #2).  Cancelling a *running* learned-sort / eval job previously only set
+  `AsyncJob.is_cancelled`, which no job target read, so the GIL-bound
+  training kept running to completion (the cancelled-*pending* half was
+  already fixed in the initial pass; both cancel routes' docstrings already
+  *claimed* the loop "polls it cooperatively", but nothing did).  Added a
+  thread-local job binding in `vtscore/concurrency/async_jobs.py`
+  (`bind_job_cancellation` / `check_job_cancelled`, entered for the
+  worker-thread lifetime in `JobManager._run`).  The deep compute loops now
+  poll it at their natural boundaries — the MLP epoch boundary in
+  `vtscore/training/mlp.py:train_model` and the per-step retrain boundary in
+  `vtscore/detectors/labeling_progress.py:_ensure_cache`.  A poll raises the
+  existing `CancelledError`, which unwinds the training/eval stack and is
+  caught in `_run_inner` to mark the job `cancelled` (never caching its
+  half-built result via `_last_done`) and hand off to any parked pending.
+  The check is a no-op outside a bound job, so the synchronous Find flow,
+  tests, and CLI that share `train_model` are unaffected.  The eval `_run`
+  now clears the progress bar to `"Cancelled"` rather than `"Error"`.
+  Tests in `tests_lib/integration/test_async_jobs.py`
+  (`TestCheckJobCancelledPrimitive`, `TestRunningJobCancellation`) and
+  `tests_lib/detectors/test_mlp_training.py` (`TestJobCancellation`).
+
 ## Open follow-ups
 
 Ordered roughly by severity.  Each was found and verified during the audit
 but deferred as needing a design decision or a larger change.  (Original
-open items #2, #6, #10, #14 were drained in the second follow-up pass — see
-"Second follow-up pass" under What shipped.)
+open items #2, #6, #10, #14 were drained in the second follow-up pass, and
+the renumbered #2 "JobManager cancellation advisory" in the third pass — see
+the follow-up-pass subsections under What shipped.  The list below is
+renumbered again after that drain.)
 
 1. **SSE `/api/events` pins a gthread worker thread per connection.**
    With `workers = 1, threads = 8`, eight open tabs starve the whole app;
    stalled requests plus a live heartbeat read as an app hang.  Needs a
    design decision: bound SSE connections, size the pool against them, or
    move the stream off the request-thread pool.
-2. **JobManager cancellation is advisory only.**  No job target reads
-   `AsyncJob.is_cancelled`, so cancelling a *running* learned-sort/eval
-   job never stops the GIL-bound training (the cancelled-pending half was
-   fixed in this pass).  Wiring `is_cancelled` into the training loop's
-   epoch boundary would make cancel real.
-3. **Staging imports publish through the global `dataset_progress`
+2. **Staging imports publish through the global `dataset_progress`
    singleton** (`load_pipeline.py:_stage_importer_in_background`): two
    concurrent staging imports interleave one channel and the terminal
    `staging_result` is last-writer-wins, orphaning the loser's staged pkl.
    Needs per-task trackers like `_run_origin_load_in_background`.
-4. **Eval progress is a global singleton keyed to no job**
+3. **Eval progress is a global singleton keyed to no job**
    (`routes/eval.py`): overlapping evals decorrelate the progress bar from
    job identity.
-5. **Region-matrix fallback can mix embedding spaces** on a multi-embedder
+4. **Region-matrix fallback can mix embedding spaces** on a multi-embedder
    dataset where only some media carry `patch_regions`
    (`embedding/matrix.py:_build_region_arrays`): region rows are in the
    patch embedder's space, fallback rows in the primary's.  Needs either an
    ingest guarantee (all-or-nothing patch_regions per dataset) or space
    checking here.
-6. **Eval harness fidelity** (`eval/voting_iterations.py`): fold models
+5. **Eval harness fidelity** (`eval/voting_iterations.py`): fold models
    don't force the full-data `hidden_dim`, always calibrate below 6 labels
    (production uses 0.5), and thread the split RNG into calibration - so
    reported eval costs measure a pipeline production doesn't run in exactly
    the small-label regime the eval characterises.
-7. **Inclusion slide drops the safe-threshold GMM blend**
+6. **Inclusion slide drops the safe-threshold GMM blend**
    (`state/core.py:recompute_detector_thresholds_for_inclusion` vs
    `training.py`): with safe-thresholds on and 6 ≤ n < 20 labels, sliding
    inclusion to a value and back changes the threshold semantics relative
    to a fresh retrain.  Decide whether the blend applies on slides.
-8. **Two training entry points disagree at 4-5 labels** with
+7. **Two training entry points disagree at 4-5 labels** with
    safe-thresholds off: `train_and_threshold` runs real cross-calibration,
    `_train_and_score_xy` hard-codes 0.5.  Same user state, different
    cutoff depending on route.
-9. **Dataset registry is not multi-process safe**
+8. **Dataset registry is not multi-process safe**
    (`vtscore/datasets/registry.py`): in-process lock plus a fixed `.tmp`
    name; a concurrent CLI autodetect run against the same data dir can
    silently erase the server's registrations.  Fine under the documented
    single-worker model; needs flock if that changes.
-10. **`http_archive` cache never invalidates** when the remote archive
+9. **`http_archive` cache never invalidates** when the remote archive
     changes (fixed collision, not staleness); `extract_archive_cached`'s
     mtime/size keying is the model.
-11. **Threshold averaging with the abstain sentinel**: a fold returning
+10. **Threshold averaging with the abstain sentinel**: a fold returning
     `NO_GOOD_THRESHOLD` (2.0) now raises the fold mean, possibly above 1.0
     (= abstain overall).  This is the intended lean but the blend weight is
     crude; revisit if precision-biased small-label behaviour looks off.
-12. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
+11. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
     rather than clean): browse-canvas/minimap coordinate math and rAF
     lifecycles, modal/player component lifecycle sweep, left/right-panel
     virtualization, and a full route-blueprint sweep of
@@ -251,3 +273,8 @@ open items #2, #6, #10, #14 were drained in the second follow-up pass — see
   `<name>.<pid>.<uuid>.tmp` temp sibling instead of a fixed `<name>.tmp`.
 - `update_cache_for_cid` (unused) was removed from
   `vtscore.detectors.labelset_training` and the `labelset_ops` re-export.
+- Cancelling a *running* learned-sort / eval job now actually stops it
+  (transitions to `cancelled` within one epoch / eval step and never caches
+  the partial result) instead of running to completion with the cancel
+  ignored.  The eval progress bar reports `"Cancelled"` on a running-job
+  cancel rather than `"Error"`.

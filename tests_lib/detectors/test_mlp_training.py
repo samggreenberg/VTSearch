@@ -6,6 +6,8 @@ import numpy as np
 import pytest
 import torch
 
+from vtscore.concurrency.async_jobs import AsyncJob, bind_job_cancellation
+from vtscore.concurrency.progress import CancelledError
 from vtscore.training.mlp import train_model
 
 
@@ -52,3 +54,32 @@ class TestSingleClassGuard:
         X, y = _balanced_xy()
         model = train_model(X, y, input_dim=8, hidden_dim=4)
         assert next(model.parameters()).device.type in {"cpu", "cuda", "mps"}
+
+
+class TestJobCancellation:
+    """The epoch loop must honour a cancel of the background job that owns
+    the worker thread, so cancelling a *running* learned-sort/eval job
+    actually stops the GIL-bound training instead of merely being advisory.
+    """
+
+    def test_cancelled_bound_job_aborts_at_epoch_boundary(self):
+        X, y = _balanced_xy()
+        job = AsyncJob(job_id="j1")
+        job.cancel()  # already cancelled before the first epoch runs
+        with bind_job_cancellation(job):  # noqa: SIM117
+            with pytest.raises(CancelledError):
+                train_model(X, y, input_dim=8, hidden_dim=4)
+
+    def test_uncancelled_bound_job_trains_normally(self):
+        """A bound-but-not-cancelled job must not disturb the happy path."""
+        X, y = _balanced_xy()
+        job = AsyncJob(job_id="j2")
+        with bind_job_cancellation(job):
+            model = train_model(X, y, input_dim=8, hidden_dim=4)
+        assert next(model.parameters()).device.type in {"cpu", "cuda", "mps"}
+
+    def test_no_binding_trains_normally(self):
+        """Outside any job the epoch-boundary check is a pure no-op."""
+        X, y = _balanced_xy()
+        model = train_model(X, y, input_dim=8, hidden_dim=4)
+        assert sum(p.numel() for p in model.parameters()) > 0

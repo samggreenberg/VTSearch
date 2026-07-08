@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
+from vtscore.concurrency.async_jobs import check_job_cancelled
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.training.mlp import train_model
 from vtscore.training.thresholds import find_optimal_threshold
@@ -391,6 +392,12 @@ def _ensure_cache(
                     _cache_diversity_tree.label(mid)
 
     for t in range(start, len(label_history)):
+        # Each step retrains a model; honour a cancel of the owning eval job
+        # here so a long history doesn't run to completion after cancel.  The
+        # partially-built cache is a valid prefix (steps 0..t-1), so the next
+        # run resumes cleanly from ``len(_cached_steps)``.  No-op outside a
+        # job (see ``async_jobs.check_job_cancelled``).
+        check_job_cancelled()
         media_id, label, _ = label_history[t]
 
         was_labeled = _apply_label_event(media_id, label)
