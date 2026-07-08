@@ -427,14 +427,20 @@ class LoadingTasksTracker:
         detector_id: str = "",
         embedder: str = "",
         step_weights: list[float] | None = None,
+        extra_fields: dict[str, Any] | None = None,
     ) -> ProgressTracker:
         """Create and register a new loading task.
 
         *step_weights* (one weight per step) tunes how the whole-job ``overall``
-        bar paces across phases; omit for equal weighting. Returns the per-task
-        :class:`ProgressTracker` instance.
+        bar paces across phases; omit for equal weighting. *extra_fields* adds
+        task-specific tracked keys (e.g. ``staging_result``) on top of the
+        shared progress extras. Returns the per-task :class:`ProgressTracker`
+        instance.
         """
-        tracker = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
+        fields = dict(_PROGRESS_COMMON_EXTRAS)
+        if extra_fields:
+            fields.update(extra_fields)
+        tracker = ProgressTracker(extra_fields=fields)
         if step_weights is not None:
             tracker.set_step_weights(step_weights)
         tracker.subscribe(lambda _snapshot: self._notify())

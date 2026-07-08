@@ -325,8 +325,8 @@ def stage_import(importer_name: str):
         extra_keys=("source_specs", "dataset_name"),
     )
 
-    _stage_importer_in_background(importer, field_values)
-    return jsonify({"ok": True, "message": "Staging started"})
+    task_id = _stage_importer_in_background(importer, field_values)
+    return jsonify({"ok": True, "message": "Staging started", "task_id": str(task_id) if task_id else ""})
 
 
 @datasets_staging_bp.route("/api/dataset/stage-demo/<name>", methods=["POST"])
@@ -353,8 +353,8 @@ def stage_demo(body: dict, name: str):
         field_values["dataset_name"] = dataset_name
 
     label = dataset_name or DEMO_DATASETS[name].get("label", name)
-    _stage_importer_in_background(importer, field_values, label=label)
-    return {"ok": True, "message": "Staging demo dataset..."}
+    task_id = _stage_importer_in_background(importer, field_values, label=label)
+    return {"ok": True, "message": "Staging demo dataset...", "task_id": str(task_id) if task_id else ""}
 
 
 @datasets_staging_bp.route("/api/dataset/staging", methods=["DELETE"])

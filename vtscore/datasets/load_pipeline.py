@@ -29,7 +29,6 @@ from vtscore.concurrency.progress import (
     dataset_progress,
     loading_tasks,
     set_thread_progress,
-    update_progress,
 )
 from vtscore.datasets import export_dataset_to_file
 from vtscore.datasets.loader import apply_custom_metadata_md5
@@ -710,13 +709,24 @@ def _demo_load_hints(importer, field_values: dict) -> tuple[int | None, float | 
 STAGING_DIR = DATA_DIR / "staging"
 
 
-def _stage_importer_in_background(importer, field_values: dict, label: str = "") -> None:
+def _stage_importer_in_background(importer, field_values: dict, label: str = "") -> str:
     """Run *importer*.run() in a daemon thread, saving the result to a staging pkl.
 
     Unlike ``_run_importer_in_background``, this does **not** modify the global
-    ``medias`` dict.  Instead it writes a temporary ``.pkl`` file to
-    :data:`STAGING_DIR` and sets the ``staging_result`` field on the progress
-    tracker when finished.
+    ``medias`` dict and does **not** register a dataset.  Instead it writes a
+    temporary ``.pkl`` file to :data:`STAGING_DIR` and publishes the terminal
+    ``staging_result`` on this operation's own per-task progress tracker.
+
+    Each call gets a dedicated :class:`ProgressTracker` (via ``loading_tasks``),
+    keyed by the returned ``task_id``, mirroring
+    :func:`_run_origin_load_in_background`.  Previously every staging import
+    reported through the single global ``dataset_progress`` tracker, so two
+    concurrent stagings interleaved one channel and the terminal
+    ``staging_result`` was last-writer-wins - orphaning the loser's staged pkl.
+    With a per-task tracker the results no longer collide.
+
+    Returns the ``task_id`` a caller can poll (via the ``loading-tasks`` SSE
+    channel) for progress and the final ``staging_result``.
     """
     from vtsearch.auth import get_current_user  # noqa: PLC0415
     from vtscore.plugins.uploads import wrap_cli_file_fields  # noqa: PLC0415
@@ -724,21 +734,35 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
     field_values = wrap_cli_file_fields(importer.fields, field_values)
     _request_user = get_current_user()
 
+    task_id = f"_staging_{uuid4().hex[:8]}"
+    display_name = label or importer.resolve_display_name(field_values)
+    tracker = loading_tasks.create_task(
+        task_id,
+        display_name,
+        media_type=_normalize_media_type(field_values.get("media_type", "")),
+        embedder=field_values.get("embedder", "") or "",
+        extra_fields={"staging_result": None},
+    )
+    tracker.update("loading", "Preparing dataset…", 0, 0)
+
     def stage_task():
-        from vtsearch.auth import thread_user
+        from vtsearch.auth import thread_user  # noqa: PLC0415
 
         with thread_user(_request_user):
+            # Route the importer's own progress calls (and embedding progress)
+            # into this task's tracker instead of the global singleton.
+            set_thread_progress(tracker.update)
             try:
                 temp_medias: dict = {}
                 importer.run(field_values, temp_medias)
                 apply_custom_metadata_md5(temp_medias)
-                embed_missing(temp_medias, field_values.get("embedder", "") or "", on_progress=update_progress)
+                embed_missing(temp_medias, field_values.get("embedder", "") or "", on_progress=tracker.update)
                 from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
 
                 temp_medias = {mid: m for mid, m in temp_medias.items() if media_embedding(m) is not None}
 
                 if not temp_medias:
-                    update_progress("idle", "", 0, 0, error="Import produced no medias.")
+                    tracker.update("idle", "", 0, 0, error="Import produced no medias.")
                     return
 
                 first = next(iter(temp_medias.values()))
@@ -756,7 +780,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
                 del data_bytes
                 gc.collect()
 
-                update_progress(
+                tracker.update(
                     "idle",
                     f"Staged: {name} ({count} medias)",
                     100,
@@ -766,7 +790,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
             except ImportError as e:
                 traceback.print_exc()
                 gc.collect()
-                update_progress(
+                tracker.update(
                     "idle",
                     "",
                     0,
@@ -775,7 +799,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
                 )
             except MemoryError:
                 gc.collect()
-                update_progress(
+                tracker.update(
                     "idle",
                     "",
                     0,
@@ -785,7 +809,11 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
             except Exception as e:
                 traceback.print_exc()
                 error_msg = str(e) or repr(e) or "Unknown error during staging"
-                update_progress("idle", "", 0, 0, error=error_msg)
+                tracker.update("idle", "", 0, 0, error=error_msg)
+            finally:
+                clear_thread_progress()
+                loading_tasks.mark_finished(task_id)
 
     thread = threading.Thread(target=stage_task, daemon=True)
     thread.start()
+    return task_id
