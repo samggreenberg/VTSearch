@@ -258,6 +258,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private pendingToggleX = 0;
   private pendingToggleY = 0;
   private static readonly DBLCLICK_MS = 250;
+  // `event.timeStamp` of the last right-click that landed on empty canvas (no
+  // bin under the cursor), used to detect a double-right-click there; see
+  // {@link onContextMenu}. Reset to 0 whenever a right-click lands on a bin
+  // or a double is consumed, so only two *consecutive empty* right-clicks
+  // within DBLCLICK_MS pair up.
+  private lastEmptyContextMenuAt = 0;
   // Per-notch wheel zoom factor. A pyramid level spans a full 2x of zoom, so the
   // {@link zoomsPerLevel} setting (n) sets how many notches cross a bin layer:
   // the factor is 2 ** (1 / n). At the default n=2 that is exactly √2, so two
@@ -2179,7 +2185,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   /** Right-click: suppress the native menu and ask the view to open the bin
-   *  popup, carrying the cursor anchor and the bin (if any) under it. */
+   *  popup, carrying the cursor anchor and the bin (if any) under it. A
+   *  second right-click on empty canvas (no bin under the cursor) within the
+   *  double-click window zooms out about the cursor instead, mirroring
+   *  double-click-to-zoom-in. Landing on a bin at either click breaks the
+   *  pair, so it never fires while browsing bin popups. */
   private onContextMenu(event: MouseEvent): void {
     event.preventDefault();
     const rect = this.canvasRef.nativeElement.getBoundingClientRect();
@@ -2188,6 +2198,19 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // Close any hover preview so it doesn't sit under the popup.
     this.clearHover();
     const cell = this.hitTest(mx, my);
+
+    if (!cell) {
+      const now = event.timeStamp;
+      const isDoubleRightClick = now - this.lastEmptyContextMenuAt < BrowseCanvasComponent.DBLCLICK_MS;
+      this.lastEmptyContextMenuAt = isDoubleRightClick ? 0 : now;
+      if (isDoubleRightClick) {
+        this.zoomBy(1 / BrowseCanvasComponent.DOUBLE_CLICK_ZOOM, mx, my);
+        return;
+      }
+    } else {
+      this.lastEmptyContextMenuAt = 0;
+    }
+
     const members = cell ? this.cellMembers(cell) : [];
     this.contextMenu.emit({
       clientX: event.clientX,
