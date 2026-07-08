@@ -931,7 +931,7 @@ class TestLearnedSortVoteSnapshot:
             app_module.good_votes[99] = None
             captured["good"] = dict(good)
             captured["bad"] = dict(bad)
-            return {1: 0.9, 2: 0.8, 3: 0.1}, 0.5
+            return [], 0.5
 
         monkeypatch.setattr(ls_mod, "run_learned_sort", fake_run)
 
