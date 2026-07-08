@@ -833,6 +833,49 @@ ROXFORD_CATEGORIES = [
     "other",
 ]
 
+# OpenLogo brand categories: the 32 FlickrLogos-32 brands, which form OpenLogo's
+# "supervised" core (the classes with labeled training data).  These are display
+# names; OpenLogo stores class labels in a normalized lowercase-alphanumeric form
+# ("coca-cola" -> "cocacola", "Stella Artois" -> "stellaartois"), so the loader
+# matches both sides through a punctuation/case-insensitive key rather than by
+# exact string.  For any one brand the other 31 supply the distractor haystack the
+# structural (instance-matching) search must reject — the same setup ROxford's
+# "other" bucket provides for landmarks.
+OPENLOGO_CATEGORIES = [
+    "Adidas",
+    "Aldi",
+    "Apple",
+    "Becks",
+    "BMW",
+    "Carlsberg",
+    "Chimay",
+    "Coca-Cola",
+    "Corona",
+    "DHL",
+    "Erdinger",
+    "Esso",
+    "Fedex",
+    "Ferrari",
+    "Ford",
+    "Foster's",
+    "Google",
+    "Guinness",
+    "Heineken",
+    "HP",
+    "Milka",
+    "Nvidia",
+    "Paulaner",
+    "Pepsi",
+    "Ritter Sport",
+    "Shell",
+    "Singha",
+    "Starbucks",
+    "Stella Artois",
+    "Texaco",
+    "Tsingtao",
+    "UPS",
+]
+
 
 # Visual Genome object categories.  The 100 most frequent object names in
 # Visual Genome's ``objects.json`` (the well-known VG scene-graph object

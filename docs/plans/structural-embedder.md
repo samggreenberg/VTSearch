@@ -8,7 +8,10 @@ scoring entry point verifies); **matched-region overlay reachable in the focus
 pane**; **ROxford5k wired as the instance-retrieval demo dataset**; **real VLAD
 codebook fit** (Caltech-101, replacing the placeholder); **K/threshold spike DONE**
 on ROxford5k (defaults `K=50` / `threshold=0.5` confirmed; Stage-1 VLAD recall
-identified as the quality ceiling — grow the codebook next). See "Open follow-ups". This is the living spec for a third embedder *type*
+identified as the quality ceiling — grow the codebook next); **OpenLogo
+(QMUL-OpenLogo) wired as the logo instance-matching demo** (`openlogo` source,
+32 FlickrLogos-32 brands with ground-truth boxes, the benchmark for measuring
+codebook growth on real logos). See "Open follow-ups". This is the living spec for a third embedder *type*
 (alongside single-vector and patch) that searches for **specific instances**
 ("the Coca-Cola logo") rather than **semantic categories** ("a cola can"). The
 architecture below is the agreed direction; the work plan is a sketch to be
@@ -638,6 +641,26 @@ entry point that stopped at coarse VLAD retrieval (CPU-tested in
   to raise Stage-1 recall, which is what caps end-to-end mAP. Bigger K also grows
   the VLAD vector (`K × 128`); confirm the diversity-tree / sort costs stay
   acceptable when bumping it.
+- **Logo instance-matching demo — SHIPPED (OpenLogo).** ROxford5k covers the
+  *landmark* instance-matching case; the *logo* case now has its own demo:
+  **Voxel51/OpenLogo** (QMUL-OpenLogo), wired as the `openlogo` image source
+  (`openlogo_s` / `openlogo_a`). It aggregates 7 logo datasets — FlickrLogos-27/32,
+  Logo32plus, BelgaLogos, WebLogo-2M (test), Logo-in-the-Wild, SportsLogo — giving
+  genuinely in-the-wild brand photos with ground-truth boxes. The demo vocabulary
+  is the 32 FlickrLogos-32 brands (OpenLogo's supervised core); for any one brand
+  the other 31 form the distractor haystack, the same setup ROxford's `other`
+  bucket provides. It is a FiftyOne dataset on HuggingFace (a flat `data/` media
+  folder + `samples.json` of `ground_truth` detections with normalized boxes),
+  pulled via `huggingface_hub.snapshot_download` and parsed with the stdlib (no
+  `fiftyone` dependency); brand labels are matched to the display categories
+  through a punctuation/case-insensitive key. Ground-truth boxes are stamped onto
+  each clip as store-only `regions`, so this is also the natural dataset for
+  exercising the Calibration & Evaluation flow against real logos. **This is the
+  benchmark to re-measure the codebook-growth follow-up on** (does a 256–1024-word
+  vocabulary lift Stage-1 recall on logos as the ROxford spike predicts?). Open:
+  measured `DEMO_MEDIA_COUNTS` entries (the advertised count currently falls back
+  to the per-category estimate, approximate for a flat-sliced multi-label source,
+  as with Visual Genome) once the 4.6 GB set has been downloaded and counted.
 - Spike (codebook size/corpus, Stage-1 backbone choice, K, geometric model)
   precedes v1 build, like the caltech101_s sweep preceded patch v1.
 - Keep the `StructuralMatcher` protocol media-agnostic from day one so the audio

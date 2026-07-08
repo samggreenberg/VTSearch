@@ -197,6 +197,7 @@ def _source_directory(source: str) -> Path | None:
             "food101": DATA_DIR / "food-101" / "images",
             "eurosat": DATA_DIR / "EuroSAT_RGB",
             "stanford_dogs": DATA_DIR / "stanford_dogs" / "Images",
+            "openlogo": DATA_DIR / "openlogo" / "data",
             "ucsf_documents": DATA_DIR / "ucsf_documents",
             "cifar10_sample": DATA_DIR / "cifar-10-batches-py",
             # Audio sources

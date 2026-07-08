@@ -22,6 +22,7 @@ from vtscore.media.image._demo_categories import (
     DEMO_CATEGORIES_CALTECH256,
     EUROSAT_CATEGORIES,
     FOOD101_CATEGORIES,
+    OPENLOGO_CATEGORIES,
     OXFORD_FLOWERS_CATEGORIES,
     PLACES365_CATEGORIES,
     ROXFORD_CATEGORIES,
@@ -41,6 +42,7 @@ def build_demo_datasets() -> list[DemoDataset]:
         CALTECH256_DOWNLOAD_SIZE_MB,
         EUROSAT_DOWNLOAD_SIZE_MB,
         FOOD101_DOWNLOAD_SIZE_MB,
+        OPENLOGO_DOWNLOAD_SIZE_MB,
         OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
         PLACES365_DOWNLOAD_SIZE_MB,
         ROXFORD_IMAGES_DOWNLOAD_SIZE_MB,
@@ -398,6 +400,33 @@ def build_demo_datasets() -> list[DemoDataset]:
             items_per_category=1500,
             download_size_mb=ROXFORD_IMAGES_DOWNLOAD_SIZE_MB,
         ),
+        # OpenLogo is multi-label (an image may show several brands) and sliced
+        # flat over the image list, so — like Visual Genome — the advertised
+        # count is only an approximation of the per-category average.
+        DemoDataset(
+            id="openlogo_s",
+            label="OpenLogo (S)",
+            description="Brand logos in the wild — instance matching",
+            categories=OPENLOGO_CATEGORIES,
+            source="openlogo",
+            required_folder=DATA_DIR / "openlogo" / "data",
+            slice_frac_start=0.0,
+            slice_frac_end=1 / 10,
+            items_per_category=156,
+            download_size_mb=OPENLOGO_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="openlogo_a",
+            label="OpenLogo (A)",
+            description="Brand logos in the wild — instance matching",
+            categories=OPENLOGO_CATEGORIES,
+            source="openlogo",
+            required_folder=DATA_DIR / "openlogo" / "data",
+            slice_frac_start=0.0,
+            slice_frac_end=None,
+            items_per_category=156,
+            download_size_mb=OPENLOGO_DOWNLOAD_SIZE_MB,
+        ),
         DemoDataset(
             id="ucsf_documents_a",
             label="UCSF Documents (A)",
@@ -732,6 +761,87 @@ def _collect_visual_genome_files(categories, slice_args, on_progress) -> list:
     return demo_slice([(p, pos, reg) for _id, p, pos, reg in records], *slice_args)
 
 
+def _openlogo_norm(name: str) -> str:
+    """Normalize a brand label to a punctuation/case-insensitive match key.
+
+    OpenLogo stores class labels in a normalized lowercase-alphanumeric form
+    ("coca-cola" -> "cocacola", "Stella Artois" -> "stellaartois"), so both the
+    dataset labels and our display categories are reduced to ``[a-z0-9]`` before
+    comparison — the display name's spacing/casing/punctuation is irrelevant.
+    """
+    return "".join(ch for ch in name.lower() if ch.isalnum())
+
+
+def _openlogo_detections_to_labels(detections, norm_to_display) -> tuple[list[str], list]:
+    """Map one image's OpenLogo detections onto ``(positive_categories, regions)``.
+
+    Detections whose brand is not in *norm_to_display* (keyed by
+    :func:`_openlogo_norm`) are skipped.  ``bounding_box`` is a normalized
+    ``[x, y, w, h]``; each in-vocab box becomes a ``{"box": [x0, y0, x1, y1],
+    "label": brand}`` dict (clamped to ``[0, 1]``, degenerate boxes dropped).
+    """
+    positive: list[str] = []
+    regions: list = []
+    for det in detections:
+        display = norm_to_display.get(_openlogo_norm(det.get("label") or ""))
+        if display is None:
+            continue
+        if display not in positive:
+            positive.append(display)
+        box = det.get("bounding_box")
+        if not (isinstance(box, (list, tuple)) and len(box) == 4):
+            continue
+        try:
+            x, y, w, h = (float(box[0]), float(box[1]), float(box[2]), float(box[3]))
+        except (TypeError, ValueError):
+            continue
+        x0, y0 = min(max(x, 0.0), 1.0), min(max(y, 0.0), 1.0)
+        x1, y1 = min(max(x + w, 0.0), 1.0), min(max(y + h, 0.0), 1.0)
+        if x1 > x0 and y1 > y0:
+            regions.append({"box": [round(x0, 5), round(y0, 5), round(x1, 5), round(y1, 5)], "label": display})
+    return positive, regions
+
+
+def _collect_openlogo_files(categories, slice_args, on_progress) -> list:
+    """Parse OpenLogo's ``samples.json`` into per-image multi-label + region records.
+
+    Each FiftyOne sample carries a ``ground_truth`` Detections field whose
+    detections give a brand ``label`` and a normalized ``bounding_box``.  Images
+    with no in-vocab brand are skipped.  Returns a flat, filename-sorted, sliced
+    list of ``(img_path, positive_categories, regions)``.
+    """
+    import json  # noqa: PLC0415
+
+    from vtscore.datasets.downloader import download_openlogo  # noqa: PLC0415
+
+    ds_dir = download_openlogo(on_progress=on_progress)
+    data_dir = ds_dir / "data"
+
+    on_progress("loading", "Reading OpenLogo annotations…", 0, 0)
+    with open(ds_dir / "samples.json", encoding="utf-8") as f:
+        doc = json.load(f)
+    samples = doc.get("samples", []) if isinstance(doc, dict) else doc
+
+    norm_to_display = {_openlogo_norm(c): c for c in categories}
+    records: list = []
+    for sample in samples:
+        filepath = sample.get("filepath") or ""
+        if not filepath:
+            continue
+        fname = Path(filepath).name
+        img_path = data_dir / fname
+        if not img_path.is_file():
+            continue
+        detections = (sample.get("ground_truth") or {}).get("detections") or []
+        positive, regions = _openlogo_detections_to_labels(detections, norm_to_display)
+        if not positive:
+            continue
+        records.append((fname, img_path, positive, regions))
+
+    records.sort(key=lambda r: r[0])
+    return demo_slice([(p, pos, reg) for _fname, p, pos, reg in records], *slice_args)
+
+
 def _ensure_image_embedder_loaded(embedder, on_progress) -> None:
     if getattr(embedder, "_model", None) is None:
         on_progress("loading", "Loading image embedding model…", 0, 0)
@@ -974,6 +1084,70 @@ def _embed_vg_images(selected, clips, embedder, on_progress, demo_origin, skip_e
         clip_id += 1
 
 
+def _embed_openlogo_images(selected, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
+    """Embed OpenLogo ``(img_path, positive_categories, regions)`` records into ``clips``.
+
+    Multi-label (an image may show several brands), mirroring the Visual Genome
+    demo: each clip gets a ``categories`` list (all in-vocab brands present), a
+    ``category`` primary (first brand, for single-label readers), and store-only
+    normalized ground-truth ``regions`` (the boxed brand region is the natural
+    template seed for a structural detector, and the boxes let the Calibration &
+    Evaluation flow score against ground truth).
+    """
+    import hashlib  # noqa: PLC0415
+
+    from PIL import Image  # noqa: PLC0415
+
+    from vtscore.media.embedder import media_from_path  # noqa: PLC0415
+
+    if not skip_embedding:
+        _ensure_image_embedder_loaded(embedder, on_progress)
+
+    clip_id = max(clips.keys(), default=0) + 1
+    total = len(selected)
+    status = "loading" if skip_embedding else "embedding"
+    verb = "Loading" if skip_embedding else "Embedding"
+    on_progress(status, f"{verb} {total} images...", 0, total)
+
+    for i, (img_path, positive_categories, regions) in enumerate(selected):
+        primary = positive_categories[0]
+        if skip_embedding:
+            on_progress("loading", f"Loading {primary}/{img_path.name}", i + 1, total)
+            embedding = None
+        else:
+            on_progress("embedding", f"Embedding {primary}/{img_path.name}", i + 1, total)
+            embedding = embedder.embed_media(media_from_path(img_path))
+            if embedding is None:
+                continue
+        with open(img_path, "rb") as f:
+            image_bytes = f.read()
+        try:
+            with Image.open(img_path) as img:
+                width, height = img.width, img.height
+        except Exception:
+            width, height = None, None
+        clips[clip_id] = {
+            "id": clip_id,
+            "media_type": _MEDIA_TYPE_ID,
+            "embedder": embedder.name,
+            "duration": 0,
+            "file_size": len(image_bytes),
+            "md5": hashlib.md5(image_bytes).hexdigest(),
+            "embeddings": {} if skip_embedding else {embedder.name: embedding},
+            "media_bytes": image_bytes,
+            "media_string": None,
+            "filename": f"{primary}/{img_path.name}",
+            "category": primary,
+            "categories": list(positive_categories),
+            "regions": list(regions),
+            "width": width,
+            "height": height,
+            "origin": demo_origin,
+            "origin_name": f"{primary}/{img_path.name}",
+        }
+        clip_id += 1
+
+
 def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per demo source
     source,
     categories,
@@ -1043,6 +1217,17 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
     if source == "roxford5k":
         _embed_file_images(
             _collect_roxford_files(categories, slice_args, on_progress),
+            clips,
+            embedder,
+            on_progress,
+            demo_origin,
+            skip_embedding=skip_embedding,
+        )
+        return None
+
+    if source == "openlogo":
+        _embed_openlogo_images(
+            _collect_openlogo_files(categories, slice_args, on_progress),
             clips,
             embedder,
             on_progress,
