@@ -181,8 +181,11 @@ _PROGRESS_COMMON_EXTRAS = {
 }
 ```
 
-`dataset_progress` additionally declares `"staging_result"` for the
-combine-datasets staging flow.
+`dataset_progress` still declares `"staging_result"` (retained for the
+legacy free-function API and its test), but the staging flow itself now
+runs through per-task trackers created via
+`LoadingTasksTracker.create_task(..., extra_fields={"staging_result": None})`,
+so two concurrent staging imports no longer collide on one channel.
 
 **ETA:** when `extra_fields` includes `"eta_seconds"`, every `update()`
 recomputes a smoothed ETA. The tracker keeps a phase key
@@ -334,9 +337,9 @@ start of each new operation so a previous cancellation doesn't
 immediately abort the next run.
 
 `cancel_dataset_progress()` is a convenience that cancels every active
-task in `loading_tasks` **and** the legacy `dataset_progress` singleton
-- staging operations write through both surfaces, so a clean abort
-needs to touch both.
+task in `loading_tasks` (which now includes staging imports) **and** the
+legacy `dataset_progress` singleton, so a clean abort touches both
+surfaces regardless of which one a given operation reports through.
 
 ---
 

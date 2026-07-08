@@ -2,8 +2,9 @@
 
 **Status: initial fix pass shipped; second follow-up pass shipped
 (#2, #6, #10, #14 of the original open list); third follow-up pass shipped
-(JobManager cancellation now stops running jobs — was open #2 of the
-renumbered list); remaining open follow-ups below.**
+(JobManager cancellation now stops running jobs); fourth follow-up pass
+shipped (per-task progress isolation — staging imports + eval jobs);
+remaining open follow-ups below.**
 
 A full-codebase audit focused on interface boundaries: frontend ↔ backend
 API contract, route layer ↔ state system, app tier ↔ `vtscore` library,
@@ -191,61 +192,81 @@ up any of these areas sees the known-weak spots.
   (`TestCheckJobCancelledPrimitive`, `TestRunningJobCancellation`) and
   `tests_lib/detectors/test_mlp_training.py` (`TestJobCancellation`).
 
+### Fourth follow-up pass (per-task progress isolation)
+
+- **Staging imports on the global `dataset_progress` singleton** (was open
+  #3, renumbered #2 after the third pass).  `_stage_importer_in_background`
+  reported through the single global `dataset_progress` tracker, so two
+  concurrent staging imports interleaved one channel and the terminal
+  `staging_result` was last-writer-wins — orphaning the loser's staged pkl.
+  Staging now runs through a dedicated per-task `ProgressTracker` created
+  via `loading_tasks` (an `extra_fields` hook on
+  `LoadingTasksTracker.create_task` carries the `staging_result` key), keyed
+  by a returned `task_id`; the importer's own progress and the embed pass
+  route into that tracker via `set_thread_progress`.  The `stage-import` /
+  `stage-demo` routes now return the `task_id` so a poller can pick up its
+  own result off the `loading-tasks` SSE channel.  Test in
+  `tests/datasets/test_combine_datasets.py::TestStagingPerTaskIsolation`.
+- **Eval progress decorrelated from job identity** (was open #4, renumbered
+  #3 after the third pass).  The eval train-and-score route wrote progress
+  to the global `eval_progress` singleton and the `/result` poll read it
+  back, so overlapping evals (one running, one parked pending behind the
+  single-runner `eval_jobs` manager) reported each other's numbers.
+  Progress now lives on the `AsyncJob` (`job.update_progress`) and the poll
+  reads `job.current` / `job.total`; the singleton is written only from
+  inside the actually-running job's `_run` (not from the request handler for
+  a possibly-pending job), so the live `eval` SSE bar reflects the running
+  job.  Test in
+  `tests/sorting/test_sorting.py::TestEvalTrainAndScoreAsync::test_result_reports_job_progress_not_singleton`.
+
 ## Open follow-ups
 
 Ordered roughly by severity.  Each was found and verified during the audit
 but deferred as needing a design decision or a larger change.  (Original
-open items #2, #6, #10, #14 were drained in the second follow-up pass, and
-the renumbered #2 "JobManager cancellation advisory" in the third pass — see
+open items #2, #6, #10, #14 were drained in the second follow-up pass, the
+renumbered #2 "JobManager cancellation advisory" in the third pass, and the
+staging + eval progress isolation (renumbered #2, #3) in the fourth — see
 the follow-up-pass subsections under What shipped.  The list below is
-renumbered again after that drain.)
+renumbered again after those drains.)
 
 1. **SSE `/api/events` pins a gthread worker thread per connection.**
    With `workers = 1, threads = 8`, eight open tabs starve the whole app;
    stalled requests plus a live heartbeat read as an app hang.  Needs a
    design decision: bound SSE connections, size the pool against them, or
    move the stream off the request-thread pool.
-2. **Staging imports publish through the global `dataset_progress`
-   singleton** (`load_pipeline.py:_stage_importer_in_background`): two
-   concurrent staging imports interleave one channel and the terminal
-   `staging_result` is last-writer-wins, orphaning the loser's staged pkl.
-   Needs per-task trackers like `_run_origin_load_in_background`.
-3. **Eval progress is a global singleton keyed to no job**
-   (`routes/eval.py`): overlapping evals decorrelate the progress bar from
-   job identity.
-4. **Region-matrix fallback can mix embedding spaces** on a multi-embedder
+2. **Region-matrix fallback can mix embedding spaces** on a multi-embedder
    dataset where only some media carry `patch_regions`
    (`embedding/matrix.py:_build_region_arrays`): region rows are in the
    patch embedder's space, fallback rows in the primary's.  Needs either an
    ingest guarantee (all-or-nothing patch_regions per dataset) or space
    checking here.
-5. **Eval harness fidelity** (`eval/voting_iterations.py`): fold models
+3. **Eval harness fidelity** (`eval/voting_iterations.py`): fold models
    don't force the full-data `hidden_dim`, always calibrate below 6 labels
    (production uses 0.5), and thread the split RNG into calibration - so
    reported eval costs measure a pipeline production doesn't run in exactly
    the small-label regime the eval characterises.
-6. **Inclusion slide drops the safe-threshold GMM blend**
+4. **Inclusion slide drops the safe-threshold GMM blend**
    (`state/core.py:recompute_detector_thresholds_for_inclusion` vs
    `training.py`): with safe-thresholds on and 6 ≤ n < 20 labels, sliding
    inclusion to a value and back changes the threshold semantics relative
    to a fresh retrain.  Decide whether the blend applies on slides.
-7. **Two training entry points disagree at 4-5 labels** with
+5. **Two training entry points disagree at 4-5 labels** with
    safe-thresholds off: `train_and_threshold` runs real cross-calibration,
    `_train_and_score_xy` hard-codes 0.5.  Same user state, different
    cutoff depending on route.
-8. **Dataset registry is not multi-process safe**
+6. **Dataset registry is not multi-process safe**
    (`vtscore/datasets/registry.py`): in-process lock plus a fixed `.tmp`
    name; a concurrent CLI autodetect run against the same data dir can
    silently erase the server's registrations.  Fine under the documented
    single-worker model; needs flock if that changes.
-9. **`http_archive` cache never invalidates** when the remote archive
+7. **`http_archive` cache never invalidates** when the remote archive
     changes (fixed collision, not staleness); `extract_archive_cached`'s
     mtime/size keying is the model.
-10. **Threshold averaging with the abstain sentinel**: a fold returning
+8. **Threshold averaging with the abstain sentinel**: a fold returning
     `NO_GOOD_THRESHOLD` (2.0) now raises the fold mean, possibly above 1.0
     (= abstain overall).  This is the intended lean but the blend weight is
     crude; revisit if precision-biased small-label behaviour looks off.
-11. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
+9. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
     rather than clean): browse-canvas/minimap coordinate math and rAF
     lifecycles, modal/player component lifecycle sweep, left/right-panel
     virtualization, and a full route-blueprint sweep of
@@ -278,3 +299,12 @@ renumbered again after that drain.)
   the partial result) instead of running to completion with the cancel
   ignored.  The eval progress bar reports `"Cancelled"` on a running-job
   cancel rather than `"Error"`.
+- Staging (`POST /api/dataset/stage-import/<importer>`, `stage-demo/<name>`)
+  now returns a `task_id` and reports progress on the per-task
+  `loading-tasks` SSE channel (with its `staging_result`) instead of the
+  global `dataset` channel / `dataset_progress` singleton.
+  `_stage_importer_in_background` returns the task id.
+- Eval `GET /api/eval/train-and-score/result` reports the polled job's own
+  `current` / `total` (read from the `AsyncJob`) rather than the shared
+  `eval_progress` singleton, so overlapping evals no longer read each
+  other's progress.
