@@ -77,3 +77,90 @@ def test_falls_back_to_cpu_when_device_resolution_raises(monkeypatch):
 
     monkeypatch.setattr("vtscore.config.resolve_device", _boom)
     assert load_step_weights() == _LOAD_STEP_WEIGHTS_CPU
+
+
+# --- n-aware affine cost model -------------------------------------------------
+
+import pytest  # noqa: E402
+
+from vtscore.datasets.stages import _load_cost_model as _cm  # noqa: E402
+
+
+def _inject_row(monkeypatch, key, coeffs, *, bandwidth=10.0):
+    monkeypatch.setattr(_cm, "LOAD_COST_MODEL", {key: coeffs})
+    monkeypatch.setattr(_cm, "DOWNLOAD_MB_PER_S", bandwidth)
+
+
+def test_n_aware_weights_come_from_cost_model(monkeypatch):
+    monkeypatch.setattr("vtscore.config.resolve_device", lambda: "cuda")
+    _inject_row(
+        monkeypatch,
+        ("cuda", "image", "siglip"),
+        {"a_model": 0.3, "a_embed": 1.0, "b_embed": 0.01, "a_fin": 1.0, "b_fin": 0.002},
+        bandwidth=10.0,
+    )
+    w = load_step_weights("image", n=1000, download_size_mb=100.0, embedder="siglip")
+    # T = [download 100/10=10, model 0.3, embed 1+10=11, finalize 1+2=3] -> /24.3
+    assert w == pytest.approx([10 / 24.3, 0.3 / 24.3, 11 / 24.3, 3 / 24.3])
+    assert sum(w) == pytest.approx(1.0)
+
+
+def test_small_n_weights_model_heavier_and_large_n_weights_embed_heavier(monkeypatch):
+    monkeypatch.setattr("vtscore.config.resolve_device", lambda: "cuda")
+    _inject_row(
+        monkeypatch,
+        ("cuda", "image", "siglip"),
+        {"a_model": 5.0, "a_embed": 1.0, "b_embed": 0.01, "a_fin": 1.0, "b_fin": 0.001},
+    )
+    small = load_step_weights("image", n=100, download_size_mb=0, embedder="siglip")
+    large = load_step_weights("image", n=10000, download_size_mb=0, embedder="siglip")
+    # model (index 1) is a fixed cost -> a larger *fraction* at small n.
+    assert small[1] > large[1]
+    # embed (index 2) grows with n -> a larger fraction at large n.
+    assert large[2] > small[2]
+
+
+def test_download_slice_collapses_when_size_zero(monkeypatch):
+    monkeypatch.setattr("vtscore.config.resolve_device", lambda: "cuda")
+    _inject_row(
+        monkeypatch,
+        ("cuda", "image", "siglip"),
+        {"a_model": 0.3, "a_embed": 1.0, "b_embed": 0.01, "a_fin": 1.0, "b_fin": 0.002},
+    )
+    w = load_step_weights("image", n=1000, download_size_mb=0, embedder="siglip")
+    assert w[0] == 0.0  # no archive fetched (local import / cached re-add)
+
+
+def test_unknown_n_returns_static_profile(monkeypatch):
+    monkeypatch.setattr("vtscore.config.resolve_device", lambda: "cuda")
+    _inject_row(
+        monkeypatch,
+        ("cuda", "image", "siglip"),
+        {"a_model": 0.3, "a_embed": 1.0, "b_embed": 0.01, "a_fin": 1.0, "b_fin": 0.002},
+    )
+    # n unknown (folder importer) -> static asymptote, not the affine model.
+    assert load_step_weights("image", embedder="siglip") == _LOAD_STEP_WEIGHTS_GPU
+
+
+def test_no_matching_cost_model_row_returns_static(monkeypatch):
+    monkeypatch.setattr("vtscore.config.resolve_device", lambda: "cpu")
+    _inject_row(
+        monkeypatch,
+        ("cuda", "image", "siglip"),
+        {"a_model": 0.3, "a_embed": 1.0, "b_embed": 0.01, "a_fin": 1.0, "b_fin": 0.002},
+    )
+    # device cpu -> no ("cpu", image, x) row -> static image-CPU profile.
+    assert load_step_weights("image", n=1000, download_size_mb=100.0, embedder="siglip") == _LOAD_STEP_WEIGHTS_CPU_IMAGE
+
+
+def test_shipped_cost_model_table_is_well_formed():
+    # Every checked-in coefficient row has the affine keys and yields a
+    # normalized weight vector; empty table (pre-calibration) trivially passes.
+    for key, coeffs in _cm.LOAD_COST_MODEL.items():
+        assert set(coeffs) >= {"a_model", "a_embed", "b_embed", "a_fin", "b_fin"}
+        device, media, embedder = key
+        w = _cm.cost_model_weights(device, media, embedder, n=1000, download_size_mb=100.0)
+        assert w is not None
+        assert len(w) == _TOTAL_LOAD_STEPS
+        assert all(x >= 0 for x in w)
+        assert sum(w) == pytest.approx(1.0)
