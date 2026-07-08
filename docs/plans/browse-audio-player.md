@@ -1,12 +1,14 @@
-# Browse audio player: squares + anchored hover player
+# Browse audio player: squares + top-left now-playing indicator
 
-**Status:** Phase 1 + Phase 2 shipped. Audio bins tile as square waveform
-thumbnails on the VTSBrowse map (Phase 1), and hovering an audio bin now opens
-an **anchored player** — the bin's waveform plus native `<audio>` controls
-(play/pause, volume, scrubber/play-point) — that opens on a dwell and stays open
-while the cursor is on it (Phase 2). Phase 3 (polish) deferred — see Open
-follow-ups. Scope confirmed with the user: *squares + hover player*, player
-*anchored to the tile*.
+**Status:** Phase 1, Phase 2, and Phase 4 shipped; Phase 2's anchored floating
+player was *replaced* by Phase 4, not layered on top of it — see "What shipped
+(Phase 4)" below. Audio bins tile as square waveform thumbnails on the
+VTSBrowse map (Phase 1). Hovering an audio bin lifts it (the same hover-enlarge
+every thumbnail type gets) and starts the clip playing, with **no on-canvas
+player UI**; the only visual feedback is a small waveform + the volume control,
+both anchored top-left (Phase 4). Scope confirmed with the user: the earlier
+anchored floating player felt redundant with the bin's own hover-enlarge, so it
+was deleted rather than polished.
 
 ## What shipped (Phase 1)
 
@@ -27,28 +29,63 @@ follow-ups. Scope confirmed with the user: *squares + hover player*, player
 - Side effect (desirable): clicking an audio bin now shows a preview pane in
   the bin popup, consistent with image/video.
 
-## What shipped (Phase 2)
+## What shipped (Phase 2) — superseded by Phase 4
 
 - **Anchored audio hover player** (`BrowseHoverPreviewComponent`). Hovering an
-  audio bin now opens a panel next to the tile with the bin's waveform PNG plus
+  audio bin opened a panel next to the tile with the bin's waveform PNG plus
   a native `<audio controls>` element — play/pause, volume, and a scrubber (the
-  "current play-point"). This replaces the old `display:none` `<audio>` (the
+  "current play-point"). This replaced the old `display:none` `<audio>` (the
   "sound from nowhere").
-- **Dwell + debounce:** the player opens only after the cursor rests ~200ms on a
-  bin, and sweeping across bins re-arms the dwell, so a fast pass doesn't spawn a
-  burst of players/auditions.
-- **Hover-bridge:** the panel takes pointer events, and a short close-grace after
-  the bin-hover clears lets the cursor travel from the tile onto the controls
+- **Dwell + debounce:** the player opened only after the cursor rested ~200ms on
+  a bin, and sweeping across bins re-armed the dwell, so a fast pass didn't spawn
+  a burst of players/auditions.
+- **Hover-bridge:** the panel took pointer events, and a short close-grace after
+  the bin-hover cleared let the cursor travel from the tile onto the controls
   without the panel vanishing.
-- **Clip-aware:** windowed clips loop within `[clip_start, clip_end]` via the
+- **Clip-aware:** windowed clips looped within `[clip_start, clip_end]` via the
   shared `applyClipWindow` helper (lazy clip-extent lookup through the metadata
   cache).
 - Implementation note: rather than embed the Train `AudioPlayerComponent` (which
   wants a full `Media` object and re-decodes audio client-side per hover), the
-  hover player is a lightweight inline panel — the same waveform PNG already on
+  hover player was a lightweight inline panel — the same waveform PNG already on
   the tile + native controls. Visually equivalent, cheaper, no type-plumbing.
+- **Why it was removed (Phase 4):** the floating panel duplicated the bin's own
+  hover-enlarge (a magnified thumbnail already appears on hover for every
+  thumbnail type, audio included) — two "here's what you're hovering" surfaces
+  stacked on top of each other. The user asked for the panel to go away
+  entirely: hovering should just enlarge the bin and play the clip, with
+  feedback confined to a small always-there corner widget instead of new UI
+  popping up mid-canvas.
 
-## Motivation
+## What shipped (Phase 4) — top-left now-playing indicator
+
+- **Deleted the anchored floating player.** `BrowseHoverPreviewComponent`'s
+  audio path no longer renders any DOM; it owns a plain `new Audio()` element
+  (never mounted) purely to hear the clip. Hovering an audio bin still lifts it
+  via the existing `usesThumbnails()` hover-enlarge — no new visual on the
+  canvas itself.
+- **`NowPlaying` output**, exported from `browse-hover-preview.component.ts`
+  (`{ mediaId, waveUrl }`), emitted when a clip starts and `null` the instant
+  hover clears (no hover-bridge grace — there's no panel to bridge onto).
+  `browse-bin-popup.component.ts` gained the same output, emitted from its
+  existing grid-hover audio path (`onEntryEnter`/`stopAudio`), so the bin-popup
+  member grid feeds the same indicator.
+- **Top-left now-playing + volume cluster**, in `browse-view.component` inside
+  the existing `.browse-tools-left` overlay (alongside "Back to Find" /
+  "Rebuild map"): a `.browse-now-playing-wave` `<img>` of whatever clip is
+  auditioning (the same waveform PNG painted on its tile) stacked above the
+  `.browse-volume` mute+slider control, which **moved from top-right to
+  top-left** to sit with it. No per-clip controls (play/pause/scrub) live here
+  — deliberately: the cursor can't reach the top-left corner without moving off
+  the bin that's making the noise, so any button there would be unreachable
+  while relevant.
+- **Redundant-by-design overlap with the bin popup:** when the bin-detail popup
+  is open, its own member grid still shows the waveform thumbnail for the
+  hovered row *and* the top-left indicator shows the same clip. Acknowledged
+  and accepted rather than solved — a candidate future merge of "bin popup
+  preview" and "now playing" is noted below, not attempted here.
+
+## Motivation (original, Phase 1/2)
 
 On the VTSBrowse map, audio bins render as flat-density **hexes**, and
 mousing one plays sound from a `display:none` `<audio>` element — audio
@@ -176,28 +213,27 @@ hardcoded list.
 - **Phase 1 — tiles (SHIPPED):** added the `has_thumbnail` capability +
   reconciled the shape/paint decisions so audio renders as square waveform
   tiles on the map. Visible tile change with the least new UI.
-- **Phase 2 — anchored player (SHIPPED):** upgraded `BrowseHoverPreviewComponent`
-  to a debounced, hover-bridged anchored player (waveform + native play/pause +
-  volume + scrubber). Went with a lightweight inline panel rather than embedding
-  `AudioPlayerComponent` (see "What shipped (Phase 2)" above).
-- **Phase 3 — polish:** canvas playhead line; decide member-paging home;
-  apply the same upgrade to the bin-popup hover-play.
+- **Phase 2 — anchored player (SHIPPED, then superseded):** upgraded
+  `BrowseHoverPreviewComponent` to a debounced, hover-bridged anchored player
+  (waveform + native play/pause + volume + scrubber). Went with a lightweight
+  inline panel rather than embedding `AudioPlayerComponent`. Replaced outright
+  by Phase 4 rather than polished — see "What shipped (Phase 2) — superseded".
+- **Phase 4 — top-left now-playing indicator (SHIPPED):** deleted the anchored
+  panel; hovering an audio bin now only enlarges it (shared hover-enlarge) and
+  plays sound, with a small waveform + the (relocated) volume control anchored
+  top-left as the sole visual feedback. Also upgraded the bin-popup's
+  grid-hover audio to feed the same indicator. See "What shipped (Phase 4)".
+- ~~Phase 3 — polish~~: superseded by Phase 4; its scope (playhead, panel
+  positioning, member-paging) no longer applies to a deleted panel. Any
+  surviving pieces are folded into Open follow-ups below.
 
 ## Open follow-ups
 
-- **Phase 3 (polish)** — a moving playhead drawn over the waveform (net-new;
-  pattern in `audio-crop-overlay`); member-paging home (anchored player vs bin
-  popup, Problem 4); apply the anchored player to the bin-popup member hover
-  (`browse-bin-popup.component.ts` still uses the hidden-`<audio>` pattern).
-- **Panel positioning polish.** The player anchors at a fixed offset
-  (`screenX+16`), with no viewport clamping, so near a screen edge it can
-  overflow. Add clamping (the bin-popup already has a clamp helper to mirror).
-- **Autoplay-on-dwell.** The player currently auto-plays on dwell (preserving the
-  old audition workflow, now visible + controllable). If that reads as too eager,
-  switch to click-to-play.
-- **Wider waveform in the panel.** The panel stretches the 128px square
-  thumbnail PNG to its width (blurry). A dedicated wider waveform render (or the
-  client-decoded canvas) would look crisper.
+- **Merge bin-popup preview with now-playing.** Noted as a known, accepted
+  redundancy in "What shipped (Phase 4)": with the bin-detail popup open, the
+  hovered row's waveform shows both in the popup's own grid and in the
+  top-left indicator. A future pass could have the popup point at (or fold
+  into) the shared now-playing indicator instead of keeping its own display.
 - **Data-drive the frontend from `has_thumbnail`.** Phase 1 added the capability
   to the API + `MediaTypeInfo`, but the frontend still hardcodes the thumbnail
   type set in several spots (`usesThumbnails`, and the per-item `hasThumbnailUrl`
@@ -208,5 +244,7 @@ hardcoded list.
 - **Waveform PNG theming.** `generate_waveform_thumbnail` paints fixed dark
   colors (`_BG_COLOR`/`_WAVE_COLOR`) regardless of light/dark theme, so audio
   square tiles won't match a light-theme map. Consider theme-aware rendering.
+  This now also affects the top-left now-playing waveform, which reuses the
+  same PNG.
 - Whether `text` (the last hex type) ever gets an analogous treatment — out of
   scope for now.

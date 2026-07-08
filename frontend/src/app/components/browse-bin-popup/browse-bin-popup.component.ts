@@ -13,6 +13,7 @@ import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { applyClipWindow, clearClipWindow } from '../../utils/clip-window';
 import { usesThumbnails } from '../browse-canvas/hex-render.util';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
+import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
 import type { MediaBatchResponse } from '../../generated/api-client/models/media-batch-response';
 
@@ -187,6 +188,10 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
 
   /** Emitted when the popup should close (outside click, Escape, or the X). */
   readonly dismissed = output<void>();
+  /** The clip now auditioning from a grid-row hover (for the top-left
+   *  now-playing indicator, shared with the canvas hover), or ``null`` once
+   *  the hover clears. */
+  readonly nowPlaying = output<NowPlaying | null>();
 
   @ViewChild('panel') private panelRef?: ElementRef<HTMLElement>;
   @ViewChild('header') private headerRef?: ElementRef<HTMLElement>;
@@ -907,6 +912,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     const src = this.activeContext.mediaUrl(`/api/medias/${id}/audio`);
     if (this.audioSrc === src) return;
     this.audioSrc = src;
+    this.nowPlaying.emit({ mediaId: id, waveUrl: this.thumbnailUrl(id) });
     setTimeout(() => {
       const el = this.audioRef?.nativeElement;
       if (!el) return;
@@ -932,6 +938,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   }
 
   private stopAudio(): void {
+    const wasPlaying = this.audioSrc !== '';
     const el = this.audioRef?.nativeElement;
     if (el) {
       clearClipWindow(el);
@@ -939,6 +946,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
       el.currentTime = 0;
     }
     this.audioSrc = '';
+    if (wasPlaying) this.nowPlaying.emit(null);
   }
 
   // --- Names + thumbnails (mirrors the selection panel's treatment) ---------

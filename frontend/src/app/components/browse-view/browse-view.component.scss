@@ -74,6 +74,30 @@
   }
 }
 
+// Bottom-most item in the top-left cluster (audio datasets only): the
+// now-playing waveform stacked above the volume control. Together they read
+// as a lightweight status/volume widget, not a player — there are no
+// play/pause controls, since hovering a bin is what starts and stops sound.
+.browse-now-playing {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+}
+
+// The waveform PNG of whatever clip is currently auditioning; the same
+// thumbnail painted on its tile, stretched wide (time on X) to read at a
+// glance as "this is what's making noise".
+.browse-now-playing-wave {
+  display: block;
+  width: 120px;
+  height: 36px;
+  object-fit: fill;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
 .browse-info {
   position: absolute;
   bottom: var(--space-md);
@@ -280,8 +304,10 @@
   z-index: 1;
 }
 
-// Preview-volume control (audio datasets only): a mute toggle joined to a slim
-// range slider, sharing the grouped-pill look of the zoom / hex-size clusters.
+// Preview-volume control (audio datasets only), anchored top-left below the
+// now-playing waveform (see ``.browse-now-playing``): a mute toggle joined to
+// a slim range slider, sharing the grouped-pill look of the zoom / hex-size
+// clusters.
 .browse-volume {
   display: inline-flex;
   align-items: stretch;
