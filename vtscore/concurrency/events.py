@@ -11,7 +11,9 @@ Replaces the per-tracker REST polling endpoints (``/api/dataset/progress``,
 from __future__ import annotations
 
 import json
+import os
 import queue
+import threading
 import time
 import uuid
 from typing import Any, Callable, Generator
@@ -61,6 +63,61 @@ _TASK_CHANNELS: dict[str, LoadingTasksTracker] = {
     "loading-tasks": loading_tasks,
     "detector-loading-tasks": detector_loading_tasks,
 }
+
+
+def _default_max_connections() -> int:
+    """Derive the SSE connection cap from the deployed thread pool size.
+
+    Each open ``/api/events`` connection pins a ``gthread`` worker thread
+    for its whole lifetime (the generator blocks in ``queue.get()`` between
+    updates). ``gunicorn.conf.py`` runs a single worker with
+    ``VTSEARCH_THREADS`` (default 8) threads, so an unbounded number of
+    open tabs can starve the pool of threads needed to serve ordinary REST
+    requests — a stalled request plus a live heartbeat then reads as an app
+    hang rather than a clear error (comprehensive-audit-2026-07 #1).
+    Reserve a fixed headroom so SSE can never claim every thread.
+    """
+    pool = int(os.environ.get("VTSEARCH_THREADS", "8"))
+    reserve = 2
+    return max(1, pool - reserve)
+
+
+#: Hard cap on concurrent ``/api/events`` connections this process accepts.
+#: Override directly with ``VTSEARCH_SSE_MAX_CONNECTIONS``; otherwise derived
+#: from ``VTSEARCH_THREADS`` via :func:`_default_max_connections`.
+MAX_SSE_CONNECTIONS = int(os.environ.get("VTSEARCH_SSE_MAX_CONNECTIONS", str(_default_max_connections())))
+
+_connection_lock = threading.Lock()
+_active_connections = 0
+
+
+def acquire_sse_slot() -> bool:
+    """Reserve one of the bounded SSE connection slots.
+
+    Returns ``False`` (without side effects) if the process is already at
+    :data:`MAX_SSE_CONNECTIONS`; the caller should reject the connection
+    instead of starting a stream that would pin a thread indefinitely.
+    Pair every successful call with :func:`release_sse_slot`.
+    """
+    global _active_connections
+    with _connection_lock:
+        if _active_connections >= MAX_SSE_CONNECTIONS:
+            return False
+        _active_connections += 1
+        return True
+
+
+def release_sse_slot() -> None:
+    """Release a slot reserved by :func:`acquire_sse_slot`."""
+    global _active_connections
+    with _connection_lock:
+        _active_connections = max(0, _active_connections - 1)
+
+
+def active_sse_connections() -> int:
+    """Current count of open SSE connections (test/introspection helper)."""
+    with _connection_lock:
+        return _active_connections
 
 
 def _format_sse(event: str, data: Any) -> str:

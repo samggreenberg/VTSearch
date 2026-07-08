@@ -144,7 +144,13 @@ A few VTSearch-specific points matter when configuring the proxy:
   SSE endpoint. Proxy response buffering breaks SSE (events arrive only when the
   buffer flushes), so disable it for the stream — `proxy_buffering off;` in nginx
   (and the equivalent elsewhere) — and ensure the same long read-timeout applies,
-  since the connection stays open for the life of the page.
+  since the connection stays open for the life of the page. Each open connection
+  pins a gthread worker thread for its lifetime, so the server caps concurrent
+  connections at `VTSEARCH_THREADS - 2` (override with
+  `VTSEARCH_SSE_MAX_CONNECTIONS`) and returns `503` once saturated instead of
+  starving the pool that serves ordinary requests; the frontend's `EventSource`
+  wrapper retries on a timer when that happens. Raising `VTSEARCH_THREADS` raises
+  the SSE cap along with it.
 - **Forwarded headers.** Pass `X-Forwarded-For`, `X-Forwarded-Proto`, and
   `X-Forwarded-Host` (and `Host`) so the app sees the real client and external
   scheme. For SSE/WebSocket-style streams also forward `Connection`/`Upgrade` if

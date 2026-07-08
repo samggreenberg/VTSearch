@@ -5,7 +5,8 @@
 (JobManager cancellation now stops running jobs); fourth follow-up pass
 shipped (per-task progress isolation — staging imports + eval jobs); fifth
 follow-up pass shipped (#5, #8 of the renumbered open list — ML threshold
-correctness); remaining open follow-ups below.**
+correctness); sixth follow-up pass shipped (#1 of the current open list —
+SSE connection cap); remaining open follow-ups below.**
 
 A full-codebase audit focused on interface boundaries: frontend ↔ backend
 API contract, route layer ↔ state system, app tier ↔ `vtscore` library,
@@ -246,48 +247,67 @@ up any of these areas sees the known-weak spots.
   abstaining folds and otherwise means the folds that produced a real cut.
   Tests in `tests_lib/sorting/test_find_optimal_threshold.py`.
 
+### Sixth follow-up pass — SSE connection cap (drained from the open list)
+
+- **SSE `/api/events` no longer starves the gthread pool** (was open #1).
+  Each open connection pins a worker thread for its lifetime (the generator
+  blocks in `queue.get()` between updates), so with the documented
+  `workers = 1, threads = 8` deployment, enough open tabs could exhaust the
+  pool and make ordinary requests stall while the stream's own heartbeat
+  kept the connection looking alive. Chose the "bound connections" option
+  from the three named in the original finding (bound / resize / move off
+  the pool): a hard cap, `MAX_SSE_CONNECTIONS` in
+  `vtscore/concurrency/events.py`, derived from `VTSEARCH_THREADS` minus a
+  fixed reserve of 2 (override directly with
+  `VTSEARCH_SSE_MAX_CONNECTIONS`). `acquire_sse_slot()` /
+  `release_sse_slot()` gate `/api/events` in `vtsearch/routes/events.py`;
+  once saturated, new connects get an immediate `503` with `Retry-After: 5`
+  instead of starting a stream, so the rejection itself never pins a
+  thread. The frontend's `EventSource` already schedules a manual
+  reconnect when the server closes the connection non-2xx (see
+  `progress-events.service.ts`'s `onerror`/`readyState === CLOSED` path),
+  so no frontend change was needed. Tests in
+  `tests/api/test_events_sse.py` (`TestSseConnectionCapPrimitive`,
+  `TestSseConnectionCapRoute`).
+
 ## Open follow-ups
 
 Ordered roughly by severity.  Each was found and verified during the audit
 but deferred as needing a design decision or a larger change.  (Original
 open items #2, #6, #10, #14 were drained in the second follow-up pass, the
 renumbered #2 "JobManager cancellation advisory" in the third pass, the
-staging + eval progress isolation (renumbered #2, #3) in the fourth, and the
-re-renumbered #5/#8 "ML threshold correctness" items in the fifth — see the
-follow-up-pass subsections under What shipped.  The list below is
-renumbered again after those drains.)
+staging + eval progress isolation (renumbered #2, #3) in the fourth, the
+re-renumbered #5/#8 "ML threshold correctness" items in the fifth, and the
+re-renumbered #1 "SSE connection cap" in the sixth — see the follow-up-pass
+subsections under What shipped.  The list below is renumbered again after
+those drains.)
 
-1. **SSE `/api/events` pins a gthread worker thread per connection.**
-   With `workers = 1, threads = 8`, eight open tabs starve the whole app;
-   stalled requests plus a live heartbeat read as an app hang.  Needs a
-   design decision: bound SSE connections, size the pool against them, or
-   move the stream off the request-thread pool.
-2. **Region-matrix fallback can mix embedding spaces** on a multi-embedder
+1. **Region-matrix fallback can mix embedding spaces** on a multi-embedder
    dataset where only some media carry `patch_regions`
    (`embedding/matrix.py:_build_region_arrays`): region rows are in the
    patch embedder's space, fallback rows in the primary's.  Needs either an
    ingest guarantee (all-or-nothing patch_regions per dataset) or space
    checking here.
-3. **Eval harness fidelity** (`eval/voting_iterations.py`): fold models
+2. **Eval harness fidelity** (`eval/voting_iterations.py`): fold models
    don't force the full-data `hidden_dim` and don't thread the split RNG
    into calibration - so reported eval costs measure a pipeline that differs
    from production in the small-label regime.  (The "production uses 0.5
    below 6 labels" mismatch is now narrower: with safe-thresholds off,
    production cross-calibrates below 6 too — see Fifth follow-up pass.)
-4. **Inclusion slide drops the safe-threshold GMM blend**
+3. **Inclusion slide drops the safe-threshold GMM blend**
    (`state/core.py:recompute_detector_thresholds_for_inclusion` vs
    `training.py`): with safe-thresholds on and 6 ≤ n < 20 labels, sliding
    inclusion to a value and back changes the threshold semantics relative
    to a fresh retrain.  Decide whether the blend applies on slides.
-5. **Dataset registry is not multi-process safe**
+4. **Dataset registry is not multi-process safe**
    (`vtscore/datasets/registry.py`): in-process lock plus a fixed `.tmp`
    name; a concurrent CLI autodetect run against the same data dir can
    silently erase the server's registrations.  Fine under the documented
    single-worker model; needs flock if that changes.
-6. **`http_archive` cache never invalidates** when the remote archive
+5. **`http_archive` cache never invalidates** when the remote archive
    changes (fixed collision, not staleness); `extract_archive_cached`'s
    mtime/size keying is the model.
-7. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
+6. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
    rather than clean): browse-canvas/minimap coordinate math and rAF
    lifecycles, modal/player component lifecycle sweep, left/right-panel
    virtualization, and a full route-blueprint sweep of
@@ -338,3 +358,8 @@ renumbered again after those drains.)
   `current` / `total` (read from the `AsyncJob`) rather than the shared
   `eval_progress` singleton, so overlapping evals no longer read each
   other's progress.
+- `GET /api/events` now returns `503` (with `Retry-After: 5`) once
+  `MAX_SSE_CONNECTIONS` concurrent streams are already open, instead of
+  accepting an unbounded number of connections that could starve the
+  gthread pool. Cap defaults to `VTSEARCH_THREADS - 2`; override with
+  `VTSEARCH_SSE_MAX_CONNECTIONS`.
