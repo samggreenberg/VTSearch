@@ -376,6 +376,61 @@ class TestValidateArchiveHeaderRead:
         assert not bad.exists()
 
 
+class TestDownloadFileAtomic:
+    """download_file_atomic must never leave partial bytes at the final path.
+
+    download_file_with_progress deliberately leaves partial bytes at its
+    destination on failure (resume support), so exists()-gated callers that
+    downloaded straight to the final path cached truncated files forever.
+    """
+
+    def test_success_publishes_final_path(self, tmp_path):
+        from vtscore.datasets.downloader import core as dl_core
+
+        final = tmp_path / "labels.mat"
+
+        def fake_download(url, dest, size, cb):
+            dest.write_bytes(b"complete-content")
+
+        with patch.object(dl_core, "download_file_with_progress", fake_download):
+            dl_core.download_file_atomic("http://example.com/labels.mat", final, 0, lambda *a: None)
+
+        assert final.read_bytes() == b"complete-content"
+        # No temp litter.
+        assert [p.name for p in tmp_path.iterdir()] == ["labels.mat"]
+
+    def test_failure_leaves_no_file_at_final_path(self, tmp_path):
+        from vtscore.datasets.downloader import core as dl_core
+
+        final = tmp_path / "labels.mat"
+
+        def fake_download(url, dest, size, cb):
+            dest.write_bytes(b"partial")  # simulate bytes written before the failure
+            raise ConnectionError("network died")
+
+        with patch.object(dl_core, "download_file_with_progress", fake_download):
+            with pytest.raises(ConnectionError):
+                dl_core.download_file_atomic("http://example.com/labels.mat", final, 0, lambda *a: None)
+
+        assert not final.exists(), "a truncated file at the final path poisons the exists() cache gate"
+        assert list(tmp_path.iterdir()) == [], "temp file must be cleaned up"
+
+    def test_concurrent_winner_is_preserved(self, tmp_path):
+        from vtscore.datasets.downloader import core as dl_core
+
+        final = tmp_path / "labels.mat"
+
+        def fake_download(url, dest, size, cb):
+            dest.write_bytes(b"mine")
+            final.write_bytes(b"other-download-won")  # a rival completed first
+
+        with patch.object(dl_core, "download_file_with_progress", fake_download):
+            dl_core.download_file_atomic("http://example.com/labels.mat", final, 0, lambda *a: None)
+
+        assert final.read_bytes() == b"other-download-won"
+        assert [p.name for p in tmp_path.iterdir()] == ["labels.mat"]
+
+
 class TestCorruptArchiveValidation:
     """Corrupt or non-archive downloads are detected and cleaned up."""
 

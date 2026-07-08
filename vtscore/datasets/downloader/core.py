@@ -391,6 +391,37 @@ def download_file_with_progress(  # noqa: C901
                 response.close()
 
 
+def download_file_atomic(
+    url: str,
+    final_path: Path,
+    expected_size: int,
+    on_progress: ProgressCallback,
+) -> None:
+    """Download *url* to *final_path* via a unique temp file + atomic rename.
+
+    :func:`download_file_with_progress` deliberately leaves partial bytes at
+    its destination when every retry fails (its resume feature depends on
+    that), so callers that gate the download on ``final_path.exists()`` must
+    never point it at the final path directly - a failed run would leave a
+    truncated file that every subsequent run treats as a complete cached
+    copy.  This wrapper downloads to a sibling temp file and only publishes
+    the final path once the stream completed cleanly.  A concurrent
+    completed download wins; the temp file is always removed.
+    """
+    final_path.parent.mkdir(parents=True, exist_ok=True)
+    unique_id = uuid.uuid4().hex[:8]
+    temp_path = final_path.parent / f".dl_{unique_id}_{final_path.name}"
+    try:
+        download_file_with_progress(url, temp_path, expected_size, on_progress)
+        if not final_path.exists():
+            try:
+                os.rename(temp_path, final_path)
+            except OSError:
+                pass  # Another download finished first
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
 _GZIP_MAGIC = b"\x1f\x8b"
 _ZIP_MAGIC = b"PK"
 # Uncompressed tar: first 257 bytes contain "ustar" at offset 257,

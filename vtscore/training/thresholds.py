@@ -46,8 +46,8 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
 
     Returns:
         A float threshold. Scores at or above this value are classified as Good.
-        Falls back to the median of scores if GMM fitting fails or fewer than 2 scores
-        are provided.
+        Returns ``0.5`` when fewer than 2 scores are provided; falls back to
+        the median of scores if GMM fitting fails.
     """
     if len(scores) < 2:
         return 0.5
@@ -192,7 +192,10 @@ def find_optimal_threshold(
               precision, i.e., exclude more items).
 
     Returns:
-        The float threshold that achieves the lowest weighted cost.
+        The float threshold that achieves the lowest weighted cost, or
+        :data:`NO_GOOD_THRESHOLD` when predicting nothing positive is
+        strictly cheaper than every realizable cut (e.g. a top-scored
+        negative under a precision-biased inclusion).
         Defaults to 0.5 if the score list is empty.
     """
     if not scores:
@@ -235,7 +238,24 @@ def find_optimal_threshold(
 
     costs = fpr_weight * fpr + fnr_weight * fnr
 
+    # Only positions where the score strictly drops afterwards are feasible
+    # cut points: ``score >= threshold`` includes *every* item tied with the
+    # threshold, so a mid-tie position advertises a TP/FP split the returned
+    # threshold cannot realize (common with a saturated MLP emitting exact
+    # 1.0/0.0 sigmoids).  The last position is always a feasible cut.
+    feasible = np.append(sorted_scores[:-1] > sorted_scores[1:], True)
+    costs = np.where(feasible, costs, np.inf)
+
     best_idx = int(np.argmin(costs))
+    best_cost = float(costs[best_idx])
+
+    # "Predict nothing positive" (a threshold above every observed score) is
+    # a legitimate candidate the observed scores can't express: FP=0, FN=all
+    # positives, so its cost is exactly ``fnr_weight``.  Observed thresholds
+    # win ties so behaviour only changes when abstaining is strictly better.
+    if fnr_weight < best_cost:
+        return NO_GOOD_THRESHOLD
+
     return float(sorted_scores[best_idx])
 
 
@@ -308,8 +328,15 @@ def compute_fold_orderings(
         model = train_model(X_train, y_train, input_dim, hidden_dim=hidden_dim)
 
         with torch.no_grad():
+            from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: PLC0415
+
             X_cal = X_cal.to(next(model.parameters()).device)
-            scores = torch.sigmoid(model(X_cal)).squeeze(1).cpu().tolist()
+            # Sanitize non-finite sigmoids (destabilised fold model): the
+            # orderings are cached, swept for the Stats chart, and averaged
+            # into ``DetectorContext.threshold`` - a NaN here would silently
+            # break every downstream ``score >= threshold`` comparison and
+            # leak NaN into JSON responses.
+            scores = sigmoid_to_finite_scores(model(X_cal))
         orderings.append((scores, y_np[cal_idx].tolist()))
 
     return orderings, None
@@ -416,7 +443,8 @@ def calculate_safe_threshold(
     linearly with the number of labels.
 
     Blending rules:
-        * ``n_labels < 6``  → pure GMM threshold.
+        * ``n_labels <= 6``  → pure GMM threshold (the x-cal weight
+          ``(n_labels - 6) / 14`` is 0 at exactly 6).
         * ``n_labels >= 20`` → pure x-cal threshold.
         * In between → linear interpolation.
 

@@ -1095,6 +1095,59 @@ class TestLabelsetSync:
             set_thread_detector_context(None)
             unregister_detector_context("test_import")
 
+    def test_sync_from_source_targets_named_detector_not_active(self, tmp_path):
+        """Votes must land on the detector the sync names, not the active one.
+
+        Regression: ``sync_from_labelset_source(detector_id)`` resolved the
+        *named* context for the source config and detector_meta, but applied
+        the imported labels via ``apply_label`` → ``get_active_detector_context()``.
+        The manual sync route takes the detector as a path param, so when it
+        differed from the request's active detector, votes landed on the
+        wrong detector while the meta went to the right one.
+        """
+        from vtscore.labels.sync import sync_from_labelset_source
+        from vtscore.state.core import (
+            DetectorContext,
+            register_detector_context,
+            set_thread_detector_context,
+            unregister_detector_context,
+        )
+        from vtsearch.state import medias
+
+        if not medias:
+            pytest.skip("No test medias available")
+        first_id = next(iter(medias))
+        first_md5 = medias[first_id].get("md5", "")
+        if not first_md5:
+            pytest.skip("Test media has no md5")
+
+        filepath = tmp_path / "labels.json"
+        filepath.write_text(json.dumps({"labels": [{"md5": first_md5, "label": "good"}]}))
+
+        target = DetectorContext("sync_target", name="sync_target")
+        target.labelset_source = {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": str(filepath)},
+        }
+        other = DetectorContext("sync_other", name="sync_other")
+        register_detector_context(target)
+        register_detector_context(other)
+        # A *different* detector is active when the sync fires.
+        set_thread_detector_context(other)
+
+        try:
+            result = sync_from_labelset_source("sync_target")
+            assert result is not None and len(result) == 1
+
+            assert first_id in target.good_votes, "vote must land on the named detector"
+            assert first_id not in other.good_votes, (
+                "vote leaked onto the request's active detector"
+            )
+        finally:
+            set_thread_detector_context(None)
+            unregister_detector_context("sync_target")
+            unregister_detector_context("sync_other")
+
     def test_sync_to_source_emits_detector_meta(self, tmp_path):
         """sync_to_labelset_source writes the detector's input_spec / threshold."""
         from vtscore.detectors.store import _detector_path, _write_detector

@@ -505,6 +505,13 @@ def _train_and_score_xy(
     # GMM) or unreliable.  0.5 is a sensible neutral mid-point.
     if len(X_list) < 6:
         threshold = 0.5
+        # Drop any fold-ordering cache from a previous ≥6-label training:
+        # this path neither reads nor rewrites it, and a later inclusion
+        # slide (`recompute_detector_thresholds_for_inclusion`) trusts any
+        # non-None cache - re-thresholding against orderings computed for
+        # the *old* label set/model.
+        if det_ctx is not None:
+            det_ctx.calibration_cache = None
     else:
         threshold = cross_calibration_threshold_cached(
             X_list,
@@ -548,8 +555,9 @@ def train_and_score(
     ``clips_dict``.
 
     Args:
-        clips_dict: Mapping of media ID to media data dict. Each value must contain
-            an ``"embedding"`` key with a ``numpy.ndarray`` embedding vector.
+        clips_dict: Mapping of media ID to media data dict. Each value must carry
+            a resolvable embedding vector in its per-embedder ``"embeddings"``
+            dict store (read via ``media_embedding``).
         good_votes: Dict whose keys are media IDs labelled as good (values are ``None``).
         bad_votes: Dict whose keys are media IDs labelled as bad (values are ``None``).
         inclusion_value: Integer in ``[-10, 10]`` passed to the training and

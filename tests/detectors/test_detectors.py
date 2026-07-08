@@ -1412,7 +1412,7 @@ class TestRequestMissingDatasetPreservesDetectorState:
         saved = get_thread_dataset_context()
         set_thread_dataset_context(None)
         try:
-            resp = client.get("/api/health", headers={"X-Detector-Id": detector_id})
+            resp = client.get("/healthz", headers={"X-Detector-Id": detector_id})
             assert resp.status_code == 200
         finally:
             set_thread_dataset_context(saved)

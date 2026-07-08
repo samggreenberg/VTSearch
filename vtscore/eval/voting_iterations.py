@@ -370,7 +370,8 @@ def run_voting_iterations_eval(
     Args:
         dataset_clips: Mapping of dataset name to a pre-loaded medias dict.
             Each medias dict maps ``int`` media IDs to media data dicts
-            (must include ``"embedding"`` and ``"category"`` keys).
+            (must carry a resolvable embedding in the per-embedder
+            ``"embeddings"`` store and a ``"category"`` key).
         seeds: List of random seeds to iterate over.
         categories: Optional mapping of dataset name to list of target
             categories.  If ``None`` or a dataset is missing from the dict,
