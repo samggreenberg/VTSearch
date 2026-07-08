@@ -40,6 +40,7 @@ import { snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
+import { apiErrorMessage } from '../../utils/api-error';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -826,7 +827,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         error: (err) => {
           this.status.set('error');
           this.errorMessage.set(
-            err?.error?.message || err?.error?.error || 'Failed to build the map',
+            apiErrorMessage(err, 'Failed to build the map'),
           );
         },
       });
@@ -870,7 +871,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         this.selection.consumeSurviveProjectionChange();
         this.status.set('error');
         this.errorMessage.set(
-          err?.error?.message || err?.error?.error || 'Failed to build the map',
+          apiErrorMessage(err, 'Failed to build the map'),
         );
       },
     });
@@ -1020,7 +1021,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
           } else {
             this.status.set('error');
             this.errorMessage.set(
-              err?.error?.message || err?.error?.error || 'Failed to build the map',
+              apiErrorMessage(err, 'Failed to build the map'),
             );
           }
         },

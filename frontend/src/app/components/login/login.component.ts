@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, output } from '@angular/cor
 
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../services/auth.service';
+import { apiErrorMessage } from '../../utils/api-error';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -35,7 +36,7 @@ export class LoginComponent {
       },
       error: (err) => {
         this.busy = false;
-        this.error = err.error?.error || 'Login failed.';
+        this.error = apiErrorMessage(err, 'Login failed.');
       },
     });
   }

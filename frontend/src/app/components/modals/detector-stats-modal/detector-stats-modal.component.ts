@@ -4,6 +4,7 @@ import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsRegistryApiService } from '../../../services/detectors-registry-api.service';
 import type { DetectorRegistryStatsResponse } from '../../../generated/api-client/models/detector-registry-stats-response';
 import { formatTimestamp as formatTs } from '../../../utils/format-date';
+import { apiErrorMessage } from '../../../utils/api-error';
 
 /** Read-only stats for a registered detector. Mirrors the dataset stats
  *  modal: labelset composition (positives / negatives / total, plus how
@@ -38,7 +39,7 @@ export class DetectorStatsModalComponent implements OnInit {
         this.loading.set(false);
       },
       error: (err) => {
-        this.error.set(err.error?.error || err.error?.message || 'Failed to load stats');
+        this.error.set(apiErrorMessage(err, 'Failed to load stats'));
         this.loading.set(false);
       },
     });

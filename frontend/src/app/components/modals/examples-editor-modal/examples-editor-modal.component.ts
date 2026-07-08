@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, Input, OnDestroy, OnInit, output, signal } from '@angular/core';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsCrudApiService } from '../../../services/detectors-crud-api.service';
+import { apiErrorMessage } from '../../../utils/api-error';
 
 interface Example {
   type: 'good' | 'bad';
@@ -83,7 +84,7 @@ export class ExamplesEditorModalComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.saving.set(false);
-        this.error.set(err.error?.error || 'Failed to save');
+        this.error.set(apiErrorMessage(err, 'Failed to save'));
       },
     });
   }

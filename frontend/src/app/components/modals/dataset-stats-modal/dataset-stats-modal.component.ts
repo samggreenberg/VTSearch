@@ -4,6 +4,7 @@ import { ModalComponent } from '../../modal/modal.component';
 import { DatasetsRegistryApiService } from '../../../services/datasets-registry-api.service';
 import type { DatasetRegistryStatsResponse } from '../../../generated/api-client/models/dataset-registry-stats-response';
 import { formatTimestamp as formatTs } from '../../../utils/format-date';
+import { apiErrorMessage } from '../../../utils/api-error';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -33,7 +34,7 @@ export class DatasetStatsModalComponent implements OnInit {
         this.loading.set(false);
       },
       error: (err) => {
-        this.error.set(err.error?.error || 'Failed to load stats');
+        this.error.set(apiErrorMessage(err, 'Failed to load stats'));
         this.loading.set(false);
       },
     });

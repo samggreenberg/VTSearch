@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router, UrlTree } from '@angular/router';
 import { Observable, combineLatest, of } from 'rxjs';
-import { filter, map, switchMap, take, tap } from 'rxjs/operators';
+import { defaultIfEmpty, filter, map, switchMap, take, tap } from 'rxjs/operators';
 import { ActiveContextService } from '../services/active-context.service';
 import { ContextSwitchService } from '../services/context-switch.service';
 import { DatasetStateService } from '../services/dataset-state.service';
@@ -85,11 +85,14 @@ export const activeContextGuard: CanActivateFn = (route) => {
       // is a valid UI state (the explainer renders against the new
       // pair), so we don't fast-fail on it here.
       return contextSwitch.applyActivePair(datasetId, detectorId).pipe(
-        // `applyActivePair` returns an Observable that completes (no
-        // value) on success. `combineLatest`-ing with an of(true) ensures
-        // the guard emits `true` once prep settles.
+        // `applyActivePair` emits once on success. When the switch is
+        // superseded by a competing one, or a required load fails, its
+        // completion completes WITHOUT emitting - `defaultIfEmpty` turns
+        // that into a clean navigation denial instead of the router's
+        // EmptyError (failed navigation with no feedback).
         tap(() => recentSessions.bump(datasetId, detectorId)),
         switchMap(() => of(true as const)),
+        defaultIfEmpty(false as const),
       );
     }),
   );

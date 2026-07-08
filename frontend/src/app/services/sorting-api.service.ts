@@ -224,9 +224,12 @@ export class SortingApiService {
     formData.append('file', file);
     if (options?.cropParams) {
       formData.append('crop_params', JSON.stringify(options.cropParams));
-      if (options.mediaType) {
-        formData.append('media_type', options.mediaType);
-      }
+    }
+    // Appended independently of cropParams: the backend only *requires*
+    // media_type alongside crop_params, but a caller passing mediaType
+    // alone shouldn't have it silently dropped.
+    if (options?.mediaType) {
+      formData.append('media_type', options.mediaType);
     }
     return this.http.post<ServerMediaUploadResponse>('/api/server-media-files/upload', formData);
   }

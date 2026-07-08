@@ -6,6 +6,7 @@ import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsCrudApiService } from '../../../services/detectors-crud-api.service';
 import type { DetectorCombineResponse } from '../../../generated/api-client/models/detector-combine-response';
 import { DetectorRegistryEntry } from '../../../models/api.models';
+import { apiErrorMessage } from '../../../utils/api-error';
 
 interface SourceRow {
   name: string;
@@ -93,7 +94,7 @@ export class CombineDetectorsModalComponent implements OnInit {
       error: (err) => {
         this.submitting = false;
         const status = err?.status;
-        const serverMsg = err?.error?.error || '';
+        const serverMsg = apiErrorMessage(err, '');
         if (status === 422) {
           this.error =
             serverMsg ||

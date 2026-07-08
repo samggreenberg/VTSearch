@@ -8,6 +8,7 @@ import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.co
 import { SettingsIoApiService } from '../../../services/settings-io-api.service';
 import { ImporterField } from '../../../models/api.models';
 import type { SettingsImporterEntry } from '../../../generated/api-client/models/settings-importer-entry';
+import { apiErrorMessage } from '../../../utils/api-error';
 
 type ModalView = 'picker' | 'form';
 
@@ -128,7 +129,7 @@ export class SettingsImporterModalComponent implements OnDestroy {
         },
         error: (err) => {
           this.submitting.set(false);
-          this.importError.set(err.error?.error || 'Import failed');
+          this.importError.set(apiErrorMessage(err, 'Import failed'));
         },
       });
   }

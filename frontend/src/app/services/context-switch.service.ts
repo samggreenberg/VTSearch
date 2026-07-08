@@ -14,10 +14,17 @@ interface ActiveSwitch {
   datasetId: string;
   detectorId: string;
   cancelled: boolean;
+  /** Set when a required load's kick-off POST failed or its background
+   *  task errored.  A failed switch must NOT promote the pair to active:
+   *  the backend hasn't loaded it, so promotion would re-open the H25
+   *  cascade of 409 `dataset_not_loaded` this service exists to prevent. */
+  failed: boolean;
   cancellable: Subject<void>;
   /** ReplaySubject(1) so late subscribers (e.g. the route guard
    *  attaching after a synchronous fast-path completion) still see the
-   *  completion signal. */
+   *  completion signal.  Completes WITHOUT emitting when the switch is
+   *  superseded or fails; consumers must handle the empty completion
+   *  (the guard uses `defaultIfEmpty`, browse-prep a `complete` handler). */
   completion: ReplaySubject<void>;
 }
 
@@ -127,7 +134,7 @@ export class ContextSwitchService {
       previous.cancellable.next();
       previous.cancellable.complete();
       previous.completion.complete();
-      this.cancelInFlightLoads();
+      this.cancelInFlightLoads(previous);
     }
 
     const requestId = this.activeContext.nextRequestId();
@@ -136,6 +143,7 @@ export class ContextSwitchService {
       datasetId,
       detectorId,
       cancelled: false,
+      failed: false,
       cancellable: new Subject<void>(),
       completion: new ReplaySubject<void>(1),
     };
@@ -206,6 +214,10 @@ export class ContextSwitchService {
         .pipe(
           takeUntil(current.cancellable),
           catchError(() => {
+            // The load kick-off failed: still tick so the switch settles,
+            // but mark it failed so finishIfCurrent doesn't promote an
+            // unloaded pair (which would 409 every subsequent request).
+            current.failed = true;
             sub.next();
             sub.complete();
             return EMPTY;
@@ -231,6 +243,8 @@ export class ContextSwitchService {
         .pipe(
           takeUntil(current.cancellable),
           catchError(() => {
+            // See runDatasetLoad: settle the switch but don't promote.
+            current.failed = true;
             sub.next();
             sub.complete();
             return EMPTY;
@@ -282,7 +296,14 @@ export class ContextSwitchService {
               return !tasks.some((t) => t.dataset_id === datasetId && t.status !== 'idle');
             }
             const task = tasks.find((t) => t.task_id === taskId);
-            if (task) seen = true;
+            if (task) {
+              seen = true;
+              // A load that settled WITH an error must not promote the
+              // pair; the dataset never loaded.
+              if (task.status === 'idle' && task.error) {
+                current.failed = true;
+              }
+            }
             // Settled only once we've seen the task and it's no longer
             // running (gone idle, or dropped from the stream entirely).
             return seen && !(task && task.status !== 'idle');
@@ -316,7 +337,12 @@ export class ContextSwitchService {
               return !tasks.some((t) => t.detector_id === detectorId && t.status !== 'idle');
             }
             const task = tasks.find((t) => t.task_id === taskId);
-            if (task) seen = true;
+            if (task) {
+              seen = true;
+              if (task.status === 'idle' && task.error) {
+                current.failed = true;
+              }
+            }
             return seen && !(task && task.status !== 'idle');
           }),
           take(1),
@@ -334,22 +360,38 @@ export class ContextSwitchService {
   private finishIfCurrent(current: ActiveSwitch): void {
     if (this.active !== current || current.cancelled) return;
     if (current.requestId !== this.activeContext.currentRequestId) return;
+    this.switchingSubject.next(false);
+    this.datasetState.setLoading(false);
+    this.active = null;
+    if (current.failed) {
+      // A required load failed: the backend does NOT have the pair loaded,
+      // so promoting it would tag every request with ids that 409. Roll
+      // the intent back to the still-active pair (pulldown highlight) and
+      // complete without emitting - the guard's `defaultIfEmpty` turns
+      // that into a clean navigation denial, and the SSE error row /
+      // global toast already surface the failure itself.
+      this.activeContext.setIntent(this.activeContext.datasetId, this.activeContext.modelId);
+      current.completion.complete();
+      return;
+    }
     // Loads have settled; promote intent to active now so the HTTP
     // interceptor starts tagging requests with the new ids (and not
     // before, per H25).
     this.activeContext.setActive(current.datasetId, current.detectorId);
-    this.switchingSubject.next(false);
-    this.datasetState.setLoading(false);
-    this.active = null;
     current.completion.next();
     current.completion.complete();
   }
 
-  private cancelInFlightLoads(): void {
-    // Best-effort: cancel any active dataset/detector loading tasks so
-    // we don't waste CPU on a load whose result will be discarded. The
-    // request-id check is the actual correctness guarantee.
-    const datasetTasks = this.progressEvents.loadingTasks().filter((t) => t.status !== 'idle');
+  private cancelInFlightLoads(previous: ActiveSwitch): void {
+    // Best-effort: cancel the superseded switch's own dataset/detector
+    // loading tasks so we don't waste CPU on a load whose result will be
+    // discarded. The request-id check is the actual correctness guarantee.
+    // Scoped to the previous switch's ids: an unrelated import or a
+    // dashboard-initiated load of a third dataset must not be blown away
+    // by a rapid pulldown double-click.
+    const datasetTasks = this.progressEvents
+      .loadingTasks()
+      .filter((t) => t.status !== 'idle' && !!t.dataset_id && t.dataset_id === previous.datasetId);
     for (const t of datasetTasks) {
       this.datasetsRegistryApi.cancelTask(t.task_id).subscribe({
         error: () => {
@@ -357,7 +399,9 @@ export class ContextSwitchService {
         },
       });
     }
-    const detectorTasks = this.progressEvents.detectorLoadingTasks().filter((t) => t.status !== 'idle');
+    const detectorTasks = this.progressEvents
+      .detectorLoadingTasks()
+      .filter((t) => t.status !== 'idle' && !!t.detector_id && t.detector_id === previous.detectorId);
     for (const t of detectorTasks) {
       this.detectorsRegistryApi.cancelDetectorLoadingTask(t.task_id).subscribe({
         error: () => {

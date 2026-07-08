@@ -17,6 +17,7 @@ import { SettingsStateService } from '../../../services/settings-state.service';
 import { ToastService } from '../../../services/toast.service';
 import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, MediaTypeDetectionResponse, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec, ImportDefaultsForMediaType } from '../../../models/api.models';
 import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
+import { apiErrorMessage } from '../../../utils/api-error';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -877,7 +878,7 @@ export class DatasetImporterModalComponent implements OnInit {
         },
         error: (err) => {
           this.dynamicFieldLoading.update((m) => ({ ...m, [key]: false }));
-          this.dynamicFieldError.update((m) => ({ ...m, [key]: err?.error?.error || 'Could not load options' }));
+          this.dynamicFieldError.update((m) => ({ ...m, [key]: apiErrorMessage(err, 'Could not load options') }));
           this.dynamicFieldOptions.update((m) => ({ ...m, [key]: [] }));
         },
       });
@@ -1573,7 +1574,7 @@ export class DatasetImporterModalComponent implements OnInit {
       },
       error: (err) => {
         this.lfSubmitting.set(false);
-        this.lfError.set(err.error?.error || 'Upload failed');
+        this.lfError.set(apiErrorMessage(err, 'Upload failed'));
       },
     });
   }
@@ -1599,7 +1600,7 @@ export class DatasetImporterModalComponent implements OnInit {
       },
       error: (err) => {
         this.lfSubmitting.set(false);
-        this.lfError.set(err.error?.error || 'Upload failed');
+        this.lfError.set(apiErrorMessage(err, 'Upload failed'));
       },
     });
   }
@@ -2146,7 +2147,7 @@ export class DatasetImporterModalComponent implements OnInit {
       },
       error: (err) => {
         this.sfSubmitting.set(false);
-        this.sfBrowseError.set(err.error?.error || 'Import failed');
+        this.sfBrowseError.set(apiErrorMessage(err, 'Import failed'));
       },
     });
   }
@@ -2233,7 +2234,7 @@ export class DatasetImporterModalComponent implements OnInit {
         },
         error: (err) => {
           this.submitting.set(false);
-          this.error.set(err.error?.error || 'Import failed');
+          this.error.set(apiErrorMessage(err, 'Import failed'));
         },
       });
     } else {
@@ -2245,7 +2246,7 @@ export class DatasetImporterModalComponent implements OnInit {
         },
         error: (err) => {
           this.submitting.set(false);
-          this.error.set(err.error?.error || 'Import failed');
+          this.error.set(apiErrorMessage(err, 'Import failed'));
         },
       });
     }

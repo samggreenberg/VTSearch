@@ -373,6 +373,81 @@ describe('VoteStateService', () => {
     });
   });
 
+  describe('failed vote POST rollback', () => {
+    it('rolls back the optimistic vote when the POST fails, so polls show server truth', () => {
+      service.submitToggleVote(10, 'good').subscribe({ next: () => {}, error: () => {} });
+      expect(service.goodVotes.has(10)).toBe(true); // optimistic
+
+      // The POST fails (transient 502 below the offline-breaker threshold).
+      httpMock
+        .expectOne('/api/medias/10/vote')
+        .flush(null, { status: 502, statusText: 'Bad Gateway' });
+
+      // The rollback re-reads server state; the server never saw the vote.
+      httpMock
+        .expectOne('/api/votes')
+        .flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
+      expect(service.goodVotes.has(10)).toBe(false);
+
+      // Regression: the pending entry used to survive the failed POST and
+      // re-impose the phantom vote over EVERY subsequent poll.
+      service.loadVotes();
+      httpMock
+        .expectOne('/api/votes')
+        .flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
+      expect(service.goodVotes.has(10)).toBe(false);
+      expect(service.clickTimes['10']).toBeUndefined();
+    });
+
+    it('rolls back an optimistic region box when the POST fails', () => {
+      service
+        .submitToggleVote(11, 'good', [0.1, 0.2, 0.3, 0.4])
+        .subscribe({ next: () => {}, error: () => {} });
+      expect(service.goodRegionBoxes['11']).toEqual([0.1, 0.2, 0.3, 0.4]);
+
+      httpMock
+        .expectOne('/api/medias/11/vote')
+        .flush(null, { status: 500, statusText: 'Server Error' });
+      httpMock
+        .expectOne('/api/votes')
+        .flush({ good: [], bad: [], click_times: {}, learned_scores: {}, good_region_boxes: {} });
+
+      expect(service.goodRegionBoxes['11']).toBeUndefined();
+
+      // A later poll must not resurrect the crop either.
+      service.loadVotes();
+      httpMock
+        .expectOne('/api/votes')
+        .flush({ good: [], bad: [], click_times: {}, learned_scores: {}, good_region_boxes: {} });
+      expect(service.goodRegionBoxes['11']).toBeUndefined();
+    });
+
+    it('a failed undo POST repairs local state from the server', () => {
+      service.recordVote(5, 'good', 'foo.wav');
+      service.applyOptimisticState(5, 'good');
+
+      service.undo(); // posts target=none optimistically
+      expect(service.goodVotes.has(5)).toBe(false);
+      httpMock
+        .expectOne('/api/medias/5/vote')
+        .flush(null, { status: 500, statusText: 'Server Error' });
+
+      // The rollback's loadVotes reflects the server (vote still good).
+      httpMock
+        .expectOne('/api/votes')
+        .flush({ good: [5], bad: [], click_times: { '5': 3 }, learned_scores: {} });
+      expect(service.goodVotes.has(5)).toBe(true);
+
+      // Regression: the pendingOptimistic entry from the undo's optimistic
+      // apply used to override this reload on every later poll.
+      service.loadVotes();
+      httpMock
+        .expectOne('/api/votes')
+        .flush({ good: [5], bad: [], click_times: { '5': 3 }, learned_scores: {} });
+      expect(service.goodVotes.has(5)).toBe(true);
+    });
+  });
+
   describe('undo / redo stack', () => {
     it('records the previous polarity at click time and POSTs the inverse target on undo', () => {
       // Pretend a vote landed: media 5 is now good.
