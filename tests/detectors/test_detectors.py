@@ -1417,15 +1417,10 @@ class TestRequestMissingDatasetPreservesDetectorState:
         finally:
             set_thread_dataset_context(saved)
 
-        assert good_cid in det_ctx.good_votes, (
-            "dataset-less request wiped the detector's good votes"
-        )
-        assert bad_cid in det_ctx.bad_votes, (
-            "dataset-less request wiped the detector's bad votes"
-        )
+        assert good_cid in det_ctx.good_votes, "dataset-less request wiped the detector's good votes"
+        assert bad_cid in det_ctx.bad_votes, "dataset-less request wiped the detector's bad votes"
         assert det_ctx.votes_dataset_id == prior_votes_dataset_id, (
-            "dataset-less request restamped votes_dataset_id "
-            f"({det_ctx.votes_dataset_id!r})"
+            f"dataset-less request restamped votes_dataset_id ({det_ctx.votes_dataset_id!r})"
         )
 
 

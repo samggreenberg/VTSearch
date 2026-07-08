@@ -61,6 +61,4 @@ class TestCalibrationCacheClearedBelowRampFloor:
         _, _, model = train_and_score(clips, good, bad, det_ctx=det_ctx)
 
         assert model is not None
-        assert det_ctx.calibration_cache is not None, (
-            "the ≥6-label path caches fold orderings for the inclusion slide"
-        )
+        assert det_ctx.calibration_cache is not None, "the ≥6-label path caches fold orderings for the inclusion slide"

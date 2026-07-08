@@ -1140,9 +1140,7 @@ class TestLabelsetSync:
             assert result is not None and len(result) == 1
 
             assert first_id in target.good_votes, "vote must land on the named detector"
-            assert first_id not in other.good_votes, (
-                "vote leaked onto the request's active detector"
-            )
+            assert first_id not in other.good_votes, "vote leaked onto the request's active detector"
         finally:
             set_thread_detector_context(None)
             unregister_detector_context("sync_target")
