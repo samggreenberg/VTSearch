@@ -96,7 +96,10 @@ When the detector context **is** loaded, the new labels are also resolved
 against the loaded dataset's medias, applied to the detector's votes, and
 a fresh MLP is trained with a cross-validated threshold.
 
-→ `{"success": true, "applied": 12, "skipped": 3, "num_labels": 62, "message": "..."}`
+→ `{"applied": 12, "skipped": 3, "resolved": 12, "trained": true, "num_labels": 62, "message": "..."}`
+
+`resolved` counts labels resolved into the loaded detector context (0 when no
+context is loaded); `trained` is `true` when a fresh MLP was retrained.
 
 404 if detector or importer not found. 400 on validation errors.
 

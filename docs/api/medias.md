@@ -233,7 +233,47 @@ POST /api/learned-sort
 Trains an MLP on the current good/bad votes and scores all medias. Requires at
 least one good and one bad vote.
 
+**Asynchronous by default.** Training is GIL-bound, so the endpoint hands the
+work to a background thread and returns immediately:
+
+→ `{"job_id": "…", "status": "running", "current": 0, "total": 1}`
+
+Poll [`GET /api/learned-sort/result`](#learned-sort-result-poll) with that
+`job_id` until `status == "done"` to receive the results. A no-op call (votes,
+detector, inclusion, and threshold settings unchanged from the most recent
+successful run) short-circuits and returns the cached `done` payload directly.
+
+Pass `{"wait": true}` in the body to block until the job finishes and receive
+the result inline (used by tests; the frontend leaves it `false`):
+
 → `{"results": [{"id": 0, "score": 0.9234}], "threshold": 0.5123}`
+
+The `done` payload — whether returned inline (`wait=true`) or via the result
+poll — carries `results` and `threshold`.
+
+#### Learned sort result (poll)
+
+```
+GET /api/learned-sort/result?job_id=<id>
+```
+
+Polls a background learned-sort job.
+
+- Running: `{"job_id": "…", "status": "running", "current": N, "total": M}`
+- Done: `{"results": [{"id": 0, "score": 0.9234}], "threshold": 0.5123}`
+- Cancelled: `{"job_id": "…", "status": "cancelled"}`
+- Job failed: HTTP 500.
+- Unknown `job_id`: HTTP 404.
+
+#### Cancel learned sort
+
+```
+POST /api/learned-sort/cancel/<job_id>
+```
+
+Sets the cancel flag on the job; the training loop polls it cooperatively.
+Returns `{"ok": true}` (HTTP 200) even when the job has already finished — the
+contract is "make sure it's no longer running". Unknown `job_id`: HTTP 404.
 
 On patch-region-aware datasets the MLP is max-pooled over each
 image's region tree, and each result carries `"best_region": [x0,

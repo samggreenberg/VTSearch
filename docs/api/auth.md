@@ -34,7 +34,7 @@ POST /api/auth/login
 **Body:** `{"username": "..."}`
 
 → Provider-specific response. With `DefaultLoginProvider`, returns 400
-(`{"error": "Login not supported by the active provider"}`).
+(`{"error": "Login/logout not supported by the active provider"}`).
 With `TrivialLoginProvider`, authenticates and returns the auth status dict
 (same shape as `GET /api/auth/status`).
 
@@ -45,7 +45,7 @@ POST /api/auth/logout
 ```
 
 → Provider-specific response. With `DefaultLoginProvider`, returns 400
-(`{"error": "Logout not supported by the active provider"}`).
+(`{"error": "Login/logout not supported by the active provider"}`).
 With `TrivialLoginProvider`, clears the session and returns the auth status dict.
 
 ---

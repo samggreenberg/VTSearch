@@ -162,8 +162,8 @@ See [EXTENDING-plugins.md § Adding a Settings Source](EXTENDING-plugins.md#addi
 
 - [ ] Create `vtsearch/settings_io/sources/<name>/__init__.py`
 - [ ] Subclass `SettingsSource`, set `name`, `display_name`, `description`, `fields`
-- [ ] Implement `load(self, field_values)`: return a settings dict
-- [ ] Implement `save(self, settings_data, field_values)`: persist settings
+- [ ] Implement `_do_load(self, field_values)`: return a settings dict (override the underscored hook, not `load`)
+- [ ] Implement `_do_save(self, settings_data, field_values)`: persist settings (override the underscored hook, not `save`)
 - [ ] Expose `SETTINGS_SOURCE = YourSource()` at module level
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/settings-sources` includes your source
@@ -174,8 +174,8 @@ See [EXTENDING-plugins.md § Adding a Labelset Source](EXTENDING-plugins.md#addi
 
 - [ ] Create `vtscore/labels/sources/<name>/__init__.py`
 - [ ] Subclass `LabelsetSource`, set `name`, `display_name`, `description`, `fields`
-- [ ] Implement `load(self, field_values)`: return a list of label dicts
-- [ ] Implement `save(self, labelset, field_values)`: persist a `LabelSet`
+- [ ] Implement `_do_load(self, field_values)`: return a list of label dicts (override the underscored hook, not `load`)
+- [ ] Implement `_do_save(self, labelset, field_values)`: persist a `LabelSet` (override the underscored hook, not `save`)
 - [ ] Expose `LABELSET_SOURCE = YourSource()` at module level
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/labelset-sources` includes your source
