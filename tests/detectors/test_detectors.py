@@ -1359,6 +1359,76 @@ class TestValidatedVoteSnapshot:
         )
 
 
+class TestRequestMissingDatasetPreservesDetectorState:
+    """A request that identifies a detector but no dataset must not wipe the
+    detector's in-memory session state.
+
+    Regression test: ``get_active_context()`` inside a Flask request with no
+    ``X-Dataset-Id`` returns the request-missing sentinel, whose
+    ``dataset_id`` is the *truthy* string ``"__request_missing__"``.  The
+    "no active dataset; preserve state" guard in
+    ``ensure_votes_match_active_dataset`` only checked emptiness, so such a
+    request fell through to the rehydrate path, cleared good/bad votes,
+    label history, and the whole Find-verification session against the
+    sentinel's frozen-empty medias, then stamped ``votes_dataset_id`` with
+    the sentinel id.
+    """
+
+    def test_detector_header_without_dataset_does_not_wipe_votes(self, client):
+        from vtscore.state.core import (
+            get_detector_context,
+            get_thread_dataset_context,
+            set_thread_dataset_context,
+        )
+        from vtsearch.state import medias
+
+        if len(medias) < 2:
+            pytest.skip("Need at least 2 medias")
+        ids = list(medias.keys())
+        good_cid, bad_cid = ids[0], ids[1]
+
+        client.post(
+            "/api/detectors",
+            json={"name": "NoDatasetHeaderTest", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "NoDatasetHeaderTest", "media_type": "audio", "text_query": "test"},
+        )
+        detector_id = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, detector_id)
+        client.post(f"/api/medias/{good_cid}/vote", json={"target": "good"})
+        client.post(f"/api/medias/{bad_cid}/vote", json={"target": "bad"})
+
+        det_ctx = get_detector_context(detector_id)
+        assert det_ctx is not None
+        assert good_cid in det_ctx.good_votes
+        prior_votes_dataset_id = det_ctx.votes_dataset_id
+
+        # Simulate a browser/API request that carries X-Detector-Id but no
+        # dataset id: clear the test fixture's thread-local dataset context so
+        # the request resolves the dataset side to the request-missing
+        # sentinel (exactly what happens in production request threads).
+        saved = get_thread_dataset_context()
+        set_thread_dataset_context(None)
+        try:
+            resp = client.get("/api/health", headers={"X-Detector-Id": detector_id})
+            assert resp.status_code == 200
+        finally:
+            set_thread_dataset_context(saved)
+
+        assert good_cid in det_ctx.good_votes, (
+            "dataset-less request wiped the detector's good votes"
+        )
+        assert bad_cid in det_ctx.bad_votes, (
+            "dataset-less request wiped the detector's bad votes"
+        )
+        assert det_ctx.votes_dataset_id == prior_votes_dataset_id, (
+            "dataset-less request restamped votes_dataset_id "
+            f"({det_ctx.votes_dataset_id!r})"
+        )
+
+
 class TestVoteSyncsToLoadedModel:
     """Voting while a detector is loaded should auto-update the model's labelset."""
 

@@ -10,10 +10,15 @@ the worker thread to serve other requests while training runs.
 Each :class:`JobManager` runs **one** background job at a time and keeps a
 single coalescing pending slot.  When a new ``start()`` arrives while a job
 is running, its target+signature are stashed as *pending*; if another
-``start()`` arrives before the runner picks the pending slot up, the
-pending slot is updated in place (latest wins) and the same job object is
-returned.  When the running job finishes, the pending job is promoted and
-spawned automatically.  This avoids the previous design's failure mode
+``start()`` from the **same requester context** (user + dataset + detector)
+arrives before the runner picks the pending slot up, the pending slot is
+updated in place (latest wins) and the same job object is returned.  A
+``start()`` from a *different* requester context instead supersedes the
+parked pending (marking it ``cancelled`` so its pollers see a terminal
+state rather than another request's results) and parks a fresh job.  When
+the running job finishes, the pending job is promoted and spawned
+automatically - unless it was cancelled while parked, in which case it is
+terminated without running.  This avoids the previous design's failure mode
 where rapid-fire requests spawned parallel training threads that fought
 for CPU/GPU - cancellation was cooperative-only and never honoured inside
 the training loop.
@@ -77,9 +82,12 @@ class JobManager:
 
     Only one job runs at a time.  A second ``start()`` while a job is in
     flight stashes the new target+signature in a pending slot; further
-    ``start()`` calls update the pending slot in place (latest wins) and
-    return the same pending job object.  When the running job finishes,
-    the pending job is promoted and spawned.
+    ``start()`` calls from the same requester context (user + dataset +
+    detector pair) update the pending slot in place (latest wins) and
+    return the same pending job object, while a call from a different
+    requester context supersedes the parked pending with a fresh job.
+    When the running job finishes, the pending job is promoted and spawned
+    (unless it was cancelled while parked).
 
     Results from the most recently completed job are cached by *signature*
     so a follow-up call with an unchanged signature reuses the previous
@@ -157,15 +165,32 @@ class JobManager:
         with self._lock:
             prev = self._jobs.get(self._current_id) if self._current_id else None
             if prev is not None and prev.status == "running":
-                if self._pending is not None:
-                    # Coalesce: update the existing pending in place so all
-                    # callers waiting on this job_id receive the latest run.
-                    self._pending.signature = signature
-                    self._pending_target = target
-                    self._pending.user = current_user
-                    self._pending.dataset_id = dataset_id
-                    self._pending.detector_id = detector_id
-                    return self._pending
+                pend = self._pending
+                if pend is not None:
+                    if (
+                        pend.user == current_user
+                        and pend.dataset_id == dataset_id
+                        and pend.detector_id == detector_id
+                        and not pend.is_cancelled
+                    ):
+                        # Coalesce: same requester context (user + pair), so
+                        # update the existing pending in place and every
+                        # caller waiting on this job_id receives the latest
+                        # run.  This is the rapid vote→re-sort burst path.
+                        pend.signature = signature
+                        self._pending_target = target
+                        return pend
+                    # Different (user, dataset, detector) - or a pending that
+                    # was cancelled while parked.  Updating it in place would
+                    # serve its pollers *another request's* results (wrong
+                    # dataset/detector, wrong user) under their job_id, so
+                    # supersede: terminate the old pending visibly and park a
+                    # fresh job for the new requester.
+                    pend.status = "cancelled"
+                    pend.error = pend.error or "superseded by a newer request"
+                    pend.done_event.set()
+                    self._pending = None
+                    self._pending_target = None
                 job = AsyncJob(
                     job_id=uuid.uuid4().hex,
                     signature=signature,
@@ -250,17 +275,35 @@ class JobManager:
                 self._last_done = job
             job.done_event.set()
 
-            if self._pending is not None:
-                next_job = self._pending
-                next_target = self._pending_target
-                self._pending = None
-                self._pending_target = None
-                next_job.status = "running"
-                next_job.started_at = time.time()
-                self._current_id = next_job.job_id
+            promoted = self._take_pending_locked()
+            if promoted is not None:
+                next_job, next_target = promoted
 
         if next_job is not None and next_target is not None:
             self._spawn_thread(next_job, next_target)
+
+    def _take_pending_locked(self) -> tuple[AsyncJob, Callable[[AsyncJob], Any]] | None:
+        """Pop the pending slot for promotion, honouring cancellation.
+
+        A cancel that arrived while the job was parked in the pending slot
+        must terminate it, not let it run to completion anyway; such a job
+        is marked ``cancelled`` and dropped.  Returns the ``(job, target)``
+        to spawn, or ``None``.  Caller must hold ``self._lock``.
+        """
+        job = self._pending
+        target = self._pending_target
+        self._pending = None
+        self._pending_target = None
+        if job is None or target is None:
+            return None
+        if job.is_cancelled:
+            job.status = "cancelled"
+            job.done_event.set()
+            return None
+        job.status = "running"
+        job.started_at = time.time()
+        self._current_id = job.job_id
+        return job, target
 
     def _promote_pending_if_any(self) -> None:
         """Promote the pending slot to running and spawn it, if present.
@@ -271,14 +314,9 @@ class JobManager:
         next_job: AsyncJob | None = None
         next_target: Callable[[AsyncJob], Any] | None = None
         with self._lock:
-            if self._pending is not None:
-                next_job = self._pending
-                next_target = self._pending_target
-                self._pending = None
-                self._pending_target = None
-                next_job.status = "running"
-                next_job.started_at = time.time()
-                self._current_id = next_job.job_id
+            promoted = self._take_pending_locked()
+            if promoted is not None:
+                next_job, next_target = promoted
         if next_job is not None and next_target is not None:
             self._spawn_thread(next_job, next_target)
 

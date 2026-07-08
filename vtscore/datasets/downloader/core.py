@@ -407,7 +407,10 @@ def _validate_archive(archive_path: Path, archive_name: str, dataset_name: str) 
     """
     suffix = archive_name.lower()
     try:
-        header = archive_path.read_bytes()[:4]
+        # Read only the magic bytes - read_bytes() would materialise the
+        # whole (potentially multi-GB) archive in memory to inspect 4 bytes.
+        with open(archive_path, "rb") as f:
+            header = f.read(4)
     except OSError:
         return  # file vanished – let the caller deal with it
 
@@ -475,16 +478,20 @@ def _extract_archive(
                     tar_ref.extract(member, dest_dir, filter="data")
         on_progress("downloading", f"Extracting {dataset_name}...", total_bytes, total_bytes)
     elif suffix.endswith(".zip"):
+        from vtscore.datasets.archive import _reject_traversal
+
+        dest_resolved = Path(dest_dir).resolve()
         with zipfile.ZipFile(archive_path, "r") as zip_ref:
             members = zip_ref.namelist()
             total = len(members)
             for i, member in enumerate(members):
                 if i % 100 == 0 or i == total - 1:
                     on_progress("downloading", f"Extracting {dataset_name}...", i + 1, total)
-                # Guard against path traversal in zip entries
-                member_path = Path(dest_dir) / member
-                if not str(member_path.resolve()).startswith(str(Path(dest_dir).resolve())):
-                    raise ValueError(f"Path traversal detected in archive: {member}")
+                # Guard against path traversal in zip entries.  Shares the
+                # strict check with archive.py: the previous inline
+                # startswith() prefix test lacked a trailing separator, so
+                # a sibling dir with the dest as a name prefix passed.
+                _reject_traversal(dest_resolved, member)
                 zip_ref.extract(member, dest_dir)
     else:
         raise ValueError(f"Unsupported archive format: {archive_name}")

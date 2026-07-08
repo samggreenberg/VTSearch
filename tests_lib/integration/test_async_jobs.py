@@ -250,6 +250,126 @@ class TestCoalescing:
         assert max_active == 1
 
 
+class TestPendingIsolation:
+    """The pending slot must not blend requests from different (dataset,
+    detector) pairs or users.
+
+    Regression tests: the coalescing branch used to update the parked
+    pending in place for *any* new ``start()``, so a poller holding the
+    pending's job_id could receive results trained for a different
+    dataset/detector (and a different user).  And a pending job that was
+    cancelled while parked was still promoted and ran to completion.
+    """
+
+    def test_start_for_different_pair_supersedes_pending(self):
+        mgr = JobManager("test")
+        first_release = threading.Event()
+        first_started = threading.Event()
+        ran: list = []
+
+        mgr.start(
+            "sig-A",
+            _make_target(first_release, first_started, ran),
+            dataset_id="ds-1",
+            detector_id="det-1",
+        )
+        assert first_started.wait(timeout=5)
+
+        release_bc = threading.Event()
+        release_bc.set()
+        second = mgr.start(
+            "sig-B",
+            _make_target(release_bc, threading.Event(), ran),
+            dataset_id="ds-2",
+            detector_id="det-2",
+        )
+        assert second.status == "pending"
+
+        third = mgr.start(
+            "sig-C",
+            _make_target(release_bc, threading.Event(), ran),
+            dataset_id="ds-1",
+            detector_id="det-1",
+        )
+        # Different pair → must NOT coalesce into second's job object.
+        assert third.job_id != second.job_id
+        # Second's pollers see a terminal state, not sig-C's results.
+        assert second.done_event.is_set()
+        assert second.status == "cancelled"
+        assert second.signature == "sig-B"
+        assert second.dataset_id == "ds-2"
+
+        first_release.set()
+        assert third.done_event.wait(timeout=5)
+        assert third.status == "done"
+        assert third.result == {"signature": "sig-C"}
+        # sig-B never executed.
+        assert ran == ["sig-A", "sig-C"]
+
+    def test_same_pair_still_coalesces(self):
+        mgr = JobManager("test")
+        first_release = threading.Event()
+        first_started = threading.Event()
+        ran: list = []
+
+        mgr.start(
+            "sig-A",
+            _make_target(first_release, first_started, ran),
+            dataset_id="ds-1",
+            detector_id="det-1",
+        )
+        assert first_started.wait(timeout=5)
+
+        release = threading.Event()
+        release.set()
+        second = mgr.start(
+            "sig-B",
+            _make_target(release, threading.Event(), ran),
+            dataset_id="ds-1",
+            detector_id="det-1",
+        )
+        third = mgr.start(
+            "sig-C",
+            _make_target(release, threading.Event(), ran),
+            dataset_id="ds-1",
+            detector_id="det-1",
+        )
+        assert third.job_id == second.job_id
+        assert second.signature == "sig-C"
+
+        first_release.set()
+        assert third.done_event.wait(timeout=5)
+        assert ran == ["sig-A", "sig-C"]
+
+    def test_cancelled_pending_is_not_promoted(self):
+        mgr = JobManager("test")
+        first_release = threading.Event()
+        first_started = threading.Event()
+        ran: list = []
+
+        first = mgr.start("sig-A", _make_target(first_release, first_started, ran))
+        assert first_started.wait(timeout=5)
+
+        pending_started = threading.Event()
+        pending = mgr.start("sig-B", _make_target(threading.Event(), pending_started, ran))
+        assert pending.status == "pending"
+        pending.cancel()
+
+        first_release.set()
+        assert first.done_event.wait(timeout=5)
+        assert pending.done_event.wait(timeout=5)
+        assert pending.status == "cancelled"
+        assert not pending_started.is_set(), "cancelled pending job must not run"
+        assert ran == ["sig-A"]
+        # The manager is idle again: a fresh start spawns immediately.
+        release = threading.Event()
+        release.set()
+        job = mgr.start("sig-D", _make_target(release, threading.Event(), ran))
+        assert job.status in ("running", "done")
+        assert job.done_event.wait(timeout=5)
+        assert ran == ["sig-A", "sig-D"]
+
+
 class TestThreadContextPropagation:
     """``_run()`` must resolve and set the dataset/detector thread-local
     contexts from ``job.dataset_id`` / ``job.detector_id`` so the target's

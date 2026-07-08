@@ -627,6 +627,41 @@ class TestApplySettings:
 
         assert _apply_settings is canonical
 
+    def test_apply_settings_ignores_infra_setters(self, isolated_settings, tmp_path):
+        """Imported/synced settings dicts are file content, not trusted code.
+
+        The settings module's namespace also holds process-level ``set_*``
+        helpers (``set_settings_path``, ``set_user_data_dir_override``, CLI
+        knobs).  A dict pulled from a settings source or import must not be
+        able to invoke them - that would let a synced file repoint the server
+        settings file or every user's data dir for the process lifetime.
+        """
+        from vtsearch import settings
+
+        orig_path = settings.SETTINGS_PATH
+        orig_override = settings._USER_DATA_DIR_OVERRIDE
+        settings._apply_settings(
+            {
+                "settings_path": str(tmp_path / "evil-settings.json"),
+                "user_data_dir_override": str(tmp_path / "evil-users"),
+                "settings_source_config": {
+                    "source_name": "server_json_file",
+                    "field_values": {"filepath": str(tmp_path / "evil-source.json")},
+                },
+            }
+        )
+        assert settings.SETTINGS_PATH == orig_path
+        assert settings._USER_DATA_DIR_OVERRIDE == orig_override
+        assert settings.get_settings_source_config() is None
+
+    def test_setter_map_contains_only_schema_keys(self):
+        """Every applyable key must be a real server/user-tier schema key."""
+        from vtsearch import settings
+
+        schema_keys = set(settings._all_defaults())
+        setter_keys = set(settings._get_setter_map())
+        assert setter_keys <= schema_keys, sorted(setter_keys - schema_keys)
+
 
 # ---------------------------------------------------------------------------
 # Startup auto-import from settings source
