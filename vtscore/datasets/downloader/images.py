@@ -434,22 +434,42 @@ def download_openlogo(on_progress: Optional[ProgressCallback] = None) -> Path:
         return extract_dir
 
     from huggingface_hub import snapshot_download  # noqa: PLC0415
+    from huggingface_hub.utils.tqdm import tqdm as _hf_tqdm  # noqa: PLC0415
 
     from vtscore.security.hf_auth import get_token  # noqa: PLC0415
 
     _core.DATA_DIR.mkdir(exist_ok=True)
+    # Brief placeholder while snapshot_download resolves the file list (a network
+    # round-trip before any file is fetched). Kept short and size-first so it
+    # stays legible in the frontend's narrow, ellipsized detail slot; real
+    # per-file progress (below) supersedes it within a second or two.
     on_progress(
         "downloading",
-        f"Downloading OpenLogo (~{_core.OPENLOGO_DOWNLOAD_SIZE_MB // 1024} GB) from HuggingFace...",
+        f"Downloading OpenLogo (~{_core.OPENLOGO_DOWNLOAD_SIZE_MB // 1024} GB)...",
         0,
         0,
     )
+
+    # OpenLogo is thousands of loose files, so there is no single byte stream to
+    # tap like download_file_with_progress does. snapshot_download drives its
+    # over-the-files progress bar through ``tqdm_class``; subclass it to forward
+    # the file count to ``on_progress`` so the UI shows a live, measurable bar
+    # ("1,234/27,000") instead of a static, ellipsized sentence.
+    class _OpenlogoProgress(_hf_tqdm):  # type: ignore[misc, valid-type]
+        def update(self, n: int = 1) -> Optional[bool]:
+            displayed = super().update(n)
+            total = int(self.total or 0)
+            if total > 0:
+                on_progress("downloading", "Downloading OpenLogo logos", int(self.n), total)
+            return displayed
+
     snapshot_download(
         repo_id=_core.OPENLOGO_REPO_ID,
         repo_type="dataset",
         local_dir=str(extract_dir),
         ignore_patterns=["*.gif"],
         token=get_token(),
+        tqdm_class=_OpenlogoProgress,
     )
     return extract_dir
 
