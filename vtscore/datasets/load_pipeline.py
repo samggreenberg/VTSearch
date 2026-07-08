@@ -43,6 +43,7 @@ from vtscore.datasets.stages._common import (
     _origin_to_str,
     load_step_weights,
 )
+from vtscore.datasets.stages._load_profiler import start_profiler
 from vtscore.datasets.stages.clipper import _apply_clipper_stage, _relazify_reference_clips_stage
 from vtscore.datasets.stages.embedding import embed_missing, _embed_missing_stage
 from vtscore.datasets.stages.finalize import (
@@ -418,6 +419,10 @@ def _run_origin_load_in_background(
         embedder=embedder,
         step_weights=load_step_weights(media_type),
     )
+    # Env-gated per-phase timing recorder (VTSEARCH_PROFILE_LOAD); ``None`` and
+    # zero-cost when off. Subscribed before the first phase fires. See
+    # docs/plans/progress-weight-calibration.md.
+    profiler = start_profiler(tracker, media_type, embedder)
     tracker.update("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
 
     # Snapshot the user that triggered the load so background per-user
@@ -450,6 +455,7 @@ def _run_origin_load_in_background(
         registry_entry_id: str | None = None
         controller = _LoadGateController(tracker)
         stepped = _make_stepped_progress(controller, tracker)
+        profiler.bind_thread()  # so FinalizeProgress.begin stamps land here (no-op when off)
 
         try:
             with thread_user(request_user), thread_dataset_context(ctx):
@@ -536,6 +542,7 @@ def _run_origin_load_in_background(
                     controller.release()
                     clear_thread_progress()
         finally:
+            profiler.finish(len(ctx.medias))  # writes JSONL + unbinds (no-op when off)
             loading_tasks.mark_finished(task_id)
 
     threading.Thread(target=task, daemon=True).start()
