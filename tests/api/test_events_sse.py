@@ -4,11 +4,15 @@ import json
 import threading
 import time
 
+import vtscore.concurrency.events as events_mod
 from vtscore.concurrency.events import (
     _TASK_CHANNELS,
     _TRACKER_CHANNELS,
     BOOT_ID,
+    acquire_sse_slot,
+    active_sse_connections,
     initial_snapshot,
+    release_sse_slot,
     stream_progress_events,
 )
 from vtscore.concurrency.progress import (
@@ -381,3 +385,86 @@ class TestEventsStateSyncExemption:
         resp = client.get("/api/version")
         assert resp.status_code == 200
         assert "votes" in calls and "embedder" in calls
+
+
+# ---------------------------------------------------------------------------
+# SSE connection cap (comprehensive-audit-2026-07 open follow-up #1)
+# ---------------------------------------------------------------------------
+
+
+class TestSseConnectionCapPrimitive:
+    def test_acquire_up_to_cap_then_rejects(self, monkeypatch):
+        monkeypatch.setattr(events_mod, "MAX_SSE_CONNECTIONS", 2)
+        assert active_sse_connections() == 0
+        assert acquire_sse_slot() is True
+        assert acquire_sse_slot() is True
+        assert active_sse_connections() == 2
+        # Third acquire is over the cap: rejected without incrementing.
+        assert acquire_sse_slot() is False
+        assert active_sse_connections() == 2
+
+        release_sse_slot()
+        assert active_sse_connections() == 1
+        assert acquire_sse_slot() is True
+        assert active_sse_connections() == 2
+
+        release_sse_slot()
+        release_sse_slot()
+        assert active_sse_connections() == 0
+
+    def test_release_below_zero_is_clamped(self, monkeypatch):
+        monkeypatch.setattr(events_mod, "MAX_SSE_CONNECTIONS", 2)
+        assert active_sse_connections() == 0
+        release_sse_slot()
+        assert active_sse_connections() == 0
+
+    def test_default_max_connections_derives_from_thread_pool(self, monkeypatch):
+        monkeypatch.setenv("VTSEARCH_THREADS", "8")
+        assert events_mod._default_max_connections() == 6
+
+    def test_default_max_connections_floors_at_one(self, monkeypatch):
+        monkeypatch.setenv("VTSEARCH_THREADS", "1")
+        assert events_mod._default_max_connections() == 1
+
+
+class TestSseConnectionCapRoute:
+    def test_route_returns_503_with_retry_after_when_saturated(self, client, monkeypatch):
+        monkeypatch.setattr(events_mod, "MAX_SSE_CONNECTIONS", 0)
+        resp = client.get("/api/events", buffered=False)
+        try:
+            assert resp.status_code == 503
+            assert resp.headers.get("Retry-After") == "5"
+            body = resp.get_json()
+            assert "message" in body
+        finally:
+            resp.close()
+        # Rejection never touched the counter.
+        assert active_sse_connections() == 0
+
+    def test_route_rejects_when_already_saturated(self, client, monkeypatch):
+        """Simulate another connection already holding the sole slot (via the
+        primitive, not a second nested test-client request — the Werkzeug
+        test client's request-context stack isn't reentrant across two
+        concurrently-open streams on the same client)."""
+        monkeypatch.setattr(events_mod, "MAX_SSE_CONNECTIONS", 1)
+        assert acquire_sse_slot() is True
+        try:
+            resp = client.get("/api/events", buffered=False)
+            try:
+                assert resp.status_code == 503
+            finally:
+                resp.close()
+        finally:
+            release_sse_slot()
+        assert active_sse_connections() == 0
+
+    def test_route_releases_slot_on_disconnect(self, client, monkeypatch):
+        monkeypatch.setattr(events_mod, "MAX_SSE_CONNECTIONS", 1)
+        resp = client.get("/api/events", buffered=False)
+        try:
+            assert resp.status_code == 200
+            assert active_sse_connections() == 1
+        finally:
+            resp.close()
+        # Closing the connection frees its slot.
+        assert active_sse_connections() == 0
