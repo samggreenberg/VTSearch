@@ -2,6 +2,10 @@
 
 [← Back to API index](../API.md)
 
+> Media, vote, and sort endpoints are scoped to the active dataset/detector via
+> the [`X-Dataset-Id` / `X-Detector-Id` context headers](../API.md#context-headers-x-dataset-id--x-detector-id).
+> Vote- and label-mutating routes **require** them (400 otherwise).
+
 ---
 
 ## Medias
@@ -359,6 +363,34 @@ POST /api/server-media-files/upload
 **Form:** `file`: media file to upload.
 
 → `{"filename": "abc123.wav", "original_name": "dog_bark.wav"}` (201)
+
+### Save loaded media as a server example file
+
+```
+POST /api/server-media-files/from-media-id
+```
+
+**Body:** `{"media_id": 42}` (optionally `{"media_id": 42, "crop_params": {...}}`
+— e.g. audio `{"start", "end"}` or image `{"box": [...]}`).
+
+Materialises a loaded media's bytes (optionally cropped) into the per-user
+`example_media/` dir so the new-detector form can reference it as a seed.
+
+→ `{"filename": "abc123.wav", "original_name": "dog_bark.wav"}` (201)
+
+400 (media not loaded, or invalid `crop_params`), 404 (media bytes unavailable).
+
+### Server media file thumbnail
+
+```
+GET /api/server-media-files/{filename}/thumbnail
+```
+
+Small preview image of an example file in the user's `example_media/` dir:
+image bytes, an audio waveform PNG, or a video mid-frame PNG (binary, not JSON).
+
+400 (filename escapes the media dir), 404 (not found / no thumbnail for the
+type), 500 (generation failed).
 
 ### Seed votes from examples
 

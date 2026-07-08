@@ -2,6 +2,11 @@
 
 [← Back to API index](../API.md)
 
+> Detector-scoped endpoints resolve the active detector (and, where scoring is
+> involved, the active dataset) via the
+> [`X-Dataset-Id` / `X-Detector-Id` context headers](../API.md#context-headers-x-dataset-id--x-detector-id).
+> Requirements are noted per endpoint.
+
 ---
 
 ## Detectors
@@ -117,6 +122,66 @@ supported policy) removes any element that appears with disagreeing
 labels across sources.
 
 → `{"success": true, "name": "A+B", "media_type": "audio", "num_labels": 73, "combined_from": ["A", "B"], "source_label_counts": [50, 30], "examples": [...]}` (201)
+
+### Labels detail
+
+```
+GET /api/detectors/{name}/labels-detail
+```
+
+Returns the detector's saved labelset split into good/bad lists with right-pane
+render data. Not gated on a loaded dataset (but when one is loaded, each item's
+`cid` / `time` / `score` resolve against it).
+
+→ ```json
+{
+  "media_type": "audio",
+  "good": [
+    {"id": "...", "label": "good", "media_type": "audio", "name": "...",
+     "filename": "dog.wav", "origin_name": "...", "md5": "...", "cid": 12,
+     "time": 1234567890.0, "score": 0.97, "region_box": null}
+  ],
+  "bad": [...]
+}
+```
+
+404 if the detector is not found.
+
+### Label preview / thumbnail
+
+```
+GET /api/detectors/{name}/labels/{element_id}/preview
+GET /api/detectors/{name}/labels/{element_id}/thumbnail
+```
+
+Serve one saved labelset element, resolved via its origin:
+
+- **`/preview`** — the full underlying media file bytes (mimetype by type), or,
+  for text, JSON `{"content", "word_count", "character_count"}`.
+- **`/thumbnail`** — a small image: resized image (cropped to `region_box` for
+  region votes), audio waveform PNG, or video mid-frame PNG. Much smaller than
+  `/preview`.
+
+404 if the detector, element, or file is missing; 500 if a thumbnail can't be
+generated.
+
+### Export portable bundle
+
+```
+POST /api/detectors/{detector_id}/portable-bundle
+```
+
+**Requires** [`X-Dataset-Id`](../API.md#context-headers-x-dataset-id--x-detector-id).
+No body.
+
+Retrains the detector from its on-disk labelset in the **active dataset's**
+embedder space and streams a zipped, standalone scoring bundle (ONNX model +
+manifest + README).
+
+→ Binary `.zip` download (`<detector>-detector.zip`).
+
+400 (no medias loaded, or no labels to score), 404 (detector not found), 409
+(active dataset can't supply the detector's embedder type).
 
 ---
 
@@ -243,6 +308,21 @@ PUT /api/detectors/registry/{detector_id}/rename
 **Body:** `{"name": "New Name"}`
 
 → `{"ok": true, "name": "New Name"}`
+
+### Set detector readers
+
+```
+PUT /api/detectors/registry/{detector_id}/readers
+```
+
+**Body:** `{"readers": ["user1", "user2"]}` (`["*"]` makes it public).
+
+Replaces the detector's reader access list (multi-user deployments). Only the
+detector's creator may call it.
+
+→ `{"ok": true, "readers": ["user1", "user2"]}`
+
+403 if the caller is not the creator; 404 if the detector does not exist.
 
 ### Detector statistics
 

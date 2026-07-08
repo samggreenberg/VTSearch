@@ -2,6 +2,10 @@
 
 [← Back to API index](../API.md)
 
+> Endpoints that act on "the loaded dataset" resolve it via the
+> [`X-Dataset-Id` context header](../API.md#context-headers-x-dataset-id--x-detector-id)
+> (registry routes take the id in the path instead).
+
 ---
 
 ## Media Types, Embedders, Clippers & Converters
@@ -198,6 +202,47 @@ Lists `.pkl` files in the embeddings directory.
 
 → `{"files": [{"name": "esc50", "path": "/abs/path/esc50.pkl", "size_mb": 12.3}]}`
 
+### Importer field options (dynamic dropdowns)
+
+```
+POST /api/dataset/import/{importer_name}/options
+```
+
+**Body:** `{"field_key": "collection", "values": {...}}` (`values` is the
+current form snapshot, optional).
+
+Calls the importer's `get_field_options(field_key, values)` and returns
+dropdown options for a [dynamic-options field](../EXTENDING-plugins.md#dynamic-field-options).
+
+→ `{"options": ["a", "b", "c"]}`
+
+400 (unknown / non-dynamic field), 404 (unknown importer), 501 (not
+implemented), 502 (remote error).
+
+### Detect media type
+
+```
+GET /api/dataset/detect-media-type
+```
+
+**Query:** `source` (default `"folder"`), `path` (default `""`), `recursive`
+(default `true`), `limit` (default 50, clamped to 1–500).
+
+Samples a folder's files by extension to pre-fill the import modal's
+media-type dropdown.
+
+→ ```json
+{
+  "sample_size": 50,
+  "counts_by_type": {"audio": 48, "image": 2},
+  "extensions": {".wav": 48, ".png": 2},
+  "dominant": "audio",
+  "truncated": false
+}
+```
+
+400 (path escapes root), 404 (source/dir not found).
+
 ---
 
 ## Loading Datasets
@@ -259,6 +304,35 @@ POST /api/dataset/load-source
 **Body:** `{"source": {"importer": "demo", "params": {"name": "esc50"}}}`
 
 → `{"ok": true, "message": "Loading started"}`
+
+**From a browser folder upload:**
+
+```
+POST /api/dataset/import-local-folder
+```
+
+**Form (`multipart/form-data`):** `files` (repeated — one file field per file,
+each multipart filename set to its `webkitRelativePath`), `media_type`
+(required); optional `dataset_name` (default `"Local folder upload"`),
+`embedder`, `clipper_params` (JSON string), `build_projection`,
+`merge_near_duplicates`, and clipper-chain fields. Streams the uploaded folder
+to a server temp dir and runs the `server_folder` importer in the background.
+
+→ `{"ok": true, "message": "...", "task_id": "..."}`
+
+**From a browser paths-file upload:**
+
+```
+POST /api/dataset/import-local-files
+```
+
+**Form (`multipart/form-data`):** `paths_file` (a single `.txt` / `.list` /
+`.npz` of media paths, required), `media_type` (required); optional
+`dataset_name` (default `"Local files upload"`), `embedder`, `clipper`,
+`clipper_params` (JSON string), `source_specs`. Runs the `server_files`
+importer in the background. Same response shape as `import-local-folder`.
+
+→ `{"ok": true, "message": "...", "task_id": "..."}`
 
 All load endpoints are async; subscribe to the `dataset` and
 `loading-tasks` channels on [`/api/events`](events.md) (SSE) for progress.
@@ -381,6 +455,20 @@ Requires at least two paths.
 
 → `{"ok": true, "message": "Combining datasets..."}`
 
+### Promote a selection to a new dataset
+
+```
+POST /api/dataset/promote
+```
+
+**Body:** `{"name": "My subset", "media_ids": [0, 3, 7]}` — ids from the active
+dataset (both fields required, non-empty).
+
+Snapshots the selected media (preserving origins and embeddings) into a brand-
+new saved, registered dataset.
+
+→ `{"ok": true, "dataset_id": "abc123", "name": "My subset", "num_items": 3}`
+
 ---
 
 ## Export & Clear
@@ -494,3 +582,29 @@ Sets which users can access a dataset (multi-user deployments). Only the
 dataset owner or an admin can modify readers.
 
 → `{"ok": true, "readers": ["user1", "user2"]}`
+
+### Preload dataset embedder
+
+```
+POST /api/datasets/registry/{dataset_id}/preload-embedder
+```
+
+Warms the dataset's embedder in a background daemon thread (idempotent) so it's
+ready before training. No body.
+
+→ `{"ok": true, "embedder": "clap"}` (`embedder` is `""` if the dataset has none)
+
+403 if access is denied; 404 if the dataset does not exist.
+
+### Build diversity tree
+
+```
+POST /api/datasets/registry/{dataset_id}/diversity-tree
+```
+
+Kicks off a cancellable background build of the diversity index for an
+already-loaded dataset. Progress streams on `/api/progress`. No body.
+
+→ `{"ok": true, "message": "...", "task_id": "_divtree_abc12345"}`
+
+400 if the dataset isn't loaded; 403 if access is denied; 404 if it doesn't exist.
