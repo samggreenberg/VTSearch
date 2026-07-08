@@ -305,6 +305,11 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
       // right-clicked) so the pane is never blank and the detail view starts on
       // the same image — not the 1-D list's first item, which differs.
       this.previewId = this.representativeId();
+      // Auto-play the representative's clip on open (audio) so the detail window
+      // is an "intense hover": opening it hears the rep, just like resting on the
+      // bin on the canvas. This is the only way to hear a singleton audio bin,
+      // whose member grid (and its hover-to-hear) is dropped (see previewOnly).
+      if (this.previewId != null) this.playAudio(this.previewId);
       // A fresh bin is a fresh popup: forget any drag from the previous one so
       // it re-anchors to the new summon point.
       this.dragged = false;
@@ -908,19 +913,32 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     // media type, so audio/text/document read metadata for the item under the
     // cursor even without a preview pane).
     this.previewId = id;
+    this.playAudio(id);
+  }
+
+  /**
+   * Audition ``id`` in the popup's audio element (audio media only), updating
+   * the shared now-playing indicator. Shared by the open-time autoplay and the
+   * grid-row hover; a no-op when the same clip is already playing so re-entering
+   * a row (or a redundant re-summon) doesn't restart it.
+   */
+  private playAudio(id: number): void {
     if (this.mediaType() !== 'audio') return;
     const src = this.activeContext.mediaUrl(`/api/medias/${id}/audio`);
     if (this.audioSrc === src) return;
     this.audioSrc = src;
+    // The autoplay-on-open path may fire before prefetchVisible has hydrated the
+    // representative's metadata, so make sure its clip extents are loading (the
+    // clip-window handlers read them lazily as they land).
+    this.metadataCache.ensureLoaded([id]);
     this.nowPlaying.emit({ mediaId: id, waveUrl: this.thumbnailUrl(id) });
     setTimeout(() => {
       const el = this.audioRef?.nativeElement;
       if (!el) return;
       el.volume = this.volume();
       // Windowed archive-member clips serve the whole file: seek to clip_start
-      // and loop within [clip_start, clip_end]. The hovered item's metadata is
-      // already hydrated (prefetchVisible loads the visible window), and is read
-      // lazily inside the handlers regardless.
+      // and loop within [clip_start, clip_end]. Metadata is read lazily inside
+      // the handlers regardless.
       applyClipWindow(el, () => this.metadataCache.get(id));
       el.load();
       el.play().catch(() => {});
