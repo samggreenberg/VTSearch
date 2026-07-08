@@ -346,15 +346,35 @@ def threshold_from_fold_orderings(
     fold_orderings: list[tuple[list[float], list[float]]],
     inclusion_value: int,
 ) -> float:
-    """Average the per-fold min-cost thresholds at *inclusion_value*.
+    """Aggregate the per-fold min-cost thresholds at *inclusion_value*.
 
     Cheap: just re-runs :func:`find_optimal_threshold` over each fold's cached
     ``(scores, labels)``.  Callers must pass a non-empty ``fold_orderings``
     (the empty case is handled via the ``fallback`` from
     :func:`compute_fold_orderings`).
+
+    A fold whose min-cost cut is "predict nothing" returns
+    :data:`NO_GOOD_THRESHOLD` (2.0), which is a *vote to abstain*, not a
+    number to average.  Numerically averaging it dragged the mean above the
+    sigmoid range whenever a single fold abstained (with the default
+    ``calibrate_count=2`` any lone abstain forced the whole ensemble to
+    abstain, while at 3+ folds the same lone abstain often did not - a
+    fold-count-dependent artifact that also stored an ill-defined ~1.3 as the
+    "threshold").  Instead the sentinel is tallied as a vote: the ensemble
+    abstains only when a **strict majority** of folds abstain; otherwise the
+    threshold is the mean of just the folds that produced a real cut.
     """
-    thresholds = [find_optimal_threshold(s, lbls, inclusion_value) for s, lbls in fold_orderings]
-    return sum(thresholds) / len(thresholds)
+    per_fold = [find_optimal_threshold(s, lbls, inclusion_value) for s, lbls in fold_orderings]
+    if not per_fold:
+        return NO_GOOD_THRESHOLD
+    finite = [t for t in per_fold if t != NO_GOOD_THRESHOLD]
+    n_abstain = len(per_fold) - len(finite)
+    # Strict majority abstains -> abstain overall.  ``not finite`` (every fold
+    # abstained) is a strict majority for any non-empty ensemble, so it is
+    # subsumed here and the ``sum(finite)`` below never divides by zero.
+    if n_abstain * 2 > len(per_fold):
+        return NO_GOOD_THRESHOLD
+    return sum(finite) / len(finite)
 
 
 def calculate_cross_calibration_threshold(
@@ -371,8 +391,9 @@ def calculate_cross_calibration_threshold(
 
     Performs ``calibrate_count`` independent random Train/Calibrate splits.
     For each split, trains a model on the Train portion and finds the
-    optimal threshold on the Calibrate portion. Returns the mean of all
-    thresholds.
+    optimal threshold on the Calibrate portion. Aggregates the per-fold
+    thresholds via :func:`threshold_from_fold_orderings` (mean of the folds
+    that produced a real cut; abstain overall when a strict majority abstain).
 
     Algorithm:
         For each of *k* = ``calibrate_count`` rounds:
@@ -382,7 +403,10 @@ def calculate_cross_calibration_threshold(
            fit always has both-class supervision.
         2. Train a model on Train.
         3. Find optimal threshold on Calibrate.
-        Return mean of all *k* thresholds.
+        Aggregate the *k* thresholds: a fold voting to abstain
+        (:data:`NO_GOOD_THRESHOLD`) counts as a vote, not a value; the
+        ensemble abstains only under a strict majority, otherwise it returns
+        the mean of the non-abstaining folds.
 
     Args:
         X_list: List of embedding arrays (one per labelled example).

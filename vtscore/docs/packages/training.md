@@ -215,9 +215,14 @@ For each of `calibrate_count` rounds:
 3. Score Calibrate, find the optimal threshold via
    `find_optimal_threshold`.
 
-Returns the mean threshold across rounds. Defaults to 0.5 when
-`n < 4`; returns `float("inf")` when the split would leave fewer than
-2 training examples or 1 calibration example.
+Aggregates the per-round thresholds via `threshold_from_fold_orderings`:
+a round whose optimal cut is "predict nothing" returns the abstain
+sentinel `NO_GOOD_THRESHOLD` (2.0), counted as a *vote* rather than
+averaged, so the ensemble abstains only under a strict majority and
+otherwise means the non-abstaining rounds. Defaults to 0.5 when `n < 4`
+or fewer than 2 of either class; returns `NO_GOOD_THRESHOLD` when the
+split would leave fewer than 2 training examples or 1 calibration
+example.
 
 ```python
 from vtscore.training import calculate_cross_calibration_threshold

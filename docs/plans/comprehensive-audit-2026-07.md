@@ -3,8 +3,9 @@
 **Status: initial fix pass shipped; second follow-up pass shipped
 (#2, #6, #10, #14 of the original open list); third follow-up pass shipped
 (JobManager cancellation now stops running jobs); fourth follow-up pass
-shipped (per-task progress isolation — staging imports + eval jobs);
-remaining open follow-ups below.**
+shipped (per-task progress isolation — staging imports + eval jobs); fifth
+follow-up pass shipped (#5, #8 of the renumbered open list — ML threshold
+correctness); remaining open follow-ups below.**
 
 A full-codebase audit focused on interface boundaries: frontend ↔ backend
 API contract, route layer ↔ state system, app tier ↔ `vtscore` library,
@@ -219,14 +220,41 @@ up any of these areas sees the known-weak spots.
   job.  Test in
   `tests/sorting/test_sorting.py::TestEvalTrainAndScoreAsync::test_result_reports_job_progress_not_singleton`.
 
+### Fifth follow-up pass — ML threshold correctness (drained from the open list)
+
+- **Training entry points now agree at 4-5 labels** (was renumbered open
+  #5).  With safe-thresholds off, `train_and_threshold` (Find / detector-
+  load) ran real cross-calibration below 6 labels while `_train_and_score_xy`
+  (vote-driven Train / labelset) and `train_detector_from_origins`
+  (detector-load-from-origins) hard-coded 0.5 — the same user state produced
+  a different cutoff depending on which route trained.  Unified on real
+  cross-calibration: the `< 6 → 0.5` short-circuit is now gated on
+  `safe_thresholds` (still skipped only when the pure-GMM blend would
+  discard the result), so every route cross-calibrates below 6 when
+  safe-thresholds is off, and an inclusion slide can move the line below 6
+  too.  `train_and_threshold`'s safe-on-<6 branch now also clears the fold
+  cache (parity with `_train_and_score_xy`), closing a stale-cache read on
+  that path.  Tests in `tests_lib/detectors/test_calibration_cache_invalidation.py`
+  and `tests/sorting/test_sorting.py`.
+- **Abstain sentinel is a vote, not a number** (was renumbered open #8).
+  `threshold_from_fold_orderings` numerically averaged the `NO_GOOD_THRESHOLD`
+  (2.0) sentinel, so a single abstaining fold dragged the mean above the
+  sigmoid range (forcing overall abstain at the default `calibrate_count=2`,
+  yet often *not* at 3+ folds — a fold-count-dependent artifact that stored an
+  ill-defined ~1.3 as "the threshold").  A fold that abstains is now tallied
+  as a vote: the ensemble abstains only under a **strict majority** of
+  abstaining folds and otherwise means the folds that produced a real cut.
+  Tests in `tests_lib/sorting/test_find_optimal_threshold.py`.
+
 ## Open follow-ups
 
 Ordered roughly by severity.  Each was found and verified during the audit
 but deferred as needing a design decision or a larger change.  (Original
 open items #2, #6, #10, #14 were drained in the second follow-up pass, the
-renumbered #2 "JobManager cancellation advisory" in the third pass, and the
-staging + eval progress isolation (renumbered #2, #3) in the fourth — see
-the follow-up-pass subsections under What shipped.  The list below is
+renumbered #2 "JobManager cancellation advisory" in the third pass, the
+staging + eval progress isolation (renumbered #2, #3) in the fourth, and the
+re-renumbered #5/#8 "ML threshold correctness" items in the fifth — see the
+follow-up-pass subsections under What shipped.  The list below is
 renumbered again after those drains.)
 
 1. **SSE `/api/events` pins a gthread worker thread per connection.**
@@ -241,41 +269,43 @@ renumbered again after those drains.)
    ingest guarantee (all-or-nothing patch_regions per dataset) or space
    checking here.
 3. **Eval harness fidelity** (`eval/voting_iterations.py`): fold models
-   don't force the full-data `hidden_dim`, always calibrate below 6 labels
-   (production uses 0.5), and thread the split RNG into calibration - so
-   reported eval costs measure a pipeline production doesn't run in exactly
-   the small-label regime the eval characterises.
+   don't force the full-data `hidden_dim` and don't thread the split RNG
+   into calibration - so reported eval costs measure a pipeline that differs
+   from production in the small-label regime.  (The "production uses 0.5
+   below 6 labels" mismatch is now narrower: with safe-thresholds off,
+   production cross-calibrates below 6 too — see Fifth follow-up pass.)
 4. **Inclusion slide drops the safe-threshold GMM blend**
    (`state/core.py:recompute_detector_thresholds_for_inclusion` vs
    `training.py`): with safe-thresholds on and 6 ≤ n < 20 labels, sliding
    inclusion to a value and back changes the threshold semantics relative
    to a fresh retrain.  Decide whether the blend applies on slides.
-5. **Two training entry points disagree at 4-5 labels** with
-   safe-thresholds off: `train_and_threshold` runs real cross-calibration,
-   `_train_and_score_xy` hard-codes 0.5.  Same user state, different
-   cutoff depending on route.
-6. **Dataset registry is not multi-process safe**
+5. **Dataset registry is not multi-process safe**
    (`vtscore/datasets/registry.py`): in-process lock plus a fixed `.tmp`
    name; a concurrent CLI autodetect run against the same data dir can
    silently erase the server's registrations.  Fine under the documented
    single-worker model; needs flock if that changes.
-7. **`http_archive` cache never invalidates** when the remote archive
-    changes (fixed collision, not staleness); `extract_archive_cached`'s
-    mtime/size keying is the model.
-8. **Threshold averaging with the abstain sentinel**: a fold returning
-    `NO_GOOD_THRESHOLD` (2.0) now raises the fold mean, possibly above 1.0
-    (= abstain overall).  This is the intended lean but the blend weight is
-    crude; revisit if precision-biased small-label behaviour looks off.
-9. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
-    rather than clean): browse-canvas/minimap coordinate math and rAF
-    lifecycles, modal/player component lifecycle sweep, left/right-panel
-    virtualization, and a full route-blueprint sweep of
-    `routes/datasets|media|detectors|labels|processors|projection`.
+6. **`http_archive` cache never invalidates** when the remote archive
+   changes (fixed collision, not staleness); `extract_archive_cached`'s
+   mtime/size keying is the model.
+7. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
+   rather than clean): browse-canvas/minimap coordinate math and rAF
+   lifecycles, modal/player component lifecycle sweep, left/right-panel
+   virtualization, and a full route-blueprint sweep of
+   `routes/datasets|media|detectors|labels|processors|projection`.
 
 ## Behaviour changes shipped (backwards compatibility notes)
 
-- `find_optimal_threshold` can now return `NO_GOOD_THRESHOLD` (2.0); fold
-  means can exceed 1.0 where abstaining is strictly cheaper.
+- `find_optimal_threshold` can now return `NO_GOOD_THRESHOLD` (2.0).
+- `threshold_from_fold_orderings` no longer numerically averages the abstain
+  sentinel: the fold ensemble abstains only under a strict majority of
+  abstaining folds and otherwise means the non-abstaining folds, so the
+  stored threshold never lands at an out-of-range ~1.3 and the abstain
+  outcome no longer depends on `calibrate_count`.
+- With safe-thresholds **off**, all training entry points cross-calibrate at
+  4-5 labels (previously the vote/labelset and origin-load paths returned
+  0.5).  The Find/Train cutoff for the same small-label state now matches
+  regardless of route, and an inclusion slide can move the threshold below 6
+  labels too.  Safe-thresholds **on** below 6 is unchanged (pure GMM).
 - `_apply_settings` no longer applies non-schema keys (previously reachable:
   `settings_path`, `user_data_dir_override`, `settings_source_config`,
   CLI knobs).
