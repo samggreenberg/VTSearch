@@ -407,6 +407,41 @@ def download_file_with_progress(  # noqa: C901
                 response.close()
 
 
+def fetch_remote_signature(url: str) -> Optional[str]:
+    """Fetch a lightweight signature (ETag / Last-Modified / size) for *url*.
+
+    Used to detect when a remote archive has changed so a caller's extraction
+    cache can invalidate instead of serving stale bytes forever. Issues a
+    ranged GET for a single byte (more universally honoured than HEAD by the
+    flaky third-party CDNs these archives live on) and reads only the
+    response headers.
+
+    Returns ``None`` if the probe fails outright or the server's response
+    carries none of the three signals - callers should fail open (trust an
+    existing cache) rather than block on a CDN that doesn't answer.
+    """
+    try:
+        validate_url(url)
+        session = requests.Session()
+        response = _open_validated_stream(session, url, headers={"Range": "bytes=0-0"})
+    except Exception:
+        return None
+    try:
+        if response.status_code >= 400:
+            return None
+        etag = response.headers.get("ETag", "")
+        last_modified = response.headers.get("Last-Modified", "")
+        content_range = response.headers.get("Content-Range", "")
+        total = content_range.rsplit("/", 1)[-1] if "/" in content_range else response.headers.get("Content-Length", "")
+        if not etag and not last_modified and not total:
+            return None
+        return f"{etag}|{last_modified}|{total}"
+    except Exception:
+        return None
+    finally:
+        response.close()
+
+
 def download_file_atomic(
     url: str,
     final_path: Path,

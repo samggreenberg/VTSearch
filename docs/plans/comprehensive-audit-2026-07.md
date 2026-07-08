@@ -5,8 +5,9 @@
 (JobManager cancellation now stops running jobs); fourth follow-up pass
 shipped (per-task progress isolation — staging imports + eval jobs); fifth
 follow-up pass shipped (#5, #8 of the renumbered open list — ML threshold
-correctness); sixth follow-up pass shipped (#1 of the current open list —
-SSE connection cap); remaining open follow-ups below.**
+correctness); sixth follow-up pass shipped (#1 of the then-current open
+list — SSE connection cap); seventh follow-up pass shipped (http_archive
+cache staleness); remaining open follow-ups below.**
 
 A full-codebase audit focused on interface boundaries: frontend ↔ backend
 API contract, route layer ↔ state system, app tier ↔ `vtscore` library,
@@ -270,6 +271,27 @@ up any of these areas sees the known-weak spots.
   `tests/api/test_events_sse.py` (`TestSseConnectionCapPrimitive`,
   `TestSseConnectionCapRoute`).
 
+### Seventh follow-up pass (drained from the open list)
+
+- **`http_archive` cache staleness** (was renumbered open #6).
+  `HttpArchiveSource`'s resolve cache keyed only on the URL, so once an
+  extraction was published under that key it was served forever, even after
+  the remote archive changed. Added `fetch_remote_signature()` in
+  `vtscore/datasets/downloader/core.py` — a single-byte ranged GET (more
+  universally honoured than HEAD by the flaky CDNs these archives live on)
+  that reads only `ETag` / `Last-Modified` / size from the response headers.
+  `_ensure_extracted()` now records that signature in a sidecar file next to
+  the cached extraction (kept as a *sibling*, never inside the extraction
+  tree, so it can't surface as a bogus media item to an extensionless
+  `list_items(None)`); a later access whose freshly-probed signature
+  disagrees with the recorded one busts the cache and re-downloads. A cache
+  with no recorded signature (predates this check, or its own probe failed)
+  is trusted as-is, and a probe failure (offline, flaky CDN) fails open onto
+  the existing cache rather than blocking. Tests in
+  `tests/datasets/test_media_sources.py`
+  (`test_stale_cache_invalidated_on_signature_mismatch`,
+  `test_signature_probe_failure_trusts_existing_cache`).
+
 ## Open follow-ups
 
 Ordered roughly by severity.  Each was found and verified during the audit
@@ -277,8 +299,9 @@ but deferred as needing a design decision or a larger change.  (Original
 open items #2, #6, #10, #14 were drained in the second follow-up pass, the
 renumbered #2 "JobManager cancellation advisory" in the third pass, the
 staging + eval progress isolation (renumbered #2, #3) in the fourth, the
-re-renumbered #5/#8 "ML threshold correctness" items in the fifth, and the
-re-renumbered #1 "SSE connection cap" in the sixth — see the follow-up-pass
+re-renumbered #5/#8 "ML threshold correctness" items in the fifth, the
+re-renumbered #1 "SSE connection cap" in the sixth, and the re-renumbered
+#6 "http_archive cache staleness" in the seventh — see the follow-up-pass
 subsections under What shipped.  The list below is renumbered again after
 those drains.)
 
@@ -304,10 +327,7 @@ those drains.)
    name; a concurrent CLI autodetect run against the same data dir can
    silently erase the server's registrations.  Fine under the documented
    single-worker model; needs flock if that changes.
-5. **`http_archive` cache never invalidates** when the remote archive
-   changes (fixed collision, not staleness); `extract_archive_cached`'s
-   mtime/size keying is the model.
-6. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
+5. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
    rather than clean): browse-canvas/minimap coordinate math and rAF
    lifecycles, modal/player component lifecycle sweep, left/right-panel
    virtualization, and a full route-blueprint sweep of
@@ -363,3 +383,9 @@ those drains.)
   accepting an unbounded number of connections that could starve the
   gthread pool. Cap defaults to `VTSEARCH_THREADS - 2`; override with
   `VTSEARCH_SSE_MAX_CONNECTIONS`.
+- `HttpArchiveSource`'s resolve cache now checks a recorded remote signature
+  (ETag/Last-Modified/size) on each access to a cached extraction and
+  re-downloads on a mismatch, instead of trusting the cache forever once
+  published. A cache built before this change (no recorded signature) or a
+  failed probe still trusts the existing cache, so this is additive: no
+  previously-cached extraction is invalidated by upgrading alone.
