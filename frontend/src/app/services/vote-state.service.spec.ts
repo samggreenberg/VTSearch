@@ -580,6 +580,10 @@ describe('VoteStateService', () => {
       });
       const req = httpMock.expectOne('/api/medias/5/vote');
       req.flush(null, { status: 500, statusText: 'Server Error' });
+      // The failed POST triggers the optimistic rollback's server re-read.
+      httpMock
+        .expectOne('/api/votes')
+        .flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
 
       // The failed POST must not leave a phantom undo entry; Cmd-Z next
       // would otherwise post a "reversal" of a vote that never happened.
@@ -624,6 +628,10 @@ describe('VoteStateService', () => {
       httpMock
         .expectOne('/api/medias/2/vote')
         .flush(null, { status: 500, statusText: 'Server Error' });
+      // Drain the rollback's server re-read.
+      httpMock
+        .expectOne('/api/votes')
+        .flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
       expect(service.canRedo()).toBe(true);
 
       // A new vote whose POST succeeds wipes the redo stack as expected.

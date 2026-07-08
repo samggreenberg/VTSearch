@@ -51,7 +51,7 @@ export const activeContextGuard: CanActivateFn = (route) => {
   return datasetState.loaded$.pipe(
     filter((loaded) => loaded),
     take(1),
-    switchMap((): Observable<true | UrlTree> => {
+    switchMap((): Observable<boolean | UrlTree> => {
       const dataset = datasetState.datasets.find((d) => d.id === datasetId);
       const detector = datasetState.detectors.find((d) => d.id === detectorId);
 
