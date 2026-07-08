@@ -1,6 +1,8 @@
 # Comprehensive interface audit — July 2026
 
-**Status: fix pass shipped; open follow-ups below.**
+**Status: initial fix pass shipped; second follow-up pass shipped
+(#2, #6, #10, #14 of the original open list); remaining open follow-ups
+below.**
 
 A full-codebase audit focused on interface boundaries: frontend ↔ backend
 API contract, route layer ↔ state system, app tier ↔ `vtscore` library,
@@ -131,82 +133,97 @@ up any of these areas sees the known-weak spots.
 - `uploadServerMediaFile` no longer drops `media_type` when `cropParams`
   is absent.
 
+### Second follow-up pass (drained from the open list)
+
+- **Registry dataset/detector load double-start + half-loaded visibility**
+  (was open #2).  Added an atomic reserve-under-lock step
+  (`begin_load`/`end_load` in `vtscore/datasets/registry.py`,
+  `begin_detector_load`/`end_detector_load` in
+  `vtscore/detectors/registry.py`): only one loader runs per id, so two
+  concurrent `.../load` requests no longer spawn twins.  The deterministic
+  task id is now intentional poll-coalescing (a second caller attaches to
+  the in-flight load).  `register_context` / `register_detector_context`
+  moved to *after* the context is fully populated, so no torn,
+  empty-then-growing context is ever published and the loaded flag is never
+  set ahead of the context store.  Tests in
+  `tests_lib/datasets/test_registry_load_reservation.py` and
+  `tests_lib/detectors/test_detector_load_reservation.py`.
+- **Learned-sort signature/data decorrelation** (was open #6).  The route
+  now freezes the votes at request time (`good_snapshot`/`bad_snapshot`),
+  exactly as region boxes already were, and passes those snapshots to both
+  the signature builder and the background job.  Previously the job copied
+  the live vote proxy at *run* time, so an intervening vote change (or an
+  `ensure_votes_match_active_dataset` rehydrate) cached a result under the
+  wrong signature.  Test in `tests/sorting/test_sorting.py`.
+- **`update_cache_for_cid` dead API removed** (was open #10).  It wrote the
+  media's *primary* vector into the detector-space label-embedding cache and
+  stamped `region=None`; no runtime callers.  Removed the function, its
+  `labelset_ops` re-export, the vulture-whitelist entry, and two stale doc
+  references.
+- **Streaming exporter temp-file collision** (was open #14).  Both
+  `server_json_file` and `server_csv_file` used a fixed `<name>.tmp`
+  sibling; two concurrent exports to the same path clobbered each other.
+  Switched to the house-style `<name>.<pid>.<uuid>.tmp` and added an fsync
+  before the atomic replace.  Tests in `tests/io/test_exporters.py`.
+
 ## Open follow-ups
 
 Ordered roughly by severity.  Each was found and verified during the audit
-but deferred as needing a design decision or a larger change.
+but deferred as needing a design decision or a larger change.  (Original
+open items #2, #6, #10, #14 were drained in the second follow-up pass — see
+"Second follow-up pass" under What shipped.)
 
 1. **SSE `/api/events` pins a gthread worker thread per connection.**
    With `workers = 1, threads = 8`, eight open tabs starve the whole app;
    stalled requests plus a live heartbeat read as an app hang.  Needs a
    design decision: bound SSE connections, size the pool against them, or
    move the stream off the request-thread pool.
-2. **Registry dataset/detector load: check-then-act double-start and
-   half-loaded context visibility.**  Two concurrent `POST .../load` both
-   pass the `is_loaded` check and spawn twin loads sharing a truncated
-   `task_id`; `register_context(ctx)` runs before the loader populates
-   `ctx.medias`, so concurrent requests can see a torn, partially-loaded
-   dataset (or hit `RuntimeError: dictionary changed size during
-   iteration`).  Same pattern for detector loads
-   (`routes/detectors/registry.py`).
-3. **JobManager cancellation is advisory only.**  No job target reads
+2. **JobManager cancellation is advisory only.**  No job target reads
    `AsyncJob.is_cancelled`, so cancelling a *running* learned-sort/eval
    job never stops the GIL-bound training (the cancelled-pending half was
    fixed in this pass).  Wiring `is_cancelled` into the training loop's
    epoch boundary would make cancel real.
-4. **Staging imports publish through the global `dataset_progress`
+3. **Staging imports publish through the global `dataset_progress`
    singleton** (`load_pipeline.py:_stage_importer_in_background`): two
    concurrent staging imports interleave one channel and the terminal
    `staging_result` is last-writer-wins, orphaning the loser's staged pkl.
    Needs per-task trackers like `_run_origin_load_in_background`.
-5. **Eval progress is a global singleton keyed to no job**
+4. **Eval progress is a global singleton keyed to no job**
    (`routes/eval.py`): overlapping evals decorrelate the progress bar from
    job identity.
-6. **Learned-sort signature/data decorrelation** (`routes/sorting.py`):
-   the background job copies the live vote dicts at *run* time but caches
-   the result under the *request-time* signature; a vote change (or an
-   `ensure_votes_match_active_dataset` rehydrate) in between poisons the
-   `_last_done` cache for later identical-signature requests.
-7. **Region-matrix fallback can mix embedding spaces** on a multi-embedder
+5. **Region-matrix fallback can mix embedding spaces** on a multi-embedder
    dataset where only some media carry `patch_regions`
    (`embedding/matrix.py:_build_region_arrays`): region rows are in the
    patch embedder's space, fallback rows in the primary's.  Needs either an
    ingest guarantee (all-or-nothing patch_regions per dataset) or space
    checking here.
-8. **Eval harness fidelity** (`eval/voting_iterations.py`): fold models
+6. **Eval harness fidelity** (`eval/voting_iterations.py`): fold models
    don't force the full-data `hidden_dim`, always calibrate below 6 labels
    (production uses 0.5), and thread the split RNG into calibration - so
    reported eval costs measure a pipeline production doesn't run in exactly
    the small-label regime the eval characterises.
-9. **Inclusion slide drops the safe-threshold GMM blend**
+7. **Inclusion slide drops the safe-threshold GMM blend**
    (`state/core.py:recompute_detector_thresholds_for_inclusion` vs
    `training.py`): with safe-thresholds on and 6 ≤ n < 20 labels, sliding
    inclusion to a value and back changes the threshold semantics relative
    to a fresh retrain.  Decide whether the blend applies on slides.
-10. **`update_cache_for_cid` is a dead API with a latent bug**
-    (`detectors/labelset_training.py`): it writes the media's *primary*
-    vector into the detector-space label-embedding cache and stamps
-    `region=None` even when the element has a region box.  No runtime
-    callers today - fix or remove before wiring it up.
-11. **Two training entry points disagree at 4-5 labels** with
-    safe-thresholds off: `train_and_threshold` runs real cross-calibration,
-    `_train_and_score_xy` hard-codes 0.5.  Same user state, different
-    cutoff depending on route.
-12. **Dataset registry is not multi-process safe**
-    (`vtscore/datasets/registry.py`): in-process lock plus a fixed `.tmp`
-    name; a concurrent CLI autodetect run against the same data dir can
-    silently erase the server's registrations.  Fine under the documented
-    single-worker model; needs flock if that changes.
-13. **`http_archive` cache never invalidates** when the remote archive
+8. **Two training entry points disagree at 4-5 labels** with
+   safe-thresholds off: `train_and_threshold` runs real cross-calibration,
+   `_train_and_score_xy` hard-codes 0.5.  Same user state, different
+   cutoff depending on route.
+9. **Dataset registry is not multi-process safe**
+   (`vtscore/datasets/registry.py`): in-process lock plus a fixed `.tmp`
+   name; a concurrent CLI autodetect run against the same data dir can
+   silently erase the server's registrations.  Fine under the documented
+   single-worker model; needs flock if that changes.
+10. **`http_archive` cache never invalidates** when the remote archive
     changes (fixed collision, not staleness); `extract_archive_cached`'s
     mtime/size keying is the model.
-14. **Streaming exporters use a fixed `.tmp` sibling**, so two concurrent
-    exports to the same path clobber each other's temp file.
-15. **Threshold averaging with the abstain sentinel**: a fold returning
+11. **Threshold averaging with the abstain sentinel**: a fold returning
     `NO_GOOD_THRESHOLD` (2.0) now raises the fold mean, possibly above 1.0
     (= abstain overall).  This is the intended lean but the blend weight is
     crude; revisit if precision-biased small-label behaviour looks off.
-16. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
+12. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
     rather than clean): browse-canvas/minimap coordinate math and rAF
     lifecycles, modal/player component lifecycle sweep, left/right-panel
     virtualization, and a full route-blueprint sweep of
@@ -224,3 +241,13 @@ but deferred as needing a design decision or a larger change.
 - `JobManager.start()` from a different (user, dataset, detector) than the
   parked pending now supersedes it (pollers of the old job id see
   `cancelled`) instead of silently rebinding their job to the new request.
+- Registry `.../load` while a load of the same id is already in flight now
+  returns `{"message": "… load already in progress"}` with the shared task
+  id (attach + poll) instead of spawning a second loader.  The load task id
+  is the full id (`_regload_<id>` / `_detload_<id>`) rather than an 8-char
+  prefix.  A registered dataset/detector context is published only once
+  fully loaded, so it is no longer briefly visible half-populated.
+- Streaming `server_json_file` / `server_csv_file` exports now write to a
+  `<name>.<pid>.<uuid>.tmp` temp sibling instead of a fixed `<name>.tmp`.
+- `update_cache_for_cid` (unused) was removed from
+  `vtscore.detectors.labelset_training` and the `labelset_ops` re-export.
