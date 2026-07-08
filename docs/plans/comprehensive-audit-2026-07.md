@@ -7,7 +7,9 @@ shipped (per-task progress isolation — staging imports + eval jobs); fifth
 follow-up pass shipped (#5, #8 of the renumbered open list — ML threshold
 correctness); sixth follow-up pass shipped (#1 of the then-current open
 list — SSE connection cap); seventh follow-up pass shipped (http_archive
-cache staleness); remaining open follow-ups below.**
+cache staleness); eighth follow-up pass shipped (#1 of the then-current
+open list — region-matrix fallback space mixing); remaining open
+follow-ups below.**
 
 A full-codebase audit focused on interface boundaries: frontend ↔ backend
 API contract, route layer ↔ state system, app tier ↔ `vtscore` library,
@@ -292,6 +294,35 @@ up any of these areas sees the known-weak spots.
   (`test_stale_cache_invalidated_on_signature_mismatch`,
   `test_signature_probe_failure_trusts_existing_cache`).
 
+### Eighth follow-up pass (drained from the open list)
+
+- **Region-matrix fallback space mixing** (was open #1).
+  `embedding/matrix.py:_build_region_arrays` flattens every media's
+  `patch_regions` into one `(R, D)` matrix, giving a region-less media a
+  single fallback row so the segmented max-pool never sees an empty group.
+  That fallback unconditionally read the media's *primary* vector - fine
+  when every media in the dataset carries `patch_regions` (the only
+  reachable case before the v3 trio-embedder work), but on a dataset that
+  mixes patch-capable and patch-less media (a combined dataset, or a media
+  type the patch embedder can't process) the primary can be a different
+  embedder than the one that produced the region rows, silently stacking
+  vectors from two different embedding spaces into one matrix and scoring
+  the region-less media's dot-products meaninglessly.  Added
+  `_patch_embedder_for_region_snap`, which derives the patch-slot embedder
+  name from a media that actually carries `patch_regions` (role-typing its
+  bound embedder names via `derive_binding_from_names`, not just reading the
+  *first* media in the dict, which may itself be the region-less one and
+  never had a patch-embedder vector to role-type from); the fallback row now
+  reads that embedder's vector instead of the primary.  A region-less media
+  with no vector at all under the patch embedder now raises `ValueError`
+  naming the media and embedder (matching this module's existing
+  loud-failure philosophy for missing embeddings) rather than silently
+  substituting the wrong space.  Single-embedder datasets are unaffected:
+  the derived patch embedder there always equals the primary, so the
+  fallback read is byte-for-byte the same as before.  Tests in
+  `tests_lib/detectors/test_region_score_pool.py`
+  (`TestRegionMatrixFallbackSpace`).
+
 ## Open follow-ups
 
 Ordered roughly by severity.  Each was found and verified during the audit
@@ -300,34 +331,29 @@ open items #2, #6, #10, #14 were drained in the second follow-up pass, the
 renumbered #2 "JobManager cancellation advisory" in the third pass, the
 staging + eval progress isolation (renumbered #2, #3) in the fourth, the
 re-renumbered #5/#8 "ML threshold correctness" items in the fifth, the
-re-renumbered #1 "SSE connection cap" in the sixth, and the re-renumbered
-#6 "http_archive cache staleness" in the seventh — see the follow-up-pass
-subsections under What shipped.  The list below is renumbered again after
-those drains.)
+re-renumbered #1 "SSE connection cap" in the sixth, the re-renumbered #6
+"http_archive cache staleness" in the seventh, and the re-renumbered #1
+"region-matrix fallback space mixing" in the eighth — see the
+follow-up-pass subsections under What shipped.  The list below is
+renumbered again after those drains.)
 
-1. **Region-matrix fallback can mix embedding spaces** on a multi-embedder
-   dataset where only some media carry `patch_regions`
-   (`embedding/matrix.py:_build_region_arrays`): region rows are in the
-   patch embedder's space, fallback rows in the primary's.  Needs either an
-   ingest guarantee (all-or-nothing patch_regions per dataset) or space
-   checking here.
-2. **Eval harness fidelity** (`eval/voting_iterations.py`): fold models
+1. **Eval harness fidelity** (`eval/voting_iterations.py`): fold models
    don't force the full-data `hidden_dim` and don't thread the split RNG
    into calibration - so reported eval costs measure a pipeline that differs
    from production in the small-label regime.  (The "production uses 0.5
    below 6 labels" mismatch is now narrower: with safe-thresholds off,
    production cross-calibrates below 6 too — see Fifth follow-up pass.)
-3. **Inclusion slide drops the safe-threshold GMM blend**
+2. **Inclusion slide drops the safe-threshold GMM blend**
    (`state/core.py:recompute_detector_thresholds_for_inclusion` vs
    `training.py`): with safe-thresholds on and 6 ≤ n < 20 labels, sliding
    inclusion to a value and back changes the threshold semantics relative
    to a fresh retrain.  Decide whether the blend applies on slides.
-4. **Dataset registry is not multi-process safe**
+3. **Dataset registry is not multi-process safe**
    (`vtscore/datasets/registry.py`): in-process lock plus a fixed `.tmp`
    name; a concurrent CLI autodetect run against the same data dir can
    silently erase the server's registrations.  Fine under the documented
    single-worker model; needs flock if that changes.
-5. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
+4. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
    rather than clean): browse-canvas/minimap coordinate math and rAF
    lifecycles, modal/player component lifecycle sweep, left/right-panel
    virtualization, and a full route-blueprint sweep of
@@ -389,3 +415,9 @@ those drains.)
   published. A cache built before this change (no recorded signature) or a
   failed probe still trusts the existing cache, so this is additive: no
   previously-cached extraction is invalidated by upgrading alone.
+- A region-less media in a mixed patch/non-patch dataset now has its
+  region-matrix fallback row read from the dataset's patch-slot embedder
+  instead of its primary embedder, and raises `ValueError` if it has no
+  vector under the patch embedder at all.  No effect on any dataset where
+  every media shares one embedder (the only case reachable before the v3
+  trio-embedder work).

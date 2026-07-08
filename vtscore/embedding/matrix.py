@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from vtscore.embedding.media_vectors import media_embedding, primary_embedder_name
+from vtscore.embedding.media_vectors import media_embedder_names, media_embedding, primary_embedder_name
 from vtscore.state.core import _state_lock
 
 if TYPE_CHECKING:
@@ -186,6 +186,28 @@ def invalidate_embedding_matrix(ctx: "DatasetContext") -> None:
         ctx._region_index_per_row = None
 
 
+def _patch_embedder_for_region_snap(snap: dict[int, dict[str, Any]]) -> str | None:
+    """Return the patch-slot embedder name that produced *snap*'s region rows.
+
+    Derived from a media that actually carries ``patch_regions`` (rather than
+    just the first media in the dict, which may be a region-less item that
+    never had a vector for the patch embedder at all - the mixed-media-type
+    case).  That media's own bound embedder names are role-typed via
+    :func:`~vtscore.embedding.binding.derive_binding_from_names`; the patch
+    slot is the space the region vectors live in.  Returns ``None`` when no
+    media in *snap* has regions, or when the region-bearing media's embedders
+    don't role-type to a patch slot (unexpected; the fallback path then keeps
+    the pre-fix behaviour of reading the primary vector).
+    """
+    from vtscore.embedding.binding import derive_binding_from_names  # noqa: PLC0415
+
+    for media in snap.values():
+        if media.get("patch_regions"):
+            _text, patch, _structural = derive_binding_from_names(media_embedder_names(media))
+            return patch
+    return None
+
+
 def _build_region_arrays(
     snap: dict,
     sorted_ids: list[int],
@@ -201,10 +223,21 @@ def _build_region_arrays(
       media's ``patch_regions`` list (the winning value surfaces as the UI's
       best-match overlay).
 
-    Media that expose no ``patch_regions`` contribute a single row from their
-    image-level ``embedding`` (region index 0), so every media has at least
-    one row - keeping the downstream segmented max-pool free of empty groups.
+    Media that expose no ``patch_regions`` contribute a single row (region
+    index 0) so every media has at least one row - keeping the downstream
+    segmented max-pool free of empty groups.  That fallback row is read from
+    the *patch-slot* embedder shared by the rest of the snapshot's region rows
+    (:func:`_patch_embedder_for_region_snap`), not unconditionally the primary
+    vector: on a dataset that mixes patch-capable and patch-less media (e.g. a
+    combined dataset, or a media type the patch embedder can't process), the
+    primary can be a different embedder than the one that produced the region
+    vectors, and stacking its vector alongside them would silently mix
+    embedding spaces in one matrix.  If the region-less media has no vector
+    under that patch embedder either, :func:`_require_embedding` raises rather
+    than falling back further - a loud, locatable failure instead of a
+    silently meaningless score.
     """
+    patch_embedder_name = _patch_embedder_for_region_snap(snap)
     flat_vecs: list[np.ndarray] = []
     media_index_per_row: list[int] = []
     region_index_per_row: list[int] = []
@@ -217,7 +250,7 @@ def _build_region_arrays(
                 media_index_per_row.append(mi)
                 region_index_per_row.append(ri)
         else:
-            flat_vecs.append(np.asarray(_require_embedding(cid, media), dtype=np.float32))
+            flat_vecs.append(np.asarray(_require_embedding(cid, media, patch_embedder_name), dtype=np.float32))
             media_index_per_row.append(mi)
             region_index_per_row.append(0)
     region_matrix = np.stack(flat_vecs).astype(np.float32, copy=False)
