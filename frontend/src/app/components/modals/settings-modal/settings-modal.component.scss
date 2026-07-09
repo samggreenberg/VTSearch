@@ -212,7 +212,7 @@
   word-break: break-word;
 
   &--mono {
-    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+    font-family: var(--font-mono);
     font-size: var(--font-sm);
     word-break: break-all;
   }
@@ -272,7 +272,7 @@
 .settings-version {
   margin-right: auto;
   font-size: var(--font-xs);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   color: var(--text-secondary);
   user-select: text;
 }
@@ -297,7 +297,7 @@
   max-width: 60ch;
 
   code {
-    font-family: var(--font-mono, monospace);
+    font-family: var(--font-mono);
     font-size: var(--font-xs);
   }
 }
@@ -308,6 +308,6 @@
   gap: var(--space-sm);
   margin-bottom: var(--space-sm);
 
-  &__icon { color: var(--success-text, var(--text-primary)); flex-shrink: 0; }
+  &__icon { color: var(--color-good); flex-shrink: 0; }
   &__label { font-size: var(--font-sm); color: var(--text-primary); }
 }
