@@ -25,6 +25,7 @@ import { ExportersApiService } from '../../../services/exporters-api.service';
 import { LabelSessionService } from '../../../services/label-session.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import type { LabelFilter } from '../../../services/sorting-api.service';
+import { ToastService } from '../../../services/toast.service';
 import { ImporterField } from '../../../models/api.models';
 import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 import type { LabeledElement } from '../../../generated/api-client/models/labeled-element';
@@ -68,6 +69,7 @@ export class ExportModalComponent implements OnInit {
   private readonly sortingApi = inject(SortingApiService);
   private readonly activeContext = inject(ActiveContextService);
   private readonly datasetState = inject(DatasetStateService);
+  private readonly toast = inject(ToastService);
 
   // Two eager reads (dataset status + exporter list) load on creation; the
   // labels read is input-derived, so it waits for `ngOnInit` to set
@@ -428,7 +430,8 @@ export class ExportModalComponent implements OnInit {
 
   exportLabelsWith(exporter: ExporterEntry, fieldValues: Record<string, string>): void {
     const exporterLabel = exporter.display_name || exporter.name;
-    this.status.set(`Exporting ${this.filteredLabels.length.toLocaleString()} labels to ${exporterLabel}…`);
+    const labelCount = this.filteredLabels.length;
+    this.status.set(`Exporting ${labelCount.toLocaleString()} labels to ${exporterLabel}…`);
     this.actionError.set('');
     this.submitting.set(true);
 
@@ -447,6 +450,14 @@ export class ExportModalComponent implements OnInit {
           this.status.set('Labels exported.');
           this.submitting.set(false);
           this.selectedExporter = null;
+          // The parent closes the modal on `exported`, so the inline status
+          // above is never seen. Fire a toast that outlives the modal so the
+          // user gets confirmation the export actually succeeded (issue #2217).
+          this.toast.success({
+            message: `Exported ${labelCount.toLocaleString()} label${labelCount === 1 ? '' : 's'} to ${exporterLabel}`,
+            detail: fieldValues['filepath'] ? `Destination: ${fieldValues['filepath']}` : undefined,
+            dedupKey: 'export-labels-success',
+          });
           this.exported.emit();
         },
         error: () => {

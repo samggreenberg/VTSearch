@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ExportModalComponent } from './export-modal.component';
+import { ToastService } from '../../../services/toast.service';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleResource } from '../../../testing/settle-resource';
 
@@ -99,6 +100,17 @@ describe('ExportModalComponent', () => {
     component.startExporter(mockExporters[0] as never);
     httpMock.expectOne('/api/exporters/export').flush({ success: true });
     expect(component.exported.emit).toHaveBeenCalled();
+  });
+
+  it('fires a success toast that outlives the closing modal', async () => {
+    await flushInit();
+    const toast = TestBed.inject(ToastService);
+    const successSpy = vi.spyOn(toast, 'success');
+    component.labelFilter = 'good'; // two matching labels in the fixture
+    component.startExporter(mockExporters[0] as never);
+    httpMock.expectOne('/api/exporters/export').flush({ success: true });
+    expect(successSpy).toHaveBeenCalledTimes(1);
+    expect(successSpy.mock.calls[0][0].message).toBe('Exported 2 labels to Server JSON');
   });
 
   it('emits closed on close', async () => {
