@@ -6,8 +6,16 @@ Near-duplicates are items that are the *same content* under a different encoding
 
 ## Open follow-ups
 
-- **Audio near-dupe** via Chromaprint/AcoustID (or constellation hashing).
-  New external dep; not in v1.
+- **Audio near-dupe** via constellation hashing (Shazam-style STFT peak-picking
+  + local hash pairs), built on `librosa` (already a dependency) — no new
+  external dep. **Do not use Chromaprint/AcoustID**: `pyacoustid` wraps a
+  native C++ library (`fpcalc`/`libchromaprint`, LGPL-2.1), not a pure-Python
+  wheel, which breaks the pip-install-and-go story and would need
+  platform-specific binaries in `scripts/install.sh` and test environments.
+  It also produces variable-length fingerprints rather than a fixed-width
+  hash, so it wouldn't plug into the existing Hamming-distance +
+  banding/DSU grouping in `near_dupes.py`; a constellation-hash comparison
+  path would need its own matching logic regardless. Not in v1.
 - **Video near-dupe** via TMK+PDQF or per-keyframe pHash sequences. New dep.
 - **Cluster-diameter cap** if transitive drift proves a problem in practice.
   *Context:* "pHashes are close" is not transitive (A≈B, B≈C, but A≉C). v1 relies
