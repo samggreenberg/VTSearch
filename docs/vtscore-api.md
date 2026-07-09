@@ -823,8 +823,9 @@ inherently a web-app affordance.
 
 ```python
 class DatasetContext:
-    """Per-dataset state: medias dict, diversity tree, display name, cached embedding
-    matrix. Mutable, RLock-protected."""
+    """Per-dataset state: medias (a MediasDict that bumps media_revision on
+    mutation), diversity tree, display name, cached embedding matrix keyed on
+    media_revision. Mutable, RLock-protected."""
 
 class DetectorContext:
     """Per-detector state: votes, labelset, label_embeddings cache, click times,
