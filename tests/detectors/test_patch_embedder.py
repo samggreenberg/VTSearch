@@ -2078,8 +2078,6 @@ class TestBagAwareCalibration:
     """
 
     def test_grouped_calibration_keeps_bags_together_and_maxpools(self):
-        import torch.nn as nn
-
         from vtscore.training.thresholds import compute_fold_orderings
 
         rng = np.random.default_rng(0)
