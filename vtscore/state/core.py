@@ -1074,6 +1074,22 @@ def recompute_detector_thresholds_for_inclusion(inclusion_value: int) -> None:
     scores.  Detectors with no cached fold orderings yet are left untouched;
     the next training pass computes the threshold under the new inclusion.
     See docs/plans/find-verification-workflow.md.
+
+    **Safe-threshold blend is deliberately NOT reapplied here.**  With
+    safe-thresholds on and 6 <= n < 20 labels, a *fresh* retrain stores the
+    cross-calibration cutoff blended with a GMM cutoff (see
+    :func:`vtscore.training.thresholds.calculate_safe_threshold`'s linear ramp).
+    The fold-ordering cache holds only the raw cross-calibration orderings - not
+    the GMM component - so a slide re-derives the **raw** cross-calibration
+    aggregate and drops the blend.  This is intentional (comprehensive-audit-
+    2026-07 open follow-up #1, resolved "skip blend on slides"): the slide is a
+    cheap re-threshold over cached orderings, not a re-blend, so the caller need
+    not carry the extra GMM/label-count state a faithful re-blend would require.
+    Consequences: below the ramp floor (n < 6) the cache is cleared and the
+    slide is a no-op (threshold stays the pure-GMM value), and at n >= 20 the
+    blend is already pure cross-calibration so the slide matches a fresh retrain
+    exactly; only the 6..19 window diverges, trading a small threshold shift on
+    the first slide for a stateless recompute.
     """
     from vtscore.training.thresholds import threshold_from_fold_orderings
 
