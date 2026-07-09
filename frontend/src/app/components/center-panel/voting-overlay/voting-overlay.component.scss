@@ -1,5 +1,6 @@
-// LAYOUT INTENT: The voting overlay must not shrink; it stays pinned at the
-// bottom of the center panel. Do NOT remove flex-shrink: 0 from :host.
+// LAYOUT INTENT: The voting overlay must not shrink; it stays near the bottom
+// of the center panel, just above the docked metadata tray. Do NOT remove
+// flex-shrink: 0 from :host.
 :host {
   flex-shrink: 0;
 }

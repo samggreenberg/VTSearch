@@ -6,8 +6,12 @@
 
 // LAYOUT INTENT: When media is selected, the layout is a flex column:
 //   1. Media viewer (flex: 1, grows to fill all remaining space)
-//   2. Metadata grid (flex-shrink: 0, hugs the voting buttons)
-//   3. Voting buttons (flex-shrink: 0, pinned to bottom)
+//   2. Voting buttons (flex-shrink: 0)
+//   3. Metadata tray (flex-shrink: 0, docked at the very bottom)
+// The metadata tray sits BELOW the voting buttons so that when metadata is
+// collapsed the "Metadata" toggle tucks under the Good/Bad buttons instead of
+// leaving a full-width divider row between the media and the votes. When
+// expanded, the grid opens at the bottom and the media viewer shrinks to fit.
 // Do NOT add justify-content: center here; it adds wasted space above/below
 // the media. The .empty state is the only case that needs centering.
 .center-panel {
@@ -229,8 +233,8 @@
 }
 
 // Sticky-armed-state hint banner for the bad-vote-with-box discard flow
-// (v2 patch-embedder plan). Sits between the metadata tray and the voting
-// overlay so it's near the vote buttons without overlapping the image.
+// (v2 patch-embedder plan). Sits just above the voting overlay so it's near
+// the vote buttons without overlapping the image.
 .bad-confirm-hint {
   flex-shrink: 0;
   width: 100%;
