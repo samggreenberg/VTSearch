@@ -115,6 +115,7 @@ def train_model(
     input_dim: int,
     seed: int = 42,
     hidden_dim: int | None = None,
+    sample_weights: torch.Tensor | None = None,
 ) -> nn.Sequential:
     """Train a small MLP classifier and return the trained model.
 
@@ -123,11 +124,17 @@ def train_model(
     provided via ``hidden_dim``.  Dropout is applied during training to
     reduce overfitting.
 
-    Trains using class-balanced binary cross-entropy loss with logits
-    (``BCEWithLogitsLoss``).  Inclusion does **not** enter training: it is a
-    pure threshold/cutoff knob applied later in :func:`find_optimal_threshold`,
-    so the trained model (and therefore every item's score) is independent of
-    inclusion.  See docs/plans/find-verification-workflow.md.
+    Trains using binary cross-entropy loss with logits (``BCEWithLogitsLoss``).
+    By default each sample is weighted by inverse class frequency (balanced
+    BCE).  When *sample_weights* is provided (one weight per row of
+    *X_train*), those weights are used verbatim instead - this is how the
+    region-flooding path expresses **per-bag** balancing: a Bad image's many
+    correlated region negatives share one image's worth of weight, so they
+    don't count as many independent negatives.  Inclusion does **not** enter
+    training: it is a pure threshold/cutoff knob applied later in
+    :func:`find_optimal_threshold`, so the trained model (and therefore every
+    item's score) is independent of inclusion.  See
+    docs/plans/find-verification-workflow.md.
 
     A local ``torch.Generator`` seeded with *seed* is used for model-weight
     initialisation, and ``torch.random.fork_rng`` isolates the global RNG
@@ -143,6 +150,10 @@ def train_model(
         hidden_dim: Number of neurons in the hidden layer.  When ``None``
             (default) the width is chosen automatically via
             :func:`_auto_hidden_dim` based on the training-set size.
+        sample_weights: Optional per-row loss weights of shape ``(N,)`` or
+            ``(N, 1)``.  When ``None`` (default) inverse-class-frequency
+            weights are computed internally.  When provided they replace the
+            frequency weights entirely (the caller owns class balance).
 
     Returns:
         A trained ``nn.Sequential`` model in eval mode.
@@ -188,13 +199,23 @@ def train_model(
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
 
-    # Balanced class weights - the single-class case was rejected above.
-    # Inclusion is deliberately absent here (it's applied later as a pure
-    # threshold knob in find_optimal_threshold), so the model is inclusion-
-    # independent and its scores can be frozen across cutoff slides.
-    weight_true = num_false / num_true
-    weight_false = 1.0
-    weights = torch.where(y_train == 1, weight_true, weight_false).squeeze().to(device)
+    # Sample weights: caller-supplied (per-bag flooding balance) or the default
+    # inverse-class-frequency balance.  Inclusion is deliberately absent here
+    # (it's applied later as a pure threshold knob in find_optimal_threshold),
+    # so the model is inclusion-independent and its scores can be frozen across
+    # cutoff slides.
+    if sample_weights is not None:
+        weights = sample_weights.reshape(-1).to(dtype=torch.float32, device=device)
+        if weights.numel() != len(y_train):
+            raise ValueError(
+                f"sample_weights length {weights.numel()} does not match "
+                f"training-set size {len(y_train)}"
+            )
+    else:
+        # Balanced class weights - the single-class case was rejected above.
+        weight_true = num_false / num_true
+        weight_false = 1.0
+        weights = torch.where(y_train == 1, weight_true, weight_false).squeeze().to(device)
     loss_fn = nn.BCEWithLogitsLoss(reduction="none")
 
     # Fork the global RNG so the Dropout seed is isolated per call -
