@@ -223,6 +223,107 @@ class TestLegacyMigration:
             settings_mod.reset()
 
 
+class TestMigrationCrossProcessLock:
+    """H28 residual follow-up: the one-shot legacy migration must run its two
+    ``_atomic_write`` calls under the cross-process ``file_lock`` (previously
+    it wrote bare), and must migrate exactly once even under concurrent first
+    loads."""
+
+    def _seed_legacy(self, tmp_path, monkeypatch):
+        legacy = {
+            "saved_datasets_dir": "/tmp/legacy",  # server tier
+            "volume": 0.33,  # user tier
+            "theme": "light",  # user tier
+        }
+        server_path = tmp_path / "settings.json"
+        server_path.write_text(json.dumps(legacy))
+        monkeypatch.setattr(settings_mod, "SETTINGS_PATH", server_path)
+        settings_mod.set_user_data_dir_override(tmp_path / "users")
+        settings_mod.reset()
+        return server_path
+
+    def test_migration_writes_under_file_lock(self, tmp_path, monkeypatch):
+        """Both the default-user write and the server rewrite happen inside a
+        ``file_lock`` for their target file."""
+        import contextlib
+        from pathlib import Path
+
+        server_path = self._seed_legacy(tmp_path, monkeypatch)
+
+        locked: list[str] = []
+        real_file_lock = settings_store_mod.file_lock
+
+        @contextlib.contextmanager
+        def recording_file_lock(path):
+            locked.append(Path(path).name)
+            with real_file_lock(path):
+                yield
+
+        monkeypatch.setattr(settings_store_mod, "file_lock", recording_file_lock)
+        try:
+            # Triggers ensure_server_loaded -> load+migrate.
+            assert settings_mod.get_volume() == 0.33
+            # Server file locked for the load+migrate; default user's file
+            # locked for the migration write.
+            assert "settings.json" in locked
+            assert "user_settings.json" in locked
+            # Migration still produced the correct split.
+            remaining = json.loads(server_path.read_text())
+            assert "volume" not in remaining
+            assert remaining["saved_datasets_dir"] == "/tmp/legacy"
+        finally:
+            settings_mod.set_user_data_dir_override(None)
+            settings_mod.reset()
+
+    def test_concurrent_first_load_migrates_once(self, tmp_path, monkeypatch):
+        """Four threads racing the first load must not double-migrate or
+        deadlock; the migration body runs exactly once."""
+        import threading
+
+        server_path = self._seed_legacy(tmp_path, monkeypatch)
+
+        calls = {"n": 0}
+        real = settings_store_mod.UserSettingsStore._maybe_migrate_legacy_settings
+
+        def counting(self, cache, path):
+            calls["n"] += 1
+            return real(self, cache, path)
+
+        monkeypatch.setattr(
+            settings_store_mod.UserSettingsStore, "_maybe_migrate_legacy_settings", counting
+        )
+        try:
+            barrier = threading.Barrier(4)
+            results: list[float] = []
+            errors: list[Exception] = []
+
+            def worker():
+                try:
+                    barrier.wait(timeout=5)
+                    results.append(settings_mod.get_volume())
+                except Exception as exc:  # pragma: no cover - surfaced below
+                    errors.append(exc)
+
+            threads = [threading.Thread(target=worker) for _ in range(4)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=10)
+
+            assert not errors, f"workers raised: {errors}"
+            for t in threads:
+                assert not t.is_alive(), "thread hung (likely deadlock)"
+            assert results == [0.33] * 4
+            # The first thread to win the server file lock migrates; the rest
+            # find the cache already published and skip the body entirely.
+            assert calls["n"] == 1
+            remaining = json.loads(server_path.read_text())
+            assert "volume" not in remaining
+        finally:
+            settings_mod.set_user_data_dir_override(None)
+            settings_mod.reset()
+
+
 class TestBackgroundThreadPropagation:
     def test_thread_local_user_routes_writes(self, isolated_settings):
         """A background thread's settings writes resolve to its thread-local user."""

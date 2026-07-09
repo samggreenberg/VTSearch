@@ -46,18 +46,27 @@ the only remaining work.
   subclass that does so transparently) would neutralise the whole category and
   let the matrix accessor compare a single int instead of two id lists.
 
-- **H28 residual multi-process items** (from the per-user settings RMW fix):
-  - `_synced_users` is still process-local, so on a fresh container every worker
-    independently runs sync-from-source for each user once. With the RMW fix
-    this is no longer corrupting (just duplicate I/O against the source) but
-    worth de-duplicating with an mtime-marker if it shows up in profiles.
-  - The legacy-settings migration in `_maybe_migrate_legacy_settings_locked`
-    still calls `_atomic_write` without the cross-process lock. It is a one-shot
-    startup step so the race window is small, but for full correctness it should
-    also use `_mutate_server_locked`.
-  - Windows has no `fcntl`, so the cross-process lock silently degrades to the
-    in-process lock only. Not a regression (Linux-only Docker images), but worth
-    a note if a contributor ever tests on Windows.
+- **H28 residual multi-process items** (from the per-user settings RMW fix) —
+  **all three resolved.**
+  - ~~Duplicate cross-worker sync-from-source I/O.~~ **Shipped.** A best-effort
+    per-user on-disk marker (`<user_settings.json>.syncmark`, written by
+    `_write_sync_marker`) records the source `peek_version` last applied. A
+    fresh worker whose first read finds the source unchanged at that version
+    adopts it and skips the duplicate `source.load()` — the values are already
+    on disk (`_adopt_sync_marker_if_current`; `test_sync_sources.py::TestSyncDedupMarker`).
+  - ~~Legacy-settings migration wrote without the cross-process lock.~~
+    **Shipped.** `ensure_server_loaded` now does its first load + one-shot
+    migration inside `_load_and_migrate_server` under the server `file_lock`,
+    and `_maybe_migrate_legacy_settings` takes the default user's `file_lock`
+    around its write — so both `_atomic_write` calls are cross-process safe.
+    The migration was hoisted out of `settings_lock` (callers invoke
+    `ensure_server_loaded` outside the lock) to keep the canonical
+    file→settings order (`test_per_user_settings.py::TestMigrationCrossProcessLock`).
+  - ~~Windows `fcntl` degradation was untested.~~ **Covered.** The fallback to
+    the in-process lock is now exercised by
+    `test_settings.py::TestFileLockWithoutFcntl`. Still Linux-only in
+    production; the fallback only matters for a Windows contributor running
+    multiple processes against one settings file (which they shouldn't).
 
 ---
 
@@ -110,7 +119,7 @@ the only remaining work.
 - **H25.** Active dataset pair set before load completes — split `ActiveContextService` into intent + active layers (commit `9470cf1a`, PR #1563; `context-switch.service.spec.ts`).
 - **H26.** `recordVote` ran before the HTTP vote returned — `submitToggleVoteAndRecord` pushes the undo entry only inside the success `tap` (`vote-state.service.spec.ts`).
 - **H27.** Binary media endpoints bypass `activeContextInterceptor` — **not a bug** (functional interceptors apply to every `HttpClient` call); removed four dead methods.
-- **H28.** Per-user cache process-local; concurrent worker writes lost updates — cross-process `flock` RMW via `_mutate_*_locked` (`test_settings.py::TestConcurrentWrites`). Residual items in Open follow-ups.
+- **H28.** Per-user cache process-local; concurrent worker writes lost updates — cross-process `flock` RMW via `_mutate_*_locked` (`test_settings.py::TestConcurrentWrites`). The three residual multi-process items (sync dedup marker, migration under the file lock, Windows fallback coverage) are now also resolved — see Open follow-ups.
 - **H29.** `_save_user` held `_settings_lock` across sync I/O — I/O moved under the per-file lock only (`test_thread_safety.py::TestSlowSettingsIODoesNotBlockOthers`).
 - **H30.** Detector save's `os.replace` failure left in-memory state "saved" — transactional snapshot/restore in `apply_and_retrain` + abort-500 at the unprotected call sites (`test_workflow.py`, `test_api_contracts.py`, `test_detectors.py`).
 - **H31.** Partial label-import had no rollback — per-entry try/except surfacing `failed` / `failed_count`.
