@@ -124,8 +124,7 @@ def main() -> int:
     by_image = find_matches(extract, args.match, q_name, q_syn)
     if not by_image:
         print(
-            f"no {args.dataset} images contain '{args.category}'. "
-            f"Run with --list-categories to see available names.",
+            f"no {args.dataset} images contain '{args.category}'. Run with --list-categories to see available names.",
             flush=True,
         )
         return 0

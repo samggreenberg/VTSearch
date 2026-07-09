@@ -20,6 +20,12 @@ annotation count K. Design + rationale: `docs/plans/` (small-object sweep).
   K=0 is the zero-shot text point.
 - DINOv2/v3 (`dinov2`/`dinov3` → patch embedders): MLP head only, and the only
   embedders valid for the `hac` proposal.
+- **`--neg-regions`** (optional, default off): train the MLP's negatives on proposed-region
+  crops of negative images instead of whole-image vectors. For crop/HAC proposals this
+  matches the train and test distributions (test scores max-pool over region crops), which
+  sharply cuts max-pool false positives — e.g. siglip/sliding FPR 0.72→0.11 in the pilot
+  (at the cost of higher FNR). No-op for `whole`. `viz.py --kind predict` takes the same flag,
+  so overlays match a `--neg-regions` run.
 
 ## Run (pilot: stop sign on COCO, single GPU)
 One command — add `--viz` and the sweep also emits all the figures at the end:
@@ -38,11 +44,12 @@ for a later SLURM array; per-image embeddings cache to `--cache-dir` (default
 to avoid re-embedding.
 
 Outputs (under `--out-dir`, gitignored):
-- `results.jsonl` / `results.csv` — one row per config × K × seed (`cost`, `fpr`,
-  `fnr`, `oracle_cost`, `calib_mode`, `negatives_exhaustive`, …)
+- `results.jsonl` / `results.csv` — one row per config × K × seed (`cost`, `fpr`, `fnr`,
+  `f1`, `mean_iou`, `corloc`, `oracle_cost`, `calib_mode`, `negatives_exhaustive`, …)
 - `<ds>_<class>_split.json` — the train/test split image ids (always written)
-- with `--viz`: `plots/` (cost/fpr/fnr curves + variance bands), `splits_gallery/`
-  (bucket montages with GT boxes), `predictions/` (per-config MLP TP/FP/FN/TN overlays)
+- with `--viz`: `plots/` (cost/fpr/fnr/f1/mean_iou curves + variance bands, and an
+  `time.png` total-time stacked bar), `time.json`, `splits_gallery/` (bucket montages
+  with GT boxes), `predictions/` (per-config MLP TP/FP/FN/TN overlays)
 
 ## Metric / threshold
 `cost = w_fpr·FPR + w_fnr·FNR` (rates), weights from `--inclusion` (0 → FPR+FNR).
@@ -52,9 +59,15 @@ blend (`--safe-thresholds`, on by default) — the `calib_mode` column
 (`fallback|gmm|blend|xcal`) records which regime each point used.
 
 ## Plots
-`plots.py` writes one figure per metric per (dataset, class): `--metrics cost,fpr,fnr`
-(default all three) → `<ds>_<class>_{cost,fpr,fnr}_vs_k.png`, so you can see whether
-error is misses (FNR) vs false alarms (FPR), not just the combined cost. Each mean curve
+`plots.py` writes one figure per metric per (dataset, class): `--metrics` defaults to
+`cost,fpr,fnr,f1,mean_iou` (also available: `corloc`) → `<ds>_<class>_<metric>_vs_k.png`.
+`f1` is at the cross-calibrated threshold; `mean_iou` is the top-scoring region's box vs the
+best GT box, averaged over test positives (`whole` → ~flat/low by construction); `corloc` =
+fraction with IoU≥0.5. So you see misses (FNR) vs false alarms (FPR), detection quality (F1),
+and localization (IoU) — not just the combined cost. **Total time** is a separate per-config
+stacked bar (`inference_time.png`, seconds): embed+propose (a cache-miss cost, 0 s on a
+fully-cached run) plus the MLP calibrate+fit+score summed over all K×seeds. Because the MLP
+work always runs, this chart has data even on a fully-cached run. Each mean curve
 gets a **seed-variance band** (`--band-kind minmax|std|none`, default minmax) showing the
 spread across `--seeds` — at small positive counts this band is large (calibration noise),
 so treat close mean curves as not significant. Overlays are off by default: `--show-oracle`
@@ -94,10 +107,11 @@ the data is always in `results.jsonl` (one row per seed).
 
 ## Matthew Run:
 ```bash
-srun --partition=gpu --gres=gpu:l40s:1 --cpus-per-task=8 --mem=46G --time=4:00:00 --pty bash -l
+srun --partition=gpu --gres=gpu:l40s:1 --cpus-per-task=8 --mem=46G --time=8:00:00 --pty bash -l
 
 python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/sod-sweep-coco-stopsign-test4/cache --k-values 0,1,2,3,4,5,8,16,32 --out-dir docs/experiments/sod-sweep-coco-stopsign-testx
 
+python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/cache --embedders clip,siglip,siglip2 --proposals whole,sliding --k-values 0,1,2,3,4,5,8,12,16,24,32 --out-dir docs/experiments/sod-sweep-coco-stopsign-test5 --viz # --neg-regions
 
-python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/cache --embedders clip,siglip,siglip2 --proposals whole,sliding --k-values 0,1,2,3,4,5,8,12,16,24,32 --out-dir docs/experiments/sod-sweep-coco-stopsign-test5 --viz 
+python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/cache --embedders dinov2,dinov3 --proposals hac --hac-alpha 0.3,0.5,0.7 --k-values 0,1,2,3,4,5,8,12,16,24,32 --out-dir docs/experiments/sod-sweep-coco-stopsign-dinov2-dinov3-hac-alphas-3-5-7 --viz
 ```

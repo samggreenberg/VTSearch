@@ -19,7 +19,7 @@ Usage::
 
     python scripts/show_vg_image.py 2357741 --out-dir /tmp/vg_show
     python scripts/show_vg_image.py 1 2 2357741 --out-dir ./vg_show --max-boxes 20
-    
+
 matthew Usage::
     cd /exp/mlucio/projects/VTSearch
     source .venv/bin/activate

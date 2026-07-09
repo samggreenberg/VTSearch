@@ -26,13 +26,14 @@ text-capable embedders (baseline). ``K == 0`` is the zero-shot cosine point
 
 from __future__ import annotations
 
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
 
-from vtscore.eval.error_metrics import min_weighted_cost, weighted_error
-from vtscore.eval.scoring_heads import CosineHead, MLPHead, max_pool_over_images
+from vtscore.eval.error_metrics import f1_at, min_weighted_cost, weighted_error
+from vtscore.eval.scoring_heads import CosineHead, MLPHead, max_pool_with_argmax
 from vtscore.eval.xcal import cross_calibrated_threshold
 
 
@@ -46,6 +47,10 @@ class RegionCurveInputs:
     test_labels: Sequence[int]  # 0/1 aligned with test_region_mats
     input_dim: int
     meta: dict = field(default_factory=dict)  # carried onto every result row
+    # Optional, for localization (IoU): per test image, the region boxes aligned
+    # with test_region_mats, and the GT boxes for the class ([] for negatives).
+    test_region_boxes: list[np.ndarray] = field(default_factory=list)
+    test_gt_boxes: list[list] = field(default_factory=list)
 
 
 def _calib_mode(k: int, n_neg: int, *, safe_thresholds: bool) -> str:
@@ -60,7 +65,9 @@ def _calib_mode(k: int, n_neg: int, *, safe_thresholds: bool) -> str:
     return "xcal"
 
 
-def _oracle_operating_point(scores: Sequence[float] | np.ndarray, labels: Sequence[int], inclusion: int) -> tuple[float, dict]:
+def _oracle_operating_point(
+    scores: Sequence[float] | np.ndarray, labels: Sequence[int], inclusion: int
+) -> tuple[float, dict]:
     """Best-case: threshold that minimizes weighted error on the test set itself."""
     from vtscore.training.thresholds import find_optimal_threshold
 
@@ -68,6 +75,34 @@ def _oracle_operating_point(scores: Sequence[float] | np.ndarray, labels: Sequen
     if not np.isfinite(thr):
         thr = 0.5
     return float(thr), weighted_error(scores, [float(v) for v in labels], thr, inclusion)
+
+
+def _iou_metrics(inputs: RegionCurveInputs, argmax: np.ndarray) -> tuple[float, float]:
+    """Mean IoU (+ CorLoc@0.5) of the top-scoring region box vs best GT box.
+
+    Averaged over all test positives that have a GT box and a valid winning
+    region. Returns (NaN, NaN) when boxes weren't provided or no positive
+    qualifies. The ``whole`` proposal (one full-frame region) scores ~0 by
+    construction — informative, not a bug.
+    """
+    if not inputs.test_region_boxes or not inputs.test_gt_boxes:
+        return float("nan"), float("nan")
+    from vtscore.eval.metrics import box_iou
+
+    ious: list[float] = []
+    for i, lbl in enumerate(inputs.test_labels):
+        if int(lbl) != 1:
+            continue
+        gts = inputs.test_gt_boxes[i]
+        boxes = inputs.test_region_boxes[i]
+        ai = int(argmax[i])
+        if not gts or ai < 0 or ai >= len(boxes):
+            continue
+        pred = tuple(float(v) for v in boxes[ai])
+        ious.append(max(box_iou(pred, tuple(float(v) for v in g)) for g in gts))
+    if not ious:
+        return float("nan"), float("nan")
+    return round(sum(ious) / len(ious), 6), round(sum(v >= 0.5 for v in ious) / len(ious), 6)
 
 
 def _evaluate_one(
@@ -92,9 +127,11 @@ def _evaluate_one(
         if head_kind != "cosine" or query_vec is None:
             return None  # only the text/cosine head has a K=0 point
         head = CosineHead(query_vec)
-        scores = max_pool_over_images(head.score_rows, inputs.test_region_mats)
+        scores, argmax = max_pool_with_argmax(head.score_rows, inputs.test_region_mats)
         thr, err = _oracle_operating_point(scores, test_labels, inclusion)
-        return _row(inputs, head_kind, 0, 0, seed, thr, err, err["cost"], "none_k0")
+        f1 = f1_at(scores, test_labels, thr)
+        mean_iou, corloc = _iou_metrics(inputs, argmax)
+        return _row(inputs, head_kind, 0, 0, seed, thr, err, err["cost"], "none_k0", f1, mean_iou, corloc)
 
     P = inputs.pos_exemplars.shape[0]
     if k > P:
@@ -134,9 +171,11 @@ def _evaluate_one(
         train_scores = np.asarray(head.score_rows(x_train), dtype=np.float64).tolist()
         threshold = calculate_safe_threshold(xcal_thr, train_scores, n_labels)
 
-    scores = max_pool_over_images(head.score_rows, inputs.test_region_mats)
+    scores, argmax = max_pool_with_argmax(head.score_rows, inputs.test_region_mats)
     err = weighted_error(scores, [float(v) for v in test_labels], threshold, inclusion)
     oracle = min_weighted_cost(scores, [float(v) for v in test_labels], inclusion)
+    f1 = f1_at(scores, test_labels, threshold)
+    mean_iou, corloc = _iou_metrics(inputs, argmax)
     return _row(
         inputs,
         head_kind,
@@ -147,10 +186,13 @@ def _evaluate_one(
         err,
         oracle,
         _calib_mode(k, n_neg, safe_thresholds=safe_thresholds),
+        f1,
+        mean_iou,
+        corloc,
     )
 
 
-def _row(inputs, head_kind, k, n_neg, seed, threshold, err, oracle, calib_mode) -> dict:
+def _row(inputs, head_kind, k, n_neg, seed, threshold, err, oracle, calib_mode, f1, mean_iou, corloc) -> dict:
     return {
         **inputs.meta,
         "head": head_kind,
@@ -161,6 +203,9 @@ def _row(inputs, head_kind, k, n_neg, seed, threshold, err, oracle, calib_mode) 
         "cost": err["cost"],
         "fpr": err["fpr"],
         "fnr": err["fnr"],
+        "f1": f1,
+        "mean_iou": mean_iou,
+        "corloc": corloc,
         "oracle_cost": float(oracle),
         "threshold": round(float(threshold), 6),
         "calib_mode": calib_mode,
@@ -194,6 +239,7 @@ def evaluate_region_curve(
     rows: list[dict] = []
     for k in k_values:
         for seed in seeds:
+            t0 = time.perf_counter()
             row = _evaluate_one(
                 inputs,
                 head_kind,
@@ -207,5 +253,9 @@ def evaluate_region_curve(
                 query_vec=query_vec,
             )
             if row is not None:
+                # Per-cell compute time (calibration + fit + scoring); embeddings are
+                # already materialized upstream, so this is the non-cached work that
+                # runs on every sweep — reported as the MLP component of "total time".
+                row["compute_ms"] = round((time.perf_counter() - t0) * 1000.0, 3)
                 rows.append(row)
     return rows
