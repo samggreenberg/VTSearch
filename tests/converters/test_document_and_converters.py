@@ -461,6 +461,28 @@ class TestVideo2ImageMediaConverter:
         results = c.convert_normalized(media, {"n_clips": "4", "seconds_per_frame": ""})
         assert len(results) == 4
 
+    def test_source_spec_parser_accepts_blank_seconds_per_frame(self):
+        """Regression for #2245: the multi-media source-spec parser must not
+        reject a blank optional ``seconds_per_frame`` as "Not a valid number".
+
+        The frontend submits ``seconds_per_frame: ""`` when the user leaves
+        the field empty in favour of "Frames per video"; that empty string
+        must be scrubbed before marshmallow validation rather than reaching
+        the Float loader."""
+        from vtscore.datasets.importers.base.specs import _parse_multi_media_specs
+
+        raw = [
+            {
+                "source_type": "video",
+                "converter": "video2image",
+                "params": {"n_clips": "10", "seconds_per_frame": ""},
+            }
+        ]
+        # Must not raise; the blank field is treated as "unset".
+        specs = _parse_multi_media_specs(raw, output_type="image")
+        assert len(specs) == 1
+        assert specs[0].converter == "video2image"
+
 
 # ===========================================================================
 # Video2AudioMediaConverter tests
