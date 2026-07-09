@@ -71,19 +71,21 @@ def _patch_pooled_from_file(
     embedder_name: str,
     region_box: tuple[float, float, float, float],
 ) -> np.ndarray | None:
-    """Run ``patch_forward`` on *file_path* and pool *region_box* into one vector.
+    """Run ``patch_forward`` on *file_path* and snap *region_box* to a node.
 
-    Mirrors the in-dataset region path (``_pool_box_from_media`` →
-    :func:`box_to_vote_vector`) for the cross-dataset case: resolve the
-    origin to a file, rebuild a patch grid via
-    :meth:`MediaEmbedder.patch_forward`, and pool the user-drawn box.
-    Returns ``None`` when the chosen embedder doesn't support patch
-    regions or the forward pass produces no output, so the caller can
+    Mirrors the in-dataset region path (``pool_box_from_media`` →
+    :func:`snap_box_to_region`) for the cross-dataset case: resolve the origin
+    to a file, rebuild the region tree via :meth:`MediaEmbedder.patch_forward`
+    + :func:`build_region_tree` (same ``k``/``alpha`` defaults ingest uses),
+    and snap the user-drawn box to its nearest node - so a Good region-vote
+    trains on the exact sub-image suggestion the MLP will max-pool over on the
+    new dataset.  Returns ``None`` when the chosen embedder doesn't support
+    patch regions or the forward pass produces no output, so the caller can
     fall back to an image-level embedding.
     """
     from vtscore.media import embedders_for_type, get_embedder
     from vtscore.media.embedder import media_from_path
-    from vtscore.media.patch_embed import box_to_vote_vector
+    from vtscore.media.patch_embed import build_region_tree, snap_box_to_region
 
     embedder = None
     if embedder_name:
@@ -111,7 +113,7 @@ def _patch_pooled_from_file(
         return None
     if output is None:
         return None
-    return box_to_vote_vector(np.asarray(output.patch_grid), region_box)
+    return snap_box_to_region(build_region_tree(output), region_box)
 
 
 def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> np.ndarray | None:
@@ -119,8 +121,9 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
 
     When *elem* carries a ``region_box`` and the active embedder supports
     patch regions, the resolved file is patch-forwarded and the box is
-    pooled via :func:`box_to_vote_vector` so the user's region-level
-    training intent survives a dataset switch.  Logs a warning and falls
+    snapped to its nearest region node via :func:`snap_box_to_region` so the
+    user's region-level training intent survives a dataset switch.  Logs a
+    warning and falls
     back to a full-file embedding when the patch path is unavailable -
     legacy single-vector embedders, an origin carrying a clipper we'd
     have to replay against an unknown patch grid, or a failed forward
@@ -199,11 +202,10 @@ def _resolve_uncached_embedding(
     """Produce a training vector for *elem*, not consulting the cache.
 
     Tries the in-dataset path first: when *elem* resolves to a cid in the
-    active *snap*, reuse the stored embedding (region-pooling from
-    ``patch_grid`` when the element has a ``region_box`` and a patch grid
-    is available).  Falls back to the cross-dataset path - resolve via the
-    importer and embed freshly.  Returns ``None`` when neither path
-    produces a vector.
+    active *snap*, reuse the stored embedding (snapping the ``region_box`` to
+    the media's nearest ``patch_regions`` node when the element carries one).
+    Falls back to the cross-dataset path - resolve via the importer and embed
+    freshly.  Returns ``None`` when neither path produces a vector.
     """
     from vtscore.detectors.labelset_elements import resolve_current_dataset_cid
     from vtscore.detectors.training import pool_box_from_media
@@ -220,9 +222,9 @@ def _resolve_uncached_embedding(
             if emb is not None:
                 return np.asarray(emb)
 
-    # Cross-dataset path: ``_embed_one`` rebuilds a patch grid on the
+    # Cross-dataset path: ``_embed_one`` rebuilds the region tree on the
     # resolved file when ``elem.region_box`` is set and the embedder
-    # supports patch regions, then pools via ``box_to_vote_vector`` so
+    # supports patch regions, then snaps via ``snap_box_to_region`` so
     # region votes survive a dataset switch.  When the patch path isn't
     # available (legacy single-vector embedder, clipper-bearing origin,
     # failed forward pass) it logs a warning and returns the image-level

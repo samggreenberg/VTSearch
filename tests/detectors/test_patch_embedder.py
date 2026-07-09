@@ -29,6 +29,7 @@ from vtscore.media.patch_embed import (
     eupe_features_to_patch_output,
     hf_vit_to_patch_output,
     propose_leaves,
+    snap_box_to_region,
     to_fp16,
 )
 from vtscore.training.region_similarity import (
@@ -1056,6 +1057,80 @@ class TestBoxToVoteVector:
         np.testing.assert_array_equal(tuple_v, list_v)
 
 
+class TestSnapBoxToRegion:
+    """``snap_box_to_region`` picks the region tree node whose box best matches
+    the user's drawn box (max IoU) and returns *that node's* vector - the exact
+    sub-image suggestion the MLP max-pools over at inference, rather than a
+    fresh pool that matches no node.
+    """
+
+    @staticmethod
+    def _region(box, axis, d=8):
+        """A RegionVector whose vec is the one-hot unit vector along *axis*."""
+        vec = np.zeros(d, dtype=np.float32)
+        vec[axis] = 1.0
+        return RegionVector(box=box, vec=vec)
+
+    def test_returns_exact_node_vector_not_a_fresh_pool(self):
+        regions = [
+            self._region((0.0, 0.0, 1.0, 1.0), axis=0),  # full-image / CLS
+            self._region((0.0, 0.0, 0.5, 0.5), axis=1),  # top-left
+            self._region((0.5, 0.5, 1.0, 1.0), axis=2),  # bottom-right
+        ]
+        # A box hugging the top-left region.
+        v = snap_box_to_region(regions, (0.02, 0.02, 0.48, 0.48))
+        np.testing.assert_array_equal(v, regions[1].vec)
+
+    def test_snaps_to_highest_iou_not_nearest_centroid(self):
+        # Two candidates share a centroid region but differ in extent; the
+        # tighter-overlapping box must win on IoU.
+        regions = [
+            self._region((0.0, 0.0, 1.0, 1.0), axis=0),  # full image
+            self._region((0.1, 0.1, 0.4, 0.4), axis=1),  # tight match
+        ]
+        v = snap_box_to_region(regions, (0.1, 0.1, 0.4, 0.4))
+        np.testing.assert_array_equal(v, regions[1].vec)
+
+    def test_whole_image_box_collapses_to_cls_node(self):
+        regions = [
+            self._region((0.0, 0.0, 1.0, 1.0), axis=0),  # full-image / CLS
+            self._region((0.0, 0.0, 0.3, 0.3), axis=1),
+        ]
+        v = snap_box_to_region(regions, (0.0, 0.0, 1.0, 1.0))
+        np.testing.assert_array_equal(v, regions[0].vec)
+
+    def test_returns_l2_normalised_float32(self):
+        # A float16-stored, slightly off-unit vector must come back unit-norm
+        # float32 (the pickle dtype can drift the norm on upcast).
+        vec = (np.array([3.0, 4.0], dtype=np.float32) / 5.0).astype(np.float16)
+        regions = [RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=vec)]
+        v = snap_box_to_region(regions, (0.1, 0.1, 0.9, 0.9))
+        assert v.dtype == np.float32
+        assert abs(float(np.linalg.norm(v)) - 1.0) < 1e-5
+
+    def test_degenerate_zero_area_box_falls_back_to_nearest_centroid(self):
+        regions = [
+            self._region((0.0, 0.0, 0.2, 0.2), axis=0),  # centroid (0.1, 0.1)
+            self._region((0.6, 0.6, 1.0, 1.0), axis=1),  # centroid (0.8, 0.8)
+        ]
+        # A zero-area "line" box near the second region's centroid: IoU is 0
+        # against everything, so centroid distance decides.
+        v = snap_box_to_region(regions, (0.75, 0.75, 0.75, 0.9))
+        np.testing.assert_array_equal(v, regions[1].vec)
+
+    def test_empty_regions_returns_none(self):
+        assert snap_box_to_region([], (0.0, 0.0, 1.0, 1.0)) is None
+
+    def test_swapped_corners_tolerated(self):
+        regions = [
+            self._region((0.0, 0.0, 1.0, 1.0), axis=0),
+            self._region((0.0, 0.0, 0.5, 0.5), axis=1),
+        ]
+        normal = snap_box_to_region(regions, (0.0, 0.0, 0.5, 0.5))
+        swapped = snap_box_to_region(regions, (0.5, 0.5, 0.0, 0.0))
+        np.testing.assert_array_equal(normal, swapped)
+
+
 # ---------------------------------------------------------------------------
 # v2: vote endpoint, label export, and region-aware training wiring
 # ---------------------------------------------------------------------------
@@ -1361,9 +1436,10 @@ class TestLabelImportRegionBox:
 
 
 class TestRegionAwareTraining:
-    """``train_and_score`` and ``populate_label_embeddings`` pool the
-    training vector on-the-fly from ``media["patch_grid"]`` when an element
-    carries a ``region_box``.  Patch-embedder v2 step 4.
+    """``train_and_score`` and ``populate_label_embeddings`` derive the
+    training vector on-the-fly when an element carries a ``region_box``:
+    snapping to the media's nearest ``patch_regions`` node when a region tree
+    is present, else pooling ``media["patch_grid"]``.  Patch-embedder v2 step 4.
     """
 
     def _media_with_patch_grid(self, grid_value: float, cid: int) -> dict:
@@ -1393,8 +1469,9 @@ class TestRegionAwareTraining:
         }
 
     def test_train_and_score_uses_box_pooled_vec_when_grid_present(self):
-        """A yes-vote with region_box on a media that has a patch_grid feeds
-        the MLP with the *pooled* vector, not the CLS embedding."""
+        """A yes-vote with region_box on a media that has a patch_grid but no
+        region tree falls back to the *pooled* grid vector, not the CLS
+        embedding."""
         from vtscore.media.patch_embed import box_to_vote_vector
         from vtscore.detectors.training import _training_vec_for_vote
 
@@ -1406,6 +1483,30 @@ class TestRegionAwareTraining:
         np.testing.assert_array_equal(vec, expected)
         # And the CLS vector is *not* what we got.
         assert not np.array_equal(vec, media_embedding(media))
+
+    def test_train_and_score_snaps_to_region_node_when_regions_present(self):
+        """When the media carries a ``patch_regions`` tree, a region vote trains
+        on the *snapped node's* vector (an inference-time candidate), not a
+        fresh grid pool that matches no node."""
+        from vtscore.media.patch_embed import box_to_vote_vector, snap_box_to_region
+        from vtscore.detectors.training import _training_vec_for_vote
+
+        media = self._media_with_patch_grid(0.99, cid=7)
+        # A distinct one-hot node vector so it can't coincide with any grid pool
+        # (whose non-zero support is the 16 grid axes 0..15).
+        node_vec = np.zeros(16, dtype=np.float32)
+        node_vec[15] = 1.0
+        media["patch_regions"] = [
+            RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=np.eye(16, dtype=np.float32)[0]),
+            RegionVector(box=(0.0, 0.0, 0.5, 0.5), vec=node_vec),
+        ]
+        box = (0.02, 0.02, 0.48, 0.48)  # hugs the second node's box
+
+        vec = _training_vec_for_vote(media, box)
+        np.testing.assert_array_equal(vec, snap_box_to_region(media["patch_regions"], box))
+        np.testing.assert_array_equal(vec, node_vec)
+        # It is *not* the grid pool the old path would have produced.
+        assert not np.array_equal(vec, box_to_vote_vector(media["patch_grid"], box))
 
     def test_train_and_score_falls_back_to_cls_without_patch_grid(self):
         """Legacy / single-vector datasets have no ``patch_grid``; even with

@@ -230,15 +230,17 @@ def pool_box_from_media(
     media: dict[str, Any],
     region_box: tuple[float, float, float, float] | None,
 ) -> np.ndarray | None:
-    """Return the region-pooled training vector for *media*, or ``None``.
+    """Return the region training vector for *media*, or ``None``.
 
-    When *region_box* is set **and** *media* has a stored ``patch_grid``,
-    pool the box on-the-fly via
-    :func:`vtscore.media.patch_embed.box_to_vote_vector` and return it.
-    Otherwise return ``None`` so the caller can fall back to the media's
-    image-level ``embedding`` - the legacy training vector for image-level
-    votes, single-vector embedders, and patch datasets that haven't been
-    re-loaded under the v1 storage scheme.  Patch-embedder v2.
+    When *region_box* is set, snap it to the media's nearest ``patch_regions``
+    node via :func:`vtscore.media.patch_embed.snap_box_to_region` and return
+    that node's vector - i.e. train on the exact sub-image suggestion the MLP
+    max-pools over at inference, so the Good vote is a fair representative of
+    what the detector will actually score.  Falls back to a uniform pool of
+    the raw ``patch_grid`` (:func:`box_to_vote_vector`) only when the media
+    carries a grid but no region tree, and to ``None`` (the caller then uses
+    the image-level ``embedding``) for legacy single-vector embedders and
+    patch datasets that predate region storage.  Patch-embedder v2.
 
     Shared by the in-dataset vote path (:func:`_training_vec_for_vote`) and
     the cross-dataset labelset path
@@ -246,6 +248,15 @@ def pool_box_from_media(
     """
     if region_box is None:
         return None
+
+    regions = media.get("patch_regions")
+    if regions:
+        from vtscore.media.patch_embed import snap_box_to_region  # noqa: PLC0415
+
+        snapped = snap_box_to_region(regions, region_box)
+        if snapped is not None:
+            return snapped
+
     grid = media.get("patch_grid")
     if grid is None:
         return None

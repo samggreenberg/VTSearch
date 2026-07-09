@@ -280,8 +280,8 @@ independent of the active detector.
   one resolver, `keying_embedder_for_snap(det_ctx, snap)` (the dataset's concrete
   embedder of the detector's type, else the score precedence), so switching between
   two same-type datasets re-derives the MLP in the new space (SigLIP→CLIP;
-  DinoV2→DinoV3, with region boxes re-pooled against the new grid by
-  `box_to_vote_vector`). The frontend gates the same pairs via `embedder_types` on
+  DinoV2→DinoV3, with region boxes snapped to the new grid's nearest HAC node by
+  `snap_box_to_region`). The frontend gates the same pairs via `embedder_types` on
   the dataset registry entry and `embedder_type` on the detector entry
   (`utils/context-compat.ts`). Single-embedder datasets are byte-for-byte unchanged.
 
