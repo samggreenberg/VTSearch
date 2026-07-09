@@ -44,6 +44,8 @@ from vtscore.datasets.downloader.core import (
     CALTECH256_URL,
     CIFAR10_DOWNLOAD_SIZE_MB,
     CIFAR10_URL,
+    CLOTHO_EVAL_DOWNLOAD_SIZE_MB,
+    CLOTHO_EVAL_URL,
     DBPEDIA_DOWNLOAD_SIZE_MB,
     DBPEDIA_URL,
     ESC50_DOWNLOAD_SIZE_MB,
@@ -109,6 +111,7 @@ from vtscore.datasets.downloader.core import (
 
 # Audio downloaders
 from vtscore.datasets.downloader.audio import (
+    download_clotho,
     download_esc50,
     download_gtzan,
     download_speech_commands_v2,
@@ -184,6 +187,8 @@ __all__ = [
     "CALTECH256_URL",
     "CIFAR10_DOWNLOAD_SIZE_MB",
     "CIFAR10_URL",
+    "CLOTHO_EVAL_DOWNLOAD_SIZE_MB",
+    "CLOTHO_EVAL_URL",
     "DBPEDIA14_CLASSES",
     "DBPEDIA_DOWNLOAD_SIZE_MB",
     "DBPEDIA_URL",
@@ -244,6 +249,7 @@ __all__ = [
     "VISUAL_GENOME_OBJECTS_URL",
     "download_file_with_progress",
     # Audio
+    "download_clotho",
     "download_esc50",
     "download_gtzan",
     "download_speech_commands_v2",

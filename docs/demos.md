@@ -30,6 +30,10 @@ Datasets are grouped by media type below. Each demo comes in size variants — *
 | **tut_sound_events_2017_m** | Uncut ~4-minute TUT street soundscapes, one "street" bucket (medium) |
 | **tut_sound_events_2017_l** | Uncut ~4-minute TUT street soundscapes, one "street" bucket (large) |
 | **tut_sound_events_2017_a** | All 32 uncut ~4-minute TUT Sound Events 2017 street recordings (dev + eval); long-form audio for hands-on clipping rather than a labeled classification set |
+| **clotho_s** | Real-world Freesound clips (15-30s) from the Clotho evaluation split, one "sound" bucket (small slice of 1045) |
+| **clotho_m** | Real-world Freesound clips from the Clotho evaluation split, one "sound" bucket (medium) |
+| **clotho_l** | Real-world Freesound clips from the Clotho evaluation split, one "sound" bucket (large) |
+| **clotho_a** | All 1045 Clotho evaluation clips: uncurated, compositional real-world sounds with no class labels; the reference demo for natural-language text→audio (CLAP) retrieval |
 
 ## Image
 
