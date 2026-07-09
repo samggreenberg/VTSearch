@@ -273,7 +273,7 @@ def populate_label_embeddings(
         # built image-level - otherwise we'd return a stale region-pooled
         # vector after a region→none transition (e.g. good→bad on a
         # previously region-voted media; or un-vote / re-vote without a
-        # region).  See ``logical-bug-audit.md`` finding M4.
+        # region).  See ``2026-05-logical-bug-audit.md`` finding M4.
         if eid in cache and elem.region_box is None and region_cache.get(eid) is None:
             cached += 1
             continue

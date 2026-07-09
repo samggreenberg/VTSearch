@@ -16,11 +16,11 @@ an entry) bump the counter automatically via
 anything.  An *in-place* rewrite of an existing media's vector (re-embed /
 clip) is invisible to a dict subclass, so those stages call
 ``invalidate_embedding_matrix`` (which bumps the counter) after the
-rewrite - see root-cause Pattern #4 in ``docs/plans/logical-bug-audit.md``.
+rewrite - see root-cause Pattern #4 in ``docs/reviews/2026-05-logical-bug-audit.md``.
 
 Any media whose ``embedding`` is ``None`` causes the builder to raise
 ``ValueError`` instead of silently filling the row with NaN - the bug
-described as M11 in ``docs/plans/logical-bug-audit.md``.  On numpy 2.x
+described as M11 in ``docs/reviews/2026-05-logical-bug-audit.md``.  On numpy 2.x
 ``matrix[i] = None`` quietly stores ``nan`` and the resulting score
 propagates through every downstream consumer (always-False threshold
 compares, NaN-poisoned sort, JSON ``NaN`` in the response).  Raising
