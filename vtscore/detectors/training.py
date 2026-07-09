@@ -89,12 +89,50 @@ def validate_good_bad_split(y_list: list[float]) -> tuple[int, int]:
     return num_good, num_bad
 
 
+def _flood_context(
+    X_list: list,
+    y_list: list[float],
+    groups: list | None,
+) -> tuple[int, list | None, Any]:
+    """Resolve the bag-aware training context for a possibly-flooded label set.
+
+    Returns ``(n_votes, cal_groups, sample_weights)``:
+
+    * ``n_votes`` - the number of distinct bags (votes/images); the unit the
+      hidden-layer width and the safe-threshold ramp should size on, so region
+      flooding (many rows per Bad vote) doesn't inflate either.
+    * ``cal_groups`` - *groups* when flooding actually occurred (a bag holds
+      more than one row), else ``None`` so the calibrator takes its historical
+      row-wise path unchanged.
+    * ``sample_weights`` - per-bag loss weights when flooding occurred, else
+      ``None`` so :func:`~vtscore.training.mlp.train_model` computes its default
+      inverse-frequency weights.
+
+    Shared by :func:`train_and_threshold` and :func:`_train_and_score_xy` so the
+    vote, labelset, and Find paths flood identically.
+    """
+    import torch  # noqa: PLC0415
+
+    from vtscore.training.thresholds import _per_bag_fit_weights  # noqa: PLC0415
+
+    n_votes = len(set(groups)) if groups is not None else len(X_list)
+    flooded = groups is not None and len(X_list) != n_votes
+    cal_groups = groups if flooded else None
+    sample_weights = None
+    if flooded and groups is not None:
+        sample_weights = torch.tensor(
+            _per_bag_fit_weights(np.asarray(y_list, dtype=np.float32), groups), dtype=torch.float32
+        )
+    return n_votes, cal_groups, sample_weights
+
+
 def train_and_threshold(
     X_list: list,
     y_list: list[float],
     snap: dict | None = None,
     embedder_name: str | None = None,
     det_ctx: Any = None,
+    groups: list | None = None,
 ) -> tuple[Any, float]:
     """Train an MLP and compute a calibrated threshold.
 
@@ -150,17 +188,23 @@ def train_and_threshold(
     X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
-    # Size the hidden layer from the full label count (the same width
-    # train_model() picks by default), so when we cache the fold orderings
+
+    # Bag-aware setup (region flooding): size on votes not rows, split/weight
+    # per bag.  On a legacy label set every bag is one row, so this collapses
+    # to the historical behaviour.
+    n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
+
+    # Size the hidden layer from the vote count (the same width train_model()
+    # picks by default when unflooded), so when we cache the fold orderings
     # below their models match the final model — keeping the cached
     # re-thresholding consistent with this run's threshold.
-    hidden_dim = _auto_hidden_dim(len(X_list))
+    hidden_dim = _auto_hidden_dim(n_votes)
 
     safe = bool(get_safe_thresholds() and snap)
     # Below the safe-threshold ramp floor the cross-cal output is blended
     # away (pure GMM), so don't pay for the fold trainings.  Safe-thresholds
     # OFF falls through to real cross-calibration at every label count.
-    if safe and len(X_list) < 6:
+    if safe and n_votes < 6:
         threshold = NO_GOOD_THRESHOLD
         # This branch never recomputes the fold orderings, so drop any stale
         # cache from a previous ≥6-label training - otherwise a later
@@ -182,6 +226,7 @@ def train_and_threshold(
             calibration_fraction=get_calibration_fraction(),
             hidden_dim=hidden_dim,
             det_ctx=det_ctx,
+            groups=cal_groups,
         )
     else:
         threshold = calculate_cross_calibration_threshold(
@@ -191,9 +236,13 @@ def train_and_threshold(
             get_inclusion(),
             calibrate_count=get_calibrate_count(),
             calibration_fraction=get_calibration_fraction(),
+            groups=cal_groups,
         )
 
-    model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
+    if sample_weights is not None:
+        model = train_model(X, y, input_dim, hidden_dim=hidden_dim, sample_weights=sample_weights)
+    else:
+        model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
 
     if safe:
         from vtscore.embedding.matrix import get_embedding_matrix_for_snap
@@ -211,7 +260,7 @@ def train_and_threshold(
         # cache above stores the raw cross-cal orderings, so a later inclusion
         # slide re-derives the unblended cutoff (intentional - see
         # recompute_detector_thresholds_for_inclusion).
-        threshold = calculate_safe_threshold(threshold, all_scores, len(y_list))
+        threshold = calculate_safe_threshold(threshold, all_scores, n_votes)
 
     return model, threshold
 
@@ -547,7 +596,6 @@ def _train_and_score_xy(
 
     from vtscore.training.mlp import _auto_hidden_dim, train_model  # noqa: PLC0415
     from vtscore.training.thresholds import (  # noqa: PLC0415
-        _per_bag_fit_weights,
         calculate_safe_threshold,
         cross_calibration_threshold_cached,
     )
@@ -566,17 +614,9 @@ def _train_and_score_xy(
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
 
-    # Flooding is "on" only when a bag holds more than one row; otherwise pass
-    # groups=None so the calibrator/trainer take their historical row-wise path
-    # unchanged.  n_votes counts bags (images), the unit for width + ramp.
-    n_votes = len(set(groups)) if groups is not None else len(X_list)
-    flooded = groups is not None and len(X_list) != n_votes
-    cal_groups = groups if flooded else None
-    sample_weights: torch.Tensor | None = None
-    if flooded and groups is not None:
-        sample_weights = torch.tensor(
-            _per_bag_fit_weights(np.asarray(y_list, dtype=np.float32), groups), dtype=torch.float32
-        )
+    # Bag-aware setup (region flooding): size on votes not rows, split/weight
+    # per bag when a Bad vote flooded its leaf set; a no-op on legacy datasets.
+    n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
     hidden_dim = _auto_hidden_dim(n_votes)
 
     # Skip k-fold calibration *only* when safe-thresholds is on and the label

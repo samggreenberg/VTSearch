@@ -691,6 +691,13 @@ class DetectorContext:
         # downstream at template-build time.  In-memory only, never persisted.
         # See docs/plans/structural-embedder.md.
         "label_local_features",  # str → StructuralFeatures
+        # Region-flooded negatives for the labelset's Bad elements on patch
+        # datasets: str → list[np.ndarray], keyed by stable_element_id, holding
+        # the element's CLS + HAC-leaf vectors so a saved detector re-sorted
+        # cross-dataset floods the same leaf negatives the live vote path does.
+        # In-memory only, re-derived from origins, never persisted; cleared on
+        # embedder switch alongside ``label_embeddings``.
+        "label_negative_regions",
         "model",  # nn.Sequential | None (current trained MLP)
         # Structural (SIFT/VLAD) detectors carry a *second* learned object next
         # to the retrieval MLP: the match-statistic verification classifier
@@ -782,6 +789,7 @@ class DetectorContext:
         self.label_embeddings: dict[str, Any] = {}
         self.label_embedding_regions: dict[str, tuple[float, float, float, float] | None] = {}
         self.label_local_features: dict[str, Any] = {}
+        self.label_negative_regions: dict[str, list[Any]] = {}
         self.model: Any = None  # nn.Sequential | None
         # Match-statistic verification classifier for structural detectors;
         # None for non-structural detectors and until first trained.
@@ -1023,6 +1031,7 @@ class _RequestMissingDetectorContext(DetectorContext):
         object.__setattr__(self, "label_embeddings", _FrozenDict("detector"))
         object.__setattr__(self, "label_embedding_regions", _FrozenDict("detector"))
         object.__setattr__(self, "label_local_features", _FrozenDict("detector"))
+        object.__setattr__(self, "label_negative_regions", _FrozenDict("detector"))
         object.__setattr__(self, "model", None)
         object.__setattr__(self, "verification_classifier", None)
         object.__setattr__(self, "threshold", 0.5)
