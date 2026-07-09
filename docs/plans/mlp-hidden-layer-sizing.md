@@ -1,69 +1,57 @@
 # MLP hidden-layer sizing
 
-**Status: shipped.** The investigation is done and its one actionable
-finding — raising `MLP_HIDDEN_MIN` 4 -> 8 — has been applied to
-`vtscore/config.py` (+ docs). Two optional sweep extensions remain open. This
-doc records an empirical capacity sweep of the detector MLP's hidden layer and
-the one actionable finding it produced: the **lower bound** `MLP_HIDDEN_MIN = 4`
-underfits and is unstable on harder tasks, and the evidence supports raising it
-to `8`. The **upper bound** `MLP_HIDDEN_MAX = 32` is well-placed and should not
-change. Nothing here has been applied to `vtscore/config.py`.
+**Status: shipped.** The one actionable finding — raising `MLP_HIDDEN_MIN`
+4 → 8 — has been applied to `vtscore/config.py` (+ `docs/ML.md`,
+`_auto_hidden_dim` docstring). Two optional sweep extensions remain open.
 
-The sweep was produced by `scripts/overfitting_probe.py --sweep-hidden ...`
-(added alongside this doc). Re-run it to reproduce or extend any table below.
+## Open follow-ups
 
-## Background: how the hidden layer is sized today
+- Optional: extend the sweep to audio (`esc50_s` / CLAP) and video
+  (`ucf101_s` / X-CLIP) to confirm the plateau shape holds across every
+  modality, not just image + text. The probe already supports `--dataset`.
+- Optional: sweep with small vote counts (e.g. `--n-good 6 --n-bad 6`) to
+  measure the floor's effect directly in the regime where it actually binds,
+  rather than inferring it from the width-4 column at 100+100 votes.
+
+## What shipped
+
+- Raised `MLP_HIDDEN_MIN` 4 → 8 in `vtscore/config.py`. Only affects the
+  tiny-vote regime: the floor binds when `n_train // 3 < 8` (fewer than ~24
+  total votes); above that `_auto_hidden_dim` already returns ≥8. Cheap
+  (8 neurons), strictly removes the observed underfit/instability at the start
+  of a session.
+- `MLP_HIDDEN_MAX = 32` left unchanged (it sits at the top of the stable
+  plateau — correct).
+- Updated `docs/ML.md` "4–32 neurons" → "8–32" and the `_auto_hidden_dim`
+  docstring; the config/training package docs match.
+- Added `scripts/overfitting_probe.py --sweep-hidden ...` alongside this doc;
+  re-run to reproduce or extend any table below.
+
+## Method (for reproducing / extending the sweep)
 
 The detector is a small MLP (`vtscore/training/mlp.py`):
+`Linear(input_dim, hidden_dim) → ReLU → Dropout(0.5) → Linear(hidden_dim, 1)`.
+`hidden_dim` is auto-sized from the training-set size:
+`max(MLP_HIDDEN_MIN, min(MLP_HIDDEN_MAX, n_train // 3))` — one neuron per three
+votes, floored (≤12 votes) and capped (≥96 votes). Dropout 0.5,
+`weight_decay=1e-4`, and inverse-frequency class weighting keep the small width
+range from overfitting.
 
-```
-Linear(input_dim, hidden_dim) -> ReLU -> Dropout(0.5) -> Linear(hidden_dim, 1)
-```
+`scripts/overfitting_probe.py` fixes the split, sampled votes, and seeds and
+varies **only** `hidden_dim`. Per width (5 seeds) it reports: `REAL_test`
+(held-out ranking AUC on true-category labels — the capacity signal, its
+across-seed std flags instability) and `NOISE_train` / `NOISE_test` (same model
+on coin-flip labels — `NOISE_train → 1.0` is pure memorization, `NOISE_test ≈
+0.5` confirms no width generalizes absent signal). Runs used `caltech101_s`
+(image / SigLIP) and `20newsgroups_s` (text / E5), 100 good + 100 bad, inclusion 0.
 
-`hidden_dim` is auto-sized from the training-set size
-(`_auto_hidden_dim`, `vtscore/training/mlp.py`):
+## Results (informs the open sweeps)
 
-```python
-max(MLP_HIDDEN_MIN, min(MLP_HIDDEN_MAX, n_train // 3))   # 4 .. 32
-```
+**Images (SigLIP):** `REAL_test` is a perfect 1.000 at every width 4→256 — the
+categories are linearly separable, so width is irrelevant here and this case
+can't speak to whether 32 is ever too small.
 
-with `MLP_HIDDEN_MIN = 4`, `MLP_HIDDEN_MAX = 32` (`vtscore/config.py`). So the
-width grows one neuron per three votes, floored at 4 (reached at ≤12 votes) and
-capped at 32 (reached at ≥96 votes). The regularizers around it — dropout 0.5,
-`weight_decay=1e-4`, inverse-frequency class weighting — are what let the width
-range stay small without overfitting.
-
-## Method
-
-`scripts/overfitting_probe.py` holds the train/held-out split, the sampled
-votes, and the seeds fixed and varies **only** `hidden_dim` (passed through the
-new `train_model(..., hidden_dim=)` override). For each width it reports, over
-5 seeds:
-
-- `REAL_test` — held-out ranking AUC when items are labeled by their true
-  category. This is the capacity signal (threshold-free, so it isolates ranking
-  quality from threshold calibration). Its across-seed **std** flags instability.
-- `NOISE_train` / `NOISE_test` — the same model trained on coin-flip labels.
-  `NOISE_train → 1.0` as width grows is pure memorization; `NOISE_test ≈ 0.5`
-  at every width confirms no capacity level can generalize a signal that isn't
-  there (and its slow creep upward is the first whiff of overfitting).
-
-Runs used `caltech101_s` (image / SigLIP) and `20newsgroups_s` (text / E5),
-100 good + 100 bad votes, inclusion 0.
-
-## Findings
-
-### Images (SigLIP) — task is already linearly separable
-
-`REAL_test` is a perfect 1.000 at **every** width from 4 to 256 (airplanes,
-dolphin, flamingo all identical). SigLIP places these categories in a linearly
-separable arrangement, so the hidden layer does no real work and width is
-irrelevant. 32 is far more than enough; even 4 is perfect. This case can't
-speak to whether 32 is ever *too small* — for that, see text.
-
-### Text (E5) — the informative regime
-
-Held-out `REAL_test` vs width (5 seeds); note the width-4 column:
+**Text (E5) — the informative regime.** Held-out `REAL_test` vs width (5 seeds):
 
 | hidden | religion | science | cars | NOISE_test (cars) | NOISE_train (cars) |
 |-------:|---------:|--------:|-----:|------------------:|-------------------:|
@@ -75,53 +63,9 @@ Held-out `REAL_test` vs width (5 seeds); note the width-4 column:
 | 128    | 0.976 | 0.982 | 0.960 | 0.517 | 1.000 |
 | 256    | 0.976 | 0.982 | 0.959 | 0.518 | 1.000 |
 
-Three regimes, consistent across topics:
-
-1. **Below ~8: underfit + unstable.** Width 4 gives `cars` only 0.684 held-out
-   AUC with a **±0.23** seed std (religion: 0.900 ±0.15). The 4-neuron model
-   can't reliably fit the boundary and swings wildly by seed.
-2. **~8 through 256: flat plateau.** Once past underfitting, held-out AUC is
-   width-independent across a 32× range. **32 sits on this plateau with margin.**
-3. **Above 32: capacity only buys memorization.** `NOISE_train` reaches a perfect
-   1.000 by width 64–128 while `NOISE_test` creeps 0.489 → 0.518 and `REAL_test`
-   flattens/dips a hair. Going bigger than 32 is all downside (no real gain, more
-   memorization, more variance, more compute).
-
-### Conclusion
-
-- **`MLP_HIDDEN_MAX = 32` is correct** — it's at the top of the stable plateau,
-  big enough that no tested task is still improving, small enough to stay below
-  where capacity starts rewarding noise. Leave it.
-- **`MLP_HIDDEN_MIN = 4` is the soft spot** — 4 neurons underfits and destabilizes
-  on harder text topics. The stable minimum in the data is ~8.
-
-## Proposed change (not yet made)
-
-Raise the floor in `vtscore/config.py`:
-
-```python
-MLP_HIDDEN_MIN = 8   # was 4
-```
-
-Scope and risk:
-
-- Only affects the **tiny-vote regime**: the floor binds when `n_train // 3 < 8`,
-  i.e. **fewer than ~24 total votes**. Above that, `_auto_hidden_dim` already
-  returns ≥8 and nothing changes.
-- In that regime held-out results are noisy regardless and the app's labeling
-  indicators are already telling the user to keep voting, so the practical
-  impact is small — but the change strictly removes the observed underfit/instability
-  at the very start of a session at no cost (8 neurons is still trivially cheap).
-- Update the `_auto_hidden_dim` docstring and the `docs/ML.md` "4–32 neurons"
-  references to "8–32" if applied. Add/adjust any test that pins the floor.
-
-## Open follow-ups
-
-- [x] Apply the `MLP_HIDDEN_MIN = 4 → 8` change (above); `docs/ML.md`,
-      `_auto_hidden_dim` docstring, and the config/training package docs updated to match.
-- [ ] Optional: extend the sweep to audio (`esc50_s` / CLAP) and video
-      (`ucf101_s` / X-CLIP) to confirm the plateau shape holds across every
-      modality, not just image + text. The probe already supports `--dataset`.
-- [ ] Optional: sweep with small vote counts (e.g. `--n-good 6 --n-bad 6`) to
-      measure the floor's effect directly in the regime where it actually binds,
-      rather than inferring it from the width-4 column at 100+100 votes.
+Three regimes: **below ~8** underfits and is seed-unstable (width 4 gives `cars`
+0.684 ±0.23); **~8 through 256** is a flat plateau (width-independent across 32×
+— 32 sits on it with margin); **above 32** capacity only buys memorization
+(`NOISE_train` → 1.000 by 64–128 while `NOISE_test` creeps up and `REAL_test`
+dips a hair). Hence: keep `MLP_HIDDEN_MAX = 32`; the stable minimum is ~8, so the
+old floor of 4 was the soft spot (now fixed).
