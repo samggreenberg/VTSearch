@@ -14,11 +14,6 @@ Named, unordered — delete an item when it ships; never renumber (see the
 plan-file policy in `CLAUDE.md`). Roughly severity-ordered, but the name is
 the identifier, not the position.
 
-- **Pure devicePixelRatio change never re-runs canvas `resize()`**
-  (browse-canvas + minimap): dragging the window to a different-density
-  monitor leaves `dpr` (and the thumbnail-resolution tier) stale until the
-  next CSS resize; rendering-quality only (hit-testing is CSS-px based).
-  Needs a `matchMedia('(resolution: …)')` listener.
 - **`save_detector_labels` full-replace drops cross-dataset labels**
   (`routes/detectors/labels.py`): the route rebuilds the labelset from the
   *active dataset's* votes only, while `sync_labels_to_loaded_detector`

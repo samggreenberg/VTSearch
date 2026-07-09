@@ -16,6 +16,7 @@ import {
 import { binGeometry, BinGeometry } from './bin-geometry';
 import { prefersReducedMotion } from '../../utils/reduced-motion';
 import { readRootZoom } from '../../utils/root-zoom';
+import { onDevicePixelRatioChange } from '../../utils/device-pixel-ratio';
 import type {
   HexCellPayload,
   ProjectionMeta,
@@ -419,6 +420,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private panAnimBg = '';
 
   private resizeObserver: ResizeObserver | null = null;
+  // Teardown for the devicePixelRatio-change listener. A pure density change
+  // (dragging to a different-density monitor) leaves the CSS box unchanged, so
+  // the ResizeObserver never fires; this re-runs `resize()` to refresh the
+  // backing store and the thumbnail-resolution tier.
+  private dprListenerTeardown: (() => void) | null = null;
   // Repaints when the document theme flips (explicit switch or an OS
   // dark/light change while on "system"), so the colormap and background
   // track the live theme without the parent having to feed it in.
@@ -514,6 +520,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     });
     this.resizeObserver.observe(this.canvasRef.nativeElement.parentElement!);
 
+    // A pure devicePixelRatio change (monitor-to-monitor drag, browser zoom, OS
+    // scaling) doesn't touch the element box, so the ResizeObserver stays quiet;
+    // re-run resize() to rebuild the backing store at the new density.
+    this.dprListenerTeardown = onDevicePixelRatioChange(() => {
+      this.ngZone.runOutsideAngular(() => this.resize());
+    });
+
     this.themeObserver = new MutationObserver(() => this.requestRedraw());
     this.themeObserver.observe(document.documentElement, {
       attributes: true,
@@ -590,6 +603,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.recenterSub?.unsubscribe();
     this.viewport.setViewport(null);
     this.resizeObserver?.disconnect();
+    this.dprListenerTeardown?.();
     this.themeObserver?.disconnect();
     if (this.rafId) cancelAnimationFrame(this.rafId);
     if (this.animRafId) cancelAnimationFrame(this.animRafId);
