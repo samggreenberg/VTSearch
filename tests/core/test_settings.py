@@ -785,3 +785,65 @@ class TestConcurrentWrites:
         assert "sibling" in final["autofind_detectors"]
         assert "ours-pre" in final["autofind_detectors"]
         assert "ours-post" in final["autofind_detectors"]
+
+
+class TestFileLockWithoutFcntl:
+    """H28 residual follow-up: on a platform without ``fcntl`` (Windows) the
+    cross-process ``file_lock`` degrades to the in-process lock only.  That
+    fallback must still serialise same-path writers and not crash."""
+
+    def test_file_lock_serialises_in_process_without_fcntl(self, tmp_path, monkeypatch):
+        """Two threads can't hold the same path's ``file_lock`` at once even
+        when ``fcntl`` is unavailable (in-process lock still enforces it)."""
+        import threading
+
+        from vtsearch import settings_store as settings_store_mod
+
+        monkeypatch.setattr(settings_store_mod, "_fcntl", None)
+        path = tmp_path / "x.json"
+
+        a_inside = threading.Event()
+        a_may_release = threading.Event()
+        b_acquired = threading.Event()
+        errors: list[Exception] = []
+
+        def hold_a():
+            try:
+                with settings_store_mod.file_lock(path):
+                    a_inside.set()
+                    a_may_release.wait(timeout=5)
+            except Exception as exc:  # pragma: no cover - surfaced below
+                errors.append(exc)
+
+        def hold_b():
+            try:
+                a_inside.wait(timeout=5)
+                with settings_store_mod.file_lock(path):
+                    b_acquired.set()
+            except Exception as exc:  # pragma: no cover - surfaced below
+                errors.append(exc)
+
+        ta = threading.Thread(target=hold_a)
+        tb = threading.Thread(target=hold_b)
+        ta.start()
+        tb.start()
+
+        assert a_inside.wait(timeout=5)
+        # While A holds the lock, B must be blocked.
+        assert not b_acquired.wait(timeout=0.3), "B acquired the lock while A held it"
+        a_may_release.set()
+        assert b_acquired.wait(timeout=5), "B never acquired the lock after A released"
+
+        ta.join(timeout=5)
+        tb.join(timeout=5)
+        assert not errors, f"threads raised: {errors}"
+
+    def test_settings_write_round_trips_without_fcntl(self, isolated_settings, monkeypatch):
+        """A normal read-modify-write still works with ``fcntl`` unavailable."""
+        from vtsearch import settings_store as settings_store_mod
+
+        monkeypatch.setattr(settings_store_mod, "_fcntl", None)
+        settings_mod.set_volume(0.5)
+        settings_mod.set_inclusion(3)
+        assert settings_mod.get_volume() == pytest.approx(0.5)
+        assert settings_mod.get_inclusion() == 3

@@ -89,6 +89,62 @@ def _atomic_write(path: Path, data: dict[str, Any]) -> None:
         raise
 
 
+# ---------------------------------------------------------------------------
+# Cross-worker sync-dedup marker (H28 residual follow-up)
+#
+# On a fresh container every Gunicorn worker independently runs
+# sync-from-source once per user, duplicating the (potentially expensive)
+# ``source.load()`` read.  A worker that finishes its sync stamps a small
+# sibling marker next to the user's settings file recording the source
+# ``peek_version`` it applied.  A later worker whose first read finds the
+# source *unchanged* at that version skips its own load: the synced values
+# are already on disk in the user file (which it loaded into its cache),
+# so re-reading the source would be pure duplicate I/O.  The marker is a
+# best-effort optimisation only - any read/write/serialisation failure is
+# swallowed and the worker falls back to the full load.
+# ---------------------------------------------------------------------------
+
+
+def _sync_marker_path(user_path: Path) -> Path:
+    """Sibling marker recording the source version last applied to *user_path*."""
+    return user_path.with_name(user_path.name + ".syncmark")
+
+
+def _read_sync_marker(user_path: Path) -> Any:
+    """Return the source version token stashed in *user_path*'s sync marker.
+
+    Best-effort: returns ``None`` if the marker is absent, unreadable, or
+    malformed.  The token is whatever :meth:`SettingsSource.peek_version`
+    produced at the last successful sync (an ``st_mtime_ns`` int, an ETag
+    string, ...).
+    """
+    marker = _sync_marker_path(user_path)
+    try:
+        if not marker.exists():
+            return None
+        data = json.loads(marker.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if isinstance(data, dict):
+        return data.get("version")
+    return None
+
+
+def _write_sync_marker(user_path: Path, version: Any) -> None:
+    """Record *version* as the source version applied to *user_path*.
+
+    Best-effort: a ``None`` token (source can't cheaply report a version),
+    a non-JSON-serialisable token, or any write failure is swallowed - the
+    marker is a pure cross-worker dedup hint, never a correctness input.
+    """
+    if version is None:
+        return
+    try:
+        _atomic_write(_sync_marker_path(user_path), {"version": version})
+    except Exception:
+        pass
+
+
 # Per-path in-process locks. Used in two ways:
 # 1. As a fallback when ``fcntl`` is unavailable (Windows).
 # 2. Held in addition to the cross-process flock so that, within a single
@@ -263,12 +319,44 @@ class UserSettingsStore:
     # -- cache loaders ---------------------------------------------------
 
     def ensure_server_loaded(self) -> dict[str, Any]:
-        """Load the server-tier cache on first access and migrate legacy keys."""
+        """Load the server-tier cache on first access and migrate legacy keys.
+
+        The first load runs under the cross-process *server* file lock so the
+        one-shot legacy migration's ``_atomic_write`` calls are protected
+        against a sibling worker migrating the same files concurrently (H28
+        residual follow-up). The file lock is taken *before* ``settings_lock``
+        (the canonical file-lock -> settings-lock order), so this must never
+        be called while already holding ``settings_lock``: callers that need
+        the server tier loaded before touching a user cache (see
+        :meth:`ensure_user_loaded`) invoke it *outside* the lock.
+        """
         with self._lock:
-            if self._server_cache is None:
-                self._server_cache = _load_path(self._server_path())
-                self._maybe_migrate_legacy_settings_locked()
+            if self._server_cache is not None:
+                return self._server_cache
+        self._load_and_migrate_server()
+        with self._lock:
+            assert self._server_cache is not None
             return self._server_cache
+
+    def _load_and_migrate_server(self) -> None:
+        """Read the server settings file and run the one-shot legacy migration.
+
+        Runs under the cross-process server file lock. The freshly-read dict
+        is migrated *before* it is published to ``self._server_cache`` so no
+        concurrent reader ever observes the intermediate (pre-migration)
+        shape.
+        """
+        server_path = self._server_path()
+        with file_lock(server_path):
+            with self._lock:
+                if self._server_cache is not None:
+                    # A sibling thread completed the load while we waited
+                    # for the file lock.
+                    return
+            fresh = _load_path(server_path)
+            self._maybe_migrate_legacy_settings(fresh, server_path)
+            with self._lock:
+                self._server_cache = fresh
 
     def ensure_user_loaded(self, username: str) -> dict[str, Any]:
         """Load *username*'s per-user cache on first access and reconcile with the source.
@@ -286,17 +374,18 @@ class UserSettingsStore:
         sync, so a concurrent thread B saw the marker and returned the
         pre-sync local cache.
         """
+        # Ensure the server tier is loaded (and the one-shot legacy migration
+        # has run) *before* we take ``settings_lock``: ``ensure_server_loaded``
+        # acquires the server file lock, and taking a file lock while holding
+        # ``settings_lock`` would invert the canonical file -> settings order.
+        # The migration may populate ``_user_caches["default"]``; we pick that
+        # up below.
+        self.ensure_server_loaded()
         with self._lock:
             cache = self._user_caches.get(username)
             if cache is None:
-                # Make sure server tier is loaded (and legacy migration has run)
-                # before we materialise a fresh user cache, otherwise the legacy
-                # migration step might not see this user yet.
-                self.ensure_server_loaded()
-                cache = self._user_caches.get(username)
-                if cache is None:
-                    cache = _load_path(self._user_path(username))
-                    self._user_caches[username] = cache
+                cache = _load_path(self._user_path(username))
+                self._user_caches[username] = cache
             # Re-entrance guard: a setter inside ``_apply_settings`` re-enters
             # this function while the outer call holds the sync lock.  Skip
             # the sync path so we don't recurse or fire another peek probe.
@@ -350,7 +439,12 @@ class UserSettingsStore:
         if state is None or state.last_check_monotonic == 0.0:
             # No state, or state exists only because a setter populated it
             # via ``mark_user_keys_dirty`` before we'd ever talked to the
-            # source.  Either way: first sync attempt is due.
+            # source.  Either way: this process's first sync attempt is due -
+            # unless a sibling worker already synced this user's file at the
+            # source's current version, in which case adopt that (the values
+            # are already on disk) and skip the duplicate load.
+            if self._adopt_sync_marker_if_current(username, cache_cfg):
+                return False
             return True
 
         if not state.last_sync_succeeded:
@@ -365,6 +459,18 @@ class UserSettingsStore:
             return False
 
         # Window elapsed - cheap probe to detect upstream changes.
+        return self._source_version_changed(username, cache_cfg, state.last_version, now)
+
+    def _source_version_changed(self, username: str, cache_cfg: dict[str, Any], last_version: Any, now: float) -> bool:
+        """Probe the source and report whether it changed since *last_version*.
+
+        Returns ``True`` only when the source reports a concrete version that
+        differs from ``last_version`` (a full re-sync is due).  On any no-sync
+        outcome (unknown source, transient peek failure, source can't cheaply
+        report a version, or the version is unchanged) it refreshes
+        ``last_check_monotonic`` so the probe stays rate-limited, and returns
+        ``False``.
+        """
         from vtsearch.settings_io.sources import get_settings_source
 
         source = get_settings_source(cache_cfg["source_name"])
@@ -376,13 +482,9 @@ class UserSettingsStore:
         except Exception:
             # Transient peek failure - back off until next window, keep
             # serving the local cache.
-            with self._lock:
-                s = self._sync_state.get(username)
-                if s is not None:
-                    s.last_check_monotonic = now
-            return False
+            current_version = last_version  # forces the "unchanged" branch below
 
-        if current_version is None or current_version == state.last_version:
+        if current_version is None or current_version == last_version:
             # Source can't cheaply check, or unchanged since last sync.
             with self._lock:
                 s = self._sync_state.get(username)
@@ -390,6 +492,44 @@ class UserSettingsStore:
                     s.last_check_monotonic = now
             return False
 
+        return True
+
+    def _adopt_sync_marker_if_current(self, username: str, cache_cfg: dict[str, Any]) -> bool:
+        """Skip the first sync-from-source load if a sibling worker already did it.
+
+        Returns ``True`` (and stamps ``_sync_state`` as freshly synced) when
+        an on-disk marker records that *username*'s file was synced at the
+        source's *current* version - the values are already on disk, so
+        re-reading the source would be duplicate I/O (H28 residual
+        follow-up).  Returns ``False`` (caller does the full load) when there
+        is no marker, the source is unknown, it can't cheaply report a
+        version, or the versions differ.
+        """
+        marker_version = _read_sync_marker(self._user_path(username))
+        if marker_version is None:
+            return False
+
+        from vtsearch.settings_io.sources import get_settings_source
+
+        source = get_settings_source(cache_cfg["source_name"])
+        if source is None:
+            return False
+        field_values = cache_cfg.get("field_values", {})
+        try:
+            current_version = source.peek_version(field_values)
+        except Exception:
+            return False
+        if current_version is None or current_version != marker_version:
+            return False
+
+        # The user file already reflects the source at this version (a sibling
+        # worker applied it and stamped the marker).  Adopt it without a load.
+        with self._lock:
+            self._sync_state[username] = UserSyncState(
+                last_version=current_version,
+                last_check_monotonic=time.monotonic(),
+                last_sync_succeeded=True,
+            )
         return True
 
     def _run_sync_from_source(self, username: str) -> None:
@@ -458,22 +598,33 @@ class UserSettingsStore:
             # confirms the source matches local (which clears them) or a
             # manual POST sync clears them on purpose.
 
-    def _maybe_migrate_legacy_settings_locked(self) -> None:
+        # Stamp the cross-worker dedup marker so a sibling worker can skip
+        # its own first load while the source stays at this version.
+        _write_sync_marker(self._user_path(username), new_version)
+
+    def _maybe_migrate_legacy_settings(self, server_cache: dict[str, Any], server_path: Path) -> None:
         """Move per-user keys from a legacy ``data/settings.json`` into the
         default user's per-user file (one-shot, idempotent).
 
-        Called from :meth:`ensure_server_loaded` with the settings lock held.
+        Called from :meth:`_load_and_migrate_server` with the **server file
+        lock** held. Operates on *server_cache* - the freshly-read,
+        not-yet-published dict - in place, so the migrated shape is what gets
+        published to ``self._server_cache``. The default user's file write
+        takes that file's own cross-process ``file_lock`` (server-then-user
+        ordering; no other path acquires both, so no deadlock), giving both
+        ``_atomic_write`` calls full multi-process protection - previously
+        they wrote without any cross-process lock (H28 residual follow-up).
         """
-        if self._legacy_migrated:
-            return
-        self._legacy_migrated = True
-        assert self._server_cache is not None
+        with self._lock:
+            if self._legacy_migrated:
+                return
+            self._legacy_migrated = True
         # ``fallback_keys`` legitimately live in the server file (the
         # default user reads through to them), so they are NOT "orphaned per-user"
         # keys; leave them in place rather than moving them into the default user's
         # file (which would also rewrite a CLI ``--settings`` file under the user).
         legacy_user_entries = {
-            k: v for k, v in self._server_cache.items() if k not in self._server_keys and k not in self._fallback_keys
+            k: v for k, v in server_cache.items() if k not in self._server_keys and k not in self._fallback_keys
         }
         if not legacy_user_entries:
             return
@@ -483,39 +634,42 @@ class UserSettingsStore:
         # multi-user upgrades (admins can copy it into other users' files).
         default_user = "default"
         user_path = self._user_path(default_user)
-        if user_path.exists():
-            existing = _load_path(user_path)
-            # Existing per-user values win - never clobber a real user file.
-            merged: dict[str, Any] = {**legacy_user_entries, **existing}
-        else:
-            merged = dict(legacy_user_entries)
-        try:
-            _atomic_write(user_path, merged)
-        except Exception as exc:
-            logger.warning("Legacy settings migration to %s failed: %s", user_path, exc)
-            return
+        with file_lock(user_path):
+            if user_path.exists():
+                existing = _load_path(user_path)
+                # Existing per-user values win - never clobber a real user file.
+                merged: dict[str, Any] = {**legacy_user_entries, **existing}
+            else:
+                merged = dict(legacy_user_entries)
+            try:
+                _atomic_write(user_path, merged)
+            except Exception as exc:
+                logger.warning("Legacy settings migration to %s failed: %s", user_path, exc)
+                return
 
-        # Build the server-tier shape first; a failure here must not pop the
-        # in-memory cache, or server_cache and disk would silently diverge. Keep
-        # the default-user fallback keys in the server file (they are read through
-        # there, not migrated out).
-        new_server = {k: v for k, v in self._server_cache.items() if k in self._server_keys or k in self._fallback_keys}
-        try:
-            _atomic_write(self._server_path(), new_server)
-        except Exception as exc:
-            logger.warning("Failed to rewrite server settings after legacy migration: %s", exc)
-            return
-        for k in list(self._server_cache.keys()):
-            if k not in self._server_keys and k not in self._fallback_keys:
-                self._server_cache.pop(k, None)
+            # Build the server-tier shape first; a failure here must not mutate
+            # the fresh dict, or the published server_cache and disk would
+            # silently diverge. Keep the default-user fallback keys in the
+            # server file (they are read through there, not migrated out).
+            new_server = {k: v for k, v in server_cache.items() if k in self._server_keys or k in self._fallback_keys}
+            try:
+                _atomic_write(server_path, new_server)
+            except Exception as exc:
+                logger.warning("Failed to rewrite server settings after legacy migration: %s", exc)
+                return
 
-        # Refresh the default user's cache if it was already materialised
-        # (unlikely, since this runs from ensure_server_loaded, but safe).
-        self._user_caches[default_user] = _load_path(user_path)
+            # Mutate the not-yet-published dict in place to the migrated shape.
+            for k in list(server_cache.keys()):
+                if k not in self._server_keys and k not in self._fallback_keys:
+                    server_cache.pop(k, None)
+
+            # Refresh the default user's cache if it was already materialised.
+            with self._lock:
+                self._user_caches[default_user] = _load_path(user_path)
         logger.info(
             "Migrated %d legacy per-user setting(s) from %s into %s",
             len(legacy_user_entries),
-            self._server_path(),
+            server_path,
             user_path,
         )
 
@@ -632,6 +786,8 @@ class UserSettingsStore:
                 last_sync_succeeded=True,
                 dirty_keys=set(),
             )
+        # Local now matches source at this version - stamp the dedup marker.
+        _write_sync_marker(self._user_path(username), new_version)
 
     def sync_from_source_now(self, cfg: dict[str, Any], username: str) -> dict[str, Any] | None:
         """Pull settings from *cfg*'s source and apply them (explicit/manual).
@@ -686,6 +842,8 @@ class UserSettingsStore:
                 last_sync_succeeded=True,
                 dirty_keys=set(),
             )
+        # Local now matches source at this version - stamp the dedup marker.
+        _write_sync_marker(self._user_path(username), new_version)
 
         return imported
 
@@ -704,6 +862,10 @@ class UserSettingsStore:
         """Forget *username*'s sync bookkeeping (e.g. when the source is cleared)."""
         with self._lock:
             self._sync_state.pop(username, None)
+        # The dedup marker described a now-defunct source; drop it so a later
+        # re-configure can't consult a stale version. Best-effort.
+        with contextlib.suppress(OSError):
+            _sync_marker_path(self._user_path(username)).unlink(missing_ok=True)
 
     def reset(self) -> None:
         """Reset every in-memory cache and sync state (for testing).

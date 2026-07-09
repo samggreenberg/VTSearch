@@ -968,6 +968,115 @@ class TestSyncFromSourceFreshness:
         assert probes["n"] - baseline <= 1
 
 
+class TestSyncDedupMarker:
+    """H28 residual follow-up: a per-user on-disk marker records the source
+    version last applied, so a *fresh* worker whose first read finds the
+    source unchanged skips the duplicate ``source.load()`` (the values are
+    already on disk in the user file)."""
+
+    def _configure_and_pull(self, settings, tmp_path, source_file, value):
+        """Configure the source, then pull *value* into the local file.
+
+        Mirrors the freshness tests: ``set_settings_source_config`` pushes
+        local -> source, so we overwrite the source *after* configuring and
+        force a re-sync to pull the desired value back in."""
+        import os
+
+        config = {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": str(source_file)},
+        }
+        settings.set_settings_source_config(config)
+        source_file.write_text(json.dumps({"volume": value}))
+        new_mtime = source_file.stat().st_mtime_ns + 10_000_000_000
+        os.utime(source_file, ns=(new_mtime, new_mtime))
+        settings._sync_state["default"].last_check_monotonic -= 5.0
+        assert settings.get_volume() == value
+
+    def test_fresh_worker_adopts_marker_and_skips_load(self, tmp_path, isolated_settings, monkeypatch):
+        from vtsearch import settings
+        from vtsearch import settings_store as settings_store_mod
+        from vtsearch.settings_io.sources import get_settings_source
+
+        source_file = tmp_path / "remote.json"
+        self._configure_and_pull(settings, tmp_path, source_file, 0.66)
+
+        # The first worker's pull stamped the dedup marker.
+        marker_version = settings_store_mod._read_sync_marker(isolated_settings._user)
+        assert marker_version is not None
+
+        # Simulate a fresh worker: forget in-memory sync state + user cache so
+        # the next read reloads the user file from disk and hits the
+        # first-attempt branch.  The source is unchanged since the marker.
+        settings._sync_state.pop("default", None)
+        settings._user_caches.pop("default", None)
+
+        src = get_settings_source("server_json_file")
+        assert src is not None
+        loads = {"n": 0}
+        real_load = src.load
+
+        def counting_load(fv):
+            loads["n"] += 1
+            return real_load(fv)
+
+        monkeypatch.setattr(src, "load", counting_load)
+
+        # Value comes straight from the already-synced user file; no load.
+        assert settings.get_volume() == 0.66
+        assert loads["n"] == 0
+        state = settings._sync_state["default"]
+        assert state.last_sync_succeeded is True
+        assert state.last_version == marker_version
+
+    def test_stale_marker_falls_back_to_load(self, tmp_path, isolated_settings, monkeypatch):
+        """If the source changed since the marker, the fresh worker must NOT
+        adopt it - it does the full load and picks up the new value."""
+        import os
+
+        from vtsearch import settings
+        from vtsearch.settings_io.sources import get_settings_source
+
+        source_file = tmp_path / "remote.json"
+        self._configure_and_pull(settings, tmp_path, source_file, 0.66)
+
+        # Source moves on after the marker was written.
+        source_file.write_text(json.dumps({"volume": 0.77}))
+        new_mtime = source_file.stat().st_mtime_ns + 20_000_000_000
+        os.utime(source_file, ns=(new_mtime, new_mtime))
+
+        settings._sync_state.pop("default", None)
+        settings._user_caches.pop("default", None)
+
+        src = get_settings_source("server_json_file")
+        assert src is not None
+        loads = {"n": 0}
+        real_load = src.load
+
+        def counting_load(fv):
+            loads["n"] += 1
+            return real_load(fv)
+
+        monkeypatch.setattr(src, "load", counting_load)
+
+        # Marker version != current source version -> full load -> new value.
+        assert settings.get_volume() == 0.77
+        assert loads["n"] >= 1
+
+    def test_clearing_source_removes_marker(self, tmp_path, isolated_settings):
+        from vtsearch import settings
+        from vtsearch import settings_store as settings_store_mod
+
+        source_file = tmp_path / "remote.json"
+        self._configure_and_pull(settings, tmp_path, source_file, 0.66)
+        marker_path = settings_store_mod._sync_marker_path(isolated_settings._user)
+        assert marker_path.exists()
+
+        # Clearing the source drops the now-defunct dedup marker.
+        settings.set_settings_source_config(None)
+        assert not marker_path.exists()
+
+
 # ---------------------------------------------------------------------------
 # DetectorContext.labelset_source field
 # ---------------------------------------------------------------------------
