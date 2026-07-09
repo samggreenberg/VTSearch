@@ -48,8 +48,5 @@
   cache-miss reloads (old pickles predating tree caching, or a media set that
   shifts on load) still rebuild once; a "write the rebuilt tree back to the
   pickle on first reload" pass would cover those too.
-- **Dead dashboard fields.** `progressValue` / `progressTotal` /
-  `progressIndeterminate` on `DashboardComponent` are set by the Find polling
-  but never rendered; safe to remove in a cleanup pass.
 - **Eval (train-and-score)** is intentionally left single-phase (one smooth
   `current/total` bar); revisit only if it grows distinct phases.
