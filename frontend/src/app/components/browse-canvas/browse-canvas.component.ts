@@ -256,8 +256,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   // second click lands. Without the defer, every double-click would also flip the
   // bin's selection on its way to zooming.
   private clickTimer: ReturnType<typeof setTimeout> | null = null;
-  private pendingToggleX = 0;
-  private pendingToggleY = 0;
+  // The bin the pending single-click toggle will flip, resolved at click time
+  // (not when the timer fires). The defer is only there to let a double-click
+  // preempt the toggle; it must not defer the *hit-test*, because a wheel notch
+  // or arrow-key glide inside the double-click window moves the transform, so a
+  // late hit-test of the captured screen point would land on a different bin.
+  // Binding the cell here keeps the toggle on the bin the user actually clicked.
+  private pendingToggleCell: HexCellPayload | null = null;
   private static readonly DBLCLICK_MS = 250;
   // `event.timeStamp` of the last right-click that landed on empty canvas (no
   // bin under the cursor), used to detect a double-right-click there; see
@@ -1252,6 +1257,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const meta = this.meta();
     if (!meta || meta.point_count === 0) return;
     if (this.width <= 0 || this.height <= 0) return;
+    // A zoom transition or pan glide still owns the canvas: both its rAF loop and
+    // the settle's write `displayedTransform` and repaint, so running them at once
+    // truncates the transition (visible jank). Re-arm the debounce and let the
+    // animation land first; the next tick finds the canvas free and springs back.
+    if (this.animActive || this.panAnimActive) {
+      this.scheduleSettle();
+      return;
+    }
     const dest = this.clampedTransform(this.transform);
     const cur = this.transform;
     const settled =
@@ -2174,11 +2187,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    */
   private scheduleToggle(mx: number, my: number): void {
     this.flushPendingToggle();
-    this.pendingToggleX = mx;
-    this.pendingToggleY = my;
+    // Resolve the bin against the transform the user clicked under — see
+    // {@link pendingToggleCell}. Nothing to toggle over blank space.
+    const cell = this.hitTest(mx, my);
+    if (!cell) return;
+    this.pendingToggleCell = cell;
     this.clickTimer = setTimeout(() => {
       this.clickTimer = null;
-      this.toggleCellAt(mx, my);
+      this.commitPendingToggle();
     }, BrowseCanvasComponent.DBLCLICK_MS);
   }
 
@@ -2187,11 +2203,23 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (this.clickTimer === null) return;
     clearTimeout(this.clickTimer);
     this.clickTimer = null;
-    this.toggleCellAt(this.pendingToggleX, this.pendingToggleY);
+    this.commitPendingToggle();
+  }
+
+  /** Flip the selection of the pending toggle's bin (bound at click time). */
+  private commitPendingToggle(): void {
+    const cell = this.pendingToggleCell;
+    this.pendingToggleCell = null;
+    if (!cell) return;
+    // The selection store is signal-backed, so the write schedules change
+    // detection on its own — no NgZone re-entry needed under zoneless.
+    this.selection.toggleBin(this.cellMembers(cell));
+    this.requestRedraw();
   }
 
   /** Drop a pending single-click toggle without running it (double-click path). */
   private cancelPendingToggle(): void {
+    this.pendingToggleCell = null;
     if (this.clickTimer === null) return;
     clearTimeout(this.clickTimer);
     this.clickTimer = null;
@@ -2282,17 +2310,6 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   /** Member media ids of a cell, falling back to its representative. */
   private cellMembers(cell: HexCellPayload): number[] {
     return cell.member_ids && cell.member_ids.length > 0 ? cell.member_ids : [cell.rep_id];
-  }
-
-  /** Toggle the selection of the bin under canvas point ``(mx, my)``. */
-  private toggleCellAt(mx: number, my: number): void {
-    const cell = this.hitTest(mx, my);
-    if (!cell) return;
-    const members = this.cellMembers(cell);
-    // The selection store is signal-backed, so the write schedules change
-    // detection on its own — no NgZone re-entry needed under zoneless.
-    this.selection.toggleBin(members);
-    this.requestRedraw();
   }
 
   /** Add every bin whose centre falls inside the marquee rectangle. */
@@ -2645,6 +2662,16 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   private onWheel(event: WheelEvent): void {
     event.preventDefault();
+    // Gate the wheel while a left-drag pan or marquee is in progress. A zoom
+    // mid-drag re-anchors the transform about the cursor, but the next
+    // {@link onMouseMove} recomputes the centre from the drag's start values
+    // (`panStartCenter` minus `dx / z`), discarding that re-anchoring — and for
+    // a marquee it would shift the screen-space rectangle out from under the
+    // pointer. The zoom transition it kicks off also owns the canvas for its
+    // ~220 ms, freezing the pan/marquee paint. Ignoring the notch (the button is
+    // still down) keeps the in-progress gesture coherent; the wheel resumes the
+    // instant the drag ends.
+    if (this.isPanning || this.isMarquee) return;
     const rect = this.canvasRef.nativeElement.getBoundingClientRect();
     const mx = event.clientX - rect.left;
     const my = event.clientY - rect.top;
