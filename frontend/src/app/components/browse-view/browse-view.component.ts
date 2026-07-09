@@ -37,6 +37,7 @@ import {
 } from '../browse-canvas/hex-render.util';
 import type { ProjectionMeta } from '../../models/projection.models';
 import { snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
+import { readRootZoom } from '../../utils/root-zoom';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
@@ -570,7 +571,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   /** Largest the side panel can grow to while leaving the canvas its minimum. */
   private panelMax(): number {
-    const layoutWidth = this.content?.nativeElement.getBoundingClientRect().width ?? 0;
+    // `getBoundingClientRect()` is visual px (scaled by `html{zoom}`); the panel
+    // width it bounds is layout px, so divide the zoom out to compare like units.
+    const layoutWidth = (this.content?.nativeElement.getBoundingClientRect().width ?? 0) / readRootZoom();
     const fit = layoutWidth - BrowseViewComponent.DIVIDER_WIDTH - BrowseViewComponent.CANVAS_MIN;
     return Math.min(BrowseViewComponent.PANEL_MAX, Math.max(this.panelMin(), fit));
   }
@@ -590,6 +593,12 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     const root = this.content?.nativeElement;
     if (!root) return BrowseViewComponent.PANEL_FLOOR;
     const current = this.panelWidth();
+    // `getBoundingClientRect()` widths are visual px (scaled by `html{zoom}`),
+    // whereas `panelWidth`, `clientWidth`, and computed-style lengths are all
+    // layout px. Divide the zoom out of the rect reads below so every term in
+    // these floor sums is layout px — otherwise the floor drifts with the zoom
+    // (a phantom scrollbar of ~(zoom-1)×width, etc.).
+    const zoom = readRootZoom();
 
     let oneColumn = BrowseViewComponent.PANEL_FLOOR;
     const list = root.querySelector('.bsp-list') as HTMLElement | null;
@@ -597,7 +606,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       const goal = parseFloat(getComputedStyle(list).getPropertyValue('--grid-goal-width')) || 80;
       const style = getComputedStyle(list);
       const padH = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-      const bounding = list.getBoundingClientRect().width;
+      const bounding = list.getBoundingClientRect().width / zoom;
       const scrollbar = Math.max(0, bounding - list.clientWidth);
       // Chrome between the panel edge and the grid element (0 today, but measured
       // so any future wrapper padding is accounted for automatically).
@@ -613,10 +622,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       if (toolbar) {
         const tstyle = getComputedStyle(toolbar);
         const tpad = parseFloat(tstyle.paddingLeft) + parseFloat(tstyle.paddingRight);
-        const panelChrome = Math.max(0, current - toolbar.getBoundingClientRect().width);
+        const panelChrome = Math.max(0, current - toolbar.getBoundingClientRect().width / zoom);
         toolbarChromeH = tpad + panelChrome;
       }
-      sortRow = Math.ceil(sort.getBoundingClientRect().width + toolbarChromeH) + 1;
+      sortRow = Math.ceil(sort.getBoundingClientRect().width / zoom + toolbarChromeH) + 1;
     }
 
     return Math.max(BrowseViewComponent.PANEL_FLOOR, oneColumn, sortRow);
@@ -637,10 +646,16 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private onPanelMouseMove(event: MouseEvent): void {
     if (!this.dragging || !this.content) return;
     const rect = this.content.nativeElement.getBoundingClientRect();
+    // `clientX` and `rect` are visual px (scaled by the app-wide `html{zoom}`),
+    // but `panelWidth` is applied as a layout-px CSS var that the zoom re-scales,
+    // and the clamp bounds (`DIVIDER_WIDTH`/`CANVAS_MIN`/`PANEL_MAX`/`dragMin`)
+    // are layout px — so convert the visual-px container width and pointer delta
+    // to layout px, or the divider rides ~(zoom-1) off the cursor.
+    const zoom = readRootZoom();
     // The panel is on the right, so its width grows as the cursor moves left.
-    const fit = rect.width - BrowseViewComponent.DIVIDER_WIDTH - BrowseViewComponent.CANVAS_MIN;
+    const fit = rect.width / zoom - BrowseViewComponent.DIVIDER_WIDTH - BrowseViewComponent.CANVAS_MIN;
     const max = Math.min(BrowseViewComponent.PANEL_MAX, Math.max(this.dragMin, fit));
-    const width = this.clamp(rect.right - event.clientX, this.dragMin, max);
+    const width = this.clamp((rect.right - event.clientX) / zoom, this.dragMin, max);
     // `panelWidth` is a signal read in the template's `--browse-panel-width`
     // binding, so the `.set()` schedules CD on its own — no `ngZone.run`.
     this.panelWidth.set(width);

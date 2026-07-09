@@ -15,6 +15,7 @@ import {
 } from './hex-render.util';
 import { binGeometry, BinGeometry } from './bin-geometry';
 import { prefersReducedMotion } from '../../utils/reduced-motion';
+import { readRootZoom } from '../../utils/root-zoom';
 import type {
   HexCellPayload,
   ProjectionMeta,
@@ -631,7 +632,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // avoid the canvas being visually double-scaled (once by html{zoom:N}, once by
     // the explicit style override), which would shift hit-test coordinates off the
     // cursor by the zoom factor.
-    const rootZoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+    const rootZoom = readRootZoom();
     canvas.style.width = `${this.width / rootZoom}px`;
     canvas.style.height = `${this.height / rootZoom}px`;
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
