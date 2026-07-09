@@ -246,7 +246,7 @@ _SERVER_KEYS: frozenset[str] = frozenset(ServerSettings.model_fields.keys())
 #: still expect a value placed in ``settings.json`` to take effect. The
 #: read-through (see :func:`_read_value`) makes that work without the
 #: destructive legacy migration moving them out of the server file (see
-#: ``UserSettingsStore._maybe_migrate_legacy_settings_locked``, which skips
+#: ``UserSettingsStore._maybe_migrate_legacy_settings``, which skips
 #: these keys).
 _DEFAULT_USER_FALLBACK_KEYS: frozenset[str] = frozenset(
     {"autofind_detectors", "autofind_exporter", "autofind_exporter_field_values"}
