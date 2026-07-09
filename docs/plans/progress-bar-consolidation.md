@@ -1,10 +1,6 @@
 # Progress-bar consolidation
 
-**Status: shipped** (consolidation + smoothness pass + GPU pacing +
-registry-reload pacing). Multi-step jobs now render one whole-job progress bar
-(0→100 %, never resetting) with a true overall ETA and a visible step count,
-instead of a fresh per-phase bar that filled, snapped back to 0 %, and started
-over. Open follow-ups below.
+**Status:** The core consolidation shipped (one whole-job bar with overall ETA and step count); the open follow-ups below remain.
 
 ## Open follow-ups
 
@@ -57,80 +53,3 @@ over. Open follow-ups below.
   but never rendered; safe to remove in a cleanup pass.
 - **Eval (train-and-score)** is intentionally left single-phase (one smooth
   `current/total` bar); revisit only if it grows distinct phases.
-
-## What shipped
-
-### Consolidation (the core)
-
-- **Unified `overall` fraction (backend).** `ProgressTracker._compute_overall`
-  (`vtscore/concurrency/progress.py`) computes one whole-job completion fraction
-  whenever a caller reports `step`/`total_steps`; the within-step `current/total`
-  maps into the job's span via `_overall_raw_fraction` (weighted:
-  `(Σ weights[:step-1] + weights[step-1]·within) / Σ weights`; equal:
-  `((step-1) + within) / total_steps`). Per-step weights
-  (`set_step_weights` / the `step_weights` arg to
-  `LoadingTasksTracker.create_task`) pace by real time — dataset load
-  `[0.25,0.15,0.50,0.10]`, detector load `[0.15,0.15,0.70]`, Find
-  `[0.10,0.30,0.60]`, Find-label `[0.10,0.45,0.40,0.05]`; no-weight flows fall
-  back to equal weight. Fraction is clamped monotonic non-decreasing; a step
-  going backwards / `total_steps` changing is read as a new job and resets the
-  clock. Exposed as a new `overall` key in `_PROGRESS_COMMON_EXTRAS`.
-- **True overall ETA (backend).** When `overall` is present, `eta_seconds` is
-  derived from elapsed-vs-overall-fraction over a single whole-job clock with EMA
-  smoothing; self-corrects and no longer resets between phases. Single-phase ops
-  keep the per-phase ETA.
-- **One bar + step count (frontend).** `progressBarState()`
-  (`utils/format-progress.ts`) prefers `overall` → `current/total` →
-  indeterminate; `formatProgressHeader` surfaces a title-cased `Step S of T` and
-  the per-item `detail` drops the parens + redundant leading verb. Wired into the
-  dashboard loading rows (dataset-card, detector-card, orphan-task rows), the
-  Find/learned-sort overlay (find-view), and the left-panel sort indicator (via
-  `SortStateService.sortOverall` / `sortEtaSeconds`).
-- **Docs + tests.** `docs/api/events.md` + `docs/api/dashboard.md` document
-  `overall` / `eta_seconds`; `tests_lib/core/test_progress_overall.py` +
-  `frontend/src/app/utils/format-progress.spec.ts`.
-
-### Smoothness pass
-
-- **Clipper backslide fixed.** The clipper stage
-  (`vtscore/datasets/stages/clipper.py`) reported the *finalize* step while
-  running *before* embed, ramming the bar ~100 %→mid-job on the backwards-step
-  reset. Clipping is really the embed phase for clipped datasets, so it now
-  reports the **embedding** step; the whole-job fraction stays monotonic.
-- **`converting` status added to `_STATUS_TO_STEP`.** It was missing, so
-  `converters/runner.py`'s `"converting"` resolved to `step=None`, nulled
-  `overall`, and bounced onto the raw `current/total` scale; now maps to the
-  loading step (pre-embed work). Map docstring states the every-load-status
-  invariant.
-- **Model-load weight shift** `0.25/0.15/0.50/0.10 → 0.25/0.10/0.55/0.10` — trims
-  the un-measurable model-load slice, hands the weight to embedding (which
-  reports per-item progress), shrinking the between-stage jump.
-- **Gentle fill ease (frontend).** `ProgressBarComponent` opt-in `smooth` input
-  (a `0.6s ease-out` fill, class `progress-fill--smooth`) on the dataset-load
-  bars; only ever eases *toward* the real reported value (no fake/timer motion).
-
-### GPU pacing profile
-
-- **Device-aware weights** (`load_step_weights()` in `stages/_common.py`,
-  resolved once at task creation). CPU profile unchanged; GPU profile
-  `[0.20,0.10,0.30,0.40]` shrinks embed and grows finalize, because on a GPU
-  embed is fast but finalize (registry save + non-cuML diversity k-means) is CPU
-  and dominates wall-clock. Detector-load weights unaffected. Tests:
-  `tests_lib/datasets/test_load_step_weights.py`.
-
-### Registry-reload pacing + redundant rebuild
-
-- **Frozen bar fixed.** The registry/pickle reload path
-  (`load_registered_dataset`, `vtsearch/routes/datasets/registry.py`) is a 2-step
-  mini-pipeline (read pickle → dedup + diversity) that set `total_steps=2` with
-  no weights, so the near-instant dedup pinned the overall bar at ~100 % while the
-  ~45 s diversity rebuild sat frozen. Fixed by moving dedup into step 1 and
-  `set_step_weights([0.15, 0.85])` so the diversity build owns the bulk of the
-  bar; a terminal `Finalizing…` fills the slice to 100 % in every branch.
-- **Redundant rebuild fixed.** Promoted datasets (`/api/dataset/promote`) omitted
-  the cached diversity tree and renumber IDs (so the source tree can't be reused),
-  rebuilding the full k-means on every reload. Now the tree is built + cached at
-  promote time (`_diversity_tree_pickle_keys` +
-  `build_diversity_tree_serializable`), gated by the same
-  `should_auto_build_diversity_tree` threshold, so reopening a promoted dataset
-  restores instead of rebuilding.
