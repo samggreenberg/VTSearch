@@ -1,6 +1,6 @@
 # Comprehensive interface audit — July 2026
 
-**Status:** 5 open follow-ups remain from the audit (below).
+**Status:** 4 open follow-ups remain from the audit (below).
 
 Background: a full-codebase audit of interface boundaries (frontend ↔ API, route
 layer ↔ state system, app tier ↔ `vtscore`, IO, concurrency, frontend TS)
@@ -41,5 +41,3 @@ Ordered roughly by severity.
    the explicit save should merge like the sync does (probably yes, via
    `_merge_labelsets_across_datasets`) or full-replace is the intended
    "save exactly what I see" semantic.
-5. **`AutoDetectProgressModalComponent` is dead code** (modal sweep note):
-   referenced nowhere; delete it or wire it up.
