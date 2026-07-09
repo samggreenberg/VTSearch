@@ -1,0 +1,63 @@
+@if (pickerKind() === 'folder') {
+  <div class="form-group">
+    <label class="form-label" for="lf-recursive" title="When enabled, files inside nested subfolders are also uploaded. When disabled, only files directly inside the picked folder are uploaded.">
+      <input
+        id="lf-recursive"
+        type="checkbox"
+        [ngModel]="recursive"
+        (ngModelChange)="onRecursiveChange($event)"
+      />
+      Include subfolders
+    </label>
+  </div>
+}
+
+<div class="form-group">
+  <label class="form-label" for="lf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder/file name.">Dataset Name</label>
+  <input
+    id="lf-dataset-name"
+    type="text"
+    class="form-input"
+    [ngModel]="datasetName"
+    (ngModelChange)="onDatasetNameInput($event)"
+    placeholder="Leave blank to use a default name"
+  />
+</div>
+
+<div class="form-group form-group--section">
+  <vt-import-advanced
+    [availableConverters]="availableConverters"
+    [nativeType]="outputTypeId"
+    [typeLabels]="mediaTypeLabels"
+    [embedders]="embedders()"
+    [clippers]="clippers()"
+    [showSourceSpecs]="true"
+    [sourceSpecs]="sourceSpecs"
+    (sourceSpecsChange)="onSpecsChange($event)"
+    [selectedEmbedder]="selectedEmbedder()"
+    (selectedEmbedderChange)="selectedEmbedder.set($event)"
+    [selectedPatchEmbedder]="selectedPatchEmbedder()"
+    (selectedPatchEmbedderChange)="selectedPatchEmbedder.set($event)"
+    [selectedStructuralEmbedder]="selectedStructuralEmbedder()"
+    (selectedStructuralEmbedderChange)="selectedStructuralEmbedder.set($event)"
+    [lockedEmbedder]="lockedEmbedderFor(mediaType, embedders())"
+    [selectedClipper]="selectedClipper()"
+    [selectedClipperParams]="clipperParamValues()"
+    (clipperChooserRequested)="openClipperChooser()"
+    [buildProjection]="buildProjection"
+    (buildProjectionChange)="buildProjectionChange.emit($event)"
+    [mergeNearDuplicates]="mergeNearDuplicates"
+    (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
+  ></vt-import-advanced>
+</div>
+
+@if (error()) {
+  <p class="error-text">{{ error() }}</p>
+}
+
+<vt-clipper-chooser
+  [open]="clipperChooserOpen"
+  [clippers]="clipperChooserClippers"
+  (selected)="onClipperChooserSelected($event)"
+  (cancelled)="onClipperChooserCancelled()"
+/>

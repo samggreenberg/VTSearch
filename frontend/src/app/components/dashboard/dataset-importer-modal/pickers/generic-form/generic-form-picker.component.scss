@@ -1,0 +1,8 @@
+// `.importer-form`'s base layout (flex column, gap) lives in the global
+// `_components.scss`; this indents the form content inward from the
+// category / importer tabs above (rendered by `<vt-source-picker>` in
+// the parent) so the hierarchy reads top-down: category tabs →
+// importer tabs → controls.
+.importer-form {
+  padding-left: var(--space-2xl);
+}

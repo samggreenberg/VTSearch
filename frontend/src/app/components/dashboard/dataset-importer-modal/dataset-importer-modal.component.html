@@ -9,197 +9,79 @@
     (importerSelected)="selectImporter($event)"
     [activePickerView]="activePickerView"
     [mediaTypes]="mediaTypes()"
-    [demos]="demos()"
-    [filteredDemos]="filteredDemos"
-    [demoLoading]="demoLoading()"
-    [demoTabs]="demoTabs()"
-    [activeDemoTab]="activeTab()"
-    (activeDemoTabChange)="selectDemoTabWithEmbedder($event)"
-    [demoCols]="demoCols"
+    [demos]="demoPicker.demos()"
+    [filteredDemos]="demoPicker.filteredDemos"
+    [demoLoading]="demoPicker.demoLoading()"
+    [demoTabs]="demoPicker.demoTabs()"
+    [activeDemoTab]="demoPicker.activeTab()"
+    (activeDemoTabChange)="demoPicker.selectDemoTabWithEmbedder($event)"
+    [demoCols]="demoPicker.demoCols"
     [showDemoMediaTypeTabs]="false"
-    [selectedDemoName]="selectedDemo?.name || ''"
-    (demoSelected)="selectDemo($event)"
-    [sfPathInputValue]="sfPathInputValue"
-    (sfPathInputValueChange)="sfOnPathInput($event)"
-    (sfPathApplied)="sfApplyPathInput()"
-    [lfPickerKind]="lfPickerKind"
-    [lfFiles]="lfFiles"
-    [lfFolderName]="lfFolderName"
-    (lfFilesDropped)="lfOnFilesDropped($event)"
+    [selectedDemoName]="demoPicker.selectedDemo()?.name || ''"
+    (demoSelected)="demoPicker.selectDemo($event)"
+    [sfPathInputValue]="serverFolderPicker.pathInputValue()"
+    (sfPathInputValueChange)="serverFolderPicker.onPathInput($event)"
+    (sfPathApplied)="serverFolderPicker.applyPathInput()"
+    [lfPickerKind]="localFolderPicker.pickerKind()"
+    [lfFiles]="localFolderPicker.files()"
+    [lfFolderName]="localFolderPicker.folderName"
+    (lfFilesDropped)="localFolderPicker.onFilesDropped($event)"
   >
     <ng-container demoBefore>
       @if (!effectiveSoloMediaType) {
         <vt-import-config
           mediaTypeFieldId="demo-media-type"
-          [mediaType]="activeTab()"
-          (mediaTypeChange)="selectDemoTabWithEmbedder($event)"
-          [mediaTypeOptions]="demoTabs()"
-          [mediaTypeOptionLabels]="mediaTypeLabels"
-          [mediaTypeOptionIcons]="demoMediaTypeIcons"
+          [mediaType]="demoPicker.activeTab()"
+          (mediaTypeChange)="demoPicker.selectDemoTabWithEmbedder($event)"
+          [mediaTypeOptions]="demoPicker.demoTabs()"
+          [mediaTypeOptionLabels]="demoPicker.mediaTypeLabels"
+          [mediaTypeOptionIcons]="demoPicker.demoMediaTypeIcons"
         ></vt-import-config>
       }
     </ng-container>
 
     <ng-container demoAfter>
-      <div class="form-group">
-        <label class="form-label" for="demo-dataset-name" title="Optional name for the new dataset. Leave blank to use the demo's name.">Dataset Name</label>
-        <input
-          id="demo-dataset-name"
-          type="text"
-          class="form-input"
-          [ngModel]="demoDatasetName"
-          (ngModelChange)="onDemoDatasetNameInput($event)"
-          placeholder="Leave blank to use the demo's name"
-        />
-      </div>
-
-      @if (demoEmbedders().length > 1 || demoClippers().length > 1) {
-        <div class="form-group form-group--section">
-          <vt-import-advanced
-            [availableConverters]="[]"
-            [nativeType]="''"
-            [typeLabels]="mediaTypeLabels"
-            [embedders]="demoEmbedders()"
-            [clippers]="demoClippers()"
-            [showSourceSpecs]="false"
-            [sourceSpecs]="[]"
-            [selectedEmbedder]="selectedDemoEmbedder()"
-            (selectedEmbedderChange)="onDemoEmbedderChange($event)"
-            [selectedPatchEmbedder]="selectedDemoPatchEmbedder()"
-            (selectedPatchEmbedderChange)="selectedDemoPatchEmbedder.set($event)"
-            [selectedStructuralEmbedder]="selectedDemoStructuralEmbedder()"
-            (selectedStructuralEmbedderChange)="selectedDemoStructuralEmbedder.set($event)"
-            [lockedEmbedder]="lockedEmbedderFor(activeTab(), demoEmbedders())"
-            [selectedClipper]="selectedDemoClipper()"
-            [selectedClipperParams]="demoClipperParamValues()"
-            (clipperChooserRequested)="openClipperChooser('demo')"
-            [buildProjection]="buildProjection"
-            (buildProjectionChange)="buildProjection = $event"
-            [mergeNearDuplicates]="mergeNearDuplicates"
-            (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
-          ></vt-import-advanced>
-        </div>
-      }
+      <vt-demo-picker
+        [guessedMediaType]="guessedMediaType"
+        [guessedMediaEmbedder]="guessedMediaEmbedder()"
+        [buildProjection]="buildProjection"
+        (buildProjectionChange)="buildProjection = $event"
+        [mergeNearDuplicates]="mergeNearDuplicates"
+        (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
+        (demoDatasetSelected)="onDemoDatasetSelected($event)"
+      ></vt-demo-picker>
     </ng-container>
 
     <ng-container sfBefore>
       @if (!effectiveSoloMediaType) {
         <vt-import-config
           mediaTypeFieldId="sf-media-type"
-          [mediaType]="sfMediaType()"
-          (mediaTypeChange)="sfOnMediaTypeChange($event)"
-          [mediaTypeOptions]="sfMediaTypeOptions"
-          [mediaTypeOptionLabels]="mediaTypeOptionLabels"
-          [mediaTypeOptionIcons]="mediaTypeOptionIcons"
-          [detectionHint]="detectionHint(sfDetection())"
+          [mediaType]="serverFolderPicker.mediaType()"
+          (mediaTypeChange)="serverFolderPicker.onMediaTypeChange($event)"
+          [mediaTypeOptions]="serverFolderPicker.mediaTypeOptions"
+          [mediaTypeOptionLabels]="serverFolderPicker.mediaTypeOptionLabels"
+          [mediaTypeOptionIcons]="serverFolderPicker.mediaTypeOptionIcons"
+          [detectionHint]="serverFolderPicker.detectionHint()"
         ></vt-import-config>
       }
     </ng-container>
 
     <ng-container sfAfter>
-      <div class="form-group">
-        <button
-          type="button"
-          class="btn btn--secondary"
-          (click)="sfBrowserOpen = !sfBrowserOpen"
-          title="Browse the server's filesystem and pick a folder"
-        >{{ sfBrowserOpen ? 'Hide browser' : 'Browse…' }}</button>
-        @if (sfBrowserOpen) {
-          <div class="sf-folder-browser-panel">
-            <vt-folder-browser
-              [browse]="sfFolderBrowseFn"
-              [showFiles]="true"
-              [showPathFooter]="true"
-              rootLabel="Server root"
-              (pathChange)="onSfFolderPicked($event)"
-            ></vt-folder-browser>
-            <p class="form-hint">Navigate into a folder to select it; its media is imported.</p>
-          </div>
-        }
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="sf-recursive" title="When enabled, subdirectories of the chosen folder are scanned recursively. When disabled, only files directly inside the chosen folder are imported.">
-          <input
-            id="sf-recursive"
-            type="checkbox"
-            [ngModel]="sfRecursive"
-            (ngModelChange)="sfOnRecursiveChange($event)"
-          />
-          Include subfolders
-        </label>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="sf-dig-archives" title="When enabled, archives (.zip, .tar, .rar …) found inside the chosen folder are extracted and their media imported too. The folder path can also point directly at a single archive file.">
-          <input
-            id="sf-dig-archives"
-            type="checkbox"
-            [ngModel]="sfDigArchives"
-            (ngModelChange)="sfDigArchives = $event"
-          />
-          Include archives' contents
-        </label>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="sf-reference-files" title="When enabled, the dataset stores a path reference to each original file on the server instead of copying its bytes in. Saves storage, but the dataset depends on the source files staying put — moving or deleting them breaks it.">
-          <input
-            id="sf-reference-files"
-            type="checkbox"
-            [ngModel]="sfReferenceFiles"
-            (ngModelChange)="sfReferenceFiles = $event"
-          />
-          Reference files in place (don't copy)
-        </label>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="sf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder name.">Dataset Name</label>
-        <input
-          id="sf-dataset-name"
-          type="text"
-          class="form-input"
-          [ngModel]="sfDatasetName"
-          (ngModelChange)="sfOnDatasetNameInput($event)"
-          placeholder="Leave blank to use a default name"
-        />
-      </div>
-
-      <div class="form-group form-group--section">
-        <vt-import-advanced
-          [availableConverters]="sfAvailableConverters"
-          [nativeType]="sfOutputTypeId"
-          [typeLabels]="mediaTypeLabels"
-          [embedders]="sfEmbedders()"
-          [clippers]="sfClippers()"
-          [showSourceSpecs]="true"
-          [sourceSpecs]="sfSourceSpecs()"
-          (sourceSpecsChange)="onSfSpecsChange($event)"
-          [selectedEmbedder]="sfSelectedEmbedder()"
-          (selectedEmbedderChange)="sfSelectedEmbedder.set($event)"
-          [selectedPatchEmbedder]="sfSelectedPatchEmbedder()"
-          (selectedPatchEmbedderChange)="sfSelectedPatchEmbedder.set($event)"
-          [selectedStructuralEmbedder]="sfSelectedStructuralEmbedder()"
-          (selectedStructuralEmbedderChange)="sfSelectedStructuralEmbedder.set($event)"
-          [lockedEmbedder]="lockedEmbedderFor(sfMediaType(), sfEmbedders())"
-          [selectedClipper]="sfSelectedClipper()"
-          [selectedClipperParams]="sfClipperParamValues()"
-          (clipperChooserRequested)="openClipperChooser('sf')"
-          [buildProjection]="buildProjection"
-          (buildProjectionChange)="buildProjection = $event"
-          [mergeNearDuplicates]="mergeNearDuplicates"
-          (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
-        ></vt-import-advanced>
-      </div>
-
-      @if (sfBrowseError()) {
-        <p class="error-text">{{ sfBrowseError() }}</p>
-      }
+      <vt-server-folder-picker
+        [importers]="importers()"
+        [mediaTypes]="mediaTypes()"
+        [guessedMediaType]="guessedMediaType"
+        [guessedMediaEmbedder]="guessedMediaEmbedder()"
+        [buildProjection]="buildProjection"
+        (buildProjectionChange)="buildProjection = $event"
+        [mergeNearDuplicates]="mergeNearDuplicates"
+        (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
+        (importStarted)="importStarted.emit()"
+      ></vt-server-folder-picker>
     </ng-container>
 
     <ng-container lfInfo>
-      @if (lfPickerKind === 'folder') {
+      @if (localFolderPicker.pickerKind() === 'folder') {
         <p class="info-text">Pick a folder on <strong>this computer</strong> (running your browser).</p>
       } @else {
         <p class="info-text">
@@ -212,261 +94,50 @@
       @if (!effectiveSoloMediaType) {
         <vt-import-config
           mediaTypeFieldId="lf-media-type"
-          [mediaType]="lfMediaType"
-          (mediaTypeChange)="lfOnMediaTypeChange($event)"
-          [mediaTypeOptions]="lfMediaTypeOptions"
-          [mediaTypeOptionLabels]="mediaTypeOptionLabels"
-          [mediaTypeOptionIcons]="mediaTypeOptionIcons"
-          [detectionHint]="detectionHint(lfDetection)"
+          [mediaType]="localFolderPicker.mediaType"
+          (mediaTypeChange)="localFolderPicker.onMediaTypeChange($event)"
+          [mediaTypeOptions]="localFolderPicker.mediaTypeOptions"
+          [mediaTypeOptionLabels]="localFolderPicker.mediaTypeOptionLabels"
+          [mediaTypeOptionIcons]="localFolderPicker.mediaTypeOptionIcons"
+          [detectionHint]="localFolderPicker.detectionHint()"
         ></vt-import-config>
       }
     </ng-container>
 
     <ng-container lfAfter>
-      @if (lfPickerKind === 'folder') {
-        <div class="form-group">
-          <label class="form-label" for="lf-recursive" title="When enabled, files inside nested subfolders are also uploaded. When disabled, only files directly inside the picked folder are uploaded.">
-            <input
-              id="lf-recursive"
-              type="checkbox"
-              [ngModel]="lfRecursive"
-              (ngModelChange)="lfOnRecursiveChange($event)"
-            />
-            Include subfolders
-          </label>
-        </div>
-      }
-
-      <div class="form-group">
-        <label class="form-label" for="lf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder/file name.">Dataset Name</label>
-        <input
-          id="lf-dataset-name"
-          type="text"
-          class="form-input"
-          [ngModel]="lfDatasetName"
-          (ngModelChange)="lfOnDatasetNameInput($event)"
-          placeholder="Leave blank to use a default name"
-        />
-      </div>
-
-      <div class="form-group form-group--section">
-        <vt-import-advanced
-          [availableConverters]="lfAvailableConverters"
-          [nativeType]="lfOutputTypeId"
-          [typeLabels]="mediaTypeLabels"
-          [embedders]="lfEmbedders()"
-          [clippers]="lfClippers()"
-          [showSourceSpecs]="true"
-          [sourceSpecs]="lfSourceSpecs"
-          (sourceSpecsChange)="onLfSpecsChange($event)"
-          [selectedEmbedder]="lfSelectedEmbedder()"
-          (selectedEmbedderChange)="lfSelectedEmbedder.set($event)"
-          [selectedPatchEmbedder]="lfSelectedPatchEmbedder()"
-          (selectedPatchEmbedderChange)="lfSelectedPatchEmbedder.set($event)"
-          [selectedStructuralEmbedder]="lfSelectedStructuralEmbedder()"
-          (selectedStructuralEmbedderChange)="lfSelectedStructuralEmbedder.set($event)"
-          [lockedEmbedder]="lockedEmbedderFor(lfMediaType, lfEmbedders())"
-          [selectedClipper]="lfSelectedClipper()"
-          [selectedClipperParams]="lfClipperParamValues()"
-          (clipperChooserRequested)="openClipperChooser('lf')"
-          [buildProjection]="buildProjection"
-          (buildProjectionChange)="buildProjection = $event"
-          [mergeNearDuplicates]="mergeNearDuplicates"
-          (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
-        ></vt-import-advanced>
-      </div>
-
-      @if (lfError()) {
-        <p class="error-text">{{ lfError() }}</p>
-      }
+      <vt-local-folder-picker
+        [importers]="importers()"
+        [mediaTypes]="mediaTypes()"
+        [guessedMediaType]="guessedMediaType"
+        [guessedMediaEmbedder]="guessedMediaEmbedder()"
+        [buildProjection]="buildProjection"
+        (buildProjectionChange)="buildProjection = $event"
+        [mergeNearDuplicates]="mergeNearDuplicates"
+        (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
+        (importStarted)="importStarted.emit()"
+      ></vt-local-folder-picker>
     </ng-container>
   </vt-source-picker>
 
-  @if (activePickerView !== 'demo' && activePickerView !== 'local_folder' && activePickerView !== 'local_files' && activePickerView !== 'server_folder' && selectedImporter()) {
-    <div class="importer-form">
-      @if ((selectedImporter()?.fields?.length ?? 0) > 0) {
-        @for (field of selectedImporter()!.fields; track field.key) {
-          @if (field.field_type === 'select' && field.key === 'media_type') {
-            @if (!effectiveSoloMediaType) {
-              <vt-import-config
-                [mediaTypeFieldId]="'field-' + field.key"
-                [mediaType]="formValues[field.key] || ''"
-                (mediaTypeChange)="onMediaTypeChange($event)"
-                [mediaTypeOptions]="field.options || []"
-                [mediaTypeOptionLabels]="mediaTypeOptionLabels"
-                [mediaTypeOptionIcons]="mediaTypeOptionIcons"
-              ></vt-import-config>
-              @if (field.hint) {
-                <p class="form-hint">{{ field.hint }}</p>
-              }
-            }
-          } @else if (field.field_type === 'checkbox') {
-          <div class="form-group">
-            <label class="form-label" [for]="'field-' + field.key"
-              [title]="field.description || field.label || field.key">
-              <input
-                [id]="'field-' + field.key"
-                type="checkbox"
-                [checked]="formValues[field.key] === true || formValues[field.key] === 'true'"
-                (change)="formValues[field.key] = $any($event.target).checked ? 'true' : 'false'"
-              />
-              {{ field.label || field.key }}
-              @if (field.hint) {
-                <vt-field-hint-icon [hint]="field.hint"></vt-field-hint-icon>
-              }
-            </label>
-          </div>
-          } @else {
-          <div class="form-group">
-            <label class="form-label" [for]="'field-' + field.key"
-              [title]="field.description || field.label || field.key">
-              {{ field.label || field.key }}
-              @if (field.required) {
-                <span class="required">*</span>
-              }
-              @if (field.hint) {
-                <vt-field-hint-icon [hint]="field.hint"></vt-field-hint-icon>
-              }
-            </label>
+  <vt-generic-form-picker
+    [hidden]="activePickerView === 'demo' || activePickerView === 'local_folder' || activePickerView === 'local_files' || activePickerView === 'server_folder'"
+    [importers]="importers()"
+    [mediaTypes]="mediaTypes()"
+    [guessedMediaType]="guessedMediaType"
+    [guessedMediaEmbedder]="guessedMediaEmbedder()"
+    [buildProjection]="buildProjection"
+    (buildProjectionChange)="buildProjection = $event"
+    [mergeNearDuplicates]="mergeNearDuplicates"
+    (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
+    (importStarted)="importStarted.emit()"
+  ></vt-generic-form-picker>
 
-            @if (field.field_type === 'server_path') {
-              <vt-file-browser
-                [value]="formValues[field.key] || ''"
-                [extensions]="field.accept || ''"
-                [placeholder]="field.placeholder || field.description || field.label || field.key"
-                (pathSelected)="formOnServerPathSelected(field.key, $event)"
-              ></vt-file-browser>
-            } @else if (field.field_type === 'file') {
-              <input
-                [id]="'field-' + field.key"
-                type="file"
-                class="form-input"
-                [accept]="field.accept || ''"
-                (change)="onFileSelected($event, field.key)"
-              />
-            } @else if (field.field_type === 'select') {
-              <select
-                [id]="'field-' + field.key"
-                class="form-select"
-                [(ngModel)]="formValues[field.key]"
-                [disabled]="!!dynamicFieldLoading()[field.key] || (!!field.dynamic_options && optionsFor(field).length === 0)"
-                (ngModelChange)="onFormFieldChanged(field.key)"
-              >
-                @if (field.dynamic_options && dynamicFieldLoading()[field.key]) {
-                  <option [value]="''" disabled>Loading…</option>
-                } @else if (field.dynamic_options && optionsFor(field).length === 0 && !dynamicFieldError()[field.key]) {
-                  <option [value]="''" disabled>No options available</option>
-                }
-                @for (opt of optionsFor(field); track opt) {
-                  <option [value]="opt">{{ opt }}</option>
-                }
-              </select>
-              @if (field.dynamic_options && dynamicFieldError()[field.key]) {
-                <p class="error-text">{{ dynamicFieldError()[field.key] }}</p>
-              }
-            } @else if (field.key === 'dataset_name') {
-              <input
-                [id]="'field-' + field.key"
-                type="text"
-                class="form-input"
-                [ngModel]="formValues['dataset_name'] || ''"
-                (ngModelChange)="formOnDatasetNameInput($event)"
-                [placeholder]="field.description || field.label || field.key"
-              />
-            } @else if (field.field_type === 'number') {
-              <input
-                [id]="'field-' + field.key"
-                type="number"
-                class="form-input"
-                [(ngModel)]="formValues[field.key]"
-                [placeholder]="field.placeholder || field.description || field.label || field.key"
-                [attr.min]="field.min || null"
-                [attr.max]="field.max || null"
-                [attr.step]="field.step || null"
-                (change)="onFormFieldChanged(field.key)"
-              />
-            } @else if (field.field_type === 'password') {
-              <input
-                [id]="'field-' + field.key"
-                type="password"
-                class="form-input"
-                [(ngModel)]="formValues[field.key]"
-                [placeholder]="field.placeholder || field.description || field.label || field.key"
-                (change)="onFormFieldChanged(field.key)"
-              />
-            } @else if (field.field_type === 'email') {
-              <input
-                [id]="'field-' + field.key"
-                type="email"
-                class="form-input"
-                [(ngModel)]="formValues[field.key]"
-                [placeholder]="field.placeholder || field.description || field.label || field.key"
-                (change)="onFormFieldChanged(field.key)"
-              />
-            } @else if (field.field_type === 'url') {
-              <input
-                [id]="'field-' + field.key"
-                type="url"
-                class="form-input"
-                [(ngModel)]="formValues[field.key]"
-                [placeholder]="field.placeholder || field.description || field.label || field.key"
-                (change)="onFormFieldChanged(field.key)"
-              />
-            } @else {
-              <input
-                [id]="'field-' + field.key"
-                type="text"
-                class="form-input"
-                [(ngModel)]="formValues[field.key]"
-                [placeholder]="field.description || field.label || field.key"
-                (change)="onFormFieldChanged(field.key)"
-              />
-            }
-          </div>
-          }
-        }
-      } @else {
-        <p class="info-text">This importer requires no additional configuration.</p>
-      }
-
-      <div class="form-group form-group--section">
-        <vt-import-advanced
-          [availableConverters]="formAvailableConverters"
-          [nativeType]="formOutputTypeId"
-          [typeLabels]="mediaTypeLabels"
-          [embedders]="availableEmbedders()"
-          [clippers]="availableClippers()"
-          [showSourceSpecs]="true"
-          [sourceSpecs]="formSourceSpecs"
-          (sourceSpecsChange)="onFormSpecsChange($event)"
-          [selectedEmbedder]="selectedEmbedder()"
-          (selectedEmbedderChange)="selectedEmbedder.set($event)"
-          [selectedPatchEmbedder]="selectedPatchEmbedder()"
-          (selectedPatchEmbedderChange)="selectedPatchEmbedder.set($event)"
-          [selectedStructuralEmbedder]="selectedStructuralEmbedder()"
-          (selectedStructuralEmbedderChange)="selectedStructuralEmbedder.set($event)"
-          [lockedEmbedder]="lockedEmbedderFor(formOutputTypeId, availableEmbedders())"
-          [selectedClipper]="selectedClipper()"
-          [selectedClipperParams]="clipperParamValues()"
-          (clipperChooserRequested)="openClipperChooser('form')"
-          [buildProjection]="buildProjection"
-          (buildProjectionChange)="buildProjection = $event"
-          [mergeNearDuplicates]="mergeNearDuplicates"
-          (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
-        ></vt-import-advanced>
-      </div>
-
-      @if (error()) {
-        <p class="error-text">{{ error() }}</p>
-      }
-    </div>
-  }
 
   @if (activePickerView !== 'demo' && activePickerView !== 'local_folder' && activePickerView !== 'local_files' && activePickerView !== 'server_folder' && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="submit()" [disabled]="submitting() || !formCanSubmit">
-        @if (submitting()) {
+      <button class="btn btn--primary" (click)="genericFormPicker.submit()" [disabled]="genericFormPicker.submitting() || !genericFormPicker.canSubmit">
+        @if (genericFormPicker.submitting()) {
           Importing...
         } @else {
           Import
@@ -478,8 +149,8 @@
   @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="lfSubmit()" [disabled]="lfSubmitting() || lfFiles.length === 0">
-        @if (lfSubmitting()) {
+      <button class="btn btn--primary" (click)="localFolderPicker.submit()" [disabled]="localFolderPicker.submitting() || localFolderPicker.files().length === 0">
+        @if (localFolderPicker.submitting()) {
           Uploading...
         } @else {
           Upload &amp; Import
@@ -491,8 +162,8 @@
   @if (activePickerView === 'server_folder' && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="sfSubmit()" [disabled]="sfSubmitting() || !sfAbsolutePath">
-        @if (sfSubmitting()) {
+      <button class="btn btn--primary" (click)="serverFolderPicker.submit()" [disabled]="serverFolderPicker.submitting() || !serverFolderPicker.folderPath()">
+        @if (serverFolderPicker.submitting()) {
           Importing...
         } @else {
           Import
@@ -504,13 +175,7 @@
   @if (activePickerView === 'demo' && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="submitDemo()" [disabled]="!selectedDemo">Import</button>
+      <button class="btn btn--primary" (click)="demoPicker.submit()" [disabled]="!demoPicker.selectedDemo()">Import</button>
     </div>
   }
-  <vt-clipper-chooser
-    [open]="clipperChooserOpen"
-    [clippers]="clipperChooserClippers"
-    (selected)="onClipperChooserSelected($event)"
-    (cancelled)="onClipperChooserCancelled()"
-  />
 </vt-modal>

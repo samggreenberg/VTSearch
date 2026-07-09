@@ -6,7 +6,7 @@ This review asks: where have design decisions that were right at small scale bee
 
 ## Prioritized backlog (remaining)
 
-1. **Theme B remaining** — `DetectorContext` sub-context split (item under Theme B; ~346 call sites, do opportunistically) and the two frontend components (`dataset-importer-modal`, `browse-canvas`). Plus the `app.py` hooks/errors split and the `settings.py` lazy-migration-to-script, both left as scoped open follow-ups (see Theme B).
+1. **Theme B remaining** — `DetectorContext` sub-context split (item under Theme B; ~346 call sites, do opportunistically). Plus the `app.py` hooks/errors split and the `settings.py` lazy-migration-to-script, both left as scoped open follow-ups (see Theme B).
 2. **Theme D** — converge frontend types onto the generated client.
 3. **Theme C remaining** — state-proxy registry table; image single/patch base; downloaders base.
 4. **Theme A (optional)** — convert the remaining lazy `vtsearch.auth` / `vtsearch.achievements` / `vtsearch.logging_config` / `vtsearch.routes._shared` reaches in `vtscore/` to injected registration hooks (the pattern already used for `register_setting_persister` / `register_core_config_builder`), making `vtscore/` import-clean of `vtsearch` entirely. Correct as lazy imports today; do this if/when the library tier is actually extracted.
@@ -20,7 +20,6 @@ Still open:
 - **`app.py` hooks/errors (open follow-up on the shipped CLI split).** The request-lifecycle hooks (`before_request` / `after_request` / `teardown_request`) and the global JSON error handlers are still inline in `app.py`. They *are* part of the `app` object's lifecycle (unlike the CLI/preflight code that was extracted), so the leverage of moving them to `hooks.py` + `errors.py` is lower and the risk (decorator-registration ordering) higher; left for a scoped follow-up.
 - **`settings.py` lazy migration (open follow-up on the shipped engine split).** The legacy-migration path is still lazy (runs from `UserSettingsStore.ensure_server_loaded` on first server load) rather than a one-shot admin script — left as-is deliberately because the lazy trigger is what the default-user read-through and the CLI `--settings` flat-file flow rely on; moving it to a script is a behavior change worth its own scoped task.
 - **`vtscore/state/core.py` — `DetectorContext` (31 fields).** A god-object spanning vote state, training artifacts, cached embeddings, and Find-session state. Splitting into `VoteState` / `TrainingState` / `FindSessionState` is the right shape but touches ~346 call sites — expensive; defer until already in that code.
-- **Frontend:** `dataset-importer-modal.component.ts` (2162; 17 state slices + HTTP + 5 picker views) and `browse-canvas.component.ts` (1881; ~200 lines of pure pan/zoom/clamp/rubber-band geometry that should be a framework-free `ViewTransformService`).
 
 ---
 
