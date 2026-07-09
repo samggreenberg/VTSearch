@@ -12,7 +12,9 @@ open list — region-matrix fallback space mixing); ninth follow-up pass
 shipped (#1 of the then-current open list — eval harness calibration
 fidelity); tenth follow-up pass shipped (#1 of the then-current open list —
 inclusion-slide safe-blend semantics, resolved "skip blend on slides");
-remaining open follow-ups below.**
+eleventh follow-up pass shipped (the "audit coverage gaps" item — all four
+never-cleared areas audited, confirmed findings fixed); remaining open
+follow-ups below.**
 
 A full-codebase audit focused on interface boundaries: frontend ↔ backend
 API contract, route layer ↔ state system, app tier ↔ `vtscore` library,
@@ -374,6 +376,119 @@ up any of these areas sees the known-weak spots.
   (`TestInclusionSlideDropsSafeBlend` — a slide re-derives the raw aggregate,
   not the blend; a below-floor slide is a no-op).
 
+### Eleventh follow-up pass — audit coverage gaps cleared (was open #2)
+
+The four areas the original audit never cleared (rate-limit casualties) were
+swept by five parallel audit passes: browse-canvas/minimap coordinate math +
+rAF lifecycles, modal/player component lifecycles, left/right-panel
+virtualization, and the full route-blueprint sweep of
+`routes/datasets|media|detectors|labels|processors|projection`.  Confirmed,
+well-scoped findings were fixed with regression tests; the rest are recorded
+under Open follow-ups.
+
+Route-blueprint sweep fixes:
+
+- **Find / auto-detect cancellation was a silent no-op** (high).
+  `POST /api/find/cancel` set `find_progress`'s cancel flag and every scoring
+  route cleared it on entry, but **no scoring loop ever read it** — the
+  cancel docstring's "long-running loops poll the flag" was false, and an
+  expensive Find always ran to completion.  The loops now poll at their
+  stage boundaries (`multi_find`'s dataset loop, `_score_dataset`'s detector
+  loop, `find_label`'s train/score/apply boundaries, and the entry of each
+  `auto-detect` worker — *before* its catch-all `except Exception`, which
+  would otherwise swallow the `CancelledError`) and the routes unwind with a
+  409 + idle progress.  Tests in `tests/detectors/test_find_cancel.py`.
+- **Unlocked detector-JSON read-modify-write in four routes** (medium).
+  `sync_labels_to_loaded_detector` serialises its RMW of
+  `detectors/<slug>.json` under `_label_sync_write_lock` (added in the
+  initial pass), but `save_detector_labels`, `vote_detector_label`,
+  `import_labels_into_detector`, and `find_corrections_to_detector` did the
+  same file's RMW unlocked — a concurrent locked sync (any media vote) and a
+  route write dropped each other's entries.  All four now take the same
+  lock (each acquiring it before `_state_lock`, preserving the documented
+  ordering).  Tests in `tests/detectors/test_detector_json_lock.py`.
+- **`save_detector_labels` sentinel empty-labelset wipe** (medium).  A
+  header-less `POST /api/detectors/<name>/labels` resolved the
+  request-missing sentinels, whose `validated_vote_snapshot` reports
+  `safe=True` over frozen-empty votes/medias — passing the 409 guard and
+  full-replacing the named detector's labelset with an empty one.  Now
+  guarded with `require_dataset_header` / `require_detector_header` (H34
+  defence-in-depth pattern).  Test in the same file.
+- **`fill_labels_from_sort` partial state on persistence failure**
+  (low-medium).  The route applied votes then aborted 500 if the disk sync
+  failed, leaving live in-memory votes that the next vote-triggered sync
+  silently persisted — contradicting the error.  Now snapshots and rolls
+  back the vote state on failure (the `apply_and_retrain` / H30 pattern).
+  Test in `tests/api/test_error_recovery.py`.
+- **Header-less `/api/dataset/clear` sentinel no-op** (low).  The route read
+  the sentinel's truthy `"__request_missing__"` id and "cleared" a dataset
+  that doesn't exist; the intended global-clear fallback was unreachable
+  in-request (and would raise on the sentinel's frozen containers anyway).
+  The header is now required (400 without it); no frontend caller exists.
+  Test in `tests/datasets/test_datasets.py`.
+- **`example_sort_origin` bypassed multi-user file confinement** (medium in
+  multi-user).  The route built a media source from the request body's
+  verbatim origin dict with none of `_load_from_origin`'s
+  `validate_server_filepath` checks, so a `server_folder` origin could point
+  at any server-readable directory (arbitrary-file embedding + existence
+  disclosure outside `data/<user>/`).  Path-like origin params are now
+  validated the same way.  Tests in `tests/api/test_path_validation.py`.
+- **`stage_file` whole-member RAM read** (low).  The pickle peek read the
+  entire decompressed `medias.pkl` into memory via `zf.read()` before
+  peeking (zip-bomb amplification, compounded by `MAX_UPLOAD_MB=0` =
+  unlimited by default); it now streams via `zf.open()`.
+
+Frontend fixes (modal/player lifecycles, virtualization, canvas/minimap):
+
+- **One Escape closed every modal in a stack** (high).  Every
+  `ModalComponent` listens for Escape on `document` guarded only by its own
+  `open()`, so nested flows (New Detector → crop modal, Settings → importer,
+  any modal → dialog-host confirm) lost the whole stack — and the outer
+  form's state — to a single keypress meant for the inner view.  A
+  module-level open-modal stack now routes Escape to the topmost open modal
+  only.  Specs in `modal.component.spec.ts`.
+- **Escape/backdrop on a `prompt()` resolved `false`** (high).  Dialog-host's
+  `onClosed()` hard-coded `resolve(false)` for every dialog kind; `prompt()`
+  callers are typed `string | null` and crashed (`false.trim()` in
+  find-view's promote flow, `false.split()` in the dashboard access-list
+  editors).  Dismissal now resolves the dialog kind's own cancel value, and
+  a second `show()` while one dialog is pending settles the superseded
+  dialog as cancelled instead of stranding its promise forever.  Specs in
+  `dialog-host.component.spec.ts`.
+- **Image-viewer's window-level Escape acted under open modals**
+  (medium-low).  Closing a modal with Esc also cleared the user's drawn
+  region box underneath; the handler now suppresses on `.modal-backdrop`
+  presence, matching `KeyboardService`.  Specs in
+  `image-viewer.component.spec.ts`.
+- **Virtual-scroll prefetch died on viewport recreation** (medium, two
+  sites).  Both the media list (`scrollSubscribed` one-shot flag) and the
+  browse-bin popup (`ngAfterViewInit`-only wiring) subscribed
+  `scrolledIndexChange` once per component, but their CDK viewports live
+  behind `@if` branches and are destroyed/recreated on dataset switches,
+  virtualization-threshold crossings, and popup re-summons
+  (singleton↔multi) — after which scroll-driven metadata/thumbnail
+  hydration silently never fired again.  Subscriptions are now keyed to the
+  viewport *instance* (the existing `observedViewportEl` re-observe
+  pattern).  Specs in `media-list.component.spec.ts` and
+  `browse-bin-popup.zoneless.spec.ts`.
+- **Minimap mouse math ignored the app-wide `html { zoom: 1.1 }`** (high).
+  `recenterFromEvent` mixed visual-px cursor offsets with layout-px map
+  transforms, so every minimap click/drag recentred ~10% off target (the
+  main canvas corrects for exactly this); the corner-resize drag grew 1.1×
+  faster than the cursor; and the bitmap was undersampled 1.1×.  The cursor
+  offset is now scaled by the rendered-size ratio, the resize delta divides
+  out the root zoom, and the backing store bakes the zoom in.  (No spec:
+  jsdom has no canvas 2D context; verified against the browse-canvas
+  transform conventions.)
+- **Post-destroy rAF scheduling in browse-canvas** (medium).  Late
+  thumbnail `img.onload` callbacks called `requestRedraw()` after
+  `ngOnDestroy` (which only cancels the *current* rAF handle), running
+  `draw()` on the destroyed component — emitting on destroyed outputs,
+  republishing a non-null viewport over teardown's `null`, re-arming the
+  idle thumb-prefetch loop, and issuing spurious tile fetches against a
+  newer browse view's projection.  A `destroyed` flag now gates
+  `requestRedraw()` and `scheduleThumbPrefetch()`.
+
 ## Open follow-ups
 
 Ordered roughly by severity.  Each was found and verified during the audit
@@ -385,21 +500,66 @@ re-renumbered #5/#8 "ML threshold correctness" items in the fifth, the
 re-renumbered #1 "SSE connection cap" in the sixth, the re-renumbered #6
 "http_archive cache staleness" in the seventh, the re-renumbered #1
 "region-matrix fallback space mixing" in the eighth, the re-renumbered
-#1 "eval harness calibration fidelity" in the ninth, and the re-renumbered
-#1 "inclusion-slide safe-blend semantics" in the tenth — see the
-follow-up-pass subsections under What shipped.  The list below is
-renumbered again after those drains.)
+#1 "eval harness calibration fidelity" in the ninth, the re-renumbered #1
+"inclusion-slide safe-blend semantics" in the tenth, and the "audit
+coverage gaps" item in the eleventh — whose sweep also *added* items 2-8
+below (findings confirmed during that pass but deferred as design
+decisions or larger changes) — see the follow-up-pass subsections under
+What shipped.  The list below is renumbered again after those drains.)
 
 1. **Dataset registry is not multi-process safe**
    (`vtscore/datasets/registry.py`): in-process lock plus a fixed `.tmp`
    name; a concurrent CLI autodetect run against the same data dir can
    silently erase the server's registrations.  Fine under the documented
    single-worker model; needs flock if that changes.
-2. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
-   rather than clean): browse-canvas/minimap coordinate math and rAF
-   lifecycles, modal/player component lifecycle sweep, left/right-panel
-   virtualization, and a full route-blueprint sweep of
-   `routes/datasets|media|detectors|labels|processors|projection`.
+2. **Progress-modal analysis path is broken three ways**
+   (`progress-modal.component.ts`, `runAnalysis()`): Escape/X/backdrop skip
+   the eval-job cancel the in-body Cancel button performs; the
+   `trainAndScore` subscribe has no `takeUntil`, so a destroy while the POST
+   is in flight arms `pollEvalJob()` against an already-completed `destroy$`
+   (RxJS `takeUntil` never fires on a pre-completed notifier → orphan
+   500 ms poller until the job ends); and the backend emits the eval
+   `idle/Done` SSE frame *inside* `_run` before the job flips to `done`, so
+   the SSE watcher usually kills the result poller before it observes
+   completion — `analyzing` hangs forever.  All currently *latent*: the only
+   in-app instantiation passes `[useCachedHistory]="true"`, but
+   `runAnalysis()` is the component default and is pinned by its spec.
+3. **Browse canvas gesture overlaps** (found in the eleventh pass, deferred
+   as UX design decisions): wheel-zoom during an active drag-pan/marquee
+   discards the zoom's cursor anchoring on the next mousemove and freezes
+   painting for the 220 ms transition (gate the wheel while a drag is
+   active, or make the pan math zoom-aware); the deferred single-click
+   toggle resolves its captured screen coords against whatever transform
+   exists 250 ms later, so a wheel notch / arrow-key glide inside the
+   double-click window toggles the wrong bin (cancel or flush the pending
+   toggle on view moves); the boundary-settle rAF loop can start while the
+   zoom-transition loop still owns the canvas (both write
+   `displayedTransform`; visible damage is a truncated transition).
+4. **Root-zoom px mixing in panel-divider drags**
+   (`browse-view.component.ts:onDividerMove`,
+   `label-view/panel-resize.directive.ts`): visual-px cursor deltas applied
+   as layout-px widths under `html { zoom: 1.1 }`, so the divider rides
+   ~10% away from the pointer.  Shared app-wide wart; fix both sites
+   together (the eleventh pass fixed the same class of bug in the minimap).
+5. **Pure devicePixelRatio change never re-runs canvas `resize()`**
+   (browse-canvas + minimap): dragging the window to a different-density
+   monitor leaves `dpr` (and the thumbnail-resolution tier) stale until the
+   next CSS resize; rendering-quality only (hit-testing is CSS-px based).
+   Needs a `matchMedia('(resolution: …)')` listener.
+6. **`save_detector_labels` full-replace drops cross-dataset labels**
+   (`routes/detectors/labels.py`): the route rebuilds the labelset from the
+   *active dataset's* votes only, while `sync_labels_to_loaded_detector`
+   deliberately merges cross-dataset entries — saving while dataset B is
+   active discards the entries accumulated under dataset C.  Decide whether
+   the explicit save should merge like the sync does (probably yes, via
+   `_merge_labelsets_across_datasets`) or full-replace is the intended
+   "save exactly what I see" semantic.
+7. **`MAX_UPLOAD_MB` defaults to 0 = unlimited** (`vtscore/config.py`):
+   staging uploads are unbounded by default; decide a sane default cap.
+   (The eleventh pass removed the *decompressed-copy* amplification in
+   `stage_file`, but the upload itself is still unbounded.)
+8. **`AutoDetectProgressModalComponent` is dead code** (modal sweep note):
+   referenced nowhere; delete it or wire it up.
 
 ## Behaviour changes shipped (backwards compatibility notes)
 
@@ -478,3 +638,24 @@ renumbered again after those drains.)
   different threshold than a fresh retrain) is now documented as intentional
   ("skip blend on slides") rather than accidental — the behaviour itself is
   unchanged from before the audit.
+- `POST /api/find/cancel` now actually stops an in-flight `/api/find`,
+  `/api/find-label`, or `/api/auto-detect`: the cancelled request unwinds
+  with **409** `{"message": "Find cancelled"}` (progress resets to idle)
+  instead of running to completion and returning 200.
+- `POST /api/detectors/<name>/labels` now **requires** the `X-Dataset-Id`
+  and `X-Detector-Id` headers (400 without them); previously a header-less
+  request silently overwrote the named detector's labelset with an empty
+  one.
+- `POST /api/dataset/clear` now **requires** `X-Dataset-Id` (400 without
+  it); previously a header-less clear silently no-oped against the
+  request-missing sentinel.  No frontend caller sends a header-less clear.
+- `POST /api/example-sort-origin` rejects (400) origins whose path-like
+  params escape the user's confinement dir in multi-user mode; single-user
+  mode is unchanged (unrestricted).
+- A failed label-persistence pass in `POST /api/labels/fill-from-sort` now
+  rolls the applied in-memory votes back before returning 500, instead of
+  leaving them live to be silently persisted later.
+- Frontend: Escape now closes only the topmost modal of a stack; Escape or
+  a backdrop click on a `prompt()` dialog resolves `null` (previously
+  `false`, which crashed callers); Escape while a modal is open no longer
+  clears the image viewer's drawn region box underneath.
