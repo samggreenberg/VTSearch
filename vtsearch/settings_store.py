@@ -459,6 +459,18 @@ class UserSettingsStore:
             return False
 
         # Window elapsed - cheap probe to detect upstream changes.
+        return self._source_version_changed(username, cache_cfg, state.last_version, now)
+
+    def _source_version_changed(self, username: str, cache_cfg: dict[str, Any], last_version: Any, now: float) -> bool:
+        """Probe the source and report whether it changed since *last_version*.
+
+        Returns ``True`` only when the source reports a concrete version that
+        differs from ``last_version`` (a full re-sync is due).  On any no-sync
+        outcome (unknown source, transient peek failure, source can't cheaply
+        report a version, or the version is unchanged) it refreshes
+        ``last_check_monotonic`` so the probe stays rate-limited, and returns
+        ``False``.
+        """
         from vtsearch.settings_io.sources import get_settings_source
 
         source = get_settings_source(cache_cfg["source_name"])
@@ -470,13 +482,9 @@ class UserSettingsStore:
         except Exception:
             # Transient peek failure - back off until next window, keep
             # serving the local cache.
-            with self._lock:
-                s = self._sync_state.get(username)
-                if s is not None:
-                    s.last_check_monotonic = now
-            return False
+            current_version = last_version  # forces the "unchanged" branch below
 
-        if current_version is None or current_version == state.last_version:
+        if current_version is None or current_version == last_version:
             # Source can't cheaply check, or unchanged since last sync.
             with self._lock:
                 s = self._sync_state.get(username)

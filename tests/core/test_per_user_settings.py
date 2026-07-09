@@ -289,9 +289,7 @@ class TestMigrationCrossProcessLock:
             calls["n"] += 1
             return real(self, cache, path)
 
-        monkeypatch.setattr(
-            settings_store_mod.UserSettingsStore, "_maybe_migrate_legacy_settings", counting
-        )
+        monkeypatch.setattr(settings_store_mod.UserSettingsStore, "_maybe_migrate_legacy_settings", counting)
         try:
             barrier = threading.Barrier(4)
             results: list[float] = []
