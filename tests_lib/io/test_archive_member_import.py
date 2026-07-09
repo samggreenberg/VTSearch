@@ -413,9 +413,9 @@ class TestArchiveMemberAudioWaveform:
     """Waveform thumbnails for windowed archive-member audio (VTSBrowse tiles)."""
 
     def _audio_type(self):
-        from vtscore.media import get as get_media_type
+        from vtscore.media.audio.media_type import AudioMediaType
 
-        return get_media_type("audio")
+        return AudioMediaType()
 
     def test_windows_get_distinct_waveforms(self, tmp_path):
         import vtscore.media.audio.media_type as mt
