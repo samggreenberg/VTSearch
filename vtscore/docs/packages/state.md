@@ -46,17 +46,23 @@ Per-dataset mutable state. One context per loaded dataset.
 | Attribute | Type | Description |
 |-----------|------|-------------|
 | `dataset_id` | `str` | Registration key |
-| `medias` | `dict[int, dict[str, Any]]` | `cid -> media dict` for every loaded item |
+| `medias` | `MediasDict` | `cid -> media dict` for every loaded item; a `dict` subclass that bumps `media_revision` on every structural mutation |
+| `media_revision` | `int` (read-only) | Monotonic counter advanced on every `medias` mutation; the matrix caches key on it |
 | `diversity_tree` | `DiversityTree \| None` | Hierarchical clustering of the embeddings (built lazily) |
 | `dataset_display_name` | `str \| None` | UI-overridable name |
 | `_emb_matrix_ids` | `list[int] \| None` | Sorted media-ID list the matrix corresponds to |
 | `_emb_matrix` | `np.ndarray \| None` | Cached `(N, D)` contiguous float32 embedding matrix |
+| `_emb_matrix_revision` | `int \| None` | The `media_revision` the cached matrix was built at (cache key) |
 
 The cached matrix is rebuilt lazily by
 `vtscore.embedding.matrix.get_embedding_matrix` and reused across
 cosine sort, MLP scoring, and diversity-tree construction so the library
-doesn't rebuild an `(N, D)` matrix per call. `clear_medias()` drops both
-the matrix and the diversity tree.
+doesn't rebuild an `(N, D)` matrix per call. Cache validity is a single
+`media_revision` compare, so a mutation that changes vectors without
+changing the id set still invalidates it (root-cause Pattern #4). An
+in-place vector rewrite must bump the counter via
+`invalidate_embedding_matrix` / `bump_media_revision`. `clear_medias()`
+drops both the matrix and the diversity tree.
 
 ### `DetectorContext`
 
