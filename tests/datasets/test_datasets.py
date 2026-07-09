@@ -1924,3 +1924,20 @@ class TestCancelIngest:
             dataset_progress.reset_cancel()
             app_module.medias.clear()
             app_module.medias.update(saved)
+
+
+class TestClearDatasetHeaderGuard:
+    """Ninth audit pass: a header-less ``POST /api/dataset/clear`` used to
+    read the request-missing sentinel's truthy id ``"__request_missing__"``
+    and silently no-op (unregistering a dataset that doesn't exist).  The
+    route now requires ``X-Dataset-Id`` and rejects loudly instead."""
+
+    def test_headerless_clear_is_rejected(self, client):
+        saved = dict(app_module.medias)
+        try:
+            resp = client.post("/api/dataset/clear", headers={"X-Dataset-Id": ""})
+            assert resp.status_code == 400
+            # Nothing was cleared or unregistered.
+            assert len(app_module.medias) == len(saved)
+        finally:
+            app_module.medias.update(saved)

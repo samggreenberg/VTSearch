@@ -20,14 +20,16 @@ from typing import Any
 from vtscore.datasets.labelset import LabelSet
 from vtscore.state.core import DetectorContext
 
-# Serialises the read → merge → write pass in
-# :func:`sync_labels_to_loaded_detector`.  Two concurrent syncs on the same
-# detector from *different dataset contexts* each merge against a stale base
-# and the last writer drops the other dataset's just-written cross-dataset
-# entries (lost update).  The write itself is atomic (os.replace), but
-# atomicity doesn't serialise the read-modify-write.  Acquired *before*
-# ``_state_lock`` (via ``validated_vote_snapshot`` inside the body); no other
-# code takes this lock, so no ordering cycle is possible.
+# Serialises every read → merge → write pass over a detector JSON file:
+# :func:`sync_labels_to_loaded_detector` here, plus the route-layer writers
+# (``save_detector_labels``, ``vote_detector_label``,
+# ``import_labels_into_detector``, ``find_corrections_to_detector``).  Two
+# concurrent RMWs on the same detector each merge against a stale base and
+# the last writer drops the other's just-written entries (lost update).  The
+# write itself is atomic (os.replace), but atomicity doesn't serialise the
+# read-modify-write.  Every taker acquires this lock *before* ``_state_lock``
+# (via ``validated_vote_snapshot`` or an explicit ``with _state_lock`` inside
+# the body), so no ordering cycle is possible.
 _label_sync_write_lock = threading.Lock()
 
 

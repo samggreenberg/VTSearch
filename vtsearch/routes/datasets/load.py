@@ -37,10 +37,9 @@ from vtscore.datasets.load_pipeline import (
     _parse_embedder_list,
     _run_importer_in_background,
     _run_origin_load_in_background,
-    clear_dataset,
 )
 from vtscore.datasets.registry import remove_loaded_id as _reg_remove_loaded
-from vtsearch.routes._shared import format_exception_detail
+from vtsearch.routes._shared import format_exception_detail, require_dataset_header
 from vtsearch.routes.datasets._helpers import _safe_relative_upload_path
 from vtsearch.schemas.datasets import (
     DatasetClearResponseSchema,
@@ -539,19 +538,22 @@ def export_dataset():
 
 @datasets_load_bp.route("/api/dataset/clear", methods=["POST"])
 @datasets_load_bp.response(200, DatasetClearResponseSchema)
+@datasets_load_bp.alt_response(400, description="X-Dataset-Id header missing.")
+@require_dataset_header
 def clear_dataset_route():
     """Clear the request-scoped dataset from memory.
 
     Uses the ``X-Dataset-Id`` header (via ``get_active_context()``) to
-    determine which dataset to clear.
+    determine which dataset to clear.  The header is required: without it
+    the active context is the request-missing sentinel, whose truthy id
+    ``"__request_missing__"`` made the old emptiness check silently
+    "clear" a dataset that doesn't exist (and the sentinel's frozen
+    containers rule out a meaningful global-clear fallback inside a
+    request), so a header-less clear is rejected loudly instead.
     """
     from vtsearch.state import get_active_context
 
     ctx = get_active_context()
-    ds_id = ctx.dataset_id if ctx.dataset_id else None
-    if ds_id:
-        unregister_context(ds_id)
-        _reg_remove_loaded(ds_id)
-    else:
-        clear_dataset()
+    unregister_context(ctx.dataset_id)
+    _reg_remove_loaded(ctx.dataset_id)
     return {"ok": True}

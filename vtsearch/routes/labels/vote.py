@@ -330,6 +330,21 @@ def fill_labels_from_sort(body: dict):
             "bad_count": len(bad_candidates),
         }
 
+    # Snapshot the vote state we're about to mutate so a failed persistence
+    # pass can roll it back (mirroring ``apply_and_retrain``, audit H30):
+    # without the rollback the 500 below tells the user the labels were NOT
+    # committed while they stay live in memory and get silently persisted by
+    # the next vote-triggered sync.
+    from vtscore.state.core import _state_lock, get_active_detector_context
+
+    det_ctx = get_active_detector_context()
+    saved_good_votes = dict(det_ctx.good_votes)
+    saved_bad_votes = dict(det_ctx.bad_votes)
+    saved_region_boxes = dict(det_ctx.vote_region_boxes)
+    saved_history = list(det_ctx.label_history)
+    saved_click_times = dict(det_ctx.vote_click_times)
+    saved_click_counter = det_ctx.click_counter
+
     # Apply labels
     for entry in good_candidates:
         apply_label_with_click_time(entry["id"], "good")
@@ -349,6 +364,18 @@ def fill_labels_from_sort(body: dict):
     try:
         sync_labels_to_loaded_detector()
     except Exception as exc:
+        with _state_lock:
+            det_ctx.good_votes.clear()
+            det_ctx.good_votes.update(saved_good_votes)
+            det_ctx.bad_votes.clear()
+            det_ctx.bad_votes.update(saved_bad_votes)
+            det_ctx.vote_region_boxes.clear()
+            det_ctx.vote_region_boxes.update(saved_region_boxes)
+            det_ctx.label_history.clear()
+            det_ctx.label_history.extend(saved_history)
+            det_ctx.vote_click_times.clear()
+            det_ctx.vote_click_times.update(saved_click_times)
+            det_ctx.click_counter = saved_click_counter
         logger.exception("fill_labels_from_sort: detector label sync failed")
         abort(500, message=f"Failed to persist labels to detector store: {exc}")
 

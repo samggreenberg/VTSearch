@@ -54,7 +54,7 @@ from vtscore.detectors.store import (
     _write_detector,
 )
 from vtscore.detectors.workflow import apply_and_retrain as _apply_and_retrain
-from vtsearch.routes._shared import image_thumbnail_response
+from vtsearch.routes._shared import image_thumbnail_response, require_dataset_header, require_detector_header
 from vtsearch.schemas.detectors import (
     DetectorLabelsDetailResponseSchema,
     DetectorLabelVoteRequestSchema,
@@ -106,51 +106,63 @@ _DEFAULT_MIMETYPE_BY_TYPE = {
 
 @detectors_labels_bp.route("/api/detectors/<name>/labels", methods=["POST"])
 @detectors_labels_bp.response(200, DetectorSaveLabelsResponseSchema)
+@detectors_labels_bp.alt_response(400, description="X-Dataset-Id / X-Detector-Id header missing.")
 @detectors_labels_bp.alt_response(404, description="Detector not found.")
 @detectors_labels_bp.alt_response(409, description="Detector vote state is not aligned with the active dataset.")
+@require_dataset_header
+@require_detector_header
 def save_detector_labels(name: str):
     """Save the current votes as the detector's labelset.
 
     Reads good_votes/bad_votes from global state and the current medias
     to build a fresh LabelSet, then persists it into the detector's JSON file.
-    """
-    path = _detector_path(name)
-    data = _read_detector(path)
-    if data is None:
-        abort(404, message=f"Detector '{name}' not found")
 
+    Requires both context headers: with the request-missing sentinels in
+    place, ``validated_vote_snapshot`` reports ``safe=True`` over frozen-empty
+    votes/medias, so a header-less request would pass the 409 guard and
+    overwrite the named detector's labelset with an empty one.
+    """
     from vtscore.datasets.labelset import LabelSet
     from vtscore.detectors.dataset_sync import validated_vote_snapshot
     from vtscore.detectors.input_spec import extract_input_spec_from_medias
+    from vtscore.detectors.label_sync import _label_sync_write_lock
 
-    snap = validated_vote_snapshot()
-    if not snap.safe:
-        # Refuse to overwrite the on-disk labelset with an empty composition
-        # when the (dataset, detector) state can't be proved consistent.
-        # Surfacing 409 lets the frontend retry on a stable request instead
-        # of silently destroying labels.
-        abort(409, message="Cannot save labels: detector vote state is not aligned with the active dataset")
-    medias_snap = snap.medias
-    labelset = LabelSet.from_clips_and_votes(
-        medias_snap,
-        snap.good_votes,
-        snap.bad_votes,
-        expand_dupes=False,
-        vote_region_boxes=snap.vote_region_boxes,
-    )
-    data["labelset"] = labelset.to_dict()
+    # The read→compose→write below races the loaded-detector label sync (and
+    # the other detector-JSON writers), so it runs under the same lock.
+    with _label_sync_write_lock:
+        path = _detector_path(name)
+        data = _read_detector(path)
+        if data is None:
+            abort(404, message=f"Detector '{name}' not found")
 
-    # Capture the active dataset's clipper into the detector's input_spec
-    # so downstream consumers (CLI autodetect, labelset-source sync) can
-    # tell what input format this detector was trained on.  ``None`` means
-    # "no clipper / default clipper"; we drop any previously-stored
-    # input_spec in that case so the field stays in sync with reality.
-    captured_spec = extract_input_spec_from_medias(medias_snap)
-    if captured_spec is not None:
-        data["input_spec"] = captured_spec
-    elif "input_spec" in data:
-        data.pop("input_spec", None)
-    _write_detector(path, data)
+        snap = validated_vote_snapshot()
+        if not snap.safe:
+            # Refuse to overwrite the on-disk labelset with an empty composition
+            # when the (dataset, detector) state can't be proved consistent.
+            # Surfacing 409 lets the frontend retry on a stable request instead
+            # of silently destroying labels.
+            abort(409, message="Cannot save labels: detector vote state is not aligned with the active dataset")
+        medias_snap = snap.medias
+        labelset = LabelSet.from_clips_and_votes(
+            medias_snap,
+            snap.good_votes,
+            snap.bad_votes,
+            expand_dupes=False,
+            vote_region_boxes=snap.vote_region_boxes,
+        )
+        data["labelset"] = labelset.to_dict()
+
+        # Capture the active dataset's clipper into the detector's input_spec
+        # so downstream consumers (CLI autodetect, labelset-source sync) can
+        # tell what input format this detector was trained on.  ``None`` means
+        # "no clipper / default clipper"; we drop any previously-stored
+        # input_spec in that case so the field stays in sync with reality.
+        captured_spec = extract_input_spec_from_medias(medias_snap)
+        if captured_spec is not None:
+            data["input_spec"] = captured_spec
+        elif "input_spec" in data:
+            data.pop("input_spec", None)
+        _write_detector(path, data)
 
     # Also update the detector registry entry if one exists
     from vtscore.detectors.registry import find_by_name, update_detector
@@ -221,6 +233,45 @@ def _merge_entries_into_labelset(existing_ls, label_entries: list[dict]) -> tupl
     return applied, skipped, new_entries
 
 
+def _apply_new_entries_if_loaded(reg_entry, applied: int, new_entries: list[dict], name: str) -> tuple[int, bool]:
+    """Resolve + apply + retrain the imported entries when the detector is loaded.
+
+    Returns ``(resolved, trained)``; ``(0, False)`` when nothing was applied
+    or the detector has no loaded context.
+    """
+    if applied <= 0 or not reg_entry:
+        return 0, False
+    from vtscore.state.core import get_detector_context
+
+    det_ctx = get_detector_context(reg_entry["id"])
+    if det_ctx is None:
+        return 0, False
+    return _apply_and_retrain(reg_entry["id"], det_ctx, new_entries, name)
+
+
+def _merge_labels_into_detector_file(path: Path, label_entries: list[dict]):
+    """Merge *label_entries* into the detector JSON at *path* under the sync lock.
+
+    The read→merge→write races the loaded-detector label sync (and the other
+    detector-JSON writers), so it runs under ``_label_sync_write_lock``.  The
+    file is re-read inside the lock (the route's earlier read only served its
+    404 check).  Returns ``(existing_ls, applied, skipped, new_entries)``, or
+    ``None`` if the detector file vanished.
+    """
+    from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.label_sync import _label_sync_write_lock
+
+    with _label_sync_write_lock:
+        data = _read_detector(path)
+        if data is None:
+            return None
+        existing_ls = LabelSet.from_dict(data.get("labelset") or {})
+        applied, skipped, new_entries = _merge_entries_into_labelset(existing_ls, label_entries)
+        data["labelset"] = existing_ls.to_dict()
+        _write_detector(path, data)
+    return existing_ls, applied, skipped, new_entries
+
+
 @detectors_labels_bp.route(
     "/api/detectors/<name>/import-labels/<importer_name>",
     methods=["POST"],
@@ -269,14 +320,10 @@ def import_labels_into_detector(name: str, importer_name: str):
     # ------------------------------------------------------------------
     # 1) Merge into the persisted labelset (always, whether loaded or not)
     # ------------------------------------------------------------------
-    from vtscore.datasets.labelset import LabelSet
-
-    existing_ls = LabelSet.from_dict(data.get("labelset") or {})
-
-    applied, skipped, new_entries = _merge_entries_into_labelset(existing_ls, label_entries)
-
-    data["labelset"] = existing_ls.to_dict()
-    _write_detector(path, data)
+    merged = _merge_labels_into_detector_file(path, label_entries)
+    if merged is None:
+        return jsonify({"error": f"Detector '{name}' not found"}), 404
+    existing_ls, applied, skipped, new_entries = merged
 
     # Update the detector registry entry
     from vtscore.detectors.registry import find_by_name, update_detector
@@ -288,19 +335,7 @@ def import_labels_into_detector(name: str, importer_name: str):
     # ------------------------------------------------------------------
     # 2) If the detector is loaded, resolve + apply + retrain in context
     # ------------------------------------------------------------------
-    resolved = 0
-    trained = False
-    if applied > 0 and reg_entry:
-        from vtscore.state.core import get_detector_context
-
-        det_ctx = get_detector_context(reg_entry["id"])
-        if det_ctx is not None:
-            resolved, trained = _apply_and_retrain(
-                reg_entry["id"],
-                det_ctx,
-                new_entries,
-                name,
-            )
+    resolved, trained = _apply_new_entries_if_loaded(reg_entry, applied, new_entries, name)
 
     msg = f"Added {applied} label(s) to detector '{name}', skipped {skipped}."
     if resolved > 0:
@@ -597,27 +632,31 @@ def vote_detector_label(body: dict, name: str, element_id: str):
 
     target = body["target"]
 
-    path = _detector_path(name)
-    data = _read_detector(path)
-    if data is None:
-        abort(404, message=f"Detector '{name}' not found")
-
     from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.label_sync import _label_sync_write_lock
     from vtscore.detectors.labelset_elements import find_element_by_id
 
-    pre_labelset = LabelSet.from_dict(data.get("labelset") or {})
-    pre_found = find_element_by_id(pre_labelset.elements, element_id)
-    if pre_found is None:
-        abort(404, message="Label element not found")
-    _, pre_elem = pre_found
+    # read→apply→write races the loaded-detector label sync (and the other
+    # detector-JSON writers), so it runs under the same lock.
+    with _label_sync_write_lock:
+        path = _detector_path(name)
+        data = _read_detector(path)
+        if data is None:
+            abort(404, message=f"Detector '{name}' not found")
 
-    cid_before = resolve_current_dataset_cid(pre_elem)
+        pre_labelset = LabelSet.from_dict(data.get("labelset") or {})
+        pre_found = find_element_by_id(pre_labelset.elements, element_id)
+        if pre_found is None:
+            abort(404, message="Label element not found")
+        _, pre_elem = pre_found
 
-    changed, _updated, action = apply_element_vote_in_data(data, element_id, target)
-    if not changed:
-        return {"ok": True, "action": action}
+        cid_before = resolve_current_dataset_cid(pre_elem)
 
-    _write_detector(path, data)
+        changed, _updated, action = apply_element_vote_in_data(data, element_id, target)
+        if not changed:
+            return {"ok": True, "action": action}
+
+        _write_detector(path, data)
 
     # Mirror into in-memory votes when the element resolves into the active
     # dataset, so the MLP and learned-sort stay aligned with the labelset.

@@ -16,7 +16,6 @@ values raise 422.  See *Resolved questions / Plugin field endpoints*
 in the plan doc.
 """
 
-import io
 import time
 from collections import Counter
 from pathlib import Path
@@ -262,9 +261,11 @@ def stage_file():
     try:
         import zipfile
 
-        with zipfile.ZipFile(str(staging_path), "r") as zf:
-            pkl_bytes = zf.read("medias.pkl")
-        peeked = peek_pickle_dataset_summary(io.BytesIO(pkl_bytes))
+        # Stream the member into the peeker instead of zf.read(): a
+        # highly-compressed medias.pkl would otherwise materialise its whole
+        # decompressed body in RAM before the peek even starts.
+        with zipfile.ZipFile(str(staging_path), "r") as zf, zf.open("medias.pkl") as member:
+            peeked = peek_pickle_dataset_summary(member)
         if isinstance(peeked, dict) and "medias" in peeked:
             media_dict = peeked["medias"]
         elif isinstance(peeked, dict):
