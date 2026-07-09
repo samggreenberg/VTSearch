@@ -706,13 +706,13 @@ def train_and_score(
             20% Calibrate.
         vote_region_boxes: Optional ``media_id -> (x0, y0, x1, y1)`` map from
             yes-votes that designated a region.  When set and the source
-            media has a stored ``patch_grid``, the training vector for that
-            vote is pooled on-the-fly via
-            :func:`vtscore.media.patch_embed.box_to_vote_vector` instead
-            of using ``media["embeddings"]``.  Falls back to the full-image
-            vector when the media lacks a patch grid (legacy datasets,
-            single-vector embedders) or when the box is missing.  Patch-
-            embedder v2.
+            media carries a ``patch_regions`` tree, the box is snapped to its
+            nearest region node (:func:`vtscore.media.patch_embed.snap_box_to_region`)
+            and that node's vector trains the vote, instead of
+            ``media["embeddings"]``.  Falls back to a uniform patch-grid pool,
+            then to the full-image vector, when the media lacks a region tree /
+            patch grid (legacy datasets, single-vector embedders) or the box is
+            missing.  Patch-embedder v2.
 
     Returns:
         A tuple ``(results, threshold, model)`` where:
