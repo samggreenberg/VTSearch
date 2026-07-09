@@ -49,6 +49,16 @@ When you're done with your changes, open a PR targeting `dev`. Do not ask; just 
 
 This standing instruction **is** the explicit request that the remote-environment harness rule ("do not create a pull request unless the user explicitly asks for one") defers to. The harness rule only suppresses *unsolicited* PRs; a durable, repo-committed instruction to auto-open one satisfies its "unless the user explicitly asks" carve-out. So the two do not conflict: in this repo, finishing your changes is your cue to open the PR (base `dev`) without further prompting.
 
+## Linking a fix PR to its GitHub issue
+
+When your change resolves a GitHub issue, **link the PR back to that issue** so the two are connected on GitHub:
+
+- Put a closing keyword in the **PR body**: `Closes #N` (or `Fixes #N` / `Resolves #N`). This populates GitHub's "Linked issues" sidebar and the issue timeline. Reference every issue the PR resolves; use one keyword per issue (`Closes #12, closes #15`), not a comma-list after a single `Closes`.
+- If the PR only *partly* addresses an issue, use a non-closing reference instead — `Refs #N` / `Part of #N` — so it links without implying the issue is done.
+- Also drop a one-line comment on the issue pointing at the PR (e.g. "Addressed in #M"), so someone reading the issue sees the fix even before it merges.
+
+**Do not close the issue yourself.** The closing keyword will **not** auto-close the issue on merge, because GitHub only auto-closes keyword-linked issues when the PR merges into the **default branch** (`main`), and our PRs target **`dev`**. That is intentional: an issue stays open while its fix lives only on `dev`, and is closed only once the fix reaches `main` (i.e. is actually shipped to users). The `dev`→`main` merge Routine is what sweeps the now-shipped issues closed (with `state_reason: completed`); a per-fix Claude session must not close the issue early. So: link and comment, but leave the issue open.
+
 ## Plan files (`docs/plans/`) track FUTURE work only
 
 A plan file describes **work still owed**: a proposed feature, or the open parts of one in progress. Plans are **not an archive of completed work.** Git history and merged PRs are the record of what already landed; the plan is what someone reads to pick up what's left.
