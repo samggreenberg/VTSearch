@@ -89,19 +89,20 @@ def _render_waveform(audio_data, *, size: int = _THUMB_SIZE) -> bytes | None:
     return buf.getvalue()
 
 
-def generate_waveform_thumbnail(audio_bytes: bytes, *, size: int = _THUMB_SIZE) -> bytes | None:
+def generate_waveform_thumbnail(audio_bytes: bytes, *, filename: str = "", size: int = _THUMB_SIZE) -> bytes | None:
     """Render a waveform thumbnail as a PNG image from raw audio bytes.
 
-    Decodes the audio with librosa from an in-memory buffer, computes the
-    min/max amplitude envelope, and draws it onto a square PIL image.  Returns
-    PNG bytes, or ``None`` if the audio cannot be decoded.
+    Decodes the audio with librosa, computes the min/max amplitude envelope, and
+    draws it onto a square PIL image.  Returns PNG bytes, or ``None`` if the
+    audio cannot be decoded.
 
-    Note that ``soundfile``-backed containers (WAV/FLAC/OGG/MP3) decode straight
-    from the in-memory buffer, but codecs that fall back to ``audioread`` +
-    ffmpeg (AAC/M4A/MP4) can only be decoded from a real file path, so this
-    buffer-only path returns ``None`` for them.  Use
-    :func:`_decode_audio_file_bytes` (which spills to a temp file) when a member
-    may be an ffmpeg-only codec.
+    ``soundfile``-backed containers (WAV/FLAC/OGG/MP3) decode straight from the
+    in-memory buffer.  Codecs that fall back to ``audioread`` + ffmpeg
+    (AAC/M4A/MP4) can't be decoded from a ``BytesIO`` at all - librosa only
+    reaches the ffmpeg backend for a real filesystem path - so on a buffer-decode
+    failure this spills to a temp file via :func:`_decode_audio_file_bytes` and
+    retries.  *filename* (when known) lends its extension to that temp file so
+    ``audioread`` picks the right backend.
     """
     try:
         import librosa  # noqa: PLC0415
@@ -110,6 +111,8 @@ def generate_waveform_thumbnail(audio_bytes: bytes, *, size: int = _THUMB_SIZE) 
     try:
         audio_data, _sr = librosa.load(io.BytesIO(audio_bytes), sr=None, mono=True)
     except Exception:
+        audio_data, _sr = _decode_audio_file_bytes(audio_bytes, filename)
+    if audio_data is None:
         return None
     return _render_waveform(audio_data, size=size)
 
@@ -883,7 +886,7 @@ class AudioMediaType(MediaType):
             duration = len(audio_data) / sr
         except Exception:
             duration = 0.0
-        thumbnail = generate_waveform_thumbnail(media_bytes)
+        thumbnail = generate_waveform_thumbnail(media_bytes, filename=Path(file_path).name)
         return {"media_bytes": media_bytes, "duration": duration, "thumbnail_bytes": thumbnail}
 
     # ------------------------------------------------------------------
