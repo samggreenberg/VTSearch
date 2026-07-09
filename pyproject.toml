@@ -169,6 +169,7 @@ extend_exclude = [
 # users opt in by installing the extra package.
 DEP001 = [
     "paddleocr",
+    "py7zr",
     "rarfile",
     "whisper",
     "mediapipe",

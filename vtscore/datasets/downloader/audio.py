@@ -1,5 +1,5 @@
 """Audio dataset downloaders: ESC-50, GTZAN, Speech Commands v2, UrbanSound8K,
-TUT Sound Events 2017."""
+TUT Sound Events 2017, Clotho."""
 
 import shutil
 import uuid
@@ -140,6 +140,43 @@ def download_urbansound8k(on_progress: Optional[ProgressCallback] = None) -> Pat
         check_path=extract_dir,
         download_size_mb=_core.URBANSOUND8K_DOWNLOAD_SIZE_MB,
         dataset_name="UrbanSound8K",
+        on_progress=on_progress,
+    )
+    return extract_dir
+
+
+def download_clotho(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download and extract the Clotho (v1) evaluation split.
+
+    Downloads ``clotho_audio_evaluation.7z`` from Zenodo into
+    ``DATA_DIR / "clotho"`` if it is not already present, then extracts it
+    (via ``py7zr``).  The archive is deleted after extraction to reclaim disk
+    space.
+
+    The evaluation split is 1045 real-world Freesound recordings (15-30 s
+    each).  Clotho is an audio *captioning* dataset with no class labels, so
+    the demo treats every recording as one undifferentiated bucket - it exists
+    to exercise natural-language text->audio retrieval, not classification.
+
+    Args:
+        on_progress: Optional progress callback.  Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``clotho/`` directory holding the extracted ``.wav`` files
+        (e.g. ``data/clotho``).
+    """
+    if on_progress is None:
+        on_progress = _core._default_progress()
+
+    extract_dir = _core.DATA_DIR / "clotho"
+    _core._download_and_extract(
+        url=_core.CLOTHO_EVAL_URL,
+        archive_name="clotho_audio_evaluation.7z",
+        extract_to=extract_dir,
+        check_path=extract_dir,
+        download_size_mb=_core.CLOTHO_EVAL_DOWNLOAD_SIZE_MB,
+        dataset_name="Clotho",
         on_progress=on_progress,
     )
     return extract_dir
