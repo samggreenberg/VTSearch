@@ -32,7 +32,7 @@ The model outputs raw logits (not probabilities) during training. This allows th
 
 ### Class Weighting
 
-Training uses **inverse-frequency weighting only** to balance classes (`mlp.py:193-197`). Inclusion does **not** enter training — the trained model, and therefore every item's score, is independent of inclusion. Inclusion is applied later as a pure threshold knob in `find_optimal_threshold` (see [Threshold Calibration](#threshold-calibration) below).
+Training balances classes by **inverse-frequency weighting** by default (`mlp.py`). The one exception is region flooding on patch datasets, where the caller supplies explicit per-bag `sample_weights` instead (see [Region-aware training](#region-aware-training-on-patch-region-datasets) below). Either way, inclusion does **not** enter training — the trained model, and therefore every item's score, is independent of inclusion. Inclusion is applied later as a pure threshold knob in `find_optimal_threshold` (see [Threshold Calibration](#threshold-calibration) below).
 
 - **Weights**: `weight_true = num_false / num_true`, `weight_false = 1.0`
 
@@ -115,11 +115,19 @@ The **document** media type has no embedding model of its own. Documents (PDF, D
 
 Embeddings are computed once when a dataset is loaded. The full-image vector lands in each clip's `"embeddings"` dict, keyed by embedder name (`numpy.ndarray` values; read it through the `media_embedding` accessor); patch embedders additionally populate `"patch_regions"` (list of `RegionVector`s, fp16-on-disk / fp32-in-RAM) and `"patch_grid"` (`H × W × D` ndarray, fp16). The MLP trains on these pre-computed vectors, so training is fast (typically < 1 second for 200 epochs on a few hundred labeled examples).
 
-### Region-aware training loss (patch-region datasets)
+### Region-aware training on patch-region datasets
 
-When the dataset's embedder produces `patch_regions`, the MLP's per-vote loss is asymmetric: Good votes train on the full-image vector (the user's "this image is good" claim doesn't single out a region); Bad votes apply `BCE(score, 0)` to *every* region in the image's HAC tree (the strictly stronger claim "no region in this image is good") and reduce by mean. At inference time `score_media` max-pools the MLP over regions, so train-time and test-time agree about what "low score" means. For datasets whose embedder doesn't produce regions, the Bad-side mean collapses to today's single-vector BCE (fully backward-compatible). See "Detector MLP: Training loss" in [`docs/plans/patch-embedder.md`](plans/patch-embedder.md) for the rationale.
+Inference max-pools the MLP over each image's `patch_regions` (an image scores by its **best** region — see `score_media`). Training is shaped to match that scorer, and it is deliberately asymmetric between Good and Bad votes — the multiple-instance-learning treatment of a max-pool bag:
 
-Yes-votes may additionally carry an optional `region_box` (4-float normalised rectangle) drawn by the user via Shift-drag on the focus pane. When set, the trainer pools the box's patch-grid cells on the fly (uniform mean, L2-normalise) and uses that vector instead of the full-image CLS vector for that Good example.
+- **Good vote** — a positive bag needs only *one* good region, and the user tells us which via an optional `region_box` (drawn by Shift-drag on the focus pane). The box is **snapped to the nearest `patch_regions` node** (max box-IoU, `snap_box_to_region`), so the positive is one of the exact candidates the max-pool will score — not a fresh uniform pool that matches no node. A Good vote with no box falls back to the full-image CLS node.
+- **Bad vote** — a negative bag asserts that *no* region is good, so a Bad vote **floods the image's CLS + HAC-leaf nodes** (the disjoint covering set; saliency-weighted internal nodes are dropped as redundant) as negatives. This trains every leaf down, so the max-pool can't surface a look-alike sub-region of a rejected image.
+
+Because flooding turns one Bad vote into many correlated leaf rows, class balance and calibration are **per-bag, not per-row**:
+
+- The final fit is `train_model(..., sample_weights=...)` where each Bad image's leaves share one image's worth of negative mass (`_per_bag_fit_weights`), so a rejected image counts once regardless of leaf count. Good votes weigh `n_bad_bags / n_good`, matching the default inverse-frequency balance but with the *bag* as the unit.
+- Cross-calibration (`compute_fold_orderings(groups=...)`) splits Train/Calibrate **by bag** (a Bad image's leaves never straddle the boundary), sizes fold counts over votes not rows, weights fold fits per-bag, and **max-pools each calibration group to one score** — so the threshold is placed on the per-image score scale the detector actually deploys. Hidden-layer width and the safe-threshold ramp likewise size on vote count.
+
+Flooding applies only where scoring is region-aware max-pool: the Learned-sort vote path (`train_and_score`) and the saved-detector labelset path (`labelset_train_and_score` / `train_from_labelset`). Paths that score each image by a single vector — Find cold-detector scoring, label-file sort — score image-level and are intentionally *not* flooded (flooding leaf negatives while scoring one image vector would be a train/score space mismatch). On any dataset whose embedder produces no regions, every bag holds one row and the whole path collapses byte-for-byte to the historical single-vector BCE — fully backward-compatible.
 
 ## Key Files
 
