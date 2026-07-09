@@ -67,6 +67,38 @@ describe('KeyboardService', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
   }));
 
+  it('should not emit vote on auto-repeat ArrowRight (held key)', () => {
+    service.start();
+    const actions: KeyboardAction[] = [];
+    service.action$.subscribe((a) => actions.push(a));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+    // Subsequent events with repeat=true simulate the OS key-repeat while held.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', repeat: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', repeat: true }));
+    expect(actions.length).toBe(1);
+    expect(actions[0].direction).toBe('good');
+  });
+
+  it('should not emit vote on auto-repeat ArrowLeft (held key)', () => {
+    service.start();
+    const actions: KeyboardAction[] = [];
+    service.action$.subscribe((a) => actions.push(a));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', repeat: true }));
+    expect(actions.length).toBe(1);
+    expect(actions[0].direction).toBe('bad');
+  });
+
+  it('should still emit volume on auto-repeat ArrowUp (held key adjusts)', () => {
+    service.start();
+    const actions: KeyboardAction[] = [];
+    service.action$.subscribe((a) => actions.push(a));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', repeat: true }));
+    expect(actions.length).toBe(2);
+    expect(actions.every((a) => a.type === 'volume')).toBe(true);
+  });
+
   it('should not emit when modifier keys are held', () => {
     service.start();
     const actions: KeyboardAction[] = [];

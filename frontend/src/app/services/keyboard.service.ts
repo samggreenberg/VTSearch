@@ -72,11 +72,18 @@ export class KeyboardService implements OnDestroy {
     switch (e.key) {
       case 'ArrowRight':
         e.preventDefault();
+        // Ignore OS key auto-repeat: holding the key would otherwise cast a
+        // vote per repeat event, rapidly tagging item after item (often the
+        // wrong ones) until the user releases. Each vote must be a discrete
+        // key press. Volume/zoom/rotate below intentionally allow repeat
+        // (holding the key to adjust continuously).
+        if (e.repeat) break;
         (document.activeElement as HTMLElement)?.blur();
         this.action$.next({ type: 'vote', direction: 'good' });
         break;
       case 'ArrowLeft':
         e.preventDefault();
+        if (e.repeat) break;
         (document.activeElement as HTMLElement)?.blur();
         this.action$.next({ type: 'vote', direction: 'bad' });
         break;
