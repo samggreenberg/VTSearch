@@ -519,6 +519,12 @@ def box_to_vote_vector(
     specific HAC node's vector without replicating its exact merge chain.
     See ``docs/plans/patch-embedder.md`` ("v2 → Backend semantics §1").
 
+    Because of that mismatch, the live Good region-vote path no longer pools
+    here: it snaps the drawn box to an actual region node via
+    :func:`snap_box_to_region`, so training sees the exact vector inference
+    max-pools over.  This function remains the fallback for media that carry a
+    raw ``patch_grid`` but no region tree.
+
     Parameters
     ----------
     patch_grid : ndarray, shape (H, W, D)
@@ -572,6 +578,82 @@ def box_to_vote_vector(
     vecs = patch_grid[mask].astype(np.float32, copy=False)
     pooled = vecs.mean(axis=0)
     return _l2_normalize(pooled)
+
+
+def snap_box_to_region(
+    regions: list[RegionVector],
+    box: tuple[float, float, float, float],
+) -> Optional[np.ndarray]:
+    """Snap a user-drawn *box* to the region tree node it best matches.
+
+    Returns the L2-normalised (float32) vector of the ``patch_regions`` node
+    with the highest box IoU against *box* - i.e. the **exact sub-image
+    suggestion the MLP max-pools over at inference time**.  A Good region-vote
+    trained through this function contributes one of the very candidates the
+    detector will later score, rather than a fresh uniform pool
+    (:func:`box_to_vote_vector`) that lands *between* the HAC nodes and matches
+    none of them (the internals are saliency-weighted means renormalised at
+    every merge; see that function's note).
+
+    Matching is by box intersection-over-union - the same rectangular
+    footprint the gallery outlines and the user drew against.  When every IoU
+    is zero (a degenerate zero-area drawn box), fall back to the region whose
+    centroid is nearest the drawn box's centre.  The CLS full-image node (box
+    ``(0, 0, 1, 1)``) is always present and overlaps any in-bounds box, so a
+    tightly-drawn box snaps to the matching leaf/internal while a whole-image
+    box collapses to the CLS vector (an image-level Good vote).
+
+    Parameters
+    ----------
+    regions : list[RegionVector]
+        A media's ``patch_regions`` (CLS node + HAC leaves + HAC internals),
+        or a freshly built :func:`build_region_tree` for the cross-dataset
+        resolve path.  Vectors may be float16 (pickle dtype) or float32.
+    box : (x0, y0, x1, y1)
+        Normalised image coordinates in ``[0, 1]``; swapped corners tolerated.
+
+    Returns
+    -------
+    ndarray, shape (D,), float32, L2-normalised - or ``None`` when *regions*
+    is empty, so the caller can fall back to raw-grid pooling.
+    """
+    if not regions:
+        return None
+
+    x0, y0, x1, y1 = (float(v) for v in box)
+    dx0, dx1 = min(x0, x1), max(x0, x1)
+    dy0, dy1 = min(y0, y1), max(y0, y1)
+    d_area = max(0.0, dx1 - dx0) * max(0.0, dy1 - dy0)
+
+    best_idx = 0
+    best_iou = -1.0
+    for idx, r in enumerate(regions):
+        rx0, ry0, rx1, ry1 = r.box
+        inter_w = max(0.0, min(dx1, rx1) - max(dx0, rx0))
+        inter_h = max(0.0, min(dy1, ry1) - max(dy0, ry0))
+        inter = inter_w * inter_h
+        r_area = max(0.0, rx1 - rx0) * max(0.0, ry1 - ry0)
+        union = d_area + r_area - inter
+        iou = inter / union if union > 0.0 else 0.0
+        if iou > best_iou:
+            best_iou = iou
+            best_idx = idx
+
+    if best_iou <= 0.0:
+        # Degenerate drawn box (zero area - a line or point): IoU is 0 against
+        # everything, so fall back to the nearest region centroid.
+        dcx, dcy = 0.5 * (dx0 + dx1), 0.5 * (dy0 + dy1)
+        best_idx = min(
+            range(len(regions)),
+            key=lambda i: (
+                (0.5 * (regions[i].box[0] + regions[i].box[2]) - dcx) ** 2
+                + (0.5 * (regions[i].box[1] + regions[i].box[3]) - dcy) ** 2
+            ),
+        )
+
+    # Region vectors are stored L2-normalised, but re-normalise defensively:
+    # the float16 pickle dtype can drift the norm off 1.0 on upcast.
+    return _l2_normalize(np.asarray(regions[best_idx].vec, dtype=np.float32))
 
 
 def to_fp16(regions: list[RegionVector]) -> list[RegionVector]:

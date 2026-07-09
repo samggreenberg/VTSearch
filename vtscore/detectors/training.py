@@ -89,12 +89,50 @@ def validate_good_bad_split(y_list: list[float]) -> tuple[int, int]:
     return num_good, num_bad
 
 
+def _flood_context(
+    X_list: list,
+    y_list: list[float],
+    groups: list | None,
+) -> tuple[int, list | None, Any]:
+    """Resolve the bag-aware training context for a possibly-flooded label set.
+
+    Returns ``(n_votes, cal_groups, sample_weights)``:
+
+    * ``n_votes`` - the number of distinct bags (votes/images); the unit the
+      hidden-layer width and the safe-threshold ramp should size on, so region
+      flooding (many rows per Bad vote) doesn't inflate either.
+    * ``cal_groups`` - *groups* when flooding actually occurred (a bag holds
+      more than one row), else ``None`` so the calibrator takes its historical
+      row-wise path unchanged.
+    * ``sample_weights`` - per-bag loss weights when flooding occurred, else
+      ``None`` so :func:`~vtscore.training.mlp.train_model` computes its default
+      inverse-frequency weights.
+
+    Shared by :func:`train_and_threshold` and :func:`_train_and_score_xy` so the
+    vote, labelset, and Find paths flood identically.
+    """
+    import torch  # noqa: PLC0415
+
+    from vtscore.training.thresholds import _per_bag_fit_weights  # noqa: PLC0415
+
+    n_votes = len(set(groups)) if groups is not None else len(X_list)
+    flooded = groups is not None and len(X_list) != n_votes
+    cal_groups = groups if flooded else None
+    sample_weights = None
+    if flooded and groups is not None:
+        sample_weights = torch.tensor(
+            _per_bag_fit_weights(np.asarray(y_list, dtype=np.float32), groups), dtype=torch.float32
+        )
+    return n_votes, cal_groups, sample_weights
+
+
 def train_and_threshold(
     X_list: list,
     y_list: list[float],
     snap: dict | None = None,
     embedder_name: str | None = None,
     det_ctx: Any = None,
+    groups: list | None = None,
 ) -> tuple[Any, float]:
     """Train an MLP and compute a calibrated threshold.
 
@@ -150,17 +188,23 @@ def train_and_threshold(
     X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
-    # Size the hidden layer from the full label count (the same width
-    # train_model() picks by default), so when we cache the fold orderings
+
+    # Bag-aware setup (region flooding): size on votes not rows, split/weight
+    # per bag.  On a legacy label set every bag is one row, so this collapses
+    # to the historical behaviour.
+    n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
+
+    # Size the hidden layer from the vote count (the same width train_model()
+    # picks by default when unflooded), so when we cache the fold orderings
     # below their models match the final model — keeping the cached
     # re-thresholding consistent with this run's threshold.
-    hidden_dim = _auto_hidden_dim(len(X_list))
+    hidden_dim = _auto_hidden_dim(n_votes)
 
     safe = bool(get_safe_thresholds() and snap)
     # Below the safe-threshold ramp floor the cross-cal output is blended
     # away (pure GMM), so don't pay for the fold trainings.  Safe-thresholds
     # OFF falls through to real cross-calibration at every label count.
-    if safe and len(X_list) < 6:
+    if safe and n_votes < 6:
         threshold = NO_GOOD_THRESHOLD
         # This branch never recomputes the fold orderings, so drop any stale
         # cache from a previous ≥6-label training - otherwise a later
@@ -182,6 +226,7 @@ def train_and_threshold(
             calibration_fraction=get_calibration_fraction(),
             hidden_dim=hidden_dim,
             det_ctx=det_ctx,
+            groups=cal_groups,
         )
     else:
         threshold = calculate_cross_calibration_threshold(
@@ -191,9 +236,13 @@ def train_and_threshold(
             get_inclusion(),
             calibrate_count=get_calibrate_count(),
             calibration_fraction=get_calibration_fraction(),
+            groups=cal_groups,
         )
 
-    model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
+    if sample_weights is not None:
+        model = train_model(X, y, input_dim, hidden_dim=hidden_dim, sample_weights=sample_weights)
+    else:
+        model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
 
     if safe:
         from vtscore.embedding.matrix import get_embedding_matrix_for_snap
@@ -211,7 +260,7 @@ def train_and_threshold(
         # cache above stores the raw cross-cal orderings, so a later inclusion
         # slide re-derives the unblended cutoff (intentional - see
         # recompute_detector_thresholds_for_inclusion).
-        threshold = calculate_safe_threshold(threshold, all_scores, len(y_list))
+        threshold = calculate_safe_threshold(threshold, all_scores, n_votes)
 
     return model, threshold
 
@@ -230,15 +279,17 @@ def pool_box_from_media(
     media: dict[str, Any],
     region_box: tuple[float, float, float, float] | None,
 ) -> np.ndarray | None:
-    """Return the region-pooled training vector for *media*, or ``None``.
+    """Return the region training vector for *media*, or ``None``.
 
-    When *region_box* is set **and** *media* has a stored ``patch_grid``,
-    pool the box on-the-fly via
-    :func:`vtscore.media.patch_embed.box_to_vote_vector` and return it.
-    Otherwise return ``None`` so the caller can fall back to the media's
-    image-level ``embedding`` - the legacy training vector for image-level
-    votes, single-vector embedders, and patch datasets that haven't been
-    re-loaded under the v1 storage scheme.  Patch-embedder v2.
+    When *region_box* is set, snap it to the media's nearest ``patch_regions``
+    node via :func:`vtscore.media.patch_embed.snap_box_to_region` and return
+    that node's vector - i.e. train on the exact sub-image suggestion the MLP
+    max-pools over at inference, so the Good vote is a fair representative of
+    what the detector will actually score.  Falls back to a uniform pool of
+    the raw ``patch_grid`` (:func:`box_to_vote_vector`) only when the media
+    carries a grid but no region tree, and to ``None`` (the caller then uses
+    the image-level ``embedding``) for legacy single-vector embedders and
+    patch datasets that predate region storage.  Patch-embedder v2.
 
     Shared by the in-dataset vote path (:func:`_training_vec_for_vote`) and
     the cross-dataset labelset path
@@ -246,6 +297,15 @@ def pool_box_from_media(
     """
     if region_box is None:
         return None
+
+    regions = media.get("patch_regions")
+    if regions:
+        from vtscore.media.patch_embed import snap_box_to_region  # noqa: PLC0415
+
+        snapped = snap_box_to_region(regions, region_box)
+        if snapped is not None:
+            return snapped
+
     grid = media.get("patch_grid")
     if grid is None:
         return None
@@ -272,41 +332,79 @@ def _training_vec_for_vote(
     return pooled if pooled is not None else media_embedding(media, embedder_name)
 
 
+def bad_negative_vecs(
+    media: dict[str, Any],
+    embedder_name: str | None = None,
+) -> list[np.ndarray]:
+    """Negative training vectors contributed by one Bad vote on *media*.
+
+    On **patch** media (carrying a ``patch_regions`` tree) a Bad vote floods
+    every region node with no children - the CLS full-image node plus the HAC
+    leaves, the disjoint set that tiles the image - as negatives.  This is the
+    multiple-instance-learning treatment of a rejected image: since inference
+    scores an image by its **best** region (max-pool), a Bad vote asserts that
+    *no* region of it should score high, so we train every leaf down.  Internal
+    HAC nodes (``children`` set) are saliency-weighted pools of those leaves and
+    are dropped as redundant (they inflate the negative count with correlated
+    duplicates without adding coverage).
+
+    Non-patch media contribute a single image-level vector, exactly as before,
+    so every legacy single-vector dataset is byte-for-byte unchanged.
+    """
+    from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
+
+    regions = media.get("patch_regions")
+    if regions:
+        leaves = [np.asarray(r.vec, dtype=np.float32) for r in regions if r.children is None]
+        if leaves:
+            return leaves
+    return [media_embedding(media, embedder_name)]
+
+
 def _build_vote_xy(
     clips_dict: dict[int, dict[str, Any]],
     good_votes: dict[int, None],
     bad_votes: dict[int, None],
     region_boxes: dict[int, tuple[float, float, float, float]],
     embedder_name: str | None = None,
-) -> tuple[list[np.ndarray], list[float]]:
-    """Build ``(X_list, y_list)`` from filtered votes.
+) -> tuple[list[np.ndarray], list[float], list]:
+    """Build ``(X_list, y_list, groups)`` from filtered votes.
 
     Good votes that designated a region are region-pooled via
-    :func:`_training_vec_for_vote`; bad votes always use the image-level
-    embedding.  Returns the raw lists - the caller
-    (:func:`_train_and_score_xy`) enforces the ≥2-samples / ≥1-good /
-    ≥1-bad guard.
+    :func:`_training_vec_for_vote` (one row each).  Bad votes are expanded by
+    :func:`bad_negative_vecs`: one row per image-level vector on a legacy
+    dataset, or one row per region leaf on a patch dataset (region flooding).
+
+    ``groups`` carries one bag id per row - ``("g", cid)`` for a Good vote,
+    ``("b", cid)`` shared across all of a Bad vote's flooded leaf rows - so the
+    downstream trainer/calibrator can balance and split by **image**, not by
+    row.  On a legacy dataset every bag holds exactly one row, so ``groups`` is
+    1:1 with the rows and the whole path collapses to the pre-flood behaviour.
+    The caller (:func:`_train_and_score_xy`) enforces the ≥2-samples /
+    ≥1-good / ≥1-bad guard.
 
     *embedder_name* is the detector's primary embedder; when ``None`` the
     dataset score precedence for *clips_dict* is used (the pre-per-detector
     behaviour).  Either way the MLP trains in the same space
     :func:`_score_all_media` scores against.
     """
-    from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
-
     if embedder_name is None:
         embedder_name = _score_embedder_for_snap(clips_dict)
     X_list: list[np.ndarray] = []
     y_list: list[float] = []
+    groups: list = []
     for cid in good_votes:
         if cid in clips_dict:
             X_list.append(_training_vec_for_vote(clips_dict[cid], region_boxes.get(cid), embedder_name))
             y_list.append(1.0)
+            groups.append(("g", cid))
     for cid in bad_votes:
         if cid in clips_dict:
-            X_list.append(media_embedding(clips_dict[cid], embedder_name))
-            y_list.append(0.0)
-    return X_list, y_list
+            for vec in bad_negative_vecs(clips_dict[cid], embedder_name):
+                X_list.append(vec)
+                y_list.append(0.0)
+                groups.append(("b", cid))
+    return X_list, y_list, groups
 
 
 def _score_all_media(
@@ -473,6 +571,7 @@ def _train_and_score_xy(
     calibrate_count: int,
     calibration_fraction: float,
     det_ctx: Any,
+    groups: list | None = None,
 ) -> tuple[list[dict[str, Any]], float, nn.Sequential | None]:
     """Train an MLP on ``(X_list, y_list)`` and score every media in *clips_dict*.
 
@@ -482,10 +581,16 @@ def _train_and_score_xy(
     ``(X_list, y_list)``, so the guard → threshold → train → score → format
     tail lives here once.
 
-    ``hidden_dim`` is sized from the label count so the cross-calibration
-    fold models share the final model's architecture, making fold thresholds
-    directly comparable to final-model scores.  Returns ``([], 0.5, None)``
-    when the labels don't satisfy ≥2 samples AND ≥1 good AND ≥1 bad.
+    ``hidden_dim`` and the safe-threshold label count are sized from the
+    **vote** count (distinct *groups*) rather than the row count, so region
+    flooding - which turns one Bad vote into many leaf rows - doesn't inflate
+    the model width or shift the small-count threshold ramp.  When *groups*
+    reveals at least one multi-row bag (flooding actually happened), the
+    calibration split, fold fits, and final fit all run **bag-aware**
+    (grouped fold split, per-bag loss weights); otherwise every row is its own
+    bag and the path is byte-for-byte the pre-flood behaviour.  Returns
+    ``([], 0.5, None)`` when the labels don't satisfy ≥2 samples AND ≥1 good
+    AND ≥1 bad.
     """
     import torch  # noqa: PLC0415
 
@@ -508,7 +613,11 @@ def _train_and_score_xy(
     X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
-    hidden_dim = _auto_hidden_dim(len(X_list))
+
+    # Bag-aware setup (region flooding): size on votes not rows, split/weight
+    # per bag when a Bad vote flooded its leaf set; a no-op on legacy datasets.
+    n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
+    hidden_dim = _auto_hidden_dim(n_votes)
 
     # Skip k-fold calibration *only* when safe-thresholds is on and the label
     # count is below the ``calculate_safe_threshold`` ramp floor: there the
@@ -519,7 +628,7 @@ def _train_and_score_xy(
     # keeps the vote/labelset path agreeing with the Find path
     # (:func:`train_and_threshold`), which has always cross-calibrated below 6
     # labels when safe-thresholds is off.
-    if safe_thresholds and len(X_list) < 6:
+    if safe_thresholds and n_votes < 6:
         threshold = 0.5
         # Drop any fold-ordering cache from a previous ≥6-label training:
         # this branch neither reads nor rewrites it, and a later inclusion
@@ -538,19 +647,26 @@ def _train_and_score_xy(
             calibration_fraction=calibration_fraction,
             hidden_dim=hidden_dim,
             det_ctx=det_ctx,
+            groups=cal_groups,
         )
 
-    # Training is image-level in v1 - the MLP only ever sees one vector
-    # per labelled media, mirroring the "vote on whole images" rule.
-    model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
+    # A Good vote trains on one region (the snapped box); a Bad vote trains on
+    # its whole leaf set (region flooding), per-bag weighted so a rejected
+    # image counts once.  On a legacy dataset there are no per-bag weights, so
+    # the call stays identical to the historical one-vector-per-media fit.
+    if sample_weights is not None:
+        model = train_model(X, y, input_dim, hidden_dim=hidden_dim, sample_weights=sample_weights)
+    else:
+        model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
 
     all_ids, scores, best_region = _score_all_media(model, clips_dict, score_emb)
 
     if safe_thresholds:
         # Blend applies on this fresh retrain only; the cached fold orderings
         # are raw cross-cal, so an inclusion slide re-derives the unblended
-        # cutoff (see recompute_detector_thresholds_for_inclusion).
-        threshold = calculate_safe_threshold(threshold, scores, len(X_list))
+        # cutoff (see recompute_detector_thresholds_for_inclusion).  The label
+        # count is votes, not flooded rows, so the small-count ramp is unmoved.
+        threshold = calculate_safe_threshold(threshold, scores, n_votes)
 
     results = _format_results(all_ids, scores, best_region, clips_dict)
     return results, threshold, model
@@ -590,13 +706,13 @@ def train_and_score(
             20% Calibrate.
         vote_region_boxes: Optional ``media_id -> (x0, y0, x1, y1)`` map from
             yes-votes that designated a region.  When set and the source
-            media has a stored ``patch_grid``, the training vector for that
-            vote is pooled on-the-fly via
-            :func:`vtscore.media.patch_embed.box_to_vote_vector` instead
-            of using ``media["embeddings"]``.  Falls back to the full-image
-            vector when the media lacks a patch grid (legacy datasets,
-            single-vector embedders) or when the box is missing.  Patch-
-            embedder v2.
+            media carries a ``patch_regions`` tree, the box is snapped to its
+            nearest region node (:func:`vtscore.media.patch_embed.snap_box_to_region`)
+            and that node's vector trains the vote, instead of
+            ``media["embeddings"]``.  Falls back to a uniform patch-grid pool,
+            then to the full-image vector, when the media lacks a region tree /
+            patch grid (legacy datasets, single-vector embedders) or the box is
+            missing.  Patch-embedder v2.
 
     Returns:
         A tuple ``(results, threshold, model)`` where:
@@ -609,7 +725,7 @@ def train_and_score(
           training was not possible).
     """
     region_boxes = vote_region_boxes or {}
-    X_list, y_list = _build_vote_xy(
+    X_list, y_list, groups = _build_vote_xy(
         clips_dict, good_votes, bad_votes, region_boxes, detector_score_embedder(det_ctx, clips_dict)
     )
     results, threshold, model = _train_and_score_xy(
@@ -621,6 +737,7 @@ def train_and_score(
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
         det_ctx=det_ctx,
+        groups=groups,
     )
 
     # Stage-2 structural re-rank: a no-op for every non-structural dataset

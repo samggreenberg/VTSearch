@@ -93,6 +93,7 @@ def _calibration_cache_key(
     calibrate_count: int,
     calibration_fraction: float,
     hidden_dim: int,
+    groups: list | None = None,
 ) -> tuple:
     """Build a deterministic cache key for the calibration **fold orderings**.
 
@@ -107,12 +108,16 @@ def _calibration_cache_key(
     """
     X_bytes = np.stack(X_list).astype(np.float32, copy=False).tobytes()
     y_bytes = np.asarray(y_list, dtype=np.float32).tobytes()
+    # Bag membership changes the fold split and per-group max-pool, so a change
+    # in grouping must invalidate the cached orderings even when X/y are equal.
+    groups_key = tuple(str(g) for g in groups) if groups is not None else None
     return (
         X_bytes,
         y_bytes,
         int(calibrate_count),
         float(calibration_fraction),
         int(hidden_dim),
+        groups_key,
     )
 
 
@@ -126,6 +131,7 @@ def cross_calibration_threshold_cached(
     calibration_fraction: float,
     hidden_dim: int,
     det_ctx: Any = None,
+    groups: list | None = None,
 ) -> float:
     """Memoized wrapper around :func:`calculate_cross_calibration_threshold`.
 
@@ -143,7 +149,7 @@ def cross_calibration_threshold_cached(
     payload: tuple[list[tuple[list[float], list[float]]], float | None] | None = None
     key = None
     if det_ctx is not None:
-        key = _calibration_cache_key(X_list, y_list, calibrate_count, calibration_fraction, hidden_dim)
+        key = _calibration_cache_key(X_list, y_list, calibrate_count, calibration_fraction, hidden_dim, groups)
         cached = getattr(det_ctx, "calibration_cache", None)
         if cached is not None and cached[0] == key:
             payload = cached[1]
@@ -158,6 +164,7 @@ def cross_calibration_threshold_cached(
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
             hidden_dim=hidden_dim,
+            groups=groups,
         )
         if det_ctx is not None and key is not None:
             det_ctx.calibration_cache = (key, payload)
@@ -259,6 +266,123 @@ def find_optimal_threshold(
     return float(sorted_scores[best_idx])
 
 
+def _per_bag_fit_weights(
+    y_rows: np.ndarray,
+    group_rows: list,
+) -> np.ndarray:
+    """Per-row loss weights that balance Good votes against Bad **bags**.
+
+    Every Good row weighs ``n_bad_bags / n_good``; every Bad row weighs
+    ``1 / (rows in its bag)`` so each Bad image contributes exactly one image's
+    worth of negative mass regardless of how many region nodes it flooded in.
+    Total Good mass (``n_bad_bags``) equals total Bad mass (``n_bad_bags``), so
+    the classes are balanced at the same magnitude as :func:`train_model`'s
+    default inverse-frequency weights - only the *unit* changes from row to bag.
+    """
+    from collections import Counter  # noqa: PLC0415
+
+    n_good = sum(1 for lbl in y_rows if lbl == 1.0)
+    bad_groups = {g for g, lbl in zip(group_rows, y_rows, strict=True) if lbl == 0.0}
+    n_bad_bags = len(bad_groups)
+    bag_sizes = Counter(g for g, lbl in zip(group_rows, y_rows, strict=True) if lbl == 0.0)
+    good_w = (n_bad_bags / n_good) if n_good else 1.0
+    w = np.ones(len(y_rows), dtype=np.float32)
+    for i, (g, lbl) in enumerate(zip(group_rows, y_rows, strict=True)):
+        w[i] = good_w if lbl == 1.0 else (1.0 / bag_sizes[g])
+    return w
+
+
+def _compute_fold_orderings_grouped(
+    X_list: list[np.ndarray],
+    y_list: list[float],
+    input_dim: int,
+    groups: list,
+    rng: np.random.RandomState | None,
+    calibrate_count: int,
+    calibration_fraction: float,
+    hidden_dim: int | None,
+) -> tuple[list[tuple[list[float], list[float]]], float | None]:
+    """Bag-aware variant of :func:`compute_fold_orderings`.
+
+    Splits by *group* (a voted image) instead of by row so a Bad bag's flooded
+    region negatives never straddle the Train/Calibrate boundary, sizes the
+    split over votes not rows, weight-balances each fold fit per-bag, and
+    collapses every calibration group to a single max-pooled score (an image
+    scores by its best region, as at inference).
+    """
+    import torch  # noqa: PLC0415
+
+    from vtscore.training.mlp import train_model  # noqa: PLC0415
+    from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: PLC0415
+
+    _rng = rng if rng is not None else np.random
+    X_np = np.array(X_list)
+    y_np = np.array(y_list)
+    grp = list(groups)
+
+    # Rows per group, and each group's (single) label.
+    order_groups: list = []
+    rows_by_group: dict = {}
+    label_by_group: dict = {}
+    for i, g in enumerate(grp):
+        if g not in rows_by_group:
+            rows_by_group[g] = []
+            order_groups.append(g)
+            label_by_group[g] = y_np[i]
+        rows_by_group[g].append(i)
+
+    pos_groups = [g for g in order_groups if label_by_group[g] == 1.0]
+    neg_groups = [g for g in order_groups if label_by_group[g] == 0.0]
+    n = len(order_groups)
+    if n < 4:
+        return [], 0.5
+    if len(pos_groups) < 2 or len(neg_groups) < 2:
+        return [], 0.5
+
+    n_cal = max(1, round(n * calibration_fraction))
+    n_train = n - n_cal
+    if n_train < 2 or n_cal < 1:
+        return [], NO_GOOD_THRESHOLD
+
+    def _per_class_n_train(class_total: int) -> int:
+        target = round(class_total * n_train / n)
+        return max(1, min(class_total - 1, target))
+
+    n_train_pos = _per_class_n_train(len(pos_groups))
+    n_train_neg = _per_class_n_train(len(neg_groups))
+
+    # Index the plain group lists by position - group ids are tuples, and
+    # ``np.array(list_of_tuples)`` would build a 2-D array and mangle them.
+    orderings: list[tuple[list[float], list[float]]] = []
+    for _ in range(max(1, calibrate_count)):
+        pos_perm = _rng.permutation(len(pos_groups))
+        neg_perm = _rng.permutation(len(neg_groups))
+        train_groups = [pos_groups[i] for i in pos_perm[:n_train_pos]] + [neg_groups[i] for i in neg_perm[:n_train_neg]]
+        cal_groups = [pos_groups[i] for i in pos_perm[n_train_pos:]] + [neg_groups[i] for i in neg_perm[n_train_neg:]]
+
+        train_idx = [i for g in train_groups for i in rows_by_group[g]]
+        X_train = torch.tensor(X_np[train_idx], dtype=torch.float32)
+        y_train = torch.tensor(y_np[train_idx], dtype=torch.float32).unsqueeze(1)
+        fold_w = torch.tensor(_per_bag_fit_weights(y_np[train_idx], [grp[i] for i in train_idx]), dtype=torch.float32)
+        model = train_model(X_train, y_train, input_dim, hidden_dim=hidden_dim, sample_weights=fold_w)
+
+        # Score every calibration row, then max-pool per group to one score.
+        cal_idx = [i for g in cal_groups for i in rows_by_group[g]]
+        with torch.no_grad():
+            X_cal = torch.tensor(X_np[cal_idx], dtype=torch.float32).to(next(model.parameters()).device)
+            row_scores = sigmoid_to_finite_scores(model(X_cal))
+        pos_in_cal = {i: s for i, s in zip(cal_idx, row_scores, strict=True)}
+        group_scores: list[float] = []
+        group_labels: list[float] = []
+        for g in cal_groups:
+            rows = rows_by_group[g]
+            group_scores.append(max(pos_in_cal[i] for i in rows))
+            group_labels.append(float(label_by_group[g]))
+        orderings.append((group_scores, group_labels))
+
+    return orderings, None
+
+
 def compute_fold_orderings(
     X_list: list[np.ndarray],
     y_list: list[float],
@@ -267,6 +391,7 @@ def compute_fold_orderings(
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
     hidden_dim: int | None = None,
+    groups: list | None = None,
 ) -> tuple[list[tuple[list[float], list[float]]], float | None]:
     """Train the K calibration folds and return their held-out orderings.
 
@@ -282,7 +407,27 @@ def compute_fold_orderings(
     orderings are empty and ``fallback`` is the sentinel threshold the public
     wrapper must return (mirrors :func:`calculate_cross_calibration_threshold`'s
     historical early-returns); otherwise ``fallback`` is ``None``.
+
+    *groups* activates the **bag-aware** path used when Bad votes are flooded
+    into their region nodes: rows sharing a ``groups`` id belong to one voted
+    image (a Bad bag's region negatives, or a single Good row) and
+    are kept together on one side of every Train/Calibrate split, split counts
+    are taken over *groups* (votes) not rows, fold fits are *weights*-balanced,
+    and each calibration group collapses to one max-pooled score - matching how
+    inference scores an image by its best region.  When *groups* is ``None``
+    (every non-flooded caller) the historical row-wise path runs unchanged.
     """
+    if groups is not None:
+        return _compute_fold_orderings_grouped(
+            X_list,
+            y_list,
+            input_dim,
+            groups,
+            rng=rng,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+            hidden_dim=hidden_dim,
+        )
     n = len(X_list)
     if n < 4:
         return [], 0.5
@@ -386,6 +531,7 @@ def calculate_cross_calibration_threshold(
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
     hidden_dim: int | None = None,
+    groups: list | None = None,
 ) -> float:
     """Estimate a decision threshold using k-fold calibration.
 
@@ -448,6 +594,7 @@ def calculate_cross_calibration_threshold(
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
         hidden_dim=hidden_dim,
+        groups=groups,
     )
     if fallback is not None:
         return fallback
