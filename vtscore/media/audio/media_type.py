@@ -89,9 +89,7 @@ def _render_waveform(audio_data, *, size: int = _THUMB_SIZE) -> bytes | None:
     return buf.getvalue()
 
 
-def generate_waveform_thumbnail(
-    audio_bytes: bytes, *, filename: str = "", size: int = _THUMB_SIZE
-) -> bytes | None:
+def generate_waveform_thumbnail(audio_bytes: bytes, *, filename: str = "", size: int = _THUMB_SIZE) -> bytes | None:
     """Render a waveform thumbnail as a PNG image from raw audio bytes.
 
     Decodes the audio with librosa, computes the min/max amplitude envelope, and
