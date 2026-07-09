@@ -36,7 +36,6 @@ This index is a grouped filename list; open a file for its remaining scope.
 - [structural-embedder.md](structural-embedder.md): structural (instance-matching) embedder — larger VLAD codebook next
 - [clipper-chain.md](clipper-chain.md): ordered converter/clipper chains — frontend chooser, sidecar/registry schema, `input_spec` migration
 - [cli-detector-converter.md](cli-detector-converter.md): CLI autodetect converter-routing + re-clipping pipeline (open work)
-- [mlp-hidden-layer-sizing.md](mlp-hidden-layer-sizing.md): optional cross-modality MLP capacity sweeps
 
 ## Find / verification
 
