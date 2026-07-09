@@ -293,6 +293,16 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private selAccent = '#4f9dff';
 
   private hoveredCell: HexCellPayload | null = null;
+  /**
+   * A bin "pinned" enlarged because its detail popup (right-click) is open.
+   * Independent of the live hover: it stays enlarged as long as the popup is up,
+   * so the user can tell which bin the details belong to. While a cell is pinned,
+   * hover on other bins is suppressed — the detail popup has precedence — until
+   * the popup is dismissed ({@link unpinCell}) or right-clicking another bin
+   * pins that one instead. Rendered enlarged via the same {@link drawHoveredHex}
+   * path as a hover; see the ``pinnedCell ?? hoveredCell`` pick in {@link draw}.
+   */
+  private pinnedCell: HexCellPayload | null = null;
   private hoverDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   // Last known cursor position over the canvas (canvas-relative mx/my plus the
   // viewport clientX/clientY) and whether the pointer is currently inside.
@@ -1361,19 +1371,18 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.selAccent = this.themeColor('--accent-color') || '#4f9dff';
     const selectionActive = this.selection.size > 0;
 
-    // The hovered cell is deferred and redrawn last (enlarged, on top of its
-    // neighbours) so the hover read-out is a size bump rather than a border —
-    // leaving the border free to encode selection state.
+    // The enlarged cell is deferred and redrawn last (on top of its neighbours)
+    // so the read-out is a size bump rather than a border — leaving the border
+    // free to encode selection state. A pinned cell (its detail popup is open)
+    // wins over the live hover, so the bin whose details are showing stays
+    // enlarged even as the cursor moves off it.
+    const enlargedCell = this.pinnedCell ?? this.hoveredCell;
     let hovered: { cell: HexCellPayload; sx: number; sy: number } | null = null;
     for (const cell of allCells) {
       const [sx, sy] = this.projToScreen(cell.cx, cell.cy);
       if (sx < -screenRadius * 2 || sx > this.width + screenRadius * 2) continue;
       if (sy < -screenRadius * 2 || sy > this.height + screenRadius * 2) continue;
-      if (
-        this.hoveredCell &&
-        this.hoveredCell.q === cell.q &&
-        this.hoveredCell.r === cell.r
-      ) {
+      if (enlargedCell && enlargedCell.q === cell.q && enlargedCell.r === cell.r) {
         hovered = { cell, sx, sy };
         continue;
       }
@@ -2184,22 +2193,33 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.zoomBy(BrowseCanvasComponent.DOUBLE_CLICK_ZOOM, mx, my);
   }
 
-  /** Right-click: suppress the native menu and ask the view to open the bin
-   *  popup, carrying the cursor anchor and the bin (if any) under it. A
-   *  second right-click on empty canvas (no bin under the cursor) within the
+  /** Right-click: suppress the native menu, pin the bin under the cursor so it
+   *  stays enlarged, and ask the view to open its detail popup. A second
+   *  right-click on empty canvas (no bin under the cursor) within the
    *  double-click window zooms out about the cursor instead, mirroring
-   *  double-click-to-zoom-in. Landing on a bin at either click breaks the
-   *  pair, so it never fires while browsing bin popups. */
+   *  double-click-to-zoom-in. Landing on a bin at either click breaks the pair,
+   *  so it never fires while browsing bin popups. */
   private onContextMenu(event: MouseEvent): void {
     event.preventDefault();
     const rect = this.canvasRef.nativeElement.getBoundingClientRect();
     const mx = event.clientX - rect.left;
     const my = event.clientY - rect.top;
-    // Close any hover preview so it doesn't sit under the popup.
+    // Target the bin the cursor is already hovering first, falling back to a
+    // hit-test only when nothing is hovered (the pointer only just arrived, or a
+    // different bin is currently pinned). This is what makes the *first*
+    // right-click open the detail view: a hovered thumbnail breaks out well past
+    // its true hex, so a raw hit-test at the cursor can land outside the true
+    // silhouette and find nothing — which used to shrink the bin and take a
+    // second click. The hovered cell is unambiguously what the user is aiming at.
+    const cell = this.hoveredCell ?? this.hitTest(mx, my);
+    // Stop the transient hover audition and drop the hover highlight; from here
+    // the pinned cell drives the enlarge and the popup drives the audio.
     this.clearHover();
-    const cell = this.hitTest(mx, my);
 
     if (!cell) {
+      // Empty canvas: a second right-click within the double-click window zooms
+      // out about the cursor (mirrors double-click-to-zoom-in). A bin under
+      // either click breaks the pair.
       const now = event.timeStamp;
       const isDoubleRightClick = now - this.lastEmptyContextMenuAt < BrowseCanvasComponent.DBLCLICK_MS;
       this.lastEmptyContextMenuAt = isDoubleRightClick ? 0 : now;
@@ -2211,14 +2231,33 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       this.lastEmptyContextMenuAt = 0;
     }
 
-    const members = cell ? this.cellMembers(cell) : [];
+    // Pin the bin so it stays enlarged while its detail popup is open (right-
+    // clicking another bin re-pins to it; dismissing the popup unpins via the
+    // view calling {@link unpinCell}). Blank space clears any pin.
+    this.pinnedCell = cell;
+    this.requestRedraw();
     this.contextMenu.emit({
       clientX: event.clientX,
       clientY: event.clientY,
-      members,
+      members: cell ? this.cellMembers(cell) : [],
       repId: cell ? cell.rep_id : null,
       bounds: rect,
     });
+  }
+
+  /**
+   * Release the pinned bin — called by the browse view when the detail popup is
+   * dismissed — and resume live hover at the current cursor position, so the bin
+   * now under the cursor lifts (and, for audio, plays) again. No-op when nothing
+   * is pinned.
+   */
+  unpinCell(): void {
+    if (!this.pinnedCell) return;
+    this.pinnedCell = null;
+    this.requestRedraw();
+    if (this.pointerInside) {
+      this.emitHoverHit(this.lastMouseX, this.lastMouseY, this.lastClientX, this.lastClientY);
+    }
   }
 
   /** Canvas-relative ``[x, y]`` for a mouse event. */
@@ -2615,6 +2654,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.lastClientY = event.clientY;
     this.pointerInside = true;
 
+    // A pinned bin (its detail popup is open) has precedence: suppress hover on
+    // other bins so the popup keeps its enlarge and audition. Keep tracking the
+    // cursor above, so hover resolves correctly the moment the popup is closed.
+    if (this.pinnedCell) return;
+
     if (this.hoverDebounceTimer) clearTimeout(this.hoverDebounceTimer);
     this.hoverDebounceTimer = setTimeout(() => {
       this.emitHoverHit(mx, my, event.clientX, event.clientY);
@@ -2629,6 +2673,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * post-zoom refresh.
    */
   private emitHoverHit(mx: number, my: number, clientX: number, clientY: number): void {
+    // Hover is suppressed while a bin's detail popup is pinned (also guards the
+    // post-zoom refresh path, which calls this directly).
+    if (this.pinnedCell) return;
     const hit = this.hitTest(mx, my);
     const prevQ = this.hoveredCell?.q;
     const prevR = this.hoveredCell?.r;

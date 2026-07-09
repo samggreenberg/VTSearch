@@ -796,6 +796,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   dismissContextMenu(): void {
     this.contextMenuOpen = false;
+    // Release the canvas's pinned enlarge so live hover resumes on the bin now
+    // under the cursor.
+    this.canvas?.unpinCell();
   }
 
   /**
