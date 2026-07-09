@@ -19,15 +19,27 @@ explicitly working around the helper.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import logging
 import os
+import threading
 import uuid
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+
+try:
+    import fcntl as _fcntl  # POSIX-only; falls back to in-process locking on Windows.
+except ImportError:  # pragma: no cover - Windows
+    _fcntl = None
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "atomic_write_json",
     "atomic_write_text",
+    "file_lock",
     "read_server_json",
 ]
 
@@ -107,3 +119,82 @@ def atomic_write_json(path: Path | str, obj: Any, *, indent: int = 2) -> None:
     newline don't complain).
     """
     atomic_write_text(path, json.dumps(obj, indent=indent) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Cross-process file locking
+# ---------------------------------------------------------------------------
+#
+# Library-tier twin of ``vtsearch.settings_store.file_lock``.  It lives here
+# (not in the app tier) so library-tier stores - the dataset/detector
+# registries - can serialise their read-modify-write cycles across processes
+# without importing ``vtsearch`` (which would break the library-clean layering).
+#
+# Pair it with a fresh ``_load()`` inside the ``with file_lock(...)`` block and
+# an :func:`atomic_write_json` at the end: holding the flock while re-reading
+# means a writer always merges into the *current* on-disk state instead of
+# clobbering entries a sibling process committed since this process last read.
+
+# Per-path in-process locks, held in addition to the cross-process flock so
+# threads within one process serialise on the same path without repeatedly
+# re-entering the kernel (and as the sole guard when ``fcntl`` is unavailable).
+_path_locks: dict[str, threading.Lock] = {}
+_path_locks_guard = threading.Lock()
+
+
+def _path_lock_for(path: Path) -> threading.Lock:
+    # resolve() is non-strict (works for not-yet-created files), so the same
+    # target maps to one lock across its whole lifetime regardless of whether
+    # the file exists yet or is reached via a relative/symlinked path.
+    key = str(path.resolve())
+    with _path_locks_guard:
+        lock = _path_locks.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _path_locks[key] = lock
+        return lock
+
+
+@contextlib.contextmanager
+def file_lock(path: Path | str) -> Iterator[None]:
+    """Acquire an exclusive cross-process lock for *path*.
+
+    The lock is taken on a sibling ``<path>.lock`` file rather than on the
+    data file itself, because atomic writes replace the data file's inode via
+    :func:`os.replace` - any fd held against the old inode would be useless.
+    The sibling lock file's inode is stable.
+
+    An in-process lock is always taken first (so threads in one process
+    serialise even on Windows), then the POSIX ``flock``.  ``flock`` releases
+    automatically when the process exits, so a crash never leaves a stale lock
+    behind.  On Windows (``fcntl`` unavailable) only the in-process lock is
+    used and cross-process protection degrades silently; VTSearch is deployed
+    on Linux, so this affects only the rare Windows-dev case.
+    """
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    in_proc = _path_lock_for(p)
+    in_proc.acquire()
+    fd: int | None = None
+    fcntl_mod = _fcntl  # snapshot so the narrowed binding survives the yield
+    if fcntl_mod is not None:
+        lock_path = p.with_name(p.name + ".lock")
+        try:
+            fd = os.open(str(lock_path), os.O_WRONLY | os.O_CREAT, 0o600)
+            fcntl_mod.flock(fd, fcntl_mod.LOCK_EX)
+        except OSError as exc:
+            logger.warning("Could not acquire file lock on %s: %s", lock_path, exc)
+            if fd is not None:
+                with contextlib.suppress(OSError):
+                    os.close(fd)
+                fd = None
+    try:
+        yield
+    finally:
+        if fd is not None and fcntl_mod is not None:
+            try:
+                fcntl_mod.flock(fd, fcntl_mod.LOCK_UN)
+            finally:
+                with contextlib.suppress(OSError):
+                    os.close(fd)
+        in_proc.release()

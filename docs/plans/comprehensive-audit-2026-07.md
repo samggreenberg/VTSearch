@@ -1,6 +1,7 @@
 # Comprehensive interface audit — July 2026
 
-**Status: eleven fix passes shipped; 8 open follow-ups below.**
+**Status: eleven fix passes shipped; follow-up #1 (registry multi-process
+safety) shipped; 7 open follow-ups below.**
 
 A full-codebase audit of interface boundaries (frontend ↔ API, route layer ↔
 state system, app tier ↔ `vtscore`, IO, concurrency, frontend TS). Six parallel
@@ -12,12 +13,7 @@ the audit but deferred as needing a design decision or a larger change.
 
 Ordered roughly by severity.
 
-1. **Dataset registry is not multi-process safe**
-   (`vtscore/datasets/registry.py`): in-process lock plus a fixed `.tmp`
-   name; a concurrent CLI autodetect run against the same data dir can
-   silently erase the server's registrations. Fine under the documented
-   single-worker model; needs flock if that changes.
-2. **Progress-modal analysis path is broken three ways**
+1. **Progress-modal analysis path is broken three ways**
    (`progress-modal.component.ts`, `runAnalysis()`): Escape/X/backdrop skip
    the eval-job cancel the in-body Cancel button performs; the
    `trainAndScore` subscribe has no `takeUntil`, so a destroy while the POST
@@ -29,7 +25,7 @@ Ordered roughly by severity.
    completion — `analyzing` hangs forever. All currently *latent*: the only
    in-app instantiation passes `[useCachedHistory]="true"`, but
    `runAnalysis()` is the component default and is pinned by its spec.
-3. **Browse canvas gesture overlaps** (UX design decisions): wheel-zoom
+2. **Browse canvas gesture overlaps** (UX design decisions): wheel-zoom
    during an active drag-pan/marquee discards the zoom's cursor anchoring on
    the next mousemove and freezes painting for the 220 ms transition (gate
    the wheel while a drag is active, or make the pan math zoom-aware); the
@@ -39,18 +35,18 @@ Ordered roughly by severity.
    pending toggle on view moves); the boundary-settle rAF loop can start while
    the zoom-transition loop still owns the canvas (both write
    `displayedTransform`; visible damage is a truncated transition).
-4. **Root-zoom px mixing in panel-divider drags**
+3. **Root-zoom px mixing in panel-divider drags**
    (`browse-view.component.ts:onDividerMove`,
    `label-view/panel-resize.directive.ts`): visual-px cursor deltas applied
    as layout-px widths under `html { zoom: 1.1 }`, so the divider rides
    ~10% away from the pointer. Shared app-wide wart; fix both sites together
    (the eleventh pass fixed the same class of bug in the minimap).
-5. **Pure devicePixelRatio change never re-runs canvas `resize()`**
+4. **Pure devicePixelRatio change never re-runs canvas `resize()`**
    (browse-canvas + minimap): dragging the window to a different-density
    monitor leaves `dpr` (and the thumbnail-resolution tier) stale until the
    next CSS resize; rendering-quality only (hit-testing is CSS-px based).
    Needs a `matchMedia('(resolution: …)')` listener.
-6. **`save_detector_labels` full-replace drops cross-dataset labels**
+5. **`save_detector_labels` full-replace drops cross-dataset labels**
    (`routes/detectors/labels.py`): the route rebuilds the labelset from the
    *active dataset's* votes only, while `sync_labels_to_loaded_detector`
    deliberately merges cross-dataset entries — saving while dataset B is
@@ -58,16 +54,23 @@ Ordered roughly by severity.
    the explicit save should merge like the sync does (probably yes, via
    `_merge_labelsets_across_datasets`) or full-replace is the intended
    "save exactly what I see" semantic.
-7. **`MAX_UPLOAD_MB` defaults to 0 = unlimited** (`vtscore/config.py`):
+6. **`MAX_UPLOAD_MB` defaults to 0 = unlimited** (`vtscore/config.py`):
    staging uploads are unbounded by default; decide a sane default cap.
    (The eleventh pass removed the *decompressed-copy* amplification in
    `stage_file`, but the upload itself is still unbounded.)
-8. **`AutoDetectProgressModalComponent` is dead code** (modal sweep note):
+7. **`AutoDetectProgressModalComponent` is dead code** (modal sweep note):
    referenced nowhere; delete it or wire it up.
 
 ## What shipped
 
 Backend — state / settings / jobs:
+- Dataset + detector registries made multi-process safe (was open follow-up #1):
+  every mutation re-reads the manifest fresh under a cross-process `file_lock`
+  and writes it back via `atomic_write_json` (pid+uuid temp name), so a
+  concurrent CLI autodetect can no longer clobber the server's registrations. A
+  library-tier `file_lock` was added to `vtscore.io`
+  (`test_registry_multiprocess_safety.py` in both `tests_lib/datasets` and
+  `tests_lib/detectors`).
 - Detector-state wipe via the `"__request_missing__"` sentinel — a detector-only
   request wiped the session against the sentinel's empty medias
   (`vtscore/detectors/dataset_sync.py`).
