@@ -18,7 +18,6 @@ This index is a grouped filename list; open a file for its remaining scope.
 - [vtsbrowse.md](vtsbrowse.md): UMAP hexbin browser — design spec; thin open work (thin-pickle save mode, tuning, WebGL escape hatch, compaction fill ceiling)
 - [vtsbrowse-empirical-tuning.md](vtsbrowse-empirical-tuning.md): UMAP/pyramid/renderer tuning — quantitative sweep + qualitative browser review remain
 - [vtsbrowse-toponymy.md](vtsbrowse-toponymy.md): named-region "street signs" (design only)
-- [vtsbrowser-hex-circle-radius.md](vtsbrowser-hex-circle-radius.md): singleton-circle radius investigation (needs visual verification)
 - [vtsbrowser-qa-followups.md](vtsbrowser-qa-followups.md): deferred QA-drive follow-ups (startup wedge, tab crash)
 - [browse-audio-player.md](browse-audio-player.md): audio-bin waveform tiles + hover player — merge bin-popup preview with now-playing, data-drive from `has_thumbnail`
 
@@ -34,9 +33,7 @@ This index is a grouped filename list; open a file for its remaining scope.
 
 - [patch-embedder.md](patch-embedder.md): patch-based image embedder — scoring/validation follow-ups + open questions
 - [structural-embedder.md](structural-embedder.md): structural (instance-matching) embedder — larger VLAD codebook next
-- [clipper-chain.md](clipper-chain.md): ordered converter/clipper chains — frontend chooser, sidecar/registry schema, `input_spec` migration
 - [cli-detector-converter.md](cli-detector-converter.md): CLI autodetect converter-routing + re-clipping pipeline (open work)
-- [mlp-hidden-layer-sizing.md](mlp-hidden-layer-sizing.md): optional cross-modality MLP capacity sweeps
 
 ## Find / verification
 
