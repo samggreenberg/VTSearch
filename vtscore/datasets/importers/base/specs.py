@@ -107,8 +107,6 @@ def _validate_spec_converter(spec: SourceSpec, output_type: str, get_converter) 
     :class:`PluginField` schema, so declared ``min`` / ``max`` ranges
     are enforced before the params reach :meth:`MediaConverter.convert`.
     """
-    from marshmallow import ValidationError  # noqa: PLC0415
-
     if spec.converter is None:
         if spec.source_type != output_type:
             raise ValueError(
@@ -128,10 +126,14 @@ def _validate_spec_converter(spec: SourceSpec, output_type: str, get_converter) 
             f"Converter {spec.converter!r} produces "
             f"{converter.target_type!r}, but output media_type is {output_type!r}",
         )
-    try:
-        converter.validate_params(spec.params)
-    except ValidationError as exc:
-        raise ValueError(f"Invalid params for converter {spec.converter!r}: {exc.messages}") from exc
+    # Route through ``normalize_params`` (not ``validate_params``) so that
+    # empty-string values for optional/defaulted fields are scrubbed before
+    # marshmallow sees them - otherwise a blank optional ``number`` field
+    # (e.g. "Seconds per frame" left unset in favour of "Frames per video")
+    # reaches the Float loader as ``""`` and is rejected as "Not a valid
+    # number".  ``normalize_params`` already raises ``ValueError`` on a real
+    # validation failure, matching this call site's error contract.
+    converter.normalize_params(spec.params)
 
 
 PickerView = str  # one of: "form", "demo", "server_folder", "local"
