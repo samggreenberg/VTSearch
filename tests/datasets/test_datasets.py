@@ -112,6 +112,84 @@ class TestDatasetEndpoints:
         assert resp.status_code == 400
         assert "Invalid dataset" in resp.get_json()["message"]
 
+    def test_load_demo_route_forwards_embedder_trio(self, client, monkeypatch):
+        """POST /api/dataset/load-demo threads the v3 ``embedders`` trio to the runner.
+
+        The demo picker's multi-embedder flow (e.g. SigLIP for text + sift_vlad
+        for instance/logo matching on OpenLogo) POSTs an ``embedders`` array.
+        The handler must forward it verbatim into the importer field_values so
+        the load pipeline's embed stage runs every bound embedder and each media
+        ends up with a per-embedder vector.  Regression guard for the demo path
+        specifically (the folder/files flows are covered separately).
+        """
+        from vtscore.datasets.config import DEMO_DATASETS
+
+        if not DEMO_DATASETS:
+            pytest.skip("No demo datasets registered")
+        demo_name = next(iter(DEMO_DATASETS))
+
+        import vtsearch.routes.datasets.load as load_mod
+
+        captured: dict = {}
+
+        def _fake_runner(importer, field_values):
+            captured["field_values"] = dict(field_values)
+            return "task-demo-trio"
+
+        # Patch the background runner so no real download/embed/thread happens;
+        # we only assert what the handler hands it.
+        monkeypatch.setattr(load_mod, "_run_importer_in_background", _fake_runner)
+
+        resp = client.post(
+            "/api/dataset/load-demo",
+            json={"name": demo_name, "embedder": "siglip", "embedders": ["siglip", "sift_vlad"]},
+        )
+
+        assert resp.status_code == 200
+        assert resp.get_json()["task_id"] == "task-demo-trio"
+        fv = captured["field_values"]
+        assert fv["embedders"] == ["siglip", "sift_vlad"]
+        # The primary pick still rides along as the singular field.
+        assert fv["embedder"] == "siglip"
+
+    def test_importer_background_threads_trio_primary_led(self, client, monkeypatch):
+        """``_run_importer_in_background`` forwards the demo trio, primary-led.
+
+        The pipeline pops ``embedders`` from the importer field_values and hands
+        it to ``_run_origin_load_in_background`` with the singular ``embedder``
+        leading the list (so it becomes each media's recorded primary), even if
+        the client omitted the primary from the array.  Patching the origin
+        loader keeps this synchronous (no background thread / real load).
+        """
+        from vtscore.datasets import get_importer, load_pipeline
+        from vtscore.datasets.config import DEMO_DATASETS
+
+        if not DEMO_DATASETS:
+            pytest.skip("No demo datasets registered")
+        demo_name = next(iter(DEMO_DATASETS))
+
+        captured: dict = {}
+
+        def _fake_origin_loader(load_fn, origin, **kwargs):
+            captured.update(kwargs)
+            return "task-origin"
+
+        monkeypatch.setattr(load_pipeline, "_run_origin_load_in_background", _fake_origin_loader)
+
+        importer = get_importer("demo")
+        assert importer is not None
+
+        # Client sent only the structural pick in the array; the primary
+        # (``embedder``) must be prepended by the pipeline.
+        task_id = load_pipeline._run_importer_in_background(
+            importer,
+            {"name": demo_name, "embedder": "siglip", "embedders": ["sift_vlad"]},
+        )
+
+        assert task_id == "task-origin"
+        assert captured["embedder"] == "siglip"
+        assert captured["embedders"] == ["siglip", "sift_vlad"]
+
     def test_browse_media_files_unknown_source(self, client):
         """GET /api/browse-media-files with unknown source returns 404."""
         resp = client.get("/api/browse-media-files?source=demo:nonexistent_xyz&path=")
