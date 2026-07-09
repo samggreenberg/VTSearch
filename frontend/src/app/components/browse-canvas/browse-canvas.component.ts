@@ -316,6 +316,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   private tileLoadSub: Subscription | null = null;
   private rafId = 0;
+  /** Set in ngOnDestroy: late async callbacks (thumbnail loads, tile
+   *  responses) must not schedule new rAF / idle work on a dead component. */
+  private destroyed = false;
   private needsRedraw = false;
 
   // --- Zoom transition (picture-in-picture) ---------------------------------
@@ -576,6 +579,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
     this.tileLoadSub?.unsubscribe();
     this.recenterSub?.unsubscribe();
     this.viewport.setViewport(null);
@@ -973,6 +977,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private requestRedraw(): void {
+    // Late async callbacks (a thumbnail Image finishing its download, a tile
+    // response) can land after destroy; ngOnDestroy cancels the *current*
+    // rAF handle, so a redraw scheduled here afterwards would run draw() on
+    // the destroyed component — emitting on destroyed outputs, republishing
+    // a non-null viewport over the teardown's null, and re-arming the idle
+    // thumb-prefetch loop.
+    if (this.destroyed) return;
     // A zoom transition or boundary snap-back owns the canvas while it runs;
     // tile loads, hover and selection repaints that arrive mid-animation are
     // folded into the real frame it paints each step / when it lands (see
@@ -1879,6 +1890,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * motion rather than only after it stops.
    */
   private scheduleThumbPrefetch(): void {
+    if (this.destroyed) return;
     if (this.thumbPrefetchHandle !== null) return;
     const run = () => {
       this.thumbPrefetchHandle = null;

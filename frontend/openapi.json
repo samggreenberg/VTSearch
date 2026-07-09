@@ -7082,6 +7082,9 @@
           "404": {
             "description": "Named detector is not flagged for Auto-Find."
           },
+          "409": {
+            "description": "Find was cancelled via /api/find/cancel."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
@@ -7925,7 +7928,7 @@
     },
     "/api/dataset/clear": {
       "post": {
-        "description": "Uses the ``X-Dataset-Id`` header (via ``get_active_context()``) to\ndetermine which dataset to clear.",
+        "description": "Uses the ``X-Dataset-Id`` header (via ``get_active_context()``) to\ndetermine which dataset to clear.  The header is required: without it\nthe active context is the request-missing sentinel, whose truthy id\n``\"__request_missing__\"`` made the old emptiness check silently\n\"clear\" a dataset that doesn't exist (and the sentinel's frozen\ncontainers rule out a meaningful global-clear fallback inside a\nrequest), so a header-less clear is rejected loudly instead.",
         "operationId": "clear_dataset_route",
         "responses": {
           "200": {
@@ -7937,6 +7940,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "X-Dataset-Id header missing."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10866,7 +10872,7 @@
         }
       ],
       "post": {
-        "description": "Reads good_votes/bad_votes from global state and the current medias\nto build a fresh LabelSet, then persists it into the detector's JSON file.",
+        "description": "Reads good_votes/bad_votes from global state and the current medias\nto build a fresh LabelSet, then persists it into the detector's JSON file.\n\nRequires both context headers: with the request-missing sentinels in\nplace, ``validated_vote_snapshot`` reports ``safe=True`` over frozen-empty\nvotes/medias, so a header-less request would pass the 409 guard and\noverwrite the named detector's labelset with an empty one.",
         "operationId": "save_detector_labels",
         "responses": {
           "200": {
@@ -10878,6 +10884,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "X-Dataset-Id / X-Detector-Id header missing."
           },
           "404": {
             "description": "Detector not found."
@@ -11675,6 +11684,9 @@
           "404": {
             "description": "A selected dataset or detector ID is unknown / missing."
           },
+          "409": {
+            "description": "Find was cancelled via /api/find/cancel."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
@@ -11721,6 +11733,9 @@
           },
           "404": {
             "description": "Detector not found."
+          },
+          "409": {
+            "description": "Dataset lacks the detector's embedder type, or Find was cancelled via /api/find/cancel."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"

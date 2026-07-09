@@ -626,3 +626,44 @@ describe('ImageViewerComponent', () => {
     });
   });
 });
+
+describe('ImageViewerComponent Escape guard', () => {
+  let component: ImageViewerComponent;
+  let fixture: ComponentFixture<ImageViewerComponent>;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [ImageViewerComponent],
+      providers: [...provideZoneless(), ActiveContextService],
+    }).compileComponents();
+    fixture = TestBed.createComponent(ImageViewerComponent);
+    component = fixture.componentInstance;
+  });
+
+  function pressEscape(): void {
+    (component as unknown as { onWindowKeyDown(e: KeyboardEvent): void }).onWindowKeyDown(
+      new KeyboardEvent('keydown', { key: 'Escape' }),
+    );
+  }
+
+  it('does not clear the region box while a modal is open', () => {
+    // Regression: the Esc that closes a modal used to also fall through to
+    // this window-level handler and discard the user's drawn box.
+    component.regionBox.set([0.1, 0.2, 0.5, 0.6]);
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    document.body.appendChild(backdrop);
+    try {
+      pressEscape();
+      expect(component.regionBox()).toEqual([0.1, 0.2, 0.5, 0.6]);
+    } finally {
+      backdrop.remove();
+    }
+  });
+
+  it('clears the region box on Escape when no modal is open', () => {
+    component.regionBox.set([0.1, 0.2, 0.5, 0.6]);
+    pressEscape();
+    expect(component.regionBox()).toBeNull();
+  });
+});

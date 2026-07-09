@@ -30,6 +30,28 @@ class TestHostComponent {
   }
 }
 
+@Component({
+  standalone: true,
+  imports: [ModalComponent],
+  template: `
+    <vt-modal [title]="'Outer'" [open]="true" (closed)="outerClosed = true">
+      <p>Outer body</p>
+    </vt-modal>
+    @if (innerVisible()) {
+      <vt-modal [title]="'Inner'" [open]="true" (closed)="innerClosed = true">
+        <p>Inner body</p>
+      </vt-modal>
+    }
+  `,
+})
+class StackedHostComponent {
+  // Mirrors the real nesting pattern (New Detector → crop modal, Settings →
+  // importer): the inner modal is created already-open by an @if.
+  readonly innerVisible = signal(false);
+  outerClosed = false;
+  innerClosed = false;
+}
+
 describe('ModalComponent', () => {
   let fixture: ComponentFixture<TestHostComponent>;
   let host: TestHostComponent;
@@ -111,5 +133,42 @@ describe('ModalComponent', () => {
     host.isOpen.set(true);
     await settleZoneless(fixture);
     expect(fixture.nativeElement.querySelector('.modal-close')).toBeTruthy();
+  });
+});
+
+describe('ModalComponent stacking', () => {
+  let fixture: ComponentFixture<StackedHostComponent>;
+  let host: StackedHostComponent;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [StackedHostComponent],
+      providers: [...provideZoneless()],
+    }).compileComponents();
+    fixture = TestBed.createComponent(StackedHostComponent);
+    host = fixture.componentInstance;
+  });
+
+  it('Escape closes only the topmost open modal, not the whole stack', async () => {
+    // Regression: every instance listens on document, so one Esc used to
+    // dismiss the outer flow (and its form state) along with the inner view.
+    await settleZoneless(fixture);
+    host.innerVisible.set(true);
+    await settleZoneless(fixture);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(host.innerClosed).toBe(true);
+    expect(host.outerClosed).toBe(false);
+  });
+
+  it('after the inner modal is destroyed, Escape reaches the outer modal', async () => {
+    await settleZoneless(fixture);
+    host.innerVisible.set(true);
+    await settleZoneless(fixture);
+    host.innerVisible.set(false);
+    await settleZoneless(fixture);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(host.outerClosed).toBe(true);
   });
 });

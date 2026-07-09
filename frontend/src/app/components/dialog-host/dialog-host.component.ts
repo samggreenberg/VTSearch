@@ -22,6 +22,8 @@ export class DialogHostComponent {
   }
 
   onClosed(): void {
-    this.dialog.resolve(false);
+    // Escape / backdrop = the dialog kind's own cancel value (null for
+    // prompt(), false for confirm()), not a hard-coded false.
+    this.dialog.cancel();
   }
 }
