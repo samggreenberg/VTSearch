@@ -11,6 +11,7 @@ import {
   type CanvasTheme,
 } from '../browse-canvas/hex-render.util';
 import { binGeometry } from '../browse-canvas/bin-geometry';
+import { readRootZoom } from '../../utils/root-zoom';
 import { IconComponent } from '../icon/icon.component';
 import type { HexCellPayload, ProjectionMeta } from '../../models/projection.models';
 
@@ -184,7 +185,7 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     // the element zoom× larger on screen — bake the zoom into the backing
     // store (as the main canvas effectively does via its visual-px sizing)
     // so the bitmap isn't undersampled/blurry.
-    const rootZoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+    const rootZoom = readRootZoom();
     const scale = this.dpr * rootZoom;
     const canvas = this.canvasRef.nativeElement;
     canvas.width = Math.round(this.width * scale);
@@ -488,7 +489,7 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     // clientX/Y deltas are visual px but width/height are layout px, so
     // divide out the app-wide root zoom or the panel grows faster than the
     // cursor moves.
-    const rootZoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+    const rootZoom = readRootZoom();
     const dw = (this.resizeStartX - event.clientX) / rootZoom;
     const dh = (this.resizeStartY - event.clientY) / rootZoom;
     this.width = Math.round(

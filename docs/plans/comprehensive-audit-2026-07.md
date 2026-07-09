@@ -22,13 +22,7 @@ Ordered roughly by severity.
    pending toggle on view moves); the boundary-settle rAF loop can start while
    the zoom-transition loop still owns the canvas (both write
    `displayedTransform`; visible damage is a truncated transition).
-2. **Root-zoom px mixing in panel-divider drags**
-   (`browse-view.component.ts:onDividerMove`,
-   `label-view/panel-resize.directive.ts`): visual-px cursor deltas applied
-   as layout-px widths under `html { zoom: 1.1 }`, so the divider rides
-   ~10% away from the pointer. Shared app-wide wart; fix both sites together
-   (the eleventh pass fixed the same class of bug in the minimap).
-3. **Pure devicePixelRatio change never re-runs canvas `resize()`**
+2. **Pure devicePixelRatio change never re-runs canvas `resize()`**
    (browse-canvas + minimap): dragging the window to a different-density
    monitor leaves `dpr` (and the thumbnail-resolution tier) stale until the
    next CSS resize; rendering-quality only (hit-testing is CSS-px based).
