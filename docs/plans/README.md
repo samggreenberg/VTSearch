@@ -44,7 +44,6 @@ This index is a grouped filename list; open a file for its remaining scope.
 ## Import / plugins
 
 - [server-import-ux.md](server-import-ux.md): Server/Services import UX — open follow-ups
-- [dataset-import-archives.md](dataset-import-archives.md): archive import — auto-detect / provenance follow-ups
 - [RCDatasetImporter.md](RCDatasetImporter.md): RCDatasetImporter / Holder / PullWrest extension — API client implementation (open)
 
 ## Progress / UX
