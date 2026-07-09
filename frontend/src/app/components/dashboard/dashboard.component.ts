@@ -29,7 +29,6 @@ import {
   ProgressHeader,
   formatProgressHeader,
   formatProgressMessage,
-  isProgressIndeterminate,
   progressBarState,
 } from '../../utils/format-progress';
 import {
@@ -109,10 +108,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   readonly wasDeletingSelectedDatasetsConfirm = signal(false);
   readonly deletingSelectedDetectorsConfirm = signal(false);
   readonly wasDeletingSelectedDetectorsConfirm = signal(false);
-
-  progressValue = 0;
-  progressTotal = 0;
-  progressIndeterminate = false;
 
   readonly importerClosing = signal(false);
   /** Visible importers (i.e. ``hidden_from_picker !== true``), fetched
@@ -1329,7 +1324,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     this.datasetState.setLoading(true);
     this.datasetState.setProgressMessage('Checking labels...');
-    this.progressIndeterminate = true;
 
     // Pre-flight: check if any labels fail to resolve
     this.detectorsFindApi.findCheckLabels(findParams).subscribe({
@@ -1344,7 +1338,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
           const ok = await this.dialog.confirm(message, 'warning');
           if (!ok) {
             this.datasetState.setLoading(false);
-            this.progressIndeterminate = false;
             return;
           }
         }
@@ -1365,14 +1358,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
         next: (progress: ProgressEvent) => {
           if (!progress || progress.status === 'idle') return;
 
-          if (!isProgressIndeterminate(progress)) {
-            this.progressIndeterminate = false;
-            this.progressValue = progress.current ?? 0;
-            this.progressTotal = progress.total ?? 0;
-          } else {
-            this.progressIndeterminate = true;
-          }
-
           this.datasetState.setProgressMessage(
             formatProgressMessage(progress, 'Running Find...'),
           );
@@ -1392,7 +1377,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
       next: (response: any) => {
         this.stopFindProgressPolling();
         this.datasetState.setLoading(false);
-        this.progressIndeterminate = false;
 
         // Convert /api/find response to AutoDetectResultsData format
         const mapHit = (r: any) => ({
@@ -1450,7 +1434,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
       error: () => {
         this.stopFindProgressPolling();
         this.datasetState.setLoading(false);
-        this.progressIndeterminate = false;
         // Global error interceptor surfaces the failure in the banner.
       },
     });
