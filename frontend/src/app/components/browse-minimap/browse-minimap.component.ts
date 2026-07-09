@@ -12,6 +12,7 @@ import {
 } from '../browse-canvas/hex-render.util';
 import { binGeometry } from '../browse-canvas/bin-geometry';
 import { readRootZoom } from '../../utils/root-zoom';
+import { onDevicePixelRatioChange } from '../../utils/device-pixel-ratio';
 import { IconComponent } from '../icon/icon.component';
 import type { HexCellPayload, ProjectionMeta } from '../../models/projection.models';
 
@@ -81,6 +82,11 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
 }>();
 
   private resizeObserver: ResizeObserver | null = null;
+  // Teardown for the devicePixelRatio-change listener. A pure density change
+  // (monitor-to-monitor drag) leaves the element box untouched, so neither the
+  // dock ResizeObserver nor the floating width/height inputs fire; this re-runs
+  // resizeCanvas() to rebuild the backing store at the new density.
+  private dprListenerTeardown: (() => void) | null = null;
 
   private ctx!: CanvasRenderingContext2D;
   private dpr = 1;
@@ -110,6 +116,15 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     this.ctx = this.canvasRef.nativeElement.getContext('2d')!;
     if (this.dock) this.startDockSizing();
     this.resizeCanvas();
+
+    // A pure devicePixelRatio change doesn't resize the element, so re-run the
+    // canvas sizing (and repaint) when the display density shifts.
+    this.ngZone.runOutsideAngular(() => {
+      this.dprListenerTeardown = onDevicePixelRatioChange(() => {
+        this.resizeCanvas();
+        this.requestRedraw();
+      });
+    });
 
     // Overview tiles arrive asynchronously; repaint as the cache fills. The
     // viewport box updates on every pan/zoom the main canvas publishes.
@@ -149,6 +164,7 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     this.viewportSub?.unsubscribe();
     this.themeObserver?.disconnect();
     this.resizeObserver?.disconnect();
+    this.dprListenerTeardown?.();
     if (this.rafId) cancelAnimationFrame(this.rafId);
     this.detachResizeListeners();
     this.detachNavListeners();
