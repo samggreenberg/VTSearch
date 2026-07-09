@@ -9,6 +9,7 @@ import { SettingsIoApiService } from '../../../services/settings-io-api.service'
 import { ImporterField } from '../../../models/api.models';
 import type { SettingsExporterEntry } from '../../../generated/api-client/models/settings-exporter-entry';
 import type { RunSettingsExportResponse } from '../../../generated/api-client/models/run-settings-export-response';
+import { apiErrorMessage } from '../../../utils/api-error';
 
 type ModalView = 'picker' | 'form';
 
@@ -127,7 +128,7 @@ export class SettingsExporterModalComponent implements OnDestroy {
       },
       error: (err) => {
         this.submitting.set(false);
-        this.exportError.set(err.error?.error || 'Export failed');
+        this.exportError.set(apiErrorMessage(err, 'Export failed'));
       },
     });
   }

@@ -193,15 +193,18 @@ would cover those too.
   `total` (e.g. model load) sits the bar at its weighted floor until the next
   phase. That's honest but static; per-step weights (now shipped) mitigate it,
   but a phase with no `total` still can't animate within itself.
-- **Weights are static guesses.** The per-step weights are fixed ballparks, not
-  learned. A future refinement could record real per-phase durations per
-  media-type/embedder and feed measured weights back in. **Specified in
-  `docs/plans/progress-weight-calibration.md`** — including making the weights
-  depend on dataset size `n` via an affine per-phase cost model (the fixed
-  model-load cost is why one static vector can't serve both small and large
-  datasets). Not yet run (needs a GPU host). A CPU **image** profile
-  (`_LOAD_STEP_WEIGHTS_CPU_IMAGE`) shipped as a stopgap: images embed cheaply, so
-  the generic 55%-embed CPU profile mispaced image imports.
+- **Weights are static guesses.** *(Largely resolved.)* The per-step weights are
+  now fit to measured per-phase durations via an affine `n`-aware cost model —
+  see `docs/plans/progress-weight-calibration.md` (executed 2026-07 for
+  `{cpu,cuda} × {image,audio}`, default embedder; coefficients in
+  `vtscore/datasets/stages/_load_cost_model.py`). The fixed model-load cost is why
+  one static vector can't serve both small and large datasets, so
+  `load_step_weights(media_type, *, n, download_size_mb, embedder)` computes the
+  vector from the cost model when `n` is known and a coefficient row exists, and
+  otherwise returns the static per-(device, media) profile (the large-`n`
+  asymptote). Remaining media/embedders/cuML cells are uncalibrated and keep the
+  static profiles (incl. the CPU **image** stopgap
+  `_LOAD_STEP_WEIGHTS_CPU_IMAGE`).
 - **Dead dashboard fields.** `progressValue` / `progressTotal` /
   `progressIndeterminate` on `DashboardComponent` are set by the Find polling
   but never rendered; safe to remove in a cleanup pass.

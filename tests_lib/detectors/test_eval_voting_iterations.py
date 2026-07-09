@@ -284,6 +284,103 @@ class TestSimulateVotingIterations:
 
 
 # ------------------------------------------------------------------
+# Production fidelity: the per-step calibration must match the live
+# _train_and_score_xy / train_and_threshold pipeline, or the reported
+# cost measures a pipeline the detector never runs.
+# ------------------------------------------------------------------
+
+
+def _mt_key(rng: np.random.RandomState):
+    """Return the MT19937 key array of *rng* as a tuple (pyright-narrowed).
+
+    ``get_state(legacy=True)`` returns a tuple, but the numpy stub types it as a
+    ``dict | tuple`` union; the ``isinstance`` narrows it so ``state[1]`` (the
+    624-word key array) type-checks.
+    """
+    state = rng.get_state(legacy=True)
+    assert isinstance(state, tuple)
+    return state
+
+
+class TestProductionCalibrationFidelity:
+    """The eval's per-step threshold calibration mirrors production exactly.
+
+    Production (`_train_and_score_xy` / `train_and_threshold`) sizes the hidden
+    layer from the full label count, forces that width onto the calibration
+    folds, and always calibrates with a fresh ``RandomState(42)`` (the fixed
+    seed baked into ``cross_calibration_threshold_cached``).  These tests spy on
+    the calibration call to prove the eval does the same, so overlapping the
+    fold split RNG with the per-seed simulation RNG or letting folds auto-size
+    can't silently reintroduce a production mismatch.
+    """
+
+    def _spy_calibration(self, monkeypatch):
+        from vtscore.eval import voting_iterations
+
+        real = voting_iterations.calculate_cross_calibration_threshold
+        captured: list[dict] = []
+
+        def spy(X_list, y_list, input_dim, inclusion_value=0, *, rng=None, hidden_dim=None, **kw):
+            # get_state() copies without advancing, so recording it here does
+            # not perturb the real calibration that runs on the next line.
+            captured.append(
+                {
+                    "n": len(X_list),
+                    "hidden_dim": hidden_dim,
+                    "mt_key": _mt_key(rng)[1] if rng is not None else None,
+                }
+            )
+            return real(X_list, y_list, input_dim, inclusion_value, rng=rng, hidden_dim=hidden_dim, **kw)
+
+        monkeypatch.setattr(voting_iterations, "calculate_cross_calibration_threshold", spy)
+        return captured
+
+    def test_folds_forced_to_full_data_hidden_dim(self, monkeypatch):
+        from vtscore.training.mlp import _auto_hidden_dim
+
+        captured = self._spy_calibration(monkeypatch)
+        medias = _make_separable_clips(n_per_cat=10)
+        simulate_voting_iterations(medias, "alpha", seed=42)
+
+        assert captured  # at least one calibrated step
+        for c in captured:
+            # The fold models must be sized from the full label count for the
+            # step, not auto-sized per fold (hidden_dim=None).
+            assert c["hidden_dim"] == _auto_hidden_dim(c["n"])
+
+    def test_folds_calibrate_with_fixed_random_state_42(self, monkeypatch):
+        captured = self._spy_calibration(monkeypatch)
+        medias = _make_separable_clips(n_per_cat=10)
+        simulate_voting_iterations(medias, "alpha", seed=7)
+
+        assert captured
+        ref_key = _mt_key(np.random.RandomState(42))[1]
+        for c in captured:
+            mt_key = c["mt_key"]
+            assert mt_key is not None
+            # A fresh RandomState(42), not the shared per-seed simulation RNG
+            # (which the media split + vote sequence would have advanced).
+            assert np.array_equal(mt_key, ref_key)
+
+    def test_calibration_rng_independent_of_eval_seed(self, monkeypatch):
+        """The fold split RNG is pinned, so it does not vary with the eval seed."""
+        medias = _make_separable_clips(n_per_cat=10)
+
+        captured_a = self._spy_calibration(monkeypatch)
+        simulate_voting_iterations(medias, "alpha", seed=1)
+        captured_b = self._spy_calibration(monkeypatch)
+        simulate_voting_iterations(medias, "alpha", seed=2)
+
+        # Same first-step vote count is not guaranteed across seeds, but every
+        # calibrated step in both runs must start from the identical RNG state.
+        assert captured_a and captured_b
+        ref_key = tuple(_mt_key(np.random.RandomState(42))[1].tolist())
+        states_a = {tuple(c["mt_key"].tolist()) for c in captured_a}
+        states_b = {tuple(c["mt_key"].tolist()) for c in captured_b}
+        assert states_a == states_b == {ref_key}
+
+
+# ------------------------------------------------------------------
 # Integration test: run_voting_iterations_eval
 # ------------------------------------------------------------------
 

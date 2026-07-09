@@ -111,7 +111,6 @@ default_concurrent_embeddings  # noqa: F821
 # ---------------------------------------------------------------------------
 find_by_pkl_path  # noqa: F821 - vtscore.datasets.registry
 recreate_model_at_time  # noqa: F821 - vtscore.detectors.labeling_progress
-update_cache_for_cid  # noqa: F821 - vtscore.detectors.labelset_training
 collect_media_origins  # noqa: F821 - vtscore.detectors.training
 train_detector_from_origins  # noqa: F821 - vtscore.detectors.training
 
@@ -154,6 +153,8 @@ get_browse_mouse_zooms_per_level  # noqa: F821
 set_browse_mouse_zooms_per_level  # noqa: F821
 set_autopilot_resort_interval  # noqa: F821
 set_dataset_max_age_days  # noqa: F821
+set_projection_n_neighbors  # noqa: F821
+set_projection_min_dist  # noqa: F821
 
 # ---------------------------------------------------------------------------
 # DetectorContext attributes written in ``vtsearch/routes/detectors/registry.py``
@@ -234,6 +235,15 @@ _extract_dir  # noqa: F821
 dir_key  # noqa: F821
 text_sort  # noqa: F821
 learned_sort  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# Duck-typed importer stub methods in test files. ``resolve_display_name``
+# is called reflectively on the importer object by the load pipeline
+# (see ``vtscore.datasets.load_pipeline.load_from_importer``); the fake
+# importer class must define it, but vulture sees the definition without
+# the caller.
+# ---------------------------------------------------------------------------
+resolve_display_name  # noqa: F821
 
 # ---------------------------------------------------------------------------
 # Pytest fixture parameters whose side effects are the point - the body

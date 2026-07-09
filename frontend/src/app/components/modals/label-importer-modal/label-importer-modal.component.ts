@@ -21,6 +21,7 @@ import { MediasApiService } from '../../../services/medias-api.service';
 import { VoteStateService } from '../../../services/vote-state.service';
 import { ImporterField } from '../../../models/api.models';
 import type { LabelImporterEntry } from '../../../generated/api-client/models/label-importer-entry';
+import { apiErrorMessage } from '../../../utils/api-error';
 
 type ModalView = 'picker' | 'form';
 
@@ -173,7 +174,7 @@ export class LabelImporterModalComponent implements OnDestroy {
           this.dynamicFieldLoading.update((m) => ({ ...m, [key]: false }));
           this.dynamicFieldError.update((m) => ({
             ...m,
-            [key]: err?.error?.error || 'Could not load options',
+            [key]: apiErrorMessage(err, 'Could not load options'),
           }));
           this.dynamicFieldOptions.update((m) => ({ ...m, [key]: [] }));
         },
@@ -243,7 +244,7 @@ export class LabelImporterModalComponent implements OnDestroy {
       },
       error: (err) => {
         this.submitting.set(false);
-        this.importError.set(err.error?.error || 'Import failed');
+        this.importError.set(apiErrorMessage(err, 'Import failed'));
       },
     });
   }
@@ -284,7 +285,7 @@ export class LabelImporterModalComponent implements OnDestroy {
         }
       },
       error: (err) => {
-        this.importError.set(err.error?.error || `Failed to add media to ${label} pile`);
+        this.importError.set(apiErrorMessage(err, `Failed to add media to ${label} pile`));
         if (label === 'good') {
           this.addingGood.set(false);
         } else {

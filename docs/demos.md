@@ -119,6 +119,6 @@ Datasets are grouped by media type below. Each demo comes in size variants — *
 | **kth_l** | Simple human-action recordings across 6 KTH categories (large) |
 | **kth_a** | Simple human-action recordings across 6 KTH categories (all) |
 
-> **Note:** Video demos are downloaded from HuggingFace Datasets. On some networks or air-gapped systems this may require manual setup; see [DEPLOYMENT.md](DEPLOYMENT.md) for offline deployment instructions.
+> **Note:** Video demos are downloaded from a mix of sources: the UCF-101 subset from HuggingFace Datasets, the full UCF-101 categories from YouTube, HMDB51 from `serre-lab.clps.brown.edu`, and KTH from `csc.kth.se`. On some networks or air-gapped systems this may require manual setup; see [DEPLOYMENT.md](DEPLOYMENT.md) for offline deployment instructions.
 
 You can also load your own data from pickle files or folders via the same dialog.

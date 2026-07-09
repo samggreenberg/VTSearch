@@ -310,17 +310,21 @@ class TestTrainModelEpochs:
             config.TRAIN_PATIENCE = saved_patience
 
 
-class TestCalibrationSkippedForTinyLabels:
-    """``train_and_score`` should skip cross-calibration when there are
-    too few labels for the result to be useful; regardless of
-    ``safe_thresholds``.  Calibration costs two 200-epoch trainings per
-    call, and below the blend's ramp floor those trainings are either
-    discarded (safe_thresholds=True) or trained on too little data to
-    be reliable (safe_thresholds=False)."""
+class TestCalibrationAtTinyLabelCounts:
+    """Below the safe-threshold ramp floor (6 labels), calibration runs only
+    when its output is actually used.
+
+    With ``safe_thresholds=True`` the calibrated value is discarded by the
+    pure-GMM blend (label_weight=0), so the two 200-epoch fold trainings are
+    skipped as pure waste.  With ``safe_thresholds=False`` the cross-cal
+    threshold *is* what the detector uses, so it is computed at every label
+    count - keeping the vote/labelset path consistent with the Find path
+    (``train_and_threshold``), which has always cross-calibrated below 6 when
+    safe-thresholds is off."""
 
     def test_skips_calibration_when_safe_and_under_six_labels(self):
-        """With safe_thresholds=True and n_labels<6, calculate_cross_calibration_threshold
-        must not be invoked; its output is entirely discarded by the blender."""
+        """With safe_thresholds=True and n_labels<6, the fold trainings must
+        not run; their output is entirely discarded by the blender."""
         from vtscore.detectors import training as detector_training
         from vtscore.training import thresholds
 
@@ -329,8 +333,8 @@ class TestCalibrationSkippedForTinyLabels:
 
         with unittest.mock.patch.object(
             thresholds,
-            "calculate_cross_calibration_threshold",
-            side_effect=AssertionError("calibration should be skipped for tiny label sets"),
+            "compute_fold_orderings",
+            side_effect=AssertionError("calibration should be skipped when safe & tiny"),
         ) as patched:
             _, threshold, _model = detector_training.train_and_score(
                 app_module.medias,
@@ -341,20 +345,20 @@ class TestCalibrationSkippedForTinyLabels:
         patched.assert_not_called()
         assert 0.0 <= threshold <= 1.0
 
-    def test_skips_calibration_when_safe_off_and_under_six_labels(self):
-        """With safe_thresholds=False and n_labels<6, calibration is still
-        skipped; fold trainings are unreliable with so few labels, and the
-        gate is purely a function of n_labels."""
+    def test_calibrates_when_safe_off_and_under_six_labels(self):
+        """With safe_thresholds=False and n_labels<6, cross-calibration now
+        runs: the threshold is the value the detector uses, so both training
+        entry points agree instead of one hard-coding 0.5."""
         from vtscore.detectors import training as detector_training
         from vtscore.training import thresholds
 
         app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4, 5]})
+        app_module.bad_votes.update({k: None for k in [3, 4, 5]})  # 5 labels < 6
 
         with unittest.mock.patch.object(
             thresholds,
-            "calculate_cross_calibration_threshold",
-            side_effect=AssertionError("calibration should be skipped for tiny label sets"),
+            "compute_fold_orderings",
+            wraps=thresholds.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
                 app_module.medias,
@@ -362,7 +366,7 @@ class TestCalibrationSkippedForTinyLabels:
                 app_module.bad_votes,
                 safe_thresholds=False,
             )
-        patched.assert_not_called()
+        assert patched.call_count == 1
 
     def test_still_calibrates_when_enough_labels(self):
         """With safe_thresholds=True and n_labels>=6, calibration still runs."""
@@ -734,6 +738,49 @@ class TestEvalTrainAndScoreAsync:
         resp = client.post("/api/eval/train-and-score", json={"metric": "bogus", "wait": True})
         assert resp.status_code == 422
 
+    def test_result_reports_job_progress_not_singleton(self, client):
+        """The poll endpoint must report the polled job's own progress, not
+        the global ``eval_progress`` singleton (which an overlapping eval can
+        pollute, decorrelating the bar from job identity)."""
+        import threading
+
+        from tests.conftest import _wait_for_job
+        from vtscore.concurrency.async_jobs import eval_jobs
+        from vtscore.concurrency.progress import update_eval_progress
+
+        self._seed_history()  # 4 labels -> n_total == 3
+        entered = threading.Event()
+        release = threading.Event()
+
+        def blocking_stable(*args, **kwargs):
+            entered.set()
+            release.wait(timeout=10)
+            return []
+
+        with unittest.mock.patch(
+            "vtsearch.routes.eval.calculate_prediction_stability_over_time",
+            side_effect=blocking_stable,
+        ):
+            envelope = client.post("/api/eval/train-and-score", json={"metric": "stable"}).get_json()
+            assert envelope["status"] == "running"
+            assert envelope["total"] == 3
+            job_id = envelope["job_id"]
+
+            # The job thread is now inside the (blocked) computation with its
+            # own current=0 / total=3 recorded.
+            assert entered.wait(timeout=10)
+
+            # Simulate a concurrent/overlapping eval clobbering the singleton.
+            update_eval_progress("running", "other eval", 99, 12345)
+
+            result = client.get(f"/api/eval/train-and-score/result?job_id={job_id}").get_json()
+            assert result["status"] == "running"
+            assert result["total"] == 3, "must report the job's own total, not the singleton's 12345"
+            assert result["current"] == 0
+
+            release.set()
+            _wait_for_job(eval_jobs)
+
 
 class TestExampleSort:
     def test_sort_with_audio_file(self, client):
@@ -900,3 +947,46 @@ class TestLoadEmbedderConcurrentCallback:
                 _load_embedder_with_progress("audio", 5)
 
         assert mock_emb._on_progress is original_cb
+
+
+class TestLearnedSortVoteSnapshot:
+    """Regression (audit #6): the learned-sort job must train on the votes as
+    they were at *request* time, not whatever the live vote proxy holds when
+    the background job happens to run.
+
+    The signature is computed at request time; if the job re-read the live
+    proxy at run time, a vote change (or an ``ensure_votes_match_active_dataset``
+    rehydrate) in between would cache a result trained on V2 under the key for
+    V1 — poisoning ``_last_done`` for later identical-signature requests.
+    """
+
+    def test_job_uses_request_time_snapshot_not_live_votes(self, client, monkeypatch):
+        from vtscore.concurrency.async_jobs import learned_sort_jobs
+        from vtscore.detectors import learned_sort as ls_mod
+
+        learned_sort_jobs.reset_for_tests()
+        app_module.good_votes.clear()
+        app_module.bad_votes.clear()
+        app_module.good_votes.update({1: None, 2: None})
+        app_module.bad_votes.update({3: None})
+
+        captured: dict[str, dict] = {}
+
+        def fake_run(*, good, bad, **_kwargs):
+            # Simulate a vote landing after the request computed its signature
+            # but before/while the job runs: mutate the live proxy.
+            app_module.good_votes[99] = None
+            captured["good"] = dict(good)
+            captured["bad"] = dict(bad)
+            return [], 0.5
+
+        monkeypatch.setattr(ls_mod, "run_learned_sort", fake_run)
+
+        resp = client.post("/api/learned-sort", json={"wait": True})
+        assert resp.status_code == 200
+
+        # The job trained on the frozen request-time votes, not the live proxy
+        # that gained id 99 mid-run.
+        assert captured["good"] == {1: None, 2: None}
+        assert 99 not in captured["good"]
+        assert captured["bad"] == {3: None}

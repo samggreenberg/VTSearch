@@ -8,7 +8,7 @@ import {
   BrowseContextMenuEvent,
   HexHoverEvent,
 } from '../browse-canvas/browse-canvas.component';
-import { BrowseHoverPreviewComponent } from '../browse-hover-preview/browse-hover-preview.component';
+import { BrowseHoverPreviewComponent, NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
 import { BrowseBinPopupComponent } from '../browse-bin-popup/browse-bin-popup.component';
 import { BrowseLegendComponent } from '../browse-legend/browse-legend.component';
 import { BrowseSelectionPanelComponent } from '../browse-selection-panel/browse-selection-panel.component';
@@ -40,6 +40,7 @@ import { snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
+import { apiErrorMessage } from '../../utils/api-error';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -100,6 +101,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   /** Last non-zero level, so the mute toggle can restore where the user was. */
   private preMuteVolume = 1;
   hoverEvent: HexHoverEvent | null = null;
+  /** The clip currently auditioning from a canvas-bin or bin-popup hover, or
+   *  ``null`` when silent. Drives the top-left now-playing waveform. */
+  readonly nowPlaying = signal<NowPlaying | null>(null);
   /**
    * Top of the density scale for the legend: the densest cell currently in
    * view, pushed up from the canvas. The legend labels the yellow end with it.
@@ -440,6 +444,12 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   onHexHover(event: HexHoverEvent | null): void {
     this.hoverEvent = event;
+  }
+
+  /** A canvas-bin or bin-popup hover started/stopped auditioning a clip;
+   *  update the shared top-left now-playing indicator. */
+  onNowPlaying(event: NowPlaying | null): void {
+    this.nowPlaying.set(event);
   }
 
   onDensityMaxChanged(max: number): void {
@@ -786,6 +796,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   dismissContextMenu(): void {
     this.contextMenuOpen = false;
+    // Release the canvas's pinned enlarge so live hover resumes on the bin now
+    // under the cursor.
+    this.canvas?.unpinCell();
   }
 
   /**
@@ -826,7 +839,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         error: (err) => {
           this.status.set('error');
           this.errorMessage.set(
-            err?.error?.message || err?.error?.error || 'Failed to build the map',
+            apiErrorMessage(err, 'Failed to build the map'),
           );
         },
       });
@@ -870,7 +883,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         this.selection.consumeSurviveProjectionChange();
         this.status.set('error');
         this.errorMessage.set(
-          err?.error?.message || err?.error?.error || 'Failed to build the map',
+          apiErrorMessage(err, 'Failed to build the map'),
         );
       },
     });
@@ -1020,7 +1033,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
           } else {
             this.status.set('error');
             this.errorMessage.set(
-              err?.error?.message || err?.error?.error || 'Failed to build the map',
+              apiErrorMessage(err, 'Failed to build the map'),
             );
           }
         },

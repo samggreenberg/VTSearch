@@ -601,7 +601,7 @@ overrides the CLI value for themselves.
 
 ## Settings tabs
 
-The Settings modal (gear icon) is organised into seven tabs:
+The Settings modal (gear icon) is organised into eight tabs:
 
 - **Appearance** - theme, animations, the metadata panel, the
   **Enable achievements** toggle, and per-media-type Scroll Style
@@ -612,6 +612,8 @@ The Settings modal (gear icon) is organised into seven tabs:
   [Configuring Autopilot](#configuring-autopilot).
 - **Browser** - per-media-type look of the spatial Browse view (tile
   shape, colour scheme, cell size).
+- **HuggingFace** - sign in with HuggingFace to download gated demo
+  datasets and gated AI models.
 - **Import Defaults** - default embedder, clipper, and converters per
   media type, plus the **Solo media type** picker.
 - **Server** - read-only settings fixed when the server started and

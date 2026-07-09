@@ -374,3 +374,79 @@ class TestMultiUserFileRestriction:
                 assert "must be within" not in resp.get_json().get("message", "")
         finally:
             set_login_provider(original)
+
+
+class TestExampleSortOriginConfinement:
+    """Ninth audit pass: ``POST /api/example-sort-origin`` takes the origin
+    dict verbatim from the request body, so in multi-user mode any path-like
+    origin param must pass the same confinement check ``_load_from_origin``
+    applies.  Before the fix a ``server_folder`` origin could point the
+    media source at any server-readable directory (arbitrary-file processing
+    + existence disclosure outside the user's ``data/<user>/`` subtree).
+    """
+
+    def _multi_user_provider(self, user_dir):
+        from vtsearch.auth import LoginProvider
+
+        class MultiUserProvider(LoginProvider):
+            name = "multi"
+
+            def get_user(self, request):
+                return "alice"
+
+            def is_authenticated(self, request):
+                return True
+
+            def get_user_data_dir(self, username, base_data_dir):
+                return user_dir
+
+        return MultiUserProvider()
+
+    def test_origin_path_outside_user_dir_rejected_multi_user(self, client, tmp_path):
+        from vtsearch.auth import get_login_provider, set_login_provider
+
+        user_dir = tmp_path / "alice"
+        user_dir.mkdir()
+        outside = tmp_path / "bob_private"
+        outside.mkdir()
+        (outside / "secret.wav").write_bytes(b"RIFF")
+
+        original = get_login_provider()
+        try:
+            set_login_provider(self._multi_user_provider(user_dir))
+            resp = client.post(
+                "/api/example-sort-origin",
+                json={
+                    "origin": {"importer": "server_folder", "params": {"path": str(outside)}},
+                    "key": "secret.wav",
+                },
+            )
+            assert resp.status_code == 400
+            assert "must be within" in resp.get_json()["message"]
+        finally:
+            set_login_provider(original)
+
+    def test_origin_path_inside_user_dir_passes_validation(self, client, tmp_path):
+        """The confinement check lets a contained path through (the request
+        proceeds into source resolution instead of 400-ing on validation)."""
+        from vtsearch.auth import get_login_provider, set_login_provider
+
+        user_dir = tmp_path / "alice"
+        sounds = user_dir / "sounds"
+        sounds.mkdir(parents=True)
+
+        original = get_login_provider()
+        try:
+            set_login_provider(self._multi_user_provider(user_dir))
+            resp = client.post(
+                "/api/example-sort-origin",
+                json={
+                    "origin": {"importer": "server_folder", "params": {"path": str(sounds)}},
+                    "key": "missing.wav",
+                },
+            )
+            # 404 (file not found) proves validation passed; the old 400
+            # confinement message must not appear.
+            assert resp.status_code == 404, resp.get_json()
+        finally:
+            set_login_provider(original)

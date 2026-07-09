@@ -26,7 +26,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
-from vtscore.config import DATA_DIR, DEFAULT_CALIBRATE_COUNT
+from vtscore.config import DATA_DIR, DEFAULT_CALIBRATE_COUNT, PROJECTION_MIN_DIST, PROJECTION_N_NEIGHBORS
 
 __all__ = [
     "BROWSE_MOUSE_ZOOMS_PER_LEVEL",
@@ -173,6 +173,14 @@ class ServerSettings(BaseModel):
     # datasets are stamped with an ``expires_at`` timestamp based on this
     # value.  ``None`` (the default) means datasets never expire.
     dataset_max_age_days: int | None = None
+
+    # Browse UMAP projection knobs (Stage 1).  They change the map layout, so
+    # a per-deployment operator may want to tune them.  The persisted
+    # projection is keyed on these values (see
+    # ``vtsearch.routes.projection._projection_params_match``), so a change
+    # forces a recompute instead of serving a layout fit under the old params.
+    projection_n_neighbors: Annotated[int, _clamp(2, 200)] = PROJECTION_N_NEIGHBORS
+    projection_min_dist: Annotated[float, _clamp(0.0, 0.99)] = PROJECTION_MIN_DIST
 
 
 class UserSettings(BaseModel):

@@ -188,9 +188,20 @@ TRAIN_PATIENCE = int(os.environ.get("VTSEARCH_TRAIN_PATIENCE", "10"))
 # labels, and a second fold mostly averages out per-split noise; bumping
 # back up is a one-setting change when the noise actually matters.
 DEFAULT_CALIBRATE_COUNT = max(1, int(os.environ.get("VTSEARCH_CALIBRATE_COUNT", "1")))
-MLP_HIDDEN_MIN = 4
+MLP_HIDDEN_MIN = 8
 MLP_HIDDEN_MAX = 32
 MLP_DROPOUT = 0.5
+
+# --- Browse projection (UMAP Stage 1) ---------------------------------------
+# Default UMAP knobs for the VTSBrowse 2-D projection.  Overridable per
+# deployment via the ``projection_n_neighbors`` / ``projection_min_dist``
+# server settings; these constants are the fallback and the values the
+# ingest-time pre-build stamps.  The persisted projection is keyed on the
+# effective values so changing a setting forces a recompute instead of
+# serving a layout fit under the old params.  See
+# docs/plans/vtsbrowse-empirical-tuning.md.
+PROJECTION_N_NEIGHBORS = 15
+PROJECTION_MIN_DIST = 0.1
 
 # Model IDs
 CLAP_MODEL_ID = "laion/clap-htsat-unfused"

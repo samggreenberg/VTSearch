@@ -34,6 +34,9 @@ class DocumentMediaType(MediaType):
     appropriate MIME type.
     """
 
+    #: Documents render a first-page thumbnail: a browsable-thumbnail type.
+    has_thumbnail = True
+
     def __init__(self) -> None:
         self._on_progress: ProgressCallback = _noop_progress
 

@@ -7,6 +7,8 @@ individual stage modules can depend on it without forming an import cycle.
 
 from __future__ import annotations
 
+from typing import Optional
+
 # Maps the status strings emitted by inner functions to step numbers.
 # "downloading" covers both download and extraction.
 # "loading"/"converting" cover model loading, pickle loading, and source→media
@@ -79,28 +81,63 @@ _LOAD_STEP_WEIGHTS_GPU = [0.20, 0.10, 0.30, 0.40]
 _LOAD_STEP_WEIGHTS = _LOAD_STEP_WEIGHTS_CPU
 
 
-def load_step_weights(media_type: str = "") -> list[float]:
-    """Return the dataset-load step weights for the active device and media type.
-
-    GPU hosts embed several times faster, so the un-accelerated finalize phase
-    (registry serialize/write, and CPU k-means when cuML is absent) becomes the
-    dominant cost and earns a larger slice of the unified bar. Falls back to the
-    CPU profile whenever the device can't be resolved (e.g. torch missing), so a
-    library-only caller never crashes here.
-
-    On a CPU host the split also depends on *media_type*: an image embed is a
-    single cheap ViT forward per item, so embedding no longer dominates the way
-    it does for audio/video, and ``image`` gets a profile with weight shifted off
-    embed and onto download + finalize. The GPU profile is media-agnostic — a
-    fast embed phase already shrinks embed's slice for every media type.
-    """
+def _resolve_device_name() -> str:
+    """Return "cuda"/"cpu" for the active device, defaulting to "cpu" when torch
+    can't be resolved (library-only callers must never crash here)."""
     try:
         from vtscore.config import resolve_device  # noqa: PLC0415
 
-        if resolve_device().startswith("cuda"):
-            return list(_LOAD_STEP_WEIGHTS_GPU)
+        return "cuda" if resolve_device().startswith("cuda") else "cpu"
     except Exception:
-        pass
+        return "cpu"
+
+
+def _default_embedder_name(media_type: str) -> str:
+    """Name of the default embedder for *media_type* (empty if none/unknown)."""
+    try:
+        from vtscore.media import embedders_for_type  # noqa: PLC0415
+
+        embs = embedders_for_type(media_type)
+        return embs[0].name if embs else ""
+    except Exception:
+        return ""
+
+
+def load_step_weights(
+    media_type: str = "",
+    *,
+    n: Optional[int] = None,
+    download_size_mb: Optional[float] = None,
+    embedder: Optional[str] = None,
+) -> list[float]:
+    """Return the dataset-load step weights for the active device and media type.
+
+    When the item count *n* is known (demo datasets know it up front) and a
+    measured affine cost-model row exists for (device, media_type, embedder), the
+    weights are computed from that model (see ``_load_cost_model``), so they adapt
+    to dataset size — model-load weighs heavier for small ``n``, embed dominates
+    for large ``n``. Otherwise it returns the static per-(device, media_type)
+    profile below — the large-``n`` asymptote — so callers without a known ``n``
+    (folder importers that stream) keep today's behaviour unchanged.
+
+    Static fallback rationale: GPU hosts embed several times faster, so the
+    un-accelerated finalize phase earns a larger slice; on a CPU host an image
+    embed is a single cheap ViT forward per item, so ``image`` shifts weight off
+    embed onto download + finalize. Falls back to the CPU profile whenever the
+    device can't be resolved, so a library-only caller never crashes here.
+    """
+    device = _resolve_device_name()
+
+    if n is not None and n > 0:
+        from vtscore.datasets.stages._load_cost_model import cost_model_weights  # noqa: PLC0415
+
+        emb = embedder or _default_embedder_name(media_type)
+        weights = cost_model_weights(device, media_type, emb, n, download_size_mb)
+        if weights is not None:
+            return weights
+
+    if device == "cuda":
+        return list(_LOAD_STEP_WEIGHTS_GPU)
     if media_type == "image":
         return list(_LOAD_STEP_WEIGHTS_CPU_IMAGE)
     return list(_LOAD_STEP_WEIGHTS_CPU)
@@ -166,6 +203,11 @@ class FinalizeProgress:
     def begin(self, slot: str) -> None:
         """Activate *slot*; subsequent :meth:`update` calls map into its range."""
         self._base, self._span = self._ranges[slot]
+        # Stamp the sub-slot boundary for the env-gated load profiler (no-op when
+        # profiling is off). See docs/plans/progress-weight-calibration.md.
+        from vtscore.datasets.stages._load_profiler import note_finalize_slot  # noqa: PLC0415
+
+        note_finalize_slot(slot)
 
     def check_cancelled(self) -> None:
         self._tracker.check_cancelled()

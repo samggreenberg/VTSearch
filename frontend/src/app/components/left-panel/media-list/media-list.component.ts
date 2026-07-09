@@ -1,7 +1,7 @@
 import { AfterViewChecked, ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, ElementRef, inject, Input, input, NgZone, OnChanges, OnDestroy, OnInit, output, SimpleChanges, ViewChild } from '@angular/core';
 
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
-import { Subject } from 'rxjs';
+import { Subject, Subscription } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { MediaItemComponent } from '../media-item/media-item.component';
 import { Media } from '../../../models/api.models';
@@ -94,7 +94,9 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
 
   private pendingScrollToSelected = false;
   private readonly destroy$ = new Subject<void>();
-  private scrollSubscribed = false;
+  /** The viewport instance whose ``scrolledIndexChange`` is currently subscribed. */
+  private scrollSubscribedViewport?: CdkVirtualScrollViewport;
+  private scrollSub?: Subscription;
   private resizeObserver?: ResizeObserver;
   private observedViewportEl?: HTMLElement;
   /** True once ``gridRowHeight`` has been measured from a real rendered card. */
@@ -308,10 +310,16 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
       }
     }
 
-    // Subscribe to virtual viewport scroll events (once the viewport exists).
-    if (this.virtualViewport && !this.scrollSubscribed) {
-      this.scrollSubscribed = true;
-      this.virtualViewport.scrolledIndexChange
+    // Subscribe to virtual viewport scroll events, re-wiring whenever the
+    // viewport *instance* changes: the template's `@if` branches destroy and
+    // recreate the viewport (dataset switch, crossing the virtualization
+    // threshold), and a subscription left on the old instance's completed
+    // stream never fires again — silently killing scroll-driven metadata
+    // prefetch. Mirrors the `observedViewportEl` re-observe pattern above.
+    if (this.virtualViewport && this.scrollSubscribedViewport !== this.virtualViewport) {
+      this.scrollSubscribedViewport = this.virtualViewport;
+      this.scrollSub?.unsubscribe();
+      this.scrollSub = this.virtualViewport.scrolledIndexChange
         .pipe(takeUntil(this.destroy$))
         .subscribe(() => this.prefetchVisibleMetadata());
     }

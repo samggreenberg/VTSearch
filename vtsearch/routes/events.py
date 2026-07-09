@@ -6,9 +6,11 @@ Replaces per-tracker REST polling (``/api/dataset/progress``,
 
 from __future__ import annotations
 
-from flask import Blueprint, Response, stream_with_context
+from typing import Generator
 
-from vtscore.concurrency.events import stream_progress_events
+from flask import Blueprint, Response, jsonify, stream_with_context
+
+from vtscore.concurrency.events import acquire_sse_slot, release_sse_slot, stream_progress_events
 
 events_bp = Blueprint("events", __name__)
 
@@ -23,9 +25,28 @@ def progress_events() -> Response:
     ``detector-loading-tasks``, and ``heartbeat`` (periodic liveness ping)
     events. The first frame on every channel is the current snapshot; clients
     do not need a separate REST call to bootstrap state.
+
+    Each open connection pins a ``gthread`` worker thread for its lifetime,
+    so connections are capped (``MAX_SSE_CONNECTIONS``) to leave headroom for
+    ordinary requests; once the cap is hit new connects get a 503 instead of
+    starving the pool. ``EventSource`` treats a non-2xx response as a fatal
+    error and stops auto-reconnecting, so the frontend's own ``onerror``
+    handler schedules a manual reconnect (see ``progress-events.service.ts``).
     """
+    if not acquire_sse_slot():
+        response = jsonify({"message": "Too many live event streams open; retry shortly."})
+        response.status_code = 503
+        response.headers["Retry-After"] = "5"
+        return response
+
+    def generate() -> Generator[str, None, None]:
+        try:
+            yield from stream_progress_events()
+        finally:
+            release_sse_slot()
+
     response = Response(
-        stream_with_context(stream_progress_events()),
+        stream_with_context(generate()),
         mimetype="text/event-stream",
     )
     # Long-lived stream: set our own Cache-Control so the global @after_request

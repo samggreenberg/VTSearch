@@ -35,6 +35,7 @@ import {
 import { DropZoneComponent } from '../../drop-zone/drop-zone.component';
 import { SourcePickerComponent } from '../dataset-importer-modal/source-picker/source-picker.component';
 import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
+import { apiErrorMessage } from '../../../utils/api-error';
 
 type ModalView = 'main' | 'media-picker';
 type ModalTab = 'blank' | 'trained';
@@ -1001,7 +1002,7 @@ export class NewDetectorModalComponent implements OnInit {
         },
         error: (err) => {
           this.submitting.set(false);
-          this.error.set(err.error?.error || 'Failed to create detector from labelset');
+          this.error.set(apiErrorMessage(err, 'Failed to create detector from labelset'));
         },
       });
   }
@@ -1058,7 +1059,7 @@ export class NewDetectorModalComponent implements OnInit {
         },
         error: (err) => {
           this.submitting.set(false);
-          this.error.set(err.error?.error || 'Failed to create detector');
+          this.error.set(apiErrorMessage(err, 'Failed to create detector'));
         },
       });
   }

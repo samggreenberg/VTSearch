@@ -70,7 +70,7 @@ hidden width from the number of training examples:
 return max(MLP_HIDDEN_MIN, min(MLP_HIDDEN_MAX, n_train // 3))
 ```
 
-With the default `MLP_HIDDEN_MIN=4` and `MLP_HIDDEN_MAX=32` (from
+With the default `MLP_HIDDEN_MIN=8` and `MLP_HIDDEN_MAX=32` (from
 `vtscore.config`), the heuristic keeps the model small when only a
 handful of labels exist - n_train=10 picks 4, n_train=60 picks 20,
 n_train=120 picks 32 (capped). The function is private but stable; the
@@ -215,9 +215,14 @@ For each of `calibrate_count` rounds:
 3. Score Calibrate, find the optimal threshold via
    `find_optimal_threshold`.
 
-Returns the mean threshold across rounds. Defaults to 0.5 when
-`n < 4`; returns `float("inf")` when the split would leave fewer than
-2 training examples or 1 calibration example.
+Aggregates the per-round thresholds via `threshold_from_fold_orderings`:
+a round whose optimal cut is "predict nothing" returns the abstain
+sentinel `NO_GOOD_THRESHOLD` (2.0), counted as a *vote* rather than
+averaged, so the ensemble abstains only under a strict majority and
+otherwise means the non-abstaining rounds. Defaults to 0.5 when `n < 4`
+or fewer than 2 of either class; returns `NO_GOOD_THRESHOLD` when the
+split would leave fewer than 2 training examples or 1 calibration
+example.
 
 ```python
 from vtscore.training import calculate_cross_calibration_threshold

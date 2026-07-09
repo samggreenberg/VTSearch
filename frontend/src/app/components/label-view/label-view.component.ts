@@ -163,6 +163,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private pendingRehydrateLearned = false;
   private autopilotTextSortPending = false;
   private autopilotMediaSortPending = false;
+  /** Armed on entry and on each pair reload; consumed once medias first render
+   *  to snap both panels tight to the grid (see ``snapPanelsOnLoad``). */
+  private pendingSnapOnLoad = false;
 
   constructor() {
     effect(() => {
@@ -223,6 +226,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
             // first real size change afterward does.
             this.captureAutoPopBaseline();
           }
+          // First content of a fresh entry/reload just rendered: snap both
+          // panels tight to the grid so the restored width doesn't leave a gap.
+          if (this.pendingSnapOnLoad) {
+            this.pendingSnapOnLoad = false;
+            this.snapPanelsOnLoad();
+          }
         }
         if (this.autopilotTextSortPending && medias.length > 0 && infos !== null) {
           this.autopilotTextSortPending = false;
@@ -260,6 +269,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.voteState.clear();
     this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth()}px`);
     this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth()}px`);
+    this.pendingSnapOnLoad = true;
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
     this.loadSettings();
@@ -336,6 +346,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortState.setSortStatus('');
     this.sortState.setSortProgress(0, 0);
     this.voteState.clear();
+    this.pendingSnapOnLoad = true;
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
     this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
@@ -353,6 +364,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.stopScoringProgressPoll();
     this.cancelAutoPop('left');
     this.cancelAutoPop('right');
+    this.cancelSnapOnLoad();
     if (this.animatePopTimer) clearTimeout(this.animatePopTimer);
     this.destroy$.next();
     this.destroy$.complete();
@@ -398,11 +410,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Snap one panel down to the minimum width that still shows its current grid
    *  column count, then clamp and persist. Shared by the divider drag-release
-   *  handlers and the icon-size auto-pop; both animate the snap so every pop
-   *  looks the same. No-op for the snap step when the panel isn't in grid mode;
-   *  the width is still persisted so drag-release always records where the user
-   *  left the divider. */
-  private popPanelTight(side: 'left' | 'right'): void {
+   *  handlers, the icon-size auto-pop, and the on-load snap. The drag/auto-pop
+   *  callers animate the snap so every pop looks the same; the on-load caller
+   *  passes `animate = false` so the panel simply appears tight instead of
+   *  visibly shrinking as the view opens. No-op for the snap step when the panel
+   *  isn't in grid mode; the width is still persisted so drag-release always
+   *  records where the user left the divider. */
+  private popPanelTight(side: 'left' | 'right', animate = true): void {
     const selector = side === 'left' ? 'vt-left-panel' : 'vt-right-panel';
     const panelEl = this.layoutRef.nativeElement.querySelector(selector) as HTMLElement | null;
     const currentWidth = side === 'left' ? this.leftWidth() : this.rightWidth();
@@ -414,13 +428,61 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       const min = side === 'left' ? this.leftMin : this.RIGHT_MIN;
       const clamped = Math.max(min, Math.min(max, snapped));
       if (clamped !== currentWidth) {
-        this.animatePop();
+        if (animate) this.animatePop();
         const widthSignal = side === 'left' ? this.leftWidth : this.rightWidth;
         widthSignal.set(clamped);
         this.layoutRef.nativeElement.style.setProperty(`--${side}-width`, `${clamped}px`);
       }
     }
     this.panelState.savePanelPx(side, side === 'left' ? this.leftWidth() : this.rightWidth());
+  }
+
+  // --- Snap on load ---
+
+  /** Pending animation-frame ids for the on-load snap poll, one per side, so
+   *  ``ngOnDestroy`` can cancel a poll still waiting for the grid to lay out. */
+  private snapLoadFrames: Record<'left' | 'right', number | null> = { left: null, right: null };
+
+  /** Snap both panels tight to their grid columns once, after a fresh content
+   *  load. On open, ``applyPanelPx`` restores the saved width verbatim — which
+   *  may sit wider than the grid needs, leaving a gap between the last thumbnail
+   *  column and the panel edge. The divider-drag handlers snap on release, so
+   *  the gap "heals" the instant the user touches the divider; this performs the
+   *  same snap at load so the user never sees the gap in the first place. */
+  private snapPanelsOnLoad(): void {
+    this.snapWhenGridReady('left');
+    this.snapWhenGridReady('right');
+  }
+
+  /** Snap `side` tight once its grid has laid out. ``snapPanelWidthToGridColumns``
+   *  needs the panel at its applied width with a real ``--grid-goal-width`` and a
+   *  nonzero client width; on first open those land a frame or two after the
+   *  medias arrive, so poll a bounded number of animation frames until it can
+   *  read a column count, then snap without animating. */
+  private snapWhenGridReady(side: 'left' | 'right', attempt = 0): void {
+    const MAX_ATTEMPTS = 60;
+    const selector = side === 'left' ? 'vt-left-panel' : 'vt-right-panel';
+    const panelEl = this.layoutRef.nativeElement.querySelector(selector) as HTMLElement | null;
+    const currentWidth = side === 'left' ? this.leftWidth() : this.rightWidth();
+    const ready = panelEl != null && snapPanelWidthToGridColumns(panelEl, currentWidth) !== null;
+    if (ready) {
+      this.snapLoadFrames[side] = null;
+      this.popPanelTight(side, false);
+      return;
+    }
+    if (attempt >= MAX_ATTEMPTS) {
+      this.snapLoadFrames[side] = null;
+      return;
+    }
+    this.snapLoadFrames[side] = requestAnimationFrame(() => this.snapWhenGridReady(side, attempt + 1));
+  }
+
+  private cancelSnapOnLoad(): void {
+    for (const side of ['left', 'right'] as const) {
+      const frame = this.snapLoadFrames[side];
+      if (frame !== null) cancelAnimationFrame(frame);
+      this.snapLoadFrames[side] = null;
+    }
   }
 
   // --- Icon-size auto-pop ---

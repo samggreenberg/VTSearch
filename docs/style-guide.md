@@ -110,6 +110,7 @@ All three resolve through `--shadow-dropdown` so they auto-tint per theme.
 | `--z-modal-backdrop` | 1000   | Modal overlay |
 | `--z-modal`          | 1001   | Modal content |
 | `--z-burger-menu`    | 2000   | Dropdown menus that must clear modals |
+| `--z-offline-banner` | 4500   | Offline / connection-lost banner |
 | `--z-toast`          | 5000   | Toast notifications |
 | `--z-login`          | 9999   | Login gate |
 

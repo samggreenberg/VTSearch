@@ -16,7 +16,6 @@ values raise 422.  See *Resolved questions / Plugin field endpoints*
 in the plan doc.
 """
 
-import io
 import time
 from collections import Counter
 from pathlib import Path
@@ -262,9 +261,16 @@ def stage_file():
     try:
         import zipfile
 
-        with zipfile.ZipFile(str(staging_path), "r") as zf:
-            pkl_bytes = zf.read("medias.pkl")
-        peeked = peek_pickle_dataset_summary(io.BytesIO(pkl_bytes))
+        # Stream the member into the peeker instead of zf.read(): a
+        # highly-compressed medias.pkl would otherwise materialise its whole
+        # decompressed body in RAM before the peek even starts.  ZipExtFile
+        # is a BufferedIOBase at runtime; typeshed types zf.open as
+        # IO[bytes], hence the cast.
+        import io
+        from typing import cast
+
+        with zipfile.ZipFile(str(staging_path), "r") as zf, zf.open("medias.pkl") as member:
+            peeked = peek_pickle_dataset_summary(cast(io.BufferedIOBase, member))
         if isinstance(peeked, dict) and "medias" in peeked:
             media_dict = peeked["medias"]
         elif isinstance(peeked, dict):
@@ -325,8 +331,8 @@ def stage_import(importer_name: str):
         extra_keys=("source_specs", "dataset_name"),
     )
 
-    _stage_importer_in_background(importer, field_values)
-    return jsonify({"ok": True, "message": "Staging started"})
+    task_id = _stage_importer_in_background(importer, field_values)
+    return jsonify({"ok": True, "message": "Staging started", "task_id": str(task_id) if task_id else ""})
 
 
 @datasets_staging_bp.route("/api/dataset/stage-demo/<name>", methods=["POST"])
@@ -353,8 +359,8 @@ def stage_demo(body: dict, name: str):
         field_values["dataset_name"] = dataset_name
 
     label = dataset_name or DEMO_DATASETS[name].get("label", name)
-    _stage_importer_in_background(importer, field_values, label=label)
-    return {"ok": True, "message": "Staging demo dataset..."}
+    task_id = _stage_importer_in_background(importer, field_values, label=label)
+    return {"ok": True, "message": "Staging demo dataset...", "task_id": str(task_id) if task_id else ""}
 
 
 @datasets_staging_bp.route("/api/dataset/staging", methods=["DELETE"])

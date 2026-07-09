@@ -340,6 +340,18 @@ class TestMediaTypesContract:
             assert isinstance(mt["type_id"], str)
             assert isinstance(mt["name"], str)
 
+    def test_advertises_has_thumbnail_capability(self, client):
+        """Each type reports ``has_thumbnail`` (drives VTSBrowse bin shape and
+        thumbnail painting). Image renders a thumbnail and audio a waveform PNG,
+        so both are True; text has no still image, so it is False."""
+        resp = client.get("/api/media-types")
+        by_id = {mt["type_id"]: mt for mt in resp.get_json()["media_types"]}
+        for mt in by_id.values():
+            assert isinstance(mt["has_thumbnail"], bool)
+        assert by_id["image"]["has_thumbnail"] is True
+        assert by_id["audio"]["has_thumbnail"] is True
+        assert by_id["text"]["has_thumbnail"] is False
+
 
 class TestSettingsContract:
     """GET/PUT /api/settings response shape."""

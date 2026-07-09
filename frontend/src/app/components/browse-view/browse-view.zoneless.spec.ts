@@ -133,10 +133,10 @@ describe('BrowseViewComponent (zoneless canary)', () => {
 
     // On entry the canvas is covered so the user never sees a half-loaded grid.
     expect(component.revealed()).toBe(false);
-    // The cover names the projection for pure-density media (the canary DS is
-    // audio); image/video datasets — the case this cover exists for — would read
-    // "Loading thumbnails…" instead.
-    expect(component.preloadMessage).toBe('Loading map…');
+    // The cover names what it's loading. The canary DS is audio, which now
+    // tiles as waveform-thumbnail squares, so the cover reads "Loading
+    // thumbnails…"; a pure-density type (text) would read "Loading map…".
+    expect(component.preloadMessage).toBe('Loading thumbnails…');
 
     // The canvas signals its opening view is fully painted → uncover it.
     component.onCanvasFirstView();

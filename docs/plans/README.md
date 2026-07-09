@@ -14,10 +14,11 @@ it can't drift far. (Point-in-time UI review/audit reports live in
 ## VTSBrowse (UMAP hexbin dataset browser)
 
 - [vtsbrowse.md](vtsbrowse.md): core design + what shipped (the feature is live; thin open work — tuning, WebGL escape hatch)
-- [vtsbrowse-empirical-tuning.md](vtsbrowse-empirical-tuning.md): UMAP/pyramid/renderer tuning pass (not started — needs a browser)
+- [vtsbrowse-empirical-tuning.md](vtsbrowse-empirical-tuning.md): UMAP/pyramid/renderer tuning pass (Deliverable 1 shipped — UMAP knobs are settings + the persisted projection is keyed on them; the sweep + qualitative browser pass remain)
 - [vtsbrowse-toponymy.md](vtsbrowse-toponymy.md): named-region "street signs" (design only)
 - [vtsbrowser-hex-circle-radius.md](vtsbrowser-hex-circle-radius.md): singleton-circle radius investigation (needs visual verification)
 - [vtsbrowser-qa-followups.md](vtsbrowser-qa-followups.md): QA-drive follow-ups (deferred: startup wedge, tab crash; skipped: toolbar overlay)
+- [browse-audio-player.md](browse-audio-player.md): audio bins as square waveform tiles + anchored hover player (play/pause/volume/play-point) (Phases 1 + 2 shipped: `has_thumbnail` capability + audio square tiles + anchored hover player; Phase 3 polish deferred)
 
 ## Scalability
 
@@ -33,7 +34,7 @@ it can't drift far. (Point-in-time UI review/audit reports live in
 - [structural-embedder.md](structural-embedder.md): structural (instance-matching) embedder — SIFT/VLAD + RANSAC re-rank (V1 + Stage-2 + Find re-rank shipped; larger VLAD codebook next)
 - [clipper-chain.md](clipper-chain.md): ordered converter/clipper chains (Phase 1 shipped)
 - [cli-detector-converter.md](cli-detector-converter.md): CLI autodetect with converters + clippers (Phase 1 shipped)
-- [mlp-hidden-layer-sizing.md](mlp-hidden-layer-sizing.md): empirical capacity sweep of the detector MLP hidden layer (investigation done; `MLP_HIDDEN_MIN 4→8` change proposed, not made — 32 cap confirmed correct)
+- [mlp-hidden-layer-sizing.md](mlp-hidden-layer-sizing.md): empirical capacity sweep of the detector MLP hidden layer (shipped: `MLP_HIDDEN_MIN 4→8` applied, 32 cap confirmed correct; two optional cross-modality sweeps open)
 
 ## Find / verification
 

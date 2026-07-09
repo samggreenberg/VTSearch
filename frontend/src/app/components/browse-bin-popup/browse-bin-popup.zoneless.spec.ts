@@ -1,9 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BrowseBinPopupComponent } from './browse-bin-popup.component';
+import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
@@ -128,13 +129,14 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     fixture.destroy();
   });
 
-  it('offers the metadata toggle and column for audio (no preview pane)', async () => {
-    // Audio is a non-thumbnailed type: no magnified preview pane on the canvas or
-    // in the popup. The metadata panel is media-agnostic, though, so the Info
+  it('offers the metadata toggle and column for text (no preview pane)', async () => {
+    // Text is a non-thumbnailed type: no magnified preview pane on the canvas or
+    // in the popup. (Audio now tiles as waveform thumbnails, so it is no longer
+    // this branch.) The metadata panel is media-agnostic, though, so the Info
     // button and the (default-shown) metadata column must still be offered, so
     // hovering a bin member surfaces its metadata just like it does for images.
     const fixture = makeFixture();
-    fixture.componentRef.setInput('mediaType', 'audio');
+    fixture.componentRef.setInput('mediaType', 'text');
     fixture.componentRef.setInput('memberIds', [1, 2]);
     fixture.componentRef.setInput('repId', 1);
     await settlePasses(fixture);
@@ -147,14 +149,14 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     fixture.destroy();
   });
 
-  it('reserves the body padding so a small audio bin grid does not scroll', async () => {
+  it('reserves the body padding so a small text bin grid does not scroll', async () => {
     // The body is ``box-sizing: border-box`` with 12px of vertical padding, so its
     // bound height must exceed the flex content it holds by that padding — else the
     // grid column's ``height: 100%`` content box comes up 12px short and the member
-    // grid gets a stray scrollbar even on a single row (the bug this guards). Audio
+    // grid gets a stray scrollbar even on a single row (the bug this guards). Text
     // has no preview pane, so the grid is the exact-fit element that reveals it.
     const fixture = makeFixture();
-    fixture.componentRef.setInput('mediaType', 'audio');
+    fixture.componentRef.setInput('mediaType', 'text');
     fixture.componentRef.setInput('memberIds', [1, 2]);
     fixture.componentRef.setInput('repId', 1);
     await settlePasses(fixture);
@@ -165,6 +167,36 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     // (count label + rows) plus the body's own 12px vertical padding on top.
     expect(parseFloat(body.style.height)).toBe(cmp.gridColHeight + 12);
 
+    fixture.destroy();
+  });
+
+  it('auto-plays the representative clip when an audio bin opens', async () => {
+    // Opening the detail popup is an "intense hover": for audio it should start
+    // auditioning the bin's representative straight away, with no grid-row hover
+    // — the behavior a singleton audio bin (no member grid) relies on entirely.
+    // jsdom doesn't implement the media element's play/load, so stub them; the
+    // now-playing emit happens before the deferred play() regardless.
+    const playStub = vi
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockResolvedValue(undefined);
+    const loadStub = vi
+      .spyOn(HTMLMediaElement.prototype, 'load')
+      .mockImplementation(() => {});
+
+    const fixture = makeFixture();
+    fixture.componentRef.setInput('mediaType', 'audio');
+    fixture.componentRef.setInput('memberIds', [7, 8, 9]);
+    fixture.componentRef.setInput('repId', 8);
+    const played: (NowPlaying | null)[] = [];
+    fixture.componentInstance.nowPlaying.subscribe((v) => played.push(v));
+    await settlePasses(fixture);
+
+    // The window opened auditioning the representative (id 8), not the list's
+    // first member (id 7), and surfaced it on the shared now-playing indicator.
+    expect(played.at(-1)).toEqual({ mediaId: 8, waveUrl: '/api/medias/8/thumbnail' });
+
+    playStub.mockRestore();
+    loadStub.mockRestore();
     fixture.destroy();
   });
 
@@ -186,5 +218,50 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     expect(panel.style.visibility).toBe('visible');
 
     fixture.destroy();
+  });
+});
+
+describe('BrowseBinPopupComponent (scroll-prefetch re-wiring)', () => {
+  it('re-subscribes prefetch when the member-grid viewport is recreated', () => {
+    // Regression: the popup subscribed scrolledIndexChange only in
+    // ngAfterViewInit, but the viewport lives behind @if (!previewOnly) and
+    // the popup is reused across summons (right-clicking another bin only
+    // swaps inputs). A singleton→multi transition created a fresh viewport
+    // whose stream was never subscribed, so scrolling the member grid never
+    // hydrated thumbnails beyond the initially-prefetched window.
+    const component = Object.create(
+      BrowseBinPopupComponent.prototype,
+    ) as BrowseBinPopupComponent;
+    const state = component as unknown as {
+      viewport?: unknown;
+      scrollSub: unknown;
+      scrollSubscribedViewport: unknown;
+      prefetchVisible(): void;
+    };
+    state.scrollSub = null;
+    state.scrollSubscribedViewport = null;
+    const prefetchSpy = vi.fn();
+    state.prefetchVisible = prefetchSpy;
+
+    const vp1 = { scrolledIndexChange: new Subject<number>() };
+    state.viewport = vp1;
+    component.ngAfterViewChecked();
+    vp1.scrolledIndexChange.next(0);
+    const callsAfterFirstScroll = prefetchSpy.mock.calls.length;
+    expect(callsAfterFirstScroll).toBeGreaterThan(0);
+
+    // Viewport destroyed (previewOnly summon) …
+    vp1.scrolledIndexChange.complete();
+    state.viewport = undefined;
+    component.ngAfterViewChecked();
+
+    // … then a new multi-member summon creates a fresh instance.
+    const vp2 = { scrolledIndexChange: new Subject<number>() };
+    state.viewport = vp2;
+    component.ngAfterViewChecked();
+
+    const callsBeforeSecondScroll = prefetchSpy.mock.calls.length;
+    vp2.scrolledIndexChange.next(2);
+    expect(prefetchSpy.mock.calls.length).toBe(callsBeforeSecondScroll + 1);
   });
 });

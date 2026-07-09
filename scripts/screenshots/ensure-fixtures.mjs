@@ -24,7 +24,10 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const goDash = async () => {
     await page.goto(`${APP}/#/dashboard`, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('.dash-table', { timeout: 30000 });
+    // An empty registry renders the ".empty-state" placeholder instead of the
+    // table — and this bootstrap's whole job is to fill an empty registry —
+    // so wait for either, not just the table.
+    await page.waitForSelector('.dash-table, .empty-state', { timeout: 30000 });
     await page.waitForTimeout(1200);
   };
   const hasDataset = (name) => page.locator('vt-dataset-card', { hasText: name }).count();

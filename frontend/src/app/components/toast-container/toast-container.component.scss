@@ -126,7 +126,7 @@
 
 .toast__btn--primary {
   background: var(--accent, var(--text-primary));
-  color: var(--accent-text, var(--bg));
+  color: var(--btn-primary-text);
   border-color: transparent;
 
   &:hover {

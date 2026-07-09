@@ -479,8 +479,8 @@ def run_label_curve_eval(  # noqa: C901
 
     Args:
         dataset_clips: Mapping of dataset name to a preloaded medias dict.
-            Each media must carry an ``"embedding"`` (np.ndarray) and a
-            ``"category"`` (str).
+            Each media must carry a resolvable embedding in the per-embedder
+            ``"embeddings"`` store and a ``"category"`` (str).
         trainers: Trainer names to compare (keys of :data:`TRAINERS`).
         label_counts: How many training labels to feed each trainer.
         seeds: Random seeds.  The split/sample is fully determined by the

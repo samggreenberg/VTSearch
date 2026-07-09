@@ -69,10 +69,11 @@ VTSearch/
 │   │   ├── embedder.py             MediaEmbedder shared helpers (media_from_path, etc.)
 │   │   ├── clipper.py              Shared clipper logic
 │   │   ├── audio/                  Audio media type, embedders (CLAP, CLAP-Music, CLAP-General,
-│   │   │                           AST, Whisper), clippers, SpeechExtractor
+│   │   │                           ParaSpeechCLAP, AST, Whisper), clippers, SpeechExtractor
 │   │   ├── image/                  Image media type, embedders (SigLIP default; SigLIP2, CLIP,
-│   │   │                           DINOv2, DINOv3, EUPE; each with single + patch variants),
-│   │   │                           clippers, ImageClassExtractor, FaceLocalizer, OCRExtractor
+│   │   │                           Face, SIFT-VLAD single-vector; DINOv2, DINOv3, EUPE each with
+│   │   │                           single + patch variants), clippers, ImageClassExtractor,
+│   │   │                           FaceLocalizer, OCRExtractor
 │   │   ├── text/                   Text media type, embedders (E5 default, BGE), clippers
 │   │   ├── video/                  Video media type, embedders (X-CLIP default, LanguageBind,
 │   │   │                           VideoMAE), clippers
@@ -186,8 +187,9 @@ VTSearch/
 │
 ├── vtsearch/                       Flask app tier (imports Flask; not library-safe)
 │   ├── settings.py                 Persistent settings (server tier + per-user tier)
-│   ├── settings_factory.py         Accessor factories for settings.py
+│   ├── settings_store.py           Two-tier persistence engine (file locking, caches) for settings.py
 │   ├── settings_models.py          Marshmallow schema helpers for settings
+│   ├── threading.py                Context-carrying thread helper (user + dataset + detector locals)
 │   ├── achievements.py             Achievement state management
 │   ├── autorun_processors.py       autorun_extractors / autorun_localizers CRUD
 │   ├── logging_config.py           Logging setup
@@ -218,7 +220,8 @@ VTSearch/
 │   │
 │   └── routes/                     Flask blueprints; all HTTP request handling
 │       ├── _shared.py              Shared route helpers (request parsing, JSON safety)
-│       ├── auth.py                 /api/auth/status
+│       ├── auth.py                 /api/auth/status, login, logout
+│       ├── auth_huggingface.py     HuggingFace OAuth (/api/auth/huggingface/*)
 │       ├── main.py                 Root route, favicon, logo
 │       ├── sorting.py              Text/learned/example sort, diversity
 │       ├── eval.py                 Evaluation and labeling progress routes

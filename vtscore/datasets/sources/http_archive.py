@@ -27,6 +27,32 @@ log = logging.getLogger(__name__)
 _extract_lock = threading.Lock()
 
 
+def _signature_path(cached_dir: Path) -> Path:
+    """Sidecar path recording the remote signature (ETag/Last-Modified/size)
+    observed at extraction time, so a later access can detect a changed
+    remote archive and bust the cache instead of serving stale bytes forever.
+
+    Kept as a *sibling* of the extraction dir, never inside it - a file
+    inside would otherwise surface as a bogus media item to an
+    extensionless ``list_items(None)`` call.
+    """
+    return cached_dir.parent / f"{cached_dir.name}.sig"
+
+
+def _read_signature(cached_dir: Path) -> str | None:
+    try:
+        return _signature_path(cached_dir).read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def _write_signature(cached_dir: Path, signature: str) -> None:
+    try:
+        _signature_path(cached_dir).write_text(signature, encoding="utf-8")
+    except OSError:
+        pass
+
+
 class HttpArchiveSource(MediaSource):
     """A media source backed by a remote archive (.zip, .tar.gz, etc.).
 
@@ -57,16 +83,37 @@ class HttpArchiveSource(MediaSource):
         if self._inner is not None:
             return self._inner
 
+        import hashlib
+
+        from vtscore.datasets.downloader.core import fetch_remote_signature
         from vtscore.datasets.sources.local_folder import LocalFolderSource
 
         url_filename = self._url.split("?")[0].rstrip("/").rsplit("/", 1)[-1] or "archive"
-        cached_dir = DATA_DIR / f"http_archive_resolve_{url_filename}"
+        # Key the cache on the *full* URL, not just its basename: two archives
+        # whose URLs share a final segment (siteA/images.zip vs siteB/images.zip)
+        # must not silently serve each other's extraction.  The basename is
+        # kept in the dir name purely for human readability.
+        url_hash = hashlib.sha256(self._url.encode("utf-8")).hexdigest()[:16]
+        cached_dir = DATA_DIR / f"http_archive_resolve_{url_hash}_{url_filename}"
 
         # Fast path: a previous run already published a cached extraction.
+        # Only bother probing the remote when the cache carries a recorded
+        # signature to compare against - a cache with no sidecar (predates
+        # this check, or its own probe failed) is trusted as-is rather than
+        # invalidated on missing information. A probe failure (offline,
+        # flaky CDN) also fails open onto the existing cache.
+        remote_sig: str | None = None
         if cached_dir.is_dir():
-            self._extract_dir = cached_dir
-            self._inner = LocalFolderSource(cached_dir)
-            return self._inner
+            cached_sig = _read_signature(cached_dir)
+            remote_sig = fetch_remote_signature(self._url) if cached_sig else None
+            if cached_sig is None or remote_sig is None or remote_sig == cached_sig:
+                self._extract_dir = cached_dir
+                self._inner = LocalFolderSource(cached_dir)
+                return self._inner
+            log.info(
+                "Remote archive changed for %s; cached extraction is stale, re-downloading",
+                self._url,
+            )
 
         from vtscore.datasets.archive import extract_archive
         from vtscore.datasets.downloader import download_file_with_progress
@@ -90,12 +137,24 @@ class HttpArchiveSource(MediaSource):
         finally:
             archive_path.unlink(missing_ok=True)
 
+        if remote_sig is None:
+            # No signature yet (fresh download, or the pre-download probe
+            # failed) - one more attempt so a future access can detect drift.
+            remote_sig = fetch_remote_signature(self._url)
+
         # Publish the extraction as the cached dir. Re-check cached_dir under
         # the lock: two concurrent imports of the same URL can both pass the
         # earlier is_dir() check, and without this guard they'd both try to
         # rename onto the same destination (clobbering each other on POSIX,
         # raising on Windows). The loser discards its own extraction.
         with _extract_lock:
+            if cached_dir.is_dir():
+                existing_sig = _read_signature(cached_dir)
+                if remote_sig is not None and existing_sig is not None and existing_sig != remote_sig:
+                    # A concurrent run published a now-stale extraction; evict it
+                    # (and its sidecar) in favor of the fresh one we just built.
+                    shutil.rmtree(cached_dir, ignore_errors=True)
+                    _signature_path(cached_dir).unlink(missing_ok=True)
             if cached_dir.is_dir():
                 shutil.rmtree(extract_dir, ignore_errors=True)
                 final_dir = cached_dir
@@ -106,6 +165,8 @@ class HttpArchiveSource(MediaSource):
                 except OSError:
                     # e.g. cross-device rename; fall back to the unique dir.
                     final_dir = extract_dir
+                if remote_sig is not None:
+                    _write_signature(final_dir, remote_sig)
 
         self._extract_dir = final_dir
         self._inner = LocalFolderSource(final_dir)

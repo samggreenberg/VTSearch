@@ -321,26 +321,34 @@ def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, 
     with _sync_lock:
         _syncing = True
         try:
-            from vtscore.state.core import get_active_context
+            from vtscore.state.core import get_active_context, override_detector_context
             from vtscore.state.votes import apply_label
 
             ds_medias = get_active_context().medias
-            for entry in labels:
-                label = entry.get("label")
-                md5 = entry.get("md5")
-                if label not in ("good", "bad") or not md5:
-                    continue
+            # Apply the votes to *ctx* - the detector this sync was invoked
+            # for - not whatever detector the surrounding request happens to
+            # have active.  The manual sync route takes the detector as a
+            # path param, so the request's X-Detector-Id can legitimately
+            # name a different detector; without the override the imported
+            # votes landed on that one while detector_meta (above) went to
+            # ctx.
+            with override_detector_context(ctx):
+                for entry in labels:
+                    label = entry.get("label")
+                    md5 = entry.get("md5")
+                    if label not in ("good", "bad") or not md5:
+                        continue
 
-                # Find media by md5
-                for mid, media in ds_medias.items():
-                    if media.get("md5") == md5:
-                        # System-driven auto-import on detector load; the
-                        # ``record_detector_import`` call below covers the
-                        # achievement credit instead of crediting each
-                        # imported label as a user vote.
-                        apply_label(mid, label, record_achievement=False)
-                        applied_any = True
-                        break
+                    # Find media by md5
+                    for mid, media in ds_medias.items():
+                        if media.get("md5") == md5:
+                            # System-driven auto-import on detector load; the
+                            # ``record_detector_import`` call below covers the
+                            # achievement credit instead of crediting each
+                            # imported label as a user vote.
+                            apply_label(mid, label, record_achievement=False)
+                            applied_any = True
+                            break
         finally:
             _syncing = False
 

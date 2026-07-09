@@ -14,6 +14,7 @@ import csv
 import io
 import json
 import os
+import uuid
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -125,14 +126,18 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
 
         Uses a fixed column superset (see :attr:`_STREAM_COLUMNS`) because a
         streaming writer cannot look ahead to decide which optional clip
-        columns are present.  The file is built at a sibling ``.tmp`` path and
-        atomically renamed on success.
+        columns are present.  The file is built at a per-writer-unique sibling
+        ``.tmp`` path and atomically renamed on success, so two concurrent
+        exports to the same path can't clobber each other's temp file.
         """
         from vtscore.datasets.origin import Origin  # noqa: PLC0415
 
         filepath = Path(field_values["filepath"])
         filepath.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = filepath.with_name(filepath.name + ".tmp")
+        # Per-writer unique suffix (pid + uuid) so two threads/processes racing
+        # to export the same path can't truncate each other's in-flight tmp or
+        # chase one already renamed away.  Matches vtscore.io.atomic_write_text.
+        tmp_path = filepath.with_name(f"{filepath.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
 
         thresholds = {d.get("detector_name", ""): d.get("threshold", "") for d in header.get("detectors", [])}
 
@@ -161,6 +166,8 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
                         ]
                     )
                     total_hits += 1
+                f.flush()
+                os.fsync(f.fileno())
             os.replace(tmp_path, filepath)
         finally:
             if tmp_path.exists():

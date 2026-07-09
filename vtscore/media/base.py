@@ -224,6 +224,23 @@ class MediaType(ABC):
     _on_progress: ProgressCallback = _noop_progress
 
     # ------------------------------------------------------------------
+    # Capabilities
+    # ------------------------------------------------------------------
+
+    #: Whether items of this media type have a *browsable thumbnail* — a small
+    #: still image that stands in for the item in grids and on the VTSBrowse
+    #: map.  Image/video/document render a real thumbnail; audio renders a
+    #: waveform PNG (see ``vtscore.media.audio``'s ``generate_waveform_thumbnail``).
+    #: Types with no meaningful still image (text) leave this ``False``.
+    #:
+    #: This flag is the single source of truth for the "thumbnail vs
+    #: no-thumbnail" distinction.  It drives the VTSBrowse bin shape
+    #: (:func:`~vtscore.projection.pyramid.bin_shape_for_media_type` — square
+    #: for thumbnailed types so tiles pack edge-to-edge, hex otherwise) and is
+    #: surfaced to the frontend via :meth:`to_dict` / ``GET /api/media-types``.
+    has_thumbnail: bool = False
+
+    # ------------------------------------------------------------------
     # Identity
     # ------------------------------------------------------------------
 
@@ -521,6 +538,7 @@ class MediaType(ABC):
             "folder_import_name": self.folder_import_name,
             "loops": self.loops,
             "file_extensions": self.file_extensions,
+            "has_thumbnail": self.has_thumbnail,
         }
 
     @abstractmethod

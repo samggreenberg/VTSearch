@@ -273,6 +273,29 @@ def example_sort_server(body: dict):
         abort(500, message=f"Example sort failed: {format_exception_detail(exc)}")
 
 
+def _validate_origin_param_confinement(origin: dict) -> None:
+    """Abort 400 if a path-like origin param escapes the user's allowed dir.
+
+    The origin dict comes verbatim from the request body, so any path-like
+    param must pass the same confinement check ``_load_from_origin`` applies
+    before it can point a filesystem-backed source (server_folder,
+    server_files) outside the user's allowed directory.  A no-op in
+    single-user mode, where the base dir is unrestricted.
+    """
+    from vtscore.security.path_validation import get_file_access_base_dir, validate_server_filepath
+
+    params = origin.get("params") if isinstance(origin, dict) else None
+    if not isinstance(params, dict):
+        return
+    base = get_file_access_base_dir()
+    for val in params.values():
+        if isinstance(val, str) and ("/" in val or "\\" in val):
+            try:
+                validate_server_filepath(val, base_dir=base)
+            except ValueError as exc:
+                abort(400, message=str(exc))
+
+
 @media_server_bp.route("/api/example-sort-origin", methods=["POST"])
 @media_server_bp.arguments(ExampleSortOriginRequestSchema)
 @media_server_bp.response(200, ExampleSortResponseSchema)
@@ -304,6 +327,8 @@ def example_sort_origin(body: dict):
 
     if not snapshot_medias():
         abort(400, message="No medias loaded")
+
+    _validate_origin_param_confinement(origin)
 
     from vtscore.datasets.sources import get_source_for_origin
 

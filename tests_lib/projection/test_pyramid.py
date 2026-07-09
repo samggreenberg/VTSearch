@@ -22,7 +22,7 @@ from vtscore.projection.umap_projection import Projection
         ("image", "square"),
         ("video", "square"),
         ("document", "square"),
-        ("audio", "hex"),
+        ("audio", "square"),
         ("text", "hex"),
         ("", "hex"),
         (None, "hex"),
@@ -30,7 +30,8 @@ from vtscore.projection.umap_projection import Projection
     ],
 )
 def test_bin_shape_for_media_type(media_type, expected):
-    """Browsable-thumbnail media tile as squares; everything else as hexes."""
+    """Browsable-thumbnail media (incl. audio waveforms) tile as squares;
+    everything else (text) as hexes. Driven by ``MediaType.has_thumbnail``."""
     assert bin_shape_for_media_type(media_type) == expected
 
 

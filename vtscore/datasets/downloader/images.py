@@ -225,12 +225,13 @@ def download_oxford_flowers(on_progress: Optional[ProgressCallback] = None) -> P
         on_progress=on_progress,
     )
 
-    # Download labels file if not present.
+    # Download labels file if not present.  Atomic (temp + rename): a
+    # partial file left at labels_path would pass the exists() gate forever.
     labels_path = extract_dir / "imagelabels.mat"
     if not labels_path.exists():
         _core.DATA_DIR.mkdir(exist_ok=True)
         on_progress("downloading", "Downloading Oxford Flowers labels...", 0, 0)
-        _core.download_file_with_progress(_core.OXFORD_FLOWERS_LABELS_URL, labels_path, 1024 * 1024, on_progress)
+        _core.download_file_atomic(_core.OXFORD_FLOWERS_LABELS_URL, labels_path, 1024 * 1024, on_progress)
 
     return extract_dir
 
@@ -385,12 +386,97 @@ def download_roxford5k(on_progress: Optional[ProgressCallback] = None) -> Path:
     )
 
     # Pull the (small) revisited ground-truth pickle alongside the images.
+    # Atomic (temp + rename): a partial file left at gnd_path would pass the
+    # exists() gate forever.
     gnd_path = extract_dir / "gnd_roxford5k.pkl"
     if not gnd_path.exists():
         extract_dir.mkdir(parents=True, exist_ok=True)
         on_progress("downloading", "Downloading ROxford5k ground truth...", 0, 0)
-        _core.download_file_with_progress(_core.ROXFORD_GND_URL, gnd_path, 1024 * 1024, on_progress)
+        _core.download_file_atomic(_core.ROXFORD_GND_URL, gnd_path, 1024 * 1024, on_progress)
 
+    return extract_dir
+
+
+def download_openlogo(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download the OpenLogo (QMUL-OpenLogo) logo dataset from HuggingFace.
+
+    OpenLogo is distributed as a `FiftyOne <https://voxel51.com>`_ dataset: a flat
+    ``data/`` folder of ~27k JPEGs plus a ``samples.json`` describing each image's
+    ``ground_truth`` detections (brand label + normalized ``[x, y, w, h]`` box).
+    Because the media is thousands of loose files with no single archive, it is
+    fetched with :func:`huggingface_hub.snapshot_download` rather than the
+    single-URL :func:`download_file_with_progress` helper.  The large preview GIF
+    is skipped.  The stored HuggingFace token (if the user signed in) is passed
+    through for rate-limit headroom, though the dataset is public.
+
+    This is the structural embedder's instance-matching *logo* demo: one boxed
+    example of a brand's logo should rank that brand's other in-the-wild photos
+    above the other brands, which a semantic embedder cannot do.  Labels are
+    parsed from ``samples.json`` with the stdlib, so ``fiftyone`` is not required.
+
+    Args:
+        on_progress: Optional progress callback. Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``openlogo/`` directory containing ``data/`` (the flat image
+        folder) and ``samples.json`` (the per-image detection annotations).
+    """
+    if on_progress is None:
+        on_progress = _core._default_progress()
+
+    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+
+    extract_dir = _core.DATA_DIR / "openlogo"
+    samples_json = extract_dir / "samples.json"
+    data_dir = extract_dir / "data"
+    if samples_json.exists() and data_dir.is_dir():
+        return extract_dir
+
+    from huggingface_hub import snapshot_download  # noqa: PLC0415
+    from huggingface_hub.utils.tqdm import tqdm as _hf_tqdm  # noqa: PLC0415
+
+    from vtscore.security.hf_auth import get_token  # noqa: PLC0415
+
+    _core.DATA_DIR.mkdir(exist_ok=True)
+    # Brief placeholder while snapshot_download resolves the file list (a network
+    # round-trip before any file is fetched). Kept short and size-first so it
+    # stays legible in the frontend's narrow, ellipsized detail slot; real
+    # per-file progress (below) supersedes it within a second or two.
+    on_progress(
+        "downloading",
+        f"Downloading OpenLogo (~{_core.OPENLOGO_DOWNLOAD_SIZE_MB // 1024} GB)...",
+        0,
+        0,
+    )
+
+    # OpenLogo is thousands of loose files, so there is no single byte stream to
+    # tap like download_file_with_progress does. snapshot_download drives its
+    # over-the-files progress bar through ``tqdm_class``; subclass it to forward
+    # the file count to ``on_progress`` so the UI shows a live, measurable bar
+    # ("1,234/27,000") instead of a static, ellipsized sentence.
+    class _OpenlogoProgress(_hf_tqdm):  # type: ignore[misc, valid-type]
+        def update(self, n: int = 1) -> Optional[bool]:
+            displayed = super().update(n)
+            total = int(self.total or 0)
+            if total > 0:
+                on_progress("downloading", "Downloading OpenLogo logos", int(self.n), total)
+            return displayed
+
+    # ~27k loose files means the wall-clock cost is dominated by per-file request
+    # latency (resolve -> 302 -> CDN GET), not bandwidth, so fetch many at once.
+    # snapshot_download defaults to 8 workers; widen it to parallelize across the
+    # round trips. The dataset is public, so this is bounded by HF rate limits
+    # rather than auth — 16 is a comfortable margin below where those bite.
+    snapshot_download(
+        repo_id=_core.OPENLOGO_REPO_ID,
+        repo_type="dataset",
+        local_dir=str(extract_dir),
+        ignore_patterns=["*.gif"],
+        token=get_token(),
+        tqdm_class=_OpenlogoProgress,
+        max_workers=_core.OPENLOGO_DOWNLOAD_WORKERS,
+    )
     return extract_dir
 
 

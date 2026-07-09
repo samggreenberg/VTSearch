@@ -136,8 +136,15 @@ class Video2ImageMediaConverter(MediaConverter):
         elif media_bytes:
             ext = Path(filename).suffix or ".mp4"
             tmp_file = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
-            tmp_file.write(media_bytes)
-            tmp_file.close()
+            try:
+                tmp_file.write(media_bytes)
+                tmp_file.close()
+            except BaseException:
+                # A failed write (e.g. ENOSPC) happens before the try/finally
+                # below owns the temp file; clean it up here or it leaks.
+                tmp_file.close()
+                Path(tmp_file.name).unlink(missing_ok=True)
+                raise
             video_path = tmp_file.name
         else:
             return []

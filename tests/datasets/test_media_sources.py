@@ -195,13 +195,22 @@ class TestHttpArchiveSource:
         # Before any access, _inner should be None
         assert source._inner is None
 
+    @staticmethod
+    def _cached_dir_for(url: str):
+        import hashlib
+
+        from vtscore.config import DATA_DIR
+
+        url_filename = url.split("?")[0].rstrip("/").rsplit("/", 1)[-1] or "archive"
+        url_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
+        return DATA_DIR / f"http_archive_resolve_{url_hash}_{url_filename}"
+
     def test_uses_cached_dir(self, tmp_path):
         """When a cached extraction directory exists, it's reused."""
-        from vtscore.config import DATA_DIR
         from vtscore.datasets.sources.http_archive import HttpArchiveSource
 
         # Create a fake cached extraction dir
-        cached = DATA_DIR / "http_archive_resolve_test.zip"
+        cached = self._cached_dir_for("https://example.com/test.zip")
         cached.mkdir(parents=True, exist_ok=True)
         (cached / "clip.wav").write_bytes(b"audio")
 
@@ -214,6 +223,113 @@ class TestHttpArchiveSource:
             import shutil
 
             shutil.rmtree(cached, ignore_errors=True)
+
+    def test_cache_not_shared_across_urls_with_same_basename(self, tmp_path):
+        """Two URLs sharing a final path segment must not share a cache.
+
+        Regression: the cache dir was keyed on the URL basename only, so
+        ``siteA/v1/images.zip`` silently served ``siteB/images.zip``'s bytes
+        (and vice versa) on any re-resolve.
+        """
+        from vtscore.datasets.sources.http_archive import HttpArchiveSource
+
+        url_a = "https://site-a.example.com/v1/images.zip"
+        url_b = "https://site-b.example.com/images.zip"
+        cached_a = self._cached_dir_for(url_a)
+        cached_b = self._cached_dir_for(url_b)
+        assert cached_a != cached_b
+
+        cached_a.mkdir(parents=True, exist_ok=True)
+        (cached_a / "a_only.wav").write_bytes(b"audio_a")
+        try:
+            # Source B must not pick up A's cached extraction: resolving via
+            # B hits the download path (which we haven't stubbed), so just
+            # verify the fast-path check.  A's source resolves fine.
+            source_a = HttpArchiveSource(url_a)
+            item = source_a.resolve_path(origin_name="a_only.wav")
+            assert item.path is not None
+
+            source_b = HttpArchiveSource(url_b)
+            assert not cached_b.is_dir(), "B's cache dir must be distinct and absent"
+            assert source_b._inner is None
+        finally:
+            import shutil
+
+            shutil.rmtree(cached_a, ignore_errors=True)
+
+    def test_stale_cache_invalidated_on_signature_mismatch(self, tmp_path):
+        """A cached extraction with a recorded signature that no longer
+        matches the remote is invalidated and re-downloaded.
+
+        Regression: the resolve cache never invalidated at all once
+        published, so a replaced remote archive served stale bytes forever.
+        """
+        from vtscore.datasets.sources.http_archive import HttpArchiveSource, _write_signature
+
+        url = "https://example.com/stale-sig.zip"
+        cached = self._cached_dir_for(url)
+        cached.mkdir(parents=True, exist_ok=True)
+        (cached / "old.wav").write_bytes(b"old_audio")
+        _write_signature(cached, "old-etag|old-date|100")
+
+        zip_path = tmp_path / "fresh.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("new.wav", b"new_audio")
+
+        try:
+            source = HttpArchiveSource(url)
+            with (
+                patch(
+                    "vtscore.datasets.downloader.core.fetch_remote_signature",
+                    return_value="new-etag|new-date|200",
+                ),
+                patch("vtscore.security.url_validation.validate_url"),
+                patch("vtscore.datasets.downloader.download_file_with_progress"),
+                patch(
+                    "vtscore.datasets.archive.extract_archive",
+                    side_effect=lambda _archive, dest: zipfile.ZipFile(zip_path).extractall(dest),
+                ),
+            ):
+                inner = source._ensure_extracted()
+                items = list(inner.list_items())
+                assert any(i.filename == "new.wav" for i in items)
+                assert not any(i.filename == "old.wav" for i in items)
+        finally:
+            import shutil
+
+            from vtscore.datasets.sources.http_archive import _signature_path
+
+            shutil.rmtree(cached, ignore_errors=True)
+            _signature_path(cached).unlink(missing_ok=True)
+
+    def test_signature_probe_failure_trusts_existing_cache(self, tmp_path):
+        """When the remote signature probe fails (offline/flaky CDN), a
+        cache carrying a recorded signature is still trusted rather than
+        blocking or forcing a re-download."""
+        from vtscore.datasets.sources.http_archive import HttpArchiveSource, _write_signature
+
+        url = "https://example.com/probe-fail.zip"
+        cached = self._cached_dir_for(url)
+        cached.mkdir(parents=True, exist_ok=True)
+        (cached / "clip.wav").write_bytes(b"audio")
+        _write_signature(cached, "etag|date|10")
+
+        try:
+            source = HttpArchiveSource(url)
+            with patch(
+                "vtscore.datasets.downloader.core.fetch_remote_signature",
+                return_value=None,
+            ):
+                item = source.resolve_path(origin_name="clip.wav")
+            assert item.path is not None
+            assert item.path.name == "clip.wav"
+        finally:
+            import shutil
+
+            from vtscore.datasets.sources.http_archive import _signature_path
+
+            shutil.rmtree(cached, ignore_errors=True)
+            _signature_path(cached).unlink(missing_ok=True)
 
     def test_delegates_to_local_folder(self, tmp_path):
         """After extraction, fetch_item delegates to LocalFolderSource."""
@@ -437,6 +553,44 @@ class TestIngestViaSource:
 
         assert result == -1
         assert len(medias) == 0  # Nothing ingested, caller should use legacy
+
+    def test_ingest_rolls_back_partial_inserts_on_mid_loop_failure(self, tmp_path):
+        """A failure on a *later* entry must undo earlier inserts before
+        signalling fallback.
+
+        Regression: the fast path inserted each resolved entry into the live
+        ``medias`` dict as it went, then returned -1 when a later entry's
+        embed failed.  ``ingest_missing_medias`` re-ran the whole group
+        through the fallback path, so the already-inserted entries landed in
+        the dataset twice under fresh ids (and a label import then applied
+        the label to both copies).
+        """
+        import numpy as np
+
+        from vtscore.datasets.ingest import _ingest_via_source
+
+        folder = tmp_path / "audio"
+        folder.mkdir()
+        (folder / "first.wav").write_bytes(b"first_audio")
+        (folder / "second.wav").write_bytes(b"second_audio")
+
+        origin = {"importer": "server_folder", "params": {"path": str(folder), "media_type": "audio"}}
+        entries = [
+            {"origin": origin, "origin_name": "first.wav", "md5": "", "label": "good", "filename": "first.wav"},
+            {"origin": origin, "origin_name": "second.wav", "md5": "", "label": "bad", "filename": "second.wav"},
+        ]
+
+        medias: dict = {}
+        fake_emb = np.zeros(512, dtype=np.float32)
+        # First entry embeds fine, second entry's embed fails.
+        with patch("vtscore.detectors.resolver.embed_file", side_effect=[fake_emb, None]):
+            result = _ingest_via_source(origin, entries, medias, lambda *a: None)
+
+        assert result == -1
+        assert len(medias) == 0, (
+            "partial inserts must be rolled back before falling back, "
+            "or the fallback path re-ingests them as duplicates"
+        )
 
     def test_ingest_uses_precomputed_embedding_from_source(self, tmp_path):
         """When resolve_paths returns a FetchedItem with an embedding, the

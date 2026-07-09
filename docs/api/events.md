@@ -22,8 +22,8 @@ tracker, so clients do not need a separate REST bootstrap call.
 
 | Event name | Payload | Source |
 |---|---|---|
-| `dataset` | progress object | singleton `dataset_progress` tracker (staging, embedding) |
-| `loading-tasks` | array of task objects | `loading_tasks` (parallel dataset loads) |
+| `dataset` | progress object | singleton `dataset_progress` tracker (legacy single-op fallback) |
+| `loading-tasks` | array of task objects | `loading_tasks` (parallel dataset loads and staging imports; a staging task carries `staging_result`) |
 | `detector-loading-tasks` | array of task objects | `detector_loading_tasks` |
 | `sort` | progress object | `sort_progress` (text sort) |
 | `find` | progress object | `find_progress` (multi-dataset Find) |

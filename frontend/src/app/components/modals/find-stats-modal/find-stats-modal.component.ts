@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsFindApiService } from '../../../services/detectors-find-api.service';
 import type { FindStatsResponse } from '../../../generated/api-client/models/find-stats-response';
+import { apiErrorMessage } from '../../../utils/api-error';
 
 /** A scaled point on the FP/FN-vs-inclusion chart. */
 interface ChartPoint {
@@ -53,7 +54,7 @@ export class FindStatsModalComponent implements OnInit {
         this.loading.set(false);
       },
       error: (err) => {
-        this.error.set(err?.error?.error || err?.error?.message || 'Failed to load stats');
+        this.error.set(apiErrorMessage(err, 'Failed to load stats'));
         this.loading.set(false);
       },
     });

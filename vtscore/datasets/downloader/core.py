@@ -119,6 +119,21 @@ UCSF_IDL_DOWNLOAD_URL = "https://download.industrydocuments.ucsf.edu"
 ROXFORD_IMAGES_URL = "https://thor.robots.ox.ac.uk/oxbuildings/oxbuild_images-v1.tgz"
 ROXFORD_GND_URL = "https://cmp.felk.cvut.cz/revisitop/data/datasets/roxford5k/gnd_roxford5k.pkl"
 
+# OpenLogo (QMUL-OpenLogo): the structural embedder's instance-matching *logo*
+# demo — 352 brands / 27k in-the-wild photos with ground-truth boxes, aggregated
+# from 7 logo datasets (FlickrLogos-27/32, Logo32plus, BelgaLogos, WebLogo-2M
+# test, Logo-in-the-Wild, SportsLogo).  It is distributed as a FiftyOne dataset
+# on HuggingFace: a flat ``data/`` media folder plus a ``samples.json`` carrying
+# per-image ``ground_truth`` detections (normalized ``[x, y, w, h]`` boxes).
+# Because the media is thousands of loose files (no single archive), it is pulled
+# with ``huggingface_hub.snapshot_download`` rather than the single-URL helper,
+# and parsed from ``samples.json`` with the stdlib (no ``fiftyone`` dependency).
+OPENLOGO_REPO_ID = "Voxel51/OpenLogo"
+# Parallel workers for the OpenLogo snapshot. With ~27k tiny files the download is
+# latency-bound on per-file round trips, so we widen snapshot_download's default of
+# 8 to fetch many concurrently. Kept modest to stay under HF's public rate limits.
+OPENLOGO_DOWNLOAD_WORKERS = 16
+
 # Visual Genome (v1.4): a multi-label scene dataset of ~108k dense-annotated
 # photos.  Images ship as two zips (the historical VG_100K / VG_100K_2 splits);
 # object annotations (per-object name + pixel bounding box) ship as a separate
@@ -163,6 +178,7 @@ STANFORD_DOGS_DOWNLOAD_SIZE_MB = 750
 PLACES365_DOWNLOAD_SIZE_MB = 501
 UCSF_IDL_DOWNLOAD_SIZE_MB = 50
 ROXFORD_IMAGES_DOWNLOAD_SIZE_MB = 1850
+OPENLOGO_DOWNLOAD_SIZE_MB = 4640
 VISUAL_GENOME_IMAGES_DOWNLOAD_SIZE_MB = 9700
 VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB = 5300
 VISUAL_GENOME_OBJECTS_DOWNLOAD_SIZE_MB = 110
@@ -391,6 +407,72 @@ def download_file_with_progress(  # noqa: C901
                 response.close()
 
 
+def fetch_remote_signature(url: str) -> Optional[str]:
+    """Fetch a lightweight signature (ETag / Last-Modified / size) for *url*.
+
+    Used to detect when a remote archive has changed so a caller's extraction
+    cache can invalidate instead of serving stale bytes forever. Issues a
+    ranged GET for a single byte (more universally honoured than HEAD by the
+    flaky third-party CDNs these archives live on) and reads only the
+    response headers.
+
+    Returns ``None`` if the probe fails outright or the server's response
+    carries none of the three signals - callers should fail open (trust an
+    existing cache) rather than block on a CDN that doesn't answer.
+    """
+    try:
+        validate_url(url)
+        session = requests.Session()
+        response = _open_validated_stream(session, url, headers={"Range": "bytes=0-0"})
+    except Exception:
+        return None
+    try:
+        if response.status_code >= 400:
+            return None
+        etag = response.headers.get("ETag", "")
+        last_modified = response.headers.get("Last-Modified", "")
+        content_range = response.headers.get("Content-Range", "")
+        total = content_range.rsplit("/", 1)[-1] if "/" in content_range else response.headers.get("Content-Length", "")
+        if not etag and not last_modified and not total:
+            return None
+        return f"{etag}|{last_modified}|{total}"
+    except Exception:
+        return None
+    finally:
+        response.close()
+
+
+def download_file_atomic(
+    url: str,
+    final_path: Path,
+    expected_size: int,
+    on_progress: ProgressCallback,
+) -> None:
+    """Download *url* to *final_path* via a unique temp file + atomic rename.
+
+    :func:`download_file_with_progress` deliberately leaves partial bytes at
+    its destination when every retry fails (its resume feature depends on
+    that), so callers that gate the download on ``final_path.exists()`` must
+    never point it at the final path directly - a failed run would leave a
+    truncated file that every subsequent run treats as a complete cached
+    copy.  This wrapper downloads to a sibling temp file and only publishes
+    the final path once the stream completed cleanly.  A concurrent
+    completed download wins; the temp file is always removed.
+    """
+    final_path.parent.mkdir(parents=True, exist_ok=True)
+    unique_id = uuid.uuid4().hex[:8]
+    temp_path = final_path.parent / f".dl_{unique_id}_{final_path.name}"
+    try:
+        download_file_with_progress(url, temp_path, expected_size, on_progress)
+        if not final_path.exists():
+            try:
+                os.rename(temp_path, final_path)
+            except OSError:
+                pass  # Another download finished first
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
 _GZIP_MAGIC = b"\x1f\x8b"
 _ZIP_MAGIC = b"PK"
 # Uncompressed tar: first 257 bytes contain "ustar" at offset 257,
@@ -407,7 +489,10 @@ def _validate_archive(archive_path: Path, archive_name: str, dataset_name: str) 
     """
     suffix = archive_name.lower()
     try:
-        header = archive_path.read_bytes()[:4]
+        # Read only the magic bytes - read_bytes() would materialise the
+        # whole (potentially multi-GB) archive in memory to inspect 4 bytes.
+        with open(archive_path, "rb") as f:
+            header = f.read(4)
     except OSError:
         return  # file vanished – let the caller deal with it
 
@@ -475,16 +560,20 @@ def _extract_archive(
                     tar_ref.extract(member, dest_dir, filter="data")
         on_progress("downloading", f"Extracting {dataset_name}...", total_bytes, total_bytes)
     elif suffix.endswith(".zip"):
+        from vtscore.datasets.archive import _reject_traversal
+
+        dest_resolved = Path(dest_dir).resolve()
         with zipfile.ZipFile(archive_path, "r") as zip_ref:
             members = zip_ref.namelist()
             total = len(members)
             for i, member in enumerate(members):
                 if i % 100 == 0 or i == total - 1:
                     on_progress("downloading", f"Extracting {dataset_name}...", i + 1, total)
-                # Guard against path traversal in zip entries
-                member_path = Path(dest_dir) / member
-                if not str(member_path.resolve()).startswith(str(Path(dest_dir).resolve())):
-                    raise ValueError(f"Path traversal detected in archive: {member}")
+                # Guard against path traversal in zip entries.  Shares the
+                # strict check with archive.py: the previous inline
+                # startswith() prefix test lacked a trailing separator, so
+                # a sibling dir with the dest as a name prefix passed.
+                _reject_traversal(dest_resolved, member)
                 zip_ref.extract(member, dest_dir)
     else:
         raise ValueError(f"Unsupported archive format: {archive_name}")

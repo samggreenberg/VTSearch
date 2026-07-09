@@ -1,6 +1,6 @@
 .hover-popup {
   position: fixed;
-  z-index: var(--z-tooltip, 1000);
+  z-index: var(--z-tooltip);
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);

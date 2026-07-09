@@ -192,7 +192,7 @@ changes to `vtscore/media/__init__.py` are needed.
 
 | Method                      | Signature                      | Description                              |
 |-----------------------------|--------------------------------|------------------------------------------|
-| `load_media_data(file_path)`| `(Path) -> dict`               | Must include `"duration"` key            |
+| `load_media_data(file_path, media_bytes=None)`| `(Path, bytes \| None) -> dict` | Must include `"duration"` key. The optional `media_bytes` lets callers (e.g. the folder loader) pass already-read bytes to avoid a second disk read. |
 | `media_response(media)`     | `(dict) -> MediaResponse`      | HTTP response for a media item           |
 
 **Optional overridable properties (with defaults):**
@@ -201,7 +201,6 @@ changes to `vtscore/media/__init__.py` are needed.
 |----------------------|-------------|--------------------|-------------------------------------------|
 | `folder_import_name` | `str`       | `type_id`          | Alias for folder imports (matches `type_id`) |
 | `dir_key`            | `str`       | `type_id + "_dir"` | Key in pickle files for external dir       |
-| `legacy_bytes_keys`  | `list[str]` | `[]`               | Legacy keys for inline bytes in old pickles |
 | `pickle_extra_fields`| `list[str]` | `[]`               | Extra fields to preserve in pickle round-trips (e.g. `["width", "height"]`) |
 
 **Optional overridable methods:**
@@ -266,6 +265,9 @@ embedder per media type should override the `is_default` property to return
 | `image/embedder_siglip.py` | `ImageSiglipEmbedder` | image | ✅ |
 | `image/embedder_siglip2.py` | `ImageSiglip2Embedder` | image | |
 | `image/embedder_clip.py` | `ImageClipEmbedder` | image | |
+| `image/embedder_dinov2_single.py` / `_patch.py` | `ImageDinov2SingleEmbedder` / `ImageDinov2PatchEmbedder` | image | |
+| `image/embedder_dinov3_single.py` / `_patch.py` | `ImageDinov3SingleEmbedder` / `ImageDinov3PatchEmbedder` | image | |
+| `image/embedder_eupe_single.py` / `_patch.py` | `ImageEupeSingleEmbedder` / `ImageEupePatchEmbedder` | image | |
 | `image/embedder_sift_vlad.py` | `ImageSiftVladEmbedder` | image | |
 | `image/embedder_face.py` | `ImageFaceEmbedder` | image | |
 | `text/embedder_e5.py` | `TextE5Embedder` | text | ✅ |

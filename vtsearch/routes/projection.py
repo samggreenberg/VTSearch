@@ -119,6 +119,34 @@ def _pkl_path_for(dataset_id: str) -> str | None:
     return entry.get("pkl_path") or None
 
 
+def _umap_params() -> tuple[int, float]:
+    """The active UMAP knobs (``n_neighbors``, ``min_dist``) from settings."""
+    from vtsearch import settings
+
+    return settings.get_projection_n_neighbors(), settings.get_projection_min_dist()
+
+
+def _projection_params_match(proj) -> bool:
+    """Whether a persisted projection was fit under the active UMAP params.
+
+    Non-UMAP layouts (the PCA / trivial fallbacks for tiny datasets) ignore
+    these knobs, so they always match.  A legacy projection with no stamped
+    params is assumed to have used the config defaults, so it only mismatches
+    once an operator has changed a setting away from the default — exactly
+    when its layout must be recomputed.
+    """
+    import math
+
+    if getattr(proj, "method", None) != "umap":
+        return True
+    from vtscore.config import PROJECTION_MIN_DIST, PROJECTION_N_NEIGHBORS
+
+    stored_n = proj.n_neighbors if proj.n_neighbors is not None else PROJECTION_N_NEIGHBORS
+    stored_d = proj.min_dist if proj.min_dist is not None else PROJECTION_MIN_DIST
+    want_n, want_d = _umap_params()
+    return stored_n == want_n and math.isclose(stored_d, want_d, abs_tol=1e-9)
+
+
 def _try_load_persisted(ctx, sorted_ids: list[int], bin_shape: str) -> dict | None:
     """Try to restore the *bin_shape* pyramid from the dataset container.
 
@@ -136,6 +164,9 @@ def _try_load_persisted(ctx, sorted_ids: list[int], bin_shape: str) -> dict | No
     proj, pyr = loaded
     if set(proj.ids) != set(sorted_ids):
         logger.info("Persisted %s projection ids mismatch; will recompute.", bin_shape)
+        return None
+    if not _projection_params_match(proj):
+        logger.info("Persisted %s projection UMAP params changed; will recompute.", bin_shape)
         return None
     ctx._projection = proj
     ctx._pyramids[bin_shape] = pyr
@@ -161,6 +192,8 @@ def _load_projection_coords(ctx, sorted_ids: list[int]):
             continue
         proj, pyr = loaded
         if set(proj.ids) != set(sorted_ids):
+            continue
+        if not _projection_params_match(proj):
             continue
         ctx._projection = proj
         ctx._pyramids.setdefault(pyr.bin_shape, pyr)
@@ -242,6 +275,7 @@ def _start_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str, *, for
     ids_copy = list(sorted_ids)
     dataset_id = ctx.dataset_id
     compact = _compact_for(ctx)
+    n_neighbors, min_dist = _umap_params()
 
     def _run(job):
         with thread_dataset_context(ctx):
@@ -249,7 +283,14 @@ def _start_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str, *, for
             def _on_progress(status, message, current, total):
                 job.update_progress(current, total, message)
 
-            proj = fit_projection(mat_copy, ids_copy, compact=compact, on_progress=_on_progress)
+            proj = fit_projection(
+                mat_copy,
+                ids_copy,
+                n_neighbors=n_neighbors,
+                min_dist=min_dist,
+                compact=compact,
+                on_progress=_on_progress,
+            )
             job.update_progress(0, 1, "building pyramid")
             pyr = build_pyramid(proj, bin_shape=bin_shape)
             job.update_progress(1, 1, "done")
@@ -353,6 +394,7 @@ def _start_subset_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str,
     mat_copy = matrix.copy()
     ids_copy = list(sorted_ids)
     compact = _compact_for(ctx)
+    n_neighbors, min_dist = _umap_params()
 
     def _run(job):
         with thread_dataset_context(ctx):
@@ -360,7 +402,14 @@ def _start_subset_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str,
             def _on_progress(status, message, current, total):
                 job.update_progress(current, total, message)
 
-            proj = fit_projection(mat_copy, ids_copy, compact=compact, on_progress=_on_progress)
+            proj = fit_projection(
+                mat_copy,
+                ids_copy,
+                n_neighbors=n_neighbors,
+                min_dist=min_dist,
+                compact=compact,
+                on_progress=_on_progress,
+            )
             job.update_progress(0, 1, "building pyramid")
             pyr = build_pyramid(proj, bin_shape=bin_shape)
             job.update_progress(1, 1, "done")

@@ -17,7 +17,7 @@ from typing import NoReturn
 import numpy as np
 from flask_smorest import Blueprint, abort
 
-from vtscore.concurrency.progress import find_progress, update_find_progress
+from vtscore.concurrency.progress import CancelledError, find_progress, update_find_progress
 from vtscore.detectors.training import train_and_threshold
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.utils.scores import sigmoid_to_finite_scores
@@ -469,6 +469,7 @@ def _score_dataset(
     media_results = _seed_media_results(all_ids, temp_medias, ds["name"])
 
     for dc in detector_configs:
+        find_progress.check_cancelled()
         score_label = f'Scoring with "{dc["name"]}" on "{ds["name"]}"…'
         update_find_progress(
             "running",
@@ -511,6 +512,7 @@ def _score_dataset(
     description="Empty datasets/detectors list, or a selected detector has no labels.",
 )
 @detector_find_bp.alt_response(404, description="A selected dataset or detector ID is unknown / missing.")
+@detector_find_bp.alt_response(409, description="Find was cancelled via /api/find/cancel.")
 @detector_find_bp.alt_response(500, description="A dataset pkl file could not be loaded.")
 def multi_find(body: dict):
     """Run selected detectors on selected datasets and return merged results.
@@ -551,28 +553,32 @@ def multi_find(body: dict):
     total_scoring_units = 0
     scored_units = 0
 
-    for di, ds in enumerate(datasets):
-        ds_label = f'Loading dataset "{ds["name"]}"…'
-        update_find_progress(
-            "running",
-            ds_label,
-            current=di,
-            total=len(datasets),
-            step=2,
-            total_steps=_FIND_STEPS,
-        )
+    try:
+        for di, ds in enumerate(datasets):
+            find_progress.check_cancelled()
+            ds_label = f'Loading dataset "{ds["name"]}"…'
+            update_find_progress(
+                "running",
+                ds_label,
+                current=di,
+                total=len(datasets),
+                step=2,
+                total_steps=_FIND_STEPS,
+            )
 
-        positives, negatives, scored_units, added_units, ds_media_type = _score_dataset(
-            ds,
-            detector_configs,
-            scored_units,
-            total_scoring_units,
-        )
-        all_results.extend(positives)
-        all_negative_results.extend(negatives)
-        total_scoring_units += added_units
-        if not detected_media_type and ds_media_type:
-            detected_media_type = ds_media_type
+            positives, negatives, scored_units, added_units, ds_media_type = _score_dataset(
+                ds,
+                detector_configs,
+                scored_units,
+                total_scoring_units,
+            )
+            all_results.extend(positives)
+            all_negative_results.extend(negatives)
+            total_scoring_units += added_units
+            if not detected_media_type and ds_media_type:
+                detected_media_type = ds_media_type
+    except CancelledError:
+        _abort_find(409, "Find cancelled")
 
     update_find_progress("idle", "", step=None, total_steps=None)
 

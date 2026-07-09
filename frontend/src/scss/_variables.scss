@@ -13,6 +13,9 @@
   --space-xl: 1rem;       // 16px
   --space-2xl: 1.5rem;    // 24px
 
+  // Monospace stack: the one place a component should reach for `monospace`.
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
   // Font-size scale
   --font-2xs: 0.7rem;
   --font-xs: 0.75rem;
@@ -69,6 +72,7 @@
   --z-sticky: 100;
   --z-modal-backdrop: 1000;
   --z-modal: 1001;
+  --z-tooltip: 1500;
   --z-burger-menu: 2000;
   --z-offline-banner: 4500;
   --z-toast: 5000;
@@ -84,11 +88,17 @@
   --bg-secondary-btn: #3a3d50;
   --border: #2a2d3a;
   --border-secondary: #4a4d60;
-  --border-subtle: #1e2030;
+  // Hairline divider between table rows / list items. Kept faint, but a step
+  // above the surface it sits on so the line is actually perceptible (the old
+  // #1e2030 tied --bg-subtle exactly and rendered at 1.04:1 - invisible).
+  --border-subtle: #303449;
   --text-primary: #e0e0e0;
   --text-secondary: #aaa;
   --text-muted: #888;
-  --text-dim: #666;
+  // Dimmest readable body tier. Lifted from #666 (2.93:1 on --bg-surface, below
+  // AA) to hold >=4.5:1 for the small real copy that uses it (burger recent
+  // times, table sub-text). Converges with --text-muted by design.
+  --text-dim: #8a8a8a;
   --text-placeholder: #555;
   --text-vote: #bbb;
   --text-btn-secondary: #ccc;
@@ -123,6 +133,10 @@
   --badge-embedding: #e0a020;
   --btn-icon-hover-bg: rgba(255, 255, 255, 0.08);
   --text-warning: #e6a700;
+  // Warning surface (amber chips: license notices, type-mismatch rows). Paired
+  // with --text-warning; adapts per theme so warnings hold up in highviz too.
+  --warning-bg: rgba(230, 167, 0, 0.12);
+  --warning-border: rgba(230, 167, 0, 0.35);
 
   // Achievement tiers are deliberately theme-agnostic (bronze should
   // look bronze in every theme). Defined once at `:root` and NOT
@@ -131,6 +145,12 @@
   --tier-silver: #d9d9d9;
   --tier-gold: #f0c419;
   --tier-platinum: #f5f6fa;
+
+  // Text color for badges filled with a saturated status color
+  // (--color-good, --badge-embedding). Those fills are bright/mid-luminance
+  // in every theme by design, so dark text reads well everywhere - no need
+  // to swap per theme the way --btn-filled-text does for accent-fill buttons.
+  --badge-text-dark: #1a1a2e;
 
   // Aliases used by component SCSS files
   --border-color: var(--border);
@@ -173,7 +193,7 @@
   // lighter/closer-to-the-white-surface the line sits on.)
   --border: #c9cdd9;
   --border-secondary: #b4b9c7;
-  --border-subtle: #dadde6;
+  --border-subtle: #ccd0da;
   --text-primary: #1a1a2e;
   --text-secondary: #555;
   --text-muted: #666;
@@ -195,23 +215,28 @@
   --accent-highlight-bg: rgba(90, 104, 216, 0.25);
   --accent-highlight-border: rgba(90, 104, 216, 0.6);
   --missing-border: #2563eb;
+  // Status text (label/sub) is darkened vs the pastel border/dot decor so small
+  // status copy holds >=4.5:1 on white/panel. The light theme previously reused
+  // the dark theme's pastel ramp for text (1.97-2.99:1 - all failing AA).
   --status-red-border: #e57373;
   --status-red-dot: #e53935;
   --status-red-label: #c62828;
-  --status-red-sub: #e57373;
+  --status-red-sub: #b03535;
   --status-yellow-border: #f9a825;
   --status-yellow-dot: #fbc02d;
-  --status-yellow-label: #f57f17;
-  --status-yellow-sub: #f9a825;
+  --status-yellow-label: #b45309;
+  --status-yellow-sub: #92590a;
   --status-green-border: #66bb6a;
   --status-green-dot: #43a047;
   --status-green-label: #2e7d32;
-  --status-green-sub: #66bb6a;
+  --status-green-sub: #2f7a34;
   --scrollbar-thumb: #bcc1ce;
   --scrollbar-thumb-hover: #5a68d8;
   --badge-embedding: #c99000;
   --btn-icon-hover-bg: rgba(0, 0, 0, 0.07);
   --text-warning: #b87900;
+  --warning-bg: rgba(184, 121, 0, 0.12);
+  --warning-border: rgba(184, 121, 0, 0.35);
 
   // Aliases
   --border-color: var(--border);
@@ -284,6 +309,8 @@
   --badge-embedding: #ffff00;
   --btn-icon-hover-bg: rgba(255, 255, 255, 0.15);
   --text-warning: #ffff00;
+  --warning-bg: rgba(255, 255, 0, 0.15);
+  --warning-border: #ffff00;
 
   // Aliases
   --border-color: var(--border);

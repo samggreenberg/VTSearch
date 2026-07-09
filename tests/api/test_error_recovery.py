@@ -712,3 +712,52 @@ class TestPathTraversalPrevention:
             assert resp.status_code == 400
         finally:
             set_login_provider(original)
+
+
+class TestFillFromSortRollback:
+    """Ninth audit pass: a failed persistence pass must roll back the applied
+    in-memory votes, mirroring ``apply_and_retrain`` (H30).
+
+    Without the rollback the 500 tells the user the labels were NOT committed
+    while they stay live in memory and get silently persisted by the next
+    vote-triggered sync — contradicting the error the user saw.
+    """
+
+    def test_sync_failure_rolls_back_applied_votes(self, client, monkeypatch):
+        import vtscore.detectors.label_sync as label_sync_mod
+        from vtscore.state.core import get_active_detector_context
+        from vtsearch.state import medias
+
+        det_ctx = get_active_detector_context()
+        assert not det_ctx.good_votes and not det_ctx.bad_votes
+
+        media_ids = list(medias.keys())[:4]
+        assert len(media_ids) >= 4, "test dataset should have at least 4 medias"
+        sort_results = [
+            {"id": media_ids[0], "score": 0.9},
+            {"id": media_ids[1], "score": 0.8},
+            {"id": media_ids[2], "score": 0.2},
+            {"id": media_ids[3], "score": 0.1},
+        ]
+
+        def failing_sync(*args, **kwargs):
+            raise RuntimeError("disk full")
+
+        monkeypatch.setattr(label_sync_mod, "sync_labels_to_loaded_detector", failing_sync)
+
+        resp = client.post(
+            "/api/labels/fill-from-sort",
+            json={
+                "sort_results": sort_results,
+                "threshold": 0.5,
+                "sides": "both",
+                "confirm": True,
+            },
+        )
+        assert resp.status_code == 500
+        assert "persist" in resp.get_json()["message"].lower()
+
+        # The in-memory votes match what the user was told: nothing committed.
+        assert dict(det_ctx.good_votes) == {}
+        assert dict(det_ctx.bad_votes) == {}
+        assert list(det_ctx.label_history) == []

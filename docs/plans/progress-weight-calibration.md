@@ -1,14 +1,16 @@
 # Progress-weight calibration
 
-**Status: planned (not yet run).** This doc specifies how to replace the
-hand-guessed dataset-load progress weights with *measured* ones, and how to make
-the weights depend on dataset size `n` rather than being a single fixed vector
-per device. It is the concrete follow-up to the "Weights are static guesses"
-item in `docs/plans/progress-bar-consolidation.md`.
+**Status: executed for image + audio × CPU + GPU (2026-07).** This doc specifies
+how to replace the hand-guessed dataset-load progress weights with *measured*
+ones, and how to make the weights depend on dataset size `n` rather than being a
+single fixed vector per device. It is the concrete follow-up to the "Weights are
+static guesses" item in `docs/plans/progress-bar-consolidation.md`. The
+instrumentation, driver, affine fit, and `n`-aware wiring shipped; fitted
+coefficients for the image/audio × CPU/GPU cells are in `_load_cost_model.py`.
+See **Results** for the runs; the sections above are the design/method.
 
-It is written to be run **locally / on a CUDA box** — the Claude Cloud container
-has no GPU and is not the right place to gather GPU timings. Nothing here has
-been executed yet; the numbers below the line are the target schema, not results.
+It is written to be run **on a CUDA box** — the Claude Cloud container has no GPU.
+The runs below were done on the HLTCOE Grid (a100).
 
 ## Background: what the weights do (and don't do)
 
@@ -183,8 +185,11 @@ it.
 
 ## Open follow-ups
 
-- This plan is **specified but not executed** — needs a GPU host and a few hours
-  of load runs. Until then the static image-CPU profile (shipped) is the stopgap.
+- **Executed** for `{cpu, cuda} × {image, audio}`, default embedder — see
+  Results below. Remaining media types (`video / text / document`), non-default
+  embedders, and the cuML-on/off split are still uncalibrated and fall back to
+  the static profiles; re-run `scripts/profiling/calibrate_load_weights.py` for
+  those cells when needed.
 - Once coefficients exist, revisit the **finalize sub-slot shares** (the
   `FinalizeProgress._SLOTS` ballparks) with the same measured data — they have
   the same "static guess" problem one level down.
@@ -196,5 +201,70 @@ it.
 
 ## Results
 
-*(empty — populate with the fitted coefficient table and fit diagnostics after
-running the harness on a GPU box.)*
+Ran on the HLTCOE Grid (a100 for the GPU cells) via
+`scripts/profiling/calibrate_load_weights.py` with the env-gated recorder, then
+`scripts/profiling/fit_load_weights.py` over the JSONL. 242 phase rows across the
+four cells. Coefficients are checked into `_load_cost_model.py`.
+
+**What ran.** `{cpu, cuda} × {image (caltech101 / siglip), audio (esc50 / clap)}`,
+default embedder only. Sizes `caltech101_{s,m,l,a}` (n = 412/838/1704/2954) and
+`esc50_{s,m,l,a}` (n = 245/588/1127/1960); ≥2 reps on the fast cells. Each cell's
+first load pays the cold model + cold archive download; the driver clears only the
+*embeddings* cache between loads, so the source stays warm and every load
+re-embeds. **Skipped, logged not silent:** media `video/text/document`; all
+non-default embedders (image: siglip2, eupe_\*, face, sift_vlad; audio:
+whisper_encoder…); cuML on/off. Uncalibrated cells fall back to the static
+per-(device, media) profile — unchanged behaviour.
+
+**Model-load is warm-≈0 by construction.** A warm load *skips the model phase
+entirely* (the encoder is resident, so no `loading model` status fires), so there
+is no warm row to fit — `a_model` is floored to 0.5 s and the model slice stays
+deliberately tiny. The cold first-load model cost (below) is recorded as a note,
+not paced against (per the plan).
+
+### Fitted coefficients (seconds; `n` = item count)
+
+| device | media | embedder | a_model (cold) | embed `a + b·n` | R² | finalize `a + b·n` | R² | n pts |
+|--------|-------|----------|---------------|-----------------|----|--------------------|----|------|
+| cpu  | image | siglip | 0.5 (39.9) | 1.97 + 0.2927·n | 1.00 | 0.47 + 0.00212·n | 0.90 | 5 |
+| cpu  | audio | clap   | 0.5 (4.5)  | 0.00 + 0.1846·n | 1.00 | 0.00 + 0.00253·n | 1.00 | 5 |
+| cuda | image | siglip | 0.5 (119.7)| 2.12 + 0.00678·n | 0.89 | 8.01 (fixed, b≈0) | 0.00 | 12 |
+| cuda | audio | clap   | 0.5 (40.1) | 0.69 + 0.03663·n | 1.00 | 0.00 + 0.00362·n | 1.00 | 12 |
+
+Download bandwidth ≈ **10.05 MB/s** (device-pooled; cuda 9.5 / cpu 10.6 agreed
+within ~10%), so `T_download ≈ download_size_mb / 10.05`.
+
+Physically sensible: per-item embed is **5–43× slower on CPU** than GPU (image
+0.293 vs 0.0068 s/item; audio 0.185 vs 0.0366) — SigLIP's ViT benefits from the
+GPU far more than CLAP. Audio finalize scales with `n` (diversity-tree k-means);
+GPU-image finalize is a ~8 s fixed overhead at these sizes (b≈0).
+
+### Sample resulting weights `[download, model, embed, finalize]`
+
+| device | media | n | archive | weights |
+|--------|-------|---|---------|---------|
+| cuda | image | 400   | 131 MB (cold) | [0.49, 0.02, 0.18, 0.31] |
+| cuda | image | 2000  | 0 (warm)      | [0.00, 0.02, 0.64, 0.34] |
+| cuda | image | 20000 | 0 (warm)      | [0.00, 0.00, 0.92, 0.08] |
+| cuda | audio | 400   | 600 MB (cold) | [0.78, 0.01, 0.20, 0.02] |
+| cuda | audio | 2000  | 0 (warm)      | [0.00, 0.01, 0.91, 0.09] |
+| cpu  | image | 400   | 131 MB (cold) | [0.10, 0.00, 0.89, 0.01] |
+| cpu  | audio | 2000  | 0 (warm)      | [0.00, 0.00, 0.99, 0.01] |
+
+The n-awareness a single static vector can't give: small `n` weighs
+model/finalize/download heavier, large `n` lets embed dominate; the download
+slice collapses when there is no archive (local imports, cached re-adds — which
+also take the static path since they don't know `n`). Cross-checks an independent
+scout run: warm large-`n` GPU-image `≈ [0, 0.02, 0.64, 0.34]` vs the scout's
+`[0, 0.01, 0.68, 0.31]` — the model and the raw data agree.
+
+### Reproduce
+
+```
+# per device (device is fixed at process start):
+CUDA_VISIBLE_DEVICES=0 python scripts/profiling/calibrate_load_weights.py --out gpu.jsonl
+CUDA_VISIBLE_DEVICES=  python scripts/profiling/calibrate_load_weights.py --out cpu.jsonl --sizes s,m,l
+python scripts/profiling/fit_load_weights.py gpu.jsonl cpu.jsonl   # prints the table above
+```
+(Needs `VTSEARCH_MODELS_DIR` pointed at a warm model cache so the model phase is
+a load, not a cold HuggingFace download.)

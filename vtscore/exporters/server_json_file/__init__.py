@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -93,13 +94,17 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
         The first line is a metadata object describing the run; every
         subsequent line is a single hit with its ``detector`` name merged in.
         Lines are flushed as they stream, so the full result set is never
-        held in memory.  The file is built at a sibling ``.tmp`` path and
-        atomically renamed on success, so a crash mid-run cannot leave a
-        half-written file at the destination.
+        held in memory.  The file is built at a per-writer-unique sibling
+        ``.tmp`` path and atomically renamed on success, so a crash mid-run
+        cannot leave a half-written file at the destination and two concurrent
+        exports to the same path can't clobber each other's temp file.
         """
         filepath = Path(field_values["filepath"])
         filepath.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = filepath.with_name(filepath.name + ".tmp")
+        # Per-writer unique suffix (pid + uuid) so two threads/processes racing
+        # to export the same path can't truncate each other's in-flight tmp or
+        # chase one already renamed away.  Matches vtscore.io.atomic_write_text.
+        tmp_path = filepath.with_name(f"{filepath.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
 
         meta = {
             "format": "vtsearch-hits-ndjson/v1",
@@ -115,6 +120,8 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
                 for detector_name, hit in records:
                     f.write(json.dumps({"detector": detector_name, **hit}) + "\n")
                     total_hits += 1
+                f.flush()
+                os.fsync(f.fileno())
             os.replace(tmp_path, filepath)
         finally:
             # Clean up the temp file if the rename never happened (e.g. an

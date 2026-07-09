@@ -12,7 +12,7 @@ installation and getting started, see [SETUP.md](SETUP.md).
 4. [Offline deployment](#offline-deployment)
 5. [Data directory layout](#data-directory-layout)
 6. [Docker production notes](#docker-production-notes)
-7. [Requirements file structure](#requirements-file-structure)
+7. [Dependency structure](#dependency-structure)
 8. [Troubleshooting](#troubleshooting)
 
 ---
@@ -144,7 +144,13 @@ A few VTSearch-specific points matter when configuring the proxy:
   SSE endpoint. Proxy response buffering breaks SSE (events arrive only when the
   buffer flushes), so disable it for the stream — `proxy_buffering off;` in nginx
   (and the equivalent elsewhere) — and ensure the same long read-timeout applies,
-  since the connection stays open for the life of the page.
+  since the connection stays open for the life of the page. Each open connection
+  pins a gthread worker thread for its lifetime, so the server caps concurrent
+  connections at `VTSEARCH_THREADS - 2` (override with
+  `VTSEARCH_SSE_MAX_CONNECTIONS`) and returns `503` once saturated instead of
+  starving the pool that serves ordinary requests; the frontend's `EventSource`
+  wrapper retries on a timer when that happens. Raising `VTSEARCH_THREADS` raises
+  the SSE cap along with it.
 - **Forwarded headers.** Pass `X-Forwarded-For`, `X-Forwarded-Proto`, and
   `X-Forwarded-Host` (and `Host`) so the app sees the real client and external
   scheme. For SSE/WebSocket-style streams also forward `Connection`/`Upgrade` if
@@ -328,9 +334,10 @@ It is created automatically on first startup.
 
 ```
 data/
-├── models/                           # HuggingFace model cache (~3.2 GB total)
+├── models/                           # HuggingFace model cache (~3.8 GB total)
 │   ├── models--laion--clap-htsat-unfused/
 │   ├── models--google--siglip-base-patch16-224/
+│   ├── models--openai--clip-vit-base-patch32/
 │   ├── models--microsoft--xclip-base-patch32/
 │   └── models--intfloat--e5-base-v2/
 ├── embeddings/                       # Cached dataset embeddings (.pkl files)
@@ -347,7 +354,7 @@ data/
 
 | Path | Preserve? | Why |
 |------|-----------|-----|
-| `data/models/` | **Yes** | Re-downloading is slow (~3.2 GB) |
+| `data/models/` | **Yes** | Re-downloading is slow (~3.8 GB) |
 | `data/embeddings/` | **Yes** | Contains cached embeddings; losing them means recomputing |
 | `data/settings.json` | **Yes** | User preferences, trained detectors, autorun processors |
 | `data/detectors/` | **Yes** | Persistent detector definitions with labelsets |
@@ -367,7 +374,7 @@ and auto-saved on every change. Schema:
   "theme": "dark",
   "enrich_descriptions": false,
   "safe_thresholds": false,
-  "calibrate_count": 2,
+  "calibrate_count": 1,
   "calibration_fraction": 0.5,
   "audio_playing": true,
   "show_animations": "show",
@@ -494,7 +501,7 @@ docker run -p 5000:5000 -v /path/on/host:/app/data vtsearch
   With all four loaded simultaneously, expect ~4–6 GB total application
   memory. Models are loaded lazily; only the media types actually used are
   loaded.
-- **Disk**: The `data/models/` directory uses ~3.2 GB. Dataset embeddings
+- **Disk**: The `data/models/` directory uses ~3.8 GB. Dataset embeddings
   and media files vary by dataset size.
 - **CPU**: `OMP_NUM_THREADS=1` and `MKL_NUM_THREADS=1` are set to reduce
   per-operation memory. This trades single-operation throughput for lower

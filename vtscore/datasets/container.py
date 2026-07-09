@@ -82,6 +82,11 @@ def write_container(
             with zipfile.ZipFile(raw, "w", compression=zipfile.ZIP_STORED) as zf:
                 zf.writestr("medias.pkl", medias_pickle_bytes)
                 zf.writestr("meta.json", json.dumps(meta, indent=2))
+            # Flush to stable storage before the rename publishes the file:
+            # without the fsync a crash/power loss shortly after os.replace
+            # can leave a zero-length/truncated dataset at the final path.
+            raw.flush()
+            os.fsync(raw.fileno())
         os.replace(tmp, str(p))
     except BaseException:
         try:
@@ -246,6 +251,8 @@ def _rewrite_without(path: Path, entry_name: str) -> None:
                 for item in src.infolist():
                     if item.filename != entry_name:
                         dst.writestr(item, src.read(item.filename))
+            raw.flush()
+            os.fsync(raw.fileno())
         os.replace(tmp, str(path))
     except BaseException:
         try:

@@ -207,6 +207,13 @@ class DiversityTree:
             if inertia is not None and inertia < best_inertia:
                 best_inertia = inertia
                 best_labels = candidate_labels
+            elif best_labels is None:
+                # The backend contract allows ``inertia=None`` (a backend
+                # that doesn't report it).  Keep the labels as a fallback
+                # candidate so ``best_labels`` can't stay None and crash the
+                # ``labels == ci`` mask below; a later init with a real
+                # inertia still wins.
+                best_labels = candidate_labels
 
             # Report progress after each init, weighted by vector count
             # (k-means cost is proportional to the number of vectors).

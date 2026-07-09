@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, ElementRef, HostListener, inject, input, OnChanges, OnDestroy, output, SimpleChanges, ViewChild } from '@angular/core';
+import { AfterViewChecked, AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, ElementRef, HostListener, inject, input, OnChanges, OnDestroy, output, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { Subscription } from 'rxjs';
@@ -13,6 +13,7 @@ import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { applyClipWindow, clearClipWindow } from '../../utils/clip-window';
 import { usesThumbnails } from '../browse-canvas/hex-render.util';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
+import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
 import type { MediaBatchResponse } from '../../generated/api-client/models/media-batch-response';
 
@@ -153,7 +154,7 @@ const PREVIEW_SIZE_STEPS = [120, 160, 208, 272, 352, 448, 560, 640, 720] as cons
   templateUrl: './browse-bin-popup.component.html',
   styleUrl: './browse-bin-popup.component.scss',
 })
-export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDestroy {
+export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit, OnChanges, OnDestroy {
   private host = inject<ElementRef<HTMLElement>>(ElementRef);
   private selection = inject(BrowseSelectionService);
   private metadataCache = inject(MediaMetadataCacheService);
@@ -187,6 +188,10 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
 
   /** Emitted when the popup should close (outside click, Escape, or the X). */
   readonly dismissed = output<void>();
+  /** The clip now auditioning from a grid-row hover (for the top-left
+   *  now-playing indicator, shared with the canvas hover), or ``null`` once
+   *  the hover clears. */
+  readonly nowPlaying = output<NowPlaying | null>();
 
   @ViewChild('panel') private panelRef?: ElementRef<HTMLElement>;
   @ViewChild('header') private headerRef?: ElementRef<HTMLElement>;
@@ -252,6 +257,8 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   private readonly failedPreviews = new Set<number>();
   private readonly subs: Subscription[] = [];
   private scrollSub: Subscription | null = null;
+  /** The viewport instance whose ``scrolledIndexChange`` is currently subscribed. */
+  private scrollSubscribedViewport: CdkVirtualScrollViewport | null = null;
 
   constructor() {
     // Keep the hover-to-hear preview element in step with the Browse toolbar's
@@ -300,6 +307,11 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
       // right-clicked) so the pane is never blank and the detail view starts on
       // the same image — not the 1-D list's first item, which differs.
       this.previewId = this.representativeId();
+      // Auto-play the representative's clip on open (audio) so the detail window
+      // is an "intense hover": opening it hears the rep, just like resting on the
+      // bin on the canvas. This is the only way to hear a singleton audio bin,
+      // whose member grid (and its hover-to-hear) is dropped (see previewOnly).
+      if (this.previewId != null) this.playAudio(this.previewId);
       // A fresh bin is a fresh popup: forget any drag from the previous one so
       // it re-anchors to the new summon point.
       this.dragged = false;
@@ -344,10 +356,32 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
       this.metadataCache.version$.subscribe(() => this.cdr.markForCheck()),
     );
     this.settingsState.load();
-    this.scrollSub =
-      this.viewport?.scrolledIndexChange.subscribe(() => this.prefetchVisible()) ?? null;
+    this.ensureScrollSubscription();
     this.prefetchVisible();
     setTimeout(() => this.place());
+  }
+
+  ngAfterViewChecked(): void {
+    this.ensureScrollSubscription();
+  }
+
+  /**
+   * (Re-)subscribe the member grid's scroll-driven thumbnail prefetch,
+   * keyed to the viewport *instance*.  The viewport lives behind the
+   * template's ``@if (!previewOnly)``, and the popup is reused across
+   * summons while open (right-clicking another bin only swaps inputs), so
+   * a singleton→multi transition creates a brand-new viewport whose stream
+   * the one-shot ``ngAfterViewInit`` wiring never subscribed — leaving
+   * everything beyond the initially-prefetched window as ``□`` placeholders
+   * with no recovery.  Mirrors media-list's viewport re-wire pattern.
+   */
+  private ensureScrollSubscription(): void {
+    const vp = this.viewport ?? null;
+    if (!vp || this.scrollSubscribedViewport === vp) return;
+    this.scrollSubscribedViewport = vp;
+    this.scrollSub?.unsubscribe();
+    this.scrollSub = vp.scrolledIndexChange.subscribe(() => this.prefetchVisible());
+    this.prefetchVisible();
   }
 
   ngOnDestroy(): void {
@@ -903,18 +937,32 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     // media type, so audio/text/document read metadata for the item under the
     // cursor even without a preview pane).
     this.previewId = id;
+    this.playAudio(id);
+  }
+
+  /**
+   * Audition ``id`` in the popup's audio element (audio media only), updating
+   * the shared now-playing indicator. Shared by the open-time autoplay and the
+   * grid-row hover; a no-op when the same clip is already playing so re-entering
+   * a row (or a redundant re-summon) doesn't restart it.
+   */
+  private playAudio(id: number): void {
     if (this.mediaType() !== 'audio') return;
     const src = this.activeContext.mediaUrl(`/api/medias/${id}/audio`);
     if (this.audioSrc === src) return;
     this.audioSrc = src;
+    // The autoplay-on-open path may fire before prefetchVisible has hydrated the
+    // representative's metadata, so make sure its clip extents are loading (the
+    // clip-window handlers read them lazily as they land).
+    this.metadataCache.ensureLoaded([id]);
+    this.nowPlaying.emit({ mediaId: id, waveUrl: this.thumbnailUrl(id) });
     setTimeout(() => {
       const el = this.audioRef?.nativeElement;
       if (!el) return;
       el.volume = this.volume();
       // Windowed archive-member clips serve the whole file: seek to clip_start
-      // and loop within [clip_start, clip_end]. The hovered item's metadata is
-      // already hydrated (prefetchVisible loads the visible window), and is read
-      // lazily inside the handlers regardless.
+      // and loop within [clip_start, clip_end]. Metadata is read lazily inside
+      // the handlers regardless.
       applyClipWindow(el, () => this.metadataCache.get(id));
       el.load();
       el.play().catch(() => {});
@@ -932,6 +980,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   }
 
   private stopAudio(): void {
+    const wasPlaying = this.audioSrc !== '';
     const el = this.audioRef?.nativeElement;
     if (el) {
       clearClipWindow(el);
@@ -939,6 +988,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
       el.currentTime = 0;
     }
     this.audioSrc = '';
+    if (wasPlaying) this.nowPlaying.emit(null);
   }
 
   // --- Names + thumbnails (mirrors the selection panel's treatment) ---------

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from vtscore import config
 
+from vtscore.concurrency.async_jobs import check_job_cancelled
 from vtscore.config import MLP_DROPOUT, MLP_HIDDEN_MAX, MLP_HIDDEN_MIN
 
 # ``TRAIN_EPOCHS`` and ``TRAIN_PATIENCE`` are read off ``config`` at call time
@@ -27,7 +28,8 @@ def _auto_hidden_dim(n_train: int) -> int:
 
     Keeps the model small when few votes are available to reduce
     overfitting, and grows (up to ``MLP_HIDDEN_MAX``) as more labels
-    arrive.
+    arrive.  The width is floored at ``MLP_HIDDEN_MIN`` (8): below ~8
+    neurons the detector underfits and destabilizes on harder tasks.
     """
     return max(MLP_HIDDEN_MIN, min(MLP_HIDDEN_MAX, n_train // 3))
 
@@ -223,6 +225,10 @@ def train_model(
     with torch.random.fork_rng(), torch.enable_grad():
         torch.manual_seed(seed)
         for _ in range(epochs):
+            # Honour a cancel of the background job that owns this thread at
+            # the epoch boundary; a no-op outside a job (see
+            # ``async_jobs.check_job_cancelled``).
+            check_job_cancelled()
             optimizer.zero_grad()
             with autocast_ctx:
                 logits = model(X_train)

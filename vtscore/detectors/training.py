@@ -158,9 +158,17 @@ def train_and_threshold(
 
     safe = bool(get_safe_thresholds() and snap)
     # Below the safe-threshold ramp floor the cross-cal output is blended
-    # away (pure GMM), so don't pay for the fold trainings.
+    # away (pure GMM), so don't pay for the fold trainings.  Safe-thresholds
+    # OFF falls through to real cross-calibration at every label count.
     if safe and len(X_list) < 6:
         threshold = NO_GOOD_THRESHOLD
+        # This branch never recomputes the fold orderings, so drop any stale
+        # cache from a previous ≥6-label training - otherwise a later
+        # inclusion slide (`recompute_detector_thresholds_for_inclusion`)
+        # re-thresholds against orderings for the old label set/model.
+        # Mirrors the same guard in :func:`_train_and_score_xy`.
+        if det_ctx is not None:
+            det_ctx.calibration_cache = None
     elif det_ctx is not None:
         # Cache the K fold orderings on the context so an Inclusion slide can
         # re-derive the cutoff without a no-op (the find-label / detector-load
@@ -199,6 +207,10 @@ def train_and_threshold(
         with torch.no_grad():
             X_all = X_all.to(next(model.parameters()).device)
             all_scores = sigmoid_to_finite_scores(model(X_all))
+        # The GMM blend is applied only on a *fresh* retrain: the fold-ordering
+        # cache above stores the raw cross-cal orderings, so a later inclusion
+        # slide re-derives the unblended cutoff (intentional - see
+        # recompute_detector_thresholds_for_inclusion).
         threshold = calculate_safe_threshold(threshold, all_scores, len(y_list))
 
     return model, threshold
@@ -498,13 +510,24 @@ def _train_and_score_xy(
     input_dim = X.shape[1]
     hidden_dim = _auto_hidden_dim(len(X_list))
 
-    # Skip k-fold calibration when the label count is below the
-    # ``calculate_safe_threshold`` ramp floor: the calibration trainings
-    # would be expensive (two 200-epoch fits) and the result is either
-    # discarded (safe_thresholds=True blends with label_weight=0 → pure
-    # GMM) or unreliable.  0.5 is a sensible neutral mid-point.
-    if len(X_list) < 6:
+    # Skip k-fold calibration *only* when safe-thresholds is on and the label
+    # count is below the ``calculate_safe_threshold`` ramp floor: there the
+    # calibrated value is entirely discarded by the pure-GMM blend
+    # (label_weight=0), so the two 200-epoch fold fits would be pure waste.
+    # With safe-thresholds OFF the cross-cal threshold is what the detector
+    # actually uses, so it is computed for every label count - this is what
+    # keeps the vote/labelset path agreeing with the Find path
+    # (:func:`train_and_threshold`), which has always cross-calibrated below 6
+    # labels when safe-thresholds is off.
+    if safe_thresholds and len(X_list) < 6:
         threshold = 0.5
+        # Drop any fold-ordering cache from a previous ≥6-label training:
+        # this branch neither reads nor rewrites it, and a later inclusion
+        # slide (`recompute_detector_thresholds_for_inclusion`) trusts any
+        # non-None cache - re-thresholding against orderings computed for
+        # the *old* label set/model.
+        if det_ctx is not None:
+            det_ctx.calibration_cache = None
     else:
         threshold = cross_calibration_threshold_cached(
             X_list,
@@ -524,6 +547,9 @@ def _train_and_score_xy(
     all_ids, scores, best_region = _score_all_media(model, clips_dict, score_emb)
 
     if safe_thresholds:
+        # Blend applies on this fresh retrain only; the cached fold orderings
+        # are raw cross-cal, so an inclusion slide re-derives the unblended
+        # cutoff (see recompute_detector_thresholds_for_inclusion).
         threshold = calculate_safe_threshold(threshold, scores, len(X_list))
 
     results = _format_results(all_ids, scores, best_region, clips_dict)
@@ -548,8 +574,9 @@ def train_and_score(
     ``clips_dict``.
 
     Args:
-        clips_dict: Mapping of media ID to media data dict. Each value must contain
-            an ``"embedding"`` key with a ``numpy.ndarray`` embedding vector.
+        clips_dict: Mapping of media ID to media data dict. Each value must carry
+            a resolvable embedding vector in its per-embedder ``"embeddings"``
+            dict store (read via ``media_embedding``).
         good_votes: Dict whose keys are media IDs labelled as good (values are ``None``).
         bad_votes: Dict whose keys are media IDs labelled as bad (values are ``None``).
         inclusion_value: Integer in ``[-10, 10]`` passed to the training and
@@ -728,17 +755,19 @@ def train_detector_from_origins(
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
 
-    if len(X_list) < 6:
-        threshold = 0.5
-    else:
-        threshold = calculate_cross_calibration_threshold(
-            X_list,
-            y_list,
-            input_dim,
-            inclusion,
-            calibrate_count=calibrate_count,
-            calibration_fraction=calibration_fraction,
-        )
+    # Real cross-calibration at every label count (the load-time counterpart
+    # has no safe-threshold blend to discard the result), matching the
+    # vote/labelset and Find paths with safe-thresholds off.  The trainer
+    # degrades gracefully below 4 labels / <2-per-class via its own 0.5
+    # fallback, so no separate small-label short-circuit is needed here.
+    threshold = calculate_cross_calibration_threshold(
+        X_list,
+        y_list,
+        input_dim,
+        inclusion,
+        calibrate_count=calibrate_count,
+        calibration_fraction=calibration_fraction,
+    )
     model = train_model(X, y, input_dim)
 
     state_dict = model.state_dict()

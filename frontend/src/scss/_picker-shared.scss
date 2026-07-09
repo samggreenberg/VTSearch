@@ -203,22 +203,23 @@
 .demo-row {
   &.ready .col-name { color: var(--color-good); }
   &.selected {
-    background: var(--bg-selected, var(--bg-hover));
+    background: var(--bg-hover);
     box-shadow: inset 3px 0 0 0 var(--accent);
-    &:hover { background: var(--bg-selected, var(--bg-hover)); }
+    &:hover { background: var(--bg-hover); }
   }
 }
 
 .badge-ready, .badge-embedding, .badge-download {
   display: inline-block;
   padding: var(--space-2xs) var(--space-sm);
-  color: var(--btn-filled-text);
   font-size: var(--font-2xs);
   border-radius: var(--radius-sm);
 }
 
-.badge-ready { background: var(--color-good); }
-.badge-embedding { background: var(--badge-embedding, var(--accent)); }
+// Dark text on these saturated fills reads far better than white
+// (--btn-filled-text): white-on-#e0a020/#4caf50 measured well under WCAG AA.
+.badge-ready { background: var(--color-good); color: var(--badge-text-dark); }
+.badge-embedding { background: var(--badge-embedding); color: var(--badge-text-dark); }
 // Neutral "needs action" pill. Uses --bg-secondary-btn (a step lighter than
 // --border) + --text-secondary so the text holds readable contrast in dark
 // mode; the previous --border + --text-muted pairing layered two near-equal
