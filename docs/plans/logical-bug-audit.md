@@ -38,13 +38,21 @@ error/exception flow, (15) frontend↔backend contract seams.
 Cross-cutting items still owed. Everything ID'd (C/H/M/L) is resolved; these are
 the only remaining work.
 
-- **Pattern #4 — `media_revision` counter is still unimplemented.** The C4
-  stage-level invalidation closes the known clip/dedup hole, but any future
-  mutation site that changes embeddings without changing the id set will
-  reintroduce the same class of bug. A `media_revision` counter on
-  `DatasetContext` bumped from every `medias` mutation (or a `MediasDict`
-  subclass that does so transparently) would neutralise the whole category and
-  let the matrix accessor compare a single int instead of two id lists.
+- **Pattern #4 — `media_revision` counter. Shipped (hybrid).**
+  `DatasetContext` now carries a monotonic `media_revision` counter, and
+  `DatasetContext.medias` is a `MediasDict` (dict subclass) that bumps it on
+  every *structural* mutation (add / remove / replace / clear / wholesale
+  reassignment). The embedding-matrix and region-matrix caches key their
+  validity on the counter (a single int) instead of comparing two sorted id
+  lists, so a mutation that changes vectors without changing the id set now
+  invalidates them. **Residual caveat by design:** a dict subclass cannot
+  observe an *in-place* rewrite of a value dict (`medias[cid]["embedding"] =
+  vec` during re-embed / clip), so those stages still call
+  `invalidate_embedding_matrix` (which bumps the counter) after the rewrite —
+  the counter makes that the single uniform "vectors changed" signal rather
+  than each site knowing which caches to clear. Any *future* in-place
+  vector-rewrite site must likewise call `bump_media_revision()`; structural
+  churn needs nothing. (`test_embedding_matrix.py::TestMediaRevisionCounter`.)
 
 - **H28 residual multi-process items** (from the per-user settings RMW fix):
   - `_synced_users` is still process-local, so on a fresh container every worker
@@ -174,8 +182,8 @@ the only remaining work.
 ## Root-cause patterns (reference)
 
 The findings collapsed into a small number of root causes; addressing each in
-one PR fixed many findings at once. All are resolved except Pattern #4 (see Open
-follow-ups).
+one PR fixed many findings at once. All are resolved (Pattern #4 shipped as a
+hybrid `media_revision` counter; see Open follow-ups for the by-design caveat).
 
 1. **Background-thread context propagation** — every `Thread(target=…)` sets
    user/dataset/detector thread-locals in `try/finally` (helper:
@@ -186,7 +194,10 @@ follow-ups).
 3. **Achievement recording at one site** — `record_vote()` moved into
    `apply_label_with_click_time`, inside the state lock. (C8.)
 4. **Embedding-matrix cache invalidation** — a `media_revision` counter bumped
-   on every `medias` mutation. **(Open — see follow-ups.)** (C4.)
+   on every `medias` mutation (structural bumps come free via `MediasDict`;
+   in-place vector rewrites bump through `invalidate_embedding_matrix`). The
+   matrix/region caches key on the counter, not id-list compares. **Shipped**
+   (hybrid; see the Pattern #4 follow-up note above for the by-design caveat). (C4.)
 5. **Embedder identity is first-class** — track the detector's training embedder
    separately; every train/score path compares and clears caches on mismatch. (H5, H22.)
 6. **`X-Dataset-Id` / `X-Detector-Id` required, not silently defaulted** — 400

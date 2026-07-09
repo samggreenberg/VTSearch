@@ -18,6 +18,7 @@ from vtscore.state.core import _state_lock  # noqa: F401
 # Re-export context management functions ---------------------------------
 from vtscore.state.core import (  # noqa: F401
     DatasetContext,
+    MediasDict,
     clear_all_contexts,
     get_active_context,
     get_context,
@@ -151,11 +152,13 @@ def clear_medias() -> None:
 
     with _state_lock:
         ctx = _core.get_active_context()
-        ctx.medias.clear()
+        ctx.medias.clear()  # bumps media_revision via MediasDict
         ctx._emb_matrix_ids = None
         ctx._emb_matrix = None
+        ctx._emb_matrix_revision = None
         ctx._region_matrix_ids = None
         ctx._region_matrix = None
+        ctx._region_matrix_revision = None
         ctx._region_media_index = None
         ctx._region_index_per_row = None
         ctx._projection = None
