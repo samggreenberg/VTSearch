@@ -17,11 +17,13 @@ import { SourceSpecsPickerComponent } from '../source-specs-picker/source-specs-
  *  override would be hidden until they opened Advanced again.  The
  *  Include media picker is gated strictly by the toggle.
  *
- *  The clipper chooser modal lives at the parent level (one instance
- *  shared across all flows), so clicking the clipper "Details" button
- *  (either the native row's button inside the source-specs column, or
- *  the standalone fallback button rendered below the Advanced block)
- *  emits :prop:`clipperChooserRequested` and the parent opens it.
+ *  The clipper chooser modal lives one level up (each of the four
+ *  Add Dataset picker views - generic form / server-folder /
+ *  local-folder / demo - owns its own instance), so clicking the
+ *  clipper "Details" button (either the native row's button inside the
+ *  source-specs column, or the standalone fallback button rendered
+ *  below the Advanced block) emits :prop:`clipperChooserRequested` and
+ *  that owner opens it.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,

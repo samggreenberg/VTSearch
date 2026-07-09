@@ -14,6 +14,18 @@ import {
   usesThumbnails,
 } from './hex-render.util';
 import { binGeometry, BinGeometry } from './bin-geometry';
+import {
+  clampedTransform,
+  computeFitZoom,
+  getVisibleBounds,
+  levelForEffZoom,
+  projToScreen,
+  screenToProj,
+  softCeilZoom,
+  softClampPan,
+  softFloorZoom,
+  type ViewGeomContext,
+} from './view-transform';
 import { prefersReducedMotion } from '../../utils/reduced-motion';
 import { readRootZoom } from '../../utils/root-zoom';
 import { onDevicePixelRatioChange } from '../../utils/device-pixel-ratio';
@@ -363,16 +375,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   // After a pan/zoom leaves the view past its hard bounds (rubber-band
   // overshoot), this eases the *real* transform back to the clamp. Distinct from
   // the picture-in-picture zoom transition above: it walks the live transform
-  // and repaints each frame, rather than blitting a frozen snapshot.
-  /** Initial give of the rubber band: a pull just past the edge moves the view
-   *  by this fraction of the pull (tapering off from there). */
-  private static readonly RUBBER_GIVE = 0.5;
-  /** Cap on pan overshoot, as a fraction of the viewport extent on that axis. */
-  private static readonly RUBBER_PAN_MAX = 0.18;
-  /** Cap on zoom overshoot past either limit (the zoom-out fit floor or the
-   *  zoom-in finest-level ceiling), in natural-log units (≈26%/≈35% extra zoom
-   *  out/in at exp(∓0.3)). Shared by {@link softFloorZoom} and {@link softCeilZoom}. */
-  private static readonly RUBBER_ZOOM_MAX = 0.3;
+  // and repaints each frame, rather than blitting a frozen snapshot. The give /
+  // overshoot-cap constants for the rubber-band curve itself live next to
+  // `rubber()` in `view-transform.ts`.
   /** Snap-back duration. */
   private static readonly SETTLE_MS = 320;
   private settleActive = false;
@@ -687,87 +692,33 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.updateActiveLevel();
   }
 
-  /**
-   * The zoom at which the whole projection just fits the viewport — the framing
-   * {@link fitToData} (Zoom Fit) lands on, and the floor {@link clampView} holds
-   * the user to (zooming out past this only adds blank margins, so it is the
-   * "useful edge"). `bounds` is the extent of the bin *centres*, but each edge
-   * bin is drawn out to its circumradius beyond its centre, so framing on the
-   * centres alone clips the edge bins; add the bin circumradius (in projection
-   * units) as margin, plus a little breathing room. The active level — and thus
-   * the radius — depends on the zoom we're solving for, so iterate a few times
-   * from the no-margin fit to a fixed point (the level is quantised and clamps
-   * at 0, so this settles immediately).
-   */
-  private computeFitZoom(): number {
-    const meta = this.meta();
-    if (!meta) return this.transform.zoom;
-    const [xmin, ymin, xmax, ymax] = meta.bounds;
-    const dataW = xmax - xmin || 1;
-    const dataH = ymax - ymin || 1;
-    // Small breathing room beyond the bins themselves.
-    const padding = 0.05;
-    const w = this.width || 800;
-    const h = this.height || 600;
-    let zoom = Math.min(
-      w / (dataW * (1 + padding * 2)),
-      h / (dataH * (1 + padding * 2)),
-    );
-    for (let i = 0; i < 3; i++) {
-      const level = this.levelForEffZoom(zoom);
-      const r = meta.base_radius / Math.pow(2, level);
-      const padW = dataW + 2 * (r + dataW * padding);
-      const padH = dataH + 2 * (r + dataH * padding);
-      zoom = Math.min(w / padW, h / padH);
-    }
-    return zoom;
+  // --- Pan/zoom/clamp/rubber-band geometry -----------------------------------
+  // The pure coordinate-transform and boundary-clamping math (fit/max zoom,
+  // hard + rubber-band clamping, level selection, proj<->screen conversion)
+  // lives in the framework-free `view-transform.ts` module so it's independently
+  // unit-testable. These are thin delegating wrappers that supply the live
+  // `meta`/`width`/`height`/`targetRadius`/`transform` state; see that module
+  // for the actual logic and the invariants behind it (why `[lo,hi]` clamping
+  // doesn't pin to centre, why rubber-band overshoot works in log-space for
+  // zoom, why level selection floors at the fit-zoom level, etc.).
+
+  /** Bundles the live state {@link computeFitZoom} and friends need. */
+  private geomCtx(): ViewGeomContext {
+    return { meta: this.meta(), width: this.width, height: this.height, targetRadius: this.targetRadius };
   }
 
-  /**
-   * The zoom ceiling: the most you can zoom *in* before bins render larger than
-   * they ever do during normal browsing. Symmetric to {@link computeFitZoom}
-   * (the floor). Level selection ({@link levelForEffZoom}) keeps each bin within
-   * `[targetRadius/√2, targetRadius·√2]` by handing off to a finer pyramid level
-   * as you zoom in — but at the finest level (`levels.length - 1`) there's
-   * nothing finer to switch to, so once the zoom passes the point where that
-   * level would hand off (`idealLevel = maxLevel + 0.5`, where bins sit at their
-   * normal-browsing max of `targetRadius·√2`) the bins just upscale and keep
-   * growing without bound. Cap the zoom there so the thumbnails can't *stay*
-   * bigger than that normal max.
-   *
-   * Tracks {@link targetRadius}, so making the thumbnails bigger (the +/- size
-   * buttons scale zoom and `targetRadius` together) lifts the ceiling in
-   * lock-step rather than fighting the resize.
-   */
-  private computeMaxZoom(): number {
-    const minZoom = this.computeFitZoom();
-    const meta = this.meta();
-    if (!meta || meta.levels.length === 0) return minZoom;
-    const maxLevel = meta.levels.length - 1;
-    const maxZoom = (this.targetRadius * Math.pow(2, maxLevel + 0.5)) / meta.base_radius;
-    // A tiny projection can fit whole at a zoom already past its finest-level
-    // size; never let the ceiling drop below the floor (that would invert the
-    // clamp and trap the view between two crossed limits).
-    return Math.max(maxZoom, minZoom);
+  /** See `computeFitZoom` in `view-transform.ts`: the whole-projection-fit zoom,
+   *  the floor {@link clampView} holds the user to. */
+  private computeFitZoom(): number {
+    return computeFitZoom(this.geomCtx(), this.transform.zoom);
   }
 
   /**
    * Keep the view within the useful bounds: never zoomed out past the
    * whole-projection fit, never panned so the viewport *centre* leaves the
    * content. Mutates {@link transform} in place; callers re-select the level and
-   * redraw. Safe to call repeatedly (idempotent once inside the bounds).
-   *
-   * Zoom is floored at {@link computeFitZoom} so the user can't shrink the
-   * projection into a sea of background. Each pan axis is then clamped so the
-   * viewport *centre* stays inside the content rectangle — the bin *centres*
-   * extent (`bounds`) grown by the edge bins' circumradius `r`, since those bins
-   * draw out that far past their centres. Clamping the centre (not the whole
-   * span) is deliberate: it lets any point in the content be parked at screen
-   * centre, at the cost of blank margin past the edge (see {@link clampAxis}).
-   * The `[lo, hi]` clamp holds at every zoom — even when the viewport is larger
-   * than the content — so you can always pull an edge bin to the centre of the
-   * current zoom. (Use Zoom Fit to re-frame the whole projection; the passive
-   * clamp no longer force-recentres on zoom-out.)
+   * redraw. Safe to call repeatedly (idempotent once inside the bounds). See
+   * `clampedTransform` in `view-transform.ts` for the actual clamping logic.
    */
   private clampView(): void {
     const meta = this.meta();
@@ -779,157 +730,41 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.transform.centerY = c.centerY;
   }
 
-  /**
-   * The hard-clamped form of `t` (zoom floored at the whole-projection fit and
-   * capped at the finest-level ceiling {@link computeMaxZoom}, pan reined inside
-   * the content rectangle — see {@link clampView}). Pure: returns
-   * a fresh transform without touching {@link transform}, so the boundary-settle
-   * animation can compute its destination while the live view is still
-   * mid-overshoot. Caller is responsible for the meta/size guards.
-   */
+  /** The hard-clamped form of `t`; see `clampedTransform` in `view-transform.ts`.
+   *  Pure: returns a fresh transform without touching {@link transform}, so the
+   *  boundary-settle animation can compute its destination while the live view
+   *  is still mid-overshoot. Caller is responsible for the meta/size guards. */
   private clampedTransform(t: ViewTransform): ViewTransform {
-    const minZoom = this.computeFitZoom();
-    const maxZoom = this.computeMaxZoom();
-    const zoom = Math.min(Math.max(t.zoom, minZoom), maxZoom);
-    const lim = this.panLimits(zoom);
-    return {
-      zoom,
-      centerX: lim ? this.clampAxis(t.centerX, lim.loX, lim.hiX) : t.centerX,
-      centerY: lim ? this.clampAxis(t.centerY, lim.loY, lim.hiY) : t.centerY,
-    };
+    return clampedTransform(t, this.geomCtx());
   }
 
-  /**
-   * Pan-centre limits at zoom `z`: the content rectangle the viewport *centre*
-   * is held within (the bin-centre `bounds` grown by the edge bins' circumradius
-   * `r`, since those bins draw out that far past their centres) plus the viewport
-   * extent on each axis (used to scale the rubber-band give). Returns null when
-   * there's no data to frame.
-   */
-  private panLimits(
-    z: number,
-  ): { loX: number; hiX: number; loY: number; hiY: number; viewX: number; viewY: number } | null {
-    const meta = this.meta();
-    if (!meta || meta.point_count === 0) return null;
-    const [xmin, ymin, xmax, ymax] = meta.bounds;
-    const r = meta.base_radius / Math.pow(2, this.levelForEffZoom(z));
-    return { loX: xmin - r, hiX: xmax + r, loY: ymin - r, hiY: ymax + r, viewX: this.width / z, viewY: this.height / z };
-  }
-
-  /**
-   * Clamp a viewport *centre* on one axis to the content range `[lo, hi]`, so any
-   * point in the content can be brought to screen centre (drag the top-left bin
-   * out from under the Back button and park it dead-centre if you like). The cost
-   * is blank margin past the content edge: at centre = `lo` the viewport spills
-   * half its extent past the edge into background. That spill is half the
-   * viewport, so it's larger when zoomed out and smaller when zoomed in — the
-   * wall sits further from the data the further out you are, which is the price of
-   * being able to centre an edge point at any zoom.
-   *
-   * The clamp is `[lo, hi]` at *every* zoom, including when the viewport is wider
-   * than the whole content (at/near the whole-projection fit): we deliberately do
-   * NOT pin the centre to `(lo + hi) / 2` there. Pinning froze panning the moment
-   * an axis's viewport grew past its content span — which killed all panning when
-   * zoomed out, and (because the test is per-axis) let you centre an edge bin
-   * vertically but not horizontally whenever the content's aspect ratio differed
-   * from the viewport's. Keeping the full `[lo, hi]` range on both axes lets you
-   * pull any bin to the centre of the current zoom, all the way out.
-   */
-  private clampAxis(center: number, lo: number, hi: number): number {
-    return Math.min(Math.max(center, lo), hi);
-  }
-
-  // --- Rubber-band boundaries -----------------------------------------------
-  // Hitting the hard clamp used to stop the view dead, which reads as the tool
-  // freezing. Instead, a gesture that pushes past the edge keeps moving the view
-  // — with diminishing travel, so the boundary feels elastic — and on release
-  // the view eases back to the clamp. That turns "unresponsive" into a legible
-  // "you've reached the edge" cue. Only the live pan/zoom gestures go soft;
-  // programmatic moves (minimap recenter, resize refit) still hard-clamp.
-
-  /**
-   * Signed diminishing overshoot. Near zero it tracks the input at
-   * {@link RUBBER_GIVE} (so the first bit past the edge still moves), and as the
-   * input grows it asymptotes to ±`maxOver`, so the view drifts a bounded amount
-   * past a limit and never runs away no matter how hard the gesture pushes. This
-   * is the standard asymptotic rubber-band curve `f(x) = maxOver·x / (maxOver/c + x)`.
-   */
-  private rubber(x: number, maxOver: number): number {
-    if (maxOver <= 0) return 0;
-    const c = BrowseCanvasComponent.RUBBER_GIVE;
-    const s = Math.sign(x);
-    const a = Math.abs(x);
-    return (s * (maxOver * a)) / (maxOver / c + a);
-  }
-
-  /**
-   * Soft analogue of the pan half of {@link clampView}: rather than pin the
-   * centre at the content edge, let it drift past with rubber-band resistance,
-   * so a drag into the wall still moves a little. Mutates {@link transform}.
-   */
+  /** Soft analogue of the pan half of {@link clampView}: rather than pin the
+   *  centre at the content edge, let it drift past with rubber-band resistance,
+   *  so a drag into the wall still moves a little. Mutates {@link transform}.
+   *  See `softClampPan` in `view-transform.ts`. */
   private softClampPan(z: number): void {
-    const lim = this.panLimits(z);
-    if (!lim) return;
-    this.transform.centerX = this.rubberAxis(this.transform.centerX, lim.loX, lim.hiX, lim.viewX);
-    this.transform.centerY = this.rubberAxis(this.transform.centerY, lim.loY, lim.hiY, lim.viewY);
+    const p = softClampPan(this.transform, this.geomCtx(), z);
+    this.transform.centerX = p.centerX;
+    this.transform.centerY = p.centerY;
   }
 
-  /**
-   * {@link clampAxis} with elastic edges: inside `[lo, hi]` it's the identity;
-   * past either edge it returns a rubber-banded overshoot. Like {@link clampAxis}
-   * it uses the full `[lo, hi]` range at every zoom (no centre-pinning when the
-   * viewport is wider than the content), so a drag can pull any bin to the centre
-   * even at the furthest zoom.
-   */
-  private rubberAxis(center: number, lo: number, hi: number, viewExtent: number): number {
-    const maxOver = BrowseCanvasComponent.RUBBER_PAN_MAX * viewExtent;
-    if (center < lo) return lo + this.rubber(center - lo, maxOver);
-    if (center > hi) return hi + this.rubber(center - hi, maxOver);
-    return center;
-  }
-
-  /**
-   * Soft analogue of the zoom floor in {@link clampView}: a zoom below the
-   * whole-projection fit is allowed but resisted in log space (perceptually even
-   * with the rest of zooming), so wheeling out at the edge keeps responding —
-   * the projection shrinks a touch more — before the settle springs it back.
-   */
+  /** Soft analogue of the zoom floor in {@link clampView}; see `softFloorZoom`
+   *  in `view-transform.ts`. */
   private softFloorZoom(rawZoom: number): number {
-    const minZoom = this.computeFitZoom();
-    if (rawZoom >= minZoom) return rawZoom;
-    const over = Math.log(minZoom / rawZoom); // > 0: how far past the floor, in log units
-    const damped = this.rubber(over, BrowseCanvasComponent.RUBBER_ZOOM_MAX);
-    return minZoom * Math.exp(-damped);
+    return softFloorZoom(rawZoom, this.geomCtx(), this.transform.zoom);
   }
 
-  /**
-   * Soft analogue of the zoom ceiling in {@link clampView}: a zoom above the
-   * finest-level cap ({@link computeMaxZoom}) is allowed but resisted in log
-   * space (perceptually even with the rest of zooming), so wheeling in at the
-   * edge keeps responding — the bins grow a touch past their normal-browsing max
-   * — before the settle springs it back. Mirror of {@link softFloorZoom}.
-   */
+  /** Soft analogue of the zoom ceiling in {@link clampView}; see `softCeilZoom`
+   *  in `view-transform.ts`. Mirror of {@link softFloorZoom}. */
   private softCeilZoom(rawZoom: number): number {
-    const maxZoom = this.computeMaxZoom();
-    if (rawZoom <= maxZoom) return rawZoom;
-    const over = Math.log(rawZoom / maxZoom); // > 0: how far past the ceiling, in log units
-    const damped = this.rubber(over, BrowseCanvasComponent.RUBBER_ZOOM_MAX);
-    return maxZoom * Math.exp(damped);
+    return softCeilZoom(rawZoom, this.geomCtx(), this.transform.zoom);
   }
 
   /** Pyramid level whose bins render closest to the current thumbnail size
    * ({@link targetRadius}) at the given on-screen zoom. Shared by live level
-   * selection and fit framing. */
+   * selection and fit framing. See `levelForEffZoom` in `view-transform.ts`. */
   private levelForEffZoom(effZoom: number): number {
-    const meta = this.meta();
-    if (!meta || meta.levels.length === 0) return 0;
-    const idealLevel = Math.log2(
-      (meta.base_radius * effZoom) / this.targetRadius,
-    );
-    return Math.max(
-      0,
-      Math.min(meta.levels.length - 1, Math.round(idealLevel)),
-    );
+    return levelForEffZoom(this.geomCtx(), effZoom);
   }
 
   private updateActiveLevel(): void {
@@ -947,28 +782,15 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private projToScreen(px: number, py: number): [number, number] {
-    const z = this.effZoom;
-    const sx = (px - this.transform.centerX) * z + this.width / 2;
-    const sy = (py - this.transform.centerY) * z + this.height / 2;
-    return [sx, sy];
+    return projToScreen(px, py, this.transform, this.width, this.height);
   }
 
   private screenToProj(sx: number, sy: number): [number, number] {
-    const z = this.effZoom;
-    const px = (sx - this.width / 2) / z + this.transform.centerX;
-    const py = (sy - this.height / 2) / z + this.transform.centerY;
-    return [px, py];
+    return screenToProj(sx, sy, this.transform, this.width, this.height);
   }
 
   private getVisibleBounds(): [number, number, number, number] {
-    const [xmin, ymin] = this.screenToProj(0, 0);
-    const [xmax, ymax] = this.screenToProj(this.width, this.height);
-    return [
-      Math.min(xmin, xmax),
-      Math.min(ymin, ymax),
-      Math.max(xmin, xmax),
-      Math.max(ymin, ymax),
-    ];
+    return getVisibleBounds(this.transform, this.width, this.height);
   }
 
   private getVisibleTiles(): { tx: number; ty: number }[] {

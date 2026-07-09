@@ -1,0 +1,46 @@
+<div class="form-group">
+  <label class="form-label" for="demo-dataset-name" title="Optional name for the new dataset. Leave blank to use the demo's name.">Dataset Name</label>
+  <input
+    id="demo-dataset-name"
+    type="text"
+    class="form-input"
+    [ngModel]="demoDatasetName"
+    (ngModelChange)="onDemoDatasetNameInput($event)"
+    placeholder="Leave blank to use the demo's name"
+  />
+</div>
+
+@if (demoEmbedders().length > 1 || demoClippers().length > 1) {
+  <div class="form-group form-group--section">
+    <vt-import-advanced
+      [availableConverters]="[]"
+      [nativeType]="''"
+      [typeLabels]="mediaTypeLabels"
+      [embedders]="demoEmbedders()"
+      [clippers]="demoClippers()"
+      [showSourceSpecs]="false"
+      [sourceSpecs]="[]"
+      [selectedEmbedder]="selectedDemoEmbedder()"
+      (selectedEmbedderChange)="onDemoEmbedderChange($event)"
+      [selectedPatchEmbedder]="selectedDemoPatchEmbedder()"
+      (selectedPatchEmbedderChange)="selectedDemoPatchEmbedder.set($event)"
+      [selectedStructuralEmbedder]="selectedDemoStructuralEmbedder()"
+      (selectedStructuralEmbedderChange)="selectedDemoStructuralEmbedder.set($event)"
+      [lockedEmbedder]="lockedEmbedderFor(activeTab(), demoEmbedders())"
+      [selectedClipper]="selectedDemoClipper()"
+      [selectedClipperParams]="demoClipperParamValues()"
+      (clipperChooserRequested)="openClipperChooser()"
+      [buildProjection]="buildProjection"
+      (buildProjectionChange)="buildProjectionChange.emit($event)"
+      [mergeNearDuplicates]="mergeNearDuplicates"
+      (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
+    ></vt-import-advanced>
+  </div>
+}
+
+<vt-clipper-chooser
+  [open]="clipperChooserOpen"
+  [clippers]="clipperChooserClippers"
+  (selected)="onClipperChooserSelected($event)"
+  (cancelled)="onClipperChooserCancelled()"
+/>
