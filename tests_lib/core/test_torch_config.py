@@ -64,6 +64,40 @@ def test_torch_threads_constant_clamps_to_one(monkeypatch):
     assert config.TORCH_THREADS == 1
 
 
+def test_max_upload_mb_default(monkeypatch):
+    """``MAX_UPLOAD_MB`` defaults to a bounded 2 GiB cap, not unlimited."""
+    monkeypatch.delenv("VTSEARCH_MAX_UPLOAD_MB", raising=False)
+    import vtscore.config as config
+
+    config = importlib.reload(config)
+    assert config.MAX_UPLOAD_MB == 2048
+
+
+def test_max_upload_mb_honours_env(monkeypatch):
+    monkeypatch.setenv("VTSEARCH_MAX_UPLOAD_MB", "512")
+    import vtscore.config as config
+
+    config = importlib.reload(config)
+    assert config.MAX_UPLOAD_MB == 512
+
+
+def test_max_upload_mb_zero_disables_cap(monkeypatch):
+    """``VTSEARCH_MAX_UPLOAD_MB=0`` opts back into Flask's unlimited body size."""
+    monkeypatch.setenv("VTSEARCH_MAX_UPLOAD_MB", "0")
+    import vtscore.config as config
+
+    config = importlib.reload(config)
+    assert config.MAX_UPLOAD_MB == 0
+
+
+def test_max_upload_mb_negative_clamps_to_zero(monkeypatch):
+    monkeypatch.setenv("VTSEARCH_MAX_UPLOAD_MB", "-5")
+    import vtscore.config as config
+
+    config = importlib.reload(config)
+    assert config.MAX_UPLOAD_MB == 0
+
+
 def test_ensure_torch_configured_applies_constant(monkeypatch):
     """``ensure_torch_configured`` passes ``TORCH_THREADS`` to torch."""
     import vtscore.media.torch_setup as torch_setup

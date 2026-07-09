@@ -80,7 +80,7 @@ def resolve_device() -> str:
     """Resolve DEVICE='auto' to the concrete torch device string for this host."""
 
 MAX_UPLOAD_MB: int
-"""HTTP request size cap in MB; 0 = unlimited. Honours $VTSEARCH_MAX_UPLOAD_MB."""
+"""HTTP request size cap in MB; default 2048 (2 GiB), 0 = unlimited. Honours $VTSEARCH_MAX_UPLOAD_MB."""
 
 TRAIN_EPOCHS: int
 """Upper bound on MLP training epochs. Honours $VTSEARCH_TRAIN_EPOCHS; default 200."""
