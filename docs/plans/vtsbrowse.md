@@ -1,9 +1,8 @@
 # Design: VTSBrowse — a UMAP hexbin Dataset Browser in VTSearch
 
-**Status: shipped and live.** UMAP projection → server-side hex/square tile
-pyramid → Canvas 2D renderer, frozen and persisted in the dataset container.
-Thin open work below (thin-pickle save mode, empirical tuning, WebGL escape
-hatch, compaction fill ceiling). The living design spec follows the open work.
+**Status:** Thin open work remains (thin-pickle save mode, empirical tuning,
+WebGL escape hatch, compaction fill ceiling); the living design spec follows the
+open work as reference for it.
 
 VTSBrowse is a **module within VTSearch** — Browse routes under the existing
 Flask app (`vtsearch/routes/projection.py`), Browse components in the existing
@@ -28,11 +27,6 @@ embedders, embedding matrix, media serving, clipper, and concurrency stack.
   existing load-time `thin=True`) would shrink those containers dramatically, at
   the cost of making the `.pkl` no longer fully self-contained — so it needs a
   portability decision (always inline, never inline, or a per-export flag).
-  *Shipped alongside this note:* embeddings now serialize as compact `float32`
-  ndarrays instead of Python float lists, and the dataset pickles use protocol 5
-  — ~20% smaller containers and a faster load (no per-vector `PyFloat`
-  reconstruction). The peek summarizer (`peek_pickle_dataset_summary`) was
-  updated to stub numpy reconstruction so it stays cheap on the new format.
 - **Empirical tuning pass:** choose validated defaults for the UMAP fit, the
   hex-tile pyramid, and the canvas renderer (the knobs *§Empirical knobs*
   deliberately left unset). Planned in detail, ready to execute on an
@@ -87,106 +81,27 @@ tunable parameters, not baked-in constants:
   crossfade, volume source, autoplay-unlock gesture; for text/image/video:
   popup size, truncation, fade timing.
 
-## What shipped
+## Deferred sub-items within shipped areas
 
-One line per item; details in git history and the cited source files. Residual
-open sub-items are noted inline in parentheses.
+Pieces of the live feature left open, to pick up alongside the follow-ups above:
 
-- **App-wide L2 normalization at ingest** — every embedding is unit-norm where
-  it enters `medias` (`vtscore/embedding/normalize.py`, `MediaEmbedder` base +
-  pickle/ingest write paths); all similarity is plain dot product
-  (`region_similarity.py`). Breaks stored-magnitude back-compat; legacy pickles
-  re-normalize on load.
-- **Projection backend (Stages 1 + 2), Flask-free** — `vtscore/projection/`
-  (`umap_projection.py` unseeded Euclidean UMAP + PCA-2 fallback; `hexbin.py`
-  d3-hexbin in NumPy; `pyramid.py` auto-depth tile pyramid). New `umap-learn` dep.
-- **Browse routes** — `vtsearch/routes/projection.py` (`POST /build`,
-  `GET /meta`, `GET /tiles/<level>/<tx>/<ty>`), backed by the `projection_jobs`
-  JobManager and `DatasetContext` cache slots.
-- **Browse canvas frontend (Stage 3)** — `BrowseCanvasComponent` (Canvas 2D,
-  pan/zoom, LOD, viewport culling, hover hit-test), `BrowseHoverPreviewComponent`,
-  `BrowseViewComponent`, `ProjectionApiService`, `TileCacheService` (LRU),
-  `browseContextGuard`, `/browse/:datasetId` route.
-- **Projection persistence (in-container)** — coords + pyramid stored as
-  `projection.npz` in the dataset ZIP (`vtscore/projection/persistence.py`,
-  `container.append_projection`/`read_projection`); build restores instead of
-  recomputing when the media-id set matches.
-- **ZIP container format** — `.pkl` files are ZIPs (`medias.pkl` + `meta.json`
-  + optional `projection.npz`); no legacy raw-pickle/sidecar
-  (`vtscore/datasets/container.py`).
-- **Opt-in projection-at-creation** — "Build 2-D Browse projection now" checkbox
-  in `vt-import-advanced`; best-effort `_build_projection_stage` after registration.
-- **Dataset age-off** — `dataset_max_age_days` setting → `expires_at` on
-  container + registry; expired loads return 410 and auto-unregister.
-- **Hex/square bin shape** — `vtscore/projection/squarebin.py`,
-  `build_pyramid(..., bin_shape=)`, per-shape container entries,
-  `DatasetContext._pyramids`; shape derived from media type
-  (`bin_shape_for_media_type`: square for image/video/document, hex for
-  audio/text), the `browse_bin_shape` setting + on-canvas toggle removed,
-  routes/tile-cache shape-agnostic. The square lattice is a corner-anchored
-  quadtree (reps persist exactly); hex uses round-to-nearest-center.
-- **Per-theme density colormap + Browser settings tab** — Heat/Ocean/Grayscale
-  resolved against the live theme; per-media-type `browse_colormap` /
-  `browse_icon_size` settings in a Browser tab.
-- **Layout compaction** — `vtscore/projection/compaction.py` `compact_layout()`,
-  on by default (`fit_projection(..., compact=True)`); collision-aware
-  force-directed cluster packer that preserves each island's internal shape
-  exactly (Procrustes disparity 0), only closing the dead water between islands.
-  Per-media-type `browse_compact` toggle. (See *Compaction fill ceiling* above.)
-- **Configurable mouse-zooms per pyramid level** — `browse_mouse_zooms_per_level`
-  setting (default 2, clamped 1..3); per-step width factor `2 ** (1 / n)`.
-  Double-click stays a fixed 2×.
-- **Wider cell-size range + full-res at large zoom** — nine named levels
-  (`XS`..`XL`, `2XL`..`5XL`); `BrowseCanvasComponent.getThumb` fetches full-res
-  `/image` past `THUMB_NATIVE_MAX_DIM` (384px) instead of the capped `/thumbnail`.
-- **Live elapsed-time during the UMAP fit** — fit on a worker thread, 1 s
-  elapsed-seconds heartbeat (`total=0` → indeterminate bar); UMAP's numba loop
-  exposes no per-epoch callback.
-- **Item selection on the canvas (tracking only)** — `BrowseSelectionService`;
-  click toggles a bin, Shift+drag marquees; none/partial/full cell rendering;
-  `member_ids` re-derived (`tile_member_ids`, never persisted). (Open: act on the
-  selection — export / seed detector / subset projection; minimap overlay.)
-- **Keyboard shortcuts** — document-level keys gated by `shortcutsBlocked()`
-  (`utils/keyboard-shortcuts.ts`); canvas: arrows pan (eased glide), `+`/`-`
-  zoom, Ctrl/Cmd-A selects every bin in view; bin-popup: arrows walk items,
-  `+`/`-` resize preview, Ctrl/Cmd-A selects all; Help sheet split into
-  Train/Find · Browser · General sub-tabs. (Open: keyboard nav doesn't move DOM
-  focus, so Enter/Space toggles the DOM-focused entry, not the arrow-walked one.)
-- **Double-click + right-click on the canvas** — double-click zooms about the
-  cursor (click toggle deferred by `DBLCLICK_MS`); right-click opens
-  `vt-media-context-menu` (the eventual home for deferred selection *actions*).
-- **Load + project on the dashboard before entering Browse** — `BrowsePrepService`
-  loads + builds the `hex` projection with inline row progress; guard/
-  `loadProjection()` stay as the deep-link fallback.
-- **Browse a Find run's positives as their own UMAP** — Find-panel `Browse`
-  button UMAPs only the positive ids into an ephemeral `_subset_*` projection
-  (`?subset=1`). (Limitation: in-memory id handoff, so a hard reload loses it.)
-- **Browse a saved detector's positives (dataset-free)** — dashboard detector-row
-  `Browse`; `POST /api/detectors/registry/<id>/browse-positives` embeds positives
-  with the **detector's own** embedder into a throwaway `__detpos__<id>` context
-  (never persisted), projects it, reuses the standard browse stack. See
-  `vtscore/detectors/positives_browse.py`. (Open: (a) clipped/region positives
-  embedded image-level, not patch-pooled; (b) no server-side TTL for the
-  ephemeral context; (c) preview bytes held in memory for the session.)
-- **Bin-popup member ordering** — `member_ids` served in a Hilbert
-  space-filling-curve 1-D order (`_hilbert_order` in `pyramid.py`) so a dense bin
-  lists similar items together; derived from the 2-D coords, no second UMAP fit.
-  (Open: true 1-D-UMAP ordering would need a second fit + a persisted `order`
-  field on `Projection`.)
-- **Bin-popup detail preview** — grid-only popup (List/Grid toggle + `view_mode_popup`
-  removed) with a large preview pane; hovering a grid thumbnail paints the
-  full-res original; the pane opens on the bin's representative. (Open: gated on
-  `usesThumbnails` (image/video); documents get a grid thumbnail but no large
-  preview.)
-- **Zoom-persistent bin representatives** — reps chosen bottom-up so a coarse bin
-  inherits a finer bin's rep (`reps(z) ⊆ reps(z+1)`); `rebin_like` keeps
-  surviving reps put on removal. `_assign_reps` in `vtscore/projection/pyramid.py`,
-  `tests_lib/projection/test_rep_persistence.py`. (Open: re-centring a surviving
-  rep after a lopsided partial removal — deferred, lazily re-centre if wanted.)
-- **Zoom-out border fill** — the zoom-transition snapshot overscans on zoom-out
-  (`SNAP_OVERSCAN_MAX`, 2× cap) and re-renders the revealed ring from cached
-  tiles (`renderSnapshotBorder`) instead of leaving a black border. (Open: a
-  zoom-out past the 2× cap or past uncached tiles still shows black falloff.)
+- **Canvas selection actions** — selection is tracked (`BrowseSelectionService`)
+  but not acted on: export / seed detector / subset projection, plus a minimap
+  overlay.
+- **Keyboard nav focus** — canvas keyboard nav doesn't move DOM focus, so
+  Enter/Space toggles the DOM-focused entry, not the arrow-walked one.
+- **Detector-positives browse** — clipped/region positives are embedded
+  image-level (not patch-pooled); no server-side TTL for the ephemeral
+  `__detpos__<id>` context; preview bytes held in memory for the session.
+- **Bin-popup ordering** — true 1-D-UMAP member ordering (currently a Hilbert
+  order over the 2-D coords) would need a second fit + a persisted `order` field
+  on `Projection`.
+- **Bin-popup preview** — the large preview pane is gated on `usesThumbnails`
+  (image/video); documents get a grid thumbnail but no large preview.
+- **Rep re-centring** — a surviving representative is not re-centred after a
+  lopsided partial removal (lazily re-centre if wanted).
+- **Zoom-out border fill** — a zoom-out past the 2× overscan cap or past uncached
+  tiles still shows black falloff.
 
 ## Design spec (living)
 

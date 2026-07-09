@@ -1,6 +1,6 @@
 # Code-structure review
 
-**Status:** A systematic, repo-wide structural review. Theme A (the `vtscore` ↔ `vtsearch` boundary) is fully shipped, along with several Theme B mega-file splits and the Theme C/E/F quick wins — all collapsed under "What shipped" at the bottom. **The still-open work (Themes B/C/D/E/F and the prioritized backlog) is the point of this doc and leads below.**
+**Status:** The remaining structural work spans Themes B/C/D/E/F and the prioritized backlog below.
 
 This review asks: where have design decisions that were right at small scale been outgrown, and what is worth streamlining, abstracting, or reorganizing? The codebase is healthy and unusually well-documented; the findings are **accretion** problems (modules that started focused and absorbed adjacent responsibilities), not rot. Nothing here is urgent. Themes are ordered by leverage-to-effort.
 
@@ -17,7 +17,7 @@ This review asks: where have design decisions that were right at small scale bee
 
 ## Theme B — Mega-files mixing unrelated concerns (remaining)
 
-The done mega-file splits (`app.py`, `settings.py`, `load_pipeline.py`, `importers/base.py`) are under "What shipped". Still open:
+Still open:
 
 - **`app.py` hooks/errors (open follow-up on the shipped CLI split).** The request-lifecycle hooks (`before_request` / `after_request` / `teardown_request`) and the global JSON error handlers are still inline in `app.py`. They *are* part of the `app` object's lifecycle (unlike the CLI/preflight code that was extracted), so the leverage of moving them to `hooks.py` + `errors.py` is lower and the risk (decorator-registration ordering) higher; left for a scoped follow-up.
 - **`settings.py` lazy migration (open follow-up on the shipped engine split).** The legacy-migration path is still lazy (runs from `UserSettingsStore.ensure_server_loaded` on first server load) rather than a one-shot admin script — left as-is deliberately because the lazy trigger is what the default-user read-through and the CLI `--settings` flat-file flow rely on; moving it to a script is a behavior change worth its own scoped task.
@@ -96,18 +96,3 @@ contention symptoms); the frozen request-missing sentinels; the
 route `_shared.py` helpers are all sound. Also declining the proposal to
 rename every plugin family's `run()`/`export()`/`load()` to a uniform
 `execute()` — domain-meaningful names, churn dwarfs benefit.
-
----
-
-## What shipped
-
-For full detail, see the git history / merged PRs on `dev`.
-
-- **Theme A (full)** — the `vtscore` ↔ `vtsearch` boundary: fat-controller extractions, `workflow.py` de-coupling, training-pipeline merge, inverse-leak sweep.
-- **Theme B — `app.py` CLI + port-preflight extraction.** `__main__` argparse + autodetect dispatch → `vtsearch/cli_main.py` (`main(app, initialize_server)`, decomposed into `_build_parser` + per-concern helpers under the McCabe gate); Linux `/proc` port-preflight + single-instance lock → `vtsearch/port_preflight.py`. `app.py` down 1462 → ~630 lines, keeps the WSGI `app`, lifecycle hooks, error handlers, blueprint registration, `initialize_server`.
-- **Theme B — `settings.py` engine extraction.** Lock-ordering-sensitive engine (cross-process locking, two-tier caches, legacy migration, bidirectional sync state-machine) → `vtsearch/settings_store.py` `UserSettingsStore`; `settings.py` down 1935 → ~1410 lines, keeps the schema/policy layer. Shared mutable containers passed by reference so external importers and the store mutate one set of objects.
-- **Theme B — `load_pipeline.py` stage extraction.** `ConcurrencyGate` → `vtscore/concurrency/gate.py`; six post-import concerns → `vtscore/datasets/stages/` (`_common`, `clipper`, `embedding`, `finalize`, `projection`, `registry`). `load_pipeline.py` down 1592 → ~640 lines, keeps orchestration + field parsing; one-way DAG, no import cycle.
-- **Theme B — `importers/base.py` thin/rich split.** 1203-line module → `base/` package: `core.py` (`ImporterBase`, the thin shared base), `dataset_importer.py` (`DatasetImporter(ImporterBase)`, the rich/public base — kept at the identical name/path so the 3 spec-aware importers, `recaller`, ~25 test subclasses, and out-of-repo extensions are unchanged), `specs.py`, `origin.py`. The 6 truly-thin importers moved onto `ImporterBase`.
-- **Theme C quick wins** — the `_ClapBase` CLAP-embedder mixin and the settings dispatch-table generation + drift guard.
-- **Theme E quick wins** — the "shim" rename and the `labelset_ops` facade.
-- **Theme F — `PluginField` alias collapse.** Removed all seven per-family aliases (`ImporterField`, `ExporterField`, `LabelImporterField`, `LabelsetSourceField`, `SettingsSourceField`, `SettingsImporterField`, `SettingsExporterField`); every plugin/test now uses `PluginField` directly (re-exported from each family's base module). Docs updated.

@@ -1,12 +1,9 @@
 # User-Docs Screenshots
 
-**Status:** Shipped. The manifest + Playwright harness + driver scripts + all
-shots are built and embedded — **20 logical shots × 2 themes = 40 PNGs** (16
-shipped 2026-06-10; +4 and 7 retakes in the [2026-06-28
-audit](docs-audit-2026-06-28.md)). This doc is now the **full-system reference**
-for the screenshot pipeline; a future GUI change re-runs it. Open follow-ups are
-foregrounded below, then the architecture/manifest/refresh/reshoot-queue
-reference, then a terse record of what shipped.
+**Status:** This doc is the full-system reference for the screenshot pipeline
+(manifest + Playwright harness + driver scripts); the open follow-ups below
+(temp-data-dir determinism, annotation polish, canvas-shot scriptability,
+pixel-diff tolerance) are the remaining work.
 
 ## Open follow-ups
 
@@ -30,11 +27,6 @@ reference, then a terse record of what shipped.
   projection rather than rebuilding per run.
 - **Pixel-diff tolerance** for `check.sh` (font hinting / AA can cause sub-pixel
   noise across machines; may need a small per-pixel threshold).
-
-*(Resolved: real screenshots captured; chromium provisioned under
-`scripts/screenshots/`; the `<picture>`/`prefers-color-scheme` embed form
-locked; the disk-gauge masking gap closed by the 2026-06-28 audit —
-`maskVolatile` now masks RAM + disk gauges and re-asserts before capture.)*
 
 ---
 
@@ -153,64 +145,8 @@ One image is shown, always matching the **viewer's** theme. The embed is a
 Images are served by an `angular.json` asset glob copying `docs/user/assets/**`
 → `/assets/docs/assets`. Each embed carries alt text (= the manifest `caption`).
 
-## Shot list
-
-**v1 (16 shots, shipped 2026-06-10)** — README reuses guide shots; `*` = annotated:
-
-| id | Doc · section | What it shows | Annotated |
-|----|---------------|---------------|-----------|
-| `dashboard-loaded` | USER_GUIDE intro; README hero | Dashboard with a synthetic dataset row + trained-detector row (clean, no selection) | |
-| `dataset-panel` | Loading a dataset | The ☰ menu open, demo-dataset list + "import your own" | `*` |
-| `importer-picker` | Loading a dataset; demos.md | The importer list incl. 🏭 Synthetic + demo entries | `*` |
-| `importer-form` | Loading a dataset | A filled Synthetic-Dataset importer form | |
-| `three-panel` | The three-panel layout | Full labeling layout, left/centre/right labeled | `*` |
-| `autopilot-vote` | Autopilot | Centre viewer with Good/Bad, Autopilot phase 1 | `*` |
-| `autopilot-progress` | Autopilot | The four phase indicators (phase 3) + status lights | `*` |
-| `manual-controls` | Manual mode | Sort mode / Selection strategy / Inclusion rows | `*` |
-| `region-voting` | Region voting on images | An image with a drawn region rectangle (8 handles) | `*` |
-| `view-options` | View options | The inline view toolbar (thumbnail size + focus mode) | |
-| `results-grid` | View options | The left-panel media list (grid) after training | |
-| `settings-appearance` | View options | The Settings → Appearance pane (theme + toggles + scroll style) | |
-| `dashboard-manage` | Dashboard | Dataset + detector row selected, Train/Find bar | `*` |
-| `browse-view` | Browse | The Browse hex-density map + legend + minimap | `*` |
-| `export-picker` | Exporting your work | The exporter picker with a chosen exporter's form | `*` |
-| `import-detector` | Importing pre-trained detectors | The import-detector picker | |
-
-**v2 deltas (2026-06-28 audit)** — 4 new + 7 retake corrections:
-
-- **New:** `new-detector` (Blank tab), `find-view` (three-pane verification),
-  `find-stats` ("Detector Stats" modal, clipped), `achievements` (tiered panel).
-- **Retakes:** `view-options` is the inline `vt-view-controls` toolbar, not a
-  modal (list/grid toggle removed); `settings-appearance` no longer hosts Solo
-  media type (moved to Import Defaults); `importer-picker` drills into the
-  Downloaded Media catalogue; `browse-view` uses hex bins + two zoom-outs (no
-  hover popup); `dashboard-manage` annotation is a `box` so the open `⋯` menu
-  stays visible; `autopilot-progress` caption names the real phases.
-- Optional `browse-bin-popup` was **not** added (no USER_GUIDE anchor).
-
-**Determinism-risk shots:** `region-voting` (canvas drag) and `browse-view`
-(seeded, expensive UMAP + posed popup) are the only `<canvas>` shots — seed +
-disable animations, or hand-capture. The rest are DOM and diff cleanly.
-
-## What shipped
-
-- **In-app theme-matched embeds (2026-06-07).** Help-panel image
-  post-processing + theme subscription in `keyboard-help-modal.component.ts` (+
-  `.scss`), `angular.json` asset glob, and the `<picture>` convention.
-- **Shot-list audit + Browse docs (2026-06-09).** Repurposed `settings-modal` →
-  `settings-appearance`, added `manual-controls` + `browse-view`, wrote a new
-  Browse section in `USER_GUIDE.md` to home `browse-view`.
-- **Capture harness (2026-06-10).** Manifest (all 16, functions-not-steps
-  recipes), `capture.ts` (determinism knobs, annotation overlay, per-shot error
-  isolation, RAM logging), `ensure-fixtures.mjs` (`syn-imgs` 60 SigLIP imgs +
-  `doc-demo` 5g/4b detector + `syn-patch` 24 DINOv2-patch imgs), `refresh.sh` /
-  `check.sh` / `wiring-check.py` (gated). `<picture>` blocks at all 16 anchors +
-  the README hero + demos.md. RAM-safe: drives a *single* running app; free RAM
-  never dropped below ~436 MB. Also fixed doc/UI drift (datasets load via the
-  **+** button, not the ☰ hamburger).
-- **2026-06-28 capture run.** Captured against a live GRID app over an SSH tunnel
-  (browser local, embedders remote), RAM-safe on a ~3.7 GB laptop. 7 Part A
-  retakes + 4 Part B new shots (`new-detector`, `find-view`, `find-stats`,
-  `achievements`) — manifest entries + recipes added and embedded at their
-  USER_GUIDE anchors (placeholders gone). Browse PNGs 256-colour quantised to
-  stay under the 500 KB large-file cap.
+The manifest (`docs/user/screenshots.manifest.ts`) is the source of truth for
+the current shot set; `wiring-check.py` (gated in `run-tests.sh`) keeps it in
+sync with the docs and the reshoot queue. Two `<canvas>` shots (`region-voting`,
+`browse-view`) are the determinism-risk cases — seed + disable animations, or
+hand-capture; the rest are DOM and diff cleanly.

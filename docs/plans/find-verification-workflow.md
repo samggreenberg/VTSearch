@@ -1,6 +1,6 @@
 # Find Verification Workflow
 
-**Status:** Phases 1–4 all shipped (backend spine, frontend, verified-only colouring, left work-queue actions); full `./run-tests.sh` + `npm run build:prod` green. Built headless (no browser in the container), so the UI has **not been visually eyeballed** — a manual pass on a real screen is still owed. Open follow-ups below; shipped detail collapsed under "What shipped".
+**Status:** Remaining work is a manual visual pass of the UI on a real screen plus the open follow-ups below.
 
 ## The reframe (essential framing)
 
@@ -32,13 +32,3 @@ Same screen, no toggle: a user who just wants "run the detector and export the h
 - **Preserve-verified is automatic.** Find-session state (`verified_ids`/`find_scores`/votes) resets when the haystack or detector changes; the detector-scoped K fold orderings + threshold survive a same-embedder haystack switch.
 - **Stats counts ALL items** (unverified flood-filled with the detector's call, `verified_count` reported separately), with the eval baseline = the default calibrated cutoff fixed at score time. The headline is the FP/FN-vs-Inclusion sweep over `[−10, 10]` on the user's own data.
 - **Ephemeral throughout**; Unverified Export (`label_filter=unverified`) is the persistence escape hatch.
-
-## What shipped
-
-Each phase landed green under `./run-tests.sh` (+ `npm run build:prod` for frontend).
-
-- **Phase 1 — backend spine.** Inclusion decoupled from the MLP (`train_model` dropped `inclusion_value` + class-weight bias; `inclusion` lives only in `find_optimal_threshold`). Fold-ordering cache: `calculate_cross_calibration_threshold` split into `compute_fold_orderings` + `threshold_from_fold_orderings`; `calibration_cache` re-keyed to exclude inclusion. No-retrain Inclusion (`set_inclusion` → `recompute_detector_thresholds_for_inclusion`). `DetectorContext.verified_ids` + `find_scores` (in-memory, cleared on pair change; mark-verified on single-item find-mode votes). APIs: `verified` array on `GET /api/votes`, `unverified`/`verified` `label_filter` on `/api/labels/export`, new read-only `GET /api/find/stats` (adopted-label 2×2 + −10…10 FP/FN sweep); `find-label` freezes `find_scores`. (Doc-vs-code note: hidden width was already `_auto_hidden_dim(n_train)`, so the refactor only removed the class-weight bias.)
-- **Phase 2 — frontend.** No-retrain slide (`find-view.onInclusionChange` → `POST /api/inclusion`, no `runFindLabel`; backend `rethreshold_unverified_find_items`). `VoteStateService.verifiedIds$` with optimistic add/remove. Right panel = verified pile (`good/bad ∩ verified`, folded "[N] Unverified …" headers; buttons act on the full good/bad set). Boundary-walk auto-advance (`advanceToBoundary` + `nextFindSide`; "All items reviewed" toast). Unverified Export button (shared `vt-export-modal` `initialFilter`). `vt-find-stats-modal` with a dependency-free inline-SVG FP/FN-vs-inclusion chart.
-- **Phase 3 — verified-only colouring.** Items colour green/red only once verified (`find-view.unverifiedSortOrder` feeds the left queue the ranking minus verified items; media-list + stripe get empty vote sets). Big Good/Bad buttons verify instead of un-toggling (VoteStateService find-mode flag; `currentState()` reads unverified as `'none'`; `effectiveGood`/`effectiveBad` gate the centre buttons).
-- **Phase 4 — left work-queue actions.** Browse / To Dataset / Export beside the Inclusion control, scoped to unverified positives (`onBrowseUnverified` / `onToDatasetUnverified`, UI-only `unverified_good` filter resolved to the server `unverified` partition). Browse-canvas "Remove from Good" became "Verified Good" / "Verified Bad" (`browse-selection-panel`, gated on `canVerify`), marking + verifying + dropping the selection.
-- **Bug fixes (post-Phase-4).** Inclusion-slide silent no-op fixed: `train_and_threshold` now takes an optional `det_ctx` and caches the fold orderings (find-label / detector-load cold-train path threaded through), and the Find view derives Browse/To-Dataset ids from the live `sortOrder` + `threshold`; regression `tests/detectors/test_find_inclusion_slide.py`. Verified-items-vanish race fixed: `/api/votes` reads stamped with a monotonic `votesSeq`, stale responses dropped (`applyVotesFresh`, `clear()` advances the watermark); regression `frontend/src/app/services/vote-state.service.spec.ts`.

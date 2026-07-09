@@ -1,9 +1,10 @@
 # Design: CLI Autodetect with Converters and Clippers
 
-**Status:** Phase 1 shipped (detector `input_spec` + LabelSet `detector_meta`
-round-trip + CLI skip-on-mismatch). The converter-routing and re-clipping
-pipeline described below is **not yet implemented** — it is the open work.
-Open follow-ups first; the design that guides them, then shipped detail, below.
+**Status:** The converter-routing and re-clipping pipeline described below is not yet implemented — it is the open work.
+
+## Background
+
+The detector `input_spec` (`clipper` + `clipper_params`) and the `LabelSet` `detector_meta` round-trip are already in place, and the CLI skips detectors whose `input_spec.clipper` mismatches the loaded dataset (with a reload hint). The remaining work below builds the converter-routing and re-clipping pipeline on top of that.
 
 ## Open follow-ups
 
@@ -101,19 +102,3 @@ quality) via `input_spec.clip_aggregation` (default `"max"`).
 For the common case nothing changes — the pipeline auto-converts per detector's
 `media_type` and clips per its `input_spec`. A niche `--override-clipper
 sound_tiling_5s` escape hatch forces a different granularity.
-
-## What shipped (Phase 1)
-
-- Detector JSON gained the optional `input_spec` field (`clipper` +
-  `clipper_params`); detectors without it behave as before.
-- `save_detector_labels` captures the active dataset's clipper into `input_spec`
-  (clearing stale values on re-save from an unclipped dataset).
-- `LabelSet` gained an optional `detector_meta` block (`media_type`, `input_spec`,
-  `threshold`) so a `LabelsetSource` round-trip keeps the training context; legacy
-  labelsets still load.
-- `LabelsetSource.load_full()` (overridden by `server_json_file`, default wraps
-  legacy `load()`).
-- `sync_to/from_labelset_source` emit/write `input_spec` + `media_type` (threshold
-  not persisted — receiver retrains).
-- CLI `_load_and_train_detectors` skips detectors whose `input_spec.clipper`
-  mismatches the loaded dataset's clipper, with a reload hint.

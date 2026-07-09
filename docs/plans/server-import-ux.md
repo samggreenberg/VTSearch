@@ -1,17 +1,15 @@
 # Server / Services dataset-import UX
 
-**Status: Phase 1 shipped.** Came out of a hands-on audit of the three
-real-world import paths (Services extension plugin, server folder, server file
-with pre-computed vectors), driving the live UI. Open follow-ups first; shipped
-detail below.
+**Status:** Phase 1 shipped; the remaining work is the open follow-ups below
+(empty Services tab, relative-entry resolution in manifests, and the multi-user
+browse-root vs. import-root seam).
 
-**Reversal note:** single-user path confinement (the `SERVER_ROOTS` work in the
-shipped list) was later **reversed** — in single-user / no-auth mode server-path
+**Background:** Single-user path confinement (`SERVER_ROOTS` /
+`VTSEARCH_SERVER_ROOTS`) was removed — in single-user / no-auth mode server-path
 import, export, and browse are now unrestricted (the lone trusted user may reach
-any server-readable path), and `SERVER_ROOTS` / `VTSEARCH_SERVER_ROOTS` were
-removed. Multi-user per-user confinement is unchanged. The "Browse-root vs.
-import-root seam" follow-up below is therefore moot for single-user mode (browse
-is now rooted at `/`, matching the unrestricted import validation).
+any server-readable path); multi-user per-user confinement is unchanged. This
+makes the "Browse-root vs. import-root seam" follow-up below moot for single-user
+mode (browse is now rooted at `/`, matching the unrestricted import validation).
 
 ## Open follow-ups
 
@@ -34,15 +32,3 @@ is now rooted at `/`, matching the unrestricted import validation).
   media-type detection were rooted at `/` while import validation confined to
   `SERVER_ROOTS`, so a user could navigate to and select a folder outside the
   root and only get rejected at Import.
-
-## What shipped
-
-- **Unified Server-tab path policy** — `server_folder`'s `path` validated through
-  `validate_server_filepath` like `server_files`; closed a multi-user confinement
-  hole; fixed the misleading `get_file_access_base_dir` docstring. *(Later
-  reversed — see status note; `SERVER_ROOTS` removed.)*
-- **Client-side required-field gating** in the generic `form` picker
-  (`formCanSubmit` disables Import until required fields are filled).
-- **Server path browser** for both Server importers — `<vt-file-browser>` on
-  `server_files`' `server_path`, a "Browse…" `<vt-folder-browser>` toggle on
-  `server_folder` (backed by `/api/browse-media-files?source=server_fs`).
