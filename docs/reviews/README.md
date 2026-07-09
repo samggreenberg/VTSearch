@@ -9,7 +9,7 @@ be referenced from plans and PRs.
 These are **not** deleted when findings are fixed: a fixed finding is
 struck through in place so the report stays an accurate record of what was
 seen on that date. Forward-looking design work lives in
-[`../plans/`](../plans/README.md).
+[`../plans/`](../plans/).
 
 | Report | Date | What it covers |
 | --- | --- | --- |

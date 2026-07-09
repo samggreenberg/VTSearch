@@ -412,7 +412,7 @@ class DatasetContext:
         # Transient create-time flag: when set, the finalize stage runs an
         # extra near-duplicate collapse (images + text) after exact MD5
         # dedup.  Never persisted - the *result* is baked into origins, so
-        # reloads default this off.  See docs/plans/near-duplicate-detection.md.
+        # reloads default this off.
         "merge_near_duplicates",
     )
 
