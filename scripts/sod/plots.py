@@ -68,7 +68,11 @@ _METRICS = {
     "cost": "weighted FPR+FNR",
     "fpr": "FPR (false-positive rate)",
     "fnr": "FNR (false-negative rate)",
+    "f1": "F1 (at cross-cal threshold)",
+    "mean_iou": "mean IoU (top region vs GT)",
+    "corloc": "CorLoc@0.5",
 }
+_DEFAULT_METRICS = ("cost", "fpr", "fnr", "f1", "mean_iou")
 
 
 def _plot_group(
@@ -157,7 +161,7 @@ def render_all(
     rows: list[dict],
     out_dir: Path,
     *,
-    metrics: list[str] | tuple[str, ...] = ("cost", "fpr", "fnr"),
+    metrics: list[str] | tuple[str, ...] = _DEFAULT_METRICS,
     band: str = "minmax",
     show_oracle: bool = False,
     show_text_baseline: bool = False,
@@ -182,6 +186,44 @@ def render_all(
             print(f"wrote {out_path}")
 
 
+def render_inference_time(timing: list[dict], out_path: Path) -> None:
+    """Stacked bar of total time per (embedder × proposal), in seconds.
+
+    ``timing`` is the combined structure from ``sweep._build_total_timing`` — each
+    item ``{label, embed_s, compute_s, total_s}``. The bottom segment is the
+    embed+propose forward pass (a cache-miss cost, 0 s on a fully-cached run); the
+    top segment is the MLP calibrate+fit+score, which runs every sweep across all
+    K×seeds — so the chart has data even when embeddings were fully cached. Bars are
+    sorted by total time. No-op on an empty list.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    if not timing:
+        return
+    timing = sorted(timing, key=lambda t: t["total_s"], reverse=True)
+    labels = [t["label"] for t in timing]
+    embed = [t["embed_s"] for t in timing]
+    compute = [t["compute_s"] for t in timing]
+    x = range(len(labels))
+    fig, ax = plt.subplots(figsize=(max(6.0, 0.6 * len(labels)), 5))
+    ax.bar(x, embed, color="#4878c8", label="embed+propose (cache miss)")
+    ax.bar(x, compute, bottom=embed, color="#e8843c", label="MLP calibrate+fit+score")
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
+    ax.set_ylabel("total time (s)")
+    ax.set_title("Total time per config (embed + MLP, summed over K×seeds)")
+    ax.grid(True, axis="y", ls=":", alpha=0.4)
+    ax.legend(fontsize=8)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=130)
+    plt.close(fig)
+    print(f"wrote {out_path}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--results", type=Path, default=Path("docs/experiments/sod-sweep/results.jsonl"))
@@ -191,8 +233,8 @@ def main() -> int:
     ap.add_argument(
         "--metrics",
         type=lambda s: [x.strip() for x in s.split(",") if x.strip()],
-        default=["cost", "fpr", "fnr"],
-        help="which metrics to plot (default: cost,fpr,fnr)",
+        default=list(_DEFAULT_METRICS),
+        help="which metrics to plot (default: cost,fpr,fnr,f1,mean_iou)",
     )
     ap.add_argument(
         "--band-kind",

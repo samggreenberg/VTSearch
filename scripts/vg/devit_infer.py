@@ -141,8 +141,17 @@ def best_f1(scores: np.ndarray, labels: np.ndarray) -> tuple[float, float, float
 # --------------------------------------------------------------------------
 # DE-ViT model
 # --------------------------------------------------------------------------
-def build_devit(devit_root: Path, config_file: str, rpn_config: str, model_path: str, prototype: str,
-                topk: int, score_thresh: float, mult_rpn_score: bool, device: str):
+def build_devit(
+    devit_root: Path,
+    config_file: str,
+    rpn_config: str,
+    model_path: str,
+    prototype: str,
+    topk: int,
+    score_thresh: float,
+    mult_rpn_score: bool,
+    device: str,
+):
     """Build DE-ViT exactly like demo/demo.py, but repoint CLASS_PROTOTYPES at our
     one-shot prototype and override the category space at inference."""
     import torch
@@ -261,7 +270,10 @@ def main() -> int:
     ap.add_argument("--model-path", default="weights/trained/open-vocabulary/lvis/vitl_0069999.pth")
     ap.add_argument("--topk", type=int, default=10, help="DE.TOPK proposals per class (default: 10)")
     ap.add_argument(
-        "--score-thresh", type=float, default=0.0, help="ROI_HEADS.SCORE_THRESH_TEST; low keeps weak dets (default: 0.0)"
+        "--score-thresh",
+        type=float,
+        default=0.0,
+        help="ROI_HEADS.SCORE_THRESH_TEST; low keeps weak dets (default: 0.0)",
     )
     ap.add_argument(
         "--mult-rpn-score",
@@ -311,10 +323,17 @@ def main() -> int:
 
     print("building DE-ViT…", flush=True)
     model, augs, T = build_devit(
-        devit_root, args.config, args.rpn_config, args.model_path, args.prototype,
-        args.topk, args.score_thresh, args.mult_rpn_score, device,
+        devit_root,
+        args.config,
+        args.rpn_config,
+        args.model_path,
+        args.prototype,
+        args.topk,
+        args.score_thresh,
+        args.mult_rpn_score,
+        device,
     )
-    label = (args.label or (model.label_names[0] if model.label_names else "class"))
+    label = args.label or (model.label_names[0] if model.label_names else "class")
     if label not in model.label_names:
         raise SystemExit(f"label {label!r} not in prototype classes {model.label_names}")
     target_idx = model.label_names.index(label)

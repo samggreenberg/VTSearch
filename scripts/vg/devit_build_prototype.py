@@ -195,7 +195,7 @@ def load_dinov2_backbone(devit_root: Path, model_path: Path, device: str):
     model = vit_large(img_size=518, patch_size=14, init_values=1, out_indices=[2, 12, 23]).eval()
     sd = torch.load(model_path, map_location="cpu")
     sd = sd.get("model", sd)
-    bb = {k[len("backbone."):]: v for k, v in sd.items() if k.startswith("backbone.")}
+    bb = {k[len("backbone.") :]: v for k, v in sd.items() if k.startswith("backbone.")}
     if not bb:
         prefixes = sorted({k.split(".")[0] for k in sd})
         raise SystemExit(f"no 'backbone.*' keys in {model_path}; top-level prefixes were: {prefixes}")
@@ -279,9 +279,7 @@ def main() -> int:
         default=None,
         help="prototype .pth output (default: weights/<noun>_prototype.vitl14.pth under cwd)",
     )
-    ap.add_argument(
-        "--label", default=None, help="label name stored in the prototype (default: the noun, lowercased)"
-    )
+    ap.add_argument("--label", default=None, help="label name stored in the prototype (default: the noun, lowercased)")
     ap.add_argument(
         "--distractors",
         default=None,

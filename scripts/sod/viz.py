@@ -181,6 +181,7 @@ def render_predictions(
     inclusion: int,
     safe_thresholds: bool,
     gallery_n: int,
+    neg_regions: bool = False,
 ) -> None:
     """MLP prediction overlays for one config, from cache. Skips (warns) if data is missing."""
     from vtscore.eval.scoring_heads import MLPHead
@@ -196,7 +197,7 @@ def render_predictions(
     exem_dir = cache_dir / "exemplars" / dataset / slugify(cls) / reg / slug
 
     pos_ex, _ = _load_stack(exem_dir, split.train_pos, "exemplars")
-    neg_train, _ = _load_stack(regions_dir, split.train_neg, "whole_vec")
+    neg_train, _ = _load_stack(regions_dir, split.train_neg, "vecs" if neg_regions else "whole_vec")
     if pos_ex.shape[0] == 0 or neg_train.shape[0] == 0:
         print(f"  [predict] skip {embedder}/{proposal} (slug={slug}): empty exemplar/negative cache", flush=True)
         return
@@ -255,7 +256,11 @@ def render_predictions(
         # Sort TP/FP by descending score (most confident first); FN/TN ascending.
         items.sort(key=lambda t: t[0], reverse=tag in ("TP", "FP"))
         capped = [(im, ti) for _s, im, ti in items[:gallery_n]]
-        _montage(capped, tag_out / f"{tag}.png", f"{embedder}/{proposal} MLP K={k} — {tag} ({len(items)})")
+        _montage(
+            capped,
+            tag_out / f"{tag}.png",
+            f"{embedder}/{proposal} MLP K={k} thr={thr:.3f} — {tag} ({len(items)})",
+        )
 
 
 def cmd_predict(args, ds: SodDataset, split) -> None:
@@ -276,6 +281,7 @@ def cmd_predict(args, ds: SodDataset, split) -> None:
         inclusion=args.inclusion,
         safe_thresholds=args.safe_thresholds,
         gallery_n=args.gallery_n,
+        neg_regions=args.neg_regions,
     )
 
 
@@ -302,6 +308,12 @@ def main() -> int:
     ap.add_argument("--neg-ratio", type=int, default=1)
     ap.add_argument("--inclusion", type=int, default=0)
     ap.add_argument("--safe-thresholds", action=argparse.BooleanOptionalAction, default=True)
+    ap.add_argument(
+        "--neg-regions",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="train MLP negatives on proposed-region crops of negative images (match the sweep run)",
+    )
     args = ap.parse_args()
 
     with SodDataset(args.dataset) as ds:
