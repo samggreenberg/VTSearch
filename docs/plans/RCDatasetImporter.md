@@ -3,9 +3,9 @@
 **Status:** Scaffold in place; **API client implementation is the open work.**
 All four plugin scaffolds (`recaller` importer, `holder` exporter/importer,
 PullWrest media source) are registered but hidden from the picker until the
-stubs are filled in. VTSearch core changes are done (compressed to "What's
-already done" at the bottom). The open implementation plan — Steps 1–4, data-flow
-diagrams, baked design decisions, and the checklist — follows.
+stubs are filled in; the VTSearch core changes they rely on are already done.
+The open implementation plan — Steps 1–4, data-flow diagrams, baked design
+decisions, and the checklist — follows.
 
 ## Overview
 
@@ -297,17 +297,3 @@ This enables origin-based matching when importing into an RC-loaded dataset.
 - [ ] Test with live services (import → vote → export → re-import)
 - [ ] Set `hidden_from_picker = False` on all four plugins
 - [ ] Run `./run-tests.sh`: all tests must pass
-
-## What's already done (VTSearch core)
-
-- **`LabeledElement.metadata`** — optional `dict[str, Any]` per label element,
-  round-trips through `to_dict()`/`from_dict()`; media `custom_metadata` flows
-  into it when building a LabelSet from votes.
-- **`media_url` lazy-fetch** — `_resolve_media_bytes()`/`_resolve_media_string()`
-  in `MediaType` fall back to fetching `media["media_url"]` when `media_bytes` and
-  `media_path` are both absent.
-- **Origin params in enriched export** — `GET /api/labels/export?enrich=true`
-  flattens `origin.params` (`contentID`, `mediaID`) into `custom_metadata` and
-  `available_columns` (`custom_metadata` wins on name clashes).
-- **36 tests** in `tests/test_extension_scaffolds.py` cover metadata round-trip,
-  media_url resolution, plugin discovery, helpers, and enriched export.

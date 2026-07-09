@@ -1,8 +1,11 @@
 # MLP hidden-layer sizing
 
-**Status: shipped.** The one actionable finding — raising `MLP_HIDDEN_MIN`
-4 → 8 — has been applied to `vtscore/config.py` (+ `docs/ML.md`,
-`_auto_hidden_dim` docstring). Two optional sweep extensions remain open.
+**Status:** Two optional sweep extensions remain open (audio/video modalities and a small-vote-count sweep).
+
+**Background.** `MLP_HIDDEN_MIN` was raised 4 → 8 in `vtscore/config.py` (with
+`MLP_HIDDEN_MAX = 32` unchanged), removing the underfit/instability at the very
+start of a session. `scripts/overfitting_probe.py --sweep-hidden ...` reproduces
+or extends the tables below.
 
 ## Open follow-ups
 
@@ -12,20 +15,6 @@
 - Optional: sweep with small vote counts (e.g. `--n-good 6 --n-bad 6`) to
   measure the floor's effect directly in the regime where it actually binds,
   rather than inferring it from the width-4 column at 100+100 votes.
-
-## What shipped
-
-- Raised `MLP_HIDDEN_MIN` 4 → 8 in `vtscore/config.py`. Only affects the
-  tiny-vote regime: the floor binds when `n_train // 3 < 8` (fewer than ~24
-  total votes); above that `_auto_hidden_dim` already returns ≥8. Cheap
-  (8 neurons), strictly removes the observed underfit/instability at the start
-  of a session.
-- `MLP_HIDDEN_MAX = 32` left unchanged (it sits at the top of the stable
-  plateau — correct).
-- Updated `docs/ML.md` "4–32 neurons" → "8–32" and the `_auto_hidden_dim`
-  docstring; the config/training package docs match.
-- Added `scripts/overfitting_probe.py --sweep-hidden ...` alongside this doc;
-  re-run to reproduce or extend any table below.
 
 ## Method (for reproducing / extending the sweep)
 

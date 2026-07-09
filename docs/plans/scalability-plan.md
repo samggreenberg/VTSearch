@@ -1,10 +1,8 @@
 # Scalability Implementation Plan
 
-**Status:** §1.2 (S9), §2.1 (S2/S8), §2.2 (S12), and §3.3 (S16) shipped; §1.1 (S5)
-rejected as a misdiagnosis; §1.3/§1.4 (S6/S7) gated until interactive datasets
-approach 1M. Open/next work: §2.3 (S14), §3.1 (S1), §3.2 (S3/S17/S19), §3.4 (S17),
-and Phase 4 (§4.1–§4.3) — full design below, followed by the shipped/rejected
-one-liners under "What shipped".
+**Status:** Open/next work is §2.3 (S14), §3.1 (S1), §3.2 (S3/S17/S19), §3.4 (S17),
+and Phase 4 (§4.1–§4.3); §1.3/§1.4 (S6/S7) remain gated until interactive datasets
+approach 1M.
 
 **Parent:** [`scalability.md`](scalability.md); the brainstorm that defines all S#
 IDs referenced here. **Goal:** Make VTSearch usable at 100k items (near-term) and
@@ -318,46 +316,3 @@ false hit can't happen because the epoch bumps only on structural change.
   without rebuilding from per-item entries.
 - **3.2**: sort response with 200k items contains ≤700 results;
   `/api/sort/page?offset=700&limit=200` returns the next window.
-
----
-
-## What shipped
-
-- **§1.2  Subsample GMM threshold (S9)** — shipped 2026-06-19. Subsampling lives
-  inside `calculate_gmm_threshold` (single point, so every caller benefits), gated by
-  `_GMM_MAX_SAMPLES = 50_000` with a seed-42 `default_rng`; the exception-fallback
-  median is bounded to the subsample too. The one Phase-1 item with a real,
-  scale-justified payoff (the GMM fits the full score distribution, 250k–2M+).
-  `tests_lib/sorting/test_gmm_subsample.py`.
-- **§2.1  Cap and defer diversity tree construction (S2, S8)** — reload caching
-  shipped 2026-06-19 (commit 64cccd5e, PR #1987): the tree is serialized into the
-  pickle and restored via `restore_diversity_tree_from_cache` (adopted only when its
-  vector set exactly matches the loaded medias, else rebuild). Part A + Part B shipped
-  2026-06-25 (backend): `_n_init_for(node_size)` scales k-means restarts down for
-  large nodes and `auto_max_depth(...)` caps depth at `_MAX_LEAVES=4000`
-  (`vtscore/state/diversity_tree.py`), both structurally no-op on normal/test-sized
-  trees; `should_auto_build_diversity_tree(n)` (threshold
-  `DIVERSITY_TREE_AUTO_THRESHOLD=50_000`) gates the auto-build, and
-  `POST /api/datasets/registry/<id>/diversity-tree` builds on demand in a cancellable
-  job. Deferred: the frontend "Build diversity index" button (see Open follow-ups).
-- **§2.2  Debounce label sync writes (S12)** — already implemented in
-  `vtscore/labels/sync.py`: `sync_to_labelset_source` schedules a per-detector
-  `threading.Timer` (`_DEBOUNCE_DELAY = 0.2s`, keyed by `detector_id`), so a rapid
-  voting burst collapses into one background push; `flush_pending_label_syncs` drains
-  synchronously for tests/shutdown, with an `atexit` flush. 200ms (vs the 2s sketch)
-  keeps on-disk labels within a UI tick while coalescing bursts.
-- **§3.3  Virtual grid mode (S16)** — shipped. `media-list/` chunks
-  `cachedOrderedItems` into fixed-width rows through a `CdkVirtualScrollViewport`
-  (one virtual item = one row of `gridColumns` cards; columns from measured viewport
-  width, row stride from a real card via `ResizeObserver`; grid-aware
-  `scrollToIndex`/selected-scroll/prefetch). List-virtualization threshold dropped
-  500 → 150; grid virtualizes above 80. Result: list↔grid toggle ~169 ms (was ~1129),
-  grid switch ~18 ms (was ~1814), ~20–34 DOM components instead of 412. (Surfaced
-  §3.4/S17 as the deferred backend cancel/progress follow-up, still open above.)
-- **§1.1  Hash-based threshold cache key (S5)** — ❌ **REJECTED** (misdiagnosis):
-  conflates training-set size with dataset size. `X_list`/`y_list` are labeled
-  examples (votes + labelset elements), not the dataset, so the "150 MB at 100k"
-  figure never occurs; the cache is a single overwritten slot, not a growing
-  structure; and the proposed fix would *add* `np.stack(...).tobytes()` compute on the
-  comparison path to save a few MB on a non-bottleneck. Revisit only if labelsets ever
-  grow to tens of thousands of elements (a different feature).

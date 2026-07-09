@@ -1017,7 +1017,7 @@ def _insert_or_collide(new_media: dict[str, Any], file_md5: str) -> tuple[list[i
     request uploading the same bytes may have inserted a media with this MD5 in
     the meantime. Without this re-check, both requests would each insert a fresh
     media, producing duplicates with identical md5/embedding/bytes.
-    (logical-bug-audit.md H32.)
+    (2026-05-logical-bug-audit.md H32.)
 
     Returns ``(target_cids, target_id, is_new)``: on a collision the existing
     cids are returned with ``is_new=False``; otherwise the freshly-assigned id
@@ -1132,7 +1132,7 @@ def _sync_pile_label_to_storage() -> None:
     update also reaches the detector's on-disk labelset and any configured
     :class:`LabelsetSource`. Without this, the label vanishes the next time
     ``ensure_votes_match_active_dataset`` rehydrates the detector from disk.
-    (logical-bug-audit.md H33.)
+    (2026-05-logical-bug-audit.md H33.)
     """
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector  # noqa: PLC0415
 

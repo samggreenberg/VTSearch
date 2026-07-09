@@ -1,7 +1,6 @@
 # CLI streaming for massive media sources
 
-**Status:** Phase 1 shipped (lazy enumeration + streaming export + per-chunk
-embed). Open follow-ups below; shipped work at the bottom.
+**Status:** Lazy enumeration, streaming export, and per-chunk embed are in place; remaining work is the open follow-ups below (global ordering, non-streaming sort-once, streaming for email/webhook, resume/checkpoint).
 
 **Parent:** [`scalability.md`](scalability.md) — the brainstorm that defines the
 `S#` IDs. This plan implements the CLI-specific pieces (S15 enumeration, S20
@@ -27,18 +26,3 @@ python app.py --autodetect --importer server_folder --path /data/images \
   (both reject streaming today).
 - **Resume / checkpoint** for multi-hour billion-image runs (record the last
   completed chunk so an interrupted run can restart mid-tree).
-
-## What shipped
-
-- **Lazy file enumeration** — generator twins `iter_rglob_follow_symlinks` /
-  `iter_glob_top_level` in `path_validation.py`; `load_dataset_from_folder_chunked`
-  streams via `_iter_media_files` (no full `list[Path]`), media type still
-  validated eagerly.
-- **Per-chunk embed** — `_score_medias_with_detectors` calls idempotent
-  `embed_missing` and drops still-`None` items before scoring, fixing the latent
-  bug where folder chunks (`embedding=None`) raised `ValueError`.
-- **Streaming export** — opt-in `--stream-results` (`_run_streaming_pipeline`)
-  streams each chunk's above-threshold hits with no global accumulation/sort
-  (`--keep-negatives` to re-include); exporters opt in via `supports_streaming`
-  + `export_cli_streaming` (`server_json_file` NDJSON, `server_csv_file` append,
-  `gui` print); `email_smtp`/`webhook` reject streaming.

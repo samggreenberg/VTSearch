@@ -1,11 +1,9 @@
 # Progress-weight calibration
 
-**Status: executed for image + audio × CPU + GPU (2026-07).** The
-instrumentation, driver, affine fit, and `n`-aware wiring shipped; fitted
-coefficients for those four cells are in
-`vtscore/datasets/stages/_load_cost_model.py`. Remaining media types /
-embedders / the cuML split are still on the static fallback. Runs were on the
-HLTCOE Grid (a100) — the Claude Cloud container has no GPU.
+**Status:** Load-progress weights are calibrated only for image + audio × CPU +
+GPU (default embedders); the remaining media types (video/text/document),
+non-default embedders, and the cuML on/off split still use the static fallback
+and need calibration.
 
 ## Open follow-ups (remaining cells to calibrate)
 
@@ -21,69 +19,16 @@ HLTCOE Grid (a100) — the Claude Cloud container has no GPU.
 - **Multi-embedder (v3 trio)** embed loop may need its own `b_embed` summed
   across bound embedders (see the trio follow-up in the consolidation doc).
 
-## What shipped
+## Reproducing calibration for a remaining cell
 
-- Env-gated per-phase timing recorder (`VTSEARCH_PROFILE_LOAD=<path>`, JSONL,
-  library-tier), `scripts/profiling/calibrate_load_weights.py` (matrix driver),
-  `scripts/profiling/fit_load_weights.py` (affine fit).
-- `n`-aware `load_step_weights(media_type, *, n, download_size_mb, embedder)`:
-  computes the weight vector from the affine cost model + known `n` /
-  `download_size_mb` when a coefficient row exists, else returns today's static
-  vector (strict superset). Threaded through the demo call site
-  (`load_pipeline.py`), reusing the count `ui.py` already computes.
-- Coefficients checked into `_load_cost_model.py`; shape validated by a unit
-  test (all phases present, weights normalize to ~1.0). No runtime persistence —
-  coefficients are source constants (consistent with "No Persisted Vectors").
-- Tests in `tests_lib/datasets/test_load_step_weights.py` (small-`n` weights
-  model/finalize heavier; download slice collapses when cached; unknown `n`
-  returns the static vector).
-
-## Results (the four calibrated cells)
-
-Ran `{cpu, cuda} × {image (caltech101 / siglip), audio (esc50 / clap)}`,
-default embedder only, over 242 phase rows. Sizes `caltech101_{s,m,l,a}`
-(n = 412/838/1704/2954) and `esc50_{s,m,l,a}` (n = 245/588/1127/1960). The
-driver clears only the *embeddings* cache between loads, so the source stays
-warm and every load re-embeds. Warm loads skip the model phase entirely, so
-`a_model` is floored to 0.5 s (cold first-load cost recorded as a note, not
-paced against).
-
-**Fitted coefficients** (seconds; `n` = item count):
-
-| device | media | embedder | a_model (cold) | embed `a + b·n` | R² | finalize `a + b·n` | R² | n pts |
-|--------|-------|----------|---------------|-----------------|----|--------------------|----|------|
-| cpu  | image | siglip | 0.5 (39.9) | 1.97 + 0.2927·n | 1.00 | 0.47 + 0.00212·n | 0.90 | 5 |
-| cpu  | audio | clap   | 0.5 (4.5)  | 0.00 + 0.1846·n | 1.00 | 0.00 + 0.00253·n | 1.00 | 5 |
-| cuda | image | siglip | 0.5 (119.7)| 2.12 + 0.00678·n | 0.89 | 8.01 (fixed, b≈0) | 0.00 | 12 |
-| cuda | audio | clap   | 0.5 (40.1) | 0.69 + 0.03663·n | 1.00 | 0.00 + 0.00362·n | 1.00 | 12 |
-
-Download bandwidth ≈ **10.05 MB/s** (device-pooled), so
-`T_download ≈ download_size_mb / 10.05`. Per-item embed is 5–43× slower on CPU
-than GPU (SigLIP's ViT benefits far more than CLAP); GPU-image finalize is a
-~8 s fixed overhead at these sizes.
-
-**Sample resulting weights** `[download, model, embed, finalize]`:
-
-| device | media | n | archive | weights |
-|--------|-------|---|---------|---------|
-| cuda | image | 400   | 131 MB (cold) | [0.49, 0.02, 0.18, 0.31] |
-| cuda | image | 2000  | 0 (warm)      | [0.00, 0.02, 0.64, 0.34] |
-| cuda | image | 20000 | 0 (warm)      | [0.00, 0.00, 0.92, 0.08] |
-| cuda | audio | 400   | 600 MB (cold) | [0.78, 0.01, 0.20, 0.02] |
-| cpu  | image | 400   | 131 MB (cold) | [0.10, 0.00, 0.89, 0.01] |
-| cpu  | audio | 2000  | 0 (warm)      | [0.00, 0.00, 0.99, 0.01] |
-
-Small `n` weighs model/finalize/download heavier; large `n` lets embed
-dominate; the download slice collapses when there is no archive.
-
-**Reproduce:**
 ```
 CUDA_VISIBLE_DEVICES=0 python scripts/profiling/calibrate_load_weights.py --out gpu.jsonl
 CUDA_VISIBLE_DEVICES=  python scripts/profiling/calibrate_load_weights.py --out cpu.jsonl --sizes s,m,l
-python scripts/profiling/fit_load_weights.py gpu.jsonl cpu.jsonl   # prints the table above
+python scripts/profiling/fit_load_weights.py gpu.jsonl cpu.jsonl   # prints the coefficient table
 ```
 (Needs `VTSEARCH_MODELS_DIR` pointed at a warm model cache so the model phase is
-a load, not a cold HuggingFace download.)
+a load, not a cold HuggingFace download.) Add the fitted rows to
+`vtscore/datasets/stages/_load_cost_model.py`.
 
 ---
 

@@ -1,9 +1,8 @@
 # `httpResource` / reactive-resource migration for the data layer
 
-Status: **Phases 1–4 shipped** (`SettingsStateService`, `MediaStateService`,
-left-panel media-type/embedder reads, importer/exporter picker-modal reads all
-on `rxResource`; pilot compat shims removed). Pollers and `forkJoin` aggregates
-deferred by design — open follow-ups below.
+Status: Remaining work is expanding the `rxResource` read-path migration to more
+services and components; pollers and `forkJoin` aggregates stay deferred by
+design. Open follow-ups below.
 
 ## Goal & scope
 
@@ -24,8 +23,9 @@ must be half-migrated.
 
 ## Open follow-ups
 
-- **Expand to more read services** (the standing next step). Done for the four
-  services in "What shipped". A still-open refinement: if media-types /
+- **Expand to more read services** (the standing next step). Already done for
+  `SettingsStateService`, `MediaStateService`, the left-panel media-type/embedder
+  reads, and the importer/exporter picker modals. A still-open refinement: if media-types /
   embedders ever need to **re-fetch on dataset switch**, give the resource a
   `toSignal(activeContext.datasetId$)` request key instead of the eager load —
   today the component is recreated on switch, so eager-once suffices.
@@ -125,49 +125,3 @@ The loader is **effect-scheduled and promise-based**, which changes Vitest +
 - At **runtime** none of this matters: zone change detection flushes the loader
   effect immediately after the load, so the GET fires as before. Timing change
   is test-only.
-
-## What shipped
-
-**Phase 1 (pilot) — `SettingsStateService`**
-(`frontend/src/app/services/settings-state.service.ts`): reimplemented on
-`rxResource` wrapping `SettingsApiService.getSettings()`, monotonic-counter
-request trigger, `animations-off` document side-effect moved to an `effect()`.
-Pilot initially kept compat shims (sync getter + `settings$` `toObservable`
-bridge) so its ~16 consumers were untouched.
-
-**Phase 2 — `MediaStateService` + shim removal**: media-stub list
-(`GET /api/medias/ids`) migrated to `rxResource` (same monotonic-counter
-trigger; `mediasSignal()` / `isLoading()`; `selectedId` a plain `signal`;
-`selectedMedia`/`getMedia()` stay synchronous accessors). Pilot's
-`SettingsStateService` shims (`settings$`, sync `settings` getter,
-`BehaviorSubject`s, `OnDestroy`/`destroy$`) **removed**. ~18 consumer files
-across both services migrated from `.subscribe()` to constructor `effect()`
-reading the signals (templates too).
-
-**Phase 3 — left-panel reads + housekeeping**: `LeftPanelComponent`
-media-type / embedder `ngOnInit` subscribes → two **eager** `rxResource`s
-(metadata as `computed`s, derived `mediaTypeName`/`textSortAvailable` recomputed
-by constructor `effect()`s). Shared `settleResource()` test helper extracted to
-`frontend/src/app/testing/settle-resource.ts`. Dead `DetectorStateService`
-(no external consumers) deleted with its spec; the
-`ProcessorsApiService.getAutorunExtractors`/`getAutorunLocalizers` wrappers stay.
-
-**Phase 4 — picker-modal reads**: four importer/exporter picker modals moved
-eager list reads to `rxResource` following the Phase 3 pattern —
-`LabelExporterModalComponent` (`getExporters()`; dropped its whole
-`destroy$`/`OnDestroy`), `SettingsImporterModalComponent` /
-`SettingsExporterModalComponent` (`listImporters()`/`listExporters()`;
-`OnDestroy` stays for a success-message timer), and `ExportModalComponent` — all
-three init reads: eager `getStatus()` + `getExporters()`, plus the input-derived
-`exportLabels(...)` on a **trigger signal** (`labelsReady`) with `buildColumns`
-moved to a constructor `effect()`. Added an `export-modal` spec (was untested);
-updated the `label-exporter` spec for loader timing.
-
-## Behaviour changes (backwards-compat notes)
-
-- `SettingsStateService` / `MediaStateService` no longer expose Observable
-  surfaces (`settings$`, `medias$`, `loading$`, `selectedId$`) or sync getters —
-  callers read signals (`settingsSignal()`, `mediasSignal()`, `selectedId()`).
-- `DetectorStateService` removed.
-- Effect-driven side effects (medias→media-type sync, deferred autopilot sort)
-  are now microtask-scheduled rather than synchronous.

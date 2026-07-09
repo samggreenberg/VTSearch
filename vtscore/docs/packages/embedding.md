@@ -297,7 +297,7 @@ call is an **in-place** rewrite of an existing media's vector
 dict subclass can't observe a mutation to a value's internals, so those
 stages call `invalidate_embedding_matrix(ctx)` (which bumps the counter)
 afterwards. See root-cause Pattern #4 in
-`docs/plans/logical-bug-audit.md`.
+`docs/reviews/2026-05-logical-bug-audit.md`.
 
 `get_embedding_matrix_for_snap(snap)` (`vtscore/embedding/matrix.py:70`)
 is for callers that hold a media-dict snapshot (typically from

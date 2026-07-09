@@ -2,10 +2,8 @@
 
 Findings from a full end-to-end QA drive of the browse flow (ESC-50 train →
 UrbanSound8K Find → browse positives → region-select wrong items → Remove from
-Good → back to Find) that were **not** fixed in the accompanying PR, with the
-reasoning. The fixed findings (sidebar flex collapse, selection cleared on
-Re-project, stale extent after a cull, autopilot boundary-phase copy,
-dashboard Train/Find hint copy, mailto-subject typo) live in that PR.
+Good → back to Find) that remain open, with the reasoning for deferring or
+skipping each.
 
 ## Deferred
 
