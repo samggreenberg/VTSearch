@@ -614,6 +614,51 @@ class TestSaveLabels:
         finally:
             medias[first_id] = original
 
+    def test_save_labels_preserves_cross_dataset_entries(self, client):
+        """Saving while dataset B is active must not drop labels from dataset C.
+
+        Regression for the cross-dataset label problem: ``save_detector_labels``
+        used to full-replace the persisted labelset with the active dataset's
+        votes, discarding entries accumulated under other datasets.  It now
+        merges non-destructively, mirroring the automatic post-vote sync.
+        """
+        from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
+        from vtsearch.state import medias
+
+        if not medias:
+            pytest.skip("No medias loaded for this test")
+
+        client.post(
+            "/api/detectors",
+            json={"name": "CrossDS", "media_type": "audio", "text_query": "test"},
+        )
+
+        # Seed the on-disk labelset with an entry that belongs to a *different*
+        # dataset (an md5/origin that resolves to nothing in the active one).
+        path = _detector_path("CrossDS")
+        data = _read_detector(path)
+        assert data is not None
+        cross_entry = {
+            "md5": "ff" * 16,
+            "label": "good",
+            "origin_name": "from_other_dataset.wav",
+        }
+        data["labelset"] = {"labels": [cross_entry]}
+        _write_detector(path, data)
+
+        # Vote in the active dataset, then save.
+        first_id = next(iter(medias))
+        client.post(f"/api/medias/{first_id}/vote", json={"target": "good"})
+        res = client.post("/api/detectors/CrossDS/labels")
+        assert res.status_code == 200
+
+        labels = client.get("/api/detectors/CrossDS").get_json()["labelset"]["labels"]
+        md5s = {lbl.get("md5") for lbl in labels}
+        # The cross-dataset entry survives AND the active vote is added.
+        assert "ff" * 16 in md5s, "cross-dataset label was dropped by save"
+        assert len(labels) == 2
+        assert res.get_json()["num_labels"] == 2
+
 
 class TestLabelVoteIsolation:
     """Clearing votes before importing a model's labels prevents cross-contamination."""

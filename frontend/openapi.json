@@ -10880,7 +10880,7 @@
         }
       ],
       "post": {
-        "description": "Reads good_votes/bad_votes from global state and the current medias\nto build a fresh LabelSet, then persists it into the detector's JSON file.\n\nRequires both context headers: with the request-missing sentinels in\nplace, ``validated_vote_snapshot`` reports ``safe=True`` over frozen-empty\nvotes/medias, so a header-less request would pass the 409 guard and\noverwrite the named detector's labelset with an empty one.",
+        "description": "Reads good_votes/bad_votes from global state and the current medias to\nbuild a LabelSet for the *active dataset*, then merges it into the\ndetector's persisted labelset and writes it back.  The merge is\nnon-destructive across datasets: entries owned by the active dataset are\nreconciled against the current votes, while entries accumulated under\nother datasets are preserved verbatim.  This mirrors\n:func:`~vtscore.detectors.label_sync.sync_labels_to_loaded_detector`, so\nan explicit save never discards the cross-dataset labels that the\nautomatic post-vote sync deliberately keeps.\n\nRequires both context headers: with the request-missing sentinels in\nplace, ``validated_vote_snapshot`` reports ``safe=True`` over frozen-empty\nvotes/medias.  Because the save now merges rather than full-replaces, a\nheader-less request that slips past the 409 guard would reconcile *no*\nactive-dataset keys and thus leave the persisted labelset untouched, but\nthe ``@require_*_header`` decorators reject it up front regardless.",
         "operationId": "save_detector_labels",
         "responses": {
           "200": {
