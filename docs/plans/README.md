@@ -18,7 +18,6 @@ This index is a grouped filename list; open a file for its remaining scope.
 - [vtsbrowse.md](vtsbrowse.md): UMAP hexbin browser — design spec; thin open work (thin-pickle save mode, tuning, WebGL escape hatch, compaction fill ceiling)
 - [vtsbrowse-empirical-tuning.md](vtsbrowse-empirical-tuning.md): UMAP/pyramid/renderer tuning — quantitative sweep + qualitative browser review remain
 - [vtsbrowse-toponymy.md](vtsbrowse-toponymy.md): named-region "street signs" (design only)
-- [vtsbrowser-qa-followups.md](vtsbrowser-qa-followups.md): deferred QA-drive follow-ups (startup wedge, tab crash)
 - [browse-audio-player.md](browse-audio-player.md): audio-bin waveform tiles + hover player — merge bin-popup preview with now-playing, data-drive from `has_thumbnail`
 
 ## Scalability
@@ -43,7 +42,6 @@ This index is a grouped filename list; open a file for its remaining scope.
 ## Import / plugins
 
 - [server-import-ux.md](server-import-ux.md): Server/Services import UX — open follow-ups
-- [dataset-import-archives.md](dataset-import-archives.md): archive import — auto-detect / provenance follow-ups
 - [RCDatasetImporter.md](RCDatasetImporter.md): RCDatasetImporter / Holder / PullWrest extension — API client implementation (open)
 
 ## Progress / UX

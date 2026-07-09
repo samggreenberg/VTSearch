@@ -1,6 +1,6 @@
 # Code-structure review
 
-**Status:** The remaining structural work spans Themes B/C/D/E/F and the prioritized backlog below.
+**Status:** The remaining structural work spans Themes B/C/D and the prioritized backlog below.
 
 This review asks: where have design decisions that were right at small scale been outgrown, and what is worth streamlining, abstracting, or reorganizing? The codebase is healthy and unusually well-documented; the findings are **accretion** problems (modules that started focused and absorbed adjacent responsibilities), not rot. Nothing here is urgent. Themes are ordered by leverage-to-effort.
 
@@ -8,10 +8,8 @@ This review asks: where have design decisions that were right at small scale bee
 
 1. **Theme B remaining** — `DetectorContext` sub-context split (item under Theme B; ~346 call sites, do opportunistically) and the two frontend components (`dataset-importer-modal`, `browse-canvas`). Plus the `app.py` hooks/errors split and the `settings.py` lazy-migration-to-script, both left as scoped open follow-ups (see Theme B).
 2. **Theme D** — converge frontend types onto the generated client.
-3. **Theme E** — `MediaSource` / `DatasetImporter` ingestion-concept overlap.
-4. **Theme F** — revisit `SyncSource` if a third consumer appears; the `loader.py` façade.
-5. **Theme C remaining** — state-proxy registry table; image single/patch base; downloaders base.
-6. **Theme A (optional)** — convert the remaining lazy `vtsearch.auth` / `vtsearch.achievements` / `vtsearch.logging_config` / `vtsearch.routes._shared` reaches in `vtscore/` to injected registration hooks (the pattern already used for `register_setting_persister` / `register_core_config_builder`), making `vtscore/` import-clean of `vtsearch` entirely. Correct as lazy imports today; do this if/when the library tier is actually extracted.
+3. **Theme C remaining** — state-proxy registry table; image single/patch base; downloaders base.
+4. **Theme A (optional)** — convert the remaining lazy `vtsearch.auth` / `vtsearch.achievements` / `vtsearch.logging_config` / `vtsearch.routes._shared` reaches in `vtscore/` to injected registration hooks (the pattern already used for `register_setting_persister` / `register_core_config_builder`), making `vtscore/` import-clean of `vtsearch` entirely. Correct as lazy imports today; do this if/when the library tier is actually extracted.
 
 ---
 
@@ -59,31 +57,6 @@ systems with nothing enforcing agreement:
 endpoint is covered; consider Pydantic→Marshmallow generation server-side.
 *Decline* adding `zod`/`io-ts` runtime validation — heavier than the drift
 risk warrants.
-
----
-
-## Theme E — Naming / conceptual overlaps that mislead readers (remaining)
-
-(The "shim" rename and the `labelset_ops` facade shipped; this bullet is open.)
-
-- **Three overlapping ingestion concepts:** `MediaSource`,
-  `DatasetImporter`, and the bare loader functions all mean "get media in,"
-  but importers sometimes use a `MediaSource` and sometimes call loaders
-  directly, and `FetchedItem.embedding` is bypassed by loader override
-  dicts. Draw the boundaries explicitly (or fold `MediaSource` into
-  importers). Larger architectural item, not a quick win.
-
----
-
-## Theme F — Abstractions that aren't paying for themselves (remaining)
-
-(The `PluginField` alias collapse shipped; these two are open.)
-
-- **`SyncSource[LoadT, SaveT]`** (`vtscore/sync/`) has two subclasses, each
-  with one concrete implementation. Don't add more indirection here until a
-  third consumer appears.
-- **`loader.py` façade** re-exports its three sibling loaders without adding
-  abstraction.
 
 ---
 

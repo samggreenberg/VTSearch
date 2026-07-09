@@ -124,7 +124,7 @@ Header markets it as "canonical public-API inventory"; body is a Phase-1/2/3 ref
 Five files (`detector-standalone-export.md`, `docs-audit-2026-06-28.md`, `gpu-acceleration.md`, `huggingface-oauth-gated-datasets.md`, `progress-weight-calibration.md`) exist on disk but aren't in the README's enumeration. That's ~14% drift and it will keep happening — an index that shadows N sibling files needs a manual edit every time a plan is added, and `ls docs/plans/` gives you the same information for free (the filenames are already self-describing: `patch-embedder`, `vtsbrowse`, `zoneless-migration`, …). The right shape is **policy-only**: what belongs in `docs/plans/` vs `docs/reviews/`, how status headers work, when to fold a shipped plan into a `*-shipped-log.md` sibling, and the "Open follow-ups" convention. Drop the enumeration entirely. A per-plan status column would compound the same problem: metadata that has to stay in sync with every file in the directory.
 
 ### VTSBrowse cluster fragmentation
-Five files totalling ~1,517 lines cover one feature: `vtsbrowse.md` (856) + `vtsbrowse-empirical-tuning.md` (267) + `vtsbrowse-toponymy.md` (260) + `vtsbrowser-hex-circle-radius.md` (136) + `vtsbrowser-qa-followups.md` (68). Naming drift too (`vtsbrowse-*` vs `vtsbrowser-*`). Fold the two small `vtsbrowser-*` follow-up files into a shared "VTSBrowse follow-ups" child of the parent.
+Four files totalling ~1,449 lines cover one feature: `vtsbrowse.md` (856) + `vtsbrowse-empirical-tuning.md` (267) + `vtsbrowse-toponymy.md` (260) + `vtsbrowser-hex-circle-radius.md` (136). Naming drift too (`vtsbrowse-*` vs `vtsbrowser-*`). Fold the small `vtsbrowser-*` follow-up file into a shared "VTSBrowse follow-ups" child of the parent.
 
 ### `docs/plans/` vs `docs/reviews/` blurred
 Dated single-shot audits sit in `plans/` where they don't belong per the README's own note ("Point-in-time UI review/audit reports live in `../reviews/`"):
@@ -190,7 +190,7 @@ Grouped so a follow-up PR can land coherently.
 ### Batch D — Plans / reviews hygiene (one PR)
 - Trim `docs/plans/README.md` to policy-only (plans-vs-reviews boundary, status-header convention, shipped-log fold pattern, "Open follow-ups" rule); delete the enumeration and don't replace it with a status column.
 - Move `logical-bug-audit.md` and `docs-audit-2026-06-28.md` from `plans/` to `reviews/`.
-- Fold `vtsbrowser-hex-circle-radius.md` and `vtsbrowser-qa-followups.md` into `vtsbrowse.md` or a shared VTSBrowse follow-ups doc; unify `vtsbrowse-*` vs `vtsbrowser-*` naming.
+- Fold `vtsbrowser-hex-circle-radius.md` into `vtsbrowse.md` or a shared VTSBrowse follow-ups doc; unify `vtsbrowse-*` vs `vtsbrowser-*` naming.
 - Merge `scalability.md` and `scalability-plan.md`; cross-link (or absorb) `cli-stream-massive-images.md`.
 - Leave `docs/reviews/README.md` as-is; migrate U10 and O8 into their respective plan files.
 
