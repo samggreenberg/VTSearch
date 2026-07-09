@@ -728,6 +728,33 @@ Origins are set automatically when data is loaded:
 - **Pickle loads** preserve the per-element origins stored in the file.
   Old pickles without origins fall back to the legacy `creation_info` stored in the pickle (if any).
 
+### Reference (no-copy) imports and lazy clips
+
+Server-side importers (e.g. `server_folder`, `server_manifest`) can import in
+**thin mode** (`thin=True`): instead of inlining `media_bytes` into the
+registry pickle, each clip stores a `media_path` reference to the file that
+already lives on the server, and `MediaType._resolve_media_bytes`
+(`vtscore/media/base.py`) reads bytes lazily on demand
+(`media_bytes → lazy recipe → media_path → media_url`). This avoids
+duplicating storage the server already owns.
+
+No symlinks are used: the server importers already reference files in place,
+so the only duplication was the inlined pickle bytes, which a plain
+`media_path` removes; a symlink would add inodes and cleanup and would break
+across machines exactly as an absolute path does. A reference dataset
+therefore **depends on its source files staying put** — moving/deleting them
+drops the affected medias on reopen (same as a missing companion file today).
+Browser-upload importers (`local_folder`, `local_files`) stage into a temp dir
+that's deleted after import, so this option is not offered there.
+
+Clippers on reference parents transiently hydrate the parent's bytes from its
+source file (tagging it with `_lazy_source`), clip as normal, then re-lazify
+the resulting clips back to references (`vtscore/datasets/stages/clipper.py`);
+converter chains re-lazify similarly via a byte-bounded LRU cache
+(`vtscore/media/lazy_clip.py`). A chain that mixes a converter and a clipper,
+and the demo-dataset / standalone-PDF conversion paths, still fall back to
+full materialization rather than lazy resolution.
+
 ### LabelSet (`vtscore/datasets/labelset.py`)
 
 A `LabelSet` extends the dataset concept: each element carries its origin,
