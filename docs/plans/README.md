@@ -18,7 +18,6 @@ This index is a grouped filename list; open a file for its remaining scope.
 - [vtsbrowse.md](vtsbrowse.md): UMAP hexbin browser — design spec; thin open work (thin-pickle save mode, tuning, WebGL escape hatch, compaction fill ceiling)
 - [vtsbrowse-empirical-tuning.md](vtsbrowse-empirical-tuning.md): UMAP/pyramid/renderer tuning — quantitative sweep + qualitative browser review remain
 - [vtsbrowse-toponymy.md](vtsbrowse-toponymy.md): named-region "street signs" (design only)
-- [vtsbrowser-hex-circle-radius.md](vtsbrowser-hex-circle-radius.md): singleton-circle radius investigation (needs visual verification)
 - [vtsbrowser-qa-followups.md](vtsbrowser-qa-followups.md): deferred QA-drive follow-ups (startup wedge, tab crash)
 - [browse-audio-player.md](browse-audio-player.md): audio-bin waveform tiles + hover player — merge bin-popup preview with now-playing, data-drive from `has_thumbnail`
 
