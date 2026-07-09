@@ -207,6 +207,10 @@ def train_and_threshold(
         with torch.no_grad():
             X_all = X_all.to(next(model.parameters()).device)
             all_scores = sigmoid_to_finite_scores(model(X_all))
+        # The GMM blend is applied only on a *fresh* retrain: the fold-ordering
+        # cache above stores the raw cross-cal orderings, so a later inclusion
+        # slide re-derives the unblended cutoff (intentional - see
+        # recompute_detector_thresholds_for_inclusion).
         threshold = calculate_safe_threshold(threshold, all_scores, len(y_list))
 
     return model, threshold
@@ -543,6 +547,9 @@ def _train_and_score_xy(
     all_ids, scores, best_region = _score_all_media(model, clips_dict, score_emb)
 
     if safe_thresholds:
+        # Blend applies on this fresh retrain only; the cached fold orderings
+        # are raw cross-cal, so an inclusion slide re-derives the unblended
+        # cutoff (see recompute_detector_thresholds_for_inclusion).
         threshold = calculate_safe_threshold(threshold, scores, len(X_list))
 
     results = _format_results(all_ids, scores, best_region, clips_dict)
