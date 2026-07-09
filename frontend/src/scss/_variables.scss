@@ -176,18 +176,24 @@
 }
 
 [data-theme="light"] {
-  // Neutral ramp. The desk (--bg-body) is a clearly-grayed slate so that white
-  // surfaces (cards, modals, dropdowns) and the lighter side panels read as
-  // *raised* against it - mirroring the dark theme, where --bg-surface sits a
-  // visible step above the near-black --bg-body. A near-white desk (the old
-  // #f0f2f5) made white cards blend into the background. Elevation order, low
-  // to high: hover < body < subtle < panel < surface.
-  --bg-body: #e4e7ef;
+  // Neutral ramp. Follows the industry "gray chrome, white cards" pattern
+  // (GitHub, Ant, Material): the panels the user actually looks at (--bg-panel,
+  // which paints all three layout columns) carry a clearly-gray tone, and white
+  // content surfaces (cards, modals, dropdowns) read as *raised* against them.
+  // An earlier ramp put the gray only on --bg-body (the desk), but the 3-panel
+  // layout covers the desk almost entirely, so the visible chrome was near-white
+  // (#f1f3f8) and cards barely separated from it - the whole thing read washed
+  // out despite the tokens measuring on the gray side of the industry range.
+  // Pulling the gray up onto --bg-panel (L 0.84, between Material's 0.86 and
+  // Tailwind slate-200's 0.80 - still comfortably standard, not darkened past
+  // it) restores the panel-vs-card separation. Elevation order, low to high:
+  // hover < body < subtle < panel < surface.
+  --bg-body: #dbdfea;
   --bg-surface: #ffffff;
-  --bg-panel: #f1f3f8;
-  --bg-hover: #dbe0ec;
-  --bg-subtle: #edeff4;
-  --bg-secondary-btn: #dde1ec;
+  --bg-panel: #e9ecf3;
+  --bg-hover: #d3d8e6;
+  --bg-subtle: #e3e7f0;
+  --bg-secondary-btn: #d8dce9;
   // Border ramp, faintest to strongest: subtle < border < secondary. (Unlike
   // dark, where "fainter" means darker/closer-to-bg, here fainter means
   // lighter/closer-to-the-white-surface the line sits on.)
