@@ -1,26 +1,58 @@
 # VTSearch Scalability Brainstorm
 
-**Status:** Brainstorm / open; no fixes shipped yet.
+**Status:** Brainstorm / reference; no full item shipped (only the partial CLI
+streaming pieces noted inline on S13/S15/S20). This doc **defines the `S#`
+IDs** referenced by `docs/plans/scalability-plan.md`; the catalog below is the
+reference. Next-work priorities and open follow-ups are foregrounded here.
 
 **Scope:** What breaks, slows, or explodes in memory as datasets grow to
 100 k / 1 M / 10 M items, and as LabelSets grow to 1 k / 10 k / 100 k labels.
-Both GUI and CLI considered. Ordered roughly by severity / likelihood to hurt
-first.
+Both GUI and CLI considered.
 
-Line references are approximate; they will drift as the codebase evolves.
+## Suggested fix order (max-leverage first — the next work)
+
+1. **S6 + S7** (epoch counter); trivial code change, eliminates O(N log N)
+   hot path from every sort and retrain. Low risk, high gain.
+2. **S1** (mmap embedding matrix); unblocks 1 M+ datasets without OOM.
+   Moderate effort.
+3. **S5** (hash-based threshold cache key); trivial, eliminates fat cache
+   key before it becomes a memory landmine.
+4. **S9** (subsample GMM); two-line fix, eliminates a growing cost on every
+   retrain.
+5. **S2 + S8** (cap/defer diversity tree); makes 100 k+ datasets load
+   usably fast; tree can remain available but opt-in.
+6. **S3 + S17 + S19** (sparse sort results, lazy ordered items); must be
+   done together; unblocks 1 M+ in the frontend.
+7. **S12** (debounce label sync); makes voting with large labelsets not
+   stall the UI.
+8. **S16** (virtual grid); significant frontend work but required for grid
+   mode at any large scale.
+9. **S11** (parallel label resolution); required for cross-dataset detectors
+   with 10 k+ labels.
+10. **S15** (streaming pickle load); required for 10 M+ datasets.
+
+## Open follow-ups (not yet scoped for implementation)
+
+- FAISS/HNSW replacement for the diversity tree (S2 long-term)
+- Columnar storage for `medias` dict (S4)
+- Append-only vote journal for label sync sources (S12 long-term)
+- Streaming JSON export (S13)
+- Paginated sort API (S3 long-term)
+- Background MLP inference with result streaming (S10)
 
 ---
 
-## How to read this doc
+## How to read the catalog
 
 - Items are grouped by the *resource* they exhaust: **RAM**, **CPU/time**,
-  or **network/JSON**.
-- Each item has a stable ID (`S#`) for reference from PRs.
-- A sub-section at the bottom collects the **recurring root causes**: fixing
-  a pattern fixes many items at once.
+  or **network/JSON**, ordered roughly by severity / likelihood to hurt first.
+- Each item has a stable ID (`S#`) for reference from PRs and from
+  `scalability-plan.md`.
+- The **recurring root causes** table (bottom) collects patterns: fixing a
+  pattern fixes many items at once.
 - "At N" estimates are back-of-envelope with SigLIP/E5 embedding dim ~384
   (float32 = 4 B), sorted-list cost at ~1 µs/item, and JSON encoding at
-  ~50 B/element.
+  ~50 B/element. Line references are approximate and will drift.
 
 ---
 
@@ -491,37 +523,4 @@ every 100 ms by wall clock).
 | **Grid mode** missing virtual scroll | S16 |
 | **Oversized cache keys** containing raw vectors | S5 |
 
----
-
-## Suggested fix order (max-leverage first)
-
-1. **S6 + S7** (epoch counter); trivial code change, eliminates O(N log N)
-   hot path from every sort and retrain.  Low risk, high gain.
-2. **S1** (mmap embedding matrix); unblocks 1 M+ datasets without OOM.
-   Moderate effort.
-3. **S5** (hash-based threshold cache key); trivial, eliminates fat cache
-   key before it becomes a memory landmine.
-4. **S9** (subsample GMM); two-line fix, eliminates a growing cost on every
-   retrain.
-5. **S2 + S8** (cap/defer diversity tree); makes 100 k+ datasets load
-   usably fast; tree can remain available but opt-in.
-6. **S3 + S17 + S19** (sparse sort results, lazy ordered items); must be
-   done together; unblocks 1 M+ in the frontend.
-7. **S12** (debounce label sync); makes voting with large labelsets not
-   stall the UI.
-8. **S16** (virtual grid); significant frontend work but required for grid
-   mode at any large scale.
-9. **S11** (parallel label resolution); required for cross-dataset detectors
-   with 10 k+ labels.
-10. **S15** (streaming pickle load); required for 10 M+ datasets.
-
----
-
-## Open follow-ups (not yet scoped for implementation)
-
-- FAISS/HNSW replacement for the diversity tree (S2 long-term)
-- Columnar storage for `medias` dict (S4)
-- Append-only vote journal for label sync sources (S12 long-term)
-- Streaming JSON export (S13)
-- Paginated sort API (S3 long-term)
-- Background MLP inference with result streaming (S10)
+(Next-work priorities and open follow-ups are at the **top** of this doc.)

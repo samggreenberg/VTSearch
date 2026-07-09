@@ -84,7 +84,7 @@
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label" title="Choose whether decorative motion plays across the whole app">Show Animations<vt-field-hint-icon hint="Controls decorative motion everywhere at once: the swipe transition when you vote, icon spins/waggles/tilts on buttons and cards, toast and banner slide-ins, smooth scrolling, and Browse map zoom tweens. “Show” forces motion on even if your OS asks to reduce it, “Hide” always turns it off, and “OS Setting” follows your operating system’s “reduce motion” preference."></vt-field-hint-icon></label>
+            <label class="form-label" title="Choose whether decorative motion plays across the whole app">Show Animations<vt-field-hint-icon hint="Controls decorative motion across the app. “Show” forces it on, “Hide” turns it off, and “OS Setting” follows your system’s reduce-motion preference."></vt-field-hint-icon></label>
             <select class="form-select" [ngModel]="settings().show_animations" (ngModelChange)="onAnimationModeChange($event)" title="Choose whether decorative motion plays" aria-label="Show Animations">
               <option value="show">Show</option>
               <option value="hide">Hide</option>
@@ -101,7 +101,7 @@
             <span class="motion-status__label">Browser motion:</span>
             @if (browserBlocksMotion()) {
               <span class="motion-status__value">Blocked by your OS / browser</span>
-              <vt-field-hint-icon hint="Your operating system or browser is set to “reduce motion”, so VTSearch animations stay off while Show Animations is on “OS Setting” (the default) — this is almost always why animations are missing. Set Show Animations to “Show” above to force motion on anyway, or turn off “Reduce motion” in your OS accessibility settings (macOS: Accessibility → Display; Windows: Accessibility → Visual effects → Animation effects; GNOME: Accessibility → Reduce animation), or the equivalent browser flag, then reload."></vt-field-hint-icon>
+              <vt-field-hint-icon hint="Your OS or browser has “reduce motion” on, so animations stay off while Show Animations is “OS Setting”. Set it to “Show” to force motion on, or turn off “reduce motion” in your OS accessibility settings."></vt-field-hint-icon>
             } @else {
               <span class="motion-status__value">Allowed</span>
             }
@@ -206,7 +206,7 @@
 
         <!-- Import Defaults -->
         @if (activeSettingsTab() === 'imports') {
-          <h3>Import Defaults<vt-field-hint-icon hint="Default import settings per media type. These defaults auto-fill the Add Dataset modal whenever you start an import whose output is the matching media type."></vt-field-hint-icon></h3>
+          <h3>Import Defaults<vt-field-hint-icon hint="Per-media-type defaults that auto-fill the Add Dataset modal when you start a matching import."></vt-field-hint-icon></h3>
           <div class="form-group" title="Streamline the UI for a single media type. Importer and detector flows will hide their media-type pickers and lock to this type; converters that produce other types are filtered out.">
             <label class="form-label">Solo media type@if (soloMediaTypeNote) {
               <vt-field-hint-icon [hint]="soloMediaTypeNote"></vt-field-hint-icon>
@@ -268,7 +268,7 @@
 
         <!-- Browser (VTSBrowse projection browser) -->
         @if (activeSettingsTab() === 'browser') {
-          <h3>Browser<vt-field-hint-icon hint="How the Browse map looks, per media type. The same controls live on the browse canvas itself; changes here are remembered for next time."></vt-field-hint-icon></h3>
+          <h3>Browser<vt-field-hint-icon hint="How the Browse map looks, per media type. The same controls live on the map; changes here are remembered."></vt-field-hint-icon></h3>
           @if (mediaTypes().length > 0) {
             <div class="view-tabs">
               @for (mt of mediaTypes(); track mt.type_id) {
@@ -286,7 +286,7 @@
             </div>
             <div class="view-tab-content browser-tab-content">
               <div class="form-group">
-                <label class="form-label" title="Slide clusters together to close the empty space between them when the map is built">Compaction<vt-field-hint-icon hint="Slides clusters together to close the empty “oceans” between them, keeping each cluster’s shape intact. Applies the next time the map is built or rebuilt."></vt-field-hint-icon></label>
+                <label class="form-label" title="Slide clusters together to close the empty space between them when the map is built">Compaction<vt-field-hint-icon hint="Slides clusters together to close the empty gaps between them. Applies next time the map is built."></vt-field-hint-icon></label>
                 <div class="toggle-group">
                   <button class="toggle-btn" [class.toggle-btn--active]="getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), true)" title="Close the empty space between clusters">
                     On
@@ -297,7 +297,7 @@
                 </div>
               </div>
               <div class="form-group">
-                <label class="form-label" title="Colors the density heatmap. Auto follows your theme: blue (Ocean) in light mode, red→yellow (Heat) in dark mode.">Colormap<vt-field-hint-icon [hint]="browseTabUsesThumbnails(activeBrowseTab()) ? 'Thumbnail datasets (image, video) always use grayscale, so the density shading never tints the thumbnails.' : 'Darker bins mean more items in light mode; brighter bins mean more in dark mode.'"></vt-field-hint-icon></label>
+                <label class="form-label" title="Colors the density heatmap. Auto follows your theme: blue (Ocean) in light mode, red→yellow (Heat) in dark mode.">Colormap<vt-field-hint-icon [hint]="browseTabUsesThumbnails(activeBrowseTab()) ? 'Thumbnail datasets (image, video) always use grayscale.' : 'Darker bins mean more items in light mode; brighter bins mean more in dark mode.'"></vt-field-hint-icon></label>
                 @if (browseTabUsesThumbnails(activeBrowseTab())) {
                   <select class="form-select" disabled aria-label="Browser colormap" title="Thumbnail datasets always use grayscale">
                     <option value="gray" selected>Grayscale</option>
@@ -326,7 +326,7 @@
                 </select>
               </div>
               <div class="form-group">
-                <label class="form-label" title="Width in pixels of the colored border drawn around stacked (pile) thumbnails">Thumbnail border<vt-field-hint-icon hint="Only affects datasets that show thumbnails (image, video). Draws a colored band around each stacked tile; its color shows how many items are piled there. Set to 0 to hide it."></vt-field-hint-icon></label>
+                <label class="form-label" title="Width in pixels of the colored border drawn around stacked (pile) thumbnails">Thumbnail border<vt-field-hint-icon hint="Colored band around stacked thumbnail tiles (image, video); its color shows how many items are piled there. Set to 0 to hide."></vt-field-hint-icon></label>
                 <input
                   class="form-input"
                   type="number"
@@ -338,7 +338,7 @@
                   aria-label="Browser thumbnail border width" />
               </div>
               <div class="form-group">
-                <label class="form-label" title="Thumbnail size in the bin popup's grid">Popup thumbnail size<vt-field-hint-icon hint="Thumbnail size in the right-click bin popup's grid. Changing it on a popup while browsing remembers the choice here for this media type."></vt-field-hint-icon></label>
+                <label class="form-label" title="Thumbnail size in the bin popup's grid">Popup thumbnail size<vt-field-hint-icon hint="Thumbnail size in the right-click bin popup. Changing it while browsing is remembered here."></vt-field-hint-icon></label>
                 <select class="form-select" [ngModel]="getPopupGridIconSize(activeBrowseTab())" (ngModelChange)="onPopupGridIconSizeChange(activeBrowseTab(), $event)" aria-label="Bin popup thumbnail size">
                   <option value="XS">XS</option>
                   <option value="S">S</option>
@@ -348,7 +348,7 @@
                 </select>
               </div>
               <div class="form-group">
-                <label class="form-label" title="How many mouse-wheel notches (and +/- button clicks) it takes to cross one zoom level of the bin pyramid">Mouse-zooms per level<vt-field-hint-icon hint="How many mouse-wheel notches (and +/- button clicks) it takes to step from one zoom level of the bin pyramid to the next. 1 zooms a full 2× per notch; 2 (the default) zooms √2 so two notches cross a level; 3 zooms ∛2 so three notches cross a level."></vt-field-hint-icon></label>
+                <label class="form-label" title="How many mouse-wheel notches (and +/- button clicks) it takes to cross one zoom level of the bin pyramid">Mouse-zooms per level<vt-field-hint-icon hint="How many mouse-wheel notches (or +/- clicks) it takes to cross one zoom level. 1 = 2× per notch; 2 (default) = √2; 3 = ∛2."></vt-field-hint-icon></label>
                 <div class="toggle-group">
                   <button class="toggle-btn" [class.toggle-btn--active]="getBrowseMouseZoomsPerLevel(activeBrowseTab()) === 1" (click)="onBrowseMouseZoomsPerLevelChange(activeBrowseTab(), 1)" title="One notch per level (2× per zoom)">
                     1
@@ -369,7 +369,7 @@
 
         <!-- Server Settings (read-only) -->
         @if (activeSettingsTab() === 'server') {
-          <h3>Server Settings<vt-field-hint-icon hint="These are fixed when the server starts (via config file, environment, or CLI flags) and shared by everyone. They’re shown here for reference and can’t be changed."></vt-field-hint-icon></h3>
+          <h3>Server Settings<vt-field-hint-icon hint="Fixed when the server starts and shared by everyone. Shown for reference; can’t be changed here."></vt-field-hint-icon></h3>
 
           <div class="form-group">
             <label class="form-label" title="Root directory where saved datasets are stored on the server">Saved datasets directory</label>
@@ -402,7 +402,7 @@
         }
 
         @if (activeSettingsTab() === 'huggingface') {
-          <h3>HuggingFace<vt-field-hint-icon hint="Signs the server's downloads to the HuggingFace Hub. Use it to fetch gated demo datasets and gated AI models that your account has been granted access to. Your token is held in memory only and never written to disk."></vt-field-hint-icon></h3>
+          <h3>HuggingFace<vt-field-hint-icon hint="Sign in to fetch gated demo datasets and AI models your account can access. Your token is held in memory only, never written to disk."></vt-field-hint-icon></h3>
 
           @let hf = hfStatus();
           @if (hf === null) {

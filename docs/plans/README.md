@@ -1,67 +1,67 @@
 # VTSearch Plans
 
-Design docs for features that are proposed, in progress, or recently
-landed. Once a plan ships and its design notes are absorbed into
-[EXTENDING.md](../EXTENDING.md) / its siblings or
-[ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted. Plans
-whose work has fully shipped are removed; partially-shipped plans keep
-their open items and strike through the completed ones.
+Design docs for **future work**: features that are proposed or in progress,
+narrowed to the parts still owed. Plans are **not** an archive of completed
+work. When a slice ships, its narrative is deleted from the plan; a plan whose
+work has fully shipped is removed entirely (fold any durable design rationale
+into [ARCHITECTURE.md](../ARCHITECTURE.md) / [EXTENDING.md](../EXTENDING.md)
+first). Keep only a short "Background" note when the remaining work can't be
+understood without it. Git history and merged PRs are the record of what
+already landed; see [`../../CLAUDE.md`](../../CLAUDE.md) for the full policy.
 
-Open the file for status; this index is just a grouped filename list so
-it can't drift far. (Point-in-time UI review/audit reports live in
+This index is a grouped filename list; open a file for its remaining scope.
+(Point-in-time UI review/audit reports live in
 [`../reviews/`](../reviews/README.md), not here.)
 
 ## VTSBrowse (UMAP hexbin dataset browser)
 
-- [vtsbrowse.md](vtsbrowse.md): core design + what shipped (the feature is live; thin open work — tuning, WebGL escape hatch)
-- [vtsbrowse-empirical-tuning.md](vtsbrowse-empirical-tuning.md): UMAP/pyramid/renderer tuning pass (Deliverable 1 shipped — UMAP knobs are settings + the persisted projection is keyed on them; the sweep + qualitative browser pass remain)
+- [vtsbrowse.md](vtsbrowse.md): UMAP hexbin browser — design spec; thin open work (thin-pickle save mode, tuning, WebGL escape hatch, compaction fill ceiling)
+- [vtsbrowse-empirical-tuning.md](vtsbrowse-empirical-tuning.md): UMAP/pyramid/renderer tuning — quantitative sweep + qualitative browser review remain
 - [vtsbrowse-toponymy.md](vtsbrowse-toponymy.md): named-region "street signs" (design only)
 - [vtsbrowser-hex-circle-radius.md](vtsbrowser-hex-circle-radius.md): singleton-circle radius investigation (needs visual verification)
-- [vtsbrowser-qa-followups.md](vtsbrowser-qa-followups.md): QA-drive follow-ups (deferred: startup wedge, tab crash; skipped: toolbar overlay)
-- [browse-audio-player.md](browse-audio-player.md): audio bins as square waveform tiles + anchored hover player (play/pause/volume/play-point) (Phases 1 + 2 shipped: `has_thumbnail` capability + audio square tiles + anchored hover player; Phase 3 polish deferred)
+- [vtsbrowser-qa-followups.md](vtsbrowser-qa-followups.md): deferred QA-drive follow-ups (startup wedge, tab crash)
+- [browse-audio-player.md](browse-audio-player.md): audio-bin waveform tiles + hover player — merge bin-popup preview with now-playing, data-drive from `has_thumbnail`
 
 ## Scalability
 
 - [scalability.md](scalability.md): brainstorm defining the `S#` IDs (reference)
-- [scalability-plan.md](scalability-plan.md): phased implementation plan (§3.3, Phase 1.2 GMM subsampling, Phase 2.2 label-sync debounce, CLI streaming shipped; Phases 1.3/1.4/2.3 + 2.1 fast-builds open)
-- [cli-stream-massive-images.md](cli-stream-massive-images.md): CLI streaming for huge media sources (Phase 1 shipped)
-- [server-dedup-references.md](server-dedup-references.md): reference (no-copy) server import + lazy clips + lazy converter output (Phases 1, 2a, 2b all shipped; fast-follows open)
-- [near-duplicate-detection.md](near-duplicate-detection.md): collapse near-dupes (images + text) opt-in at dataset creation (Phase 1 shipped; audio/video deferred)
+- [scalability-plan.md](scalability-plan.md): phased implementation plan — §2.3, §3.1, §3.2, §3.4, and Phase 4 open
+- [cli-stream-massive-images.md](cli-stream-massive-images.md): CLI streaming for huge media sources — open follow-ups
+- [server-dedup-references.md](server-dedup-references.md): reference (no-copy) server import + lazy clips + lazy converter output — fast-follows open
+- [near-duplicate-detection.md](near-duplicate-detection.md): collapse near-dupes — audio/video near-dupe deferred
 
 ## Detectors / embedders / clippers
 
-- [patch-embedder.md](patch-embedder.md): patch-based image embedder (V1+V2 shipped; V3 in progress)
-- [structural-embedder.md](structural-embedder.md): structural (instance-matching) embedder — SIFT/VLAD + RANSAC re-rank (V1 + Stage-2 + Find re-rank shipped; larger VLAD codebook next)
-- [clipper-chain.md](clipper-chain.md): ordered converter/clipper chains (Phase 1 shipped)
-- [cli-detector-converter.md](cli-detector-converter.md): CLI autodetect with converters + clippers (Phase 1 shipped)
-- [mlp-hidden-layer-sizing.md](mlp-hidden-layer-sizing.md): empirical capacity sweep of the detector MLP hidden layer (shipped: `MLP_HIDDEN_MIN 4→8` applied, 32 cap confirmed correct; two optional cross-modality sweeps open)
+- [patch-embedder.md](patch-embedder.md): patch-based image embedder — scoring/validation follow-ups + open questions
+- [structural-embedder.md](structural-embedder.md): structural (instance-matching) embedder — larger VLAD codebook next
+- [clipper-chain.md](clipper-chain.md): ordered converter/clipper chains — frontend chooser, sidecar/registry schema, `input_spec` migration
+- [cli-detector-converter.md](cli-detector-converter.md): CLI autodetect converter-routing + re-clipping pipeline (open work)
+- [mlp-hidden-layer-sizing.md](mlp-hidden-layer-sizing.md): optional cross-modality MLP capacity sweeps
 
 ## Find / verification
 
-- [find-verification-workflow.md](find-verification-workflow.md): Find verify loop, frozen scores, Stats (Phases 1–4 shipped; follow-ups open)
+- [find-verification-workflow.md](find-verification-workflow.md): Find verify loop — visual eyeball pass + follow-ups open
 - [coverage-atlas.md](coverage-atlas.md): domain-shift + evidence-aware verification for transferred detectors (design/research writeup only)
-- [visual-genome-dataset.md](visual-genome-dataset.md): Visual Genome demo dataset — multi-label + region-annotation ground truth for eval (Phase 1 in progress; region-vote reporting / attributes open)
+- [visual-genome-dataset.md](visual-genome-dataset.md): Visual Genome demo dataset — region-vote reporting, richer vocab, attributes open
 
 ## Import / plugins
 
-- [server-import-ux.md](server-import-ux.md): Server/Services import UX (Phase 1 shipped; UX follow-ups open)
-- [dataset-import-archives.md](dataset-import-archives.md): import media from zip/tar/rar archives via folder + URL importers (shipped; auto-detect / provenance follow-ups open)
-- [RCDatasetImporter.md](RCDatasetImporter.md): RCDatasetImporter / Holder / PullWrest extension (scaffolds only; API clients open)
+- [server-import-ux.md](server-import-ux.md): Server/Services import UX — open follow-ups
+- [dataset-import-archives.md](dataset-import-archives.md): archive import — auto-detect / provenance follow-ups
+- [RCDatasetImporter.md](RCDatasetImporter.md): RCDatasetImporter / Holder / PullWrest extension — API client implementation (open)
 
 ## Progress / UX
 
-- [progress-bar-consolidation.md](progress-bar-consolidation.md): one whole-job progress bar + overall ETA + step count for multi-phase loads (shipped; text-sort unification + a few cleanups open)
-- [auto-find-settings-tab.md](auto-find-settings-tab.md): Auto-Find settings tab, per-user detector lists, detector access controls (shipped, incl. Phase 2 rename + hardening)
+- [progress-bar-consolidation.md](progress-bar-consolidation.md): whole-job progress bar — text-sort unification + cleanups open
+- [auto-find-settings-tab.md](auto-find-settings-tab.md): Auto-Find settings tab — UI caller + streaming-export fallback open
 
 ## Frontend migrations
 
-- [angular-21-upgrade.md](angular-21-upgrade.md): Angular 19→21 bump (clears npm-audit highs) + Vitest spec migration to restore runnable frontend tests (all phases shipped; kept as the migration reference for future bumps)
-- [zoneless-migration.md](zoneless-migration.md): drop zone.js for `provideZonelessChangeDetection()` + signalize reactivity (Phases 0–5 complete; production is zoneless; kept as reference)
-- [httpresource-migration.md](httpresource-migration.md): move data-layer reads onto Angular `rxResource` primitives (Phases 1–4 shipped; pollers / forkJoin aggregates deferred)
+- [angular-21-upgrade.md](angular-21-upgrade.md): reusable Angular-bump reference (upgrade path, risks, gotchas) + optional Vitest fakeAsync follow-ups
+- [httpresource-migration.md](httpresource-migration.md): move data-layer reads onto Angular `rxResource` primitives (pollers / forkJoin aggregates deferred)
 
 ## Audits / tooling / methodology
 
-- [code-structure-review.md](code-structure-review.md): repo-wide structural review of accretion problems (Theme A + mega-file splits + quick wins shipped; Themes B/D/E/F partly open)
-- [logical-bug-audit.md](logical-bug-audit.md): codebase logical-bug audit (all findings resolved; kept as the audit record)
-- [browser-vision-testing.md](browser-vision-testing.md): browser-vision testing playbook (first round ran; reusable)
-- [user-docs-screenshots.md](user-docs-screenshots.md): auto-refreshable screenshots for user docs — manifest + capture harness (shipped 2026-06-10; 32 PNGs embedded; masking polish deferred)
+- [code-structure-review.md](code-structure-review.md): repo-wide structural review — Themes B/C/D/E/F + prioritized backlog open
+- [browser-vision-testing.md](browser-vision-testing.md): reusable browser-vision testing playbook (templates for future rounds)
+- [user-docs-screenshots.md](user-docs-screenshots.md): screenshot pipeline reference (manifest + capture harness) — masking polish deferred

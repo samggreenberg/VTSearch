@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { LabelExporterModalComponent } from './label-exporter-modal.component';
+import { ToastService } from '../../../services/toast.service';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../../testing/settle-resource';
 
@@ -80,6 +81,25 @@ describe('LabelExporterModalComponent', () => {
 
     expect(component.exportComplete.emit).toHaveBeenCalled();
     expect(component.closed.emit).toHaveBeenCalled();
+  });
+
+  it('fires a success toast so feedback survives the modal closing', async () => {
+    await flushInit();
+    const toast = TestBed.inject(ToastService);
+    const successSpy = vi.spyOn(toast, 'success');
+
+    component.selectExporter(mockExporters[1] as any);
+    httpMock.expectOne('/api/labels/export').flush({
+      labels: [
+        { md5: 'a', label: 'good' },
+        { md5: 'b', label: 'good' },
+        { md5: 'c', label: 'good' },
+      ],
+    });
+    httpMock.expectOne('/api/exporters/export').flush({ success: true });
+
+    expect(successSpy).toHaveBeenCalledTimes(1);
+    expect(successSpy.mock.calls[0][0].message).toBe('Exported 3 labels to server_json_file');
   });
 
   it('should render exporter cards', async () => {

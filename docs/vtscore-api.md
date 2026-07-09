@@ -80,7 +80,7 @@ def resolve_device() -> str:
     """Resolve DEVICE='auto' to the concrete torch device string for this host."""
 
 MAX_UPLOAD_MB: int
-"""HTTP request size cap in MB; 0 = unlimited. Honours $VTSEARCH_MAX_UPLOAD_MB."""
+"""HTTP request size cap in MB; default 2048 (2 GiB), 0 = unlimited. Honours $VTSEARCH_MAX_UPLOAD_MB."""
 
 TRAIN_EPOCHS: int
 """Upper bound on MLP training epochs. Honours $VTSEARCH_TRAIN_EPOCHS; default 200."""
@@ -823,8 +823,9 @@ inherently a web-app affordance.
 
 ```python
 class DatasetContext:
-    """Per-dataset state: medias dict, diversity tree, display name, cached embedding
-    matrix. Mutable, RLock-protected."""
+    """Per-dataset state: medias (a MediasDict that bumps media_revision on
+    mutation), diversity tree, display name, cached embedding matrix keyed on
+    media_revision. Mutable, RLock-protected."""
 
 class DetectorContext:
     """Per-detector state: votes, labelset, label_embeddings cache, click times,

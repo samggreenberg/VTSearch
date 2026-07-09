@@ -1,125 +1,6 @@
 # GPU acceleration audit
 
-**Status: Phase 1 shipped (device-aware embedders + no-new-dep converter GPU
-paths). Phase 2 partially shipped — GPU UMAP + GPU k-means via cuML landed
-(opt-in dependency); video frame decode (decord) is still deferred. The
-deliberately-skipped signal-rewrite items remain out of scope. See What shipped
-(Phase 2) and Open follow-ups.**
-
-VTSearch already had production-grade device infrastructure that nothing on the
-embedding side was using:
-
-- `vtscore/config.py::resolve_device()` — honours `VTSEARCH_DEVICE`, smoke-tests
-  an actual CUDA kernel launch, and falls back to CPU when the installed torch
-  wheel can't drive the visible GPU.
-- MLP training/scoring (`vtscore/training/mlp.py`, `vtscore/detectors/training.py`)
-  already ran on the resolved device, AMP and all.
-
-But every embedder hardcoded `self._model = self._model.to("cpu")` at load time,
-pinning the heaviest part of the pipeline — embedding inference, ~95% of
-load/train/score wall-time — to CPU even on GPU hosts. The fix was small because
-every embedder's forward pass already device-follows
-`next(self._model.parameters()).device` and returns results via
-`.detach().cpu().numpy()`.
-
-## What shipped (Phase 1)
-
-- **`to_compute_device(model)`** in `vtscore/media/embedder.py`: moves a freshly
-  loaded model onto `resolve_device()`. On CPU-only hosts it is exactly the old
-  `.to("cpu")` (still materialises `meta`-device tensors from
-  `low_cpu_mem_usage=True`); on a usable GPU the model — and the whole forward
-  pass — lands on the accelerator.
-- **14 embedder load pins converted** across image/audio/video
-  (`_clap_shared`, `embedder_ast`, `embedder_whisper`, `embedder_paraspeechclap`,
-  `embedder_siglip`, `embedder_siglip2`, `embedder_clip`, `embedder_face`,
-  `_dinov2_shared`, `_dinov3_shared`, `_eupe_shared`, `embedder_xclip`,
-  `embedder_languagebind`, `embedder_videomae`). The three CLAP variants share
-  `_clap_shared`.
-- **E5 / BGE text embedders**: `SentenceTransformer(..., device=resolve_device())`
-  so they route through the smoke-test + `VTSEARCH_DEVICE` instead of
-  sentence-transformers' naive auto-pick (which would grab a GPU the wheel can't
-  run).
-- **Whisper ASR converter** (`converters/audio2text.py`): loads on
-  `resolve_device()` with FP16 on CUDA.
-- **OCR converter** (`converters/image2text.py`): requests `use_gpu` when a CUDA
-  device resolves, falling back gracefully when the kwarg is unsupported
-  (PaddleOCR 3.x removed it).
-- **Concurrency default** (`embedding/loader.py::default_concurrent_embeddings`):
-  returns 1 on an accelerator — embedders share one GPU and forward passes
-  serialise on the global `_embed_lock`, so extra concurrent jobs only multiply
-  resident weights and court OOM. `VTSEARCH_MAX_CONCURRENT_EMBEDDINGS` still
-  overrides for multi-GPU / large-VRAM nodes.
-- **GPU tests** (`tests_lib/gpu/test_gpu.py`): added self-contained coverage for
-  `to_compute_device` and the embed concurrency default, and fixed two stale
-  tests that referenced a long-removed `MediaType._model` attribute.
-
-CPU-only behaviour is byte-for-byte unchanged (`resolve_device()` → `"cpu"`).
-
-## Deliberately NOT done (and why)
-
-These were in the "no-new-dep converters" tier but were skipped after grounding
-the call in the code:
-
-- **Spectrogram rendering** (`converters/audio2image.py`, librosa mel/CQT +
-  matplotlib), **audio resampling** (librosa in the CLAP/AST path), and **image
-  thumbnail/resize** (PIL). Moving these to torchaudio/torchvision would change
-  numerical/pixel outputs that feed embeddings and pHash near-dedup — breaking
-  the origin→embedding rederivation contract and snapshot tests — for steps that
-  are no longer the bottleneck once the embedder forward pass is on the GPU. CQT
-  also isn't in core torchaudio, and the matplotlib figure render (the actual
-  cost in spectrograms) stays on CPU regardless. Net: real risk, marginal/no
-  payoff. Left on CPU on purpose.
-
-## What shipped (Phase 2 — cuML)
-
-GPU UMAP and GPU k-means now run on the accelerator when cuML/RAPIDS is present,
-falling back to the CPU libraries otherwise:
-
-- **`vtscore/gpu_backends.py`** — new shared module centralising the cuML
-  backend story (mirrors how `to_compute_device` centralises the embedder
-  story). `cuml_enabled()` is true only when `resolve_device()` returns a usable
-  CUDA device *and* `cuml` imports; `umap_fit_transform(...)` /
-  `kmeans_fit_predict(...)` construct **and fit** the GPU estimator
-  (`output_type="numpy"`) and degrade to `umap-learn` / `sklearn.cluster.KMeans`
-  on any hiccup. The fallback wraps the *whole* construct-and-fit, so a cuML
-  failure that only surfaces inside `fit` — e.g. the lazy nvrtc kernel compile
-  blowing up on a mismatched CUDA toolchain (CUDA-12 nvrtc parsing CUDA-13 fp8
-  headers) — degrades to CPU instead of crashing. The first such failure also
-  flips a process-global kill switch (`cuml_enabled()` returns `False`
-  thereafter) so the rest of the run skips cuML rather than re-paying the
-  multi-second compile failure on every call.
-- **UMAP projection** (`vtscore/projection/umap_projection.py::_umap_layout`) —
-  fits its reducer via `umap_fit_transform`; the heartbeat/threading wrapper is
-  unchanged. `cuml.manifold.UMAP` is ~20–100× on large sets.
-- **Diversity-tree k-means** (`vtscore/state/diversity_tree.py`) — the per-init
-  build loop fits via `kmeans_fit_predict`. The eager top-level
-  `sklearn` import is retained to warm the CPU cold-import before the progress
-  bar (and as the fallback).
-- **Default best-effort dependency** — `scripts/install.sh` installs cuML by
-  default on GPU hosts via `vts_install_cuml`, but as a *separate, non-fatal*
-  step: it maps the CUDA tag to `cuml-cu11` / `cuml-cu12`, installs from the
-  NVIDIA index (`pypi.nvidia.com`), and warns-and-continues on failure so a
-  slow/unreachable index or a torch resolver conflict can't abort the whole GPU
-  install. Skip with `VTSEARCH_SKIP_CUML=1`. cuML is deliberately kept OUT of the
-  main `requirements/gpu.txt` pass (a hard requirement there would break
-  non-Linux/offline GPU installs and let an index hiccup abort everything).
-  `docker/Dockerfile.gpu` installs `cuml-cu12` in its own dedicated RUN layer
-  (~+3-4 GB, ~8.5 GB → ~12 GB image), fail-loud on purpose: a build-once-ship
-  image should surface a torch/cuML resolver conflict rather than silently ship
-  a CPU-only UMAP. The runtime detection (`vtscore/gpu_backends.py`) means a
-  missing cuML just uses the CPU fallback.
-- **GPU tests** (`tests_lib/gpu/test_gpu.py::TestCuMLBackends`) — exercise the
-  factory contract (works + returns numpy whether it resolves to cuML or the CPU
-  fallback) plus end-to-end `fit_projection` and `DiversityTree` builds, with the
-  cuML-specific assertions guarded by an import check.
-
-**Output note:** cuML is a separate implementation, so the projection
-coordinates and k-means labels differ numerically from the CPU path. This is
-safe because both consumers compute their result exactly once and then
-freeze/persist it (projection frozen per dataset; diversity tree cached in the
-dataset pickle), so the non-reproducibility never surfaces; the *structure* is
-preserved. CPU-only hosts (and GPU hosts without cuML) are byte-for-byte
-unchanged.
+**Status:** Remaining Phase 2 work is GPU video frame decode (decord/PyAV+NVDEC); the signal-rewrite items below stay deliberately out of scope.
 
 ## Open follow-ups (Phase 2 — remaining)
 
@@ -131,3 +12,17 @@ When picking up the remaining item: gate any new GPU dependency behind the
 existing CPU/GPU install split and keep a CPU fallback path, exactly as the
 embedder work does via `resolve_device()` and the cuML work does via
 `vtscore/gpu_backends.py`.
+
+## Deliberately NOT done (and why)
+
+In the "no-new-dep converters" tier but skipped after grounding the call in the code:
+
+- **Spectrogram rendering** (`converters/audio2image.py`, librosa mel/CQT +
+  matplotlib), **audio resampling** (librosa in the CLAP/AST path), and **image
+  thumbnail/resize** (PIL). Moving these to torchaudio/torchvision would change
+  numerical/pixel outputs that feed embeddings and pHash near-dedup — breaking
+  the origin→embedding rederivation contract and snapshot tests — for steps that
+  are no longer the bottleneck once the embedder forward pass is on the GPU. CQT
+  also isn't in core torchaudio, and the matplotlib figure render (the actual
+  cost in spectrograms) stays on CPU regardless. Net: real risk, marginal/no
+  payoff. Left on CPU on purpose.

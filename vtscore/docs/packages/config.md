@@ -145,7 +145,7 @@ when one is in scope). Tests rely on this: they override
 |--------------------------|---------|-------------------------------|------------------------------------------------------------------------------------------------------------------|
 | `TORCH_THREADS`          | `1`     | `VTSEARCH_TORCH_THREADS`      | Native thread count for OpenMP / MKL / `torch.set_num_threads`. Default 1 keeps RSS low in constrained envs.     |
 | `DEVICE`                 | `"auto"`| `VTSEARCH_DEVICE`             | Preferred compute device. `"auto"` resolves at call time; explicit `"cuda"`, `"cuda:0"`, `"cpu"`, `"mps"` are honoured, but a CUDA device the installed torch wheel can't actually run on falls back to `"cpu"`. |
-| `MAX_UPLOAD_MB`          | `0`     | `VTSEARCH_MAX_UPLOAD_MB`      | HTTP body cap in megabytes. `0` = unlimited (Flask's out-of-the-box behaviour).                                  |
+| `MAX_UPLOAD_MB`          | `2048`  | `VTSEARCH_MAX_UPLOAD_MB`      | HTTP body cap in megabytes (default 2 GiB). Oversized requests get HTTP 413. Set to `0` for unlimited (Flask's out-of-the-box behaviour). |
 | `TRAIN_EPOCHS`           | `200`   | `VTSEARCH_TRAIN_EPOCHS`       | Upper bound on MLP training epochs. `vtscore.training.mlp.train_model` may early-stop sooner.                    |
 | `TRAIN_PATIENCE`         | `10`    | `VTSEARCH_TRAIN_PATIENCE`     | Epochs the training loss must fail to improve before early-stop fires. `0` disables early-stop.                  |
 | `DEFAULT_CALIBRATE_COUNT`| `1`     | `VTSEARCH_CALIBRATE_COUNT`    | First-run default for `CoreConfig.calibrate_count`. Min 1.                                                       |
@@ -248,7 +248,7 @@ Every env var consulted by `vtscore.config`, in one place:
 | `VTSEARCH_MODELS_DIR`       | Override `MODELS_CACHE_DIR`. Independent of `VTSEARCH_DATA_DIR`.                                |
 | `VTSEARCH_TORCH_THREADS`    | Set `TORCH_THREADS` (and therefore OMP / MKL caps). Floor of 1.                                 |
 | `VTSEARCH_DEVICE`           | Set `DEVICE`. `"auto"` is the default; pin to `"cuda"`, `"cuda:0"`, `"cpu"`, or `"mps"`.        |
-| `VTSEARCH_MAX_UPLOAD_MB`    | Set `MAX_UPLOAD_MB`. `0` = unlimited.                                                           |
+| `VTSEARCH_MAX_UPLOAD_MB`    | Set `MAX_UPLOAD_MB` (default 2048 MB). `0` = unlimited.                                         |
 | `VTSEARCH_TRAIN_EPOCHS`     | Set `TRAIN_EPOCHS` (MLP training upper bound).                                                  |
 | `VTSEARCH_TRAIN_PATIENCE`   | Set `TRAIN_PATIENCE` (early-stop patience). `0` disables.                                       |
 | `VTSEARCH_CALIBRATE_COUNT`  | Set `DEFAULT_CALIBRATE_COUNT` (first-run default; later writes go to per-user settings).        |

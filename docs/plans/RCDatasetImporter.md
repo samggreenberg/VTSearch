@@ -1,13 +1,11 @@
 # RCDatasetImporter Extension Plan
 
-**Status:** Scaffold in place; API client implementation required. All four
-plugin scaffolds (`recaller` importer, `holder` exporter/importer, PullWrest
-media source) are registered but hidden from the picker until the stubs are
-filled in. See the checklist at the bottom of this doc.
-
-This document describes everything needed to complete the ReCaller / Holder /
-PullWrest integration.  VTSearch core changes and plugin scaffolds are already
-in place; the developer's job is to implement the API client stubs.
+**Status:** Scaffold in place; **API client implementation is the open work.**
+All four plugin scaffolds (`recaller` importer, `holder` exporter/importer,
+PullWrest media source) are registered but hidden from the picker until the
+stubs are filled in; the VTSearch core changes they rely on are already done.
+The open implementation plan — Steps 1–4, data-flow diagrams, baked design
+decisions, and the checklist — follows.
 
 ## Overview
 
@@ -28,29 +26,6 @@ Four plugins are scaffolded (all `hidden_from_picker = True` until ready):
 | Holder Labelset Exporter | `vtscore/exporters/holder/__init__.py` | `LabelsetExporter` | `EXPORTER` |
 | Holder Label Importer | `vtscore/labels/importers/holder/__init__.py` | `LabelImporter` | `LABEL_IMPORTER` |
 | PullWrest Media Source | `vtscore/datasets/sources/pullwrest.py` | `MediaSource` factory | `SOURCE` |
-
-## What's already done (VTSearch core)
-
-1. **`LabeledElement.metadata`**: Optional `dict[str, Any]` on each label
-   element that round-trips through `to_dict()` / `from_dict()`.  When
-   building a LabelSet from votes, `custom_metadata` from the media
-   automatically flows into `metadata`.
-
-2. **`media_url` lazy-fetch**: `_resolve_media_bytes()` and
-   `_resolve_media_string()` in `MediaType` fall back to fetching from
-   `media["media_url"]` when `media_bytes` and `media_path` are both
-   absent.
-
-3. **Origin params in enriched export**: `GET /api/labels/export?enrich=true`
-   flattens `origin.params` (e.g. `contentID`, `mediaID`) into
-   `custom_metadata` and `available_columns`.  `custom_metadata` values
-   override same-named `origin.params` if both are present.
-
-4. **36 tests** in `tests/test_extension_scaffolds.py` covering metadata
-   round-trip, media_url resolution, plugin discovery, helper functions,
-   and enriched export.
-
----
 
 ## Step 1: Implement API clients
 
@@ -134,8 +109,6 @@ Replace stubs in:
   write_entry)
 - `vtscore/labels/importers/holder/__init__.py` (read_folder)
 
----
-
 ## Step 2: Declare any new dependencies in pyproject.toml
 
 If the API clients use a package that isn't already declared (e.g.
@@ -146,8 +119,6 @@ imported package is declared there.
 
 Re-run `bash scripts/install.sh` (or any editable install) to pick
 up the new dep.
-
----
 
 ## Step 3: Test with real services
 
@@ -192,16 +163,12 @@ Once API clients work, test the full round-trip:
 4. Import labels from Holder using the same `holder_id`
 5. Verify votes match
 
----
-
 ## Step 4: Flip `hidden_from_picker`
 
 When the plugins are ready for production:
 
 1. Set `hidden_from_picker = False` in each plugin class
 2. The plugins will immediately appear in the frontend UI
-
----
 
 ## Data flow diagrams
 
@@ -270,8 +237,6 @@ POST /api/label-importers/import/holder  {holder_id: "H123"}
     └── VTSearch matches to existing media by origin+origin_name or md5
 ```
 
----
-
 ## Key design decisions (already baked in)
 
 ### Per-media origin (not queryID)
@@ -316,8 +281,6 @@ format that the RC importer creates:
 ```
 
 This enables origin-based matching when importing into an RC-loaded dataset.
-
----
 
 ## Checklist
 

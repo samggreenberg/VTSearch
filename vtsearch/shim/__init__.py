@@ -110,7 +110,7 @@ def register_flask_context_resolvers() -> None:
     predicate so :func:`vtscore.state.core.get_active_context` returns the
     frozen request-missing sentinel (rather than the global empty
     context) when a request arrives without an ``X-Dataset-Id`` /
-    ``X-Detector-Id`` header - see ``docs/plans/logical-bug-audit.md``
+    ``X-Detector-Id`` header - see ``docs/reviews/2026-05-logical-bug-audit.md``
     H13 / H16.
     """
     from vtscore.state.core import (

@@ -258,6 +258,78 @@ def register_detector_context_resolver(fn: Callable[[], Any]) -> None:
 # ---------------------------------------------------------------------------
 
 
+class MediasDict(dict):
+    """A ``dict`` of media items that bumps a revision counter on mutation.
+
+    Backs :attr:`DatasetContext.medias`.  The embedding-matrix and
+    region-matrix caches key their validity on ``ctx.media_revision``
+    (see :mod:`vtscore.embedding.matrix`); routing every add / remove /
+    replace through this subclass means those *structural* mutations bump
+    the revision automatically, so no call site has to remember to
+    invalidate the derived caches after changing which media are loaded.
+
+    Limitation (important): a ``dict`` subclass only observes changes to
+    the *key → value* mapping.  An in-place edit of a value dict - e.g.
+    ``medias[cid]["embedding"] = vec`` while re-embedding or clipping -
+    never calls ``__setitem__`` on this container, so it does **not** bump
+    the counter.  Code that rewrites a media's vector in place must bump it
+    itself via :meth:`DatasetContext.bump_media_revision`; the embed / clip
+    load stages do this through ``invalidate_embedding_matrix``.  This is
+    the ``media_revision`` follow-up (root-cause Pattern #4) recorded in
+    ``docs/reviews/2026-05-logical-bug-audit.md``.
+
+    Over-bumping (bumping when nothing actually changed) is always safe: it
+    only forces an unnecessary cache rebuild, never serves a stale one.
+    """
+
+    __slots__ = ("_on_mutate",)
+
+    def __init__(self, on_mutate: Callable[[], None], *args: Any, **kwargs: Any) -> None:
+        # dict's C-level constructor / update populate directly without
+        # calling our Python __setitem__, so seeding from *args* does not
+        # fire _on_mutate - the owner counts construction as one bump when it
+        # assigns the dict, not once per seeded item.
+        object.__setattr__(self, "_on_mutate", on_mutate)
+        super().__init__(*args, **kwargs)
+
+    def __setitem__(self, key: Any, value: Any) -> None:
+        super().__setitem__(key, value)
+        self._on_mutate()
+
+    def __delitem__(self, key: Any) -> None:
+        super().__delitem__(key)  # raises before the bump if key is absent
+        self._on_mutate()
+
+    def pop(self, *args: Any) -> Any:
+        n = len(self)
+        result = super().pop(*args)
+        if len(self) != n:
+            self._on_mutate()
+        return result
+
+    def popitem(self) -> Any:
+        result = super().popitem()  # raises on empty before the bump
+        self._on_mutate()
+        return result
+
+    def clear(self) -> None:
+        had_items = bool(self)
+        super().clear()
+        if had_items:
+            self._on_mutate()
+
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        super().update(*args, **kwargs)
+        self._on_mutate()
+
+    def setdefault(self, key: Any, default: Any = None) -> Any:
+        existed = key in self
+        result = super().setdefault(key, default)
+        if not existed:
+            self._on_mutate()
+        return result
+
+
 class DatasetContext:
     """All mutable state that belongs to a single loaded dataset.
 
@@ -268,16 +340,28 @@ class DatasetContext:
 
     __slots__ = (
         "dataset_id",
-        "medias",
+        # Backing store for the ``medias`` property (a :class:`MediasDict`)
+        # and the monotonic revision counter it bumps.  ``media_revision``
+        # advances on every structural mutation of the medias (and on every
+        # in-place vector rewrite that calls ``bump_media_revision``); the
+        # embedding / region matrix caches key their validity on it instead
+        # of comparing sorted id lists (root-cause Pattern #4, see
+        # ``docs/reviews/2026-05-logical-bug-audit.md``).
+        "_medias",
+        "_media_revision",
         "diversity_tree",
         "dataset_display_name",
-        # Cached contiguous (N, D) float32 embedding matrix and the sorted
-        # media-id list it corresponds to.  Built lazily on first access by
+        # Cached contiguous (N, D) float32 embedding matrix, the sorted
+        # media-id list it corresponds to, and the ``media_revision`` it was
+        # built at.  Built lazily on first access by
         # ``vtscore.embedding.matrix.get_embedding_matrix`` and reused
         # across cosine sort, MLP scoring, and diversity-tree construction so
-        # we don't rebuild a 10k-row matrix per call.
+        # we don't rebuild a 10k-row matrix per call.  Cache validity is the
+        # revision match; the id list is kept for the returned tuple / region
+        # snap-key match.
         "_emb_matrix_ids",
         "_emb_matrix",
+        "_emb_matrix_revision",
         # Cached *flattened region matrix* for patch-region (e.g. DINOv3)
         # datasets, mirroring ``_emb_matrix`` but expanded to one row per
         # (media, region) pair.  ``_region_matrix`` is the ``(R, D)`` float32
@@ -287,9 +371,11 @@ class DatasetContext:
         # Built lazily by ``vtscore.embedding.matrix.get_region_matrix_for_snap``
         # and reused across votes so online retraining never rebuilds the
         # multi-hundred-thousand-row matrix per vote.  Keyed, like
-        # ``_emb_matrix``, on the sorted media-id list in ``_region_matrix_ids``.
+        # ``_emb_matrix``, on the sorted media-id list in ``_region_matrix_ids``
+        # plus the ``media_revision`` it was built at (``_region_matrix_revision``).
         "_region_matrix_ids",
         "_region_matrix",
+        "_region_matrix_revision",
         "_region_media_index",
         "_region_index_per_row",
         # VTSBrowse: cached projection (frozen at ingest) + per-bin-shape
@@ -332,13 +418,20 @@ class DatasetContext:
 
     def __init__(self, dataset_id: str = "") -> None:
         self.dataset_id: str = dataset_id
-        self.medias: dict[int, dict[str, Any]] = {}
+        # ``_media_revision`` must exist before ``_medias`` so the MediasDict's
+        # mutate callback can safely bump it.  Assign the backing slot directly
+        # (not via the ``medias`` setter) so construction leaves the revision
+        # at 0 rather than counting itself as a mutation.
+        self._media_revision: int = 0
+        self._medias: MediasDict = MediasDict(self.bump_media_revision)
         self.diversity_tree: Any = None  # DiversityTree | None
         self.dataset_display_name: str | None = None
         self._emb_matrix_ids: list[int] | None = None
         self._emb_matrix: Any = None  # np.ndarray | None
+        self._emb_matrix_revision: int | None = None  # media_revision the matrix was built at
         self._region_matrix_ids: list[int] | None = None
         self._region_matrix: Any = None  # np.ndarray | None, shape (R, D)
+        self._region_matrix_revision: int | None = None  # media_revision the region matrix was built at
         self._region_media_index: Any = None  # np.ndarray | None, int64 (R,)
         self._region_index_per_row: Any = None  # np.ndarray | None, int64 (R,)
         self._projection: Any = None  # Projection | None
@@ -360,6 +453,50 @@ class DatasetContext:
         self._structural_embedder: str | None = None
         self._binding_explicit: bool = False
         self.merge_near_duplicates: bool = False
+
+    # ------------------------------------------------------------------
+    # Medias + revision counter (root-cause Pattern #4)
+    # ------------------------------------------------------------------
+
+    @property
+    def medias(self) -> MediasDict:
+        """The dataset's ``{id: media}`` map, as a revision-tracking dict.
+
+        Structural mutations (add / remove / replace an entry) bump
+        :attr:`media_revision` automatically via :class:`MediasDict`.
+        """
+        return self._medias
+
+    @medias.setter
+    def medias(self, value: dict[int, dict[str, Any]]) -> None:
+        # Wrap any assigned mapping in a fresh MediasDict bound to *this*
+        # context, then count the wholesale replacement as one mutation so a
+        # cached matrix built against the old contents is invalidated even
+        # when the new id set happens to match the old one.
+        self._medias = MediasDict(self.bump_media_revision, value)
+        self.bump_media_revision()
+
+    @property
+    def media_revision(self) -> int:
+        """Monotonic counter, advanced on every mutation of the medias.
+
+        The embedding-matrix and region-matrix caches compare this single
+        int instead of two sorted id lists, so a mutation that changes
+        vectors without changing the id set still invalidates them
+        (root-cause Pattern #4 in ``docs/reviews/2026-05-logical-bug-audit.md``).
+        """
+        return self._media_revision
+
+    def bump_media_revision(self) -> None:
+        """Advance :attr:`media_revision` by one.
+
+        Called automatically by :class:`MediasDict` on structural changes.
+        Call it directly after an *in-place* rewrite of a media's embedding
+        vector (which a dict subclass can't observe) so the derived matrix
+        caches rebuild; the embed / clip stages do so via
+        ``invalidate_embedding_matrix``.
+        """
+        self._media_revision += 1
 
     # ------------------------------------------------------------------
     # Role-typed embedder binding
@@ -544,7 +681,7 @@ class DetectorContext:
         # ``populate_label_embeddings`` detect a region→none (or any region
         # edit) transition and re-resolve instead of returning a stale
         # region-pooled vector keyed to an element that no longer has a
-        # region.  See ``logical-bug-audit.md`` finding M4.
+        # region.  See ``2026-05-logical-bug-audit.md`` finding M4.
         "label_embedding_regions",
         # Cross-dataset local features (StructuralFeatures) for the labelset's
         # elements, keyed by stable_element_id.  Re-derived from each element's
@@ -698,13 +835,20 @@ class _RequestMissingDatasetContext(DatasetContext):
         # Use object.__setattr__ to bypass our own write guard while
         # initialising the slot values.
         object.__setattr__(self, "dataset_id", "__request_missing__")
-        object.__setattr__(self, "medias", _FrozenDict("dataset"))
+        # ``medias`` is a property on the base class; write its backing slot
+        # directly with a frozen dict so every mutation raises.  The revision
+        # counter is inert here (a frozen dict never mutates), but the slot
+        # must exist for the property / bump machinery not to AttributeError.
+        object.__setattr__(self, "_medias", _FrozenDict("dataset"))
+        object.__setattr__(self, "_media_revision", 0)
         object.__setattr__(self, "diversity_tree", None)
         object.__setattr__(self, "dataset_display_name", None)
         object.__setattr__(self, "_emb_matrix_ids", None)
         object.__setattr__(self, "_emb_matrix", None)
+        object.__setattr__(self, "_emb_matrix_revision", None)
         object.__setattr__(self, "_region_matrix_ids", None)
         object.__setattr__(self, "_region_matrix", None)
+        object.__setattr__(self, "_region_matrix_revision", None)
         object.__setattr__(self, "_region_media_index", None)
         object.__setattr__(self, "_region_index_per_row", None)
         object.__setattr__(self, "_text_embedder", None)

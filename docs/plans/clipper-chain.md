@@ -1,201 +1,10 @@
 # Clipper chain
 
-*Status: Phase 1 shipped. The dataset-load pipeline accepts an ordered
-list of converter/clipper steps via a new `clipper_chain` field, stamps
-the resolved trail on every clip's `origin.params`, and the cross-dataset
-resolver replays the chain end-to-end. Phases 2-4 (frontend chooser,
-sidecar JSON, detector `input_spec` migration) are deferred (see Open
-follow-ups).*
+**Status:** Phases 2–4 (frontend chain chooser, sidecar/registry schema, detector `input_spec` migration) plus the open follow-ups below remain.
 
-This plan implements a `clipper_chain` abstraction so we can run e.g.
-`document_section → text_token_window` without writing a custom clipper.
+Background: Phase 1 (backend chain runner, origin encoding, resolver replay) and demo-dataset GUI clipping have shipped. The design reference at the bottom describes the encoding the deferred phases build on.
 
-## Problem
-
-Today the dataset-load pipeline runs **exactly one** `MediaClipper` per
-import. Real use cases want composition:
-
-- **`document_section → text_token_window`**: split a PDF/ePub into
-  chapters, then split each chapter into token-bounded windows. Today
-  the only ways to do this are (a) write a one-off custom clipper that
-  hard-codes both algorithms, or (b) load the dataset twice with two
-  different settings, which loses the chapter→window provenance.
-- **`image_object → image_window`**: detect objects in an image, then
-  sliding-window each detection. Same shape, same workaround tax.
-- **`sound_speech_activity → sound_tiling`**: VAD to find speech turns,
-  then tile each turn. Same.
-
-The headline case is cross-type composition (document → text). That
-can't be expressed by chaining
-`MediaClipper`s alone (a `MediaClipper` produces output of the same
-media type by contract). It needs a `MediaConverter` step (the existing
-`Document2TextMediaConverter` already does document → text).
-
-So a "clipper chain" is really a generalised **transform chain**: an
-ordered list of `converter` and `clipper` steps. Each step's input type
-must match the previous step's output type (or, for step 0, the source
-media type). The final step's output type becomes the dataset's media
-type.
-
-## Why Option C (converter + clipper steps) over the alternatives
-
-Three approaches were considered when scoping this work:
-
-| Option | Sketch | Cross-type? | Blast radius |
-|--------|--------|-------------|--------------|
-| A | `ChainedClipper(steps=[c1, c2, ...])`, same `media_type` end-to-end | No | Tiny |
-| B | Add `output_media_type` to `MediaClipper`; allow type-changing clippers | Yes (clippers cross types) | Medium |
-| C | Ordered list of `converter | clipper` steps | Yes (converters cross types) | Large |
-
-Option C was chosen because:
-
-- The headline example is **literally** `document → text`, which is
-  what `MediaConverter` already exists for. Forcing the same capability
-  into clippers (Option B) duplicates the converter family rather than
-  reusing it.
-- `MediaConverter` already round-trips through `MediaType.load_media_data`
-  and produces clean output dicts. We get cross-type composition for
-  free.
-- The runner and origin encoding are media-type-agnostic, which lets
-  new converters and clippers plug in without touching the pipeline.
-
-The cost is breadth: origin schema, importer field schema, sidecars,
-frontend chooser, detector `input_spec`, and `detector_meta` all carry
-single-clipper state today. We rolled the change out in phases below.
-
-## Design
-
-### Step list
-
-A chain is an ordered list of step dicts. Each step has the same shape:
-
-```json
-[
-  {"kind": "converter", "name": "document2text", "params": {}},
-  {"kind": "clipper",   "name": "text_token_window", "params": {"window": 512, "overlap": 64}}
-]
-```
-
-- `kind`: `"converter"` or `"clipper"`.
-- `name`: the plugin's registered name (`MediaConverter.name` or
-  `MediaClipper.name`).
-- `params`: kwargs passed to `with_params()` (clippers) or `convert()`
-  (converters). Empty dict allowed.
-
-A single-clipper load is equivalent to a length-1 chain:
-
-```json
-[{"kind": "clipper", "name": "sound_tiling", "params": {"duration": 2.0}}]
-```
-
-Phase 1 builds this internally so the legacy `clipper_name + clipper_params`
-import field still works; there is no migration cost for existing
-importers.
-
-### Validation rules
-
-Implemented in `vtscore/datasets/clipper_chain.py:validate_chain`:
-
-1. Every step resolves in its respective registry (`get_clipper` /
-   `get_converter`). Unknown names raise `ValueError`.
-2. Step 0's input type must match the dataset's source media type.
-3. Step *i*'s input type must equal step *(i−1)*'s output type.
-4. The chain may be empty (no-op) or contain any positive number of
-   steps. Pure `*_default` clipper-only chains are normalised to empty.
-
-The function returns the final output media type so the load pipeline
-can record the right `media_type` on the dataset registry entry.
-
-### Origin encoding (new)
-
-Each final clip gets, in addition to the existing single-clipper stamp:
-
-- `params["clipper_chain"]`: a JSON-encoded string containing the full
-  resolved trail. Each entry is:
-  ```json
-  {
-    "kind": "converter" | "clipper",
-    "name": "document2text",
-    "params": {"...": "..."},
-    "out_index": 0,
-    "clip_start": "...",   // when applicable
-    "clip_end":   "...",   // when applicable
-    "clip_box":   "x,y,w,h" // when applicable
-  }
-  ```
-  `out_index` is the index into the step's output list that this clip
-  descends from. The boundary fields are populated from the step
-  output's own `clip_start`/`clip_end`/`clip_box`/`clip_index`, so the
-  resolver can re-select the same sub-clip when replaying on a fresh
-  dataset.
-
-- For backwards compatibility, the **last clipper step** in the chain
-  also writes the legacy `params["clipper"]`, `params["clipper_<key>"]`,
-  `params["clip_start"]`, `params["clip_end"]`, `params["clip_box"]`,
-  `params["clip_index"]` keys exactly as before. This keeps existing
-  readers (`extract_input_spec_from_medias`, the legacy
-  `_apply_clip_and_embed` branch, the dataset registry's `clipper`
-  field, the `_write_clipper_sidecar` writer) working unmodified.
-  These keys describe only the last clipper step; the full chain lives
-  in `clipper_chain`.
-
-### Resolver replay
-
-`vtscore/detectors/resolver.py:_apply_clip_and_embed` is the
-cross-dataset replay path: given a resolved file and a label's origin,
-re-derive the embedding by re-applying whatever clipping the original
-dataset did.
-
-Phase 1 adds a chain-aware branch that runs **before** the legacy
-single-clipper branches. When `params["clipper_chain"]` is present, the
-resolver:
-
-1. Loads the source file into a media dict
-   (`media_bytes`/`media_string`) keyed by the source media type
-   inferred from the chain's first step.
-2. For each step, runs `convert()` or `clip()` and selects the matching
-   sub-output by `out_index` (or by `clip_start/end/box/index` fallback).
-3. Writes the final media's bytes/string to a tempfile of the
-   appropriate extension and calls `embed_file` with the final media
-   type and the dataset's embedder.
-
-If the chain entry is missing or malformed, the resolver falls through
-to the legacy single-clipper code path; labels imported from
-pre-chain datasets keep working.
-
-## ~~Phase 1: Backend chain runner + origin encoding + resolver replay (shipped)~~
-
-Shipped — struck through. The design above (step list, validation, origin
-encoding, resolver replay) is the spec for what landed:
-
-- ~~**New** `vtscore/datasets/clipper_chain.py`~~ — `ChainStep`,
-  `validate_chain`, `apply_chain_to_clips` (stamps `params["clipper_chain"]` +
-  legacy last-clipper keys), `replay_chain_on_file`.
-- ~~**Modified** `load_pipeline.py`~~ — `_apply_clipper` + the background loaders
-  accept/forward `chain_steps` (importer `clipper_chain` JSON parsed through).
-- ~~**Modified** `resolver.py`~~ — `_apply_clip_and_embed` replays the chain when
-  `params["clipper_chain"]` is present.
-- ~~**Tests** `tests/detectors/test_clipper_chain.py`~~ — same-type chain
-  end-to-end, single-step regression guard, validation errors.
-
-### Limitations of Phase 1
-
-- **No frontend**: the importer modal still only lets the user pick
-  one clipper. To exercise a chain in Phase 1, callers pass a
-  `clipper_chain` JSON field through the importer field values
-  programmatically (CLI, test, scripted client).
-- **No sidecar JSON / dataset registry chain column**: the registry's
-  `clipper` column still records only the last clipper's name. The
-  pickle sidecar (`_write_clipper_sidecar`) still writes a single
-  clipper name. Replay relies on per-clip origin only; the registry
-  fields are informational.
-- **Detector `input_spec` stays single-step**: `extract_input_spec_from_medias`
-  reads the legacy `params["clipper"]` keys, so the spec describes the
-  last clipper step only. A detector trained on a chained dataset still
-  records the last step as its expected granularity; the chain is not
-  reflected in `detector_meta`. This is enough for re-embedding labels
-  (resolver replay handles the full chain), but the spec mismatch check
-  at autodetect time is coarser than it could be.
+The feature is a generalised **transform chain**: an ordered list of `converter` and `clipper` steps (e.g. `document_section → text_token_window`) so cross-type composition works without a custom clipper. Each step's input type must match the previous step's output type (step 0 matches the source media type); the final step's output type becomes the dataset's media type. Option C (converter + clipper steps) was chosen over a same-type `ChainedClipper` (A) or type-changing clippers (B) because the headline case is literally `document → text`, which `MediaConverter` already does — reusing the converter family rather than duplicating it into clippers.
 
 ## Phase 2: Frontend chain chooser (deferred)
 
@@ -272,21 +81,6 @@ unless the consumer reads `clipper_chain`. Phase 4 will replace the
 legacy keys; for Phase 1 this is acceptable because the resolver uses
 the JSON trail.
 
-## Demo-dataset clipping (GUI) — shipped
-
-The demo importer already exposed a clipper "Details" button in the picker,
-but `load_demo_dataset` only recorded the chosen clipper name in the pickle
-meta and never applied it. It now runs the selected clipper (with params) at
-load time via the shared `_apply_clipper` machinery, so clips inherit their
-parent's category and are re-embedded with the demo's embedder. The demo path
-sends `clipper` + `clipper_params` only when the pick is a real (non-default)
-clipper — `_effective_clipper` (backend) and `effectiveDemoClipper()`
-(frontend) share the "default = empty / `*_default` / first-in-list" rule so
-the pre-selected default stays a no-op. The single per-dataset pickle records
-the effective clipper + params; a later load with a different clipper/params
-rebuilds it. Motivating case: the long-form `tut_sound_events_2017_*` demos,
-which are meant to be cut by hand.
-
 ### Open follow-ups (demo clipping)
 
 - **Params-blind status.** `GET /api/dataset/demo-list` only receives the
@@ -305,3 +99,11 @@ which are meant to be cut by hand.
   pickle); re-deriving a single clip purely from its origin would not re-clip.
 - **Multi-embedder trio.** When the create-time embedder trio is used, clip
   re-embedding uses the primary embedder only.
+
+## Design reference (encoding the deferred phases build on)
+
+A chain is an ordered list of step dicts, each `{"kind": "converter"|"clipper", "name": ..., "params": {...}}`. A single-clipper load is a length-1 chain; pure `*_default` clipper-only chains normalise to empty. `validate_chain` (`vtscore/datasets/clipper_chain.py`) resolves every step in its registry, enforces step-0 input = source type and step *i* input = step *(i−1)* output, and returns the final output media type.
+
+**Origin encoding.** Each final clip gets `params["clipper_chain"]`: a JSON-encoded resolved trail, one entry per step (`kind`, `name`, `params`, `out_index`, and `clip_start`/`clip_end`/`clip_box` when applicable). `out_index` + the boundary fields let the resolver re-select the same sub-clip on a fresh dataset. For backwards compatibility the **last clipper step** also writes the legacy `params["clipper"]`, `params["clipper_<key>"]`, `clip_start/end/box/index` keys unchanged, so existing readers (`extract_input_spec_from_medias`, the legacy `_apply_clip_and_embed` branch, the registry `clipper` field, `_write_clipper_sidecar`) keep working — these describe only the last step; the full chain lives in `clipper_chain`.
+
+**Resolver replay.** When `params["clipper_chain"]` is present, `resolver.py:_apply_clip_and_embed` loads the source file, runs each step's `convert()`/`clip()` selecting the matching sub-output by `out_index` (fallback to `clip_start/end/box/index`), writes the final media to a tempfile, and calls `embed_file` with the final media type. Missing/malformed chain → falls through to the legacy single-clipper path, so pre-chain labels keep working.

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import io
+import struct
 import tarfile
+import wave
 from pathlib import Path
 
 import numpy as np
@@ -356,3 +358,146 @@ class TestLocalArchiveMemberSource:
         fetched = source.fetch_item("does/not/exist.mp4")
         assert fetched.path is None
         assert fetched.embedding is None
+
+
+def _ramped_wav_bytes(seconds: float = 3.0, sr: int = 16000, freq: float = 220.0) -> bytes:
+    """Return WAV bytes whose amplitude ramps from near-0 to full over its length.
+
+    The ramp makes each per-second window's waveform envelope visibly distinct,
+    so a window-aware thumbnail differs across windows of the same member.
+    """
+    n = int(seconds * sr)
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sr)
+        frames = bytearray()
+        for i in range(n):
+            env = 0.05 + 0.95 * (i / n)
+            sample = int(env * 32767 * np.sin(2 * np.pi * freq * i / sr))
+            frames += struct.pack("<h", sample)
+        w.writeframes(bytes(frames))
+    return buf.getvalue()
+
+
+def _make_audio_tar(tmp_path: Path, member: str = "clip_a.wav") -> Path:
+    archive = tmp_path / "audio_shard.tar"
+    payload = _ramped_wav_bytes()
+    with tarfile.open(archive, "w") as tf:
+        info = tarfile.TarInfo(member)
+        info.size = len(payload)
+        tf.addfile(info, io.BytesIO(payload))
+    return archive
+
+
+def _make_windowed_audio_manifest(tmp_path: Path, archive: Path, member: str = "clip_a.wav") -> Path:
+    """One audio member fanned into three 1 s windows."""
+    members = [member, member, member]
+    starts = np.array([0.0, 1.0, 2.0], dtype=np.float32)
+    ends = np.array([1.0, 2.0, 3.0], dtype=np.float32)
+    vectors = np.random.default_rng(3).standard_normal((3, 512)).astype(np.float32)
+    manifest = tmp_path / "audio_windowed.npz"
+    np.savez(
+        manifest,
+        vectors=vectors,
+        members=np.array(members),
+        archives=np.array(str(archive)),
+        clip_start=starts,
+        clip_end=ends,
+    )
+    return manifest
+
+
+class TestArchiveMemberAudioWaveform:
+    """Waveform thumbnails for windowed archive-member audio (VTSBrowse tiles)."""
+
+    def _audio_type(self):
+        from vtscore.media.audio.media_type import AudioMediaType
+
+        return AudioMediaType()
+
+    def test_windows_get_distinct_waveforms(self, tmp_path):
+        import vtscore.media.audio.media_type as mt
+
+        mt._clear_decode_cache()
+        archive = _make_audio_tar(tmp_path)
+        manifest = _make_windowed_audio_manifest(tmp_path, archive)
+        medias: dict[int, dict] = {}
+        IMPORTER.run({"manifest": str(manifest), "media_type": "audio"}, medias)
+        assert len(medias) == 3
+
+        audio = self._audio_type()
+        pngs = []
+        for media in medias.values():
+            resp = audio.image_response(media)
+            assert resp is not None, "windowed archive-member audio must render a waveform"
+            assert resp.mimetype == "image/png"
+            assert resp.data[:8] == b"\x89PNG\r\n\x1a\n"
+            # The generated PNG is memoised so repeat fetches skip the decode.
+            assert media.get("thumbnail_bytes") == resp.data
+            pngs.append(resp.data)
+
+        # Each window shows its own slice, not one shared whole-member waveform.
+        assert len(set(pngs)) == 3
+
+    def test_member_decoded_once_across_windows(self, tmp_path):
+        import vtscore.media.audio.media_type as mt
+
+        mt._clear_decode_cache()
+        archive = _make_audio_tar(tmp_path)
+        manifest = _make_windowed_audio_manifest(tmp_path, archive)
+        medias: dict[int, dict] = {}
+        IMPORTER.run({"manifest": str(manifest), "media_type": "audio"}, medias)
+
+        audio = self._audio_type()
+        for media in medias.values():
+            audio.image_response(media)
+        # All three windows share one member, so the decode cache holds one entry.
+        assert len(mt._decode_cache) == 1
+
+    def test_whole_member_audio_renders_waveform(self, tmp_path):
+        import vtscore.media.audio.media_type as mt
+
+        mt._clear_decode_cache()
+        archive = _make_audio_tar(tmp_path)
+        # Manifest with no clip windows: one whole-member row.
+        vectors = np.random.default_rng(4).standard_normal((1, 512)).astype(np.float32)
+        manifest = tmp_path / "audio_whole.npz"
+        np.savez(manifest, vectors=vectors, members=np.array(["clip_a.wav"]), archives=np.array(str(archive)))
+        medias: dict[int, dict] = {}
+        IMPORTER.run({"manifest": str(manifest), "media_type": "audio"}, medias)
+
+        resp = self._audio_type().image_response(next(iter(medias.values())))
+        assert resp is not None
+        assert resp.data[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+class TestSliceWindow:
+    def test_slices_to_bounds(self):
+        from vtscore.media.audio.media_type import _slice_window
+
+        data = np.arange(1000, dtype=np.float32)
+        out = _slice_window(data, 100, 2.0, 5.0)  # sr=100 -> samples [200:500]
+        assert len(out) == 300
+        np.testing.assert_array_equal(out, data[200:500])
+
+    def test_open_bounds(self):
+        from vtscore.media.audio.media_type import _slice_window
+
+        data = np.arange(1000, dtype=np.float32)
+        np.testing.assert_array_equal(_slice_window(data, 100, None, 3.0), data[:300])
+        np.testing.assert_array_equal(_slice_window(data, 100, 7.0, None), data[700:])
+
+    def test_nan_bound_left_open(self):
+        from vtscore.media.audio.media_type import _slice_window
+
+        data = np.arange(1000, dtype=np.float32)
+        np.testing.assert_array_equal(_slice_window(data, 100, float("nan"), float("nan")), data)
+
+    def test_degenerate_window_falls_back_to_whole(self):
+        from vtscore.media.audio.media_type import _slice_window
+
+        data = np.arange(1000, dtype=np.float32)
+        # end <= start -> whole array rather than an empty slice.
+        np.testing.assert_array_equal(_slice_window(data, 100, 5.0, 2.0), data)

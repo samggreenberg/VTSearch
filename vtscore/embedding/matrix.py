@@ -8,14 +8,19 @@ media IDs changes, so we cache one contiguous ``(N, D)`` float32 array
 on the active dataset context and hand callers a ``torch.from_numpy``
 view (zero-copy) when they need a tensor.
 
-Cache invalidation is keyed on ``sorted(ctx.medias.keys())``: when that
-list differs from the cached one, the matrix is rebuilt.  Callers that
-mutate ``ctx.medias`` don't need to do anything - the next access will
-detect the new key set and rebuild.
+Cache invalidation is keyed on ``ctx.media_revision``: when the counter
+differs from the one the cached matrix was built at, the matrix is
+rebuilt.  Structural mutations of ``ctx.medias`` (add / remove / replace
+an entry) bump the counter automatically via
+:class:`~vtscore.state.core.MediasDict`, so callers don't need to do
+anything.  An *in-place* rewrite of an existing media's vector (re-embed /
+clip) is invisible to a dict subclass, so those stages call
+``invalidate_embedding_matrix`` (which bumps the counter) after the
+rewrite - see root-cause Pattern #4 in ``docs/reviews/2026-05-logical-bug-audit.md``.
 
 Any media whose ``embedding`` is ``None`` causes the builder to raise
 ``ValueError`` instead of silently filling the row with NaN - the bug
-described as M11 in ``docs/plans/logical-bug-audit.md``.  On numpy 2.x
+described as M11 in ``docs/reviews/2026-05-logical-bug-audit.md``.  On numpy 2.x
 ``matrix[i] = None`` quietly stores ``nan`` and the resulting score
 propagates through every downstream consumer (always-False threshold
 compares, NaN-poisoned sort, JSON ``NaN`` in the response).  Raising
@@ -109,17 +114,25 @@ def get_embedding_matrix(ctx: "DatasetContext", embedder_name: str | None = None
     # numpy stack and stall every other request's before_request state-sync.
     with _state_lock:
         sorted_ids = sorted(ctx.medias.keys())
+        # Snapshot the revision under the lock; the cache is valid iff it still
+        # matches after the unlocked build (phase 3). Keying on the counter
+        # rather than an id-list compare also catches an in-place vector
+        # rewrite that leaves the id set unchanged (root-cause Pattern #4).
+        revision = ctx.media_revision
         # A routed name equal to the primary collapses to the cached path.
         embedder_name = _collapse_to_primary(ctx.medias, embedder_name)
         if embedder_name is None:
             cached_matrix = ctx._emb_matrix
-            if cached_matrix is not None and ctx._emb_matrix_ids == sorted_ids:
+            # A revision match guarantees the id set is unchanged, so the live
+            # sorted_ids equals the cached ids the matrix rows correspond to.
+            if cached_matrix is not None and ctx._emb_matrix_revision == revision:
                 return list(sorted_ids), cached_matrix
 
         if not sorted_ids:
             if embedder_name is None:
                 ctx._emb_matrix_ids = []
                 ctx._emb_matrix = np.empty((0, 0), dtype=np.float32)
+                ctx._emb_matrix_revision = revision
                 return [], ctx._emb_matrix
             return [], np.empty((0, 0), dtype=np.float32)
 
@@ -130,14 +143,15 @@ def get_embedding_matrix(ctx: "DatasetContext", embedder_name: str | None = None
     # Phase 2 (unlocked): the heavy contiguous (N, D) build.
     matrix = _stack_embeddings(sorted_ids, medias_snapshot, embedder_name)
 
-    # Phase 3 (locked): repopulate the primary cache, double-checking the id
-    # set still matches so a media mutation during the unlocked build cannot
-    # cache a stale matrix. The named path never touches the cache.
+    # Phase 3 (locked): repopulate the primary cache, double-checking the
+    # revision still matches so a media mutation during the unlocked build
+    # cannot cache a stale matrix. The named path never touches the cache.
     if embedder_name is None:
         with _state_lock:
-            if sorted(ctx.medias.keys()) == sorted_ids:
+            if ctx.media_revision == revision:
                 ctx._emb_matrix_ids = sorted_ids
                 ctx._emb_matrix = matrix
+                ctx._emb_matrix_revision = revision
     return list(sorted_ids), matrix
 
 
@@ -174,16 +188,23 @@ def invalidate_embedding_matrix(ctx: "DatasetContext") -> None:
 
     Clears both the per-media embedding matrix and the flattened
     per-region matrix (used by patch-region scoring), since both are keyed
-    on the media-id set and become stale together when the dataset's media
-    change.
+    on ``media_revision`` and become stale together when the dataset's media
+    change.  Also bumps ``media_revision`` so this stands in as the explicit
+    "vectors changed in place" signal at the embed / clip stages: an
+    in-place rewrite of existing media dicts is invisible to
+    :class:`~vtscore.state.core.MediasDict`, so those stages call this to
+    advance the counter (and free the cached arrays' RAM immediately).
     """
     with _state_lock:
         ctx._emb_matrix_ids = None
         ctx._emb_matrix = None
+        ctx._emb_matrix_revision = None
         ctx._region_matrix_ids = None
         ctx._region_matrix = None
+        ctx._region_matrix_revision = None
         ctx._region_media_index = None
         ctx._region_index_per_row = None
+        ctx.bump_media_revision()
 
 
 def _patch_embedder_for_region_snap(snap: dict[int, dict[str, Any]]) -> str | None:
@@ -288,9 +309,16 @@ def get_region_matrix_for_snap(
 
     ctx = get_active_context()
     with _state_lock:
+        # Snapshot the revision so a mutation during the unlocked build below
+        # can't cache a stale matrix. The id-list compare still guards against
+        # a *different* snap with a coincidentally equal cached id set; the
+        # revision compare additionally catches an in-place vector rewrite
+        # under the same id set (root-cause Pattern #4).
+        revision = ctx.media_revision
         if (
             ctx._region_matrix is not None
             and ctx._region_matrix_ids == sorted_ids
+            and ctx._region_matrix_revision == revision
             and ctx._region_media_index is not None
             and ctx._region_index_per_row is not None
         ):
@@ -304,14 +332,17 @@ def get_region_matrix_for_snap(
     region_matrix, media_index, region_index = _build_region_arrays(snap, sorted_ids)
 
     # Populate the cache only when *snap* matches the active dataset's medias
-    # (the common case: ``snap = snapshot_medias()``).  Subset / cross-dataset
-    # dicts are ephemeral and must not clobber the active cache.
+    # (the common case: ``snap = snapshot_medias()``) and no mutation landed
+    # during the build.  Subset / cross-dataset dicts are ephemeral and must
+    # not clobber the active cache.
     if sorted_ids == sorted(ctx.medias.keys()):
         with _state_lock:
-            ctx._region_matrix_ids = sorted_ids
-            ctx._region_matrix = region_matrix
-            ctx._region_media_index = media_index
-            ctx._region_index_per_row = region_index
+            if ctx.media_revision == revision:
+                ctx._region_matrix_ids = sorted_ids
+                ctx._region_matrix = region_matrix
+                ctx._region_matrix_revision = revision
+                ctx._region_media_index = media_index
+                ctx._region_index_per_row = region_index
     return list(sorted_ids), region_matrix, media_index, region_index
 
 
@@ -346,7 +377,12 @@ def get_embedding_matrix_for_snap(
         with _state_lock:
             cached_ids = ctx._emb_matrix_ids
             cached_matrix = ctx._emb_matrix
-        if cached_matrix is not None and cached_ids == sorted_ids:
+            cache_current = ctx._emb_matrix_revision == ctx.media_revision
+        # The id-list compare guards against a *different* snap whose ids
+        # happen to equal the cached set; the revision compare additionally
+        # rejects a cache stale from an in-place vector rewrite under the same
+        # id set (root-cause Pattern #4).
+        if cached_matrix is not None and cached_ids == sorted_ids and cache_current:
             return sorted_ids, cached_matrix
 
     # When *snap* matches the active dataset's medias (the common case:

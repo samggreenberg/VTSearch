@@ -313,3 +313,91 @@ class TestEmbeddingMatrixLockScoping:
         assert mat.shape == (4, 4)
         # Cache must not hold the stale [1,2,3,4] build now that medias changed.
         assert ctx._emb_matrix_ids != [1, 2, 3, 4]
+
+
+class TestMediaRevisionCounter:
+    """Root-cause Pattern #4: the matrix cache keys on ``media_revision``.
+
+    Structural mutations bump the counter transparently through
+    :class:`MediasDict`; an in-place vector rewrite (same id set, different
+    vectors) is invisible to a dict subclass and must be signalled by
+    ``invalidate_embedding_matrix`` / ``bump_media_revision`` — this is the
+    exact C4 miscompute the counter neutralises.
+    """
+
+    def _ctx(self) -> DatasetContext:
+        ctx = DatasetContext("test_media_revision")
+        for cid in (1, 2, 3):
+            ctx.medias[cid] = {
+                "id": cid,
+                "embedder": "e5",
+                "embeddings": {"e5": np.full(4, float(cid), dtype=np.float32)},
+            }
+        return ctx
+
+    def test_structural_mutations_bump_revision(self):
+        ctx = DatasetContext("test_bump_structural")
+        assert ctx.media_revision == 0
+        ctx.medias[1] = {"id": 1, "embedder": "e5", "embeddings": {"e5": np.ones(4, dtype=np.float32)}}
+        after_add = ctx.media_revision
+        assert after_add > 0
+        del ctx.medias[1]
+        assert ctx.media_revision > after_add
+
+    def test_wholesale_reassignment_bumps_revision(self):
+        ctx = DatasetContext("test_bump_reassign")
+        before = ctx.media_revision
+        ctx.medias = {1: {"id": 1, "embedder": "e5", "embeddings": {"e5": np.ones(4, dtype=np.float32)}}}
+        assert ctx.media_revision > before
+        # The assigned mapping is wrapped so it keeps bumping on later edits.
+        after_assign = ctx.media_revision
+        ctx.medias[2] = {"id": 2, "embedder": "e5", "embeddings": {"e5": np.full(4, 2.0, dtype=np.float32)}}
+        assert ctx.media_revision > after_assign
+
+    def test_no_bump_without_mutation(self):
+        ctx = self._ctx()
+        rev = ctx.media_revision
+        _ = ctx.medias[1]  # a read must not bump
+        _ = list(ctx.medias.keys())
+        assert ctx.media_revision == rev
+
+    def test_cache_reused_across_calls_at_same_revision(self):
+        ctx = self._ctx()
+        ids1, mat1 = get_embedding_matrix(ctx)
+        ids2, mat2 = get_embedding_matrix(ctx)
+        assert ids1 == ids2 == [1, 2, 3]
+        # Same underlying array object → served from cache, not rebuilt.
+        assert mat1 is mat2
+        assert ctx._emb_matrix_revision == ctx.media_revision
+
+    def test_inplace_vector_rewrite_needs_explicit_bump(self):
+        """A dict-subclass can't see ``medias[cid][...] = vec``; until the
+        counter is bumped the cache keeps serving the pre-rewrite matrix."""
+        ctx = self._ctx()
+        _, mat_before = get_embedding_matrix(ctx)
+        assert mat_before[0, 0] == 1.0
+
+        # Rewrite media 1's vector in place — no structural change, no bump.
+        ctx.medias[1]["embeddings"]["e5"] = np.full(4, 42.0, dtype=np.float32)
+        _, mat_stale = get_embedding_matrix(ctx)
+        assert mat_stale[0, 0] == 1.0  # still the cached pre-rewrite row
+
+        # The embed/clip stages signal the in-place change via this call.
+        invalidate_embedding_matrix(ctx)
+        _, mat_fresh = get_embedding_matrix(ctx)
+        assert mat_fresh[0, 0] == 42.0
+
+    def test_same_id_set_new_content_not_served_stale(self):
+        """Reassigning ``medias`` to a fresh dict with the *same ids* but new
+        vectors must invalidate the cache (the id-list key could not tell)."""
+        ctx = self._ctx()
+        _, mat_before = get_embedding_matrix(ctx)
+        assert mat_before[0, 0] == 1.0
+
+        ctx.medias = {
+            cid: {"id": cid, "embedder": "e5", "embeddings": {"e5": np.full(4, float(cid) + 100.0, dtype=np.float32)}}
+            for cid in (1, 2, 3)
+        }
+        ids, mat_after = get_embedding_matrix(ctx)
+        assert ids == [1, 2, 3]
+        assert mat_after[0, 0] == 101.0

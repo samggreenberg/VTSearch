@@ -248,7 +248,8 @@ exist because parts of the legacy app reach into the backbone.
 For any sort or learned-sort over a loaded dataset, you need every
 media's embedding as a contiguous `(N, D) float32` array.
 `vtscore/embedding/matrix.py` keeps that array on `DatasetContext`
-and rebuilds it only when the set of loaded media IDs changes.
+and rebuilds it only when the context's `media_revision` counter
+changes (bumped on every `medias` mutation).
 
 ```python
 def get_embedding_matrix(ctx: DatasetContext) -> tuple[list[int], np.ndarray]: ...
@@ -260,16 +261,18 @@ def get_embedding_matrix_for_snap(snap: dict) -> tuple[list[int], np.ndarray]: .
 
 ### How the cache works
 
-`DatasetContext._emb_matrix` and `DatasetContext._emb_matrix_ids` are
-the cache. `get_embedding_matrix(ctx)` (`vtscore/embedding/matrix.py:29`):
+`DatasetContext._emb_matrix`, `DatasetContext._emb_matrix_ids`, and
+`DatasetContext._emb_matrix_revision` are the cache.
+`get_embedding_matrix(ctx)` (`vtscore/embedding/matrix.py:29`):
 
 1. Acquires `vtscore.state.core._state_lock`.
-2. Computes `sorted_ids = sorted(ctx.medias.keys())`.
-3. If `sorted_ids == ctx._emb_matrix_ids`, returns the cached
-   `(ids, matrix)` directly - no rebuild.
+2. Snapshots `revision = ctx.media_revision`.
+3. If `ctx._emb_matrix_revision == revision` (and the matrix is
+   present), returns the cached `(ids, matrix)` directly - no rebuild.
 4. Otherwise, allocates an `(N, D) float32` array, fills it row by
    row from `media_embedding(ctx.medias[cid])` (the per-embedder
-   `media["embeddings"]` dict), and stores it on the context.
+   `media["embeddings"]` dict), and stores it on the context along
+   with the revision it was built at.
 
 Convert to torch with `torch.from_numpy(matrix)` for a zero-copy
 view. The matrix is contiguous, so it's safe to slice without
@@ -285,10 +288,16 @@ ids, matrix = get_embedding_matrix(ctx)   # (N, D) float32
 invalidate_embedding_matrix(ctx)          # next call rebuilds
 ```
 
-Callers that mutate `ctx.medias` directly don't strictly need to
-invalidate - the next access detects the new key set and rebuilds -
-but explicit invalidation is cheaper than the implicit "did the key
-set change?" walk and removes the ambiguity.
+Callers that add / remove / replace entries in `ctx.medias` don't need
+to invalidate: `ctx.medias` is a `MediasDict` that bumps
+`media_revision` on every structural mutation, so the next access sees
+the new revision and rebuilds. The one case that *does* need an explicit
+call is an **in-place** rewrite of an existing media's vector
+(`ctx.medias[cid]["embeddings"][name] = vec` during re-embed / clip): a
+dict subclass can't observe a mutation to a value's internals, so those
+stages call `invalidate_embedding_matrix(ctx)` (which bumps the counter)
+afterwards. See root-cause Pattern #4 in
+`docs/reviews/2026-05-logical-bug-audit.md`.
 
 `get_embedding_matrix_for_snap(snap)` (`vtscore/embedding/matrix.py:70`)
 is for callers that hold a media-dict snapshot (typically from

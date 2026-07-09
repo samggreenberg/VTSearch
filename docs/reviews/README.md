@@ -13,6 +13,7 @@ seen on that date. Forward-looking design work lives in
 
 | Report | Date | What it covers |
 | --- | --- | --- |
+| [2026-05-logical-bug-audit.md](2026-05-logical-bug-audit.md) | 2026-05 | Codebase logical-bug audit (10 per-subsystem + 5 interaction passes); all C/H/M/L findings resolved, IDs referenced from code |
 | [2026-05-27-style-audit.md](2026-05-27-style-audit.md) | 2026-05-27 | Rendered style audit, light/dark, every major view (V7/V10/V11/V13 fixed; rest open) |
 | [2026-05-28-edge-states.md](2026-05-28-edge-states.md) | 2026-05-28 | Empty / edge-state sweep (cold boot, long names, single-item, errors) — open |
 | [2026-05-28-e2e-flows.md](2026-05-28-e2e-flows.md) | 2026-05-28 | End-to-end flow walkthroughs + UX friction — open |

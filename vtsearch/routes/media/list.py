@@ -961,7 +961,7 @@ def _embed_upload(embedder, file_bytes: bytes, original_filename: str):
     return embedding
 
 
-def _make_pile_thumbnail(media_type: str, file_bytes: bytes) -> bytes | None:
+def _make_pile_thumbnail(media_type: str, file_bytes: bytes, filename: str = "") -> bytes | None:
     """Precompute the grid/list thumbnail for an add-to-pile upload.
 
     Dispatches per media type (audio waveform, video frame, image downscale) so
@@ -971,7 +971,7 @@ def _make_pile_thumbnail(media_type: str, file_bytes: bytes) -> bytes | None:
     if media_type == "audio":
         from vtscore.media.audio.media_type import generate_waveform_thumbnail  # noqa: PLC0415
 
-        return generate_waveform_thumbnail(file_bytes)
+        return generate_waveform_thumbnail(file_bytes, filename=filename)
     if media_type == "video":
         from vtscore.media.video.media_type import generate_video_thumbnail  # noqa: PLC0415
 
@@ -1017,7 +1017,7 @@ def _insert_or_collide(new_media: dict[str, Any], file_md5: str) -> tuple[list[i
     request uploading the same bytes may have inserted a media with this MD5 in
     the meantime. Without this re-check, both requests would each insert a fresh
     media, producing duplicates with identical md5/embedding/bytes.
-    (logical-bug-audit.md H32.)
+    (2026-05-logical-bug-audit.md H32.)
 
     Returns ``(target_cids, target_id, is_new)``: on a collision the existing
     cids are returned with ``is_new=False``; otherwise the freshly-assigned id
@@ -1094,7 +1094,7 @@ def add_media_to_pile():
 
     # Precompute the grid/list thumbnail so the request path never decodes the
     # full-resolution upload on a cold tile fetch (matches the ingest path).
-    thumb = _make_pile_thumbnail(dataset_media_type, file_bytes)
+    thumb = _make_pile_thumbnail(dataset_media_type, file_bytes, original_filename)
 
     new_media: dict[str, Any] = {
         "media_type": dataset_media_type,
@@ -1132,7 +1132,7 @@ def _sync_pile_label_to_storage() -> None:
     update also reaches the detector's on-disk labelset and any configured
     :class:`LabelsetSource`. Without this, the label vanishes the next time
     ``ensure_votes_match_active_dataset`` rehydrates the detector from disk.
-    (logical-bug-audit.md H33.)
+    (2026-05-logical-bug-audit.md H33.)
     """
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector  # noqa: PLC0415
 
