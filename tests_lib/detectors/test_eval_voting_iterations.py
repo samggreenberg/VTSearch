@@ -542,13 +542,18 @@ class TestGoodTrainingVec:
         vec = _good_training_vec(media, "apple", region_voting=False)
         np.testing.assert_allclose(vec, media_embedding(media))
 
-    def test_pools_box_when_region_voting_on(self):
-        from vtscore.media.patch_embed import box_to_vote_vector
+    def test_snaps_box_to_region_when_region_voting_on(self):
+        """With a ``patch_regions`` tree present, the simulated region vote
+        snaps the ground-truth box to its nearest region node (the same path
+        the live vote flow takes), not a fresh uniform grid pool."""
+        from vtscore.media.patch_embed import snap_box_to_region
 
         media = _patch_media(1, positive=True, category="apple")
         vec = _good_training_vec(media, "apple", region_voting=True)
-        expected = box_to_vote_vector(np.asarray(media["patch_grid"]), (0.0, 0.0, 2 / 3, 1.0))
+        expected = snap_box_to_region(media["patch_regions"], (0.0, 0.0, 2 / 3, 1.0))
         np.testing.assert_allclose(vec, expected)
+        # The snapped vector is one of the tree's actual node vectors.
+        assert any(np.allclose(vec, r.vec) for r in media["patch_regions"])
 
     def test_falls_back_without_patch_grid(self):
         from vtscore.embedding.media_vectors import media_embedding
