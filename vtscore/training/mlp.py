@@ -207,10 +207,7 @@ def train_model(
     if sample_weights is not None:
         weights = sample_weights.reshape(-1).to(dtype=torch.float32, device=device)
         if weights.numel() != len(y_train):
-            raise ValueError(
-                f"sample_weights length {weights.numel()} does not match "
-                f"training-set size {len(y_train)}"
-            )
+            raise ValueError(f"sample_weights length {weights.numel()} does not match training-set size {len(y_train)}")
     else:
         # Balanced class weights - the single-class case was rejected above.
         weight_true = num_false / num_true

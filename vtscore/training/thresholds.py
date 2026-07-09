@@ -364,9 +364,7 @@ def _compute_fold_orderings_grouped(
         train_idx = [i for g in train_groups for i in rows_by_group[g]]
         X_train = torch.tensor(X_np[train_idx], dtype=torch.float32)
         y_train = torch.tensor(y_np[train_idx], dtype=torch.float32).unsqueeze(1)
-        fold_w = torch.tensor(
-            _per_bag_fit_weights(y_np[train_idx], [grp[i] for i in train_idx]), dtype=torch.float32
-        )
+        fold_w = torch.tensor(_per_bag_fit_weights(y_np[train_idx], [grp[i] for i in train_idx]), dtype=torch.float32)
         model = train_model(X_train, y_train, input_dim, hidden_dim=hidden_dim, sample_weights=fold_w)
 
         # Score every calibration row, then max-pool per group to one score.
