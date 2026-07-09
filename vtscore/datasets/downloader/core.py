@@ -555,7 +555,7 @@ def _extract_7z(archive_path: Path, dest_dir: Path, dataset_name: str, on_progre
     against path traversal (the same protection the zip branch applies).
     """
     try:
-        import py7zr  # noqa: PLC0415
+        import py7zr  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
     except ImportError as exc:
         raise RuntimeError(
             f"Extracting {dataset_name} needs the 'py7zr' package to read .7z archives. "
