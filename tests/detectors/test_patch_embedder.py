@@ -1105,6 +1105,7 @@ class TestSnapBoxToRegion:
         vec = (np.array([3.0, 4.0], dtype=np.float32) / 5.0).astype(np.float16)
         regions = [RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=vec)]
         v = snap_box_to_region(regions, (0.1, 0.1, 0.9, 0.9))
+        assert v is not None
         assert v.dtype == np.float32
         assert abs(float(np.linalg.norm(v)) - 1.0) < 1e-5
 
