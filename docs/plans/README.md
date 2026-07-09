@@ -30,7 +30,7 @@ it can't drift far. (Point-in-time UI review/audit reports live in
 
 ## Detectors / embedders / clippers
 
-- [patch-embedder.md](patch-embedder.md): patch-based image embedder (V1+V2 shipped; V3 in progress)
+- [patch-embedder.md](patch-embedder.md): patch-based image embedder (V1+V2+V3 trio + per-detector embedder-type shipped; scoring/validation follow-ups open)
 - [structural-embedder.md](structural-embedder.md): structural (instance-matching) embedder — SIFT/VLAD + RANSAC re-rank (V1 + Stage-2 + Find re-rank shipped; larger VLAD codebook next)
 - [clipper-chain.md](clipper-chain.md): ordered converter/clipper chains (Phase 1 shipped)
 - [cli-detector-converter.md](cli-detector-converter.md): CLI autodetect with converters + clippers (Phase 1 shipped)
@@ -40,7 +40,7 @@ it can't drift far. (Point-in-time UI review/audit reports live in
 
 - [find-verification-workflow.md](find-verification-workflow.md): Find verify loop, frozen scores, Stats (Phases 1–4 shipped; follow-ups open)
 - [coverage-atlas.md](coverage-atlas.md): domain-shift + evidence-aware verification for transferred detectors (design/research writeup only)
-- [visual-genome-dataset.md](visual-genome-dataset.md): Visual Genome demo dataset — multi-label + region-annotation ground truth for eval (Phase 1 in progress; region-vote reporting / attributes open)
+- [visual-genome-dataset.md](visual-genome-dataset.md): Visual Genome demo dataset — multi-label + region-annotation ground truth for eval (Phase 1 + Phase 2 region-voting shipped; region-vote reporting / attributes open)
 
 ## Import / plugins
 

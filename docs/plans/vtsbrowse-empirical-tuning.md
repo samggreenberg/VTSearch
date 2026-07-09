@@ -1,147 +1,33 @@
 # Plan: VTSBrowse empirical tuning pass
 
-> **Status:** Deliverable 1 (knob plumbing + persistence-key correctness fix)
-> **shipped**; the quantitative sweep and qualitative pass remain. This is the
-> deferred *§Open problems → Empirical* work from `docs/plans/vtsbrowse.md`.
-> The remaining steps are written to be picked up on a **stronger environment**
-> (one with a browser for visual judgment, and ideally GPU + real demo datasets
-> downloaded) because the core deliverable — choosing good defaults — requires
-> *looking at the rendered canvas*, which the headless cloud container can't do
-> (no Chrome/Chromium).
->
-> The other VTSBrowse follow-ups (sibling highlighting, text-seeded
-> navigation, detector handoff) have been **cut** — see *§Open follow-ups* in
-> the design doc. Empirical tuning is the remaining v1 polish item.
+**Status:** Deliverable 1 (knob plumbing + persistence-key correctness fix)
+**shipped**. The remaining work is the **quantitative sweep (Phase A)** and the
+**qualitative review (Phase B)** — detailed below. This is the deferred
+*§Open problems → Empirical* work from `docs/plans/vtsbrowse.md`; the other
+VTSBrowse follow-ups (sibling highlighting, text-seeded navigation, detector
+handoff) were **cut**. Empirical tuning is the remaining v1 polish item.
 
-## Goal
+The remaining steps need a **stronger environment** (a browser for visual
+judgment, ideally GPU + real demo datasets) because choosing good defaults
+requires *looking at the rendered canvas*, which the headless cloud container
+can't do (no Chrome/Chromium). Since Deliverable 1 landed, both phases can now
+retune purely by changing two settings (`projection_n_neighbors`,
+`projection_min_dist`).
 
-VTSBrowse shipped with **defensible-but-unvalidated defaults** for the UMAP
-fit, the hex-tile pyramid, and the canvas renderer. The design doc
-(*§Open problems*) deliberately left these as tunable parameters rather than
-baking in constants, on the explicit understanding that good values can only
-be chosen by running the pipeline on real datasets and judging the output.
-
-This pass:
-
-1. Makes the parameters that are currently hardcoded **reachable without
-   editing code** (server settings or build-route params) so a tuning loop
-   doesn't require a recompile per trial.
-2. Runs a **quantitative sweep** (headless, scriptable) over demo datasets ×
-   parameter grid, capturing build cost and layout/aggregation metrics.
-3. Runs a **qualitative review** (browser, requires a display) of the rendered
-   canvas to pick final defaults for the knobs that only a human eye can
-   settle.
-4. Lands the chosen defaults (and any newly-exposed settings) with a short
-   write-up of *why* each value was picked, so the next person doesn't re-open
-   settled questions.
-
-## Why a stronger environment
-
-| Step | Needs a browser? | Needs GPU? | Can do headless here? |
-|------|------------------|-----------|----------------------|
-| Expose knobs as settings/params (impl) | no | no | **yes** |
+| Step | Needs a browser? | Needs GPU? | Headless here? |
+|------|------------------|-----------|----------------|
 | Quantitative sweep harness (impl + run) | no | helps (faster embed) | **yes** (small N) |
 | Visual layout / hex-readability review | **yes** | no | no |
 | Hover-preview feel (debounce, audio loop) | **yes** | no | no |
 | Final default selection + write-up | partly | no | partly |
 
-The impl steps (expose knobs, write the sweep harness) are environment-neutral
-and could even be done first in the cloud container. The *judgment* steps need
-a real display.
-
-## Current defaults and where each knob lives
-
-The knobs, their current values, and their source of truth as of this plan:
-
-### UMAP (Stage 1) — `vtscore/projection/umap_projection.py:fit_projection`
-
-| Knob | Current default | Notes |
-|------|-----------------|-------|
-| `n_neighbors` | `15` | Clamped to `N-1`. **Not plumbed** from the route — see *§Gap*. |
-| `min_dist` | `0.1` | **Not plumbed** from the route. |
-| `min_n_for_umap` | `10` | Below this → PCA-2 fallback. |
-| `random_state` | `None` (unseeded) | Locked decision — keep unseeded in prod. Seed only inside the sweep harness for run-to-run comparability. |
-| `metric` | `"euclidean"` | **Settled** (ingest-normalized vectors); not a tuning target. |
-
-### Pyramid (Stage 2) — `vtscore/projection/pyramid.py:build_pyramid`
-
-| Knob | Current default | Notes |
-|------|-----------------|-------|
-| `n_levels` | **auto-depth** (`None`) | Default `None` makes `build_pyramid` descend until every occupied hex holds a single clip (one-clip-per-hex at deepest zoom), stopping early on co-located clips. Pass an int for fixed depth. |
-| `max_useful_levels(N)` | `1 + ceil(log2 N)`, clamped `[1, 14]` | Runaway-guard **ceiling** for the auto-depth descent only — not the operating depth. Replaced the old `log4(N / base_cols²)` heuristic, which assumed uniform 2-D fill and bottomed out ~1 level short of single clips for clustered embeddings (e.g. ~3 levels / ~5 clips-per-hex for the 245-clip ESC-50 demo). |
-| `base_cols` | `6.0` | Level-0 spans ~6 hex columns across the larger extent. Drives `base_radius`. |
-| `base_radius` | derived (`None` → `_base_radius_for`) | Override path exists but unused. |
-| `tile_span` | `16.0` | Hex columns/rows per tile. Payload-size vs round-trip-count tradeoff. |
-
-`build_pyramid(proj)` is called with **no** `n_levels` (auto-depth) in
-`vtsearch/routes/projection.py:131` and `vtscore/datasets/load_pipeline.py:1104`;
-`base_cols`/`tile_span` use the function defaults. Auto-depth resolves the
-former `n_levels` tuning question — the descent self-terminates at single-clip
-resolution rather than relying on a closed-form estimate.
-
-### Canvas renderer (Stage 3) — `frontend/src/app/components/browse-canvas/browse-canvas.component.ts`
-
-| Knob | Current value | Location |
-|------|---------------|----------|
-| Target on-screen hex radius (level picker) | `28` px default (`DEFAULT_TARGET_RADIUS`), scaled by the thumbnail-size buttons (XS–XL → ×0.5–×2.5) into `targetRadius` | `levelForEffZoom` / `setThumbnailRadius` |
-| Density scale | log (`log(count)/log(maxCount)`) | `drawHex`, `:284` |
-| Colormap | darkred→yellow, 8-stop LUT (black left free for "None"/empty space) | `HEATMAP`, `hex-render.util.ts` |
-| Singleton cell shape | inscribed disc (`HEX_INRADIUS_RATIO`), hex otherwise | `traceCellPath`, `hex-render.util.ts` |
-| Minimap overview level | level whose hexes ≈ `5` px (finer-grained than level 0) | `overviewLevel`, `browse-minimap.component.ts` |
-| Hover debounce | `30` ms | `onCanvasMouseMove`, `:445` |
-| Hex hit radius | `1 × radius` | `hitTest`, `:490` |
-
-### Hover preview — `frontend/src/app/components/browse-hover-preview/browse-hover-preview.component.ts`
-
-| Knob | Current value | Location |
-|------|---------------|----------|
-| Audio | `loop=true`, hard-cut on move | `playAudio`, `:93` |
-| Text truncation | `300` chars | `loadText`, `:126` |
-| Popup offset | `+16 / -8` px from cursor | `show`, `:53` |
-
-## Gap to fix first: `n_neighbors` / `min_dist` are unreachable
-
-The build route (`vtsearch/routes/projection.py:126`) calls `fit_projection`
-with **no** `n_neighbors`/`min_dist`, so the two most impactful UMAP knobs are
-pinned to the function defaults and can't be tuned without a code edit + the
-container being rebuilt (the projection is frozen + persisted, so a stale
-container also has to be invalidated). **Step 1 of the impl is to plumb these
-through** so the sweep — and any future re-tune — is a config change, not a
-patch.
-
-**Decision to make (resolve at impl, ask if non-obvious):** which knobs become
-*server settings* (persisted, user-visible) vs *build-route params* (advanced /
-internal) vs *stay constants*. A reasonable cut:
-
-- **Server settings** (`ServerSettings` + `CoreConfig`, like `dataset_max_age_days`):
-  `projection_n_neighbors`, `projection_min_dist`. These materially change the
-  map and a user/operator might want to set them per deployment.
-- **Derived, not exposed:** `n_levels` (auto-depth — descends to single-clip
-  resolution; `max_useful_levels` is only the guard ceiling), `base_radius`
-  (derived from `base_cols`).
-- **Constants for now, revisit only if the sweep says so:** `base_cols`,
-  `tile_span`, `min_n_for_umap`.
-
-Because the projection is **persisted and frozen**, changing a UMAP setting
-must **not** silently reuse an old container's projection. The build route
-already guards on the media-id set (`_try_load_persisted`), but it does **not**
-key on the UMAP params. **Add the active UMAP params to the persisted
-projection's metadata and to the `_try_load_persisted` match**, so flipping a
-setting forces a recompute instead of serving a layout fit under the old
-params. (This is a real correctness fix the sweep depends on, not just tuning.)
-
-> **Done.** This gap is closed — see *Deliverables §1*. What remains under this
-> plan is the sweep (Phase A) and the qualitative pass (Phase B), both of which
-> can now retune purely by changing the two settings.
-
 ## Phase A — quantitative sweep (headless, scriptable)
 
 A standalone script (suggested: `scripts/projection_sweep.py`, dev-only, not
-shipped in the app) that, for each `(dataset, params)` cell:
+shipped) that, for each `(dataset, params)` cell:
 
-1. Loads the demo dataset's embedding matrix via
-   `get_embedding_matrix(ctx)` (reuse the real ingest path; embeddings are
-   already L2-normalized).
+1. Loads the demo dataset's embedding matrix via `get_embedding_matrix(ctx)`
+   (reuse the real ingest path; embeddings are already L2-normalized).
 2. Runs `fit_projection(..., random_state=SEED)` — **seeded here only**, so
    trials are comparable; production stays unseeded.
 3. Runs `build_pyramid` with the trial pyramid params.
@@ -152,15 +38,13 @@ shipped in the app) that, for each `(dataset, params)` cell:
 - **Build cost:** UMAP fit seconds, pyramid build seconds, peak RSS.
 - **Layout quality (neighborhood preservation):** trustworthiness &
   continuity of the 2-D embedding vs the original space (`sklearn.manifold.
-  trustworthiness`); optionally kNN-overlap @k between original and projected
-  neighbors. These are the standard quantitative proxies for "did UMAP keep
-  the structure?" and let `n_neighbors`/`min_dist` be ranked numerically
-  before any eyeballing.
+  trustworthiness`); optionally kNN-overlap @k. Lets `n_neighbors`/`min_dist`
+  be ranked numerically before any eyeballing.
 - **Aggregation health per level:** for each pyramid level — number of
   non-empty hexes, count distribution (min/median/p95/max items per hex),
   fraction of single-item hexes, tile fan-out (hexes per tile, tiles per
-  level). This tells whether `base_cols`/`tile_span`/`n_levels` produce a
-  readable, evenly-loaded pyramid or a few mega-hexes + dust.
+  level). Tells whether `base_cols`/`tile_span`/`n_levels` produce a readable,
+  evenly-loaded pyramid or a few mega-hexes + dust.
 - **Small-N behavior:** confirm the PCA-2 / trivial fallbacks trigger at the
   intended `min_n_for_umap` boundary and produce sane bounds.
 
@@ -172,7 +56,7 @@ shipped in the app) that, for each `(dataset, params)` cell:
 - `tile_span ∈ {8, 16, 32}`
 
 **Datasets** — span media type and N (use the S/M/L/A size variants the demo
-registry already provides, e.g. `esc50_s/m/l/a`, `gtzan_a`):
+registry provides, e.g. `esc50_s/m/l/a`, `gtzan_a`):
 
 | Media type | Demo source(s) | Why |
 |------------|----------------|-----|
@@ -213,18 +97,8 @@ can't:
 
 Capture before/after screenshots for the write-up.
 
-## Deliverables
+## Remaining deliverables
 
-1. **Knob plumbing** (impl, env-neutral): **SHIPPED.** `projection_n_neighbors`
-   / `projection_min_dist` are `ServerSettings` (defaults in `vtscore.config`),
-   the build route passes them into `fit_projection`, the fit stamps them onto
-   the `Projection`, and `_try_load_persisted` / `_load_projection_coords` now
-   reject a persisted layout fit under different params (`_projection_params_match`)
-   so a setting change forces a recompute. Tests in `tests/api/test_projection.py`
-   + `tests_lib/projection/test_persistence.py` + `test_umap_projection.py`.
-   (The ingest-time pre-build stays on the `vtscore.config` defaults — core is
-   Flask-free — so a non-default deployment recomputes each dataset once on first
-   browse, which the params-match guard handles correctly.)
 2. **Sweep harness** `scripts/projection_sweep.py` + a short README block on
    running it. (Dev tool; keep it out of the shipped package and out of
    `deptry`'s prod-dependency surface — if it needs `sklearn.manifold` etc.,
@@ -232,35 +106,89 @@ Capture before/after screenshots for the write-up.
 3. **Chosen defaults** landed in `umap_projection.py` / `pyramid.py` / the
    canvas component / settings, each with a one-line rationale comment or a row
    in the write-up.
-4. **Write-up** appended to this plan's *§Results* (below, currently empty):
-   the grid that was run, the winning values, and the metric/screenshot
-   evidence. Update `docs/plans/vtsbrowse.md` *§Open problems → Empirical* to
-   "settled — see plan §Results".
+4. **Write-up** appended to *§Results* (below, currently empty): the grid that
+   was run, the winning values, and the metric/screenshot evidence. Update
+   `docs/plans/vtsbrowse.md` *§Open problems → Empirical* to "settled — see plan
+   §Results".
 
-## Acceptance
+**Acceptance:** `./run-tests.sh` green (the sweep script is dev-only and must
+not break the build, `deptry`, or `ruff`); new defaults committed with
+rationale; no hardcoded UMAP params left unreachable; design doc §Empirical
+marked settled and pointing here.
 
-- `./run-tests.sh` green (the plumbing + persistence-match changes are the only
-  shippable code; the sweep script is dev-only and must not break the build,
-  `deptry`, or `ruff`).
-- New defaults committed with rationale; no hardcoded UMAP params left
-  unreachable in the route.
-- Design doc *§Open problems → Empirical* marked settled and pointing here.
+**Risks & notes.** Tune with a fixed seed for comparability, but the chosen
+defaults must be robust to the run-to-run variation of the *unseeded* production
+fit — prefer params stable across a few seeds, not a knife-edge winner. Any
+container built before the params-in-match fix carries a projection fit under
+old params and must recompute (the persistence-key fix, shipped in Deliverable
+1, is what makes re-tuning safe). If the largest target N stutters even after
+tuning, that triggers the deferred **WebGL renderer** follow-up (out of scope).
+GPU only speeds up embedding the demo datasets; the projection/pyramid math is
+CPU NumPy/numba.
 
-## Risks & notes
+## Reference: current defaults and where each knob lives
 
-- **Unseeded production fit vs seeded sweep.** Tune with a fixed seed for
-  comparability, but the chosen defaults must be robust to the run-to-run
-  variation of the *unseeded* production fit — prefer params whose quality is
-  stable across a few seeds, not a knife-edge winner.
-- **Frozen + persisted projection.** Any container built before the
-  params-in-match fix carries a projection fit under old params; re-tuning
-  means those must recompute. The persistence-key fix (above) is what makes
-  re-tuning safe; without it the sweep results won't reflect the served map.
-- **Performance ceiling defines scope, not features.** If the largest target N
-  stutters even after tuning, that's the trigger to open the deferred **WebGL
-  renderer** follow-up — out of scope for this pass.
-- **GPU is a convenience, not a requirement.** It only speeds up embedding the
-  demo datasets; the projection/pyramid math is CPU NumPy/numba.
+The knobs the sweep varies, their current values, and their source of truth.
+
+### UMAP (Stage 1) — `vtscore/projection/umap_projection.py:fit_projection`
+
+| Knob | Current default | Notes |
+|------|-----------------|-------|
+| `n_neighbors` | `15` | Clamped to `N-1`. Now a `ServerSettings` (`projection_n_neighbors`), plumbed through the route. |
+| `min_dist` | `0.1` | Now a `ServerSettings` (`projection_min_dist`), plumbed through. |
+| `min_n_for_umap` | `10` | Below this → PCA-2 fallback. Constant for now. |
+| `random_state` | `None` (unseeded) | Keep unseeded in prod. Seed only inside the sweep harness. |
+| `metric` | `"euclidean"` | Settled (ingest-normalized vectors); not a tuning target. |
+
+### Pyramid (Stage 2) — `vtscore/projection/pyramid.py:build_pyramid`
+
+| Knob | Current default | Notes |
+|------|-----------------|-------|
+| `n_levels` | **auto-depth** (`None`) | Descends until every occupied hex holds a single clip, stopping early on co-located clips. Derived, not exposed. |
+| `max_useful_levels(N)` | `1 + ceil(log2 N)`, clamped `[1, 14]` | Runaway-guard **ceiling** for the auto-depth descent only, not the operating depth. |
+| `base_cols` | `6.0` | Level-0 spans ~6 hex columns across the larger extent. Drives `base_radius`. Constant for now, revisit if sweep says so. |
+| `base_radius` | derived (`None` → `_base_radius_for`) | Override path exists but unused. |
+| `tile_span` | `16.0` | Hex columns/rows per tile. Payload-size vs round-trip-count tradeoff. Constant for now. |
+
+`build_pyramid(proj)` is called with **no** `n_levels` (auto-depth) in
+`vtsearch/routes/projection.py` and `vtscore/datasets/load_pipeline.py`;
+`base_cols`/`tile_span` use the function defaults.
+
+### Canvas renderer (Stage 3) — `frontend/.../browse-canvas/browse-canvas.component.ts`
+
+| Knob | Current value | Location |
+|------|---------------|----------|
+| Target on-screen hex radius (level picker) | `28` px (`DEFAULT_TARGET_RADIUS`), scaled by thumbnail-size buttons (XS–XL → ×0.5–×2.5) | `levelForEffZoom` / `setThumbnailRadius` |
+| Density scale | log (`log(count)/log(maxCount)`) | `drawHex` |
+| Colormap | darkred→yellow, 8-stop LUT (black left free for empty) | `HEATMAP`, `hex-render.util.ts` |
+| Singleton cell shape | inscribed disc, hex otherwise | `traceCellPath`, `hex-render.util.ts` |
+| Minimap overview level | hexes ≈ `5` px | `overviewLevel`, `browse-minimap.component.ts` |
+| Hover debounce | `30` ms | `onCanvasMouseMove` |
+| Hex hit radius | `1 × radius` | `hitTest` |
+
+### Hover preview — `frontend/.../browse-hover-preview/browse-hover-preview.component.ts`
+
+| Knob | Current value | Location |
+|------|---------------|----------|
+| Audio | `loop=true`, hard-cut on move | `playAudio` |
+| Text truncation | `300` chars | `loadText` |
+| Popup offset | `+16 / -8` px from cursor | `show` |
+
+## What shipped
+
+- **Deliverable 1 — knob plumbing + persistence-key fix.**
+  `projection_n_neighbors` / `projection_min_dist` are now `ServerSettings`
+  (defaults in `vtscore.config`); the build route passes them into
+  `fit_projection`, the fit stamps them onto the `Projection`, and
+  `_try_load_persisted` / `_load_projection_coords` reject a persisted layout
+  fit under different params (`_projection_params_match`) so a setting change
+  forces a recompute. Previously the two most impactful UMAP knobs were pinned
+  to the function defaults and unreachable without a code edit + container
+  rebuild. Tests: `tests/api/test_projection.py`,
+  `tests_lib/projection/test_persistence.py`, `test_umap_projection.py`. (The
+  ingest-time pre-build stays on the `vtscore.config` defaults — core is
+  Flask-free — so a non-default deployment recomputes each dataset once on first
+  browse, which the params-match guard handles.)
 
 ## Results
 

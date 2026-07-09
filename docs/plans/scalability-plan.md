@@ -1,435 +1,38 @@
 # Scalability Implementation Plan
 
-**Status:** Mostly open.  **§3.3 (S16) virtual grid mode has shipped** — the
-gallery now virtualizes both grid and list and no longer freezes the UI at a
-few hundred items (added §3.4/S17 as the deferred backend cancel/progress
-follow-up surfaced by that work).  **§1.2 (S9) GMM subsampling has shipped.**
-**§2.1 has shipped** — reload caching plus Part A (smarter k-means
-defaults / auto-capped depth) and Part B (skip auto-build above 50k items + an
-on-demand `POST .../diversity-tree` endpoint); only the optional frontend
-"Build diversity index" button is deferred.  **§2.2 (S12) debounce label sync
-was already implemented** in `vtscore/labels/sync.py` (200ms per-detector
-timer).  Phase 2 is therefore effectively complete on the backend.
-Separately, the CLI-specific streaming work (lazy folder enumeration, per-chunk
-embed, and streaming export — partial fixes for S20/S15/S13 on the
-`--autodetect` target side) **has** shipped; see
+**Status:** §1.2 (S9), §2.1 (S2/S8), §2.2 (S12), and §3.3 (S16) shipped; §1.1 (S5)
+rejected as a misdiagnosis; §1.3/§1.4 (S6/S7) gated until interactive datasets
+approach 1M. Open/next work: §2.3 (S14), §3.1 (S1), §3.2 (S3/S17/S19), §3.4 (S17),
+and Phase 4 (§4.1–§4.3) — full design below, followed by the shipped/rejected
+one-liners under "What shipped".
+
+**Parent:** [`scalability.md`](scalability.md); the brainstorm that defines all S#
+IDs referenced here. **Goal:** Make VTSearch usable at 100k items (near-term) and
+survivable at 1M (medium-term) without a full architectural rewrite; 10M requires
+Phase 4 work and is deferred. Phases are ordered by leverage-to-effort ratio and are
+each shippable independently.
+
+**Target scale (confirmed 2026-06-19, drives what's worth doing):** GUI Train ~50k,
+GUI Find ~250k, CLI Find 2M+. A critical re-read of Phase 1 against these numbers
+**rejected §1.1** as a misdiagnosis and **gated §1.3/§1.4** as not worth their
+correctness risk until interactive datasets actually approach the million-item range
+— at 50k–250k the `sorted(medias.keys())` cost they target is 5–80 ms, noise next to
+the matmul/argsort. Separately, CLI-specific streaming work (lazy folder enumeration,
+per-chunk embed, streaming export — partial fixes for S20/S15/S13 on the
+`--autodetect` side) has shipped; see
 [`cli-stream-massive-images.md`](cli-stream-massive-images.md).
 
-**Target scale (confirmed 2026-06-19, drives what's worth doing):** GUI Train
-~50k, GUI Find ~250k, CLI Find 2M+.  A critical re-read of Phase 1 against these
-numbers (below) **rejected §1.1** as a misdiagnosis and **gated §1.3/§1.4** as
-not worth their correctness risk until interactive datasets actually approach
-the million-item range — at 50k–250k the `sorted(medias.keys())` cost they
-target is 5–80 ms, noise next to the matmul/argsort.  See per-section notes.
-
-**Parent:** [`scalability.md`](scalability.md); the brainstorm that defines
-all S# IDs referenced here.
-
-**Goal:** Make VTSearch usable at 100 k items (near-term) and survivable at
-1 M items (medium-term) without a full architectural rewrite.  10 M items
-requires Phase 4 work and is deferred.
-
-Phases are ordered by leverage-to-effort ratio.  Each phase is shippable
-independently.
-
 ---
 
-## Phase 1: Trivial wins (no architecture change)
-
-These are 1–3 line fixes that eliminate growing hot paths.  Land them
-together in a single PR.
-
-### 1.1  Hash-based threshold cache key (S5) — ❌ REJECTED (misdiagnosis)
-
-> **Verdict (2026-06-19): do not implement.** The premise conflates training-set
-> size with dataset size. `X_list`/`y_list` here are the **labeled examples**
-> (good/bad votes + labelset elements), not the dataset — you do not
-> interactively hand-label 100k items, so the "150 MB at 100k" figure never
-> occurs. The cache is also a **single overwritten slot**
-> (`det_ctx.calibration_cache = (key, payload)`), not a growing structure, so
-> even a large imported labelset costs one key's worth of memory. Worse, the
-> proposed fix still calls `np.stack(...).tobytes()` to build the key and *then*
-> hashes it, **adding** compute on the comparison path to save a few MB on a
-> non-bottleneck. Left here as a record of the dead end; revisit only if
-> labelsets ever grow to tens of thousands of elements (a different feature).
-
-**File:** `vtscore/training/thresholds.py:71–97` (`_calibration_cache_key`)
-
-**Problem:** `np.stack(X_list).tobytes()` produces an `N × D × 4`-byte
-string stored as part of a tuple in `DetectorContext._calibration_threshold_cache`.
-At 10 k training vectors it is already ~15 MB; at 100 k it is 150 MB.
-
-**Fix:** Replace the raw bytes with a `blake2b` digest.
-
-```python
-import hashlib
-
-def _calibration_cache_key(X_list, y_list, inclusion_value, ...):
-    X_bytes = np.stack(X_list).astype(np.float32, copy=False).tobytes()
-    y_bytes = np.asarray(y_list, dtype=np.float32).tobytes()
-    X_hash = hashlib.blake2b(X_bytes, digest_size=16).digest()
-    y_hash = hashlib.blake2b(y_bytes, digest_size=16).digest()
-    return (X_hash, y_hash, int(inclusion_value), ...)
-```
-
-The hash is computed from the same bytes (so correctness is identical), but
-only 32 bytes are stored in the key tuple instead of the full array.
-`blake2b` at this size is ~1 GB/s on modern hardware; far cheaper than
-the current path.
-
-**Risk:** negligible (birthday collision at 2^64; unreachable).
-
----
-
-### 1.2  Subsample GMM threshold (S9) — ✅ SHIPPED
-
-> **Shipped 2026-06-19.** Subsampling now lives *inside*
-> `calculate_gmm_threshold` (single point, so every caller — the every-sort
-> cosine path at `sorting.py:103` and the safe-threshold blend — benefits),
-> gated by `_GMM_MAX_SAMPLES = 50_000` with a seed-42 `default_rng`. The
-> exception-fallback median was also bounded to the subsample. This was the one
-> Phase-1 item with a real, scale-justified payoff: the GMM fits the **full**
-> score distribution, which reaches 250k (GUI Find) to 2M+ (CLI Find). Covered
-> by `tests_lib/sorting/test_gmm_subsample.py`.
-
-**File:** `vtscore/training/thresholds.py:24–68` (`calculate_gmm_threshold`)
-
-**Problem:** Takes all N scores and fits a 2-component GMM.  At 1 M items
-this is an 8 MB array and many EM iterations.
-
-**Fix:** Subsample before fitting.
-
-```python
-_GMM_MAX_SAMPLES = 50_000
-
-def calculate_gmm_threshold(scores: list[float]) -> float:
-    if len(scores) < 2:
-        return 0.5
-    arr = np.array(scores, dtype=np.float32)
-    if len(arr) > _GMM_MAX_SAMPLES:
-        rng = np.random.default_rng(42)
-        arr = rng.choice(arr, size=_GMM_MAX_SAMPLES, replace=False)
-    X = arr.reshape(-1, 1)
-    ...  # rest unchanged
-```
-
-At 50 k samples the GMM threshold is statistically indistinguishable from
-fitting on 1 M samples (two Gaussians only need their means and variances).
-The same subsampling should be applied anywhere `calculate_gmm_threshold`
-is called from the safe-threshold blender
-(`vtscore/training/thresholds.py:378`).
-
-**Risk:** negligible.
-
----
-
-### 1.3  Epoch counter for embedding matrix invalidation (S6) — ⏸ GATED on 1M-scale interactive use
-
-> **Verdict (2026-06-19): defer; not worth the correctness risk at current
-> target scale.** The `sorted(ctx.medias.keys())` it removes costs ~5–15 ms at
-> 50k (GUI Train) and ~30–80 ms at 250k (GUI Find) — noise beside the matmul and
-> argsort on the same call. The only regime where it matters is CLI Find at
-> 2M+, which is a *batch* path (latency-insensitive) rather than interactive.
-> Against that thin payoff, the current check (`cached_ids == sorted_ids`) is
-> **self-correcting — it can never serve a stale matrix.** The epoch scheme
-> replaces it with a manual invariant that every one of ~5 mutation sites must
-> bump; a single miss silently serves the **wrong embedding matrix → wrong
-> scores, no error**. Trading a self-correcting check for a silent-corruption
-> footgun is only justified if interactive datasets approach 1M. Revisit then,
-> with the test in §1.3's checklist landing first.
-
-**File:** `vtscore/state/core.py` (`DatasetContext`),
-`vtscore/embedding/matrix.py:58–79`
-
-**Problem:** `get_embedding_matrix` calls `sorted(ctx.medias.keys())` on
-every invocation; O(N log N); to detect whether the cached matrix is
-stale.
-
-**Fix:** Add an integer `_medias_epoch` field to `DatasetContext`.
-Increment it whenever `medias` is structurally mutated (adds or deletes).
-The matrix cache stores the epoch at build time and validates with O(1)
-integer compare.
-
-`DatasetContext` changes:
-
-```python
-__slots__ = (
-    ...
-    "_medias_epoch",      # int, incremented on add/remove
-    "_emb_matrix_epoch",  # epoch at which the cached matrix was built
-    "_emb_matrix",        # np.ndarray | None
-)
-
-def __init__(self, dataset_id: str = "") -> None:
-    ...
-    self._medias_epoch: int = 0
-    self._emb_matrix_epoch: int = -1
-    self._emb_matrix: Any = None
-```
-
-`_emb_matrix_ids` is dropped; it was only needed for the sorted-key
-comparison and is no longer required.
-
-All sites that structurally modify `ctx.medias` must increment the epoch:
-
-| Site | File |
-|------|------|
-| `ctx.medias[cid] = …` (importer write) | `load_pipeline.py` |
-| `del ctx.medias[cid]` (None-embedding drop) | `load_pipeline.py:932` |
-| `ctx.medias.clear()` | `vtscore/state/__init__.py:134` |
-| `collapse_duplicates` (may delete) | `vtscore/state/media_lookup.py` |
-
-Since `medias` is a plain dict and Python does not support dict hooks,
-the epoch must be incremented manually at each mutation site.  A helper
-`def _bump_epoch(ctx)` in `core.py` keeps this one line per site.
-
-`get_embedding_matrix` becomes:
-
-```python
-def get_embedding_matrix(ctx):
-    with _state_lock:
-        if ctx._emb_matrix is not None and ctx._emb_matrix_epoch == ctx._medias_epoch:
-            sorted_ids = sorted(ctx.medias.keys())  # still needed for the return value
-            return list(sorted_ids), ctx._emb_matrix
-        ...  # rebuild as before; store ctx._emb_matrix_epoch = ctx._medias_epoch
-```
-
-Wait; the sorted_ids return value still needs `sorted(...)` on the cache
-hit path.  Callers that need the id list on every call will still pay O(N
-log N) for that.  Fix those callers to not re-sort on cache-hit:
-
-- Store `_emb_matrix_sorted_ids: list[int]` alongside the matrix (same as
-  today's `_emb_matrix_ids`, but now the epoch is the validity signal, not
-  the list comparison).  Return the stored list on cache hit.
-
-Net result: the epoch check is O(1); `sorted(...)` only runs on cache miss
-(i.e. when the dataset actually changed).
-
-**`get_embedding_matrix_for_snap`** (line 89): also performs
-`sorted(snap.keys())` (line 102) and `sorted(ctx.medias.keys())` (line 115).
-After this change, the ctx branch reuses the epoch path (shared cached
-matrix); the temp-dict/cross-dataset branch still sorts once (unavoidable
-since there is no epoch for an ad-hoc dict).
-
-**Risk:** medium; touches `DatasetContext.__slots__` and several mutation
-sites.  Must be covered by tests that verify the matrix is rebuilt exactly
-when medias change.
-
----
-
-### 1.4  Epoch-based learned-sort signature (S7) — ⏸ GATED (depends on 1.3)
-
-> **Verdict (2026-06-19): defer with 1.3.** Same `sorted(snap.keys())` cost
-> profile (negligible ≤250k), and this item piggybacks on 1.3's epoch counter,
-> so it inherits the same gating and the same staleness risk. The actual
-> signature builder now lives in
-> `vtscore/detectors/learned_sort.py:build_learned_sort_signature` (the line
-> reference below is stale). Note learned-sort is the GUI **Train** path, capped
-> at ~50k — the regime where this optimization matters least.
-
-**File:** `vtsearch/routes/sorting.py:340–358` (`_build_learned_sort_signature`)
-
-**Problem:**
-
-```python
-tuple(sorted(snap.keys())),                         # O(N log N)
-("regions", tuple(sorted(region_boxes_snapshot.items()))),  # O(R log R)
-```
-
-Both appear inside the signature that is checked before every learned-sort
-job.
-
-**Fix:** Replace `tuple(sorted(snap.keys()))` with
-`("epoch", ctx._medias_epoch)` fetched from the active `DatasetContext`.
-Replace the region-box sort with a frozen-set hash of region IDs (vote
-regions are small, so this is negligible, but the sort is wasteful).
-
-```python
-from vtscore.state.core import get_active_context
-
-epoch = get_active_context()._medias_epoch
-region_sig = frozenset(region_boxes_snapshot.keys())
-
-sig = (
-    ("epoch", epoch),
-    ("votes", tuple(sorted(good_votes)) + tuple(sorted(bad_votes))),
-    ("regions", region_sig),
-    ("inclusion", inclusion),
-    ...
-)
-```
-
-Vote sets are small (tens to hundreds of items), so sorting them is cheap.
-
-**Risk:** low; the signature is only a cache key; a false miss (different
-epoch, same medias) wastes one retrain; a false hit (same epoch, different
-medias) cannot happen because the epoch is only bumped on structural change.
-
----
-
-## Phase 2: Medium effort, high leverage
-
-### 2.1  Cap and defer diversity tree construction (S2, S8) — ✅ SHIPPED
-
-> **Reload caching shipped 2026-06-19** (commit 64cccd5e, PR #1987). The
-> diversity tree is now serialized into the dataset pickle at creation and
-> restored on reload via `restore_diversity_tree_from_cache`, which adopts the
-> cache only when its vector set exactly matches the loaded medias (any
-> remap/dedup/drop falls back to a rebuild). `_build_diversity_tree_stage`
-> skips when a tree is already present; cache-less (pre-change) pickles keep
-> rebuilding eagerly and age off. This removes the rebuild cost on every
-> *reload*, but the **first** build at dataset creation still paid full cost.
->
-> **Part A + Part B shipped 2026-06-25** (backend only). Part A:
-> `_n_init_for(node_size)` scales k-means restarts down for large nodes (3 above
-> 10k, 5 above 1k, 10 otherwise) and `auto_max_depth(n, k, min_node_size)` caps
-> tree depth at the natural splitting depth bounded by `_MAX_LEAVES=4000`; both
-> live in `vtscore/state/diversity_tree.py` and are applied by the two build
-> helpers in `vtscore/state/diversity.py`. Because the small-node branch keeps
-> the full restart count and `auto_max_depth` never caps *below* the natural
-> depth (where `_build_node` already stops via `min_node_size`), trees over
-> normal/test-sized datasets are structurally unchanged. Part B:
-> `should_auto_build_diversity_tree(n)` (threshold
-> `DIVERSITY_TREE_AUTO_THRESHOLD=50_000`) gates the auto-build; the load
-> pipeline (`stages/finalize.py`) and the registry load path skip it above the
-> threshold, and `POST /api/datasets/registry/<id>/diversity-tree` builds it on
-> demand in a cancellable background job (resyncing the active detector's votes
-> when they belong to the dataset). **Deferred:** the frontend "Build diversity
-> index" button — the endpoint is reachable via API/CLI; tree absence already
-> degrades gracefully (autopilot falls back to score-only sampling). See Open
-> follow-ups.
-
-**Files:** `vtscore/state/diversity_tree.py`,
-`vtscore/datasets/load_pipeline.py:968–981`
-
-**Problem:** The diversity tree is always built at load time.  At 100 k
-items it already takes several seconds; at 1 M it takes minutes and
-allocates GBs.  (The reload path is now cached — see the shipped note above —
-so what remains is the cost of the *initial* build at creation time.)
-
-**Fix (two parts):**
-
-**Part A; smarter defaults.**  In `DiversityTree.__init__`, cap k-means
-`_N_INIT` as a function of node size:
-
-```python
-def _n_init_for(node_size: int) -> int:
-    if node_size > 10_000:
-        return 3   # large nodes converge reliably; fewer restarts
-    if node_size > 1_000:
-        return 5
-    return 10  # current default for small nodes
-```
-
-Similarly auto-cap `max_depth` so the tree never has more than ~4 000 leaf
-nodes regardless of N:
-
-```python
-def _auto_max_depth(n: int, k: int, min_node_size: int) -> int:
-    import math
-    max_leaves = 4_000
-    # k^depth ≈ n / min_node_size, capped at max_leaves
-    natural = math.ceil(math.log(n / max(min_node_size, 1), max(k, 2)))
-    cap = math.ceil(math.log(max_leaves, max(k, 2)))
-    return min(DIVERSITY_TREE_MAX_DEPTH, natural, cap)
-```
-
-Apply this in `build_diversity_tree_for_context` when the caller doesn't
-pass an explicit `max_depth`.
-
-**Part B; skip above a threshold; expose a "Build diversity tree" endpoint.**
-In `_build_diversity_tree_stage` (load pipeline):
-
-```python
-_DIVERSITY_TREE_AUTO_THRESHOLD = 50_000  # skip auto-build above this
-
-def _build_diversity_tree_stage(ctx, tracker):
-    n = len(ctx.medias)
-    if n > _DIVERSITY_TREE_AUTO_THRESHOLD:
-        # Tree skipped at load time; user can trigger it via POST /api/datasets/.../diversity-tree
-        return
-    ...build as today...
-```
-
-Add a new route `POST /api/datasets/registry/<id>/diversity-tree` that
-builds the tree in the background (reusing the existing `JobManager`
-pattern) and reports progress via `/api/progress/dataset/<id>`.  The
-frontend shows a "Build diversity index" button in the dataset panel when
-the tree is absent.
-
-**Risk:** medium; the diversity tree is the autopilot's diversity signal.
-Without it, autopilot falls back to score-only sampling.  This is
-acceptable and already handled by the `if tree is None` guard in
-`diversity_tree_next_sample`.
-
----
-
-### 2.2  Debounce label sync writes (S12) — ✅ ALREADY SHIPPED
-
-> **Already implemented** in `vtscore/labels/sync.py`. `sync_to_labelset_source`
-> is debounced and asynchronous: each call schedules a per-detector
-> `threading.Timer` (`_DEBOUNCE_DELAY = 0.2s`, keyed by `detector_id`), so a
-> rapid voting burst collapses into a single background push that uses the
-> latest state. `flush_pending_label_syncs` drains synchronously for tests /
-> graceful shutdown, and an `atexit` hook flushes the last pending push on
-> normal exit. The shipped delay is 200ms rather than the 2s sketched below,
-> which keeps the on-disk labels within a UI tick while still coalescing
-> bursts. No further work needed.
-
-**File:** `vtscore/labels/sync.py` (`sync_to_labelset_source`)
-
-**Problem:** `sync_to_labelset_source` fires on every vote and rewrites
-the entire JSON labelset file.  At 100 k labels the file is ~50–100 MB;
-each vote stalls the vote handler for seconds.
-
-**Fix:** Debounce with a per-detector background flush.
-
-```python
-import threading
-
-_flush_timers: dict[str, threading.Timer] = {}  # detector_id → timer
-_FLUSH_DELAY = 2.0  # seconds
-
-def sync_to_labelset_source(flush_delay: float = _FLUSH_DELAY) -> None:
-    from vtscore.state.core import get_active_detector_context
-    det_ctx = get_active_detector_context()
-    det_id = det_ctx.detector_id
-
-    # Cancel any pending flush for this detector.
-    if det_id in _flush_timers:
-        _flush_timers[det_id].cancel()
-
-    def _flush():
-        _flush_timers.pop(det_id, None)
-        _do_sync_to_labelset_source()  # existing implementation
-
-    timer = threading.Timer(flush_delay, _flush)
-    timer.daemon = True
-    timer.start()
-    _flush_timers[det_id] = timer
-```
-
-This means votes accumulate for up to 2 s before a write fires; one write
-instead of N.  On process shutdown the timers are daemon threads so they do
-not block exit; the settings-source sync (which is already separate) is
-responsible for flushing on graceful shutdown.
-
-An immediate flush can be forced by passing `flush_delay=0`; useful in
-tests and in the label-export route.
-
-**Risk:** low; labels might be up to 2 s stale in the sync target after a
-vote, which is acceptable.
-
----
+## Open / next work
 
 ### 2.3  Incremental secondary lookups on DatasetContext (S14)
 
-**File:** `vtscore/state/core.py` (`DatasetContext`),
-various route files that rebuild `md5_to_media` / `origin_key_to_cid` per
-request.
+**File:** `vtscore/state/core.py` (`DatasetContext`), various route files that rebuild
+`md5_to_media` / `origin_key_to_cid` per request.
 
-**Problem:** Many routes rebuild `{m["md5"]: m for m in snap.values()}`
-(or similar) on every request; O(N) Python iteration with dict construction.
+**Problem:** Many routes rebuild `{m["md5"]: m for m in snap.values()}` (or similar)
+on every request; O(N) Python iteration with dict construction.
 
 **Fix:** Add maintained secondary indexes to `DatasetContext`:
 
@@ -447,7 +50,7 @@ class DatasetContext:
         self._origin_key_index: dict[str, int] = {}
 ```
 
-Maintained by the same mutation sites that bump `_medias_epoch` (Phase 1.3):
+Maintained by the same mutation sites that would bump `_medias_epoch` (§1.3):
 
 ```python
 def _add_media(ctx, cid, media):
@@ -466,95 +69,64 @@ def _remove_media(ctx, cid):
         ctx._origin_key_index.pop(_stable_origin_key(media), None)
 ```
 
-Routes and helpers that currently rebuild lookup dicts from the full
-snapshot switch to `ctx._md5_index` / `ctx._origin_key_index` directly.
+Routes/helpers that rebuild lookup dicts switch to `ctx._md5_index` /
+`ctx._origin_key_index` directly. Medium refactor because mutation sites are spread
+across `load_pipeline.py`, `state/__init__.py`, and `state/media_lookup.py`.
 
-This is a medium refactor because mutation sites are spread across
-`load_pipeline.py`, `state/__init__.py`, and `state/media_lookup.py`.
-
-**Risk:** medium; secondary indexes must stay in sync with `medias`.  Any
-site that writes to `ctx.medias` directly (bypassing the helper) will
-produce stale indexes.  The Phase 1.3 epoch audit surfaces all those sites,
-so Phase 1.3 should land first.
+**Risk:** medium; secondary indexes must stay in sync with `medias`. Any site that
+writes `ctx.medias` directly (bypassing the helper) produces stale indexes. The §1.3
+epoch audit surfaces all those sites, so §1.3 should land first.
 
 ---
 
-## Phase 3: Larger architectural work
-
 ### 3.1  mmap embedding matrix (S1)
 
-**Files:** `vtscore/datasets/loader_pickle.py`,
-`vtscore/embedding/matrix.py`
+**Files:** `vtscore/datasets/loader_pickle.py`, `vtscore/embedding/matrix.py`
 
 **Problem:** Embeddings are stored inline in `media["embedding"]` as Python
-lists/arrays, then copied into a contiguous `(N, D)` NumPy array on first
-access.  At 1 M items × 384-dim the array is 1.5 GB; it must be rebuilt
-from the per-item entries on every cold start.
+lists/arrays, then copied into a contiguous `(N, D)` NumPy array on first access. At
+1M items × 384-dim the array is 1.5 GB; it must be rebuilt from per-item entries on
+every cold start.
 
 **Fix (two-step):**
 
-**Step A; sidecar `.npy` file.**  During the post-load phase
-(after all embeddings are present), write the sorted-by-cid embedding
-matrix to `<dataset_path>.emb.npy` if it doesn't already exist.  Format:
+**Step A — sidecar `.npy` file.** After all embeddings are present, write the
+sorted-by-cid matrix to `<dataset>.emb.npy` (+ companion `<dataset>.cids.npy`, int64
+sorted cids) if it doesn't already exist.
 
-```
-# Header line (JSON): {"cids": [1, 2, 3, ...], "dim": 384, "dtype": "float32"}
-# Body: raw float32 bytes, row-major, shape (N, D)
-```
-
-Actually simpler: use `np.save` / `np.load` with a companion `<dataset>.cids.npy`
-(int64 array of sorted cids) and `<dataset>.emb.npy` (float32 matrix).
-
-**Step B; mmap load.**  On pickle load, check whether both sidecars exist
-and their cid list matches the pickle's media IDs.  If so:
+**Step B — mmap load.** On pickle load, if both sidecars exist and the cid list
+matches the pickle's media IDs:
 
 ```python
-cids = np.load(cids_path)          # int64 array
+cids = np.load(cids_path)                  # int64 array
 matrix = np.load(emb_path, mmap_mode='r')  # zero-RAM mmap
 ctx._emb_matrix = matrix
 ctx._emb_matrix_sorted_ids = list(cids)
 ctx._emb_matrix_epoch = ctx._medias_epoch
 ```
 
-The OS pages in only the rows that scoring actually accesses.  For a
-100-item sort query on a 1 M item dataset, only ~40 kB of the 1.5 GB file
-is touched.
+The OS pages in only the rows scoring actually accesses (a 100-item sort query on a
+1M dataset touches ~40 kB of the 1.5 GB file). `get_embedding_matrix` must detect the
+cached-this-way matrix and skip the rebuild.
 
-`get_embedding_matrix` must detect when the matrix is already cached this
-way and skip the rebuild.
+**Sidecar invalidation:** if the pickle is newer than the sidecar, or the cid list
+doesn't match, fall back to the in-memory build (optionally rewrite fresh sidecars).
 
-**Sidecar invalidation:** If the pickle file is newer than the sidecar, or
-if the cid list doesn't match, fall back to the in-memory build (and
-optionally write fresh sidecars).
-
-**Risk:** high; introduces file-system state alongside pickle files.
-Must be careful about:
-- Race between sidecar write and concurrent load
-- Version drift if the embedder changes (embedding dim changes → sidecar invalid)
-- Docker / read-only filesystems (fall back gracefully to in-memory)
-
-A `--no-emb-sidecar` CLI flag (or a settings key) can disable sidecar
-writing for environments where the dataset path is read-only.
+**Risk:** high; introduces file-system state alongside pickle files. Care needed for:
+race between sidecar write and concurrent load; version drift if the embedder changes
+(embedding dim changes → sidecar invalid); Docker / read-only filesystems (fall back
+to in-memory). A `--no-emb-sidecar` flag (or settings key) disables sidecar writing
+where the dataset path is read-only.
 
 ---
 
 ### 3.2  Sparse sort results: top-K API + lazy frontend (S3, S17, S19)
 
-This is the largest single change.  It requires coordinated backend + frontend
-work and must be landed as a pair of PRs.
+The largest single change; requires coordinated backend + frontend work landed as a
+pair of PRs.
 
-**Backend changes:**
-
-`POST /api/sort/cosine` and `POST /api/sort/learned` currently return:
-
-```json
-{
-  "results": [{"id": 1, "score": 0.91, "bestRegion": null}, ...],
-  "threshold": 0.72
-}
-```
-
-for all N items.  Change the response to:
+**Backend.** `POST /api/sort/cosine` and `/api/sort/learned` currently return all N
+items. Change the response to a windowed shape:
 
 ```json
 {
@@ -566,57 +138,32 @@ for all N items.  Change the response to:
 }
 ```
 
-where `results` contains only the top `K_ABOVE` items above threshold
-plus `K_BELOW` items immediately below (e.g. `K_ABOVE = 500`,
-`K_BELOW = 200`).  Clients that need more items fetch:
+where `results` contains only the top `K_ABOVE` items above threshold plus `K_BELOW`
+immediately below (e.g. 500 / 200). Clients fetch more via
+`GET /api/sort/page?offset=500&limit=200`. The full sorted order is computed as today
+but only a window is transmitted; the backend holds the full list in the existing
+`AsyncJob.result`.
 
-```
-GET /api/sort/page?offset=500&limit=200
-```
-
-The full sorted order is computed in the backend as today, but only a
-window is transmitted.  The backend holds the full sorted list in the
-existing job result (already stored in `AsyncJob.result`).
-
-**Frontend changes:**
-
-`SortStateService` currently holds `SortedItem[] | null`.  Replace with:
+**Frontend.** Replace `SortStateService`'s `SortedItem[] | null` with a windowed model:
 
 ```typescript
 interface SortWindow {
   total: number;
   threshold: number;
   aboveThreshold: number;
-  items: SortedItem[];        // the loaded window
-  loadedRange: [number, number]; // [start, end] indices
+  items: SortedItem[];            // the loaded window
+  loadedRange: [number, number];  // [start, end] indices
   hasMore: boolean;
 }
 ```
 
-`media-list.component.ts:rebuildOrderedItems` no longer iterates a
-full array; it renders whatever is in `items` and shows a "Load more"
-trigger at the end.  `cachedOrderedItems` stays bounded to the loaded
-window (≤ 700 items by default).
+`media-list.component.ts:rebuildOrderedItems` renders whatever is in `items` and shows
+a "Load more" trigger at the end; `cachedOrderedItems` stays bounded to the loaded
+window (≤700). Virtual scroll already handles a fixed window; this caps the array size
+at the API level.
 
-Virtual scroll on the frontend already handles a fixed window; this just
-caps the array size at the API level.
-
-**Complexity:** 2–3 PRs (backend sort API, frontend SortStateService,
-frontend media-list).  All three must land atomically or behind a feature
-flag.
-
----
-
-### ~~3.3  Virtual grid mode (S16)~~ — **SHIPPED**
-
-`media-list/` now chunks `cachedOrderedItems` into fixed-width rows through a
-`CdkVirtualScrollViewport` (one virtual item = one row of `gridColumns` cards;
-columns derived from measured viewport width, row stride measured from a real
-card via `ResizeObserver`; threshold marker gets its own full-width row;
-grid-aware `scrollToIndex`/selected-scroll/prefetch). The list-virtualization
-threshold dropped 500 → **150**; grid virtualizes above 80. Result: list↔grid
-toggles ~169 ms (was ~1129 ms), grid switch ~18 ms (was ~1814 ms), ~20–34
-components in the DOM instead of 412.
+**Complexity:** 2–3 PRs (backend sort API, frontend SortStateService, frontend
+media-list). All must land atomically or behind a feature flag.
 
 ---
 
@@ -625,99 +172,192 @@ components in the DOM instead of 412.
 **Files:** `vtscore/datasets/container.py` (`read_container`),
 `vtscore/datasets/loader_pickle.py`, `vtscore/datasets/load_pipeline.py`
 
-**Problem (found while investigating the S16 freeze, deferred for now):** the
-dataset load runs in a daemon thread and streams progress over SSE, so for
-the demo datasets the dashboard load stays responsive with a working Cancel.
-But on a large `.pkl` two things still read as "frozen, Cancel does nothing":
+**Problem (found while investigating the S16 freeze):** the dataset load runs in a
+daemon thread and streams SSE progress, so demo-dataset loads stay responsive with a
+working Cancel. But on a large `.pkl` two things read as "frozen, Cancel does nothing":
 
-1. **`read_container` is one un-cancellable, no-progress step.** It does a
-   full ZIP `zf.read("medias.pkl")` (DEFLATE decompress of the whole blob) +
-   `safe_pickle_load` of the entire dict.  While it runs the bar sits at
-   "Reading…" and — because the dev server is a single process holding the
-   GIL through that pure-Python work — the Cancel/SSE endpoints can't be
-   serviced.  So the progress bar appears stuck and Cancel is inert until it
+1. **`read_container` is one un-cancellable, no-progress step.** A full ZIP
+   `zf.read("medias.pkl")` (DEFLATE of the whole blob) + `safe_pickle_load` of the
+   entire dict. While it runs the bar sits at "Reading…" and — because the dev server
+   is a single process holding the GIL through that pure-Python work — the Cancel/SSE
+   endpoints can't be serviced, so the bar appears stuck and Cancel is inert until it
    finishes.
-2. **Cancel is unchecked for the whole import phase.** `_run_importer(...)`
-   runs the entire pickle-conversion loop with no `tracker.check_cancelled()`
-   inside; the first cancel check is only *after* it returns
-   (`load_pipeline.py`, right after `_run_importer`).  So even once the read
-   finishes, a click during conversion doesn't abort until the loop ends.
+2. **Cancel is unchecked for the whole import phase.** `_run_importer(...)` runs the
+   entire pickle-conversion loop with no `tracker.check_cancelled()` inside; the first
+   cancel check is only *after* it returns.
 
-**Fix direction:** add `check_cancelled()` inside the
-`load_dataset_from_pickle` conversion loop (it already reports progress every
-`_progress_interval` items — check cancel there too), and give the
-read/decompress phase coarse progress + a cancellation point (e.g. stream the
-ZIP member, or at minimum surface an indeterminate "Reading…" state the user
-understands is uninterruptible).  Overlaps with **S15 (streaming pickle
-load)** below.
+**Fix direction:** add `check_cancelled()` inside the `load_dataset_from_pickle`
+conversion loop (it already reports progress every `_progress_interval` items — check
+cancel there too), and give the read/decompress phase coarse progress + a cancellation
+point (stream the ZIP member, or at minimum surface an honest indeterminate "Reading…"
+state). Overlaps with **§4.1 (streaming pickle load)** below.
 
 ---
 
-## Phase 4: Major infrastructure (1 M+ items)
+### Phase 4: Major infrastructure (1M+ items)
 
-These are deferred until Phase 1–3 are stable.
+Deferred until Phase 1–3 are stable.
 
-### 4.1  Streaming pickle load (S15)
-
-Pickle files > 500 MB should be loaded in chunks.  The embedding matrix
-sidecar (Phase 3.1) decouples embeddings from the pickle, enabling the
-pickle itself to omit inline embeddings.  Once that is in place, the
-pickle file becomes mostly metadata (filenames, origins, md5s) and can
-be loaded quickly; embeddings come from the mmap'd sidecar.
-
-### 4.2  Parallel cross-dataset label population (S11)
-
-`populate_label_embeddings` in `vtscore/detectors/labelset_training.py`
-resolves and embeds each LabelSet element sequentially.  Replace with a
-`ThreadPoolExecutor` (bounded by the same `_embed_gate` that governs
-dataset embedding concurrency).  Deduplicate file resolves across elements
-with the same origin before dispatching.
-
-### 4.3  Streaming JSON label export (S13)
-
-Replace `LabelSet.to_dict()` → `flask.jsonify()` with a generator that
-yields one JSON line per label element, wrapped in `flask.stream_with_context`.
-Requires clients to parse a newline-delimited JSON stream (NDJSON) or the
-existing `{"labels": [...]}` wrapper using a streaming parser.  The simpler
-approach is to add a `?format=ndjson` query param and keep the default
-response identical.
+- **4.1  Streaming pickle load (S15).** Pickle files > 500 MB should load in chunks.
+  The embedding-matrix sidecar (§3.1) decouples embeddings from the pickle, so the
+  pickle becomes mostly metadata (filenames, origins, md5s) and can load quickly;
+  embeddings come from the mmap'd sidecar.
+- **4.2  Parallel cross-dataset label population (S11).**
+  `populate_label_embeddings` (`vtscore/detectors/labelset_training.py`) resolves and
+  embeds each LabelSet element sequentially. Replace with a `ThreadPoolExecutor`
+  (bounded by the same `_embed_gate` that governs dataset embedding concurrency);
+  dedupe file resolves across elements with the same origin before dispatching.
+- **4.3  Streaming JSON label export (S13).** Replace
+  `LabelSet.to_dict()` → `flask.jsonify()` with a generator yielding one JSON line per
+  element, wrapped in `flask.stream_with_context`. Simplest: add a `?format=ndjson`
+  query param and keep the default response identical.
 
 ---
 
-## Test coverage checklist
+## Gated (deferred until 1M-scale interactive use)
 
-Each phase needs targeted tests before merging:
+### 1.3  Epoch counter for embedding matrix invalidation (S6) — ⏸ GATED
 
-- **1.1**: Unit test: cache key is always the same tuple length regardless
-  of N_labels; verify no collision for distinct X/y pairs.
-- **1.2**: Unit test: `calculate_gmm_threshold` with N > 50 k produces a
-  threshold within 1% of the full-sample result (use a known bimodal
-  distribution).
-- **1.3**: Integration test: matrix is rebuilt exactly when medias change,
-  reused when they don't; epoch counter is O(1) to check.
-- **1.4**: Integration test: learned-sort job is not re-fired when called
-  twice with the same votes on the same epoch.
-- **2.1**: Load test: dataset with 100 k items loads in < 30 s without a
-  diversity tree; "Build diversity tree" endpoint completes and the result
-  is used by autopilot.
-- **2.2**: Integration test: 100 rapid votes produce exactly 1 file write
-  within 2 s of the last vote.
-- **3.1**: Integration test: load, unload, reload a dataset; matrix is
-  re-used from sidecar on second load without rebuilding from per-item entries.
-- **3.2**: API test: sort response with 200 k items contains ≤ 700 results;
-  `/api/sort/page?offset=700&limit=200` returns the next window.
+> **Verdict (2026-06-19): defer; not worth the correctness risk at current target
+> scale.** The `sorted(ctx.medias.keys())` it removes costs ~5–15 ms at 50k and
+> ~30–80 ms at 250k — noise beside the matmul/argsort on the same call. The only
+> regime where it matters is CLI Find at 2M+, a *batch* path (latency-insensitive).
+> Against that thin payoff, the current check (`cached_ids == sorted_ids`) is
+> **self-correcting — it can never serve a stale matrix.** The epoch scheme replaces
+> it with a manual invariant every one of ~5 mutation sites must bump; a single miss
+> silently serves the **wrong embedding matrix → wrong scores, no error.** Revisit
+> only if interactive datasets approach 1M, with the §1.3 test landing first.
+
+**File:** `vtscore/state/core.py` (`DatasetContext`), `vtscore/embedding/matrix.py:58–79`
+
+**Problem:** `get_embedding_matrix` calls `sorted(ctx.medias.keys())` on every
+invocation (O(N log N)) to detect a stale cached matrix.
+
+**Fix:** Add an integer `_medias_epoch` to `DatasetContext`, incremented whenever
+`medias` is structurally mutated (adds/deletes). The matrix cache stores the epoch at
+build time and validates with an O(1) integer compare; `_emb_matrix_ids` is dropped.
+
+```python
+__slots__ = (..., "_medias_epoch", "_emb_matrix_epoch", "_emb_matrix")
+# __init__: _medias_epoch = 0; _emb_matrix_epoch = -1; _emb_matrix = None
+```
+
+All sites that structurally modify `ctx.medias` must increment the epoch:
+
+| Site | File |
+|------|------|
+| `ctx.medias[cid] = …` (importer write) | `load_pipeline.py` |
+| `del ctx.medias[cid]` (None-embedding drop) | `load_pipeline.py:932` |
+| `ctx.medias.clear()` | `vtscore/state/__init__.py:134` |
+| `collapse_duplicates` (may delete) | `vtscore/state/media_lookup.py` |
+
+Since `medias` is a plain dict with no hooks, a helper `_bump_epoch(ctx)` in `core.py`
+keeps this one line per site. On cache hit the return value still needs the id list,
+so store `_emb_matrix_sorted_ids` alongside the matrix (the epoch is the validity
+signal, not the list comparison) and return the stored list; `sorted(...)` only runs
+on cache miss. `get_embedding_matrix_for_snap` reuses the epoch path on the ctx
+branch; the temp-dict/cross-dataset branch still sorts once (no epoch for an ad-hoc
+dict).
+
+**Risk:** medium; touches `__slots__` and several mutation sites. Must be covered by
+tests that verify the matrix rebuilds exactly when medias change.
+
+---
+
+### 1.4  Epoch-based learned-sort signature (S7) — ⏸ GATED (depends on 1.3)
+
+> **Verdict (2026-06-19): defer with 1.3.** Same `sorted(snap.keys())` cost profile
+> (negligible ≤250k), and it piggybacks on §1.3's epoch counter, so it inherits the
+> same gating and staleness risk. The signature builder now lives in
+> `vtscore/detectors/learned_sort.py:build_learned_sort_signature` (the line
+> reference below is stale). Note learned-sort is the GUI **Train** path (~50k) — the
+> regime where this optimization matters least.
+
+**File:** `vtsearch/routes/sorting.py:340–358` (`_build_learned_sort_signature`)
+
+**Problem:** `tuple(sorted(snap.keys()))` (O(N log N)) and
+`tuple(sorted(region_boxes_snapshot.items()))` (O(R log R)) appear inside the
+signature checked before every learned-sort job.
+
+**Fix:** Replace `tuple(sorted(snap.keys()))` with `("epoch", ctx._medias_epoch)`;
+replace the region-box sort with a frozen-set of region IDs.
+
+```python
+epoch = get_active_context()._medias_epoch
+region_sig = frozenset(region_boxes_snapshot.keys())
+sig = (("epoch", epoch), ("votes", ...), ("regions", region_sig), ("inclusion", ...), ...)
+```
+
+Vote sets are small, so sorting them stays cheap.
+
+**Risk:** low; the signature is only a cache key — a false miss wastes one retrain; a
+false hit can't happen because the epoch bumps only on structural change.
 
 ---
 
 ## Open follow-ups
 
 - Frontend "Build diversity index" button (deferred from §2.1 Part B): surface a
-  trigger for `POST /api/datasets/registry/<id>/diversity-tree` when a loaded
-  dataset has no tree. No existing dataset/tree-status panel hosts it today, so
-  it needs a UI home; the endpoint is meanwhile reachable via API/CLI.
-- FAISS / HNSW replacement for diversity tree (long-term S2 fix)
-- Columnar `medias` storage (S4): deferred; requires redesign of every
-  media-reading call site
-- Append-only vote journal for labelset sources (S12 long-term): deferred
-  until compaction semantics are defined
-- CLI progress bar rate-limiting (S21): trivial, add when touching CLI
+  trigger for `POST /api/datasets/registry/<id>/diversity-tree` when a loaded dataset
+  has no tree. No existing dataset/tree-status panel hosts it today, so it needs a UI
+  home; the endpoint is meanwhile reachable via API/CLI.
+- FAISS / HNSW replacement for diversity tree (long-term S2 fix).
+- Columnar `medias` storage (S4): deferred; requires redesign of every media-reading
+  call site.
+- Append-only vote journal for labelset sources (S12 long-term): deferred until
+  compaction semantics are defined.
+- CLI progress bar rate-limiting (S21): trivial, add when touching CLI.
+
+## Test coverage checklist (open items)
+
+- **1.3**: matrix rebuilt exactly when medias change, reused when they don't; epoch
+  check is O(1).
+- **1.4**: learned-sort job not re-fired when called twice with the same votes on the
+  same epoch.
+- **3.1**: load, unload, reload a dataset; matrix re-used from sidecar on second load
+  without rebuilding from per-item entries.
+- **3.2**: sort response with 200k items contains ≤700 results;
+  `/api/sort/page?offset=700&limit=200` returns the next window.
+
+---
+
+## What shipped
+
+- **§1.2  Subsample GMM threshold (S9)** — shipped 2026-06-19. Subsampling lives
+  inside `calculate_gmm_threshold` (single point, so every caller benefits), gated by
+  `_GMM_MAX_SAMPLES = 50_000` with a seed-42 `default_rng`; the exception-fallback
+  median is bounded to the subsample too. The one Phase-1 item with a real,
+  scale-justified payoff (the GMM fits the full score distribution, 250k–2M+).
+  `tests_lib/sorting/test_gmm_subsample.py`.
+- **§2.1  Cap and defer diversity tree construction (S2, S8)** — reload caching
+  shipped 2026-06-19 (commit 64cccd5e, PR #1987): the tree is serialized into the
+  pickle and restored via `restore_diversity_tree_from_cache` (adopted only when its
+  vector set exactly matches the loaded medias, else rebuild). Part A + Part B shipped
+  2026-06-25 (backend): `_n_init_for(node_size)` scales k-means restarts down for
+  large nodes and `auto_max_depth(...)` caps depth at `_MAX_LEAVES=4000`
+  (`vtscore/state/diversity_tree.py`), both structurally no-op on normal/test-sized
+  trees; `should_auto_build_diversity_tree(n)` (threshold
+  `DIVERSITY_TREE_AUTO_THRESHOLD=50_000`) gates the auto-build, and
+  `POST /api/datasets/registry/<id>/diversity-tree` builds on demand in a cancellable
+  job. Deferred: the frontend "Build diversity index" button (see Open follow-ups).
+- **§2.2  Debounce label sync writes (S12)** — already implemented in
+  `vtscore/labels/sync.py`: `sync_to_labelset_source` schedules a per-detector
+  `threading.Timer` (`_DEBOUNCE_DELAY = 0.2s`, keyed by `detector_id`), so a rapid
+  voting burst collapses into one background push; `flush_pending_label_syncs` drains
+  synchronously for tests/shutdown, with an `atexit` flush. 200ms (vs the 2s sketch)
+  keeps on-disk labels within a UI tick while coalescing bursts.
+- **§3.3  Virtual grid mode (S16)** — shipped. `media-list/` chunks
+  `cachedOrderedItems` into fixed-width rows through a `CdkVirtualScrollViewport`
+  (one virtual item = one row of `gridColumns` cards; columns from measured viewport
+  width, row stride from a real card via `ResizeObserver`; grid-aware
+  `scrollToIndex`/selected-scroll/prefetch). List-virtualization threshold dropped
+  500 → 150; grid virtualizes above 80. Result: list↔grid toggle ~169 ms (was ~1129),
+  grid switch ~18 ms (was ~1814), ~20–34 DOM components instead of 412. (Surfaced
+  §3.4/S17 as the deferred backend cancel/progress follow-up, still open above.)
+- **§1.1  Hash-based threshold cache key (S5)** — ❌ **REJECTED** (misdiagnosis):
+  conflates training-set size with dataset size. `X_list`/`y_list` are labeled
+  examples (votes + labelset elements), not the dataset, so the "150 MB at 100k"
+  figure never occurs; the cache is a single overwritten slot, not a growing
+  structure; and the proposed fix would *add* `np.stack(...).tobytes()` compute on the
+  comparison path to save a few MB on a non-bottleneck. Revisit only if labelsets ever
+  grow to tens of thousands of elements (a different feature).
