@@ -98,7 +98,7 @@
   }
 
   tbody tr.row-mismatch {
-    background: rgba(255, 180, 0, .12);
+    background: var(--warning-bg);
 
     .col-type {
       color: var(--text-warning);

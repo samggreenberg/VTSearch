@@ -524,7 +524,15 @@ Ordered by leverage; each is independently shippable.
    surfaces that relied on it. Kills the vh/px distortions, makes 1px real,
    and gives the app genuine typographic hierarchy. This is the single change
    most likely to make the whole product feel more polished.
-2. **Light-theme contrast pass + status/warning tokens.** Darken the light
+2. **Light-theme contrast pass + status/warning tokens.** ✅ **Shipped**
+   (PR #2213): light status label/sub ramp darkened to ≥4.5:1, `--warning-bg`/
+   `--warning-border` added to all three themes (three amber chips migrated),
+   disabled `.btn--primary` desaturated instead of opacity-faded, and the two
+   remaining §2 base-token FAILs fixed (dark `--text-dim` → `#8a8a8a`,
+   `--border-subtle` lifted so dividers are perceptible). The filled-badge
+   contrast fix landed separately on `dev` (Phase 1's `--badge-text-dark`), so
+   every §2 FAIL now passes its target ratio. Screenshots queued for reshoot.
+   Darken the light
    theme's status sub/label ramp to ≥4.5:1, add `--warning-bg`/`--warning-border`
    to all three themes, switch filled badges to dark-text-on-fill (or tinted-bg
    + colored-text like `.badge-download`), and replace disabled-filled-button
@@ -574,7 +582,7 @@ Ordered by leverage; each is independently shippable.
 | Phase | Contents | Risk |
 |---|---|---|
 | 1 (bug fixes) | §1 broken tokens, find-stats table, focus-outline restores, badge/status contrast, Back-vs-Cancel ×3 | Low — small, local diffs |
-| 2 (foundations) | Type scale + zoom removal; token consolidation + scanner extension; light-theme ramp | Medium — visual diff everywhere, wants screenshot review |
+| 2 (foundations) | Type scale + zoom removal; token consolidation + scanner extension; ~~light-theme ramp~~ (✅ shipped, PR #2213) | Medium — visual diff everywhere, wants screenshot review |
 | 3 (consolidation) | Shared primitives (§10.4), modal package (§10.5), icon system (§10.6) | Medium — many files, mechanical |
 | 4 (IA & copy) | Header simplification, headings/a11y sweep, copy sweep | Low-medium |
 

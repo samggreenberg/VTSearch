@@ -346,8 +346,8 @@
   margin-top: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
   border-radius: var(--radius-md);
-  background: rgba(255, 196, 0, 0.12);
-  border: 1px solid rgba(255, 196, 0, 0.4);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
   color: var(--text-warning);
   font-size: var(--font-sm);
   line-height: 1.35;

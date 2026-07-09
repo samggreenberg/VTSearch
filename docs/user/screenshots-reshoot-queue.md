@@ -37,3 +37,5 @@ An empty table means "no known-stale shots" — the desired resting state.
 | Shot id | Embedded in | Why it's stale | Flagged |
 |---------|-------------|----------------|---------|
 | `importer-picker` | `docs/user/USER_GUIDE.md#loading-a-dataset` | The shot's caption calls out "per-row readiness badges" (`.badge-ready`/`.badge-embedding`); the 2026-07-09 UI style review Phase 1 fix swapped their unreadable white text for a new `--badge-text-dark` token, changing the badge's rendered text color in both themes. | 2026-07-09 |
+| `dashboard-loaded` | USER_GUIDE.md#what-vtsearch-does | §2 contrast fix: dark-theme table row dividers (--border-subtle) now perceptible; dim sub-text (--text-dim) lightened | 2026-07-09 |
+| `dashboard-manage` | USER_GUIDE.md#dashboard--managing-datasets-and-detectors | §2 contrast fix: dark-theme table row dividers (--border-subtle) now perceptible; dim sub-text (--text-dim) lightened | 2026-07-09 |
