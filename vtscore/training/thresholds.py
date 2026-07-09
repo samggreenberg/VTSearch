@@ -351,15 +351,14 @@ def _compute_fold_orderings_grouped(
     n_train_pos = _per_class_n_train(len(pos_groups))
     n_train_neg = _per_class_n_train(len(neg_groups))
 
-    pos_arr = np.array(pos_groups, dtype=object)
-    neg_arr = np.array(neg_groups, dtype=object)
-
+    # Index the plain group lists by position - group ids are tuples, and
+    # ``np.array(list_of_tuples)`` would build a 2-D array and mangle them.
     orderings: list[tuple[list[float], list[float]]] = []
     for _ in range(max(1, calibrate_count)):
-        pos_perm = _rng.permutation(len(pos_arr))
-        neg_perm = _rng.permutation(len(neg_arr))
-        train_groups = [pos_arr[i] for i in pos_perm[:n_train_pos]] + [neg_arr[i] for i in neg_perm[:n_train_neg]]
-        cal_groups = [pos_arr[i] for i in pos_perm[n_train_pos:]] + [neg_arr[i] for i in neg_perm[n_train_neg:]]
+        pos_perm = _rng.permutation(len(pos_groups))
+        neg_perm = _rng.permutation(len(neg_groups))
+        train_groups = [pos_groups[i] for i in pos_perm[:n_train_pos]] + [neg_groups[i] for i in neg_perm[:n_train_neg]]
+        cal_groups = [pos_groups[i] for i in pos_perm[n_train_pos:]] + [neg_groups[i] for i in neg_perm[n_train_neg:]]
 
         train_idx = [i for g in train_groups for i in rows_by_group[g]]
         X_train = torch.tensor(X_np[train_idx], dtype=torch.float32)
