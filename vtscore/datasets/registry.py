@@ -15,10 +15,12 @@ import json
 import logging
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from vtscore.config import DATA_DIR
+from vtscore.io import atomic_write_json, file_lock
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +42,16 @@ def get_saved_datasets_dir() -> Path:
 # Backward-compat alias - prefer :func:`get_saved_datasets_dir` for live value.
 SAVED_DATASETS_DIR = DATA_DIR / "saved_datasets"
 
+_T = TypeVar("_T")
+
+# Guards the process-local state below: the ``_entries`` cache and the
+# ``_loaded_ids`` / ``_loading_ids`` sets.  Cross-process durability of the
+# on-disk manifest is handled separately by :func:`_read_modify_write` under a
+# ``file_lock``; this lock only serialises threads within one process.
 _lock = threading.RLock()
 
-# In-memory cache - loaded once from disk, written back on every mutation.
+# In-memory cache - loaded once from disk, refreshed from disk on every
+# mutation (see :func:`_read_modify_write`).
 _entries: list[dict[str, Any]] | None = None
 
 # The set of dataset IDs that are currently loaded in memory.
@@ -74,16 +83,8 @@ def _load() -> list[dict[str, Any]]:
 
 
 def _save(entries: list[dict[str, Any]]) -> None:
-    """Write *entries* to disk atomically."""
-    import os
-
-    REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    tmp = REGISTRY_PATH.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(entries, f, indent=2)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(str(tmp), str(REGISTRY_PATH))
+    """Write *entries* to disk atomically (per-writer unique temp name)."""
+    atomic_write_json(REGISTRY_PATH, entries)
 
 
 def _ensure_loaded() -> list[dict[str, Any]]:
@@ -92,6 +93,30 @@ def _ensure_loaded() -> list[dict[str, Any]]:
     if _entries is None:
         _entries = _load()
     return _entries
+
+
+def _read_modify_write(mutator: Callable[[list[dict[str, Any]]], _T]) -> _T:
+    """Run *mutator* over a fresh-from-disk registry under a cross-process lock.
+
+    Holding the ``file_lock`` while re-reading the manifest closes the
+    multi-process read-modify-write race: a concurrent process (e.g. a CLI
+    autodetect run against the same data dir) can't commit between our read and
+    write, so a mutation always merges into the *current* on-disk state instead
+    of clobbering entries a sibling registered.  ``_load`` is deliberately used
+    (not the possibly-stale ``_entries`` cache) so we start from disk truth.
+
+    *mutator* receives the fresh list, mutates it in place, and returns this
+    call's result.  The list is always persisted and swapped into the in-memory
+    cache, so the cache converges to disk truth on every mutation.
+    """
+    global _entries
+    with file_lock(REGISTRY_PATH):
+        entries = _load()
+        result = mutator(entries)
+        _save(entries)
+        with _lock:
+            _entries = entries
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -178,10 +203,7 @@ def register_dataset(
         "ingest_finished_at": now,
         "expires_at": expires_at,
     }
-    with _lock:
-        entries = _ensure_loaded()
-        entries.append(entry)
-        _save(entries)
+    _read_modify_write(lambda entries: entries.append(entry))
 
     # New entry expands the predicted-embedder set; warm anything new in the
     # background so a subsequent load is instant. Idempotent: already-loaded
@@ -201,42 +223,47 @@ def unregister_dataset(dataset_id: str) -> bool:
 
     Returns ``True`` if the dataset was found and removed.
     """
-    with _lock:
-        entries = _ensure_loaded()
+
+    def mutate(entries: list[dict[str, Any]]) -> bool:
         for i, entry in enumerate(entries):
             if entry["id"] == dataset_id:
                 pkl = Path(entry.get("pkl_path", ""))
                 if pkl.is_file():
                     pkl.unlink(missing_ok=True)
                 entries.pop(i)
-                _loaded_ids.discard(dataset_id)
-                _save(entries)
                 return True
-    return False
+        return False
+
+    removed = _read_modify_write(mutate)
+    with _lock:
+        _loaded_ids.discard(dataset_id)
+    return removed
 
 
 def rename_dataset(dataset_id: str, new_name: str) -> bool:
     """Rename a registered dataset. Returns ``True`` on success."""
-    with _lock:
-        entries = _ensure_loaded()
+
+    def mutate(entries: list[dict[str, Any]]) -> bool:
         for entry in entries:
             if entry["id"] == dataset_id:
                 entry["name"] = new_name
-                _save(entries)
                 return True
-    return False
+        return False
+
+    return _read_modify_write(mutate)
 
 
 def update_dataset(dataset_id: str, **fields: Any) -> bool:
     """Update arbitrary fields on a registered dataset."""
-    with _lock:
-        entries = _ensure_loaded()
+
+    def mutate(entries: list[dict[str, Any]]) -> bool:
         for entry in entries:
             if entry["id"] == dataset_id:
                 entry.update(fields)
-                _save(entries)
                 return True
-    return False
+        return False
+
+    return _read_modify_write(mutate)
 
 
 def get_loaded_ids() -> set[str]:
@@ -350,16 +377,17 @@ def set_readers(dataset_id: str, readers: list[str], requesting_user: str) -> tu
 
     Returns ``(success, error_message)``.
     """
-    with _lock:
-        entries = _ensure_loaded()
+
+    def mutate(entries: list[dict[str, Any]]) -> tuple[bool, str]:
         for entry in entries:
             if entry["id"] == dataset_id:
                 if entry.get("created_by", "default") != requesting_user:
                     return False, "Only the dataset creator can modify readers"
                 entry["readers"] = readers
-                _save(entries)
                 return True, ""
         return False, "Dataset not found"
+
+    return _read_modify_write(mutate)
 
 
 def reset_for_tests() -> None:

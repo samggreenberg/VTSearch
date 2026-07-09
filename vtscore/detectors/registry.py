@@ -19,14 +19,22 @@ import json
 import logging
 import threading
 import time
-from typing import Any
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from vtscore.config import DATA_DIR
+from vtscore.io import atomic_write_json, file_lock
 
 logger = logging.getLogger(__name__)
 
 REGISTRY_PATH = DATA_DIR / "detector_registry.json"
 
+_T = TypeVar("_T")
+
+# Guards the process-local state below: the ``_entries`` cache and the
+# ``_loaded_ids`` / ``_loading_ids`` sets.  Cross-process durability of the
+# on-disk manifest is handled by :func:`_read_modify_write` under a
+# ``file_lock``; this lock only serialises threads within one process.
 _lock = threading.RLock()
 
 _entries: list[dict[str, Any]] | None = None
@@ -58,15 +66,7 @@ def _load() -> list[dict[str, Any]]:
 
 
 def _save(entries: list[dict[str, Any]]) -> None:
-    import os
-
-    REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    tmp = REGISTRY_PATH.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(entries, f, indent=2)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(str(tmp), str(REGISTRY_PATH))
+    atomic_write_json(REGISTRY_PATH, entries)
 
 
 def _ensure_loaded() -> list[dict[str, Any]]:
@@ -74,6 +74,26 @@ def _ensure_loaded() -> list[dict[str, Any]]:
     if _entries is None:
         _entries = _load()
     return _entries
+
+
+def _read_modify_write(mutator: Callable[[list[dict[str, Any]]], _T]) -> _T:
+    """Run *mutator* over a fresh-from-disk registry under a cross-process lock.
+
+    Mirrors :func:`vtscore.datasets.registry._read_modify_write`.  Holding the
+    ``file_lock`` while re-reading closes the multi-process read-modify-write
+    race so a mutation merges into the current on-disk state instead of
+    clobbering entries a sibling process committed since this process last read.
+    ``_load`` starts from disk truth (not the possibly-stale cache); the result
+    is always persisted and swapped into ``_entries``.
+    """
+    global _entries
+    with file_lock(REGISTRY_PATH):
+        entries = _load()
+        result = mutator(entries)
+        _save(entries)
+        with _lock:
+            _entries = entries
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -149,48 +169,50 @@ def register_detector(
         # ``["*"]`` = visible to everyone. See ``can_user_access_detector``.
         "readers": list(readers) if readers else [],
     }
-    with _lock:
-        entries = _ensure_loaded()
-        entries.append(entry)
-        _save(entries)
+    _read_modify_write(lambda entries: entries.append(entry))
     return entry
 
 
 def unregister_detector(detector_id: str) -> bool:
     """Remove a detector from the registry. Returns ``True`` if found."""
-    with _lock:
-        entries = _ensure_loaded()
+
+    def mutate(entries: list[dict[str, Any]]) -> bool:
         for i, entry in enumerate(entries):
             if entry["id"] == detector_id:
                 entries.pop(i)
-                _loaded_ids.discard(detector_id)
-                _save(entries)
                 return True
-    return False
+        return False
+
+    removed = _read_modify_write(mutate)
+    with _lock:
+        _loaded_ids.discard(detector_id)
+    return removed
 
 
 def rename_detector(detector_id: str, new_name: str) -> bool:
     """Rename a registered detector. Returns ``True`` on success."""
-    with _lock:
-        entries = _ensure_loaded()
+
+    def mutate(entries: list[dict[str, Any]]) -> bool:
         for entry in entries:
             if entry["id"] == detector_id:
                 entry["name"] = new_name
-                _save(entries)
                 return True
-    return False
+        return False
+
+    return _read_modify_write(mutate)
 
 
 def update_detector(detector_id: str, **fields: Any) -> bool:
     """Update arbitrary fields on a registered detector."""
-    with _lock:
-        entries = _ensure_loaded()
+
+    def mutate(entries: list[dict[str, Any]]) -> bool:
         for entry in entries:
             if entry["id"] == detector_id:
                 entry.update(fields)
-                _save(entries)
                 return True
-    return False
+        return False
+
+    return _read_modify_write(mutate)
 
 
 def record_detector_embedder(detector_id: str, embedder_name: str) -> None:
@@ -204,16 +226,23 @@ def record_detector_embedder(detector_id: str, embedder_name: str) -> None:
     """
     if not detector_id or not embedder_name:
         return
+    global _entries
     try:
-        with _lock:
-            entries = _ensure_loaded()
+        # Inline read-modify-write (not the shared helper) so an already-stamped
+        # embedder skips the disk write - this runs on every training cycle.
+        with file_lock(REGISTRY_PATH):
+            entries = _load()
+            changed = False
             for entry in entries:
                 if entry["id"] == detector_id:
-                    if entry.get("embedder") == embedder_name:
-                        return
-                    entry["embedder"] = embedder_name
-                    _save(entries)
-                    return
+                    if entry.get("embedder") != embedder_name:
+                        entry["embedder"] = embedder_name
+                        changed = True
+                    break
+            if changed:
+                _save(entries)
+            with _lock:
+                _entries = entries
     except Exception as exc:
         logger.warning("Failed to persist embedder for detector %s: %s", detector_id, exc)
 
@@ -283,16 +312,17 @@ def set_detector_readers(detector_id: str, readers: list[str], requesting_user: 
 
     Returns ``(success, error_message)``.
     """
-    with _lock:
-        entries = _ensure_loaded()
+
+    def mutate(entries: list[dict[str, Any]]) -> tuple[bool, str]:
         for entry in entries:
             if entry["id"] == detector_id:
                 if entry.get("created_by", "default") != requesting_user:
                     return False, "Only the detector creator can modify readers"
                 entry["readers"] = readers
-                _save(entries)
                 return True, ""
         return False, "Detector not found"
+
+    return _read_modify_write(mutate)
 
 
 def add_loaded_detector_id(detector_id: str) -> None:
