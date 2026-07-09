@@ -105,7 +105,9 @@ class TestSaveLabelsHeaderGuard:
         first_id = next(iter(medias))
         assert client.post(f"/api/medias/{first_id}/vote", json={"target": "good"}).status_code == 200
         assert client.post("/api/detectors/guard-save/labels").status_code == 200
-        before = _read_detector(_detector_path("guard-save"))["labelset"]
+        before_data = _read_detector(_detector_path("guard-save"))
+        assert before_data is not None
+        before = before_data["labelset"]
         assert before["labels"], "setup should have persisted one label"
 
         resp = client.post(
@@ -114,8 +116,9 @@ class TestSaveLabelsHeaderGuard:
         )
         assert resp.status_code == 400
 
-        after = _read_detector(_detector_path("guard-save"))["labelset"]
-        assert after == before
+        after_data = _read_detector(_detector_path("guard-save"))
+        assert after_data is not None
+        assert after_data["labelset"] == before
 
     def test_headerless_dataset_save_is_rejected(self, client):
         _create_detector(client, "guard-save-ds")

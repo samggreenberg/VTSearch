@@ -263,9 +263,14 @@ def stage_file():
 
         # Stream the member into the peeker instead of zf.read(): a
         # highly-compressed medias.pkl would otherwise materialise its whole
-        # decompressed body in RAM before the peek even starts.
+        # decompressed body in RAM before the peek even starts.  ZipExtFile
+        # is a BufferedIOBase at runtime; typeshed types zf.open as
+        # IO[bytes], hence the cast.
+        import io
+        from typing import cast
+
         with zipfile.ZipFile(str(staging_path), "r") as zf, zf.open("medias.pkl") as member:
-            peeked = peek_pickle_dataset_summary(member)
+            peeked = peek_pickle_dataset_summary(cast(io.BufferedIOBase, member))
         if isinstance(peeked, dict) and "medias" in peeked:
             media_dict = peeked["medias"]
         elif isinstance(peeked, dict):
