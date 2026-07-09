@@ -125,6 +125,30 @@ describe('MediaListComponent', () => {
     expect(component['pendingScrollToSelected']).toBe(true);
   });
 
+  // Regression: clicking a card in this grid selects an item that is, by
+  // definition, already on screen. Autoscrolling it into view is jarring and
+  // pointless, so a selection that originated from onMediaSelect must not queue
+  // an autoscroll — even in click mode.
+  it('does not queue an autoscroll for a selection driven by clicking a card', () => {
+    fixture.componentRef.setInput('focusMode', 'click');
+    TestBed.tick();
+    component.onMediaSelect(2);
+    component.ngOnChanges({ selectedId: new SimpleChange(null, 2, false) });
+    expect(component['pendingScrollToSelected']).toBe(false);
+  });
+
+  // A click on card 2 must not suppress a *later* off-screen selection (e.g. a
+  // vote auto-advance to card 5): only the clicked id is exempt from autoscroll.
+  it('still autoscrolls a subsequent selection from elsewhere after a click', () => {
+    fixture.componentRef.setInput('focusMode', 'click');
+    TestBed.tick();
+    component.onMediaSelect(2);
+    component.ngOnChanges({ selectedId: new SimpleChange(null, 2, false) });
+    expect(component['pendingScrollToSelected']).toBe(false);
+    component.ngOnChanges({ selectedId: new SimpleChange(2, 5, false) });
+    expect(component['pendingScrollToSelected']).toBe(true);
+  });
+
   // Regression: in hover mode the selection follows the cursor. Scrolling the
   // hovered item to the top shifts what's under the mouse, which re-selects and
   // scrolls again — an infinite autoscroll loop. Hover selection must not queue

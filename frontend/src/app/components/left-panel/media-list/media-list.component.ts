@@ -93,6 +93,15 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
   gridRowHeight = GRID_ROW_HEIGHT_FALLBACK;
 
   private pendingScrollToSelected = false;
+  /**
+   * The id most recently selected by clicking a card in *this* grid. Such an
+   * item is, by definition, already on screen (the user just clicked it), so we
+   * suppress the selection autoscroll for it — scrolling a visible thumbnail
+   * into view is jarring and pointless. Selections arriving from elsewhere
+   * (keyboard, vote auto-advance, stripe overview) leave this null and still
+   * autoscroll, since the target may be off-screen.
+   */
+  private clickSelectedId: number | null = null;
   private readonly destroy$ = new Subject<void>();
   /** The viewport instance whose ``scrolledIndexChange`` is currently subscribed. */
   private scrollSubscribedViewport?: CdkVirtualScrollViewport;
@@ -142,12 +151,18 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     // mode the selection follows the cursor, so scrolling the item to the top
     // would shift what's under the mouse, re-trigger selection, and scroll
     // again — an infinite autoscroll loop. Let the hovered item stay put.
-    if (
-      changes['selectedId'] &&
-      !changes['selectedId'].firstChange &&
-      this.focusMode() === 'click'
-    ) {
-      this.pendingScrollToSelected = true;
+    //
+    // And when the selection was driven by clicking a card in this grid, the
+    // item is already visible, so scrolling it into view is jarring and
+    // unnecessary — suppress the autoscroll for that id. Selections from
+    // elsewhere (keyboard, vote auto-advance, stripe overview) may target an
+    // off-screen item, so those still autoscroll.
+    if (changes['selectedId'] && !changes['selectedId'].firstChange) {
+      const clickedInThisGrid = changes['selectedId'].currentValue === this.clickSelectedId;
+      this.clickSelectedId = null;
+      if (this.focusMode() === 'click' && !clickedInThisGrid) {
+        this.pendingScrollToSelected = true;
+      }
     }
 
     // A wider/narrower goal width changes how many cards fit per grid row and
@@ -268,6 +283,10 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
   }
 
   onMediaSelect(id: number): void {
+    // Remember that this selection came from a click on a visible card so the
+    // resulting ``selectedId`` change doesn't autoscroll an already-on-screen
+    // item into view (see ``ngOnChanges``).
+    this.clickSelectedId = id;
     this.mediaSelect.emit(id);
   }
 
