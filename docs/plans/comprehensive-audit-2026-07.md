@@ -8,8 +8,9 @@ follow-up pass shipped (#5, #8 of the renumbered open list — ML threshold
 correctness); sixth follow-up pass shipped (#1 of the then-current open
 list — SSE connection cap); seventh follow-up pass shipped (http_archive
 cache staleness); eighth follow-up pass shipped (#1 of the then-current
-open list — region-matrix fallback space mixing); remaining open
-follow-ups below.**
+open list — region-matrix fallback space mixing); ninth follow-up pass
+shipped (#1 of the then-current open list — eval harness calibration
+fidelity); remaining open follow-ups below.**
 
 A full-codebase audit focused on interface boundaries: frontend ↔ backend
 API contract, route layer ↔ state system, app tier ↔ `vtscore` library,
@@ -323,6 +324,29 @@ up any of these areas sees the known-weak spots.
   `tests_lib/detectors/test_region_score_pool.py`
   (`TestRegionMatrixFallbackSpace`).
 
+### Ninth follow-up pass — eval harness calibration fidelity (drained from the open list)
+
+- **Eval folds now calibrate exactly as production does** (was open #1).
+  `eval/voting_iterations.py:simulate_voting_iterations` computed its per-step
+  threshold via `calculate_cross_calibration_threshold` **without** forcing the
+  full-data `hidden_dim` (so each calibration fold auto-sized to its own
+  smaller train split) and threaded the **shared per-seed simulation RNG** into
+  the fold splits.  Production's `_train_and_score_xy` / `train_and_threshold`
+  do the opposite: they size `hidden_dim` from the full label count, force that
+  width onto the folds (via `cross_calibration_threshold_cached(...,
+  hidden_dim=...)`), and always calibrate with a fresh `RandomState(42)`.  The
+  eval therefore measured a threshold the live detector never computes in the
+  small-label regime — narrower fold nets, calibrated against splits that
+  varied with the eval seed instead of the pinned production seed.  The per-step
+  call now passes `hidden_dim=_auto_hidden_dim(n_labels)` and
+  `rng=np.random.RandomState(42)` (a fresh one per step, mirroring how
+  `cross_calibration_threshold_cached` mints one per call), and the final
+  `train_model` is handed the same `hidden_dim`.  The eval seed still varies the
+  *data* (which media are voted, in what order, and the held-out test split);
+  only the calibration folds are now pinned, exactly as in production.  Tests in
+  `tests_lib/detectors/test_eval_voting_iterations.py`
+  (`TestProductionCalibrationFidelity`).
+
 ## Open follow-ups
 
 Ordered roughly by severity.  Each was found and verified during the audit
@@ -332,28 +356,23 @@ renumbered #2 "JobManager cancellation advisory" in the third pass, the
 staging + eval progress isolation (renumbered #2, #3) in the fourth, the
 re-renumbered #5/#8 "ML threshold correctness" items in the fifth, the
 re-renumbered #1 "SSE connection cap" in the sixth, the re-renumbered #6
-"http_archive cache staleness" in the seventh, and the re-renumbered #1
-"region-matrix fallback space mixing" in the eighth — see the
+"http_archive cache staleness" in the seventh, the re-renumbered #1
+"region-matrix fallback space mixing" in the eighth, and the re-renumbered
+#1 "eval harness calibration fidelity" in the ninth — see the
 follow-up-pass subsections under What shipped.  The list below is
 renumbered again after those drains.)
 
-1. **Eval harness fidelity** (`eval/voting_iterations.py`): fold models
-   don't force the full-data `hidden_dim` and don't thread the split RNG
-   into calibration - so reported eval costs measure a pipeline that differs
-   from production in the small-label regime.  (The "production uses 0.5
-   below 6 labels" mismatch is now narrower: with safe-thresholds off,
-   production cross-calibrates below 6 too — see Fifth follow-up pass.)
-2. **Inclusion slide drops the safe-threshold GMM blend**
+1. **Inclusion slide drops the safe-threshold GMM blend**
    (`state/core.py:recompute_detector_thresholds_for_inclusion` vs
    `training.py`): with safe-thresholds on and 6 ≤ n < 20 labels, sliding
    inclusion to a value and back changes the threshold semantics relative
    to a fresh retrain.  Decide whether the blend applies on slides.
-3. **Dataset registry is not multi-process safe**
+2. **Dataset registry is not multi-process safe**
    (`vtscore/datasets/registry.py`): in-process lock plus a fixed `.tmp`
    name; a concurrent CLI autodetect run against the same data dir can
    silently erase the server's registrations.  Fine under the documented
    single-worker model; needs flock if that changes.
-4. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
+3. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
    rather than clean): browse-canvas/minimap coordinate math and rAF
    lifecycles, modal/player component lifecycle sweep, left/right-panel
    virtualization, and a full route-blueprint sweep of
@@ -421,3 +440,11 @@ renumbered again after those drains.)
   vector under the patch embedder at all.  No effect on any dataset where
   every media shares one embedder (the only case reachable before the v3
   trio-embedder work).
+- `simulate_voting_iterations` / `run_voting_iterations_eval` now calibrate
+  each step's threshold with the production `hidden_dim` (full-label width,
+  forced onto the folds) and a fixed `RandomState(42)` fold split, instead of
+  auto-sizing the folds and threading the per-seed simulation RNG.  Reported
+  `cost` / `fpr` / `fnr` values shift in the small-label regime because the
+  eval now measures the exact pipeline the live detector runs; the eval seed
+  still varies the data (votes, order, test split), only the calibration folds
+  are pinned.
