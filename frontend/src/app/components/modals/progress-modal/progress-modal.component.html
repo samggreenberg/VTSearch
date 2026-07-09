@@ -1,4 +1,4 @@
-<vt-modal [title]="title" [open]="true" (closed)="close()">
+<vt-modal [title]="title" [open]="true" (closed)="onCancel()">
   @if (analyzing) {
     <div class="analysis-loading">
       @if (useCachedHistory()) {

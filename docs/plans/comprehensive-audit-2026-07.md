@@ -1,8 +1,8 @@
 # Comprehensive interface audit — July 2026
 
-**Status: eleven fix passes shipped; follow-up #1 (registry multi-process
-safety) shipped; item 6 (`MAX_UPLOAD_MB` default cap) fixed; 6 open follow-ups
-below.**
+**Status: eleven fix passes shipped; follow-ups #1 (registry multi-process
+safety) and #2 (progress-modal analysis path) shipped; `MAX_UPLOAD_MB` default
+cap fixed; 5 open follow-ups below.**
 
 A full-codebase audit of interface boundaries (frontend ↔ API, route layer ↔
 state system, app tier ↔ `vtscore`, IO, concurrency, frontend TS). Six parallel
@@ -14,19 +14,7 @@ the audit but deferred as needing a design decision or a larger change.
 
 Ordered roughly by severity.
 
-1. **Progress-modal analysis path is broken three ways**
-   (`progress-modal.component.ts`, `runAnalysis()`): Escape/X/backdrop skip
-   the eval-job cancel the in-body Cancel button performs; the
-   `trainAndScore` subscribe has no `takeUntil`, so a destroy while the POST
-   is in flight arms `pollEvalJob()` against an already-completed `destroy$`
-   (RxJS `takeUntil` never fires on a pre-completed notifier → orphan
-   500 ms poller until the job ends); and the backend emits the eval
-   `idle/Done` SSE frame *inside* `_run` before the job flips to `done`, so
-   the SSE watcher usually kills the result poller before it observes
-   completion — `analyzing` hangs forever. All currently *latent*: the only
-   in-app instantiation passes `[useCachedHistory]="true"`, but
-   `runAnalysis()` is the component default and is pinned by its spec.
-2. **Browse canvas gesture overlaps** (UX design decisions): wheel-zoom
+1. **Browse canvas gesture overlaps** (UX design decisions): wheel-zoom
    during an active drag-pan/marquee discards the zoom's cursor anchoring on
    the next mousemove and freezes painting for the 220 ms transition (gate
    the wheel while a drag is active, or make the pan math zoom-aware); the
@@ -36,18 +24,18 @@ Ordered roughly by severity.
    pending toggle on view moves); the boundary-settle rAF loop can start while
    the zoom-transition loop still owns the canvas (both write
    `displayedTransform`; visible damage is a truncated transition).
-3. **Root-zoom px mixing in panel-divider drags**
+2. **Root-zoom px mixing in panel-divider drags**
    (`browse-view.component.ts:onDividerMove`,
    `label-view/panel-resize.directive.ts`): visual-px cursor deltas applied
    as layout-px widths under `html { zoom: 1.1 }`, so the divider rides
    ~10% away from the pointer. Shared app-wide wart; fix both sites together
    (the eleventh pass fixed the same class of bug in the minimap).
-4. **Pure devicePixelRatio change never re-runs canvas `resize()`**
+3. **Pure devicePixelRatio change never re-runs canvas `resize()`**
    (browse-canvas + minimap): dragging the window to a different-density
    monitor leaves `dpr` (and the thumbnail-resolution tier) stale until the
    next CSS resize; rendering-quality only (hit-testing is CSS-px based).
    Needs a `matchMedia('(resolution: …)')` listener.
-5. **`save_detector_labels` full-replace drops cross-dataset labels**
+4. **`save_detector_labels` full-replace drops cross-dataset labels**
    (`routes/detectors/labels.py`): the route rebuilds the labelset from the
    *active dataset's* votes only, while `sync_labels_to_loaded_detector`
    deliberately merges cross-dataset entries — saving while dataset B is
@@ -55,13 +43,13 @@ Ordered roughly by severity.
    the explicit save should merge like the sync does (probably yes, via
    `_merge_labelsets_across_datasets`) or full-replace is the intended
    "save exactly what I see" semantic.
-6. ~~**`MAX_UPLOAD_MB` defaults to 0 = unlimited** (`vtscore/config.py`):
+5. ~~**`MAX_UPLOAD_MB` defaults to 0 = unlimited** (`vtscore/config.py`):
    staging uploads are unbounded by default; decide a sane default cap.~~
    **Fixed:** default changed to `2048` (2 GiB) — generous enough for typical
    media archives and dataset pickles, oversized requests get HTTP 413.
    `VTSEARCH_MAX_UPLOAD_MB=0` still opts back into unlimited for genuinely
    large-archive uploads.
-7. **`AutoDetectProgressModalComponent` is dead code** (modal sweep note):
+6. **`AutoDetectProgressModalComponent` is dead code** (modal sweep note):
    referenced nowhere; delete it or wire it up.
 
 ## What shipped
@@ -165,6 +153,14 @@ Frontend:
 - Minimap mouse math corrects for `html { zoom: 1.1 }` (cursor offset, resize
   delta, backing store). Post-destroy rAF gated by a `destroyed` flag in
   browse-canvas.
+- Progress-modal analysis path (was follow-up #2): the modal's `(closed)` now
+  routes Escape/X/backdrop through `onCancel()` so every dismissal cancels the
+  running eval job; the `trainAndScore` POST is guarded with
+  `takeUntil(destroy$)` (no orphan poller when destroyed mid-flight); and the
+  eval SSE progress watcher stops via a dedicated subject instead of
+  `destroy$.next()`, so the backend's early `idle/Done` frame no longer tears
+  down the result poller and hangs `analyzing`
+  (`progress-modal.component.spec.ts`).
 
 ## Behaviour changes (backwards-compat notes)
 

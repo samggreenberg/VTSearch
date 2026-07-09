@@ -92,36 +92,51 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
     this.analyzing = true;
     this.analysisProgress = 0;
 
-    // Progress comes from the `eval` SSE channel on /api/events.
+    // Progress comes from the `eval` SSE channel on /api/events. Use a
+    // dedicated notifier to stop watching once the bar reaches 100%: the
+    // backend emits the `idle/Done` eval frame *inside* `_run`, before the
+    // job flips to `done`, so this fires while the result poller is still
+    // polling. It must NOT tear down the poller — hence a separate subject
+    // rather than `this.destroy$.next()`, which would kill the poller too
+    // and leave `analyzing` hung forever.
+    const stopWatchingProgress$ = new Subject<void>();
     this.progressEvents.votingIterations$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntil(this.destroy$), takeUntil(stopWatchingProgress$))
       .subscribe({
         next: (res) => {
           if (res.total > 0) {
             this.analysisProgress = Math.round((res.progress / res.total) * 100);
           }
           if (res.done) {
-            this.destroy$.next(); // stop watching
+            stopWatchingProgress$.next();
+            stopWatchingProgress$.complete();
           }
         },
       });
 
     // Request train-and-score; the new endpoint returns a job envelope.
-    this.sortingApi.trainAndScore(this.metric).subscribe({
-      next: (res) => {
-        if (res.status === 'done') {
-          this.applyEvalResult(res);
-        } else if (res.status === 'running') {
-          this.currentJobId = res.job_id;
-          this.pollEvalJob(res.job_id);
-        } else {
+    // `takeUntil(destroy$)` guards the case where the modal is dismissed
+    // while the POST is in flight: without it, a late `next` would arm
+    // `pollEvalJob()` against an already-completed `destroy$` (RxJS
+    // `takeUntil` never fires on a pre-completed notifier), leaking a poller.
+    this.sortingApi
+      .trainAndScore(this.metric)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res) => {
+          if (res.status === 'done') {
+            this.applyEvalResult(res);
+          } else if (res.status === 'running') {
+            this.currentJobId = res.job_id;
+            this.pollEvalJob(res.job_id);
+          } else {
+            this.analyzing = false;
+          }
+        },
+        error: () => {
           this.analyzing = false;
-        }
-      },
-      error: () => {
-        this.analyzing = false;
-      },
-    });
+        },
+      });
   }
 
   private pollEvalJob(jobId: string): void {
@@ -148,7 +163,14 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
       });
   }
 
-  /** Cancel the in-flight eval job and close the modal. */
+  /** Cancel the in-flight eval job (if any) and close the modal.
+   *
+   *  This is the single dismissal path for the modal: the in-body Cancel
+   *  button, and Escape / the X / a backdrop click (routed here from the
+   *  inner `vt-modal`'s `(closed)`) all land here, so every way of leaving
+   *  the modal stops the running eval job rather than orphaning it. Safe on
+   *  the cached-history path, where `currentJobId` is null and no cancel
+   *  request is sent. */
   onCancel(): void {
     const jobId = this.currentJobId;
     this.currentJobId = null;
