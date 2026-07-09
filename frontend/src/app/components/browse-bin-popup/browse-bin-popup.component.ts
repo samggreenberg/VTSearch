@@ -1,4 +1,4 @@
-import { AfterViewChecked, AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, ElementRef, HostListener, inject, input, OnChanges, OnDestroy, output, SimpleChanges, ViewChild } from '@angular/core';
+import { afterNextRender, AfterViewChecked, AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, ElementRef, HostListener, inject, Injector, input, OnChanges, OnDestroy, output, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { Subscription } from 'rxjs';
@@ -161,6 +161,7 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
   private activeContext = inject(ActiveContextService);
   private settingsState = inject(SettingsStateService);
   private cdr = inject(ChangeDetectorRef);
+  private injector = inject(Injector);
 
   /** Member media ids of the bin the popup was summoned over. */
   readonly memberIds = input<number[]>([]);
@@ -219,6 +220,11 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
   /** True only mid-drag (pointer down on the header, not yet released). */
   dragging = false;
   private dragStart = { x: 0, y: 0, left: 0, top: 0 };
+  /** Bounded re-measure counter for {@link nudgeOnScreen}: when a correction
+   *  actually moves the popup the pre-measurement clamp had under-modelled the
+   *  rendered size, so we re-measure on the next render until it settles (or the
+   *  cap is hit), rather than trusting a single post-render pass. */
+  private nudgeSettleAttempts = 0;
 
   /** Body height cap (px) for the current visible region; the body never grows
    *  past this, so a short region can't push the popup off the bottom edge. */
@@ -1081,7 +1087,23 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
     // what let the popup flash at the computed clamp and then jump to the
     // corrected spot.
     this.cdr.markForCheck();
-    requestAnimationFrame(() => this.nudgeOnScreen());
+    this.nudgeSettleAttempts = 0;
+    this.scheduleNudge();
+  }
+
+  /** Schedule the post-render corrective measurement ({@link nudgeOnScreen}).
+   *
+   *  Uses {@link afterNextRender} rather than a bare ``requestAnimationFrame``
+   *  so the panel is measured only *after* Angular's zoneless change detection
+   *  has written the freshly-clamped size (bound via {@link bodyOuterHeight} /
+   *  {@link maxWidthPx}) to the DOM. A raw rAF is not ordered against the
+   *  zoneless render, so it can fire *before* that write and measure a stale,
+   *  shorter panel — under-correcting the clamp and leaving the real (taller)
+   *  popup's floor below the region's bottom edge. That was the intermittent
+   *  "detail window pops up slightly out of frame" the first-click summon
+   *  surfaced. */
+  private scheduleNudge(): void {
+    afterNextRender(() => this.nudgeOnScreen(), { injector: this.injector });
   }
 
   /** Measure the rendered panel and slide it so its real rect sits inside the
@@ -1135,6 +1157,17 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
       }
     } else if (moved) {
       this.cdr.markForCheck();
+    }
+    // A correction that actually moved the popup means this pass measured a
+    // panel larger than the pre-measurement clamp modelled (e.g. the header or
+    // the view-controls settled a hair taller a frame after layout). Moving
+    // doesn't itself resize the panel, so a settled layout re-measures to the
+    // same spot and stops on the next pass; re-measuring (bounded) only keeps
+    // correcting while the size is still growing, so a late reflow can't strand
+    // the floor off-screen.
+    if (moved && this.nudgeSettleAttempts < 4) {
+      this.nudgeSettleAttempts++;
+      this.scheduleNudge();
     }
   }
 

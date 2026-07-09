@@ -14,10 +14,10 @@ import { settleZoneless } from '../../testing/settle-resource';
 
 /**
  * Drain several zoneless settle passes. The popup places itself across a chain
- * of `setTimeout(place)` → `requestAnimationFrame(nudge)` → `markForCheck`, and
- * the `setTimeout` is itself scheduled by the async CD tick that runs *after*
- * the first settle's own macrotask — so a single `settleZoneless` can return
- * before the reveal chain has run. A few passes flush it deterministically.
+ * of `setTimeout(place)` → `afterNextRender(nudge)` → `markForCheck`, and the
+ * `setTimeout` is itself scheduled by the async CD tick that runs *after* the
+ * first settle's own macrotask — so a single `settleZoneless` can return before
+ * the reveal chain has run. A few passes flush it deterministically.
  */
 async function settlePasses(fixture: ComponentFixture<unknown>, passes = 3): Promise<void> {
   for (let i = 0; i < passes; i++) await settleZoneless(fixture);
@@ -29,7 +29,7 @@ async function settlePasses(fixture: ComponentFixture<unknown>, passes = 3): Pro
  * The popup opens hidden and reveals itself only after its position has been
  * clamped on-screen and the rendered panel measured (see `place()` /
  * `nudgeOnScreen()`). Under zoneless change detection those steps run in a bare
- * `setTimeout` + `requestAnimationFrame`, with no change detection attached, so
+ * `setTimeout` + `afterNextRender`, with no change detection attached, so
  * the reveal must schedule its own `markForCheck()` or the `visibility` binding
  * silently goes stale — the popup would stay invisible, or (before the reveal
  * was moved past the measurement) flash at the un-corrected spot. This spec
@@ -125,6 +125,45 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     // read 5000px here.
     expect(parseFloat(panel.style.left)).toBeLessThan(400);
     expect(parseFloat(panel.style.top)).toBeLessThan(400);
+
+    fixture.destroy();
+  });
+
+  it('pulls a panel taller than the region up so its floor stays on-screen', async () => {
+    // The corrective measurement pass (nudgeOnScreen) keeps the *rendered* panel
+    // inside the region even when the computed clamp under-modelled its height —
+    // the "detail window pops up slightly out of frame" regression. jsdom reports
+    // 0-size rects, so stub the panel to report a height that overflows the 400px
+    // region and assert the popup is pulled up until its floor lands at
+    // regionBottom - EDGE_MARGIN (8), i.e. a top of 400 - 380 - 8 = 12.
+    const fixture = makeFixture();
+    fixture.componentRef.setInput('x', 50);
+    fixture.componentRef.setInput('y', 50);
+    await settlePasses(fixture);
+
+    const panel = fixture.nativeElement.querySelector('.bin-popup') as HTMLElement;
+    panel.getBoundingClientRect = () =>
+      ({
+        width: 100,
+        height: 380,
+        top: 0,
+        left: 0,
+        right: 100,
+        bottom: 380,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    // Re-place: a size-input change re-clamps and re-measures without
+    // re-anchoring to the cursor, so the stubbed oversize drives the correction.
+    fixture.componentRef.setInput('hoverThumbRadius', 40);
+    await settlePasses(fixture, 5);
+
+    const top = parseFloat(panel.style.top);
+    expect(top).toBe(12);
+    // The measured floor sits exactly at the region's bottom edge less the margin.
+    expect(top + 380).toBeLessThanOrEqual(400 - 8);
 
     fixture.destroy();
   });
