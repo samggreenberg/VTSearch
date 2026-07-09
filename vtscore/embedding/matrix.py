@@ -123,8 +123,10 @@ def get_embedding_matrix(ctx: "DatasetContext", embedder_name: str | None = None
         embedder_name = _collapse_to_primary(ctx.medias, embedder_name)
         if embedder_name is None:
             cached_matrix = ctx._emb_matrix
+            # A revision match guarantees the id set is unchanged, so the live
+            # sorted_ids equals the cached ids the matrix rows correspond to.
             if cached_matrix is not None and ctx._emb_matrix_revision == revision:
-                return list(ctx._emb_matrix_ids), cached_matrix
+                return list(sorted_ids), cached_matrix
 
         if not sorted_ids:
             if embedder_name is None:
