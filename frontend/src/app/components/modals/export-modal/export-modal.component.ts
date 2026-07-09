@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   effect,
+  HostListener,
   inject,
   input,
   OnInit,
@@ -226,6 +227,72 @@ export class ExportModalComponent implements OnInit {
 
   get enabledColumns(): ColumnDef[] {
     return this.columns.filter((c) => c.enabled);
+  }
+
+  // --- Preview column resize ---
+  //
+  // The preview table's columns default to auto layout (`width: 100%`, each
+  // column sized to its content up to a cap). Once the user grabs a divider we
+  // switch to a pixel model: freeze every column's current width, flip the
+  // table to `table-layout: fixed`, and let the grabbed column grow/shrink on
+  // its own. The `.table-scroll` container already scrolls horizontally, so a
+  // widened column reveals its full content instead of redistributing space
+  // away from its neighbours. Widths are per-process view state, not persisted
+  // (the preview is ephemeral).
+
+  private static readonly MIN_COL_PX = 40;
+
+  /** Pixel widths keyed by column key; populated on first resize. */
+  colWidths: Record<string, number> = {};
+
+  /** Once true, the table uses `table-layout: fixed` with explicit widths. */
+  tableFixed = false;
+
+  private colResize: { key: string; startX: number; startWidth: number } | null = null;
+
+  /** Begin dragging a column divider: freeze current widths, then track the
+   *  grabbed column so `onColResizeMove` can size it. */
+  startColResize(event: MouseEvent, key: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const th = (event.target as HTMLElement).closest('th');
+    const table = th?.closest('table');
+    if (!table) return;
+
+    if (!this.tableFixed) {
+      const ths = table.querySelectorAll('thead th') as NodeListOf<HTMLElement>;
+      ths.forEach((cell) => {
+        const cellKey = cell.getAttribute('data-col');
+        if (cellKey) this.colWidths[cellKey] = cell.offsetWidth;
+      });
+      this.tableFixed = true;
+    }
+
+    this.colResize = {
+      key,
+      startX: event.clientX,
+      startWidth: this.colWidths[key] ?? (th as HTMLElement).offsetWidth,
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  @HostListener('document:mousemove', ['$event'])
+  onColResizeMove(event: MouseEvent): void {
+    if (!this.colResize) return;
+    const dx = event.clientX - this.colResize.startX;
+    this.colWidths[this.colResize.key] = Math.max(
+      ExportModalComponent.MIN_COL_PX,
+      this.colResize.startWidth + dx,
+    );
+  }
+
+  @HostListener('document:mouseup')
+  onColResizeEnd(): void {
+    if (!this.colResize) return;
+    this.colResize = null;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
   }
 
   get filteredLabels(): LabeledElement[] {

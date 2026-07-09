@@ -49,11 +49,21 @@
       <p class="empty-state">No labeled items to export.</p>
     } @else {
       <div class="table-scroll">
-        <table class="export-table">
+        <table class="export-table" [class.table-fixed]="tableFixed">
           <thead>
             <tr>
               @for (col of enabledColumns; track col.key) {
-                <th [title]="col.label">{{ col.label }}</th>
+                <th
+                  [attr.data-col]="col.key"
+                  [title]="col.label"
+                  [style.width.px]="tableFixed ? colWidths[col.key] : null"
+                >
+                  <span
+                    class="col-resize-handle"
+                    (mousedown)="startColResize($event, col.key)"
+                    title="Drag to resize column"
+                  ></span>{{ col.label }}
+                </th>
               }
             </tr>
           </thead>
