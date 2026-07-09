@@ -171,9 +171,10 @@ describe('ProgressModalComponent', () => {
 
       const trainReq = httpMock.expectOne('/api/eval/train-and-score');
       component.ngOnDestroy();
-      // The POST resolves after destroy; `takeUntil(destroy$)` drops it, so
-      // `pollEvalJob` never runs and no result poll is issued.
-      trainReq.flush({ job_id: 'j3', status: 'running', current: 0, total: 3 });
+      // `takeUntil(destroy$)` unsubscribes from the in-flight POST, so the
+      // request is cancelled: its `next` never runs, `pollEvalJob` is never
+      // armed, and no result poll is issued.
+      expect(trainReq.cancelled).toBe(true);
 
       await vi.advanceTimersByTimeAsync(1000);
       httpMock.expectNone((req: HttpRequest<unknown>) =>
