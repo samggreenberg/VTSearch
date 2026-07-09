@@ -114,18 +114,27 @@ _DEFAULT_MIMETYPE_BY_TYPE = {
 def save_detector_labels(name: str):
     """Save the current votes as the detector's labelset.
 
-    Reads good_votes/bad_votes from global state and the current medias
-    to build a fresh LabelSet, then persists it into the detector's JSON file.
+    Reads good_votes/bad_votes from global state and the current medias to
+    build a LabelSet for the *active dataset*, then merges it into the
+    detector's persisted labelset and writes it back.  The merge is
+    non-destructive across datasets: entries owned by the active dataset are
+    reconciled against the current votes, while entries accumulated under
+    other datasets are preserved verbatim.  This mirrors
+    :func:`~vtscore.detectors.label_sync.sync_labels_to_loaded_detector`, so
+    an explicit save never discards the cross-dataset labels that the
+    automatic post-vote sync deliberately keeps.
 
     Requires both context headers: with the request-missing sentinels in
     place, ``validated_vote_snapshot`` reports ``safe=True`` over frozen-empty
-    votes/medias, so a header-less request would pass the 409 guard and
-    overwrite the named detector's labelset with an empty one.
+    votes/medias.  Because the save now merges rather than full-replaces, a
+    header-less request that slips past the 409 guard would reconcile *no*
+    active-dataset keys and thus leave the persisted labelset untouched, but
+    the ``@require_*_header`` decorators reject it up front regardless.
     """
-    from vtscore.datasets.labelset import LabelSet
+    from vtscore.datasets.labelset import LabelSet, media_element_key
     from vtscore.detectors.dataset_sync import validated_vote_snapshot
     from vtscore.detectors.input_spec import extract_input_spec_from_medias
-    from vtscore.detectors.label_sync import _label_sync_write_lock
+    from vtscore.detectors.label_sync import _label_sync_write_lock, _merge_labelsets_across_datasets
 
     # The read→compose→write below races the loaded-detector label sync (and
     # the other detector-JSON writers), so it runs under the same lock.
@@ -143,13 +152,26 @@ def save_detector_labels(name: str):
             # of silently destroying labels.
             abort(409, message="Cannot save labels: detector vote state is not aligned with the active dataset")
         medias_snap = snap.medias
-        labelset = LabelSet.from_clips_and_votes(
+        current_ls = LabelSet.from_clips_and_votes(
             medias_snap,
             snap.good_votes,
             snap.bad_votes,
             expand_dupes=False,
             vote_region_boxes=snap.vote_region_boxes,
         )
+
+        # Origin keys for *every* media in the active dataset (voted or not).
+        # Existing labelset entries matching one of these keys are "owned" by
+        # the active dataset and get reconciled against the current votes;
+        # entries that don't match were accumulated under other datasets and
+        # are preserved verbatim by the merge.
+        existing_ls = LabelSet.from_dict(data.get("labelset") or {})
+        current_dataset_keys = set()
+        for media in medias_snap.values():
+            key = media_element_key(media)
+            if key is not None:
+                current_dataset_keys.add(key)
+        labelset = _merge_labelsets_across_datasets(existing_ls, current_ls, current_dataset_keys)
         data["labelset"] = labelset.to_dict()
 
         # Capture the active dataset's clipper into the detector's input_spec
