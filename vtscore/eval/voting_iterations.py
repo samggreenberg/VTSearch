@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.labels import media_is_positive, region_box_for_category
-from vtscore.training.mlp import train_model
+from vtscore.training.mlp import _auto_hidden_dim, train_model
 from vtscore.training.thresholds import (
     calculate_cross_calibration_threshold,
     calculate_safe_threshold,
@@ -309,24 +309,40 @@ def simulate_voting_iterations(
         X = torch.tensor(np.array(X_list), dtype=torch.float32)
         y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
         input_dim = X.shape[1]
+        n_labels = len(good_votes) + len(bad_votes)
 
-        # Train and find threshold (mirrors train_and_score)
+        # Train and find threshold, matching the production
+        # ``_train_and_score_xy`` / ``train_and_threshold`` pipeline exactly so
+        # the reported cost measures what the live detector computes:
+        #   * ``hidden_dim`` is sized from the *full* label count and forced onto
+        #     the calibration folds, so the fold models share the final model's
+        #     architecture (production passes this into
+        #     ``cross_calibration_threshold_cached``).  Letting each fold
+        #     auto-size to its own smaller train split would train narrower fold
+        #     nets and report a threshold the live pipeline never produces.
+        #   * the fold splits use a fresh ``RandomState(42)`` — the fixed seed
+        #     ``cross_calibration_threshold_cached`` always calibrates with —
+        #     rather than the shared per-seed simulation RNG, so the calibration
+        #     is byte-for-byte what production runs for this vote set.  The eval
+        #     seed still varies the data (which media are voted, in what order,
+        #     and the held-out test split); only the calibration folds are now
+        #     pinned, as they are in production.
+        hidden_dim = _auto_hidden_dim(n_labels)
         threshold = calculate_cross_calibration_threshold(
             X_list,
             y_list,
             input_dim,
             inclusion,
-            rng=rng,
+            rng=np.random.RandomState(42),
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
+            hidden_dim=hidden_dim,
         )
-        model = train_model(X, y, input_dim)
+        model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
 
         # Apply safe threshold blending if enabled
         if safe_thresholds:
-            threshold = _blend_safe_threshold(
-                threshold, model, region_aware, sim_clips, X_all_clips, len(good_votes) + len(bad_votes)
-            )
+            threshold = _blend_safe_threshold(threshold, model, region_aware, sim_clips, X_all_clips, n_labels)
 
         # Evaluate on held-out test set
         metrics = _evaluate_on_test(
