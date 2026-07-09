@@ -86,6 +86,54 @@ class TestLoadFile:
         assert resp.status_code == 400
         assert "No file selected" in resp.get_json()["message"]
 
+    def test_upload_is_wrapped_as_saveable_and_loads(self, client, monkeypatch):
+        """Regression: the upload must reach the pickle importer as a save-able
+        ``UploadedFile``, never a bare ``io.BytesIO``.
+
+        The route reads the upload into memory before the background thread
+        runs (the Flask ``FileStorage`` stream dies with the request).  Those
+        bytes must be wrapped in a ``BytesIOUploadedFile``: the pickle importer
+        persists the upload via ``file_obj.save(temp_path)``, and a raw
+        ``io.BytesIO`` has no ``.save``, so an unwrapped buffer crashed the
+        background load with ``'_io.BytesIO' object has no attribute 'save'``.
+        """
+        import vtsearch.routes.datasets.load as load_mod
+        from vtscore.plugins.uploads import UploadedFile, wrap_cli_file_fields
+
+        # A real, valid exported pickle of the fixture dataset.
+        pkl_bytes = client.get("/api/dataset/export").data
+        assert pkl_bytes
+
+        captured: dict = {}
+
+        def _capture(importer, field_values):
+            captured["importer"] = importer
+            captured["field_values"] = field_values
+            return "task-regression"
+
+        monkeypatch.setattr(load_mod, "_run_importer_in_background", _capture)
+
+        data = {"file": (io.BytesIO(pkl_bytes), "dataset.pkl")}
+        resp = client.post("/api/dataset/load-file", data=data, content_type="multipart/form-data")
+        assert resp.status_code == 200
+
+        file_obj = captured["field_values"]["file"]
+        # The contract the pickle importer relies on: a save-able UploadedFile,
+        # not a bare io.BytesIO (which is what the bug handed it).
+        assert not isinstance(file_obj, io.BytesIO)
+        assert isinstance(file_obj, UploadedFile)
+        assert callable(getattr(file_obj, "save", None))
+        assert file_obj.filename == "dataset.pkl"
+
+        # End-to-end: run the importer exactly as the background runner does
+        # (normalize file fields, then run) and confirm it loads the dataset
+        # rather than raising the AttributeError the bug produced.
+        importer = captured["importer"]
+        normalized = wrap_cli_file_fields(importer.fields, dict(captured["field_values"]))
+        loaded: dict = {}
+        importer.run(normalized, loaded)
+        assert len(loaded) > 0
+
 
 # ---------------------------------------------------------------------------
 # POST /api/dataset/load-source
