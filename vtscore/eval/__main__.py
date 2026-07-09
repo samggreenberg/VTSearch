@@ -22,7 +22,7 @@ Usage::
 
     # List available eval datasets
     python -m vtscore.eval --list
-    
+
 Matthew Usage::
 VG=/exp/scale26/datasets/external/VisualGenome
 mkdir -p "$TMPDIR/visual_genome/VG_100K"

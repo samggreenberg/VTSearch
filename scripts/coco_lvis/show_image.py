@@ -18,7 +18,9 @@ Reads the dataset staged under ``/exp/scale26/datasets/external`` (see READMEs):
 Usage::
 
     python scripts/coco_lvis/show_image.py 289343 --dataset coco --out-dir /tmp/coco_show
-    python scripts/coco_lvis/show_image.py 446522 128506 --dataset lvis --max-boxes 30
+    python scripts/coco_lvis/show_image.py 235081 --dataset lvis --max-boxes 30
+    # only draw boxes for one class (name match; 'traffic light' == 'traffic_light'):
+    python scripts/coco_lvis/show_image.py 289343 --dataset coco --class "stop sign"
 """
 
 from __future__ import annotations
@@ -36,7 +38,13 @@ def main() -> int:
     ap.add_argument("--dataset", choices=("coco", "lvis"), default="coco", help="which staged dataset")
     ap.add_argument("--extract", type=Path, default=None, help="override the derived .jsonl.gz path")
     ap.add_argument("--images-dir", type=Path, default=None, help="override the image-zip dir")
-    ap.add_argument("--out-dir", type=Path, default=None, help="output dir (default: <dataset>_show)")
+    ap.add_argument("--out-dir", type=Path, default=None, help="output dir (default: <dataset>_show[_<class>])")
+    ap.add_argument(
+        "--class",
+        dest="cls",
+        default=None,
+        help="only draw boxes for this category (name match; 'traffic light' == 'traffic_light')",
+    )
     ap.add_argument(
         "--max-boxes",
         type=int,
@@ -47,7 +55,9 @@ def main() -> int:
     args = ap.parse_args()
 
     extract, images_dir = C.resolve_paths(args.dataset, args.extract, args.images_dir)
-    out_dir = args.out_dir or Path(f"{args.dataset}_show")
+    q = C.norm_category(args.cls) if args.cls else None
+    default_out = f"{args.dataset}_show" + (f"_{args.cls.replace(' ', '_')}" if args.cls else "")
+    out_dir = args.out_dir or Path(default_out)
 
     ids = set(args.image_id)
     print(f"collecting annotations for {len(ids)} image(s) from {extract.name}…", flush=True)
@@ -62,7 +72,13 @@ def main() -> int:
             if not rows:
                 print(f"  [{iid}] no annotations in {args.dataset} — skipping", flush=True)
                 continue
+            # Get the pixel locator from ALL rows before any class filtering.
             split, file_name = C.file_name_of(rows)
+            if q is not None:
+                rows = [r for r in rows if C.norm_category(r.get("name", "")) == q]
+                if not rows:
+                    print(f"  [{iid}] no '{args.cls}' annotations — skipping", flush=True)
+                    continue
             try:
                 img = reader.open_rgb(split, file_name)
                 img = C.draw_rows(img, rows, ft, args.max_boxes)

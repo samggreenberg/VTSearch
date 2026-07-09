@@ -50,6 +50,32 @@ def max_pool_over_images(score_fn: PredictFn, region_mats: Sequence[np.ndarray])
     return out
 
 
+def max_pool_with_argmax(score_fn: PredictFn, region_mats: Sequence[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
+    """Like :func:`max_pool_over_images` but also return the winning region index.
+
+    Returns ``(scores, argmax)`` where ``argmax[j]`` is the index (within image
+    ``j``'s region matrix) of the max-scoring region, or ``-1`` for an image with
+    no regions. Used for localization (the IoU box is that region's box).
+    """
+    counts = [int(m.shape[0]) for m in region_mats]
+    scores = np.full(len(region_mats), float("-inf"), dtype=np.float64)
+    argmax = np.full(len(region_mats), -1, dtype=np.int64)
+    nonempty = [m for m in region_mats if m.shape[0] > 0]
+    if not nonempty:
+        return scores, argmax
+    big = np.concatenate(nonempty, axis=0)
+    flat = np.asarray(score_fn(big), dtype=np.float64).reshape(-1)
+    i = 0
+    for j, c in enumerate(counts):
+        if c > 0:
+            block = flat[i : i + c]
+            bi = int(block.argmax())
+            scores[j] = float(block[bi])
+            argmax[j] = bi
+            i += c
+    return scores, argmax
+
+
 def _mlp_predict_factory(model) -> PredictFn:
     import torch  # noqa: PLC0415
 

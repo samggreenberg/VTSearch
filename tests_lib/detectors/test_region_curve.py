@@ -9,8 +9,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from vtscore.eval.error_metrics import inclusion_weights, min_weighted_cost, weighted_error
-from vtscore.eval.region_curve import RegionCurveInputs, evaluate_region_curve
+from vtscore.eval.error_metrics import f1_at, inclusion_weights, min_weighted_cost, weighted_error
+from vtscore.eval.region_curve import RegionCurveInputs, _iou_metrics, evaluate_region_curve
 from vtscore.eval.scoring_heads import CosineHead, MLPHead, max_pool_over_images
 
 
@@ -58,6 +58,46 @@ def test_min_weighted_cost_separable_is_zero():
     scores = [0.9, 0.8, 0.2, 0.1]
     labels = [1.0, 1.0, 0.0, 0.0]
     assert min_weighted_cost(scores, labels, 0) == 0.0
+
+
+def test_f1_at_hand_computed():
+    # thr 0.5 -> preds [1,1,0,0]; TP=1, FP=1, FN=1 -> F1 = 2*1/(2*1+1+1) = 0.5
+    assert f1_at([0.9, 0.8, 0.4, 0.1], [1.0, 0.0, 1.0, 0.0], 0.5) == 0.5
+    assert np.isnan(f1_at([], [], 0.5))
+    # perfect separation at 0.5
+    assert f1_at([0.9, 0.1], [1.0, 0.0], 0.5) == 1.0
+
+
+def _boxes_inputs(labels, region_boxes, gt_boxes) -> RegionCurveInputs:
+    z = np.zeros((0, 4), np.float32)
+    return RegionCurveInputs(z, z, [], labels, 4, test_region_boxes=region_boxes, test_gt_boxes=gt_boxes)
+
+
+def test_iou_metrics_direct():
+    # pos 0: argmax box exactly overlaps GT -> IoU 1.0; pos 1: argmax box disjoint -> 0.0.
+    region_boxes = [
+        np.array([[0.0, 0.0, 0.5, 0.5], [0.9, 0.9, 1.0, 1.0]], np.float32),
+        np.array([[0.9, 0.9, 1.0, 1.0], [0.0, 0.0, 0.5, 0.5]], np.float32),
+    ]
+    gt = [[(0.0, 0.0, 0.5, 0.5)], [(0.0, 0.0, 0.5, 0.5)]]
+    inp = _boxes_inputs([1, 1], region_boxes, gt)
+    mean_iou, corloc = _iou_metrics(inp, np.array([0, 0]))  # both pick region 0
+    assert mean_iou == 0.5  # (1.0 + 0.0)/2
+    assert corloc == 0.5  # one of two hits IoU>=0.5
+
+
+def test_iou_metrics_nan_without_boxes():
+    inp = RegionCurveInputs(np.zeros((0, 4), np.float32), np.zeros((0, 4), np.float32), [], [1, 0], 4)
+    mean_iou, corloc = _iou_metrics(inp, np.array([0, 0]))
+    assert np.isnan(mean_iou) and np.isnan(corloc)
+
+
+def test_region_curve_row_has_f1_iou_fields():
+    inputs, _ = _inputs()
+    rows = evaluate_region_curve(inputs, "mlp", k_values=[4], seeds=[0], neg_ratio=1)
+    assert rows and {"f1", "mean_iou", "corloc"} <= set(rows[0])
+    # no boxes provided in _inputs() -> IoU fields are NaN, F1 is finite
+    assert np.isnan(rows[0]["mean_iou"])
 
 
 def test_weighted_error_matches_legacy_inline():

@@ -73,6 +73,27 @@ def weighted_error(
     return {"cost": round(cost, 6), "fpr": round(fpr, 6), "fnr": round(fnr, 6)}
 
 
+def f1_at(scores: FloatArray, labels: FloatArray, threshold: float) -> float:
+    """F1 of ``scores >= threshold`` vs ``labels`` (1/0). ``F1 = 2TP/(2TP+FP+FN)``.
+
+    NaN when undefined (no predicted or actual positives). Same operating point
+    as :func:`weighted_error`, so this is the F1 at the cross-calibrated threshold.
+    """
+    if len(scores) == 0:
+        return float("nan")
+    tp = fp = fn = 0
+    for s, y in zip(scores, labels, strict=True):
+        pred = s >= threshold
+        if pred and y == 1.0:
+            tp += 1
+        elif pred and y == 0.0:
+            fp += 1
+        elif not pred and y == 1.0:
+            fn += 1
+    denom = 2 * tp + fp + fn
+    return round(2 * tp / denom, 6) if denom > 0 else float("nan")
+
+
 def min_weighted_cost(
     scores: FloatArray,
     labels: FloatArray,

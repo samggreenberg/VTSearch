@@ -12,7 +12,7 @@ same command drops into a SLURM array later. Per-image embeddings are cached to
 npz (``--cache-dir``) so re-runs and multiple K reuse forward passes.
 
 Example (stop sign on COCO):
-    srun --partition=gpu --gres=gpu:l40s:1 --cpus-per-task=8 --mem=46G --time=2:00:00 \\ # or --pty bash -l
+    srun --partition=gpu --gres=gpu:l40s:1 --cpus-per-task=8 --mem=46G --time=8:00:00 \\ # or --pty bash -l
       .venv/bin/python scripts/sod/sweep.py \\
         --datasets coco --classes "stop sign" --embedders siglip,dinov2 \\
         --proposals whole,sliding,dino,hac --k-values 1,2,4,8,16 \\
@@ -142,13 +142,18 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
             "dataset": cell["dataset"],
             "class": cell["class"],
             "embedder": cell["embedder"],
+            "reg_name": reg_name,  # registry name; joins rows to prep_timing_summary
             "proposal": proposal,
+            "proposal_slug": slug,
             "alpha": alpha,
             "negatives_exhaustive": split.negatives_exhaustive,
+            "neg_regions": args.neg_regions,
             "n_pos_total": len(split.positive_ids),
             "n_neg_total": len(split.negative_ids),
         }
-        inputs = build_curve_inputs(ds, source, buckets, cache, class_name=cell["class"], meta=meta)
+        inputs = build_curve_inputs(
+            ds, source, buckets, cache, class_name=cell["class"], meta=meta, neg_regions=args.neg_regions
+        )
 
     rows: list[dict] = []
     heads = list(args.heads)
@@ -208,6 +213,13 @@ def main() -> int:
     ap.add_argument("--split-seed", type=int, default=0, help="seed for class split + pool partition")
     ap.add_argument("--neg-count", type=int, default=690, help="size of the sampled evaluation negative pool")
     ap.add_argument("--neg-ratio", type=int, default=1, help="training negatives per positive (per K)")
+    ap.add_argument(
+        "--neg-regions",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="train MLP negatives on proposed-region crops of negative images (matches the test "
+        "distribution for crop/HAC proposals) instead of whole-image vectors",
+    )
     ap.add_argument("--test-fraction", type=float, default=0.5)
     ap.add_argument("--inclusion", type=int, default=0, help="0=FPR+FNR; >0 favors recall; <0 favors precision")
     ap.add_argument("--safe-thresholds", action=argparse.BooleanOptionalAction, default=True)
@@ -266,14 +278,57 @@ def main() -> int:
     return 0
 
 
+def _build_total_timing(prep: list[dict], rows: list[dict]) -> list[dict]:
+    """Combine embed+propose seconds (from ``prep_timing_summary``) with the MLP
+    ``compute_ms`` summed from result rows into a total-time entry per config.
+
+    Joined on ``(dataset, reg_name, proposal_slug)``: ``prep`` is keyed by registry
+    name + slug, and rows now carry the same keys. Embedding is a cache-miss cost
+    (0 on a fully-cached run); the MLP compute always runs, so the total always has
+    data. Returns one dict per config with ``embed_s``/``compute_s``/``total_s``.
+    """
+    from collections import defaultdict
+
+    embed_by = {(t["dataset"], t["embedder"], t["slug"]): t["embed_s"] for t in prep}
+    compute_by: dict[tuple, float] = defaultdict(float)
+    label_by: dict[tuple, str] = {}
+    for r in rows:
+        key = (r["dataset"], r.get("reg_name", r["embedder"]), r.get("proposal_slug", r["proposal"]))
+        compute_by[key] += float(r.get("compute_ms", 0.0)) / 1000.0
+        tag = f" α{r['alpha']}" if r.get("proposal") == "hac" else ""
+        label_by[key] = f"{r['embedder']}/{r['proposal']}{tag}"
+    out: list[dict] = []
+    for key in sorted(set(embed_by) | set(compute_by)):
+        e = embed_by.get(key, 0.0)
+        c = compute_by.get(key, 0.0)
+        out.append(
+            {
+                "label": label_by.get(key, f"{key[1]}/{key[2]}"),
+                "embed_s": round(e, 3),
+                "compute_s": round(c, 3),
+                "total_s": round(e + c, 3),
+            }
+        )
+    return out
+
+
 def _run_viz(args, cells: list[dict], cache_root: Path, all_rows: list[dict], out_dir: Path) -> None:
     """Emit plots + split galleries + MLP prediction overlays after the sweep."""
-    from plots import render_all
+    from features import prep_timing_summary
+    from plots import render_all, render_inference_time
     from viz import render_predictions, render_split_gallery
 
     print("=== viz ===", flush=True)
     if all_rows:
         render_all(all_rows, out_dir / "plots", band=args.viz_band)
+    # Total-time bar chart (per-config): embed+propose (cache misses this run) + MLP
+    # train+score (always runs, so this has data even on a fully-cached run).
+    total_timing = _build_total_timing(prep_timing_summary(), all_rows)
+    if total_timing:
+        render_inference_time(total_timing, out_dir / "plots" / "time.png")
+        (out_dir / "time.json").write_text(json.dumps(total_timing, indent=2))
+    else:
+        print("  timing: no rows to summarize", flush=True)
     viz_k = args.viz_k if args.viz_k is not None else max((k for k in args.k_values if k > 0), default=1)
     viz_seed = args.viz_seed if args.viz_seed is not None else (args.seeds[0] if args.seeds else 0)
     for dataset in args.datasets:
@@ -316,6 +371,7 @@ def _run_viz(args, cells: list[dict], cache_root: Path, all_rows: list[dict], ou
                                 inclusion=args.inclusion,
                                 safe_thresholds=args.safe_thresholds,
                                 gallery_n=args.viz_n,
+                                neg_regions=args.neg_regions,
                             )
                         except Exception:
                             print(f"  viz predict error {cell}:\n{traceback.format_exc()}", flush=True)
