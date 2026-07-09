@@ -572,11 +572,11 @@ def _train_and_score_xy(
     n_votes = len(set(groups)) if groups is not None else len(X_list)
     flooded = groups is not None and len(X_list) != n_votes
     cal_groups = groups if flooded else None
-    sample_weights = (
-        torch.tensor(_per_bag_fit_weights(np.asarray(y_list, dtype=np.float32), groups), dtype=torch.float32)
-        if flooded
-        else None
-    )
+    sample_weights: torch.Tensor | None = None
+    if flooded and groups is not None:
+        sample_weights = torch.tensor(
+            _per_bag_fit_weights(np.asarray(y_list, dtype=np.float32), groups), dtype=torch.float32
+        )
     hidden_dim = _auto_hidden_dim(n_votes)
 
     # Skip k-fold calibration *only* when safe-thresholds is on and the label
