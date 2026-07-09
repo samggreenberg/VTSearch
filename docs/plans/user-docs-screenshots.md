@@ -27,6 +27,10 @@ pixel-diff tolerance) are the remaining work.
   projection rather than rebuilding per run.
 - **Pixel-diff tolerance** for `check.sh` (font hinting / AA can cause sub-pixel
   noise across machines; may need a small per-pixel threshold).
+- **Optional `browse-bin-popup` shot.** Not yet added — it has no USER_GUIDE
+  anchor/placeholder, so it stayed out of scope. Recipe for when a Browse-detail
+  section is written to home it: within `openBrowse()`, hover/click a tile so
+  `vt-browse-bin-popup` appears, then `clip` the popup.
 
 ---
 
