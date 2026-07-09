@@ -80,6 +80,24 @@
   border-collapse: collapse;
   font-size: var(--font-sm);
 
+  // Once the user drags a divider the component freezes per-column pixel
+  // widths and flips to fixed layout; `max-content` sizes the table to the sum
+  // of those widths (so a widened column overflows and the `.table-scroll`
+  // container scrolls), while `min-width: 100%` keeps it filling the container
+  // when the columns are narrow.
+  &.table-fixed {
+    table-layout: fixed;
+    width: max-content;
+    min-width: 100%;
+
+    // Explicit per-column widths govern in fixed layout; drop the auto-layout
+    // 220px cap so a column can be dragged wider than that.
+    th,
+    td {
+      max-width: none;
+    }
+  }
+
   th,
   td {
     padding: var(--space-xs) var(--space-md);
@@ -99,6 +117,36 @@
     font-size: var(--font-xs);
     text-transform: uppercase;
     letter-spacing: 0.02em;
+
+    // Column resize handle, pinned inside the cell's right edge so the next
+    // sticky <th>'s stacking context can't paint over it (the reason the
+    // shared datagrid handle instead leaks left onto the following cell).
+    // The 2px indicator sits just inside the divider.
+    .col-resize-handle {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 10px;
+      cursor: col-resize;
+      z-index: 2;
+
+      &::after {
+        content: '';
+        position: absolute;
+        top: 25%;
+        bottom: 25%;
+        right: 2px;
+        width: 2px;
+        background: var(--accent);
+        opacity: 0;
+        transition: opacity var(--transition-base);
+      }
+
+      &:hover::after {
+        opacity: 0.6;
+      }
+    }
   }
 
   tbody tr:hover {

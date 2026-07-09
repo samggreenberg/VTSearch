@@ -107,4 +107,68 @@ describe('ExportModalComponent', () => {
     component.close();
     expect(component.closed.emit).toHaveBeenCalled();
   });
+
+  describe('preview column resize', () => {
+    /** Build a detached preview-style table and return its parts. */
+    function makeTable(): { table: HTMLTableElement; th1: HTMLElement; handle: HTMLElement } {
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const tr = document.createElement('tr');
+      const th1 = document.createElement('th');
+      th1.setAttribute('data-col', 'label');
+      const th2 = document.createElement('th');
+      th2.setAttribute('data-col', 'md5');
+      tr.append(th1, th2);
+      thead.append(tr);
+      table.append(thead);
+      const handle = document.createElement('span');
+      th1.append(handle);
+      document.body.append(table);
+      return { table, th1, handle };
+    }
+
+    function mousedownOn(handle: HTMLElement, clientX: number): MouseEvent {
+      const ev = new MouseEvent('mousedown', { clientX });
+      Object.defineProperty(ev, 'target', { value: handle });
+      return ev;
+    }
+
+    it('freezes every column width and enters fixed layout on first grab', async () => {
+      await flushInit();
+      const { table, handle } = makeTable();
+      component.startColResize(mousedownOn(handle, 100), 'label');
+      expect(component.tableFixed).toBe(true);
+      expect(component.colWidths).toHaveProperty('label');
+      expect(component.colWidths).toHaveProperty('md5');
+      expect(document.body.style.cursor).toBe('col-resize');
+      component.onColResizeEnd();
+      table.remove();
+    });
+
+    it('resizes the grabbed column by the drag delta, clamped to a minimum', async () => {
+      await flushInit();
+      const { table, handle } = makeTable();
+      component.startColResize(mousedownOn(handle, 100), 'label');
+      // offsetWidth is 0 under jsdom, so startWidth is 0; +80px drag → 80px.
+      component.onColResizeMove(new MouseEvent('mousemove', { clientX: 180 }));
+      expect(component.colWidths['label']).toBe(80);
+      // A tiny drag can't shrink the column below the 40px floor.
+      component.onColResizeMove(new MouseEvent('mousemove', { clientX: 110 }));
+      expect(component.colWidths['label']).toBe(40);
+      component.onColResizeEnd();
+      table.remove();
+    });
+
+    it('ignores pointer motion once the drag ends and clears the cursor', async () => {
+      await flushInit();
+      const { table, handle } = makeTable();
+      component.startColResize(mousedownOn(handle, 100), 'label');
+      component.onColResizeMove(new MouseEvent('mousemove', { clientX: 180 }));
+      component.onColResizeEnd();
+      expect(document.body.style.cursor).toBe('');
+      component.onColResizeMove(new MouseEvent('mousemove', { clientX: 400 }));
+      expect(component.colWidths['label']).toBe(80); // unchanged after end
+      table.remove();
+    });
+  });
 });
