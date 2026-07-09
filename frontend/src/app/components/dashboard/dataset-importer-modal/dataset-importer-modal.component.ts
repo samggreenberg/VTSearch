@@ -15,7 +15,8 @@ import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.serv
 import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { ToastService } from '../../../services/toast.service';
-import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, MediaTypeDetectionResponse, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec, ImportDefaultsForMediaType } from '../../../models/api.models';
+import { ImporterInfo, ImporterField, ImporterPickerTab, MediaTypeInfo, MediaTypeDetectionResponse, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec, ImportDefaultsForMediaType } from '../../../models/api.models';
+import { DemoDatasetEntry } from '../../../generated/api-client/models/demo-dataset-entry';
 import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 import { apiErrorMessage } from '../../../utils/api-error';
 
@@ -46,7 +47,7 @@ export class DatasetImporterModalComponent implements OnInit {
 
   readonly closed = output<void>();
   readonly importStarted = output<void>();
-  readonly demoSelected = output<DemoDataset>();
+  readonly demoSelected = output<DemoDatasetEntry>();
 
   readonly importers = signal<ImporterInfo[]>([]);
   readonly selectedImporter = signal<ImporterInfo | null>(null);
@@ -85,7 +86,7 @@ export class DatasetImporterModalComponent implements OnInit {
   readonly selectedStructuralEmbedder = signal('');
 
   // Demo picker state
-  readonly demos = signal<DemoDataset[]>([]);
+  readonly demos = signal<DemoDatasetEntry[]>([]);
   readonly mediaTypes = signal<MediaTypeInfo[]>([]);
   readonly demoTabs = signal<string[]>([]);
   readonly activeTab = signal('');
@@ -107,7 +108,7 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Currently-selected demo row.  Clicking a row sets this; the Import
    *  button in the footer then commits the selection.  ``null`` means
    *  nothing is selected yet, so the Import button is disabled. */
-  selectedDemo: DemoDataset | null = null;
+  selectedDemo: DemoDatasetEntry | null = null;
 
   // Demo table column metadata + controller. Mirrors the Dashboard datagrid:
   // percentage widths summing to 100, draggable column reorder, click-to-sort
@@ -1129,13 +1130,13 @@ export class DatasetImporterModalComponent implements OnInit {
     });
   }
 
-  get filteredDemos(): DemoDataset[] {
+  get filteredDemos(): DemoDatasetEntry[] {
     const items = this.demos().filter((d) => d.media_type === this.activeTab());
     const statusOrder: Record<string, number> = { ready: 0, needs_embedding: 1, needs_download: 2 };
     const sortKey = this.demoCols.sortColumn;
     const asc = this.demoCols.sortAsc;
     return items.sort((a, b) => {
-      const key = sortKey as keyof DemoDataset;
+      const key = sortKey as keyof DemoDatasetEntry;
       let va: any = a[key];
       let vb: any = b[key];
       if (key === 'status') {
@@ -1262,7 +1263,7 @@ export class DatasetImporterModalComponent implements OnInit {
    *  and auto-populates the Dataset Name input (unless the user has
    *  manually edited it).  The actual import is deferred to
    *  :meth:`submitDemo`, which the Import footer button calls. */
-  selectDemo(demo: DemoDataset): void {
+  selectDemo(demo: DemoDatasetEntry): void {
     this.selectedDemo = demo;
     if (!this.demoDatasetNameDirty) {
       this.demoDatasetName = demo.label || '';

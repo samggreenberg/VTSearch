@@ -5,7 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsCrudApiService } from '../../../services/detectors-crud-api.service';
 import type { DetectorCombineResponse } from '../../../generated/api-client/models/detector-combine-response';
-import { DetectorRegistryEntry } from '../../../models/api.models';
+import { DetectorRegistryEntry } from '../../../generated/api-client/models/detector-registry-entry';
 import { apiErrorMessage } from '../../../utils/api-error';
 
 interface SourceRow {

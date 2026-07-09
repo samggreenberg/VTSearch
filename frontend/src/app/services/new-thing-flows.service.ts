@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Subject } from 'rxjs';
-import { DemoDataset } from '../models/api.models';
+import { DemoDatasetEntry } from '../generated/api-client/models/demo-dataset-entry';
 
 export interface ImporterFlowState {
   open: boolean;
@@ -37,7 +37,7 @@ export interface ThingCreatedEvent {
 }
 
 export interface DemoSelectedEvent {
-  demo: DemoDataset;
+  demo: DemoDatasetEntry;
 }
 
 /**
@@ -132,7 +132,7 @@ export class NewThingFlowsService {
     this.importStartedSubject.next();
   }
 
-  emitDemoSelected(demo: DemoDataset): void {
+  emitDemoSelected(demo: DemoDatasetEntry): void {
     this.demoSelectedSubject.next({ demo });
   }
 

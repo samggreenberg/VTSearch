@@ -29,24 +29,6 @@ type RemoveIndex<T> = {
 export type Media = MediaIdsListResponse &
   Partial<Omit<RemoveIndex<MediaBatchResponse>, keyof MediaIdsListResponse>>;
 
-// --- Sorting ---
-
-export interface VotesResponse {
-  good: number[];
-  bad: number[];
-  /** Find mode: ids the human has explicitly verified (acted on). Empty
-   *  outside Find mode. Drives the left work-queue vs. right verified split. */
-  verified?: number[];
-  click_times: Record<string, number>;
-  learned_scores: Record<string, number>;
-  labelset_good_count?: number;
-  labelset_bad_count?: number;
-  /** Normalised [x0, y0, x1, y1] region boxes for good votes cast by drawing
-   *  a box on an image, keyed by media id. Lets the Good pile request a
-   *  cropped thumbnail of just the voted region. Empty when no region votes. */
-  good_region_boxes?: Record<string, number[]>;
-}
-
 // --- Progress ---
 
 /**
@@ -216,20 +198,6 @@ export interface ImporterPickerTab {
   order?: number;
 }
 
-export interface DemoDataset {
-  name: string;
-  label: string;
-  status: 'ready' | 'needs_embedding' | 'needs_download';
-  ready: boolean;
-  num_files: number;
-  download_size_mb: number;
-  description: string;
-  media_type: string;
-  num_categories: number;
-  pkl_embedder?: string;
-  pkl_clipper?: string;
-}
-
 export interface MediaTypeInfo {
   type_id: string;
   name: string;
@@ -270,36 +238,6 @@ export interface DatasetRegistryEntry {
   /** Unix timestamp (seconds) at which this dataset ages off and is
    *  automatically removed; `null`/absent means it never expires. */
   expires_at?: number | null;
-  [key: string]: unknown;
-}
-
-// --- Detectors ---
-
-export interface DetectorRegistryEntry {
-  id: string;
-  name: string;
-  media_type: string;
-  num_training?: number;
-  text_query?: string;
-  media_example?: string;
-  loaded?: boolean;
-  detector_loaded?: boolean;
-  /** Whether this detector is on the current user's Auto-Find list. */
-  autofind?: boolean;
-  last_trained_at?: number | null;
-  /** Embedder this detector's label-vector cache is built against.
-   *  Populated only for loaded detectors; empty for unloaded entries. */
-  embedder?: string;
-  /** The detector's locked embedder type ("semantic" / "patch_semantic" /
-   *  "structural"). Immutable; drives the detector/dataset compatibility gate.
-   *  Empty for a legacy detector with neither a type nor a migratable primary. */
-  embedder_type?: string;
-  /** Username of the detector's creator (shown in multi-user mode). */
-  created_by?: string;
-  /** Usernames granted access besides the creator; ``["*"]`` = public. */
-  readers?: string[];
-  /** Whether the current user created this detector (creator-only actions). */
-  is_owner?: boolean;
   [key: string]: unknown;
 }
 
