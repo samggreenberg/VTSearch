@@ -612,9 +612,12 @@ def _train_and_score_xy(
 
     # A Good vote trains on one region (the snapped box); a Bad vote trains on
     # its whole leaf set (region flooding), per-bag weighted so a rejected
-    # image counts once.  On a legacy dataset ``sample_weights`` is None and
-    # this is the historical one-vector-per-media fit.
-    model = train_model(X, y, input_dim, hidden_dim=hidden_dim, sample_weights=sample_weights)
+    # image counts once.  On a legacy dataset there are no per-bag weights, so
+    # the call stays identical to the historical one-vector-per-media fit.
+    if sample_weights is not None:
+        model = train_model(X, y, input_dim, hidden_dim=hidden_dim, sample_weights=sample_weights)
+    else:
+        model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
 
     all_ids, scores, best_region = _score_all_media(model, clips_dict, score_emb)
 
