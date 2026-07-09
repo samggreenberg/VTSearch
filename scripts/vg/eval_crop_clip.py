@@ -93,6 +93,10 @@ from sklearn.metrics import roc_auc_score
 
 from vtscore.config import CLIP_MODEL_ID, DINOV2_MODEL_ID, DINOV3_MODEL_ID, SIGLIP_MODEL_ID
 from vtscore.eval.metrics import compute_average_precision, compute_binary_classification_metrics
+
+# sliding_boxes_by_scale / crops_from_boxes now live in the shared region-source
+# core so the sweep and this script use one implementation.
+from vtscore.eval.region_sources import crops_from_boxes, sliding_boxes_by_scale
 from vtscore.media.patch_embed import build_region_tree, hf_vit_to_patch_output
 
 DEFAULT_VG_DIR = Path("/exp/scale26/datasets/external/VisualGenome")
@@ -159,29 +163,9 @@ def read_pil(members: dict[int, tuple[Path, str]], iid: int) -> Image.Image:
 
 
 # --------------------------------------------------------------------------
-# Crop generation
+# Crop generation: sliding_boxes_by_scale is imported from
+# vtscore.eval.region_sources (shared with the sweep).
 # --------------------------------------------------------------------------
-def sliding_boxes_by_scale(
-    w: int, h: int, scales: list[float], overlap: float, min_window: int
-) -> dict[float, list[Box]]:
-    """Multiscale square windows (pixel coords), grouped by scale."""
-    short = min(w, h)
-    out: dict[float, list[Box]] = {}
-    for f in scales:
-        side = min(int(round(f * short)), short)
-        if side < min_window:
-            continue
-        stride = max(1, int(round(side * (1.0 - overlap))))
-        xs = list(range(0, max(1, w - side + 1), stride))
-        ys = list(range(0, max(1, h - side + 1), stride))
-        if w - side > 0 and xs[-1] != w - side:
-            xs.append(w - side)
-        if h - side > 0 and ys[-1] != h - side:
-            ys.append(h - side)
-        boxes = [(float(x), float(y), float(x + side), float(y + side)) for x in xs for y in ys]
-        if boxes:
-            out[f] = list(dict.fromkeys(boxes))
-    return out
 
 
 # --------------------------------------------------------------------------
@@ -267,12 +251,8 @@ class DinoProposer:
 
 
 # --------------------------------------------------------------------------
-# Scoring
+# Scoring (crops_from_boxes imported from vtscore.eval.region_sources)
 # --------------------------------------------------------------------------
-def crops_from_boxes(img: Image.Image, boxes_px: list[Box]) -> list[Image.Image]:
-    return [img.crop((int(b[0]), int(b[1]), int(b[2]), int(b[3]))) for b in boxes_px]
-
-
 def crop_sims(img: Image.Image, boxes_px: list[Box], emb: "TextImageEmbedder", q: np.ndarray) -> np.ndarray:
     """Cosine of each crop against the query (empty array when no crops)."""
     if not boxes_px:
