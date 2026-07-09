@@ -551,6 +551,7 @@ class TestGoodTrainingVec:
         media = _patch_media(1, positive=True, category="apple")
         vec = _good_training_vec(media, "apple", region_voting=True)
         expected = snap_box_to_region(media["patch_regions"], (0.0, 0.0, 2 / 3, 1.0))
+        assert expected is not None
         np.testing.assert_allclose(vec, expected)
         # The snapped vector is one of the tree's actual node vectors.
         assert any(np.allclose(vec, r.vec) for r in media["patch_regions"])
