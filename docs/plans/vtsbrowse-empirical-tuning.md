@@ -1,18 +1,15 @@
 # Plan: VTSBrowse empirical tuning pass
 
-**Status:** Deliverable 1 (knob plumbing + persistence-key correctness fix)
-**shipped**. The remaining work is the **quantitative sweep (Phase A)** and the
-**qualitative review (Phase B)** — detailed below. This is the deferred
-*§Open problems → Empirical* work from `docs/plans/vtsbrowse.md`; the other
-VTSBrowse follow-ups (sibling highlighting, text-seeded navigation, detector
-handoff) were **cut**. Empirical tuning is the remaining v1 polish item.
+**Status:** The remaining work is the quantitative sweep (Phase A) and the
+qualitative review (Phase B), detailed below — the deferred empirical-tuning
+work from `docs/plans/vtsbrowse.md`.
 
 The remaining steps need a **stronger environment** (a browser for visual
 judgment, ideally GPU + real demo datasets) because choosing good defaults
 requires *looking at the rendered canvas*, which the headless cloud container
-can't do (no Chrome/Chromium). Since Deliverable 1 landed, both phases can now
-retune purely by changing two settings (`projection_n_neighbors`,
-`projection_min_dist`).
+can't do (no Chrome/Chromium). The two most impactful UMAP knobs are exposed as
+`ServerSettings`, so both phases retune purely by changing two settings
+(`projection_n_neighbors`, `projection_min_dist`).
 
 | Step | Needs a browser? | Needs GPU? | Headless here? |
 |------|------------------|-----------|----------------|
@@ -120,8 +117,8 @@ marked settled and pointing here.
 defaults must be robust to the run-to-run variation of the *unseeded* production
 fit — prefer params stable across a few seeds, not a knife-edge winner. Any
 container built before the params-in-match fix carries a projection fit under
-old params and must recompute (the persistence-key fix, shipped in Deliverable
-1, is what makes re-tuning safe). If the largest target N stutters even after
+old params and must recompute (the persistence-key fix is what makes re-tuning
+safe). If the largest target N stutters even after
 tuning, that triggers the deferred **WebGL renderer** follow-up (out of scope).
 GPU only speeds up embedding the demo datasets; the projection/pyramid math is
 CPU NumPy/numba.
@@ -173,22 +170,6 @@ The knobs the sweep varies, their current values, and their source of truth.
 | Audio | `loop=true`, hard-cut on move | `playAudio` |
 | Text truncation | `300` chars | `loadText` |
 | Popup offset | `+16 / -8` px from cursor | `show` |
-
-## What shipped
-
-- **Deliverable 1 — knob plumbing + persistence-key fix.**
-  `projection_n_neighbors` / `projection_min_dist` are now `ServerSettings`
-  (defaults in `vtscore.config`); the build route passes them into
-  `fit_projection`, the fit stamps them onto the `Projection`, and
-  `_try_load_persisted` / `_load_projection_coords` reject a persisted layout
-  fit under different params (`_projection_params_match`) so a setting change
-  forces a recompute. Previously the two most impactful UMAP knobs were pinned
-  to the function defaults and unreachable without a code edit + container
-  rebuild. Tests: `tests/api/test_projection.py`,
-  `tests_lib/projection/test_persistence.py`, `test_umap_projection.py`. (The
-  ingest-time pre-build stays on the `vtscore.config` defaults — core is
-  Flask-free — so a non-default deployment recomputes each dataset once on first
-  browse, which the params-match guard handles.)
 
 ## Results
 

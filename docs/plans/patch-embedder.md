@@ -1,12 +1,6 @@
 # Patch-based Image Embedder - Design
 
-**Status:** V1, V2, V3 (the text/patch/structural trio), and the per-detector
-embedder-type lock have all shipped end-to-end. What remains is the open
-follow-ups and unvalidated open questions below. The **V3 design** (dict-keyed
-`media["embeddings"]`, role binding, routing) and the **per-detector
-embedder-type** design are kept in full as the living spec that frames that open
-work; the fully-shipped V1/V2 design bodies are collapsed to one-liners under
-"What shipped".
+**Status:** Only the cross-cutting follow-ups and unvalidated open questions below remain open; the V3 trio and per-detector embedder-type sections below are the living design specs that frame them.
 
 ## Open follow-ups & open questions (remaining work)
 
@@ -40,11 +34,6 @@ Cross-cutting, still open:
 - **NPZ per-embedder layout (`vectors_<name>`) not added.** The `server_files`
   NPZ importer still carries a single `vectors` array; the per-embedder layout
   lands with the multi-embed path that would populate it.
-- ~~**Region-less media in a region matrix fall back to the primary vector.**~~
-  **Fixed** (see `comprehensive-audit-2026-07.md`, eighth follow-up pass):
-  `matrix._build_region_arrays` now sources the fallback row from the dataset's
-  patch-slot embedder and raises `ValueError` if absent.
-
 Per-detector embedder-type follow-ups:
 
 - **In-memory primary drift across A→B→A switches.** `DetectorContext.embedder`
@@ -207,10 +196,9 @@ is the **score** embedder (structural ▸ patch ▸ text) the model was trained 
 
 ### Frontend
 
-- **Dataset-create flow** (design): three independent role pickers (Text / Patch /
+- **Dataset-create flow**: three independent role pickers (Text / Patch /
   Structural), each defaulted None and filtered by its capability list; submission
-  rejected only when all three empty. **Shipped as an additive variant instead** —
-  see the Phase 3 note under "What shipped".
+  rejected only when all three empty.
 - **Sort bar** reads `dataset.supports_text` / `supports_patch_regions`
   (+ `supports_geometric_verification`) — no per-component change.
 - **Region-vote UI**: unchanged from v2; Shift-drag works whenever
@@ -240,8 +228,7 @@ changing/adding an embedder requires re-import.
 
 ## Per-detector embedder type (living spec)
 
-**Status: SHIPPED** (first as a per-detector primary *name*, then revised to a
-*type* lock). Each detector locks one embedder **type** at create time —
+Each detector locks one embedder **type** at create time —
 `semantic` / `patch_semantic` / `structural` (the buckets of
 `vtscore/embedding/binding.py::embedder_type`) — and trains/scores in whichever
 *concrete* embedder of that type the active dataset binds, overriding the
@@ -259,7 +246,7 @@ training + scoring *that detector* run in *that* type's space. Text sort is
 unaffected — `POST /api/sort` always runs against the dataset's text slot,
 independent of the active detector.
 
-### What shipped (revised to embedder *type* — authoritative)
+### Design (embedder *type* — authoritative)
 
 - **Taxonomy.** `binding.py::embedder_type(name)` classifies every embedder into
   exactly one of three buckets, precedence `structural ▸ patch_semantic ▸ semantic`:
@@ -317,104 +304,3 @@ on the *current* cache space, not the preference.
 - **Multi-type single detector** (one detector scoring in two spaces at once). Out of
   scope — the inverse of the trio's "one space per detector" premise (same exclusion
   as V3 open question #4).
-
----
-
-## What shipped
-
-**V1** (backend PR #1248; UI/validation in follow-ups):
-
-- Six image embedders — single/patch pairs for **DINOv2** (`facebook/dinov2-base`,
-  ungated Apache-2.0 default, 16×16 grid), **DINOv3**
-  (`facebook/dinov3-vitb16-pretrain-lvd1689m`, gated, 14×14 grid, register tokens
-  stripped), and **real-EUPE** (`facebook/EUPE-ViT-B`, FAIR Noncommercial, 14×14
-  grid), each as `embedder_<name>_single` / `_patch` over a shared `_<name>_shared`
-  base. `MediaEmbedder.supports_patch_regions` (commit 441233b) + `license_notice`
-  capability flags.
-- EUPE loads via `torch.hub.load('facebookresearch/EUPE', 'eupe_vitb16',
-  weights=<HF .pt>)` (replacing the broken PE-Core `AutoModel + trust_remote_code`
-  path); `forward_features` → `x_norm_clstoken` / `x_norm_patchtokens`; saliency is a
-  **CLS-cosine proxy** (SDPA returns no attention weights). DINOv3 uses real
-  CLS→patch attention (`output_attentions=True`).
-- `PatchEmbedOutput` protocol; HAC region tree (`K=12`, `α=0.5`) in
-  `vtscore/media/patch_embed.py` (`2K−1` nodes + CLS full-image node);
-  fp16-in-pickle / fp32-in-RAM storage (`media["patch_regions"]`, `media["patch_grid"]`);
-  max-over-regions similarity (`vtsearch/models/region_similarity.py`); region-aware
-  MLP scoring + asymmetric training loss (Good = full-image `BCE(mlp(cls),1)`, Bad =
-  `mean`-over-regions BCE); gallery-card `best_region` outline. Backward compatible
-  (non-patch datasets reduce to today's single-vector paths).
-- `Dockerfile.image-embedders` + `scripts/cache_gated_models.sh` pre-cache EUPE via
-  torch.hub (`SKIP_DINOV3=1` knob). caltech101_s experiments confirmed K=12/α=0.5 and
-  sensible diversity clusters; fp16↔fp32 rank-stability verified
-  (`TestFp16Fp32RankStability`, worst-case Δ~1e-3, zero rank flips). Tests in
-  `tests/test_patch_embedder.py` (+ GPU integration in `tests/test_gpu.py`).
-
-**V2** (region voting, PRs #1271–#1274):
-
-- `LabeledElement.region_box`; Shift-drag box draw on `ImageViewerComponent`
-  `.region-stage` (8 handles, zoom/rotate-stable image-local coords); on-the-fly
-  `box_to_vote_vector` uniform-mean pooling from the v1-pickled `patch_grid` (no
-  re-import); `POST /vote` accepts `region_box` (400 on no-vote-with-box); training
-  re-pools per pass; binary `←`/`→` fast path byte-for-byte identical (no-timeout
-  sticky "discard box & vote no" state on `←`). Region voting is image-media only.
-- **Focus-pane best-match Highlight toggle** (next to Marquee, image-only, hidden
-  unless `supports_patch_regions`): dashed marching-ants overlay of the backend's
-  `best_region` in the center viewer, read-only, `(0,0,1,1)` fallback suppressed,
-  frontend-only.
-- Tests: `TestRegionBox*` / `TestRegionAwareTraining` / `TestLabel*RegionBox`; frontend
-  coord-transform / armed-state / vote-API-contract specs. Deferred: touch support,
-  multiple regions per vote, region votes on non-image media.
-
-**V3** (the trio, shipped end-to-end as behavior-preserving substrate phases then the
-user-visible binding):
-
-- **Phase 2a** — per-media accessor substrate (`vtscore/embedding/media_vectors.py`):
-  `media["embeddings"]` dict is the forward representation.
-- **Phase 2b.1** — embedder-aware matrix layer: `get_embedding_matrix` /
-  `_submatrix` / `_for_snap` take an optional `embedder_name` (unset → cached primary
-  path; set → fresh matrix from that embedder's vectors).
-- **Phase 2b.2** — in-memory dataset binding: `DatasetContext.text/patch_embedder`
-  slots + derived capability props; `derive_binding` (from medias) / `bind_embedders`
-  (explicit, validated). No schema change yet.
-- **Phase 2b.3** — loader multi-embed: the embed stage runs the *set* of bound
-  embedders; `export_dataset_to_file` serialises `media["embeddings"]` + role slots in
-  `meta`; pickle loader re-keys on load; legacy single-vector pickles materialise via
-  `ensure_embeddings_dict`.
-- **Phase 2b.4** — routing: `DatasetContext.routed_embedder(role)` encodes the table;
-  every active-dataset consumer threads the routed name into the matrix layer;
-  single-vector gap → `None` → primary vector; a routed name == primary collapses to
-  the cached primary hot path.
-- **Phase 2b.5** — MLP keyed to the **score** embedder via one canonical resolver
-  `binding.score_marker_embedder` (`patch or text or primary`); every marker-write and
-  marker-compare site routes through it.
-- **Phase 2c** — dropped the singular `media["embedding"]` mirror; `embeddings` is the
-  sole store; read-time `ensure_embeddings_dict` re-keys old pickles one-way.
-- **Phase 2d** — structural binding slot + `"structural"` role; score precedence
-  became **structural ▸ patch ▸ text** across `routed_embedder`,
-  `score_marker_embedder`, `training._score_embedder_for_snap`.
-- **Phase 3** — create-time trio picker (**additive** deviation): the existing primary
-  picker is unchanged (preserving single-vector picks like `dinov2_single`) and two
-  optional Region/Instance role pickers appear under Advanced via the shared
-  `vt-import-advanced` component; the load pipeline accepts an `embedders` list, the
-  four import routes parse the trio, medias payloads expose the bound set under
-  `embedders`, and `EmbedderCapabilityService.supports*Any` ORs capability across the
-  trio.
-
-**Per-detector embedder type** — see the living-spec section above for the
-authoritative close-out (type lock via `embedder_type`, `keying_embedder_for_snap`
-routing, same-type compatibility gate).
-
-## Phasing (summary)
-
-- **v1:** six single/patch image embedders (DINOv2 default, DINOv3 gated, real-EUPE
-  noncommercial); `supports_patch_regions` + `license_notice`; HAC region tree;
-  max-region similarity; region-aware MLP scoring + asymmetric loss; gallery highlight.
-- **v2:** Shift-drag region voting on image media (optional `region_box` on yes-votes;
-  binary fast path preserved); on-the-fly vote pooling from `patch_grid`.
-- **v3:** the text/patch/structural trio on one dataset; dict-keyed
-  `media["embeddings"]`; legacy `media["embedding"]` read-migrated then dropped; MLPs
-  keyed by `(detector, dataset, embedder)` against the score embedder
-  (structural ▸ patch ▸ text). Create-time picker shipped as an additive variant.
-- **per-detector embedder type:** moves the scoring-space choice from the dataset to
-  the detector (`semantic` / `patch_semantic` / `structural` lock); labels portable
-  across same-type datasets; text sort stays on the dataset text slot.

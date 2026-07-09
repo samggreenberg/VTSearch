@@ -138,8 +138,9 @@ a `shape` parameter. Existing media endpoints are reused as-is for hover preview
 
 **Stage 1 — UMAP projection** (server, batch, computed **once at ingest,
 frozen, persisted**). `umap-learn` on the `(N,d)` matrix → `(N,2)`. Metric is
-plain **Euclidean** (safe because embeddings are L2-normalized at ingest — see
-*What shipped*). Fit is **unseeded** (numba parallelism on, faster) — safe
+plain **Euclidean** (safe because every embedding is L2-normalized at ingest,
+app-wide, so all similarity is a plain dot product). Fit is **unseeded** (numba
+parallelism on, faster) — safe
 *only because* the projection is frozen at ingest and never re-fit, so its
 non-reproducibility never surfaces. Runs as a background async job with
 progress. Small-N: clamp `n_neighbors < N`, PCA-2/grid fallback below a

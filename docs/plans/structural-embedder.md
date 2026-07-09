@@ -1,15 +1,10 @@
 # Structural Embedders — Design
 
-**Status:** v1 + Stage-2 backend + Find re-rank all shipped. The two-stage
-re-rank now reaches **every** scoring entry point (vote-driven learned-sort,
-example-sort, labelset/saved-detector, and Find/`find-label`); the
-match-statistic verification classifier, RegionYes-as-template voting, and the
-matched-region overlay are live; ROxford5k and OpenLogo are wired as demo
-datasets; the VLAD codebook is a real Caltech-101 k-means fit; and the
-K/threshold spike is done (defaults `K=50` / `threshold=0.5` confirmed).
-**Larger VLAD codebook is the main next step** — the spike identified Stage-1
-VLAD recall as the end-to-end quality ceiling. Open follow-ups below; the living
-design spec is further down.
+**Status:** v1 (SIFT + VLAD + RANSAC two-stage retrieve-then-verify, across all
+scoring paths) has shipped; the main next step is growing the VLAD codebook
+(256–1024 centroids on a building/scene corpus), since the spike identified
+Stage-1 VLAD recall as the end-to-end quality ceiling. Open follow-ups below; the
+living design spec is further down.
 
 Structural embedders are a third embedder *type* (alongside single-vector and
 patch) that searches for **specific instances** ("the Coca-Cola logo") rather
@@ -96,97 +91,6 @@ patch-embedder.md ("V3 - design" / "Open follow-ups (from 2b.3)"), not here.
 - **Per-dataset codebook (v2 option).** A data-tuned per-dataset codebook gives
   better instance recall on a narrow domain, at the cost of an ingest fit pass and
   a per-dataset artifact. A possible v2 optimisation, not v1.
-
-## What shipped
-
-One line per item; details in git history, the cited source files, and
-`tests_lib/detectors/test_structural_similarity.py` /
-`test_structural_labelset.py` / `tests/detectors/test_find_label.py`.
-
-**v1 foundation** (backend, CPU-tested, no model download):
-
-- **Capability flag** — `MediaEmbedder.supports_geometric_verification` (default
-  `False`), surfaced in `to_dict()` + `/api/embedders`, mirrored in the frontend
-  `EmbedderInfo`; plus `local_features_forward`/`_bulk` base hooks.
-- **Matcher core** — `vtscore/media/structural.py` (library-tier, media-agnostic,
-  lazy `cv2`): `StructuralMatcher` protocol; `StructuralFeatures` (keypoints +
-  descriptors, fp16/uint8 storage); `MatchStats` + `match_stats_to_features`;
-  VLAD aggregation (`rootsift` + `aggregate_vlad`); `SiftMatcher` backend (SIFT +
-  `estimateAffinePartial2D` 4-DoF similarity-transform RANSAC).
-- **Embedder** — `sift_vlad` (`vtscore/media/image/embedder_sift_vlad.py`) on a
-  reusable `_structural_shared.py` base; `supports_text=False`, `is_default=False`,
-  `supports_geometric_verification=True`. Stage-1 VLAD → `media["embedding"]`;
-  Stage-2 features → `media["local_features"]`.
-- **Loader pass** — `vtscore/datasets/stages/embedding.py` structural sibling
-  pass (flag-gated) storing `media["local_features"]` in compact pickle form.
-- **Codebook asset** — `vtscore/media/assets/vlad_codebook_v1.npy` (real
-  Caltech-101 fit; `scripts/build_vlad_codebook.py`).
-
-**v1 Stage-2 backend core** (chokepoint + verification learnable, vote path):
-
-- **Chokepoint** — `vtscore/training/structural_similarity.py`: the one place
-  that knows the two-stage rule. `structural_rerank` verifies the top-`K`
-  (`DEFAULT_RERANK_TOP_K = 50`) against templates and re-ranks by a `[0,1]`
-  verification score (beyond-K kept in Stage-1 order, scored 0). The matched
-  `inlier_box` rides out as `best_region`.
-- **RegionYes-as-template** — `filter_features_to_box` keeps in-box keypoints;
-  `build_templates` makes one template per Good vote; `best_match_stats` scores
-  **max-over-templates**.
-- **Verification classifier** — `train_verification_classifier` trains a tiny MLP
-  via `train_model` over per-item `MatchStats` (leave-one-out for a Good vote's
-  own template); decision boundary = `STRUCTURAL_DECISION_THRESHOLD = 0.5`.
-  `VerificationScorer` falls back below `MIN_VERIFICATION_VOTES` (3) to a
-  cold-start inlier gate crossing 0.5 at `DEFAULT_MIN_INLIERS`. Carried on
-  `DetectorContext.verification_classifier` (in-memory, re-derived, never persisted).
-- **Wiring** — `maybe_structural_rerank` invoked from `train_and_score`
-  (`vtscore/detectors/training.py`), gated on media carrying `local_features` so
-  non-structural datasets pay zero cost.
-
-**v1 Stage-2 re-rank across all sort paths:**
-
-- **`feature_snap` decoupling** — `maybe_structural_rerank` takes an optional
-  snapshot so templates/classifier can be sourced separately from the re-rank
-  target (labelset path passes a synthetic cross-dataset snapshot).
-- **Example-sort** — `maybe_structural_rerank_example` uses the uploaded
-  example's own local features as the single template + cold-start gate; wired
-  into `_example_sort_from_path` (`vtsearch/routes/sorting.py`).
-- **Labelset (saved-detector reload)** — `DetectorContext.label_local_features`
-  cache (re-derived from origins, invalidated on embedder switch);
-  `maybe_labelset_structural_rerank` wired into `labelset_train_and_score`.
-
-**v1 Find-path re-rank:**
-
-- **`find-label` wiring** — `find_label` (`vtsearch/routes/detectors/scoring.py`)
-  scores with the retrieval MLP then hands the list to
-  `maybe_labelset_structural_rerank` (the same chokepoint), building templates +
-  classifier from the cross-dataset `label_local_features` cache. So every
-  scoring path — vote, example, labelset, **and Find** — now verifies. No-op for
-  non-structural detectors (gated via `snapshot_is_structural`); frozen
-  `find_scores` hold verification probabilities, re-thresholded by the Inclusion
-  slider.
-
-**Demos + spike:**
-
-- **ROxford5k** wired as the landmark instance-retrieval demo.
-- **OpenLogo (QMUL-OpenLogo)** wired as the logo instance-matching demo
-  (`openlogo` source, `openlogo_s`/`openlogo_a`): 7 aggregated logo datasets,
-  32 FlickrLogos-32 brands as the vocabulary (the other 31 as distractors),
-  ground-truth boxes stamped as store-only `regions`. FiftyOne-on-HuggingFace,
-  pulled via `snapshot_download`, parsed with the stdlib (no `fiftyone` dep).
-  The benchmark for re-measuring codebook growth.
-- **K/threshold/live-vs-on-demand spike DONE** — defaults confirmed (`K=50`,
-  `threshold=0.5`; precision ~93% at 0.5, the P/R knee; ~250 ms/query at K=50 is
-  fine for on-every-sort re-rank). See the codebook follow-up above for the table
-  and the "Stage-1 recall is the ceiling" finding.
-
-**Frontend overlay (reachable now):** the backend emits `best_region` on verified
-results across all paths; the frontend renders it as the focus-pane highlight via
-patch's existing machinery (`center-panel` / `image-viewer`, fed `bestRegion`).
-Reachability fix: the Highlight toggle was gated on `supports_patch_regions`
-alone (which structural leaves `false`); it now uses `center-panel`'s
-`regionOverlayCapable` getter (true when the embedder reports *either*
-`supports_patch_regions` *or* `supports_geometric_verification`), and the marquee
-copy nudges "box the pattern you want to match."
 
 ## Design spec (living architecture)
 
