@@ -91,6 +91,16 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
       background: var(--accent-hover);
       border-color: var(--accent-hover);
     }
+
+    // Disabled: desaturate to a neutral fill + dimmed text rather than fading
+    // the accent with opacity. 0.5 opacity over the accent fill collapsed to
+    // 1.45:1 (light) / 3.08:1 (dark); a neutral grey fill holds readable text.
+    &:disabled {
+      opacity: 1;
+      background: var(--bg-secondary-btn);
+      border-color: var(--bg-secondary-btn);
+      color: var(--text-muted);
+    }
   }
 
   &--secondary {
