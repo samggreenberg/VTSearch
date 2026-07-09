@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { Subject } from 'rxjs';
+import { vi } from 'vitest';
 import { SimpleChange } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -148,5 +150,54 @@ describe('MediaListComponent', () => {
     expect(spy).toHaveBeenCalled();
     const ids = spy.mock.lastCall![0] as number[];
     expect(ids).toEqual([1, 2, 3]);
+  });
+});
+
+describe('MediaListComponent scroll-prefetch re-wiring', () => {
+  let component: MediaListComponent;
+  let fixture: ComponentFixture<MediaListComponent>;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [MediaListComponent],
+      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    fixture = TestBed.createComponent(MediaListComponent);
+    component = fixture.componentInstance;
+    component.medias = [];
+    TestBed.tick();
+  });
+
+  function fakeViewport() {
+    return {
+      scrolledIndexChange: new Subject<number>(),
+      elementRef: { nativeElement: document.createElement('div') },
+    };
+  }
+
+  it('re-subscribes prefetch when the viewport instance is recreated', () => {
+    // Regression: a one-shot `scrollSubscribed` flag outlived the CDK
+    // viewport; after a dataset switch destroyed and recreated it, the new
+    // instance's scrolledIndexChange was never subscribed, so scroll-driven
+    // metadata prefetch silently died and rows showed stub names forever.
+    const prefetchSpy = vi
+      .spyOn(component as never as { prefetchVisibleMetadata(): void }, 'prefetchVisibleMetadata')
+      .mockImplementation(() => undefined);
+
+    const vp1 = fakeViewport();
+    (component as never as { virtualViewport: unknown }).virtualViewport = vp1;
+    component.ngAfterViewChecked();
+    vp1.scrolledIndexChange.next(0);
+    expect(prefetchSpy).toHaveBeenCalledTimes(1);
+
+    // Simulate the @if branch destroying the viewport (its stream completes)
+    // and a new instance appearing after the next dataset renders.
+    vp1.scrolledIndexChange.complete();
+    const vp2 = fakeViewport();
+    (component as never as { virtualViewport: unknown }).virtualViewport = vp2;
+    component.ngAfterViewChecked();
+
+    vp2.scrolledIndexChange.next(3);
+    expect(prefetchSpy).toHaveBeenCalledTimes(2);
   });
 });

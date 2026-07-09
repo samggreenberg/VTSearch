@@ -563,6 +563,9 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
       return;
     }
     if (e.key !== 'Escape' || this.isTyping()) return;
+    // Skip when a modal is open (matching KeyboardService): the same Esc that
+    // closes the modal must not also clear the drawn region box underneath.
+    if (document.querySelector('.modal-backdrop')) return;
     // Esc while a bad-vote-with-box discard is armed cancels the armed state but
     // keeps the box (per the v2 patch-embedder plan, drawing a box is real work,
     // and Esc should be the "I changed my mind about voting no" out, not "throw

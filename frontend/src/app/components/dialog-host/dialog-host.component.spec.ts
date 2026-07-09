@@ -45,6 +45,31 @@ describe('DialogHostComponent', () => {
     expect(result).toBe(false);
   });
 
+  it('should resolve a prompt with null (not false) on Escape/backdrop close', async () => {
+    // Regression: onClosed() hard-coded resolve(false); prompt() callers are
+    // typed `string | null` and crashed on `false.trim()` / `false.split()`.
+    const promise = dialogService.prompt('Name?');
+    await settleZoneless(fixture);
+
+    component.onClosed();
+    const result = await promise;
+    expect(result).toBeNull();
+  });
+
+  it('should settle a superseded dialog as cancelled instead of stranding it', async () => {
+    // Regression: a second show() overwrote activeResolve, so the first
+    // caller's await hung forever with no error.
+    const first = dialogService.confirm('First?');
+    await settleZoneless(fixture);
+    const second = dialogService.confirm('Second?');
+    await settleZoneless(fixture);
+
+    expect(await first).toBe(false);
+
+    component.onButtonClick(true);
+    expect(await second).toBe(true);
+  });
+
   it('should not show close button on dialog modal', async () => {
     const promise = dialogService.confirm('Delete?');
     await settleZoneless(fixture);

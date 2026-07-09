@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, ElementRef, HostListener, inject, input, OnChanges, OnDestroy, output, SimpleChanges, ViewChild } from '@angular/core';
+import { AfterViewChecked, AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, ElementRef, HostListener, inject, input, OnChanges, OnDestroy, output, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { Subscription } from 'rxjs';
@@ -154,7 +154,7 @@ const PREVIEW_SIZE_STEPS = [120, 160, 208, 272, 352, 448, 560, 640, 720] as cons
   templateUrl: './browse-bin-popup.component.html',
   styleUrl: './browse-bin-popup.component.scss',
 })
-export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDestroy {
+export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit, OnChanges, OnDestroy {
   private host = inject<ElementRef<HTMLElement>>(ElementRef);
   private selection = inject(BrowseSelectionService);
   private metadataCache = inject(MediaMetadataCacheService);
@@ -257,6 +257,8 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   private readonly failedPreviews = new Set<number>();
   private readonly subs: Subscription[] = [];
   private scrollSub: Subscription | null = null;
+  /** The viewport instance whose ``scrolledIndexChange`` is currently subscribed. */
+  private scrollSubscribedViewport: CdkVirtualScrollViewport | null = null;
 
   constructor() {
     // Keep the hover-to-hear preview element in step with the Browse toolbar's
@@ -354,10 +356,32 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
       this.metadataCache.version$.subscribe(() => this.cdr.markForCheck()),
     );
     this.settingsState.load();
-    this.scrollSub =
-      this.viewport?.scrolledIndexChange.subscribe(() => this.prefetchVisible()) ?? null;
+    this.ensureScrollSubscription();
     this.prefetchVisible();
     setTimeout(() => this.place());
+  }
+
+  ngAfterViewChecked(): void {
+    this.ensureScrollSubscription();
+  }
+
+  /**
+   * (Re-)subscribe the member grid's scroll-driven thumbnail prefetch,
+   * keyed to the viewport *instance*.  The viewport lives behind the
+   * template's ``@if (!previewOnly)``, and the popup is reused across
+   * summons while open (right-clicking another bin only swaps inputs), so
+   * a singleton→multi transition creates a brand-new viewport whose stream
+   * the one-shot ``ngAfterViewInit`` wiring never subscribed — leaving
+   * everything beyond the initially-prefetched window as ``□`` placeholders
+   * with no recovery.  Mirrors media-list's viewport re-wire pattern.
+   */
+  private ensureScrollSubscription(): void {
+    const vp = this.viewport ?? null;
+    if (!vp || this.scrollSubscribedViewport === vp) return;
+    this.scrollSubscribedViewport = vp;
+    this.scrollSub?.unsubscribe();
+    this.scrollSub = vp.scrolledIndexChange.subscribe(() => this.prefetchVisible());
+    this.prefetchVisible();
   }
 
   ngOnDestroy(): void {

@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BrowseBinPopupComponent } from './browse-bin-popup.component';
@@ -218,5 +218,50 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     expect(panel.style.visibility).toBe('visible');
 
     fixture.destroy();
+  });
+});
+
+describe('BrowseBinPopupComponent (scroll-prefetch re-wiring)', () => {
+  it('re-subscribes prefetch when the member-grid viewport is recreated', () => {
+    // Regression: the popup subscribed scrolledIndexChange only in
+    // ngAfterViewInit, but the viewport lives behind @if (!previewOnly) and
+    // the popup is reused across summons (right-clicking another bin only
+    // swaps inputs). A singleton→multi transition created a fresh viewport
+    // whose stream was never subscribed, so scrolling the member grid never
+    // hydrated thumbnails beyond the initially-prefetched window.
+    const component = Object.create(
+      BrowseBinPopupComponent.prototype,
+    ) as BrowseBinPopupComponent;
+    const state = component as unknown as {
+      viewport?: unknown;
+      scrollSub: unknown;
+      scrollSubscribedViewport: unknown;
+      prefetchVisible(): void;
+    };
+    state.scrollSub = null;
+    state.scrollSubscribedViewport = null;
+    const prefetchSpy = vi.fn();
+    state.prefetchVisible = prefetchSpy;
+
+    const vp1 = { scrolledIndexChange: new Subject<number>() };
+    state.viewport = vp1;
+    component.ngAfterViewChecked();
+    vp1.scrolledIndexChange.next(0);
+    const callsAfterFirstScroll = prefetchSpy.mock.calls.length;
+    expect(callsAfterFirstScroll).toBeGreaterThan(0);
+
+    // Viewport destroyed (previewOnly summon) …
+    vp1.scrolledIndexChange.complete();
+    state.viewport = undefined;
+    component.ngAfterViewChecked();
+
+    // … then a new multi-member summon creates a fresh instance.
+    const vp2 = { scrolledIndexChange: new Subject<number>() };
+    state.viewport = vp2;
+    component.ngAfterViewChecked();
+
+    const callsBeforeSecondScroll = prefetchSpy.mock.calls.length;
+    vp2.scrolledIndexChange.next(2);
+    expect(prefetchSpy.mock.calls.length).toBe(callsBeforeSecondScroll + 1);
   });
 });

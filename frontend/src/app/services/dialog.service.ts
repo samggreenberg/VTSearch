@@ -98,6 +98,18 @@ export class VtDialogService {
     }
   }
 
+  /**
+   * Dismiss the current dialog as if its non-primary (Cancel) button was
+   * clicked. Escape / backdrop dismissal must use the dialog kind's own
+   * cancel value: a `prompt()` resolves `null` (its callers are typed
+   * `string | null`, and a hard-coded `false` made `(name ?? '').trim()` /
+   * `result.split(...)` throw), while `confirm()` resolves `false`.
+   */
+  cancel(): void {
+    const cancelButton = this.dialogButtons().find((btn) => !btn.primary);
+    this.resolve(cancelButton ? cancelButton.value : false);
+  }
+
   private show(config: {
     message: string;
     type: DialogType;
@@ -105,6 +117,12 @@ export class VtDialogService {
     inputDefault?: string;
     buttons: DialogButton[];
   }): Promise<unknown> {
+    // A second show() while a dialog is still pending used to overwrite
+    // `activeResolve`, stranding the first caller's promise forever. Settle
+    // the superseded dialog as cancelled instead.
+    if (this.activeResolve) {
+      this.cancel();
+    }
     return new Promise(resolve => {
       this.activeResolve = resolve;
       this.dialogTitle.set('');

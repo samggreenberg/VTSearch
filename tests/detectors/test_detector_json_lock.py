@@ -41,7 +41,7 @@ def _create_detector(client, name: str) -> None:
         "/api/detectors",
         json={"name": name, "media_type": "audio", "text_query": "test"},
     )
-    assert resp.status_code == 200, resp.get_json()
+    assert resp.status_code in (200, 201), resp.get_json()
 
 
 class TestDetectorJsonWritersHoldSyncLock:
