@@ -44,8 +44,3 @@ offered there.
   eviction policies. Migrating clips onto the byte-bounded LRU (clips are just
   small, cheap-to-recompute entries) would leave one cache with one policy; not
   required, noted so they don't drift.
-- **Pre-warm**: intentionally not done — re-converting on load defeats the
-  storage-only-cost trade (we'd pay conversion compute eagerly *and* still need
-  the cache). Disk-backed caches are likewise rejected (re-persisting bytes by
-  another name, against the no-persisted-bytes rule). Revisit pre-warm only if a
-  real workload shows cold-fetch latency is a problem.
