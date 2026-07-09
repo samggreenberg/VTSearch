@@ -10,7 +10,9 @@ list — SSE connection cap); seventh follow-up pass shipped (http_archive
 cache staleness); eighth follow-up pass shipped (#1 of the then-current
 open list — region-matrix fallback space mixing); ninth follow-up pass
 shipped (#1 of the then-current open list — eval harness calibration
-fidelity); remaining open follow-ups below.**
+fidelity); tenth follow-up pass shipped (#1 of the then-current open list —
+inclusion-slide safe-blend semantics, resolved "skip blend on slides");
+remaining open follow-ups below.**
 
 A full-codebase audit focused on interface boundaries: frontend ↔ backend
 API contract, route layer ↔ state system, app tier ↔ `vtscore` library,
@@ -347,6 +349,31 @@ up any of these areas sees the known-weak spots.
   `tests_lib/detectors/test_eval_voting_iterations.py`
   (`TestProductionCalibrationFidelity`).
 
+### Tenth follow-up pass — inclusion-slide safe-blend semantics (drained from the open list)
+
+- **Inclusion slide drops the safe-threshold GMM blend** (was open #1).
+  With safe-thresholds on and 6 ≤ n < 20 labels a *fresh* retrain stores the
+  cross-calibration cutoff blended with a GMM cutoff
+  (`calculate_safe_threshold`'s linear ramp), but the fold-ordering cache on
+  the detector context holds only the raw cross-calibration orderings — not the
+  GMM component — so an inclusion slide
+  (`recompute_detector_thresholds_for_inclusion`) re-derived the *raw*
+  cross-calibration aggregate and silently dropped the blend, changing the
+  threshold semantics relative to a fresh retrain.  **Decision (user): skip
+  the blend on slides.**  A slide is a cheap re-threshold over cached orderings,
+  not a re-blend; making the recompute reproduce the blend would require it to
+  carry cached GMM-threshold + label-count state, not worth it for the
+  6..19-label window (below 6 the cache is cleared and the slide is a no-op at
+  the inclusion-independent pure-GMM value; at ≥20 the blend is already pure
+  cross-calibration so a slide matches a fresh retrain exactly).  No behaviour
+  change from the pre-audit code — the divergence was already present — but it
+  was accidental and undocumented, and is now deliberate.  Documented the
+  intent on `recompute_detector_thresholds_for_inclusion` and at both blend
+  sites in `vtscore/detectors/training.py`, and pinned the semantics with tests
+  in `tests_lib/detectors/test_inclusion_slide_safe_blend.py`
+  (`TestInclusionSlideDropsSafeBlend` — a slide re-derives the raw aggregate,
+  not the blend; a below-floor slide is a no-op).
+
 ## Open follow-ups
 
 Ordered roughly by severity.  Each was found and verified during the audit
@@ -357,22 +384,18 @@ staging + eval progress isolation (renumbered #2, #3) in the fourth, the
 re-renumbered #5/#8 "ML threshold correctness" items in the fifth, the
 re-renumbered #1 "SSE connection cap" in the sixth, the re-renumbered #6
 "http_archive cache staleness" in the seventh, the re-renumbered #1
-"region-matrix fallback space mixing" in the eighth, and the re-renumbered
-#1 "eval harness calibration fidelity" in the ninth — see the
+"region-matrix fallback space mixing" in the eighth, the re-renumbered
+#1 "eval harness calibration fidelity" in the ninth, and the re-renumbered
+#1 "inclusion-slide safe-blend semantics" in the tenth — see the
 follow-up-pass subsections under What shipped.  The list below is
 renumbered again after those drains.)
 
-1. **Inclusion slide drops the safe-threshold GMM blend**
-   (`state/core.py:recompute_detector_thresholds_for_inclusion` vs
-   `training.py`): with safe-thresholds on and 6 ≤ n < 20 labels, sliding
-   inclusion to a value and back changes the threshold semantics relative
-   to a fresh retrain.  Decide whether the blend applies on slides.
-2. **Dataset registry is not multi-process safe**
+1. **Dataset registry is not multi-process safe**
    (`vtscore/datasets/registry.py`): in-process lock plus a fixed `.tmp`
    name; a concurrent CLI autodetect run against the same data dir can
    silently erase the server's registrations.  Fine under the documented
    single-worker model; needs flock if that changes.
-3. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
+2. **Audit coverage gaps** (rate-limit casualties, treat as *not cleared*
    rather than clean): browse-canvas/minimap coordinate math and rAF
    lifecycles, modal/player component lifecycle sweep, left/right-panel
    virtualization, and a full route-blueprint sweep of
@@ -448,3 +471,10 @@ renumbered again after those drains.)
   eval now measures the exact pipeline the live detector runs; the eval seed
   still varies the data (votes, order, test split), only the calibration folds
   are pinned.
+- **No runtime change**: the inclusion-slide safe-threshold divergence
+  (`recompute_detector_thresholds_for_inclusion` re-derives the raw
+  cross-calibration cutoff and does not reapply the GMM blend, so with
+  safe-thresholds on and 6 ≤ n < 20 labels a slide yields a slightly
+  different threshold than a fresh retrain) is now documented as intentional
+  ("skip blend on slides") rather than accidental — the behaviour itself is
+  unchanged from before the audit.

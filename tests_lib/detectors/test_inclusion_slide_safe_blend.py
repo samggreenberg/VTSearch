@@ -71,8 +71,7 @@ class TestInclusionSlideDropsSafeBlend:
         # The stored (fresh-retrain) cutoff is the GMM blend, distinct from the
         # raw cross-cal aggregate - otherwise this test proves nothing.
         assert abs(blended - raw) > 1e-9, (
-            "expected the GMM blend to move the threshold off the raw cross-cal value "
-            "in the 6..19 label window"
+            "expected the GMM blend to move the threshold off the raw cross-cal value in the 6..19 label window"
         )
 
         # Drive the slide path exactly as the route does: the trained threshold
