@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
@@ -126,6 +127,22 @@ describe('LabelViewComponent', () => {
     flushInitialRequests();
     expect(component.voteState.goodVotes.size).toBe(0);
     expect(component.voteState.badVotes.size).toBe(0);
+  });
+
+  it('snaps both panels tight once medias first render', async () => {
+    // Grid layout is unavailable in jsdom, so stub rAF to a no-op: we assert the
+    // on-load snap is *kicked off* once content arrives (the divider used to be
+    // the only trigger), not that the bounded readiness poll converges — it
+    // can't without a real layout engine.
+    vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(0);
+    const snapSpy = vi.spyOn(
+      component as unknown as { snapPanelsOnLoad: () => void },
+      'snapPanelsOnLoad',
+    );
+    flushInitialRequests();
+    await settleResource();
+    TestBed.tick();
+    expect(snapSpy).toHaveBeenCalledTimes(1);
   });
 
   it('should render 3-panel layout', () => {
