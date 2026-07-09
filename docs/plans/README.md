@@ -25,7 +25,6 @@ This index is a grouped filename list; open a file for its remaining scope.
 - [scalability.md](scalability.md): brainstorm defining the `S#` IDs (reference)
 - [scalability-plan.md](scalability-plan.md): phased implementation plan — §2.3, §3.1, §3.2, §3.4, and Phase 4 open
 - [cli-stream-massive-images.md](cli-stream-massive-images.md): CLI streaming for huge media sources — open follow-ups
-- [near-duplicate-detection.md](near-duplicate-detection.md): collapse near-dupes — audio/video near-dupe deferred
 
 ## Detectors / embedders / clippers
 

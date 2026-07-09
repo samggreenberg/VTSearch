@@ -27,7 +27,6 @@ over the closeness graph as if it were an equivalence relation.
 Collapsing reuses the exact-duplicate ``dupe_set`` origin structure so that
 label export (which already expands ``dupe_set`` representatives into one
 element per member) fans a near-dup group out to its full membership for free.
-See ``docs/plans/near-duplicate-detection.md``.
 """
 
 from __future__ import annotations
