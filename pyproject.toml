@@ -54,6 +54,11 @@ dependencies = [
     # MLP (vtscore.detectors.portable_bundle). Pure-Python protobuf builder; no
     # torch.onnx dependency (the graph is hand-assembled via onnx.helper).
     "onnx",
+    # Extract the Clotho audio demo, which ships as a single .7z archive on
+    # Zenodo (vtscore.datasets.downloader.core._extract_7z). Imported lazily so
+    # a missing install still surfaces an actionable error, but declared here so
+    # a plain `install.sh` covers the Clotho demo out of the box.
+    "py7zr",
 ]
 
 [project.optional-dependencies]
@@ -169,7 +174,6 @@ extend_exclude = [
 # users opt in by installing the extra package.
 DEP001 = [
     "paddleocr",
-    "py7zr",
     "rarfile",
     "whisper",
     "mediapipe",

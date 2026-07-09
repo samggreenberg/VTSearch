@@ -548,11 +548,12 @@ def _move_tree_contents(src: Path, dst: Path) -> None:
 def _extract_7z(archive_path: Path, dest_dir: Path, dataset_name: str, on_progress: ProgressCallback) -> None:
     """Extract a ``.7z`` archive into *dest_dir* using ``py7zr``.
 
-    ``py7zr`` is an optional dependency (only the Clotho audio demo ships as
-    ``.7z``), so it is imported lazily and a missing install surfaces as a
-    short, actionable ``RuntimeError`` rather than an ``ImportError``.  Every
-    member name is validated against *dest_dir* before extraction to guard
-    against path traversal (the same protection the zip branch applies).
+    ``py7zr`` is a declared dependency (installed by ``install.sh``), but only
+    the Clotho audio demo ships as ``.7z``, so it is still imported lazily and a
+    missing install surfaces as a short, actionable ``RuntimeError`` rather than
+    an ``ImportError``.  Every member name is validated against *dest_dir* before
+    extraction to guard against path traversal (the same protection the zip
+    branch applies).
     """
     try:
         import py7zr  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
