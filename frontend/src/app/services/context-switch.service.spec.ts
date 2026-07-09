@@ -11,11 +11,8 @@ import { DatasetsRegistryApiService } from './datasets-registry-api.service';
 import { DetectorsRegistryApiService } from './detectors-registry-api.service';
 import { ProgressEventsService } from './progress-events.service';
 import { configureZoneless } from '../testing/zoneless-testbed';
-import {
-  DatasetRegistryEntry,
-  DetectorRegistryEntry,
-  LoadingTask,
-} from '../models/api.models';
+import { DatasetRegistryEntry, LoadingTask } from '../models/api.models';
+import { DetectorRegistryEntry } from '../generated/api-client/models/detector-registry-entry';
 
 /**
  * Regression spec for H25: "Active dataset pair is set before load

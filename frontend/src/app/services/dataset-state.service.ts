@@ -2,7 +2,8 @@ import { Injectable, OnDestroy, inject, signal } from '@angular/core';
 import { toObservable } from '@angular/core/rxjs-interop';
 import { Subject, forkJoin, of } from 'rxjs';
 import { catchError, switchMap, takeUntil } from 'rxjs/operators';
-import { DatasetRegistryEntry, DetectorRegistryEntry } from '../models/api.models';
+import { DatasetRegistryEntry } from '../models/api.models';
+import { DetectorRegistryEntry } from '../generated/api-client/models/detector-registry-entry';
 import { DatasetsRegistryApiService } from './datasets-registry-api.service';
 import { DetectorsRegistryApiService } from './detectors-registry-api.service';
 

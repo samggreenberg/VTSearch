@@ -3,12 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../icon/icon.component';
 import { DropZoneComponent } from '../../../drop-zone/drop-zone.component';
-import {
-  DemoDataset,
-  ImporterInfo,
-  ImporterPickerTab,
-  MediaTypeInfo,
-} from '../../../../models/api.models';
+import { ImporterInfo, ImporterPickerTab, MediaTypeInfo } from '../../../../models/api.models';
+import { DemoDatasetEntry } from '../../../../generated/api-client/models/demo-dataset-entry';
 import { ManagedColumns } from '../../../../utils/managed-columns';
 
 /** Shared "where does the media come from?" widget.  Renders the
@@ -97,8 +93,8 @@ export class SourcePickerComponent {
 
   // === Demo source view ===
 
-  readonly demos = input<DemoDataset[]>([]);
-  readonly filteredDemos = input<DemoDataset[]>([]);
+  readonly demos = input<DemoDatasetEntry[]>([]);
+  readonly filteredDemos = input<DemoDatasetEntry[]>([]);
   readonly demoLoading = input(false);
   readonly demoTabs = input<string[]>([]);
   readonly activeDemoTab = input('');
@@ -106,7 +102,7 @@ export class SourcePickerComponent {
   readonly mediaTypes = input<MediaTypeInfo[]>([]);
 
   readonly activeDemoTabChange = output<string>();
-  readonly demoSelected = output<DemoDataset>();
+  readonly demoSelected = output<DemoDatasetEntry>();
 
   readonly demoLoadingText = input('Loading demo datasets...');
   readonly demoEmptyText = input('No demo datasets available.');
@@ -117,9 +113,9 @@ export class SourcePickerComponent {
    *  styling.  Source picker still emits ``demoSelected`` for clicks
    *  - the parent is responsible for treating disabled rows as
    *  no-ops. */
-  readonly demoRowDisabledFn = input<((demo: DemoDataset) => boolean) | null>(null);
+  readonly demoRowDisabledFn = input<((demo: DemoDatasetEntry) => boolean) | null>(null);
   /** Optional formatter for the ``title`` attribute on each demo row. */
-  readonly demoRowTitleFn = input<((demo: DemoDataset) => string) | null>(null);
+  readonly demoRowTitleFn = input<((demo: DemoDatasetEntry) => string) | null>(null);
 
   /** When ``true`` (default) the inner media-type tab bar renders above
    *  the demo table.  Callers that want to render their own media-type
@@ -215,12 +211,12 @@ export class SourcePickerComponent {
     if (this.demoCols?.meta(col).sortable) this.demoCols.sortBy(col);
   }
 
-  demoRowDisabled(demo: DemoDataset): boolean {
+  demoRowDisabled(demo: DemoDatasetEntry): boolean {
     const demoRowDisabledFn = this.demoRowDisabledFn();
     return demoRowDisabledFn ? demoRowDisabledFn(demo) : false;
   }
 
-  demoRowTitle(demo: DemoDataset): string {
+  demoRowTitle(demo: DemoDatasetEntry): string {
     const demoRowTitleFn = this.demoRowTitleFn();
     return demoRowTitleFn ? demoRowTitleFn(demo) : '';
   }

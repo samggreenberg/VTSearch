@@ -8,7 +8,8 @@ import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.serv
 import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
 import { DatasetsUiApiService } from '../../../services/datasets-ui-api.service';
 import { DetectorsRegistryApiService } from '../../../services/detectors-registry-api.service';
-import { DetectorRegistryEntry, ImporterInfo } from '../../../models/api.models';
+import { ImporterInfo } from '../../../models/api.models';
+import { DetectorRegistryEntry } from '../../../generated/api-client/models/detector-registry-entry';
 import type { ServerMediaFileEntry } from '../../../generated/api-client/models/server-media-file-entry';
 import {
   MediaCropModalComponent,

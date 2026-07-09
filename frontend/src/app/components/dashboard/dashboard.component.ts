@@ -22,7 +22,9 @@ import { DashboardModalsService } from '../../services/dashboard-modals.service'
 import { DashboardLoadingTasksService } from '../../services/dashboard-loading-tasks.service';
 import { BrowsePrepService } from '../../services/browse-prep.service';
 import { SettingsStateService } from '../../services/settings-state.service';
-import { DatasetRegistryEntry, DemoDataset, DetectorRegistryEntry, ImporterInfo, LoadingTask, ProgressEvent } from '../../models/api.models';
+import { DatasetRegistryEntry, ImporterInfo, LoadingTask, ProgressEvent } from '../../models/api.models';
+import { DemoDatasetEntry } from '../../generated/api-client/models/demo-dataset-entry';
+import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import {
   ProgressBarState,
@@ -1034,13 +1036,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.loadingTasksSvc.startProgressPolling();
   }
 
-  private handleDemoSelected(demo: DemoDataset): void {
+  private handleDemoSelected(demo: DemoDatasetEntry): void {
     this.importerClosing.set(true);
-    // The importer modal augments the DemoDataset payload with the
+    // The importer modal augments the DemoDatasetEntry payload with the
     // user-chosen embedder / clipper / display name before emitting;
     // those extras aren't part of the typed schema so we read them
     // through a permissive cast.
-    const extras = demo as DemoDataset & {
+    const extras = demo as DemoDatasetEntry & {
       embedder?: string;
       embedders?: string[];
       clipper?: string;

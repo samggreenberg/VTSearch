@@ -6,7 +6,8 @@ import { takeUntil } from 'rxjs/operators';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { PulldownControlService } from '../../services/pulldown-control.service';
-import { DatasetRegistryEntry, DetectorRegistryEntry } from '../../models/api.models';
+import { DatasetRegistryEntry } from '../../models/api.models';
+import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 
 /**
  * Renders in place of `/label` and `/find` content when the active

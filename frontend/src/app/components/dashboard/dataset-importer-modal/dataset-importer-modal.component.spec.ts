@@ -99,6 +99,8 @@ describe('DatasetImporterModalComponent', () => {
       media_type: 'audio',
       num_categories: 10,
       pkl_embedder: '',
+      pkl_clipper: '',
+      available_converters: [],
     },
     {
       name: 'flowers102',
@@ -111,6 +113,8 @@ describe('DatasetImporterModalComponent', () => {
       media_type: 'image',
       num_categories: 102,
       pkl_embedder: 'clip',
+      pkl_clipper: '',
+      available_converters: [],
     },
   ];
 
@@ -678,6 +682,8 @@ describe('DatasetImporterModalComponent', () => {
         media_type: 'image',
         num_categories: 102,
         pkl_embedder: 'clip',
+        pkl_clipper: '',
+        available_converters: [],
       },
     ];
 
@@ -708,6 +714,8 @@ describe('DatasetImporterModalComponent', () => {
         media_type: 'image',
         num_categories: 102,
         pkl_embedder: 'clip',
+        pkl_clipper: '',
+        available_converters: [],
       },
     ];
 
@@ -736,6 +744,8 @@ describe('DatasetImporterModalComponent', () => {
         media_type: 'image',
         num_categories: 5,
         pkl_embedder: '',  // unknown
+        pkl_clipper: '',
+        available_converters: [],
       },
     ];
 
@@ -765,6 +775,8 @@ describe('DatasetImporterModalComponent', () => {
         media_type: 'audio',
         num_categories: 10,
         pkl_embedder: 'clap',
+        pkl_clipper: '',
+        available_converters: [],
       },
       {
         name: 'flowers102',
@@ -777,6 +789,8 @@ describe('DatasetImporterModalComponent', () => {
         media_type: 'image',
         num_categories: 102,
         pkl_embedder: 'clip',
+        pkl_clipper: '',
+        available_converters: [],
       },
     ];
 
@@ -807,6 +821,8 @@ describe('DatasetImporterModalComponent', () => {
         media_type: 'audio',
         num_categories: 10,
         pkl_embedder: '',
+        pkl_clipper: '',
+        available_converters: [],
       },
     ];
 
