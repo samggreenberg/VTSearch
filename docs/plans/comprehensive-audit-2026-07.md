@@ -1,7 +1,8 @@
 # Comprehensive interface audit — July 2026
 
 **Status: eleven fix passes shipped; follow-up #1 (registry multi-process
-safety) shipped; 7 open follow-ups below.**
+safety) shipped; item 6 (`MAX_UPLOAD_MB` default cap) fixed; 6 open follow-ups
+below.**
 
 A full-codebase audit of interface boundaries (frontend ↔ API, route layer ↔
 state system, app tier ↔ `vtscore`, IO, concurrency, frontend TS). Six parallel
@@ -54,10 +55,12 @@ Ordered roughly by severity.
    the explicit save should merge like the sync does (probably yes, via
    `_merge_labelsets_across_datasets`) or full-replace is the intended
    "save exactly what I see" semantic.
-6. **`MAX_UPLOAD_MB` defaults to 0 = unlimited** (`vtscore/config.py`):
-   staging uploads are unbounded by default; decide a sane default cap.
-   (The eleventh pass removed the *decompressed-copy* amplification in
-   `stage_file`, but the upload itself is still unbounded.)
+6. ~~**`MAX_UPLOAD_MB` defaults to 0 = unlimited** (`vtscore/config.py`):
+   staging uploads are unbounded by default; decide a sane default cap.~~
+   **Fixed:** default changed to `2048` (2 GiB) — generous enough for typical
+   media archives and dataset pickles, oversized requests get HTTP 413.
+   `VTSEARCH_MAX_UPLOAD_MB=0` still opts back into unlimited for genuinely
+   large-archive uploads.
 7. **`AutoDetectProgressModalComponent` is dead code** (modal sweep note):
    referenced nowhere; delete it or wire it up.
 

@@ -163,12 +163,13 @@ def resolve_device() -> str:
 # :func:`vtscore.security.path_validation.get_file_access_base_dir`.
 
 # Maximum size (in megabytes) accepted for a single HTTP request body.  Wired
-# into Flask's ``MAX_CONTENT_LENGTH`` config in ``app.py``.  ``0`` (the
-# default) disables the cap, preserving Flask's out-of-the-box "no limit"
-# behaviour so existing large-archive uploads keep working.  Set
-# ``VTSEARCH_MAX_UPLOAD_MB`` to a positive integer to reject oversized
-# uploads with HTTP 413 before they consume disk.
-MAX_UPLOAD_MB = max(0, int(os.environ.get("VTSEARCH_MAX_UPLOAD_MB", "0")))
+# into Flask's ``MAX_CONTENT_LENGTH`` config in ``app.py``.  Defaults to
+# ``2048`` (2 GiB): generous enough for typical media archives and dataset
+# pickles while still rejecting pathological uploads with HTTP 413 before they
+# consume disk.  Set ``VTSEARCH_MAX_UPLOAD_MB`` to a different positive integer
+# to raise or lower the cap, or to ``0`` to disable it entirely (Flask's
+# out-of-the-box "no limit" behaviour) for genuinely large-archive uploads.
+MAX_UPLOAD_MB = max(0, int(os.environ.get("VTSEARCH_MAX_UPLOAD_MB", "2048")))
 
 # Training
 #

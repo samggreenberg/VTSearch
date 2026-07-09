@@ -120,9 +120,10 @@ app = Flask(__name__)
 # deployments should always set the env var.
 app.secret_key = os.environ.get("VTSEARCH_SECRET_KEY", "vtsearch-dev-key-change-in-production")
 
-# Optional cap on request body size (uploads).  ``MAX_UPLOAD_MB == 0`` leaves
-# Flask's default of no limit in place; a positive value rejects oversized
-# requests with HTTP 413 before they consume disk.
+# Cap on request body size (uploads).  Defaults to 2 GiB (see
+# ``vtscore.config.MAX_UPLOAD_MB``); a positive value rejects oversized
+# requests with HTTP 413 before they consume disk.  ``MAX_UPLOAD_MB == 0``
+# (set via ``VTSEARCH_MAX_UPLOAD_MB=0``) leaves Flask's default of no limit.
 from vtscore.config import MAX_UPLOAD_MB as _MAX_UPLOAD_MB  # noqa: E402
 
 if _MAX_UPLOAD_MB > 0:
