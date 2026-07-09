@@ -934,11 +934,14 @@ dataset-level score precedence for detector operations) — see
   only matters once a multi-embedder (trio) dataset can be created and
   Find-scored; wire a binding derived from those medias' own embedder names when
   the create-time three-role picker lands.
-- **Region-less media in a region matrix fall back to the primary vector.**
-  `matrix._build_region_arrays` sources a region-less media's single row from
-  `media["embedding"]` (primary), not the patch embedder's vector.  On a real
-  patch dataset every media has `patch_regions`, so this branch is unreachable
-  today; revisit if a dual dataset ever mixes patch and non-patch media.
+- ~~**Region-less media in a region matrix fall back to the primary vector.**~~
+  **Fixed** (`docs/plans/comprehensive-audit-2026-07.md` → eighth follow-up
+  pass). `matrix._build_region_arrays` now sources a region-less media's
+  fallback row from the dataset's patch-slot embedder (derived from a
+  region-bearing media via `derive_binding_from_names`), not unconditionally
+  the primary; raises `ValueError` if that media has no vector under the
+  patch embedder either. Byte-for-byte unchanged when every media shares one
+  embedder.
 
 ### Open follow-ups (from 2b.3)
 

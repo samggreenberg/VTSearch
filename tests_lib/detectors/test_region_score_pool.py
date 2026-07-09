@@ -87,6 +87,87 @@ class TestRegionMaxPool:
         assert best_region[2] == 0
 
 
+class TestRegionMatrixFallbackSpace:
+    """A region-less media's fallback row must be the *patch*-space vector.
+
+    On a dataset that mixes patch-capable and patch-less media (e.g. two
+    datasets combined, or a media type the patch embedder can't process),
+    the primary embedder can differ from the one that produced the region
+    vectors.  Stacking the primary vector alongside patch-space region rows
+    in the same matrix would silently score a region-less media in the wrong
+    space; the fallback must read the patch embedder's own vector instead.
+    """
+
+    def test_fallback_row_reads_patch_embedder_not_primary(self):
+        rng = np.random.default_rng(0)
+        region_vec = rng.standard_normal(DIM).astype(np.float32)
+        region_vec /= np.linalg.norm(region_vec) + 1e-8
+        primary_vec = rng.standard_normal(DIM).astype(np.float32)
+        primary_vec /= np.linalg.norm(primary_vec) + 1e-8
+        patch_vec = rng.standard_normal(DIM).astype(np.float32)
+        patch_vec /= np.linalg.norm(patch_vec) + 1e-8
+
+        clips = {
+            1: {
+                "id": 1,
+                "media_type": "image",
+                "embedder": "dinov3_patch",
+                "embeddings": {"dinov3_patch": rng.standard_normal(DIM).astype(np.float32)},
+                "patch_regions": [RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=region_vec)],
+            },
+            # Region-less media bound under a *different* primary embedder
+            # (e.g. text-capable), but also carries a vector for the patch
+            # embedder - the mixed-media-type case.
+            2: {
+                "id": 2,
+                "media_type": "image",
+                "embedder": "siglip",
+                "embeddings": {"siglip": primary_vec, "dinov3_patch": patch_vec},
+                "patch_regions": None,
+            },
+        }
+
+        _all_ids, region_matrix, media_index, _region_index = get_region_matrix_for_snap(clips)
+
+        # Media 2's single fallback row is its "dinov3_patch" vector, not its
+        # "siglip" primary vector.
+        fallback_row = region_matrix[media_index.tolist().index(1)]
+        np.testing.assert_array_equal(fallback_row, patch_vec)
+        assert not np.array_equal(fallback_row, primary_vec)
+
+    def test_fallback_row_missing_patch_vector_raises(self):
+        rng = np.random.default_rng(1)
+        region_vec = rng.standard_normal(DIM).astype(np.float32)
+        region_vec /= np.linalg.norm(region_vec) + 1e-8
+
+        clips = {
+            1: {
+                "id": 1,
+                "media_type": "image",
+                "embedder": "dinov3_patch",
+                "embeddings": {"dinov3_patch": rng.standard_normal(DIM).astype(np.float32)},
+                "patch_regions": [RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=region_vec)],
+            },
+            # Region-less media with no vector at all under the patch
+            # embedder - must raise loudly rather than mix in its primary.
+            2: {
+                "id": 2,
+                "media_type": "video",
+                "embedder": "siglip",
+                "embeddings": {"siglip": rng.standard_normal(DIM).astype(np.float32)},
+                "patch_regions": None,
+            },
+        }
+
+        try:
+            get_region_matrix_for_snap(clips)
+        except ValueError as exc:
+            assert "dinov3_patch" in str(exc)
+            assert "2" in str(exc)
+        else:
+            raise AssertionError("expected ValueError for missing patch-embedder vector")
+
+
 class TestRegionMatrixCache:
     def test_matrix_cached_and_invalidated(self):
         ctx = get_active_context()
