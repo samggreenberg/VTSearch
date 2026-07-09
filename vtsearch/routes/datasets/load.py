@@ -412,15 +412,21 @@ def load_dataset_file():
     if not file.filename:
         abort(400, message="No file selected")
 
+    from vtscore.plugins.uploads import BytesIOUploadedFile  # noqa: PLC0415
+
     importer = get_importer("pickle")
     # Read file contents before passing to background thread, since the
     # Flask FileStorage stream is only valid during the request lifecycle.
-    file_bytes = io.BytesIO(file.read())
-    file_bytes.name = file.filename
+    # Wrap in BytesIOUploadedFile (not a raw io.BytesIO) so the value satisfies
+    # the UploadedFile protocol the importer relies on: a bare BytesIO has no
+    # ``.save()``, so the pickle importer's ``file_obj.save(temp_path)`` would
+    # raise ``'_io.BytesIO' object has no attribute 'save'`` in the background
+    # thread.
+    uploaded = BytesIOUploadedFile(file.read(), file.filename)
     task_id = _run_importer_in_background(
         importer,
         {
-            "file": file_bytes,
+            "file": uploaded,
             "build_projection": "true" if _form_flag(request.form.get("build_projection")) else "false",
         },
     )
