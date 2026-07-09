@@ -20,7 +20,6 @@ input[type="number"] {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   text-align: center;
-  outline: none;
 
   &:focus {
     border-color: var(--accent);

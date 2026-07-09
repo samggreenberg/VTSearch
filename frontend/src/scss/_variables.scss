@@ -13,6 +13,9 @@
   --space-xl: 1rem;       // 16px
   --space-2xl: 1.5rem;    // 24px
 
+  // Monospace stack: the one place a component should reach for `monospace`.
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
   // Font-size scale
   --font-2xs: 0.7rem;
   --font-xs: 0.75rem;
@@ -69,6 +72,7 @@
   --z-sticky: 100;
   --z-modal-backdrop: 1000;
   --z-modal: 1001;
+  --z-tooltip: 1500;
   --z-burger-menu: 2000;
   --z-offline-banner: 4500;
   --z-toast: 5000;
@@ -131,6 +135,12 @@
   --tier-silver: #d9d9d9;
   --tier-gold: #f0c419;
   --tier-platinum: #f5f6fa;
+
+  // Text color for badges filled with a saturated status color
+  // (--color-good, --badge-embedding). Those fills are bright/mid-luminance
+  // in every theme by design, so dark text reads well everywhere - no need
+  // to swap per theme the way --btn-filled-text does for accent-fill buttons.
+  --badge-text-dark: #1a1a2e;
 
   // Aliases used by component SCSS files
   --border-color: var(--border);

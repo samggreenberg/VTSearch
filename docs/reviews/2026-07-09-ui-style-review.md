@@ -1,10 +1,31 @@
 # UI Style Review — 2026-07-09
 
-**Status: report only — no changes made.** Comprehensive style/structure/layout review
-of the VTSearch frontend: fonts, sizing, organization, colors, contrast, component
-consistency, accessibility, and information architecture. Findings are grouped by
-severity and theme, with file:line references, and end with larger rework
-proposals plus a suggested phasing.
+**Status: Phase 1 (bug fixes) shipped; Phases 2–4 not started.** Comprehensive
+style/structure/layout review of the VTSearch frontend: fonts, sizing,
+organization, colors, contrast, component consistency, accessibility, and
+information architecture. Findings are grouped by severity and theme, with
+file:line references, and end with larger rework proposals plus a suggested
+phasing.
+
+**What shipped (Phase 1).** All of §1's verified broken/ghost tokens (incl.
+`--font-mono` and a real `--z-tooltip` defined once, and the find-stats-modal
+table styling gap); the two badge-contrast FAILs from §2
+(`badge-ready`/`badge-embedding` white-on-fill in dark theme) via a new
+`--badge-text-dark` token; the 3 focus-outline removals in §5/§8 (restored
+after confirming none were wired to a hotkey/programmatic-focus path — the
+app's `KeyboardService` already blurs `activeElement` on every shortcut); and
+the 3 Back-vs-Cancel violations in §6 (footer Cancel now calls `close()`
+instead of `back()`).
+
+**Open follow-ups (Phases 2–4, not started).** The remaining §2 light-theme
+contrast ramp (still uses the dark theme's pastel status palette — needs its
+own darkened ramp), the `zoom: 1.1` / type-scale rework (§4), token
+consolidation and alias cleanup (§3), the "one role, N implementations"
+primitives and modal polish package (§5/§6/§10.4-5), the icon system
+unification (§10.6), header/IA simplification (§7/§10.7), the remaining a11y
+sweep items (§8: modal focus trapping, heading structure, table semantics,
+`aria-sort`, fieldsets, `for=` associations), and the copy-style guide
+(§9/§10.9) are all still open — see the phasing table below for grouping.
 
 **Method.** Static audit of all 85 component SCSS files + 86 templates against
 `docs/style-guide.md` and the token system in `frontend/src/scss/_variables.scss`;

@@ -45,7 +45,7 @@
 .offline-banner__retry {
   flex: 0 0 auto;
   background: var(--accent, var(--text-primary));
-  color: var(--accent-text, var(--bg));
+  color: var(--btn-primary-text);
   border: 1px solid transparent;
   font-size: var(--font-xs);
   font-weight: var(--weight-medium);

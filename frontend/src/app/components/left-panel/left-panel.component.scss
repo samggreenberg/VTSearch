@@ -52,10 +52,6 @@
   font-size: var(--font-md);
   transition: background var(--transition-base), color var(--transition-base);
 
-  &:focus-visible {
-    outline: none;
-  }
-
   &:hover:not(:disabled) {
     background: var(--bg-hover);
     color: var(--text-primary);

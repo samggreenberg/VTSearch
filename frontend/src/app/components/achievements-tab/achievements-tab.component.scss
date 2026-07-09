@@ -187,7 +187,7 @@
   justify-content: center;
   padding: var(--space-2xs) 0;
   font-size: var(--font-xs);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   border-radius: var(--radius-sm);
   background: var(--bg-hover);
   border: 1px solid var(--border);
@@ -238,7 +238,7 @@
 
 .docs-list-path {
   color: var(--text-muted);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   font-size: var(--font-xs);
 }
 

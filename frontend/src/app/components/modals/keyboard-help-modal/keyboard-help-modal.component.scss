@@ -114,7 +114,7 @@
   justify-content: center;
   min-width: 1.75rem;
   padding: var(--space-2xs) var(--space-xs);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-family: var(--font-mono);
   font-size: var(--font-sm);
   color: var(--text-primary);
   background: var(--bg-subtle);
@@ -165,7 +165,7 @@
 }
 
 .guide-error {
-  color: var(--danger, var(--text-primary));
+  color: var(--color-bad);
 }
 
 .guide-body {
@@ -202,7 +202,7 @@
     margin-bottom: var(--space-2xs);
   }
   ::ng-deep code {
-    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-family: var(--font-mono);
     font-size: 0.9em;
     background: var(--bg-subtle);
     padding: 0 var(--space-2xs);

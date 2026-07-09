@@ -1,7 +1,42 @@
-// `.loading-text`, `.error-text`, `.stats-table`, `.stat-label`,
-// `.stat-value`, and `.section-title` are shared utilities (see
-// dataset-stats-modal + _components.scss); only the find-specific confusion
-// grid and the inline chart are styled here.
+// `.error-text` and `.section-title` are genuinely shared (`_components.scss`).
+// `.loading-text`, `.stats-table`, `.stat-label`, `.stat-value` are NOT global -
+// each stats modal (dataset/detector/find) keeps its own view-encapsulated copy;
+// this file's copy also carries the `.stats-table th` rule since this is the
+// only one of the three whose markup uses `<thead><th>`.
+
+.loading-text {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: var(--space-lg);
+
+  th,
+  td {
+    padding: var(--space-sm) var(--space-md);
+    text-align: left;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  th {
+    font-weight: var(--weight-semibold);
+    color: var(--text-secondary);
+    font-size: var(--font-md);
+  }
+}
+
+.stat-label {
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.stat-value {
+  color: var(--text-primary);
+}
 
 .stale-note {
   margin: 0 0 var(--space-md);
@@ -94,7 +129,7 @@
 .legend-item {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2xs, 4px);
+  gap: var(--space-2xs);
 }
 
 .swatch {

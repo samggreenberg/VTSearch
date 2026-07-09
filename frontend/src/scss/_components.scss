@@ -328,7 +328,7 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   line-height: 1.4;
   color: var(--text-muted);
   white-space: pre-wrap;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-family: var(--font-mono);
 }
 
 .required {
