@@ -1,156 +1,8 @@
 # Visual Genome demo dataset (multi-label + region annotations)
 
-Status: **Phase 1 in progress.** Adds the Visual Genome (VG) dataset as a demo
-dataset for hands-on browsing *and* automated eval, introducing two new
-capabilities the existing demo datasets don't have: per-image **multi-label**
-ground truth and stored **bounding-box region** annotations.
+**Status: Phase 1 (multi-label eval + VG ingestion) and Phase 2 (region voting in evals) shipped.** Region-vote eval reporting, richer vocab matching, and attributes/relationships remain open (see Open follow-ups).
 
-## Why VG is different
-
-Every existing demo dataset is **single-label and pretend-disjoint**: each media
-carries exactly one `media["category"]` string, and the eval harness
-(`vtscore/eval/runner.py`, `vtscore/eval/voting_iterations.py`) treats
-"category == target" as positive and *everything else* as negative.
-
-VG annotations don't fit that model:
-
-1. **Multi-label.** `img123 = "man eating an apple"` puts the image in `man`
-   **and** `apple` simultaneously, and (because nobody annotated a banana)
-   implicitly *not* in `banana`. Inclusive category lists become per-image
-   booleans.
-2. **Bounding boxes.** Every annotated object carries a pixel box. We want to
-   keep those for future **region voting** / region-level evals rather than
-   throwing them away.
-
-## Decisions (locked)
-
-These were chosen explicitly with the user:
-
-- **Negatives — closed-world.** Membership is strictly binary: a category is
-  either in an image's annotated object set (**positive, +1**) or it isn't
-  (**negative, −1**). There is no third "unknown" value — if one of our
-  categories is not among an image's annotated objects, the image counts as a
-  negative for it, full stop. We accept that VG's incompleteness turns a few
-  real-but-unannotated objects (the unlooked-for banana) into false negatives —
-  the same accidental-overlap noise the existing datasets already tolerate. So a
-  VG image just needs a **set of positive categories**; everything outside that
-  set is negative.
-- **Scope — additive, VG-only.** Existing single-label datasets are left exactly
-  as they are. The eval positive/negative test branches: if a media carries a
-  `categories` list it uses set membership, otherwise it falls back to the
-  legacy `category ==` string compare. No migration of the other demos.
-- **Regions — store-only.** Ground-truth boxes are persisted on the media dict
-  (in the dataset pickle, the one place derived per-item data is allowed) as
-  `media["regions"]`. **No consumer is built in this phase** — this is raw
-  material for the existing region-voting plumbing
-  (`LabeledElement.region_box`, `DetectorContext.vote_region_boxes`, and
-  `docs/plans/patch-embedder.md`) to draw on later.
-- **Categories — top-100 by frequency.** The vocabulary is the 100 most frequent
-  VG object names (the well-known VG scene-graph object vocab), kept as one
-  **static hardcoded list** (`VISUAL_GENOME_CATEGORIES`) — *not* recomputed from
-  each slice's frequencies. All four `visual_genome_{s,m,l,a}` variants share
-  that exact same list, so the category space is identical across slices; only
-  which images fall in the slice changes. A category with zero images in a small
-  slice is still one of the 100 (its queries just have no positives there). The
-  hardcoded list also lets the UI show categories before the (large) download.
-  Object→category matching normalizes case/whitespace and folds simple plurals.
-
-## Data model (the additive bits)
-
-A VG image's media dict gains two keys on top of the usual image media fields:
-
-```python
-media["categories"] = ["man", "apple"]          # positive categories (⊆ the 100)
-media["category"]    = "man"                      # primary = first positive, kept
-                                                  #   so legacy readers (UI filter,
-                                                  #   label export) still work
-media["regions"] = [                              # store-only ground-truth boxes
-    {"box": [0.12, 0.30, 0.44, 0.88], "label": "man"},    # normalized x0,y0,x1,y1
-    {"box": [0.40, 0.55, 0.52, 0.69], "label": "apple"},
-]
-```
-
-`categories` and `regions` live only in RAM and the dataset pickle — never in
-detector JSON or settings (consistent with the "No Persisted Vectors or MLPs"
-rule, whose single exception is the dataset pickle snapshot).
-
-## Eval semantics
-
-`media_is_positive(media, category)` (new, `vtscore/eval/labels.py`) is the one
-place that decides membership:
-
-```python
-cats = media.get("categories")
-if cats is not None:          # VG-style multi-label
-    return category in cats
-return media.get("category") == category   # legacy single-label
-```
-
-Closed-world means **negative = not positive**, so the four eval selection sites
-(text-sort relevant set, learned-sort target/other split, voting-iterations vote
-sequence and test scoring) all route through this helper. Existing datasets have
-no `categories` key, so their behavior is byte-for-byte unchanged.
-
-## Ingestion path
-
-Mirrors the existing image demo-source machinery
-(`vtscore/media/image/_demo_sources.py`):
-
-- `download_visual_genome()` (`vtscore/datasets/downloader/images.py`) fetches
-  the two VG image zips + `objects.json` into `data/visual_genome/`.
-- `_collect_visual_genome_files()` parses `objects.json`, maps each object name
-  to the vocab, and yields per-image `(path, positive_categories, pixel_regions)`
-  for images with ≥1 in-vocab object. VG is **not** folder-per-class, so slicing
-  is a flat fractional slice over the image list (sorted by image id) for the
-  S/M/L/A variants — not the per-category slice the other sources use.
-- `_embed_vg_images()` embeds each image and stamps `categories` + normalized
-  `regions` (pixel boxes ÷ image dims, clamped to [0,1]).
-
-## What shipped
-
-Phase 1:
-
-- **Multi-label eval.** `vtscore/eval/labels.py::media_is_positive` routes the
-  four eval selection sites (text-sort relevant set, learned-sort target/other
-  split, voting-iterations vote sequence + test scoring). Datasets with a
-  `categories` list use set membership; everything else is unchanged.
-- **VG ingestion.** `download_visual_genome()` (two image zips + objects.json),
-  `_collect_visual_genome_files()` (objects.json → per-image positives + pixel
-  regions, flat-sliced), `_embed_vg_images()` (stamps `categories` + normalized
-  store-only `regions`), and `visual_genome_{s,m,l,a}` demo datasets.
-- **Vocab.** `VISUAL_GENOME_CATEGORIES` (top-100 VG object names) +
-  `_vg_category_for()` case/plural-folding matcher.
-- **Eval registration.** `_VISUAL_GENOME_QUERIES` + `visual_genome_{s,m}`
-  entries in `EVAL_DATASETS`.
-- **Tests.** `tests_lib/downloads/test_visual_genome_download.py` (fixture-based
-  download/collect/load + region normalization) and multi-label eval tests in
-  `tests_lib/detectors/test_eval.py`.
-
-## Phase 2 — Region voting in evals (shipped)
-
-The stored ground-truth boxes now feed the eval harness as simulated region
-votes. `vtscore/eval/labels.py::region_box_for_category(media, category)`
-returns the **minimal box covering every annotated instance** of the category
-(multiple apples → one box around all of them; `None` when the image has no
-annotated box, so callers fall back to the whole-image vector — exactly an
-image-level Good vote). Both simulated-voting evaluators take a `region_voting`
-flag:
-
-- **Voting-iterations** (`vtscore/eval/voting_iterations.py`): each Good vote
-  region-pools its box from the media's `patch_grid` via
-  `pool_box_from_media` / `box_to_vote_vector`. Bad votes always stay
-  whole-image (matching the live detector, where only Yes-votes carry a
-  region). Scoring is **independent** of the flag — any patch dataset (media
-  with `patch_regions`) is scored region-aware (max-pool over regions) the same
-  way the live detector scores it, so the only variable `region_voting` toggles
-  is the Good-vote training vector, isolating its effect.
-- **Learned-sort** (`vtscore/eval/runner.py::eval_learned_sort`): passes the
-  per-Good `vote_region_boxes` map straight to `train_and_score`, which already
-  region-pools and region-max-pool-scores.
-- **CLI**: `python -m vtscore.eval --embedder dinov3_patch --region-voting`.
-  Region voting needs a **patch embedder** (DINOv2/v3/EUPE) — SigLIP, the
-  default VG embedder, produces no `patch_grid`, so `--embedder` re-embeds VG
-  in a patch space. No embedder is hardcoded; any patch embedder works.
+VG is the first demo dataset with per-image **multi-label** ground truth (an image is in `man` **and** `apple` at once) and stored **bounding-box region** annotations. Every other demo dataset is single-label and pretend-disjoint (`category == target` is positive, everything else negative). Membership here is closed-world binary: a category is positive if it's in the image's annotated object set, negative otherwise (VG incompleteness → a few accepted false negatives). The vocabulary is a static hardcoded top-100 VG object list (`VISUAL_GENOME_CATEGORIES`), identical across all `visual_genome_{s,m,l,a}` slices.
 
 ## Open follow-ups
 
@@ -166,3 +18,19 @@ flag:
 - **Real download verification.** The VG archives are ~15 GB; CI exercises the
   ingestion path against small fixtures only. The hardcoded URLs/sizes should be
   smoke-checked against a real download before relying on them.
+
+## What shipped
+
+Phase 1 — multi-label eval + VG ingestion:
+- **Multi-label eval.** `vtscore/eval/labels.py::media_is_positive` — if a media carries a `categories` list, membership is set-based (`category in cats`); else legacy `category ==` compare. Routes the four eval selection sites (text-sort relevant set, learned-sort target/other split, voting-iterations vote sequence + test scoring). Existing datasets byte-for-byte unchanged.
+- **Data model (additive).** VG media gain `media["categories"]` (positive categories ⊆ the 100), keep `media["category"]` (first positive, for legacy readers), and store `media["regions"]` (normalized ground-truth boxes). All live only in RAM + the dataset pickle, never in detector JSON/settings.
+- **VG ingestion.** `download_visual_genome()` (two image zips + objects.json → `data/visual_genome/`), `_collect_visual_genome_files()` (objects.json → per-image positives + pixel regions, flat fractional slice over sorted image ids for S/M/L/A), `_embed_vg_images()` (embeds + stamps `categories` and pixel-÷-dims-clamped `regions`), and the `visual_genome_{s,m,l,a}` demo datasets.
+- **Vocab.** `VISUAL_GENOME_CATEGORIES` (top-100) + `_vg_category_for()` case/plural-folding matcher.
+- **Eval registration.** `_VISUAL_GENOME_QUERIES` + `visual_genome_{s,m}` entries in `EVAL_DATASETS`.
+- **Tests.** `tests_lib/downloads/test_visual_genome_download.py` (fixture download/collect/load + region normalization) and multi-label eval tests in `tests_lib/detectors/test_eval.py`.
+
+Phase 2 — region voting in evals (stored boxes feed the harness as simulated region votes):
+- `vtscore/eval/labels.py::region_box_for_category(media, category)` returns the minimal box covering every annotated instance of the category (`None` → callers fall back to the whole-image vector = an image-level Good vote).
+- **Voting-iterations** (`vtscore/eval/voting_iterations.py`): each Good vote region-pools its box via `pool_box_from_media` / `box_to_vote_vector`; Bad votes stay whole-image (matching the live detector). Scoring is independent of the `region_voting` flag — any patch dataset is scored region-aware regardless — so the flag isolates only the Good-vote training vector.
+- **Learned-sort** (`vtscore/eval/runner.py::eval_learned_sort`): passes the per-Good `vote_region_boxes` map to `train_and_score`, which already region-pools/region-max-pool-scores.
+- **CLI:** `python -m vtscore.eval --embedder dinov3_patch --region-voting`. Region voting needs a patch embedder (DINOv2/v3/EUPE); SigLIP (the default VG embedder) has no `patch_grid`, so `--embedder` re-embeds VG in a patch space. No embedder is hardcoded.
