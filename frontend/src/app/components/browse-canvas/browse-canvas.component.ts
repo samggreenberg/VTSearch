@@ -258,7 +258,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private clickTimer: ReturnType<typeof setTimeout> | null = null;
   // The bin the pending single-click toggle will flip, resolved at click time
   // (not when the timer fires). The defer is only there to let a double-click
-  // pre-empt the toggle; it must not defer the *hit-test*, because a wheel notch
+  // preempt the toggle; it must not defer the *hit-test*, because a wheel notch
   // or arrow-key glide inside the double-click window moves the transform, so a
   // late hit-test of the captured screen point would land on a different bin.
   // Binding the cell here keeps the toggle on the bin the user actually clicked.
