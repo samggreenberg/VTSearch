@@ -163,6 +163,23 @@ def _load_stack(npz_dir: Path, ids: list[int], key: str) -> tuple[np.ndarray, li
     return (np.vstack(arrs).astype(np.float32) if arrs else np.zeros((0, 0), np.float32)), used
 
 
+def _load_neg_bags(regions_dir: Path, ids: list[int]) -> list[np.ndarray]:
+    """One CLS+leaf bag per negative image (from cached vecs + leaf_mask), for the
+    region-voting overlay. Skips images with no cache or no childless nodes."""
+    bags: list[np.ndarray] = []
+    for iid in ids:
+        p = regions_dir / f"{iid}.npz"
+        if not p.exists():
+            continue
+        with np.load(p) as z:
+            vecs = z["vecs"]
+            mask = z["leaf_mask"] if "leaf_mask" in z else np.ones(vecs.shape[0], dtype=bool)
+        bag = vecs[mask] if mask.any() else vecs
+        if bag.shape[0] > 0:
+            bags.append(np.asarray(bag, dtype=np.float32))
+    return bags
+
+
 def render_predictions(
     ds: SodDataset,
     split,
@@ -182,11 +199,15 @@ def render_predictions(
     safe_thresholds: bool,
     gallery_n: int,
     neg_regions: bool = False,
+    region_voting: bool = False,
 ) -> None:
-    """MLP prediction overlays for one config, from cache. Skips (warns) if data is missing."""
-    from vtscore.eval.scoring_heads import MLPHead
-    from vtscore.eval.xcal import cross_calibrated_threshold
+    """MLP prediction overlays for one config, from cache. Skips (warns) if data is missing.
 
+    With ``region_voting`` the training reproduces the faithful DINO-patch path
+    (snapped positives, leaf-flooded per-image bag negatives, bag-aware weighting)
+    via the shared :func:`vtscore.eval.region_curve.train_rv_head`, so overlays
+    match a ``--region-voting`` sweep's metrics.
+    """
     reg = _EMBEDDER_ALIASES.get(embedder, embedder)
     regions_root = cache_dir / "regions" / dataset / reg
     slug = _resolve_slug(regions_root, proposal, alpha, slug)
@@ -197,33 +218,60 @@ def render_predictions(
     exem_dir = cache_dir / "exemplars" / dataset / slugify(cls) / reg / slug
 
     pos_ex, _ = _load_stack(exem_dir, split.train_pos, "exemplars")
-    neg_train, _ = _load_stack(regions_dir, split.train_neg, "vecs" if neg_regions else "whole_vec")
-    if pos_ex.shape[0] == 0 or neg_train.shape[0] == 0:
-        print(f"  [predict] skip {embedder}/{proposal} (slug={slug}): empty exemplar/negative cache", flush=True)
+    if pos_ex.shape[0] == 0:
+        print(f"  [predict] skip {embedder}/{proposal} (slug={slug}): empty exemplar cache", flush=True)
         return
     dim = pos_ex.shape[1]
-
-    # Reproduce region_curve's (k, seed) training draw exactly (clamp K to exemplars).
     k = min(k, pos_ex.shape[0])
     if k < 1:
         return
-    rng = np.random.default_rng(seed)
-    P, N = pos_ex.shape[0], neg_train.shape[0]
-    n_neg = min(max(1, neg_ratio * k), N)
-    x = np.vstack([pos_ex[rng.permutation(P)[:k]], neg_train[rng.permutation(N)[:n_neg]]]).astype(np.float32)
-    y = np.array([1.0] * k + [0.0] * n_neg, dtype=np.float32)
 
-    head = MLPHead(dim)
-    xcal = cross_calibrated_threshold(x, y, head.trainer_fn(), seed, inclusion_value=inclusion)
-    head.fit(x, y, seed)
-    thr = xcal
-    if safe_thresholds and (k + n_neg) < 20:
-        from vtscore.training.thresholds import calculate_safe_threshold
+    if region_voting:
+        from vtscore.eval.region_curve import sample_rv_budget, train_rv_head
 
-        thr = calculate_safe_threshold(xcal, head.score_rows(x).tolist(), k + n_neg)
+        neg_bags = _load_neg_bags(regions_dir, split.train_neg)
+        budget = sample_rv_budget(pos_ex, neg_bags, k, neg_ratio, seed) if neg_bags else None
+        trained = (
+            train_rv_head(
+                budget[0],
+                budget[1],
+                dim,
+                seed,
+                inclusion=inclusion,
+                safe_thresholds=safe_thresholds,
+                calibrate_count=2,
+                cal_fraction=0.5,
+            )
+            if budget is not None
+            else None
+        )
+        if trained is None:
+            print(f"  [predict] skip {embedder}/{proposal} (slug={slug}): region-voting budget unmet", flush=True)
+            return
+        predict, raw_thr, n_votes = trained
+    else:
+        from vtscore.eval.scoring_heads import MLPHead
+        from vtscore.eval.xcal import cross_calibrated_threshold
 
-    # Score every test image; bucket by confusion outcome.
-    groups: dict[str, list[tuple[float, Image.Image, str]]] = {"TP": [], "FP": [], "FN": [], "TN": []}
+        neg_train, _ = _load_stack(regions_dir, split.train_neg, "vecs" if neg_regions else "whole_vec")
+        if neg_train.shape[0] == 0:
+            print(f"  [predict] skip {embedder}/{proposal} (slug={slug}): empty negative cache", flush=True)
+            return
+        rng = np.random.default_rng(seed)
+        P, N = pos_ex.shape[0], neg_train.shape[0]
+        n_neg = min(max(1, neg_ratio * k), N)
+        x = np.vstack([pos_ex[rng.permutation(P)[:k]], neg_train[rng.permutation(N)[:n_neg]]]).astype(np.float32)
+        y = np.array([1.0] * k + [0.0] * n_neg, dtype=np.float32)
+        head = MLPHead(dim)
+        raw_thr = cross_calibrated_threshold(x, y, head.trainer_fn(), seed, inclusion_value=inclusion)
+        head.fit(x, y, seed)
+        predict = head.score_rows
+        n_votes = k + n_neg
+
+    # Pass 1: score every test image (winning region), collecting the distribution
+    # so the GMM safe-threshold blends over the same scores production sees.
+    scored: list[tuple[int, bool, float, tuple]] = []
+    all_scores: list[float] = []
     for iid, is_pos in [(i, True) for i in split.test_pos] + [(i, False) for i in split.test_neg]:
         p = regions_dir / f"{iid}.npz"
         if not p.exists():
@@ -232,9 +280,21 @@ def render_predictions(
             vecs, boxes = z["vecs"], z["boxes"]
         if vecs.shape[0] == 0:
             continue
-        s = np.asarray(head.score_rows(vecs))
+        s = np.asarray(predict(vecs))
         best = int(s.argmax())
         score = float(s[best])
+        scored.append((iid, is_pos, score, tuple(float(b) for b in boxes[best])))
+        all_scores.append(score)
+
+    thr = raw_thr
+    if safe_thresholds:
+        from vtscore.training.thresholds import calculate_safe_threshold
+
+        thr = calculate_safe_threshold(raw_thr, all_scores, n_votes)
+
+    # Pass 2: bucket by confusion outcome at thr and draw overlays.
+    groups: dict[str, list[tuple[float, Image.Image, str]]] = {"TP": [], "FP": [], "FN": [], "TN": []}
+    for iid, is_pos, score, best_box in scored:
         pred_pos = score >= thr
         tag = ("TP" if pred_pos else "FN") if is_pos else ("FP" if pred_pos else "TN")
         try:
@@ -242,7 +302,7 @@ def render_predictions(
         except Exception:
             continue
         gt = split.gt_boxes.get(iid, []) if is_pos else []
-        overlay = _draw(img, gt, tuple(float(b) for b in boxes[best]), score)
+        overlay = _draw(img, gt, best_box, score)
         groups[tag].append((score, overlay, f"{iid}  {score:.2f}"))
 
     alpha_tag = f"_a{alpha}" if proposal == "hac" else ""
@@ -282,6 +342,7 @@ def cmd_predict(args, ds: SodDataset, split) -> None:
         safe_thresholds=args.safe_thresholds,
         gallery_n=args.gallery_n,
         neg_regions=args.neg_regions,
+        region_voting=args.region_voting,
     )
 
 
@@ -313,6 +374,13 @@ def main() -> int:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="train MLP negatives on proposed-region crops of negative images (match the sweep run)",
+    )
+    ap.add_argument(
+        "--region-voting",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="faithful DINO-patch training for hac overlays (snap positives + leaf-flood bag negatives); "
+        "point --cache-dir at a --region-voting sweep's cache and use --proposal hac",
     )
     args = ap.parse_args()
 

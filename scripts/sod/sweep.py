@@ -51,18 +51,21 @@ def _strs(s: str) -> list[str]:
     return [x.strip() for x in s.split(",") if x.strip()]
 
 
-def _proposal_slug(proposal: str, args, alpha: float) -> str:
+def _proposal_slug(proposal: str, args, alpha: float, region_voting: bool = False) -> str:
     if proposal == "sliding":
         sc = "-".join(str(x) for x in args.scales)
         return f"sliding_s{sc}_o{args.overlap}_w{args.min_window}"
     if proposal == "dino":
         return f"dino_k{args.hac_k}_a{args.hac_alpha_default}"
     if proposal == "hac":
-        return f"hac_k{args.hac_k}_a{alpha}"
+        # Region-voting rewrites the exemplar (snapped, one per image) and stores a
+        # leaf_mask, so it must not share a cache with the box-pool hac variant.
+        rv = "_rv" if region_voting else ""
+        return f"hac{rv}_k{args.hac_k}_a{alpha}"
     return "whole"
 
 
-def _build_source(proposal: str, embedder, args, alpha: float):
+def _build_source(proposal: str, embedder, args, alpha: float, region_voting: bool = False):
     from vtscore.config import DINOV2_MODEL_ID, resolve_device
 
     return build_region_source(
@@ -76,6 +79,7 @@ def _build_source(proposal: str, embedder, args, alpha: float):
         dino_model_id=DINOV2_MODEL_ID,
         dino_device=resolve_device(),
         dino_register_tokens=0,
+        region_voting=region_voting,
     )
 
 
@@ -111,9 +115,17 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
         print(f"  skip {cell}: hac needs a patch embedder", flush=True)
         return []
 
+    # Region-voting (faithful app-detector label construction) applies only to the
+    # hac proposal on a patch embedder; a no-op elsewhere even when --region-voting
+    # is set, so `--proposals whole,hac --region-voting` runs whole normally.
+    region_voting = bool(args.region_voting) and proposal == "hac" and cell["embedder"] in {"dinov2", "dinov3"}
+    if args.region_voting and not region_voting and proposal == "hac":
+        print(f"  skip {cell}: --region-voting needs a patch embedder", flush=True)
+        return []
+
     embedder = get_embedder(reg_name)
     try:
-        source = _build_source(proposal, embedder, args, alpha)
+        source = _build_source(proposal, embedder, args, alpha, region_voting=region_voting)
     except Exception as exc:
         print(f"  skip {cell}: {exc}", flush=True)
         return []
@@ -136,7 +148,7 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
                 test_fraction=args.test_fraction,
                 split=buckets,
             )
-        slug = _proposal_slug(proposal, args, alpha)
+        slug = _proposal_slug(proposal, args, alpha, region_voting=region_voting)
         cache = FeatureCache(cache_root, cell["dataset"], reg_name, slug)
         meta = {
             "dataset": cell["dataset"],
@@ -146,13 +158,21 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
             "proposal": proposal,
             "proposal_slug": slug,
             "alpha": alpha,
+            "region_voting": region_voting,
             "negatives_exhaustive": split.negatives_exhaustive,
             "neg_regions": args.neg_regions,
             "n_pos_total": len(split.positive_ids),
             "n_neg_total": len(split.negative_ids),
         }
         inputs = build_curve_inputs(
-            ds, source, buckets, cache, class_name=cell["class"], meta=meta, neg_regions=args.neg_regions
+            ds,
+            source,
+            buckets,
+            cache,
+            class_name=cell["class"],
+            meta=meta,
+            neg_regions=args.neg_regions,
+            region_voting=region_voting,
         )
 
     rows: list[dict] = []
@@ -219,6 +239,15 @@ def main() -> int:
         default=False,
         help="train MLP negatives on proposed-region crops of negative images (matches the test "
         "distribution for crop/HAC proposals) instead of whole-image vectors",
+    )
+    ap.add_argument(
+        "--region-voting",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="faithful app-detector label construction for the hac proposal on dinov2/dinov3: "
+        "good votes snap to the nearest HAC node, bad votes flood CLS+leaves as negatives, "
+        "bag-aware per-image weighting + grouped cross-calibration (mirrors `vtscore.eval --region-voting`). "
+        "No-op for non-hac proposals; overrides --neg-regions for hac. Uses a distinct 'hac_rv' cache slug.",
     )
     ap.add_argument("--test-fraction", type=float, default=0.5)
     ap.add_argument("--inclusion", type=int, default=0, help="0=FPR+FNR; >0 favors recall; <0 favors precision")
@@ -353,6 +382,11 @@ def _run_viz(args, cells: list[dict], cache_root: Path, all_rows: list[dict], ou
                             continue
                         if cell["proposal"] == "hac" and cell["embedder"] not in {"dinov2", "dinov3"}:
                             continue  # no MLP cache for this combo
+                        rv = (
+                            bool(args.region_voting)
+                            and cell["proposal"] == "hac"
+                            and cell["embedder"] in {"dinov2", "dinov3"}
+                        )
                         try:
                             render_predictions(
                                 ds,
@@ -364,7 +398,7 @@ def _run_viz(args, cells: list[dict], cache_root: Path, all_rows: list[dict], ou
                                 embedder=cell["embedder"],
                                 proposal=cell["proposal"],
                                 alpha=cell["alpha"],
-                                slug=_proposal_slug(cell["proposal"], args, cell["alpha"]),
+                                slug=_proposal_slug(cell["proposal"], args, cell["alpha"], region_voting=rv),
                                 k=viz_k,
                                 seed=viz_seed,
                                 neg_ratio=args.neg_ratio,
@@ -372,6 +406,7 @@ def _run_viz(args, cells: list[dict], cache_root: Path, all_rows: list[dict], ou
                                 safe_thresholds=args.safe_thresholds,
                                 gallery_n=args.viz_n,
                                 neg_regions=args.neg_regions,
+                                region_voting=rv,
                             )
                         except Exception:
                             print(f"  viz predict error {cell}:\n{traceback.format_exc()}", flush=True)

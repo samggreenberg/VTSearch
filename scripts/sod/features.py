@@ -83,17 +83,27 @@ class FeatureCache:
         self._proposal_slug = proposal_slug
         self._regions_dir.mkdir(parents=True, exist_ok=True)
 
-    def regions(self, source: RegionSource, image_id: int, image) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """(region_boxes (R,4), region_vecs (R,D), whole_vec (D,)) for an image, cached."""
+    def regions(
+        self, source: RegionSource, image_id: int, image
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """(region_boxes (R,4), region_vecs (R,D), whole_vec (D,), leaf_mask (R,)) for an image, cached.
+
+        ``leaf_mask`` is True for the childless nodes (CLS + HAC leaves) a Bad
+        vote floods in region-voting mode; all-True for sources without a tree.
+        Older caches without the key back-fill to all-True.
+        """
         path = self._regions_dir / f"{image_id}.npz"
         if path.exists():
             with np.load(path) as z:
-                return z["boxes"], z["vecs"], z["whole_vec"]
+                boxes, vecs, whole = z["boxes"], z["vecs"], z["whole_vec"]
+                mask = z["leaf_mask"] if "leaf_mask" in z else np.ones(boxes.shape[0], dtype=bool)
+                return boxes, vecs, whole, mask
         t0 = time.perf_counter()
         prep = source.prepare(image)  # embed + propose: the per-image inference cost
         _record_prep_time(self._dataset, self._embedder, self._proposal_slug, time.perf_counter() - t0)
-        np.savez_compressed(path, boxes=prep.boxes, vecs=prep.vecs, whole_vec=prep.whole_vec)
-        return prep.boxes, prep.vecs, prep.whole_vec
+        mask = prep.leaf_mask if prep.leaf_mask is not None else np.ones(prep.boxes.shape[0], dtype=bool)
+        np.savez_compressed(path, boxes=prep.boxes, vecs=prep.vecs, whole_vec=prep.whole_vec, leaf_mask=mask)
+        return prep.boxes, prep.vecs, prep.whole_vec, mask
 
     def exemplars(self, source: RegionSource, class_slug: str, image_id: int, image, gt_boxes) -> np.ndarray:
         """(M,D) GT-box exemplar vectors for a positive image, cached."""
@@ -179,6 +189,7 @@ def build_curve_inputs(
     class_name: str,
     meta: dict,
     neg_regions: bool = False,
+    region_voting: bool = False,
 ) -> RegionCurveInputs:
     """Materialize (cached) vectors from a partitioned :class:`Split`.
 
@@ -188,10 +199,18 @@ def build_curve_inputs(
     distribution as the test regions the head is scored on), which better matches
     train to test for crop/HAC proposals. No-op for ``whole`` (its only region is
     the full frame). Reads region vecs from the same cached npz — no re-embedding.
+
+    ``region_voting`` (HAC/patch only) is the faithful app-detector path: one
+    snapped positive per image, and negatives as per-image **bags** of CLS+leaf
+    vectors (``leaf_mask``). It overrides ``neg_regions``. The exemplar cache must
+    have been written by a region-voting :class:`~vtscore.eval.region_sources.RegionSource`
+    (one snapped vector per image); use a distinct ``proposal_slug`` so it doesn't
+    collide with the box-pool exemplars.
     """
     class_slug = slugify(class_name)
 
-    # Positive exemplar pool: every GT-box exemplar across training-positive images.
+    # Positive exemplars: region-voting → one snapped covering-box vector per
+    # image (K = good swipes); otherwise one GT-box pool per instance.
     pos_ex_list: list[np.ndarray] = []
     for iid in split.train_pos:
         ex = cache.exemplars(source, class_slug, iid, dataset.load_image(iid), split.gt_boxes[iid])
@@ -199,12 +218,19 @@ def build_curve_inputs(
             pos_ex_list.append(ex)
     pos_exemplars = np.vstack(pos_ex_list) if pos_ex_list else np.zeros((0, source.input_dim), np.float32)
 
-    # Training negatives: whole-image vectors, or proposed-region vectors when
-    # --neg-regions (matches the test-region distribution).
+    # Training negatives. Region-voting: one bag per negative image (its CLS+leaf
+    # vectors) so the trainer can flood + balance per image. Otherwise: whole-image
+    # vectors, or all proposed-region vectors when --neg-regions.
     neg_list: list[np.ndarray] = []
+    neg_bags: list[np.ndarray] = []
     for iid in split.train_neg:
-        _boxes, vecs, whole = cache.regions(source, iid, dataset.load_image(iid))
-        neg_list.append(vecs if neg_regions else whole[None, :])
+        _boxes, vecs, whole, mask = cache.regions(source, iid, dataset.load_image(iid))
+        if region_voting:
+            bag = vecs[mask] if mask.any() else vecs
+            if bag.shape[0] > 0:
+                neg_bags.append(bag)
+        else:
+            neg_list.append(vecs if neg_regions else whole[None, :])
     neg_train = np.vstack(neg_list) if neg_list else np.zeros((0, source.input_dim), np.float32)
 
     # Test set: region matrices + boxes + GT boxes for held-out positives + test negatives.
@@ -213,13 +239,13 @@ def build_curve_inputs(
     test_gt: list[list] = []
     test_labels: list[int] = []
     for iid in split.test_pos:
-        boxes, vecs, _whole = cache.regions(source, iid, dataset.load_image(iid))
+        boxes, vecs, _whole, _mask = cache.regions(source, iid, dataset.load_image(iid))
         test_mats.append(vecs)
         test_boxes.append(boxes)
         test_gt.append(split.gt_boxes.get(iid, []))
         test_labels.append(1)
     for iid in split.test_neg:
-        boxes, vecs, _whole = cache.regions(source, iid, dataset.load_image(iid))
+        boxes, vecs, _whole, _mask = cache.regions(source, iid, dataset.load_image(iid))
         test_mats.append(vecs)
         test_boxes.append(boxes)
         test_gt.append([])
@@ -233,6 +259,8 @@ def build_curve_inputs(
         input_dim=source.input_dim,
         test_region_boxes=test_boxes,
         test_gt_boxes=test_gt,
+        region_voting=region_voting,
+        neg_train_bags=neg_bags,
         meta={
             **meta,
             "n_train_pos": len(split.train_pos),
