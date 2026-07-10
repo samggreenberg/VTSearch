@@ -187,38 +187,6 @@ canvas renderer, LSH near-dup detection, async jobs with signature caches.
   `vtsearch/routes/media/list.py` (ETag), maybe a tiny peaks-cache service.
   Impact: high for audio-heavy voting. Complexity: medium.
 
-<!-- item-sep -->
-
-- **Virtualized label piles** — the right-panel Good/Bad piles render **every**
-  labeled item as DOM with a plain `@for`
-  (`frontend/src/app/components/right-panel/label-list/label-list.component.html:14`,
-  `labelset-list/labelset-list.component.html:6`), each row with an `<img>`.
-  Every vote and every 1.5 s labelset poll re-runs the loop over the full
-  pile. The left grid virtualizes above 80 items for exactly this reason
-  (`media-list.component.ts:20`, `GRID_VIRTUAL_THRESHOLD = 80`, with a comment
-  citing a ~1.8 s freeze).
-  **Fix:** wrap both lists in `cdk-virtual-scroll-viewport` +
-  `*cdkVirtualFor` above a threshold (copy the left grid's hybrid pattern:
-  plain `@for` under the threshold so small piles keep natural height).
-  While in there, fix the template-getter churn: `hasThumbnailUrl()` /
-  `thumbnailUrl()` / `placeholderIcon()` are called 3-4× per row per
-  change-detection cycle (`label-list.component.ts:148-184`, identical copies
-  in `labelset-list.component.ts:78-113` — including a
-  `region_box.map(v => v.toFixed(4)).join(',')` string build per call).
-  Precompute `thumbnailUrl`, `hasThumbnail`, `placeholderIcon` onto each entry
-  inside `buildSortedEntries()` / `buildSorted()` (where sorting already
-  happens) and bind the stored fields.
-  **Gotchas:** fixed `itemSize` is required by CDK — measure the current row
-  height (thumbnail rows vs text rows may differ; if heights vary use
-  `autosize` from `@angular/cdk-experimental` — no, don't add a dep: make row
-  height uniform instead, it's a simple list). Keep `track` on entry id.
-  Desktop-only per CLAUDE.md — no responsive concerns. Frontend gate:
-  `./run-tests.sh frontend`; watch the `anyComponentStyle` budget (shared
-  styles go in `_components.scss` if a component sheet grows).
-  **Files touched:** `label-list.component.{ts,html,scss}`,
-  `labelset-list.component.{ts,html,scss}`, possibly `right-panel.component.html`.
-  Impact: medium-high for large labelsets. Complexity: medium.
-
 ## Tier 3 — worthwhile, more design judgment needed
 
 <!-- item-sep -->
