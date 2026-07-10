@@ -64,10 +64,15 @@ _N_INIT = 10  # number of k-means initialisations per node (small nodes)
 # can't explode the tree into tens of thousands of nodes.
 _MAX_LEAVES = 4_000
 
-# Minimum node population for typicality calibration: routing backs off to
-# the deepest ancestor with at least this many points, so sparse regions
-# terminate shallow — which *is* the adaptive bandwidth.
-_CALIBRATION_MIN_NODE = 30
+# Minimum node population for typicality calibration: routing scores a query
+# at every ancestor with at least this many points, so sparse regions
+# terminate shallow — which *is* the adaptive bandwidth.  Matches the split
+# floor (min_node_size) so every splittable node calibrates: with leave-one-out
+# quantiles even 20 points give usable tail estimates, and requiring more
+# would leave small datasets calibrating only at the root, whose mean
+# direction is degenerate after centering (a single isotropic cluster has no
+# preferred direction left, so root-only typicality carries no signal).
+_CALIBRATION_MIN_NODE = 20
 
 # Quantile grid stored per node for typicality calibration.  21 points
 # (ventiles) rather than 11 halves the interpolation error in the tails,

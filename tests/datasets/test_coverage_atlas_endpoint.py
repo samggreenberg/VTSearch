@@ -34,8 +34,10 @@ def _make_media(media_id: int, *, seed_offset: int = 0, shifted: bool = False) -
         emb[32:] = rng.standard_normal(32).astype(np.float32)
         emb[32] += 4.0
     else:
+        # Two well-separated clusters in the first half of the coordinates —
+        # the multi-blob structure real embedding spaces have.
         emb[:32] = rng.standard_normal(32).astype(np.float32)
-        emb[0] += 4.0
+        emb[media_id % 2] += 4.0
     emb /= np.linalg.norm(emb)
     return {
         "id": media_id,
@@ -112,7 +114,7 @@ class TestCoverageAtlasEndpoint:
 
 
 class TestDomainShiftEndpoint:
-    def _reference_with_atlas(self, client, n: int = 60):
+    def _reference_with_atlas(self, client, n: int = 120):
         """Register + load a reference dataset and build its atlas synchronously."""
         from vtscore.state.coverage_atlas import CoverageAtlas
 
