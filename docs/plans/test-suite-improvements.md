@@ -96,8 +96,6 @@ Each item below is independent; pick any and delete it when it ships.
 
 <!-- item-sep -->
 
-- **HTTP interceptors (0 of 4 tested)** — `frontend/src/app/interceptors/`: `error.interceptor.ts` (197 lines, the global error-to-toast funnel for every API call), `active-context.interceptor.ts` (stamps `X-Dataset-Id`/`X-Detector-Id` — the backbone of the multi-context state model; a regression silently mistargets every mutation), `achievements-refresh` and `timezone`. These are pure functions over `HttpRequest`/`HttpHandler`, cheap to test with `HttpTestingController`, and currently the highest-risk untested frontend code.
-
 <!-- item-sep -->
 
 - **Browse-canvas subsystem** — `components/browse-canvas/browse-canvas.component.ts` (2,640 lines — largest file in the frontend) plus `browse-minimap.component.ts` (538) have no specs; only the extracted `view-transform.ts` util does. Full canvas rendering isn't unit-testable, but the extracted pure logic is: start by testing `hex-render.util.ts` (219) and `bin-geometry.ts` (143), and extract+test hit-testing/pan-zoom math from the component rather than testing the component wholesale.
