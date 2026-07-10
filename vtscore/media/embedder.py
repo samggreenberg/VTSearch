@@ -158,6 +158,7 @@ def timed_progress(
     current: int = 0,
     total: int = 0,
     est_modules: int | None = None,
+    tick_interval: float = 1.0,
 ) -> Any:
     """Show elapsed time in the progress message while a block executes.
 
@@ -185,6 +186,10 @@ def timed_progress(
     never claims a still-running import has finished.  Without *est_modules* the
     passed *current*/*total* are forwarded unchanged (e.g. a fixed step counter
     or an indeterminate ``0/0`` phase message).
+
+    *tick_interval* is the seconds between ticker updates.  Production call
+    sites keep the 1-second default; tests pass a small value so they can
+    observe ticks without real multi-second sleeps.
     """
     import sys  # noqa: PLC0415
 
@@ -206,7 +211,7 @@ def timed_progress(
 
     def _ticker() -> None:
         start = time.monotonic()
-        while not stop.wait(timeout=1.0):
+        while not stop.wait(timeout=tick_interval):
             elapsed = int(time.monotonic() - start)
             loaded = len(sys.modules) - baseline_modules
             suffix = f"({elapsed}s, {loaded} modules)" if loaded > 0 else f"({elapsed}s)"

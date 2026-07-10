@@ -1,5 +1,7 @@
 """Tests for the VTSearch dashboard API endpoint."""
 
+import pytest
+
 import app as app_module  # noqa: F401  (triggers conftest side effects)
 from vtscore.datasets.registry import register_dataset
 from vtscore.detectors.registry import register_detector
@@ -127,6 +129,7 @@ class TestDashboardDiskUsage:
         assert data["used"] + data["free"] <= data["total"] + 1  # rounding tolerance
 
 
+@pytest.mark.usefixtures("angular_bundle")
 class TestDashboardHtmlPresent:
     """Test that the dashboard-related content is present in the Angular bundle."""
 
@@ -217,6 +220,7 @@ class TestGuessMediaEmbedder:
         task = next(t for t in tasks if t["task_id"] == "test_no_emb")
         assert "embedder" not in task
 
+    @pytest.mark.usefixtures("angular_bundle")
     def test_js_contains_embedder_guessing_logic(self, client):
         """The Angular bundle should include the embedder guessing code."""
         import glob as globmod
@@ -435,6 +439,7 @@ class TestDashboardSecurityIcon:
         assert "readers" in ds
         assert isinstance(ds["readers"], list)
 
+    @pytest.mark.usefixtures("angular_bundle")
     def test_security_icon_in_frontend_bundle(self, client):
         """The Angular bundle should contain the security icon shield path."""
         import glob as globmod
@@ -646,6 +651,7 @@ class TestAutofindCheckboxPersistence:
         assert "autofind_detectors" not in data
 
 
+@pytest.mark.usefixtures("angular_bundle")
 class TestDashboardColumnHeaders:
     """Verify the frontend JS contains the updated column headers."""
 
@@ -695,6 +701,7 @@ class TestFindButtonValidation:
         assert resp.status_code == 400
         assert "No datasets selected" in resp.get_json()["message"]
 
+    @pytest.mark.usefixtures("angular_bundle")
     def test_frontend_uses_resolved_model_count(self, client):
         """The Angular bundle should use resolvedSelectedModels for Find validation."""
         import glob as globmod

@@ -20,6 +20,12 @@ class ConcurrencyGate:
         self._get_limit = get_limit
         self._cv = threading.Condition()
         self._active = 0
+        #: Test-visible hook: set every time a blocking ``acquire()`` actually
+        #: parks because the gate is full.  Lets tests wait for "a waiter is
+        #: queued" deterministically instead of sleeping a fixed race window.
+        #: Tests clear it before triggering the contended acquire they care
+        #: about; production code never reads it.
+        self.waiter_parked = threading.Event()
 
     def _limit(self) -> int:
         return max(1, int(self._get_limit()))
@@ -34,6 +40,7 @@ class ConcurrencyGate:
 
             if timeout is None:
                 while self._active >= self._limit():
+                    self.waiter_parked.set()
                     self._cv.wait()
                 self._active += 1
                 return True
@@ -43,6 +50,7 @@ class ConcurrencyGate:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     return False
+                self.waiter_parked.set()
                 self._cv.wait(timeout=remaining)
             self._active += 1
             return True

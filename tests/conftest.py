@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
@@ -149,6 +150,71 @@ _audio_emb = _embedders_for_type("audio")[0]
 # download real CLIP / X-CLIP / E5 / SigLIP weights.
 _ALL_EMBEDDERS = _all_embedders()
 _ALL_MEDIA_TYPES = _all_types()
+
+
+# ---------------------------------------------------------------------------
+# Angular bundle (static/) on demand, safe under pytest-xdist.
+#
+# `./run-tests.sh` builds the bundle before pytest starts, so this is a no-op
+# there.  Bare `pytest tests/ -n auto` invocations on a fresh clone need the
+# bundle built exactly once: without cross-worker coordination, the worker
+# that collects tests/core/test_frontend.py would build while workers running
+# tests/api/test_dashboard.py read static/ before it exists (and several
+# workers could kick off concurrent ~16s npm builds).  A cross-process flock
+# (vtscore.io.file_lock) elects one builder; the others block until the build
+# finishes, then see the bundle and return.
+# ---------------------------------------------------------------------------
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_STATIC_DIR = _REPO_ROOT / "static"
+_FRONTEND_DIR = _REPO_ROOT / "frontend"
+
+
+def _angular_bundle_built() -> bool:
+    return (_STATIC_DIR / "index.html").exists() and (_STATIC_DIR / "main.js").exists()
+
+
+@pytest.fixture(scope="session")
+def angular_bundle() -> None:
+    """Ensure the Angular bundle exists in ``static/`` (build once per run).
+
+    Tests that serve the SPA shell or read bundle artefacts request this
+    fixture.  Skips (cached for the whole session) when the bundle is absent
+    and cannot be built here (no npm / node_modules / failing build).
+    """
+    import shutil
+    import subprocess
+
+    if _angular_bundle_built():
+        return
+    npm = shutil.which("npm")
+    if npm is None or not (_FRONTEND_DIR / "node_modules").exists():
+        pytest.skip(
+            "Angular bundle not built and cannot build it here "
+            f"(npm={'found' if npm else 'missing'}, "
+            f"node_modules={'present' if (_FRONTEND_DIR / 'node_modules').exists() else 'missing'}). "
+            "Run: cd frontend && npm install && npm run build:prod"
+        )
+
+    from vtscore.io import file_lock
+
+    # flock-based: releases automatically if the building process dies, so a
+    # crashed builder can't wedge the other workers.
+    with file_lock(config.DATA_DIR / "angular-bundle-build"):
+        if _angular_bundle_built():
+            return  # another xdist worker built it while we waited
+        try:
+            subprocess.run(  # noqa: S603  # npm resolved via shutil.which, args are constant
+                [npm, "run", "build:prod"],
+                cwd=_FRONTEND_DIR,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            pytest.skip(f"Angular build failed: {exc.stderr.strip() or exc.stdout.strip() or exc}")
+    if not _angular_bundle_built():
+        pytest.skip("Angular build completed but static/main.js or static/index.html still missing")
 
 
 @pytest.fixture(autouse=True)
