@@ -125,7 +125,7 @@ class TestDomainShiftEndpoint:
 
     def test_same_domain_not_shifted(self, client):
         ref_entry, _ = self._reference_with_atlas(client)
-        target_entry, target_ctx = _loaded_dataset(40, name="TargetSame", seed_offset=1000)
+        target_entry, _ = _loaded_dataset(40, name="TargetSame", seed_offset=1000)
 
         resp = client.get(
             f"/api/datasets/registry/{ref_entry['id']}/domain-shift",
