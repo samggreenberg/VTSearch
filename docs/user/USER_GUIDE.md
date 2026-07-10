@@ -485,14 +485,19 @@ It has two tabs:
 
 - **Blank** - start a fresh detector that learns from your votes as you
   label. Give it a name, and seed it one of two ways: type a short
-  **Text Example** ("e.g. dog barking sounds"), or pick a **media
-  example** by browsing demos / server folders / uploading a file. When
-  the active dataset offers more than one kind of embedder, a **Detector
-  Embedder Type** picker appears so you can choose which one this detector
-  uses: **Semantic**, **Patch Semantic**, or **Structural**. That choice
-  fixes what the detector is compatible with later. If the dataset's embedder
-  can't search by text, you'll see a note that you can still create the
-  detector but must label a few examples to train it.
+  **Text Example** ("e.g. dog barking sounds"), or pick one or more
+  **media examples** by browsing demos / server folders / uploading
+  files. Picked examples stack vertically, each with its own **Remove**
+  button; use **+ Add** below the stack to append another. With several
+  examples, Autopilot's first sort ranks the dataset against their
+  *average* - it surfaces items resembling what the examples have in
+  common, and each example is seeded as a Good vote when the detector
+  loads. When the active dataset offers more than one kind of embedder, a
+  **Detector Embedder Type** picker appears so you can choose which one
+  this detector uses: **Semantic**, **Patch Semantic**, or **Structural**.
+  That choice fixes what the detector is compatible with later. If the
+  dataset's embedder can't search by text, you'll see a note that you can
+  still create the detector but must label a few examples to train it.
 - **Trained** - create a detector pre-trained on labels imported from an
   external source. It opens a label-importer picker (file, URL, or
   service); pick a source, fill its form, and VTSearch trains the

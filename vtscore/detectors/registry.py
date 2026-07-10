@@ -123,6 +123,7 @@ def register_detector(
     num_training: int = 0,
     text_query: str = "",
     media_example: str = "",
+    examples: list[dict[str, Any]] | None = None,
     created_by: str = "default",
     embedder: str = "",
     embedder_type: str = "",
@@ -136,7 +137,11 @@ def register_detector(
         media_type: ``"audio"``, ``"image"``, ``"video"``, ``"text"``, etc.
         num_training: Number of training examples (label count).
         text_query: Text-sort query associated with the detector.
-        media_example: Optional path to an example media file.
+        media_example: Optional path to an example media file (the first
+            media example; kept alongside ``examples`` for quick display).
+        examples: Full seed-example list (``[{"type": "text"|"media",
+            "value": ...}, ...]``), mirroring the detector JSON.  The label
+            session reads it so Autopilot can sort by every media example.
         created_by: Username of the user who created this detector.
         embedder: Name of the embedder used for this detector's labels.
             Defaults to ``""`` for newly created detectors that haven't been
@@ -160,6 +165,7 @@ def register_detector(
         "num_training": num_training,
         "text_query": text_query,
         "media_example": media_example,
+        "examples": list(examples) if examples else [],
         "created_by": created_by,
         "created_at": time.time(),
         "embedder": embedder,

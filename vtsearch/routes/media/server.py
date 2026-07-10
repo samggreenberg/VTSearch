@@ -215,37 +215,50 @@ def list_server_media_files():
 @media_server_bp.route("/api/example-sort-server", methods=["POST"])
 @media_server_bp.arguments(ExampleSortServerRequestSchema)
 @media_server_bp.response(200, ExampleSortResponseSchema)
-@media_server_bp.alt_response(400, description="Filename escapes the example_media directory.")
+@media_server_bp.alt_response(
+    400,
+    description=("Empty/escaping filename, or crop_params combined with more than one filename."),
+)
 @media_server_bp.alt_response(404, description="File not found.")
 @media_server_bp.alt_response(500, description="Example sort failed.")
 def example_sort_server(body: dict):
-    """Sort medias by similarity to a server-side media file.
+    """Sort medias by similarity to one or more server-side media files.
+
+    A single filename sorts by cosine similarity to that example; several
+    filenames sort against the centroid of their (L2-normalised)
+    embeddings, so the ranking reflects what the examples have in common.
 
     Optional ``crop_params`` body field carries a JSON-compatible dict with
     bounds for a user-cropped sub-region (audio: ``{"start", "end"}``;
-    image: ``{"box": [...]}``).  When set, the file is cropped server-side
-    before embedding.
+    image: ``{"box": [...]}``).  Crop bounds describe a single example, so
+    the field is rejected when more than one filename is given.  When set,
+    the file is cropped server-side before embedding.
     """
-    filename = body["filename"].strip()
-    if not filename:
-        abort(400, message="filename is required")
+    filenames = [f.strip() for f in body["filenames"]]
+    if any(not f for f in filenames):
+        abort(400, message="filenames must be non-empty")
 
     media_dir = _get_server_media_dir()
-    file_path = media_dir / filename
+    file_paths = []
+    for filename in filenames:
+        file_path = media_dir / filename
 
-    # Ensure path doesn't escape the server media directory
-    try:
-        file_path.resolve().relative_to(media_dir.resolve())
-    except ValueError:
-        abort(400, message="Invalid filename")
+        # Ensure path doesn't escape the server media directory
+        try:
+            file_path.resolve().relative_to(media_dir.resolve())
+        except ValueError:
+            abort(400, message=f"Invalid filename: {filename}")
 
-    if not file_path.is_file():
-        abort(404, message=f"File not found: {filename}")
+        if not file_path.is_file():
+            abort(404, message=f"File not found: {filename}")
+        file_paths.append(file_path)
 
     crop_params = body.get("crop_params") if isinstance(body.get("crop_params"), dict) else None
+    if crop_params and len(file_paths) > 1:
+        abort(400, message="crop_params applies to a single example; omit it when passing multiple filenames")
 
     try:
-        from vtsearch.routes.sorting import _apply_crop_or_keep, _example_sort_from_path
+        from vtsearch.routes.sorting import _apply_crop_or_keep, _example_sort_from_paths
 
         if crop_params:
             # Crop into a temp file so the saved server-side example is unchanged.
@@ -253,16 +266,17 @@ def example_sort_server(body: dict):
 
             from vtscore.config import DATA_DIR
 
+            file_path = file_paths[0]
             DATA_DIR.mkdir(exist_ok=True)
             tmp = DATA_DIR / f"temp_example_{uuid.uuid4().hex}{file_path.suffix or '.bin'}"
             tmp.write_bytes(file_path.read_bytes())
             try:
                 _apply_crop_or_keep(tmp, crop_params)
-                results, thresh = _example_sort_from_path(tmp)
+                results, thresh = _example_sort_from_paths([tmp])
             finally:
                 tmp.unlink(missing_ok=True)
         else:
-            results, thresh = _example_sort_from_path(file_path)
+            results, thresh = _example_sort_from_paths(file_paths)
         return {"results": results, "threshold": thresh}
     except HTTPException:
         raise
@@ -357,7 +371,7 @@ def example_sort_origin(body: dict):
         if file_path is None:
             abort(404, message=f"File not found: {key}")
 
-        from vtsearch.routes.sorting import _apply_crop_or_keep, _example_sort_from_path
+        from vtsearch.routes.sorting import _apply_crop_or_keep, _example_sort_from_paths
 
         if crop_params:
             import uuid
@@ -369,11 +383,11 @@ def example_sort_origin(body: dict):
             tmp.write_bytes(file_path.read_bytes())
             try:
                 _apply_crop_or_keep(tmp, crop_params)
-                results, thresh = _example_sort_from_path(tmp)
+                results, thresh = _example_sort_from_paths([tmp])
             finally:
                 tmp.unlink(missing_ok=True)
         else:
-            results, thresh = _example_sort_from_path(file_path)
+            results, thresh = _example_sort_from_paths([file_path])
         return {"results": results, "threshold": thresh}
     except HTTPException:
         raise
@@ -472,7 +486,7 @@ def example_sort_by_id(body: dict):
         from vtsearch.routes.sorting import (
             _apply_crop_or_keep,
             _cosine_sort,
-            _example_sort_from_path,
+            _example_sort_from_paths,
         )
 
         if crop_params:
@@ -487,7 +501,7 @@ def example_sort_by_id(body: dict):
             tmp.write_bytes(media_bytes)
             try:
                 _apply_crop_or_keep(tmp, crop_params)
-                results, thresh = _example_sort_from_path(tmp)
+                results, thresh = _example_sort_from_paths([tmp])
             finally:
                 tmp.unlink(missing_ok=True)
         else:

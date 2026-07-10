@@ -127,6 +127,12 @@ def list_registered_detectors():
         entry["embedder_type"] = entry.get("embedder_type") or detector_embedder_type_from_data(
             _read_detector(_detector_path(entry.get("name", ""))) or {}
         )
+        # Seed-example list, read by the label session so Autopilot can sort
+        # by every media example.  Entries registered before the field existed
+        # fall back to the detector JSON (same pattern as embedder_type).
+        if "examples" not in entry:
+            det_data = _read_detector(_detector_path(entry.get("name", ""))) or {}
+            entry["examples"] = det_data.get("examples", [])
     return {"detectors": entries}
 
 
@@ -159,13 +165,18 @@ def register_detector_route(body: dict):
     if type_err:
         abort(400, message=type_err)
 
+    examples = body.get("examples") or []
+    if not examples and text_query:
+        examples = [{"type": "text", "value": text_query}]
+    if not examples and media_example:
+        examples = [{"type": "media", "value": media_example}]
+    if not media_example:
+        # Keep the scalar in sync with the list so legacy readers (dashboard
+        # display, Autopilot fallback) see the first media example.
+        media_example = next((ex.get("value", "") for ex in examples if ex.get("type") == "media"), "")
+
     det_path = _detector_path(name)
     if not det_path.exists():
-        examples = body.get("examples") or []
-        if not examples and text_query:
-            examples = [{"type": "text", "value": text_query}]
-        if not examples and media_example:
-            examples = [{"type": "media", "value": media_example}]
         detector_data = {
             "name": name,
             "text_query": text_query,
@@ -183,6 +194,7 @@ def register_detector_route(body: dict):
         media_type=media_type,
         text_query=text_query,
         media_example=media_example,
+        examples=examples,
         embedder_type=embedder_type,
         created_by=get_current_user(),
     )

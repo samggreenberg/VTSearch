@@ -612,40 +612,58 @@ def set_safe_thresholds_route(body: dict):
     return {"safe_thresholds": get_safe_thresholds()}
 
 
-def _example_sort_from_path(file_path: Path) -> tuple:
-    """Embed a media file and sort all loaded medias by cosine similarity.
+def _example_sort_from_paths(file_paths: list[Path]) -> tuple:
+    """Embed one or more media files and sort all loaded medias by similarity.
 
     Returns ``(results_list, threshold)`` on success or raises on error.
-    The file at *file_path* is embedded using the embedder of the currently
-    loaded dataset.
+    Each file is embedded using the embedder of the currently loaded
+    dataset.  A single example sorts by cosine similarity to its vector;
+    multiple examples sort against their centroid (the mean of the
+    L2-normalised example vectors), so each example contributes equally
+    regardless of its embedding norm.
     """
+    import numpy as np  # noqa: PLC0415
+
+    if not file_paths:
+        raise ValueError("No example files provided")
+
     snap = snapshot_medias()
     if not snap:
         raise ValueError("No medias loaded")
 
-    # Embed the example with the dataset's score embedder so the query shares
+    # Embed the examples with the dataset's score embedder so the query shares
     # the space the haystack is scored against.
     emb, _score_name = _score_embedder_for_loaded_data()
     if emb is None:
         raise ValueError("No embedder available for loaded dataset")
     from vtscore.media.embedder import media_from_path  # noqa: PLC0415
 
-    media = media_from_path(file_path)
-    example_embedding = emb.embed_media(media)
+    medias = [media_from_path(p) for p in file_paths]
+    embeddings = []
+    for path, media in zip(file_paths, medias, strict=True):
+        vec = emb.embed_media(media)
+        if vec is None:
+            raise ValueError(f"Failed to embed media file: {path.name}")
+        embeddings.append(np.asarray(vec, dtype=np.float32))
 
-    if example_embedding is None:
-        raise ValueError("Failed to embed media file")
+    if len(embeddings) == 1:
+        query_vec = embeddings[0]
+    else:
+        normed = [v / n if (n := float(np.linalg.norm(v))) > 0 else v for v in embeddings]
+        query_vec = np.mean(np.stack(normed), axis=0)
 
-    results, threshold = _cosine_sort(example_embedding)
+    results, threshold = _cosine_sort(query_vec)
 
     # Stage-2 structural re-rank (a no-op for non-structural datasets): for a
     # SIFT/VLAD dataset, geometrically verify the VLAD shortlist against the
     # uploaded example's own local features.  The example is the template; any
     # crop was already applied to the file above, so it restricts the template.
-    if getattr(emb, "supports_geometric_verification", False):
+    # Geometric verification needs a single template, so the multi-example
+    # centroid path skips it and keeps the pure cosine ranking.
+    if len(medias) == 1 and getattr(emb, "supports_geometric_verification", False):
         from vtscore.training.structural_similarity import maybe_structural_rerank_example  # noqa: PLC0415
 
-        example_features = emb.local_features_forward(media)
+        example_features = emb.local_features_forward(medias[0])
         results, threshold = maybe_structural_rerank_example(
             results, threshold, snap, example_features, score_key="similarity"
         )
@@ -730,7 +748,7 @@ def example_sort():
         try:
             crop_params = _parse_crop_params(request.form.get("crop_params"))
             _apply_crop_or_keep(temp_path, crop_params)
-            results, thresh = _example_sort_from_path(temp_path)
+            results, thresh = _example_sort_from_paths([temp_path])
         finally:
             # Clean up temp file even if sorting raises
             temp_path.unlink(missing_ok=True)

@@ -316,12 +316,22 @@ class ServerMediaUploadResponseSchema(Schema):
 class ExampleSortServerRequestSchema(Schema):
     """Body for ``POST /api/example-sort-server``.
 
+    ``filenames`` carries one or more server-side example files.  With a
+    single entry the behaviour is the classic example sort; with several,
+    the haystack is ranked against the centroid (mean of the L2-normalised
+    embeddings) of all examples.
+
     ``crop_params`` is free-form (audio: ``{"start", "end"}``; image:
     ``{"box": [...]}``) and validated by the bounded clipper, not by
-    this schema.
+    this schema.  It applies to a single example, so the handler rejects
+    it when more than one filename is given.
     """
 
-    filename = fields.String(required=True, validate=validate.Length(min=1))
+    filenames = fields.List(
+        fields.String(validate=validate.Length(min=1)),
+        required=True,
+        validate=validate.Length(min=1),
+    )
     crop_params = fields.Dict(allow_none=True)
 
 

@@ -1054,7 +1054,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   get autopilotDisabled(): boolean {
     if (this.textSupported) return false;
-    if (this.labelSession.mediaExample) return false;
+    if (this.labelSession.mediaExampleFilenames.length > 0) return false;
     return !this.voteState.learnedSortAvailable;
   }
 
@@ -1084,7 +1084,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // the text/media sort so the user has results to vote on.
     if (phase === 'good' || phase === 'bad') {
       const textQuery = this.labelSession.textQuery;
-      const mediaExample = this.labelSession.mediaExample;
+      const hasMediaExamples = this.labelSession.mediaExampleFilenames.length > 0;
       if (textQuery) {
         // Defer until both medias and the embedder registry are loaded so the
         // no-text check in `triggerAutopilotTextSort` is reliable.
@@ -1093,7 +1093,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         } else {
           this.autopilotTextSortPending = true;
         }
-      } else if (mediaExample) {
+      } else if (hasMediaExamples) {
         if (this.mediaState.mediasSignal().length > 0) {
           this.triggerAutopilotMediaSort();
         } else {
@@ -1118,11 +1118,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private triggerAutopilotMediaSort(): void {
-    const mediaExample = this.labelSession.mediaExample;
-    if (mediaExample) {
+    // Every media example seeds the sort: plural examples rank the haystack
+    // against the centroid of their embeddings, so the "good" phase surfaces
+    // items resembling what the examples have in common.
+    const filenames = this.labelSession.mediaExampleFilenames;
+    if (filenames.length > 0) {
       this.sortState.setSortBusy(true);
-      this.sortState.setSortStatus('Sorting by example...');
-      this.sortingApi.exampleSortServer({ filename: mediaExample }).pipe(takeUntil(this.destroy$)).subscribe({
+      this.sortState.setSortStatus(filenames.length > 1 ? 'Sorting by examples...' : 'Sorting by example...');
+      this.sortingApi.exampleSortServer({ filenames }).pipe(takeUntil(this.destroy$)).subscribe({
         next: (response) => {
           this.sortState.setSortResults(
             response.results.map((r) => ({ id: r.id, score: r.similarity, bestRegion: r.best_region })),
@@ -1189,11 +1192,15 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (result.type === 'text') {
       this.labelSession.textQuery = result.value;
       this.labelSession.mediaExample = '';
+      this.labelSession.examples = [{ type: 'text', value: result.value }];
       this.sortState.setSelectMode('top');
       this.triggerAutopilotTextSort();
     } else {
+      // The re-sort prompt swaps in a single fresh example, replacing any
+      // multi-example seed stack the detector started with.
       this.labelSession.mediaExample = result.value;
       this.labelSession.textQuery = '';
+      this.labelSession.examples = [{ type: 'media', value: result.value }];
       this.sortState.setSelectMode('top');
       this.triggerAutopilotMediaSort();
     }

@@ -549,7 +549,7 @@ class TestMultiUserServerMediaFiles:
             set_login_provider(_make_multi_user_provider(bob_dir, "bob"))
             resp = client.post(
                 "/api/example-sort-server",
-                json={"filename": "../../alice/example_media/test.wav"},
+                json={"filenames": ["../../alice/example_media/test.wav"]},
             )
             assert resp.status_code == 400
         finally:

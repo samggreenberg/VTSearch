@@ -2168,6 +2168,13 @@
           "embedder_type": {
             "type": "string"
           },
+          "examples": {
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "type": "array"
+          },
           "id": {
             "type": "string"
           },
@@ -2705,13 +2712,17 @@
             "nullable": true,
             "type": "object"
           },
-          "filename": {
-            "minLength": 1,
-            "type": "string"
+          "filenames": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
           }
         },
         "required": [
-          "filename"
+          "filenames"
         ],
         "type": "object"
       },
@@ -11588,7 +11599,7 @@
     },
     "/api/example-sort-server": {
       "post": {
-        "description": "Optional ``crop_params`` body field carries a JSON-compatible dict with\nbounds for a user-cropped sub-region (audio: ``{\"start\", \"end\"}``;\nimage: ``{\"box\": [...]}``).  When set, the file is cropped server-side\nbefore embedding.",
+        "description": "A single filename sorts by cosine similarity to that example; several\nfilenames sort against the centroid of their (L2-normalised)\nembeddings, so the ranking reflects what the examples have in common.\n\nOptional ``crop_params`` body field carries a JSON-compatible dict with\nbounds for a user-cropped sub-region (audio: ``{\"start\", \"end\"}``;\nimage: ``{\"box\": [...]}``).  Crop bounds describe a single example, so\nthe field is rejected when more than one filename is given.  When set,\nthe file is cropped server-side before embedding.",
         "operationId": "example_sort_server",
         "requestBody": {
           "content": {
@@ -11612,7 +11623,7 @@
             "description": "OK"
           },
           "400": {
-            "description": "Filename escapes the example_media directory."
+            "description": "Empty/escaping filename, or crop_params combined with more than one filename."
           },
           "404": {
             "description": "File not found."
@@ -11627,7 +11638,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Sort medias by similarity to a server-side media file.",
+        "summary": "Sort medias by similarity to one or more server-side media files.",
         "tags": [
           "media_server"
         ]
