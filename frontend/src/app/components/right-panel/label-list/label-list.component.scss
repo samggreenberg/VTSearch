@@ -5,6 +5,8 @@
   flex-direction: column;
 }
 
+// Cell/grid styles live in vote-grid.component.scss; this sheet only styles
+// the section chrome (heading chip, folded note, action cluster slot).
 .vote-section {
   flex: 1;
   min-height: 0;
@@ -56,103 +58,4 @@ h3 {
 
   &.good { color: var(--color-good); }
   &.bad  { color: var(--color-bad); }
-}
-
-.vote-list {
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, var(--grid-goal-width, 80px));
-  gap: var(--space-xs);
-  align-content: start;
-  justify-content: end;
-}
-
-.vote-entry {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: var(--space-xs);
-  gap: var(--space-2xs);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-sm);
-  cursor: pointer;
-  color: var(--text-vote);
-  line-height: 1.3;
-  // Query container so the name can hide itself at small icon sizes (below).
-  container-type: inline-size;
-  container-name: vote-cell;
-
-  &:hover {
-    color: var(--text-primary);
-    background: var(--bg-hover);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-    border-radius: var(--radius-sm);
-  }
-}
-
-.vote-entry-missing {
-  outline: 1px solid var(--missing-border);
-  outline-offset: -1px;
-  border-radius: var(--radius-sm);
-}
-
-.vote-thumbnail-wrap {
-  display: block;
-  width: 100%;
-  height: auto;
-  aspect-ratio: 1;
-  min-height: 0;
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-  overflow: hidden;
-}
-
-.vote-thumbnail {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  border-radius: var(--radius-sm);
-  background: var(--bg-surface);
-  display: block;
-}
-
-.vote-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: var(--radius-sm);
-  background: var(--bg-surface);
-  color: var(--text-muted);
-  font-size: var(--font-3xl);
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-.vote-name-grid {
-  font-size: var(--font-2xs);
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  width: 100%;
-  text-align: center;
-  line-height: 1.2;
-  flex-shrink: 0;
-}
-
-// At the two smallest icon sizes (XS/S, ~42px content-box) the name truncates to
-// a useless "a…", so hide it and let the grid pack tighter. M and up keep it.
-@container vote-cell (max-width: 60px) {
-  .vote-name-grid {
-    display: none;
-  }
 }

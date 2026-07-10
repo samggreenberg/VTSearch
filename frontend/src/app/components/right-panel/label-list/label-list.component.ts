@@ -6,10 +6,10 @@ import { Media } from '../../../models/api.models';
 import { LabelSortMode } from '../label-sort/label-sort.component';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
+import { THUMBNAIL_MEDIA_TYPES, VoteGridComponent, VoteGridEntry } from '../vote-grid/vote-grid.component';
 
-export interface LabelEntry {
+export interface LabelEntry extends VoteGridEntry {
   id: number;
-  name: string;
   time: number;
   score: number;
   confidence: number;
@@ -19,7 +19,7 @@ export interface LabelEntry {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-label-list',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, VoteGridComponent],
   templateUrl: './label-list.component.html',
   styleUrl: './label-list.component.scss',
 })
@@ -111,7 +111,41 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy {
     if (score >= 0) {
       confidence = this.label === 'good' ? score : 1 - score;
     }
-    return { id, name, time, score, confidence };
+    return {
+      id,
+      key: String(id),
+      name,
+      time,
+      score,
+      confidence,
+      thumbnailUrl: this.buildThumbnailUrl(media, id),
+      fallbackIcon: this.buildFallbackIcon(media),
+      missing: !this.mediaMap.has(id),
+    };
+  }
+
+  private buildThumbnailUrl(media: Media | undefined, id: number): string {
+    if (!media || !THUMBNAIL_MEDIA_TYPES.has(media.media_type)) return '';
+    // Downscaled tile, not the full-resolution ``/image``: the labeled set can
+    // hold hundreds of items, and decoding every full-size bitmap at once
+    // exhausts browser memory.
+    let url = this.activeContext.mediaUrl(`/api/medias/${id}/thumbnail`);
+    // A region-voted item shows a thumbnail of just the voted crop. The box
+    // coordinates ride in the query string so a re-vote with a different box
+    // is a distinct URL (and cache entry) rather than a stale tile.
+    const box = this.regionBoxes()[String(id)];
+    if (box && box.length === 4) {
+      const sep = url.includes('?') ? '&' : '?';
+      url += `${sep}region=${box.map((v) => v.toFixed(4)).join(',')}`;
+    }
+    return url;
+  }
+
+  private buildFallbackIcon(media: Media | undefined): string | null {
+    if (!media) return null;
+    if (media.media_type === 'audio') return '♫';
+    if (media.media_type === 'text') return '¶';
+    return '□';
   }
 
   private sortEntries(entries: LabelEntry[]): LabelEntry[] {
@@ -143,79 +177,11 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy {
     return sorted;
   }
 
-  private thumbnailFailedUrls = new Set<string>();
-
-  hasThumbnailUrl(id: number): boolean {
-    const url = this.thumbnailUrl(id);
-    if (url && this.thumbnailFailedUrls.has(url)) return false;
-    const media = this.lookup(id);
-    return !!media && (media.media_type === 'image' || media.media_type === 'video' || media.media_type === 'document' || media.media_type === 'audio');
+  onEntrySelected(entry: VoteGridEntry): void {
+    this.mediaSelected.emit(Number(entry.key));
   }
 
-  thumbnailUrl(id: number): string {
-    const media = this.lookup(id);
-    if (!media) return '';
-    // Downscaled tile, not the full-resolution ``/image``: the labeled set can
-    // hold hundreds of items, and decoding every full-size bitmap at once
-    // exhausts browser memory.
-    let url = this.activeContext.mediaUrl(`/api/medias/${id}/thumbnail`);
-    // A region-voted item shows a thumbnail of just the voted crop. The box
-    // coordinates ride in the query string so a re-vote with a different box
-    // is a distinct URL (and cache entry) rather than a stale tile.
-    const box = this.regionBoxes()[String(id)];
-    if (box && box.length === 4) {
-      const sep = url.includes('?') ? '&' : '?';
-      url += `${sep}region=${box.map((v) => v.toFixed(4)).join(',')}`;
-    }
-    return url;
-  }
-
-  onThumbnailError(url: string): void {
-    if (url) this.thumbnailFailedUrls.add(url);
-  }
-
-  placeholderIcon(id: number): string | null {
-    if (this.hasThumbnailUrl(id)) return null;
-    const media = this.lookup(id);
-    if (!media) return null;
-    if (media.media_type === 'audio') return '\u266B';
-    if (media.media_type === 'text') return '\u00B6';
-    return '\u25A1';
-  }
-
-  isMissing(id: number): boolean {
-    return !this.mediaMap.has(id);
-  }
-
-  onEntryClick(id: number): void {
-    if (this.focusMode() === 'hover') {
-      this.mediaVote.emit({ id, vote: 'bad' });
-    } else {
-      this.mediaSelected.emit(id);
-    }
-  }
-
-  onEntryContextMenu(event: MouseEvent, id: number): void {
-    if (this.focusMode() === 'hover') {
-      event.preventDefault();
-      this.mediaVote.emit({ id, vote: 'good' });
-    }
-  }
-
-  onEntryMouseEnter(id: number): void {
-    if (this.focusMode() === 'hover') {
-      this.mediaSelected.emit(id);
-    }
-  }
-
-  onEntryKeydown(event: KeyboardEvent, id: number): void {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      this.mediaSelected.emit(id);
-    }
-  }
-
-  trackById(_index: number, entry: LabelEntry): number {
-    return entry.id;
+  onEntryVote(event: { entry: VoteGridEntry; vote: 'good' | 'bad' }): void {
+    this.mediaVote.emit({ id: Number(event.entry.key), vote: event.vote });
   }
 }

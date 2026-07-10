@@ -1,0 +1,52 @@
+@if (useVirtual) {
+  <!-- Virtual scrolling for large piles: cells are chunked into rows so only
+       the visible rows are mounted, instead of every thumbnail at once. -->
+  <cdk-virtual-scroll-viewport
+    [itemSize]="rowHeight"
+    class="vote-list vote-list-virtual"
+    [style.--grid-goal-width]="gridGoalWidth() + 'px'"
+  >
+    <div
+      class="vote-grid-row"
+      *cdkVirtualFor="let row of rows; trackBy: trackByRow"
+      [style.height.px]="rowHeight"
+      [style.--grid-goal-width]="gridGoalWidth() + 'px'"
+      [style.grid-template-columns]="'repeat(' + columns + ', var(--grid-goal-width, 80px))'"
+    >
+      @for (entry of row; track entry.key) {
+        <ng-container [ngTemplateOutlet]="cell" [ngTemplateOutletContext]="{ $implicit: entry }" />
+      }
+    </div>
+  </cdk-virtual-scroll-viewport>
+} @else {
+  <!-- Plain DOM rendering for small piles (natural height, no measurement). -->
+  <div class="vote-list vote-list-plain" [style.--grid-goal-width]="gridGoalWidth() + 'px'">
+    @for (entry of entries(); track entry.key) {
+      <ng-container [ngTemplateOutlet]="cell" [ngTemplateOutletContext]="{ $implicit: entry }" />
+    }
+  </div>
+}
+
+<ng-template #cell let-entry>
+  <div
+    class="vote-entry"
+    [class.vote-entry-missing]="entry.missing"
+    [attr.title]="entry.missing ? entry.name + ' (not in the current dataset)' : null"
+    role="button"
+    tabindex="0"
+    [attr.aria-label]="(label() === 'good' ? 'Good' : 'Bad') + ': ' + entry.name + (entry.missing ? ' (not in current dataset)' : '')"
+    (click)="onEntryClick(entry)"
+    (contextmenu)="onEntryContextMenu($event, entry)"
+    (mouseenter)="onEntryMouseEnter(entry)"
+    (keydown)="onEntryKeydown($event, entry)"
+  >
+    @if (entry.thumbnailUrl && !thumbnailFailedUrls.has(entry.thumbnailUrl)) {
+      <span class="vote-thumbnail-wrap">
+        <img class="vote-thumbnail" [src]="entry.thumbnailUrl" [alt]="entry.name" loading="lazy" (error)="onThumbnailError(entry.thumbnailUrl)" />
+      </span>
+    } @else if (entry.fallbackIcon) {
+      <span class="vote-placeholder">{{ entry.fallbackIcon }}</span>
+    }
+    <span class="vote-name-grid">{{ entry.name }}</span>
+  </div>
+</ng-template>
