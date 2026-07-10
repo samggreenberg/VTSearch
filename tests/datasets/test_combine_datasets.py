@@ -611,7 +611,12 @@ class TestStageImportEndpoint:
         assert result["ok"] is True
 
 
+@pytest.mark.xdist_group("shared-demo-data-dir")
 class TestStageDemoEndpoint:
+    """Grouped with the demo-status tests in ``test_datasets.py``: staging a
+    demo reads the repo-shared ``data/embeddings/<demo>.pkl`` those tests
+    create and delete."""
+
     def test_rejects_invalid_name(self, client):
         resp = client.post("/api/dataset/stage-demo/nonexistent_xyz_demo")
         assert resp.status_code == 400
