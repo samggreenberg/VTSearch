@@ -74,6 +74,16 @@ _MAX_LEAVES = 4_000
 # preferred direction left, so root-only typicality carries no signal).
 _CALIBRATION_MIN_NODE = 20
 
+# Minimum resultant length (rbar = ||sum of unit vectors|| / n) for a node to
+# calibrate.  The root sits at rbar ~ 0 by construction — the build subtracts
+# the dataset mean, so the centered vectors' resultant vanishes — and a node
+# with no concentrated direction has (a) a meaningless mu and (b) leave-one-out
+# calibration scores systematically far below full-mu query scores (removing
+# one point from a near-zero resultant flips it), which reads every query as
+# "more typical than everything".  K-means cells are cohesive and land well
+# above this floor.
+_CALIBRATION_MIN_RBAR = 0.1
+
 # Quantile grid stored per node for typicality calibration.  21 points
 # (ventiles) rather than 11 halves the interpolation error in the tails,
 # where the p-values that matter for domain-shift detection live.
@@ -525,7 +535,7 @@ class CoverageAtlas:
             # in-domain query near a k-means cell edge reads atypical at leaf
             # scale), and averaging the path's p-values smooths them the same
             # way a tree ensemble would, at zero extra build cost.
-            if node["n"] >= _CALIBRATION_MIN_NODE and node["t_quantiles"]:
+            if node["n"] >= _CALIBRATION_MIN_NODE and node["rbar"] >= _CALIBRATION_MIN_RBAR and node["t_quantiles"]:
                 _score(name, idx)
             children = node["children"]
             if not children:
