@@ -6,8 +6,6 @@ export interface BrowseSubset {
   datasetId: string;
   /** Media ids to project (e.g. the positives of a Find run). */
   ids: number[];
-  /** Human label for the browse header, e.g. the detector name. */
-  label: string;
 }
 
 /**

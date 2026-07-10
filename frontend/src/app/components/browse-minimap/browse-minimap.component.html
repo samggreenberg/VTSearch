@@ -1,4 +1,7 @@
 <canvas #canvas (mousedown)="onCanvasDown($event)"></canvas>
+@if (meta()?.point_count; as count) {
+  <span class="minimap-count">{{ count | number }} {{ countNoun() }}</span>
+}
 @if (!dock) {
   <button
     type="button"

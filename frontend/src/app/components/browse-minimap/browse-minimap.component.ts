@@ -14,6 +14,7 @@ import { binGeometry } from '../browse-canvas/bin-geometry';
 import { readRootZoom } from '../../utils/root-zoom';
 import { onDevicePixelRatioChange } from '../../utils/device-pixel-ratio';
 import { IconComponent } from '../icon/icon.component';
+import { DecimalPipe } from '@angular/common';
 import type { HexCellPayload, ProjectionMeta } from '../../models/projection.models';
 
 /** Resize clamps; must mirror the backend ``browse_minimap_*`` setting ranges. */
@@ -38,7 +39,7 @@ export const MINIMAP_MAX_HEIGHT = 450;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-minimap',
   standalone: true,
-  imports: [IconComponent],
+  imports: [IconComponent, DecimalPipe],
   templateUrl: './browse-minimap.component.html',
   styleUrl: './browse-minimap.component.scss',
 })
@@ -65,6 +66,11 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   @Input() height = 150;
   /** Density colormap preset; mirrors the main canvas so the overview matches. */
   readonly colormap = input<BrowseColormapId>('auto');
+  /**
+   * Noun for the item-count floater ("items", or "positives" for a Find-subset
+   * browse). The count itself is read from ``meta.point_count``.
+   */
+  readonly countNoun = input('items');
   /**
    * Docked mode: the minimap fills its container (the browse side panel's
    * meta-row) and sizes its canvas to fit via a {@link ResizeObserver},

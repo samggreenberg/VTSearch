@@ -696,7 +696,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * scopes to the unverified positives instead ({@link onBrowseUnverified}).
    */
   onBrowse(): void {
-    this.browseIds(this.goodIds(), 'positives');
+    this.browseIds(this.goodIds());
   }
 
   /**
@@ -705,24 +705,19 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * longer unverified. Left-panel work-queue action.
    */
   onBrowseUnverified(): void {
-    this.browseIds(this.unverifiedGoodIds(), 'unverified positives');
+    this.browseIds(this.unverifiedGoodIds());
   }
 
   /**
    * Stash *ids* for the browse view and navigate to
-   * `/browse/:datasetId?subset=1`, where they're UMAP'd on their own. *suffix*
-   * names the subset in the browse header (e.g. "<detector> — positives").
+   * `/browse/:datasetId?subset=1`, where they're UMAP'd on their own.
    */
-  private browseIds(ids: number[], suffix: string): void {
+  private browseIds(ids: number[]): void {
     const datasetId = this.activeContext.datasetId;
     if (!datasetId || ids.length === 0) return;
-    const modelId = this.activeContext.modelId;
-    const detectorName =
-      this.datasetState.detectors.find((d) => d.id === modelId)?.name || 'Detector';
     this.browseSubset.set({
       datasetId,
       ids,
-      label: `${detectorName} — ${suffix}`,
     });
     this.router.navigate(['/browse', datasetId], { queryParams: { subset: 1 } });
   }
