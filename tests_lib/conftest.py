@@ -132,6 +132,17 @@ _test_medias_snapshot = {k: dict(v) for k, v in medias.items()}
 
 _patch_embed_audio.stop()
 
+# Freeze the startup heap (torch, registries, test medias — all of it lives
+# for the whole session anyway) so it is excluded from garbage-collection
+# scans.  Production code sprinkles ``gc.collect()`` through the dataset-load
+# pipeline for memory hygiene on huge datasets; with the multi-hundred-MB
+# startup heap unfrozen, each of those calls costs ~0.3s of pure scan time in
+# tests that load several tiny datasets.
+import gc  # noqa: E402
+
+gc.collect()
+gc.freeze()
+
 from vtscore.media import (  # noqa: E402
     all_embedders as _all_embedders,
     all_types as _all_types,

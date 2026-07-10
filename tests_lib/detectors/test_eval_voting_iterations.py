@@ -148,8 +148,13 @@ class TestMakeVoteSequence:
 
 
 class TestSimulateVotingIterations:
+    # Shape/plumbing tests use small media pools and ``calibrate_count=1``:
+    # each simulated voting step trains an MLP and calibrates per split, so a
+    # full-size sweep costs seconds for assertions that only look at row
+    # structure.  Behavioral tests (cost decrease, inclusion sensitivity)
+    # keep the full sweep they actually measure.
     def test_returns_rows(self):
-        medias = _make_separable_clips(n_per_cat=10)
+        medias = _make_separable_clips(n_per_cat=6)
         rows = simulate_voting_iterations(
             medias,
             target_category="alpha",
@@ -157,16 +162,18 @@ class TestSimulateVotingIterations:
             dataset_name="test_ds",
             inclusion=0,
             sim_fraction=0.5,
+            calibrate_count=1,
         )
         assert len(rows) > 0
 
     def test_row_schema(self):
-        medias = _make_separable_clips(n_per_cat=10)
+        medias = _make_separable_clips(n_per_cat=6)
         rows = simulate_voting_iterations(
             medias,
             target_category="alpha",
             seed=42,
             dataset_name="test_ds",
+            calibrate_count=1,
         )
         expected_keys = {
             "seed",
@@ -189,8 +196,8 @@ class TestSimulateVotingIterations:
         The first scored row reflects the 1-good + 1-bad minimum, and the
         counts never exceed the votes seen so far (t).
         """
-        medias = _make_separable_clips(n_per_cat=10)
-        rows = simulate_voting_iterations(medias, "alpha", seed=42)
+        medias = _make_separable_clips(n_per_cat=6)
+        rows = simulate_voting_iterations(medias, "alpha", seed=42, calibrate_count=1)
         assert rows  # at least one scored step
         first = rows[0]
         assert first["n_good"] >= 1
@@ -202,9 +209,9 @@ class TestSimulateVotingIterations:
             assert row["n_bad"] >= 1
 
     def test_seed_determinism(self):
-        medias = _make_separable_clips(n_per_cat=10)
-        rows1 = simulate_voting_iterations(medias, "alpha", seed=42)
-        rows2 = simulate_voting_iterations(medias, "alpha", seed=42)
+        medias = _make_separable_clips(n_per_cat=6)
+        rows1 = simulate_voting_iterations(medias, "alpha", seed=42, calibrate_count=1)
+        rows2 = simulate_voting_iterations(medias, "alpha", seed=42, calibrate_count=1)
         assert len(rows1) == len(rows2)
         for r1, r2 in zip(rows1, rows2):
             # Compare all fields except elapsed_seconds (wall-clock timing varies between runs)
@@ -214,8 +221,8 @@ class TestSimulateVotingIterations:
 
     def test_different_seeds_differ(self):
         medias = _make_separable_clips(n_per_cat=10)
-        rows1 = simulate_voting_iterations(medias, "alpha", seed=42)
-        rows2 = simulate_voting_iterations(medias, "alpha", seed=99)
+        rows1 = simulate_voting_iterations(medias, "alpha", seed=42, calibrate_count=1)
+        rows2 = simulate_voting_iterations(medias, "alpha", seed=99, calibrate_count=1)
         # Different seeds should produce different vote orderings / splits,
         # so the t-indexed costs should differ (not guaranteed for every row,
         # but at least the full sequence should differ).
@@ -224,8 +231,8 @@ class TestSimulateVotingIterations:
         assert costs1 != costs2
 
     def test_t_values_monotonically_increase(self):
-        medias = _make_separable_clips(n_per_cat=10)
-        rows = simulate_voting_iterations(medias, "alpha", seed=42)
+        medias = _make_separable_clips(n_per_cat=6)
+        rows = simulate_voting_iterations(medias, "alpha", seed=42, calibrate_count=1)
         t_vals = [r["t"] for r in rows]
         assert t_vals == sorted(t_vals)
         # t starts >=2 because we need at least 1 good + 1 bad
@@ -275,8 +282,8 @@ class TestSimulateVotingIterations:
 
     def test_elapsed_seconds_non_negative_and_increasing(self):
         """elapsed_seconds should be non-negative and non-decreasing over rows."""
-        medias = _make_separable_clips(n_per_cat=10)
-        rows = simulate_voting_iterations(medias, "alpha", seed=42)
+        medias = _make_separable_clips(n_per_cat=6)
+        rows = simulate_voting_iterations(medias, "alpha", seed=42, calibrate_count=1)
         times = [r["elapsed_seconds"] for r in rows]
         assert all(t >= 0.0 for t in times)
         for i in range(1, len(times)):
@@ -386,12 +393,15 @@ class TestProductionCalibrationFidelity:
 
 
 class TestRunVotingIterationsEval:
+    # Plumbing tests (columns, cross-product coverage): small pools and
+    # ``calibrate_count=1`` keep each seed×category sweep cheap.
     def test_returns_dataframe(self):
-        medias = _make_separable_clips(n_per_cat=10)
+        medias = _make_separable_clips(n_per_cat=6)
         df = run_voting_iterations_eval(
             dataset_clips={"ds1": medias},
             seeds=[42],
             categories={"ds1": ["alpha"]},
+            calibrate_count=1,
         )
         assert isinstance(df, pd.DataFrame)
         assert list(df.columns) == [
@@ -408,48 +418,53 @@ class TestRunVotingIterationsEval:
         ]
 
     def test_multiple_seeds(self):
-        medias = _make_separable_clips(n_per_cat=10)
+        medias = _make_separable_clips(n_per_cat=6)
         df = run_voting_iterations_eval(
             dataset_clips={"ds1": medias},
             seeds=[1, 2, 3],
             categories={"ds1": ["alpha"]},
+            calibrate_count=1,
         )
         assert set(df["seed"].unique()) == {1, 2, 3}
 
     def test_multiple_categories(self):
-        medias = _make_separable_clips(n_per_cat=10)
+        medias = _make_separable_clips(n_per_cat=6)
         df = run_voting_iterations_eval(
             dataset_clips={"ds1": medias},
             seeds=[42],
             categories={"ds1": ["alpha", "beta"]},
+            calibrate_count=1,
         )
         assert set(df["category"].unique()) == {"alpha", "beta"}
 
     def test_auto_categories(self):
         """When categories=None, all unique categories are used."""
-        medias = _make_three_category_clips(n_per_cat=10)
+        medias = _make_three_category_clips(n_per_cat=6)
         df = run_voting_iterations_eval(
             dataset_clips={"ds1": medias},
             seeds=[42],
+            calibrate_count=1,
         )
         assert set(df["category"].unique()) == {"alpha", "beta", "gamma"}
 
     def test_multiple_datasets(self):
-        clips1 = _make_separable_clips(n_per_cat=10, seed=0)
-        clips2 = _make_separable_clips(n_per_cat=10, seed=1)
+        clips1 = _make_separable_clips(n_per_cat=6, seed=0)
+        clips2 = _make_separable_clips(n_per_cat=6, seed=1)
         df = run_voting_iterations_eval(
             dataset_clips={"ds1": clips1, "ds2": clips2},
             seeds=[42],
             categories={"ds1": ["alpha"], "ds2": ["beta"]},
+            calibrate_count=1,
         )
         assert set(df["dataset"].unique()) == {"ds1", "ds2"}
 
     def test_cost_column_numeric(self):
-        medias = _make_separable_clips(n_per_cat=10)
+        medias = _make_separable_clips(n_per_cat=6)
         df = run_voting_iterations_eval(
             dataset_clips={"ds1": medias},
             seeds=[42],
             categories={"ds1": ["alpha"]},
+            calibrate_count=1,
         )
         assert df["cost"].dtype == np.float64
         assert df["fpr"].dtype == np.float64
@@ -457,11 +472,12 @@ class TestRunVotingIterationsEval:
 
     def test_full_cross_product_shape(self):
         """2 seeds x 1 dataset x 2 categories -> each combo produces rows."""
-        medias = _make_separable_clips(n_per_cat=10)
+        medias = _make_separable_clips(n_per_cat=6)
         df = run_voting_iterations_eval(
             dataset_clips={"ds1": medias},
             seeds=[1, 2],
             categories={"ds1": ["alpha", "beta"]},
+            calibrate_count=1,
         )
         combos = df.groupby(["seed", "dataset", "category"]).ngroups
         assert combos == 4  # 2 seeds x 1 dataset x 2 categories

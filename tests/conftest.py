@@ -126,6 +126,17 @@ init_medias()
 # Save the test medias so we can replay them into each test's fresh context.
 _test_medias_snapshot = {k: dict(v) for k, v in medias.items()}
 
+# Freeze the startup heap (torch, Flask app, test medias — all of it lives for
+# the whole session anyway) so it is excluded from garbage-collection scans.
+# Production code sprinkles ``gc.collect()`` through the dataset-load pipeline
+# for memory hygiene on huge datasets; with the multi-hundred-MB startup heap
+# unfrozen, each of those calls costs ~0.3s of pure scan time in tests that
+# load several tiny datasets (combine, staging, promote).
+import gc
+
+gc.collect()
+gc.freeze()
+
 # Stop the module-level patch (init_medias is done); the per-test autouse
 # fixture below re-applies the patches for every test so that /api/sort and
 # other routes that call embed_text don't trigger CLAP loading either.
