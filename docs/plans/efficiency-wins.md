@@ -41,34 +41,6 @@ canvas renderer, LSH near-dup detection, async jobs with signature caches.
 
 <!-- item-sep -->
 
-- **Array-native score conversion** — `_score_all_media`
-  (`vtscore/detectors/training.py:469`) does
-  `np.asarray(sigmoid_to_finite_scores(model(X_all)), dtype=np.float64)`.
-  `sigmoid_to_finite_scores` (`vtscore/utils/scores.py:34-58`) ends in
-  `.cpu().tolist()` — so every retrain materializes a Python list of R floats
-  (R = flattened (media, region) rows; large on patch datasets) and immediately
-  re-parses it into numpy. That's a pure-Python, GIL-holding O(R) pass in the
-  background training thread, which competes with request handlers (the
-  `_segmented_max_pool` docstring in the same file explains why GIL stalls
-  there matter).
-  **Fix:** add `sigmoid_to_finite_array(logits, *, default=...) -> np.ndarray`
-  next to the list version in `vtscore/utils/scores.py`: same
-  `torch.sigmoid(...).squeeze(-1)` + `torch.nan_to_num`, but ending in
-  `.cpu().numpy()` (then `.astype(np.float64, copy=False)` at the call site if
-  the downstream math wants float64 — check what `_segmented_max_pool` and the
-  threshold code actually need; float32 may be fine end-to-end, in which case
-  skip the upcast). Route `_score_all_media` through it. Leave the list version
-  for JSON-response call sites (grep `sigmoid_to_finite_scores` for the
-  others — the grouped-fold calibration in `thresholds.py:373` runs on small
-  splits and can keep the list form).
-  **Gotchas:** the returned array must be writable/owned if anything mutates it
-  (`.numpy()` on a CPU tensor shares memory with the tensor — if the tensor is
-  a temporary this is fine, but add `np.ascontiguousarray`/`.copy()` only if a
-  test proves mutation happens; don't copy blindly). Tests:
-  `./run-tests.sh detectors sorting`.
-  **Files touched:** `vtscore/utils/scores.py`, `vtscore/detectors/training.py`.
-  Impact: medium (large patch datasets). Complexity: trivial.
-
 ## Tier 2 — high impact, needs care
 
 <!-- item-sep -->
