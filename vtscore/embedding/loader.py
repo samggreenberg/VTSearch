@@ -27,26 +27,37 @@ _TIME_SUFFIX_RE = re.compile(r"\s*\(\d+s(?:,\s*\d+\s+modules)?\)$")
 #: bracket always lands in the same column and the bars stay aligned.
 _LABEL_WIDTH = 32
 
-#: ANSI colors for the bar fill *between* the brackets (the rest of the line
-#: keeps its default color).  Red while at or below the half-way mark, yellow
-#: past it, green only at completion.  ``_ANSI_RESET`` restores the default so
-#: the closing bracket and trailing percentage are uncolored.
-_ANSI_RED = "\033[31m"
-_ANSI_YELLOW = "\033[93m"  # bright yellow; the dim \033[33m renders olive/brown
-_ANSI_GREEN = "\033[32m"
+#: 24-bit ("truecolor") RGB endpoints for the bar-fill gradient, interpolated
+#: continuously by :func:`_bar_rgb`: reddest at 0%, yellowest at 50%, greenest
+#: at 100%.  Only the fill (the ``#`` characters already drawn) is colored;
+#: the ``.`` characters marking the not-yet-filled remainder keep the
+#: terminal's default text color, and so does the rest of the line.
+#: ``_ANSI_RESET`` restores the default color after the fill.
+_RGB_RED = (205, 0, 0)
+_RGB_YELLOW = (255, 215, 0)
+_RGB_GREEN = (0, 205, 0)
 _ANSI_RESET = "\033[0m"
 
 
-def _bar_color(pct: int) -> str:
-    """Return the ANSI color for a bar at *pct* percent (0-100).
+def _bar_rgb(pct: int) -> tuple[int, int, int]:
+    """Return the interpolated ``(r, g, b)`` fill color for a bar at *pct* (0-100).
 
-    Red for ``pct <= 50``, yellow for ``50 < pct < 100``, green at ``100``.
+    Linearly interpolates red -> yellow over ``[0, 50]`` and yellow -> green
+    over ``[50, 100]``, so every percentage gets a distinct shade rather than
+    snapping between three fixed colors.
     """
-    if pct >= 100:
-        return _ANSI_GREEN
-    if pct > 50:
-        return _ANSI_YELLOW
-    return _ANSI_RED
+    pct = max(0, min(100, pct))
+    if pct <= 50:
+        start, end, t = _RGB_RED, _RGB_YELLOW, pct / 50
+    else:
+        start, end, t = _RGB_YELLOW, _RGB_GREEN, (pct - 50) / 50
+    return tuple(round(start[i] + (end[i] - start[i]) * t) for i in range(3))  # type: ignore[return-value]
+
+
+def _bar_color(pct: int) -> str:
+    """Return the 24-bit ANSI foreground escape for a bar at *pct* percent (0-100)."""
+    r, g, b = _bar_rgb(pct)
+    return f"\033[38;2;{r};{g};{b}m"
 
 
 def _strip_time_suffix(msg: str) -> str:
@@ -351,7 +362,7 @@ def _make_console_progress(original_callback):
         """Overwrite the current progress line with a 100% bar."""
         if _last_base[0]:
             label = _fit_label(_last_base[0])
-            sys.stdout.write(f"\r    {label} [{_ANSI_GREEN}{_FULL_BAR}{_ANSI_RESET}] 100%\033[K")
+            sys.stdout.write(f"\r    {label} [{_bar_color(100)}{_FULL_BAR}{_ANSI_RESET}] 100%\033[K")
 
     def _flush() -> None:
         if _on_progress_line[0]:
@@ -374,9 +385,10 @@ def _make_console_progress(original_callback):
                 sys.stdout.write("\n")
             pct = min(100, current * 100 // total)
             filled = pct * 30 // 100
-            # Color only the fill between the brackets: red ≤50%, yellow >50%,
-            # green at 100%.  The rest of the line keeps its default color.
-            bar = f"{_bar_color(pct)}{'#' * filled}{'.' * (30 - filled)}{_ANSI_RESET}"
+            # Color only the '#' fill characters with the continuous R->Y->G
+            # gradient; reset before the '.' placeholders so the not-yet-filled
+            # remainder keeps the terminal's default text color.
+            bar = f"{_bar_color(pct)}{'#' * filled}{_ANSI_RESET}{'.' * (30 - filled)}"
             # Pad the base label to a fixed width so every bar starts at the
             # same column and the bars line up vertically.  The elapsed-time /
             # status suffix (e.g. "(3s, 247 modules)") goes *after* the

@@ -26,4 +26,25 @@ export class ProgressBarComponent {
     if (this.max <= 0) return 0;
     return Math.min(100, (this.value / this.max) * 100);
   }
+
+  /**
+   * Continuous red -> yellow -> green fill color, matching the CMD progress
+   * bar gradient: reddest at 0%, yellowest at 50%, greenest at 100%. Built
+   * from the theme's `--color-bad` / `--text-warning` / `--color-good`
+   * variables via `color-mix` so it stays correct in every theme (light,
+   * dark, high-visibility) without hardcoding RGB values here.
+   *
+   * Returns `null` while indeterminate so the element falls back to the
+   * SCSS default (`--accent`); there is no percentage to color by.
+   */
+  get fillColor(): string | null {
+    if (this.indeterminate) return null;
+    const pct = this.percentage;
+    if (pct <= 50) {
+      const t = (pct / 50) * 100;
+      return `color-mix(in srgb, var(--text-warning) ${t}%, var(--color-bad))`;
+    }
+    const t = ((pct - 50) / 50) * 100;
+    return `color-mix(in srgb, var(--color-good) ${t}%, var(--text-warning))`;
+  }
 }
