@@ -210,7 +210,7 @@ Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a py
 ## Test Markers
 
 - **Default** (`./run-tests.sh` or `pytest tests/`): Runs fast CPU tests only (~35s). Excludes `gpu` and `slow` markers.
-- **`slow`**: CLI subprocess tests that spawn `python app.py --autodetect` (each ~16s, total ~290s). Run with `-m slow` or include with `-m 'not gpu'`.
+- **`slow`**: CLI subprocess tests that spawn `python app.py --autodetect` (2 tests in `tests/cli/test_cli_main_subprocess.py`, each ~16s). Run with `-m slow` or include with `-m 'not gpu'`.
 - **`gpu`**: CUDA-only tests. Run with `-m gpu`.
 - **All tests**: Use `-m ''` to run everything.
 

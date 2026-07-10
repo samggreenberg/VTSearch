@@ -1327,8 +1327,11 @@ class TestEmbedMediaLock:
             def __exit__(self, *exc):
                 self._lock.release()
 
+        from typing import cast
+
         original_lock = MediaEmbedder._embed_lock
-        MediaEmbedder._embed_lock = _SignalingLock()
+        # cast: duck-typed context-manager stand-in for the real Lock.
+        MediaEmbedder._embed_lock = cast(threading.Lock, _SignalingLock())
         try:
             t1.start()
             # Wait for t1 to be inside _embed_media_impl
