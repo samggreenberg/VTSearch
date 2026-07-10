@@ -235,12 +235,9 @@
   // way to select in a singleton popup (no grid), and a convenience in any popup.
   cursor: pointer;
 
-  // A faint ring hints the image is clickable; the solid ``.selected`` ring
-  // (mirroring a grid entry's) takes over once the shown item is selected.
-  &:hover:not(.selected) {
-    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
-  }
-
+  // The solid ``.selected`` ring (mirroring a grid entry's) is the only ring the
+  // pane paints. It deliberately shows no hover cue: a hover ring reads almost
+  // exactly like the selected ring, which is confusing.
   &.selected {
     box-shadow: inset 0 0 0 2px var(--accent);
   }
