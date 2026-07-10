@@ -183,9 +183,11 @@ class TestCoverageAtlasNextEndpoint:
     def test_scores_influence_selection(self, client):
         """When scores are posted, the highest-scored element in the node is returned."""
         atlas = _build_atlas()
-        # Build scores: give the highest score to a specific media
+        # Build scores: give the highest score to the root's most typical
+        # media — always inside the surprise pool regardless of whether the
+        # node tempers by typicality (concentrated direction) or not.
         all_ids = list(atlas.vector_to_leaf.keys())
-        target_id = all_ids[-1]  # pick the last one
+        target_id = atlas.nodes["0"]["ids"][0]
         scores = {str(vid): 0.1 for vid in all_ids}
         scores[str(target_id)] = 1.0
 
@@ -197,9 +199,11 @@ class TestCoverageAtlasNextEndpoint:
         """When threshold is below the node median, the lowest-scored element is returned."""
         atlas = _build_atlas()
         all_ids = list(atlas.vector_to_leaf.keys())
-        # Give all media high scores (above threshold) so median > threshold
+        # Give all media high scores (above threshold) so median > threshold.
+        # The low outlier sits on the root's most typical media so it is
+        # inside the surprise pool under either pooling branch.
         scores = {str(vid): 0.9 for vid in all_ids}
-        lowest_id = all_ids[0]
+        lowest_id = atlas.nodes["0"]["ids"][0]
         scores[str(lowest_id)] = 0.1  # one outlier low score
 
         resp = client.post(
@@ -215,9 +219,11 @@ class TestCoverageAtlasNextEndpoint:
         """When threshold is above the node median, the highest-scored element is returned."""
         atlas = _build_atlas()
         all_ids = list(atlas.vector_to_leaf.keys())
-        # Give all media low scores (below threshold)
+        # Give all media low scores (below threshold).  The high outlier sits
+        # on the root's most typical media so it is inside the surprise pool
+        # under either pooling branch.
         scores = {str(vid): 0.1 for vid in all_ids}
-        highest_id = all_ids[-1]
+        highest_id = atlas.nodes["0"]["ids"][0]
         scores[str(highest_id)] = 0.3  # still below threshold
 
         resp = client.post(

@@ -912,8 +912,10 @@ def coverage_atlas_next():
     the node's median score determines direction: above-threshold nodes yield
     the lowest-scored element (surprise in a "good" region), while
     below-threshold nodes yield the highest-scored element (surprise in a
-    "bad" region).  Without scores the node's most typical element is
-    returned.
+    "bad" region).  In nodes with a concentrated direction the surprise
+    extremum is drawn from the node's typical half, so the probe lands on a
+    representative counterexample rather than a lone oddball.  Without
+    scores the node's most typical element is returned.
 
     Returns ``{"id": <media_id>}`` or ``{"id": null}`` when the atlas is
     exhausted or not yet built.  Also includes ``coverage_level`` (the

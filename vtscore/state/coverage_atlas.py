@@ -30,8 +30,10 @@ The atlas supports:
 - Coverage level: the number of consecutive evidence-bearing nodes in BFS
   order (the autopilot's span progress).
 - Next sample: a surprise-maximising element of the first evidence-free
-  node in BFS order, with siblings visited largest-first so each click
-  covers the biggest unexplored region.
+  node in BFS order — drawn from the node's typical half when the node has
+  a concentrated direction, so the surprise is a representative
+  counterexample rather than a lone oddball — with siblings visited
+  largest-first so each click covers the biggest unexplored region.
 - Typicality: calibrated p-values for arbitrary query vectors, and a
   dataset-level domain-shift report built on them.
 """
@@ -452,9 +454,23 @@ class CoverageAtlas:
         - Otherwise the **highest**-scored element is returned (the one most
           likely to surprise the user in a predominantly-bad region).
 
-        When *scores* is ``None``, returns the node's most typical element
-        (``ids`` is sorted by descending ``mu . x``), so an unscored click
-        still lands on a representative of the unexplored region.
+        The surprise extremum is taken over the node's **typical half**
+        (``ids`` is sorted by descending ``mu . x``), not all of it: an
+        extreme score on an atypical item is disproportionately often a lone
+        oddball — a corrupt file, a weird crop — whose flip says nothing
+        about the region.  A flip on a *typical* item is evidence of a real
+        hidden pocket, and when the typical extremum does not flip, the
+        node's presumption has been stress-tested at its (representative)
+        weakest point.  The median that decides the probe direction still
+        spans the whole node — the presumption is about the region.  Nodes
+        with no concentrated direction (``rbar`` below the calibration
+        floor — notably the root, whose resultant vanishes by construction
+        after centering) probe the whole node: their typicality ordering is
+        noise, and tempering by it would just hide an arbitrary half.
+
+        When *scores* is ``None``, returns the node's most typical element,
+        so an unscored click still lands on a representative of the
+        unexplored region.
 
         Returns ``None`` if all nodes carry evidence.
         """
@@ -465,14 +481,18 @@ class CoverageAtlas:
         while queue:
             name = queue.popleft()
             if not self._covered(name):
-                ids = self.nodes[name]["ids"]
+                node = self.nodes[name]
+                ids = node["ids"]
                 if scores is not None:
-                    node_scores = [scores.get(i, 0.0) for i in ids]
+                    if node["rbar"] >= _CALIBRATION_MIN_RBAR:
+                        pool = ids[: max(1, math.ceil(len(ids) / 2))]
+                    else:
+                        pool = ids
                     if threshold is not None:
-                        median = float(np.median(node_scores))
+                        median = float(np.median([scores.get(i, 0.0) for i in ids]))
                         if median >= threshold:
-                            return min(ids, key=lambda i: scores.get(i, 0.0))
-                    return max(ids, key=lambda i: scores.get(i, 0.0))
+                            return min(pool, key=lambda i: scores.get(i, 0.0))
+                    return max(pool, key=lambda i: scores.get(i, 0.0))
                 return ids[0]
             queue.extend(self.nodes[name]["children"])
 

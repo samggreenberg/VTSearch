@@ -547,10 +547,14 @@ class TestNextSample:
             assert s2 in atlas.nodes[uncovered[0]]["ids"]
 
     def test_next_sample_with_scores(self):
-        """When scores are provided, return the highest-scored element from the node."""
+        """When scores are provided, return the highest-scored element from the node.
+
+        The root's direction is degenerate after centering (rbar ~ 0), so no
+        typical-half tempering applies there: the probe spans the whole node.
+        """
         vecs = _make_vectors(50)
         atlas = CoverageAtlas(vecs, k=2, min_node_size=20)
-        # Single node atlas; assign highest score to vector 50
+        assert atlas.nodes["0"]["rbar"] < 0.1  # degenerate root → no tempering
         scores = {i: float(i) for i in range(1, 51)}
         sample = atlas.next_sample(scores=scores)
         # Vector 50 has the highest score
@@ -568,17 +572,83 @@ class TestNextSample:
         for vid in range(31, 61):
             scores[vid] = 0.9
 
-        # First sample (from root) should be the highest-scored element overall
+        # First sample (from root) should be a highest-scored element
         s1 = atlas.next_sample(scores=scores)
         assert s1 in atlas.nodes["0"]["ids"]
         # Should pick a high-scoring element
         assert scores[s1] == 0.9
 
+    def _concentrated_uncovered_node(self):
+        """Cover the root via the smaller cluster, leaving the larger cluster
+        (a concentrated k-means cell, rbar >= 0.1) as the first uncovered node.
+        """
+        vecs = _make_clustered_vectors([40, 20], dim=32)
+        atlas = CoverageAtlas(vecs, k=2, min_node_size=10)
+        # Label an item from the smaller cluster: its leaf-to-root path is
+        # covered, so BFS lands on the larger cluster's (uncovered) child.
+        atlas.label(41, good=True)
+        children = atlas.nodes["0"]["children"]
+        target = next(c for c in children if not (atlas.nodes[c]["n_pos"] + atlas.nodes[c]["n_neg"]))
+        node = atlas.nodes[target]
+        assert node["rbar"] >= 0.1, "cluster cell should have a concentrated direction"
+        return atlas, node
+
+    def test_surprise_pool_excludes_atypical_outlier(self):
+        """An extreme score on an atypical item must not win the probe.
+
+        In a node with a concentrated direction, the surprise extremum is
+        drawn from the typical half: an oddball whose flip says nothing about
+        the region would otherwise monopolise the pick.
+        """
+        atlas, node = self._concentrated_uncovered_node()
+        ids = node["ids"]
+        pool = ids[: (len(ids) + 1) // 2]
+        # Rank-based scores: most typical → 1, least typical → n.
+        scores = {vid: float(i + 1) for i, vid in enumerate(ids)}
+        sample = atlas.next_sample(scores=scores)
+        # The global maximum (ids[-1], the least typical item) is excluded;
+        # the pick is the highest score within the typical half.
+        assert sample != ids[-1]
+        assert sample == pool[-1]
+
+    def test_surprise_pool_threshold_flip_stays_typical(self):
+        """The lowest-scored probe in a presumed-good region is also typical-half."""
+        atlas, node = self._concentrated_uncovered_node()
+        ids = node["ids"]
+        pool = ids[: (len(ids) + 1) // 2]
+        # High scores everywhere; the global minimum sits on the least
+        # typical item, the typical-half minimum on the most typical one.
+        scores = {vid: 0.9 for vid in ids}
+        scores[ids[-1]] = 0.1  # atypical outlier, global minimum
+        scores[ids[0]] = 0.5  # typical-half minimum
+        sample = atlas.next_sample(scores=scores, threshold=0.5)
+        # Median 0.9 >= 0.5 → presumed good → probe the lowest, but within
+        # the typical half.
+        assert sample == ids[0]
+        assert sample in pool
+
+    def test_median_spans_whole_node_not_just_pool(self):
+        """The probe direction (median vs threshold) considers every element.
+
+        Rank-based scores over an n-item node: the whole-node median is
+        (n+1)/2 while the typical-half median is about half that.  A
+        threshold between the two must still read the region as
+        above-threshold (→ pick the lowest), which would flip if the median
+        were pool-only.
+        """
+        atlas, node = self._concentrated_uncovered_node()
+        ids = node["ids"]
+        n = len(ids)
+        scores = {vid: float(i + 1) for i, vid in enumerate(ids)}
+        threshold = (n + 1) / 2 - n / 8  # between pool median and node median
+        sample = atlas.next_sample(scores=scores, threshold=threshold)
+        assert sample == ids[0]  # lowest — the region presumes above-threshold
+
     def test_threshold_above_median_picks_lowest(self):
         """When the node's median score is >= threshold, return the lowest-scored element."""
         vecs = _make_vectors(50)
         atlas = CoverageAtlas(vecs, k=2, min_node_size=20)
-        # Single node atlas; scores 1..50
+        assert atlas.nodes["0"]["rbar"] < 0.1  # degenerate root → whole-node probe
         scores = {i: float(i) for i in range(1, 51)}
         # Median of 1..50 is 25.5; set threshold below that
         sample = atlas.next_sample(scores=scores, threshold=20.0)
@@ -596,7 +666,7 @@ class TestNextSample:
         assert sample == 50
 
     def test_threshold_none_always_picks_highest(self):
-        """When threshold is None, always return the highest-scored element (original behavior)."""
+        """When threshold is None, always return the highest-scored element."""
         vecs = _make_vectors(50)
         atlas = CoverageAtlas(vecs, k=2, min_node_size=20)
         scores = {i: float(i) for i in range(1, 51)}

@@ -174,3 +174,9 @@ number of consecutive evidence-bearing nodes in BFS order (0 when nothing is
 labeled, up to the total number of atlas nodes when fully covered). `exhausted`
 is `true` when every node carries labeled evidence. Sibling nodes are visited
 largest-first, so each suggestion covers the biggest unexplored region.
+
+With scores, the pick is a surprise probe: a presumed-good node (median score
+at or above the threshold) yields its lowest-scored element, a presumed-bad
+node its highest-scored one. In nodes with a concentrated direction the
+extremum is drawn from the node's typical half, so a flip signals a real
+hidden pocket rather than a lone oddball.
