@@ -62,26 +62,6 @@ canvas renderer, LSH near-dup detection, async jobs with signature caches.
   **Files touched:** `vtscore/datasets/loader.py`, `vtscore/datasets/loader_demo.py`.
   Impact: high. Complexity: trivial.
 
-- **Throttled download progress** — the demo downloader calls `on_progress`
-  once per 8 KB chunk (`vtscore/datasets/downloader/core.py:404-408`). Each
-  call goes `update_progress` → `ProgressTracker.update`
-  (`vtscore/concurrency/progress.py`), which takes a lock, copies the data
-  dict, and synchronously pushes an SSE frame. A 5 GB download (Food-101,
-  UCF101, Visual Genome) makes ~650k such calls — real CPU plus an SSE flood
-  that can throttle the transfer itself.
-  **Fix:** bump `iter_content(chunk_size=...)` to `1 << 20` (1 MB), and gate
-  the `on_progress` call on elapsed time (emit at most every ~200 ms via a
-  `time.monotonic()` check; always emit the final 100% call after the loop).
-  The tar/zip extract loops in the same file already gate on `i % 100` — this
-  brings the download loop in line.
-  **Gotchas:** keep the resume-from-Range logic intact (`downloaded` starts
-  nonzero on resume); the throttle must compare against `time.monotonic()`,
-  not call count, so slow links still update. Tests: `./run-tests.sh downloads`
-  (the download tests mock `iter_content`; check none assert per-chunk
-  progress counts).
-  **Files touched:** `vtscore/datasets/downloader/core.py`.
-  Impact: medium-high on big demos. Complexity: trivial.
-
 - **Array-native score conversion** — `_score_all_media`
   (`vtscore/detectors/training.py:469`) does
   `np.asarray(sigmoid_to_finite_scores(model(X_all)), dtype=np.float64)`.

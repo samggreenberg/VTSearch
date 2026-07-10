@@ -402,10 +402,20 @@ def download_file_with_progress(  # noqa: C901
                 total_size = _total_size_from_headers(response, downloaded, expected_size)
 
             mode = "ab" if downloaded else "wb"
+            # Emit progress at most every ~200 ms rather than once per chunk: a
+            # multi-GB download makes hundreds of thousands of chunk writes, and
+            # a per-chunk SSE push is real CPU that can throttle the transfer.
+            # Throttle on wall-clock (time.monotonic), not chunk count, so slow
+            # links still update; always emit a final 100% call after the loop.
+            last_emit = time.monotonic()
             with open(dest_path, mode) as f:
-                for chunk in response.iter_content(chunk_size=8192):
+                for chunk in response.iter_content(chunk_size=1 << 20):
                     downloaded += f.write(chunk)
-                    on_progress("downloading", f"Downloading {dest_path.name}...", downloaded, total_size)
+                    now = time.monotonic()
+                    if now - last_emit >= 0.2:
+                        last_emit = now
+                        on_progress("downloading", f"Downloading {dest_path.name}...", downloaded, total_size)
+            on_progress("downloading", f"Downloading {dest_path.name}...", downloaded, total_size)
             return  # stream consumed cleanly
         except _RETRYABLE_EXCEPTIONS:
             if last_attempt:
