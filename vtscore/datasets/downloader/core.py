@@ -414,9 +414,7 @@ def download_file_with_progress(  # noqa: C901
                     now = time.monotonic()
                     if now - last_emit >= 0.2:
                         last_emit = now
-                        on_progress(
-                            "downloading", f"Downloading {dest_path.name}...", downloaded, total_size
-                        )
+                        on_progress("downloading", f"Downloading {dest_path.name}...", downloaded, total_size)
             on_progress("downloading", f"Downloading {dest_path.name}...", downloaded, total_size)
             return  # stream consumed cleanly
         except _RETRYABLE_EXCEPTIONS:
