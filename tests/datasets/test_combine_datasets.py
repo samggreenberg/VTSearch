@@ -629,7 +629,13 @@ class TestStageDemoEndpoint:
         assert data["ok"] is True
 
 
+@pytest.mark.xdist_group("shared-staging-dir")
 class TestClearStagingEndpoint:
+    """DELETE /api/dataset/staging wipes the repo-shared ``data/staging/``
+    directory, so these tests must not run concurrently with tests on other
+    xdist workers that assert staged files exist on disk — grouped with
+    ``TestStagingPerTaskIsolation`` via ``--dist loadgroup``."""
+
     def test_clear_staging(self, client):
         """DELETE /api/dataset/staging returns ok."""
         resp = client.delete("/api/dataset/staging")
@@ -704,11 +710,15 @@ def _sync_thread_factory(store: list):
     return fake_thread
 
 
+@pytest.mark.xdist_group("shared-staging-dir")
 class TestStagingPerTaskIsolation:
     """Two concurrent staging imports must each publish their own
     ``staging_result`` on their own per-task tracker; the terminal result is
     no longer last-writer-wins on the global ``dataset_progress`` singleton
-    (which orphaned the loser's staged pkl)."""
+    (which orphaned the loser's staged pkl).
+
+    Grouped with ``TestClearStagingEndpoint``: the existence assertions below
+    read the repo-shared ``data/staging/`` dir, which that class wipes."""
 
     def test_concurrent_stagings_keep_distinct_results(self, isolated_settings):
         from pathlib import Path

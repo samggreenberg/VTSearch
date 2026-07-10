@@ -235,6 +235,19 @@ def reset_contexts(tmp_path, monkeypatch):
 
     _clear_query_cache()
 
+    # ``resolve_device`` is lru_cached for the life of the process.  A test
+    # that resolves it under mocked CUDA (e.g. test_torch_config.py) would
+    # otherwise leak a cached "cuda" into every later ``train_model`` on a
+    # CPU-only box.  ``vtscore.embedding.loader`` binds the function at
+    # import, and the ``importlib.reload`` in those tests can leave it
+    # holding a *different* function object than the current module
+    # attribute — clear both.
+    import vtscore.config as _config
+    import vtscore.embedding.loader as _emb_loader
+
+    _config.resolve_device.cache_clear()
+    _emb_loader.resolve_device.cache_clear()
+
     _dataset_progress.reset_cancel()
     _find_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
     _sort_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
