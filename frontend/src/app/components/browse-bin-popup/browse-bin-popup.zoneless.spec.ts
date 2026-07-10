@@ -129,6 +129,56 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     fixture.destroy();
   });
 
+  it('reveals once settings resolve after mount, with no re-summon (the two-right-click bug)', async () => {
+    // Regression for "the first right-click shows nothing; the second opens it".
+    //
+    // In the app the popup mounts while its settings-driven prefs are already known
+    // (settings loaded app-wide), but its own ngAfterViewInit `settingsState.load()`
+    // momentarily resets `settingsSignal()` to null while the resource refetches. So
+    // its first placement pass runs with `settingsReady` false and the reveal gate in
+    // nudgeOnScreen holds `placed` false. When settings land *again* the prefs are
+    // unchanged (same values), so the settings effect's size-change branch is a no-op
+    // — and before the fix nothing else re-ran `place()`, stranding the popup hidden
+    // until the next summon (the second right-click). The `!this.placed` clause makes
+    // the effect re-place on settings-arrival while still unrevealed.
+    //
+    // Reproduce that state precisely: place with settings null (→ hidden, `placed`
+    // false), then pre-seed the effect's "last seen prefs" to the values the arriving
+    // settings will produce, so the size-change branch stays a no-op and only the
+    // `!this.placed` clause can reveal — exactly the code path the fix adds.
+    settings.set(null);
+    const fixture = makeFixture();
+    // Summon fully on-screen so there is no size/clamp reason to re-place — the reveal
+    // must come purely from settings landing, not from a corrective measurement.
+    fixture.componentRef.setInput('x', 50);
+    fixture.componentRef.setInput('y', 50);
+    await settlePasses(fixture);
+
+    const panel = fixture.nativeElement.querySelector('.bin-popup') as HTMLElement;
+    expect(panel).not.toBeNull();
+    // Held hidden while settings are still null (the stranded state the user saw).
+    expect(panel.style.visibility).toBe('hidden');
+
+    const comp = fixture.componentInstance as unknown as {
+      lastPreviewOverride: number | null;
+      lastMetadataShown: boolean | null;
+      previewOverride: number | null;
+      showMetadataColumn: boolean;
+    };
+    comp.lastPreviewOverride = comp.previewOverride;
+    comp.lastMetadataShown = comp.showMetadataColumn;
+
+    // Settings resolve (resource refetch completes). No new summon, and — with last*
+    // pre-seeded — no pref change, so only the unrevealed-re-place path is left.
+    settings.set({});
+    await settlePasses(fixture);
+
+    // The popup must now reveal itself — without a second right-click.
+    expect(panel.style.visibility).toBe('visible');
+
+    fixture.destroy();
+  });
+
   it('pulls a panel taller than the region up so its floor stays on-screen', async () => {
     // The corrective measurement pass (nudgeOnScreen) keeps the *rendered* panel
     // inside the region even when the computed clamp under-modelled its height —
