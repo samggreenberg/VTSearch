@@ -536,6 +536,7 @@ class TestNextSample:
         vecs = _make_clustered_vectors([60, 20], dim=32)
         atlas = CoverageAtlas(vecs, k=2, min_node_size=10)
         s1 = atlas.next_sample()
+        assert s1 is not None
         atlas.label(s1, good=True)
         s2 = atlas.next_sample()
         children = atlas.nodes["0"]["children"]
