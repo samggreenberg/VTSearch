@@ -7,7 +7,10 @@ below is an **independently shippable** fix with file/line pointers, a concrete
 approach, and the gotchas a fresh session needs. Items are named (stable
 labels, never renumbered) and grouped so parallel efforts don't collide — the
 "Files touched" line is the conflict map: two items sharing no files can ship
-in parallel branches safely.
+in parallel branches safely. Items are separated by `<!-- item-sep -->`
+sentinels; when you ship a slice, delete only your item's own lines and leave
+the sentinels intact (see the plan-file policy in `CLAUDE.md` for why — a
+never-deleted line between items keeps two parallel deletions from conflicting).
 
 **Relationship to [`scalability.md`](scalability.md):** that plan tracks
 *scale-limit* work (what breaks at 100k–10M items) under stable `S#` IDs. This
@@ -36,31 +39,7 @@ canvas renderer, LSH near-dup detection, async jobs with signature caches.
 
 ## Tier 1 — small, low-risk, immediately felt
 
-- **Single-pass container save** — every dataset save currently pickles the
-  whole dataset **twice** and unpickles it once. `write_container`
-  (`vtscore/datasets/container.py:55-62`) deserializes the entire
-  `medias_pickle_bytes` blob, `update()`s in `extra_pickle_keys`, and re-pickles
-  — and the registry-save flow *always* passes `extra_pickle_keys`
-  (`vtscore/datasets/stages/registry.py` and
-  `vtsearch/routes/datasets/staging.py` pass `{"diversity_tree": ...}`), so
-  this fires on every "Saving to registry…". For image datasets with inline
-  `media_bytes` this round-trip is a large share of the save stall — right next
-  to the ZIP_STORED comment that measured 9 s saved on the same path.
-  **Fix:** in `export_dataset_to_file` (`vtscore/datasets/loader.py:271-274`),
-  do `data.update(extra_pickle_keys or {})` *before* the single `pickle.dump`,
-  then call `write_container(..., extra_pickle_keys=None)`. In
-  `_write_demo_cache` (`vtscore/datasets/loader_demo.py:406-434`) the extra key
-  (`mt.dir_key`) is **already in `pkl_data` before pickling** (set at ~line
-  411), so simply drop the `extra_pickle_keys` argument there — its re-pickle
-  is 100% redundant. Keep `write_container`'s branch for API compatibility
-  (other callers may pass raw bytes without a dict in hand), but the two hot
-  paths stop using it.
-  **Gotchas:** none real — output is byte-identical modulo dict insertion order
-  of the merged keys. `tests_lib/datasets/test_container.py` and
-  `test_diversity_tree_cache.py` cover the round trip; run
-  `./run-tests.sh datasets`.
-  **Files touched:** `vtscore/datasets/loader.py`, `vtscore/datasets/loader_demo.py`.
-  Impact: high. Complexity: trivial.
+<!-- item-sep -->
 
 - **Array-native score conversion** — `_score_all_media`
   (`vtscore/detectors/training.py:469`) does
@@ -91,6 +70,8 @@ canvas renderer, LSH near-dup detection, async jobs with signature caches.
   Impact: medium (large patch datasets). Complexity: trivial.
 
 ## Tier 2 — high impact, needs care
+
+<!-- item-sep -->
 
 - **Parallel folder ingest** — full-mode folder import processes files
   strictly serially (`vtscore/datasets/loader_folder.py:454-470` inside
@@ -126,6 +107,8 @@ canvas renderer, LSH near-dup detection, async jobs with signature caches.
   match the serial path on a fixture folder.
   Impact: high (bulk image/audio import ≈ cores× faster on the decode phase).
   Complexity: medium.
+
+<!-- item-sep -->
 
 - **Vectorized region cosine sort** — text/example sort on a patch dataset
   (DINOv2/DINOv3/EUPE) loops per media and per region in Python:
@@ -171,6 +154,8 @@ canvas renderer, LSH near-dup detection, async jobs with signature caches.
   already vectorized). Complexity: medium — the argmax/tie/mixed-snapshot
   details are the whole job.
 
+<!-- item-sep -->
+
 - **Single-fetch audio player** — selecting an audio clip downloads the file
   **twice** and decodes it every time: the `<audio>` element streams
   `/api/medias/{id}/audio`
@@ -201,6 +186,8 @@ canvas renderer, LSH near-dup detection, async jobs with signature caches.
   **Files touched:** `audio-player.component.{ts,html,spec.ts}`,
   `vtsearch/routes/media/list.py` (ETag), maybe a tiny peaks-cache service.
   Impact: high for audio-heavy voting. Complexity: medium.
+
+<!-- item-sep -->
 
 - **Virtualized label piles** — the right-panel Good/Bad piles render **every**
   labeled item as DOM with a plain `@for`
@@ -233,6 +220,8 @@ canvas renderer, LSH near-dup detection, async jobs with signature caches.
   Impact: medium-high for large labelsets. Complexity: medium.
 
 ## Tier 3 — worthwhile, more design judgment needed
+
+<!-- item-sep -->
 
 - **Non-blocking labeling status** — `/api/labeling-status` (a GET the
   frontend polls every 2 s during labeling — `label-view.component.ts:554`)
@@ -272,6 +261,8 @@ canvas renderer, LSH near-dup detection, async jobs with signature caches.
   `vtscore/detectors/labeling_progress.py`, schema file under
   `vtsearch/schemas/`.
   Impact: medium (removes post-vote request-thread stalls). Complexity: medium.
+
+<!-- item-sep -->
 
 - **Micro-fix grab bag** — small independent cleanups; shippable as one PR or
   folded into neighboring work. Each is verified real but individually minor:
