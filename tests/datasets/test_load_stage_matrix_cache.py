@@ -116,7 +116,7 @@ class TestDropNoneEmbeddingsStage:
     forces an always-False threshold compare so the media silently lands
     in negative_hits with a NaN score (and ``NaN`` in the JSON response).
     The drop stage in ``_run_origin_load_in_background`` ensures None
-    embeddings never reach the matrix builder, dedup, diversity tree,
+    embeddings never reach the matrix builder, dedup, coverage atlas,
     or registry; and surfaces the dropped count to the user via the
     progress tracker so the load row reflects the real N.
     """

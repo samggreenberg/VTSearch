@@ -280,8 +280,8 @@ export function formatProgressHeader(
   } else if (/duplicates/i.test(message)) {
     phase = 'removing duplicates';
     subtitle = 'Collapsing media that share the same content fingerprint.';
-  } else if (/diversity/i.test(message)) {
-    phase = 'building diversity index';
+  } else if (/coverage atlas|diversity/i.test(message)) {
+    phase = 'building coverage atlas';
     subtitle = 'Indexing for fast diverse browsing and autopilot guidance.';
   } else if (/projection|tile pyramid/i.test(message)) {
     phase = 'building map';

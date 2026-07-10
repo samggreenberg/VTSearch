@@ -780,15 +780,15 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       ? Object.fromEntries(sortOrder.map((s) => [String(s.id), s.score]))
       : undefined;
     this.sortingApi
-      .getDiversityTreeNext(scores, this.sortState.threshold ?? undefined)
+      .getCoverageAtlasNext(scores, this.sortState.threshold ?? undefined)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response) => {
           if (response.id !== null) {
             this.mediaState.selectMedia(response.id);
           }
-          if (typeof response.diversity_level === 'number') {
-            this.autopilotStateService.updateDiversityLevel(response.diversity_level);
+          if (typeof response.coverage_level === 'number') {
+            this.autopilotStateService.updateDiversityLevel(response.coverage_level);
           }
         },
       });

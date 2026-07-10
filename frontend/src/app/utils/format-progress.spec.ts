@@ -106,7 +106,7 @@ describe('formatProgressHeader step-4 finalize phases', () => {
     ['Saving to registry…', 'saving dataset'],
     ['Serializing dataset…', 'saving dataset'],
     ['Packaging dataset…', 'saving dataset'],
-    ['Building diversity index…', 'building diversity index'],
+    ['Building coverage atlas…', 'building coverage atlas'],
     ['Building 2-D projection…', 'building map'],
     ['Building tile pyramid…', 'building map'],
     ['Dropped 3 item(s) with failed embedding…', 'cleaning up'],

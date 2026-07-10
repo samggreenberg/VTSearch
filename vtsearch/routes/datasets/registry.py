@@ -17,6 +17,7 @@ Endpoints
 GET    /api/datasets/registry                       List datasets visible to the user.
 POST   /api/datasets/registry/<id>/load             Load a registered dataset from its pkl.
 POST   /api/datasets/registry/<id>/coverage-atlas   Build the coverage atlas on demand (large datasets).
+GET    /api/datasets/registry/<id>/domain-shift     Typicality of the active dataset under <id>'s atlas.
 POST   /api/datasets/registry/<id>/unload           Unload a dataset from memory.
 DELETE /api/datasets/registry/<id>                  Remove a dataset from the registry.
 PUT    /api/datasets/registry/<id>/rename           Rename a registered dataset.
@@ -50,6 +51,7 @@ from vtscore.datasets.registry import (
     update_dataset as _reg_update,
 )
 from vtsearch.schemas.datasets import (
+    DatasetDomainShiftResponseSchema,
     DatasetRegistryLoadResponseSchema,
     DatasetRegistryPreloadEmbedderResponseSchema,
     DatasetRegistryReadersRequestSchema,
@@ -414,8 +416,76 @@ def build_dataset_coverage_atlas(dataset_id: str):
 
     from vtsearch.threading import spawn
 
-    spawn(build_task, name=f"divtree-{dataset_id[:8]}")
-    return {"ok": True, "message": "Diversity index build started", "task_id": str(task_id)}
+    spawn(build_task, name=f"atlas-{dataset_id[:8]}")
+    return {"ok": True, "message": "Coverage atlas build started", "task_id": str(task_id)}
+
+
+@datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/domain-shift", methods=["GET"])
+@datasets_registry_bp.response(200, DatasetDomainShiftResponseSchema)
+@datasets_registry_bp.alt_response(
+    400,
+    description="Reference dataset has no coverage atlas, embedders differ, or the active dataset has no embeddings.",
+)
+@datasets_registry_bp.alt_response(403, description="Access denied for the current user.")
+@datasets_registry_bp.alt_response(404, description="Dataset not found.")
+def dataset_domain_shift(dataset_id: str):
+    """Report domain shift of the active dataset against *dataset_id*'s atlas.
+
+    *dataset_id* names the **reference** dataset — the one a detector was
+    trained on.  Its coverage atlas is queried with every embedding of the
+    **active** dataset (the ``X-Dataset-Id`` header), yielding calibrated
+    typicality p-values.  The response summarises them: ``frac_atypical``
+    is roughly the proportion of the active dataset that lies outside the
+    reference domain, and ``shifted`` is the headline verdict.  Use it
+    before trusting a detector trained on *dataset_id* against the active
+    dataset without hands-on verification.
+    """
+    import numpy as np
+
+    from vtsearch.auth import get_current_user
+    from vtsearch.state import get_active_context, get_context
+    from vtscore.embedding.media_vectors import media_embedding
+    from vtscore.state.coverage_atlas import domain_shift_report
+
+    entry = _reg_get(dataset_id)
+    if entry is None:
+        abort(404, message="Dataset not found in registry")
+    if not _reg_can_access(dataset_id, get_current_user()):
+        abort(403, message="Access denied")
+    ref_ctx = get_context(dataset_id)
+    if ref_ctx is None:
+        abort(400, message="Load the reference dataset before running a domain-shift check")
+    atlas = ref_ctx.coverage_atlas
+    if atlas is None:
+        abort(400, message="Reference dataset has no coverage atlas; build it first")
+
+    active_ctx = get_active_context()
+    if active_ctx.dataset_id == dataset_id:
+        abort(400, message="Active dataset and reference dataset are the same")
+    # Typicality p-values are meaningless across embedding spaces: refuse
+    # instead of returning confident nonsense (the atlas geometry is stamped
+    # by its dataset's embedder).
+    active_entry = _reg_get(active_ctx.dataset_id)
+    ref_embedder = entry.get("embedder", "")
+    active_embedder = (active_entry or {}).get("embedder", "")
+    if ref_embedder != active_embedder:
+        abort(
+            400,
+            message=(
+                f"Embedder mismatch: reference uses {ref_embedder or 'unknown'!r}, "
+                f"active dataset uses {active_embedder or 'unknown'!r}"
+            ),
+        )
+
+    vectors = [
+        np.asarray(emb, dtype=np.float32)
+        for media in active_ctx.medias.values()
+        if (emb := media_embedding(media)) is not None
+    ]
+    if not vectors:
+        abort(400, message="Active dataset has no embeddings to compare")
+    report = domain_shift_report(atlas, np.stack(vectors))
+    return {"reference_dataset_id": dataset_id, **report}
 
 
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/unload", methods=["POST"])

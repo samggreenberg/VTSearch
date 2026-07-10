@@ -47,14 +47,14 @@ class TestPromoteToDataset:
         promoted_origins = {(m.get("origin_name") or m.get("filename")) for m in roundtrip.values()}
         assert promoted_origins == original_origins
 
-    def test_caches_diversity_tree_in_pickle(self, client):
-        """The promoted pickle carries a cached diversity tree so reopening it
-        restores the tree instead of rebuilding it (hierarchical k-means) on
+    def test_caches_coverage_atlas_in_pickle(self, client):
+        """The promoted pickle carries a cached coverage atlas so reopening it
+        restores the atlas instead of rebuilding it (hierarchical k-means) on
         every reload. The subset's renumbered IDs must match the cache exactly.
         """
         from vtscore.datasets import registry as reg
         from vtscore.datasets.loader import load_dataset_from_pickle
-        from vtscore.state import restore_diversity_tree_from_cache
+        from vtscore.state import restore_coverage_atlas_from_cache
         from vtscore.state.core import DatasetContext
         from vtsearch.state import snapshot_medias
 
@@ -62,7 +62,7 @@ class TestPromoteToDataset:
         assert len(ids) >= 1
         resp = client.post(
             "/api/dataset/promote",
-            json={"name": "Cached Tree", "media_ids": ids},
+            json={"name": "Cached Atlas", "media_ids": ids},
         )
         assert resp.status_code == 200, resp.get_json()
         entry = reg.get_dataset(resp.get_json()["dataset_id"])
@@ -70,12 +70,12 @@ class TestPromoteToDataset:
 
         roundtrip: dict = {}
         cached = load_dataset_from_pickle(entry["pkl_path"], roundtrip)
-        # A tree payload was written, and it restores cleanly onto the reloaded
+        # An atlas payload was written, and it restores cleanly onto the reloaded
         # (renumbered) medias — i.e. no rebuild is needed on reload.
-        assert cached is not None, "promote should cache a diversity tree in the pickle"
+        assert cached is not None, "promote should cache a coverage atlas in the pickle"
         ctx = DatasetContext("reload")
         ctx.medias = roundtrip
-        assert restore_diversity_tree_from_cache(ctx, cached) is True
+        assert restore_coverage_atlas_from_cache(ctx, cached) is True
 
     def test_renumbers_ids_from_one(self, client):
         from vtscore.datasets import registry as reg

@@ -903,6 +903,27 @@
         ],
         "type": "object"
       },
+      "CoverageAtlasNextResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "coverage_level": {
+            "type": "integer"
+          },
+          "exhausted": {
+            "type": "boolean"
+          },
+          "id": {
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "coverage_level",
+          "exhausted",
+          "id"
+        ],
+        "type": "object"
+      },
       "DashboardDatasetInfoResponse": {
         "additionalProperties": false,
         "properties": {
@@ -1079,6 +1100,46 @@
         },
         "required": [
           "datasets"
+        ],
+        "type": "object"
+      },
+      "DatasetDomainShiftResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "alpha": {
+            "type": "number"
+          },
+          "expected_atypical": {
+            "type": "number"
+          },
+          "frac_atypical": {
+            "type": "number"
+          },
+          "median_pvalue": {
+            "type": "number"
+          },
+          "n_items": {
+            "type": "integer"
+          },
+          "reference_dataset_id": {
+            "type": "string"
+          },
+          "shifted": {
+            "type": "boolean"
+          },
+          "z_score": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "alpha",
+          "expected_atypical",
+          "frac_atypical",
+          "median_pvalue",
+          "n_items",
+          "reference_dataset_id",
+          "shifted",
+          "z_score"
         ],
         "type": "object"
       },
@@ -2444,27 +2505,6 @@
         },
         "required": [
           "detectors"
-        ],
-        "type": "object"
-      },
-      "DiversityTreeNextResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "diversity_level": {
-            "type": "integer"
-          },
-          "exhausted": {
-            "type": "boolean"
-          },
-          "id": {
-            "nullable": true,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "diversity_level",
-          "exhausted",
-          "id"
         ],
         "type": "object"
       },
@@ -7709,6 +7749,60 @@
         ]
       }
     },
+    "/api/coverage-atlas/next": {
+      "get": {
+        "description": "Accepts an optional POST body with ``{\"scores\": {id: score, ...},\n\"threshold\": <float>}`` so the sort mode influences which element is\npicked from the next evidence-free node.  When a threshold is provided,\nthe node's median score determines direction: above-threshold nodes yield\nthe lowest-scored element (surprise in a \"good\" region), while\nbelow-threshold nodes yield the highest-scored element (surprise in a\n\"bad\" region).  Without scores the node's most typical element is\nreturned.\n\nReturns ``{\"id\": <media_id>}`` or ``{\"id\": null}`` when the atlas is\nexhausted or not yet built.  Also includes ``coverage_level`` (the\nnumber of consecutive BFS-order evidence-bearing nodes) so the frontend\ncan display progress, and ``exhausted`` (bool) which is true when the\natlas exists but every node already carries evidence.",
+        "operationId": "coverage_atlas_next_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageAtlasNextResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Invalid score keys/values or threshold value (POST only)."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return the next diverse sample from the Coverage Atlas.",
+        "tags": [
+          "sorting"
+        ]
+      },
+      "post": {
+        "description": "Accepts an optional POST body with ``{\"scores\": {id: score, ...},\n\"threshold\": <float>}`` so the sort mode influences which element is\npicked from the next evidence-free node.  When a threshold is provided,\nthe node's median score determines direction: above-threshold nodes yield\nthe lowest-scored element (surprise in a \"good\" region), while\nbelow-threshold nodes yield the highest-scored element (surprise in a\n\"bad\" region).  Without scores the node's most typical element is\nreturned.\n\nReturns ``{\"id\": <media_id>}`` or ``{\"id\": null}`` when the atlas is\nexhausted or not yet built.  Also includes ``coverage_level`` (the\nnumber of consecutive BFS-order evidence-bearing nodes) so the frontend\ncan display progress, and ``exhausted`` (bool) which is true when the\natlas exists but every node already carries evidence.",
+        "operationId": "coverage_atlas_next_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageAtlasNextResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Invalid score keys/values or threshold value (POST only)."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return the next diverse sample from the Coverage Atlas.",
+        "tags": [
+          "sorting"
+        ]
+      }
+    },
     "/api/dashboard/dataset-info": {
       "get": {
         "description": "Returns a JSON object with ``name``, ``num_medias``, ``media_type``, and\n``origin`` extracted from the first media that has origin info.",
@@ -9338,7 +9432,7 @@
         }
       ]
     },
-    "/api/datasets/registry/{dataset_id}/diversity-tree": {
+    "/api/datasets/registry/{dataset_id}/coverage-atlas": {
       "parameters": [
         {
           "in": "path",
@@ -9351,8 +9445,8 @@
         }
       ],
       "post": {
-        "description": "Datasets past ``should_auto_build_diversity_tree`` skip the automatic build\nat load time so they load fast; this endpoint lets the user trigger that\nbuild on demand.  The dataset must already be loaded in memory.  Progress\nis reported via ``/api/progress`` under the returned ``task_id``; the build\nis cancellable.  Calling it on a dataset that already has a tree rebuilds\nit from scratch.",
-        "operationId": "build_dataset_diversity_tree",
+        "description": "Datasets past ``should_auto_build_coverage_atlas`` skip the automatic build\nat load time so they load fast; this endpoint lets the user trigger that\nbuild on demand.  The dataset must already be loaded in memory.  Progress\nis reported via ``/api/progress`` under the returned ``task_id``; the build\nis cancellable.  Calling it on a dataset that already has a tree rebuilds\nit from scratch.",
+        "operationId": "build_dataset_coverage_atlas",
         "responses": {
           "200": {
             "content": {
@@ -9377,11 +9471,56 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Build the diversity index for a loaded dataset in a background thread.",
+        "summary": "Build the coverage atlas for a loaded dataset in a background thread.",
         "tags": [
           "datasets_registry"
         ]
       }
+    },
+    "/api/datasets/registry/{dataset_id}/domain-shift": {
+      "get": {
+        "description": "*dataset_id* names the **reference** dataset \u2014 the one a detector was\ntrained on.  Its coverage atlas is queried with every embedding of the\n**active** dataset (the ``X-Dataset-Id`` header), yielding calibrated\ntypicality p-values.  The response summarises them: ``frac_atypical``\nis roughly the proportion of the active dataset that lies outside the\nreference domain, and ``shifted`` is the headline verdict.  Use it\nbefore trusting a detector trained on *dataset_id* against the active\ndataset without hands-on verification.",
+        "operationId": "dataset_domain_shift",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetDomainShiftResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Reference dataset has no coverage atlas, embedders differ, or the active dataset has no embeddings."
+          },
+          "403": {
+            "description": "Access denied for the current user."
+          },
+          "404": {
+            "description": "Dataset not found."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Report domain shift of the active dataset against *dataset_id*'s atlas.",
+        "tags": [
+          "datasets_registry"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "dataset_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ]
     },
     "/api/datasets/registry/{dataset_id}/load": {
       "parameters": [
@@ -11142,60 +11281,6 @@
         "summary": "Rename a detector.",
         "tags": [
           "detectors_crud"
-        ]
-      }
-    },
-    "/api/diversity-tree/next": {
-      "get": {
-        "description": "Accepts an optional POST body with ``{\"scores\": {id: score, ...},\n\"threshold\": <float>}`` so the sort mode influences which element is\npicked from the next unseen node.  When a threshold is provided, the\nnode's median score determines direction: above-threshold nodes yield\nthe lowest-scored element (surprise in a \"good\" region), while\nbelow-threshold nodes yield the highest-scored element (surprise in a\n\"bad\" region).  Without scores the first element in the node is returned.\n\nReturns ``{\"id\": <media_id>}`` or ``{\"id\": null}`` when the tree is\nexhausted or not yet built.  Also includes ``diversity_level`` (the\nnumber of consecutive BFS-order seen nodes) so the frontend can display\nprogress, and ``exhausted`` (bool) which is true when the tree exists\nbut every node has already been seen.",
-        "operationId": "diversity_tree_next_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DiversityTreeNextResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "description": "Invalid score keys/values or threshold value (POST only)."
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Return the next diverse sample from the Diversity Tree.",
-        "tags": [
-          "sorting"
-        ]
-      },
-      "post": {
-        "description": "Accepts an optional POST body with ``{\"scores\": {id: score, ...},\n\"threshold\": <float>}`` so the sort mode influences which element is\npicked from the next unseen node.  When a threshold is provided, the\nnode's median score determines direction: above-threshold nodes yield\nthe lowest-scored element (surprise in a \"good\" region), while\nbelow-threshold nodes yield the highest-scored element (surprise in a\n\"bad\" region).  Without scores the first element in the node is returned.\n\nReturns ``{\"id\": <media_id>}`` or ``{\"id\": null}`` when the tree is\nexhausted or not yet built.  Also includes ``diversity_level`` (the\nnumber of consecutive BFS-order seen nodes) so the frontend can display\nprogress, and ``exhausted`` (bool) which is true when the tree exists\nbut every node has already been seen.",
-        "operationId": "diversity_tree_next_post",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DiversityTreeNextResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "description": "Invalid score keys/values or threshold value (POST only)."
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Return the next diverse sample from the Diversity Tree.",
-        "tags": [
-          "sorting"
         ]
       }
     },
@@ -14377,7 +14462,7 @@
       "name": "medias"
     },
     {
-      "description": "Text / example / learned sort, votes, inclusion, safe-thresholds, diversity tree.",
+      "description": "Text / example / learned sort, votes, inclusion, safe-thresholds, coverage atlas.",
       "name": "sorting"
     },
     {

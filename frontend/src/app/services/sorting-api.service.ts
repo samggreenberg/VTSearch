@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
-import type { DiversityTreeNextResponse } from '../generated/api-client/models/diversity-tree-next-response';
+import type { CoverageAtlasNextResponse } from '../generated/api-client/models/coverage-atlas-next-response';
 import type { EvalTrainAndScoreCancelResponse } from '../generated/api-client/models/eval-train-and-score-cancel-response';
 import type { EvalTrainAndScoreResponse } from '../generated/api-client/models/eval-train-and-score-response';
 import type { ExampleSortResponse } from '../generated/api-client/models/example-sort-response';
@@ -26,7 +26,7 @@ import type { ServerMediaUploadResponse } from '../generated/api-client/models/s
 import type { SortResponse } from '../generated/api-client/models/sort-response';
 import type { TextsortSuggestionsResponse } from '../generated/api-client/models/textsort-suggestions-response';
 import type { VotesResponse } from '../generated/api-client/models/votes-response';
-import { diversityTreeNextGet } from '../generated/api-client/fn/sorting/diversity-tree-next-get';
+import { coverageAtlasNextGet } from '../generated/api-client/fn/sorting/coverage-atlas-next-get';
 import { getInclusionRoute } from '../generated/api-client/fn/sorting/get-inclusion-route';
 import { setInclusionRoute } from '../generated/api-client/fn/sorting/set-inclusion-route';
 import { cancelLearnedSort } from '../generated/api-client/fn/sorting/cancel-learned-sort';
@@ -276,14 +276,14 @@ export class SortingApiService {
    *  intentionally omits that body so GET and POST share one declaration, so
    *  the POST call stays on plain ``HttpClient``.  The GET branch uses the
    *  generated function. */
-  getDiversityTreeNext(
+  getCoverageAtlasNext(
     scores?: Record<string, number>,
     threshold?: number,
-  ): Observable<DiversityTreeNextResponse> {
+  ): Observable<CoverageAtlasNextResponse> {
     if (scores) {
-      return this.http.post<DiversityTreeNextResponse>('/api/diversity-tree/next', { scores, threshold });
+      return this.http.post<CoverageAtlasNextResponse>('/api/coverage-atlas/next', { scores, threshold });
     }
-    return diversityTreeNextGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return coverageAtlasNextGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   /** Kick off an eval train-and-score job.  Like {@link learnedSort}, the

@@ -474,7 +474,7 @@ class TestRequestMissingSentinel:
             with pytest.raises(RequestMissingContextError):
                 ctx.medias[42] = {"id": 42, "media_type": "audio"}
             with pytest.raises(RequestMissingContextError):
-                ctx.diversity_tree = object()
+                ctx.coverage_atlas = object()
 
     def test_detector_sentinel_mutation_raises(self, client):
         """Writing into the sentinel's vote dicts raises
