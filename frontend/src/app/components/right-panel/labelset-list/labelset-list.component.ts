@@ -3,8 +3,9 @@ import { CommonModule } from '@angular/common';
 import type { DetectorLabelView } from '../../../generated/api-client/models/detector-label-view';
 import { LabelSortMode } from '../label-sort/label-sort.component';
 import { DetectorsCrudApiService } from '../../../services/detectors-crud-api.service';
+import { THUMBNAIL_MEDIA_TYPES, VoteGridComponent, VoteGridEntry } from '../vote-grid/vote-grid.component';
 
-interface SortedElement extends DetectorLabelView {
+interface SortedElement extends DetectorLabelView, VoteGridEntry {
   confidence: number;
 }
 
@@ -12,7 +13,7 @@ interface SortedElement extends DetectorLabelView {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-labelset-list',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, VoteGridComponent],
   templateUrl: './labelset-list.component.html',
   styleUrls: ['../label-list/label-list.component.scss'],
 })
@@ -32,7 +33,6 @@ export class LabelsetListComponent implements OnChanges {
 }>();
 
   sortedEntries: SortedElement[] = [];
-  private thumbnailFailedUrls = new Set<string>();
 
   ngOnChanges(_changes: SimpleChanges): void {
     this.sortedEntries = this.buildSorted();
@@ -41,9 +41,28 @@ export class LabelsetListComponent implements OnChanges {
   private buildSorted(): SortedElement[] {
     const entries: SortedElement[] = this.elements().map((e) => ({
       ...e,
+      key: e.id,
       confidence: e.score >= 0 ? (this.label() === 'good' ? e.score : 1 - e.score) : -1,
+      thumbnailUrl: this.buildThumbnailUrl(e),
+      fallbackIcon: e.media_type === 'audio' ? '♫' : e.media_type === 'text' ? '¶' : '□',
+      missing: e.cid === null || e.cid === undefined,
     }));
     return this.sortEntries(entries);
+  }
+
+  private buildThumbnailUrl(entry: DetectorLabelView): string {
+    const modelName = this.modelName();
+    if (!modelName || !THUMBNAIL_MEDIA_TYPES.has(entry.media_type)) return '';
+    let url = this.detectorsCrudApi.labelThumbnailUrl(modelName, entry.id);
+    // The route crops to the element's stored region box server-side; fold the
+    // box into the URL so a re-vote with a different box busts the cached tile
+    // (the box coords aren't otherwise part of the URL).
+    const box = entry.region_box;
+    if (box && box.length === 4) {
+      const sep = url.includes('?') ? '&' : '?';
+      url += `${sep}region=${box.map((v) => v.toFixed(4)).join(',')}`;
+    }
+    return url;
   }
 
   private sortEntries(entries: SortedElement[]): SortedElement[] {
@@ -75,76 +94,11 @@ export class LabelsetListComponent implements OnChanges {
     return sorted;
   }
 
-  hasThumbnailUrl(entry: DetectorLabelView): boolean {
-    const url = this.thumbnailUrl(entry);
-    if (url && this.thumbnailFailedUrls.has(url)) return false;
-    return (
-      entry.media_type === 'image' ||
-      entry.media_type === 'video' ||
-      entry.media_type === 'document' ||
-      entry.media_type === 'audio'
-    );
+  onEntrySelected(entry: VoteGridEntry): void {
+    this.elementSelected.emit(entry as SortedElement);
   }
 
-  thumbnailUrl(entry: DetectorLabelView): string {
-    const modelName = this.modelName();
-    if (!modelName) return '';
-    let url = this.detectorsCrudApi.labelThumbnailUrl(modelName, entry.id);
-    // The route crops to the element's stored region box server-side; fold the
-    // box into the URL so a re-vote with a different box busts the cached tile
-    // (the box coords aren't otherwise part of the URL).
-    const box = entry.region_box;
-    if (box && box.length === 4) {
-      const sep = url.includes('?') ? '&' : '?';
-      url += `${sep}region=${box.map((v) => v.toFixed(4)).join(',')}`;
-    }
-    return url;
-  }
-
-  onThumbnailError(url: string): void {
-    if (url) this.thumbnailFailedUrls.add(url);
-  }
-
-  placeholderIcon(entry: DetectorLabelView): string | null {
-    if (this.hasThumbnailUrl(entry)) return null;
-    if (entry.media_type === 'audio') return '♫';
-    if (entry.media_type === 'text') return '¶';
-    return '□';
-  }
-
-  isMissing(entry: DetectorLabelView): boolean {
-    return entry.cid === null || entry.cid === undefined;
-  }
-
-  onEntryClick(entry: DetectorLabelView): void {
-    if (this.focusMode() === 'hover') {
-      this.elementVote.emit({ id: entry.id, vote: 'bad' });
-    } else {
-      this.elementSelected.emit(entry);
-    }
-  }
-
-  onEntryContextMenu(event: MouseEvent, entry: DetectorLabelView): void {
-    if (this.focusMode() === 'hover') {
-      event.preventDefault();
-      this.elementVote.emit({ id: entry.id, vote: 'good' });
-    }
-  }
-
-  onEntryMouseEnter(entry: DetectorLabelView): void {
-    if (this.focusMode() === 'hover') {
-      this.elementSelected.emit(entry);
-    }
-  }
-
-  onEntryKeydown(event: KeyboardEvent, entry: DetectorLabelView): void {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      this.elementSelected.emit(entry);
-    }
-  }
-
-  trackById(_index: number, entry: SortedElement): string {
-    return entry.id;
+  onEntryVote(event: { entry: VoteGridEntry; vote: 'good' | 'bad' }): void {
+    this.elementVote.emit({ id: event.entry.key, vote: event.vote });
   }
 }

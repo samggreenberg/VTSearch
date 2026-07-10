@@ -1,0 +1,123 @@
+:host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+// Shared scroll container for both render modes. `snapPanelWidthToGridColumns`
+// (grid-icon-size.ts) matches `.vote-list` and reads the inline
+// --grid-goal-width from it, so both the plain grid and the CDK viewport keep
+// this class and that style.
+.vote-list {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  flex: 1;
+  min-height: 0;
+}
+
+.vote-list-plain {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--grid-goal-width, 80px));
+  gap: var(--space-xs);
+  align-content: start;
+  justify-content: end;
+}
+
+// Virtualized pile: each CDK item is a single row of cells laid out with a
+// fixed column template, so only on-screen rows are mounted. Same gap and
+// right-alignment as the plain grid.
+.vote-grid-row {
+  display: grid;
+  gap: var(--space-xs);
+  align-content: start;
+  justify-content: end;
+  box-sizing: border-box;
+}
+
+.vote-entry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-xs);
+  gap: var(--space-2xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  color: var(--text-vote);
+  line-height: 1.3;
+  // Query container so the name can hide itself at small icon sizes (below).
+  container-type: inline-size;
+  container-name: vote-cell;
+
+  &:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+}
+
+.vote-entry-missing {
+  outline: 1px solid var(--missing-border);
+  outline-offset: -1px;
+  border-radius: var(--radius-sm);
+}
+
+.vote-thumbnail-wrap {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  min-height: 0;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.vote-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  display: block;
+}
+
+.vote-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  font-size: var(--font-3xl);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.vote-name-grid {
+  font-size: var(--font-2xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+  text-align: center;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
+// At the two smallest icon sizes (XS/S, ~42px content-box) the name truncates to
+// a useless "a…", so hide it and let the grid pack tighter. M and up keep it.
+@container vote-cell (max-width: 60px) {
+  .vote-name-grid {
+    display: none;
+  }
+}

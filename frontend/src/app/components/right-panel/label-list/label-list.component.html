@@ -10,29 +10,12 @@
     </div>
     <ng-content select="[list-actions]"></ng-content>
   </div>
-  <div class="vote-list" [style.--grid-goal-width]="gridGoalWidth() + 'px'">
-    @for (entry of sortedEntries(); track trackById($index, entry)) {
-      <div
-        class="vote-entry"
-        [class.vote-entry-missing]="isMissing(entry.id)"
-        [attr.title]="isMissing(entry.id) ? entry.name + ' (not in the current dataset)' : null"
-        role="button"
-        tabindex="0"
-        [attr.aria-label]="(label === 'good' ? 'Good' : 'Bad') + ': ' + entry.name + (isMissing(entry.id) ? ' (not in current dataset)' : '')"
-        (click)="onEntryClick(entry.id)"
-        (contextmenu)="onEntryContextMenu($event, entry.id)"
-        (mouseenter)="onEntryMouseEnter(entry.id)"
-        (keydown)="onEntryKeydown($event, entry.id)"
-      >
-        @if (hasThumbnailUrl(entry.id)) {
-          <span class="vote-thumbnail-wrap">
-            <img class="vote-thumbnail" [src]="thumbnailUrl(entry.id)" [alt]="entry.name" loading="lazy" (error)="onThumbnailError(thumbnailUrl(entry.id))" />
-          </span>
-        } @else if (placeholderIcon(entry.id)) {
-          <span class="vote-placeholder">{{ placeholderIcon(entry.id) }}</span>
-        }
-        <span class="vote-name-grid">{{ entry.name }}</span>
-      </div>
-    }
-  </div>
+  <vt-vote-grid
+    [entries]="sortedEntries()"
+    [label]="label"
+    [gridGoalWidth]="gridGoalWidth()"
+    [focusMode]="focusMode()"
+    (entrySelected)="onEntrySelected($event)"
+    (entryVote)="onEntryVote($event)"
+  />
 </div>
