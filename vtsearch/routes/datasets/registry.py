@@ -16,7 +16,7 @@ Endpoints
 ---------
 GET    /api/datasets/registry                       List datasets visible to the user.
 POST   /api/datasets/registry/<id>/load             Load a registered dataset from its pkl.
-POST   /api/datasets/registry/<id>/diversity-tree   Build the diversity index on demand (large datasets).
+POST   /api/datasets/registry/<id>/coverage-atlas   Build the coverage atlas on demand (large datasets).
 POST   /api/datasets/registry/<id>/unload           Unload a dataset from memory.
 DELETE /api/datasets/registry/<id>                  Remove a dataset from the registry.
 PUT    /api/datasets/registry/<id>/rename           Rename a registered dataset.
@@ -140,9 +140,9 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     from vtsearch.auth import get_current_user
     from vtscore.concurrency.progress import clear_thread_progress, set_thread_progress
     from vtsearch.state import (
-        build_diversity_tree_for_context,
-        restore_diversity_tree_from_cache,
-        should_auto_build_diversity_tree,
+        build_coverage_atlas_for_context,
+        restore_coverage_atlas_from_cache,
+        should_auto_build_coverage_atlas,
     )
 
     entry = _reg_get(dataset_id)
@@ -180,7 +180,7 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
         _reg_end_load(dataset_id)
         abort(404, message=f"Saved dataset file not found: {pkl_path}")
 
-    _LOAD_STEPS = 2  # step 1: load items (read + dedup); step 2: diversity index
+    _LOAD_STEPS = 2  # step 1: load items (read + dedup); step 2: coverage atlas
 
     # Create a per-task tracker for this load operation.
     tracker = _loading_tasks.create_task(
@@ -192,7 +192,7 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     )
     # Pace the unified bar against the real phase split. Step 1 (pickle read +
     # convert + the near-instant exact-dedup) is seconds at most; step 2 is the
-    # diversity index, which is instant when the cached tree restores but a
+    # coverage atlas, which is instant when the cached atlas restores but a
     # minutes-long hierarchical-k-means rebuild when it doesn't. Weighting step 2
     # as the dominant slice keeps a rebuild advancing the bar across its whole
     # span instead of the old equal split, where the instant dedup drove step 2
@@ -231,7 +231,7 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                     )
                 )
                 try:
-                    cached_diversity_tree = load_dataset_from_pickle(
+                    cached_coverage_atlas = load_dataset_from_pickle(
                         Path(pkl_path), ctx.medias, on_progress=_pickle_progress
                     )
                 finally:
@@ -242,7 +242,7 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                 # Exact-MD5 dedup is part of loading (step 1): the pickle was
                 # already deduped at import, so on reload this is a near-instant
                 # no-op — keeping it out of step 2 stops it from pre-filling the
-                # diversity slice and freezing the bar (see set_step_weights).
+                # coverage slice and freezing the bar (see set_step_weights).
                 def _dedup_progress(current: int, total: int) -> None:
                     tracker.check_cancelled()
                     tracker.update(
@@ -258,29 +258,29 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                 collapse_duplicates(ctx.medias, on_progress=_dedup_progress)
                 invalidate_embedding_matrix(ctx)
 
-                def _diversity_progress(current: int, total: int) -> None:
+                def _coverage_progress(current: int, total: int) -> None:
                     tracker.check_cancelled()
                     tracker.update(
                         "loading",
-                        "Building diversity index…",
+                        "Building coverage atlas…",
                         current=current,
                         total=total,
                         step=2,
                         total_steps=_LOAD_STEPS,
                     )
 
-                # Reuse the diversity tree cached in the pickle when its vector
+                # Reuse the coverage atlas cached in the pickle when its vector
                 # set still matches the (post-dedup) medias; only rebuild the
                 # hierarchical k-means from scratch when there is no usable
                 # cache (older pickles, or a media set that shifted on load).
                 # Past the auto-build threshold a missing cache is left absent -
                 # the build would cost minutes/GBs and the user can trigger it
-                # on demand via the diversity-tree endpoint.
-                if not restore_diversity_tree_from_cache(ctx, cached_diversity_tree):
-                    if should_auto_build_diversity_tree(len(ctx.medias)):
-                        _diversity_progress(0, 0)
-                        build_diversity_tree_for_context(ctx, on_progress=_diversity_progress)
-                # Fill the diversity slice to completion in every branch (cache
+                # on demand via the coverage-atlas endpoint.
+                if not restore_coverage_atlas_from_cache(ctx, cached_coverage_atlas):
+                    if should_auto_build_coverage_atlas(len(ctx.medias)):
+                        _coverage_progress(0, 0)
+                        build_coverage_atlas_for_context(ctx, on_progress=_coverage_progress)
+                # Fill the coverage slice to completion in every branch (cache
                 # restore, rebuild, or deferred-above-threshold) so the unified
                 # bar reaches 100% cleanly instead of stalling at the step-1
                 # boundary when the tree restored without emitting any progress.
@@ -332,15 +332,15 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
 
-@datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/diversity-tree", methods=["POST"])
+@datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/coverage-atlas", methods=["POST"])
 @datasets_registry_bp.response(200, DatasetRegistryLoadResponseSchema)
 @datasets_registry_bp.alt_response(400, description="Dataset is not currently loaded.")
 @datasets_registry_bp.alt_response(403, description="Access denied for the current user.")
 @datasets_registry_bp.alt_response(404, description="Dataset not found.")
-def build_dataset_diversity_tree(dataset_id: str):
-    """Build the diversity index for a loaded dataset in a background thread.
+def build_dataset_coverage_atlas(dataset_id: str):
+    """Build the coverage atlas for a loaded dataset in a background thread.
 
-    Datasets past ``should_auto_build_diversity_tree`` skip the automatic build
+    Datasets past ``should_auto_build_coverage_atlas`` skip the automatic build
     at load time so they load fast; this endpoint lets the user trigger that
     build on demand.  The dataset must already be loaded in memory.  Progress
     is reported via ``/api/progress`` under the returned ``task_id``; the build
@@ -349,10 +349,10 @@ def build_dataset_diversity_tree(dataset_id: str):
     """
     from vtsearch.auth import get_current_user
     from vtsearch.state import (
-        build_diversity_tree_for_context,
+        build_coverage_atlas_for_context,
         get_active_detector_context,
         get_context,
-        resync_diversity_tree_to_detector,
+        resync_coverage_atlas_to_detector,
     )
     from vtscore.state.core import _state_lock
 
@@ -362,13 +362,13 @@ def build_dataset_diversity_tree(dataset_id: str):
     if not _reg_can_access(dataset_id, get_current_user()):
         abort(403, message="Access denied")
     if not _reg_is_loaded(dataset_id):
-        abort(400, message="Load the dataset before building its diversity index")
+        abort(400, message="Load the dataset before building its coverage atlas")
 
     ctx = get_context(dataset_id)
     if ctx is None:
         abort(400, message="This dataset is not currently loaded")
 
-    task_id = f"_divtree_{dataset_id[:8]}"
+    task_id = f"_atlas_{dataset_id[:8]}"
     tracker = _loading_tasks.create_task(
         task_id,
         entry.get("name", dataset_id),
@@ -376,7 +376,7 @@ def build_dataset_diversity_tree(dataset_id: str):
         media_type=entry.get("media_type", ""),
         embedder=entry.get("embedder", ""),
     )
-    tracker.update("loading", "Building diversity index…", 0, 0, step=1, total_steps=1)
+    tracker.update("loading", "Building coverage atlas…", 0, 0, step=1, total_steps=1)
 
     _request_user = get_current_user()
 
@@ -388,10 +388,10 @@ def build_dataset_diversity_tree(dataset_id: str):
 
                 def _progress(current: int, total: int) -> None:
                     tracker.check_cancelled()
-                    tracker.update("loading", "Building diversity index…", current, total, step=1, total_steps=1)
+                    tracker.update("loading", "Building coverage atlas…", current, total, step=1, total_steps=1)
 
                 _progress(0, 0)
-                build_diversity_tree_for_context(ctx, on_progress=_progress)
+                build_coverage_atlas_for_context(ctx, on_progress=_progress)
 
                 # Replay the active detector's votes into the fresh tree when
                 # they belong to this dataset, so seen-state is correct right
@@ -399,15 +399,15 @@ def build_dataset_diversity_tree(dataset_id: str):
                 det_ctx = get_active_detector_context()
                 if det_ctx is not None and getattr(det_ctx, "votes_dataset_id", None) == dataset_id:
                     with _state_lock:
-                        resync_diversity_tree_to_detector(ctx, det_ctx)
+                        resync_coverage_atlas_to_detector(ctx, det_ctx)
             except CancelledError:
-                ctx.diversity_tree = None
+                ctx.coverage_atlas = None
                 tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
             except Exception as e:
                 import traceback as _tb
 
                 _tb.print_exc()
-                error_msg = str(e) or repr(e) or "Unknown error building diversity index"
+                error_msg = str(e) or repr(e) or "Unknown error building coverage atlas"
                 tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
             finally:
                 _loading_tasks.mark_finished(task_id)

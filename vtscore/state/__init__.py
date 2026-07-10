@@ -1,4 +1,4 @@
-"""Library-tier state package: contexts, votes, clicks, diversity, lookup.
+"""Library-tier state package: contexts, votes, clicks, coverage, lookup.
 
 The library-only API for the dataset / detector context system and its
 operations.  No Flask, no ``vtsearch.settings``, no proxy view - those
@@ -78,19 +78,19 @@ from vtscore.state.votes import (  # noqa: F401
     update_learned_scores,
 )
 
-# Re-export diversity tree --------------------------------------------------
-from vtscore.state.diversity import (  # noqa: F401
-    DIVERSITY_TREE_AUTO_THRESHOLD,
-    build_diversity_tree,
-    build_diversity_tree_for_context,
-    build_diversity_tree_serializable,
-    diversity_tree_label,
-    diversity_tree_next_sample,
-    diversity_tree_unlabel,
-    get_diversity_tree,
-    restore_diversity_tree_from_cache,
-    resync_diversity_tree_to_detector,
-    should_auto_build_diversity_tree,
+# Re-export coverage atlas ---------------------------------------------------
+from vtscore.state.coverage import (  # noqa: F401
+    COVERAGE_ATLAS_AUTO_THRESHOLD,
+    build_coverage_atlas,
+    build_coverage_atlas_for_context,
+    build_coverage_atlas_serializable,
+    coverage_atlas_label,
+    coverage_atlas_next_sample,
+    coverage_atlas_unlabel,
+    get_coverage_atlas,
+    restore_coverage_atlas_from_cache,
+    resync_coverage_atlas_to_detector,
+    should_auto_build_coverage_atlas,
 )
 
 # Re-export media lookup ----------------------------------------------------
@@ -139,7 +139,7 @@ def clear_medias() -> None:
     """Clear all loaded medias from the active dataset's context.
 
     Drops the cached embedding matrix, the 2-D projection + tile pyramids
-    (one per bin shape), diversity tree, dataset display name override, and
+    (one per bin shape), coverage atlas, dataset display name override, and
     the per-step progress model cache so RAM is released immediately rather
     than waiting for the next access.
 
@@ -163,7 +163,7 @@ def clear_medias() -> None:
         ctx._region_index_per_row = None
         ctx._projection = None
         ctx._pyramids = {}
-        ctx.diversity_tree = None
+        ctx.coverage_atlas = None
         ctx.dataset_display_name = None
     # ``_progress_lock`` is acquired strictly outside ``_state_lock`` so the
     # two locks never establish a cross-module ordering (audit M1).

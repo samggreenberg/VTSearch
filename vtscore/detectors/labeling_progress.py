@@ -19,7 +19,7 @@ function in this module.  Conversely, code inside ``_progress_lock`` must
 not call into anything that acquires ``_state_lock`` - including helpers
 on ``DatasetContext`` / ``DetectorContext`` that take the state lock,
 and any of the resolve-context-then-mutate functions in
-:mod:`vtscore.state.votes` / :mod:`vtscore.state.diversity`.  Holding
+:mod:`vtscore.state.votes` / :mod:`vtscore.state.coverage`.  Holding
 both locks in the opposite order would establish a cross-module cycle
 and could deadlock.
 """
@@ -52,7 +52,7 @@ _cached_steps: list[dict[str, Any]] = []
 _cache_good_ids: set[int] = set()
 _cache_bad_ids: set[int] = set()
 _cache_prev_predictions: Optional[dict[int, int]] = None
-_cache_diversity_tree: Any = None  # DiversityTree | None
+_cache_coverage_atlas: Any = None  # CoverageAtlas | None
 
 # Live models injected by `train_and_score` during sorting.  Keyed by
 # ``(frozenset(good_ids), frozenset(bad_ids))`` so that ``_ensure_cache``
@@ -72,14 +72,14 @@ def clear_progress_cache() -> None:
     Must be called whenever votes are cleared, medias change, or inclusion
     is altered so that stale models are not reused.
     """
-    global _cache_inclusion, _cache_prev_predictions, _cache_diversity_tree
+    global _cache_inclusion, _cache_prev_predictions, _cache_coverage_atlas
     with _progress_lock:
         _cached_steps.clear()
         _cache_good_ids.clear()
         _cache_bad_ids.clear()
         _cache_prev_predictions = None
         _cache_inclusion = None
-        _cache_diversity_tree = None
+        _cache_coverage_atlas = None
         _live_models.clear()
 
 
@@ -92,7 +92,7 @@ def invalidate_progress_cache_from(media_id: int) -> None:
     appearance onward are discarded so they can be retrained and their
     stability/evaluation metrics recomputed.
     """
-    global _cache_prev_predictions, _cache_diversity_tree
+    global _cache_prev_predictions, _cache_coverage_atlas
     with _progress_lock:
         # Find the first cached step that includes media_id in its training data.
         truncate_at = None
@@ -127,9 +127,9 @@ def invalidate_progress_cache_from(media_id: int) -> None:
         # truncation point when _ensure_cache replays the remaining history.
         _cache_prev_predictions = None
 
-        # Rebuild the diversity tree on next _ensure_cache call so its label
+        # Rebuild the coverage atlas on next _ensure_cache call so its label
         # state is re-synced from the truncation point forward.
-        _cache_diversity_tree = None
+        _cache_coverage_atlas = None
 
         # Clear live models - some may have been trained with the old label.
         _live_models.clear()
@@ -152,8 +152,8 @@ def inject_live_model(
         _live_models[key] = (model, threshold)
 
 
-def _build_diversity_tree(clips_dict: dict[int, dict[str, Any]]) -> Any:
-    """Build a DiversityTree from clip embeddings, or ``None`` if no embeddings."""
+def _build_coverage_atlas(clips_dict: dict[int, dict[str, Any]]) -> Any:
+    """Build a CoverageAtlas from clip embeddings, or ``None`` if no embeddings."""
     vectors: dict[int, np.ndarray] = {
         cid: np.asarray(media_embedding(media), dtype=np.float32)
         for cid, media in clips_dict.items()
@@ -161,9 +161,9 @@ def _build_diversity_tree(clips_dict: dict[int, dict[str, Any]]) -> Any:
     }
     if not vectors:
         return None
-    from vtscore.state.diversity_tree import DiversityTree  # noqa: PLC0415
+    from vtscore.state.coverage_atlas import CoverageAtlas  # noqa: PLC0415
 
-    return DiversityTree(vectors, k=3)
+    return CoverageAtlas(vectors, k=3)
 
 
 def _apply_label_event(media_id: int, label: str) -> bool:
@@ -184,23 +184,23 @@ def _apply_label_event(media_id: int, label: str) -> bool:
     return was_labeled
 
 
-def _sync_diversity_tree(media_id: int, label: str, was_labeled: bool) -> Optional[dict[str, Any]]:
-    """Mirror a label event onto the diversity tree and return level info."""
-    if _cache_diversity_tree is None:
+def _sync_coverage_atlas(media_id: int, label: str, was_labeled: bool) -> Optional[dict[str, Any]]:
+    """Mirror a label event onto the coverage atlas and return level info."""
+    if _cache_coverage_atlas is None:
         return None
     if label == "unlabel":
-        # Only unlabel on the tree when the item is no longer labeled at all
+        # Only unlabel on the atlas when the item is no longer labeled at all
         # (guards against good→bad re-labels going through "unlabel").
         if was_labeled and media_id not in _cache_good_ids and media_id not in _cache_bad_ids:
-            if media_id in _cache_diversity_tree.vector_to_leaf:
-                _cache_diversity_tree.unlabel(media_id)
+            if media_id in _cache_coverage_atlas.vector_to_leaf:
+                _cache_coverage_atlas.unlabel(media_id)
     else:
-        if media_id in _cache_diversity_tree.vector_to_leaf:
-            _cache_diversity_tree.label(media_id)
+        if media_id in _cache_coverage_atlas.vector_to_leaf:
+            _cache_coverage_atlas.label(media_id, good=label == "good")
     return {
         "num_labels": len(_cache_good_ids) + len(_cache_bad_ids),
-        "diversity_level": _cache_diversity_tree.diversity_level(),
-        "depth": _cache_diversity_tree.total_nodes,
+        "diversity_level": _cache_coverage_atlas.coverage_level(),
+        "depth": _cache_coverage_atlas.total_nodes,
     }
 
 
@@ -366,7 +366,7 @@ def _ensure_cache(
     differs from the value used for existing cache entries the entire cache
     is rebuilt.
     """
-    global _cache_inclusion, _cache_diversity_tree
+    global _cache_inclusion, _cache_coverage_atlas
 
     if _cache_inclusion is not None and _cache_inclusion != inclusion_value:
         clear_progress_cache()
@@ -380,16 +380,16 @@ def _ensure_cache(
 
     all_media_ids = sorted(clips_dict.keys())
 
-    if _cache_diversity_tree is None:
-        _cache_diversity_tree = _build_diversity_tree(clips_dict)
-        # After a partial invalidation (_cache_diversity_tree was set to None
+    if _cache_coverage_atlas is None:
+        _cache_coverage_atlas = _build_coverage_atlas(clips_dict)
+        # After a partial invalidation (_cache_coverage_atlas was set to None
         # but _cache_good_ids/_cache_bad_ids still contain IDs from kept
-        # steps), seed the fresh tree with those pre-existing labels so that
-        # diversity_level() is correct for subsequently replayed events.
-        if _cache_diversity_tree is not None:
+        # steps), seed the fresh atlas with those pre-existing labels so that
+        # coverage_level() is correct for subsequently replayed events.
+        if _cache_coverage_atlas is not None:
             for mid in _cache_good_ids | _cache_bad_ids:
-                if mid in _cache_diversity_tree.vector_to_leaf:
-                    _cache_diversity_tree.label(mid)
+                if mid in _cache_coverage_atlas.vector_to_leaf:
+                    _cache_coverage_atlas.label(mid, good=mid in _cache_good_ids)
 
     for t in range(start, len(label_history)):
         # Each step retrains a model; honour a cancel of the owning eval job
@@ -401,7 +401,7 @@ def _ensure_cache(
         media_id, label, _ = label_history[t]
 
         was_labeled = _apply_label_event(media_id, label)
-        diversity_info = _sync_diversity_tree(media_id, label, was_labeled)
+        diversity_info = _sync_coverage_atlas(media_id, label, was_labeled)
 
         good_ids = list(_cache_good_ids)
         bad_ids = list(_cache_bad_ids)
@@ -735,7 +735,7 @@ def compute_labeling_status(
         )
         stable = _compute_stable_status(good, bad, total)
 
-    # Span status from diversity tree info (passed in from the route).
+    # Span status from coverage atlas info (passed in from the route).
     # ``level`` is the number of consecutive BFS-order seen nodes and
     # ``depth`` is the total number of nodes (the maximum diversity level).
     #

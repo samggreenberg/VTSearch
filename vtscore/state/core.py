@@ -335,7 +335,7 @@ class DatasetContext:
 
     Vote-related state (``good_votes``, ``bad_votes``, ``label_history``, etc.)
     lives in :class:`DetectorContext`, not here.  ``DatasetContext`` holds only
-    dataset-intrinsic state: the media items, diversity tree, and display name.
+    dataset-intrinsic state: the media items, coverage atlas, and display name.
     """
 
     __slots__ = (
@@ -349,13 +349,13 @@ class DatasetContext:
         # ``docs/reviews/2026-05-logical-bug-audit.md``).
         "_medias",
         "_media_revision",
-        "diversity_tree",
+        "coverage_atlas",
         "dataset_display_name",
         # Cached contiguous (N, D) float32 embedding matrix, the sorted
         # media-id list it corresponds to, and the ``media_revision`` it was
         # built at.  Built lazily on first access by
         # ``vtscore.embedding.matrix.get_embedding_matrix`` and reused
-        # across cosine sort, MLP scoring, and diversity-tree construction so
+        # across cosine sort, MLP scoring, and coverage-atlas construction so
         # we don't rebuild a 10k-row matrix per call.  Cache validity is the
         # revision match; the id list is kept for the returned tuple / region
         # snap-key match.
@@ -424,7 +424,7 @@ class DatasetContext:
         # at 0 rather than counting itself as a mutation.
         self._media_revision: int = 0
         self._medias: MediasDict = MediasDict(self.bump_media_revision)
-        self.diversity_tree: Any = None  # DiversityTree | None
+        self.coverage_atlas: Any = None  # CoverageAtlas | None
         self.dataset_display_name: str | None = None
         self._emb_matrix_ids: list[int] | None = None
         self._emb_matrix: Any = None  # np.ndarray | None
@@ -573,7 +573,7 @@ class DatasetContext:
           structural slot, or ``None`` (the caller 400s; structural ops need a
           structural embedder).
         * ``"score"`` - cosine example sort, the detector MLP (train + score),
-          and the diversity tree: the structural slot if bound, else the patch
+          and the coverage atlas: the structural slot if bound, else the patch
           slot, else the text slot, else ``None``.  ``None`` means a slot-less
           single-vector dataset (e.g.  ``dinov2_single``); the matrix layer then
           reads each media's primary vector, so cosine sort / MLP scoring keep
@@ -849,7 +849,7 @@ class _RequestMissingDatasetContext(DatasetContext):
         # must exist for the property / bump machinery not to AttributeError.
         object.__setattr__(self, "_medias", _FrozenDict("dataset"))
         object.__setattr__(self, "_media_revision", 0)
-        object.__setattr__(self, "diversity_tree", None)
+        object.__setattr__(self, "coverage_atlas", None)
         object.__setattr__(self, "dataset_display_name", None)
         object.__setattr__(self, "_emb_matrix_ids", None)
         object.__setattr__(self, "_emb_matrix", None)
@@ -1264,7 +1264,7 @@ def recompute_detector_thresholds_for_inclusion(inclusion_value: int) -> None:
 # These thin helpers wrap "give me the X of whatever context is currently
 # active" so callers that operate on the active context but don't need
 # a full DatasetContext / DetectorContext reference can stay one-liners.
-# Dataset-intrinsic scalars (diversity_tree, dataset_display_name) delegate
+# Dataset-intrinsic scalars (coverage_atlas, dataset_display_name) delegate
 # to the active DatasetContext.  Detector-related scalars (click_counter,
 # inclusion) delegate to the active DetectorContext.
 # ---------------------------------------------------------------------------
@@ -1278,12 +1278,12 @@ def _set_click_counter(value: int) -> None:
     get_active_detector_context().click_counter = value
 
 
-def _get_diversity_tree() -> Any:
-    return get_active_context().diversity_tree
+def _get_coverage_atlas() -> Any:
+    return get_active_context().coverage_atlas
 
 
-def _set_diversity_tree(value: Any) -> None:
-    get_active_context().diversity_tree = value
+def _set_coverage_atlas(value: Any) -> None:
+    get_active_context().coverage_atlas = value
 
 
 def _get_dataset_display_name() -> str | None:
@@ -1329,7 +1329,7 @@ class with_dataset_context:
     Usage::
 
         with with_dataset_context("my_dataset"):
-            # code here sees my_dataset's medias, diversity tree, etc.
+            # code here sees my_dataset's medias, coverage atlas, etc.
             print(len(medias))
         # original dataset is restored here
 

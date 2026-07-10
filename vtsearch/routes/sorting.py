@@ -35,7 +35,7 @@ from vtscore.config import DATA_DIR
 import vtscore.security.path_validation as _paths
 from vtscore.embedding import embed_text_query
 from vtsearch.schemas.sorting import (
-    DiversityTreeNextResponseSchema,
+    CoverageAtlasNextResponseSchema,
     InclusionRequestSchema,
     InclusionResponseSchema,
     LabelFileSortResponseSchema,
@@ -58,10 +58,10 @@ from vtscore.training.thresholds import calculate_gmm_threshold
 from vtsearch.state import (
     add_textsort_suggestion,
     bad_votes,
-    diversity_tree_next_sample,
+    coverage_atlas_next_sample,
     get_calibrate_count,
     get_calibration_fraction,
-    get_diversity_tree,
+    get_coverage_atlas,
     get_inclusion,
     get_learned_scores,
     get_safe_thresholds,
@@ -81,7 +81,7 @@ if TYPE_CHECKING:
 sorting_bp = Blueprint(
     "sorting",
     __name__,
-    description="Text / example / learned sort, votes, inclusion, safe-thresholds, diversity tree.",
+    description="Text / example / learned sort, votes, inclusion, safe-thresholds, coverage atlas.",
 )
 
 
@@ -900,25 +900,26 @@ def label_file_sort():
         abort(500, message="Label file sort failed")
 
 
-@sorting_bp.route("/api/diversity-tree/next", methods=["GET", "POST"])
-@sorting_bp.response(200, DiversityTreeNextResponseSchema)
+@sorting_bp.route("/api/coverage-atlas/next", methods=["GET", "POST"])
+@sorting_bp.response(200, CoverageAtlasNextResponseSchema)
 @sorting_bp.alt_response(400, description="Invalid score keys/values or threshold value (POST only).")
-def diversity_tree_next():
-    """Return the next diverse sample from the Diversity Tree.
+def coverage_atlas_next():
+    """Return the next diverse sample from the Coverage Atlas.
 
     Accepts an optional POST body with ``{"scores": {id: score, ...},
     "threshold": <float>}`` so the sort mode influences which element is
-    picked from the next unseen node.  When a threshold is provided, the
-    node's median score determines direction: above-threshold nodes yield
+    picked from the next evidence-free node.  When a threshold is provided,
+    the node's median score determines direction: above-threshold nodes yield
     the lowest-scored element (surprise in a "good" region), while
     below-threshold nodes yield the highest-scored element (surprise in a
-    "bad" region).  Without scores the first element in the node is returned.
+    "bad" region).  Without scores the node's most typical element is
+    returned.
 
-    Returns ``{"id": <media_id>}`` or ``{"id": null}`` when the tree is
-    exhausted or not yet built.  Also includes ``diversity_level`` (the
-    number of consecutive BFS-order seen nodes) so the frontend can display
-    progress, and ``exhausted`` (bool) which is true when the tree exists
-    but every node has already been seen.
+    Returns ``{"id": <media_id>}`` or ``{"id": null}`` when the atlas is
+    exhausted or not yet built.  Also includes ``coverage_level`` (the
+    number of consecutive BFS-order evidence-bearing nodes) so the frontend
+    can display progress, and ``exhausted`` (bool) which is true when the
+    atlas exists but every node already carries evidence.
     """
     scores: dict[int, float] | None = None
     threshold: float | None = None
@@ -943,8 +944,8 @@ def diversity_tree_next():
             except (ValueError, TypeError):
                 abort(400, message="Invalid threshold value")
 
-    tree = get_diversity_tree()
-    next_id = diversity_tree_next_sample(scores=scores, threshold=threshold)
-    level = tree.diversity_level() if tree is not None else 0
-    exhausted = tree is not None and next_id is None
-    return {"id": next_id, "diversity_level": level, "exhausted": exhausted}
+    atlas = get_coverage_atlas()
+    next_id = coverage_atlas_next_sample(scores=scores, threshold=threshold)
+    level = atlas.coverage_level() if atlas is not None else 0
+    exhausted = atlas is not None and next_id is None
+    return {"id": next_id, "coverage_level": level, "exhausted": exhausted}

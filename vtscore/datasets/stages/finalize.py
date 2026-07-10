@@ -1,8 +1,8 @@
-"""Finalisation stages: drop failed embeds, collapse duplicates, diversity tree.
+"""Finalisation stages: drop failed embeds, collapse duplicates, coverage atlas.
 
 These run after embedding to hand the registry/projection stages a clean
 ``medias`` dict: media that finished without an embedding are dropped,
-exact-duplicate media are collapsed, and the diversity index is built.
+exact-duplicate media are collapsed, and the coverage atlas is built.
 """
 
 from __future__ import annotations
@@ -12,10 +12,10 @@ from typing import TYPE_CHECKING
 from vtscore.embedding.matrix import invalidate_embedding_matrix
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.state import (
-    build_diversity_tree_for_context,
+    build_coverage_atlas_for_context,
     collapse_duplicates,
     collapse_near_duplicates,
-    should_auto_build_diversity_tree,
+    should_auto_build_coverage_atlas,
 )
 
 from vtscore.datasets.stages._common import _TOTAL_LOAD_STEPS
@@ -33,7 +33,7 @@ def _drop_none_embeddings_stage(ctx: DatasetContext, tracker) -> None:
     those through poisons every downstream consumer; the matrix builder
     in ``vtscore/embedding/matrix.py`` raises (M11 fix); sort/score
     aggregations get wrong-length lists.  Drop them here so the rest of
-    the load pipeline (dedup, diversity tree, registry) sees a clean
+    the load pipeline (dedup, coverage atlas, registry) sees a clean
     dict, and surface the count to the progress tracker so the user
     knows N is lower than the importer reported.
     """
@@ -105,21 +105,21 @@ def _collapse_near_duplicates_stage(ctx: DatasetContext, tracker) -> None:
     invalidate_embedding_matrix(ctx)
 
 
-def _build_diversity_tree_stage(ctx: DatasetContext, tracker) -> None:
+def _build_coverage_atlas_stage(ctx: DatasetContext, tracker) -> None:
     # An upstream step (e.g. a pickle restore) may have already populated the
     # tree; skip the expensive hierarchical k-means rebuild when so.
-    if ctx.diversity_tree is not None:
+    if ctx.coverage_atlas is not None:
         return
 
     # Past the auto-build threshold the tree is deferred: the build would cost
     # minutes/GBs and the autopilot degrades gracefully without it.  The user
-    # can trigger it later via POST /api/datasets/registry/<id>/diversity-tree.
-    if not should_auto_build_diversity_tree(len(ctx.medias)):
+    # can trigger it later via POST /api/datasets/registry/<id>/coverage-atlas.
+    if not should_auto_build_coverage_atlas(len(ctx.medias)):
         import logging  # noqa: PLC0415
 
         logging.getLogger(__name__).info(
-            "Skipping automatic diversity-tree build for %d items (> threshold); "
-            "build on demand via the diversity-tree endpoint.",
+            "Skipping automatic coverage-atlas build for %d items (> threshold); "
+            "build on demand via the coverage-atlas endpoint.",
             len(ctx.medias),
         )
         return
@@ -136,4 +136,4 @@ def _build_diversity_tree_stage(ctx: DatasetContext, tracker) -> None:
         )
 
     _progress(0, 0)
-    build_diversity_tree_for_context(ctx, on_progress=_progress)
+    build_coverage_atlas_for_context(ctx, on_progress=_progress)
