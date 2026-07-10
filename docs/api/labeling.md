@@ -154,22 +154,23 @@ is back to `"idle"` and `current >= total`.
 
 ---
 
-## Diversity Tree
+## Coverage Atlas
 
 ### Get next diverse sample
 
 ```
-GET /api/diversity-tree/next
-POST /api/diversity-tree/next
+GET /api/coverage-atlas/next
+POST /api/coverage-atlas/next
 ```
 
 POST accepts an optional body with sort scores to influence selection:
 
 **Body:** `{"scores": {"0": 0.9, "1": 0.2}}`
 
-→ `{"id": 42, "diversity_level": 3, "exhausted": false}`
+→ `{"id": 42, "coverage_level": 3, "exhausted": false}`
 
-`id` is `null` when the tree is not built or exhausted. `diversity_level` is the
-number of consecutive seen nodes in BFS order (0 when nothing is labeled, up to
-the total number of tree nodes when fully covered). `exhausted` is `true` when
-every node has been seen.
+`id` is `null` when the atlas is not built or exhausted. `coverage_level` is the
+number of consecutive evidence-bearing nodes in BFS order (0 when nothing is
+labeled, up to the total number of atlas nodes when fully covered). `exhausted`
+is `true` when every node carries labeled evidence. Sibling nodes are visited
+largest-first, so each suggestion covers the biggest unexplored region.

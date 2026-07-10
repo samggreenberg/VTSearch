@@ -9,7 +9,7 @@ unless otherwise noted. File uploads use `multipart/form-data`.
 |---------|-------------|
 | [Authentication & UI](api/auth.md) | Auth status, login/logout, static assets |
 | [Medias & Sorting](api/medias.md) | Media listing/streaming, text/learned/example sort, votes & labels, pile upload |
-| [Labeling & Diversity](api/labeling.md) | Inclusion, thresholds, labeling progress, diversity tree |
+| [Labeling & Diversity](api/labeling.md) | Inclusion, thresholds, labeling progress, coverage atlas |
 | [Detectors](api/detectors.md) | Detector CRUD, detector registry, Auto-Find toggle, loading SSE |
 | [Datasets](api/datasets.md) | Loading, importers, demos, staging, registry, media types, embedders, clippers, converters, file browsing |
 | [Import & Export](api/io.md) | Result exporters, label importers, pregen processors, autorun extractors/localizers |
@@ -39,7 +39,7 @@ chosen **per request** by two HTTP headers:
 
 | Header | Selects | Sent by |
 |--------|---------|---------|
-| `X-Dataset-Id` | Which loaded `DatasetContext` the request's `medias` / diversity / dataset-scoped votes resolve to | Angular's `HttpClient` interceptor on every API call |
+| `X-Dataset-Id` | Which loaded `DatasetContext` the request's `medias` / coverage / dataset-scoped votes resolve to | Angular's `HttpClient` interceptor on every API call |
 | `X-Detector-Id` | Which loaded `DetectorContext` the request's `good_votes` / `bad_votes` / MLP / labelset resolve to | Same interceptor |
 
 Key semantics (`app.py` `before_request`, `vtsearch/routes/_shared.py`):

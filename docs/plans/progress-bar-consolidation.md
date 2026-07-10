@@ -5,13 +5,13 @@
 ## Open follow-ups
 
 - **Finalize lumps ~6 sub-stages into one step.** The finalize step (drop-none,
-  relazify, collapse-dup, diversity-tree, registry, projection) is a single
+  relazify, collapse-dup, coverage-atlas, registry, projection) is a single
   weighted slice. The `FinalizeProgress` proxy (`stages/_common.py`) now spreads
-  it across ordered sub-ranges (cleanup 0.05, dedup 0.15, diversity 0.30,
+  it across ordered sub-ranges (cleanup 0.05, dedup 0.15, coverage 0.30,
   registry 0.45, projection 0.05) so finishing one sub-stage no longer pins the
   bar at 100 % while the rest run — the bar advances once, monotonically, across
   the phase. The remaining roughness is that those sub-slot shares are static
-  ballparks (e.g. on a non-cuML GPU host the diversity k-means can outweigh the
+  ballparks (e.g. on a non-cuML GPU host the coverage k-means can outweigh the
   registry save), not measured; a future pass could record real per-sub-stage
   durations and feed them back in, mirroring the device-aware top-level weights.
 - **Multi-embedder (v3 trio) holds mid-embed.** `_embed_missing_stage` loops
@@ -41,7 +41,7 @@
   asymptote). Remaining media/embedders/cuML cells are uncalibrated and keep the
   static profiles (incl. the CPU **image** stopgap
   `_LOAD_STEP_WEIGHTS_CPU_IMAGE`).
-- **Promote builds the diversity tree synchronously.** Promote now builds + caches
+- **Promote builds the coverage atlas synchronously.** Promote now builds + caches
   the tree in-request (the app runs with `VTSEARCH_TIMEOUT=0`, so long creates
   are tolerated), which means no fine-grained progress during a large promote. If
   that becomes a pain, background the promote like the import pipeline. Other

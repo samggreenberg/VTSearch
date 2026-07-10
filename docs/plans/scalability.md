@@ -9,7 +9,7 @@ fix direction + implementation sketch for each item still owed.
 
 **Scope:** What breaks as datasets grow to 100 k / 1 M / 10 M items and as
 LabelSets grow to 1 k / 10 k / 100 k labels, GUI and CLI. Items track **future
-work only**: shipped items (S2/S8 diversity-tree auto-defer, S9 GMM subsample,
+work only**: shipped items (S2/S8 coverage-atlas auto-defer, S9 GMM subsample,
 S16 grid virtual scroll, S18 prefetch cap, S21 CLI progress throttle) have been
 pruned per the plan-file policy — git history is their record. `S#` numbering
 has gaps where those were removed; that is expected (labels are stable, never
@@ -420,11 +420,11 @@ embedder. Shares the S11 approach.
 
 ## Open follow-ups (not yet scoped for implementation)
 
-- **FAISS / HNSW replacement for the diversity tree** (long-term S2 fix): an
+- **FAISS / HNSW replacement for the coverage atlas** (long-term S2 fix): an
   approximate-nearest-neighbour structure supporting the same "next unseen
   cluster" query but storable mmap'd.
-- **Frontend "Build diversity index" button:** surface a trigger for
-  `POST /api/datasets/registry/<id>/diversity-tree` when a loaded dataset has no
+- **Frontend "Build coverage atlas" button:** surface a trigger for
+  `POST /api/datasets/registry/<id>/coverage-atlas` when a loaded dataset has no
   tree (auto-build is skipped above 50 k). No dataset/tree-status panel hosts it
   today, so it needs a UI home; the endpoint is meanwhile reachable via API/CLI.
 - **Columnar `medias` storage** (S4 full rewrite): deferred; requires redesign of

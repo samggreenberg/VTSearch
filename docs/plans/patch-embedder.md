@@ -18,7 +18,7 @@ Cross-cutting, still open:
 - **Trio score-precedence (open question #3) not yet validated on real data.**
   The score role resolves structural ▸ patch ▸ text everywhere, but it is
   unproven whether (a) a detector should default to the structural two-stage
-  pipeline when both patch and structural are bound, and (b) the diversity tree
+  pipeline when both patch and structural are bound, and (b) the coverage atlas
   should use a *different* preference (patch ▸ structural) than the detector.
   Now that a patch+structural dataset is creatable, run the spike.
 - **`patch_regions` / `patch_grid` / `local_features` stay singular.** The
@@ -43,7 +43,7 @@ Per-detector embedder-type follow-ups:
   one session a multi-embedder → other-space → back sequence can leave the
   detector scoring via the *adapted* slot until reload. Exotic; revisit if it
   bites.
-- **Per-detector diversity tree** and **changing a detector's type after
+- **Per-detector coverage atlas** and **changing a detector's type after
   creation** remain out of scope (see the per-detector "Out of scope" below).
 
 V3 open questions (design-level, still unresolved):
@@ -55,12 +55,12 @@ V3 open questions (design-level, still unresolved):
 2. **Combine Datasets ergonomics.** Strict "embedder triple must match" is the
    v3 rule; if it bites, add a "combine on the text slot only" variant. Punt
    until real demand.
-3. **Diversity-tree vs score backbone (patch vs structural).** Structural-over-
+3. **Coverage-atlas vs score backbone (patch vs structural).** Structural-over-
    patch for the shared score role is the less obvious call — a structural
    embedder is a deliberate specialist pick, but its Stage-1 VLAD vector may
-   cluster *worse* than patch for the diversity tree. Two sub-decisions to
+   cluster *worse* than patch for the coverage atlas. Two sub-decisions to
    validate on a real patch+structural dataset: does the detector default to
-   structural two-stage when both are bound, and should the diversity tree use a
+   structural two-stage when both are bound, and should the coverage atlas use a
    different preference than the detector? Until then both use the single score
    precedence.
 4. **Patch + structural coexistence at score time.** Storage and routing support
@@ -143,7 +143,7 @@ the dataset slots record which embedder is *bound* to which role.
 
 ### Routing rules
 
-The shared **score embedder** (the single vector space the detector MLP, diversity
+The shared **score embedder** (the single vector space the detector MLP, coverage
 tree, and example/by-id cosine sort run against) resolves by precedence:
 **`structural_embedder` if set, else `patch_embedder`, else `text_embedder`**
 (`None` for a slot-less single-vector dataset, where the matrix layer reads each
@@ -155,7 +155,7 @@ media's primary vector).
 | Cosine example sort (`POST /api/example-sort`) | score embedder (structural ▸ patch ▸ text) | HTTP 400 if all three empty |
 | Region similarity / region voting / `region_box` | `patch_embedder` | UI hides Shift-drag affordance |
 | Geometric (instance) verification + Stage-2 re-rank | `structural_embedder` | re-rank skipped (coarse VLAD only) |
-| Diversity tree | score embedder | One tree per dataset; rebuilt when the score embedder changes |
+| Coverage atlas | score embedder | One tree per dataset; rebuilt when the score embedder changes |
 | Detector MLP scoring | score embedder | Region max-pool when score == `patch_embedder`; two-stage verify when score == `structural_embedder` |
 | Detector MLP training | same embedder as scoring | - |
 | Gallery `best_region` overlay | `patch_embedder` or `structural_embedder` (whichever drove the score) | Outline absent when neither set |
@@ -295,7 +295,7 @@ on the *current* cache space, not the preference.
 
 ### Out of scope / open questions
 
-- **Per-detector diversity tree.** The diversity tree is currently a dataset-level
+- **Per-detector coverage atlas.** The coverage atlas is currently a dataset-level
   structure (one tree, score precedence). Whether each detector gets its own tree in
   its type's space is left open; decide when a real multi-primary dataset exists.
 - **Changing a detector's type after creation.** Out of scope — same spirit as

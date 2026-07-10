@@ -414,7 +414,7 @@ Notable fields:
   `max_concurrent_dataset_embeddings`: concurrency gates for dataset
   loading. The download gate covers the bandwidth/disk-bound import
   phase; the embed gate covers CPU/GPU-bound embedding plus post-load
-  clipping, dedup, and diversity-tree construction. Changes take
+  clipping, dedup, and coverage-atlas construction. Changes take
   effect on queued and future loads (running tasks are never
   preempted). Defaults derive from hardware on first read (and are
   **not** persisted to disk): downloads = `max(1, min(4, cpu_count))`;
@@ -905,7 +905,7 @@ a different problem with a real fix.
 
 ### cuML crashes compiling a kernel (`cuda_fp8.hpp` / nvrtc errors)
 
-**Symptom**: A VTSBrowse projection or diversity-tree build dies with an
+**Symptom**: A VTSBrowse projection or coverage-atlas build dies with an
 nvrtc compile error like:
 
 ```

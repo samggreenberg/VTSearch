@@ -596,15 +596,40 @@ ready before training. No body.
 
 403 if access is denied; 404 if the dataset does not exist.
 
-### Build diversity tree
+### Build coverage atlas
 
 ```
-POST /api/datasets/registry/{dataset_id}/diversity-tree
+POST /api/datasets/registry/{dataset_id}/coverage-atlas
 ```
 
-Kicks off a cancellable background build of the diversity index for an
+Kicks off a cancellable background build of the coverage atlas for an
 already-loaded dataset. Progress streams on `/api/progress`. No body.
 
-→ `{"ok": true, "message": "...", "task_id": "_divtree_abc12345"}`
+→ `{"ok": true, "message": "...", "task_id": "_atlas_abc12345"}`
 
 400 if the dataset isn't loaded; 403 if access is denied; 404 if it doesn't exist.
+
+### Domain-shift report
+
+```
+GET /api/datasets/registry/{dataset_id}/domain-shift
+```
+
+Reports how typical the **active** dataset's items (the `X-Dataset-Id`
+header) look under `{dataset_id}`'s coverage atlas — `{dataset_id}` is the
+*reference*, i.e. the dataset a detector was trained on. Use it before
+trusting a detector trained on the reference against the active dataset.
+
+→ `{"reference_dataset_id": "…", "n_items": 40000, "alpha": 0.05,
+"frac_atypical": 0.31, "expected_atypical": 0.05, "z_score": 24.1,
+"median_pvalue": 0.18, "shifted": true}`
+
+`frac_atypical` is the fraction of active-dataset items whose calibrated
+typicality p-value falls below `alpha` — roughly the shifted proportion
+(it stays near `expected_atypical` when there is no shift). `shifted` is
+the headline verdict (statistically clear **and** practically large
+excess).
+
+400 if either dataset isn't loaded, the reference has no coverage atlas,
+the two datasets use different embedders, or the active dataset equals the
+reference; 403 if access is denied; 404 if the reference doesn't exist.

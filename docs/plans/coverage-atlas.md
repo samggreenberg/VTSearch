@@ -1,6 +1,8 @@
 # Coverage Atlas: domain-shift and evidence-aware verification for transferred detectors
 
-**Status:** design / research writeup only — nothing implemented. This document is the output of a first-principles design discussion ("invent the perfect density structure, don't adapt the existing one"). It scopes the science; an implementation plan would be a follow-up document.
+**Status:** design writeup + first slice shipped. This document is the output of a first-principles design discussion ("invent the perfect density structure, don't adapt the existing one"). It scopes the science; the sections below remain the spec for the unshipped parts.
+
+**Background — what already exists:** the Diversity Tree has been migrated to a `CoverageAtlas` (`vtscore/state/coverage_atlas.py`): the same hierarchical k-means partition, now over mean-centered renormalized embeddings (§4.1's cone fix), keeping per-node per-class evidence counts (`n_pos`/`n_neg`), mean-direction moments (`mu`, `rbar`), and 21-point leave-one-out typicality quantiles. Q1 typicality is live (path-averaged p-values, calibration gated on node size ≥ 20 and `rbar` ≥ 0.1 — the root is degenerate by construction after centering). The autopilot's diversity step samples mass-first (siblings stored largest-first) and picks the node's most typical element when unscored. The atlas serializes into the dataset pickle (`"coverage_atlas"` cache key), and an in-session domain-shift report exists at `GET /api/datasets/registry/<id>/domain-shift` (active dataset's items vs `<id>`'s atlas; refuses on embedder mismatch). Not yet built: the tree ensemble, the `n_viewed` channel, split-half calibration, everything in §5 (blob scan, global alarms), §6 (decision support, tiers, active auditor), and §7 (portable artifact).
 
 **Relationship to shipped work:** this design layers on top of the shipped [Find verification workflow](find-verification-workflow.md). That feature built the verify loop (frozen `find_scores`, `verified_ids`, the marginal-positive work queue, the Stats modal). Its Stats section explicitly documents a **false-confidence caveat**: unverified items are flood-filled with the detector's own call, so precision "agreement" is inflated by everything the human never looked at. The active-auditor portion of this design (§6) is the principled replacement for that flood-fill: stratified estimates with confidence intervals instead of adopted self-agreement.
 
@@ -281,7 +283,7 @@ No GPU anywhere; nothing exceeds what a dataset load already costs.
 ## 10. Phasing (sketch, not a commitment)
 
 1. **v0 — zero infrastructure**: labelset-kNN evidence signals (D, TS) + conformal calibration via leave-one-out labelset distances. Needs nothing persisted that isn't already in the detector JSON; works today, cross-user, by construction.
-2. **v1 — in-session atlas**: build the atlas at Find time over haystackA when both haystacks are local (same user, two datasets) — no artifact yet; tiered work queue + blob scan + VTSBrowse coloring.
+2. **v1 — in-session atlas, remaining parts**: the structure itself shipped (see Background); still owed from this phase: the tiered work queue, the §5 blob scan, VTSBrowse coloring by typicality, and frontend surfacing of the domain-shift report.
 3. **v2 — portable artifact**: schema of §7, export at Train time, the rule amendment of §7.3, Stats-modal domain chip.
 4. **v3 — active auditor**: flip model, stratified estimation replacing the flood-fill Stats numbers, disagreement taxonomy and the concept-conflict map.
 
