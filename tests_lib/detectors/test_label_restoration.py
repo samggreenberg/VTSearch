@@ -52,9 +52,7 @@ class TestDirectMatchPass:
         snap = get_active_context().medias
         good_ids = [1, 2]
         bad_ids = [3]
-        labelset = LabelSet.from_clips_and_votes(
-            snap, {i: None for i in good_ids}, {i: None for i in bad_ids}
-        )
+        labelset = LabelSet.from_clips_and_votes(snap, {i: None for i in good_ids}, {i: None for i in bad_ids})
 
         restored = restore_labels_from_detector({"labelset": labelset.to_dict()})
 
@@ -106,9 +104,7 @@ class TestDirectMatchPass:
         dupe["origin"] = {"importer": "other", "params": {}}
         ctx.medias[dupe_id] = dupe
 
-        elements = [
-            LabeledElement(md5=m1["md5"], label="good", origin=None, origin_name="")
-        ]
+        elements = [LabeledElement(md5=m1["md5"], label="good", origin=None, origin_name="")]
         restored = restore_labels_from_detector(_det_data(elements))
 
         # Both medias get labeled, but the entry counts as one restoration.
@@ -189,9 +185,7 @@ class TestUnmatchedFallbackPass:
             _fake_resolver(resolved),
         )
 
-        restored = restore_labels_from_detector(
-            _det_data([self._foreign_entry(label="bad")])
-        )
+        restored = restore_labels_from_detector(_det_data([self._foreign_entry(label="bad")]))
 
         assert restored == 1
         det = get_active_detector_context()

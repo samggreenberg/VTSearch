@@ -58,10 +58,6 @@ Each item below is independent; pick any and delete it when it ships.
 
 <!-- item-sep -->
 
-- **Cross-dataset label restoration (`_resolve_unmatched`)** — `vtscore/detectors/label_restoration.py` (121 lines): the second-pass fallback that re-matches a detector's labels on a *different* dataset by resolving origins and comparing MD5s — i.e. the exact "detectors are reusable across compatible datasets" product promise — has no test. Exercise: train on dataset A, load the detector against dataset B with overlapping files, assert labels re-attach; plus the no-match path.
-
-<!-- item-sep -->
-
 - **Embedder wrapper code paths** — Every embedder is stubbed session-wide, and the GPU suite (`tests_lib/gpu/test_gpu.py`) loads CLAP/CLIP/X-CLIP/E5 straight from transformers, bypassing VTSearch's own wrappers. Consequently `_paraspeechclap_model.py` is at 0%, `_clap_shared.py` 29%, `embedder_ast.py` 28%, `embedder_whisper.py` 29%, `_eupe_shared.py` 35%, `embedder_siglip2.py` 35%, `_dinov2/3_shared.py` 39%, `embedder_videomae.py`/`embedder_languagebind.py` 54%, `embedder_e5.py` 25%. Full model loads belong behind `gpu`/`slow` markers, but the pre/post-processing around the forward pass (input prep, pooling, normalization, batching, device selection) can be unit-tested on CPU with a fake tiny model. At minimum, route the GPU tests through the wrappers instead of raw transformers.
 
 <!-- item-sep -->
