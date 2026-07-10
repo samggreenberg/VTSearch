@@ -321,16 +321,20 @@ and re-embedded before sorting. Powers the right-click "sort by similarity" /
 400 if no medias loaded or `media_id` not in the loaded snapshot. 404 if the
 media's bytes are unavailable when cropping is requested.
 
-### Example sort (server file)
+### Example sort (server files)
 
 ```
 POST /api/example-sort-server
 ```
 
-**Body:** `{"filename": "example.wav"}`
+**Body:** `{"filenames": ["example.wav"]}` (optionally with `"crop_params"`)
 
-Same as example sort but uses a file already on the server in
-`data/example_media/`.
+Same as example sort but uses one or more files already on the server in
+`data/example_media/`. With multiple filenames the haystack is ranked
+against the centroid (mean of the L2-normalised embeddings) of all
+examples — this is how Autopilot's Good phase sorts for a detector seeded
+with several media examples. `crop_params` describes a single example, so
+it is rejected (400) when more than one filename is given.
 
 → `{"results": [...], "threshold": 0.5123}`
 

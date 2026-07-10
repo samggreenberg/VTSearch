@@ -132,6 +132,19 @@
   height: 22px;
 }
 
+// Vertical stack of picked media examples, each row with its own Remove
+// button, followed by the "+ Add" affordance for appending another.
+.example-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
+}
+
+.add-example-btn {
+  align-self: flex-start;
+}
+
 .example-row {
   display: flex;
   align-items: center;
@@ -140,7 +153,6 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-subtle);
-  margin-top: var(--space-xs);
 }
 
 .example-icon {

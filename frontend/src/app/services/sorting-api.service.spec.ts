@@ -173,10 +173,11 @@ describe('SortingApiService', () => {
     req.flush({ files: [] });
   });
 
-  it('exampleSortServer should POST', () => {
-    service.exampleSortServer({ filename: 'test.wav' }).subscribe();
+  it('exampleSortServer should POST the filenames list', () => {
+    service.exampleSortServer({ filenames: ['test.wav', 'other.wav'] }).subscribe();
     const req = httpMock.expectOne('/api/example-sort-server');
     expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ filenames: ['test.wav', 'other.wav'] });
     req.flush({ results: [], threshold: 0 });
   });
 });

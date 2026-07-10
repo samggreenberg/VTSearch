@@ -173,8 +173,10 @@ export class SortingApiService {
     return listServerMediaFiles(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
+  /** Sort by one or more server-side example files. Multiple filenames
+   *  rank the haystack against the centroid of the examples' embeddings. */
   exampleSortServer(params: {
-    filename: string;
+    filenames: string[];
     crop_params?: Record<string, unknown>;
   }): Observable<ExampleSortResponse> {
     return exampleSortServer(this.http, this.config.rootUrl, { body: params }).pipe(

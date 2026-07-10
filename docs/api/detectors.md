@@ -233,6 +233,26 @@ POST /api/detectors/registry
 }
 ```
 
+Or seeded with media examples (each `value` a filename previously saved in
+`example_media/`, e.g. via `/api/server-media-files/upload`):
+
+```json
+{
+  "name": "Red Cars",
+  "media_type": "image",
+  "media_example": "a1b2.jpg",
+  "examples": [
+    {"type": "media", "value": "a1b2.jpg"},
+    {"type": "media", "value": "c3d4.jpg"}
+  ]
+}
+```
+
+The full `examples` list is persisted on both the detector JSON and the
+registry entry. On detector load every media example is seeded as a Good
+vote, and Autopilot's Good phase sorts against the embedding centroid of
+all of them.
+
 → `{"ok": true, "detector": {...}}` (201)
 
 ### Toggle Auto-Find flag

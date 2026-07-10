@@ -142,7 +142,7 @@ export class LoadSortModalComponent implements OnInit {
 
   loadServerMedia(filename: string): void {
     this.status.set('Scoring with example media...');
-    this.sortingApi.exampleSortServer({ filename }).subscribe({
+    this.sortingApi.exampleSortServer({ filenames: [filename] }).subscribe({
       next: (data) => {
         this.status.set('');
         this.exampleSortStarted.emit(data);

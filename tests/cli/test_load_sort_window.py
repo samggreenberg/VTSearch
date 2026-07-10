@@ -246,28 +246,69 @@ class TestExampleSortServer:
             wf.writeframes(struct.pack(f"<{num_samples}h", *samples))
         return path
 
-    def test_missing_filename_returns_422(self, client):
-        # ``filename`` is required by the marshmallow schema → schema-level
+    def test_missing_filenames_returns_422(self, client):
+        # ``filenames`` is required by the marshmallow schema → schema-level
         # 422 with the per-field ``errors`` envelope.
         resp = client.post("/api/example-sort-server", json={})
         assert resp.status_code == 422
-        assert "filename" in resp.get_json()["errors"]["json"]
+        assert "filenames" in resp.get_json()["errors"]["json"]
+
+    def test_empty_filenames_returns_422(self, client):
+        resp = client.post("/api/example-sort-server", json={"filenames": []})
+        assert resp.status_code == 422
 
     def test_nonexistent_file_returns_404(self, client):
-        resp = client.post("/api/example-sort-server", json={"filename": "nope.wav"})
+        resp = client.post("/api/example-sort-server", json={"filenames": ["nope.wav"]})
         assert resp.status_code == 404
 
     def test_sort_returns_results(self, client):
         self._create_test_wav("example.wav")
-        resp = client.post("/api/example-sort-server", json={"filename": "example.wav"})
+        resp = client.post("/api/example-sort-server", json={"filenames": ["example.wav"]})
         assert resp.status_code == 200
         data = resp.get_json()
         assert "results" in data
         assert "threshold" in data
         assert len(data["results"]) == app_module.NUM_MEDIAS
 
+    def test_multi_example_sort_returns_results(self, client):
+        # Two examples rank the haystack against their embedding centroid.
+        self._create_test_wav("example1.wav")
+        self._create_test_wav("example2.wav")
+        resp = client.post(
+            "/api/example-sort-server",
+            json={"filenames": ["example1.wav", "example2.wav"]},
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert len(data["results"]) == app_module.NUM_MEDIAS
+        assert "threshold" in data
+
+    def test_multi_example_missing_one_returns_404(self, client):
+        # Every listed example must exist; a missing one fails the request
+        # instead of silently sorting by the subset that resolved.
+        self._create_test_wav("example.wav")
+        resp = client.post(
+            "/api/example-sort-server",
+            json={"filenames": ["example.wav", "nope.wav"]},
+        )
+        assert resp.status_code == 404
+
+    def test_crop_params_with_multiple_files_rejected(self, client):
+        # Crop bounds describe a single example; combining them with a
+        # plural request is ambiguous and rejected outright.
+        self._create_test_wav("example1.wav")
+        self._create_test_wav("example2.wav")
+        resp = client.post(
+            "/api/example-sort-server",
+            json={
+                "filenames": ["example1.wav", "example2.wav"],
+                "crop_params": {"start": 0.0, "end": 0.05},
+            },
+        )
+        assert resp.status_code == 400
+
     def test_path_traversal_rejected(self, client):
-        resp = client.post("/api/example-sort-server", json={"filename": "../../../etc/passwd"})
+        resp = client.post("/api/example-sort-server", json={"filenames": ["../../../etc/passwd"]})
         assert resp.status_code in (400, 404)
 
     def test_sort_with_audio_crop_params(self, client):
@@ -285,7 +326,7 @@ class TestExampleSortServer:
 
         resp = client.post(
             "/api/example-sort-server",
-            json={"filename": "longer.wav", "crop_params": {"start": 0.1, "end": 0.5}},
+            json={"filenames": ["longer.wav"], "crop_params": {"start": 0.1, "end": 0.5}},
         )
         assert resp.status_code == 200
         data = resp.get_json()
