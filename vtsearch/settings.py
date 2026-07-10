@@ -23,9 +23,9 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from vtscore.config import DATA_DIR
 from vtsearch.settings_models import (
@@ -551,21 +551,62 @@ def get_all() -> dict[str, Any]:
 # -------------------------------------------------------------------
 
 
+#: Cache of per-field validators, keyed by ``(model, key)``. Built lazily on
+#: first use; a ``TypeAdapter`` compiles a core-schema once, so caching it
+#: makes ``_validate_field`` O(one field) instead of constructing and dumping
+#: the whole ~40-field model (which also fires every absent field's
+#: ``default_factory``) on every settings read/write. ``None`` marks a field
+#: that must keep the whole-model path (see :func:`_build_field_adapter`).
+_FIELD_ADAPTERS: dict[tuple[type, str], TypeAdapter[Any] | None] = {}
+
+
+def _build_field_adapter(model: type, key: str) -> TypeAdapter[Any] | None:
+    """Build a validator for a single field of *model*, or ``None``.
+
+    ``None`` means "validate through the whole model": a ``TypeAdapter``
+    only sees the field's annotation, so any ``@field_validator`` /
+    ``@model_validator`` hook would be silently skipped. Neither settings
+    model currently defines such hooks (all validation lives in
+    ``Annotated[..., BeforeValidator(...)]`` metadata), so today every
+    field gets a fast per-field adapter; the guard keeps a future hook
+    from being dropped without anyone noticing.
+    """
+    decorators = model.__pydantic_decorators__  # type: ignore[attr-defined]
+    hooked = {f for dec in decorators.field_validators.values() for f in dec.info.fields}
+    if decorators.model_validators or "*" in hooked or key in hooked:
+        return None
+    field_info = model.model_fields[key]  # type: ignore[attr-defined]
+    annotation = field_info.annotation
+    if field_info.metadata:
+        # Pydantic unpacks ``Annotated[T, meta...]`` into ``annotation=T``
+        # + ``metadata=[meta...]``; re-wrap so the ``BeforeValidator``
+        # clamps and case-folds still run under the adapter.
+        annotation = Annotated[tuple([annotation, *field_info.metadata])]
+    return TypeAdapter(annotation)
+
+
 def _validate_field(model: type, key: str, value: Any) -> Any:
     """Run *value* through *model*'s validator for *key* and return the result.
 
-    Uses ``model_validate`` with a single-key dict so per-field
-    ``BeforeValidator`` clamps and enum checks fire as if the value had
-    been loaded from disk. A :class:`pydantic.ValidationError` is
-    surfaced as :class:`ValueError` with a compact message - matches the
-    error shape callers expect from the legacy spec-driven setters.
+    Uses a cached per-field :class:`TypeAdapter` built from the field's
+    annotation (metadata re-attached) so per-field ``BeforeValidator``
+    clamps and enum checks fire as if the value had been loaded from disk,
+    without paying a whole-model construct-and-dump on every read/write.
+    A :class:`pydantic.ValidationError` is surfaced as :class:`ValueError`
+    with a compact message - matches the error shape callers expect from
+    the legacy spec-driven setters.
     """
+    cache_key = (model, key)
+    if cache_key not in _FIELD_ADAPTERS:
+        _FIELD_ADAPTERS[cache_key] = _build_field_adapter(model, key)
+    adapter = _FIELD_ADAPTERS[cache_key]
     try:
-        validated = model.model_validate({key: value}).model_dump()
+        if adapter is None:
+            return model.model_validate({key: value}).model_dump()[key]  # type: ignore[attr-defined]
+        return adapter.validate_python(value)
     except ValidationError as exc:
         first = exc.errors()[0] if exc.errors() else {"msg": str(exc)}
         raise ValueError(f"Invalid {key}: {first.get('msg', exc)}") from None
-    return validated[key]
 
 
 def _make_scalar_accessors(model: type, key: str):

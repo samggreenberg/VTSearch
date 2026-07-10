@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -124,11 +125,18 @@ def _cuda_can_run(device: str = "cuda") -> bool:
     return ok
 
 
+@functools.lru_cache(maxsize=None)
 def resolve_device() -> str:
     """Resolve :data:`DEVICE` to a concrete ``torch.device`` string.
 
     Imports torch lazily so that simply importing this module does not pull
     torch in.  Returns ``"cpu"`` if torch is unavailable.
+
+    The result is cached for the life of the process (device identity is
+    fixed once resolved): settings getters and embedder helpers call this on
+    hot request paths, and the un-memoized availability/backends probes are
+    not free. Tests that need a different resolution reload this module or
+    monkeypatch ``resolve_device`` itself, both of which bypass the cache.
 
     Whether ``DEVICE`` is ``"auto"`` or an explicit ``"cuda"``/``"cuda:N"``,
     the chosen CUDA device is smoke-tested via :func:`_cuda_can_run` before it
