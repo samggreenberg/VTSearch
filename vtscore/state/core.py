@@ -382,8 +382,15 @@ class DatasetContext:
         # pyramids derived from it. The projection (UMAP coords) is shared
         # across bin shapes; ``_pyramids`` maps "hex"/"square" -> Pyramid so the
         # browse hex/square toggle can keep both binnings cached at once.
+        # ``_full_job_id`` tracks the in-flight background UMAP build for status
+        # polling — the projection runner is a single app-wide slot shared with
+        # every other dataset's full build and every subset build, so a poll
+        # must look up *this* dataset's own job by id rather than asking the
+        # runner what it happens to be running right now (which may be a
+        # different dataset's job while this one sits parked pending).
         "_projection",
         "_pyramids",
+        "_full_job_id",
         # VTSBrowse subset projection: an ephemeral UMAP fit over just a subset
         # of this dataset's media ids (e.g. the positives of a Find run),
         # computed on demand and never persisted.  Held alongside the full
@@ -436,6 +443,7 @@ class DatasetContext:
         self._region_index_per_row: Any = None  # np.ndarray | None, int64 (R,)
         self._projection: Any = None  # Projection | None
         self._pyramids: dict[str, Any] = {}  # bin_shape -> Pyramid
+        self._full_job_id: str | None = None  # in-flight full-dataset build job id
         self._subset_projection: Any = None  # Projection | None (ephemeral subset UMAP)
         self._subset_pyramids: dict[str, Any] = {}  # bin_shape -> Pyramid (subset)
         self._subset_ids: list[int] | None = None  # sorted ids the subset layout is fit on

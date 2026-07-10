@@ -271,6 +271,13 @@ def _start_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str, *, for
             ctx._pyramids[bin_shape] = pyr
             return {"status": "ready", "projection_id": pyr.projection_id}
 
+        # Already building this exact dataset + shape?  Reuse the in-flight job
+        # instead of queueing a duplicate fit behind it.
+        if ctx._full_job_id:
+            existing = projection_jobs.get(ctx._full_job_id)
+            if existing is not None and existing.signature == sig and existing.status in ("running", "pending"):
+                return {"status": "building", "job_id": existing.job_id}
+
     mat_copy = matrix.copy()
     ids_copy = list(sorted_ids)
     dataset_id = ctx.dataset_id
@@ -302,6 +309,7 @@ def _start_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str, *, for
             _persist_projection(dataset_id, proj, pyr)
 
     job = projection_jobs.start(sig, _run, dataset_id=ctx.dataset_id)
+    ctx._full_job_id = job.job_id
     return {"status": "building", "job_id": job.job_id}
 
 
@@ -565,22 +573,19 @@ def projection_meta():
         meta["content_version"] = 0  # full-dataset layouts are never edited in place
         return meta
 
-    job = projection_jobs.current()
-    # A subset build shares the single projection runner; don't report its
-    # progress as the full-dataset build's status.
-    if job is not None and job.job_id == ctx._subset_job_id:
-        job = None
-    if job is not None and job.dataset_id == ctx.dataset_id:
-        if job.status in ("running", "pending"):
-            return {
-                "status": "building",
-                "job_id": job.job_id,
-                "current": job.current,
-                "total": job.total,
-                "message": job.message,
-            }
-        if job.status == "error":
-            return {"status": "error", "error": job.error or "projection build failed"}
+    if ctx._full_job_id:
+        job = projection_jobs.get(ctx._full_job_id)
+        if job is not None:
+            if job.status in ("running", "pending"):
+                return {
+                    "status": "building",
+                    "job_id": job.job_id,
+                    "current": job.current,
+                    "total": job.total,
+                    "message": job.message,
+                }
+            if job.status == "error":
+                return {"status": "error", "error": job.error or "projection build failed"}
 
     return {"status": "idle"}
 
