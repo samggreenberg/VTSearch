@@ -125,7 +125,6 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   readonly buildProgress = signal(0);
   readonly buildTotal = signal(0);
   readonly buildMessage = signal('');
-  readonly datasetName = signal('');
 
   /**
    * Discrete thumbnail-size multipliers, one per named icon size (XS…XL),
@@ -329,7 +328,6 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       const handoff = this.browseSubset.take();
       if (handoff && handoff.ids.length > 0) {
         this.subsetIds = handoff.ids;
-        this.datasetName.set(handoff.label);
       } else {
         // No handoff (e.g. a hard reload): the ephemeral subset is gone.
         this.status.set('error');
@@ -346,7 +344,6 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (status) => {
-          if (!this.subset) this.datasetName.set(status.display_name || '');
           this.mediaType.set(status.media_type || '');
           this.applyBrowsePrefsForMediaType();
           this.statusResolved = true;
