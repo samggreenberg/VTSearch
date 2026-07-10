@@ -22,6 +22,7 @@ import torch.nn as nn
 from vtscore.utils.scores import (
     NON_FINITE_SCORE_SENTINEL,
     finite_or,
+    sigmoid_to_finite_array,
     sigmoid_to_finite_scores,
 )
 
@@ -80,6 +81,55 @@ class TestSigmoidToFiniteScores:
         assert scores[0] == pytest.approx(0.5, abs=1e-3)
         assert scores[1] == NON_FINITE_SCORE_SENTINEL
         assert math.isfinite(scores[2])
+
+
+class TestSigmoidToFiniteArray:
+    """Array-native twin of the list helper; same sanitisation, ``np.ndarray``."""
+
+    def test_finite_logits_round_trip(self):
+        logits = torch.tensor([[-2.0], [0.0], [2.0]])
+        arr = sigmoid_to_finite_array(logits)
+        assert isinstance(arr, np.ndarray)
+        assert arr.shape == (3,)
+        assert arr == pytest.approx([0.1192, 0.5, 0.8808], abs=1e-3)
+        assert np.all(np.isfinite(arr))
+
+    def test_nan_logits_replaced_with_sentinel(self):
+        logits = torch.tensor([[float("nan")], [1.0], [float("nan")]])
+        arr = sigmoid_to_finite_array(logits)
+        assert arr[0] == NON_FINITE_SCORE_SENTINEL
+        assert arr[2] == NON_FINITE_SCORE_SENTINEL
+        assert arr[1] == pytest.approx(0.7311, abs=1e-3)
+        assert np.all(np.isfinite(arr))
+
+    def test_inf_logits_produce_finite_scores(self):
+        arr = sigmoid_to_finite_array(torch.tensor([[float("inf")], [float("-inf")]]))
+        assert np.all(np.isfinite(arr))
+
+    def test_custom_default(self):
+        arr = sigmoid_to_finite_array(torch.tensor([[float("nan")]]), default=0.5)
+        assert arr[0] == 0.5
+
+    def test_unsqueezed_input_handled(self):
+        arr = sigmoid_to_finite_array(torch.tensor([0.0, float("nan"), 2.0]))
+        assert arr[0] == pytest.approx(0.5, abs=1e-3)
+        assert arr[1] == NON_FINITE_SCORE_SENTINEL
+        assert np.all(np.isfinite(arr))
+
+    def test_matches_list_helper(self):
+        # The array and list helpers must agree element-for-element so the
+        # hot path swap is behaviour-preserving.
+        logits = torch.tensor([[-3.0], [float("nan")], [0.5], [float("inf")]])
+        arr = sigmoid_to_finite_array(logits)
+        lst = sigmoid_to_finite_scores(logits)
+        assert arr.tolist() == pytest.approx(lst)
+
+    def test_returned_array_is_writable(self):
+        # ``.numpy()`` can alias the source tensor; downstream max-pool never
+        # mutates, but the array must be safe to write if a caller ever does.
+        arr = sigmoid_to_finite_array(torch.tensor([[0.0], [1.0]]))
+        assert arr.flags.writeable
+        arr[0] = 42.0  # must not raise
 
 
 class _NaNProducingModel(nn.Module):

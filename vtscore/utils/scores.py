@@ -26,6 +26,7 @@ import math
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    import numpy as np
     import torch
 
 NON_FINITE_SCORE_SENTINEL: float = -1.0
@@ -56,6 +57,38 @@ def sigmoid_to_finite_scores(
     scores = torch.sigmoid(logits).squeeze(-1)
     scores = torch.nan_to_num(scores, nan=default, posinf=default, neginf=default)
     return scores.cpu().tolist()
+
+
+def sigmoid_to_finite_array(
+    logits: torch.Tensor,
+    *,
+    default: float = NON_FINITE_SCORE_SENTINEL,
+) -> np.ndarray:
+    """Apply sigmoid to *logits* and return a JSON-safe ``np.ndarray``.
+
+    Array-native twin of :func:`sigmoid_to_finite_scores`: same squeeze /
+    sigmoid / ``nan_to_num`` sanitisation, but ends in ``.cpu().numpy()``
+    instead of ``.tolist()``. Use this at sites whose output feeds straight
+    into numpy math (e.g. segmented max-pool) so the scores never make a
+    round-trip through a Python list, which is a pure-Python, GIL-holding
+    ``O(N)`` pass that matters in the background training thread.
+
+    Args:
+        logits: Raw MLP output, shape ``(N, 1)`` or ``(N,)``.
+        default: Sentinel substituted for ``NaN`` / ``+Inf`` / ``-Inf``.
+            Defaults to :data:`NON_FINITE_SCORE_SENTINEL`.
+
+    Returns:
+        A freshly-owned ``np.ndarray`` (the returned array does not alias any
+        live tensor), every element guaranteed ``math.isfinite``. Dtype
+        follows the input tensor (typically ``float32``); upcast at the call
+        site if the downstream math wants ``float64``.
+    """
+    import torch  # noqa: PLC0415
+
+    scores = torch.sigmoid(logits).squeeze(-1)
+    scores = torch.nan_to_num(scores, nan=default, posinf=default, neginf=default)
+    return scores.cpu().numpy()
 
 
 def finite_or(value: float, default: float = NON_FINITE_SCORE_SENTINEL) -> float:

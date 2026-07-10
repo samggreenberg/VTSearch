@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from vtscore.utils.scores import sigmoid_to_finite_scores
+from vtscore.utils.scores import sigmoid_to_finite_array, sigmoid_to_finite_scores
 
 if TYPE_CHECKING:
     import torch.nn as nn
@@ -466,7 +466,7 @@ def _score_all_media(
         # leak non-finite floats into the JSON response. The downstream
         # segmented max-pool then incidentally drops sentinels in favour of
         # any real score (in ``[0, 1]``) for the same media.
-        flat_scores = np.asarray(sigmoid_to_finite_scores(model(X_all)), dtype=np.float64)
+        flat_scores = sigmoid_to_finite_array(model(X_all)).astype(np.float64, copy=False)
 
     scores, best_region = _segmented_max_pool(flat_scores, media_index_per_row, region_index_per_row, len(all_ids))
     return all_ids, scores, best_region
