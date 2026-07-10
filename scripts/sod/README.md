@@ -124,9 +124,18 @@ the data is always in `results.jsonl` (one row per seed).
 ```bash
 srun --partition=gpu --gres=gpu:l40s:1 --cpus-per-task=8 --mem=46G --time=8:00:00 --pty bash -l
 
-python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/sod-sweep-coco-stopsign-test4/cache --k-values 0,1,2,3,4,5,8,16,32 --out-dir docs/experiments/sod-sweep-coco-stopsign-testx
+# coco stop sign (CLIP/SigLIP/SigLIP 2, whole/sliding)
+# neg regions:
+python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/cache --embedders clip,siglip,siglip2 --proposals whole,sliding --k-values 0,1,2,3,4,5,8,12,16,24,32 --out-dir docs/experiments/sod-sweep-coco-stopsign-test5 --viz --neg-regions
 
-python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/cache --embedders clip,siglip,siglip2 --proposals whole,sliding --k-values 0,1,2,3,4,5,8,12,16,24,32 --out-dir docs/experiments/sod-sweep-coco-stopsign-test5 --viz # --neg-regions
+# coco stop sign HAC sweep (dinov2/dinov3, alpha=0.3,0.5,0.7):
 
-python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/cache --embedders dinov2,dinov3 --proposals hac --hac-alpha 0.3,0.5,0.7 --k-values 0,1,2,3,4,5,8,12,16,24,32 --out-dir docs/experiments/sod-sweep-coco-stopsign-dinov2-dinov3-hac-alphas-3-5-7 --viz
+# no region voting
+python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/cache --embedders dinov2,dinov3 --proposals hac --hac-alpha 0.3,0.5,0.7 --k-values 0,1,2,3,4,5,8,12,16,24,32 --out-dir docs/experiments/sod-sweep-coco-stopsign-dinov2-dinov3-hac-alphas-3-5-7-no-region-voting --viz
+
+# region voting
+python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/cache --embedders dinov2,dinov3 --proposals hac --hac-alpha 0.3,0.5,0.7 --k-values 0,1,2,3,4,5,8,12,16,24,32 --out-dir docs/experiments/sod-sweep-coco-stopsign-dinov2-dinov3-hac-alphas-3-5-7-region-voting --region-voting --viz
+
+# traffic light
+python scripts/sod/sweep.py --datasets lvis --classes "traffic light" --cache-dir docs/experiments/cache --embedders dinov2,dinov3 --proposals hac --hac-alpha 0.1,0.3,0.5,0.7,0.9 --k-values 0,1,2,3,4,5,8,12,16,24,32 --out-dir docs/experiments/sod-sweep-lvis-traffic-light-dinov2-dinov3-hac-alphas-1-3-5-7-9-region-voting --region-voting --viz
 ```
