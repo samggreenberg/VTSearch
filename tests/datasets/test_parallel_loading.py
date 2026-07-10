@@ -973,37 +973,37 @@ class TestConcurrencyGate:
         gate.release()
 
 
-class TestBuildDiversityTreeForContext:
-    """Test the context-specific diversity tree builder."""
+class TestBuildCoverageAtlasForContext:
+    """Test the context-specific coverage atlas builder."""
 
     def test_builds_tree_on_context(self):
         from vtscore.state.core import DatasetContext
-        from vtscore.state.diversity import build_diversity_tree_for_context
+        from vtscore.state.coverage import build_coverage_atlas_for_context
 
         rng = np.random.default_rng(42)
-        ctx = DatasetContext("test_diversity")
+        ctx = DatasetContext("test_coverage")
         for i in range(10):
             ctx.medias[i] = {
                 "id": i,
                 "embeddings": {"e5": rng.standard_normal(128).astype(np.float32)},
             }
 
-        build_diversity_tree_for_context(ctx)
-        assert ctx.diversity_tree is not None
+        build_coverage_atlas_for_context(ctx)
+        assert ctx.coverage_atlas is not None
 
     def test_empty_context_sets_none(self):
         from vtscore.state.core import DatasetContext
-        from vtscore.state.diversity import build_diversity_tree_for_context
+        from vtscore.state.coverage import build_coverage_atlas_for_context
 
         ctx = DatasetContext("test_empty")
-        build_diversity_tree_for_context(ctx)
-        assert ctx.diversity_tree is None
+        build_coverage_atlas_for_context(ctx)
+        assert ctx.coverage_atlas is None
 
 
 class TestBackgroundLoadThreadContext:
     """Regression for C3: background load tasks must pin the in-flight
     DatasetContext to the worker thread so importer / clipper / dedup /
-    diversity-tree helpers that resolve via ``get_active_context()`` see
+    coverage-atlas helpers that resolve via ``get_active_context()`` see
     the dataset being built, not the empty fallback context.
     """
 

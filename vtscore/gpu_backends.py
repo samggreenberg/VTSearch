@@ -6,8 +6,8 @@ cuML is importable, the two heavyweight CPU clustering steps run on the GPU:
 
 - UMAP projection (:mod:`vtscore.projection.umap_projection`) →
   ``cuml.manifold.UMAP`` instead of ``umap-learn``.
-- the diversity tree's hierarchical k-means
-  (:mod:`vtscore.state.diversity_tree`) → ``cuml.cluster.KMeans`` instead of
+- the coverage atlas's hierarchical k-means
+  (:mod:`vtscore.state.coverage_atlas`) → ``cuml.cluster.KMeans`` instead of
   ``sklearn.cluster.KMeans``.
 
 cuML's UMAP/KMeans are deliberately API-compatible with their CPU counterparts,
@@ -31,7 +31,7 @@ and re-runs the operation on the CPU library.  The result is identical-shape
 implementation, so even with identical parameters it does not produce
 byte-identical coordinates/labels.  That is safe for both consumers because each
 computes its result exactly once and then freezes/persists it (the projection is
-frozen per dataset; the diversity tree is cached in the dataset pickle), so the
+frozen per dataset; the coverage atlas is cached in the dataset pickle), so the
 non-reproducibility never surfaces.  The *structure* (neighbourhoods / cluster
 topology) is preserved — that's the whole point of these algorithms.
 
@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 # Process-global kill switch, flipped the first time a cuML op fails at runtime
 # (typically an nvrtc compile error surfaced from ``fit``).  Once a GPU is known
 # to be broken for cuML, there is no point paying the multi-second compile
-# failure on every subsequent call — the diversity tree alone fits k-means
+# failure on every subsequent call — the coverage atlas alone fits k-means
 # dozens of times — so we disable cuML for the rest of the process and go
 # straight to the CPU library.  It only resets on a fresh interpreter.
 _cuml_runtime_failed = False
@@ -175,7 +175,7 @@ def kmeans_fit_predict(
     :func:`_disable_cuml_after_failure`).  Returns ``(labels, inertia)`` where
     ``labels`` is a plain ``numpy`` array and ``inertia`` is the fitted
     ``inertia_`` (or ``None`` if the backend didn't report one) — the two things
-    the diversity-tree builder needs.
+    the coverage-atlas builder needs.
     """
     if cuml_enabled():
         try:

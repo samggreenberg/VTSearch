@@ -25,8 +25,8 @@ Covers the routes in ``vtsearch/routes/sorting.py``:
                                                 :class:`SortResponseSchema`
 * ``POST /api/label-file-sort``               (multipart upload) ->
                                                 :class:`LabelFileSortResponseSchema`
-* ``GET|POST /api/diversity-tree/next``       -> :class:`DiversityTreeNextRequestSchema` ->
-                                                :class:`DiversityTreeNextResponseSchema`
+* ``GET|POST /api/coverage-atlas/next``       -> :class:`CoverageAtlasNextRequestSchema` ->
+                                                :class:`CoverageAtlasNextResponseSchema`
 
 The sort result items use ``fields.Dict()`` rather than nested schemas
 because the inner shape varies: text/example sort produces
@@ -271,12 +271,12 @@ class LabelFileSortResponseSchema(Schema):
 
 
 # ---------------------------------------------------------------------------
-# /api/diversity-tree/next
+# /api/coverage-atlas/next
 # ---------------------------------------------------------------------------
 
 
-class DiversityTreeNextRequestSchema(Schema):
-    """Body for ``POST /api/diversity-tree/next``.
+class CoverageAtlasNextRequestSchema(Schema):
+    """Body for ``POST /api/coverage-atlas/next``.
 
     Both fields are optional. ``scores`` keys are media ids encoded as
     strings (JSON object keys can't be ints); the handler converts them
@@ -288,17 +288,17 @@ class DiversityTreeNextRequestSchema(Schema):
     threshold = fields.Float(load_default=None, allow_none=True)
 
 
-class DiversityTreeNextResponseSchema(Schema):
-    """Response for ``GET|POST /api/diversity-tree/next``."""
+class CoverageAtlasNextResponseSchema(Schema):
+    """Response for ``GET|POST /api/coverage-atlas/next``."""
 
     id = fields.Integer(allow_none=True, required=True)
-    diversity_level = fields.Integer(required=True)
+    coverage_level = fields.Integer(required=True)
     exhausted = fields.Boolean(required=True)
 
 
 __all__ = [
-    "DiversityTreeNextRequestSchema",
-    "DiversityTreeNextResponseSchema",
+    "CoverageAtlasNextRequestSchema",
+    "CoverageAtlasNextResponseSchema",
     "InclusionRequestSchema",
     "InclusionResponseSchema",
     "LabelFileSortResponseSchema",

@@ -227,7 +227,7 @@ def default_concurrent_embeddings() -> int:
 def _warm_threadpool_controller() -> None:
     """Build sklearn's cached ``ThreadpoolController`` while single-threaded.
 
-    The first sklearn fit (e.g. KMeans in diversity-tree building) constructs
+    The first sklearn fit (e.g. KMeans in coverage-atlas building) constructs
     a ``threadpoolctl.ThreadpoolController``, which scans every loaded shared
     library via ``dl_iterate_phdr``.  That C call holds glibc's loader lock
     while invoking a *Python* callback per library - and running Python means

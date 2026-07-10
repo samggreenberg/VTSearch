@@ -1,10 +1,10 @@
 """Vote management, label history, text-sort suggestions, and learned scores.
 
 Also contains compound vote operations (toggle_vote, apply_label) that
-coordinate across vote dicts, click tracking, and the diversity tree.
+coordinate across vote dicts, click tracking, and the coverage atlas.
 
 All functions operate on the *active* :class:`DetectorContext` (and the
-active :class:`DatasetContext` for the diversity tree side-effects).  They
+active :class:`DatasetContext` for the coverage atlas side-effects).  They
 resolve the context themselves via :func:`get_active_detector_context` /
 :func:`get_active_context` - no module-level proxy names are imported, so
 the library has no implicit dependency on the app-side proxy view.  See
@@ -21,7 +21,7 @@ from vtscore.state.core import (
     get_active_context,
     get_active_detector_context,
 )
-from vtscore.state.diversity import diversity_tree_label, diversity_tree_unlabel
+from vtscore.state.coverage import coverage_atlas_label, coverage_atlas_unlabel
 
 
 def clear_votes() -> None:
@@ -30,9 +30,9 @@ def clear_votes() -> None:
     Removes all entries from ``good_votes``, ``bad_votes``, and
     ``label_history`` in place on the active detector context. Does not affect
     any dataset's ``medias`` dict.  Also clears the progress model cache,
-    click-time / score tracking, and the active dataset's diversity tree
-    ``seen`` state - otherwise ``diversity_tree_next_sample`` would keep
-    skipping nodes that the just-cleared votes had marked seen, and the
+    click-time / score tracking, and the active dataset's coverage atlas
+    evidence state - otherwise ``coverage_atlas_next_sample`` would keep
+    skipping nodes that the just-cleared votes had marked covered, and the
     UI's diversity-level chip would stay elevated despite zero labels.
     """
     from vtscore.detectors.labeling_progress import clear_progress_cache
@@ -51,9 +51,9 @@ def clear_votes() -> None:
         ctx.verified_ids.clear()
         ctx.find_scores.clear()
         ctx.find_eval_stale = False
-        ds_tree = get_active_context().diversity_tree
-        if ds_tree is not None:
-            ds_tree.reset_seen()
+        ds_atlas = get_active_context().coverage_atlas
+        if ds_atlas is not None:
+            ds_atlas.reset_evidence()
     # ``_progress_lock`` is acquired strictly outside ``_state_lock`` so the
     # two locks never establish a cross-module ordering (audit M1).
     clear_progress_cache()
@@ -275,21 +275,21 @@ def _set_vote_locked(
             ctx.vote_region_boxes.pop(media_id, None)
         click_time = assign_click_time(media_id)
         add_label_to_history(media_id, "good")
-        diversity_tree_label(media_id)
+        coverage_atlas_label(media_id, good=True)
     elif target == "bad":
         ctx.good_votes.pop(media_id, None)
         ctx.vote_region_boxes.pop(media_id, None)
         ctx.bad_votes[media_id] = None
         click_time = assign_click_time(media_id)
         add_label_to_history(media_id, "bad")
-        diversity_tree_label(media_id)
+        coverage_atlas_label(media_id, good=False)
     else:  # target == "none"
         ctx.good_votes.pop(media_id, None)
         ctx.bad_votes.pop(media_id, None)
         ctx.vote_region_boxes.pop(media_id, None)
         remove_click_time(media_id)
         add_label_to_history(media_id, "unlabel")
-        diversity_tree_unlabel(media_id)
+        coverage_atlas_unlabel(media_id)
         click_time = None
 
     # Counter increments only on a transition that produces a labeled state.
@@ -447,7 +447,7 @@ def apply_label(
     No click-time is assigned (imported labels have no click-time).
 
     When *silent* is True, the label is recorded in ``good_votes``/``bad_votes``
-    only - ``label_history`` is not appended, the diversity tree is not
+    only - ``label_history`` is not appended, the coverage atlas is not
     marked, and achievement counters are not credited.  This is used when
     restoring a detector's saved labels into a new dataset: those labels are
     seeded so autopilot's good/bad-count gates are satisfied, but they should
@@ -457,7 +457,7 @@ def apply_label(
     Args:
         media_id: Integer ID of the media to label.
         label: ``"good"`` or ``"bad"``.
-        silent: If True, skip history append, diversity-tree marking, and
+        silent: If True, skip history append, coverage-atlas marking, and
             achievement credit.
         region_box: Optional normalised ``(x0, y0, x1, y1)`` box from an
             imported labelset entry.  Only stored when *label* is ``"good"``
@@ -493,7 +493,7 @@ def apply_label(
             if not silent:
                 add_label_to_history(media_id, "bad")
         if not silent:
-            diversity_tree_label(media_id)
+            coverage_atlas_label(media_id, good=label == "good")
             if record_achievement and not already:
                 _record_vote_locked(count_streak=count_streak)
 
@@ -526,7 +526,7 @@ def apply_label_with_click_time(media_id: int, label: str) -> None:
             ctx.bad_votes[media_id] = None
             add_label_to_history(media_id, "bad")
         assign_click_time(media_id)
-        diversity_tree_label(media_id)
+        coverage_atlas_label(media_id, good=label == "good")
         # Bulk fill-from-sort: credit votes_cast/days/hours/types but never the
         # individual-effort Marathoner streak.
         _record_vote_locked(count_streak=False)
@@ -566,7 +566,7 @@ def apply_labels_bulk_with_click_time(
         vote_click_times = ctx.vote_click_times
         vote_region_boxes = ctx.vote_region_boxes
         label_history = ctx.label_history
-        tree = get_active_context().diversity_tree
+        atlas = get_active_context().coverage_atlas
         if replace_all:
             kept = {mid for mid, _ in labels}
             for cid in [c for c in good_votes if c not in kept]:
@@ -593,8 +593,8 @@ def apply_labels_bulk_with_click_time(
                 label_history.append((media_id, "bad", _time.time()))
             ctx.click_counter += 1
             vote_click_times[media_id] = ctx.click_counter
-            if tree is not None and media_id in tree.vector_to_leaf:
-                tree.label(media_id)
+            if atlas is not None and media_id in atlas.vector_to_leaf:
+                atlas.label(media_id, good=label == "good")
             if not already and record_achievement:
                 # Bulk batch: never contributes to the individual-effort streak.
                 _record_vote_locked(count_streak=False)

@@ -198,14 +198,14 @@ def _register_and_migrate(
             total_steps=_TOTAL_LOAD_STEPS,
         )
 
-    # Cache the freshly-built diversity tree into the pickle so reloads skip
+    # Cache the freshly-built coverage atlas into the pickle so reloads skip
     # the expensive hierarchical k-means rebuild (it is re-derived only when
     # absent or stale).  Embeddings/MLPs are still never persisted - this is
     # cluster *topology* keyed by media id, re-resolved against the medias on
     # load and discarded if they no longer match.
     extra_pickle_keys: dict | None = None
-    if ctx.diversity_tree is not None:
-        extra_pickle_keys = {"diversity_tree": ctx.diversity_tree.to_serializable()}
+    if ctx.coverage_atlas is not None:
+        extra_pickle_keys = {"coverage_atlas": ctx.coverage_atlas.to_serializable()}
 
     _on_stage("Saving to registry…")
     entry = _auto_register_dataset(

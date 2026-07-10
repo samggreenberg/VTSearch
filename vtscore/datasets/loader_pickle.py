@@ -303,18 +303,18 @@ def load_dataset_from_pickle(
             workflows that only need embeddings for scoring.
 
     Returns:
-        The cached ``"diversity_tree"`` payload (a plain-dict snapshot written
+        The cached ``"coverage_atlas"`` payload (a plain-dict snapshot written
         by :func:`export_dataset_to_file`) when the pickle carries one, else
         ``None``.  Callers can hand it to
-        :func:`vtscore.state.diversity.restore_diversity_tree_from_cache` to
-        skip rebuilding the diversity tree.
+        :func:`vtscore.state.coverage.restore_coverage_atlas_from_cache` to
+        skip rebuilding the coverage atlas.
     """
     if on_progress is not None:
         on_progress("loading", f"Reading {file_path.name}…", 0, 0)
 
     data = _read_pickle_dataset(file_path)
     medias.clear()
-    cached_diversity_tree = data.get("diversity_tree")
+    cached_coverage_atlas = data.get("coverage_atlas")
     medias_data = data["medias"]
     dir_keys, extra_fields_map = _build_pickle_dir_maps()
 
@@ -359,7 +359,7 @@ def load_dataset_from_pickle(
     if missing_media > 0:
         print(f"WARNING: {missing_media} media files missing from {file_path}", flush=True)
 
-    return cached_diversity_tree
+    return cached_coverage_atlas
 
 
 def load_dataset_from_pickle_chunked(

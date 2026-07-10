@@ -150,7 +150,7 @@ def require_dataset_header(fn: Callable) -> Callable:
 
     Sister of :func:`require_detector_header`; closes the dataset-side
     analog of H34. Apply to any endpoint that mutates ``DatasetContext``
-    state (``medias`` insertions, ``diversity_tree`` rebuilds) or whose
+    state (``medias`` insertions, ``coverage_atlas`` rebuilds) or whose
     correctness depends on knowing which dataset's cid-keyed votes are
     being touched (label imports, fill-from-sort).
     """

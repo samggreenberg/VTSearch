@@ -430,12 +430,12 @@ class TestEmptyState:
         finally:
             medias.update(saved)
 
-    def test_diversity_tree_when_not_built(self, client):
-        resp = client.get("/api/diversity-tree/next")
+    def test_coverage_atlas_when_not_built(self, client):
+        resp = client.get("/api/coverage-atlas/next")
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["id"] is None
-        assert data["diversity_level"] == 0
+        assert data["coverage_level"] == 0
 
     def test_textsort_suggestions_empty(self, client):
         resp = client.get("/api/textsort-suggestions")

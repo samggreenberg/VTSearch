@@ -34,7 +34,7 @@ class TestDatasetContext:
         ctx = DatasetContext("ds1")
         assert ctx.dataset_id == "ds1"
         assert ctx.medias == {}
-        assert ctx.diversity_tree is None
+        assert ctx.coverage_atlas is None
         assert ctx.dataset_display_name is None
 
     def test_contexts_are_independent(self):

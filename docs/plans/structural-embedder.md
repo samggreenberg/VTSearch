@@ -25,7 +25,7 @@ retrieve-then-geometrically-verify pipeline.
   The clear follow-up is a **larger vocabulary (256–1024 centroids) fit on a
   building/scene corpus** (e.g. Paris6k or a Places365 slice — kept disjoint from
   any eval set) to raise Stage-1 recall, which is what caps end-to-end mAP.
-  Bigger K also grows the VLAD vector (`K × 128`); confirm the diversity-tree /
+  Bigger K also grows the VLAD vector (`K × 128`); confirm the coverage-atlas /
   sort costs stay acceptable when bumping it. **Re-measure on OpenLogo**
   (below) — does a 256–1024-word vocabulary lift Stage-1 recall on logos as the
   ROxford spike predicts?
@@ -105,7 +105,7 @@ extractor produces a *variable-size set* of `(keypoint, descriptor)` pairs per
 image, not a single fixed-D vector; (2) two images are compared by **geometric
 verification** (match descriptors, RANSAC-fit a transform, count inliers), not a
 dot product. Yet every downstream consumer — `train_model(X, y, input_dim)`, the
-diversity tree, cosine/example sort, `_score_all_media` — wants a fixed-D
+coverage atlas, cosine/example sort, `_score_all_media` — wants a fixed-D
 L2-normalised vector and a cosine. The two-stage architecture reconciles the two
 worlds without rewriting the downstream.
 
@@ -113,7 +113,7 @@ worlds without rewriting the downstream.
 
 **Stage 1 — retrieval (rides the existing pipeline unchanged).** Aggregate each
 image's local descriptors into a fixed-D vector via **VLAD**. That vector
-populates `media["embedding"]`, so the diversity tree, cosine/example sort,
+populates `media["embedding"]`, so the coverage atlas, cosine/example sort,
 pre-vote sorts, and `train_model` work with zero new machinery. `supports_text`
 is `False` (no text encoder maps into VLAD space). Stage 1 alone is coarse
 instance retrieval — fast, and what makes Stage 2 tractable.
