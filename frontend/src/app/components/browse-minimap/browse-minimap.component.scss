@@ -36,6 +36,23 @@ canvas {
   cursor: crosshair;
 }
 
+// Item-count floater, pinned to the minimap's bottom-left. Non-interactive so a
+// click-drag over it still recenters the main view via the canvas underneath.
+.minimap-count {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  padding: 1px var(--space-xs);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  font-size: var(--font-xs);
+  line-height: normal;
+  color: var(--text-secondary);
+  pointer-events: none;
+  opacity: 0.85;
+}
+
 .minimap-close {
   position: absolute;
   top: 2px;

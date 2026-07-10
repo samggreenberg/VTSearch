@@ -1,4 +1,5 @@
-import { DatasetRegistryEntry, DetectorRegistryEntry } from '../models/api.models';
+import { DatasetRegistryEntry } from '../models/api.models';
+import { DetectorRegistryEntry } from '../generated/api-client/models/detector-registry-entry';
 
 /**
  * Whether the given dataset/detector pair can be used together.

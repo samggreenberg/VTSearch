@@ -11,7 +11,7 @@ and need calibration.
   Calibrate by re-running `scripts/profiling/calibrate_load_weights.py` for:
   the remaining media types (`video / text / document`), the non-default
   embedders (image: siglip2, eupe_*, face, sift_vlad; audio: whisper_encoder…),
-  and the **cuML on/off** split (cuML moves diversity-tree k-means to GPU,
+  and the **cuML on/off** split (cuML moves coverage-atlas k-means to GPU,
   materially changing finalize).
 - **Finalize sub-slot shares** (`FinalizeProgress._SLOTS` ballparks) have the
   same "static guess" problem one level down — revisit with the measured data
@@ -49,7 +49,7 @@ That bounds the value of this work: smooth honest pacing, not a time oracle.
 | download   | archive **bytes**, not `n`         | `download_size_mb / bandwidth` |
 | model load | nothing (encoder loaded once)      | fixed per (embedder, device) |
 | embed      | `n` (one forward per item)         | `a_embed + b_embed · n` |
-| finalize   | `n` (dedup + diversity + registry) | `a_fin + b_fin · n` |
+| finalize   | `n` (dedup + coverage + registry) | `a_fin + b_fin · n` |
 
 Model load is a **constant**, so its *fraction* is large for small datasets and
 negligible for large ones — no single vector is right at both ends. The target

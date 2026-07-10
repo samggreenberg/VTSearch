@@ -11,7 +11,10 @@ import {
   type CanvasTheme,
 } from '../browse-canvas/hex-render.util';
 import { binGeometry } from '../browse-canvas/bin-geometry';
+import { readRootZoom } from '../../utils/root-zoom';
+import { onDevicePixelRatioChange } from '../../utils/device-pixel-ratio';
 import { IconComponent } from '../icon/icon.component';
+import { DecimalPipe } from '@angular/common';
 import type { HexCellPayload, ProjectionMeta } from '../../models/projection.models';
 
 /** Resize clamps; must mirror the backend ``browse_minimap_*`` setting ranges. */
@@ -36,7 +39,7 @@ export const MINIMAP_MAX_HEIGHT = 450;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-minimap',
   standalone: true,
-  imports: [IconComponent],
+  imports: [IconComponent, DecimalPipe],
   templateUrl: './browse-minimap.component.html',
   styleUrl: './browse-minimap.component.scss',
 })
@@ -64,6 +67,11 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   /** Density colormap preset; mirrors the main canvas so the overview matches. */
   readonly colormap = input<BrowseColormapId>('auto');
   /**
+   * Noun for the item-count floater ("items", or "positives" for a Find-subset
+   * browse). The count itself is read from ``meta.point_count``.
+   */
+  readonly countNoun = input('items');
+  /**
    * Docked mode: the minimap fills its container (the browse side panel's
    * meta-row) and sizes its canvas to fit via a {@link ResizeObserver},
    * rather than floating over the canvas at an explicit size. In this mode
@@ -80,6 +88,11 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
 }>();
 
   private resizeObserver: ResizeObserver | null = null;
+  // Teardown for the devicePixelRatio-change listener. A pure density change
+  // (monitor-to-monitor drag) leaves the element box untouched, so neither the
+  // dock ResizeObserver nor the floating width/height inputs fire; this re-runs
+  // resizeCanvas() to rebuild the backing store at the new density.
+  private dprListenerTeardown: (() => void) | null = null;
 
   private ctx!: CanvasRenderingContext2D;
   private dpr = 1;
@@ -109,6 +122,15 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     this.ctx = this.canvasRef.nativeElement.getContext('2d')!;
     if (this.dock) this.startDockSizing();
     this.resizeCanvas();
+
+    // A pure devicePixelRatio change doesn't resize the element, so re-run the
+    // canvas sizing (and repaint) when the display density shifts.
+    this.ngZone.runOutsideAngular(() => {
+      this.dprListenerTeardown = onDevicePixelRatioChange(() => {
+        this.resizeCanvas();
+        this.requestRedraw();
+      });
+    });
 
     // Overview tiles arrive asynchronously; repaint as the cache fills. The
     // viewport box updates on every pan/zoom the main canvas publishes.
@@ -148,6 +170,7 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     this.viewportSub?.unsubscribe();
     this.themeObserver?.disconnect();
     this.resizeObserver?.disconnect();
+    this.dprListenerTeardown?.();
     if (this.rafId) cancelAnimationFrame(this.rafId);
     this.detachResizeListeners();
     this.detachNavListeners();
@@ -184,7 +207,7 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     // the element zoom× larger on screen — bake the zoom into the backing
     // store (as the main canvas effectively does via its visual-px sizing)
     // so the bitmap isn't undersampled/blurry.
-    const rootZoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+    const rootZoom = readRootZoom();
     const scale = this.dpr * rootZoom;
     const canvas = this.canvasRef.nativeElement;
     canvas.width = Math.round(this.width * scale);
@@ -488,7 +511,7 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     // clientX/Y deltas are visual px but width/height are layout px, so
     // divide out the app-wide root zoom or the panel grows faster than the
     // cursor moves.
-    const rootZoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+    const rootZoom = readRootZoom();
     const dw = (this.resizeStartX - event.clientX) / rootZoom;
     const dh = (this.resizeStartY - event.clientY) / rootZoom;
     this.width = Math.round(

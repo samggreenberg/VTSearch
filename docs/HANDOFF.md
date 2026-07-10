@@ -58,11 +58,11 @@ deployments. Runs locally or in Docker.
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Module structure, dependency graph, extractability matrix, state management |
 | [API.md](API.md) | HTTP API reference (all REST endpoints, request/response formats) |
 | [CLI.md](CLI.md) | Command-line interface reference (autodetect, importers, exporters) |
-| [ML.md](ML.md) | MLP architecture, training config, embedding models, threshold calibration |
+| [ML.md](ML.md) | MLP architecture, training config, embedding models, threshold calibration, Coverage Atlas |
 | [EVAL.md](EVAL.md) | Evaluation framework (metrics, runner, visualisation) |
 | [EXTENDING.md](EXTENDING.md) | Plugin authoring index: splits into **[EXTENDING-plugins.md](EXTENDING-plugins.md)** (importers/exporters/sources), **[EXTENDING-media.md](EXTENDING-media.md)** (media types/embedders/clippers/converters), **[EXTENDING-processors.md](EXTENDING-processors.md)** (detectors/localizers/extractors). EXTENDING.md itself holds auth, dependencies, and checklists. |
 | [demos.md](demos.md) | Available demo datasets |
-| [plans/README.md](plans/README.md) | Filename index of open design plans (multi-media import, patch embedders, clipper chain, etc.) |
+| [plans/](plans/) | Open design plans for future work (multi-media import, patch embedders, clipper chain, etc.); one file per plan |
 | [../vtscore/docs/README.md](../vtscore/docs/README.md) | Developer documentation for the `vtscore` library (the Flask-free reusable core extracted from VTSearch) |
 | [plans/cli-detector-converter.md](plans/cli-detector-converter.md) | CLI autodetect with converters/clippers (**Design proposal**, not yet implemented) |
 

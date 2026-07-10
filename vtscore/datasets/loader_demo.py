@@ -413,9 +413,6 @@ def _write_demo_cache(
     _loader.EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
 
     resolved_name = getattr(embedder, "name", "") if embedder is not None else ""
-    extra_pickle_keys: dict[str, Any] = {}
-    if store_external:
-        extra_pickle_keys[mt.dir_key] = external_dir
 
     medias_pkl_bytes = pickle.dumps(pkl_data, protocol=5)
     meta = {
@@ -431,4 +428,7 @@ def _write_demo_cache(
     }
     from vtscore.datasets.container import write_container
 
-    write_container(pkl_file, medias_pkl_bytes, meta, extra_pickle_keys=extra_pickle_keys)
+    # ``mt.dir_key`` (the only extra key) is already folded into ``pkl_data``
+    # above, so the pickle is complete — no need for ``write_container`` to
+    # unpickle+update+re-pickle the blob a second time.
+    write_container(pkl_file, medias_pkl_bytes, meta)

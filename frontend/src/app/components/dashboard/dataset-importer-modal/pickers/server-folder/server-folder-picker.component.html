@@ -1,0 +1,106 @@
+<div class="form-group">
+  <button
+    type="button"
+    class="btn btn--secondary"
+    (click)="browserOpen = !browserOpen"
+    title="Browse the server's filesystem and pick a folder"
+  >{{ browserOpen ? 'Hide browser' : 'Browse…' }}</button>
+  @if (browserOpen) {
+    <div class="sf-folder-browser-panel">
+      <vt-folder-browser
+        [browse]="folderBrowseFn"
+        [showFiles]="true"
+        [showPathFooter]="true"
+        rootLabel="Server root"
+        (pathChange)="onFolderPicked($event)"
+      ></vt-folder-browser>
+      <p class="form-hint">Navigate into a folder to select it; its media is imported.</p>
+    </div>
+  }
+</div>
+
+<div class="form-group">
+  <label class="form-label" for="sf-recursive" title="When enabled, subdirectories of the chosen folder are scanned recursively. When disabled, only files directly inside the chosen folder are imported.">
+    <input
+      id="sf-recursive"
+      type="checkbox"
+      [ngModel]="recursive"
+      (ngModelChange)="onRecursiveChange($event)"
+    />
+    Include subfolders
+  </label>
+</div>
+
+<div class="form-group">
+  <label class="form-label" for="sf-dig-archives" title="When enabled, archives (.zip, .tar, .rar …) found inside the chosen folder are extracted and their media imported too. The folder path can also point directly at a single archive file.">
+    <input
+      id="sf-dig-archives"
+      type="checkbox"
+      [ngModel]="digArchives"
+      (ngModelChange)="digArchives = $event"
+    />
+    Include archives' contents
+  </label>
+</div>
+
+<div class="form-group">
+  <label class="form-label" for="sf-reference-files" title="When enabled, the dataset stores a path reference to each original file on the server instead of copying its bytes in. Saves storage, but the dataset depends on the source files staying put — moving or deleting them breaks it.">
+    <input
+      id="sf-reference-files"
+      type="checkbox"
+      [ngModel]="referenceFiles"
+      (ngModelChange)="referenceFiles = $event"
+    />
+    Reference files in place (don't copy)
+  </label>
+</div>
+
+<div class="form-group">
+  <label class="form-label" for="sf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder name.">Dataset Name</label>
+  <input
+    id="sf-dataset-name"
+    type="text"
+    class="form-input"
+    [ngModel]="datasetName"
+    (ngModelChange)="onDatasetNameInput($event)"
+    placeholder="Leave blank to use a default name"
+  />
+</div>
+
+<div class="form-group form-group--section">
+  <vt-import-advanced
+    [availableConverters]="availableConverters"
+    [nativeType]="outputTypeId"
+    [typeLabels]="mediaTypeLabels"
+    [embedders]="embedders()"
+    [clippers]="clippers()"
+    [showSourceSpecs]="true"
+    [sourceSpecs]="sourceSpecs()"
+    (sourceSpecsChange)="onSpecsChange($event)"
+    [selectedEmbedder]="selectedEmbedder()"
+    (selectedEmbedderChange)="selectedEmbedder.set($event)"
+    [selectedPatchEmbedder]="selectedPatchEmbedder()"
+    (selectedPatchEmbedderChange)="selectedPatchEmbedder.set($event)"
+    [selectedStructuralEmbedder]="selectedStructuralEmbedder()"
+    (selectedStructuralEmbedderChange)="selectedStructuralEmbedder.set($event)"
+    [lockedEmbedder]="lockedEmbedderFor(mediaType(), embedders())"
+    [selectedClipper]="selectedClipper()"
+    [selectedClipperParams]="clipperParamValues()"
+    (clipperChooserRequested)="openClipperChooser()"
+    [buildProjection]="buildProjection"
+    (buildProjectionChange)="buildProjectionChange.emit($event)"
+    [mergeNearDuplicates]="mergeNearDuplicates"
+    (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
+  ></vt-import-advanced>
+</div>
+
+@if (browseError()) {
+  <p class="error-text">{{ browseError() }}</p>
+}
+
+<vt-clipper-chooser
+  [open]="clipperChooserOpen"
+  [clippers]="clipperChooserClippers"
+  (selected)="onClipperChooserSelected($event)"
+  (cancelled)="onClipperChooserCancelled()"
+/>

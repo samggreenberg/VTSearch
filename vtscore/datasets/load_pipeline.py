@@ -3,7 +3,7 @@
 This module strings the post-import :mod:`vtscore.datasets.stages` together
 into a background-threaded dataset load: it acquires the download/embed
 concurrency gates, runs the importer, then drives the clipper, embed, dedup,
-diversity-tree, registry, and (optional) projection stages while routing each
+coverage-atlas, registry, and (optional) projection stages while routing each
 stage's progress into the shared loading-task tracker. The per-stage work
 itself lives under :mod:`vtscore.datasets.stages`; the
 :class:`~vtscore.concurrency.gate.ConcurrencyGate` primitive lives in
@@ -46,7 +46,7 @@ from vtscore.datasets.stages._load_profiler import start_profiler
 from vtscore.datasets.stages.clipper import _apply_clipper_stage, _relazify_reference_clips_stage
 from vtscore.datasets.stages.embedding import embed_missing, _embed_missing_stage
 from vtscore.datasets.stages.finalize import (
-    _build_diversity_tree_stage,
+    _build_coverage_atlas_stage,
     _collapse_duplicates_stage,
     _collapse_near_duplicates_stage,
     _drop_none_embeddings_stage,
@@ -379,7 +379,7 @@ def _run_origin_load_in_background(
 
     *load_fn* is called with a single argument (the target medias dict);
     and should populate it in-place.  Everything after (origin tagging,
-    clipping, dedup, diversity tree, registry, embedder warm-up) is handled
+    clipping, dedup, coverage atlas, registry, embedder warm-up) is handled
     automatically.
 
     *embedder* is the primary create-time embedder (recorded as each media's
@@ -439,7 +439,7 @@ def _run_origin_load_in_background(
         ctx = DatasetContext(task_id)
         ctx.merge_near_duplicates = merge_near_duplicates
         # Pin the in-flight context to this thread so importers, clippers,
-        # dedup, diversity-tree, and label-sync helpers that resolve via
+        # dedup, coverage-atlas, and label-sync helpers that resolve via
         # ``get_active_context()`` see the dataset being built, not the
         # empty fallback context.  Without this, mutations addressed at
         # the active context (e.g. label restoration, vote replay) land
@@ -510,8 +510,8 @@ def _run_origin_load_in_background(
                     fin.begin("dedup")
                     _collapse_duplicates_stage(ctx, fin)
                     _collapse_near_duplicates_stage(ctx, fin)
-                    fin.begin("diversity")
-                    _build_diversity_tree_stage(ctx, fin)
+                    fin.begin("coverage")
+                    _build_coverage_atlas_stage(ctx, fin)
                     tracker.check_cancelled()
                     fin.begin("registry")
                     context_id, registry_entry_id = _register_and_migrate(

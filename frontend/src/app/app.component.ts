@@ -35,7 +35,7 @@ import {
   ImporterFlowState,
   NewDetectorFlowState,
 } from './services/new-thing-flows.service';
-import { DemoDataset } from './models/api.models';
+import { DemoDatasetEntry } from './generated/api-client/models/demo-dataset-entry';
 import type { RecentSession } from './generated/api-client/models/recent-session';
 import { isPairCompatible } from './utils/context-compat';
 
@@ -364,7 +364,7 @@ export class AppComponent {
     this.newThingFlows.closeImporter();
   }
 
-  onDemoSelected(demo: DemoDataset): void {
+  onDemoSelected(demo: DemoDatasetEntry): void {
     this.newThingFlows.emitDemoSelected(demo);
     this.newThingFlows.closeImporter();
   }

@@ -2,7 +2,7 @@ import { Injectable, OnDestroy, inject, signal } from '@angular/core';
 import { EMPTY, Observable, Subject, timer } from 'rxjs';
 import { catchError, map, switchMap, takeUntil, tap } from 'rxjs/operators';
 import type { MediaVoteResponse } from '../generated/api-client/models/media-vote-response';
-import { VotesResponse } from '../models/api.models';
+import { VotesResponse } from '../generated/api-client/models/votes-response';
 import { MediasApiService } from './medias-api.service';
 import { SortingApiService } from './sorting-api.service';
 

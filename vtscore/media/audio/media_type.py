@@ -455,9 +455,15 @@ class AudioMediaType(MediaType):
     # so the user clips the long files themselves.
     _TUT_CATEGORIES = ["street"]
 
+    # Clotho is an audio *captioning* dataset (no class labels), imported as
+    # real-world Freesound sound clips in one undifferentiated bucket.  It's the
+    # compositional-scene playground for natural-language text->audio search.
+    _CLOTHO_CATEGORIES = ["sound"]
+
     @property
     def demo_datasets(self) -> list:
         from vtscore.datasets.downloader import (  # noqa: PLC0415
+            CLOTHO_EVAL_DOWNLOAD_SIZE_MB,
             ESC50_DOWNLOAD_SIZE_MB,
             GTZAN_DOWNLOAD_SIZE_MB,
             SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
@@ -474,6 +480,10 @@ class AudioMediaType(MediaType):
         tut_folder = DATA_DIR / "tut_sound_events_2017"
         tut_desc = "Long ~4min street soundscapes (clip them yourself)"
         tut_total = 32
+        # Clotho eval split: 1045 real-world Freesound clips, one "sound" bucket.
+        clotho_folder = DATA_DIR / "clotho"
+        clotho_desc = "Real-world Freesound clips for text search"
+        clotho_total = 1045
         return [
             DemoDataset(
                 id="esc50_s",
@@ -670,6 +680,54 @@ class AudioMediaType(MediaType):
                 items_per_category=tut_total,
                 download_size_mb=TUT_SOUND_EVENTS_2017_DOWNLOAD_SIZE_MB,
             ),
+            DemoDataset(
+                id="clotho_s",
+                label="Clotho (S)",
+                description=clotho_desc,
+                categories=self._CLOTHO_CATEGORIES,
+                source="clotho",
+                required_folder=clotho_folder,
+                slice_frac_start=0.0,
+                slice_frac_end=1 / 7,
+                items_per_category=clotho_total,
+                download_size_mb=CLOTHO_EVAL_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="clotho_m",
+                label="Clotho (M)",
+                description=clotho_desc,
+                categories=self._CLOTHO_CATEGORIES,
+                source="clotho",
+                required_folder=clotho_folder,
+                slice_frac_start=1 / 7,
+                slice_frac_end=3 / 7,
+                items_per_category=clotho_total,
+                download_size_mb=CLOTHO_EVAL_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="clotho_l",
+                label="Clotho (L)",
+                description=clotho_desc,
+                categories=self._CLOTHO_CATEGORIES,
+                source="clotho",
+                required_folder=clotho_folder,
+                slice_frac_start=3 / 7,
+                slice_frac_end=None,
+                items_per_category=clotho_total,
+                download_size_mb=CLOTHO_EVAL_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="clotho_a",
+                label="Clotho (A)",
+                description=clotho_desc,
+                categories=self._CLOTHO_CATEGORIES,
+                source="clotho",
+                required_folder=clotho_folder,
+                slice_frac_start=0.0,
+                slice_frac_end=None,
+                items_per_category=clotho_total,
+                download_size_mb=CLOTHO_EVAL_DOWNLOAD_SIZE_MB,
+            ),
         ]
 
     # ------------------------------------------------------------------
@@ -735,6 +793,15 @@ class AudioMediaType(MediaType):
             audio_dir = download_tut_sound_events_2017(on_progress=on_progress)
             # No annotations: every recording is one undifferentiated bucket.
             category = categories[0] if categories else "street"
+            by_cat = {category: [(p, {"category": category, "path": p}) for p in sorted(audio_dir.rglob("*.wav"))]}
+            return _sliced_by_category(by_cat), audio_dir
+
+        if source == "clotho":
+            from vtscore.datasets.downloader import download_clotho  # noqa: PLC0415
+
+            audio_dir = download_clotho(on_progress=on_progress)
+            # Captioning dataset with no class labels: one undifferentiated bucket.
+            category = categories[0] if categories else "sound"
             by_cat = {category: [(p, {"category": category, "path": p}) for p in sorted(audio_dir.rglob("*.wav"))]}
             return _sliced_by_category(by_cat), audio_dir
 

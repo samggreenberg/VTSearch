@@ -12,6 +12,7 @@ Also tests ``load_pretrained_local_first`` which avoids network hangs by
 preferring locally cached model files.
 """
 
+import re
 from unittest.mock import MagicMock, patch
 
 import torch
@@ -25,6 +26,7 @@ from vtscore.media.embedder import (
     timed_progress,
 )
 from vtscore.embedding.loader import (
+    _ANSI_RESET,
     _make_console_progress,
     initialize_models,
     predict_embedders_to_preload,
@@ -182,50 +184,72 @@ class TestMakeConsoleProgress:
         for seg in renders:
             assert seg.index("s)") > seg.index("%")
 
-    def test_bar_fill_is_colored_red_at_or_below_half(self, capsys):
-        """A bar at ≤50% colors its fill red (between the brackets only)."""
+    def test_bar_fill_uses_a_truecolor_gradient(self, capsys):
+        """The fill is colored with a 24-bit RGB escape, not a fixed 16-color code."""
         cb = _make_console_progress(lambda *a, **kw: None)
 
         cb("loading", "model.safetensors", 30, 100)
-        cb("loading", "model.safetensors", 50, 100)
 
         out = capsys.readouterr().out
-        # Every render's bracketed fill opens with the red code and resets
-        # before the closing bracket; the percentage stays uncolored.
-        for seg in (s for s in out.split("\r") if "[" in s):
-            assert "[\033[31m" in seg
-            assert "\033[0m]" in seg
+        assert "\033[38;2;" in out
 
-    def test_bar_fill_is_colored_yellow_past_half(self, capsys):
-        """A bar in (50%, 100%) colors its fill yellow."""
+    def test_bar_color_is_reddest_at_zero_percent(self):
+        from vtscore.embedding.loader import _bar_rgb, _RGB_RED
+
+        assert _bar_rgb(0) == _RGB_RED
+
+    def test_bar_color_is_yellowest_at_fifty_percent(self):
+        from vtscore.embedding.loader import _bar_rgb, _RGB_YELLOW
+
+        assert _bar_rgb(50) == _RGB_YELLOW
+
+    def test_bar_color_is_greenest_at_hundred_percent(self):
+        from vtscore.embedding.loader import _bar_rgb, _RGB_GREEN
+
+        assert _bar_rgb(100) == _RGB_GREEN
+
+    def test_bar_color_interpolates_continuously(self):
+        """Every percentage should get a distinct shade, not a three-step palette."""
+        from vtscore.embedding.loader import _bar_rgb
+
+        rgbs = [_bar_rgb(pct) for pct in range(0, 101, 5)]
+        # No two consecutive 5%-apart samples should be identical: proves the
+        # color is a continuous function of percentage rather than a step function.
+        assert len(set(rgbs)) == len(rgbs)
+
+    def test_only_filled_chars_are_colored_not_empty_dots(self, capsys):
+        """Only the '#' fill is colored; the '.' remainder stays default-colored."""
         cb = _make_console_progress(lambda *a, **kw: None)
 
-        cb("loading", "model.safetensors", 75, 100)
+        cb("loading", "model.safetensors", 30, 100)
 
         out = capsys.readouterr().out
-        assert "[\033[93m" in out
-        assert "\033[0m]" in out
+        bar_start = out.index("[")
+        bar_end = out.index("]", bar_start)
+        bar_content = out[bar_start + 1 : bar_end]
 
-    def test_bar_fill_is_colored_green_at_completion(self, capsys):
-        """A 100% bar colors its fill green."""
-        cb = _make_console_progress(lambda *a, **kw: None)
+        match = re.match(r"\033\[38;2;\d+;\d+;\d+m", bar_content)
+        assert match
+        rest = bar_content[match.end() :]
+        reset_idx = rest.index(_ANSI_RESET)
+        filled_part = rest[:reset_idx]
+        dots_part = rest[reset_idx + len(_ANSI_RESET) :]
 
-        cb("loading", "model.safetensors", 100, 100)
+        assert filled_part == "#" * 9  # 30% of 30 columns
+        assert dots_part == "." * 21
 
-        out = capsys.readouterr().out
-        assert "[\033[32m" in out
-        assert "\033[0m]" in out
+    def test_completed_bar_via_flush_is_greenest(self, capsys):
+        """The flush-finalized bar (snap to 100%) colors its fill the greenest shade."""
+        from vtscore.embedding.loader import _bar_color
 
-    def test_completed_bar_via_flush_is_green(self, capsys):
-        """The flush-finalized bar (snap to 100%) colors its fill green."""
         cb = _make_console_progress(lambda *a, **kw: None)
 
         cb("loading", "model.safetensors", 40, 100)
         cb.flush()
 
         out = capsys.readouterr().out
-        # The final overwrite is the full green bar at 100%.
-        assert "[\033[32m" + "#" * 30 + "\033[0m] 100%" in out
+        # The final overwrite is the full bar colored with the 100% (greenest) shade.
+        assert "[" + _bar_color(100) + "#" * 30 + _ANSI_RESET + "] 100%" in out
 
     def test_color_codes_do_not_shift_bar_alignment(self, capsys):
         """ANSI color codes live *inside* the brackets, so the open-bracket

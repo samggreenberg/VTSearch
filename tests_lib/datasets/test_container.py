@@ -71,7 +71,7 @@ class TestContainerFormat:
 
         The payload is float32 embeddings + already-compressed media_bytes,
         both incompressible: DEFLATE burned seconds scanning every byte for
-        zero gain, the bulk of the post-diversity "Saving to registry…"
+        zero gain, the bulk of the post-coverage "Saving to registry…"
         stall.  Pin STORED so the latency fix can't silently regress.
         """
         path = tmp_path / "dataset.pkl"

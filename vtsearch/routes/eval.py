@@ -29,7 +29,7 @@ from vtsearch.schemas.eval import (
 )
 from vtsearch.state import (
     bad_votes,
-    get_diversity_tree,
+    get_coverage_atlas,
     get_inclusion,
     good_votes,
     label_history,
@@ -78,7 +78,7 @@ def labeling_status_indicator():
     ``status`` field of ``"red"``, ``"yellow"``, or ``"green"``.
     """
     try:
-        tree = get_diversity_tree()
+        tree = get_coverage_atlas()
         span = tree.span_info() if tree is not None else None
         return compute_labeling_status(
             snapshot_medias(), label_history, good_votes, bad_votes, get_inclusion(), span_info=span

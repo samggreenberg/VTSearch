@@ -290,7 +290,18 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
       // re-clamps too.
       const override = this.previewOverride;
       const metaShown = this.showMetadataColumn;
-      if (override !== this.lastPreviewOverride || metaShown !== this.lastMetadataShown) {
+      // Re-place when the settings-driven size actually changed, OR when the popup
+      // has mounted but not yet revealed (`placed` still false). The `!this.placed`
+      // clause fixes the "first right-click shows nothing, second opens it" bug:
+      // {@link ngAfterViewInit} calls `settingsState.load()`, which bumps the
+      // settings resource's request and so momentarily resets `settingsSignal()` to
+      // null while it refetches. If `nudgeOnScreen`'s reveal gate (`settingsReady`)
+      // runs during that null window it holds `placed` false, and nothing else
+      // re-runs `place()` when settings land (the size didn't change) — so the popup
+      // strands hidden until the next summon. Re-placing on settings-arrival reveals
+      // it then, keeping the "wait for the real sizes" behaviour (no default-size
+      // flash) while dropping the spurious second click.
+      if (override !== this.lastPreviewOverride || metaShown !== this.lastMetadataShown || !this.placed) {
         this.lastPreviewOverride = override;
         this.lastMetadataShown = metaShown;
         setTimeout(() => this.place());

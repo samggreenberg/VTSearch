@@ -1,4 +1,5 @@
 import { Directive, ElementRef, HostBinding, HostListener, NgZone, OnDestroy, inject, input, output } from '@angular/core';
+import { readRootZoom } from '../../utils/root-zoom';
 
 /**
  * Handles a vertical-divider drag for a flanking panel inside `vt-label-view`.
@@ -71,8 +72,16 @@ export class PanelResizeDirective implements OnDestroy {
   /** Translate a pointer position into a clamped width for this side. */
   private computeWidth(event: MouseEvent): number {
     const rect = this.layoutEl().getBoundingClientRect();
-    const raw = this.side() === 'left' ? event.clientX - rect.left : rect.right - event.clientX;
-    const max = rect.width - this.dividerTotal() - this.centerMin() - this.opposingWidth();
+    // `clientX` and `rect` are visual px (scaled by the app-wide `html{zoom}`),
+    // but the emitted width is applied as a layout-px CSS value that the zoom
+    // re-scales — divide the visual-px pointer delta and the container width by
+    // the zoom so the divider tracks the cursor instead of riding ~(zoom-1) off.
+    // The clamp bounds (`minWidth`/`centerMin`/`opposingWidth`/`dividerTotal`)
+    // are already layout px, so they need no conversion.
+    const zoom = readRootZoom();
+    const rawVisual = this.side() === 'left' ? event.clientX - rect.left : rect.right - event.clientX;
+    const raw = rawVisual / zoom;
+    const max = rect.width / zoom - this.dividerTotal() - this.centerMin() - this.opposingWidth();
     return Math.max(this.minWidth(), Math.min(max, raw));
   }
 

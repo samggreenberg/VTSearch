@@ -3,7 +3,7 @@
 VTSearch threads its execution context through three thread-locals: the
 authenticated user (consulted by per-user settings reads / writes), the
 active :class:`~vtscore.state.core.DatasetContext` (consulted by the
-``medias`` / ``diversity_tree`` proxies), and the active
+``medias`` / ``coverage_atlas`` proxies), and the active
 :class:`~vtscore.state.core.DetectorContext` (consulted by the
 ``good_votes`` / ``bad_votes`` / ``model`` proxies).
 

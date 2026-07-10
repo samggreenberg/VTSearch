@@ -152,18 +152,18 @@ describe('SortingApiService', () => {
     req.flush({});
   });
 
-  it('getDiversityTreeNext without scores should GET', () => {
-    service.getDiversityTreeNext().subscribe(data => expect(data.id).toBeNull());
-    const req = httpMock.expectOne('/api/diversity-tree/next');
+  it('getCoverageAtlasNext without scores should GET', () => {
+    service.getCoverageAtlasNext().subscribe(data => expect(data.id).toBeNull());
+    const req = httpMock.expectOne('/api/coverage-atlas/next');
     expect(req.request.method).toBe('GET');
-    req.flush({ id: null, diversity_level: 0, exhausted: false });
+    req.flush({ id: null, coverage_level: 0, exhausted: false });
   });
 
-  it('getDiversityTreeNext with scores should POST', () => {
-    service.getDiversityTreeNext({ '1': 0.9 }, 0.5).subscribe();
-    const req = httpMock.expectOne('/api/diversity-tree/next');
+  it('getCoverageAtlasNext with scores should POST', () => {
+    service.getCoverageAtlasNext({ '1': 0.9 }, 0.5).subscribe();
+    const req = httpMock.expectOne('/api/coverage-atlas/next');
     expect(req.request.method).toBe('POST');
-    req.flush({ id: 1, diversity_level: 1, exhausted: false });
+    req.flush({ id: 1, coverage_level: 1, exhausted: false });
   });
 
   it('getServerMediaFiles should GET', () => {

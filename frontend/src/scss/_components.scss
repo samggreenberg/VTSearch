@@ -328,6 +328,13 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   gap: var(--space-xs);
 }
 
+// Extra vertical breathing room above a grouped section inside an
+// importer form (e.g. the Embedder/Clipper "Advanced" block).  Shared
+// by every Add Dataset picker view (generic form / server-folder /
+// local-folder / demo), each of which renders its own
+// `<vt-import-advanced>` wrapped in a `.form-group.form-group--section`.
+.form-group--section { margin-top: var(--space-xl); }
+
 // Inline format-hint chip rendered below an importer form field when the
 // PluginField declares a `hint` (separate from `description`, which feeds
 // the placeholder).  Stays visible after the user starts typing; used for

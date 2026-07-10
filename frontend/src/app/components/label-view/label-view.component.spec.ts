@@ -212,7 +212,7 @@ describe('LabelViewComponent', () => {
 
   it('should handle select mode change to new', () => {
     flushInitialRequests();
-    // autoSelectNext (and thus the diversity-tree fetch for 'new' mode) only
+    // autoSelectNext (and thus the coverage-atlas fetch for 'new' mode) only
     // runs when there is a sort order to act on, so seed one first.
     component.sortState.setSortResults(
       [{ id: 2, score: 0.9 }, { id: 1, score: 0.3 }],
@@ -222,8 +222,8 @@ describe('LabelViewComponent', () => {
     expect(component.sortState.selectMode).toBe('new');
 
     // With a sort order present the diversity fetch POSTs the scores.
-    const req = httpMock.expectOne('/api/diversity-tree/next');
-    req.flush({ id: 1, diversity_level: 2.0, exhausted: false });
+    const req = httpMock.expectOne('/api/coverage-atlas/next');
+    req.flush({ id: 1, coverage_level: 2.0, exhausted: false });
     expect(component.mediaState.selectedId()).toBe(1);
   });
 

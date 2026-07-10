@@ -118,7 +118,7 @@ def _cuml_installed() -> bool:
 
 
 class TestCuMLBackends:
-    """The cuML backend selectors that accelerate UMAP + the diversity tree.
+    """The cuML backend selectors that accelerate UMAP + the coverage atlas.
 
     cuML is an *optional* GPU dependency, so these tests exercise the factory
     contract on any CUDA host: the estimators must work (and return numpy)
@@ -169,17 +169,17 @@ class TestCuMLBackends:
         assert proj.coords.dtype == np.float32
         assert np.isfinite(proj.coords).all()
 
-    def test_diversity_tree_builds_on_gpu(self):
-        from vtscore.state.diversity_tree import DiversityTree
+    def test_coverage_atlas_builds_on_gpu(self):
+        from vtscore.state.coverage_atlas import CoverageAtlas
 
         rng = np.random.default_rng(3)
         vectors = {i: rng.standard_normal(8).astype(np.float32) for i in range(60)}
-        tree = DiversityTree(vectors, k=2, max_depth=4, min_node_size=20)
-        # Every vector lands in a leaf and the tree actually split the root.
-        assert len(tree.vector_to_leaf) == 60
-        assert tree.total_nodes > 1
+        atlas = CoverageAtlas(vectors, k=2, max_depth=4, min_node_size=20)
+        # Every vector lands in a leaf and the atlas actually split the root.
+        assert len(atlas.vector_to_leaf) == 60
+        assert atlas.total_nodes > 1
         for vid in vectors:
-            assert tree.lookup(vid) in tree.nodes
+            assert atlas.lookup(vid) in atlas.nodes
 
 
 # ---------------------------------------------------------------------------

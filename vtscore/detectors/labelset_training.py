@@ -64,26 +64,24 @@ def _detector_embedder(det_ctx, snap: dict[int, dict[str, Any]] | None) -> str:
     return keying_embedder_for_snap(det_ctx, snap)
 
 
-def _patch_pooled_from_file(
+def _region_tree_from_file(
     file_path: Path,
     *,
     media_type: str,
     embedder_name: str,
-    region_box: tuple[float, float, float, float],
-) -> np.ndarray | None:
-    """Run ``patch_forward`` on *file_path* and pool *region_box* into one vector.
+):
+    """Rebuild a media's ``patch_regions`` tree from its file, or ``None``.
 
-    Mirrors the in-dataset region path (``_pool_box_from_media`` →
-    :func:`box_to_vote_vector`) for the cross-dataset case: resolve the
-    origin to a file, rebuild a patch grid via
-    :meth:`MediaEmbedder.patch_forward`, and pool the user-drawn box.
-    Returns ``None`` when the chosen embedder doesn't support patch
-    regions or the forward pass produces no output, so the caller can
-    fall back to an image-level embedding.
+    Resolves the embedder (the detector's, else the media type's default),
+    runs :meth:`MediaEmbedder.patch_forward`, and builds the region tree with
+    the same ``k``/``alpha`` defaults ingest uses.  Returns ``None`` when the
+    embedder doesn't support patch regions or the forward pass produces no
+    output.  Shared by the Good-vote snap path and the Bad-vote leaf-flood
+    path so both rebuild the identical tree cross-dataset.
     """
     from vtscore.media import embedders_for_type, get_embedder
     from vtscore.media.embedder import media_from_path
-    from vtscore.media.patch_embed import box_to_vote_vector
+    from vtscore.media.patch_embed import build_region_tree
 
     embedder = None
     if embedder_name:
@@ -111,7 +109,45 @@ def _patch_pooled_from_file(
         return None
     if output is None:
         return None
-    return box_to_vote_vector(np.asarray(output.patch_grid), region_box)
+    return build_region_tree(output)
+
+
+def _leaves_from_regions(regions) -> list[np.ndarray] | None:
+    """CLS + HAC-leaf vectors (``children is None``) from a ``patch_regions`` list.
+
+    The disjoint set a Bad vote floods as negatives - the full-image node plus
+    the leaves, dropping the redundant saliency-weighted internal pools.
+    Returns ``None`` for an empty/leafless list.
+    """
+    if not regions:
+        return None
+    leaves = [np.asarray(r.vec, dtype=np.float32) for r in regions if getattr(r, "children", None) is None]
+    return leaves or None
+
+
+def _patch_pooled_from_file(
+    file_path: Path,
+    *,
+    media_type: str,
+    embedder_name: str,
+    region_box: tuple[float, float, float, float],
+) -> np.ndarray | None:
+    """Run ``patch_forward`` on *file_path* and snap *region_box* to a node.
+
+    Mirrors the in-dataset region path (``pool_box_from_media`` →
+    :func:`snap_box_to_region`) for the cross-dataset case: rebuild the region
+    tree via :func:`_region_tree_from_file` and snap the user-drawn box to its
+    nearest node - so a Good region-vote trains on the exact sub-image
+    suggestion the MLP will max-pool over on the new dataset.  Returns ``None``
+    when the tree can't be built, so the caller can fall back to an image-level
+    embedding.
+    """
+    from vtscore.media.patch_embed import snap_box_to_region
+
+    regions = _region_tree_from_file(file_path, media_type=media_type, embedder_name=embedder_name)
+    if regions is None:
+        return None
+    return snap_box_to_region(regions, region_box)
 
 
 def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> np.ndarray | None:
@@ -119,8 +155,9 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
 
     When *elem* carries a ``region_box`` and the active embedder supports
     patch regions, the resolved file is patch-forwarded and the box is
-    pooled via :func:`box_to_vote_vector` so the user's region-level
-    training intent survives a dataset switch.  Logs a warning and falls
+    snapped to its nearest region node via :func:`snap_box_to_region` so the
+    user's region-level training intent survives a dataset switch.  Logs a
+    warning and falls
     back to a full-file embedding when the patch path is unavailable -
     legacy single-vector embedders, an origin carrying a clipper we'd
     have to replay against an unknown patch grid, or a failed forward
@@ -183,6 +220,8 @@ def _maybe_clear_cache_on_embedder_switch(det_ctx, embedder_name: str) -> None:
     if det_ctx.embedder and embedder_name and det_ctx.embedder != embedder_name:
         det_ctx.label_embeddings.clear()
         det_ctx.label_embedding_regions.clear()
+        # Flooded leaf negatives live in the old embedder's space too.
+        det_ctx.label_negative_regions.clear()
         # Local features are descriptor sets in the old embedder's feature space;
         # a switch invalidates them too (a SIFT template can't verify against a
         # learned-feature candidate, nor vice versa).
@@ -199,11 +238,10 @@ def _resolve_uncached_embedding(
     """Produce a training vector for *elem*, not consulting the cache.
 
     Tries the in-dataset path first: when *elem* resolves to a cid in the
-    active *snap*, reuse the stored embedding (region-pooling from
-    ``patch_grid`` when the element has a ``region_box`` and a patch grid
-    is available).  Falls back to the cross-dataset path - resolve via the
-    importer and embed freshly.  Returns ``None`` when neither path
-    produces a vector.
+    active *snap*, reuse the stored embedding (snapping the ``region_box`` to
+    the media's nearest ``patch_regions`` node when the element carries one).
+    Falls back to the cross-dataset path - resolve via the importer and embed
+    freshly.  Returns ``None`` when neither path produces a vector.
     """
     from vtscore.detectors.labelset_elements import resolve_current_dataset_cid
     from vtscore.detectors.training import pool_box_from_media
@@ -220,15 +258,51 @@ def _resolve_uncached_embedding(
             if emb is not None:
                 return np.asarray(emb)
 
-    # Cross-dataset path: ``_embed_one`` rebuilds a patch grid on the
+    # Cross-dataset path: ``_embed_one`` rebuilds the region tree on the
     # resolved file when ``elem.region_box`` is set and the embedder
-    # supports patch regions, then pools via ``box_to_vote_vector`` so
+    # supports patch regions, then snaps via ``snap_box_to_region`` so
     # region votes survive a dataset switch.  When the patch path isn't
     # available (legacy single-vector embedder, clipper-bearing origin,
     # failed forward pass) it logs a warning and returns the image-level
     # embedding - the only signal we have left to offer training.
     emb = _embed_one(elem, media_type=media_type, embedder_name=embedder_name)
     return np.asarray(emb) if emb is not None else None
+
+
+def _resolve_negative_leaves(
+    elem: LabeledElement,
+    snap: dict[int, dict[str, Any]] | None,
+    *,
+    media_type: str,
+    embedder_name: str,
+) -> list[np.ndarray] | None:
+    """Leaf negatives (CLS + HAC leaves) for a Bad *elem* on a patch dataset.
+
+    In-dataset: read the resolved media's ``patch_regions`` leaves (no I/O).
+    Cross-dataset: rebuild the region tree from the origin file via
+    :func:`_region_tree_from_file` and take its leaves.  Returns ``None`` for
+    non-patch datasets/elements (and clipper-bearing origins, whose patch grid
+    we can't reconstruct) so the caller falls back to a single image-level
+    negative - i.e. no flooding, the pre-change behaviour.
+    """
+    from vtscore.detectors.labelset_elements import resolve_current_dataset_cid
+    from vtscore.detectors.resolver import resolve_file_context
+
+    if snap:
+        cid = resolve_current_dataset_cid(elem)
+        if cid is not None and cid in snap:
+            return _leaves_from_regions(snap[cid].get("patch_regions"))
+
+    origin = elem.origin or {}
+    params = origin.get("params", {}) if isinstance(origin, dict) else {}
+    if isinstance(params, dict) and params.get("clipper"):
+        return None
+
+    with resolve_file_context(elem.origin, elem.origin_name, elem.filename) as file_path:
+        if file_path is None:
+            return None
+        regions = _region_tree_from_file(file_path, media_type=media_type, embedder_name=embedder_name)
+    return _leaves_from_regions(regions)
 
 
 def populate_label_embeddings(
@@ -263,8 +337,20 @@ def populate_label_embeddings(
     total = len(labelset.elements)
     cached = 0
 
+    neg_cache: dict[str, list[np.ndarray]] = det_ctx.label_negative_regions
+
     for idx, elem in enumerate(labelset.elements):
         eid = stable_element_id(elem)
+        # Bad elements on a patch dataset flood their CLS + leaf negatives (the
+        # cross-dataset counterpart of ``bad_negative_vecs``); cache the leaf
+        # set once so re-sorts don't re-resolve.  A no-op on non-patch datasets
+        # (``_resolve_negative_leaves`` returns None), leaving the Bad element
+        # to contribute its single image-level vector below.
+        if elem.label == "bad" and eid not in neg_cache:
+            leaves = _resolve_negative_leaves(elem, snap, media_type=media_type, embedder_name=embedder_name)
+            if leaves is not None:
+                neg_cache[eid] = leaves
+
         # Cache hit only when the cached vector was built against the same
         # ``region_box`` the element currently carries.  Region-voted
         # elements (``region_box is not None``) always fall through so the
@@ -301,23 +387,44 @@ def populate_label_embeddings(
 def build_xy_from_labelset(
     det_ctx,
     labelset: LabelSet,
-) -> tuple[list[np.ndarray], list[float]]:
-    """Build ``(X_list, y_list)`` from the cached embeddings on *det_ctx*."""
+) -> tuple[list[np.ndarray], list[float], list]:
+    """Build ``(X_list, y_list, groups)`` from the cached embeddings on *det_ctx*.
+
+    A Good element contributes its single cached vector.  A Bad element on a
+    patch dataset contributes its flooded CLS + leaf negatives (cached in
+    ``label_negative_regions`` by :func:`populate_label_embeddings`); on a
+    legacy dataset it contributes its single image-level vector, as before.
+    ``groups`` carries one bag id per row - ``("g"/"b", element_id)`` - so the
+    trainer/calibrator balance and split by element (image), not by row.  When
+    nothing floods, every bag holds one row and the downstream path is
+    byte-for-byte the pre-flood behaviour.
+    """
     from vtscore.detectors.labelset_elements import stable_element_id
 
     cache: dict[str, np.ndarray] = det_ctx.label_embeddings
+    neg_cache: dict[str, list[np.ndarray]] = det_ctx.label_negative_regions
     X_list: list[np.ndarray] = []
     y_list: list[float] = []
+    groups: list = []
     for elem in labelset.elements:
         if elem.label not in ("good", "bad"):
             continue
         eid = stable_element_id(elem)
+        if elem.label == "bad":
+            leaves = neg_cache.get(eid)
+            if leaves:
+                for vec in leaves:
+                    X_list.append(vec)
+                    y_list.append(0.0)
+                    groups.append(("b", eid))
+                continue
         emb = cache.get(eid)
         if emb is None:
             continue
         X_list.append(emb)
         y_list.append(1.0 if elem.label == "good" else 0.0)
-    return X_list, y_list
+        groups.append(("g" if elem.label == "good" else "b", eid))
+    return X_list, y_list, groups
 
 
 # ---------------------------------------------------------------------------
@@ -512,7 +619,7 @@ def train_from_labelset(
         snap=snap,
         on_progress=on_progress,
     )
-    X_list, y_list = build_xy_from_labelset(det_ctx, labelset)
+    X_list, y_list, groups = build_xy_from_labelset(det_ctx, labelset)
     if len(X_list) < 2:
         return False
     if not any(y == 1.0 for y in y_list) or not any(y == 0.0 for y in y_list):
@@ -525,7 +632,7 @@ def train_from_labelset(
     # Pass det_ctx so the fold orderings are cached for a no-retrain Inclusion
     # slide (otherwise the slide can't move the cutoff — see train_and_threshold).
     mlp, threshold = train_and_threshold(
-        X_list, y_list, snap=snap, embedder_name=det_ctx.embedder or None, det_ctx=det_ctx
+        X_list, y_list, snap=snap, embedder_name=det_ctx.embedder or None, det_ctx=det_ctx, groups=groups
     )
     det_ctx.model = mlp
     det_ctx.threshold = threshold
@@ -557,7 +664,7 @@ def labelset_train_and_score(
     from vtscore.detectors.training import _train_and_score_xy
 
     populate_label_embeddings(det_ctx, labelset, media_type=media_type, snap=clips_dict)
-    X_list, y_list = build_xy_from_labelset(det_ctx, labelset)
+    X_list, y_list, groups = build_xy_from_labelset(det_ctx, labelset)
     results, threshold, model = _train_and_score_xy(
         X_list,
         y_list,
@@ -567,6 +674,7 @@ def labelset_train_and_score(
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
         det_ctx=det_ctx,
+        groups=groups,
     )
 
     # Stage-2 structural re-rank for a saved structural detector reloaded

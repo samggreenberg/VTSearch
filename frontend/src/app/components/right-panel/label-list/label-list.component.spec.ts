@@ -123,62 +123,59 @@ describe('LabelListComponent', () => {
     });
   });
 
-  describe('view modes and thumbnails', () => {
+  describe('precomputed entry display fields', () => {
+    // Entries carry their thumbnail URL / fallback icon precomputed by
+    // buildSortedEntries() (the template binds stored fields; there are no
+    // per-change-detection getters anymore).
     beforeEach(async () => {
-      // setInput builds the media-id → media lookup map (in ngOnChanges) so
-      // thumbnailUrl()/hasThumbnailUrl() resolve.
-      await setInputs({ medias: sampleMedias });
+      await setInputs({ ids: [1, 2, 3], medias: sampleMedias });
     });
 
-    it('should have thumbnail URL for images', () => {
-      expect(component.hasThumbnailUrl(2)).toBe(true);
+    function entryById(id: number) {
+      const entry = component.sortedEntries().find((e) => e.id === id);
+      if (!entry) throw new Error(`no entry for id ${id}`);
+      return entry;
+    }
+
+    it('should precompute thumbnail URLs for audio/image/video', () => {
+      expect(entryById(1).thumbnailUrl).toBe('/api/medias/1/thumbnail');
+      expect(entryById(2).thumbnailUrl).toBe('/api/medias/2/thumbnail');
+      expect(entryById(3).thumbnailUrl).toBe('/api/medias/3/thumbnail');
     });
 
-    it('should have thumbnail URL for videos', () => {
-      expect(component.hasThumbnailUrl(3)).toBe(true);
+    it('should fold a region box into the thumbnail URL', async () => {
+      await setInputs({ regionBoxes: { '2': [0, 0.25, 0.5, 1] } });
+      expect(entryById(2).thumbnailUrl).toBe('/api/medias/2/thumbnail?region=0.0000,0.2500,0.5000,1.0000');
+      expect(entryById(1).thumbnailUrl).toBe('/api/medias/1/thumbnail');
     });
 
-    it('should have thumbnail URL for audio', () => {
-      expect(component.hasThumbnailUrl(1)).toBe(true);
+    it('should keep a media-type fallback icon for failed thumbnails', () => {
+      expect(entryById(1).fallbackIcon).toBe('♫');
+      expect(entryById(2).fallbackIcon).toBe('□');
     });
 
-    it('should generate correct thumbnail URLs', () => {
-      expect(component.thumbnailUrl(1)).toBe('/api/medias/1/thumbnail');
-      expect(component.thumbnailUrl(2)).toBe('/api/medias/2/thumbnail');
-      expect(component.thumbnailUrl(3)).toBe('/api/medias/3/thumbnail');
-    });
-
-    it('should not show placeholder icon for audio (has thumbnail)', () => {
-      expect(component.placeholderIcon(1)).toBeNull();
-    });
-
-    it('should not show placeholder icon for image (has thumbnail)', () => {
-      expect(component.placeholderIcon(2)).toBeNull();
+    it('should mark ids without a media as missing with no thumbnail or icon', async () => {
+      await setInputs({ ids: [999] });
+      const entry = component.sortedEntries()[0];
+      expect(entry.thumbnailUrl).toBe('');
+      expect(entry.fallbackIcon).toBeNull();
+      expect(entry.missing).toBe(true);
     });
   });
 
-  it('should emit mediaSelected on entry click', () => {
+  it('should emit mediaSelected with a numeric id on grid selection', () => {
     vi.spyOn(component.mediaSelected, 'emit');
-    component.onEntryClick(42);
+    component.onEntrySelected({ key: '42', name: 'x', thumbnailUrl: '', fallbackIcon: null, missing: false });
     expect(component.mediaSelected.emit).toHaveBeenCalledWith(42);
   });
 
-  it('should emit mediaSelected on Enter keydown', () => {
-    vi.spyOn(component.mediaSelected, 'emit');
-    component.onEntryKeydown(new KeyboardEvent('keydown', { key: 'Enter' }), 42);
-    expect(component.mediaSelected.emit).toHaveBeenCalledWith(42);
-  });
-
-  it('should emit mediaSelected on Space keydown', () => {
-    vi.spyOn(component.mediaSelected, 'emit');
-    component.onEntryKeydown(new KeyboardEvent('keydown', { key: ' ' }), 42);
-    expect(component.mediaSelected.emit).toHaveBeenCalledWith(42);
-  });
-
-  it('should not emit on other key', () => {
-    vi.spyOn(component.mediaSelected, 'emit');
-    component.onEntryKeydown(new KeyboardEvent('keydown', { key: 'a' }), 42);
-    expect(component.mediaSelected.emit).not.toHaveBeenCalled();
+  it('should forward grid votes with a numeric id', () => {
+    vi.spyOn(component.mediaVote, 'emit');
+    component.onEntryVote({
+      entry: { key: '42', name: 'x', thumbnailUrl: '', fallbackIcon: null, missing: false },
+      vote: 'good',
+    });
+    expect(component.mediaVote.emit).toHaveBeenCalledWith({ id: 42, vote: 'good' });
   });
 
   it('should use filename for entry name', async () => {

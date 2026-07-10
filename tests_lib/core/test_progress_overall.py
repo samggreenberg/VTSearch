@@ -232,8 +232,8 @@ class TestFinalizeProgress:
         fin.update("loading", "Removing duplicates…", current=10, total=10)
         rec()
         after_dedup = t.get()["overall"]
-        fin.begin("diversity")
-        fin.update("loading", "Building diversity index…", current=5, total=10)
+        fin.begin("coverage")
+        fin.update("loading", "Building coverage atlas…", current=5, total=10)
         rec()
         fin.begin("registry")
         fin.update("loading", "Saving to registry…", current=3, total=3)

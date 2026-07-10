@@ -33,7 +33,7 @@ _TOTAL_LOAD_STEPS = 4  # download, load model, embed, finalize
 # Rough typical wall-clock split across the four load phases, used to pace the
 # unified whole-job progress bar (see ProgressTracker.set_step_weights).
 # Embedding dominates almost any real dataset on a CPU host; the model load is a
-# roughly fixed one-time cost; finalize (dedup + diversity tree + registry) is
+# roughly fixed one-time cost; finalize (dedup + coverage atlas + registry) is
 # short *relative to a slow CPU embed*.
 #
 # The model-load slice is kept deliberately small: it is the one phase that
@@ -51,7 +51,7 @@ _LOAD_STEP_WEIGHTS_CPU = [0.25, 0.10, 0.55, 0.10]
 # encoder pass. An image embed is a single ViT forward over one frame — far
 # cheaper per item — so on a CPU image import the embed phase no longer
 # dominates: archive download/extraction (many image demo sources are tens of MB
-# pulled over the network) and the un-accelerated finalize (dedup + diversity
+# pulled over the network) and the un-accelerated finalize (dedup + coverage-
 # k-means + registry serialize/zip/write) take a proportionally larger share.
 # With the generic 55%-embed profile the bar raced through embedding and then
 # crawled download/finalize. Shifting weight off embed and onto download +
@@ -64,7 +64,7 @@ _LOAD_STEP_WEIGHTS_CPU_IMAGE = [0.35, 0.10, 0.35, 0.20]
 # GPU profile. When embedding runs on a CUDA device it is several times faster,
 # so the embed phase shrinks while the *finalize* phase does not: the registry
 # save (serialize → zip → disk write) is never GPU-accelerated, and the
-# diversity-tree k-means only moves to the GPU when cuML is installed (a
+# atlas k-means only moves to the GPU when cuML is installed (a
 # best-effort RAPIDS dependency that is frequently absent — see
 # ``vtscore/gpu_backends.py``), so it usually still runs on CPU ``sklearn``.
 # The net effect on a GPU host is that finalize dominates wall-clock instead of
@@ -148,12 +148,12 @@ class FinalizeProgress:
     of step 4 (the finalize phase).
 
     Step 4 bundles several sub-stages — drop-failed-embeds, dedup, the
-    diversity-tree build, the registry save, and the optional Browse
+    coverage-atlas build, the registry save, and the optional Browse
     projection. Each of them used to report its *own* ``current``/``total``
     against the single step-4 slice, so whichever finished first (usually
     dedup) drove the within-step fraction to ``1.0`` and pinned the unified
     bar at 100% while the slower sub-stages (serialize + zip + disk write,
-    diversity k-means) were still grinding — the bar looked done, the ETA
+    coverage k-means) were still grinding — the bar looked done, the ETA
     froze at its last embed-phase estimate, and the user sat there.
 
     This proxy fixes that by assigning each sub-stage an ordered, non-
@@ -165,7 +165,7 @@ class FinalizeProgress:
     fraction into the active slot before forwarding, so the bar advances once,
     monotonically, across the whole phase and the overall ETA self-corrects.
 
-    A skipped sub-stage (opt-in near-dup merge, deferred diversity tree above
+    A skipped sub-stage (opt-in near-dup merge, deferred coverage atlas above
     the size threshold, opt-out projection) simply leaves its slice unfilled;
     the next :meth:`begin` jumps the bar forward, which is monotonic and fine.
     """
@@ -176,14 +176,14 @@ class FinalizeProgress:
     _SCALE = 1000
 
     #: Ordered finalize sub-stages with a rough wall-clock share each. The
-    #: registry save (serialize + zip + write) dominates, with the diversity
+    #: registry save (serialize + zip + write) dominates, with the coverage
     #: tree second; the rest are quick. Shares need only be in the right
     #: ballpark — they shape pacing within the finalize slice, and the overall
     #: ETA self-corrects from the real rate (see ProgressTracker._compute_overall).
     _SLOTS: tuple[tuple[str, float], ...] = (
         ("cleanup", 0.05),
         ("dedup", 0.15),
-        ("diversity", 0.30),
+        ("coverage", 0.30),
         ("registry", 0.45),
         ("projection", 0.05),
     )

@@ -96,6 +96,14 @@ TUT_SOUND_EVENTS_2017_ARCHIVES = (
         "evaluation",
     ),
 )
+# Clotho (v1) evaluation split: 1045 real-world Freesound clips, 15-30s each,
+# hosted on Zenodo as a single ``.7z`` archive (extraction needs py7zr).  Clotho
+# is an audio *captioning* set; VTSearch imports only the audio (no class
+# labels) into one bucket, so it serves as the compositional-real-world-sound
+# playground for text->audio (CLAP) retrieval.  The much larger 3.4 GB
+# development split is intentionally skipped - the eval split alone is a
+# GTZAN-sized demo.
+CLOTHO_EVAL_URL = "https://zenodo.org/records/3490684/files/clotho_audio_evaluation.7z"
 OXFORD_FLOWERS_URL = "https://www.robots.ox.ac.uk/~vgg/data/flowers/102/102flowers.tgz"
 OXFORD_FLOWERS_LABELS_URL = "https://www.robots.ox.ac.uk/~vgg/data/flowers/102/imagelabels.mat"
 FOOD101_URL = "http://data.vision.ee.ethz.ch/cvl/food-101.tar.gz"
@@ -171,6 +179,7 @@ SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB = 2300
 URBANSOUND8K_DOWNLOAD_SIZE_MB = 6000
 # Dev audio.1 (~1.1 GB) + audio.2 (~213 MB) + eval audio (~388 MB).
 TUT_SOUND_EVENTS_2017_DOWNLOAD_SIZE_MB = 1730
+CLOTHO_EVAL_DOWNLOAD_SIZE_MB = 1200
 OXFORD_FLOWERS_DOWNLOAD_SIZE_MB = 330
 FOOD101_DOWNLOAD_SIZE_MB = 5000
 EUROSAT_DOWNLOAD_SIZE_MB = 90
@@ -393,10 +402,20 @@ def download_file_with_progress(  # noqa: C901
                 total_size = _total_size_from_headers(response, downloaded, expected_size)
 
             mode = "ab" if downloaded else "wb"
+            # Emit progress at most every ~200 ms rather than once per chunk: a
+            # multi-GB download makes hundreds of thousands of chunk writes, and
+            # a per-chunk SSE push is real CPU that can throttle the transfer.
+            # Throttle on wall-clock (time.monotonic), not chunk count, so slow
+            # links still update; always emit a final 100% call after the loop.
+            last_emit = time.monotonic()
             with open(dest_path, mode) as f:
-                for chunk in response.iter_content(chunk_size=8192):
+                for chunk in response.iter_content(chunk_size=1 << 20):
                     downloaded += f.write(chunk)
-                    on_progress("downloading", f"Downloading {dest_path.name}...", downloaded, total_size)
+                    now = time.monotonic()
+                    if now - last_emit >= 0.2:
+                        last_emit = now
+                        on_progress("downloading", f"Downloading {dest_path.name}...", downloaded, total_size)
+            on_progress("downloading", f"Downloading {dest_path.name}...", downloaded, total_size)
             return  # stream consumed cleanly
         except _RETRYABLE_EXCEPTIONS:
             if last_attempt:
@@ -475,6 +494,9 @@ def download_file_atomic(
 
 _GZIP_MAGIC = b"\x1f\x8b"
 _ZIP_MAGIC = b"PK"
+# 7-Zip archives begin with the 6-byte signature "7z\xbc\xaf\x27\x1c"; the
+# first 4 bytes are enough to tell a real archive from an HTML error page.
+_SEVENZIP_MAGIC = b"7z\xbc\xaf"
 # Uncompressed tar: first 257 bytes contain "ustar" at offset 257,
 # but a simpler heuristic is that the file does NOT start with common
 # non-archive signatures (HTML, JSON, plain text error pages).
@@ -503,6 +525,8 @@ def _validate_archive(archive_path: Path, archive_name: str, dataset_name: str) 
         ok = header[:2] == _GZIP_MAGIC or tarfile.is_tarfile(archive_path)
     elif suffix.endswith(".zip"):
         ok = header[:2] == _ZIP_MAGIC
+    elif suffix.endswith(".7z"):
+        ok = header == _SEVENZIP_MAGIC
     elif suffix.endswith(".tar"):
         # For plain tar we just check it doesn't look like HTML/text
         ok = not any(header.startswith(sig) for sig in _HTML_SIGNATURES)
@@ -531,16 +555,46 @@ def _move_tree_contents(src: Path, dst: Path) -> None:
                     shutil.copy2(child, target)
 
 
+def _extract_7z(archive_path: Path, dest_dir: Path, dataset_name: str, on_progress: ProgressCallback) -> None:
+    """Extract a ``.7z`` archive into *dest_dir* using ``py7zr``.
+
+    ``py7zr`` is a declared dependency (installed by ``install.sh``), but only
+    the Clotho audio demo ships as ``.7z``, so it is still imported lazily and a
+    missing install surfaces as a short, actionable ``RuntimeError`` rather than
+    an ``ImportError``.  Every member name is validated against *dest_dir* before
+    extraction to guard against path traversal (the same protection the zip
+    branch applies).
+    """
+    try:
+        import py7zr  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+    except ImportError as exc:
+        raise RuntimeError(
+            f"Extracting {dataset_name} needs the 'py7zr' package to read .7z archives. "
+            f"Install it with 'pip install py7zr' and try again."
+        ) from exc
+
+    from vtscore.datasets.archive import _reject_traversal  # noqa: PLC0415
+
+    dest_resolved = Path(dest_dir).resolve()
+    on_progress("downloading", f"Extracting {dataset_name}...", 0, 0)
+    with py7zr.SevenZipFile(archive_path, mode="r") as archive:
+        for name in archive.getnames():
+            _reject_traversal(dest_resolved, name)
+        # Safe: every member name was traversal-checked against dest_dir above.
+        archive.extractall(path=dest_dir)  # noqa: S202
+    on_progress("downloading", f"Extracting {dataset_name}...", 1, 1)
+
+
 def _extract_archive(
     archive_path: Path, archive_name: str, dest_dir: Path, dataset_name: str, on_progress: ProgressCallback
 ) -> None:
     """Extract *archive_path* into *dest_dir*, dispatching by filename suffix.
 
-    Supports ``.tar.gz`` / ``.tgz`` (gzip tar), ``.tar`` (uncompressed tar), and
-    ``.zip`` archives.  Tar members are extracted with ``filter="data"`` (which
-    rejects unsafe absolute/traversal paths); zip members are validated against
-    *dest_dir* to guard against path traversal (zip-slip).  Raises ``ValueError``
-    for an unsupported archive format.
+    Supports ``.tar.gz`` / ``.tgz`` (gzip tar), ``.tar`` (uncompressed tar),
+    ``.zip``, and ``.7z`` archives.  Tar members are extracted with
+    ``filter="data"`` (which rejects unsafe absolute/traversal paths); zip and
+    7z members are validated against *dest_dir* to guard against path traversal
+    (zip-slip).  Raises ``ValueError`` for an unsupported archive format.
     """
     suffix = archive_name.lower()
     if suffix.endswith((".tar.gz", ".tgz", ".tar")):
@@ -575,6 +629,8 @@ def _extract_archive(
                 # a sibling dir with the dest as a name prefix passed.
                 _reject_traversal(dest_resolved, member)
                 zip_ref.extract(member, dest_dir)
+    elif suffix.endswith(".7z"):
+        _extract_7z(archive_path, dest_dir, dataset_name, on_progress)
     else:
         raise ValueError(f"Unsupported archive format: {archive_name}")
 
@@ -592,8 +648,8 @@ def _download_and_extract(
     """Download an archive and extract it if *check_path* does not already exist.
 
     Supports ``.tar.gz`` / ``.tgz`` (gzip tar), ``.tar`` (uncompressed tar),
-    and ``.zip`` archives.  The archive file is deleted after successful
-    extraction to reclaim disk space.
+    ``.zip``, and ``.7z`` archives.  The archive file is deleted after
+    successful extraction to reclaim disk space.
 
     Each invocation downloads and extracts into unique temporary paths so that
     concurrent calls targeting the same archive do not interfere with each

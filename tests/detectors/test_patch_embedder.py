@@ -29,6 +29,7 @@ from vtscore.media.patch_embed import (
     eupe_features_to_patch_output,
     hf_vit_to_patch_output,
     propose_leaves,
+    snap_box_to_region,
     to_fp16,
 )
 from vtscore.training.region_similarity import (
@@ -1056,6 +1057,81 @@ class TestBoxToVoteVector:
         np.testing.assert_array_equal(tuple_v, list_v)
 
 
+class TestSnapBoxToRegion:
+    """``snap_box_to_region`` picks the region tree node whose box best matches
+    the user's drawn box (max IoU) and returns *that node's* vector - the exact
+    sub-image suggestion the MLP max-pools over at inference, rather than a
+    fresh pool that matches no node.
+    """
+
+    @staticmethod
+    def _region(box, axis, d=8):
+        """A RegionVector whose vec is the one-hot unit vector along *axis*."""
+        vec = np.zeros(d, dtype=np.float32)
+        vec[axis] = 1.0
+        return RegionVector(box=box, vec=vec)
+
+    def test_returns_exact_node_vector_not_a_fresh_pool(self):
+        regions = [
+            self._region((0.0, 0.0, 1.0, 1.0), axis=0),  # full-image / CLS
+            self._region((0.0, 0.0, 0.5, 0.5), axis=1),  # top-left
+            self._region((0.5, 0.5, 1.0, 1.0), axis=2),  # bottom-right
+        ]
+        # A box hugging the top-left region.
+        v = snap_box_to_region(regions, (0.02, 0.02, 0.48, 0.48))
+        np.testing.assert_array_equal(v, regions[1].vec)
+
+    def test_snaps_to_highest_iou_not_nearest_centroid(self):
+        # Two candidates share a centroid region but differ in extent; the
+        # tighter-overlapping box must win on IoU.
+        regions = [
+            self._region((0.0, 0.0, 1.0, 1.0), axis=0),  # full image
+            self._region((0.1, 0.1, 0.4, 0.4), axis=1),  # tight match
+        ]
+        v = snap_box_to_region(regions, (0.1, 0.1, 0.4, 0.4))
+        np.testing.assert_array_equal(v, regions[1].vec)
+
+    def test_whole_image_box_collapses_to_cls_node(self):
+        regions = [
+            self._region((0.0, 0.0, 1.0, 1.0), axis=0),  # full-image / CLS
+            self._region((0.0, 0.0, 0.3, 0.3), axis=1),
+        ]
+        v = snap_box_to_region(regions, (0.0, 0.0, 1.0, 1.0))
+        np.testing.assert_array_equal(v, regions[0].vec)
+
+    def test_returns_l2_normalised_float32(self):
+        # A float16-stored, slightly off-unit vector must come back unit-norm
+        # float32 (the pickle dtype can drift the norm on upcast).
+        vec = (np.array([3.0, 4.0], dtype=np.float32) / 5.0).astype(np.float16)
+        regions = [RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=vec)]
+        v = snap_box_to_region(regions, (0.1, 0.1, 0.9, 0.9))
+        assert v is not None
+        assert v.dtype == np.float32
+        assert abs(float(np.linalg.norm(v)) - 1.0) < 1e-5
+
+    def test_degenerate_zero_area_box_falls_back_to_nearest_centroid(self):
+        regions = [
+            self._region((0.0, 0.0, 0.2, 0.2), axis=0),  # centroid (0.1, 0.1)
+            self._region((0.6, 0.6, 1.0, 1.0), axis=1),  # centroid (0.8, 0.8)
+        ]
+        # A zero-area "line" box near the second region's centroid: IoU is 0
+        # against everything, so centroid distance decides.
+        v = snap_box_to_region(regions, (0.75, 0.75, 0.75, 0.9))
+        np.testing.assert_array_equal(v, regions[1].vec)
+
+    def test_empty_regions_returns_none(self):
+        assert snap_box_to_region([], (0.0, 0.0, 1.0, 1.0)) is None
+
+    def test_swapped_corners_tolerated(self):
+        regions = [
+            self._region((0.0, 0.0, 1.0, 1.0), axis=0),
+            self._region((0.0, 0.0, 0.5, 0.5), axis=1),
+        ]
+        normal = snap_box_to_region(regions, (0.0, 0.0, 0.5, 0.5))
+        swapped = snap_box_to_region(regions, (0.5, 0.5, 0.0, 0.0))
+        np.testing.assert_array_equal(normal, swapped)
+
+
 # ---------------------------------------------------------------------------
 # v2: vote endpoint, label export, and region-aware training wiring
 # ---------------------------------------------------------------------------
@@ -1361,9 +1437,10 @@ class TestLabelImportRegionBox:
 
 
 class TestRegionAwareTraining:
-    """``train_and_score`` and ``populate_label_embeddings`` pool the
-    training vector on-the-fly from ``media["patch_grid"]`` when an element
-    carries a ``region_box``.  Patch-embedder v2 step 4.
+    """``train_and_score`` and ``populate_label_embeddings`` derive the
+    training vector on-the-fly when an element carries a ``region_box``:
+    snapping to the media's nearest ``patch_regions`` node when a region tree
+    is present, else pooling ``media["patch_grid"]``.  Patch-embedder v2 step 4.
     """
 
     def _media_with_patch_grid(self, grid_value: float, cid: int) -> dict:
@@ -1393,8 +1470,9 @@ class TestRegionAwareTraining:
         }
 
     def test_train_and_score_uses_box_pooled_vec_when_grid_present(self):
-        """A yes-vote with region_box on a media that has a patch_grid feeds
-        the MLP with the *pooled* vector, not the CLS embedding."""
+        """A yes-vote with region_box on a media that has a patch_grid but no
+        region tree falls back to the *pooled* grid vector, not the CLS
+        embedding."""
         from vtscore.media.patch_embed import box_to_vote_vector
         from vtscore.detectors.training import _training_vec_for_vote
 
@@ -1406,6 +1484,30 @@ class TestRegionAwareTraining:
         np.testing.assert_array_equal(vec, expected)
         # And the CLS vector is *not* what we got.
         assert not np.array_equal(vec, media_embedding(media))
+
+    def test_train_and_score_snaps_to_region_node_when_regions_present(self):
+        """When the media carries a ``patch_regions`` tree, a region vote trains
+        on the *snapped node's* vector (an inference-time candidate), not a
+        fresh grid pool that matches no node."""
+        from vtscore.media.patch_embed import box_to_vote_vector, snap_box_to_region
+        from vtscore.detectors.training import _training_vec_for_vote
+
+        media = self._media_with_patch_grid(0.99, cid=7)
+        # A distinct one-hot node vector so it can't coincide with any grid pool
+        # (whose non-zero support is the 16 grid axes 0..15).
+        node_vec = np.zeros(16, dtype=np.float32)
+        node_vec[15] = 1.0
+        media["patch_regions"] = [
+            RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=np.eye(16, dtype=np.float32)[0]),
+            RegionVector(box=(0.0, 0.0, 0.5, 0.5), vec=node_vec),
+        ]
+        box = (0.02, 0.02, 0.48, 0.48)  # hugs the second node's box
+
+        vec = _training_vec_for_vote(media, box)
+        np.testing.assert_array_equal(vec, snap_box_to_region(media["patch_regions"], box))
+        np.testing.assert_array_equal(vec, node_vec)
+        # It is *not* the grid pool the old path would have produced.
+        assert not np.array_equal(vec, box_to_vote_vector(media["patch_grid"], box))
 
     def test_train_and_score_falls_back_to_cls_without_patch_grid(self):
         """Legacy / single-vector datasets have no ``patch_grid``; even with
@@ -1856,3 +1958,150 @@ class TestRegionAwareTrainingCrossDataset:
         eid = stable_element_id(elem)
         np.testing.assert_array_equal(det_ctx.label_embeddings[eid], sentinel)
         assert patch_calls == []
+
+
+class TestBadVoteRegionFlooding:
+    """A Bad vote on a patch media floods the image's CLS + HAC-leaf negatives
+    (the disjoint covering set), so the max-pool can't surface any look-alike
+    sub-region of a rejected image.  Internals are dropped; legacy datasets
+    contribute one image-level negative, unchanged.
+    """
+
+    @staticmethod
+    def _patch_media(cid, d=8):
+        rng = np.random.default_rng(cid)
+
+        def _unit(v):
+            v = np.asarray(v, dtype=np.float32)
+            return v / (np.linalg.norm(v) + 1e-8)
+
+        cls = _unit(rng.standard_normal(d))
+        leaf1 = _unit(rng.standard_normal(d))
+        leaf2 = _unit(rng.standard_normal(d))
+        internal = _unit(leaf1 + leaf2)
+        regions = [
+            RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=cls, children=None),  # CLS
+            RegionVector(box=(0.0, 0.0, 0.5, 1.0), vec=leaf1, children=None),  # leaf
+            RegionVector(box=(0.5, 0.0, 1.0, 1.0), vec=leaf2, children=None),  # leaf
+            RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=internal, children=(1, 2)),  # internal
+        ]
+        return {
+            "id": cid,
+            "md5": f"md5-{cid:04x}",
+            "media_type": "image",
+            "embedder": "dinov3_patch",
+            "embeddings": {"dinov3_patch": cls},
+            "patch_regions": regions,
+        }, [cls, leaf1, leaf2]
+
+    def test_bad_negative_vecs_returns_cls_plus_leaves_not_internals(self):
+        from vtscore.detectors.training import bad_negative_vecs
+
+        media, expected_leaves = self._patch_media(1)
+        vecs = bad_negative_vecs(media, "dinov3_patch")
+        assert len(vecs) == 3  # CLS + 2 leaves, internal dropped
+        for got, exp in zip(vecs, expected_leaves):
+            np.testing.assert_array_equal(got, exp)
+
+    def test_bad_negative_vecs_legacy_media_single_image_vector(self):
+        from vtscore.detectors.training import bad_negative_vecs
+
+        vec = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+        media = {"id": 1, "media_type": "image", "embedder": "siglip", "embeddings": {"siglip": vec}}
+        vecs = bad_negative_vecs(media, "siglip")
+        assert len(vecs) == 1
+        np.testing.assert_array_equal(vecs[0], vec)
+
+    def test_build_vote_xy_floods_bad_patch_vote_with_grouped_rows(self):
+        from vtscore.detectors.training import _build_vote_xy
+
+        good_media, _ = self._patch_media(1)
+        good_media["patch_grid"] = None  # good vote falls back to image-level (no box)
+        bad_media, _ = self._patch_media(2)
+        clips = {1: good_media, 2: bad_media}
+
+        X, y, groups = _build_vote_xy(clips, {1: None}, {2: None}, {}, "dinov3_patch")
+        # 1 good row + 3 flooded bad rows.
+        assert y == [1.0, 0.0, 0.0, 0.0]
+        assert groups == [("g", 1), ("b", 2), ("b", 2), ("b", 2)]
+        assert len(X) == 4
+
+    def test_per_bag_weights_balance_bag_not_rows(self):
+        from vtscore.training.thresholds import _per_bag_fit_weights
+
+        # 1 good vote, 1 bad bag flooded into 3 rows.
+        y = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+        groups = [("g", 1), ("b", 2), ("b", 2), ("b", 2)]
+        w = _per_bag_fit_weights(y, groups)
+        # good weight = n_bad_bags / n_good = 1/1 = 1; each bad row = 1/3.
+        np.testing.assert_allclose(w, [1.0, 1 / 3, 1 / 3, 1 / 3], atol=1e-6)
+        # Total good mass == total bad mass (balanced at the bag level).
+        assert abs(w[y == 1].sum() - w[y == 0].sum()) < 1e-6
+
+    def test_flood_context_noop_when_every_bag_is_one_row(self):
+        from vtscore.detectors.training import _flood_context
+
+        X = [np.zeros(4, dtype=np.float32) for _ in range(3)]
+        y = [1.0, 0.0, 0.0]
+        groups = [("g", 1), ("b", 2), ("b", 3)]  # no multi-row bag
+        n_votes, cal_groups, sample_weights = _flood_context(X, y, groups)
+        assert n_votes == 3
+        assert cal_groups is None  # unflooded -> legacy row-wise path
+        assert sample_weights is None
+
+    def test_build_xy_from_labelset_floods_bad_from_neg_cache(self):
+        from vtscore.datasets.labelset import LabeledElement, LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import build_xy_from_labelset
+        from vtscore.state.core import DetectorContext
+
+        good = LabeledElement(md5="g", label="good")
+        bad = LabeledElement(md5="b", label="bad")
+        det = DetectorContext("d1")
+        gid, bid = stable_element_id(good), stable_element_id(bad)
+        det.label_embeddings[gid] = np.array([1, 0, 0, 0], dtype=np.float32)
+        det.label_embeddings[bid] = np.array([0, 1, 0, 0], dtype=np.float32)  # ignored when flooded
+        leaves = [np.array([0, 0, 1, 0], dtype=np.float32), np.array([0, 0, 0, 1], dtype=np.float32)]
+        det.label_negative_regions[bid] = leaves
+
+        X, y, groups = build_xy_from_labelset(det, LabelSet([good, bad]))
+        assert y == [1.0, 0.0, 0.0]
+        assert groups == [("g", gid), ("b", bid), ("b", bid)]
+        np.testing.assert_array_equal(X[1], leaves[0])
+        np.testing.assert_array_equal(X[2], leaves[1])
+
+
+class TestBagAwareCalibration:
+    """``compute_fold_orderings(groups=...)`` splits by bag and max-pools each
+    calibration group to one score - so a Bad bag's flooded leaves never
+    straddle the Train/Calibrate boundary and score as one image.
+    """
+
+    def test_grouped_calibration_keeps_bags_together_and_maxpools(self):
+        from vtscore.training.thresholds import compute_fold_orderings
+
+        rng = np.random.default_rng(0)
+        # 3 good votes (singletons) + 3 bad bags (3 rows each) = 6 bags, 12 rows.
+        X, y, groups = [], [], []
+        for g in range(3):
+            X.append(rng.standard_normal(4).astype(np.float32))
+            y.append(1.0)
+            groups.append(("g", g))
+        for b in range(3):
+            for _ in range(3):
+                X.append(rng.standard_normal(4).astype(np.float32))
+                y.append(0.0)
+                groups.append(("b", b))
+
+        orderings, fallback = compute_fold_orderings(
+            X, y, 4, rng=np.random.RandomState(42), calibrate_count=2, hidden_dim=8, groups=groups
+        )
+        assert fallback is None
+        assert len(orderings) == 2
+        for scores, labels in orderings:
+            # One score per calibration GROUP, not per row: a fold holding
+            # k cal groups yields exactly k scores/labels.
+            assert len(scores) == len(labels)
+            assert all(lbl in (0.0, 1.0) for lbl in labels)
+            # No fold has more entries than there are bags.
+            assert len(scores) <= 6

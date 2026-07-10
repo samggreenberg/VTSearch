@@ -20,7 +20,6 @@ import {
 } from '../../../services/embedder-capability.service';
 import { MediaStateService } from '../../../services/media-state.service';
 import {
-  DemoDataset,
   ImporterField,
   ImporterInfo,
   ImporterPickerTab,
@@ -28,6 +27,7 @@ import {
   MediaTypeInfo,
 } from '../../../models/api.models';
 import type { LabelImporterEntry } from '../../../generated/api-client/models/label-importer-entry';
+import { DemoDatasetEntry } from '../../../generated/api-client/models/demo-dataset-entry';
 import {
   MediaCropModalComponent,
   MediaCropResult,
@@ -159,7 +159,7 @@ export class NewDetectorModalComponent implements OnInit {
   ]);
 
   // --- Demo picker state ---
-  readonly demos = signal<DemoDataset[]>([]);
+  readonly demos = signal<DemoDatasetEntry[]>([]);
   readonly demoTabs = signal<string[]>([]);
   activeDemoTab = '';
   readonly demoLoading = signal(false);
@@ -656,13 +656,13 @@ export class NewDetectorModalComponent implements OnInit {
     this.activeDemoTab = tab;
   }
 
-  get filteredDemos(): DemoDataset[] {
+  get filteredDemos(): DemoDatasetEntry[] {
     const items = this.demos().filter((d) => d.media_type === this.activeDemoTab);
     const statusOrder: Record<string, number> = { ready: 0, needs_embedding: 1, needs_download: 2 };
     const sortKey = this.demoCols.sortColumn;
     const asc = this.demoCols.sortAsc;
     return [...items].sort((a, b) => {
-      const key = sortKey as keyof DemoDataset;
+      const key = sortKey as keyof DemoDatasetEntry;
       let va: any = a[key];
       let vb: any = b[key];
       if (key === 'status') {
@@ -681,7 +681,7 @@ export class NewDetectorModalComponent implements OnInit {
   /** True when the demo's files are on disk and can be browsed.  Demos
    *  that still need to be downloaded show a tooltip explaining how to
    *  fetch them via the Add Dataset modal. */
-  isDemoBrowsable(demo: DemoDataset): boolean {
+  isDemoBrowsable(demo: DemoDatasetEntry): boolean {
     return demo.status === 'ready' || demo.status === 'needs_embedding';
   }
 
@@ -689,10 +689,10 @@ export class NewDetectorModalComponent implements OnInit {
    *  table can apply ``.disabled`` styling to non-browsable rows.  Kept
    *  as a class field (rather than a getter) so the function reference
    *  is stable across change-detection cycles. */
-  demoRowDisabledFn = (demo: DemoDataset): boolean => !this.isDemoBrowsable(demo);
+  demoRowDisabledFn = (demo: DemoDatasetEntry): boolean => !this.isDemoBrowsable(demo);
 
   /** Arrow-bound formatter for the ``title`` attribute on demo rows. */
-  demoRowTitleFn = (demo: DemoDataset): string =>
+  demoRowTitleFn = (demo: DemoDatasetEntry): string =>
     this.isDemoBrowsable(demo)
       ? `Browse files in ${demo.label}`
       : 'This demo has not been downloaded. Use the Add Dataset window to fetch it first.';
@@ -703,7 +703,7 @@ export class NewDetectorModalComponent implements OnInit {
     return this.activePickerView === 'local_files' ? 'files' : 'folder';
   }
 
-  selectDemo(demo: DemoDataset): void {
+  selectDemo(demo: DemoDatasetEntry): void {
     if (!this.isDemoBrowsable(demo)) return;
     this.demoFileBrowsing = true;
     this.demoFileBrowseSource = `demo:${demo.name}`;

@@ -2,6 +2,8 @@
 
 VTSearch uses a small MLP (multi-layer perceptron) neural network to learn a binary classifier from user votes ("good" vs "bad"). The model operates on embeddings produced by pretrained feature extractors (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text) and outputs a score in [0, 1] for each item in the dataset.
 
+Alongside the MLP, each dataset carries a **[Coverage Atlas](#coverage-atlas)** — a hierarchical partition of the embedding space that guides the autopilot's diversity sampling and provides calibrated typicality scores for domain-shift detection.
+
 ## Architecture
 
 The MLP is defined in `vtscore/training/mlp.py` via `build_model()`:
@@ -32,7 +34,7 @@ The model outputs raw logits (not probabilities) during training. This allows th
 
 ### Class Weighting
 
-Training uses **inverse-frequency weighting only** to balance classes (`mlp.py:193-197`). Inclusion does **not** enter training — the trained model, and therefore every item's score, is independent of inclusion. Inclusion is applied later as a pure threshold knob in `find_optimal_threshold` (see [Threshold Calibration](#threshold-calibration) below).
+Training balances classes by **inverse-frequency weighting** by default (`mlp.py`). The one exception is region flooding on patch datasets, where the caller supplies explicit per-bag `sample_weights` instead (see [Region-aware training](#region-aware-training-on-patch-region-datasets) below). Either way, inclusion does **not** enter training — the trained model, and therefore every item's score, is independent of inclusion. Inclusion is applied later as a pure threshold knob in `find_optimal_threshold` (see [Threshold Calibration](#threshold-calibration) below).
 
 - **Weights**: `weight_true = num_false / num_true`, `weight_false = 1.0`
 
@@ -115,15 +117,157 @@ The **document** media type has no embedding model of its own. Documents (PDF, D
 
 Embeddings are computed once when a dataset is loaded. The full-image vector lands in each clip's `"embeddings"` dict, keyed by embedder name (`numpy.ndarray` values; read it through the `media_embedding` accessor); patch embedders additionally populate `"patch_regions"` (list of `RegionVector`s, fp16-on-disk / fp32-in-RAM) and `"patch_grid"` (`H × W × D` ndarray, fp16). The MLP trains on these pre-computed vectors, so training is fast (typically < 1 second for 200 epochs on a few hundred labeled examples).
 
-### Region-aware training loss (patch-region datasets)
+### Region-aware training on patch-region datasets
 
-When the dataset's embedder produces `patch_regions`, the MLP's per-vote loss is asymmetric: Good votes train on the full-image vector (the user's "this image is good" claim doesn't single out a region); Bad votes apply `BCE(score, 0)` to *every* region in the image's HAC tree (the strictly stronger claim "no region in this image is good") and reduce by mean. At inference time `score_media` max-pools the MLP over regions, so train-time and test-time agree about what "low score" means. For datasets whose embedder doesn't produce regions, the Bad-side mean collapses to today's single-vector BCE (fully backward-compatible). See "Detector MLP: Training loss" in [`docs/plans/patch-embedder.md`](plans/patch-embedder.md) for the rationale.
+Inference max-pools the MLP over each image's `patch_regions` (an image scores by its **best** region — see `score_media`). Training is shaped to match that scorer, and it is deliberately asymmetric between Good and Bad votes — the multiple-instance-learning treatment of a max-pool bag:
 
-Yes-votes may additionally carry an optional `region_box` (4-float normalised rectangle) drawn by the user via Shift-drag on the focus pane. When set, the trainer pools the box's patch-grid cells on the fly (uniform mean, L2-normalise) and uses that vector instead of the full-image CLS vector for that Good example.
+- **Good vote** — a positive bag needs only *one* good region, and the user tells us which via an optional `region_box` (drawn by Shift-drag on the focus pane). The box is **snapped to the nearest `patch_regions` node** (max box-IoU, `snap_box_to_region`), so the positive is one of the exact candidates the max-pool will score — not a fresh uniform pool that matches no node. A Good vote with no box falls back to the full-image CLS node.
+- **Bad vote** — a negative bag asserts that *no* region is good, so a Bad vote **floods the image's CLS + HAC-leaf nodes** (the disjoint covering set; saliency-weighted internal nodes are dropped as redundant) as negatives. This trains every leaf down, so the max-pool can't surface a look-alike sub-region of a rejected image.
+
+Because flooding turns one Bad vote into many correlated leaf rows, class balance and calibration are **per-bag, not per-row**:
+
+- The final fit is `train_model(..., sample_weights=...)` where each Bad image's leaves share one image's worth of negative mass (`_per_bag_fit_weights`), so a rejected image counts once regardless of leaf count. Good votes weigh `n_bad_bags / n_good`, matching the default inverse-frequency balance but with the *bag* as the unit.
+- Cross-calibration (`compute_fold_orderings(groups=...)`) splits Train/Calibrate **by bag** (a Bad image's leaves never straddle the boundary), sizes fold counts over votes not rows, weights fold fits per-bag, and **max-pools each calibration group to one score** — so the threshold is placed on the per-image score scale the detector actually deploys. Hidden-layer width and the safe-threshold ramp likewise size on vote count.
+
+Flooding applies only where scoring is region-aware max-pool: the Learned-sort vote path (`train_and_score`) and the saved-detector labelset path (`labelset_train_and_score` / `train_from_labelset`). Paths that score each image by a single vector — Find cold-detector scoring, label-file sort — score image-level and are intentionally *not* flooded (flooding leaf negatives while scoring one image vector would be a train/score space mismatch). On any dataset whose embedder produces no regions, every bag holds one row and the whole path collapses byte-for-byte to the historical single-vector BCE — fully backward-compatible.
+
+## Coverage Atlas
+
+The Coverage Atlas (`vtscore/state/coverage_atlas.py`, class `CoverageAtlas`) is a hierarchical k-means partition of a dataset's embedding space that remembers, per region, how much labeled evidence of each class the user has provided. It serves two jobs:
+
+1. **Diversity sampling** — the Training autopilot's "Explore Diversity" phase asks it for the next item to label, so a handful of clicks covers the whole collection and stress-tests the model where it is most likely to be wrong.
+2. **Domain-shift detection** — it answers "how typical is this item of the data this atlas was built on?" with a calibrated p-value, so a detector trained on dataset A can be sanity-checked against dataset B before anyone trusts its scores there.
+
+One atlas exists per dataset (`DatasetContext.coverage_atlas`). It replaced the earlier Diversity Tree, which kept only a boolean "seen" flag per region; the atlas keeps the geometry and statistics the tree threw away. The full design study (including the not-yet-built portable artifact, blob scan, and active auditor) lives in [`docs/plans/coverage-atlas.md`](plans/coverage-atlas.md).
+
+### Geometry: center, then normalize
+
+All stored embeddings are unit vectors (L2-normalized at ingest), and contrastive embedders concentrate them in a narrow cone — raw cosines between any two items are uniformly high, which makes raw directions nearly useless for partitioning or typicality. The atlas therefore works in a **centered spherical frame**: it subtracts the dataset's mean vector and re-normalizes to the unit sphere. The centering vector is part of the structure and every query is mapped into the same frame.
+
+One consequence worth remembering: the **root node is directionally degenerate by construction**. Centering makes the sum of all vectors (the "resultant") vanish, so the root has no preferred direction. Everything below the root — the k-means cells — is cohesive and directional. Several behaviors key off this via the resultant length `rbar` (see the calibration gate below).
+
+### Build
+
+Built automatically at dataset load for datasets up to 50 000 items (`COVERAGE_ATLAS_AUTO_THRESHOLD`), on demand via `POST /api/datasets/registry/<id>/coverage-atlas` for larger ones, and cached inside the dataset pickle (key `"coverage_atlas"`, format `"coverage-atlas/1"`) so reloads skip the k-means. The build is recursive k-means (k = 3) over the centered vectors, splitting until a node has fewer than 20 items (`min_node_size`) or the depth cap is hit (`auto_max_depth` bounds the leaf count at ~4 000 for very large datasets). K-means runs on cuML when a usable GPU is present, sklearn otherwise, with restart counts scaled down for large nodes.
+
+Each node stores:
+
+| Field | Contents |
+|-------|----------|
+| `ids` | The node's item IDs, sorted **most-typical-first** (descending `mu . x`) — `ids[0]` is the region's representative |
+| `children` | Child node names, stored **largest-first** so breadth-first traversal reaches big unexplored regions before small ones |
+| `n` | Item count |
+| `mu`, `rbar` | Mean direction and resultant length — the sufficient statistics of a von Mises–Fisher component, so reading the tree at any depth gives a multiresolution mixture model of the dataset |
+| `t_quantiles` | A 21-point quantile grid of the node's own points' **leave-one-out** typicality scores, used to calibrate query p-values |
+| `n_pos`, `n_neg` | Labeled-evidence counts per class (session state, not serialized) |
+
+Evidence flows in from votes: every good/bad vote calls `label(id, good=...)`, which increments the class counter in the item's leaf and every ancestor; un-voting decrements; clearing votes or swapping detectors resets and replays (`resync_coverage_atlas_to_detector`). A node is **covered** when `n_pos + n_neg > 0`.
+
+### Diversity sampling (`next_sample`)
+
+`GET|POST /api/coverage-atlas/next` returns the next item the autopilot should show. The walk is breadth-first from the root: the first node carrying **no evidence** is the next region to explore. Because siblings are stored largest-first, ties break toward the biggest unexplored region — best coverage gain per click.
+
+Within the chosen node, the pick is a **surprise probe** when sort scores are supplied (the autopilot always supplies the current learned-sort scores and threshold):
+
+- Node's median score ≥ threshold (**presumed good**) → return the **lowest**-scored element: the item most likely to be a hidden bad in a region the model calls good.
+- Otherwise (**presumed bad**) → return the **highest**-scored element: the item most likely to be a hidden good.
+
+The extremum probe is informative in both outcomes. If the probe *flips* (the greenest item of a presumed-red region is actually good), the user just found a hidden pocket the model was wrong about — maximum training value for one click. If it *doesn't* flip, the region's presumption has been stress-tested at its weakest point: nothing else in the node was more likely to surprise.
+
+Two refinements:
+
+- **Typicality tempering.** In nodes with a concentrated direction (`rbar ≥ 0.1`), the extremum is taken over the node's **typical half** (`ids` is typicality-sorted, so this is just the first half). An extreme score on an *atypical* item is disproportionately often a lone oddball — a corrupt file, a weird crop — whose flip says nothing about the region; a flip on a typical item is evidence of a real pocket. Degenerate nodes (the root) probe the whole node, since their typicality ordering is noise.
+- **Regional median.** The median that decides the probe direction always spans the whole node, not the pool — the presumption being tested is about the region.
+
+Without scores, the pick is the node's most typical element (`ids[0]`), a representative of the unexplored region.
+
+The response's `coverage_level` — the number of consecutive covered nodes in breadth-first order — is the autopilot's **Span** indicator: it turns green at `autopilot_goal_diversity` (default 40) covered nodes, ending the diversity phase. `exhausted: true` means every node carries evidence.
+
+### Typicality and domain shift
+
+`CoverageAtlas.typicality_pvalues(matrix)` answers, per query vector: *what fraction of the data this atlas was built on looks less typical than this?* Small p-value = the atlas has essentially never seen anything like it.
+
+How a query is scored:
+
+1. Map the query into the atlas frame (subtract `center`, renormalize).
+2. Route it down the tree, at each node descending into the cosine-nearest child.
+3. At every **calibrated** node along the path — at least 20 points *and* `rbar ≥ 0.1` — compute the alignment `t = mu . x` and read a p-value off the node's stored quantile grid.
+4. Average the p-values along the path.
+
+Three details make the p-values honest rather than merely monotone:
+
+- **Leave-one-out calibration.** Each node's quantile grid is built from scores of its own points against the mean direction of the *other* points (closed form on the sphere: `(R.x - 1) / ||R - x||`). Scoring a point against a mean it helped shape is optimistic, and without the correction fresh in-domain queries systematically read as atypical.
+- **The `rbar` gate.** A node with no concentrated direction has a meaningless `mu` and pathological leave-one-out scores; the gate excludes it — notably the always-degenerate root. Sparse branches terminate shallow, which is the adaptive bandwidth: dense regions are judged at fine scale, sparse ones at coarse scale.
+- **Path averaging.** A hard partition has boundary artifacts (a fresh in-domain query near a k-means cell edge looks atypical at leaf scale); averaging across scales smooths them the way a tree ensemble would, at zero extra build cost.
+
+`domain_shift_report(atlas, matrix, alpha=0.05)` aggregates the p-values into a dataset-level verdict. Under no shift, about `alpha` of items fall below `alpha`; the report gives the observed fraction (`frac_atypical` — roughly the shifted proportion), a binomial z-score for the excess, the median p-value, and a headline `shifted` boolean (excess both statistically clear, z > 3, and practically large, ≥ 2×`alpha`).
+
+### Tutorial: how a diversity session works
+
+What actually happens when the autopilot enters its "Explore Diversity" phase, click by click:
+
+1. **The atlas already exists.** It was built (or restored from the pickle cache) when the dataset loaded, and every vote cast during the earlier good/bad/refine phases has already been counted into its evidence channels.
+2. **The frontend asks for a sample.** `POST /api/coverage-atlas/next` with the current learned-sort scores and decision threshold in the body.
+3. **The atlas walks breadth-first** to the first evidence-free node — say a 900-item region of the collection no vote has ever touched — preferring the largest such region among siblings.
+4. **It probes for a surprise.** Suppose the node's median score is 0.81 against a threshold of 0.5: the model presumes the whole region is good. The atlas returns the *lowest*-scored item from the region's typical half — the most plausible hidden bad that is still representative of the region.
+5. **The user votes.** The vote lands in the detector's labels *and* increments `n_neg` (or `n_pos`) in the item's leaf and all its ancestors — the region is now covered, and the next `next_sample` call moves on to the next uncovered region.
+6. **The Span indicator advances.** Each labeling-status poll reads `span_info()`; when 40 consecutive breadth-first nodes carry evidence, Span turns green and the autopilot declares the collection covered.
+
+Either outcome of step 5 helped: a flip hands the MLP a training example from a region it was confidently wrong about (the next retrain bends the boundary there); a non-flip certifies the region at its weakest point for one click.
+
+### Tutorial: checking for domain shift before reusing a detector
+
+You trained a detector on dataset A and want to run it on dataset B. Should you trust it? Ask the atlas:
+
+```
+# Both datasets loaded; A's coverage atlas built (automatic ≤ 50k items).
+# The X-Dataset-Id header names the ACTIVE dataset (B); the URL names the
+# REFERENCE dataset (A, the training domain).
+GET /api/datasets/registry/<dataset_A_id>/domain-shift
+X-Dataset-Id: <dataset_B_id>
+```
+
+```json
+{
+  "reference_dataset_id": "…",
+  "n_items": 40000,
+  "alpha": 0.05,
+  "frac_atypical": 0.31,
+  "expected_atypical": 0.05,
+  "z_score": 24.1,
+  "median_pvalue": 0.18,
+  "shifted": true
+}
+```
+
+Reading this: 31% of dataset B sits in regions of embedding space where dataset A had essentially no mass (against the 5% that chance would produce), so the verdict is `shifted` — the detector will be *extrapolating* on a third of B, and its scores there are unfalsified guesswork. Verify by hand before trusting it. A same-domain report instead shows `frac_atypical` near `alpha`, a median p-value near 0.5, and `shifted: false`.
+
+The endpoint refuses (HTTP 400) when the two datasets use different embedders — typicality across embedding spaces would be confident nonsense — or when the reference has no atlas yet (build it via the endpoint above).
+
+The same machinery is available in the library tier:
+
+```python
+import numpy as np
+from vtscore.state.coverage_atlas import CoverageAtlas, domain_shift_report
+
+atlas = CoverageAtlas({mid: vec for mid, vec in train_vectors.items()}, k=3)
+
+atlas.label(42, good=True)          # count labeled evidence
+print(atlas.next_sample(scores, threshold))  # next diversity probe
+
+pvals = atlas.typicality_pvalues(np.stack(list(other_vectors.values())))
+print(domain_shift_report(atlas, np.stack(list(other_vectors.values()))))
+```
+
+### Costs
+
+Build is the same order as the embedding-matrix work a dataset load already does — seconds on CPU for 50k items, with progress reported to the load bar. Queries are microseconds per item (`O(depth × k × dim)`); a full domain-shift sweep over a 40k-item dataset is well under a second. Nothing needs a GPU.
 
 ## Key Files
 
 - `vtscore/training/mlp.py`: `build_model`, `train_model`, `build_model_from_weights`
+- `vtscore/state/coverage_atlas.py`: `CoverageAtlas`, `domain_shift_report`
+- `vtscore/state/coverage.py`: atlas build/restore/resync helpers, vote wiring
 - `vtscore/training/thresholds.py`: `calculate_cross_calibration_threshold`, `calculate_safe_threshold`, `calculate_gmm_threshold`, `find_optimal_threshold`
 - `vtscore/detectors/training.py`: `train_and_score`, `train_and_threshold`, origin-based detector training
 - `vtscore/detectors/labeling_progress.py`: Cached per-step training and stability analysis

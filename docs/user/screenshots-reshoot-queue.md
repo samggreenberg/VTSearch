@@ -65,7 +65,7 @@ process model — both environment blockers, not recipe problems.
 | `region-voting` | USER_GUIDE.md#region-voting-on-images | 2026-07-09 light-mode neutral-ramp change: light variant's panel/background tone shifts. | 2026-07-09 |
 | `view-options` | USER_GUIDE.md#view-options | 2026-07-09 light-mode neutral-ramp change: light variant's panel/background tone shifts. | 2026-07-09 |
 | `settings-appearance` | USER_GUIDE.md#solo-media-type--streamline-for-one-media-type | 2026-07-09 light-mode neutral-ramp change: light variant's modal/background tone shifts. | 2026-07-09 |
-| `browse-view` | USER_GUIDE.md#browse--exploring-a-dataset-spatially | 2026-07-09 light-mode neutral-ramp change: light variant's panel/background tone shifts. | 2026-07-09 |
+| `browse-view` | USER_GUIDE.md#browse--exploring-a-dataset-spatially | The bottom-left canvas overlay (redundant dataset name + item count) was removed, and the item count now renders as a floater pinned to the minimap's bottom-left. Both themes' frames change. Also: 2026-07-09 light-mode neutral-ramp change shifts the light variant's panel/background tone. | 2026-07-10 |
 | `export-picker` | USER_GUIDE.md#exporting-your-work | 2026-07-09 light-mode neutral-ramp change: light variant's modal/background tone shifts. | 2026-07-09 |
 | `import-detector` | USER_GUIDE.md#importing-pre-trained-detectors | 2026-07-09 light-mode neutral-ramp change: light variant's modal/background tone shifts. | 2026-07-09 |
 | `new-detector` | USER_GUIDE.md#creating-a-detector | 2026-07-09 light-mode neutral-ramp change: light variant's modal/background tone shifts. | 2026-07-09 |

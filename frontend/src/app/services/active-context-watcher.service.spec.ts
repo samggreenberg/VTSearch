@@ -6,7 +6,8 @@ import { ActiveContextWatcherService } from './active-context-watcher.service';
 import { ActiveContextService } from './active-context.service';
 import { DatasetStateService } from './dataset-state.service';
 import { ToastService } from './toast.service';
-import { DatasetRegistryEntry, DetectorRegistryEntry } from '../models/api.models';
+import { DatasetRegistryEntry } from '../models/api.models';
+import { DetectorRegistryEntry } from '../generated/api-client/models/detector-registry-entry';
 import { configureZoneless } from '../testing/zoneless-testbed';
 
 describe('ActiveContextWatcherService', () => {

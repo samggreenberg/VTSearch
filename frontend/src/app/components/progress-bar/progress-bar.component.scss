@@ -8,9 +8,12 @@
 
 .progress-fill {
   height: 100%;
+  // Falls back to --accent only while indeterminate (no percentage to color
+  // by); otherwise the component's `fillColor` inline style (a red -> yellow
+  // -> green color-mix keyed off the percentage) overrides this.
   background: var(--accent);
   border-radius: var(--radius-sm);
-  transition: width var(--transition-slow) ease;
+  transition: width var(--transition-slow) ease, background-color var(--transition-slow) ease;
 
   // Multi-stage load bar: a longer, decelerating ease so the jumps between
   // phases (e.g. an un-measurable model-load slice filling in one step) glide

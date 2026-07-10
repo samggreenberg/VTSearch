@@ -12,7 +12,8 @@ import { DashboardColumnsService } from '../../services/dashboard-columns.servic
 import { DashboardSelectionService } from '../../services/dashboard-selection.service';
 import { RunningJobsService, pairKey } from '../../services/running-jobs.service';
 import { SortState } from '../../utils/managed-columns';
-import { DatasetRegistryEntry, DetectorRegistryEntry } from '../../models/api.models';
+import { DatasetRegistryEntry } from '../../models/api.models';
+import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { isPairCompatible } from '../../utils/context-compat';
 
 type PulldownKind = 'dataset' | 'detector';

@@ -80,4 +80,49 @@ describe('ProgressBarComponent', () => {
     const fill = fixture.nativeElement.querySelector('.progress-fill');
     expect(fill.classList).toContain('progress-fill--smooth');
   });
+
+  describe('fillColor', () => {
+    it('should be reddest at 0%', () => {
+      component.value = 0;
+      component.max = 100;
+      expect(component.fillColor).toBe('color-mix(in srgb, var(--text-warning) 0%, var(--color-bad))');
+    });
+
+    it('should be yellowest at 50%', () => {
+      component.value = 50;
+      component.max = 100;
+      expect(component.fillColor).toBe('color-mix(in srgb, var(--text-warning) 100%, var(--color-bad))');
+    });
+
+    it('should be greenest at 100%', () => {
+      component.value = 100;
+      component.max = 100;
+      expect(component.fillColor).toBe('color-mix(in srgb, var(--color-good) 100%, var(--text-warning))');
+    });
+
+    it('should interpolate continuously between red and yellow below 50%', () => {
+      component.value = 25;
+      component.max = 100;
+      expect(component.fillColor).toBe('color-mix(in srgb, var(--text-warning) 50%, var(--color-bad))');
+    });
+
+    it('should interpolate continuously between yellow and green above 50%', () => {
+      component.value = 75;
+      component.max = 100;
+      expect(component.fillColor).toBe('color-mix(in srgb, var(--color-good) 50%, var(--text-warning))');
+    });
+
+    it('should be null while indeterminate', () => {
+      component.indeterminate = true;
+      expect(component.fillColor).toBeNull();
+    });
+
+    it('should apply the fill color as the background style', async () => {
+      fixture.componentRef.setInput('value', 75);
+      fixture.componentRef.setInput('max', 100);
+      await settleZoneless(fixture);
+      const fill = fixture.nativeElement.querySelector('.progress-fill') as HTMLElement;
+      expect(fill.style.background).toContain('color-mix');
+    });
+  });
 });

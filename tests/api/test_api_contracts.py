@@ -507,23 +507,23 @@ class TestTextsortSuggestionsContract:
         assert "my suggestion" in data["suggestions"]
 
 
-class TestDiversityTreeContract:
-    """GET/POST /api/diversity-tree/next response shape."""
+class TestCoverageAtlasContract:
+    """GET/POST /api/coverage-atlas/next response shape."""
 
     def test_get_returns_required_fields(self, client):
-        resp = client.get("/api/diversity-tree/next")
+        resp = client.get("/api/coverage-atlas/next")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "id" in data
-        assert "diversity_level" in data
+        assert "coverage_level" in data
         assert "exhausted" in data
 
     def test_post_returns_required_fields(self, client):
-        resp = client.post("/api/diversity-tree/next", json={"scores": {}})
+        resp = client.post("/api/coverage-atlas/next", json={"scores": {}})
         assert resp.status_code == 200
         data = resp.get_json()
         assert "id" in data
-        assert "diversity_level" in data
+        assert "coverage_level" in data
         assert "exhausted" in data
 
 

@@ -98,28 +98,6 @@
   background: var(--bg-surface);
 }
 
-.browse-info {
-  position: absolute;
-  bottom: var(--space-md);
-  left: var(--space-md);
-  display: flex;
-  gap: var(--space-sm);
-  align-items: center;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: var(--space-xs) var(--space-sm);
-  font-size: var(--font-xs);
-  color: var(--text-secondary);
-  pointer-events: none;
-  opacity: 0.85;
-}
-
-.browse-info-label {
-  font-weight: var(--weight-medium);
-  color: var(--text-primary);
-}
-
 // Ready-state layout: the canvas region, a draggable divider, and the docked
 // side panel. The panel width is driven by the ``--browse-panel-width`` custom
 // property the divider drag updates (persisted as ``browse_panel_width``).

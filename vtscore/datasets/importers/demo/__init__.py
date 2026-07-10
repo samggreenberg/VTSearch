@@ -206,6 +206,7 @@ def _source_directory(source: str) -> Path | None:
             "speech_commands_v2": DATA_DIR / "speech_commands_v2",
             "urbansound8k": DATA_DIR / "UrbanSound8K" / "audio",
             "tut_sound_events_2017": DATA_DIR / "tut_sound_events_2017",
+            "clotho": DATA_DIR / "clotho",
             # Video sources
             "ucf101": video_dir / "ucf101",
             "hmdb51": video_dir / "hmdb51",

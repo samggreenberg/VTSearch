@@ -62,6 +62,18 @@ class EventSourceMock {
 }
 (globalThis as unknown as { EventSource: unknown }).EventSource = EventSourceMock;
 
+// --- ResizeObserver ----------------------------------------------------------
+// The virtualized grids (media-list, vote-grid) observe their viewport to
+// derive column count and row stride. jsdom has no ResizeObserver — and no
+// layout engine, so a real one would never fire anyway. An inert stub lets
+// specs mount the virtualized branch.
+class ResizeObserverMock {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = ResizeObserverMock;
+
 // --- HTMLMediaElement play/pause/load --------------------------------------
 // The audio/video players call these; jsdom throws "Not implemented".
 Object.defineProperties(HTMLMediaElement.prototype, {

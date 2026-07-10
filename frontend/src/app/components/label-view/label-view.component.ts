@@ -30,7 +30,8 @@ import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
-import { DetectorRegistryEntry, ProgressEvent } from '../../models/api.models';
+import { ProgressEvent } from '../../models/api.models';
+import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
@@ -779,15 +780,15 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       ? Object.fromEntries(sortOrder.map((s) => [String(s.id), s.score]))
       : undefined;
     this.sortingApi
-      .getDiversityTreeNext(scores, this.sortState.threshold ?? undefined)
+      .getCoverageAtlasNext(scores, this.sortState.threshold ?? undefined)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response) => {
           if (response.id !== null) {
             this.mediaState.selectMedia(response.id);
           }
-          if (typeof response.diversity_level === 'number') {
-            this.autopilotStateService.updateDiversityLevel(response.diversity_level);
+          if (typeof response.coverage_level === 'number') {
+            this.autopilotStateService.updateDiversityLevel(response.coverage_level);
           }
         },
       });

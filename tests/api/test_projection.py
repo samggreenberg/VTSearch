@@ -97,6 +97,57 @@ class TestProjectionMeta:
         assert body["method"] == "pca"
         assert isinstance(body["media_type"], str)
 
+    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
+    def test_building_while_parked_behind_another_job(self, _mock_fit, client):
+        """A full build parked behind another projection job still reports
+        ``building``, not ``idle``.
+
+        The projection runner is a single app-wide slot shared across every
+        dataset's full build and every subset build. When another job holds the
+        runner, this dataset's build is parked in the pending slot. Meta must
+        look up this context's own tracked job (``ctx._full_job_id``) and report
+        its ``building`` status — *not* ask the runner for ``current()``, which
+        returns the unrelated job hogging the slot and made meta fall back to
+        ``idle``. That false ``idle`` made the frontend's poll loop re-issue
+        ``build()`` forever, hanging the Browse spinner until the blocking job
+        happened to free the runner (the reported "reload fixes it" bug).
+        """
+        import threading
+
+        started = threading.Event()
+        release = threading.Event()
+
+        def _blocker(job):
+            started.set()
+            release.wait(timeout=30)
+
+        # Occupy the single runner with an unrelated job (a different dataset id
+        # so the build we fire next can't coalesce into it).
+        projection_jobs.start(("blocker",), _blocker, dataset_id="__other__")
+        assert started.wait(timeout=5)
+
+        try:
+            # The runner is busy, so this build parks in the pending slot.
+            resp = client.post("/api/projection/build")
+            assert resp.status_code == 200
+            build_body = resp.get_json()
+            assert build_body["status"] == "building"
+
+            # Regression: meta must find the parked build and say "building".
+            meta = client.get("/api/projection/meta").get_json()
+            assert meta["status"] == "building"
+        finally:
+            release.set()
+
+        # Freeing the runner promotes the parked build; it then finishes.
+        build_job = projection_jobs.get(build_body["job_id"])
+        assert build_job is not None
+        assert build_job.done_event.wait(timeout=30)
+
+        meta = client.get("/api/projection/meta").get_json()
+        assert meta["status"] == "ready"
+        assert meta["point_count"] > 0
+
 
 class TestProjectionBuild:
     """``POST /api/projection/build`` background job lifecycle."""

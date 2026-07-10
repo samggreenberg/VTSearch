@@ -626,6 +626,28 @@ class DatasetRegistryReadersResponseSchema(Schema):
     readers = fields.List(fields.String(), required=True)
 
 
+class DatasetDomainShiftResponseSchema(Schema):
+    """Response for ``GET /api/datasets/registry/<id>/domain-shift``.
+
+    Reports how typical the *active* dataset's items look under the named
+    reference dataset's coverage atlas.  ``frac_atypical`` is the observed
+    fraction of items with typicality p-value below ``alpha`` (roughly the
+    shifted proportion); under no shift it stays near ``expected_atypical``.
+    ``shifted`` is True when the excess is both statistically clear and
+    practically large — a detector trained on the reference dataset should
+    not be trusted on the active one without hands-on verification.
+    """
+
+    reference_dataset_id = fields.String(required=True)
+    n_items = fields.Integer(required=True)
+    alpha = fields.Float(required=True)
+    frac_atypical = fields.Float(required=True)
+    expected_atypical = fields.Float(required=True)
+    z_score = fields.Float(required=True)
+    median_pvalue = fields.Float(required=True)
+    shifted = fields.Boolean(required=True)
+
+
 class DatasetRegistryStatsResponseSchema(Schema):
     """Response for ``GET /api/datasets/registry/<id>/stats``."""
 
@@ -660,6 +682,7 @@ __all__ = [
     "DatasetAvailableFilesResponseSchema",
     "DatasetClearResponseSchema",
     "DatasetCombineRequestSchema",
+    "DatasetDomainShiftResponseSchema",
     "DatasetImportersListResponseSchema",
     "DatasetLoadDemoRequestSchema",
     "DatasetLoadFolderRequestSchema",
