@@ -10,7 +10,15 @@ import numpy as np
 import pytest
 
 from vtscore.eval.error_metrics import f1_at, inclusion_weights, min_weighted_cost, weighted_error
-from vtscore.eval.region_curve import RegionCurveInputs, _iou_metrics, evaluate_region_curve
+from vtscore.eval.region_curve import (
+    RegionCurveInputs,
+    _flood_context_np,
+    _iou_metrics,
+    evaluate_region_curve,
+    sample_rv_budget,
+    train_rv_head,
+)
+from vtscore.eval.region_sources import _covering_box
 from vtscore.eval.scoring_heads import CosineHead, MLPHead, max_pool_over_images
 
 
@@ -236,3 +244,112 @@ def test_region_curve_calib_mode_transitions():
     modes = {r["k"]: r["calib_mode"] for r in rows}
     assert modes[1] == "fallback"  # K<2 -> cross-calibration can't form folds
     assert modes[16] == "xcal"  # n_labels=32 -> pure cross-calibration
+
+
+# --------------------------------------------------------------------------
+# region-voting (DINO-patch faithful path)
+# --------------------------------------------------------------------------
+
+
+def _rv_inputs(seed=0, dim=24):
+    """RegionCurveInputs in region-voting mode: one snapped positive per image,
+    negatives as per-image bags of CLS+leaf vectors. neg_train_wholes is empty on
+    purpose — the rv path must ignore it and use the bags."""
+    rng = np.random.default_rng(seed)
+    cpos = np.zeros(dim, np.float32)
+    cpos[0] = 1.0
+    cneg = np.zeros(dim, np.float32)
+    cneg[1] = 1.0
+
+    def blob(c, m):
+        v = c + 0.15 * rng.standard_normal((m, dim)).astype(np.float32)
+        return v / (np.linalg.norm(v, axis=1, keepdims=True) + 1e-9)
+
+    pos_ex = blob(cpos, 40)  # 40 positive images, one snapped vector each
+    neg_bags = [blob(cneg, int(rng.integers(3, 7))) for _ in range(100)]  # varied bag sizes
+    test_mats = [blob(cpos, 3) for _ in range(15)] + [blob(cneg, 3) for _ in range(45)]
+    test_labels = [1] * 15 + [0] * 45
+    inputs = RegionCurveInputs(
+        pos_ex,
+        np.zeros((0, dim), np.float32),
+        test_mats,
+        test_labels,
+        dim,
+        meta={"embedder": "syn"},
+        region_voting=True,
+        neg_train_bags=neg_bags,
+    )
+    return inputs, cpos
+
+
+def test_covering_box():
+    assert _covering_box([(0.1, 0.2, 0.3, 0.4), (0.5, 0.1, 0.7, 0.9)]) == (0.1, 0.1, 0.7, 0.9)
+    assert _covering_box([(0.2, 0.2, 0.6, 0.6)]) == (0.2, 0.2, 0.6, 0.6)
+
+
+def test_flood_context_bag_aware_weights():
+    # 2 good (1 row each) + 1 bad image flooded into 4 rows.
+    x = [np.zeros(4, np.float32)] * 6
+    y = [1.0, 1.0, 0.0, 0.0, 0.0, 0.0]
+    groups = [("g", 0), ("g", 1), ("b", 0), ("b", 0), ("b", 0), ("b", 0)]
+    n_votes, cal_groups, sw = _flood_context_np(x, y, groups)
+    assert n_votes == 3  # 2 good bags + 1 bad bag, NOT 6 rows
+    assert cal_groups is groups  # flooded -> calibrate by bag
+    assert sw is not None
+    # Each bad row carries 1/4 of one image's negative mass.
+    assert np.allclose(np.asarray(sw)[2:], 0.25)
+
+
+def test_flood_context_not_flooded_is_noop():
+    x = [np.zeros(4, np.float32)] * 3
+    y = [1.0, 0.0, 0.0]
+    groups = [("g", 0), ("b", 1), ("b", 2)]  # one row per bag
+    n_votes, cal_groups, sw = _flood_context_np(x, y, groups)
+    assert n_votes == 3 and cal_groups is None and sw is None
+
+
+def test_sample_rv_budget():
+    inputs, _ = _rv_inputs()
+    b = sample_rv_budget(inputs.pos_exemplars, inputs.neg_train_bags, 4, 2, 0)
+    assert b is not None
+    pos_rows, bags = b
+    assert pos_rows.shape[0] == 4 and len(bags) == 8  # neg_ratio*k negative images
+    assert sample_rv_budget(inputs.pos_exemplars, inputs.neg_train_bags, 999, 1, 0) is None  # K > positives
+
+
+def test_train_rv_head_counts_votes_by_bag():
+    inputs, _ = _rv_inputs()
+    pos_rows, bags = sample_rv_budget(inputs.pos_exemplars, inputs.neg_train_bags, 8, 1, 0)
+    out = train_rv_head(
+        pos_rows, bags, inputs.input_dim, 0, inclusion=0, safe_thresholds=True, calibrate_count=2, cal_fraction=0.5
+    )
+    assert out is not None
+    predict, thr, n_votes = out
+    assert n_votes == 16  # 8 good images + 8 bad images (NOT the flooded leaf rows)
+    s = predict(inputs.test_region_mats[0])
+    assert s.shape[0] == inputs.test_region_mats[0].shape[0]
+
+
+def test_region_curve_region_voting_rows_and_fields():
+    inputs, _ = _rv_inputs()
+    rows = evaluate_region_curve(inputs, "mlp", k_values=[2, 8], seeds=[0, 1], neg_ratio=1)
+    assert rows
+    assert {r["k"] for r in rows} == {2, 8}
+    for r in rows:
+        assert set(r) >= {"k", "cost", "fpr", "fnr", "oracle_cost", "threshold", "calib_mode", "head", "compute_ms"}
+        assert r["head"] == "mlp"
+
+
+def test_region_curve_region_voting_realistic_never_below_oracle():
+    inputs, _ = _rv_inputs()
+    rows = evaluate_region_curve(inputs, "mlp", k_values=[2, 8, 16], seeds=[0, 1], neg_ratio=2)
+    for r in rows:
+        if not np.isnan(r["cost"]) and not np.isnan(r["oracle_cost"]):
+            assert r["cost"] >= r["oracle_cost"] - 1e-6
+
+
+def test_region_curve_region_voting_separates():
+    inputs, _ = _rv_inputs()
+    rows = evaluate_region_curve(inputs, "mlp", k_values=[16], seeds=[0, 1, 2], neg_ratio=2)
+    # Separable blobs -> the oracle operating point should be clearly good.
+    assert min(r["oracle_cost"] for r in rows) < 0.3

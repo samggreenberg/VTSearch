@@ -90,6 +90,17 @@ def _as_box(b) -> Box:
     return (float(b[0]), float(b[1]), float(b[2]), float(b[3]))
 
 
+def _covering_box(boxes: list[Box]) -> Box:
+    """Minimal axis-aligned box covering every instance box (matches
+    :func:`vtscore.eval.labels.region_box_for_category`): the box a Good vote on
+    an image with several instances of the class designates."""
+    xs0 = [float(b[0]) for b in boxes]
+    ys0 = [float(b[1]) for b in boxes]
+    xs1 = [float(b[2]) for b in boxes]
+    ys1 = [float(b[3]) for b in boxes]
+    return (min(xs0), min(ys0), max(xs1), max(ys1))
+
+
 def _denorm_boxes(boxes: np.ndarray, w: int, h: int) -> list[Box]:
     """(N,4) normalized boxes -> pixel-coordinate box tuples."""
     out: list[Box] = []
@@ -185,6 +196,12 @@ class PreparedImage:
     vecs: np.ndarray  # (N, D)
     whole_vec: np.ndarray  # (D,)
     exemplars: np.ndarray  # (M, D) — GT-box exemplar vectors (empty when none requested)
+    # (N,) bool, aligned with ``boxes``/``vecs``: True for the "childless" nodes a
+    # Bad vote floods as negatives — the CLS full-image node + HAC leaves — and
+    # False for internal HAC merge nodes (correlated duplicates, dropped in the
+    # region-voting negative set). ``None`` when the source has no tree structure
+    # (crop/sliding/whole), where every candidate is a leaf by construction.
+    leaf_mask: np.ndarray | None = None
 
 
 class RegionSource(Protocol):
@@ -281,13 +298,25 @@ class _PatchSource:
     """
 
     def __init__(
-        self, embedder, name: str, *, k: int = 12, alpha: float = 0.5, proposer: Proposer | None = None
+        self,
+        embedder,
+        name: str,
+        *,
+        k: int = 12,
+        alpha: float = 0.5,
+        proposer: Proposer | None = None,
+        region_voting: bool = False,
     ) -> None:
         self._emb = embedder
         self.name = name
         self._k = k
         self._alpha = alpha
         self._proposer = proposer
+        # Region-voting label construction (matches the app detector's DINO-patch
+        # path): a Good vote's box snaps to the nearest tree node, and negatives
+        # flood only the childless nodes. Only meaningful for the HAC-tree variant
+        # (``proposer is None``); ignored for the box-pool variant.
+        self._region_voting = bool(region_voting) and proposer is None
         self.supports_text = False  # DINO patch embedders have no text encoder
         self.input_dim = _embedder_dim(embedder)
 
@@ -295,26 +324,45 @@ class _PatchSource:
         return self._emb._patch_forward_pil_batch([image])[0]
 
     def prepare(self, image: "Image.Image", gt_boxes: list[Box] | None = None) -> PreparedImage:
-        from vtscore.media.patch_embed import box_to_vote_vector, build_region_tree
+        from vtscore.media.patch_embed import box_to_vote_vector, build_region_tree, snap_box_to_region
 
         pe = self._patch_forward(image)
         if pe is None:  # forward failed — degrade to a zero whole vector
             z = np.zeros(self.input_dim, np.float32)
             return PreparedImage(
-                np.asarray([[0.0, 0.0, 1.0, 1.0]], np.float32), z[None, :], z, np.zeros((0, self.input_dim), np.float32)
+                np.asarray([[0.0, 0.0, 1.0, 1.0]], np.float32),
+                z[None, :],
+                z,
+                np.zeros((0, self.input_dim), np.float32),
+                leaf_mask=np.ones(1, dtype=bool),
             )
         whole_vec = np.asarray(pe.cls_vec, dtype=np.float32)
+        tree = None
         if self._proposer is None:
             tree = build_region_tree(pe, k=self._k, alpha=self._alpha)
             boxes = np.asarray([r.box for r in tree], dtype=np.float32)
             vecs = np.asarray([r.vec for r in tree], dtype=np.float32)
+            # Childless nodes (CLS + HAC leaves) — the set a Bad vote floods.
+            leaf_mask = np.asarray([r.children is None for r in tree], dtype=bool)
         else:
             boxes = self._proposer(image)
             vecs = np.asarray([box_to_vote_vector(pe.patch_grid, _as_box(b)) for b in boxes], dtype=np.float32)
+            leaf_mask = np.ones(boxes.shape[0], dtype=bool)
         exemplars = np.zeros((0, self.input_dim), np.float32)
         if gt_boxes:
-            exemplars = np.asarray([box_to_vote_vector(pe.patch_grid, _as_box(b)) for b in gt_boxes], dtype=np.float32)
-        return PreparedImage(boxes=boxes, vecs=vecs, whole_vec=whole_vec, exemplars=exemplars)
+            if self._region_voting and tree is not None:
+                # One positive per image: snap the covering box (union of all
+                # instance boxes) to its best-IoU tree node — the exact candidate
+                # the detector max-pools over — instead of a uniform grid pool.
+                snapped = snap_box_to_region(tree, _covering_box(gt_boxes))
+                if snapped is None:  # empty tree (shouldn't happen) — grid fallback
+                    snapped = box_to_vote_vector(pe.patch_grid, _covering_box(gt_boxes))
+                exemplars = np.asarray(snapped, dtype=np.float32)[None, :]
+            else:
+                exemplars = np.asarray(
+                    [box_to_vote_vector(pe.patch_grid, _as_box(b)) for b in gt_boxes], dtype=np.float32
+                )
+        return PreparedImage(boxes=boxes, vecs=vecs, whole_vec=whole_vec, exemplars=exemplars, leaf_mask=leaf_mask)
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:  # noqa: ARG002
         return None
@@ -353,6 +401,7 @@ def build_region_source(
     dino_model_id: str | None = None,
     dino_device: str = "cpu",
     dino_register_tokens: int = 0,
+    region_voting: bool = False,
 ) -> RegionSource:
     """Build a region source for ``proposal`` bound to ``embedder``.
 
@@ -376,7 +425,7 @@ def build_region_source(
     if proposal == "hac":
         if not embedder.supports_patch_regions:
             raise ValueError(f"proposal='hac' needs a patch embedder; {embedder.name!r} has no patch grid")
-        return _PatchSource(embedder, name="hac", k=hac_k, alpha=hac_alpha, proposer=None)
+        return _PatchSource(embedder, name="hac", k=hac_k, alpha=hac_alpha, proposer=None, region_voting=region_voting)
     if proposal == "hac_boxpool":
         if not embedder.supports_patch_regions:
             raise ValueError(f"proposal='hac_boxpool' needs a patch embedder; {embedder.name!r} has no patch grid")
