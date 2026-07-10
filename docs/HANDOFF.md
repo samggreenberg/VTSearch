@@ -58,7 +58,7 @@ deployments. Runs locally or in Docker.
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Module structure, dependency graph, extractability matrix, state management |
 | [API.md](API.md) | HTTP API reference (all REST endpoints, request/response formats) |
 | [CLI.md](CLI.md) | Command-line interface reference (autodetect, importers, exporters) |
-| [ML.md](ML.md) | MLP architecture, training config, embedding models, threshold calibration |
+| [ML.md](ML.md) | MLP architecture, training config, embedding models, threshold calibration, Coverage Atlas |
 | [EVAL.md](EVAL.md) | Evaluation framework (metrics, runner, visualisation) |
 | [EXTENDING.md](EXTENDING.md) | Plugin authoring index: splits into **[EXTENDING-plugins.md](EXTENDING-plugins.md)** (importers/exporters/sources), **[EXTENDING-media.md](EXTENDING-media.md)** (media types/embedders/clippers/converters), **[EXTENDING-processors.md](EXTENDING-processors.md)** (detectors/localizers/extractors). EXTENDING.md itself holds auth, dependencies, and checklists. |
 | [demos.md](demos.md) | Available demo datasets |

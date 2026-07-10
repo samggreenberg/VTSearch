@@ -95,7 +95,7 @@ New to the project? Start with [docs/HANDOFF.md](docs/HANDOFF.md) for a full ori
 
 ## Machine learning
 
-VTSearch trains a small MLP neural network on user votes to learn a binary classifier over pretrained embeddings. See [docs/ML.md](docs/ML.md) for full details on the model architecture, training configuration, PyTorch settings, and embedding models.
+VTSearch trains a small MLP neural network on user votes to learn a binary classifier over pretrained embeddings. See [docs/ML.md](docs/ML.md) for full details on the model architecture, training configuration, PyTorch settings, embedding models, and the Coverage Atlas that drives diversity sampling and domain-shift detection.
 
 ## Evaluation
 
