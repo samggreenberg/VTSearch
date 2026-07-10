@@ -26,6 +26,21 @@ annotation count K. Design + rationale: `docs/plans/` (small-object sweep).
   sharply cuts max-pool false positives — e.g. siglip/sliding FPR 0.72→0.11 in the pilot
   (at the cost of higher FNR). No-op for `whole`. `viz.py --kind predict` takes the same flag,
   so overlays match a `--neg-regions` run.
+- **`--region-voting`** (optional, default off; **hac + dinov2/dinov3 only**): the faithful
+  app-detector label construction, so a sweep cell reproduces what a user swiping in VTSearch
+  produces (`python -m vtscore.eval --region-voting`). It changes the whole `hac` train path:
+  - **Good vote** → the covering GT box (union of all instances) is **snapped to its best-IoU
+    HAC node** (`snap_box_to_region`) — one positive per image (K = good swipes), an actual
+    candidate the detector max-pools over, not a uniform grid pool.
+  - **Bad vote** → floods the image's **childless nodes (CLS + HAC leaves)**, dropping internals,
+    as negatives (MIL: no region should score high).
+  - **Bag-aware** training: per-image loss weights (a busy negative image counts once, not once
+    per leaf), hidden width + safe-threshold ramp sized on **votes not rows**, cross-calibration
+    folds split by image, via the production `cross_calibration_threshold_cached`.
+  Overrides `--neg-regions` for `hac`; a no-op for other proposals (so `--proposals whole,hac
+  --region-voting` runs `whole` normally). Uses a distinct `hac_rv_*` cache slug (don't reuse a
+  plain-`hac` cache). `viz.py --kind predict --region-voting` renders matching overlays.
+  Only alpha=0.5 / k=12 reproduce production's tree (its fixed build params).
 
 ## Run (pilot: stop sign on COCO, single GPU)
 One command — add `--viz` and the sweep also emits all the figures at the end:
