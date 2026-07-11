@@ -996,6 +996,33 @@ VISUAL_GENOME_CATEGORIES = [
 # case-insensitive lookup.  ``Bare`` (near-empty screens) and ``Other``
 # (catch-all) are kept for completeness but are deliberately not given eval
 # queries — they describe no visual subject a user would search for.
+# RICO-Screen2Words: Android app-store *category* (app genre) of the app each
+# mobile-UI screenshot came from — a Google Play taxonomy.  Unlike Enrico's
+# screen-function labels, this asks "what kind of app is this?", a harder,
+# semantic signal for a screenshot embedder.  A curated subset of common,
+# visually-distinguishable Play categories; ``download_rico_screen2words`` folds
+# the raw parquet ``category`` strings to these via case/punctuation-insensitive
+# matching, so minor spelling drift in the source data still lands here.
+RICO_SCREEN2WORDS_CATEGORIES = [
+    "Books & Reference",
+    "Business",
+    "Communication",
+    "Finance",
+    "Food & Drink",
+    "Health & Fitness",
+    "Maps & Navigation",
+    "Music & Audio",
+    "News & Magazines",
+    "Photography",
+    "Productivity",
+    "Shopping",
+    "Social",
+    "Sports",
+    "Travel & Local",
+    "Weather",
+]
+
+
 ENRICO_CATEGORIES = [
     "Bare",
     "Camera",

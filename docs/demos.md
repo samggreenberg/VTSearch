@@ -68,6 +68,10 @@ Datasets are grouped by media type below. Each demo comes in size variants — *
 | **enrico_m** | Enrico mobile UI screenshots across 20 screen-function topics (medium) |
 | **enrico_l** | Enrico mobile UI screenshots across 20 screen-function topics (large) |
 | **enrico_a** | All ~1,460 Enrico mobile UI screenshots across 20 screen-function topics (all) |
+| **rico_screen2words_s** | Born-digital **mobile app UI screenshots** (RICO-Screen2Words) labeled by **app category** (Google Play genre) — Finance, Shopping, Social, Weather, Maps & Navigation… (small). A harder, semantic label than Enrico's screen function |
+| **rico_screen2words_m** | RICO mobile UI screenshots across 16 app categories (medium) |
+| **rico_screen2words_l** | RICO mobile UI screenshots across 16 app categories (large) |
+| **rico_screen2words_a** | RICO mobile UI screenshots across 16 Google Play app categories (all) |
 | **ucsf_documents_a** | Scanned industry document pages from the UCSF Industry Documents Library: tobacco, food, drug, chemical, fossil fuel, and opioids |
 | **roxford5k_s** | ~500 Oxford Buildings photos (a 1/10 slice) for instance matching — same landmark across viewpoints; best paired with the SIFT/VLAD (instance matching) embedder |
 | **roxford5k_a** | All 5,063 Revisited Oxford Buildings photos across 11 landmarks plus distractors — the canonical instance-retrieval benchmark; pair with the SIFT/VLAD (instance matching) embedder |

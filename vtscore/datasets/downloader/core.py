@@ -159,6 +159,17 @@ OPENLOGO_DOWNLOAD_WORKERS = 16
 ENRICO_SCREENSHOTS_URL = "https://userinterfaces.aalto.fi/enrico/resources/screenshots.zip"
 ENRICO_TOPICS_URL = "https://userinterfaces.aalto.fi/enrico/resources/design_topics.csv"
 
+# RICO-Screen2Words: 22,417 Android mobile-UI screenshots (built on Rico), each
+# carrying its app's Google Play *category* plus human caption summaries.
+# CC-BY-4.0.  Distributed on the Hub as parquet shards whose ``image`` column is
+# an Image feature (embedded JPEG bytes); ``download_rico_screen2words`` pulls
+# the train split (8 shards ≈ 1.7 GB), decodes each screenshot to a
+# ``<category>/<screenId>.jpg`` file, then deletes the parquet.  Born-digital
+# mobile-UI screenshots — a second, harder-labelled screenshot demo alongside
+# Enrico (app genre vs. screen function).
+RICO_SCREEN2WORDS_REPO_ID = "bevaya/RICO-Screen2Words"
+RICO_SCREEN2WORDS_SHARDS = [f"data/train-{i:05d}-of-00008.parquet" for i in range(8)]
+
 VISUAL_GENOME_IMAGES_URL = "https://cs.stanford.edu/people/rak248/VG_100K/images.zip"
 VISUAL_GENOME_IMAGES2_URL = "https://cs.stanford.edu/people/rak248/VG_100K_2/images2.zip"
 VISUAL_GENOME_OBJECTS_URL = "https://homes.cs.washington.edu/~ranjay/visualgenome/data/dataset/objects.json.zip"
@@ -200,6 +211,7 @@ PLACES365_DOWNLOAD_SIZE_MB = 501
 UCSF_IDL_DOWNLOAD_SIZE_MB = 50
 ROXFORD_IMAGES_DOWNLOAD_SIZE_MB = 1850
 ENRICO_DOWNLOAD_SIZE_MB = 110
+RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB = 1720
 OPENLOGO_DOWNLOAD_SIZE_MB = 4640
 VISUAL_GENOME_IMAGES_DOWNLOAD_SIZE_MB = 9700
 VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB = 5300

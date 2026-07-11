@@ -26,6 +26,7 @@ from vtscore.media.image._demo_categories import (
     OPENLOGO_CATEGORIES,
     OXFORD_FLOWERS_CATEGORIES,
     PLACES365_CATEGORIES,
+    RICO_SCREEN2WORDS_CATEGORIES,
     ROXFORD_CATEGORIES,
     STANFORD_DOGS_CATEGORIES,
     UCSF_DOCUMENTS_CATEGORIES,
@@ -47,6 +48,7 @@ def build_demo_datasets() -> list[DemoDataset]:
         OPENLOGO_DOWNLOAD_SIZE_MB,
         OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
         PLACES365_DOWNLOAD_SIZE_MB,
+        RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
         ROXFORD_IMAGES_DOWNLOAD_SIZE_MB,
         STANFORD_DOGS_DOWNLOAD_SIZE_MB,
         UCSF_IDL_DOWNLOAD_SIZE_MB,
@@ -77,6 +79,7 @@ def build_demo_datasets() -> list[DemoDataset]:
     dogs_folder = DATA_DIR / "stanford_dogs" / "Images"
     places_desc = "Indoor & outdoor scenes"
     places_folder = DATA_DIR / "places365" / "val_256"
+    rico_folder = DATA_DIR / "rico_screen2words" / "screenshots"
     return [
         DemoDataset(
             id="caltech101_s",
@@ -429,6 +432,58 @@ def build_demo_datasets() -> list[DemoDataset]:
             items_per_category=73,
             download_size_mb=ENRICO_DOWNLOAD_SIZE_MB,
         ),
+        # RICO-Screen2Words: mobile-UI screenshots labeled by *app genre* (Google
+        # Play category) rather than screen function.  All variants pull the same
+        # ~1.7 GB train split and extract the 16 curated categories; the slices
+        # differ only in how much of each category they take.
+        DemoDataset(
+            id="rico_screen2words_s",
+            label="RICO App UIs (S)",
+            description="Mobile app UI screenshots by app category",
+            categories=RICO_SCREEN2WORDS_CATEGORIES,
+            source="rico_screen2words",
+            required_folder=rico_folder,
+            slice_frac_start=0.0,
+            slice_frac_end=1 / 7,
+            items_per_category=400,
+            download_size_mb=RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="rico_screen2words_m",
+            label="RICO App UIs (M)",
+            description="Mobile app UI screenshots by app category",
+            categories=RICO_SCREEN2WORDS_CATEGORIES,
+            source="rico_screen2words",
+            required_folder=rico_folder,
+            slice_frac_start=1 / 7,
+            slice_frac_end=3 / 7,
+            items_per_category=400,
+            download_size_mb=RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="rico_screen2words_l",
+            label="RICO App UIs (L)",
+            description="Mobile app UI screenshots by app category",
+            categories=RICO_SCREEN2WORDS_CATEGORIES,
+            source="rico_screen2words",
+            required_folder=rico_folder,
+            slice_frac_start=3 / 7,
+            slice_frac_end=None,
+            items_per_category=400,
+            download_size_mb=RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="rico_screen2words_a",
+            label="RICO App UIs (A)",
+            description="Mobile app UI screenshots across 16 Google Play app categories",
+            categories=RICO_SCREEN2WORDS_CATEGORIES,
+            source="rico_screen2words",
+            required_folder=rico_folder,
+            slice_frac_start=0.0,
+            slice_frac_end=None,
+            items_per_category=400,
+            download_size_mb=RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
+        ),
         DemoDataset(
             id="roxford5k_s",
             label="ROxford5k (S)",
@@ -552,6 +607,9 @@ _FILE_SOURCE_DOWNLOADERS: dict[str, str] = {
     "caltech256": "download_caltech256",
     "food101": "download_food101",
     "eurosat": "download_eurosat",
+    # RICO-Screen2Words decodes its HF parquet into a <category>/<id>.jpg tree,
+    # so it plugs straight into the folder-per-class collect path.
+    "rico_screen2words": "download_rico_screen2words",
 }
 
 

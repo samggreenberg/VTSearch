@@ -198,6 +198,7 @@ def _source_directory(source: str) -> Path | None:
             "eurosat": DATA_DIR / "EuroSAT_RGB",
             "stanford_dogs": DATA_DIR / "stanford_dogs" / "Images",
             "enrico": DATA_DIR / "enrico",
+            "rico_screen2words": DATA_DIR / "rico_screen2words" / "screenshots",
             "openlogo": DATA_DIR / "openlogo" / "data",
             "ucsf_documents": DATA_DIR / "ucsf_documents",
             "cifar10_sample": DATA_DIR / "cifar-10-batches-py",

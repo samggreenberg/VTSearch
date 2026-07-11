@@ -182,6 +182,33 @@ _ENRICO_QUERIES = [
 ]
 
 # ------------------------------------------------------------------
+# Image eval queries  (RICO-Screen2Words - mobile UI screenshots by app genre)
+# The label is the app's Google Play category, so the query describes the kind
+# of app the screen belongs to.  A harder signal than Enrico's screen function:
+# two apps in different genres can share a screen layout, so this stresses
+# whether the embedder captures app-domain semantics from a screenshot.
+# ------------------------------------------------------------------
+
+_RICO_SCREEN2WORDS_QUERIES = [
+    EvalQuery("a screen from a books or reference reading app", "Books & Reference"),
+    EvalQuery("a screen from a business app", "Business"),
+    EvalQuery("a screen from a messaging or communication app", "Communication"),
+    EvalQuery("a screen from a banking or finance app", "Finance"),
+    EvalQuery("a screen from a food or drink ordering app", "Food & Drink"),
+    EvalQuery("a screen from a health or fitness tracking app", "Health & Fitness"),
+    EvalQuery("a screen from a maps or navigation app", "Maps & Navigation"),
+    EvalQuery("a screen from a music or audio streaming app", "Music & Audio"),
+    EvalQuery("a screen from a news or magazine app", "News & Magazines"),
+    EvalQuery("a screen from a photography or camera app", "Photography"),
+    EvalQuery("a screen from a productivity app", "Productivity"),
+    EvalQuery("a screen from a shopping or e-commerce app", "Shopping"),
+    EvalQuery("a screen from a social networking app", "Social"),
+    EvalQuery("a screen from a sports app", "Sports"),
+    EvalQuery("a screen from a travel or local guide app", "Travel & Local"),
+    EvalQuery("a screen from a weather forecast app", "Weather"),
+]
+
+# ------------------------------------------------------------------
 # Text / paragraph eval queries  (20 Newsgroups - 15 categories)
 # All S/M/L share the same categories; queries are identical.
 # ------------------------------------------------------------------
@@ -311,6 +338,14 @@ EVAL_DATASETS: dict[str, dict] = {
     "enrico_a": {
         "demo_dataset": "enrico_a",
         "queries": _ENRICO_QUERIES,
+    },
+    "rico_screen2words_m": {
+        "demo_dataset": "rico_screen2words_m",
+        "queries": _RICO_SCREEN2WORDS_QUERIES,
+    },
+    "rico_screen2words_a": {
+        "demo_dataset": "rico_screen2words_a",
+        "queries": _RICO_SCREEN2WORDS_QUERIES,
     },
     # Image (multi-label)
     "visual_genome_s": {

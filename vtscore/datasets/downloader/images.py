@@ -532,6 +532,76 @@ def download_enrico(on_progress: Optional[ProgressCallback] = None) -> Path:
     return extract_dir
 
 
+def _rico_norm(s: Optional[str]) -> str:
+    """Fold a Play-Store category string to a case/punctuation-insensitive key."""
+    import re  # noqa: PLC0415
+
+    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
+
+def download_rico_screen2words(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download RICO-Screen2Words and lay it out as a folder-per-category demo.
+
+    The dataset ships on the Hub as parquet shards whose ``image`` column holds
+    the screenshot bytes and whose ``category`` column holds the app's Google
+    Play genre.  This pulls the train split (~1.7 GB), decodes each screenshot in
+    a curated set of Play categories to ``<dir>/screenshots/<category>/<screenId>.jpg``
+    (category folder names normalised to ``RICO_SCREEN2WORDS_CATEGORIES``), then
+    deletes the parquet shards to reclaim disk.  The result is an ordinary
+    folder-per-class image tree, so the rest of the demo pipeline reuses the
+    Caltech/Food-101 path unchanged.
+
+    Returns:
+        Path to the ``screenshots/`` directory (the folder-per-category root).
+    """
+    if on_progress is None:
+        on_progress = _core._default_progress()
+
+    from vtscore.datasets.downloader._hf_parquet import (  # noqa: PLC0415
+        download_parquet_shards,
+        extract_images_to_folders,
+    )
+    from vtscore.media.image._demo_categories import RICO_SCREEN2WORDS_CATEGORIES  # noqa: PLC0415
+
+    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+    base = _core.DATA_DIR / "rico_screen2words"
+    screenshots = base / "screenshots"
+
+    if screenshots.is_dir() and next(screenshots.rglob("*.jpg"), None) is not None:
+        return screenshots
+
+    display_by_norm = {_rico_norm(c): c for c in RICO_SCREEN2WORDS_CATEGORIES}
+
+    def category_of(row: dict) -> Optional[str]:
+        return display_by_norm.get(_rico_norm(row.get("category")))
+
+    def id_of(row: dict, idx: int) -> str:
+        sid = row.get("screenId")
+        return str(sid) if sid is not None else f"row{idx}"
+
+    shards_dir = base / "parquet"
+    shard_paths = download_parquet_shards(
+        _core.RICO_SCREEN2WORDS_REPO_ID,
+        _core.RICO_SCREEN2WORDS_SHARDS,
+        shards_dir,
+        "RICO-Screen2Words",
+        on_progress,
+    )
+    extract_images_to_folders(
+        shard_paths,
+        image_col="image",
+        out_dir=screenshots,
+        category_of=category_of,
+        id_of=id_of,
+        ext="jpg",
+        dataset_name="RICO-Screen2Words",
+        on_progress=on_progress,
+        columns=["image", "category", "screenId"],
+    )
+    shutil.rmtree(shards_dir, ignore_errors=True)
+    return screenshots
+
+
 def download_places365(on_progress: Optional[ProgressCallback] = None) -> Path:
     """Download and extract the Places365 validation set.
 
