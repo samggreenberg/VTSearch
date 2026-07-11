@@ -45,41 +45,6 @@ canvas renderer, LSH near-dup detection, async jobs with signature caches.
 
 <!-- item-sep -->
 
-- **Parallel folder ingest** — full-mode folder import processes files
-  strictly serially (`vtscore/datasets/loader_folder.py:454-470` inside
-  `_build_per_file_media`, driven by plain `for` loops in
-  `load_dataset_from_folder` ~line 567 and `load_dataset_from_folder_chunked`
-  ~line 699). Per file: disk read + `mt.load_media_data` (for images: PIL
-  decode + LANCZOS thumbnail + JPEG re-encode in `make_image_thumbnail`; for
-  audio: decode + waveform PNG). PIL decode/resize/encode release the GIL, so
-  this parallelizes near-linearly — and the codebase already proves the
-  pattern twice: `vtscore/state/near_dupes.py:300-313` (ThreadPoolExecutor,
-  with a comment saying exactly this) and
-  `vtscore/datasets/importers/recaller/__init__.py:254`
-  (`ThreadPoolExecutor(max_workers=16)`).
-  **Fix:** inside each chunk, submit `_build_per_file_media(...)` for the
-  chunk's files to a `ThreadPoolExecutor(max_workers=min(8, os.cpu_count() or 4))`,
-  then collect results **in submission order** (`executor.map`, or a list of
-  futures iterated in order — not `as_completed`) so media IDs and origin
-  ordering stay deterministic. Assign `media_id` before submission (it's an
-  input, not derived inside). Gate on a small-N threshold (e.g. skip the pool
-  under ~64 files, mirroring near_dupes' `_THREAD_MIN_IMAGES`) so tiny imports
-  don't pay pool startup. Progress: call `on_progress` from the collection
-  loop (main thread), not from workers, to keep ProgressTracker single-writer.
-  **Gotchas:** (1) cancellation — the serial loop's `check_cancelled()` calls
-  must survive: check in the collection loop each iteration, and on
-  `CancelledError` call `executor.shutdown(cancel_futures=True)`. (2) Memory —
-  a chunk's worth of `media_bytes` in flight is the same as today (the chunk
-  already bounds it); don't widen the pool beyond the chunk. (3) Exceptions in
-  a worker must propagate with the failing file's path in the message, same as
-  today. (4) `thin=True` mode does no decode — keep it on the serial path or
-  let it flow through (harmless either way).
-  **Files touched:** `vtscore/datasets/loader_folder.py` only.
-  Tests: `./run-tests.sh datasets io` — plus add one test asserting IDs/order
-  match the serial path on a fixture folder.
-  Impact: high (bulk image/audio import ≈ cores× faster on the decode phase).
-  Complexity: medium.
-
 <!-- item-sep -->
 
 - **Vectorized region cosine sort** — text/example sort on a patch dataset
