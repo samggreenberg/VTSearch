@@ -69,6 +69,8 @@ from vtscore.datasets.downloader.core import (
     RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
     RICO_SCREEN2WORDS_REPO_ID,
     RICO_SCREEN2WORDS_SHARDS,
+    RVL_CDIP_DOWNLOAD_SIZE_MB,
+    RVL_CDIP_REPO_ID,
     KTH_ACTIONS,
     KTH_BASE_URL,
     KTH_DOWNLOAD_SIZE_MB,
@@ -138,6 +140,7 @@ from vtscore.datasets.downloader.images import (
     download_places365,
     download_rico_screen2words,
     download_roxford5k,
+    download_rvl_cdip,
     download_stanford_dogs,
     download_visual_genome,
 )
@@ -222,6 +225,8 @@ __all__ = [
     "RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB",
     "RICO_SCREEN2WORDS_REPO_ID",
     "RICO_SCREEN2WORDS_SHARDS",
+    "RVL_CDIP_DOWNLOAD_SIZE_MB",
+    "RVL_CDIP_REPO_ID",
     "KTH_ACTIONS",
     "KTH_BASE_URL",
     "KTH_DOWNLOAD_SIZE_MB",
@@ -281,6 +286,7 @@ __all__ = [
     "download_places365",
     "download_rico_screen2words",
     "download_roxford5k",
+    "download_rvl_cdip",
     "download_stanford_dogs",
     "download_visual_genome",
     # Video

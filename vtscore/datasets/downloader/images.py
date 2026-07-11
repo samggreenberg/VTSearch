@@ -602,6 +602,69 @@ def download_rico_screen2words(on_progress: Optional[ProgressCallback] = None) -
     return screenshots
 
 
+def download_rvl_cdip(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download a demo-sized RVL-CDIP mirror as a folder-per-class document tree.
+
+    Pulls the ~4,800-image (300-per-class) parquet mirror, decodes each
+    document image into ``<dir>/images/<class>/<idx>.png`` (the integer ``label``
+    column indexes ``RVL_CDIP_CATEGORIES``), then deletes the parquet.  The
+    result is an ordinary folder-per-class tree reusing the Caltech/Food-101
+    collect path.  Scanned grayscale document images — the "document screenshot"
+    corner of digitally-native imagery.
+
+    Returns:
+        Path to the ``images/`` directory (the folder-per-class root).
+    """
+    if on_progress is None:
+        on_progress = _core._default_progress()
+
+    from vtscore.datasets.downloader._hf_parquet import (  # noqa: PLC0415
+        download_parquet_shards,
+        extract_images_to_folders,
+        list_parquet_shards,
+    )
+    from vtscore.media.image._demo_categories import RVL_CDIP_CATEGORIES  # noqa: PLC0415
+
+    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+    base = _core.DATA_DIR / "rvl_cdip"
+    images_dir = base / "images"
+
+    if images_dir.is_dir() and next(images_dir.rglob("*.png"), None) is not None:
+        return images_dir
+
+    def category_of(row: dict) -> Optional[str]:
+        label = row.get("label")
+        if isinstance(label, int) and 0 <= label < len(RVL_CDIP_CATEGORIES):
+            return RVL_CDIP_CATEGORIES[label]
+        return None
+
+    shard_names = list_parquet_shards(_core.RVL_CDIP_REPO_ID, "data/train")
+    if not shard_names:
+        raise RuntimeError(f"No train parquet shards found in {_core.RVL_CDIP_REPO_ID}")
+
+    shards_dir = base / "parquet"
+    shard_paths = download_parquet_shards(
+        _core.RVL_CDIP_REPO_ID,
+        shard_names,
+        shards_dir,
+        "RVL-CDIP",
+        on_progress,
+    )
+    extract_images_to_folders(
+        shard_paths,
+        image_col="image",
+        out_dir=images_dir,
+        category_of=category_of,
+        id_of=lambda row, idx: str(idx),
+        ext="png",
+        dataset_name="RVL-CDIP",
+        on_progress=on_progress,
+        columns=["image", "label"],
+    )
+    shutil.rmtree(shards_dir, ignore_errors=True)
+    return images_dir
+
+
 def download_places365(on_progress: Optional[ProgressCallback] = None) -> Path:
     """Download and extract the Places365 validation set.
 

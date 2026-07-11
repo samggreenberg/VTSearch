@@ -28,6 +28,7 @@ from vtscore.media.image._demo_categories import (
     PLACES365_CATEGORIES,
     RICO_SCREEN2WORDS_CATEGORIES,
     ROXFORD_CATEGORIES,
+    RVL_CDIP_CATEGORIES,
     STANFORD_DOGS_CATEGORIES,
     UCSF_DOCUMENTS_CATEGORIES,
     VISUAL_GENOME_CATEGORIES,
@@ -50,6 +51,7 @@ def build_demo_datasets() -> list[DemoDataset]:
         PLACES365_DOWNLOAD_SIZE_MB,
         RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
         ROXFORD_IMAGES_DOWNLOAD_SIZE_MB,
+        RVL_CDIP_DOWNLOAD_SIZE_MB,
         STANFORD_DOGS_DOWNLOAD_SIZE_MB,
         UCSF_IDL_DOWNLOAD_SIZE_MB,
         VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB,
@@ -80,6 +82,7 @@ def build_demo_datasets() -> list[DemoDataset]:
     places_desc = "Indoor & outdoor scenes"
     places_folder = DATA_DIR / "places365" / "val_256"
     rico_folder = DATA_DIR / "rico_screen2words" / "screenshots"
+    rvl_folder = DATA_DIR / "rvl_cdip" / "images"
     return [
         DemoDataset(
             id="caltech101_s",
@@ -484,6 +487,58 @@ def build_demo_datasets() -> list[DemoDataset]:
             items_per_category=400,
             download_size_mb=RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
         ),
+        # RVL-CDIP: scanned grayscale *document images* across 16 balanced types
+        # (letter, form, email, invoice, resume, memo, …).  A demo-sized
+        # 300-per-class mirror (~4,800 images); the "document screenshot" corner
+        # of digitally-native imagery with a clean 16-way label set.
+        DemoDataset(
+            id="rvl_cdip_s",
+            label="RVL-CDIP Docs (S)",
+            description="Scanned document images by type",
+            categories=RVL_CDIP_CATEGORIES,
+            source="rvl_cdip",
+            required_folder=rvl_folder,
+            slice_frac_start=0.0,
+            slice_frac_end=1 / 7,
+            items_per_category=300,
+            download_size_mb=RVL_CDIP_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="rvl_cdip_m",
+            label="RVL-CDIP Docs (M)",
+            description="Scanned document images by type",
+            categories=RVL_CDIP_CATEGORIES,
+            source="rvl_cdip",
+            required_folder=rvl_folder,
+            slice_frac_start=1 / 7,
+            slice_frac_end=3 / 7,
+            items_per_category=300,
+            download_size_mb=RVL_CDIP_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="rvl_cdip_l",
+            label="RVL-CDIP Docs (L)",
+            description="Scanned document images by type",
+            categories=RVL_CDIP_CATEGORIES,
+            source="rvl_cdip",
+            required_folder=rvl_folder,
+            slice_frac_start=3 / 7,
+            slice_frac_end=None,
+            items_per_category=300,
+            download_size_mb=RVL_CDIP_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="rvl_cdip_a",
+            label="RVL-CDIP Docs (A)",
+            description="Scanned document images across 16 RVL-CDIP document types",
+            categories=RVL_CDIP_CATEGORIES,
+            source="rvl_cdip",
+            required_folder=rvl_folder,
+            slice_frac_start=0.0,
+            slice_frac_end=None,
+            items_per_category=300,
+            download_size_mb=RVL_CDIP_DOWNLOAD_SIZE_MB,
+        ),
         DemoDataset(
             id="roxford5k_s",
             label="ROxford5k (S)",
@@ -610,6 +665,8 @@ _FILE_SOURCE_DOWNLOADERS: dict[str, str] = {
     # RICO-Screen2Words decodes its HF parquet into a <category>/<id>.jpg tree,
     # so it plugs straight into the folder-per-class collect path.
     "rico_screen2words": "download_rico_screen2words",
+    # RVL-CDIP likewise decodes its parquet mirror into <class>/<idx>.png.
+    "rvl_cdip": "download_rvl_cdip",
 }
 
 

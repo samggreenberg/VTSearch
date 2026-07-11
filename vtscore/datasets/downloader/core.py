@@ -170,6 +170,14 @@ ENRICO_TOPICS_URL = "https://userinterfaces.aalto.fi/enrico/resources/design_top
 RICO_SCREEN2WORDS_REPO_ID = "bevaya/RICO-Screen2Words"
 RICO_SCREEN2WORDS_SHARDS = [f"data/train-{i:05d}-of-00008.parquet" for i in range(8)]
 
+# RVL-CDIP: 16-class document-image classification.  The canonical
+# ``aharley/rvl_cdip`` is a 38 GB tarball (impractical as a demo); instead we
+# pull a demo-sized 300-images-per-class parquet mirror (~4,800 images, ~32 MB)
+# whose ``image``/``label`` columns decode straight into a folder-per-class
+# tree.  The train shard filename carries a content hash, so it is resolved at
+# download time rather than hardcoded.
+RVL_CDIP_REPO_ID = "umair894/rvl_cdip_300_examples_per_class"
+
 VISUAL_GENOME_IMAGES_URL = "https://cs.stanford.edu/people/rak248/VG_100K/images.zip"
 VISUAL_GENOME_IMAGES2_URL = "https://cs.stanford.edu/people/rak248/VG_100K_2/images2.zip"
 VISUAL_GENOME_OBJECTS_URL = "https://homes.cs.washington.edu/~ranjay/visualgenome/data/dataset/objects.json.zip"
@@ -212,6 +220,7 @@ UCSF_IDL_DOWNLOAD_SIZE_MB = 50
 ROXFORD_IMAGES_DOWNLOAD_SIZE_MB = 1850
 ENRICO_DOWNLOAD_SIZE_MB = 110
 RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB = 1720
+RVL_CDIP_DOWNLOAD_SIZE_MB = 32
 OPENLOGO_DOWNLOAD_SIZE_MB = 4640
 VISUAL_GENOME_IMAGES_DOWNLOAD_SIZE_MB = 9700
 VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB = 5300

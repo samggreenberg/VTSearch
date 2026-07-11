@@ -996,6 +996,34 @@ VISUAL_GENOME_CATEGORIES = [
 # case-insensitive lookup.  ``Bare`` (near-empty screens) and ``Other``
 # (catch-all) are kept for completeness but are deliberately not given eval
 # queries — they describe no visual subject a user would search for.
+# RVL-CDIP: 16 balanced document-image *types* (letter, form, email, invoice,
+# resume, memo, …).  Scanned grayscale document images, not born-digital
+# screenshots — the "document screenshot" corner of digitally-native imagery,
+# and a clean 16-way label set for retrieval eval.  ORDER MATTERS: these are the
+# ClassLabel ``names`` of the demo-sized parquet mirror we pull
+# (``umair894/rvl_cdip_300_examples_per_class``), so the integer ``label``
+# column indexes directly into this list.  Do not reorder without re-checking
+# the mirror's ClassLabel ordering.
+RVL_CDIP_CATEGORIES = [
+    "advertisement",
+    "budget",
+    "email",
+    "file folder",
+    "form",
+    "handwritten",
+    "invoice",
+    "letter",
+    "memo",
+    "news article",
+    "presentation",
+    "questionnaire",
+    "resume",
+    "scientific publication",
+    "scientific report",
+    "specification",
+]
+
+
 # RICO-Screen2Words: Android app-store *category* (app genre) of the app each
 # mobile-UI screenshot came from — a Google Play taxonomy.  Unlike Enrico's
 # screen-function labels, this asks "what kind of app is this?", a harder,

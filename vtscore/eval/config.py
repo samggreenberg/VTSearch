@@ -209,6 +209,31 @@ _RICO_SCREEN2WORDS_QUERIES = [
 ]
 
 # ------------------------------------------------------------------
+# Image eval queries  (RVL-CDIP - scanned document images by type)
+# Digitally-native document images (not photos); the query describes the kind
+# of document.  All 16 classes are describable, so every one gets a query.
+# ------------------------------------------------------------------
+
+_RVL_CDIP_QUERIES = [
+    EvalQuery("a printed advertisement", "advertisement"),
+    EvalQuery("a budget spreadsheet with numbers and totals", "budget"),
+    EvalQuery("an email message with headers", "email"),
+    EvalQuery("a file folder cover sheet", "file folder"),
+    EvalQuery("a blank or filled paper form", "form"),
+    EvalQuery("a handwritten note or letter", "handwritten"),
+    EvalQuery("an invoice or bill", "invoice"),
+    EvalQuery("a typed business letter", "letter"),
+    EvalQuery("an office memo", "memo"),
+    EvalQuery("a newspaper or news article page", "news article"),
+    EvalQuery("presentation slides", "presentation"),
+    EvalQuery("a questionnaire or survey", "questionnaire"),
+    EvalQuery("a resume or CV", "resume"),
+    EvalQuery("a scientific journal publication page", "scientific publication"),
+    EvalQuery("a scientific or technical report", "scientific report"),
+    EvalQuery("a technical specification document", "specification"),
+]
+
+# ------------------------------------------------------------------
 # Text / paragraph eval queries  (20 Newsgroups - 15 categories)
 # All S/M/L share the same categories; queries are identical.
 # ------------------------------------------------------------------
@@ -346,6 +371,15 @@ EVAL_DATASETS: dict[str, dict] = {
     "rico_screen2words_a": {
         "demo_dataset": "rico_screen2words_a",
         "queries": _RICO_SCREEN2WORDS_QUERIES,
+    },
+    # Image (scanned document images)
+    "rvl_cdip_m": {
+        "demo_dataset": "rvl_cdip_m",
+        "queries": _RVL_CDIP_QUERIES,
+    },
+    "rvl_cdip_a": {
+        "demo_dataset": "rvl_cdip_a",
+        "queries": _RVL_CDIP_QUERIES,
     },
     # Image (multi-label)
     "visual_genome_s": {

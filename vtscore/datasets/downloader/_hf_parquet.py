@@ -36,6 +36,20 @@ def _require_pyarrow():
     return pq
 
 
+def list_parquet_shards(repo_id: str, path_prefix: str) -> list[str]:
+    """Return the dataset repo's parquet files whose path starts with *path_prefix*.
+
+    Used when shard filenames carry a volatile content hash (e.g.
+    ``data/train-00000-of-00001-<hash>.parquet``) that would rot if hardcoded.
+    """
+    from huggingface_hub import HfApi  # noqa: PLC0415
+
+    from vtscore.security.hf_auth import get_token  # noqa: PLC0415
+
+    files = HfApi().list_repo_files(repo_id, repo_type="dataset", token=get_token())
+    return sorted(f for f in files if f.startswith(path_prefix) and f.endswith(".parquet"))
+
+
 def download_parquet_shards(
     repo_id: str,
     filenames: list[str],
@@ -108,9 +122,12 @@ def extract_images_to_folders(
     """
     read_cols = columns or [image_col]
     written = 0
+    global_idx = 0  # monotonic across shards so id_of(row, idx) never collides
     for si, shard in enumerate(shard_paths):
         on_progress("downloading", f"Extracting {dataset_name} images (shard {si + 1}/{len(shard_paths)})...", si, len(shard_paths))
-        for idx, row in enumerate(iter_parquet_rows(shard, read_cols)):
+        for row in iter_parquet_rows(shard, read_cols):
+            idx = global_idx
+            global_idx += 1
             category = category_of(row)
             if category is None:
                 continue
