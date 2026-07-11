@@ -471,6 +471,19 @@ class LoadingTasksTracker:
                 entry["finished_at"] = time.time()
         self._notify()
 
+    def is_finished(self, task_id: str) -> bool:
+        """Return ``True`` once :meth:`mark_finished` ran for *task_id*.
+
+        The task body calls ``mark_finished`` from its outermost ``finally``,
+        so a ``True`` here means the worker thread has fully unwound (gates
+        released, contexts restored).  Tests use this to wait for a
+        cancelled/finished task deterministically instead of sleeping.
+        ``False`` for unknown (never created or already removed) task ids.
+        """
+        with self._lock:
+            entry = self._tasks.get(task_id)
+        return bool(entry and entry.get("finished_at") is not None)
+
     def get_tracker(self, task_id: str) -> ProgressTracker | None:
         """Return the ProgressTracker for *task_id*, or ``None``."""
         with self._lock:

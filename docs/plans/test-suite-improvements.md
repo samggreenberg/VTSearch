@@ -1,50 +1,11 @@
-# Test Suite Improvements (speed + coverage)
+# Test Suite Improvements (coverage)
 
 Open work from a full evaluation of the test suite (2026-07). Baseline measurements that motivate the items below, taken on a 4-core cloud container, cold caches, `pytest tests/ tests_lib/ -q -n auto` with coverage enabled:
 
-- 5,614 Python tests, 197s wall. The worst individual tests are numba-JIT-bound UMAP fits (~50s each) and real-time backoff/ticker sleeps, not training or I/O.
 - Backend line coverage (vtsearch + vtscore combined): **83%**. Cold spots are concentrated in embedder wrappers (stubbed session-wide), `vtsearch/cli_main.py` (6% — only covered by the excluded `slow` subprocess tests), and a handful of network-facing/plugin modules.
 - Frontend: 115 spec files; ~68% of components and ~76% of services have specs; **0 of 4 HTTP interceptors** are tested.
 
 Each item below is independent; pick any and delete it when it ships.
-
-## Speed
-
-<!-- item-sep -->
-
-- **Fix the static-bundle ordering race under bare `pytest -n auto`** — With no pre-built `static/` bundle, 9 tests in `tests/api/test_dashboard.py` fail: the session-autouse fixture in `tests/core/test_frontend.py:39` runs `npm run build:prod` (~28s) only on whichever xdist worker collects that file, while dashboard tests on other workers read `static/` before it exists. (Under `./run-tests.sh` the bundle is built beforehand, so the gate passes — but `pytest tests/ tests_lib/ -m 'not gpu'` is a documented invocation in CLAUDE.md and currently red on a fresh clone.) Fix: hoist ensure-frontend-built into a shared session fixture guarded by a cross-worker file lock (build once, others wait), and make `test_dashboard.py` depend on it; that also prevents N concurrent 16s npm builds when several workers hit `test_frontend.py`.
-
-<!-- item-sep -->
-
-- **Stop paying numba JIT compilation for UMAP/librosa tests** — The two slowest tests, `tests_lib/projection/test_gpu_backends.py::test_umap_fit_transform_falls_back_when_cuml_fit_raises` (53s) and `tests_lib/projection/test_umap_projection.py::test_umap_fit_shape_and_metadata` (49s), run real `umap-learn` fits on tiny matrices (60×16); nearly all the time is numba JIT compiling UMAP's kernels, paid once per xdist worker per run. Options, in order of preference: (a) set `NUMBA_CACHE_DIR` to a persistent path in the test conftests so compiled kernels cache across runs and workers; (b) `NUMBA_DISABLE_JIT=1` for the test env (verify the librosa mel-spectrogram test, `tests/converters/test_audio2image_and_image2text.py::test_convert_mel_spectrogram` at 9.8s, stays tolerable interpreted); (c) mark the real-fit tests `slow` and keep a mocked-UMAP fast path. Expected saving: ~100s of worker CPU per cold run.
-
-<!-- item-sep -->
-
-- **Patch `time.sleep` in the HF backoff-failure test** — `tests_lib/cli/test_preload_progress.py::TestLoadPretrainedLocalFirst::test_network_fallback_error_propagates` (14s) exercises the retry loop in `vtscore/media/embedder.py` (`_HF_RETRY_BACKOFF_BASE` sleeps of 2+4+8s) with real sleeps. The sibling test at `tests_lib/cli/test_preload_progress.py:804` already does `@patch("vtscore.media.embedder.time.sleep")`; apply the same to this one. Saves 14s.
-
-<!-- item-sep -->
-
-- **Parameterize the `timed_progress` tick interval** — `timed_progress` in `vtscore/media/embedder.py` hardcodes `stop.wait(timeout=1.0)`, forcing 9 tests in `tests_lib/cli/test_preload_progress.py` (lines ~1037–1180) to sleep 1.5–2.5s each (~14.5s of pure sleeping). Add a `tick_interval: float = 1.0` parameter and pass ~0.05 in tests; replace the unconditional "verify ticker stopped" post-block sleeps with a wait of a couple of tick intervals.
-
-<!-- item-sep -->
-
-- **Stub or cache waveform thumbnails in the media fixtures** — `tests/fixtures/medias.py:89` (and the `tests_lib` twin) call `generate_waveform_thumbnail()` for each of the 20 generated WAVs at session start, which imports librosa/numba and decodes every file — in every xdist worker, every run. Either cache `thumbnail_bytes` in the existing per-worker `media_embedding_cache*.npz`, or stub `generate_waveform_thumbnail` the way `embed_audio_file` is stubbed. Also: the NPZ embedding cache stores conftest-faked vectors (saves nothing) and writes into the repo's `data/` dir — consider dropping it or pointing it at a temp dir while in there.
-
-<!-- item-sep -->
-
-- **Replace fixed race-window sleeps with "waiter parked" event hooks** — Negative-assertion sleeps that always pay full price and are inherently flaky: `tests/datasets/test_parallel_loading.py:669,729,733` (0.3–0.5s around the download gate), `tests/io/test_sync_sources.py:1819` (0.3s cancelled-timer probe), `tests_lib/detectors/test_new_embedders.py:1322` (0.1s lock race). Add a test-visible `threading.Event` set when a waiter blocks on the gate/timer so the tests become deterministic and near-instant.
-
-<!-- item-sep -->
-
-- **Trim the voting-iteration eval sweeps** — `tests_lib/detectors/test_eval_voting_iterations.py` makes 27 calls to `simulate_voting_iterations` / `run_voting_iterations_eval`, each training an MLP per voting step and calibrating per split; several tests take 1.3–5.5s. Where the assertion doesn't need the full sweep (shape/plumbing tests like `test_full_cross_product_shape`, `test_multiple_seeds`), pass minimal step counts / `calibrate_count` and smaller media pools. Same review applies to `tests/sorting/test_safe_thresholds.py` (4 tests at 1.8–3.6s) and the 500-epoch run at `tests/sorting/test_sorting.py:272` (could assert on a smaller epoch bound).
-
-<!-- item-sep -->
-
-- **Slim the combine-datasets pickle round-trips** — `tests/datasets/test_combine_datasets.py` has ~10 tests at ~2s each; `make_dataset_file` (`tests/helpers.py:55`) pickles the full 20-media snapshot including `media_bytes` (~3–4MB per write) even for tests that only assert on metadata/dedup/registry behavior. Use 2–3-media subsets (several tests already do) or strip `media_bytes` where the test doesn't read it back.
-
-<!-- item-sep -->
-
-- **Correct the stale `slow`-marker note in CLAUDE.md** — Only 2 subprocess CLI tests remain (`tests/cli/test_cli_main_subprocess.py`, ~16s each); CLAUDE.md still says "total ~290s". Update when touching CLAUDE.md for other reasons (or as part of the in-process CLI item below, which may remove them entirely).
 
 ## Coverage — backend
 

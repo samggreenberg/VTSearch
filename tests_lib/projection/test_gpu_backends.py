@@ -56,7 +56,10 @@ def _install_fake_broken_cuml(monkeypatch):
     monkeypatch.setattr(gb, "cuml_enabled", lambda: True)
 
 
+@pytest.mark.xdist_group("numba-umap-jit")
 def test_umap_fit_transform_falls_back_when_cuml_fit_raises(monkeypatch, caplog):
+    # Real umap-learn fit → shares the JIT-compile worker with
+    # test_umap_projection.py (see the pytestmark comment there).
     _install_fake_broken_cuml(monkeypatch)
     rng = np.random.default_rng(0)
     mat = rng.standard_normal((60, 16)).astype(np.float32)

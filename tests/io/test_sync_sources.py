@@ -1795,6 +1795,7 @@ class TestLabelsetSyncDebounce:
     def test_reset_drops_pending_without_writing(self, tmp_path):
         """reset_label_sync_for_tests cancels the timer instead of running it."""
         from vtscore.labels.sync import (
+            _run_pending_sync,
             reset_label_sync_for_tests,
             sync_to_labelset_source,
         )
@@ -1813,10 +1814,10 @@ class TestLabelsetSyncDebounce:
 
             reset_label_sync_for_tests()
 
-            # Give any (cancelled) timer a chance to fire.
-            import time
-
-            time.sleep(0.3)
+            # Simulate the worst-case race deterministically: a timer that
+            # already fired before cancel() landed runs its callback *after*
+            # the reset.  The pending entry is gone, so it must be a no-op.
+            _run_pending_sync(ctx.detector_id)
 
             assert not (tmp_path / "labels.json").exists()
         finally:

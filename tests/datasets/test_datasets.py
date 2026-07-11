@@ -426,8 +426,15 @@ class TestStartupState:
         )
 
 
+@pytest.mark.xdist_group("shared-demo-data-dir")
 class TestDemoDatasetReadiness:
-    """Demo datasets report three-state status: ready / needs_embedding / needs_download."""
+    """Demo datasets report three-state status: ready / needs_embedding / needs_download.
+
+    These tests create/delete real files under the repo-shared
+    ``data/embeddings/`` and ``data/ESC-50-master/`` paths (several write the
+    *same* filename), so they are pinned to one xdist worker via
+    ``--dist loadgroup`` together with every other test touching those paths.
+    """
 
     def test_audio_pkl_without_esc50_shows_needs_download(self, client):
         """Audio pkl exists but ESC-50 audio dir is absent → needs_download (stale pkl)."""
@@ -620,8 +627,12 @@ class TestDemoDatasetReadiness:
             assert ds["status"] in ("ready", "needs_embedding", "needs_download")
 
 
+@pytest.mark.xdist_group("shared-demo-data-dir")
 class TestDemoDatasetEmbedderStatus:
-    """Demo dataset status respects which embedder produced the cached pkl."""
+    """Demo dataset status respects which embedder produced the cached pkl.
+
+    Grouped with ``TestDemoDatasetReadiness``: these tests write the same
+    repo-shared ``data/embeddings/<demo>.pkl`` files."""
 
     def test_ready_with_matching_embedder(self, client):
         """Container with matching embedder in meta → ready."""

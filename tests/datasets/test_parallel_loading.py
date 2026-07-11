@@ -658,15 +658,16 @@ class TestLoadingGates:
             # Wait for first load to actually start running.
             assert first_started.wait(timeout=10)
 
+            _download_gate.waiter_parked.clear()
             task2 = _run_origin_load_in_background(
                 second_load,
                 {"importer": "test2", "params": {}},
                 name="Second",
             )
 
-            # Second load should be waiting; give it a moment to start its
-            # thread and hit the gate wait.
-            time.sleep(0.3)
+            # Wait until the second load is actually parked on the gate
+            # (deterministic; no fixed race-window sleep).
+            assert _download_gate.waiter_parked.wait(timeout=10), "Second load never blocked on the download gate"
             assert not second_started.is_set(), "Second load should be queued, not running"
 
             # Check that the second task shows a "Waiting" message.
@@ -721,16 +722,22 @@ class TestLoadingGates:
             assert first_started.wait(timeout=10)
 
             # Start a second load; it will be queued on the download gate.
+            _download_gate.waiter_parked.clear()
             task2 = _run_origin_load_in_background(
                 lambda medias: None,
                 {"importer": "test2", "params": {}},
                 name="Second",
             )
-            time.sleep(0.3)
+            assert _download_gate.waiter_parked.wait(timeout=10), "Second load never blocked on the download gate"
 
-            # Cancel the queued task before it acquires the gate.
+            # Cancel the queued task before it acquires the gate, then wait
+            # for its worker thread to fully unwind (mark_finished runs in
+            # the task's outermost finally, after any gate release).
             loading_tasks.cancel_task(task2)
-            time.sleep(0.5)
+            deadline = time.time() + 10
+            while not loading_tasks.is_finished(task2) and time.time() < deadline:
+                time.sleep(0.05)
+            assert loading_tasks.is_finished(task2), "Cancelled task never finished"
 
             # The gate should still show exactly one holder (the first load).
             # If the cancel wrongly released, active would drop to 0.
