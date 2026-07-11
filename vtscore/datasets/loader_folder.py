@@ -19,7 +19,7 @@ import os
 from collections import defaultdict
 from contextlib import closing
 from pathlib import Path
-from typing import Any, Callable, Iterator, Optional
+from typing import Any, Callable, Generator, Iterator, Optional
 
 from vtscore.datasets.loader import (
     ProgressCallback,
@@ -520,7 +520,7 @@ def _build_media_in_order(
     build_one: Callable[[int, Path, str], dict[str, Any]],
     *,
     parallel: bool,
-) -> Iterator[tuple[int, Path, str, dict[str, Any]]]:
+) -> Generator[tuple[int, Path, str, dict[str, Any]], None, None]:
     """Yield ``(media_id, file_path, rel_path, media_data)`` for each spec, in submission order.
 
     The per-file work in *build_one* (disk read + PIL/audio decode + thumbnail
