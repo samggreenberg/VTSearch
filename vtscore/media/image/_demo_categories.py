@@ -985,3 +985,36 @@ VISUAL_GENOME_CATEGORIES = [
     "tower",
     "bear",
 ]
+
+
+# Enrico (Enhanced Rico): 20 mobile-UI "design topics" — the screen-function
+# taxonomy from Leiva et al., "Enrico: A Dataset for Topic Modeling of Mobile UI
+# Designs" (MobileHCI 2020).  Each Rico Android screenshot is labeled with
+# exactly one of these.  Stored here in display (Title-case) form; the raw
+# ``design_topics.csv`` uses the lowercase single-token spelling (e.g.
+# ``mediaplayer``), which ``_collect_enrico_files`` folds to these via a
+# case-insensitive lookup.  ``Bare`` (near-empty screens) and ``Other``
+# (catch-all) are kept for completeness but are deliberately not given eval
+# queries — they describe no visual subject a user would search for.
+ENRICO_CATEGORIES = [
+    "Bare",
+    "Camera",
+    "Chat",
+    "Dialer",
+    "Editor",
+    "Form",
+    "Gallery",
+    "List",
+    "Login",
+    "Maps",
+    "MediaPlayer",
+    "Menu",
+    "Modal",
+    "News",
+    "Other",
+    "Profile",
+    "Search",
+    "Settings",
+    "Terms",
+    "Tutorial",
+]

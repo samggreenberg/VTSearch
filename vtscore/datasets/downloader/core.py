@@ -147,6 +147,18 @@ OPENLOGO_DOWNLOAD_WORKERS = 16
 # object annotations (per-object name + pixel bounding box) ship as a separate
 # JSON zip.  Unlike the other image demos this is multi-label ground truth — see
 # docs/plans/visual-genome-dataset.md.
+# Enrico (Enhanced Rico): 1,460 Android mobile-UI screenshots (a curated,
+# de-duplicated Rico subset), each labeled with one of 20 "design topic"
+# categories (screen function: Login, Chat, Maps, Settings, Gallery, …).  MIT
+# licensed.  Ships as a small ``screenshots.zip`` (JPEGs named
+# ``<rico_screen_id>-screenshot.jpg``) plus a separate ``design_topics.csv``
+# (``screen_id,topic``) that carries the labels — the two are fetched together
+# by ``download_enrico``.  This is VTSearch's born-digital *screenshot* demo:
+# unlike the natural-photo image demos, the content is rendered UI, so it
+# stresses the embedder on digitally-native imagery.
+ENRICO_SCREENSHOTS_URL = "https://userinterfaces.aalto.fi/enrico/resources/screenshots.zip"
+ENRICO_TOPICS_URL = "https://userinterfaces.aalto.fi/enrico/resources/design_topics.csv"
+
 VISUAL_GENOME_IMAGES_URL = "https://cs.stanford.edu/people/rak248/VG_100K/images.zip"
 VISUAL_GENOME_IMAGES2_URL = "https://cs.stanford.edu/people/rak248/VG_100K_2/images2.zip"
 VISUAL_GENOME_OBJECTS_URL = "https://homes.cs.washington.edu/~ranjay/visualgenome/data/dataset/objects.json.zip"
@@ -187,6 +199,7 @@ STANFORD_DOGS_DOWNLOAD_SIZE_MB = 750
 PLACES365_DOWNLOAD_SIZE_MB = 501
 UCSF_IDL_DOWNLOAD_SIZE_MB = 50
 ROXFORD_IMAGES_DOWNLOAD_SIZE_MB = 1850
+ENRICO_DOWNLOAD_SIZE_MB = 110
 OPENLOGO_DOWNLOAD_SIZE_MB = 4640
 VISUAL_GENOME_IMAGES_DOWNLOAD_SIZE_MB = 9700
 VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB = 5300

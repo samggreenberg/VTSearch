@@ -480,6 +480,58 @@ def download_openlogo(on_progress: Optional[ProgressCallback] = None) -> Path:
     return extract_dir
 
 
+def download_enrico(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download the Enrico (Enhanced Rico) mobile-UI screenshot dataset.
+
+    Enrico is a curated 1,460-screenshot subset of Rico, each Android UI screen
+    labeled with one of 20 "design topic" categories (Login, Chat, Maps, …).
+    Two files are fetched into ``DATA_DIR/enrico``: ``screenshots.zip`` (~110 MB
+    of JPEGs named ``<rico_screen_id>-screenshot.jpg``) and the small
+    ``design_topics.csv`` (``screen_id,topic``) that carries the labels.  MIT
+    licensed.  This is VTSearch's born-digital *screenshot* image demo.
+
+    The zip's internal layout (flat vs. a top-level ``screenshots/`` folder) is
+    not relied upon: completion is detected by rglob-ing for any
+    ``*-screenshot.jpg`` under the extract dir, so a re-run never re-downloads
+    regardless of how the archive unpacks.
+
+    Args:
+        on_progress: Optional progress callback. Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``enrico/`` directory containing the extracted screenshots
+        and ``design_topics.csv``.
+    """
+    if on_progress is None:
+        on_progress = _core._default_progress()
+
+    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+    extract_dir = _core.DATA_DIR / "enrico"
+    topics_csv = extract_dir / "design_topics.csv"
+
+    def _has_screenshots() -> bool:
+        return extract_dir.is_dir() and next(extract_dir.rglob("*-screenshot.jpg"), None) is not None
+
+    if not _has_screenshots():
+        _core._download_and_extract(
+            url=_core.ENRICO_SCREENSHOTS_URL,
+            archive_name="screenshots.zip",
+            extract_to=extract_dir,
+            check_path=extract_dir / "screenshots",
+            download_size_mb=_core.ENRICO_DOWNLOAD_SIZE_MB,
+            dataset_name="Enrico",
+            on_progress=on_progress,
+        )
+
+    if not topics_csv.exists():
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        on_progress("downloading", "Downloading Enrico labels...", 0, 0)
+        _core.download_file_with_progress(_core.ENRICO_TOPICS_URL, topics_csv, 0, on_progress)
+
+    return extract_dir
+
+
 def download_places365(on_progress: Optional[ProgressCallback] = None) -> Path:
     """Download and extract the Places365 validation set.
 

@@ -154,6 +154,34 @@ _IMAGES_L_QUERIES = [
 ]
 
 # ------------------------------------------------------------------
+# Image eval queries  (Enrico - mobile UI screenshots by screen function)
+# Born-digital screenshots, so the queries describe the *screen's function*
+# ("a login screen", "a chat conversation") rather than a photographed subject.
+# ``Bare`` and ``Other`` carry no describable subject and are omitted.
+# ------------------------------------------------------------------
+
+_ENRICO_QUERIES = [
+    EvalQuery("a camera viewfinder screen", "Camera"),
+    EvalQuery("a chat conversation screen with message bubbles", "Chat"),
+    EvalQuery("a phone dialer with a numeric keypad", "Dialer"),
+    EvalQuery("a text or document editor screen", "Editor"),
+    EvalQuery("a form with input fields to fill in", "Form"),
+    EvalQuery("a grid gallery of photos or thumbnails", "Gallery"),
+    EvalQuery("a scrollable list of items", "List"),
+    EvalQuery("a login or sign-in screen", "Login"),
+    EvalQuery("a map view showing streets", "Maps"),
+    EvalQuery("a media player with playback controls", "MediaPlayer"),
+    EvalQuery("a navigation menu or drawer", "Menu"),
+    EvalQuery("a modal dialog or popup overlay", "Modal"),
+    EvalQuery("a news or article feed", "News"),
+    EvalQuery("a user profile screen", "Profile"),
+    EvalQuery("a search screen with a search bar and results", "Search"),
+    EvalQuery("a settings or preferences screen", "Settings"),
+    EvalQuery("a terms of service or legal text screen", "Terms"),
+    EvalQuery("an onboarding or tutorial walkthrough screen", "Tutorial"),
+]
+
+# ------------------------------------------------------------------
 # Text / paragraph eval queries  (20 Newsgroups - 15 categories)
 # All S/M/L share the same categories; queries are identical.
 # ------------------------------------------------------------------
@@ -274,6 +302,15 @@ EVAL_DATASETS: dict[str, dict] = {
     "caltech256_a": {
         "demo_dataset": "caltech256_a",
         "queries": _IMAGES_L_QUERIES,
+    },
+    # Image (born-digital mobile UI screenshots)
+    "enrico_m": {
+        "demo_dataset": "enrico_m",
+        "queries": _ENRICO_QUERIES,
+    },
+    "enrico_a": {
+        "demo_dataset": "enrico_a",
+        "queries": _ENRICO_QUERIES,
     },
     # Image (multi-label)
     "visual_genome_s": {

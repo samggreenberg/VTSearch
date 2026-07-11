@@ -20,6 +20,7 @@ from vtscore.media.base import DemoDataset, demo_slice
 from vtscore.media.image._demo_categories import (
     DEMO_CATEGORIES_CALTECH101,
     DEMO_CATEGORIES_CALTECH256,
+    ENRICO_CATEGORIES,
     EUROSAT_CATEGORIES,
     FOOD101_CATEGORIES,
     OPENLOGO_CATEGORIES,
@@ -40,6 +41,7 @@ def build_demo_datasets() -> list[DemoDataset]:
     from vtscore.datasets.downloader import (  # noqa: PLC0415
         CALTECH101_DOWNLOAD_SIZE_MB,
         CALTECH256_DOWNLOAD_SIZE_MB,
+        ENRICO_DOWNLOAD_SIZE_MB,
         EUROSAT_DOWNLOAD_SIZE_MB,
         FOOD101_DOWNLOAD_SIZE_MB,
         OPENLOGO_DOWNLOAD_SIZE_MB,
@@ -376,6 +378,57 @@ def build_demo_datasets() -> list[DemoDataset]:
             items_per_category=100,
             download_size_mb=PLACES365_DOWNLOAD_SIZE_MB,
         ),
+        # Enrico: born-digital mobile-UI *screenshots* (not natural photos),
+        # labeled by screen function.  ~1,460 images over 20 topics (~73/topic,
+        # unevenly), so the S/M/L slices are small; A is the whole set.
+        DemoDataset(
+            id="enrico_s",
+            label="Enrico UI (S)",
+            description="Mobile app UI screenshots by screen type",
+            categories=ENRICO_CATEGORIES,
+            source="enrico",
+            required_folder=DATA_DIR / "enrico",
+            slice_frac_start=0.0,
+            slice_frac_end=1 / 7,
+            items_per_category=73,
+            download_size_mb=ENRICO_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="enrico_m",
+            label="Enrico UI (M)",
+            description="Mobile app UI screenshots by screen type",
+            categories=ENRICO_CATEGORIES,
+            source="enrico",
+            required_folder=DATA_DIR / "enrico",
+            slice_frac_start=1 / 7,
+            slice_frac_end=3 / 7,
+            items_per_category=73,
+            download_size_mb=ENRICO_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="enrico_l",
+            label="Enrico UI (L)",
+            description="Mobile app UI screenshots by screen type",
+            categories=ENRICO_CATEGORIES,
+            source="enrico",
+            required_folder=DATA_DIR / "enrico",
+            slice_frac_start=3 / 7,
+            slice_frac_end=None,
+            items_per_category=73,
+            download_size_mb=ENRICO_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="enrico_a",
+            label="Enrico UI (A)",
+            description="All Enrico mobile UI screenshots across 20 screen-function topics",
+            categories=ENRICO_CATEGORIES,
+            source="enrico",
+            required_folder=DATA_DIR / "enrico",
+            slice_frac_start=0.0,
+            slice_frac_end=None,
+            items_per_category=73,
+            download_size_mb=ENRICO_DOWNLOAD_SIZE_MB,
+        ),
         DemoDataset(
             id="roxford5k_s",
             label="ROxford5k (S)",
@@ -585,6 +638,40 @@ def _collect_roxford_files(categories, slice_args, on_progress) -> list:
             cat = _roxford_category_for(img_path.stem, landmark_set)
             if cat in categories:
                 by_cat.setdefault(cat, []).append((img_path, cat))
+    return _slice_by_category(by_cat, categories, *slice_args)
+
+
+def _collect_enrico_files(categories, slice_args, on_progress) -> list:
+    """Collect Enrico screenshots grouped by their 20-way design-topic label.
+
+    Screenshots are flat JPEGs named ``<rico_screen_id>-screenshot.jpg``; the
+    label lives in ``design_topics.csv`` (``screen_id,topic``), whose ``topic``
+    values are lowercase single tokens (e.g. ``mediaplayer``).  We fold each to
+    its display category (``MediaPlayer``) with a case-insensitive lookup so the
+    stored ``category`` matches ``ENRICO_CATEGORIES`` (and the eval queries).
+    """
+    import csv  # noqa: PLC0415
+
+    from vtscore.datasets.downloader import download_enrico  # noqa: PLC0415
+
+    extract_dir = download_enrico(on_progress=on_progress)
+    topics_csv = extract_dir / "design_topics.csv"
+
+    display_by_norm = {c.lower(): c for c in ENRICO_CATEGORIES}
+    id_to_cat: dict[str, str] = {}
+    if topics_csv.exists():
+        with open(topics_csv, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                sid = (row.get("screen_id") or "").strip()
+                cat = display_by_norm.get((row.get("topic") or "").strip().lower())
+                if sid and cat:
+                    id_to_cat[sid] = cat
+
+    by_cat: dict = {}
+    for img_path in sorted(extract_dir.rglob("*-screenshot.jpg")):
+        cat = id_to_cat.get(img_path.name.split("-", 1)[0])
+        if cat in categories:
+            by_cat.setdefault(cat, []).append((img_path, cat))
     return _slice_by_category(by_cat, categories, *slice_args)
 
 
@@ -1228,6 +1315,17 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
     if source == "openlogo":
         _embed_openlogo_images(
             _collect_openlogo_files(categories, slice_args, on_progress),
+            clips,
+            embedder,
+            on_progress,
+            demo_origin,
+            skip_embedding=skip_embedding,
+        )
+        return None
+
+    if source == "enrico":
+        _embed_file_images(
+            _collect_enrico_files(categories, slice_args, on_progress),
             clips,
             embedder,
             on_progress,
