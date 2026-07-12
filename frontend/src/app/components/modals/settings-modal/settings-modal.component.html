@@ -3,66 +3,66 @@
     <p class="empty-state">Loading settings...</p>
   } @else {
     <div class="settings-layout">
-      <nav class="settings-tabs">
+      <nav class="side-tab-bar">
         <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'appearance'"
+          class="side-tab"
+          [class.side-tab--active]="activeSettingsTab() === 'appearance'"
           (click)="activeSettingsTab.set('appearance')"
           title="Theme, animations, and view layout options">
           <vt-icon type="palette" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'appearance'"></vt-icon>
           Appearance
         </button>
         <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'autofind'"
+          class="side-tab"
+          [class.side-tab--active]="activeSettingsTab() === 'autofind'"
           (click)="activeSettingsTab.set('autofind')"
           title="Detectors that auto-run on import, and what to do with their results">
           <vt-icon type="auto-find" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'autofind'"></vt-icon>
           Auto-Find
         </button>
         <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'autopilot'"
+          class="side-tab"
+          [class.side-tab--active]="activeSettingsTab() === 'autopilot'"
           (click)="activeSettingsTab.set('autopilot')"
           title="Configure the guided autopilot labeling workflow">
           <vt-icon type="steering-wheel" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'autopilot'"></vt-icon>
           Autopilot
         </button>
         <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'browser'"
+          class="side-tab"
+          [class.side-tab--active]="activeSettingsTab() === 'browser'"
           (click)="activeSettingsTab.set('browser')"
           title="Browse map look per media type: bin shape, density colormap, and cell size">
           <vt-icon type="eye" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'browser'"></vt-icon>
           Browser
         </button>
         <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'imports'"
+          class="side-tab"
+          [class.side-tab--active]="activeSettingsTab() === 'imports'"
           (click)="activeSettingsTab.set('imports')"
           title="Default embedder, clipper, and converters to apply when importing each kind of dataset">
           <vt-icon type="import" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'imports'"></vt-icon>
           Import Defaults
         </button>
         <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'server'"
+          class="side-tab"
+          [class.side-tab--active]="activeSettingsTab() === 'server'"
           (click)="activeSettingsTab.set('server')"
           title="Settings fixed when the server started; shared by everyone and read-only here">
           <vt-icon type="server" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'server'"></vt-icon>
           Server
         </button>
         <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'sorting'"
+          class="side-tab"
+          [class.side-tab--active]="activeSettingsTab() === 'sorting'"
           (click)="activeSettingsTab.set('sorting')"
           title="Options that control how sorting and detector tuning behave">
           <vt-icon type="sort-descending" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'sorting'"></vt-icon>
           Sorting
         </button>
         <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'huggingface'"
+          class="side-tab"
+          [class.side-tab--active]="activeSettingsTab() === 'huggingface'"
           (click)="activeSettingsTab.set('huggingface')"
           title="Sign in with HuggingFace to download gated demo datasets and gated AI models">
           <vt-icon type="globe" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'huggingface'"></vt-icon>

@@ -273,6 +273,49 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   }
 }
 
+// --- Side tab bar (vertical tab rail) ---
+//
+// The vertical counterpart to `.importer-tab-bar`: a fixed-width column of
+// tabs down the left edge of a modal, with a left-border active indicator
+// instead of the horizontal bar's underline. Currently the Settings modal's
+// tab rail; extract-and-fold target for any other vertical rail.
+.side-tab-bar {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 140px;
+  border-right: 1px solid var(--border);
+  padding: var(--space-xs) 0;
+}
+
+.side-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  border: none;
+  border-left: 3px solid transparent;
+  background: none;
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+  font-weight: var(--weight-medium);
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--transition-base), background var(--transition-base),
+    border-color var(--transition-base);
+
+  &:hover {
+    color: var(--text-primary);
+    background: var(--bg-subtle);
+  }
+
+  &--active {
+    color: var(--text-primary);
+    background: var(--bg-subtle);
+    border-left-color: var(--accent);
+  }
+}
+
 // --- Dashboard entity cards (dataset / detector rows) ---
 //
 // `vt-dataset-card` and `vt-detector-card` render as <tr> rows in the dashboard
