@@ -36,9 +36,12 @@
           </div>
           <p class="achievement-desc">{{ row.description }}</p>
           <div class="achievement-progress" [title]="row.progressLabel">
-            <div class="achievement-progress-track">
-              <div class="achievement-progress-fill" [style.width.%]="row.progressPct"></div>
-            </div>
+            <vt-progress-bar
+              class="achievement-progress-bar"
+              [value]="row.progressPct"
+              [max]="100"
+              fill="var(--accent)"
+            />
             <span class="achievement-progress-label">{{ row.progressLabel }}</span>
           </div>
           @if (row.id === 'docs_read' && isExpanded('docs_read')) {
