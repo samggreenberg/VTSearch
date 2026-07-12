@@ -124,7 +124,12 @@ def extract_images_to_folders(
     written = 0
     global_idx = 0  # monotonic across shards so id_of(row, idx) never collides
     for si, shard in enumerate(shard_paths):
-        on_progress("downloading", f"Extracting {dataset_name} images (shard {si + 1}/{len(shard_paths)})...", si, len(shard_paths))
+        on_progress(
+            "downloading",
+            f"Extracting {dataset_name} images (shard {si + 1}/{len(shard_paths)})...",
+            si,
+            len(shard_paths),
+        )
         for row in iter_parquet_rows(shard, read_cols):
             idx = global_idx
             global_idx += 1
@@ -140,5 +145,7 @@ def extract_images_to_folders(
             (cat_dir / f"{id_of(row, idx)}.{ext}").write_bytes(data)
             written += 1
             if written % 500 == 0:
-                on_progress("downloading", f"Extracting {dataset_name} images ({written} written)...", si, len(shard_paths))
+                on_progress(
+                    "downloading", f"Extracting {dataset_name} images ({written} written)...", si, len(shard_paths)
+                )
     on_progress("downloading", f"Extracting {dataset_name} images...", len(shard_paths), len(shard_paths))

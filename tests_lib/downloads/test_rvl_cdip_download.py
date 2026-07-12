@@ -43,7 +43,9 @@ class TestDownloadRvlCdip:
         with (
             patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
-            patch.object(_hf_parquet, "list_parquet_shards", lambda repo, prefix: ["data/train-00000-of-00001-abc.parquet"]),
+            patch.object(
+                _hf_parquet, "list_parquet_shards", lambda repo, prefix: ["data/train-00000-of-00001-abc.parquet"]
+            ),
             patch.object(_hf_parquet, "download_parquet_shards", fake_download_shards),
             patch.object(_hf_parquet, "iter_parquet_rows", lambda shard, cols, batch_size=256: iter(rows)),
         ):
