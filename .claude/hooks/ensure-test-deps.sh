@@ -49,6 +49,14 @@ pip install --upgrade --ignore-installed pip wheel cryptography pyjwt urllib3 -q
 # uninstall it).  Force-installing a fresh copy lets Flask pick it up.
 pip install --ignore-installed blinker -q
 
+# VTSBrowse signpost naming deps (see docs/plans/vtsbrowse-toponymy.md):
+# apricot-select's legacy setup.py needs the stdlib-distutils shim and must
+# precede the main requirements pass (it's declared in pyproject.toml);
+# toponymy goes in --no-deps because its transformers<5 pin would downgrade
+# the app's transformers and is empirically unnecessary for our usage.
+SETUPTOOLS_USE_DISTUTILS=stdlib pip install apricot-select -q
+pip install --no-deps "toponymy==0.5.2" -q
+
 # Install all dependencies + editable install via pyproject.toml
 # (requirements/base.txt is just `-e .[dev]`).
 pip install --prefer-binary \

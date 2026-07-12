@@ -815,8 +815,26 @@ vts_install_precommit() {
 # Installs runtime + dev dependencies and the vtsearch package itself (editable)
 # by forwarding to pyproject.toml via requirements/base.txt, which is just
 # `--extra-index-url <cpu wheel index>` + `-e .[dev]`.
+# --- toponymy (VTSBrowse signpost naming) ------------------------------------
+# Two quirks force a dedicated step (see docs/plans/vtsbrowse-toponymy.md):
+#   - apricot-select (a real toponymy dep, declared in pyproject.toml) ships a
+#     legacy setup.py that crashes under modern setuptools' bdist
+#     ("AttributeError: install_layout"); building under the stdlib-distutils
+#     shim works. It must be installed BEFORE the main requirements pass, or
+#     that pass fails trying to build it without the shim.
+#   - toponymy 0.5.2 pins transformers<5.0.0, which a plain install would
+#     honor by downgrading the app's transformers stack; the pin is
+#     empirically unnecessary for our usage (validated end-to-end on
+#     transformers 5.x), so toponymy is installed --no-deps with its real
+#     dependencies declared in pyproject.toml instead. The tests_lib
+#     projection smoke test guards this bypass against future breakage.
+vts_install_toponymy() {
+    SETUPTOOLS_USE_DISTUTILS=stdlib pip install apricot-select --progress-bar on
+    pip install --no-deps "toponymy==0.5.2" --progress-bar on
+}
+
 vts_install_cpu() {
-    vts_progress_init 4 "Installing VTSearch CPU dependencies"
+    vts_progress_init 5 "Installing VTSearch CPU dependencies"
     echo "Heads-up: the pip steps below show a download bar, but pip also goes quiet"
     echo "for 10-30s at a time while it resolves dependency versions. That silence is"
     echo "normal -- it is working, not frozen."
@@ -827,6 +845,9 @@ vts_install_cpu() {
 
     vts_progress_step "Upgrading pip / setuptools / wheel"
     pip install --upgrade pip "setuptools<82" wheel --progress-bar on
+
+    vts_progress_step "Installing signpost naming deps (apricot-select + toponymy)"
+    vts_install_toponymy
 
     vts_progress_step "Installing runtime + dev dependencies (this may take several minutes)"
     pip install -r "$REPO_ROOT/requirements/base.txt" --progress-bar on
@@ -999,7 +1020,7 @@ vts_install_gpu() {
     local cuda_tag="$1"
     local extra_index="https://download.pytorch.org/whl/${cuda_tag}"
 
-    vts_progress_init 8 "Installing VTSearch GPU dependencies (CUDA tag: ${cuda_tag})"
+    vts_progress_init 9 "Installing VTSearch GPU dependencies (CUDA tag: ${cuda_tag})"
     echo "Heads-up: the pip steps below show a download bar, but pip also goes quiet"
     echo "for 10-30s at a time while it resolves dependency versions. That silence is"
     echo "normal -- it is working, not frozen."
@@ -1037,6 +1058,9 @@ vts_install_gpu() {
       --prefer-binary \
       torch torchvision torchaudio \
       --progress-bar on
+
+    vts_progress_step "Installing signpost naming deps (apricot-select + toponymy)"
+    vts_install_toponymy
 
     # Install everything else. torch is already satisfied by the pinned build above,
     # so this --extra-index-url pass won't replace it (no --upgrade).

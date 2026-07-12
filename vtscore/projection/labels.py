@@ -19,6 +19,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from collections.abc import Iterable
 
+import numpy as np
+
 
 @dataclass(frozen=True)
 class RegionLabel:
@@ -61,4 +63,19 @@ def make_label_set(projection_id: str, labels: Iterable[RegionLabel]) -> RegionL
     return RegionLabelSet(projection_id=projection_id, labels=tuple(labels))
 
 
-__all__ = ["RegionLabel", "RegionLabelSet", "make_label_set"]
+def medoid(pts: np.ndarray) -> np.ndarray:
+    """Return the member point nearest the centroid of *pts* (an ``(m, 2)`` array).
+
+    A medoid — an actual member, not the raw mean — so a sign anchor sits on
+    the cluster even when it's crescent-shaped or split, where the centroid
+    could land in empty space between lobes.  Shared by every signpost
+    builder (ground-truth demo signs and the Toponymy pipeline).
+    """
+    if pts.shape[0] == 1:
+        return pts[0]
+    centroid = pts.mean(axis=0)
+    d2 = np.einsum("ij,ij->i", pts - centroid, pts - centroid)
+    return pts[int(np.argmin(d2))]
+
+
+__all__ = ["RegionLabel", "RegionLabelSet", "make_label_set", "medoid"]

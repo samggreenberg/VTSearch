@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from vtscore.projection.labels import RegionLabel, RegionLabelSet, make_label_set
+from vtscore.projection.labels import RegionLabel, RegionLabelSet, make_label_set, medoid
 
 if TYPE_CHECKING:
     from vtscore.projection.umap_projection import Projection
@@ -150,7 +150,7 @@ def build_category_signposts(
             continue
         depth = len(prefix) - 1
         pts = coords[rows]
-        anchor = _medoid(pts)
+        anchor = medoid(pts)
         labels.append(
             RegionLabel(
                 level=_level_for_depth(depth),
@@ -171,20 +171,6 @@ def build_category_signposts(
         labels = labels[:_MAX_SIGNS]
 
     return make_label_set(projection.projection_id, labels)
-
-
-def _medoid(pts: np.ndarray) -> np.ndarray:
-    """Return the member point nearest the centroid of *pts* (an ``(m, 2)`` array).
-
-    A medoid — an actual member, not the raw mean — so the anchor sits on the
-    cluster even when it's crescent-shaped or split, where the centroid could
-    land in empty space between lobes.
-    """
-    if pts.shape[0] == 1:
-        return pts[0]
-    centroid = pts.mean(axis=0)
-    d2 = np.einsum("ij,ij->i", pts - centroid, pts - centroid)
-    return pts[int(np.argmin(d2))]
 
 
 __all__ = [

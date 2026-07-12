@@ -180,7 +180,9 @@ def remove_projections(path: str | Path) -> None:
     (which are shared across bin shapes).  A no-op if no entries are present.
     """
     p = Path(path)
-    entry_names = {_projection_entry_name(s) for s in ("hex", "square")}
+    # The signpost labels are anchored in the discarded layout's coordinates,
+    # so they go with it.
+    entry_names = {_projection_entry_name(s) for s in ("hex", "square")} | {_REGION_LABELS_ENTRY}
     try:
         with zipfile.ZipFile(str(p), "r") as zf:
             present = entry_names & set(zf.namelist())
@@ -208,6 +210,72 @@ def read_projection(path: str | Path, bin_shape: str = "hex") -> tuple[Any, Any]
         return None
 
     return _deserialize_projection(npz_bytes)
+
+
+#: ZIP entry holding the region signpost labels for the persisted full-dataset
+#: projection (see ``vtscore.projection.labels``).  Pure derived text + 2-D
+#: anchors — JSON, no vectors — pinned to the layout's ``projection_id`` and
+#: stamped with the labeler signature that produced it.
+_REGION_LABELS_ENTRY = "region_labels.json"
+
+
+def append_region_labels(path: str | Path, label_set: Any, labeler_signature: str) -> None:
+    """Append (or replace) the region signpost labels in a container.
+
+    *label_set* is a :class:`~vtscore.projection.labels.RegionLabelSet`; its
+    ``projection_id`` pins the signs to the frozen layout they were computed
+    from, and *labeler_signature* records the provider/namer configuration so
+    a later load can tell whether the signs match the active pipeline.
+    """
+    p = Path(path)
+    payload = {
+        "projection_id": label_set.projection_id,
+        "labeler_signature": labeler_signature,
+        "labels": label_set.payload(),
+    }
+    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+
+    with zipfile.ZipFile(str(p), "a") as zf:
+        if _REGION_LABELS_ENTRY in zf.namelist():
+            _rewrite_without(p, _REGION_LABELS_ENTRY)
+            with zipfile.ZipFile(str(p), "a") as zf2:
+                zf2.writestr(_REGION_LABELS_ENTRY, body)
+        else:
+            zf.writestr(_REGION_LABELS_ENTRY, body)
+
+    logger.info("Appended region labels (%d signs) to container: %s", len(label_set.labels), p)
+
+
+def read_region_labels(path: str | Path) -> tuple[Any, str] | None:
+    """Read ``(RegionLabelSet, labeler_signature)`` from a container, or ``None``."""
+    try:
+        with zipfile.ZipFile(str(path), "r") as zf:
+            if _REGION_LABELS_ENTRY not in zf.namelist():
+                return None
+            body = zf.read(_REGION_LABELS_ENTRY)
+        payload = json.loads(body.decode("utf-8"))
+        from vtscore.projection.labels import RegionLabel, make_label_set  # noqa: PLC0415
+
+        labels = [RegionLabel(**entry) for entry in payload.get("labels", [])]
+        label_set = make_label_set(str(payload["projection_id"]), labels)
+        return label_set, str(payload.get("labeler_signature", ""))
+    except Exception:
+        logger.warning("Failed to read region labels from container %s", path, exc_info=True)
+        return None
+
+
+def remove_region_labels(path: str | Path) -> None:
+    """Remove the region signpost labels entry from a container (no-op if absent)."""
+    p = Path(path)
+    try:
+        with zipfile.ZipFile(str(p), "r") as zf:
+            present = _REGION_LABELS_ENTRY in zf.namelist()
+    except Exception:
+        logger.warning("Failed to read container %s while clearing region labels", p, exc_info=True)
+        return
+    if present:
+        _rewrite_without(p, _REGION_LABELS_ENTRY)
+        logger.info("Removed region labels from container: %s", p)
 
 
 def _serialize_projection(projection: Any, pyramid: Any) -> bytes:
