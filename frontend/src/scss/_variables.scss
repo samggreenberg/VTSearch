@@ -155,6 +155,11 @@
   --indicator-dot: #555;
   --good-bg: rgba(76, 175, 80, 0.08);
   --bad-bg: rgba(244, 67, 54, 0.08);
+  // Canonical selected/highlight tint. The one accent-tinted fill for a
+  // selected item or tile (selected table rows, entity cards, media items,
+  // bin-popup thumbnails). Do NOT hand-roll a bespoke accent tint per
+  // component (a static audit found a stray `color-mix(accent 18%)` doing the
+  // same job) - reach for this token so the selected-state tint stays uniform.
   --accent-highlight-bg: rgba(124, 138, 255, 0.2);
   --accent-highlight-border: rgba(124, 138, 255, 0.5);
   --missing-border: #3b82f6;

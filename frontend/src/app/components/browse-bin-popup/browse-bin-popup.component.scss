@@ -112,7 +112,7 @@
   }
 
   &.active {
-    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    background: var(--accent-highlight-bg);
     border-color: var(--accent);
     color: var(--text-primary);
   }
@@ -366,7 +366,7 @@
   // Selection: a solid accent ring at the cell edge (mirrors bin selection on
   // the canvas) plus an accent-tinted fill.
   &.selected {
-    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    background: var(--accent-highlight-bg);
     color: var(--text-primary);
     box-shadow: 0 0 0 2px var(--accent);
   }
