@@ -204,13 +204,6 @@
 // The selectable option cards use the shared `.picker-card` primitive
 // (`frontend/src/scss/_components.scss`).
 
-.empty-state {
-  color: var(--text-muted);
-  font-size: var(--font-lg);
-  text-align: center;
-  padding: var(--space-xl) 0;
-}
-
 // Media-type field row: dropdown + optional unlock button.
 .media-type-row {
   display: flex;

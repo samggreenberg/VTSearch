@@ -43,7 +43,7 @@
         }
       </ul>
     } @else if (datasets.length === 0 && loadingTasksSvc.orphanLoadingTasks.length === 0 && !loading) {
-      <p class="empty-state">No datasets yet. Click + to add one.</p>
+      <p class="empty-state empty-state--fill">No datasets yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
         <table class="data-table data-table--grid dash-table" [class.table-fixed]="datasetCols.tableFixed" [class.actions-has-load]="anyDatasetUnloaded">
@@ -208,7 +208,7 @@
         }
       </ul>
     } @else if (detectors.length === 0) {
-      <p class="empty-state">No detectors yet. Click + to add one.</p>
+      <p class="empty-state empty-state--fill">No detectors yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
         <table class="data-table data-table--grid dash-table" [class.table-fixed]="detectorCols.tableFixed" [class.actions-has-load]="anyDetectorUnloaded">

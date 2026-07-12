@@ -685,11 +685,53 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   color: var(--text-secondary);
 }
 
+// Canonical empty-state primitive: the centered, muted placeholder shown
+// wherever a list, table, or panel has no content yet ("No datasets yet",
+// "No results", a "Loading…" notice, etc.). Stacks an optional icon, the
+// message, and an optional action — all centered. The common case is a bare
+// `<p class="empty-state">message</p>`; the richer form is:
+//
+//   <div class="empty-state">
+//     <span class="empty-state__icon"><vt-icon .../></span>
+//     <p class="empty-state__message">Nothing here yet.</p>
+//     <button class="empty-state__action btn btn--secondary">Add one</button>
+//   </div>
+//
+// Modifiers:
+//   .empty-state--fill    stretch to fill a flex-column parent and center
+//                         vertically (used by the dashboard list panels).
+//   .empty-state--inline  compact, left-aligned, italic inline notice
+//                         (defined in _picker-shared.scss).
 .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
   font-size: var(--font-md);
   color: var(--text-muted);
   text-align: center;
   padding: var(--space-xl) 0;
+
+  &--fill {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+
+  &__icon {
+    display: inline-flex;
+    color: var(--text-muted);
+    font-size: var(--font-2xl);
+    line-height: 1;
+  }
+
+  &__message {
+    margin: 0;
+  }
+
+  &__action {
+    margin-top: var(--space-xs);
+  }
 }
 
 // `.subhead` styles a heading tag (typically `<h4>`) as a small muted
