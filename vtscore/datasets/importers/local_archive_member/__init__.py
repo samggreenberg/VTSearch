@@ -89,7 +89,7 @@ class LocalArchiveMemberImporter(ImporterBase):
     fields = [
         PluginField(
             key="media_type",
-            label="Dataset MediaType",
+            label="Dataset media type",
             field_type="select",
             description="Type of media the referenced members hold (e.g. video or audio).",
             default="video",

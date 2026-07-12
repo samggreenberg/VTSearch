@@ -79,7 +79,7 @@
               [class.active]="exampleTab() === 'media'"
               [attr.aria-selected]="exampleTab() === 'media'"
               (click)="setExampleTab('media')"
-              [title]="'Pick a ' + exampleMediaTabLabel.toLowerCase() + ' example to find more like it.'">{{ exampleMediaTabLabel }}</button>
+              [title]="'Pick an example ' + exampleMediaTabLabel.toLowerCase() + ' to find more like it.'">{{ exampleMediaTabLabel }}</button>
           </div>
 
           @if (exampleTab() === 'text') {

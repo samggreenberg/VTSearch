@@ -202,6 +202,15 @@ export class ExportModalComponent implements OnInit {
     this.labelsReady.set(true);
   }
 
+  /** ``"media_type"`` → ``"Media type"``: humanize a raw metadata key for
+   *  the column checkbox label. Keys that already read well ("Dimensions",
+   *  "File Size") pass through unchanged; the export payload keeps the raw
+   *  key either way. */
+  private static humanizeColumnKey(key: string): string {
+    const spaced = key.replace(/_/g, ' ').trim();
+    return spaced ? spaced[0].toUpperCase() + spaced.slice(1) : key;
+  }
+
   /** Build column definitions from available_columns or fall back to defaults. */
   private buildColumns(availableColumns?: string[]): void {
     const baseKeys = new Set(ExportModalComponent.BASE_COLUMNS.map((c) => c.key));
@@ -218,7 +227,7 @@ export class ExportModalComponent implements OnInit {
         if (!baseKeys.has(key) && !alwaysKeys.has(key)) {
           this.columns.push({
             key,
-            label: key,
+            label: ExportModalComponent.humanizeColumnKey(key),
             enabled: true,
             isMetadata: true,
           });
