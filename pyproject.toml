@@ -274,7 +274,10 @@ exclude_lines = [
 # Skip generated, binary, frontend node_modules (including nested
 # node_modules npm installs), serialized formats, and any in-repo
 # virtualenv (third-party site-packages must never be spell-checked).
-skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv"
+# docs/reports/*.html are generated experiment reports with embedded
+# base64 image data URIs, the same class of binary-ish content *.svg is
+# already skipped for.
+skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv,docs/reports/*.html"
 # Domain terms (clap/siglip/xclip = embedder names; wrest/caller/recaller =
 # extension scaffold names), legitimate code identifiers (numer/denom in
 # slope formulas, medias as the global state proxy, goup as a TS method,
