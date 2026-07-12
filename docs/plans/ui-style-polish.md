@@ -154,22 +154,6 @@ surface. When you ship it, add the affected shot ids to
 
 <!-- item-sep -->
 
-- **Accessibility foundation sweep** — verified still open: dashboard section
-  titles are `<span class="dashboard-section-title">`, not headings
-  (`dashboard.component.html:6,167`; only the login screen has an `<h1>`);
-  `vt-dataset-card`/`vt-detector-card` use element selectors
-  (`dataset-card.component.ts:19`) rendered `display: table-row`, which breaks
-  table semantics; sortable `<th>` headers have no `aria-sort` and no keyboard
-  path; radio groups lack `<fieldset>`/`<legend>`; settings-modal `<label>`s
-  lack `for=` associations; some dashboard "+" buttons are `title`-only; and
-  the Find wait message has no `aria-live`. **Fix:** promote section titles to
-  real headings; switch the cards to attribute selectors
-  (`selector: 'tr[vt-dataset-card]'`); add `aria-sort` + keyboard sort;
-  add fieldsets/legends and `for=` associations; add `aria-label` on the "+"
-  buttons and `aria-live` on the Find wait region. **Files:** the listed
-  templates/components. (The three deleted focus outlines were restored in the
-  2026-07-09 report's Phase 1 — exclude those.)
-
 <!-- item-sep -->
 
 - **Copy-style guide + sweep** — microcopy drifts three ways: ellipsis is
