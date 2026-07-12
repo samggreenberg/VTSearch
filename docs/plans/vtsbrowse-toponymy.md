@@ -324,6 +324,31 @@ and `labeler`.
 - `deptry` will fail until `toponymy` is added to `pyproject.toml`; the LLM
   client extras stay optional/per-deployment.
 
+## Eval scaffold (shipped): ground-truth signposts + a synthetic demo
+
+Ahead of the real pipeline, a **cheating** signpost path exists so the map
+*display* (zoom-band fading, multi-level hand-off, de-clutter) can be evaluated
+hands-on:
+
+- **`vtscore/projection/demo_signposts.py`** derives a hierarchical
+  `RegionLabelSet` straight from each media's `/`-separated `category` path
+  (one sign per distinct prefix; anchor = the region's medoid in the frozen
+  layout; level = depth × a fixed zoom step). It's `source="ground-truth"`, no
+  clustering/LLM. The projection route builds+caches it lazily in
+  `_label_set_for` whenever a browsed dataset has hierarchical categories — so
+  Places365-style path taxonomies light up for free too.
+- **The `synthetic_world_audio` / `synthetic_world_image` demo datasets**
+  (`vtscore/media/_toponymy_demo.py`) ship a hand-authored 4-level geographic
+  taxonomy (Continent → Country → State → City, 108 leaf cities) with *pre-baked
+  hierarchical embeddings* — no download, no model, no GPU. UMAP recovers the
+  nested clusters and the map letters ~160 signs across the four levels.
+
+This is scaffolding for evaluating the display, **not** a substitute for the
+real contrastive/LLM naming below; the real pipeline should populate
+`_region_labels` from the build job (G2), at which point it wins over the
+lazy ground-truth fallback (a set already pinned to the layout is never
+overwritten).
+
 ## Open follow-ups
 
 <!-- item-sep -->

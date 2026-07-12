@@ -952,3 +952,104 @@ class TestProjectionLabels:
 
         _reset_full_projection(ctx)
         assert ctx._region_labels is None
+
+
+class TestDemoSignpostsLazyBuild:
+    """Ground-truth signposts derived on demand from hierarchical categories.
+
+    A dataset that ships ``/``-separated ``category`` paths (the synthetic
+    world-map demo, Places365, …) lights up the signpost layer with no labeler
+    run: :func:`_label_set_for` builds and caches the signs the first time meta
+    or the labels endpoint is hit.
+    """
+
+    # Europe/Asia → 2 continents, 4 countries, 6 cities; 2 items per leaf city.
+    _PATHS = [
+        "Europe/France/Paris",
+        "Europe/France/Paris",
+        "Europe/France/Lyon",
+        "Europe/France/Lyon",
+        "Europe/Italy/Rome",
+        "Europe/Italy/Rome",
+        "Asia/Japan/Tokyo",
+        "Asia/Japan/Tokyo",
+        "Asia/Japan/Osaka",
+        "Asia/Japan/Osaka",
+        "Asia/China/Beijing",
+        "Asia/China/Beijing",
+    ]
+
+    def _setup(self, ctx, projection_id="demo-signpost-layout"):
+        rng = np.random.default_rng(11)
+        ids = list(ctx.medias.keys())[: len(self._PATHS)]
+        assert len(ids) == len(self._PATHS), "fixture needs at least 12 medias"
+        saved = {i: ctx.medias[i].get("category") for i in ids}
+        for path, mid in zip(self._PATHS, ids):
+            ctx.medias[mid]["category"] = path
+        coords = rng.standard_normal((len(ids), 2)).astype(np.float32)
+        proj = Projection(projection_id, ids, coords, "pca")
+        pyr = build_pyramid(proj, n_levels=2)
+        ctx._projection = proj
+        ctx._pyramids = {"hex": pyr}
+        ctx._region_labels = None
+        return ids, saved, pyr
+
+    def test_meta_and_labels_build_lazily_from_categories(self, client):
+        ctx = get_active_context()
+        ids, saved, pyr = self._setup(ctx)
+        try:
+            # Meta advertises signs even though no labeler ran.
+            meta = client.get("/api/projection/meta").get_json()
+            assert meta["has_labels"] is True
+
+            body = client.get("/api/projection/labels").get_json()
+            assert body["status"] == "ready"
+            assert body["projection_id"] == pyr.projection_id
+            labels = body["labels"]
+            # 2 continents + 4 countries + 6 cities = 12 signs across 3 levels.
+            assert len(labels) == 12
+            by_level: dict[float, list] = {}
+            for lab in labels:
+                by_level.setdefault(lab["level"], []).append(lab["text"])
+            levels = sorted(by_level)
+            assert len(levels) == 3
+            assert levels[0] == 0.0
+            assert set(by_level[levels[0]]) == {"Europe", "Asia"}
+            assert len(by_level[levels[1]]) == 4  # countries
+            assert len(by_level[levels[2]]) == 6  # cities
+            assert all(lab["source"] == "ground-truth" for lab in labels)
+        finally:
+            for mid, cat in saved.items():
+                if cat is None:
+                    ctx.medias[mid].pop("category", None)
+                else:
+                    ctx.medias[mid]["category"] = cat
+
+    def test_cached_and_pinned_to_layout(self, client):
+        ctx = get_active_context()
+        ids, saved, pyr = self._setup(ctx)
+        try:
+            client.get("/api/projection/labels")
+            # The build is cached on the context, pinned to this layout.
+            assert ctx._region_labels is not None
+            assert ctx._region_labels.projection_id == pyr.projection_id
+            assert len(ctx._region_labels.labels) == 12
+        finally:
+            for mid, cat in saved.items():
+                if cat is None:
+                    ctx.medias[mid].pop("category", None)
+                else:
+                    ctx.medias[mid]["category"] = cat
+
+    def test_flat_categories_yield_no_signs(self, client):
+        ctx = get_active_context()
+        proj, pyr = TestProjectionLabels._build_hex_pyramid("flat-layout")
+        ctx._projection = proj
+        ctx._pyramids = {"hex": pyr}
+        ctx._region_labels = None
+        # The generated fixtures carry flat categories (e.g. "test-image"), so
+        # the hierarchical probe declines and no signs are built.
+        body = client.get("/api/projection/labels").get_json()
+        assert body["status"] == "ready"
+        assert body["labels"] == []
+        assert client.get("/api/projection/meta").get_json()["has_labels"] is False

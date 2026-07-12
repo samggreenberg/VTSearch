@@ -98,11 +98,51 @@ def _label_set_for(ctx, pyr, *, subset: bool):
     ``projection_id`` doesn't match the active pyramid's is stale (the layout
     was re-fit underneath it) and is treated as absent rather than served over
     the wrong coordinates.
+
+    When no set is cached for this layout, we lazily derive **ground-truth
+    signposts** from the dataset's category annotations (see
+    :func:`_maybe_build_demo_signposts`) and cache the result — including an
+    empty set, so a dataset with no usable hierarchy isn't re-probed on every
+    poll.  A set left behind by the real labeling pipeline wins: it already
+    matches the layout, so this never overwrites it.
     """
     label_set = ctx._subset_region_labels if subset else ctx._region_labels
-    if label_set is None or label_set.projection_id != pyr.projection_id:
+    if label_set is not None and label_set.projection_id == pyr.projection_id:
+        return label_set
+
+    proj = ctx._subset_projection if subset else ctx._projection
+    built = _maybe_build_demo_signposts(proj, pyr, ctx.medias)
+    if subset:
+        ctx._subset_region_labels = built
+    else:
+        ctx._region_labels = built
+    if built is None or built.projection_id != pyr.projection_id:
         return None
-    return label_set
+    return built
+
+
+def _maybe_build_demo_signposts(proj, pyr, medias):
+    """Derive ground-truth signposts for ``pyr``'s layout, or ``None``.
+
+    Cheap-probes the medias for a hierarchical (``/``-separated) ``category``
+    first, so non-demo datasets never pull the projection package on the
+    request path or pay for a build.  Returns an id-pinned
+    :class:`RegionLabelSet` (possibly empty) when the layout is usable, else
+    ``None``.
+    """
+    if proj is None or proj.projection_id != pyr.projection_id:
+        return None
+    from vtscore.projection.demo_signposts import has_hierarchical_categories
+
+    if not has_hierarchical_categories(medias):
+        # Cache an empty, id-pinned set so we don't re-probe every poll.
+        from vtscore.projection.labels import make_label_set
+
+        return make_label_set(pyr.projection_id, [])
+
+    from vtscore.projection.demo_signposts import build_category_signposts
+
+    return build_category_signposts(proj, medias)
 
 
 def _media_type_for(ctx) -> str:
