@@ -37,8 +37,7 @@ without a browser.
   `--z-*` token for the raw z-indexes on the browse overlays
   (`browse-view.component.scss` `z-index: 1/2/3`) (#2321); rounding off-scale
   transition/animation durations and stray radii onto the existing scales
-  (#2322); resolving hand-copied box-shadows through `--shadow-sm/md/lg`
-  (#2323); and sharing one selected-tile tint token (#2324). Each is
+  (#2322); and sharing one selected-tile tint token (#2324). Each is
   judgment-heavy (which opacity sites are "decorative dim" vs. animation vs.
   disabled; which durations are interactive vs. keyframe timing that would
   change feel if rounded), so scope each before applying. **Files:**
