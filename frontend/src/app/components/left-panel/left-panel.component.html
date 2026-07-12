@@ -16,7 +16,7 @@
         />
         <div class="goods-actions find-queue-actions">
           <button
-            class="goods-action-btn"
+            class="card-icon-btn"
             [disabled]="disabled() || unverifiedGoodCount === 0"
             (click)="browse.emit()"
             aria-label="Browse unverified positives"
@@ -28,7 +28,7 @@
             </svg>
           </button>
           <button
-            class="goods-action-btn"
+            class="card-icon-btn"
             [disabled]="disabled() || unverifiedGoodCount === 0"
             (click)="toDataset.emit()"
             aria-label="Unverified positives to dataset"
@@ -37,7 +37,7 @@
             <vt-icon type="cubes" [size]="14"></vt-icon>
           </button>
           <button
-            class="goods-action-btn"
+            class="card-icon-btn"
             [disabled]="disabled() || unverifiedGoodCount === 0"
             (click)="unverifiedExport.emit()"
             aria-label="Export unverified positives"

@@ -58,9 +58,7 @@ without a browser.
   (#2300); folding the horizontal `.tab-bar`/`.help-tabs` strips onto
   `.importer-tab-bar` (#2301); a vertical `.side-tab-bar` for the settings tabs
   (#2302); shared data-table (#2304), empty-state (#2305), and pane-divider
-  (#2307) primitives; unifying the 3 progress bars (#2306);
-  deduping the verbatim `dataset-card`/`detector-card` + `goods-actions` SCSS
-  (#2308). **Fix pattern:** extract a sanctioned shared class into
+  (#2307) primitives; and unifying the 3 progress bars (#2306). **Fix pattern:** extract a sanctioned shared class into
   `_components.scss` / `_picker-shared.scss`, then fold the bespoke copies onto
   it via markup + `@extend`. Ship incrementally (one primitive per PR) to keep
   diffs reviewable. **Files:** `_components.scss`, `_picker-shared.scss`, and

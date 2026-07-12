@@ -60,29 +60,9 @@
   }
 }
 
-// Header master checkbox: matches the per-row .select-checkbox visual in the
-// card components so the column reads as one consistent checkbox stack.
-.select-checkbox {
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  cursor: pointer;
-  padding: var(--space-xs);
-  border-radius: var(--radius-md);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: color var(--transition-base), background var(--transition-base);
-
-  &:hover:not(:disabled) {
-    background: var(--btn-icon-hover-bg);
-  }
-
-  &:disabled {
-    opacity: var(--opacity-disabled);
-    cursor: not-allowed;
-  }
-}
+// The header master checkbox uses the shared `.card-icon-btn` primitive so the
+// column reads as one consistent checkbox stack with the per-row card buttons;
+// `.header-checkbox` (in `_data-table.scss`) mutes its resting colour.
 
 // Delete spins to 90° while confirm dialog is up, then reverses back.
 // Hoisted out of `.side-action-btn` to keep specificity flat.

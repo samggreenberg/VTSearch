@@ -18,6 +18,7 @@ import { buildDatasetCardMenuItems, CARD_MENU_MIN_WIDTH, overflowMenuItems } fro
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'tr[vt-dataset-card]',
   standalone: true,
+  host: { class: 'entity-card' },
   imports: [CommonModule, FormsModule, JobProgressComponent, ContextMenuComponent],
   templateUrl: './dataset-card.component.html',
   styleUrl: './dataset-card.component.scss',

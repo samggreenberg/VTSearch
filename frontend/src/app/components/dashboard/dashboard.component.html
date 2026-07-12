@@ -50,7 +50,7 @@
           <thead>
             <tr>
               <th scope="col" class="select-col" data-col="select" [style.width.%]="datasetCols.tableFixed ? datasetCols.colWidths['select'] : null">
-                <button class="select-checkbox header-checkbox" (click)="toggleAllDatasets()" [disabled]="isContextSwitching || datasets.length === 0" [title]="datasetSelectionState === 'all' ? 'Deselect all' : 'Select all datasets'" [attr.aria-label]="datasetSelectionState === 'all' ? 'Deselect all' : 'Select all'" [attr.aria-checked]="datasetSelectionState === 'all' ? 'true' : datasetSelectionState === 'some' ? 'mixed' : 'false'" role="checkbox">
+                <button class="card-icon-btn header-checkbox" (click)="toggleAllDatasets()" [disabled]="isContextSwitching || datasets.length === 0" [title]="datasetSelectionState === 'all' ? 'Deselect all' : 'Select all datasets'" [attr.aria-label]="datasetSelectionState === 'all' ? 'Deselect all' : 'Select all'" [attr.aria-checked]="datasetSelectionState === 'all' ? 'true' : datasetSelectionState === 'some' ? 'mixed' : 'false'" role="checkbox">
                   @switch (datasetSelectionState) {
                     @case ('all') {
                       <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -215,7 +215,7 @@
           <thead>
             <tr>
               <th scope="col" class="select-col" data-col="select" [style.width.%]="detectorCols.tableFixed ? detectorCols.colWidths['select'] : null">
-                <button class="select-checkbox header-checkbox" (click)="toggleAllDetectors()" [disabled]="isContextSwitching || detectors.length === 0" [title]="detectorSelectionState === 'all' ? 'Deselect all' : 'Select all detectors'" [attr.aria-label]="detectorSelectionState === 'all' ? 'Deselect all' : 'Select all'" [attr.aria-checked]="detectorSelectionState === 'all' ? 'true' : detectorSelectionState === 'some' ? 'mixed' : 'false'" role="checkbox">
+                <button class="card-icon-btn header-checkbox" (click)="toggleAllDetectors()" [disabled]="isContextSwitching || detectors.length === 0" [title]="detectorSelectionState === 'all' ? 'Deselect all' : 'Select all detectors'" [attr.aria-label]="detectorSelectionState === 'all' ? 'Deselect all' : 'Select all'" [attr.aria-checked]="detectorSelectionState === 'all' ? 'true' : detectorSelectionState === 'some' ? 'mixed' : 'false'" role="checkbox">
                   @switch (detectorSelectionState) {
                     @case ('all') {
                       <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">

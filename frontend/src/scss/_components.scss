@@ -253,6 +253,82 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   }
 }
 
+// --- Dashboard entity cards (dataset / detector rows) ---
+//
+// `vt-dataset-card` and `vt-detector-card` render as <tr> rows in the dashboard
+// `.dash-table`. They shared verbatim-duplicated SCSS for their row state, their
+// right-aligned inline action cluster, and the compact borderless icon buttons
+// inside it; that primitive now lives here once. The right-panel goods-action
+// cluster (Browse / To Dataset / Export in Find mode) mirrored the same icon
+// button and folds onto `.card-icon-btn` too. Each card's own SCSS keeps only
+// its genuinely unique bits (dataset's load-error row tint, the pencil/trash
+// icon animations, the failed-row layout).
+//
+// The card host (a real `<tr vt-*-card>`) gets `.entity-card` via the
+// component's `host` metadata; the dynamic `selected`/`dimmed` state classes
+// are toggled on the same element.
+
+.entity-card {
+  cursor: pointer;
+  transition: background var(--transition-fast);
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+
+  &.selected {
+    background: var(--accent-highlight-bg);
+  }
+
+  &.dimmed {
+    opacity: 0.35;
+    pointer-events: none;
+    cursor: default;
+
+    &:hover {
+      background: none;
+    }
+  }
+}
+
+// Right-aligned inline action cluster in a card row's Actions cell.
+.card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+}
+
+// Compact, borderless icon button used in the card action cluster (edit, load,
+// delete, overflow, select) and the right-panel goods-action cluster.
+//   .card-icon-btn--danger  destructive (Delete): reddens on hover.
+.card-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xs);
+  border: none;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: color var(--transition-base), background var(--transition-base);
+
+  &:hover:not(:disabled) {
+    background: var(--btn-icon-hover-bg);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: var(--opacity-disabled);
+  }
+
+  &--danger:hover:not(:disabled) {
+    color: var(--color-bad);
+    background: var(--bad-bg);
+  }
+}
+
 // --- Form elements ---
 
 .form-input {
