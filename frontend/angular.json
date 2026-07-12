@@ -51,17 +51,21 @@
           "configurations": {
             "production": {
               "budgets": [
-                // initial: 500kB. The app is zoneless (zone.js dropped from the
+                // initial: 520kB. The app is zoneless (zone.js dropped from the
                 // production polyfills), which took the measured eager bundle to
                 // ~488kB. The eager path is framework-dominated (Angular
                 // core+router+forms+http+CDK), not app bloat: routes are lazy,
                 // the heavy modals are @defer'd, and `marked` lives only in a
-                // deferred chunk. The warn limit sits just above the real size
-                // with a small headroom. Do not raise without first auditing the
-                // eager path for genuine bloat.
+                // deferred chunk. The shared `vt-modal` adds CDK a11y's focus
+                // trap (`CdkTrapFocus`) for keyboard/screen-reader focus
+                // management across all ~24 dialogs; because the modal is eager,
+                // that ~7kB lands in the initial bundle, taking it to ~507kB. The
+                // warn limit sits just above the real size with a small headroom.
+                // Do not raise without first auditing the eager path for genuine
+                // bloat.
                 {
                   "type": "initial",
-                  "maximumWarning": "500kB",
+                  "maximumWarning": "520kB",
                   "maximumError": "1MB"
                 },
                 {
