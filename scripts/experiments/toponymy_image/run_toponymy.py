@@ -146,6 +146,15 @@ def main() -> None:
     ap.add_argument("--n-cats", type=int, default=None, help="keep only the first N categories alphabetically")
     ap.add_argument("--per-cat", type=int, default=None, help="cap images per kept category (subset scenario)")
     ap.add_argument("--out-suffix", default="", help="append to run id, e.g. _sub10x20")
+    ap.add_argument(
+        "--text-space",
+        default=None,
+        metavar="ST_MODEL",
+        help="browse the TEXTS instead of the images: replace the image-embedding "
+        "matrix with sentence-transformer embeddings of texts_<variant> (e.g. "
+        "intfloat/e5-base-v2). The image analog of the audio study's 'browse "
+        "transcript embeddings' resolution for speech.",
+    )
     args = ap.parse_args()
 
     out = common.ds_dir(args.dataset)
@@ -154,6 +163,16 @@ def main() -> None:
     texts = common.load_json(out / f"texts_{args.variant}.json")
     n = min(len(texts), len(meta))
     meta, emb, texts = meta[:n], emb[:n], [str(t) for t in texts[:n]]
+
+    if args.text_space:
+        from sentence_transformers import SentenceTransformer
+
+        st = SentenceTransformer(args.text_space)
+        prefix = "passage: " if "e5" in args.text_space.lower() else ""
+        emb = np.asarray(
+            st.encode([prefix + t for t in texts], batch_size=64, show_progress_bar=False), dtype=np.float32
+        )
+        emb /= np.linalg.norm(emb, axis=1, keepdims=True) + 1e-9
 
     subset_note = None
     idx: list[int] | None = None
@@ -198,7 +217,19 @@ def main() -> None:
             namer = make_hf_namer(args.hf_model, stats)
 
     with common.timed("text_encoder_init", timings):
-        text_encoder = SiglipTextEncoder(args.embedder)
+        if args.text_space:
+            # Keyphrases must live in the same space as embedding_vectors.
+            from sentence_transformers import SentenceTransformer
+
+            st_model = SentenceTransformer(args.text_space)
+
+            class STEncoder:
+                def encode(self, strs, show_progress_bar=False, **kw):
+                    return np.asarray(st_model.encode([str(s) for s in strs]), dtype=np.float32)
+
+            text_encoder = STEncoder()
+        else:
+            text_encoder = SiglipTextEncoder(args.embedder)
 
     corpus_desc = args.corpus_desc or f"a collection of images ({args.dataset})"
     model = Toponymy(
@@ -209,7 +240,7 @@ def main() -> None:
         corpus_description=corpus_desc,
         verbose=True,
     )
-    run_id = f"topo_{args.variant}_{args.namer}{args.out_suffix}"
+    run_id = f"topo_{args.variant}_{args.namer}{'_txtspace' if args.text_space else ''}{args.out_suffix}"
     try:
         with common.timed("toponymy_fit", timings):
             model.fit(texts, emb.astype(np.float32), umap5.astype(np.float32))
@@ -262,6 +293,7 @@ def main() -> None:
             "variant": args.variant,
             "namer": args.namer,
             "hf_model": args.hf_model if args.namer == "hf" else None,
+            "text_space": args.text_space,
             "n_images": n,
             "subset": subset_note,
             "kept_indices": idx if subset_note else None,
