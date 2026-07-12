@@ -285,6 +285,37 @@ def check_raw_dim_opacity(files: list[Path]) -> Finding:
 
 
 # ---------------------------------------------------------------------------
+# Bespoke accent-tinted selection fill (must use --accent-highlight-bg)
+# ---------------------------------------------------------------------------
+# The canonical selected/highlight tint is --accent-highlight-bg. A hand-rolled
+# `color-mix(in srgb, var(--accent) N%, transparent)` reinvents it with a
+# slightly-off alpha (a static audit found a stray 18% mix). Matches only the
+# bare `var(--accent)` form, so the legitimate decorative tint that carries a
+# fallback (`var(--accent, var(--text-primary))`, e.g. keyboard keys) is not
+# flagged.
+ACCENT_MIX_RE = re.compile(r"color-mix\(\s*in\s+srgb\s*,\s*var\(--accent\)\s+\d", re.IGNORECASE)
+
+
+def check_bespoke_accent_tint(files: list[Path]) -> Finding:
+    f = Finding(
+        rule="Bespoke accent selection tint (use --accent-highlight-bg)",
+        description=(
+            "The selected/highlight tint has one canonical token, "
+            "--accent-highlight-bg. Don't hand-roll `color-mix(in srgb, "
+            "var(--accent) N%, transparent)` for a selected item/tile fill - it "
+            "drifts the alpha per component. Reach for var(--accent-highlight-bg)."
+        ),
+    )
+    for path in files:
+        for lineno, line in enumerate(path.read_text().splitlines(), 1):
+            if line.strip().startswith("//"):
+                continue
+            if ACCENT_MIX_RE.search(line):
+                f.hits.append((path, lineno, line.rstrip()))
+    return f
+
+
+# ---------------------------------------------------------------------------
 # §4.13 `font: inherit` on form-input/form-select aliases
 # ---------------------------------------------------------------------------
 def check_font_inherit_trap(files: list[Path]) -> Finding:
@@ -613,6 +644,7 @@ def main() -> int:
         check_transition_all(files),
         check_raw_zindex(files),
         check_raw_dim_opacity(files),
+        check_bespoke_accent_tint(files),
         check_font_inherit_trap(files),
         check_flex_column_no_gap(files),
         check_redeclared_utility(files),
