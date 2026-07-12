@@ -15,8 +15,8 @@ import { DatasetRegistryEntry, LoadingTask } from '../models/api.models';
 import { DetectorRegistryEntry } from '../generated/api-client/models/detector-registry-entry';
 
 /**
- * Regression spec for H25: "Active dataset pair is set before load
- * completes" (see `docs/plans/logical-bug-audit.md`).
+ * Regression spec for logical-bug-audit H25: "Active dataset pair is set
+ * before load completes".
  *
  * The fix split `ActiveContextService` into two layers:
  *   - **intent**: flips immediately on switch entry (for UI affordances)

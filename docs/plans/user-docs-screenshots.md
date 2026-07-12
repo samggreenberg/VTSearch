@@ -41,7 +41,7 @@ pixel-diff tolerance) are the remaining work.
 is *staleness*: a single source of truth (a manifest) plus a deterministic,
 scriptable capture harness makes a refresh a re-run, not a re-shoot. This is
 *not* [browser-vision-testing.md](browser-vision-testing.md) (throwaway
-bug-hunt shots under `docs/reviews/assets/`) — these are durable, doc-embedded
+bug-hunt shots kept as working artifacts) — these are durable, doc-embedded
 shots that must look identical on every refresh.
 
 **Locked decisions (2026-06-07).** Capture engine = checked-in automated

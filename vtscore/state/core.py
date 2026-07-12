@@ -275,8 +275,8 @@ class MediasDict(dict):
     the counter.  Code that rewrites a media's vector in place must bump it
     itself via :meth:`DatasetContext.bump_media_revision`; the embed / clip
     load stages do this through ``invalidate_embedding_matrix``.  This is
-    the ``media_revision`` follow-up (root-cause Pattern #4) recorded in
-    ``docs/reviews/2026-05-logical-bug-audit.md``.
+    the ``media_revision`` follow-up (logical-bug-audit root-cause
+    Pattern #4).
 
     Over-bumping (bumping when nothing actually changed) is always safe: it
     only forces an unnecessary cache rebuild, never serves a stale one.
@@ -345,8 +345,8 @@ class DatasetContext:
         # advances on every structural mutation of the medias (and on every
         # in-place vector rewrite that calls ``bump_media_revision``); the
         # embedding / region matrix caches key their validity on it instead
-        # of comparing sorted id lists (root-cause Pattern #4, see
-        # ``docs/reviews/2026-05-logical-bug-audit.md``).
+        # of comparing sorted id lists (logical-bug-audit root-cause
+        # Pattern #4).
         "_medias",
         "_media_revision",
         "coverage_atlas",
@@ -502,7 +502,7 @@ class DatasetContext:
         The embedding-matrix and region-matrix caches compare this single
         int instead of two sorted id lists, so a mutation that changes
         vectors without changing the id set still invalidates them
-        (root-cause Pattern #4 in ``docs/reviews/2026-05-logical-bug-audit.md``).
+        (logical-bug-audit root-cause Pattern #4).
         """
         return self._media_revision
 
@@ -700,7 +700,7 @@ class DetectorContext:
         # ``populate_label_embeddings`` detect a region→none (or any region
         # edit) transition and re-resolve instead of returning a stale
         # region-pooled vector keyed to an element that no longer has a
-        # region.  See ``2026-05-logical-bug-audit.md`` finding M4.
+        # region.  See logical-bug-audit finding M4.
         "label_embedding_regions",
         # Cross-dataset local features (StructuralFeatures) for the labelset's
         # elements, keyed by stable_element_id.  Re-derived from each element's

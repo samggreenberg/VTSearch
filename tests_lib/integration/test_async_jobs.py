@@ -387,8 +387,7 @@ class TestThreadContextPropagation:
 
     Without this, every learned-sort / eval job target that reads votes,
     media, or any other context-scoped state from a background thread sees
-    empty containers; silent miscompute. See ``docs/plans/logical-bug-audit.md``
-    finding C2.
+    empty containers; silent miscompute. See logical-bug-audit finding C2.
     """
 
     def test_run_sets_thread_dataset_and_detector_context_from_ids(self):
