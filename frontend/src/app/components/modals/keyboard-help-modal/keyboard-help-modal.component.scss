@@ -117,6 +117,18 @@
   font-size: var(--font-sm);
 }
 
+.help-footer {
+  margin: 0;
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+
+  a {
+    color: var(--accent, var(--text-primary));
+  }
+}
+
 .guide {
   max-height: 70vh;
   overflow-y: auto;

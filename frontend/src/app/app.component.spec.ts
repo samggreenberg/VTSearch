@@ -89,39 +89,45 @@ describe('AppComponent', () => {
     expect(fixture.componentInstance.menuOpen).toBe(false);
   });
 
-  it('should render all menu items', () => {
+  it('should show the Recent sessions burger with an empty state when none exist', () => {
     const fixture = TestBed.createComponent(AppComponent);
     TestBed.tick();
-    const items = fixture.nativeElement.querySelectorAll('.burger-item');
-    expect(items.length).toBe(4);
-    expect(items[0].textContent).toContain('Dashboard');
-    expect(items[1].textContent).toContain('Help');
-    expect(items[2].textContent).toContain('Achievements');
-    expect(items[3].textContent).toContain('Settings');
+    const dropdown = fixture.nativeElement.querySelector('.burger-dropdown') as HTMLElement;
+    // The burger no longer duplicates the top-bar destinations; it is a
+    // Recent-sessions menu, empty by default in the test harness.
+    expect(dropdown.querySelector('.burger-section-header')?.textContent).toContain(
+      'Recent sessions',
+    );
+    expect(dropdown.querySelectorAll('.burger-subitem').length).toBe(0);
+    expect(dropdown.querySelector('.burger-status')?.textContent).toContain('No recent sessions');
   });
 
-  it('should disable dataset-dependent items when not on label view', () => {
+  it('should render the header icon buttons (Achievements, Help, Settings)', () => {
+    const fixture = TestBed.createComponent(AppComponent);
+    TestBed.tick();
+    const buttons = fixture.nativeElement.querySelectorAll('header .header-icon-btn');
+    const labels = Array.from(buttons).map((b) => (b as HTMLElement).getAttribute('aria-label'));
+    expect(labels).toEqual(['Achievements', 'Help', 'Settings']);
+  });
+
+  it('should disable the Dashboard logo/button when not on label view', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.componentInstance.isOnLabelView.set(false);
     TestBed.tick();
-    const items = fixture.nativeElement.querySelectorAll('.burger-item');
-    // Only Dashboard is dataset-dependent and gets disabled off the label view.
-    expect(items[0].classList).toContain('disabled');
-    // Help, Achievements, and Settings are always enabled.
-    expect(items[1].classList).not.toContain('disabled');
-    expect(items[2].classList).not.toContain('disabled');
-    expect(items[3].classList).not.toContain('disabled');
+    const logo = fixture.nativeElement.querySelector('.logo-btn') as HTMLElement;
+    const dashBtn = fixture.nativeElement.querySelector('.top-bar-btn') as HTMLButtonElement;
+    expect(logo.classList).toContain('disabled');
+    expect(dashBtn.disabled).toBe(true);
   });
 
-  it('should enable dataset-dependent items when on label view', () => {
+  it('should enable the Dashboard logo/button when on label view', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.componentInstance.isOnLabelView.set(true);
     TestBed.tick();
-    const items = fixture.nativeElement.querySelectorAll('.burger-item');
-    expect(items[0].classList).not.toContain('disabled');
-    expect(items[1].classList).not.toContain('disabled');
-    expect(items[2].classList).not.toContain('disabled');
-    expect(items[3].classList).not.toContain('disabled');
+    const logo = fixture.nativeElement.querySelector('.logo-btn') as HTMLElement;
+    const dashBtn = fixture.nativeElement.querySelector('.top-bar-btn') as HTMLButtonElement;
+    expect(logo.classList).not.toContain('disabled');
+    expect(dashBtn.disabled).toBe(false);
   });
 
   it('should not navigate to dashboard when disabled', () => {

@@ -60,14 +60,14 @@ the original priority.
 
 <!-- item-sep -->
 
-- **"Email us" mailto has no recipient (`mailto-recipient`, P3)** —
-  `frontend/src/app/app.component.html:98` is
+- **"Email us" mailto has no recipient (`mailto-recipient`, P3)** — the
+  "Email us" affordance now lives in the Help modal
+  (`keyboard-help-modal.component.html`, `.help-footer`) as
   `mailto:?subject=VTSearch%20Issue%3A` — the subject typo is fixed but the
   to-address is still empty, so "Email us" opens a blank-recipient compose
-  window. **Fix:** add the recipient address. **Files:** `app.component.html`.
-  **Note:** `ui-style-polish.md` ("Simplify header and layout IA") also edits
-  this file to repoint the logo `mailto:` to Dashboard and move "email us" into
-  Help — coordinate so the two don't collide.
+  window. **Fix:** add the recipient address. **Files:**
+  `keyboard-help-modal.component.html`. (The "Simplify header and layout IA"
+  slice that moved this out of the header logo has already shipped.)
 
 <!-- item-sep -->
 

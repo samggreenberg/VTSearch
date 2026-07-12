@@ -75,22 +75,6 @@ without a browser.
 
 <!-- item-sep -->
 
-- **Simplify header and layout IA** (#2327) — the 3-panel grid is declared *twice* with
-  conflicting borders (`scss/_layout.scss:5` and `app.component.scss:296`, both
-  `300px 1fr 300px`) — a dead, conflicting source of truth. The fixed 300px
-  side panels don't scale on wide monitors; the burger menu and the top bar
-  duplicate the same four destinations; the logo is a `mailto:` link
-  (`app.component.html:98`) instead of navigating to the Dashboard; and there
-  are three near-identical header icon-button classes (`.help-btn`,
-  `.achievements-btn`, `.settings-btn`). **Fix:** delete one grid declaration;
-  switch side tracks to `minmax(280px, 20%)`; drop the burger-vs-topbar
-  duplication; point the logo at Dashboard and move "email us" into Help;
-  collapse the three header button classes into one `.header-icon-btn`.
-  **Files:** `_layout.scss`, `app.component.{scss,html}`. **Note:** the empty
-  `mailto:` recipient on the separate "Email us" affordance is tracked in
-  `standard-workflow-polish.md` (`mailto-recipient`) — same file, different
-  line; coordinate.
-
 <!-- item-sep -->
 
 <!-- item-sep -->
