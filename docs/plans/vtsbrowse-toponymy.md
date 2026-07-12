@@ -211,23 +211,51 @@ toggle. Add `RegionLabelPayload` to `models/projection.models.ts`.
 
 ## Decisions to lock (before coding)
 
-1. **Adopt `toponymy` at all** vs. a slim in-house reimplementation. The
-   library gives us the correct contrastive/hierarchical pipeline for free; the
-   cost is the dependency footprint (esp. `datasets`, `fast_hdbscan`,
-   `vectorizers`, `apricot-select`). *Leaning: adopt — reimplementing it well is
-   a lot of subtle work.*
+> **Experimental evidence:** every unresolved decision below was exercised
+> end-to-end on the grid (ESC-50 / Speech Commands / Clotho, 4,445 clips, real
+> CLAP embeddings, toponymy 0.5.2, no-LLM + Qwen2.5-7B namers) — see
+> **`docs/reports/2026-07-12-toponymy-audio-signposts.html`** and the reusable
+> framework at `scripts/experiments/toponymy_audio/`.
+
+1. **Adopt `toponymy` at all** — **RESOLVED: adopt the pipeline, but do NOT
+   `pip install` it into the app venv as-is.** The pipeline works (fine-layer
+   signs on ESC-50: ARI 0.87 / purity 0.97 / 91% name–category hit; ~3–5 min
+   end-to-end for 2k clips on one GPU). But toponymy 0.5.2 hard-pins
+   `transformers<5.0.0` (plus unconditional `datasets`, `dask`, `vectorizers`,
+   `apricot-select`), and a resolver dry-run downgrades the app's
+   transformers 5.12→4.57 and huggingface-hub 1.20→0.36. Path options, in
+   order: upstream a lazy/optional `transformers` import (it is only truly
+   needed by `HuggingFaceNamer`); vendor the core (clustering + keyphrases +
+   templates have no transformers dependency); sidecar venv. Re-check the pin
+   at implementation time.
 2. ~~`clusterable_vectors` source~~ **RESOLVED:** cluster on a **dedicated
    higher-D UMAP** (`n_components≈5`, `metric="cosine"`), not the 2-D browse
-   layout — following Toponymy's examples and naming with the full embeddings.
-   The 2-D layout stays for rendering + anchors. Remaining sub-knob: the exact
-   `n_components` (start 5, per their richer examples).
-3. **Default `object_to_text` for audio:** CLAP top-k zero-shot tags (and the
-   vocabulary + k behind them) vs. Whisper-first for speech. *Leaning: CLAP tags
-   as the general default, Whisper when the dataset is speech.*
-4. **No-LLM fallback:** ship the `KeyphraseNamer` passthrough vs. require a
-   small local model (LlamaCpp/HF). *Leaning: `KeyphraseNamer` — zero infra.*
-5. **Async/batch namers** for large datasets (the library has `Async*`/`Batch*`
-   variants) — wire later if naming latency matters.
+   layout. Confirmed empirically (26 s for 2k clips; multiresolution tree
+   70→34→13 topics recovers ESC-50's taxonomy without labels).
+3. **Default `object_to_text` for audio** — **RESOLVED: CLAP top-5 zero-shot
+   tags against the AudioSet-527 vocabulary** (template "The sound of {}"),
+   shipping the label list as a data file, with music-genre terms filtered
+   for non-music datasets (they cause the worst sign pollution). Evidence
+   against alternatives: a small domain-matched vocabulary is *worse* than the
+   big generic one (runner-up tags become semantically distant junk); Whisper
+   is mandatory for speech datasets and useless elsewhere — and for speech the
+   CLAP *map* itself is near-random (ARI 0.05), so the better long-term answer
+   there is browsing transcript-text embeddings via the existing `audio2text`
+   converter. **Promote the audio captioner** (was Phase 3 "optional, heavy"):
+   `MU-NLPC/whisper-small-audio-captioning` is 1 GB, captions 2k clips in
+   ~90 s, and produced the cleanest signs on both ESC-50 and uncurated Clotho.
+4. **No-LLM fallback** — **RESOLVED: ship `KeyphraseNamer`** (signs are
+   genuinely usable, e.g. "sheep goat bleat livestock"), but add a cheap
+   sibling-dedup pass before rendering — without an LLM, duplicate sibling
+   signs reach 38% on hard maps.
+5. **Async/batch namers** for large datasets — still open, but now with a cost
+   model: naming ≈ 1 LLM call/topic ≈ 2 topics/s on an a100 with Qwen2.5-7B;
+   topic count ≈ n / base_min_cluster_size, so the 20k+ regime needs
+   `base_min_cluster_size` scaled up (≈50–100) and/or the async namers.
+   Also lock at implementation: raise `lowest_detail_level` (default fine-layer
+   prompts request 8–15-word names — too long for map signs) and set
+   `llm_specific_instructions` (English-only, ≤6 words, no filler names —
+   Qwen produced "日语学习指令" and "Sounds" without them).
 
 ## Phasing
 
@@ -257,4 +285,31 @@ toggle. Add `RegionLabelPayload` to `models/projection.models.ts`.
 
 ## Open follow-ups
 
-- (none yet — populated as phases ship)
+<!-- item-sep -->
+
+- **Vocab-filtering ablation** — drop AudioSet's music-genre terms from the
+  tag vocabulary for non-music datasets and confirm the "Flamenco/Bluegrass"
+  sign pollution disappears (framework rerun, minutes).
+
+<!-- item-sep -->
+
+- **Captioner validation on a second uncurated corpus + music** — the
+  captioner's Clotho result is flattered by its training data; check GTZAN and
+  one more real-world set before making it a default for user data.
+
+<!-- item-sep -->
+
+- **Scale run** — urbansound8k_a or a ~20k mixed corpus to validate the
+  `base_min_cluster_size ∝ n` rule and the naming-cost model.
+
+<!-- item-sep -->
+
+- **KeyphraseNamer sibling dedup** — cheap pass that appends the first
+  non-shared keyphrase when sibling signs collide (38% dups on speech maps).
+
+<!-- item-sep -->
+
+- **Detail-level sweep** — pick `lowest_detail_level` / prompt instructions
+  that keep signs ≤6 words without losing specificity.
+
+<!-- item-sep -->
