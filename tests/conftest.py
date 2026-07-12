@@ -450,6 +450,24 @@ class _MergedSettingsPath:
 
 
 @pytest.fixture(autouse=True)
+def _no_signpost_pipeline(monkeypatch):
+    """Keep the Toponymy signpost pipeline out of the app-tier suite.
+
+    The projection build paths run signpost prep best-effort whenever the
+    ``toponymy`` library is installed, which would drag a real (numba-heavy)
+    clustering fit into otherwise-fast build tests — and make the suite's
+    behavior depend on whether the optional library is present.  Reporting it
+    unavailable makes every build path skip prep deterministically; the prep
+    glue itself is covered by ``tests_lib/projection`` with the fit seam
+    stubbed, and the real library by the ``slow``-marked smoke test.  Tests
+    that exercise the label-serving paths re-patch what they need.
+    """
+    from vtscore.projection import signpost_prep
+
+    monkeypatch.setattr(signpost_prep, "signposting_available", lambda: False)
+
+
+@pytest.fixture(autouse=True)
 def isolated_settings(tmp_path, monkeypatch):
     """Redirect both settings tiers to a temp directory for each test.
 

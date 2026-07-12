@@ -954,6 +954,67 @@ class TestProjectionLabels:
         assert ctx._region_labels is None
 
 
+class TestPersistedLabelRestore:
+    """Labels persisted in the dataset container are restored on serve.
+
+    The labeling pipeline persists the full-dataset ``RegionLabelSet`` next to
+    the projection; a fresh process (no in-memory set) must serve it back —
+    but only over the exact layout it was computed from, and only while its
+    labeler signature matches the active pipeline's (a ``None`` active
+    signature — no toponymy here — still serves: derived text pinned to the
+    right layout beats nothing).
+    """
+
+    @staticmethod
+    def _persist(tmp_path, projection_id: str, signature: str):
+        import zipfile
+
+        from vtscore.datasets.container import append_region_labels
+
+        pkl = tmp_path / "container.pkl"
+        if not pkl.exists():
+            with zipfile.ZipFile(pkl, "w") as zf:
+                zf.writestr("placeholder", b"")
+        append_region_labels(pkl, TestProjectionLabels._label_set(projection_id), signature)
+        return pkl
+
+    def _serve(self, client, monkeypatch, tmp_path, *, stored_id, stored_sig, active_sig="__unset__"):
+        ctx = get_active_context()
+        proj, pyr = TestProjectionLabels._build_hex_pyramid("live-layout")
+        ctx._projection = proj
+        ctx._pyramids = {"hex": pyr}
+        pkl = self._persist(tmp_path, stored_id, stored_sig)
+        monkeypatch.setattr("vtsearch.routes.projection._pkl_path_for", lambda dataset_id: str(pkl))
+        if active_sig != "__unset__":
+            monkeypatch.setattr("vtscore.projection.signpost_prep.labeler_signature", lambda ctx: active_sig)
+        return client.get("/api/projection/labels").get_json()
+
+    def test_restores_matching_layout(self, client, monkeypatch, tmp_path):
+        # Active signature is None here (the suite reports toponymy
+        # unavailable), so the persisted set serves unconditionally.
+        body = self._serve(client, monkeypatch, tmp_path, stored_id="live-layout", stored_sig="sig-v1")
+        assert body["status"] == "ready"
+        assert [lab["text"] for lab in body["labels"]] == ["animal sounds", "dog barking"]
+        # And it lands in the context cache like a live-built set.
+        assert get_active_context()._region_labels is not None
+
+    def test_matching_signature_serves(self, client, monkeypatch, tmp_path):
+        body = self._serve(
+            client, monkeypatch, tmp_path, stored_id="live-layout", stored_sig="sig-v1", active_sig="sig-v1"
+        )
+        assert len(body["labels"]) == 2
+
+    def test_stale_signature_treated_as_absent(self, client, monkeypatch, tmp_path):
+        body = self._serve(
+            client, monkeypatch, tmp_path, stored_id="live-layout", stored_sig="sig-old", active_sig="sig-new"
+        )
+        assert body["labels"] == []
+
+    def test_wrong_layout_treated_as_absent(self, client, monkeypatch, tmp_path):
+        body = self._serve(client, monkeypatch, tmp_path, stored_id="some-old-layout", stored_sig="sig-v1")
+        assert body["labels"] == []
+
+
 class TestDemoSignpostsLazyBuild:
     """Ground-truth signposts derived on demand from hierarchical categories.
 

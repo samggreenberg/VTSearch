@@ -64,6 +64,19 @@ dependencies = [
     # a missing install still surfaces an actionable error, but declared here so
     # a plain `install.sh` covers the Clotho demo out of the box.
     "py7zr",
+    # The actually-used dependencies of `toponymy` (VTSBrowse signpost naming;
+    # vtscore.projection.signpost_build). toponymy itself is installed
+    # `--no-deps` by scripts/install.sh / ensure-test-deps.sh because its
+    # transformers<5 pin would downgrade the app's transformers and is
+    # empirically unnecessary for our usage — see docs/plans/vtsbrowse-toponymy.md
+    # (decision 1) — so its real deps are declared here instead. apricot-select
+    # ships a legacy setup.py that needs the stdlib-distutils shim to build;
+    # the install scripts pre-install it before the main requirements pass.
+    "fast_hdbscan",
+    "vectorizers",
+    "apricot-select",
+    "tenacity",
+    "jinja2",
 ]
 
 [project.optional-dependencies]
@@ -95,6 +108,9 @@ include = ["vtsearch*", "vtscore*"]
 # Ship the fixed VLAD visual vocabulary (a code asset, like model weights) used
 # by the structural (SIFT/VLAD) embedder.  Rebuilt via scripts/build_vlad_codebook.py.
 "vtscore.media" = ["assets/*.npy"]
+# Zero-shot tag vocabularies for the signpost text providers (AudioSet-527 /
+# OpenImages-600 class names; see vtscore.projection.signpost_texts).
+"vtscore.projection" = ["assets/*.txt"]
 
 [tool.ruff]
 line-length = 120
@@ -187,6 +203,12 @@ DEP001 = [
     "safetensors",
     "huggingface_hub",
     "cuml",
+    # Installed `--no-deps` by the install scripts (its transformers<5 pin is
+    # empirically unnecessary; see docs/plans/vtsbrowse-toponymy.md), so it
+    # cannot be declared here — declaring it would put its pins back in the
+    # resolver. Its real deps ARE declared (fast_hdbscan et al.); the smoke
+    # test in tests_lib/projection guards the --no-deps bypass.
+    "toponymy",
 ]
 # DEP003: imported as a transitive of another declared dependency.
 # ``safetensors`` and ``torchvision`` ship with ``transformers`` / ``torch``
@@ -209,6 +231,10 @@ DEP003 = [
     "torchvision",
     "huggingface_hub",
     "cuml",
+    # Same dual classification as cuml: on a box where toponymy IS installed
+    # (via the scripts' --no-deps step) deptry reclassifies the import from
+    # DEP001 (missing) to DEP003 (transitive/undeclared). See the DEP001 note.
+    "toponymy",
 ]
 # DEP002: declared but not imported. Tools we run via their CLIs
 # (pytest, ruff, …), runtime helpers loaded by name (gunicorn), or
@@ -232,6 +258,14 @@ DEP002 = [
     # Loaded via importorskip in the portable-export test; never imported
     # statically, so deptry can't see the use.
     "onnxruntime",
+    # toponymy's real dependencies, declared on its behalf because it is
+    # installed --no-deps (see the DEP001 note on "toponymy"); our code never
+    # imports them directly.
+    "fast_hdbscan",
+    "vectorizers",
+    "apricot-select",
+    "tenacity",
+    "jinja2",
 ]
 
 [tool.pytest.ini_options]
@@ -277,7 +311,7 @@ exclude_lines = [
 # docs/reports/*.html are generated experiment reports with embedded
 # base64 image data URIs, the same class of binary-ish content *.svg is
 # already skipped for.
-skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv,*docs/reports/*.html"
+skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv,*docs/reports/*.html,*vtscore/projection/assets*"
 # Domain terms (clap/siglip/xclip = embedder names; wrest/caller/recaller =
 # extension scaffold names), legitimate code identifiers (numer/denom in
 # slope formulas, medias as the global state proxy, goup as a TS method,

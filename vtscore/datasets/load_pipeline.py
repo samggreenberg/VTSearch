@@ -51,7 +51,7 @@ from vtscore.datasets.stages.finalize import (
     _collapse_near_duplicates_stage,
     _drop_none_embeddings_stage,
 )
-from vtscore.datasets.stages.projection import _build_projection_stage
+from vtscore.datasets.stages.projection import _build_projection_stage, _maybe_signpost_texts_stage
 from vtscore.datasets.stages.registry import _register_and_migrate
 
 
@@ -513,6 +513,12 @@ def _run_origin_load_in_background(
                     fin.begin("coverage")
                     _build_coverage_atlas_stage(ctx, fin)
                     tracker.check_cancelled()
+                    # Opt-in (rides the projection opt-in): cache a signpost
+                    # text per media BEFORE the registry save, so the texts —
+                    # the sign pipeline's only full-corpus model cost — are
+                    # pickled with the dataset and later browse / Find→Browse
+                    # re-fits skip the text models entirely.
+                    _maybe_signpost_texts_stage(ctx, fin, build_projection)
                     fin.begin("registry")
                     context_id, registry_entry_id = _register_and_migrate(
                         ctx, fin, task_id, origin, name, clipper, embedder, created_by, ingest_started_at
