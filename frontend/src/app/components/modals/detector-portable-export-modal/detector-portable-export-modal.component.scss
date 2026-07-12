@@ -12,7 +12,7 @@
   &__warn {
     padding: 0.75rem;
     border: 1px solid var(--text-warning);
-    border-radius: 6px;
+    border-radius: var(--radius-lg);
     background: color-mix(in srgb, var(--text-warning) 12%, transparent);
 
     p {

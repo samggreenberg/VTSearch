@@ -67,11 +67,11 @@
 // Delete spins to 90° while confirm dialog is up, then reverses back.
 // Hoisted out of `.side-action-btn` to keep specificity flat.
 .side-action-delete-active {
-  animation: side-action-rotate 0.3s ease-in-out forwards;
+  animation: side-action-rotate var(--transition-slow) ease-in-out forwards;
 }
 
 .side-action-delete-inactive {
-  animation: side-action-rotate 0.3s ease-in-out reverse forwards;
+  animation: side-action-rotate var(--transition-slow) ease-in-out reverse forwards;
 }
 
 @keyframes side-action-rotate {

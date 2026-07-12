@@ -115,7 +115,7 @@
 .swatch {
   width: 12px;
   height: 3px;
-  border-radius: 1px;
+  border-radius: var(--radius-sm);
 }
 
 .swatch-fp {
