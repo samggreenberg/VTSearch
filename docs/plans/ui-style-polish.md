@@ -21,27 +21,9 @@ system in `_variables.scss`. The static half is enforceable — extend
 `.claude/scripts/style-check.py` (see the token item) so regressions get caught
 without a browser.
 
-**Screenshot note:** the type-scale item changes essentially every rendered
-surface. When you ship it, add the affected shot ids to
-`docs/user/screenshots-reshoot-queue.md` (see CLAUDE.md "Screenshot reshoots").
-
 ---
 
 <!-- item-sep -->
-
-- **Delete `zoom: 1.1` and rebuild the type scale** — the single
-  highest-leverage polish item. `frontend/src/styles.scss:44` applies
-  `html { zoom: 1.1 }`, which distorts every `px`/`vh` value in the app and
-  forces the `100%`-vs-`100vh` workaround in `app.component.scss`. The scale
-  itself is over-compressed: `_variables.scss:20-27` packs `--font-2xs` 0.7 /
-  `--font-xs` 0.75 / `--font-sm` 0.8 / `--font-md` 0.85 / `--font-lg` 0.9rem —
-  five steps inside a 0.2rem band, i.e. sub-pixel differences that don't read.
-  **Fix:** rebase the scale to a ~1.12–1.2 ratio with a ~0.875rem base, remove
-  the `zoom`, and re-tune the handful of surfaces that were compensating for it
-  (the `100vh` workaround, any fixed heights that assumed the zoom). Do this
-  first — most "text feels cramped" nits downstream dissolve once the scale is
-  real. **Files:** `styles.scss`, `_variables.scss`, `app.component.scss`.
-  **Reshoot:** queue the doc screenshots (this touches every view).
 
 <!-- item-sep -->
 

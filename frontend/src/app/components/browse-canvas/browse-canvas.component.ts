@@ -32,7 +32,6 @@ import {
   viewLevelForZoom,
 } from './sign-layout';
 import { prefersReducedMotion } from '../../utils/reduced-motion';
-import { readRootZoom } from '../../utils/root-zoom';
 import { onDevicePixelRatioChange } from '../../utils/device-pixel-ratio';
 import type {
   HexCellPayload,
@@ -680,14 +679,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const canvas = this.canvasRef.nativeElement;
     canvas.width = this.width * this.dpr;
     canvas.height = this.height * this.dpr;
-    // getBoundingClientRect() returns viewport-coordinate px (CSS layout × root zoom).
-    // canvas.style.width/height must be in CSS px, so divide out the root zoom to
-    // avoid the canvas being visually double-scaled (once by html{zoom:N}, once by
-    // the explicit style override), which would shift hit-test coordinates off the
-    // cursor by the zoom factor.
-    const rootZoom = readRootZoom();
-    canvas.style.width = `${this.width / rootZoom}px`;
-    canvas.style.height = `${this.height / rootZoom}px`;
+    canvas.style.width = `${this.width}px`;
+    canvas.style.height = `${this.height}px`;
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     // A devicePixelRatio change (e.g. dragging to a different-density display)
     // can also cross the full-res threshold, so re-evaluate the tier here.

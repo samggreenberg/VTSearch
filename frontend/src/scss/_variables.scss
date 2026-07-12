@@ -16,15 +16,18 @@
   // Monospace stack: the one place a component should reach for `monospace`.
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  // Font-size scale
-  --font-2xs: 0.7rem;
-  --font-xs: 0.75rem;
-  --font-sm: 0.8rem;
-  --font-md: 0.85rem;     // default for secondary UI text
-  --font-lg: 0.9rem;
-  --font-xl: 1rem;
-  --font-2xl: 1.1rem;
-  --font-3xl: 1.4rem;
+  // Font-size scale. Whole-px steps (at the 16px root) around a 14px base:
+  // 1px increments at the small end where a step must stay subtle, widening
+  // to a ~1.12-1.2 ratio from --font-lg up so adjacent sizes actually read
+  // as different. Values are rem so user font-size preferences still scale.
+  --font-2xs: 0.6875rem;  // 11px - badges, tiny meta text
+  --font-xs: 0.75rem;     // 12px
+  --font-sm: 0.8125rem;   // 13px
+  --font-md: 0.875rem;    // 14px - default for body UI text
+  --font-lg: 1rem;        // 16px
+  --font-xl: 1.125rem;    // 18px
+  --font-2xl: 1.25rem;    // 20px
+  --font-3xl: 1.5rem;     // 24px
 
   // Border radius scale
   --radius-sm: 3px;

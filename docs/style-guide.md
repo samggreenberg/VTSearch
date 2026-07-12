@@ -28,16 +28,21 @@ Use the spacing scale for `padding`, `margin`, `gap`, and similar layout offsets
 
 ### 1.2 Font sizes - `--font-*`
 
-| Token         | Value      | When to use |
-|---------------|------------|-------------|
-| `--font-2xs`  | 0.7rem     | Badges, tiny meta text |
-| `--font-xs`   | 0.75rem    | Table headers, captions, subtitle rows |
-| `--font-sm`   | 0.8rem     | Form labels, secondary helper text |
-| `--font-md`   | 0.85rem    | **Default** for body UI text, buttons, inputs, tables |
-| `--font-lg`   | 0.9rem     | Card titles, prominent secondary headings |
-| `--font-xl`   | 1rem       | `<h3>`, section headers |
-| `--font-2xl`  | 1.1rem     | `<h2>`, modal titles |
-| `--font-3xl`  | 1.4rem     | `<h1>`, page-level header, modal-close glyph |
+| Token         | Value           | When to use |
+|---------------|-----------------|-------------|
+| `--font-2xs`  | 0.6875rem (11px) | Badges, tiny meta text |
+| `--font-xs`   | 0.75rem (12px)   | Table headers, captions, subtitle rows |
+| `--font-sm`   | 0.8125rem (13px) | Form labels, secondary helper text |
+| `--font-md`   | 0.875rem (14px)  | **Default** for body UI text, buttons, inputs, tables |
+| `--font-lg`   | 1rem (16px)      | Card titles, prominent secondary headings |
+| `--font-xl`   | 1.125rem (18px)  | `<h3>`, section headers |
+| `--font-2xl`  | 1.25rem (20px)   | `<h2>`, modal titles |
+| `--font-3xl`  | 1.5rem (24px)    | `<h1>`, page-level header, modal-close glyph |
+
+The scale steps 1px at a time through the small sizes (11-14px, where a step
+must stay subtle) and widens to a ~1.12-1.2 ratio from `--font-lg` up, so
+adjacent sizes read as genuinely different. Every step lands on a whole pixel
+at the default 16px root.
 
 There are no other font sizes. `0.78rem`, `0.83rem`, `0.95rem`, `12px`, `13px`, etc. are all violations - they collapse into the table above.
 
