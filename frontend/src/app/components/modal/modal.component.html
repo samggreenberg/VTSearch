@@ -6,10 +6,12 @@
   aria-modal="true"
   [attr.aria-label]="title()"
   tabindex="-1"
+  cdkTrapFocus
+  [cdkTrapFocusAutoCapture]="true"
 >
   <div class="modal-content">
     <div class="modal-header">
-      <h2>{{ title() }}</h2>
+      <h2 tabindex="-1" cdkFocusInitial>{{ title() }}</h2>
       @if (showCloseButton) {
         <button class="modal-close" (click)="close()" title="Close" aria-label="Close">&times;</button>
       }

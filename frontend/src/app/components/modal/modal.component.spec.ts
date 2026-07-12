@@ -136,6 +136,66 @@ describe('ModalComponent', () => {
   });
 });
 
+@Component({
+  standalone: true,
+  imports: [ModalComponent],
+  template: `
+    <button class="trigger">Open</button>
+    <vt-modal [title]="'Focusable'" [open]="isOpen()" (closed)="isOpen.set(false)">
+      <input class="body-input" />
+    </vt-modal>
+  `,
+})
+class FocusHostComponent {
+  readonly isOpen = signal(false);
+}
+
+describe('ModalComponent focus management', () => {
+  let fixture: ComponentFixture<FocusHostComponent>;
+  let host: FocusHostComponent;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [FocusHostComponent],
+      providers: [...provideZoneless()],
+    }).compileComponents();
+    fixture = TestBed.createComponent(FocusHostComponent);
+    host = fixture.componentInstance;
+    // Attach to the live document so `document.activeElement` tracks focus():
+    // jsdom only updates it for elements connected to the document.
+    document.body.appendChild(fixture.nativeElement);
+  });
+
+  afterEach(() => {
+    fixture.nativeElement.remove();
+  });
+
+  it('moves initial focus into the dialog when opened', async () => {
+    await settleZoneless(fixture);
+    host.isOpen.set(true);
+    await settleZoneless(fixture);
+
+    const backdrop = fixture.nativeElement.querySelector('.modal-backdrop');
+    expect(backdrop.contains(document.activeElement)).toBe(true);
+    // cdkFocusInitial targets the heading so screen readers land on the title.
+    expect(document.activeElement).toBe(fixture.nativeElement.querySelector('.modal-header h2'));
+  });
+
+  it('restores focus to the triggering element when closed', async () => {
+    const trigger = fixture.nativeElement.querySelector('.trigger') as HTMLButtonElement;
+    trigger.focus();
+    expect(document.activeElement).toBe(trigger);
+
+    host.isOpen.set(true);
+    await settleZoneless(fixture);
+    expect(document.activeElement).not.toBe(trigger);
+
+    host.isOpen.set(false);
+    await settleZoneless(fixture);
+    expect(document.activeElement).toBe(trigger);
+  });
+});
+
 describe('ModalComponent stacking', () => {
   let fixture: ComponentFixture<StackedHostComponent>;
   let host: StackedHostComponent;
