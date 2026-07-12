@@ -65,7 +65,7 @@ header {
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: 0 4px 12px var(--shadow-dropdown);
+  box-shadow: var(--shadow-md);
   min-width: 160px;
   z-index: var(--z-modal-backdrop);
   display: none;

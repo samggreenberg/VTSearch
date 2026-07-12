@@ -7,7 +7,7 @@
   padding: var(--space-sm);
   pointer-events: none;
   max-width: 280px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-md);
 }
 
 .hover-count {
