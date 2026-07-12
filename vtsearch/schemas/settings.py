@@ -94,6 +94,9 @@ class AppSettingsSchema(Schema):
     browse_compact = _PerMediaTypeBooleanDict()
     # Wheel notches / +/- clicks per pyramid level (1..3), per media type.
     browse_mouse_zooms_per_level = _PerMediaTypeIntDict()
+    # Whether the canvas draws region signposts (named "street sign" labels
+    # over the map), per media type; unset falls back to on.
+    browse_signposts = _PerMediaTypeBooleanDict()
 
     # Per-user, per-media-type
     grid_icon_size_left = _PerMediaTypeStringDict()
@@ -235,6 +238,7 @@ class SettingsUpdateSchema(Schema):
     browse_thumbnail_border = fields.Raw()
     browse_compact = fields.Raw()
     browse_mouse_zooms_per_level = fields.Raw()
+    browse_signposts = fields.Raw()
 
     autofind_detectors = fields.List(fields.String())
     # Auto-Find results exporter. ``autofind_exporter`` is validated against the

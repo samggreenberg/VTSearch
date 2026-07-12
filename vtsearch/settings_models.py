@@ -288,6 +288,11 @@ class UserSettings(BaseModel):
     #   clicks cross one pyramid level (a full 2x). The per-step width factor is
     #   ``2 ** (1 / n)``, so 1 ⇒ 2x, 2 ⇒ √2 (default), 3 ⇒ ∛2. Clamped to 1..3;
     #   empty entries fall back to 2 on the frontend.
+    # - ``browse_signposts``: whether the canvas draws region signposts — the
+    #   named "street sign" labels lettered over the map (see
+    #   docs/plans/vtsbrowse-toponymy.md) — when the projection has labels.
+    #   Toggled by the signpost button on the browse canvas; empty entries
+    #   fall back to on (true) on the frontend.
     browse_colormap: dict[str, BrowseColormap] = Field(default_factory=dict)
     browse_icon_size: dict[str, Annotated[BrowseIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     browse_thumbnail_border: dict[str, Annotated[int, _clamp(*BROWSE_THUMBNAIL_BORDER_PX)]] = Field(
@@ -297,6 +302,7 @@ class UserSettings(BaseModel):
     browse_mouse_zooms_per_level: dict[str, Annotated[int, _clamp(*BROWSE_MOUSE_ZOOMS_PER_LEVEL)]] = Field(
         default_factory=dict
     )
+    browse_signposts: dict[str, bool] = Field(default_factory=dict)
 
     grid_icon_size_left: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     grid_icon_size_right: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)

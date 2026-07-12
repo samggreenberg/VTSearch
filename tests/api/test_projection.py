@@ -835,3 +835,120 @@ def test_projection_params_match(monkeypatch):
     assert proj_route._projection_params_match(legacy) is False
     assert proj_route._projection_params_match(umap_changed) is True
     assert proj_route._projection_params_match(pca) is True
+
+
+class TestProjectionLabels:
+    """``GET /api/projection/labels`` — the region signpost layer."""
+
+    @staticmethod
+    def _build_hex_pyramid(projection_id: str = "label-proj"):
+        rng = np.random.default_rng(7)
+        ctx = get_active_context()
+        ids = list(ctx.medias.keys())[:5]
+        coords = rng.standard_normal((len(ids), 2)).astype(np.float32)
+        proj = Projection(projection_id, ids, coords, "pca")
+        pyr = build_pyramid(proj, n_levels=2)
+        return proj, pyr
+
+    @staticmethod
+    def _label_set(projection_id: str):
+        from vtscore.projection import RegionLabel, make_label_set
+
+        return make_label_set(
+            projection_id,
+            [
+                RegionLabel(level=0, x=0.0, y=0.0, text="animal sounds", score=0.9, source="keyphrase"),
+                RegionLabel(level=1, x=0.5, y=-0.5, text="dog barking", score=0.7, source="keyphrase"),
+            ],
+        )
+
+    def test_idle_when_no_projection(self, client):
+        resp = client.get("/api/projection/labels")
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["status"] == "idle"
+        assert body["labels"] == []
+
+    def test_ready_but_empty_when_no_labeler_has_run(self, client):
+        ctx = get_active_context()
+        proj, pyr = self._build_hex_pyramid()
+        ctx._projection = proj
+        ctx._pyramids = {"hex": pyr}
+
+        resp = client.get("/api/projection/labels")
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["status"] == "ready"
+        assert body["projection_id"] == pyr.projection_id
+        assert body["labels"] == []
+
+        # And the meta advertises the absence, so the client can skip the fetch.
+        assert client.get("/api/projection/meta").get_json()["has_labels"] is False
+
+    def test_serves_labels_for_matching_layout(self, client):
+        ctx = get_active_context()
+        proj, pyr = self._build_hex_pyramid()
+        ctx._projection = proj
+        ctx._pyramids = {"hex": pyr}
+        ctx._region_labels = self._label_set(pyr.projection_id)
+
+        resp = client.get("/api/projection/labels")
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["status"] == "ready"
+        assert body["projection_id"] == pyr.projection_id
+        assert len(body["labels"]) == 2
+        first = body["labels"][0]
+        assert first["text"] == "animal sounds"
+        assert first["level"] == 0
+        assert first["score"] == 0.9
+        assert first["source"] == "keyphrase"
+        assert set(first) == {"level", "x", "y", "text", "score", "source"}
+
+        assert client.get("/api/projection/meta").get_json()["has_labels"] is True
+
+    def test_stale_label_set_is_treated_as_absent(self, client):
+        # Labels are pinned to the layout they were computed from: a set left
+        # over from a previous (re-fit) layout must not be served over the new
+        # coordinates.
+        ctx = get_active_context()
+        proj, pyr = self._build_hex_pyramid("new-layout")
+        ctx._projection = proj
+        ctx._pyramids = {"hex": pyr}
+        ctx._region_labels = self._label_set("old-layout")
+
+        body = client.get("/api/projection/labels").get_json()
+        assert body["status"] == "ready"
+        assert body["labels"] == []
+        assert client.get("/api/projection/meta").get_json()["has_labels"] is False
+
+    def test_subset_labels_are_independent(self, client):
+        # The subset browse carries its own label set; the full-dataset one
+        # must not bleed into it (and vice versa).
+        ctx = get_active_context()
+        proj, pyr = self._build_hex_pyramid("subset-layout")
+        ctx._subset_projection = proj
+        ctx._subset_pyramids = {"hex": pyr}
+        ctx._subset_ids = list(proj.ids)
+        ctx._region_labels = self._label_set("some-other-layout")
+
+        body = client.get("/api/projection/labels?subset=1").get_json()
+        assert body["status"] == "ready"
+        assert body["labels"] == []
+
+        ctx._subset_region_labels = self._label_set(pyr.projection_id)
+        body = client.get("/api/projection/labels?subset=1").get_json()
+        assert len(body["labels"]) == 2
+        assert client.get("/api/projection/meta?subset=1").get_json()["has_labels"] is True
+
+    def test_reset_full_projection_drops_labels(self, client):
+        from vtsearch.routes.projection import _reset_full_projection
+
+        ctx = get_active_context()
+        proj, pyr = self._build_hex_pyramid()
+        ctx._projection = proj
+        ctx._pyramids = {"hex": pyr}
+        ctx._region_labels = self._label_set(pyr.projection_id)
+
+        _reset_full_projection(ctx)
+        assert ctx._region_labels is None

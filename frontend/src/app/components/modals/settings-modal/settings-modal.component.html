@@ -297,6 +297,17 @@
                 </div>
               </div>
               <div class="form-group">
+                <label class="form-label" title="Letter named region signposts over the map when the dataset has them">Signposts<vt-field-hint-icon hint="Names the map's regions like street signs: broad names when zoomed out, finer names as you zoom in. Only shows when the dataset's map has computed labels."></vt-field-hint-icon></label>
+                <div class="toggle-group">
+                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseSignposts(activeBrowseTab())" (click)="onBrowseSignpostsChange(activeBrowseTab(), true)" title="Show region signposts on the map">
+                    On
+                  </button>
+                  <button class="toggle-btn" [class.toggle-btn--active]="!getBrowseSignposts(activeBrowseTab())" (click)="onBrowseSignpostsChange(activeBrowseTab(), false)" title="Hide region signposts">
+                    Off
+                  </button>
+                </div>
+              </div>
+              <div class="form-group">
                 <label class="form-label" title="Colors the density heatmap. Auto follows your theme: blue (Ocean) in light mode, red→yellow (Heat) in dark mode.">Colormap<vt-field-hint-icon [hint]="browseTabUsesThumbnails(activeBrowseTab()) ? 'Thumbnail datasets (image, video) always use grayscale.' : 'Darker bins mean more items in light mode; brighter bins mean more in dark mode.'"></vt-field-hint-icon></label>
                 @if (browseTabUsesThumbnails(activeBrowseTab())) {
                   <select class="form-select" disabled aria-label="Browser colormap" title="Thumbnail datasets always use grayscale">

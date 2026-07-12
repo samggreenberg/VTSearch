@@ -21,6 +21,7 @@ from flask_smorest import Blueprint, abort
 
 from vtsearch.schemas.projection import (
     ProjectionBuildResponseSchema,
+    ProjectionLabelsResponseSchema,
     ProjectionMetaSchema,
     SubsetRemoveRequestSchema,
     TileResponseSchema,
@@ -69,6 +70,8 @@ def _subset_meta(ctx, bin_shape: str) -> dict:
         meta["media_type"] = _media_type_for(ctx)
         meta["method"] = ctx._subset_projection.method if ctx._subset_projection else None
         meta["content_version"] = getattr(ctx, "_subset_content_version", 0)
+        label_set = _label_set_for(ctx, pyr, subset=True)
+        meta["has_labels"] = bool(label_set and label_set.labels)
         return meta
 
     if ctx._subset_job_id:
@@ -86,6 +89,20 @@ def _subset_meta(ctx, bin_shape: str) -> dict:
                 return {"status": "error", "error": job.error or "projection build failed"}
 
     return {"status": "idle"}
+
+
+def _label_set_for(ctx, pyr, *, subset: bool):
+    """The context's :class:`RegionLabelSet` for ``pyr``'s layout, or ``None``.
+
+    Labels are pinned to the frozen layout they were computed from: a set whose
+    ``projection_id`` doesn't match the active pyramid's is stale (the layout
+    was re-fit underneath it) and is treated as absent rather than served over
+    the wrong coordinates.
+    """
+    label_set = ctx._subset_region_labels if subset else ctx._region_labels
+    if label_set is None or label_set.projection_id != pyr.projection_id:
+        return None
+    return label_set
 
 
 def _media_type_for(ctx) -> str:
@@ -238,6 +255,7 @@ def _reset_full_projection(ctx) -> None:
     """
     ctx._projection = None
     ctx._pyramids = {}
+    ctx._region_labels = None
     pkl_path = _pkl_path_for(ctx.dataset_id)
     if pkl_path is None:
         return
@@ -366,6 +384,7 @@ def _build_subset(ctx, requested_ids: list[int], bin_shape: str, *, force: bool 
         ctx._subset_ids = sorted_ids
         ctx._subset_job_id = None
         ctx._subset_content_version = 0  # fresh layout — reset the tile cache token
+        ctx._subset_region_labels = None  # signposts were anchored in the dropped layout
 
     return _start_subset_umap_build(ctx, sorted_ids, matrix, bin_shape, force=force)
 
@@ -571,6 +590,8 @@ def projection_meta():
         meta["media_type"] = _media_type_for(ctx)
         meta["method"] = ctx._projection.method if ctx._projection else None
         meta["content_version"] = 0  # full-dataset layouts are never edited in place
+        label_set = _label_set_for(ctx, pyr, subset=False)
+        meta["has_labels"] = bool(label_set and label_set.labels)
         return meta
 
     if ctx._full_job_id:
@@ -588,6 +609,40 @@ def projection_meta():
                 return {"status": "error", "error": job.error or "projection build failed"}
 
     return {"status": "idle"}
+
+
+@projection_bp.route("/api/projection/labels", methods=["GET"])
+@projection_bp.response(200, ProjectionLabelsResponseSchema)
+def projection_labels():
+    """Return the region signpost labels for the active projection.
+
+    The "street signs" the browse canvas letters over the map (see
+    ``docs/plans/vtsbrowse-toponymy.md``): one entry per named region, each a
+    text + a 2-D anchor in the frozen layout + the pyramid zoom level it
+    belongs to.  The payload is tiny — the client fetches it once per
+    ``projection_id``.
+
+    Labels are optional decoration: a projection whose labeling pipeline
+    hasn't run (or that predates it) answers an empty list, not an error, and
+    ``status`` is ``"idle"`` only when no projection is built at all.  A label
+    set computed for a *different* layout than the active pyramid's is treated
+    as absent — anchors are meaningless off their own layout.
+    """
+    from vtscore.state.core import get_active_context
+
+    ctx = get_active_context()
+    shape = _shape_for(ctx)
+    subset = _is_subset(request.args.get("subset"))
+    pyr = (ctx._subset_pyramids if subset else ctx._pyramids).get(shape)
+    if pyr is None:
+        return {"status": "idle", "labels": []}
+
+    label_set = _label_set_for(ctx, pyr, subset=subset)
+    return {
+        "status": "ready",
+        "projection_id": pyr.projection_id,
+        "labels": label_set.payload() if label_set is not None else [],
+    }
 
 
 @projection_bp.route(

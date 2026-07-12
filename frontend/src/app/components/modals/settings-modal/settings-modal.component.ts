@@ -449,6 +449,23 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
+  /** Whether the browse canvas draws region signposts (the named "street sign"
+   *  labels over the map) for *typeId*, defaulting to on when unset. */
+  getBrowseSignposts(typeId: string): boolean {
+    const dict = this.settings().browse_signposts as Record<string, boolean> | undefined;
+    const value = dict?.[typeId];
+    return value == null ? true : value;
+  }
+
+  /** Write the per-media-type signposts toggle and persist. The same map the
+   *  signpost button on the browse canvas writes, so the two stay in step. */
+  onBrowseSignpostsChange(typeId: string, value: boolean): void {
+    const dict = { ...((this.settings().browse_signposts as Record<string, boolean> | undefined) || {}) };
+    dict[typeId] = value;
+    this.settings.update((s) => ({ ...(s as Record<string, unknown>), browse_signposts: dict }) as AppSettings);
+    this.save();
+  }
+
   // --- Browser tab: right-click bin-popup thumbnail size ---
   // The bin popup keeps its own per-media-type thumbnail size
   // (``grid_icon_size_popup``), independent of the left/right panels. The
