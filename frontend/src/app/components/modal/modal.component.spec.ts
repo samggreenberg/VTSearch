@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Component, signal } from '@angular/core';
+import { By } from '@angular/platform-browser';
+import { CdkTrapFocus } from '@angular/cdk/a11y';
 import { ModalComponent } from './modal.component';
 import { provideZoneless } from '../../testing/zoneless-testbed';
 import { settleZoneless } from '../../testing/settle-resource';
@@ -133,6 +135,46 @@ describe('ModalComponent', () => {
     host.isOpen.set(true);
     await settleZoneless(fixture);
     expect(fixture.nativeElement.querySelector('.modal-close')).toBeTruthy();
+  });
+});
+
+describe('ModalComponent focus management', () => {
+  // We assert the CdkTrapFocus wiring rather than live focus movement: the
+  // directive's auto-capture (initial focus in, Tab trap, restore-to-trigger on
+  // close) is exercised by CDK's own tests, and its InteractivityChecker treats
+  // every element as invisible under jsdom (no layout engine), so it refuses to
+  // move focus headlessly. Verifying the trap is attached and auto-capturing
+  // guards against the wiring being dropped; the real behavior only surfaces in
+  // a browser.
+  let fixture: ComponentFixture<TestHostComponent>;
+  let host: TestHostComponent;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [TestHostComponent],
+      providers: [...provideZoneless()],
+    }).compileComponents();
+    fixture = TestBed.createComponent(TestHostComponent);
+    host = fixture.componentInstance;
+  });
+
+  it('attaches an auto-capturing focus trap to the open dialog', async () => {
+    host.isOpen.set(true);
+    await settleZoneless(fixture);
+
+    const trapEl = fixture.debugElement.query(By.directive(CdkTrapFocus));
+    expect(trapEl).toBeTruthy();
+    // The trap wraps the whole dialog so Tab cannot escape to the page behind it.
+    expect((trapEl.nativeElement as HTMLElement).classList.contains('modal-backdrop')).toBe(true);
+    // Auto-capture is what pulls focus in on open and restores it to the trigger
+    // on close.
+    expect(trapEl.injector.get(CdkTrapFocus).autoCapture).toBe(true);
+  });
+
+  it('does not render a focus trap while the dialog is closed', async () => {
+    host.isOpen.set(false);
+    await settleZoneless(fixture);
+    expect(fixture.debugElement.query(By.directive(CdkTrapFocus))).toBeNull();
   });
 });
 

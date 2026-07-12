@@ -67,18 +67,15 @@ without a browser.
 
 <!-- item-sep -->
 
-- **Add focus management to the shared `vt-modal`** — `app/components/modal/`
-  has no focus handling at all: no initial focus into the dialog, no Tab trap,
-  no focus restore on close, across all ~24 modals (grep finds no
-  `cdkTrapFocus`/`FocusTrap`/`focus(` in the component or template). Keyboard
-  and screen-reader users can tab out of an open modal into the page behind it.
-  **Fix:** add `cdkTrapFocus` (Angular CDK a11y), move initial focus to the
-  first interactive control (or the heading), and restore focus to the trigger
-  on close — one change in the shared component fixes it app-wide. While here,
-  verify the reported "Esc doesn't always dismiss the New Detector dialog"
-  (V5): `modal.component.ts` still has an Esc keydown handler but the repro
-  needs a live browser to confirm. **Files:** `modal.component.ts`,
-  `modal.component.html`.
+- **Verify the New Detector Esc dismissal (V5)** — the shared `vt-modal` now
+  has full focus management (`cdkTrapFocus` + auto-capture; initial focus, Tab
+  trap, restore-to-trigger on close). What remains is the reported "Esc doesn't
+  always dismiss the New Detector dialog" (V5): `modal.component.ts` has an Esc
+  keydown handler (topmost-modal-only, unit-tested), but confirming the repro
+  needs a live browser this cloud container lacks. Re-check once a browser is
+  available; if it reproduces, the fix likely lives in how the New Detector
+  flow's nested modals register on the open-modal stack. **Files:**
+  `modal.component.ts`.
 
 <!-- item-sep -->
 

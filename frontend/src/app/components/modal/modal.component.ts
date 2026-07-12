@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, HostListener, Input, OnDestroy, effect, input, output } from '@angular/core';
+import { CdkTrapFocus } from '@angular/cdk/a11y';
 
 /**
  * Stack of currently-open modal instances, in the order they opened.
@@ -15,6 +16,7 @@ const openModalStack: ModalComponent[] = [];
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-modal',
   standalone: true,
+  imports: [CdkTrapFocus],
   templateUrl: './modal.component.html',
   styleUrl: './modal.component.scss',
 })
