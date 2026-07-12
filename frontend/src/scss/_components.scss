@@ -392,6 +392,39 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   }
 }
 
+// --- Pane divider ---
+//
+// The draggable rule between resizable layout panes: an 8px hit target with a
+// 4px visible line centered inside (the same wider-hit-zone pattern as
+// `.col-resize-handle`, easier to grab than the thin line alone). The line
+// tracks `--border` at rest and switches to `--accent` on hover or while the
+// pane is being dragged. The drag handlers add `.dragging` to keep the accent
+// lit through the drag (bound by `vtPanelResize` in the Label view; the Find
+// and VTSBrowse views highlight on hover only). Used by the Find, Label, and
+// VTSBrowse view layouts.
+.pane-divider {
+  width: 8px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 2px;
+    width: 4px;
+    background: var(--border);
+    transition: background var(--transition-base);
+  }
+
+  &:hover::after,
+  &.dragging::after {
+    background: var(--accent);
+  }
+}
+
 // --- Form elements ---
 
 .form-input {
