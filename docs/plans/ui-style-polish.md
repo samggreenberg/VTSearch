@@ -34,9 +34,9 @@ without a browser.
   sub-slice (shipped one-per-PR; the umbrella stays here until the last is
   done): a canvas-overlay
   `--z-*` token for the raw z-indexes on the browse overlays
-  (`browse-view.component.scss` `z-index: 1/2/3`) (#2321); rounding off-scale
-  transition/animation durations and stray radii onto the existing scales
-  (#2322); and sharing one selected-tile tint token (#2324). Each is
+  (`browse-view.component.scss` `z-index: 1/2/3`) (#2321); and rounding
+  off-scale transition/animation durations and stray radii onto the existing
+  scales (#2322). Each is
   judgment-heavy (which opacity sites are "decorative dim" vs. animation vs.
   disabled; which durations are interactive vs. keyframe timing that would
   change feel if rounded), so scope each before applying. **Files:**
