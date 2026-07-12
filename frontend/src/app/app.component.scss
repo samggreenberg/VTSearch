@@ -14,6 +14,20 @@ header {
   background: var(--header-bg);
   border-bottom: 1px solid var(--header-border);
 
+  .logo-btn {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+
+    &.disabled {
+      // On the Dashboard itself the logo is a no-op, so drop the pointer cue.
+      cursor: default;
+    }
+  }
+
   .header-logo {
     height: 36px;
     width: auto;
@@ -74,12 +88,6 @@ header {
   &.show {
     display: block;
   }
-}
-
-.menu-icon {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
 }
 
 .burger-item {
@@ -186,8 +194,11 @@ header {
   flex: 1;
 }
 
-.help-btn,
-.achievements-btn {
+// Single shared class for the header's icon buttons (Achievements, Help,
+// Settings). Each flavor's open/close animation class (trophy-*, help-*,
+// gear-*) reuses the same tilt keyframes.
+.header-icon-btn {
+  position: relative;
   background: transparent;
   border: 1px solid var(--header-btn-border);
   border-radius: var(--radius-md);
@@ -204,16 +215,16 @@ header {
     height: 20px;
     color: var(--header-text-dim);
 
-    // Tilt-and-hold while the button's modal is open, mirroring the Settings
-    // gear. trophy-* lives on the Achievements icon, help-* on the Help icon;
-    // both reuse the shared header tilt keyframes.
+    // Tilt-and-hold while the button's modal is open.
     &.trophy-open,
-    &.help-open {
+    &.help-open,
+    &.gear-open {
       animation: header-icon-tilt-open var(--transition-slow) ease-in-out forwards;
     }
 
     &.trophy-close,
-    &.help-close {
+    &.help-close,
+    &.gear-close {
       animation: header-icon-tilt-close var(--transition-slow) ease-in-out forwards;
     }
   }
@@ -226,10 +237,6 @@ header {
       color: var(--header-text);
     }
   }
-}
-
-.achievements-btn {
-  position: relative;
 
   .notif-dot {
     position: absolute;
@@ -244,73 +251,10 @@ header {
   }
 }
 
-.settings-btn {
-  background: transparent;
-  border: 1px solid var(--header-btn-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  padding: var(--space-xs);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background var(--transition-base), border-color var(--transition-base);
-  flex-shrink: 0;
-
-  svg {
-    width: 20px;
-    height: 20px;
-    color: var(--header-text-dim);
-
-    &.gear-open {
-      animation: header-icon-tilt-open var(--transition-slow) ease-in-out forwards;
-    }
-
-    &.gear-close {
-      animation: header-icon-tilt-close var(--transition-slow) ease-in-out forwards;
-    }
-  }
-
-  &:hover {
-    background: var(--header-btn-hover-bg);
-    border-color: var(--header-btn-hover-border);
-
-    svg {
-      color: var(--header-text);
-    }
-  }
-}
-
 .main-content {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-}
-
-// Keep the 3-panel layout classes for future phases (4-6)
-.layout {
-  display: grid;
-  grid-template-columns: 300px 1fr 300px;
-  flex: 1;
-  overflow: hidden;
-}
-
-.panel-left,
-.panel-center,
-.panel-right {
-  overflow-y: auto;
-  padding: var(--space-xl);
-  border-right: 1px solid var(--border);
-}
-
-.panel-right {
-  border-right: none;
-}
-
-.placeholder {
-  color: var(--text-muted);
-  text-align: center;
-  margin-top: 40%;
-  font-style: italic;
 }
 
 @keyframes header-icon-tilt-open {
