@@ -196,7 +196,6 @@ def _source_directory(source: str) -> Path | None:
             "oxford_flowers_102": DATA_DIR / "oxford_flowers",
             "food101": DATA_DIR / "food-101" / "images",
             "eurosat": DATA_DIR / "EuroSAT_RGB",
-            "stanford_dogs": DATA_DIR / "stanford_dogs" / "Images",
             "enrico": DATA_DIR / "enrico",
             "rico_screen2words": DATA_DIR / "rico_screen2words" / "screenshots",
             "rvl_cdip": DATA_DIR / "rvl_cdip" / "images",

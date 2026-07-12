@@ -7,7 +7,7 @@ This package is split into sub-modules by media type:
 - :mod:`~vtscore.datasets.downloader.audio` - ESC-50, GTZAN, Speech Commands v2,
   UrbanSound8K
 - :mod:`~vtscore.datasets.downloader.images` - CIFAR-10, Caltech-101/256, Oxford
-  Flowers, Food-101, EuroSAT, Stanford Dogs, Places365
+  Flowers, Food-101, EuroSAT, Places365
 - :mod:`~vtscore.datasets.downloader.video` - UCF-101 subset
 - :mod:`~vtscore.datasets.downloader.text` - 20 Newsgroups, BBC News, AG News, IMDB
 - :mod:`~vtscore.datasets.downloader.documents` - UCSF Industry Documents
@@ -89,8 +89,6 @@ from vtscore.datasets.downloader.core import (
     SAMPLE_VIDEOS_URL,
     SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
     SPEECH_COMMANDS_V2_URL,
-    STANFORD_DOGS_DOWNLOAD_SIZE_MB,
-    STANFORD_DOGS_URL,
     TUT_SOUND_EVENTS_2017_ARCHIVES,
     TUT_SOUND_EVENTS_2017_DOWNLOAD_SIZE_MB,
     UCF101_FULL_DOWNLOAD_SIZE_MB,
@@ -141,7 +139,6 @@ from vtscore.datasets.downloader.images import (
     download_rico_screen2words,
     download_roxford5k,
     download_rvl_cdip,
-    download_stanford_dogs,
     download_visual_genome,
 )
 
@@ -246,8 +243,6 @@ __all__ = [
     "SAMPLE_VIDEOS_URL",
     "SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB",
     "SPEECH_COMMANDS_V2_URL",
-    "STANFORD_DOGS_DOWNLOAD_SIZE_MB",
-    "STANFORD_DOGS_URL",
     "TUT_SOUND_EVENTS_2017_ARCHIVES",
     "TUT_SOUND_EVENTS_2017_DOWNLOAD_SIZE_MB",
     "UCF101_FULL_DOWNLOAD_SIZE_MB",
@@ -287,7 +282,6 @@ __all__ = [
     "download_rico_screen2words",
     "download_roxford5k",
     "download_rvl_cdip",
-    "download_stanford_dogs",
     "download_visual_genome",
     # Video
     "download_hmdb51",
