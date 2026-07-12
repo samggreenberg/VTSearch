@@ -157,7 +157,9 @@ OPENLOGO_DOWNLOAD_WORKERS = 16
 # unlike the natural-photo image demos, the content is rendered UI, so it
 # stresses the embedder on digitally-native imagery.
 ENRICO_SCREENSHOTS_URL = "https://userinterfaces.aalto.fi/enrico/resources/screenshots.zip"
-ENRICO_TOPICS_URL = "https://userinterfaces.aalto.fi/enrico/resources/design_topics.csv"
+# The Aalto-hosted ``design_topics.csv`` now 404s; the upstream Enrico GitHub
+# repo still serves the identical ``screen_id,topic`` file, so we pull it there.
+ENRICO_TOPICS_URL = "https://raw.githubusercontent.com/luileito/enrico/master/design_topics.csv"
 
 # RICO-Screen2Words: 22,417 Android mobile-UI screenshots (built on Rico), each
 # carrying its app's Google Play *category* plus human caption summaries.
@@ -678,8 +680,9 @@ def _download_and_extract(
     download_size_mb: int,
     dataset_name: str,
     on_progress: ProgressCallback,
+    is_complete: Optional[Callable[[], bool]] = None,
 ) -> None:
-    """Download an archive and extract it if *check_path* does not already exist.
+    """Download an archive and extract it unless it is already complete.
 
     Supports ``.tar.gz`` / ``.tgz`` (gzip tar), ``.tar`` (uncompressed tar),
     ``.zip``, and ``.7z`` archives.  The archive file is deleted after
@@ -697,11 +700,22 @@ def _download_and_extract(
         extract_to: Directory into which the archive contents are extracted.
         check_path: Path whose existence signals that extraction is already
             complete (often the same as *extract_to* or a subdirectory of it).
+            Ignored when *is_complete* is given.
         download_size_mb: Expected download size in megabytes (for progress).
         dataset_name: Human-readable dataset name used in progress messages.
         on_progress: Progress callback.
+        is_complete: Optional predicate that returns ``True`` when the dataset
+            is already fully extracted.  Prefer this over *check_path* when a
+            bare directory (e.g. an empty, partially-extracted folder) would
+            otherwise be a false positive that blocks re-download: the predicate
+            can require the expected content (labeled images, etc.) to be
+            present rather than merely that a path exists.
     """
-    if check_path.exists():
+
+    def _complete() -> bool:
+        return is_complete() if is_complete is not None else check_path.exists()
+
+    if _complete():
         return
 
     unique_id = uuid.uuid4().hex[:8]
@@ -714,7 +728,7 @@ def _download_and_extract(
         download_file_with_progress(url, temp_archive, download_size_mb * 1024 * 1024, on_progress)
 
         # Another download may have finished while we were downloading.
-        if check_path.exists():
+        if _complete():
             return
 
         # Validate the downloaded file looks like a real archive before trying
@@ -728,7 +742,7 @@ def _download_and_extract(
         _extract_archive(temp_archive, archive_name, temp_extract, dataset_name, on_progress)
 
         # Another download may have finished while we were extracting.
-        if check_path.exists():
+        if _complete():
             return
 
         # Move extracted content to final location.

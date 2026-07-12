@@ -773,11 +773,14 @@ def _collect_roxford_files(categories, slice_args, on_progress) -> list:
 def _collect_enrico_files(categories, slice_args, on_progress) -> list:
     """Collect Enrico screenshots grouped by their 20-way design-topic label.
 
-    Screenshots are flat JPEGs named ``<rico_screen_id>-screenshot.jpg``; the
-    label lives in ``design_topics.csv`` (``screen_id,topic``), whose ``topic``
-    values are lowercase single tokens (e.g. ``mediaplayer``).  We fold each to
-    its display category (``MediaPlayer``) with a case-insensitive lookup so the
-    stored ``category`` matches ``ENRICO_CATEGORIES`` (and the eval queries).
+    Screenshots are JPEGs keyed on the Rico screen id; upstream drift means the
+    id shows up either as a flat ``<screen_id>.jpg`` or the older
+    ``<screen_id>-screenshot.jpg``, so we accept both and recover the id from
+    the stem.  The label lives in ``design_topics.csv`` (``screen_id,topic``),
+    whose ``topic`` values are lowercase single tokens (e.g. ``mediaplayer``).
+    We fold each to its display category (``MediaPlayer``) with a
+    case-insensitive lookup so the stored ``category`` matches
+    ``ENRICO_CATEGORIES`` (and the eval queries).
     """
     import csv  # noqa: PLC0415
 
@@ -797,8 +800,10 @@ def _collect_enrico_files(categories, slice_args, on_progress) -> list:
                     id_to_cat[sid] = cat
 
     by_cat: dict = {}
-    for img_path in sorted(extract_dir.rglob("*-screenshot.jpg")):
-        cat = id_to_cat.get(img_path.name.split("-", 1)[0])
+    for img_path in sorted(extract_dir.rglob("*.jpg")):
+        stem = img_path.stem
+        sid = stem[: -len("-screenshot")] if stem.endswith("-screenshot") else stem
+        cat = id_to_cat.get(sid)
         if cat in categories:
             by_cat.setdefault(cat, []).append((img_path, cat))
     return _slice_by_category(by_cat, categories, *slice_args)
