@@ -120,13 +120,3 @@ without a browser.
 
 <!-- item-sep -->
 
-- **Dataset importer picker Back affordance (V6)** (#2329) — the Add-Dataset picker
-  (`source-picker.component.html`) uses persistent `.importer-tab-bar` tabs with
-  no `.back-btn`; "going back" means clicking a different tab. The sibling
-  New-detector › Trained › Server-JSON flow uses the canonical picker → `← Back`
-  pattern, so the two diverge. This is a design-alignment call, not a mechanical
-  fix (the footer `Cancel` there legitimately dismisses the whole dialog per the
-  Back-vs-Cancel rule). Decide whether the picker should adopt the
-  form-with-`← Back` shape or stay tabbed, then align. **Files:**
-  `source-picker.component.{html,ts}`; cross-check CLAUDE.md "Nested-modal back
-  buttons".
