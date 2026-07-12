@@ -12,7 +12,7 @@
 .achievements-total-label {
   font-size: var(--font-md);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-wide);
   color: var(--text-muted);
 }
 
@@ -70,7 +70,7 @@
 .achievement-tier {
   font-size: var(--font-xs);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-wide);
   padding: var(--space-2xs) var(--space-xs);
   border-radius: var(--radius-sm);
   background: var(--bg-hover);

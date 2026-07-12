@@ -167,7 +167,7 @@
   cursor: pointer;
   font-size: var(--font-xs);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: var(--tracking-wide);
   transition: color var(--transition-base);
 
   &:hover {
@@ -216,7 +216,7 @@
   font-size: var(--font-xs);
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: var(--tracking-wide);
 }
 
 .metadata-value {

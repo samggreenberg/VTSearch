@@ -522,9 +522,9 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   display: flex;
   gap: 0;
   margin-bottom: 0;
-  background: var(--bg-secondary);
+  background: var(--bg-subtle);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-bottom: none;
   padding: var(--space-xs) var(--space-xs) 0;
 }
@@ -551,16 +551,16 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 
   &--active {
     color: var(--text-primary);
-    background: var(--bg-primary);
-    border-bottom-color: var(--accent-color);
+    background: var(--bg-panel);
+    border-bottom-color: var(--accent);
   }
 }
 
 .view-tab-content {
   padding: var(--space-lg);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-  background: var(--bg-primary);
+  background: var(--bg-panel);
 }
 
 // --- Scrollbars ---

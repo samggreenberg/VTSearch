@@ -29,7 +29,7 @@
 .bsp-title {
   margin: 0;
   font-size: var(--font-sm);
-  letter-spacing: 0.05em;
+  letter-spacing: var(--tracking-wide);
   font-weight: var(--weight-regular);
   color: var(--text-primary);
 }

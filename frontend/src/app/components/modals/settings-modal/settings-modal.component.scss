@@ -15,7 +15,7 @@
   flex-direction: column;
   flex-shrink: 0;
   width: 140px;
-  border-right: 1px solid var(--border-color);
+  border-right: 1px solid var(--border);
   padding: var(--space-xs) 0;
 }
 
@@ -36,13 +36,13 @@
 
   &:hover {
     color: var(--text-primary);
-    background: var(--bg-secondary);
+    background: var(--bg-subtle);
   }
 
   &--active {
     color: var(--text-primary);
-    background: var(--bg-secondary);
-    border-left-color: var(--accent-color);
+    background: var(--bg-subtle);
+    border-left-color: var(--accent);
   }
 }
 
@@ -146,7 +146,7 @@
   // contextual divider styling.
   h4 {
     margin: 0;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border);
     padding-bottom: var(--space-xs);
   }
 }
@@ -161,8 +161,8 @@
 // while still sitting under a `.form-label` like every other setting.
 .server-value {
   padding: var(--space-xs) var(--space-sm);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: var(--font-md);
@@ -186,8 +186,8 @@
 .server-list {
   margin: 0;
   padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-xl);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   font-size: var(--font-md);
   display: flex;
