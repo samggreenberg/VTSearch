@@ -14,7 +14,7 @@
 .detector-type {
   margin-left: 0.5rem;
   font-size: var(--font-xs);
-  opacity: 0.6;
+  opacity: var(--opacity-dim);
 }
 
 // `.subhead` headings carry a trailing `(?)` help icon whose `title`

@@ -267,7 +267,7 @@
 
 .select-arrow {
   flex-shrink: 0;
-  opacity: 0.6;
+  opacity: var(--opacity-dim);
   transition: transform var(--transition-base);
 
   .custom-select.open & { transform: rotate(180deg); }

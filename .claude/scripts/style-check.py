@@ -249,6 +249,42 @@ def check_raw_zindex(files: list[Path]) -> Finding:
 
 
 # ---------------------------------------------------------------------------
+# §1.9 Raw decorative-dim opacity (should be var(--opacity-dim))
+# ---------------------------------------------------------------------------
+# The canonical decorative-dim value. A raw `opacity: 0.7` on a decorative or
+# secondary element (dimmed icon, chevron, accent divider, hint/note text,
+# locked row) should resolve through --opacity-dim so the "recede this
+# decoration" value stays consolidated - the same intent as flagging raw
+# --space-* / --font-* values. Kept in sync with _variables.scss.
+DIM_OPACITY_VALUE = "0.7"
+RAW_OPACITY_RE = re.compile(r"\bopacity\s*:\s*(0?\.\d+|1(?:\.0+)?|0)\b")
+
+
+def check_raw_dim_opacity(files: list[Path]) -> Finding:
+    f = Finding(
+        rule="§1.9 Raw decorative-dim opacity",
+        description=(
+            f"A raw `opacity: {DIM_OPACITY_VALUE}` on a decorative/secondary "
+            "element should use var(--opacity-dim). Legitimate exceptions: "
+            "animation keyframes (0<->1 fades), hover-brighten rest states, and "
+            "the two-tier done/future progression dims carry their own values - "
+            "curate before fixing."
+        ),
+    )
+    for path in files:
+        for lineno, line in enumerate(path.read_text().splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith("//"):
+                continue
+            if "var(--opacity" in line:
+                continue
+            m = RAW_OPACITY_RE.search(line)
+            if m and m.group(1) == DIM_OPACITY_VALUE:
+                f.hits.append((path, lineno, line.rstrip()))
+    return f
+
+
+# ---------------------------------------------------------------------------
 # §4.13 `font: inherit` on form-input/form-select aliases
 # ---------------------------------------------------------------------------
 def check_font_inherit_trap(files: list[Path]) -> Finding:
@@ -576,6 +612,7 @@ def main() -> int:
         check_heading_restyling(files),
         check_transition_all(files),
         check_raw_zindex(files),
+        check_raw_dim_opacity(files),
         check_font_inherit_trap(files),
         check_flex_column_no_gap(files),
         check_redeclared_utility(files),

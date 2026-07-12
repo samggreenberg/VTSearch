@@ -32,8 +32,7 @@ without a browser.
   (broken `var()` refs + deleted-alias usage) have shipped. What's still owed
   is the rest of the value-drift consolidation, tracked as one GitHub issue per
   sub-slice (shipped one-per-PR; the umbrella stays here until the last is
-  done): a decorative-dim opacity token for the ~11 ad-hoc opacity values,
-  distinct from the existing `--opacity-disabled` (#2320); a canvas-overlay
+  done): a canvas-overlay
   `--z-*` token for the raw z-indexes on the browse overlays
   (`browse-view.component.scss` `z-index: 1/2/3`) (#2321); rounding off-scale
   transition/animation durations and stray radii onto the existing scales
