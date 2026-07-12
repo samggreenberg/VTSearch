@@ -253,14 +253,12 @@
   color: var(--text-muted);
 }
 
+// Inherits `.form-input`; overrides only the flex sizing, the tighter
+// inline padding, and the smaller corner radius for this compact row.
 .docs-phrase-input {
   flex: 1;
-  font-size: var(--font-md);
   padding: var(--space-xs) var(--space-md);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-subtle);
-  color: inherit;
 }
 
 .docs-phrase-submit {

@@ -33,18 +33,12 @@
   font-weight: var(--weight-semibold);
 }
 
+// Inherits `.form-input`; only the larger type size and the on-surface
+// background (this input sits directly on the modal surface, not on a
+// subtle inset field) differ from the shared primitive.
 .name-input {
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
   background: var(--bg-surface);
-  color: var(--text-primary);
   font-size: var(--font-xl);
-
-  &:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
 }
 
 .combine-table {
