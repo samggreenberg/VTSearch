@@ -78,6 +78,16 @@
   --z-toast: 5000;
   --z-login: 9999;
 
+  // Modal width scale. Dialogs pick one of these instead of hand-rolling a
+  // width; keeps chrome consistent across the ~24 modals. `sm` is the simple
+  // single-column form (label importer, combine detectors, blank new-detector
+  // form); `md` the picker/table dialogs (importer, export, settings, help);
+  // `lg` the media-picker view that needs room for the demo table + folder
+  // browser. Modals with no fixed-width need size to content.
+  --modal-w-sm: 480px;
+  --modal-w-md: 720px;
+  --modal-w-lg: 900px;
+
   // --- Theme colors (dark, default) ---
 
   --bg-body: #0f1117;

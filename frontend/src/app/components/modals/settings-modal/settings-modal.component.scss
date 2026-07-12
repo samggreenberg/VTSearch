@@ -1,6 +1,6 @@
 :host {
   ::ng-deep .modal-content {
-    width: 680px;
+    width: var(--modal-w-md);
   }
 }
 

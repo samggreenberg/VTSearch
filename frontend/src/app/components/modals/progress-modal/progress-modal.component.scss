@@ -1,6 +1,8 @@
 .analysis-loading {
   text-align: center;
-  padding: var(--space-2xl);
+  // Vertical breathing room only: `.modal-content` already supplies the
+  // horizontal padding, so a full box padding here double-pads the sides.
+  padding: var(--space-2xl) 0;
 
   p {
     margin-bottom: var(--space-xl);

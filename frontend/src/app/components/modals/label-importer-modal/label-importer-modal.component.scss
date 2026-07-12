@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  width: 480px;
+  width: var(--modal-w-sm);
   max-width: 100%;
 }
 
@@ -44,7 +44,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);
-  width: 480px;
+  width: var(--modal-w-sm);
   max-width: 100%;
 }
 
@@ -74,7 +74,7 @@
   margin-top: var(--space-xl);
   padding-top: var(--space-xl);
   border-top: 1px solid var(--border);
-  width: 480px;
+  width: var(--modal-w-sm);
   max-width: 100%;
 }
 
