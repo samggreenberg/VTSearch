@@ -1,4 +1,11 @@
 @if (open()) {
+<!--
+  cdkTrapFocus + auto-capture gives the dialog full keyboard/screen-reader focus
+  management app-wide: on open it saves the triggering element and moves focus to
+  the first tabbable control inside the dialog; Tab/Shift+Tab then cycle within
+  the dialog instead of escaping to the page behind it; and on close (the `@if`
+  destroys this subtree) focus is restored to the trigger.
+-->
 <div
   class="modal-backdrop"
   (click)="onBackdropClick($event)"
@@ -11,7 +18,7 @@
 >
   <div class="modal-content">
     <div class="modal-header">
-      <h2 tabindex="-1" cdkFocusInitial>{{ title() }}</h2>
+      <h2>{{ title() }}</h2>
       @if (showCloseButton) {
         <button class="modal-close" (click)="close()" title="Close" aria-label="Close">&times;</button>
       }
