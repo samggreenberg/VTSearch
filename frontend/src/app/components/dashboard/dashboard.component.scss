@@ -118,6 +118,7 @@
 }
 
 .dashboard-section-title {
+  margin: 0;  // neutralize the UA <h2> block margins; this is a real heading now
   font-size: var(--font-xl);
   font-weight: var(--weight-semibold);
   color: var(--text-primary);

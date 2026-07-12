@@ -15,7 +15,7 @@ import { buildDetectorCardMenuItems, CARD_MENU_MIN_WIDTH, overflowMenuItems } fr
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
-  selector: 'vt-detector-card',
+  selector: 'tr[vt-detector-card]',
   standalone: true,
   imports: [CommonModule, FormsModule, JobProgressComponent, ContextMenuComponent],
   templateUrl: './detector-card.component.html',

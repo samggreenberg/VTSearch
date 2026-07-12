@@ -177,6 +177,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Keyboard-activate a sortable header. Enter/Space sort the column; Space
+   *  also gets its default page-scroll suppressed. */
+  onDatasetHeaderKeydown(event: KeyboardEvent, col: string): void {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.onDatasetHeaderClick(col);
+    }
+  }
+
+  onDetectorHeaderKeydown(event: KeyboardEvent, col: string): void {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.onDetectorHeaderClick(col);
+    }
+  }
+
   private destroy$ = new Subject<void>();
   private findPolling$ = new Subject<void>();
   private knownDatasetIds = new Set<string>();

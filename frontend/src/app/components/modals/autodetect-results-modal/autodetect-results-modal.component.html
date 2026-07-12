@@ -62,7 +62,7 @@
 
   <!-- Export controls -->
   <div class="export-controls">
-    <div class="export-sides">
+    <div class="export-sides" role="radiogroup" aria-label="Filter which predictions to show">
       <label title="Show only items predicted as good"><input type="radio" name="sides" value="good" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Good</label>
       <label title="Show only items predicted as bad"><input type="radio" name="sides" value="bad" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Bad</label>
       <label title="Show both good and bad predictions"><input type="radio" name="sides" value="both" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Both</label>
