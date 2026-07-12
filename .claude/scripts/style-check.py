@@ -221,6 +221,34 @@ def check_transition_all(files: list[Path]) -> Finding:
 
 
 # ---------------------------------------------------------------------------
+# §1.8 Raw z-index (must resolve through a --z-* token)
+# ---------------------------------------------------------------------------
+RAW_ZINDEX_RE = re.compile(r"\bz-index\s*:\s*(-?\d+)\b")
+
+
+def check_raw_zindex(files: list[Path]) -> Finding:
+    f = Finding(
+        rule="§1.8 Raw z-index (bypasses the --z-* scale)",
+        description=(
+            "Never use a raw z-index. Resolve stacking through a --z-* token "
+            "(global layers like --z-modal / --z-toast, or the canvas-overlay "
+            "scale --z-canvas-base/overlay/top). If you need a new layer, add a "
+            "token to _variables.scss instead of a bare integer."
+        ),
+    )
+    for path in files:
+        for lineno, line in enumerate(path.read_text().splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith("//"):
+                continue
+            if "var(--" in line:
+                continue
+            if RAW_ZINDEX_RE.search(line):
+                f.hits.append((path, lineno, line.rstrip()))
+    return f
+
+
+# ---------------------------------------------------------------------------
 # §4.13 `font: inherit` on form-input/form-select aliases
 # ---------------------------------------------------------------------------
 def check_font_inherit_trap(files: list[Path]) -> Finding:
@@ -547,6 +575,7 @@ def main() -> int:
         check_bold_weight(files),
         check_heading_restyling(files),
         check_transition_all(files),
+        check_raw_zindex(files),
         check_font_inherit_trap(files),
         check_flex_column_no_gap(files),
         check_redeclared_utility(files),
