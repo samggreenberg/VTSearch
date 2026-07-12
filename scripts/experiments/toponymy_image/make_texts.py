@@ -193,6 +193,9 @@ def qwen_captions(meta, batch_size=8, model_id="Qwen/Qwen2.5-VL-3B-Instruct") ->
     ).eval()
     # Bound the vision-token budget so document pages don't explode the batch.
     processor = AutoProcessor.from_pretrained(model_id, min_pixels=256 * 28 * 28, max_pixels=768 * 28 * 28)
+    # Batched generation on a decoder-only model requires LEFT padding —
+    # right-padding makes the model continue from pad tokens.
+    processor.tokenizer.padding_side = "left"
 
     texts = []
     for i in range(0, len(meta), batch_size):
