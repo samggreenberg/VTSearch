@@ -60,6 +60,7 @@ def _synthetic_tone_wav(city_index: int, n_cities: int) -> bytes:
         wf.writeframes(struct.pack(f"<{len(pcm)}h", *pcm.tolist()))
     return buf.getvalue()
 
+
 # Waveform colours (dark background, bright waveform)
 _BG_COLOR = (30, 30, 30)
 _WAVE_COLOR = (0, 180, 255)
