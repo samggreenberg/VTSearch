@@ -61,6 +61,15 @@ changes size and text metrics, so **both** theme variants of every shot below
 are stale. Rows are not individually annotated with this reason — it applies
 to the whole table.
 
+**Responsive side tracks (2026-07-12).** The three-panel `.layout` grid's side
+columns changed from a fixed `300px` to `minmax(280px, 20%)`, so at the harness's
+1440px viewport each side panel renders 288px (was 300px) and the centre panel
+gains the reclaimed 24px. Every shot that frames the label/find three-panel
+layout — `three-panel`, `results-grid`, `view-options`, `autopilot-progress`,
+`autopilot-vote`, `manual-controls`, `region-voting`, `find-view` — shifts by
+these few px. All are already listed below for other reasons; this note records
+the additional layout drift so a drain session knows to expect it.
+
 | Shot id | Embedded in | Why it's stale | Flagged |
 |---------|-------------|----------------|---------|
 | `importer-picker` | `docs/user/USER_GUIDE.md#loading-a-dataset` | The shot's caption calls out "per-row readiness badges" (`.badge-ready`/`.badge-embedding`); the 2026-07-09 UI style review Phase 1 fix swapped their unreadable white text for a new `--badge-text-dark` token, changing the badge's rendered text color in both themes. Also: 2026-07-09 light-mode neutral-ramp change (see note above) shifts the light variant's background tone. | 2026-07-09 |
