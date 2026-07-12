@@ -125,15 +125,15 @@ describe('LabelImporterModalComponent', () => {
     expect(component.closed.emit).toHaveBeenCalled();
   });
 
-  it('should render Add media to Good and Add media to Bad buttons in picker view', async () => {
+  it('should render Add Media to Good and Add Media to Bad buttons in picker view', async () => {
     await flushInit();
     const el = fixture.nativeElement as HTMLElement;
     const addGoodBtn = el.querySelector('.btn-add-good');
     const addBadBtn = el.querySelector('.btn-add-bad');
     expect(addGoodBtn).toBeTruthy();
     expect(addBadBtn).toBeTruthy();
-    expect(addGoodBtn!.textContent!.trim()).toBe('Add media to Good');
-    expect(addBadBtn!.textContent!.trim()).toBe('Add media to Bad');
+    expect(addGoodBtn!.textContent!.trim()).toBe('Add Media to Good');
+    expect(addBadBtn!.textContent!.trim()).toBe('Add Media to Bad');
   });
 
   it('should have hidden file inputs for add-to-pile', async () => {

@@ -104,7 +104,7 @@
               <tr class="loading-task-row" [class.loading-task-error]="!!task.error">
                 <td class="select-col"></td>
                 <td>
-                  <span class="loading-task-name">{{ task.name || 'Loading...' }}</span>
+                  <span class="loading-task-name">{{ task.name || 'Loading…' }}</span>
                 </td>
                 <td [attr.colspan]="visibleDatasetColumns.length + 1">
                   @if (task.error) {

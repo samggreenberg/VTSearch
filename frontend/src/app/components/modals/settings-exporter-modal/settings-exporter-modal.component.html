@@ -2,7 +2,7 @@
   @if (view === 'picker') {
     <div class="exporter-picker">
       @if (loading()) {
-        <p class="empty-state">Loading exporters...</p>
+        <p class="empty-state">Loading exporters…</p>
       } @else if (exporters().length === 0) {
         <p class="empty-state">No settings exporters available.</p>
       } @else {
@@ -101,7 +101,7 @@
         <button class="btn btn--primary" (click)="submit()" [disabled]="submitting()">
           <svg aria-hidden="true" [class.icon-waggle]="submitting()" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-5"/><polyline points="15 3 21 3 21 9"/><line x1="12" y1="12" x2="21" y2="3"/></svg>
           @if (submitting()) {
-            Exporting...
+            Exporting…
           } @else {
             Export
           }

@@ -186,7 +186,7 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   }
 
   private loadText(mediaId: number): void {
-    this.textContent.set('Loading...');
+    this.textContent.set('Loading…');
     // Cancel any in-flight text load so a slow earlier response can't clobber
     // the preview after the cursor has moved to another hex.
     this.textLoadAbort?.abort();
@@ -198,7 +198,7 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
       .then((data) => {
         if (this.hover()?.cell.rep_id === mediaId) {
           const text: string = data.content || '';
-          this.textContent.set(text.length > 300 ? text.slice(0, 300) + '...' : text);
+          this.textContent.set(text.length > 300 ? text.slice(0, 300) + '…' : text);
         }
       })
       .catch((err) => {

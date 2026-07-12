@@ -138,7 +138,7 @@
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
       <button class="btn btn--primary" (click)="genericFormPicker.submit()" [disabled]="genericFormPicker.submitting() || !genericFormPicker.canSubmit">
         @if (genericFormPicker.submitting()) {
-          Importing...
+          Importing…
         } @else {
           Import
         }
@@ -151,7 +151,7 @@
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
       <button class="btn btn--primary" (click)="localFolderPicker.submit()" [disabled]="localFolderPicker.submitting() || localFolderPicker.files().length === 0">
         @if (localFolderPicker.submitting()) {
-          Uploading...
+          Uploading…
         } @else {
           Upload &amp; Import
         }
@@ -164,7 +164,7 @@
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
       <button class="btn btn--primary" (click)="serverFolderPicker.submit()" [disabled]="serverFolderPicker.submitting() || !serverFolderPicker.folderPath()">
         @if (serverFolderPicker.submitting()) {
-          Importing...
+          Importing…
         } @else {
           Import
         }

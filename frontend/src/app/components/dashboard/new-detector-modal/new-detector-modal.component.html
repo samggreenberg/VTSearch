@@ -16,7 +16,7 @@
     <form class="new-detector-form" (ngSubmit)="submit()">
       @if (tab === 'blank' && !effectiveSoloMediaType) {
         <div class="form-group">
-          <label class="col-label" title="The type of media this detector will process">Media Type</label>
+          <label class="col-label" title="The type of media this detector will process">Media type</label>
           <div class="media-type-row">
             <div class="custom-select"
               [class.open]="mediaTypeDropdownOpen"
@@ -136,10 +136,10 @@
       @if (tab === 'trained') {
         @if (trainedView === 'picker') {
           <div class="form-group">
-            <label class="col-label">Import Labels From <span class="required">*</span></label>
+            <label class="col-label">Import labels from <span class="required">*</span></label>
             <p class="info-text">Choose where to import labels from. The resulting detector's training data will be the imported labels.</p>
             @if (labelImportersLoading()) {
-              <p class="empty-state">Loading importers...</p>
+              <p class="empty-state">Loading importers…</p>
             } @else if (labelImporters().length === 0) {
               <p class="empty-state">No label importers available.</p>
             } @else {
@@ -271,7 +271,7 @@
       }
 
       <div class="form-group">
-        <label class="col-label" for="detector-name" title="A short name to identify this detector">Detector Name</label>
+        <label class="col-label" for="detector-name" title="A short name to identify this detector">Detector name</label>
         <input
           id="detector-name"
           class="form-input"
@@ -334,12 +334,12 @@
       @if (tab === 'blank') {
         <button class="btn btn--primary" [disabled]="!canSubmitBlank" (click)="submit()"
           title="Create the detector with the example you provided">
-          {{ submitting() ? 'Creating...' : 'Create' }}
+          {{ submitting() ? 'Creating…' : 'Create' }}
         </button>
       } @else {
         <button class="btn btn--primary" [disabled]="!canSubmitTrained" (click)="submit()"
           title="Create the detector and import labels from the selected source">
-          {{ submitting() ? 'Importing...' : 'Create & Import' }}
+          {{ submitting() ? 'Importing…' : 'Create & Import' }}
         </button>
       }
     </div>

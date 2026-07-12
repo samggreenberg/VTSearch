@@ -79,14 +79,5 @@ without a browser.
 
 <!-- item-sep -->
 
-- **Copy-style guide + sweep** (#2328) — microcopy drifts three ways: ellipsis is
-  written `...`, `…`, and `&hellip;`; Title Case and sentence case are mixed;
-  one concept has several names (Train/Label, Find/Autodetect; "model" leaks
-  into UI where the product word is "detector"); placeholder casing is
-  inconsistent. **Fix:** add a copy-style section to `docs/style-guide.md`
-  (sentence-vs-Title-case decision, `…` only, placeholder format, canonical
-  product vocabulary), then sweep the templates to match. **Files:**
-  `docs/style-guide.md` + template text.
-
 <!-- item-sep -->
 

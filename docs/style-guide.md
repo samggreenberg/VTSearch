@@ -377,7 +377,99 @@ Avoid them. The right answer is almost always "use a theme variable." If a compo
 
 ---
 
-## 4. Anti-patterns (do not do these)
+## 4. Copy style (voice, casing, vocabulary)
+
+Microcopy is styling too. Visible UI text - button labels, headings, form
+labels, placeholders, hints, empty states, tooltips - follows the same
+"one rule, applied everywhere" discipline as the tokens. The rules below are
+not machine-enforced (casing can't be reliably linted), so they live here and
+are applied by hand during review.
+
+### 4.1 Casing: Title Case for chrome, sentence case for content
+
+Two buckets, one rule each:
+
+- **Title Case** - the framing "chrome" of the UI: **modal titles** (`vt-modal
+  title="…"`), **section headings** (`<h1>`–`<h4>`, `.section-title`,
+  `.dashboard-section-title`), and **button labels** (`.btn`, toolbar/icon
+  buttons with a text label, radio-pill labels). These name a surface or an
+  action, so they read as a title.
+- **sentence case** - everything the user *reads or fills in*: **form field
+  labels** (`.form-label`, `.col-label`), **placeholders**, **hints**
+  (`.form-hint`, `.info-text`), **empty-state messages** (`.empty-state`),
+  **tooltips** (`title="…"`), **aria-labels**, and any inline description or
+  status sentence. Capitalize only the first word and proper nouns.
+
+**Title Case rule.** Capitalize the first and last word and every "major"
+word. Keep these lowercase unless they're first or last: articles (`a`, `an`,
+`the`), coordinating conjunctions (`and`, `but`, `or`, `nor`, `for`, `so`,
+`yet`), and short prepositions (`to`, `of`, `in`, `on`, `at`, `by`, `for`,
+`with`, `from`, …). So it's `Add Media to Bad`, `Sort by Detector`, `Copy to
+Clipboard` (not `Copy To Clipboard`), `Add Corrections to Detector`.
+
+| Surface | Case | Example |
+|---------|------|---------|
+| Modal title | Title Case | `Combine Datasets`, `Crop Example`, `Use This Example?` |
+| Section heading (`h2`–`h4`, `.section-title`) | Title Case | `Detector Accuracy`, `What You'll Get` |
+| Button label | Title Case | `Import Labels`, `Rebuild Map`, `Download Bundle` |
+| Form field label | sentence case | `Detector name`, `Conflict policy`, `Cell size` |
+| Placeholder | sentence case | `Combined dataset name`, `Describe what you're looking for` |
+| Hint / info / empty-state | sentence case | `No detectors yet. Click + to add one.` |
+| Tooltip (`title=`) / aria-label | sentence case | `Order labeled items by time, name, or detector confidence` |
+
+Proper nouns keep their own casing everywhere (`HuggingFace`, `VTSearch`,
+`UMAP`), as do the canonical capitalized buckets **Good** / **Bad** when they
+name the two vote piles (`Add Media to Good`, `Mark this media as a Bad
+example`).
+
+### 4.2 Ellipsis: the `…` character only
+
+Use the single Unicode ellipsis character **`…` (U+2026)**. Never the three-dot
+ASCII `...`, and never the HTML entity `&hellip;`. This holds for both templates
+and any user-facing string literal in a `.ts` file (`signal('Loading…')`,
+status messages, fallback labels).
+
+- **In-progress button/status labels** end in `…`: `Creating…`, `Importing…`,
+  `Combining…`, `Saving…`, `Scoring with example media…`.
+- **Truncation** markers use `…` too (`… 12 more rows`, `text.slice(0, 300) +
+  '…'`).
+- **Placeholders do *not* end in `…`** (see §4.3).
+
+### 4.3 Placeholder format
+
+- **Sentence case**, no trailing ellipsis, no trailing period.
+- For "here's what to type" examples, prefix with `e.g. ` and match the casing
+  of the real value: a free-text query is lowercase (`e.g. dog barking
+  sounds`), a proper name is Title Case (`e.g. Dog Barks`).
+- For "leave blank to get a default" inputs, state that: `Leave blank to use a
+  default name`.
+- For a server/file path, use the shared hint `path/to/file` (or
+  `/absolute/server/path/to/file` when an absolute path is required) - don't
+  invent a new spelling.
+
+### 4.4 Canonical product vocabulary
+
+One concept, one word. The product noun for the trained ranker is
+**detector** - **never** "model" in user-facing text. ("Model" is correct only
+when it genuinely means a HuggingFace **AI model** / embedder, e.g. the gated-model
+download copy in Settings.) Internal identifiers (`ngModel`, `trainMode.model`,
+CSS classes) are exempt - this rule is about *visible* strings only.
+
+| Concept | Canonical word | Don't write |
+|---------|----------------|-------------|
+| The trained ranker (the product's core object) | **detector** | model |
+| Making a detector by voting good/bad | **Train** (verb) / **Learned** (the sort mode) | — |
+| Running a detector across a dataset to score items | **Find** (the action) / **Auto-Find** (the automatic/CLI variant) | — |
+| The two vote piles | **Good** / **Bad** | positives/negatives (in general UI; the ML terms are fine inside a stats table) |
+
+`Train` and `Find` are the two flow verbs surfaced to users; keep them stable.
+Meaning-bearing distinctions are *not* drift and stay as-is: `Verified Good`
+vs. `Good` (a real Find-mode state), and `Positives`/`Negatives` inside the
+detector-stats table (standard ML terminology in that context).
+
+---
+
+## 5. Anti-patterns (do not do these)
 
 1. **Hardcoded `px` / `rem` for padding, margin, gap.** Pick a `--space-*` token.
 2. **Hardcoded font sizes.** Pick a `--font-*` token. `0.78rem`, `0.95rem`, `13px` are all violations.
@@ -402,7 +494,7 @@ Avoid them. The right answer is almost always "use a theme variable." If a compo
 
 ---
 
-## 5. Adding new shared styles
+## 6. Adding new shared styles
 
 When you have a pattern that recurs (the third time you copy similar SCSS from one component to another), promote it to `_components.scss` (general shared) or `_picker-shared.scss` (importer/exporter/picker domain) or `_data-table.scss` (tables). Don't let the same "kind of thing" diverge across components - that's how the codebase ends up with three "small buttons" that all look slightly different.
 
@@ -413,7 +505,7 @@ When you add a new token:
 
 ---
 
-## 6. References
+## 7. References
 
 - `frontend/src/scss/_variables.scss` - every design token.
 - `frontend/src/scss/_components.scss` - buttons, forms, modals, headings, info/error/success text.

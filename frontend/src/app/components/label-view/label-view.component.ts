@@ -577,7 +577,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   onTextSort(text: string): void {
     this.sortState.setTextQuery(text);
     this.sortState.setSortBusy(true);
-    this.sortState.setSortStatus('Sorting...');
+    this.sortState.setSortStatus('Sorting…');
     this.sortingApi.sort({ text }).pipe(takeUntil(this.destroy$)).subscribe({
       next: (response) => {
         this.sortState.setSortResults(
@@ -602,7 +602,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   onLearnedSort(autoSelect = true): void {
     if (!this.voteState.learnedSortAvailable) return;
     this.sortState.setSortBusy(true);
-    this.sortState.setSortStatus('Training...');
+    this.sortState.setSortStatus('Training…');
     this.sortingApi.learnedSort().pipe(takeUntil(this.destroy$)).subscribe({
       next: (response) => {
         if (response.status === 'done') {
@@ -1124,7 +1124,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const filenames = this.labelSession.mediaExampleFilenames;
     if (filenames.length > 0) {
       this.sortState.setSortBusy(true);
-      this.sortState.setSortStatus(filenames.length > 1 ? 'Sorting by examples...' : 'Sorting by example...');
+      this.sortState.setSortStatus(filenames.length > 1 ? 'Sorting by examples…' : 'Sorting by example…');
       this.sortingApi.exampleSortServer({ filenames }).pipe(takeUntil(this.destroy$)).subscribe({
         next: (response) => {
           this.sortState.setSortResults(

@@ -1,6 +1,6 @@
 <vt-modal [title]="title" [open]="true" (closed)="close()">
   @if (loading()) {
-    <p class="empty-state">Loading exporters...</p>
+    <p class="empty-state">Loading exporters…</p>
   } @else if (exporters().length === 0) {
     <p class="empty-state">No exporters available.</p>
   } @else {
