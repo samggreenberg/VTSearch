@@ -35,9 +35,11 @@ An empty table means "no known-stale shots" — the desired resting state.
 ## Queue
 
 Every shot below is captured in **both** themes (`themes: BOTH` in the
-manifest). The 2026-07-09 light-mode neutral-ramp change (see below) alters the
-**light** variant of *all* of them, so the whole shot set is listed here; a few
-rows also carry an earlier, unrelated staleness reason.
+manifest). Two whole-set changes make *all* of them stale — the 2026-07-09
+light-mode neutral-ramp change (light variants only) and the 2026-07-12 zoom
+removal + type-scale rebuild (both variants; see notes below) — so the entire
+shot set is listed here; a few rows also carry an earlier, unrelated staleness
+reason.
 
 **Light-mode neutral ramp (2026-07-09).** The light theme moved its gray off the
 mostly-hidden desk and onto the surfaces the user actually looks at: `--bg-panel`
@@ -49,6 +51,15 @@ This session had a browser but could not drain the queue: the repo pins
 Playwright 1.60 (Chromium build 1223) while the container ships build 1194, and
 the dev app server would not stay alive across the capture in this session's
 process model — both environment blockers, not recipe problems.
+
+**Zoom removal + type-scale rebuild (2026-07-12).** The app-wide
+`html { zoom: 1.1 }` was deleted (everything renders ~9% smaller, at true
+1:1 px) and the `--font-*` scale was rebased to whole-px steps around a 14px
+base (`--font-2xs..3xl`: 11/12/13/14/16/18/20/24px; previously
+11.2–15.8/17.6/19.4/24.6px effective under the zoom). Every rendered surface
+changes size and text metrics, so **both** theme variants of every shot below
+are stale. Rows are not individually annotated with this reason — it applies
+to the whole table.
 
 | Shot id | Embedded in | Why it's stale | Flagged |
 |---------|-------------|----------------|---------|

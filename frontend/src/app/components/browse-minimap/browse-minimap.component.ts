@@ -11,7 +11,6 @@ import {
   type CanvasTheme,
 } from '../browse-canvas/hex-render.util';
 import { binGeometry } from '../browse-canvas/bin-geometry';
-import { readRootZoom } from '../../utils/root-zoom';
 import { onDevicePixelRatioChange } from '../../utils/device-pixel-ratio';
 import { IconComponent } from '../icon/icon.component';
 import { DecimalPipe } from '@angular/common';
@@ -203,18 +202,12 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
 
   private resizeCanvas(): void {
     this.dpr = window.devicePixelRatio || 1;
-    // this.width/height are layout px, but the app-wide html{zoom} renders
-    // the element zoom× larger on screen — bake the zoom into the backing
-    // store (as the main canvas effectively does via its visual-px sizing)
-    // so the bitmap isn't undersampled/blurry.
-    const rootZoom = readRootZoom();
-    const scale = this.dpr * rootZoom;
     const canvas = this.canvasRef.nativeElement;
-    canvas.width = Math.round(this.width * scale);
-    canvas.height = Math.round(this.height * scale);
+    canvas.width = Math.round(this.width * this.dpr);
+    canvas.height = Math.round(this.height * this.dpr);
     canvas.style.width = `${this.width}px`;
     canvas.style.height = `${this.height}px`;
-    this.ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
   }
 
   // --- Overview-tile coverage -----------------------------------------------
@@ -475,10 +468,9 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     const f = this.fit();
     if (!f) return;
     const rect = this.canvasRef.nativeElement.getBoundingClientRect();
-    // rect / clientX are visual px (CSS layout × the app-wide html{zoom})
-    // while this.width/height and the map transform are layout px, so scale
-    // the cursor offset by the rendered-size ratio. Without it every click
-    // recenters skewed away from the map's top-left by the zoom factor.
+    // Scale the cursor offset by the rendered-size ratio so the math stays
+    // correct even if the canvas element is ever rendered at a size other
+    // than this.width/height (e.g. under a CSS transform).
     const mx = (event.clientX - rect.left) * (this.width / (rect.width || 1));
     const my = (event.clientY - rect.top) * (this.height / (rect.height || 1));
     const [px, py] = this.mapToProj(mx, my, f);
@@ -508,12 +500,8 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   private onResizeMove(event: MouseEvent): void {
     if (!this.resizing) return;
     // Anchored bottom-right: dragging the top-left handle up/left grows it.
-    // clientX/Y deltas are visual px but width/height are layout px, so
-    // divide out the app-wide root zoom or the panel grows faster than the
-    // cursor moves.
-    const rootZoom = readRootZoom();
-    const dw = (this.resizeStartX - event.clientX) / rootZoom;
-    const dh = (this.resizeStartY - event.clientY) / rootZoom;
+    const dw = this.resizeStartX - event.clientX;
+    const dh = this.resizeStartY - event.clientY;
     this.width = Math.round(
       Math.max(MINIMAP_MIN_WIDTH, Math.min(MINIMAP_MAX_WIDTH, this.resizeStartW + dw)),
     );
