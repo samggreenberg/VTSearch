@@ -1,13 +1,23 @@
 # Browser-Vision Testing
 
 **Status:** Active playbook. First round of all four tasks ran 2026-05-27/28;
-the task bodies below are reusable templates for future rounds. Completed runs
-(findings live in the linked reports, not here):
+the task bodies below are reusable templates for future rounds. The
+point-in-time reports those runs produced were consolidated into topic plans;
+the surviving open findings now live there, keyed by finding ID:
 
-- ~~Task 1 — Rendered style audit~~ → [`reviews/2026-05-27-style-audit.md`](../reviews/2026-05-27-style-audit.md)
-- ~~Task 2 — Empty / edge-state sweep~~ → [`reviews/2026-05-28-edge-states.md`](../reviews/2026-05-28-edge-states.md)
-- ~~Task 3 — End-to-end flow walkthrough~~ → [`reviews/2026-05-28-e2e-flows.md`](../reviews/2026-05-28-e2e-flows.md)
-- ~~Task 4 — Long-running-op observability~~ → [`reviews/2026-05-28-longops.md`](../reviews/2026-05-28-longops.md)
+- Task 1 — Rendered style audit → [`ui-style-polish.md`](ui-style-polish.md)
+- Task 2 — Empty / edge-state sweep → [`ui-ux-papercuts.md`](ui-ux-papercuts.md)
+- Task 3 — End-to-end flow walkthrough → [`ui-ux-papercuts.md`](ui-ux-papercuts.md)
+- Task 4 — Long-running-op observability → [`progress-ux.md`](progress-ux.md)
+
+**Deliverable model (changed).** Earlier rounds wrote a dated point-in-time
+report under `docs/reviews/`. That directory is gone: record surviving findings
+as named, `<!-- item-sep -->`-separated open items in the relevant topic plan
+above (matching the plan-file policy in `CLAUDE.md`). Keep the run's screenshots
+as throwaway working artifacts (a scratch dir, or attached to the PR) — they are
+evidence for the write-up, not committed docs. The per-task prompts below still
+describe the old report-file shape; treat "produce a report" as "append open
+items to the topic plan" and the `docs/reviews/...` paths in them as historical.
 
 **Scope:** Exercise VTSearch through the Claude Chrome extension on a
 CPU-only Linux laptop, using Claude's ability to *see* the rendered
@@ -30,9 +40,10 @@ no prior shared state. Each task lists:
 - **Goal**: what we want to learn.
 - **Setup**: how to bring the app up to the right state before the
   vision pass.
-- **Deliverable**: a markdown report under `docs/reviews/<date>-<scope>.md`
-  with screenshots saved alongside (in
-  `docs/reviews/assets/<date>-<scope>/`).
+- **Deliverable**: surviving findings appended as named,
+  `<!-- item-sep -->`-separated open items in the relevant topic plan (see the
+  "Deliverable model" note above), with the run's screenshots kept as throwaway
+  working artifacts (a scratch dir or the PR), not committed docs.
 - **Draft prompt**: copy-paste into the laptop session.
 
 Order suggestion (fastest → deepest):

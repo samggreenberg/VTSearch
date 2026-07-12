@@ -692,7 +692,7 @@ class UserSettingsStore:
         cross-process file lock only; ``settings_lock`` is acquired briefly
         at the end just to swap the in-memory cache, so a slow local fsync
         (NFS, full disk, hung disk controller) can't stall unrelated
-        settings reads - see H29 in ``docs/reviews/2026-05-logical-bug-audit.md``.
+        settings reads - see logical-bug-audit H29.
         """
         path = self._server_path()
         with file_lock(path):

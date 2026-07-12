@@ -296,8 +296,7 @@ call is an **in-place** rewrite of an existing media's vector
 (`ctx.medias[cid]["embeddings"][name] = vec` during re-embed / clip): a
 dict subclass can't observe a mutation to a value's internals, so those
 stages call `invalidate_embedding_matrix(ctx)` (which bumps the counter)
-afterwards. See root-cause Pattern #4 in
-`docs/reviews/2026-05-logical-bug-audit.md`.
+afterwards (logical-bug-audit root-cause Pattern #4).
 
 `get_embedding_matrix_for_snap(snap)` (`vtscore/embedding/matrix.py:70`)
 is for callers that hold a media-dict snapshot (typically from
