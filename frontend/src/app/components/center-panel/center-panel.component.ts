@@ -15,6 +15,7 @@ import { TextViewerComponent } from './text-viewer/text-viewer.component';
 import { DocumentViewerComponent } from './document-viewer/document-viewer.component';
 import { VotingOverlayComponent } from './voting-overlay/voting-overlay.component';
 import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
+import { IconComponent } from '../icon/icon.component';
 import { prefersReducedMotion } from '../../utils/reduced-motion';
 
 @Component({
@@ -31,6 +32,7 @@ import { prefersReducedMotion } from '../../utils/reduced-motion';
     DocumentViewerComponent,
     VotingOverlayComponent,
     CopyDetailButtonComponent,
+    IconComponent,
   ],
   templateUrl: './center-panel.component.html',
   styleUrl: './center-panel.component.scss',

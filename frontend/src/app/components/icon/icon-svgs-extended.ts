@@ -38,6 +38,30 @@ export const EXTENDED_ICON_SVGS: Record<string, string> = {
   // read as a matched in/out pair.
   import:
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3h5a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-5"/><polyline points="12 6 12 12 6 12"/><line x1="3" y1="3" x2="12" y2="12"/></svg>',
+  // Data-export glyph: the mirror of `import` — a rounded box whose upper-RIGHT
+  // corner is open, with a diagonal arrow running from the centre OUT through
+  // that corner. Matches `import`'s stroke weight so the in/out pair reads as a
+  // set. Used by every Export button/menu action across the app.
+  export:
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-5"/><polyline points="15 3 21 3 21 9"/><line x1="12" y1="12" x2="21" y2="3"/></svg>',
+  // Trash can (delete). Kept at stroke-width 1.5 to match the small (14–16px)
+  // delete buttons it backs across the dashboard rows, section headers, and the
+  // card context menu. The dashboard's delete buttons animate it by toggling a
+  // rotate class on the surrounding `vt-icon` host (see `.trash-active`).
+  trash:
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>',
+  // Combine glyph: two curved branches merging into a single arrow pointing
+  // right — "merge these into one". Backs the dashboard's Combine-selected
+  // datasets / detectors actions.
+  combine:
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7 C 10 7, 10 12, 17 12 L 21 12"/><path d="M3 17 C 10 17, 10 12, 17 12"/><polyline points="18 9 21 12 18 15"/></svg>',
+  // Counter-clockwise / clockwise rotate arrows, backing the image toolbar's
+  // rotate-left / rotate-right controls (they rotate the image, not undo/redo
+  // app state).
+  'rotate-ccw':
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>',
+  'rotate-cw':
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>',
   // Browse glyph: an eye, matching the Browse buttons used throughout the app
   // (dashboard dataset cards, the Find right-panel goods actions, etc.).
   eye:
@@ -106,8 +130,17 @@ export const EXTENDED_ICON_SVGS: Record<string, string> = {
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v7.5a2 2 0 0 1-.3 1L4 20a1.5 1.5 0 0 0 1.3 2.2h13.4A1.5 1.5 0 0 0 20 20l-4.7-9.5a2 2 0 0 1-.3-1V2"/><line x1="8" y1="2" x2="16" y2="2"/><line x1="7" y1="15" x2="17" y2="15"/></svg>',
   cubes:
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6h16v16H2z"/><path d="M2 6l4-4h16v16l-4 4"/><path d="M18 6l4-4"/><path d="M10 6v16M2 14h16"/><path d="M10 6l4-4"/><path d="M18 14l4-4"/></svg>',
+  // Tri-state selection checkbox, backing the dashboard/browse row and
+  // select-all controls. The three states share a common rounded square so they
+  // read as one control: `checkbox-checked` (with a tick), `checkbox-some`
+  // (indeterminate dash, for a header whose rows are partially selected), and
+  // `checkbox-blank` (empty). Stroke-width 1.5 matches the 16px checkboxes.
   'checkbox-checked':
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3" ry="3"/><polyline points="8 12 11 15 16 9"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="8 12 11 15 16 9"/></svg>',
+  'checkbox-some':
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
+  'checkbox-blank':
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>',
   search:
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"/><line x1="21" y1="21" x2="15.2" y2="15.2"/></svg>',
   trophy:

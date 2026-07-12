@@ -12,6 +12,7 @@ import {
 } from '../../../utils/format-progress';
 import { formatTimestamp } from '../../../utils/format-date';
 import { ContextMenuComponent, ContextMenuItem } from '../../context-menu/context-menu.component';
+import { IconComponent } from '../../icon/icon.component';
 import { buildDatasetCardMenuItems, CARD_MENU_MIN_WIDTH, overflowMenuItems } from '../card-context-menu-items';
 
 @Component({
@@ -19,7 +20,7 @@ import { buildDatasetCardMenuItems, CARD_MENU_MIN_WIDTH, overflowMenuItems } fro
   selector: 'tr[vt-dataset-card]',
   standalone: true,
   host: { class: 'entity-card' },
-  imports: [CommonModule, FormsModule, JobProgressComponent, ContextMenuComponent],
+  imports: [CommonModule, FormsModule, JobProgressComponent, ContextMenuComponent, IconComponent],
   templateUrl: './dataset-card.component.html',
   styleUrl: './dataset-card.component.scss',
 })

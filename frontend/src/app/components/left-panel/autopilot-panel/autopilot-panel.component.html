@@ -37,7 +37,7 @@
           >
             <div class="ap-step-marker">
               @if (step.state === 'done') {
-                <span class="ap-check" title="Complete" aria-label="Complete">&#10003;</span>
+                <span class="ap-check" title="Complete" aria-label="Complete"><vt-icon type="check" [size]="14"></vt-icon></span>
               } @else if (step.state === 'active') {
                 <span class="ap-dot active-dot" title="Current step" aria-label="Current step"></span>
               } @else {

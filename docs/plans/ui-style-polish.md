@@ -65,14 +65,6 @@ without a browser.
 
 <!-- item-sep -->
 
-- **Unify the icon system** (#2326) — several inline SVGs are pasted 2–4× (eye/export/
-  trash/combine, the tri-state checkbox), the center-panel toolbar uses raw
-  Unicode glyphs (`⟲ ⟳ − +`) and a text "Reset", and there are three different
-  success-check renderings. **Fix:** move the duplicated SVGs into the `vt-icon`
-  registry and replace the glyphs/text with registry icons. Deep-verify each
-  duplicate against the current `vt-icon` registry when planning (some may
-  already be registered). **Files:** `vt-icon` registry + the listed templates.
-
 <!-- item-sep -->
 
 <!-- item-sep -->

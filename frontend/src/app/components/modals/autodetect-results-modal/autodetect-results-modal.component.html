@@ -25,7 +25,7 @@
   @if (data.auto_export; as ax) {
     <div class="auto-export-status" [class.auto-export-status--error]="!ax.success">
       @if (ax.success) {
-        &#10003; Auto-exported via {{ ax.exporter }}{{ ax.message ? ' — ' + ax.message : '' }}
+        <vt-icon type="check" [size]="14"></vt-icon> Auto-exported via {{ ax.exporter }}{{ ax.message ? ' — ' + ax.message : '' }}
       } @else {
         &#9888; Auto-export via {{ ax.exporter }} failed{{ ax.error ? ': ' + ax.error : '' }}
       }

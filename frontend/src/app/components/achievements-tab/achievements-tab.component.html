@@ -50,7 +50,7 @@
                 @for (doc of docs; track doc.id) {
                   <li class="docs-list-item" [class.docs-list-item--read]="doc.read">
                     <span class="docs-list-status" [attr.aria-label]="doc.read ? 'read' : 'unread'">
-                      {{ doc.read ? '✓' : '○' }}
+                      @if (doc.read) { <vt-icon type="check" [size]="14"></vt-icon> } @else { ○ }
                     </span>
                     <a class="docs-list-link" [href]="docRawUrl(doc.id)" target="_blank" rel="noopener noreferrer">
                       {{ doc.name }}
@@ -92,7 +92,7 @@
                 @for (mt of mediaTypes; track mt.id) {
                   <li class="ticks-list-item" [class.ticks-list-item--on]="mt.seen">
                     <span class="ticks-list-status" [attr.aria-label]="mt.seen ? 'voted' : 'not yet'">
-                      {{ mt.seen ? '✓' : '○' }}
+                      @if (mt.seen) { <vt-icon type="check" [size]="14"></vt-icon> } @else { ○ }
                     </span>
                     <span class="ticks-list-name">{{ mt.name }}</span>
                   </li>

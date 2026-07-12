@@ -461,15 +461,11 @@
     @if (version()) {
       <span class="settings-version" title="App version (UTC timestamp of the last dev to main merge). Include this when reporting issues.">v {{ version() }}</span>
     }
-    <span class="settings-saved" [class.settings-saved--visible]="savedVisible()" role="status" aria-live="polite" title="Settings auto-save as you change them">&#10003; saved</span>
+    <span class="settings-saved" [class.settings-saved--visible]="savedVisible()" role="status" aria-live="polite" title="Settings auto-save as you change them"><vt-icon type="check" [size]="14"></vt-icon> saved</span>
     <button class="btn btn--secondary" (click)="resetDefaults()" title="Reset all settings to their factory defaults">Default</button>
     <button class="btn btn--secondary" (click)="openImporter()" title="Import settings from a file">Import</button>
     <button class="btn btn--secondary" (click)="openExporter()" aria-label="Export" title="Export settings to a file">
-      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M11 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-5"></path>
-        <polyline points="15 3 21 3 21 9"></polyline>
-        <line x1="12" y1="12" x2="21" y2="3"></line>
-      </svg>
+      <vt-icon type="export" [size]="16"></vt-icon>
     </button>
     <button class="btn btn--secondary" (click)="close()" title="Close the settings panel">Done</button>
   </div>

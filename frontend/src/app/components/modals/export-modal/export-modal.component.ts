@@ -15,6 +15,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
+import { IconComponent } from '../../icon/icon.component';
 import {
   ClipboardColumn,
   ClipboardCopyComponent,
@@ -48,6 +49,7 @@ export interface ColumnDef {
     ModalComponent,
     FieldHintIconComponent,
     ClipboardCopyComponent,
+    IconComponent,
   ],
   templateUrl: './export-modal.component.html',
   styleUrl: './export-modal.component.scss',

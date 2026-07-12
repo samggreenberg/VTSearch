@@ -87,11 +87,11 @@
 
 // The image-view toolbar buttons build on the shared `.btn.btn--toolbar`
 // primitive (see scss/_components.scss). These add-ons layer only what is
-// genuinely distinct: the larger glyph size the rotate/zoom/reset controls
-// need, and the accent-fill active state for the marquee / highlight toggles.
+// genuinely distinct: the roomier horizontal padding for the rotate/zoom/reset
+// controls, and the accent-fill active state for the marquee / highlight
+// toggles. All glyphs are now `vt-icon`s sized via their `[size]` input.
 .ivc-btn {
   padding: var(--space-2xs) var(--space-md);
-  font-size: var(--font-xl);
 }
 
 .ivc-btn-toggle {
