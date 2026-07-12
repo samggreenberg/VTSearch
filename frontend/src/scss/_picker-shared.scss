@@ -76,11 +76,17 @@
   font-style: italic;
 }
 
+// Inline modifier for the canonical `.empty-state` primitive (see
+// `_components.scss`): a compact, left-aligned, italic notice shown inline
+// below a tab bar rather than as a full centered block. Resets the base
+// primitive's centered flex-column layout back to a simple text run.
 .empty-state--inline {
+  display: block;
   padding: var(--space-sm) var(--space-md);
   font-size: var(--font-sm);
   color: var(--text-muted);
   font-style: italic;
+  text-align: left;
 }
 
 // --- Demo media-type tabs ---
