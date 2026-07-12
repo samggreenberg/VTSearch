@@ -7,10 +7,10 @@
         <p class="empty-state">No label importers available.</p>
       } @else {
         @for (imp of importers(); track imp.name) {
-          <button class="importer-card" (click)="selectImporter(imp)">
-            <span class="importer-name">@if (imp.icon) {<span class="importer-icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
+          <button class="picker-card" (click)="selectImporter(imp)">
+            <span class="picker-card__title">@if (imp.icon) {<span class="picker-card__icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
             @if (imp.description) {
-              <span class="importer-desc">{{ imp.description }}</span>
+              <span class="picker-card__desc">{{ imp.description }}</span>
             }
           </button>
         }

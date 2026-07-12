@@ -145,10 +145,10 @@
             } @else {
               <div class="source-list">
                 @for (imp of labelImporters(); track imp.name) {
-                  <button type="button" class="importer-card" (click)="selectLabelImporter(imp)">
-                    <span class="importer-name">@if (imp.icon) {<span class="importer-icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
+                  <button type="button" class="picker-card" (click)="selectLabelImporter(imp)">
+                    <span class="picker-card__title">@if (imp.icon) {<span class="picker-card__icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
                     @if (imp.description) {
-                      <span class="importer-desc">{{ imp.description }}</span>
+                      <span class="picker-card__desc">{{ imp.description }}</span>
                     }
                   </button>
                 }

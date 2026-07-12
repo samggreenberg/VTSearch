@@ -381,7 +381,18 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   gap: var(--space-md);
 }
 
-// --- Importer/Exporter picker ---
+// --- Picker cards ---
+//
+// One shared selectable option card (icon + title + description) for every
+// picker that lists choices: the settings import/export pickers, label
+// import/export, the New Detector "Trained" tab, and the load-sort /
+// resort-prompt source pickers. A single canonical title size lives here so
+// the per-modal copies can't drift into three different sizes again; the
+// `.selected` state is provided for pickers that keep a persistent choice.
+//
+// The container layout stays with each picker (a responsive grid for the
+// settings/label pickers below, a vertical `.source-list` for the others);
+// only the card itself is unified.
 
 .importer-picker,
 .exporter-picker {
@@ -390,39 +401,38 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   gap: var(--space-lg);
 }
 
-.importer-card,
-.exporter-card {
+.picker-card {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: var(--space-xs);
   padding: var(--space-lg);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-subtle);
+  color: var(--text-primary);
   cursor: pointer;
   text-align: left;
   transition: border-color var(--transition-base), background var(--transition-base);
 
-  &:hover {
+  &:hover,
+  &.selected {
     border-color: var(--accent);
     background: var(--bg-hover);
   }
 }
 
-.importer-icon {
-  font-size: var(--font-2xl);
-  margin-right: var(--space-sm);
+.picker-card__icon {
+  margin-right: var(--space-xs);
 }
 
-.importer-name,
-.exporter-name {
+.picker-card__title {
   font-size: var(--font-lg);
   font-weight: var(--weight-semibold);
   color: var(--text-primary);
 }
 
-.importer-desc,
-.exporter-desc {
+.picker-card__desc {
   font-size: var(--font-sm);
   color: var(--text-secondary);
 }
