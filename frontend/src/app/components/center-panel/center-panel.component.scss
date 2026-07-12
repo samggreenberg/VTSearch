@@ -85,31 +85,26 @@
   }
 }
 
+// The image-view toolbar buttons build on the shared `.btn.btn--toolbar`
+// primitive (see scss/_components.scss). These add-ons layer only what is
+// genuinely distinct: the larger glyph size the rotate/zoom/reset controls
+// need, and the accent-fill active state for the marquee / highlight toggles.
 .ivc-btn {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  cursor: pointer;
   padding: var(--space-2xs) var(--space-md);
   font-size: var(--font-xl);
-
-  &:hover {
-    background: var(--bg-hover);
-  }
 }
 
 .ivc-btn-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   padding: var(--space-2xs) var(--space-sm);
-  line-height: 1;
+
+  &.active,
+  &.active:hover {
+    color: var(--btn-filled-text);
+  }
 
   &.active {
     background: var(--accent);
     border-color: var(--accent);
-    color: var(--btn-filled-text);
   }
 
   &.active:hover {

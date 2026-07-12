@@ -57,28 +57,10 @@
   border-top: 1px solid var(--border);
 }
 
-.panel-btn {
-  padding: var(--space-xs) var(--space-md);
-  font-size: var(--font-xs);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all var(--transition-base);
-
-  &:hover:not(:disabled) {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-    border-color: var(--accent);
-  }
-
-  &:disabled {
-    opacity: var(--opacity-disabled);
-    cursor: not-allowed;
-  }
-}
+// The panel action buttons (Import Labels / Add Corrections / Export) use the
+// shared `.btn.btn--toolbar` primitive from `scss/_components.scss`; the
+// `.import-btn` / `.export-btn` / `.corrections-btn` add-ons below only carry
+// each button's layout (flex sizing, centering).
 
 // Icon-only action cluster projected into the good label-list header in Find
 // mode (Browse / To Dataset / Export). The buttons themselves are the shared
