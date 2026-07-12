@@ -115,10 +115,14 @@ def make_hf_namer(model_id: str, stats: CallStats):
             stats.record("hf_sys", {"system": system_prompt, "user": user_prompt}, r)
             return r
 
+    import transformers
+
+    # transformers 5 renamed the pipeline dtype kwarg (torch_dtype -> dtype).
+    dtype_key = "dtype" if int(transformers.__version__.split(".")[0]) >= 5 else "torch_dtype"
     return CountingHFNamer(
         model=model_id,
         device_map="auto",
-        model_kwargs={"torch_dtype": torch.bfloat16},
+        model_kwargs={dtype_key: torch.bfloat16},
     )
 
 

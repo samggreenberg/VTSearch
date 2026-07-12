@@ -218,17 +218,55 @@ and `labeler`.
 > **`docs/reports/2026-07-12-toponymy-audio-signposts.html`** and the reusable
 > framework at `scripts/experiments/toponymy_audio/`.
 
-1. **Adopt `toponymy` at all** — **RESOLVED: adopt the pipeline, but do NOT
-   `pip install` it into the app venv as-is.** The pipeline works (fine-layer
-   signs on ESC-50: ARI 0.87 / purity 0.97 / 91% name–category hit; ~3–5 min
-   end-to-end for 2k clips on one GPU). But toponymy 0.5.2 hard-pins
-   `transformers<5.0.0` (plus unconditional `datasets`, `dask`, `vectorizers`,
-   `apricot-select`), and a resolver dry-run downgrades the app's
-   transformers 5.12→4.57 and huggingface-hub 1.20→0.36. Path options, in
-   order: upstream a lazy/optional `transformers` import (it is only truly
-   needed by `HuggingFaceNamer`); vendor the core (clustering + keyphrases +
-   templates have no transformers dependency); sidecar venv. Re-check the pin
-   at implementation time.
+1. **Adopt `toponymy` at all** — **RESOLVED: adopt, installed with
+   `--no-deps` + explicitly declared real dependencies.** The pipeline works
+   (fine-layer signs on ESC-50: ARI 0.87 / purity 0.97 / 91% name–category
+   hit; ~3–5 min end-to-end for 2k clips on one GPU). A plain
+   `pip install toponymy` is still off the table — toponymy 0.5.2 pins
+   `transformers<5.0.0` and a resolver dry-run downgrades the app's
+   transformers 5.12→4.57 and huggingface-hub 1.20→0.36 — but all three
+   workarounds were **tested end-to-end on the grid (2026-07-12)** in a venv
+   mirroring the app (transformers 5.12.1, hf-hub 1.x), rerunning the full
+   ESC-50 fit from cached embeddings/texts:
+
+   - **Install `--no-deps` (recommended — tested, passes):** unmodified
+     toponymy 0.5.2 imports and runs the *entire* pipeline under
+     transformers 5.12.1 — including its own `HuggingFaceNamer` driving
+     Qwen2.5-7B through the transformers-5 pipeline API — with an identical
+     topic tree (70/34/13), identical names, and timing parity (fit 113 s vs
+     108 s on transformers 4.57). The `<5` pin (upstream rationale: a
+     sentence-transformers compat concern) is empirically unnecessary for our
+     usage. Static analysis agrees: `transformers` is only *used* inside the
+     already-guarded HuggingFaceNamer block, `tokenizers` is imported but
+     never used, and `datasets` is declared but **never imported anywhere**.
+     Integration recipe: pin `toponymy==0.5.2`, install with `--no-deps` in
+     `scripts/install.sh`, and declare its actually-used deps in
+     `pyproject.toml`: `fast_hdbscan`, `vectorizers`, `apricot-select`,
+     `tenacity`, `jinja2` (numpy/pandas/scikit-learn/scipy/numba/tqdm are
+     already VTSearch deps; `httpx` arrives via huggingface-hub 1.x;
+     `tokenizers` via transformers). Add a smoke test that imports toponymy
+     and fits a tiny corpus, since `--no-deps` bypasses resolver protection
+     for future toponymy versions; deptry will need `toponymy` in
+     dependencies plus the usual per-rule config.
+   - **Vendor the core (tested, passes — fallback):** a 5-line patch (drop
+     the vestigial top-level `import tokenizers` / `import transformers` in
+     `llm_wrappers.py`, wrap `import httpx` in try/except there and in
+     `embedding_wrappers.py`) makes the whole package import-clean; full fit
+     reproduces the baseline exactly. ~13k LOC to carry if upstream ever
+     hard-breaks.
+   - **Sidecar venv/process (tested, passes — last resort):** toponymy in its
+     own 752 MB venv (its own transformers 4.57.6, **no torch**), embeddings
+     and texts passed by file, keyphrase/topic-name embedding served by the
+     app's CLAP text branch over localhost HTTP — only **4 round-trips for
+     4,352 encoded strings** end-to-end; fit parity (180 s). Working demo:
+     `scripts/experiments/toponymy_audio/sidecar/`. Operationally heaviest
+     (second venv to build/ship, process lifecycle) — keep as escape hatch.
+
+   Upstream: `main` still pins `<5` and has *added* `litellm` as a hard dep
+   (trending heavier), and #150 deliberately made transformers a base dep —
+   so don't block on upstream; file an issue offering the transformers-5
+   runtime evidence and the unused `datasets`/`tokenizers` finding, and
+   re-check before implementation in case a fixed release lands.
 2. ~~`clusterable_vectors` source~~ **RESOLVED:** cluster on a **dedicated
    higher-D UMAP** (`n_components≈5`, `metric="cosine"`), not the 2-D browse
    layout. Confirmed empirically (26 s for 2k clips; multiresolution tree
