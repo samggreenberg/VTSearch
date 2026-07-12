@@ -163,6 +163,7 @@ def clear_medias() -> None:
         ctx._region_index_per_row = None
         ctx._projection = None
         ctx._pyramids = {}
+        ctx._region_labels = None
         ctx.coverage_atlas = None
         ctx.dataset_display_name = None
     # ``_progress_lock`` is acquired strictly outside ``_state_lock`` so the

@@ -218,6 +218,12 @@
           "browse_panel_width": {
             "type": "integer"
           },
+          "browse_signposts": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object"
+          },
           "browse_thumbnail_border": {
             "additionalProperties": {
               "type": "integer"
@@ -4123,6 +4129,31 @@
         ],
         "type": "object"
       },
+      "ProjectionLabelsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "labels": {
+            "items": {
+              "$ref": "#/components/schemas/RegionLabel"
+            },
+            "type": "array"
+          },
+          "projection_id": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "description": "\"ready\" when a projection exists (labels may be empty), else \"idle\".",
+            "type": "string"
+          }
+        },
+        "required": [
+          "labels",
+          "status"
+        ],
+        "type": "object"
+      },
       "ProjectionMeta": {
         "additionalProperties": false,
         "properties": {
@@ -4159,6 +4190,12 @@
             "default": null,
             "nullable": true,
             "type": "string"
+          },
+          "has_labels": {
+            "default": null,
+            "description": "Whether region signpost labels exist for this projection (see GET /api/projection/labels). False until a labeler has run for the current layout.",
+            "nullable": true,
+            "type": "boolean"
           },
           "job_id": {
             "default": null,
@@ -4296,6 +4333,43 @@
         },
         "required": [
           "sessions"
+        ],
+        "type": "object"
+      },
+      "RegionLabel": {
+        "additionalProperties": false,
+        "properties": {
+          "level": {
+            "description": "Pyramid zoom level the sign belongs to (0 = coarsest). May be fractional; the canvas interpolates visibility on a continuous axis.",
+            "type": "number"
+          },
+          "score": {
+            "default": 1.0,
+            "description": "Naming confidence; the de-clutter tiebreak.",
+            "type": "number"
+          },
+          "source": {
+            "default": "",
+            "description": "Which namer produced the sign (e.g. \"keyphrase\", \"llm\").",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "x": {
+            "description": "Anchor (projection space).",
+            "type": "number"
+          },
+          "y": {
+            "description": "Anchor (projection space).",
+            "type": "number"
+          }
+        },
+        "required": [
+          "level",
+          "text",
+          "x",
+          "y"
         ],
         "type": "object"
       },
@@ -4614,6 +4688,7 @@
           "browse_panel_width": {
             "type": "integer"
           },
+          "browse_signposts": {},
           "browse_thumbnail_border": {},
           "calibrate_count": {
             "type": "integer"
@@ -13336,6 +13411,31 @@
           }
         },
         "summary": "Kick off (or short-circuit) a build of the dataset's projection.",
+        "tags": [
+          "projection"
+        ]
+      }
+    },
+    "/api/projection/labels": {
+      "get": {
+        "description": "The \"street signs\" the browse canvas letters over the map (see\n``docs/plans/vtsbrowse-toponymy.md``): one entry per named region, each a\ntext + a 2-D anchor in the frozen layout + the pyramid zoom level it\nbelongs to.  The payload is tiny \u2014 the client fetches it once per\n``projection_id``.\n\nLabels are optional decoration: a projection whose labeling pipeline\nhasn't run (or that predates it) answers an empty list, not an error, and\n``status`` is ``\"idle\"`` only when no projection is built at all.  A label\nset computed for a *different* layout than the active pyramid's is treated\nas absent \u2014 anchors are meaningless off their own layout.",
+        "operationId": "projection_labels",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectionLabelsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return the region signpost labels for the active projection.",
         "tags": [
           "projection"
         ]

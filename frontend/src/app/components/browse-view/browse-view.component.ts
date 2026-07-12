@@ -35,7 +35,7 @@ import {
   usesThumbnails,
   type BrowseColormapId,
 } from '../browse-canvas/hex-render.util';
-import type { ProjectionMeta } from '../../models/projection.models';
+import type { ProjectionMeta, RegionLabelPayload } from '../../models/projection.models';
 import { snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 import { readRootZoom } from '../../utils/root-zoom';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
@@ -219,6 +219,25 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private dragMin = BrowseViewComponent.PANEL_FLOOR;
   private boundPanelMove = this.onPanelMouseMove.bind(this);
   private boundPanelUp = this.onPanelMouseUp.bind(this);
+
+  /**
+   * Region signpost labels for the current projection, fetched once per
+   * ``projection_id`` (only when the meta advertises ``has_labels``) and passed
+   * to the canvas. Empty for datasets with no computed labels — the signpost
+   * toggle button disables itself then.
+   */
+  readonly labels = signal<RegionLabelPayload[]>([]);
+
+  /**
+   * Whether the canvas draws the region signposts — mirrored from the
+   * per-media ``browse_signposts`` setting (default on) and toggled by the
+   * signpost button in the canvas toolbar, which persists the choice back.
+   */
+  readonly signposts = signal(true);
+
+  /** The ``projection_id`` the current {@link labels} were fetched for (or
+   *  requested for — set before the request so a poll can't double-fetch). */
+  private labelsFetchedFor = '';
 
   /**
    * How many +/- button clicks (and wheel notches) cross one pyramid level —
@@ -537,6 +556,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.zoomsPerLevel.set(
       rawZooms == null ? 2 : Math.max(1, Math.min(3, Math.round(rawZooms))),
     );
+
+    const signMap = s.browse_signposts as { [key: string]: boolean } | undefined;
+    const rawSigns = mt && signMap ? signMap[mt] : undefined;
+    this.signposts.set(rawSigns == null ? true : rawSigns);
   }
 
   /** Read a ``{media_type: value}`` setting for *mt*, or ``''`` when unset. */
@@ -681,6 +704,56 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   /** Toggle region-select mode (drag-to-marquee without holding Shift). */
   toggleMarqueeMode(): void {
     this.marqueeMode = !this.marqueeMode;
+  }
+
+  /** Whether the current projection has any signpost labels to show. Gates the
+   *  signpost toggle button: with no labels the toggle would do nothing. */
+  get hasLabels(): boolean {
+    return this.labels().length > 0;
+  }
+
+  /** Toggle the region-signpost layer and persist the choice as the per-media
+   *  ``browse_signposts`` setting, so the map comes back the same way. */
+  toggleSignposts(): void {
+    const next = !this.signposts();
+    this.signposts.set(next);
+    const mt = this.mediaType();
+    if (!mt) return;
+    const existing =
+      (this.lastSettings?.browse_signposts as { [k: string]: boolean } | undefined) || {};
+    const map = { ...existing, [mt]: next };
+    if (this.lastSettings) {
+      (this.lastSettings as Record<string, unknown>)['browse_signposts'] = map;
+    }
+    this.settingsState.update({ browse_signposts: map } as SettingsUpdate).subscribe();
+  }
+
+  /**
+   * Fetch the region signposts for a freshly-ready projection, once per
+   * ``projection_id``. Metas without ``has_labels`` (no labeler has run, or an
+   * older server) clear the signs instead of fetching a guaranteed-empty list.
+   * A failure just leaves the map unsigned — the signs are optional decoration,
+   * never worth an error state.
+   */
+  private syncLabels(meta: ProjectionMeta): void {
+    if (!meta.projection_id || meta.point_count === 0) return;
+    if (meta.projection_id === this.labelsFetchedFor) return;
+    this.labelsFetchedFor = meta.projection_id;
+    this.labels.set([]);
+    if (!meta.has_labels) return;
+    this.projectionApi
+      .getLabels(this.subset)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (resp) => {
+          // Guard against a stale response landing after the projection moved on.
+          if (resp.projection_id && resp.projection_id !== this.meta()?.projection_id) return;
+          this.labels.set(resp.labels ?? []);
+        },
+        error: () => {
+          /* leave the map unsigned */
+        },
+      });
   }
 
   /**
@@ -1065,6 +1138,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.tileCache.setContentVersion(meta.content_version ?? 0);
 
     if (meta.point_count > 0) {
+      this.syncLabels(meta);
       this.enterReady();
       return;
     }
@@ -1105,6 +1179,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
             this.tileCache.setProjectionId(meta.projection_id);
             if (meta.point_count > 0) {
               this.polling = false;
+              this.syncLabels(meta);
               this.enterReady();
               return;
             }

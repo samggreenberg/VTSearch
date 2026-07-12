@@ -391,6 +391,13 @@ class DatasetContext:
         "_projection",
         "_pyramids",
         "_full_job_id",
+        # VTSBrowse region signposts (the "street sign" name layer; see
+        # docs/plans/vtsbrowse-toponymy.md).  A RegionLabelSet computed by the
+        # labeling pipeline for the *current* frozen layout, or None.  The set
+        # carries the projection_id it was fit against, and the labels route
+        # refuses to serve it over a different layout — so a stale set is
+        # inert, never wrong.  Text + 2-D anchors only, no vectors.
+        "_region_labels",
         # VTSBrowse subset projection: an ephemeral UMAP fit over just a subset
         # of this dataset's media ids (e.g. the positives of a Find run),
         # computed on demand and never persisted.  Held alongside the full
@@ -403,6 +410,8 @@ class DatasetContext:
         "_subset_ids",
         "_subset_job_id",
         "_subset_content_version",
+        # Region signposts for the subset layout (mirror of ``_region_labels``).
+        "_subset_region_labels",
         # Role-typed embedder binding (v3 "three-slot" trio; see
         # docs/plans/patch-embedder.md).  A dataset binds up to one
         # text-capable embedder, up to one patch-capable embedder, and up to
@@ -444,10 +453,12 @@ class DatasetContext:
         self._projection: Any = None  # Projection | None
         self._pyramids: dict[str, Any] = {}  # bin_shape -> Pyramid
         self._full_job_id: str | None = None  # in-flight full-dataset build job id
+        self._region_labels: Any = None  # RegionLabelSet | None (signposts, full layout)
         self._subset_projection: Any = None  # Projection | None (ephemeral subset UMAP)
         self._subset_pyramids: dict[str, Any] = {}  # bin_shape -> Pyramid (subset)
         self._subset_ids: list[int] | None = None  # sorted ids the subset layout is fit on
         self._subset_job_id: str | None = None  # in-flight subset build job id
+        self._subset_region_labels: Any = None  # RegionLabelSet | None (signposts, subset)
         # Bumped on each in-place edit of the subset layout (e.g. removing
         # false-positives from a Find browse).  The layout/``projection_id`` is
         # kept stable so the canvas preserves the viewport; this counter changes

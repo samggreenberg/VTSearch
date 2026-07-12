@@ -24,6 +24,16 @@ class ProjectionMetaSchema(Schema):
     levels = fields.List(fields.Nested(LevelMetaSchema), load_default=None)
     media_type = fields.String(load_default=None)
     method = fields.String(load_default=None)
+    has_labels = fields.Boolean(
+        load_default=None,
+        metadata={
+            "description": (
+                "Whether region signpost labels exist for this projection "
+                "(see GET /api/projection/labels). False until a labeler has "
+                "run for the current layout."
+            ),
+        },
+    )
     content_version = fields.Integer(
         load_default=0,
         metadata={
@@ -62,6 +72,42 @@ class SubsetRemoveRequestSchema(Schema):
     )
 
 
+class RegionLabelSchema(Schema):
+    """One region signpost — a named region of the projection map."""
+
+    level = fields.Float(
+        required=True,
+        metadata={
+            "description": (
+                "Pyramid zoom level the sign belongs to (0 = coarsest). May be "
+                "fractional; the canvas interpolates visibility on a continuous axis."
+            ),
+        },
+    )
+    x = fields.Float(required=True, metadata={"description": "Anchor (projection space)."})
+    y = fields.Float(required=True, metadata={"description": "Anchor (projection space)."})
+    text = fields.String(required=True)
+    score = fields.Float(
+        load_default=1.0,
+        metadata={"description": "Naming confidence; the de-clutter tiebreak."},
+    )
+    source = fields.String(
+        load_default="",
+        metadata={"description": 'Which namer produced the sign (e.g. "keyphrase", "llm").'},
+    )
+
+
+class ProjectionLabelsResponseSchema(Schema):
+    """Response for ``GET /api/projection/labels``."""
+
+    status = fields.String(
+        required=True,
+        metadata={"description": '"ready" when a projection exists (labels may be empty), else "idle".'},
+    )
+    projection_id = fields.String(load_default=None)
+    labels = fields.List(fields.Nested(RegionLabelSchema), required=True)
+
+
 class HexCellSchema(Schema):
     q = fields.Integer(required=True)
     r = fields.Integer(required=True)
@@ -89,7 +135,9 @@ __all__ = [
     "HexCellSchema",
     "LevelMetaSchema",
     "ProjectionBuildResponseSchema",
+    "ProjectionLabelsResponseSchema",
     "ProjectionMetaSchema",
+    "RegionLabelSchema",
     "SubsetRemoveRequestSchema",
     "TileResponseSchema",
 ]

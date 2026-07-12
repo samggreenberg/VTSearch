@@ -193,19 +193,20 @@ toponymy_version}`).
   Browse load.
 - **Subset projections** (Find→Browse): labels in-memory only, never persisted.
 
-### G4 — API
-In `vtsearch/routes/projection.py`: meta gains `available_labelers`, `labeler`,
-`has_labels`; new `GET /api/projection/labels?shape=&subset=` returns the whole
-`RegionLabel` list (tiny — one per topic node). Schema in
-`vtsearch/schemas/projection.py`.
+### G4 — Labeler-selection meta
+Once namer selection (G1) exists, projection meta gains `available_labelers`
+and `labeler`.
 
-### G5 — Frontend signs
-In `browse-canvas.component.ts`: fetch labels once; render those whose `level`
-matches the current LOD through the existing projection→screen affine; greedy
-collision de-clutter; fade across zoom (coarse names dissolve into finer ones —
-correct now, since a child topic is a refinement of its parent). Subtle
-semi-transparent sign pill, theme-aware, desktop-only; show/hide toolbar
-toggle. Add `RegionLabelPayload` to `models/projection.models.ts`.
+> **Background (what G2 plugs into).** The serving + rendering layers already
+> exist, so G2's output has a ready-made sink: build a
+> `RegionLabelSet(projection_id, labels)` (`vtscore/projection/labels.py`) and
+> assign it to `ctx._region_labels` (or `ctx._subset_region_labels`) at the end
+> of the build job. `GET /api/projection/labels?subset=` serves it — only over
+> a matching `projection_id` — meta reports `has_labels`, and the canvas
+> (`sign-layout.ts` + the `browse_signposts` toolbar toggle) letters the signs
+> with zoom-band sizing and de-cluttering. Each `RegionLabel.level` is a
+> (possibly fractional) **pyramid zoom level** — 0 = coarsest layer — so G2's
+> topic-layer→level mapping should target that scale.
 
 ---
 
@@ -260,8 +261,10 @@ toggle. Add `RegionLabelPayload` to `models/projection.models.ts`.
 ## Phasing
 
 - **Phase 1 (no LLM): Toponymy + `KeyphraseNamer` + CLAP `object_to_text` +
-  G1–G5.** A full contrastive, hierarchical, library-backed sign layer with
+  G1–G4.** A full contrastive, hierarchical, library-backed sign layer with
   zero external infra — names are the top contrastive keyphrase per topic.
+  (The serving API and the canvas sign layer are already live — see the G4
+  background note — so Phase 1's frontend work is done.)
 - **Phase 2: real LLM namers + the setting switch + config.** Swap
   `KeyphraseNamer` for `OpenAINamer(base_url=...)` / `OllamaNamer` / local
   model, selected by `browse_labeler`/`browse_llm_*`. Everything else
