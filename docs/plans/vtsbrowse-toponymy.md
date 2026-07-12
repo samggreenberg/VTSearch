@@ -217,6 +217,25 @@ and `labeler`.
 > CLAP embeddings, toponymy 0.5.2, no-LLM + Qwen2.5-7B namers) — see
 > **`docs/reports/2026-07-12-toponymy-audio-signposts.html`** and the reusable
 > framework at `scripts/experiments/toponymy_audio/`.
+>
+> **Image evidence (2026-07-12):** the image half of Phase 3 was exercised the
+> same way (Caltech-101 / Stanford Dogs / Enrico / RVL-CDIP / mixed, 8,874
+> images, real SigLIP embeddings, 75 fits incl. Find→Browse subset re-fits) —
+> see **`docs/reports/2026-07-12-toponymy-image-signposts.html`** and
+> `scripts/experiments/toponymy_image/`. Headline resolutions: image
+> `object_to_text` should be an **instructed ~3B VLM captioner** (cached at
+> ingest), *not* a fixed tag vocabulary — zero-shot SigLIP tags remain only a
+> no-new-models fallback (they collapse on fine-grained subsets: 0–14%
+> breed-sign hit on a 10-breed Find result, vs 56–78% for the captioner /
+> in-vocab tags; and 93–94% of their emitted vocabulary on documents and
+> screenshots is photo-term distractors). Subset re-fits are interactive
+> (~16 s for 150 images + ~12 naming calls). Duplicate signs were ~0–3% on
+> image maps, so KeyphraseNamer's audio dedup weakness doesn't carry over.
+> The LLM namer needs a "preserve exact rare terms" instruction (it rewrote
+> exact breed keyphrases into generic names, 76%→50% hit). Caption-text-space
+> browsing does NOT reproduce the audio transcript rescue (flat ARI on
+> document types) — taxonomy-grade document structure would need a
+> layout-aware embedder instead.
 
 1. **Adopt `toponymy` at all** — **RESOLVED: adopt, installed with
    `--no-deps` + explicitly declared real dependencies.** The pipeline works
@@ -308,7 +327,14 @@ and `labeler`.
   model, selected by `browse_labeler`/`browse_llm_*`. Everything else
   (clustering, keyphrases, persistence, API, canvas) is unchanged.
 - **Phase 3 (follow-ups):** audio-captioning `object_to_text`; image/text
-  datasets (the same hooks generalize); search-by-sign; user-editable signs.
+  datasets; search-by-sign; user-editable signs. For images the
+  `object_to_text` question is now **resolved by experiment** (see the image
+  evidence note above): default = instructed ~3B VLM captioner
+  (Qwen2.5-VL-3B class; prompt states type + subject + key visible text),
+  computed once at ingest and cached like thumbnails; fallback = SigLIP
+  zero-shot tags vs OpenImages-600 for photo corpora / no-VLM deployments;
+  never a curated per-domain label list. Subset (Find→Browse) fits recompute
+  from cached texts (~16 s at n=150).
 
 ## Testing notes
 
@@ -350,6 +376,34 @@ lazy ground-truth fallback (a set already pinned to the layout is never
 overwritten).
 
 ## Open follow-ups
+
+<!-- item-sep -->
+
+- **LLM namer "preserve exact terms" instruction** — image study: the 7B
+  namer rewrote exact breed keyphrases into generic names (hit 76%→50% on
+  Stanford Dogs) and caption-derived names drifted to the appearance axis
+  ("Fluffy White Dogs"); add prompt guidance to keep rare exact terms
+  (breeds, brands, form titles) and re-measure.
+
+<!-- item-sep -->
+
+- **Captioner default validation on an uncurated image dump** — the image
+  study's datasets are curated/single-domain (mixed is synthetic); run the
+  Qwen-3B captioner default + prompt-sensitivity check on a real-world image
+  dump before shipping it as the image `object_to_text` default.
+
+<!-- item-sep -->
+
+- **Layout-aware document embedder** — caption-text-space clustering did NOT
+  recover document-type structure (ARI flat at 0.38 on RVL-CDIP); if
+  taxonomy-grade doc browsing becomes a requirement, evaluate a
+  Donut/LayoutLM-class embedder as a selectable image embedder.
+
+<!-- item-sep -->
+
+- **Image demo dataset fixes** — Stanford Dogs flat-mirror (issue #2290),
+  RVL-CDIP single-class mirror (#2291), Enrico URL/layout rot (#2292);
+  working replacements prototyped in `scripts/experiments/toponymy_image/`.
 
 <!-- item-sep -->
 
