@@ -125,4 +125,28 @@ describe('ProgressBarComponent', () => {
       expect(fill.style.background).toContain('color-mix');
     });
   });
+
+  describe('fill override', () => {
+    it('resolvedFill falls back to the gradient when no override is set', () => {
+      component.value = 50;
+      component.max = 100;
+      expect(component.resolvedFill).toBe(component.fillColor);
+    });
+
+    it('resolvedFill uses the override when set, ignoring the gradient', () => {
+      component.value = 50;
+      component.max = 100;
+      component.fill = 'var(--accent)';
+      expect(component.resolvedFill).toBe('var(--accent)');
+    });
+
+    it('paints the override color as the background style', async () => {
+      fixture.componentRef.setInput('value', 50);
+      fixture.componentRef.setInput('max', 100);
+      fixture.componentRef.setInput('fill', 'var(--accent)');
+      await settleZoneless(fixture);
+      const fill = fixture.nativeElement.querySelector('.progress-fill') as HTMLElement;
+      expect(fill.style.background).toBe('var(--accent)');
+    });
+  });
 });

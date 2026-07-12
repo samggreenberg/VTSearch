@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AchievementBadgeComponent } from '../achievement-badge/achievement-badge.component';
+import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { AchievementsService } from '../../services/achievements.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import type { AchievementEntry } from '../../generated/api-client/models/achievement-entry';
@@ -29,7 +30,7 @@ interface AchievementRow extends AchievementEntry {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-achievements-tab',
   standalone: true,
-  imports: [FormsModule, AchievementBadgeComponent],
+  imports: [FormsModule, AchievementBadgeComponent, ProgressBarComponent],
   templateUrl: './achievements-tab.component.html',
   styleUrl: './achievements-tab.component.scss',
 })

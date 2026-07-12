@@ -96,19 +96,9 @@
   gap: var(--space-md);
 }
 
-.achievement-progress-track {
+.achievement-progress-bar {
   flex: 1;
-  height: 6px;
-  background: var(--bg-hover);
-  border-radius: var(--radius-pill);
-  overflow: hidden;
-}
-
-.achievement-progress-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: inherit;
-  transition: width var(--transition-slow) ease;
+  min-width: 0;
 }
 
 .achievement-progress-label {
