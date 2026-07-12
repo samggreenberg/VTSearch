@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Any, cast
 
 from vtscore.config import DATA_DIR
+from vtscore.media._toponymy_demo import SOURCE_ID as _TOPONYMY_SOURCE_ID
+from vtscore.media._toponymy_demo import TAXONOMY as _TOPONYMY_TAXONOMY
 from vtscore.media.base import DemoDataset, demo_slice
 from vtscore.media.image._demo_categories import (
     DEMO_CATEGORIES_CALTECH101,
@@ -84,6 +86,18 @@ def build_demo_datasets() -> list[DemoDataset]:
     rico_folder = DATA_DIR / "rico_screen2words" / "screenshots"
     rvl_folder = DATA_DIR / "rvl_cdip" / "images"
     return [
+        DemoDataset(
+            id="synthetic_world_image",
+            label="Synthetic World Map (signposts demo)",
+            description=(
+                "Pre-baked 4-level toponymy (Continent → Country → State → City) "
+                "with cheating ground-truth signposts — no download, loads instantly."
+            ),
+            categories=list(_TOPONYMY_TAXONOMY.keys()),
+            source=_TOPONYMY_SOURCE_ID,
+            items_per_category=0,
+            download_size_mb=0,
+        ),
         DemoDataset(
             id="caltech101_s",
             label="Caltech-101 (S)",
@@ -1055,6 +1069,79 @@ def _ensure_image_embedder_loaded(embedder, on_progress) -> None:
             embedder._on_progress = original_cb
 
 
+def _synthetic_tile_png(item) -> bytes:
+    """Render a synthetic place as a small solid-colour PNG tile.
+
+    Hue is a continent family (four quadrants of the wheel), lightness/saturation
+    drift with the leaf-city index, so sibling cities read as shades of one
+    regional colour while continents stay clearly distinct on the map.
+    """
+    import colorsys  # noqa: PLC0415
+    import io  # noqa: PLC0415
+
+    from PIL import Image  # noqa: PLC0415
+
+    from vtscore.media._toponymy_demo import total_cities  # noqa: PLC0415
+
+    n_cities = total_cities()
+    hue = (item.continent_index / 4.0 + (item.city_index / max(1, n_cities)) * 0.08) % 1.0
+    sat = 0.45 + 0.4 * ((item.city_index % 9) / 8.0)
+    val = 0.55 + 0.35 * ((item.city_index % 5) / 4.0)
+    r, g, b = (int(round(c * 255)) for c in colorsys.hsv_to_rgb(hue, sat, val))
+    img = Image.new("RGB", (96, 96), (r, g, b))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _load_synthetic_toponymy(clips, embedder, on_progress, demo_origin) -> None:
+    """Populate *clips* with the synthetic world-map demo (no model, no download).
+
+    Image sibling of the audio synthetic demo: each leaf city is a solid colour
+    tile tagged with its ``Continent/Country/State/City`` path and a pre-baked
+    hierarchical embedding, so browsing lights up the ground-truth signpost
+    layer straight from those paths.  See :mod:`vtscore.media._toponymy_demo`.
+    """
+    import hashlib  # noqa: PLC0415
+
+    from vtscore.media._toponymy_demo import generate_items  # noqa: PLC0415
+    from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
+
+    # SigLIP's image/text space is 768-D; match it so the baked vectors slot into
+    # the primary embedder's slot and text queries don't dimension-clash.
+    items = generate_items(dim=768)
+    total = len(items)
+    on_progress("loading", f"Generating {total} synthetic tiles…", 0, total)
+
+    emb_name = embedder.name if embedder is not None else "siglip"
+    clip_id = 1
+    for i, item in enumerate(items):
+        png_bytes = _synthetic_tile_png(item)
+        thumb = make_image_thumbnail(png_bytes)
+        filename = f"{item.category}/tile{i:04d}.png"
+        clips[clip_id] = {
+            "id": clip_id,
+            "media_type": _MEDIA_TYPE_ID,
+            "embedder": emb_name,
+            "duration": 0,
+            "file_size": len(png_bytes),
+            "md5": hashlib.md5(png_bytes).hexdigest(),
+            "embeddings": {emb_name: item.embedding},
+            "media_bytes": png_bytes,
+            "media_string": None,
+            "thumbnail_bytes": thumb[0] if thumb is not None else None,
+            "filename": filename,
+            "category": item.category,
+            "width": 96,
+            "height": 96,
+            "origin": demo_origin,
+            "origin_name": filename,
+        }
+        clip_id += 1
+        if (i + 1) % 100 == 0:
+            on_progress("loading", f"Generating synthetic tiles… ({i + 1}/{total})", i + 1, total)
+
+
 def _embed_file_images(selected, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
     """Embed a list of (img_path, category) tuples into ``clips``."""
     import hashlib  # noqa: PLC0415
@@ -1382,6 +1469,11 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
 
     demo_origin: dict = {"importer": "demo", "params": {}}
     slice_args = (slice_start, slice_end, slice_frac_start, slice_frac_end)
+
+    # Synthetic signposts demo: generated in-memory, no download, no model.
+    if source == _TOPONYMY_SOURCE_ID:
+        _load_synthetic_toponymy(clips, embedder, on_progress, demo_origin)
+        return None
 
     if source in _FILE_SOURCE_DOWNLOADERS:
         _embed_file_images(

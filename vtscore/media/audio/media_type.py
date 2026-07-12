@@ -12,6 +12,8 @@ from pathlib import Path
 
 
 from vtscore.config import DATA_DIR
+from vtscore.media._toponymy_demo import SOURCE_ID as _TOPONYMY_SOURCE_ID
+from vtscore.media._toponymy_demo import TAXONOMY as _TOPONYMY_TAXONOMY
 from vtscore.media.base import (
     DemoDataset,
     MediaResponse,
@@ -23,6 +25,40 @@ from vtscore.media.base import (
 
 # Thumbnail dimensions (square)
 _THUMB_SIZE = 128
+
+# Synthetic world-map demo tone: a short mono sine whose pitch identifies the
+# leaf city, so 108 cities span an audible, visibly-distinct range of waveforms.
+_SYNTH_TONE_SECONDS = 0.6
+_SYNTH_TONE_SR = 16000
+_SYNTH_TONE_LO_HZ = 180.0
+_SYNTH_TONE_HI_HZ = 1400.0
+
+
+def _synthetic_tone_wav(city_index: int, n_cities: int) -> bytes:
+    """Render a leaf city as a short 16-bit-PCM sine-tone WAV (no files, no ffmpeg).
+
+    The pitch rises log-linearly with *city_index* across the taxonomy so each
+    city gets a recognisably different tone (and waveform thumbnail); a faint
+    second harmonic keeps the render from looking perfectly flat.
+    """
+    import struct  # noqa: PLC0415
+    import wave  # noqa: PLC0415
+
+    import numpy as np  # noqa: PLC0415
+
+    frac = city_index / max(1, n_cities - 1)
+    freq = _SYNTH_TONE_LO_HZ * (_SYNTH_TONE_HI_HZ / _SYNTH_TONE_LO_HZ) ** frac
+    t = np.arange(int(_SYNTH_TONE_SR * _SYNTH_TONE_SECONDS), dtype=np.float64) / _SYNTH_TONE_SR
+    wave_f = 0.6 * np.sin(2 * np.pi * freq * t) + 0.15 * np.sin(2 * np.pi * 2 * freq * t)
+    samples = np.clip(wave_f, -1.0, 1.0)
+    pcm = (samples * 32767).astype("<i2")
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(_SYNTH_TONE_SR)
+        wf.writeframes(struct.pack(f"<{len(pcm)}h", *pcm.tolist()))
+    return buf.getvalue()
 
 # Waveform colours (dark background, bright waveform)
 _BG_COLOR = (30, 30, 30)
@@ -728,11 +764,70 @@ class AudioMediaType(MediaType):
                 items_per_category=clotho_total,
                 download_size_mb=CLOTHO_EVAL_DOWNLOAD_SIZE_MB,
             ),
+            DemoDataset(
+                id="synthetic_world_audio",
+                label="Synthetic World Map (signposts demo)",
+                description=(
+                    "Pre-baked 4-level toponymy (Continent → Country → State → City) "
+                    "with cheating ground-truth signposts — no download, loads instantly."
+                ),
+                categories=list(_TOPONYMY_TAXONOMY.keys()),
+                source=_TOPONYMY_SOURCE_ID,
+                items_per_category=0,
+                download_size_mb=0,
+            ),
         ]
 
     # ------------------------------------------------------------------
     # Demo dataset loading
     # ------------------------------------------------------------------
+
+    def _load_synthetic_toponymy(self, clips, embedder, on_progress):
+        """Populate *clips* with the synthetic world-map demo (no model, no download).
+
+        Each item is a leaf city rendered as a short sine tone (a per-city
+        frequency), tagged with its ``Continent/Country/State/City`` path and a
+        pre-baked hierarchical embedding.  Browsing it lights up the ground-truth
+        signpost layer straight from those paths — the friction-free way to eval
+        the VTSBrowse sign display.  See :mod:`vtscore.media._toponymy_demo`.
+        """
+        import hashlib  # noqa: PLC0415
+
+        from vtscore.media._toponymy_demo import generate_items, total_cities  # noqa: PLC0415
+
+        # CLAP's audio/text space is 512-D; match it so the baked vectors slot
+        # into the primary embedder's slot and text queries don't dimension-clash.
+        items = generate_items(dim=512)
+        n_cities = total_cities()
+        total = len(items)
+        on_progress("loading", f"Generating {total} synthetic clips…", 0, total)
+
+        emb_name = embedder.name if embedder is not None else "clap"
+        clip_id = 1
+        for i, item in enumerate(items):
+            wav_bytes = _synthetic_tone_wav(item.city_index, n_cities)
+            thumb = generate_waveform_thumbnail(wav_bytes, filename=f"{item.category}.wav")
+            filename = f"{item.category}/clip{i:04d}.wav"
+            clips[clip_id] = {
+                "id": clip_id,
+                "media_type": self.type_id,
+                "embedder": emb_name,
+                "duration": _SYNTH_TONE_SECONDS,
+                "file_size": len(wav_bytes),
+                "md5": hashlib.md5(wav_bytes).hexdigest(),
+                "embeddings": {emb_name: item.embedding},
+                "media_bytes": wav_bytes,
+                "thumbnail_bytes": thumb,
+                "filename": filename,
+                "category": item.category,
+                "origin": {"importer": "demo", "params": {}},
+                "origin_name": filename,
+            }
+            clip_id += 1
+            if (i + 1) % 100 == 0:
+                on_progress("loading", f"Generating synthetic clips… ({i + 1}/{total})", i + 1, total)
+        # Bytes ride inline in the pickle — no external media dir.
+        return None
 
     def _collect_audio_files(
         self,
@@ -869,6 +964,10 @@ class AudioMediaType(MediaType):
             if not avail:
                 raise ValueError(f"No embedders registered for media type {self.type_id!r}")
             embedder = avail[0]
+
+        # Synthetic signposts demo: generated in-memory, no download, no model.
+        if source == _TOPONYMY_SOURCE_ID:
+            return self._load_synthetic_toponymy(clips, embedder, on_progress)
 
         audio_files, audio_dir = self._collect_audio_files(
             source,
