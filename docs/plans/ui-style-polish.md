@@ -53,8 +53,8 @@ without a browser.
   owed: a `.btn--toolbar` variant for the `.ivc-btn`/`.panel-btn` icon buttons
   (#2300); folding the horizontal `.tab-bar`/`.help-tabs` strips onto
   `.importer-tab-bar` (#2301); a vertical `.side-tab-bar` for the settings tabs
-  (#2302); shared picker-card (#2303), data-table (#2304), empty-state (#2305),
-  and pane-divider (#2307) primitives; unifying the 3 progress bars (#2306);
+  (#2302); shared data-table (#2304), empty-state (#2305), and pane-divider
+  (#2307) primitives; unifying the 3 progress bars (#2306);
   deduping the verbatim `dataset-card`/`detector-card` + `goods-actions` SCSS
   (#2308); and folding hand-built inputs onto `.form-input`/`.form-select`
   (#2309). **Fix pattern:** extract a sanctioned shared class into

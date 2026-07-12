@@ -114,7 +114,7 @@ describe('LabelImporterModalComponent', () => {
   it('should render importer cards', async () => {
     await flushInit();
     const el = fixture.nativeElement as HTMLElement;
-    const cards = el.querySelectorAll('.importer-card');
+    const cards = el.querySelectorAll('.picker-card');
     expect(cards.length).toBe(2);
   });
 
