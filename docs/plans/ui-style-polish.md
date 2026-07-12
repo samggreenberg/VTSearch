@@ -53,7 +53,7 @@ without a browser.
   is done. (Shipped: `.segmented-toggle`, folding the settings View/Focus
   control and the view-controls size/focus toolbar onto one primitive.) Still
   owed: a `.btn--toolbar` variant for the `.ivc-btn`/`.panel-btn` icon buttons
-  (#2300); shared data-table (#2304) and empty-state (#2305) primitives. **Fix pattern:** extract a sanctioned shared class into
+  (#2300); and the shared data-table (#2304) primitive. **Fix pattern:** extract a sanctioned shared class into
   `_components.scss` / `_picker-shared.scss`, then fold the bespoke copies onto
   it via markup + `@extend`. Ship incrementally (one primitive per PR) to keep
   diffs reviewable. **Files:** `_components.scss`, `_picker-shared.scss`, and
