@@ -108,6 +108,13 @@ export class ManagedColumns<TCol extends string = string> {
     return this.sortColumn === col;
   }
 
+  /** ARIA `aria-sort` value for a header cell: the active column reports its
+   *  direction, every other sortable column reports `none`. */
+  ariaSort(col: string): 'ascending' | 'descending' | 'none' {
+    if (this.sortColumn !== col) return 'none';
+    return this.sortAsc ? 'ascending' : 'descending';
+  }
+
   // --- Resize ---
 
   private captureColumnPercentages(tableEl: HTMLTableElement): void {
@@ -212,12 +219,10 @@ export class ManagedColumns<TCol extends string = string> {
     const prevColWidth = ths[colIndex].style.width;
     ths[colIndex].style.width = '0px';
 
-    // `tbody > *` rather than `tbody tr`: dashboard rows are Angular custom
-    // elements (`<vt-dataset-card>`, `<vt-detector-card>`) with `:host {
-    // display: table-row }`, so they participate in table layout but don't
-    // match the `tr` selector. Querying for `tr` returned zero rows, so this
-    // method fell through to the `maxPx = ths[colIndex].offsetWidth` fallback
-    // and the `+ 2` below grew the column by 2px on every click.
+    // `tbody > *` matches every row regardless of kind: dashboard card rows are
+    // real `<tr>` hosts (`tr[vt-dataset-card]` / `tr[vt-detector-card]`
+    // attribute selectors) alongside the plain `<tr>` loading/error rows, so a
+    // child-of-tbody query covers them all without depending on the row's tag.
     let maxPx = 0;
     const rows = tableEl.querySelectorAll('tbody > *');
     rows.forEach((row) => {

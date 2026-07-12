@@ -1,5 +1,5 @@
-<div class="select-mode-group">
-  <span class="sort-label" title="Choose which unlabeled item to present next for labeling.">Select:</span>
+<div class="select-mode-group" role="radiogroup" aria-labelledby="select-mode-label">
+  <span class="sort-label" id="select-mode-label" title="Choose which unlabeled item to present next for labeling.">Select:</span>
   <label class="sort-radio" [class.active]="selectMode === 'top'" title="Pick the highest-ranked unlabeled item. Best for quickly finding strong matches.">
     <input
       type="radio"
