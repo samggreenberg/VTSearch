@@ -44,7 +44,7 @@
       }
     </h3>
     @if (!labelsLoaded()) {
-      <p class="empty-state">Loading labels...</p>
+      <p class="empty-state">Loading labels…</p>
     } @else if (filteredLabels.length === 0) {
       <p class="empty-state">No labeled items to export.</p>
     } @else {
@@ -81,7 +81,7 @@
             @if (filteredLabels.length > 50) {
               <tr class="truncated-row">
                 <td [attr.colspan]="enabledColumns.length">
-                  ... {{ filteredLabels.length - 50 | number }} more rows
+                  … {{ filteredLabels.length - 50 | number }} more rows
                 </td>
               </tr>
             }

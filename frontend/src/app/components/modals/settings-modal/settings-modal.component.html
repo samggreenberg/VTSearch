@@ -1,6 +1,6 @@
 <vt-modal title="Settings" [open]="true" (closed)="close()">
   @if (loading()) {
-    <p class="empty-state">Loading settings...</p>
+    <p class="empty-state">Loading settings…</p>
   } @else {
     <div class="settings-layout">
       <nav class="side-tab-bar">
@@ -84,7 +84,7 @@
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label" for="setting-animations" title="Choose whether decorative motion plays across the whole app">Show Animations<vt-field-hint-icon hint="Controls decorative motion across the app. “Show” forces it on, “Hide” turns it off, and “OS Setting” follows your system’s reduce-motion preference."></vt-field-hint-icon></label>
+            <label class="form-label" for="setting-animations" title="Choose whether decorative motion plays across the whole app">Show animations<vt-field-hint-icon hint="Controls decorative motion across the app. “Show” forces it on, “Hide” turns it off, and “OS Setting” follows your system’s reduce-motion preference."></vt-field-hint-icon></label>
             <select id="setting-animations" class="form-select" [ngModel]="settings().show_animations" (ngModelChange)="onAnimationModeChange($event)" title="Choose whether decorative motion plays">
               <option value="show">Show</option>
               <option value="hide">Hide</option>
@@ -134,7 +134,7 @@
               <div class="view-side-section">
                 <h4 class="subhead" title="Display settings for the left panel (unlabeled media list)">Left Side</h4>
                 <div class="form-group">
-                  <label class="form-label" title="How an item is selected for preview: click to select, or hover to preview on mouseover">Focus Mode:</label>
+                  <label class="form-label" title="How an item is selected for preview: click to select, or hover to preview on mouseover">Focus mode:</label>
                   <div class="segmented-toggle segmented-toggle--stretch">
                     <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getFocusMode('focus_mode_left', activeViewTab()) === 'click'" (click)="onFocusModeChange('focus_mode_left', activeViewTab(), 'click')" title="Click an item to preview it in the center panel">
                       <vt-icon type="cursor-click" [size]="14"></vt-icon> Click
@@ -145,7 +145,7 @@
                   </div>
                 </div>
                 <div class="form-group">
-                  <label class="form-label" for="setting-grid-icon-left" title="Thumbnail size in the media grid">Grid Icon Size:</label>
+                  <label class="form-label" for="setting-grid-icon-left" title="Thumbnail size in the media grid">Grid icon size:</label>
                   <select id="setting-grid-icon-left" class="form-select" [ngModel]="getGridIconSize('grid_icon_size_left', activeViewTab())" (ngModelChange)="onGridIconSizeChange('grid_icon_size_left', activeViewTab(), $event)" title="Choose thumbnail size for the grid view" aria-label="Left grid icon size">
                     <option value="XS">XS</option>
                     <option value="S">S</option>
@@ -158,7 +158,7 @@
               <div class="view-side-section">
                 <h4 class="subhead" title="Display settings for the right panel (labeled goods and bads)">Right Side</h4>
                 <div class="form-group">
-                  <label class="form-label" title="How an item is selected for preview: click to select, or hover to preview on mouseover">Focus Mode:</label>
+                  <label class="form-label" title="How an item is selected for preview: click to select, or hover to preview on mouseover">Focus mode:</label>
                   <div class="segmented-toggle segmented-toggle--stretch">
                     <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getFocusMode('focus_mode_right', activeViewTab()) === 'click'" (click)="onFocusModeChange('focus_mode_right', activeViewTab(), 'click')" title="Click an item to preview it in the center panel">
                       <vt-icon type="cursor-click" [size]="14"></vt-icon> Click
@@ -169,7 +169,7 @@
                   </div>
                 </div>
                 <div class="form-group">
-                  <label class="form-label" for="setting-grid-icon-right" title="Thumbnail size in the media grid">Grid Icon Size:</label>
+                  <label class="form-label" for="setting-grid-icon-right" title="Thumbnail size in the media grid">Grid icon size:</label>
                   <select id="setting-grid-icon-right" class="form-select" [ngModel]="getGridIconSize('grid_icon_size_right', activeViewTab())" (ngModelChange)="onGridIconSizeChange('grid_icon_size_right', activeViewTab(), $event)" title="Choose thumbnail size for the grid view" aria-label="Right grid icon size">
                     <option value="XS">XS</option>
                     <option value="S">S</option>
@@ -261,7 +261,7 @@
             <input id="setting-autopilot-resort" type="number" class="form-input" [ngModel]="settings().autopilot_resort_interval" (ngModelChange)="onNumberChange('autopilot_resort_interval', $event)" min="1" title="Votes between automatic re-sorts" />
           </div>
           <div class="form-group">
-            <label class="form-label" for="setting-autopilot-diversity" title="Target diversity level for the exploration phase. Higher values mean autopilot will push you to sample from more distinct regions of the dataset.">Goal Diversity</label>
+            <label class="form-label" for="setting-autopilot-diversity" title="Target diversity level for the exploration phase. Higher values mean autopilot will push you to sample from more distinct regions of the dataset.">Goal diversity</label>
             <input id="setting-autopilot-diversity" type="number" class="form-input" [ngModel]="settings().autopilot_goal_diversity" (ngModelChange)="onNumberChange('autopilot_goal_diversity', $event)" min="1" title="Target diversity level for the exploration phase" />
           </div>
 

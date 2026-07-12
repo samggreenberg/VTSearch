@@ -1075,14 +1075,14 @@ export class NewDetectorModalComponent implements OnInit {
     return typeId;
   }
 
-  /** "Browse Images...", "Browse Audio...", "Browse Media..." as a fallback. */
+  /** "Browse Images…", "Browse Audio…", "Browse Media…" as a fallback. */
   get browseMediaLabel(): string {
     const mediaType = this.mediaType();
     const name = mediaType ? this.getMediaTypeLabel(mediaType) : '';
-    if (!name) return 'Browse Media...';
+    if (!name) return 'Browse Media…';
     // audio and text don't take a plural -s in this context.
     const uncountable = mediaType === 'audio' || mediaType === 'text';
-    return `Browse ${uncountable ? name : name + 's'}...`;
+    return `Browse ${uncountable ? name : name + 's'}…`;
   }
 
   /** "Drop an image file here", "Drop a video file here", etc. */

@@ -1,6 +1,6 @@
 <vt-modal title="Edit Examples" [open]="true" (closed)="close()">
   @if (loading()) {
-    <p class="empty-state">Loading examples...</p>
+    <p class="empty-state">Loading examples…</p>
   } @else {
     <div class="examples-sections">
       <div class="examples-section">
@@ -51,7 +51,7 @@
   <div class="editor-actions" modal-footer>
     <button class="btn btn--secondary" (click)="close()">Cancel</button>
     <button class="btn btn--primary" (click)="save()" [disabled]="saving()">
-      {{ saving() ? 'Saving...' : 'Save' }}
+      {{ saving() ? 'Saving…' : 'Save' }}
     </button>
   </div>
 </vt-modal>

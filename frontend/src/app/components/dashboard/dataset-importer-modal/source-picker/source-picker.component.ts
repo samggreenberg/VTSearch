@@ -114,7 +114,7 @@ export class SourcePickerComponent {
   readonly activeDemoTabChange = output<string>();
   readonly demoSelected = output<DemoDatasetEntry>();
 
-  readonly demoLoadingText = input('Loading demo datasets...');
+  readonly demoLoadingText = input('Loading demo datasets…');
   readonly demoEmptyText = input('No demo datasets available.');
   readonly demoNoTabHint = input('Select the media type to demonstrate.');
 
