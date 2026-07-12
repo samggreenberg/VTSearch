@@ -46,27 +46,22 @@ without a browser.
 <!-- item-sep -->
 
 - **Promote shared component primitives** — "one role, N implementations" is
-  the biggest structural debt. Bespoke buttons bypass the `.btn` taxonomy:
-  `.ivc-btn` (`center-panel/...:88`), `.panel-btn` (`right-panel/...:60`),
-  `.vc-btn` (`view-controls/...:17`), plus the `.toggle-group`/`.toggle-btn`
-  View/Focus segmented control (`settings-modal.component.scss:154-198`, custom
-  padding/font/`--accent-color` fill). Tab strips are re-implemented ~7 times
-  instead of extending `.importer-tab-bar`/`.importer-tab`
-  (`_picker-shared.scss:12-45`): `.tab-bar`/`.tab-btn`
-  (`new-detector-modal.component.scss:21-46`), `.help-tabs`/`.help-tab`
-  (`keyboard-help-modal.component.scss:9-32`), and the *vertical*
-  `.settings-tabs`/`.settings-tab` (`settings-modal.component.scss:13-47`,
-  which can't `@extend` a horizontal bar — it wants a new shared
-  `.side-tab-bar`). Also duplicated: 6 data tables, 6 picker-card copies (with
-  3 different title sizes), 6 empty states, 3 progress bars, 3 pane dividers,
-  verbatim `dataset-card`/`detector-card` and `goods-actions` SCSS, and
-  hand-built inputs that skip `.form-input`/`.form-select`.
-  **Fix:** extract sanctioned shared classes — a `.btn--toolbar` variant for
-  the icon buttons, a `.segmented-toggle`, a shared vertical `.side-tab-bar`,
-  and shared picker-card / table / empty-state / divider primitives — then fold
-  the bespoke copies onto them via markup + `@extend`. Ship incrementally
-  (one primitive per PR) to keep diffs reviewable. **Files:** `_components.scss`,
-  `_picker-shared.scss`, and the listed component SCSS/templates.
+  the biggest structural debt. Each remaining primitive is tracked as its own
+  GitHub issue and shipped one-per-PR; the umbrella stays here until the last
+  is done. (Shipped: `.segmented-toggle`, folding the settings View/Focus
+  control and the view-controls size/focus toolbar onto one primitive.) Still
+  owed: a `.btn--toolbar` variant for the `.ivc-btn`/`.panel-btn` icon buttons
+  (#2300); folding the horizontal `.tab-bar`/`.help-tabs` strips onto
+  `.importer-tab-bar` (#2301); a vertical `.side-tab-bar` for the settings tabs
+  (#2302); shared picker-card (#2303), data-table (#2304), empty-state (#2305),
+  and pane-divider (#2307) primitives; unifying the 3 progress bars (#2306);
+  deduping the verbatim `dataset-card`/`detector-card` + `goods-actions` SCSS
+  (#2308); and folding hand-built inputs onto `.form-input`/`.form-select`
+  (#2309). **Fix pattern:** extract a sanctioned shared class into
+  `_components.scss` / `_picker-shared.scss`, then fold the bespoke copies onto
+  it via markup + `@extend`. Ship incrementally (one primitive per PR) to keep
+  diffs reviewable. **Files:** `_components.scss`, `_picker-shared.scss`, and
+  the listed component SCSS/templates.
 
 <!-- item-sep -->
 

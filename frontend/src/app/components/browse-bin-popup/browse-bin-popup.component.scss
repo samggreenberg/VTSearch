@@ -36,7 +36,7 @@
 }
 
 // Top-left detail-canvas (large preview) size buttons. A segmented pair that
-// mirrors the top-right grid-thumbnail size buttons (``vc-btn--size``), but
+// mirrors the top-right grid-thumbnail size buttons (`.segmented-toggle--compact`), but
 // resizes the single large preview — and so the whole popup — instead of the
 // member thumbnails.
 .bin-popup-size-group {

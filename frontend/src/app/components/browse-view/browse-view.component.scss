@@ -214,7 +214,7 @@
 }
 
 // Zoom (true span) control and on-screen hex size control. Both mirror the
-// grouped pill look of the Find view's grid-size buttons (.vc-btn); the hex
+// grouped pill look of the Find view's grid-size buttons (`.segmented-toggle--compact`); the hex
 // pill reuses the image icon at 11px / 18px, the zoom pill uses +/- glyphs.
 .browse-select,
 .browse-signposts,
@@ -274,7 +274,7 @@
 
 // The active toggle (region-select) reads as pressed: filled accent surface
 // that stays lit even when not hovered, so the active mode is obvious at a
-// glance. Mirrors the Find view's ``.vc-btn--active`` treatment.
+// glance. Mirrors the Find view's `.segmented-toggle__btn--active` treatment.
 .browse-size-btn--active {
   background: var(--accent-color);
   color: var(--toggle-active-text);
