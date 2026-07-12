@@ -1,15 +1,17 @@
-// Shared importer-picker styles used by both the Add Dataset modal
-// (DatasetImporterModalComponent) and the New Model > Browse Media picker
-// (NewModelModalComponent).  Lives in the global stylesheet so the rules
-// only ship once instead of being duplicated inside each component's
-// scoped CSS bundle.
+// Shared picker + tab-strip styles. Originally scoped to the Add Dataset
+// modal (DatasetImporterModalComponent) and the New Model > Browse Media
+// picker (NewModelModalComponent); the horizontal tab primitive below
+// (`.tab-bar` / `.tab`) is now the sanctioned shared strip used across
+// modals (importer picker, New Detector, keyboard help). Lives in the
+// global stylesheet so the rules only ship once instead of being
+// duplicated inside each component's scoped CSS bundle.
 //
-// All selectors here are class-only and only used by these two modals, so
-// they can safely apply globally without bleeding into other components.
+// All selectors here are class-only, so they apply globally without
+// bleeding into other components.
 
-// --- Importer category / sub-importer tabs ---
+// --- Horizontal tab strip (shared primitive) ---
 
-.importer-tab-bar {
+.tab-bar {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
@@ -17,7 +19,7 @@
   border-bottom: 2px solid var(--border);
 }
 
-.importer-tab {
+.tab {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -44,10 +46,12 @@
   }
 }
 
-.importer-subtab-bar { @extend .importer-tab-bar; }
+// --- Importer sub-importer tabs ---
+
+.importer-subtab-bar { @extend .tab-bar; }
 
 .importer-subtab {
-  @extend .importer-tab;
+  @extend .tab;
 
   &.disabled, &:disabled {
     opacity: var(--opacity-disabled);
@@ -81,8 +85,8 @@
 
 // --- Demo media-type tabs ---
 
-.demo-tab-bar { @extend .importer-tab-bar; }
-.demo-tab { @extend .importer-tab; }
+.demo-tab-bar { @extend .tab-bar; }
+.demo-tab { @extend .tab; }
 
 // --- Demo table ---
 

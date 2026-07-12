@@ -247,7 +247,7 @@ describe('DatasetImporterModalComponent', () => {
     flushImporters();
     await settleZoneless(fixture);
     const el = fixture.nativeElement as HTMLElement;
-    const tabLabels = Array.from(el.querySelectorAll('.importer-tab')).map(
+    const tabLabels = Array.from(el.querySelectorAll('.tab-bar .tab')).map(
       (b) => (b.textContent || '').trim(),
     );
     expect(tabLabels.some((l) => l.includes('Services'))).toBe(true);

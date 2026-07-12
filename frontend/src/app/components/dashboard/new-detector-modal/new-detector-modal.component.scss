@@ -22,31 +22,11 @@
   }
 }
 
+// Top-level Blank/Trained strip uses the shared `.tab-bar` / `.tab`
+// primitive (`_picker-shared.scss`). It sits as a sibling above the form,
+// so add the bottom spacing the shared primitive intentionally omits.
 .tab-bar {
-  display: flex;
-  gap: var(--space-xs);
-  border-bottom: 1px solid var(--border);
   margin-bottom: var(--space-lg);
-}
-
-.tab-btn {
-  background: none;
-  border: none;
-  padding: var(--space-md) var(--space-xl);
-  font-size: var(--font-lg);
-  font-weight: var(--weight-medium);
-  color: var(--text-muted);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: color var(--transition-base), border-color var(--transition-base);
-
-  &:hover { color: var(--text-primary); }
-
-  &.active {
-    color: var(--text-primary);
-    border-bottom-color: var(--accent);
-  }
 }
 
 .importer-form-header {
@@ -92,7 +72,7 @@
 .example-tab-bar {
   margin-bottom: var(--space-sm);
 
-  .tab-btn {
+  .tab {
     padding: var(--space-sm) var(--space-lg);
     font-size: var(--font-md);
   }
