@@ -49,7 +49,7 @@
       <p class="empty-state">No labeled items to export.</p>
     } @else {
       <div class="table-scroll">
-        <table class="export-table" [class.table-fixed]="tableFixed">
+        <table class="data-table export-table" [class.table-fixed]="tableFixed">
           <thead>
             <tr>
               @for (col of enabledColumns; track col.key) {

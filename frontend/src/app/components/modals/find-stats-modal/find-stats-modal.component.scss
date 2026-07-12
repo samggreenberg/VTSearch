@@ -1,31 +1,11 @@
-// `.error-text` and `.section-title` are genuinely shared (`_components.scss`).
-// `.loading-text`, `.stats-table`, `.stat-label`, `.stat-value` are NOT global -
-// each stats modal (dataset/detector/find) keeps its own view-encapsulated copy;
-// this file's copy also carries the `.stats-table th` rule since this is the
-// only one of the three whose markup uses `<thead><th>`.
+// `.error-text` and `.section-title` are genuinely shared (`_components.scss`);
+// `.stats-table` is the shared `.data-table` primitive (`_data-table.scss`).
+// `.loading-text`, `.stat-label`, `.stat-value` stay view-encapsulated per
+// stats modal. The confusion-matrix deltas below are unique to this modal.
 
 .loading-text {
   color: var(--text-muted);
   font-style: italic;
-}
-
-.stats-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: var(--space-lg);
-
-  th,
-  td {
-    padding: var(--space-sm) var(--space-md);
-    text-align: left;
-    border-bottom: 1px solid var(--border-subtle);
-  }
-
-  th {
-    font-weight: var(--weight-semibold);
-    color: var(--text-secondary);
-    font-size: var(--font-md);
-  }
 }
 
 .stat-label {
