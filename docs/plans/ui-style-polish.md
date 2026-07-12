@@ -53,8 +53,7 @@ without a browser.
   is done. (Shipped: `.segmented-toggle`, folding the settings View/Focus
   control and the view-controls size/focus toolbar onto one primitive.) Still
   owed: a `.btn--toolbar` variant for the `.ivc-btn`/`.panel-btn` icon buttons
-  (#2300); folding the horizontal `.tab-bar`/`.help-tabs` strips onto
-  `.importer-tab-bar` (#2301); a vertical `.side-tab-bar` for the settings tabs
+  (#2300); a vertical `.side-tab-bar` for the settings tabs
   (#2302); shared data-table (#2304), empty-state (#2305), and pane-divider
   (#2307) primitives; unifying the 3 progress bars (#2306);
   deduping the verbatim `dataset-card`/`detector-card` + `goods-actions` SCSS
