@@ -235,7 +235,7 @@
 
 // --- Stats modals (dataset / detector / find): read-only key/value tables
 //     with a semibold secondary header. Shared here so the three modals
-//     don't each re-declare the table; their text helpers stay scoped. ---
+//     don't each redeclare the table; their text helpers stay scoped. ---
 .stats-table {
   margin-bottom: var(--space-lg);
 
