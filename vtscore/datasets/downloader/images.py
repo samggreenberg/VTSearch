@@ -480,6 +480,191 @@ def download_openlogo(on_progress: Optional[ProgressCallback] = None) -> Path:
     return extract_dir
 
 
+def download_enrico(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download the Enrico (Enhanced Rico) mobile-UI screenshot dataset.
+
+    Enrico is a curated 1,460-screenshot subset of Rico, each Android UI screen
+    labeled with one of 20 "design topic" categories (Login, Chat, Maps, …).
+    Two files are fetched into ``DATA_DIR/enrico``: ``screenshots.zip`` (~110 MB
+    of JPEGs named ``<rico_screen_id>-screenshot.jpg``) and the small
+    ``design_topics.csv`` (``screen_id,topic``) that carries the labels.  MIT
+    licensed.  This is VTSearch's born-digital *screenshot* image demo.
+
+    The zip's internal layout (flat vs. a top-level ``screenshots/`` folder) is
+    not relied upon: completion is detected by rglob-ing for any
+    ``*-screenshot.jpg`` under the extract dir, so a re-run never re-downloads
+    regardless of how the archive unpacks.
+
+    Args:
+        on_progress: Optional progress callback. Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``enrico/`` directory containing the extracted screenshots
+        and ``design_topics.csv``.
+    """
+    if on_progress is None:
+        on_progress = _core._default_progress()
+
+    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+    extract_dir = _core.DATA_DIR / "enrico"
+    topics_csv = extract_dir / "design_topics.csv"
+
+    def _has_screenshots() -> bool:
+        return extract_dir.is_dir() and next(extract_dir.rglob("*-screenshot.jpg"), None) is not None
+
+    if not _has_screenshots():
+        _core._download_and_extract(
+            url=_core.ENRICO_SCREENSHOTS_URL,
+            archive_name="screenshots.zip",
+            extract_to=extract_dir,
+            check_path=extract_dir / "screenshots",
+            download_size_mb=_core.ENRICO_DOWNLOAD_SIZE_MB,
+            dataset_name="Enrico",
+            on_progress=on_progress,
+        )
+
+    if not topics_csv.exists():
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        on_progress("downloading", "Downloading Enrico labels...", 0, 0)
+        _core.download_file_with_progress(_core.ENRICO_TOPICS_URL, topics_csv, 0, on_progress)
+
+    return extract_dir
+
+
+def _rico_norm(s: Optional[str]) -> str:
+    """Fold a Play-Store category string to a case/punctuation-insensitive key."""
+    import re  # noqa: PLC0415
+
+    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
+
+def download_rico_screen2words(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download RICO-Screen2Words and lay it out as a folder-per-category demo.
+
+    The dataset ships on the Hub as parquet shards whose ``image`` column holds
+    the screenshot bytes and whose ``category`` column holds the app's Google
+    Play genre.  This pulls the train split (~1.7 GB), decodes each screenshot in
+    a curated set of Play categories to ``<dir>/screenshots/<category>/<screenId>.jpg``
+    (category folder names normalised to ``RICO_SCREEN2WORDS_CATEGORIES``), then
+    deletes the parquet shards to reclaim disk.  The result is an ordinary
+    folder-per-class image tree, so the rest of the demo pipeline reuses the
+    Caltech/Food-101 path unchanged.
+
+    Returns:
+        Path to the ``screenshots/`` directory (the folder-per-category root).
+    """
+    if on_progress is None:
+        on_progress = _core._default_progress()
+
+    from vtscore.datasets.downloader._hf_parquet import (  # noqa: PLC0415
+        download_parquet_shards,
+        extract_images_to_folders,
+    )
+    from vtscore.media.image._demo_categories import RICO_SCREEN2WORDS_CATEGORIES  # noqa: PLC0415
+
+    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+    base = _core.DATA_DIR / "rico_screen2words"
+    screenshots = base / "screenshots"
+
+    if screenshots.is_dir() and next(screenshots.rglob("*.jpg"), None) is not None:
+        return screenshots
+
+    display_by_norm = {_rico_norm(c): c for c in RICO_SCREEN2WORDS_CATEGORIES}
+
+    def category_of(row: dict) -> Optional[str]:
+        return display_by_norm.get(_rico_norm(row.get("category")))
+
+    def id_of(row: dict, idx: int) -> str:
+        sid = row.get("screenId")
+        return str(sid) if sid is not None else f"row{idx}"
+
+    shards_dir = base / "parquet"
+    shard_paths = download_parquet_shards(
+        _core.RICO_SCREEN2WORDS_REPO_ID,
+        _core.RICO_SCREEN2WORDS_SHARDS,
+        shards_dir,
+        "RICO-Screen2Words",
+        on_progress,
+    )
+    extract_images_to_folders(
+        shard_paths,
+        image_col="image",
+        out_dir=screenshots,
+        category_of=category_of,
+        id_of=id_of,
+        ext="jpg",
+        dataset_name="RICO-Screen2Words",
+        on_progress=on_progress,
+        columns=["image", "category", "screenId"],
+    )
+    shutil.rmtree(shards_dir, ignore_errors=True)
+    return screenshots
+
+
+def download_rvl_cdip(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download a demo-sized RVL-CDIP mirror as a folder-per-class document tree.
+
+    Pulls the ~4,800-image (300-per-class) parquet mirror, decodes each
+    document image into ``<dir>/images/<class>/<idx>.png`` (the integer ``label``
+    column indexes ``RVL_CDIP_CATEGORIES``), then deletes the parquet.  The
+    result is an ordinary folder-per-class tree reusing the Caltech/Food-101
+    collect path.  Scanned grayscale document images — the "document screenshot"
+    corner of digitally-native imagery.
+
+    Returns:
+        Path to the ``images/`` directory (the folder-per-class root).
+    """
+    if on_progress is None:
+        on_progress = _core._default_progress()
+
+    from vtscore.datasets.downloader._hf_parquet import (  # noqa: PLC0415
+        download_parquet_shards,
+        extract_images_to_folders,
+        list_parquet_shards,
+    )
+    from vtscore.media.image._demo_categories import RVL_CDIP_CATEGORIES  # noqa: PLC0415
+
+    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+    base = _core.DATA_DIR / "rvl_cdip"
+    images_dir = base / "images"
+
+    if images_dir.is_dir() and next(images_dir.rglob("*.png"), None) is not None:
+        return images_dir
+
+    def category_of(row: dict) -> Optional[str]:
+        label = row.get("label")
+        if isinstance(label, int) and 0 <= label < len(RVL_CDIP_CATEGORIES):
+            return RVL_CDIP_CATEGORIES[label]
+        return None
+
+    shard_names = list_parquet_shards(_core.RVL_CDIP_REPO_ID, "data/train")
+    if not shard_names:
+        raise RuntimeError(f"No train parquet shards found in {_core.RVL_CDIP_REPO_ID}")
+
+    shards_dir = base / "parquet"
+    shard_paths = download_parquet_shards(
+        _core.RVL_CDIP_REPO_ID,
+        shard_names,
+        shards_dir,
+        "RVL-CDIP",
+        on_progress,
+    )
+    extract_images_to_folders(
+        shard_paths,
+        image_col="image",
+        out_dir=images_dir,
+        category_of=category_of,
+        id_of=lambda row, idx: str(idx),
+        ext="png",
+        dataset_name="RVL-CDIP",
+        on_progress=on_progress,
+        columns=["image", "label"],
+    )
+    shutil.rmtree(shards_dir, ignore_errors=True)
+    return images_dir
+
+
 def download_places365(on_progress: Optional[ProgressCallback] = None) -> Path:
     """Download and extract the Places365 validation set.
 

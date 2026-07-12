@@ -34,6 +34,11 @@ dependencies = [
     # preflight (also a transformers dependency).
     "huggingface_hub",
     "pandas",
+    # Read HuggingFace-hosted parquet demo datasets (RICO-Screen2Words, RVL-CDIP)
+    # whose screenshots/document-images are stored as an Image-feature column
+    # inside parquet shards. Used by vtscore.datasets.downloader._hf_parquet to
+    # stream rows and decode the embedded image bytes to loose files on disk.
+    "pyarrow",
     "pyyaml",
     "matplotlib",
     "scipy",

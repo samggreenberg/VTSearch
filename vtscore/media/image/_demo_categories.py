@@ -985,3 +985,91 @@ VISUAL_GENOME_CATEGORIES = [
     "tower",
     "bear",
 ]
+
+
+# Enrico (Enhanced Rico): 20 mobile-UI "design topics" — the screen-function
+# taxonomy from Leiva et al., "Enrico: A Dataset for Topic Modeling of Mobile UI
+# Designs" (MobileHCI 2020).  Each Rico Android screenshot is labeled with
+# exactly one of these.  Stored here in display (Title-case) form; the raw
+# ``design_topics.csv`` uses the lowercase single-token spelling (e.g.
+# ``mediaplayer``), which ``_collect_enrico_files`` folds to these via a
+# case-insensitive lookup.  ``Bare`` (near-empty screens) and ``Other``
+# (catch-all) are kept for completeness but are deliberately not given eval
+# queries — they describe no visual subject a user would search for.
+# RVL-CDIP: 16 balanced document-image *types* (letter, form, email, invoice,
+# resume, memo, …).  Scanned grayscale document images, not born-digital
+# screenshots — the "document screenshot" corner of digitally-native imagery,
+# and a clean 16-way label set for retrieval eval.  ORDER MATTERS: these are the
+# ClassLabel ``names`` of the demo-sized parquet mirror we pull
+# (``umair894/rvl_cdip_300_examples_per_class``), so the integer ``label``
+# column indexes directly into this list.  Do not reorder without re-checking
+# the mirror's ClassLabel ordering.
+RVL_CDIP_CATEGORIES = [
+    "advertisement",
+    "budget",
+    "email",
+    "file folder",
+    "form",
+    "handwritten",
+    "invoice",
+    "letter",
+    "memo",
+    "news article",
+    "presentation",
+    "questionnaire",
+    "resume",
+    "scientific publication",
+    "scientific report",
+    "specification",
+]
+
+
+# RICO-Screen2Words: Android app-store *category* (app genre) of the app each
+# mobile-UI screenshot came from — a Google Play taxonomy.  Unlike Enrico's
+# screen-function labels, this asks "what kind of app is this?", a harder,
+# semantic signal for a screenshot embedder.  A curated subset of common,
+# visually-distinguishable Play categories; ``download_rico_screen2words`` folds
+# the raw parquet ``category`` strings to these via case/punctuation-insensitive
+# matching, so minor spelling drift in the source data still lands here.
+RICO_SCREEN2WORDS_CATEGORIES = [
+    "Books & Reference",
+    "Business",
+    "Communication",
+    "Finance",
+    "Food & Drink",
+    "Health & Fitness",
+    "Maps & Navigation",
+    "Music & Audio",
+    "News & Magazines",
+    "Photography",
+    "Productivity",
+    "Shopping",
+    "Social",
+    "Sports",
+    "Travel & Local",
+    "Weather",
+]
+
+
+ENRICO_CATEGORIES = [
+    "Bare",
+    "Camera",
+    "Chat",
+    "Dialer",
+    "Editor",
+    "Form",
+    "Gallery",
+    "List",
+    "Login",
+    "Maps",
+    "MediaPlayer",
+    "Menu",
+    "Modal",
+    "News",
+    "Other",
+    "Profile",
+    "Search",
+    "Settings",
+    "Terms",
+    "Tutorial",
+]

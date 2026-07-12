@@ -147,6 +147,37 @@ OPENLOGO_DOWNLOAD_WORKERS = 16
 # object annotations (per-object name + pixel bounding box) ship as a separate
 # JSON zip.  Unlike the other image demos this is multi-label ground truth — see
 # docs/plans/visual-genome-dataset.md.
+# Enrico (Enhanced Rico): 1,460 Android mobile-UI screenshots (a curated,
+# de-duplicated Rico subset), each labeled with one of 20 "design topic"
+# categories (screen function: Login, Chat, Maps, Settings, Gallery, …).  MIT
+# licensed.  Ships as a small ``screenshots.zip`` (JPEGs named
+# ``<rico_screen_id>-screenshot.jpg``) plus a separate ``design_topics.csv``
+# (``screen_id,topic``) that carries the labels — the two are fetched together
+# by ``download_enrico``.  This is VTSearch's born-digital *screenshot* demo:
+# unlike the natural-photo image demos, the content is rendered UI, so it
+# stresses the embedder on digitally-native imagery.
+ENRICO_SCREENSHOTS_URL = "https://userinterfaces.aalto.fi/enrico/resources/screenshots.zip"
+ENRICO_TOPICS_URL = "https://userinterfaces.aalto.fi/enrico/resources/design_topics.csv"
+
+# RICO-Screen2Words: 22,417 Android mobile-UI screenshots (built on Rico), each
+# carrying its app's Google Play *category* plus human caption summaries.
+# CC-BY-4.0.  Distributed on the Hub as parquet shards whose ``image`` column is
+# an Image feature (embedded JPEG bytes); ``download_rico_screen2words`` pulls
+# the train split (8 shards ≈ 1.7 GB), decodes each screenshot to a
+# ``<category>/<screenId>.jpg`` file, then deletes the parquet.  Born-digital
+# mobile-UI screenshots — a second, harder-labelled screenshot demo alongside
+# Enrico (app genre vs. screen function).
+RICO_SCREEN2WORDS_REPO_ID = "bevaya/RICO-Screen2Words"
+RICO_SCREEN2WORDS_SHARDS = [f"data/train-{i:05d}-of-00008.parquet" for i in range(8)]
+
+# RVL-CDIP: 16-class document-image classification.  The canonical
+# ``aharley/rvl_cdip`` is a 38 GB tarball (impractical as a demo); instead we
+# pull a demo-sized 300-images-per-class parquet mirror (~4,800 images, ~32 MB)
+# whose ``image``/``label`` columns decode straight into a folder-per-class
+# tree.  The train shard filename carries a content hash, so it is resolved at
+# download time rather than hardcoded.
+RVL_CDIP_REPO_ID = "umair894/rvl_cdip_300_examples_per_class"
+
 VISUAL_GENOME_IMAGES_URL = "https://cs.stanford.edu/people/rak248/VG_100K/images.zip"
 VISUAL_GENOME_IMAGES2_URL = "https://cs.stanford.edu/people/rak248/VG_100K_2/images2.zip"
 VISUAL_GENOME_OBJECTS_URL = "https://homes.cs.washington.edu/~ranjay/visualgenome/data/dataset/objects.json.zip"
@@ -187,6 +218,9 @@ STANFORD_DOGS_DOWNLOAD_SIZE_MB = 750
 PLACES365_DOWNLOAD_SIZE_MB = 501
 UCSF_IDL_DOWNLOAD_SIZE_MB = 50
 ROXFORD_IMAGES_DOWNLOAD_SIZE_MB = 1850
+ENRICO_DOWNLOAD_SIZE_MB = 110
+RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB = 1720
+RVL_CDIP_DOWNLOAD_SIZE_MB = 32
 OPENLOGO_DOWNLOAD_SIZE_MB = 4640
 VISUAL_GENOME_IMAGES_DOWNLOAD_SIZE_MB = 9700
 VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB = 5300

@@ -20,12 +20,15 @@ from vtscore.media.base import DemoDataset, demo_slice
 from vtscore.media.image._demo_categories import (
     DEMO_CATEGORIES_CALTECH101,
     DEMO_CATEGORIES_CALTECH256,
+    ENRICO_CATEGORIES,
     EUROSAT_CATEGORIES,
     FOOD101_CATEGORIES,
     OPENLOGO_CATEGORIES,
     OXFORD_FLOWERS_CATEGORIES,
     PLACES365_CATEGORIES,
+    RICO_SCREEN2WORDS_CATEGORIES,
     ROXFORD_CATEGORIES,
+    RVL_CDIP_CATEGORIES,
     STANFORD_DOGS_CATEGORIES,
     UCSF_DOCUMENTS_CATEGORIES,
     VISUAL_GENOME_CATEGORIES,
@@ -40,12 +43,15 @@ def build_demo_datasets() -> list[DemoDataset]:
     from vtscore.datasets.downloader import (  # noqa: PLC0415
         CALTECH101_DOWNLOAD_SIZE_MB,
         CALTECH256_DOWNLOAD_SIZE_MB,
+        ENRICO_DOWNLOAD_SIZE_MB,
         EUROSAT_DOWNLOAD_SIZE_MB,
         FOOD101_DOWNLOAD_SIZE_MB,
         OPENLOGO_DOWNLOAD_SIZE_MB,
         OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
         PLACES365_DOWNLOAD_SIZE_MB,
+        RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
         ROXFORD_IMAGES_DOWNLOAD_SIZE_MB,
+        RVL_CDIP_DOWNLOAD_SIZE_MB,
         STANFORD_DOGS_DOWNLOAD_SIZE_MB,
         UCSF_IDL_DOWNLOAD_SIZE_MB,
         VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB,
@@ -75,6 +81,8 @@ def build_demo_datasets() -> list[DemoDataset]:
     dogs_folder = DATA_DIR / "stanford_dogs" / "Images"
     places_desc = "Indoor & outdoor scenes"
     places_folder = DATA_DIR / "places365" / "val_256"
+    rico_folder = DATA_DIR / "rico_screen2words" / "screenshots"
+    rvl_folder = DATA_DIR / "rvl_cdip" / "images"
     return [
         DemoDataset(
             id="caltech101_s",
@@ -376,6 +384,161 @@ def build_demo_datasets() -> list[DemoDataset]:
             items_per_category=100,
             download_size_mb=PLACES365_DOWNLOAD_SIZE_MB,
         ),
+        # Enrico: born-digital mobile-UI *screenshots* (not natural photos),
+        # labeled by screen function.  ~1,460 images over 20 topics (~73/topic,
+        # unevenly), so the S/M/L slices are small; A is the whole set.
+        DemoDataset(
+            id="enrico_s",
+            label="Enrico UI (S)",
+            description="Mobile app UI screenshots by screen type",
+            categories=ENRICO_CATEGORIES,
+            source="enrico",
+            required_folder=DATA_DIR / "enrico",
+            slice_frac_start=0.0,
+            slice_frac_end=1 / 7,
+            items_per_category=73,
+            download_size_mb=ENRICO_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="enrico_m",
+            label="Enrico UI (M)",
+            description="Mobile app UI screenshots by screen type",
+            categories=ENRICO_CATEGORIES,
+            source="enrico",
+            required_folder=DATA_DIR / "enrico",
+            slice_frac_start=1 / 7,
+            slice_frac_end=3 / 7,
+            items_per_category=73,
+            download_size_mb=ENRICO_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="enrico_l",
+            label="Enrico UI (L)",
+            description="Mobile app UI screenshots by screen type",
+            categories=ENRICO_CATEGORIES,
+            source="enrico",
+            required_folder=DATA_DIR / "enrico",
+            slice_frac_start=3 / 7,
+            slice_frac_end=None,
+            items_per_category=73,
+            download_size_mb=ENRICO_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="enrico_a",
+            label="Enrico UI (A)",
+            description="All Enrico mobile UI screenshots across 20 screen-function topics",
+            categories=ENRICO_CATEGORIES,
+            source="enrico",
+            required_folder=DATA_DIR / "enrico",
+            slice_frac_start=0.0,
+            slice_frac_end=None,
+            items_per_category=73,
+            download_size_mb=ENRICO_DOWNLOAD_SIZE_MB,
+        ),
+        # RICO-Screen2Words: mobile-UI screenshots labeled by *app genre* (Google
+        # Play category) rather than screen function.  All variants pull the same
+        # ~1.7 GB train split and extract the 16 curated categories; the slices
+        # differ only in how much of each category they take.
+        DemoDataset(
+            id="rico_screen2words_s",
+            label="RICO App UIs (S)",
+            description="Mobile app UI screenshots by app category",
+            categories=RICO_SCREEN2WORDS_CATEGORIES,
+            source="rico_screen2words",
+            required_folder=rico_folder,
+            slice_frac_start=0.0,
+            slice_frac_end=1 / 7,
+            items_per_category=400,
+            download_size_mb=RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="rico_screen2words_m",
+            label="RICO App UIs (M)",
+            description="Mobile app UI screenshots by app category",
+            categories=RICO_SCREEN2WORDS_CATEGORIES,
+            source="rico_screen2words",
+            required_folder=rico_folder,
+            slice_frac_start=1 / 7,
+            slice_frac_end=3 / 7,
+            items_per_category=400,
+            download_size_mb=RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="rico_screen2words_l",
+            label="RICO App UIs (L)",
+            description="Mobile app UI screenshots by app category",
+            categories=RICO_SCREEN2WORDS_CATEGORIES,
+            source="rico_screen2words",
+            required_folder=rico_folder,
+            slice_frac_start=3 / 7,
+            slice_frac_end=None,
+            items_per_category=400,
+            download_size_mb=RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="rico_screen2words_a",
+            label="RICO App UIs (A)",
+            description="Mobile app UI screenshots across 16 Google Play app categories",
+            categories=RICO_SCREEN2WORDS_CATEGORIES,
+            source="rico_screen2words",
+            required_folder=rico_folder,
+            slice_frac_start=0.0,
+            slice_frac_end=None,
+            items_per_category=400,
+            download_size_mb=RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
+        ),
+        # RVL-CDIP: scanned grayscale *document images* across 16 balanced types
+        # (letter, form, email, invoice, resume, memo, …).  A demo-sized
+        # 300-per-class mirror (~4,800 images); the "document screenshot" corner
+        # of digitally-native imagery with a clean 16-way label set.
+        DemoDataset(
+            id="rvl_cdip_s",
+            label="RVL-CDIP Docs (S)",
+            description="Scanned document images by type",
+            categories=RVL_CDIP_CATEGORIES,
+            source="rvl_cdip",
+            required_folder=rvl_folder,
+            slice_frac_start=0.0,
+            slice_frac_end=1 / 7,
+            items_per_category=300,
+            download_size_mb=RVL_CDIP_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="rvl_cdip_m",
+            label="RVL-CDIP Docs (M)",
+            description="Scanned document images by type",
+            categories=RVL_CDIP_CATEGORIES,
+            source="rvl_cdip",
+            required_folder=rvl_folder,
+            slice_frac_start=1 / 7,
+            slice_frac_end=3 / 7,
+            items_per_category=300,
+            download_size_mb=RVL_CDIP_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="rvl_cdip_l",
+            label="RVL-CDIP Docs (L)",
+            description="Scanned document images by type",
+            categories=RVL_CDIP_CATEGORIES,
+            source="rvl_cdip",
+            required_folder=rvl_folder,
+            slice_frac_start=3 / 7,
+            slice_frac_end=None,
+            items_per_category=300,
+            download_size_mb=RVL_CDIP_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="rvl_cdip_a",
+            label="RVL-CDIP Docs (A)",
+            description="Scanned document images across 16 RVL-CDIP document types",
+            categories=RVL_CDIP_CATEGORIES,
+            source="rvl_cdip",
+            required_folder=rvl_folder,
+            slice_frac_start=0.0,
+            slice_frac_end=None,
+            items_per_category=300,
+            download_size_mb=RVL_CDIP_DOWNLOAD_SIZE_MB,
+        ),
         DemoDataset(
             id="roxford5k_s",
             label="ROxford5k (S)",
@@ -499,6 +662,11 @@ _FILE_SOURCE_DOWNLOADERS: dict[str, str] = {
     "caltech256": "download_caltech256",
     "food101": "download_food101",
     "eurosat": "download_eurosat",
+    # RICO-Screen2Words decodes its HF parquet into a <category>/<id>.jpg tree,
+    # so it plugs straight into the folder-per-class collect path.
+    "rico_screen2words": "download_rico_screen2words",
+    # RVL-CDIP likewise decodes its parquet mirror into <class>/<idx>.png.
+    "rvl_cdip": "download_rvl_cdip",
 }
 
 
@@ -585,6 +753,40 @@ def _collect_roxford_files(categories, slice_args, on_progress) -> list:
             cat = _roxford_category_for(img_path.stem, landmark_set)
             if cat in categories:
                 by_cat.setdefault(cat, []).append((img_path, cat))
+    return _slice_by_category(by_cat, categories, *slice_args)
+
+
+def _collect_enrico_files(categories, slice_args, on_progress) -> list:
+    """Collect Enrico screenshots grouped by their 20-way design-topic label.
+
+    Screenshots are flat JPEGs named ``<rico_screen_id>-screenshot.jpg``; the
+    label lives in ``design_topics.csv`` (``screen_id,topic``), whose ``topic``
+    values are lowercase single tokens (e.g. ``mediaplayer``).  We fold each to
+    its display category (``MediaPlayer``) with a case-insensitive lookup so the
+    stored ``category`` matches ``ENRICO_CATEGORIES`` (and the eval queries).
+    """
+    import csv  # noqa: PLC0415
+
+    from vtscore.datasets.downloader import download_enrico  # noqa: PLC0415
+
+    extract_dir = download_enrico(on_progress=on_progress)
+    topics_csv = extract_dir / "design_topics.csv"
+
+    display_by_norm = {c.lower(): c for c in ENRICO_CATEGORIES}
+    id_to_cat: dict[str, str] = {}
+    if topics_csv.exists():
+        with open(topics_csv, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                sid = (row.get("screen_id") or "").strip()
+                cat = display_by_norm.get((row.get("topic") or "").strip().lower())
+                if sid and cat:
+                    id_to_cat[sid] = cat
+
+    by_cat: dict = {}
+    for img_path in sorted(extract_dir.rglob("*-screenshot.jpg")):
+        cat = id_to_cat.get(img_path.name.split("-", 1)[0])
+        if cat in categories:
+            by_cat.setdefault(cat, []).append((img_path, cat))
     return _slice_by_category(by_cat, categories, *slice_args)
 
 
@@ -1228,6 +1430,17 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
     if source == "openlogo":
         _embed_openlogo_images(
             _collect_openlogo_files(categories, slice_args, on_progress),
+            clips,
+            embedder,
+            on_progress,
+            demo_origin,
+            skip_embedding=skip_embedding,
+        )
+        return None
+
+    if source == "enrico":
+        _embed_file_images(
+            _collect_enrico_files(categories, slice_args, on_progress),
             clips,
             embedder,
             on_progress,
