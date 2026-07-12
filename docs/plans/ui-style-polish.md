@@ -65,27 +65,6 @@ without a browser.
 
 <!-- item-sep -->
 
-- **Modal polish package** — modal chrome is inconsistent across ~24 dialogs.
-  Widths are ad-hoc (720/680/480/900/34rem, no shared scale); the "Close"
-  button has no fixed identity (styled `.btn--primary` in some, secondary in
-  others — e.g. `settings-modal.component.html:472` renders a purple-fill
-  "Close" even though settings auto-save, reading as a commit action);
-  `media-crop-modal` puts its actions *inside* the scrolling body with
-  non-`.btn` classes in reversed order; `autodetect-progress` double-pads; and
-  ~9 hard-coded nested `max-height` scroll regions live inside `.modal-body`.
-  The `.new-detector-form` also pins `width: 480px`
-  (`new-detector-modal.component.scss:64`) while the modal widens to 900px when
-  the media picker mounts, leaving empty side gutters on the Blank form.
-  **Fix:** add `--modal-w-sm/md/lg` tokens and adopt them; enforce "Close is
-  never primary" (demote/relabel the settings Close to "Done"); move the
-  media-crop actions into a real `.modal-footer`; replace the nested
-  `max-height`s with `flex: 1; min-height: 0`; make `.new-detector-form` track
-  the modal width. Also document the intentional close-less dialogs
-  (`[showCloseButton]="false"` on new-detector, clipper-chooser,
-  combine-detectors, resort-prompt, dialog-host) in `docs/style-guide.md §2.4`,
-  or restore the `×` glyph. **Files:** the listed modal SCSS/templates,
-  `_variables.scss`, `docs/style-guide.md`.
-
 <!-- item-sep -->
 
 - **Add focus management to the shared `vt-modal`** — `app/components/modal/`

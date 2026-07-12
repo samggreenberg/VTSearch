@@ -3,7 +3,7 @@
   flex-direction: column;
   gap: var(--space-lg);
   min-width: 360px;
-  max-width: 720px;
+  max-width: var(--modal-w-md);
 }
 
 .help-tabs {

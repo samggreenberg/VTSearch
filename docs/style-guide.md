@@ -229,6 +229,34 @@ Spacing inside modals:
 - `.modal-footer` has `gap: var(--space-md)` between buttons.
 - The modal-content uses `--shadow-lg` and `--radius-xl`.
 
+**Width scale.** A dialog that needs a fixed width picks one of the three
+tokens instead of hand-rolling a `px` value; a dialog that sizes to its content
+sets none:
+
+| Token          | Width | Use |
+|----------------|-------|-----|
+| `--modal-w-sm` | 480px | Single-column forms: label importer, combine detectors, the blank new-detector form. |
+| `--modal-w-md` | 720px | Picker / table / settings dialogs: dataset importer, export, settings, keyboard help. |
+| `--modal-w-lg` | 900px | Wide views that need room for a table + browser side by side: the new-detector / dataset media-picker view. |
+
+Set the width on `.modal-content` (via `::ng-deep`), not on an inner wrapper,
+so inner content can `width: 100%` and fill the dialog rather than leaving side
+gutters. A raw `px`/`rem` width on a `.modal-content` is a violation.
+
+**Footer buttons.** Cancel/back on the left, the primary action on the far
+right. **"Close" is never `.btn--primary`.** A Close button dismisses the
+dialog - it commits nothing - so styling it as the primary (accent-fill) action
+misreads as "save". Dismiss buttons are `.btn--secondary`. When a dialog
+auto-saves (e.g. Settings) the dismiss verb is **"Done"**, not "Close", so it
+doesn't imply the changes were pending a commit.
+
+**Close-less dialogs.** A handful of modals set `[showCloseButton]="false"` and
+render no header `×`, on purpose: they are decision points that must be resolved
+by an explicit footer action (or a `← Back`) rather than dismissed ambiguously.
+These are the new-detector modal, the clipper-chooser, combine-detectors,
+resort-prompt, and dialog-host. Every *other* modal keeps the header `×`. Do not
+add `[showCloseButton]="false"` to a new modal without a comparable reason.
+
 #### Back vs Cancel
 
 This pattern is **mandatory** for any modal with an outer→inner view (importer picker → importer form, exporter picker → exporter form, new-detector → media picker, etc.). See CLAUDE.md for the canonical writeup. Short version:
