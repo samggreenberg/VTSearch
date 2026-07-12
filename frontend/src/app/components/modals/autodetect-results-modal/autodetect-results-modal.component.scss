@@ -17,17 +17,12 @@
   margin-bottom: var(--space-xl);
 }
 
+// Builds on the shared `.data-table` primitive (`_data-table.scss`); the knob
+// tightens the cell padding and the sticky header keeps the column labels
+// visible while the results list scrolls.
 .results-table {
-  width: 100%;
-  border-collapse: collapse;
+  --dt-cell-pad-y: var(--space-xs);
   font-size: var(--font-sm);
-
-  th,
-  td {
-    padding: var(--space-xs) var(--space-md);
-    text-align: left;
-    border-bottom: 1px solid var(--border-subtle);
-  }
 
   th {
     position: sticky;

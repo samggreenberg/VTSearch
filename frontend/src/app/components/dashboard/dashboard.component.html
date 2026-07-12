@@ -46,7 +46,7 @@
       <p class="empty-state">No datasets yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
-        <table class="dash-table" [class.table-fixed]="datasetCols.tableFixed" [class.actions-has-load]="anyDatasetUnloaded">
+        <table class="data-table data-table--grid dash-table" [class.table-fixed]="datasetCols.tableFixed" [class.actions-has-load]="anyDatasetUnloaded">
           <thead>
             <tr>
               <th scope="col" class="select-col" data-col="select" [style.width.%]="datasetCols.tableFixed ? datasetCols.colWidths['select'] : null">
@@ -211,7 +211,7 @@
       <p class="empty-state">No detectors yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
-        <table class="dash-table" [class.table-fixed]="detectorCols.tableFixed" [class.actions-has-load]="anyDetectorUnloaded">
+        <table class="data-table data-table--grid dash-table" [class.table-fixed]="detectorCols.tableFixed" [class.actions-has-load]="anyDetectorUnloaded">
           <thead>
             <tr>
               <th scope="col" class="select-col" data-col="select" [style.width.%]="detectorCols.tableFixed ? detectorCols.colWidths['select'] : null">

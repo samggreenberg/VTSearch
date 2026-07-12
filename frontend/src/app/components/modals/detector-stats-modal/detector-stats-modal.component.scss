@@ -5,18 +5,8 @@
 
 // `.error-text` comes from `_components.scss` (uses `--color-bad`).
 
-.stats-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: var(--space-lg);
-
-  th,
-  td {
-    padding: var(--space-sm) var(--space-md);
-    text-align: left;
-    border-bottom: 1px solid var(--border-subtle);
-  }
-}
+// `.stats-table` is the shared `.data-table` primitive (`_data-table.scss`);
+// this file keeps only the stat-cell text helpers.
 
 .stat-label {
   font-weight: var(--weight-medium);

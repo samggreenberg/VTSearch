@@ -8,24 +8,8 @@
 // `--color-bad`); both render the same red, so removing the local is
 // a no-op visually.
 
-.stats-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: var(--space-lg);
-
-  th,
-  td {
-    padding: var(--space-sm) var(--space-md);
-    text-align: left;
-    border-bottom: 1px solid var(--border-subtle);
-  }
-
-  th {
-    font-weight: var(--weight-semibold);
-    color: var(--text-secondary);
-    font-size: var(--font-md);
-  }
-}
+// `.stats-table` is the shared `.data-table` primitive (`_data-table.scss`);
+// this file keeps only the stat-cell text helpers.
 
 .stat-label {
   font-weight: var(--weight-medium);

@@ -65,7 +65,7 @@
 
       @if (activeDemoTab() && demoCols) {
         <div class="demo-content-area">
-          <table class="demo-table" [class.table-fixed]="demoCols.tableFixed">
+          <table class="data-table data-table--grid demo-table" [class.table-fixed]="demoCols.tableFixed">
             <thead>
               <tr>
                 @for (col of demoCols.columnOrder; track col; let first = $first) {
