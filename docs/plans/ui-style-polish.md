@@ -65,16 +65,6 @@ without a browser.
 
 <!-- item-sep -->
 
-- **Verify the New Detector Esc dismissal (V5)** (#2325) — the shared `vt-modal` now
-  has full focus management (`cdkTrapFocus` + auto-capture; initial focus, Tab
-  trap, restore-to-trigger on close). What remains is the reported "Esc doesn't
-  always dismiss the New Detector dialog" (V5): `modal.component.ts` has an Esc
-  keydown handler (topmost-modal-only, unit-tested), but confirming the repro
-  needs a live browser this cloud container lacks. Re-check once a browser is
-  available; if it reproduces, the fix likely lives in how the New Detector
-  flow's nested modals register on the open-modal stack. **Files:**
-  `modal.component.ts`.
-
 <!-- item-sep -->
 
 - **Unify the icon system** (#2326) — several inline SVGs are pasted 2–4× (eye/export/
