@@ -1,6 +1,6 @@
 """Tests for new image dataset downloads and load_demo_source integration.
 
-Covers: Oxford Flowers 102, Food-101, EuroSAT, Stanford Dogs, Places365.
+Covers: Oxford Flowers 102, Food-101, EuroSAT, Places365.
 """
 
 import tarfile
@@ -100,23 +100,6 @@ def _make_places365_filelist_tar(tmp_path: Path, labels_bytes: bytes) -> Path:
     with tarfile.open(tar_path, "w") as tf:
         tf.add(labels_src, arcname="places365_val.txt")
     labels_src.unlink()
-    return tar_path
-
-
-def _make_stanford_dogs_tar(tmp_path: Path) -> Path:
-    """Create a minimal Stanford Dogs tar.gz fixture."""
-    tar_path = tmp_path / "stanford_dogs_images.tar.gz"
-
-    tree_root = tmp_path / "tar_staging" / "Images"
-    for breed_dir_name in ("n02085620-Chihuahua", "n02099601-golden_retriever"):
-        d = tree_root / breed_dir_name
-        d.mkdir(parents=True)
-        for i in range(3):
-            (d / f"{breed_dir_name}_{i:04d}.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
-
-    with tarfile.open(tar_path, "w:gz") as tf:
-        tf.add(tree_root, arcname="Images")
-
     return tar_path
 
 
@@ -289,60 +272,6 @@ class TestDownloadEurosat:
 
 
 # ---------------------------------------------------------------------------
-# download_stanford_dogs
-# ---------------------------------------------------------------------------
-
-
-class TestDownloadStanfordDogs:
-    def test_returns_images_directory(self, tmp_path):
-        """download_stanford_dogs returns the stanford_dogs/Images/ directory."""
-        import shutil
-
-        from vtscore.datasets import downloader as dl_module
-
-        tar_path = _make_stanford_dogs_tar(tmp_path)
-
-        with (
-            patch.object(dl_module.core, "DATA_DIR", tmp_path),
-            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
-            patch.object(
-                dl_module.core,
-                "download_file_with_progress",
-                lambda url, dest, size, cb: shutil.copy(str(tar_path), str(dest)),
-            ),
-        ):
-            result = dl_module.download_stanford_dogs(on_progress=lambda *a: None)
-
-        assert result.name == "Images"
-        assert result.parent.name == "stanford_dogs"
-        assert any(d.name.startswith("n02085620") for d in result.iterdir())
-
-    def test_cached_extraction_skips_download(self, tmp_path):
-        """If the Images directory already exists, no download is triggered."""
-        from vtscore.datasets import downloader as dl_module
-
-        images_dir = tmp_path / "stanford_dogs" / "Images" / "n02085620-Chihuahua"
-        images_dir.mkdir(parents=True)
-        (images_dir / "img.jpg").write_bytes(b"\xff\xd8")
-
-        download_called = []
-
-        with (
-            patch.object(dl_module.core, "DATA_DIR", tmp_path),
-            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
-            patch.object(
-                dl_module,
-                "download_file_with_progress",
-                lambda *a, **kw: download_called.append(True),
-            ),
-        ):
-            result = dl_module.download_stanford_dogs(on_progress=lambda *a: None)
-
-        assert not download_called
-        assert result.exists()
-
-
-# ---------------------------------------------------------------------------
 # load_oxford_flowers_metadata
 # ---------------------------------------------------------------------------
 
@@ -373,7 +302,7 @@ class TestLoadOxfordFlowersMetadata:
 
 
 # ---------------------------------------------------------------------------
-# load_demo_source: image (oxford_flowers_102, food101, eurosat, stanford_dogs)
+# load_demo_source: image (oxford_flowers_102, food101, eurosat)
 # ---------------------------------------------------------------------------
 
 
@@ -554,90 +483,20 @@ class TestLoadDemoSourceEurosat:
         assert categories_seen == {"Forest", "Residential"}
 
 
-class TestLoadDemoSourceStanfordDogs:
-    """ImageMediaType.load_demo_source with source='stanford_dogs'."""
+def test_unsupported_source_still_raises():
+    """Non-existent sources still raise ValueError."""
+    from vtscore.media.image.media_type import ImageMediaType
 
-    def _make_mock_embedder(self):
-        mock_emb = MagicMock()
-        mock_emb.name = "siglip"
-        mock_emb.media_type_id = "image"
-        mock_emb._model = True
-        mock_emb.embed_media = MagicMock(return_value=np.zeros(768))
-        return mock_emb
-
-    def test_stanford_dogs_populates_clips(self, tmp_path):
-        """load_demo_source with source='stanford_dogs' fills the clips dict."""
-        from vtscore.datasets import downloader as dl_module
-        from vtscore.media.image.media_type import ImageMediaType
-
-        # Create folder structure: Images/n02085620-Chihuahua/img.jpg
-        images_dir = tmp_path / "Images"
-        breed_dir = images_dir / "n02085620-Chihuahua"
-        breed_dir.mkdir(parents=True)
-        for i in range(3):
-            (breed_dir / f"n02085620_{i:04d}.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
-
-        mt = ImageMediaType()
-        mock_emb = self._make_mock_embedder()
-        clips: dict = {}
-
-        with patch.object(dl_module, "download_stanford_dogs", return_value=images_dir):
-            mt.load_demo_source(
-                source="stanford_dogs",
-                categories=["Chihuahua"],
-                slice_start=0,
-                slice_end=10,
-                clips=clips,
-                on_progress=lambda *a: None,
-                embedder=mock_emb,
-            )
-
-        assert len(clips) == 3
-        categories_seen = {c["category"] for c in clips.values()}
-        assert categories_seen == {"Chihuahua"}
-
-    def test_stanford_dogs_slice_is_applied(self, tmp_path):
-        """slice_start/slice_end limits images per breed."""
-        from vtscore.datasets import downloader as dl_module
-        from vtscore.media.image.media_type import ImageMediaType
-
-        images_dir = tmp_path / "Images"
-        breed_dir = images_dir / "n02085620-Chihuahua"
-        breed_dir.mkdir(parents=True)
-        for i in range(10):
-            (breed_dir / f"n02085620_{i:04d}.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
-
-        mt = ImageMediaType()
-        mock_emb = self._make_mock_embedder()
-        clips: dict = {}
-
-        with patch.object(dl_module, "download_stanford_dogs", return_value=images_dir):
-            mt.load_demo_source(
-                source="stanford_dogs",
-                categories=["Chihuahua"],
-                slice_start=2,
-                slice_end=5,
-                clips=clips,
-                on_progress=lambda *a: None,
-                embedder=mock_emb,
-            )
-
-        assert len(clips) == 3
-
-    def test_unsupported_source_still_raises(self):
-        """Non-existent sources still raise ValueError."""
-        from vtscore.media.image.media_type import ImageMediaType
-
-        mt = ImageMediaType()
-        with pytest.raises(ValueError, match="Unsupported image source"):
-            mt.load_demo_source(
-                source="unknown_source",
-                categories=[],
-                slice_start=0,
-                slice_end=10,
-                clips={},
-                on_progress=lambda *a: None,
-            )
+    mt = ImageMediaType()
+    with pytest.raises(ValueError, match="Unsupported image source"):
+        mt.load_demo_source(
+            source="unknown_source",
+            categories=[],
+            slice_start=0,
+            slice_end=10,
+            clips={},
+            on_progress=lambda *a: None,
+        )
 
 
 # ---------------------------------------------------------------------------

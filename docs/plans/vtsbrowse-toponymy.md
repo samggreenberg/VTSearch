@@ -401,9 +401,9 @@ overwritten).
 
 <!-- item-sep -->
 
-- **Image demo dataset fixes** — Stanford Dogs flat-mirror (issue #2290),
-  RVL-CDIP single-class mirror (#2291), Enrico URL/layout rot (#2292);
-  working replacements prototyped in `scripts/experiments/toponymy_image/`.
+- **Image demo dataset fixes** — RVL-CDIP single-class mirror (#2291), Enrico
+  URL/layout rot (#2292); working replacements prototyped in
+  `scripts/experiments/toponymy_image/`.
 
 <!-- item-sep -->
 

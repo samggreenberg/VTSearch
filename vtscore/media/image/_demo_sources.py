@@ -31,7 +31,6 @@ from vtscore.media.image._demo_categories import (
     RICO_SCREEN2WORDS_CATEGORIES,
     ROXFORD_CATEGORIES,
     RVL_CDIP_CATEGORIES,
-    STANFORD_DOGS_CATEGORIES,
     UCSF_DOCUMENTS_CATEGORIES,
     VISUAL_GENOME_CATEGORIES,
 )
@@ -54,7 +53,6 @@ def build_demo_datasets() -> list[DemoDataset]:
         RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
         ROXFORD_IMAGES_DOWNLOAD_SIZE_MB,
         RVL_CDIP_DOWNLOAD_SIZE_MB,
-        STANFORD_DOGS_DOWNLOAD_SIZE_MB,
         UCSF_IDL_DOWNLOAD_SIZE_MB,
         VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB,
         VISUAL_GENOME_IMAGES_DOWNLOAD_SIZE_MB,
@@ -79,8 +77,6 @@ def build_demo_datasets() -> list[DemoDataset]:
     food_folder = DATA_DIR / "food-101" / "images"
     euro_desc = "Satellite imagery by land use"
     euro_folder = DATA_DIR / "EuroSAT_RGB"
-    dogs_desc = "Dog breeds"
-    dogs_folder = DATA_DIR / "stanford_dogs" / "Images"
     places_desc = "Indoor & outdoor scenes"
     places_folder = DATA_DIR / "places365" / "val_256"
     rico_folder = DATA_DIR / "rico_screen2words" / "screenshots"
@@ -301,54 +297,6 @@ def build_demo_datasets() -> list[DemoDataset]:
             slice_frac_end=None,
             items_per_category=2700,
             download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
-        ),
-        DemoDataset(
-            id="stanford_dogs_s",
-            label="Stanford Dogs (S)",
-            description=dogs_desc,
-            categories=STANFORD_DOGS_CATEGORIES,
-            source="stanford_dogs",
-            required_folder=dogs_folder,
-            slice_frac_start=0.0,
-            slice_frac_end=1 / 7,
-            items_per_category=171,
-            download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
-        ),
-        DemoDataset(
-            id="stanford_dogs_m",
-            label="Stanford Dogs (M)",
-            description=dogs_desc,
-            categories=STANFORD_DOGS_CATEGORIES,
-            source="stanford_dogs",
-            required_folder=dogs_folder,
-            slice_frac_start=1 / 7,
-            slice_frac_end=3 / 7,
-            items_per_category=171,
-            download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
-        ),
-        DemoDataset(
-            id="stanford_dogs_l",
-            label="Stanford Dogs (L)",
-            description=dogs_desc,
-            categories=STANFORD_DOGS_CATEGORIES,
-            source="stanford_dogs",
-            required_folder=dogs_folder,
-            slice_frac_start=3 / 7,
-            slice_frac_end=None,
-            items_per_category=171,
-            download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
-        ),
-        DemoDataset(
-            id="stanford_dogs_a",
-            label="Stanford Dogs (A)",
-            description=dogs_desc,
-            categories=STANFORD_DOGS_CATEGORIES,
-            source="stanford_dogs",
-            required_folder=dogs_folder,
-            slice_frac_start=0.0,
-            slice_frac_end=None,
-            items_per_category=171,
-            download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
         ),
         DemoDataset(
             id="places365_s",
@@ -716,27 +664,6 @@ def _collect_oxford_flowers_files(categories, slice_args, on_progress) -> list:
     for _fname, meta in sorted(metadata.items()):
         if meta["category"] in categories:
             by_cat.setdefault(meta["category"], []).append((meta["path"], meta["category"]))
-    return _slice_by_category(by_cat, categories, *slice_args)
-
-
-def _collect_stanford_dogs_files(categories, slice_args, on_progress) -> list:
-    from vtscore.datasets.downloader import download_stanford_dogs  # noqa: PLC0415
-
-    images_dir = download_stanford_dogs(on_progress=on_progress)
-    breed_to_folder: dict[str, Path] = {}
-    if images_dir.exists():
-        for folder in images_dir.iterdir():
-            if folder.is_dir() and "-" in folder.name:
-                breed_to_folder[folder.name.split("-", 1)[1]] = folder
-
-    by_cat: dict = {}
-    for cat in categories:
-        folder = breed_to_folder.get(cat)
-        if folder is None:
-            continue
-        for ext in ["*.jpg", "*.jpeg", "*.png"]:
-            for img_path in sorted(folder.glob(ext)):
-                by_cat.setdefault(cat, []).append((img_path, cat))
     return _slice_by_category(by_cat, categories, *slice_args)
 
 
@@ -1494,17 +1421,6 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
     if source == "oxford_flowers_102":
         _embed_file_images(
             _collect_oxford_flowers_files(categories, slice_args, on_progress),
-            clips,
-            embedder,
-            on_progress,
-            demo_origin,
-            skip_embedding=skip_embedding,
-        )
-        return None
-
-    if source == "stanford_dogs":
-        _embed_file_images(
-            _collect_stanford_dogs_files(categories, slice_args, on_progress),
             clips,
             embedder,
             on_progress,

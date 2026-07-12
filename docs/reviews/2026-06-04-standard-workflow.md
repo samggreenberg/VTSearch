@@ -55,7 +55,7 @@ The picker shows exact integers — Caltech-101 (S) = **300**, (M) = **600** —
 
 Measured so far (the estimate was sometimes *over*-counting badly, not just under): caltech101 (300→412 …), reuters21578 (40000→9555), 20newsgroups (14250→8358), arxiv_abstracts (24000→200), eurosat (27000, ±a few per slice), oxford_flowers_102 (8160→8189), ucf101 (1320→405), bbc_news (2225, already matched). Each source's S/M/L slices verified to partition (S+M+L==A).
 
-**Open follow-up:** populate `DEMO_MEDIA_COUNTS` for the remaining uneven sources by downloading each and running the script: caltech256, stanford_dogs, places365, urbansound8k, gtzan, speech_commands_v2, hmdb51, kth, ucf101_full, ucsf_documents, dbpedia (and the deliberately-skipped giants food101/ag_news/wikipedia if ever wanted). Class-balanced sources (AG News, IMDB, DBpedia, Food-101 at 1000/cat, ESC-50 at 40/cat) are already exact under the estimate and need no entry.
+**Open follow-up:** populate `DEMO_MEDIA_COUNTS` for the remaining uneven sources by downloading each and running the script: caltech256, places365, urbansound8k, gtzan, speech_commands_v2, hmdb51, kth, ucf101_full, ucsf_documents, dbpedia (and the deliberately-skipped giants food101/ag_news/wikipedia if ever wanted). Class-balanced sources (AG News, IMDB, DBpedia, Food-101 at 1000/cat, ESC-50 at 40/cat) are already exact under the estimate and need no entry.
 
 **[Not a bug · `importer-no-default-category`] Add-Dataset modal opens with no importer category selected.**
 The modal opens to a large empty body ("Select what type of dataset to add.") until you pick Services/Server/Local/Demo.

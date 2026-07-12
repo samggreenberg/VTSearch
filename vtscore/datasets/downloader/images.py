@@ -1,4 +1,4 @@
-"""Image dataset downloaders: CIFAR-10, Caltech-101/256, Oxford Flowers, Food-101, EuroSAT, Stanford Dogs, Places365."""
+"""Image dataset downloaders: CIFAR-10, Caltech-101/256, Oxford Flowers, Food-101, EuroSAT, Places365."""
 
 import os
 import shutil
@@ -306,44 +306,6 @@ def download_eurosat(on_progress: Optional[ProgressCallback] = None) -> Path:
         on_progress=on_progress,
     )
     return extract_dir
-
-
-def download_stanford_dogs(on_progress: Optional[ProgressCallback] = None) -> Path:
-    """Download and extract the Stanford Dogs dataset.
-
-    Downloads ``images.tar`` from the Stanford Vision Lab into ``DATA_DIR``
-    if it is not already present, then extracts it.  The archive is deleted
-    after extraction to reclaim disk space.
-
-    The dataset contains ~20 580 images across 120 dog breed classes.  The
-    archive extracts to an ``Images/`` directory with breed subdirectories
-    named like ``n02085620-Chihuahua``.
-
-    Args:
-        on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
-
-    Returns:
-        Path to the ``stanford_dogs/Images/`` directory containing breed
-        subdirectories with JPEG images (e.g.
-        ``data/stanford_dogs/Images``).
-    """
-    if on_progress is None:
-        on_progress = _core._default_progress()
-
-    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
-
-    images_dir = _core.DATA_DIR / "stanford_dogs" / "Images"
-    _core._download_and_extract(
-        url=_core.STANFORD_DOGS_URL,
-        archive_name="stanford_dogs_images.tar.gz",
-        extract_to=_core.DATA_DIR / "stanford_dogs",
-        check_path=images_dir,
-        download_size_mb=_core.STANFORD_DOGS_DOWNLOAD_SIZE_MB,
-        dataset_name="Stanford Dogs",
-        on_progress=on_progress,
-    )
-    return images_dir
 
 
 def download_roxford5k(on_progress: Optional[ProgressCallback] = None) -> Path:

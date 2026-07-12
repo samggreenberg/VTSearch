@@ -56,10 +56,6 @@ Datasets are grouped by media type below. Each demo comes in size variants — *
 | **eurosat_m** | Sentinel-2 satellite imagery across EuroSAT land use categories (medium) |
 | **eurosat_l** | Sentinel-2 satellite imagery across EuroSAT land use categories (large) |
 | **eurosat_a** | Sentinel-2 satellite imagery across 10 EuroSAT land use categories (all) |
-| **stanford_dogs_s** | Fine-grained dog breed photos across Stanford Dogs categories (small) |
-| **stanford_dogs_m** | Fine-grained dog breed photos across Stanford Dogs categories (medium) |
-| **stanford_dogs_l** | Fine-grained dog breed photos across Stanford Dogs categories (large) |
-| **stanford_dogs_a** | Fine-grained dog breed photos across 120 Stanford Dogs categories (all) |
 | **places365_s** | Scene photos across 365 Places365 categories (small) |
 | **places365_m** | Scene photos across 365 Places365 categories (medium) |
 | **places365_l** | Scene photos across 365 Places365 categories (large) |
