@@ -135,11 +135,11 @@
                 <h4 class="subhead" title="Display settings for the left panel (unlabeled media list)">Left Side</h4>
                 <div class="form-group">
                   <label class="form-label" title="How an item is selected for preview: click to select, or hover to preview on mouseover">Focus Mode:</label>
-                  <div class="toggle-group">
-                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_left', activeViewTab()) === 'click'" (click)="onFocusModeChange('focus_mode_left', activeViewTab(), 'click')" title="Click an item to preview it in the center panel">
+                  <div class="segmented-toggle segmented-toggle--stretch">
+                    <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getFocusMode('focus_mode_left', activeViewTab()) === 'click'" (click)="onFocusModeChange('focus_mode_left', activeViewTab(), 'click')" title="Click an item to preview it in the center panel">
                       <vt-icon type="cursor-click" [size]="14"></vt-icon> Click
                     </button>
-                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_left', activeViewTab()) === 'hover'" (click)="onFocusModeChange('focus_mode_left', activeViewTab(), 'hover')" title="Hover over an item to immediately preview it">
+                    <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getFocusMode('focus_mode_left', activeViewTab()) === 'hover'" (click)="onFocusModeChange('focus_mode_left', activeViewTab(), 'hover')" title="Hover over an item to immediately preview it">
                       <vt-icon type="cursor-hover" [size]="14"></vt-icon> Hover
                     </button>
                   </div>
@@ -159,11 +159,11 @@
                 <h4 class="subhead" title="Display settings for the right panel (labeled goods and bads)">Right Side</h4>
                 <div class="form-group">
                   <label class="form-label" title="How an item is selected for preview: click to select, or hover to preview on mouseover">Focus Mode:</label>
-                  <div class="toggle-group">
-                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_right', activeViewTab()) === 'click'" (click)="onFocusModeChange('focus_mode_right', activeViewTab(), 'click')" title="Click an item to preview it in the center panel">
+                  <div class="segmented-toggle segmented-toggle--stretch">
+                    <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getFocusMode('focus_mode_right', activeViewTab()) === 'click'" (click)="onFocusModeChange('focus_mode_right', activeViewTab(), 'click')" title="Click an item to preview it in the center panel">
                       <vt-icon type="cursor-click" [size]="14"></vt-icon> Click
                     </button>
-                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_right', activeViewTab()) === 'hover'" (click)="onFocusModeChange('focus_mode_right', activeViewTab(), 'hover')" title="Hover over an item to immediately preview it">
+                    <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getFocusMode('focus_mode_right', activeViewTab()) === 'hover'" (click)="onFocusModeChange('focus_mode_right', activeViewTab(), 'hover')" title="Hover over an item to immediately preview it">
                       <vt-icon type="cursor-hover" [size]="14"></vt-icon> Hover
                     </button>
                   </div>
@@ -287,22 +287,22 @@
             <div class="view-tab-content browser-tab-content">
               <div class="form-group">
                 <label class="form-label" title="Slide clusters together to close the empty space between them when the map is built">Compaction<vt-field-hint-icon hint="Slides clusters together to close the empty gaps between them. Applies next time the map is built."></vt-field-hint-icon></label>
-                <div class="toggle-group">
-                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), true)" title="Close the empty space between clusters">
+                <div class="segmented-toggle segmented-toggle--stretch">
+                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), true)" title="Close the empty space between clusters">
                     On
                   </button>
-                  <button class="toggle-btn" [class.toggle-btn--active]="!getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), false)" title="Keep the map's original spacing">
+                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="!getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), false)" title="Keep the map's original spacing">
                     Off
                   </button>
                 </div>
               </div>
               <div class="form-group">
                 <label class="form-label" title="Letter named region signposts over the map when the dataset has them">Signposts<vt-field-hint-icon hint="Names the map's regions like street signs: broad names when zoomed out, finer names as you zoom in. Only shows when the dataset's map has computed labels."></vt-field-hint-icon></label>
-                <div class="toggle-group">
-                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseSignposts(activeBrowseTab())" (click)="onBrowseSignpostsChange(activeBrowseTab(), true)" title="Show region signposts on the map">
+                <div class="segmented-toggle segmented-toggle--stretch">
+                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getBrowseSignposts(activeBrowseTab())" (click)="onBrowseSignpostsChange(activeBrowseTab(), true)" title="Show region signposts on the map">
                     On
                   </button>
-                  <button class="toggle-btn" [class.toggle-btn--active]="!getBrowseSignposts(activeBrowseTab())" (click)="onBrowseSignpostsChange(activeBrowseTab(), false)" title="Hide region signposts">
+                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="!getBrowseSignposts(activeBrowseTab())" (click)="onBrowseSignpostsChange(activeBrowseTab(), false)" title="Hide region signposts">
                     Off
                   </button>
                 </div>
@@ -360,14 +360,14 @@
               </div>
               <div class="form-group">
                 <label class="form-label" title="How many mouse-wheel notches (and +/- button clicks) it takes to cross one zoom level of the bin pyramid">Mouse-zooms per level<vt-field-hint-icon hint="How many mouse-wheel notches (or +/- clicks) it takes to cross one zoom level. 1 = 2× per notch; 2 (default) = √2; 3 = ∛2."></vt-field-hint-icon></label>
-                <div class="toggle-group">
-                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseMouseZoomsPerLevel(activeBrowseTab()) === 1" (click)="onBrowseMouseZoomsPerLevelChange(activeBrowseTab(), 1)" title="One notch per level (2× per zoom)">
+                <div class="segmented-toggle segmented-toggle--stretch">
+                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getBrowseMouseZoomsPerLevel(activeBrowseTab()) === 1" (click)="onBrowseMouseZoomsPerLevelChange(activeBrowseTab(), 1)" title="One notch per level (2× per zoom)">
                     1
                   </button>
-                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseMouseZoomsPerLevel(activeBrowseTab()) === 2" (click)="onBrowseMouseZoomsPerLevelChange(activeBrowseTab(), 2)" title="Two notches per level (√2 per zoom) — the default">
+                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getBrowseMouseZoomsPerLevel(activeBrowseTab()) === 2" (click)="onBrowseMouseZoomsPerLevelChange(activeBrowseTab(), 2)" title="Two notches per level (√2 per zoom) — the default">
                     2
                   </button>
-                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseMouseZoomsPerLevel(activeBrowseTab()) === 3" (click)="onBrowseMouseZoomsPerLevelChange(activeBrowseTab(), 3)" title="Three notches per level (∛2 per zoom)">
+                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getBrowseMouseZoomsPerLevel(activeBrowseTab()) === 3" (click)="onBrowseMouseZoomsPerLevelChange(activeBrowseTab(), 3)" title="Three notches per level (∛2 per zoom)">
                     3
                   </button>
                 </div>

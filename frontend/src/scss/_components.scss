@@ -153,6 +153,106 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   }
 }
 
+// --- Segmented toggle ---
+//
+// A connected row of buttons acting as a single-select control: the
+// View/Focus pickers in Settings and the size/focus toggles in the
+// center-panel view toolbar. Buttons share a border (overlapped via a
+// negative left margin, with the active/hovered button raised on top so its
+// border wins on both sides) and the group's outer corners are rounded. The
+// selected button fills with the accent and gains an inset shadow.
+//
+// Variants:
+//   .segmented-toggle--stretch  equal-width buttons filling the row (labelled toggles)
+//   .segmented-toggle--compact  dense, icon-only buttons (toolbars)
+.segmented-toggle {
+  display: inline-flex;
+}
+
+.segmented-toggle--stretch {
+  display: flex;
+
+  .segmented-toggle__btn {
+    flex: 1;
+  }
+}
+
+.segmented-toggle__btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: background var(--transition-base), color var(--transition-base),
+    border-color var(--transition-base), box-shadow var(--transition-base);
+
+  &:not(:first-child) {
+    margin-left: -1px;
+  }
+
+  &:first-child {
+    border-radius: var(--radius-md) 0 0 var(--radius-md);
+  }
+
+  &:last-child {
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  }
+
+  &:hover:not(:disabled):not(.segmented-toggle__btn--active) {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+    z-index: 1;
+  }
+
+  &:disabled {
+    opacity: var(--opacity-disabled);
+    cursor: not-allowed;
+  }
+
+  &--active {
+    background: var(--accent);
+    color: var(--toggle-active-text);
+    border-color: var(--accent);
+    box-shadow: inset 0 1px 3px var(--shadow-dropdown);
+    z-index: 1;
+  }
+}
+
+// Dense, icon-only variant for toolbars: smaller footprint, muted resting
+// colour, tighter corners, and a border-highlight hover (no fill) to suit a
+// packed row of glyph buttons.
+.segmented-toggle--compact .segmented-toggle__btn {
+  min-width: 26px;
+  height: 22px;
+  padding: 0 var(--space-sm);
+  color: var(--text-muted);
+
+  &:first-child {
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  }
+
+  &:last-child {
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+
+  &:hover:not(:disabled):not(.segmented-toggle__btn--active) {
+    color: var(--text-primary);
+    border-color: var(--text-primary);
+    background: var(--bg-panel);
+  }
+
+  vt-icon {
+    line-height: 0;
+  }
+}
+
 // --- Form elements ---
 
 .form-input {
