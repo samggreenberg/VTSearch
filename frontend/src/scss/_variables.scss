@@ -29,6 +29,12 @@
   --font-2xl: 1.25rem;    // 20px
   --font-3xl: 1.5rem;     // 24px
 
+  // Letter-spacing (tracking). One canonical "wide" value for the uppercase
+  // micro-labels (section headers, table headers, tier chips) that pepper the
+  // UI - a rendered audit found a dozen hand-picked values (0.02-0.06em, plus
+  // raw 0.5px) all doing the same job. em-based so it tracks the label's font.
+  --tracking-wide: 0.05em;
+
   // Border radius scale
   --radius-sm: 3px;
   --radius-md: 4px;
@@ -165,13 +171,7 @@
   // to swap per theme the way --btn-filled-text does for accent-fill buttons.
   --badge-text-dark: #1a1a2e;
 
-  // Aliases used by component SCSS files
-  --border-color: var(--border);
-  --bg-secondary: var(--bg-subtle);
-  --bg-primary: var(--bg-panel);
-  --accent-color: var(--accent);
-  --color-accent: var(--accent);
-  --error: var(--color-bad);
+  // Error-state aliases used by component SCSS files
   --error-text: var(--color-bad);
   --error-border: var(--border-secondary);
   --error-bg: var(--bad-bg);
@@ -257,13 +257,7 @@
   --warning-bg: rgba(184, 121, 0, 0.12);
   --warning-border: rgba(184, 121, 0, 0.35);
 
-  // Aliases
-  --border-color: var(--border);
-  --bg-secondary: var(--bg-subtle);
-  --bg-primary: var(--bg-panel);
-  --accent-color: var(--accent);
-  --color-accent: var(--accent);
-  --error: var(--color-bad);
+  // Error-state aliases
   --error-text: var(--color-bad);
   --error-border: #e57373;
   --error-bg: var(--bad-bg);
@@ -331,13 +325,7 @@
   --warning-bg: rgba(255, 255, 0, 0.15);
   --warning-border: #ffff00;
 
-  // Aliases
-  --border-color: var(--border);
-  --bg-secondary: var(--bg-subtle);
-  --bg-primary: var(--bg-panel);
-  --accent-color: var(--accent);
-  --color-accent: var(--accent);
-  --error: var(--color-bad);
+  // Error-state aliases
   --error-text: var(--color-bad);
   --error-border: #ff4444;
   --error-bg: var(--bad-bg);

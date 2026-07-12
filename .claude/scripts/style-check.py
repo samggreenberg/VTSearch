@@ -47,6 +47,15 @@ def scss_files() -> list[Path]:
     return [f for f in files if f not in EXCLUDE_FILES]
 
 
+def all_scss_files() -> list[Path]:
+    """Every SCSS file, including the token source-of-truth (_variables.scss).
+
+    The token-resolution checks below validate the token file's own internal
+    `var()` references too, so they intentionally do not exclude it.
+    """
+    return sorted(SCSS_DIR.rglob("*.scss"))
+
+
 def rel(p: Path) -> str:
     try:
         return str(p.relative_to(REPO_ROOT))
@@ -340,6 +349,162 @@ def check_redeclared_utility(files: list[Path]) -> Finding:
 
 
 # ---------------------------------------------------------------------------
+# Token resolution: broken var() references + deleted-alias usage
+# ---------------------------------------------------------------------------
+# Aliases removed in the "Consolidate design tokens" pass. Each mapped to a
+# canonical token; component SCSS was codemodded onto the canonical name and
+# the alias definitions deleted from _variables.scss. Listing them here (with
+# their canonical replacement) lets the scanner catch a resurrection - even one
+# hidden behind a var() fallback, which the generic broken-var check below
+# would let through - without needing a browser to notice the missing color.
+DELETED_ALIASES = {
+    "--border-color": "--border",
+    "--bg-secondary": "--bg-subtle",
+    "--bg-primary": "--bg-panel",
+    "--accent-color": "--accent",
+    "--color-accent": "--accent",
+    "--error": "--color-bad",
+}
+
+# Custom-property NAME token. Deliberately excludes a trailing `-`/word char so
+# `--bg-secondary` does not swallow `--bg-secondary-btn`.
+CUSTOM_PROP = re.compile(r"--[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*")
+PROP_DEF = re.compile(r"^\s*(--[a-zA-Z0-9-]+)\s*:")
+# Custom properties set from Angular templates / TS (consumed by `var()` in
+# SCSS): `[style.--x]`, `style="--x: ..."`, `setProperty('--x', ...)`.
+TEMPLATE_PROP = re.compile(
+    r"\[style\.(--[a-zA-Z0-9-]+)|setProperty\(\s*['\"`](--[a-zA-Z0-9-]+)|style\s*=\s*\"[^\"]*?(--[a-zA-Z0-9-]+)\s*:"
+)
+
+
+def _strip_comments(text: str) -> str:
+    """Blank out `//` line comments and `/* */` block comments, preserving
+    every character offset and newline (comment bytes become spaces) so line
+    numbers computed against the result still match the original source.
+
+    Doc comments in _components.scss reference tokens as prose (`var(--space-*)`);
+    without this, the broken-var check would flag the wildcard `--space`.
+    """
+    out = list(text)
+    n = len(text)
+    i = 0
+    while i < n:
+        two = text[i : i + 2]
+        if two == "//":
+            j = i
+            while j < n and text[j] != "\n":
+                out[j] = " "
+                j += 1
+            i = j
+        elif two == "/*":
+            j = i
+            while j < n and text[j : j + 2] != "*/":
+                if text[j] != "\n":
+                    out[j] = " "
+                j += 1
+            # blank the closing */ too (if present)
+            for k in range(j, min(j + 2, n)):
+                if text[k] != "\n":
+                    out[k] = " "
+            i = j + 2
+        else:
+            i += 1
+    return "".join(out)
+
+
+def _var_refs(text: str):
+    """Yield (name, has_fallback, offset) for every `var(...)` in *text*.
+
+    Handles nested parens so a `var(--x, var(--y))` fallback is parsed
+    correctly: the fallback comma is the first top-level comma inside the
+    outer `var(`.
+    """
+    i = 0
+    n = len(text)
+    while True:
+        start = text.find("var(", i)
+        if start == -1:
+            return
+        j = start + 4
+        depth = 1
+        comma = -1
+        while j < n and depth > 0:
+            c = text[j]
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+            elif c == "," and depth == 1 and comma == -1:
+                comma = j
+            j += 1
+        inner_end = j - 1  # index of the matching ')'
+        name_part = text[start + 4 : (comma if comma != -1 else inner_end)]
+        m = CUSTOM_PROP.search(name_part)
+        if m:
+            yield m.group(0), comma != -1, start
+        i = j
+
+
+def _line_of(text: str, offset: int) -> int:
+    return text.count("\n", 0, offset) + 1
+
+
+def _defined_props() -> set[str]:
+    """All custom properties that resolve at runtime: every `--x:` definition
+    across the SCSS tree plus properties set from templates/TS style bindings.
+    """
+    defined: set[str] = set()
+    for path in all_scss_files():
+        for line in path.read_text().splitlines():
+            m = PROP_DEF.match(line)
+            if m:
+                defined.add(m.group(1))
+    for path in sorted(SCSS_DIR.rglob("*.ts")) + sorted(SCSS_DIR.rglob("*.html")):
+        for m in TEMPLATE_PROP.finditer(path.read_text()):
+            defined.add(next(g for g in m.groups() if g))
+    return defined
+
+
+def check_broken_var(files: list[Path]) -> Finding:
+    f = Finding(
+        rule="Broken var(): custom property resolves to nothing",
+        description=(
+            "A `var(--x)` with no fallback whose `--x` is not defined anywhere "
+            "(no `--x:` in the SCSS tree, no template/TS style binding) renders "
+            "as an invalid/empty value - a real bug the Angular build won't "
+            "catch. Add the token to _variables.scss, fix the name, or give it "
+            "a fallback: `var(--x, <fallback>)`."
+        ),
+    )
+    defined = _defined_props()
+    for path in files:
+        text = path.read_text()
+        for name, has_fallback, offset in _var_refs(_strip_comments(text)):
+            if has_fallback or name in defined:
+                continue
+            f.hits.append((path, _line_of(text, offset), _read_line(text, _line_of(text, offset))))
+    return f
+
+
+def check_deleted_alias(files: list[Path]) -> Finding:
+    f = Finding(
+        rule="Deleted design-token alias in use",
+        description=(
+            "These alias tokens were removed in the token-consolidation pass; "
+            "each has a canonical replacement. Referencing one (even behind a "
+            "var() fallback) resurrects a token that no longer exists. Swap to "
+            "the canonical name: " + ", ".join(f"{a} -> {c}" for a, c in sorted(DELETED_ALIASES.items())) + "."
+        ),
+    )
+    for path in files:
+        text = path.read_text()
+        for name, _has_fallback, offset in _var_refs(_strip_comments(text)):
+            if name in DELETED_ALIASES:
+                f.hits.append((path, _line_of(text, offset), _read_line(text, _line_of(text, offset))))
+    return f
+
+
+# ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
 def print_report(findings: list[Finding]) -> int:
@@ -372,7 +537,11 @@ def print_report(findings: list[Finding]) -> int:
 
 def main() -> int:
     files = scss_files()
+    all_files = all_scss_files()
     findings = [
+        # Objective token-resolution bugs first (these have no legitimate hits).
+        check_broken_var(all_files),
+        check_deleted_alias(all_files),
         check_raw_lengths(files),
         check_hex_colors(files),
         check_bold_weight(files),

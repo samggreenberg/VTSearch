@@ -70,7 +70,7 @@
   }
 
   .correct {
-    color: var(--color-accent, var(--text-primary));
+    color: var(--accent, var(--text-primary));
     font-weight: var(--weight-semibold);
   }
 }

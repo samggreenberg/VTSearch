@@ -331,7 +331,7 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
       const cellR = (this.meta()!.base_radius / Math.pow(2, level)) * f.scale;
       const cmap = resolveColormap(this.colormap(), this.effectiveTheme());
       const selActive = this.selection.size > 0;
-      const selAccent = this.themeColor('--accent-color') || '#4f9dff';
+      const selAccent = this.themeColor('--accent') || '#4f9dff';
       for (const cell of cells) {
         const [sx, sy] = this.projToMap(cell.cx, cell.cy, f);
         const single = cell.count === 1;

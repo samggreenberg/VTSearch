@@ -51,7 +51,7 @@
   min-width: 26px;
   height: 22px;
   padding: 0 var(--space-sm);
-  background: var(--bg-primary);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
   color: var(--text-muted);
   cursor: pointer;
@@ -97,7 +97,7 @@
   min-width: 26px;
   height: 22px;
   padding: 0 var(--space-sm);
-  background: var(--bg-primary);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
@@ -194,7 +194,7 @@
 
 .bin-popup-meta-label {
   font-size: var(--font-2xs);
-  letter-spacing: 0.05em;
+  letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
   color: var(--text-muted);
   white-space: nowrap;
@@ -307,7 +307,7 @@
 .bin-popup-count {
   flex-shrink: 0;
   font-size: var(--font-xs);
-  letter-spacing: 0.05em;
+  letter-spacing: var(--tracking-wide);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;

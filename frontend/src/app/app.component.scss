@@ -118,7 +118,7 @@ header {
   font-size: var(--font-2xs);
   color: var(--text-dim);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--tracking-wide);
   padding: var(--space-md) var(--space-lg) var(--space-xs);
   border-top: 1px solid var(--border);
   margin-top: var(--space-xs);

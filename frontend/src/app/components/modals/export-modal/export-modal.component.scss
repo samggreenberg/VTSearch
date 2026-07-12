@@ -116,7 +116,7 @@
     font-weight: var(--weight-semibold);
     font-size: var(--font-xs);
     text-transform: uppercase;
-    letter-spacing: 0.02em;
+    letter-spacing: var(--tracking-wide);
 
     // Column resize handle, pinned inside the cell's right edge so the next
     // sticky <th>'s stacking context can't paint over it (the reason the
@@ -209,7 +209,7 @@
 
   &.active {
     color: var(--text-primary);
-    border-bottom-color: var(--color-accent);
+    border-bottom-color: var(--accent);
     font-weight: var(--weight-semibold);
   }
 }

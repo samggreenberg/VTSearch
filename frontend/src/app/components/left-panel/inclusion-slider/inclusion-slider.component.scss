@@ -16,7 +16,7 @@ input[type="number"] {
   padding: var(--space-2xs) var(--space-xs);
   font-size: var(--font-sm);
   color: var(--text-primary);
-  background: var(--bg-secondary, transparent);
+  background: var(--bg-subtle, transparent);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   text-align: center;

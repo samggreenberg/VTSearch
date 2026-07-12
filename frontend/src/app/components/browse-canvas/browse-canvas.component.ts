@@ -987,7 +987,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const tyMax = Math.ceil((from.centerY + halfWy) / tileH + 1);
 
     const cmap = resolveColormap(this.colormap(), this.effectiveTheme());
-    this.selAccent = this.themeColor('--accent-color') || '#4f9dff';
+    this.selAccent = this.themeColor('--accent') || '#4f9dff';
     const selectionActive = this.selection.size > 0;
     const cull = screenRadius * 2;
     // The frozen viewport copy is dropped into the centre afterwards, so a cell
@@ -1251,7 +1251,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // Resolve the colormap against the live theme once per frame, not per cell.
     const cmap = resolveColormap(this.colormap(), this.effectiveTheme());
     // Accent for selection rings + marquee, also resolved once per frame.
-    this.selAccent = this.themeColor('--accent-color') || '#4f9dff';
+    this.selAccent = this.themeColor('--accent') || '#4f9dff';
     const selectionActive = this.selection.size > 0;
 
     // The enlarged cell is deferred and redrawn last (on top of its neighbours)

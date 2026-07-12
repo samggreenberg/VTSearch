@@ -16,7 +16,7 @@
 .train-context-label {
   font-size: var(--font-2xs);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--tracking-wide);
   color: var(--text-muted);
   display: block;
   line-height: 1;

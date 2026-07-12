@@ -27,21 +27,23 @@ without a browser.
 
 <!-- item-sep -->
 
-- **Consolidate design tokens and extend the style scanner** — six alias
-  tokens still live in all three theme blocks (`_variables.scss:156-161`,
-  `:248-253`, `:322-327`): `--border-color`, `--bg-secondary`, `--bg-primary`
-  (confusingly maps to `--bg-panel`), `--accent-color`, `--color-accent` (the
-  same word order-swapped), and `--error`. Alongside them: 11 raw
-  letter-spacing values with no `--tracking-wide` token, 11 ad-hoc opacity
-  values, off-scale durations/radii, hand-copied box-shadows, reinvented
-  selected-tile tints, and raw z-indexes on the browse overlays.
-  **Fix:** codemod each alias to its canonical name and delete the alias; add
-  `--tracking-wide`, a decorative-dim opacity token, and a canvas-overlay
-  `--z-*` token; round stray durations/radii onto the scale. Then extend
-  `.claude/scripts/style-check.py` to flag (a) `var(--x)` names that resolve to
-  nothing and (b) use of the deleted aliases, so this can't regress without a
-  browser. **Files:** `_variables.scss`, component SCSS using the aliases,
-  `.claude/scripts/style-check.py`.
+- **Consolidate the remaining ad-hoc token values** — the six alias tokens,
+  the `--tracking-wide` letter-spacing token, and the two style-scanner checks
+  (broken `var()` refs + deleted-alias usage) have shipped. What's still owed
+  is the rest of the value-drift consolidation: ~11 ad-hoc opacity values that
+  want a decorative-dim opacity token (distinct from the existing
+  `--opacity-disabled`); raw z-indexes on the browse overlays
+  (`browse-view.component.scss` `z-index: 1/2/3`) that want a canvas-overlay
+  `--z-*` token; off-scale transition/animation durations and stray radii that
+  should round onto the existing scales; hand-copied box-shadows that should
+  resolve through `--shadow-sm/md/lg`; and reinvented selected-tile tints that
+  should share one token. Each is judgment-heavy (which opacity sites are
+  "decorative dim" vs. animation vs. disabled; which durations are interactive
+  vs. keyframe timing that would change feel if rounded), so scope each before
+  applying. **Files:** `_variables.scss`, the listed component SCSS. **Note:**
+  the scanner (`.claude/scripts/style-check.py`) already flags any resurrected
+  alias and any broken `var()` — extend it similarly if a new token added here
+  is meant to be enforced.
 
 <!-- item-sep -->
 

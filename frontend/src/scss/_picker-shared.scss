@@ -127,7 +127,7 @@
     font-weight: var(--weight-medium);
     font-size: var(--font-xs);
     text-transform: uppercase;
-    letter-spacing: 0.03em;
+    letter-spacing: var(--tracking-wide);
     user-select: none;
 
     &[draggable='true'] { cursor: grab; &:active { cursor: grabbing; } }

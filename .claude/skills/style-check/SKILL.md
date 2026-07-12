@@ -26,6 +26,8 @@ your job is to review them and decide which to fix.
 
 | Rule | What | How |
 |---|---|---|
+| Broken `var()` | `var(--x)` with no fallback whose `--x` is defined nowhere (SCSS tree or template/TS style binding) — an invalid/empty render the Angular build won't catch | Paren-aware `var()` parser vs. the set of all defined custom properties |
+| Deleted alias | Use of a design-token alias removed in the consolidation pass (`--border-color`, `--bg-secondary`, `--bg-primary`, `--accent-color`, `--color-accent`, `--error`), even behind a `var()` fallback | Alias→canonical map |
 | §4.1-2 | Hardcoded `px`/`rem` in `padding`/`margin`/`gap`/`font-size` | Regex on the property list |
 | §4.3   | Hex color literals in component SCSS | `#xxxxxx` outside `_variables.scss` |
 | §4.6   | `font-weight: 700` / `bold` | Regex |
@@ -68,10 +70,12 @@ hit) before deciding it's a violation.
 
 When invoked by the user, run the script, then:
 
-1. **Summarise total findings** (e.g. "83 hits across 8 rules").
-2. **Highlight the clear bugs first** - anything in §4.13 or §4.15 is
-   usually genuine; §4.6 (`font-weight: 700`) and §4.10 (`transition:
-   all`) are almost always real.
+1. **Summarise total findings** (e.g. "83 hits across 10 rules").
+2. **Highlight the clear bugs first** - the two token-resolution checks
+   (**Broken `var()`** and **Deleted alias**) are objective: they have no
+   legitimate hits, so treat every one as a bug to fix. After those,
+   anything in §4.13 or §4.15 is usually genuine; §4.6 (`font-weight:
+   700`) and §4.10 (`transition: all`) are almost always real.
 3. **Group §4.14 hits by likely category** (real form/section
    containers vs. top-level layout panels) before listing.
 4. **Offer to fix categories one at a time** rather than dumping a

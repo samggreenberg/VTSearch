@@ -72,7 +72,7 @@
   font-size: var(--font-2xs);
   color: var(--accent);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--tracking-wide);
   white-space: nowrap;
 }
 
