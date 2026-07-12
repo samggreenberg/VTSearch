@@ -199,6 +199,72 @@ class TestDownloadAndExtract:
 
         assert not download_called
 
+    def test_is_complete_overrides_check_path(self, tmp_path):
+        """When *is_complete* is given, an existing check_path does NOT skip.
+
+        Guards the partial-state trap: a bare (e.g. empty) check_path dir left
+        by a failed run must not masquerade as a finished download. The probe
+        decides completion by content, so the archive still downloads.
+        """
+        from vtscore.datasets import downloader as dl_module
+
+        zip_path = _make_zip(tmp_path, arcname="data_dir")
+        extract_to = tmp_path / "extracted"
+        # A bare leftover dir whose mere existence would satisfy a check_path gate.
+        check_path = extract_to / "partial"
+        check_path.mkdir(parents=True)
+
+        download_called = []
+
+        def fake_download(url, dest, size, cb):
+            download_called.append(True)
+            zip_path.rename(dest)
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
+        ):
+            dl_module._download_and_extract(
+                url="http://example.com/test.zip",
+                archive_name="test.zip",
+                extract_to=extract_to,
+                check_path=check_path,
+                download_size_mb=1,
+                dataset_name="Test",
+                on_progress=lambda *a: None,
+                is_complete=lambda: (extract_to / "data_dir" / "file.txt").exists(),
+            )
+
+        assert download_called, "is_complete=False must not be short-circuited by check_path.exists()"
+        assert (extract_to / "data_dir" / "file.txt").read_text() == "hello"
+
+    def test_is_complete_true_skips_download(self, tmp_path):
+        """When *is_complete* returns True, nothing is downloaded."""
+        from vtscore.datasets import downloader as dl_module
+
+        download_called = []
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(
+                dl_module.core,
+                "download_file_with_progress",
+                lambda *a, **kw: download_called.append(True),
+            ),
+        ):
+            dl_module._download_and_extract(
+                url="http://example.com/test.zip",
+                archive_name="test.zip",
+                extract_to=tmp_path / "extracted",
+                check_path=tmp_path / "does_not_exist",
+                download_size_mb=1,
+                dataset_name="Test",
+                on_progress=lambda *a: None,
+                is_complete=lambda: True,
+            )
+
+        assert not download_called
+
     def test_unsupported_format_raises(self, tmp_path):
         """Raises ValueError for unsupported archive extensions."""
         from vtscore.datasets import downloader as dl_module

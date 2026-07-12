@@ -486,14 +486,17 @@ def download_enrico(on_progress: Optional[ProgressCallback] = None) -> Path:
     Enrico is a curated 1,460-screenshot subset of Rico, each Android UI screen
     labeled with one of 20 "design topic" categories (Login, Chat, Maps, …).
     Two files are fetched into ``DATA_DIR/enrico``: ``screenshots.zip`` (~110 MB
-    of JPEGs named ``<rico_screen_id>-screenshot.jpg``) and the small
-    ``design_topics.csv`` (``screen_id,topic``) that carries the labels.  MIT
-    licensed.  This is VTSearch's born-digital *screenshot* image demo.
+    of JPEGs) and the small ``design_topics.csv`` (``screen_id,topic``) that
+    carries the labels.  MIT licensed.  This is VTSearch's born-digital
+    *screenshot* image demo.
 
-    The zip's internal layout (flat vs. a top-level ``screenshots/`` folder) is
-    not relied upon: completion is detected by rglob-ing for any
-    ``*-screenshot.jpg`` under the extract dir, so a re-run never re-downloads
-    regardless of how the archive unpacks.
+    Both the zip's internal layout (flat vs. a top-level ``screenshots/``
+    folder) and the JPEG naming convention (flat ``<screen_id>.jpg`` vs. the
+    older ``<screen_id>-screenshot.jpg``) drift upstream, so neither is relied
+    upon: completion is detected by rglob-ing for *any* ``*.jpg`` under the
+    extract dir.  That predicate is also handed to ``_download_and_extract`` as
+    ``is_complete`` so an empty, partially-extracted ``screenshots/`` folder
+    can't masquerade as a finished download and block re-download.
 
     Args:
         on_progress: Optional progress callback. Falls back to the
@@ -511,7 +514,7 @@ def download_enrico(on_progress: Optional[ProgressCallback] = None) -> Path:
     topics_csv = extract_dir / "design_topics.csv"
 
     def _has_screenshots() -> bool:
-        return extract_dir.is_dir() and next(extract_dir.rglob("*-screenshot.jpg"), None) is not None
+        return extract_dir.is_dir() and next(extract_dir.rglob("*.jpg"), None) is not None
 
     if not _has_screenshots():
         _core._download_and_extract(
@@ -522,6 +525,7 @@ def download_enrico(on_progress: Optional[ProgressCallback] = None) -> Path:
             download_size_mb=_core.ENRICO_DOWNLOAD_SIZE_MB,
             dataset_name="Enrico",
             on_progress=on_progress,
+            is_complete=_has_screenshots,
         )
 
     if not topics_csv.exists():
