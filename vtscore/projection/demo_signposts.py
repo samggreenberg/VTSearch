@@ -48,14 +48,15 @@ _MIN_MEMBERS = 2
 #: hits.  The canvas de-clutters what's visible; this only bounds the payload.
 _MAX_SIGNS = 600
 
-#: Minimum spacing (in pyramid levels) between adjacent hierarchy depths.  The
-#: canvas fades a sign in/out over roughly ±1.5 levels, so depths closer than
-#: this would mush together instead of handing off cleanly.
-_MIN_LEVEL_STEP = 1.3
-
-#: Fallback pyramid depth used to spread hierarchy levels when the caller
-#: doesn't pass a pyramid (e.g. a unit test with a bare projection).
-_DEFAULT_LEVEL_COUNT = 6
+#: Zoom-level gap between adjacent hierarchy depths.  A sign's ``level`` is a
+#: *zoom band*, not a tile LOD: the canvas shows the current tier crisp with its
+#: parent one step coarser still faintly visible (the canvas fades over roughly
+#: ±1.5–2.5 levels).  ~1.8 means each tier hands off to the next after about a
+#: 3.5× zoom, so all four tiers span a comfortable ~5.4 zoom levels — never the
+#: dozen tiling levels a dense layout can carry (which would bury city names at
+#: 2000× zoom).  Tuned for a Toponymy-like "a couple of layers legible at once"
+#: feel; independent of dataset size.
+_LEVEL_STEP = 1.8
 
 
 def clean_category_path(category: Any) -> list[str]:
@@ -91,36 +92,30 @@ def has_hierarchical_categories(medias: dict[int, dict[str, Any]], *, min_fracti
     return deep >= max(1, int(min_fraction * len(medias)))
 
 
-def _level_for_depth(depth: int, max_depth: int, level_count: int) -> float:
-    """Map a taxonomy *depth* (0 = coarsest) to a pyramid zoom level.
+def _level_for_depth(depth: int) -> float:
+    """Map a taxonomy *depth* (0 = coarsest) to a signpost zoom level.
 
-    Spreads depths ``0..max_depth`` across the pyramid's ``level_count`` zoom
-    bands, keeping at least :data:`_MIN_LEVEL_STEP` between neighbours so the
-    canvas's fade bands hand off rather than overlap.  Depth 0 always sits at
-    level 0 (visible at the whole-projection fit).
+    A fixed :data:`_LEVEL_STEP` per tier: depth 0 (continents) sits at level 0,
+    visible at the whole-projection fit, and each finer tier is one step deeper
+    in.  Deliberately *not* scaled to the pyramid's tiling depth — sign levels
+    are zoom bands, not LODs (see :data:`_LEVEL_STEP`).
     """
-    if max_depth <= 0:
-        return 0.0
-    step = max(_MIN_LEVEL_STEP, (level_count - 1) / max_depth)
-    return depth * step
+    return depth * _LEVEL_STEP
 
 
 def build_category_signposts(
     projection: "Projection",
     medias: dict[int, dict[str, Any]],
-    *,
-    level_count: int | None = None,
 ) -> RegionLabelSet:
     """Build a hierarchical :class:`RegionLabelSet` from category annotations.
 
     For every distinct path prefix across the medias' cleaned ``category``
     paths (see :func:`clean_category_path`), emit one sign: text = the prefix's
     last segment, anchor = the medoid of that region's members in
-    *projection*'s 2-D layout, level = its depth spread across the pyramid's
-    zoom range (*level_count*, defaulting to the pyramid depth or a sane
-    fallback).  Regions with fewer than :data:`_MIN_MEMBERS` members are
-    skipped; the whole set is capped at :data:`_MAX_SIGNS` (coarsest, largest
-    regions kept first).
+    *projection*'s 2-D layout, level = its depth mapped to a signpost zoom band
+    (see :func:`_level_for_depth`).  Regions with fewer than
+    :data:`_MIN_MEMBERS` members are skipped; the whole set is capped at
+    :data:`_MAX_SIGNS` (coarsest, largest regions kept first).
 
     The set is pinned to ``projection.projection_id`` so the serving layer only
     ever hands it back over the layout it was measured on.  Returns an empty
@@ -137,7 +132,6 @@ def build_category_signposts(
 
     # region prefix (tuple of segments) -> list of row indices into `coords`
     members: dict[tuple[str, ...], list[int]] = {}
-    max_depth = 0
     for mid, media in medias.items():
         row = index_of.get(int(mid))
         if row is None:
@@ -146,13 +140,9 @@ def build_category_signposts(
         for depth in range(len(path)):
             prefix = tuple(path[: depth + 1])
             members.setdefault(prefix, []).append(row)
-        if path:
-            max_depth = max(max_depth, len(path) - 1)
 
     if not members:
         return empty
-
-    resolved_levels = level_count if level_count and level_count > 0 else _DEFAULT_LEVEL_COUNT
 
     labels: list[RegionLabel] = []
     for prefix, rows in members.items():
@@ -163,7 +153,7 @@ def build_category_signposts(
         anchor = _medoid(pts)
         labels.append(
             RegionLabel(
-                level=_level_for_depth(depth, max_depth, resolved_levels),
+                level=_level_for_depth(depth),
                 x=float(anchor[0]),
                 y=float(anchor[1]),
                 text=prefix[-1],

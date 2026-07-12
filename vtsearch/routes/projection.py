@@ -142,7 +142,7 @@ def _maybe_build_demo_signposts(proj, pyr, medias):
 
     from vtscore.projection.demo_signposts import build_category_signposts
 
-    return build_category_signposts(proj, medias, level_count=len(pyr.levels))
+    return build_category_signposts(proj, medias)
 
 
 def _media_type_for(ctx) -> str:
