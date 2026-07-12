@@ -75,6 +75,18 @@
   // contrast on a saturated surface.
   --opacity-disabled: 0.5;
 
+  // Decorative-dim opacity. One value for a *decorative or secondary*
+  // element intentionally shown muted at rest - a dimmed type/status icon,
+  // a dropdown chevron, a faint accent divider line, a hint/note paragraph,
+  // a locked achievement row. Distinct from --opacity-disabled (which is
+  // reserved for interactive `:disabled` / `.disabled` states): this one is
+  // about visual hierarchy, not interactivity. A rendered audit found ~11
+  // sites hand-picking 0.5/0.55/0.6/0.7/0.75 for the same "recede this
+  // decoration" job; they all resolve here now. Do NOT use it for animation
+  // keyframes (0<->1 fades), hover-brighten rest states, or the two-tier
+  // done/future progression dims - those carry their own values by design.
+  --opacity-dim: 0.7;
+
   // Z-index scale (centralised stacking order)
   --z-base: 1;
   --z-elevated: 10;

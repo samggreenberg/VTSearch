@@ -131,6 +131,14 @@ There is only one disabled opacity. Don't write `opacity: 0.35` or `opacity: 0.4
 
 **Don't use opacity to disable text on a saturated background.** Opacity dims the rendered pixels toward the background, so 50% white on the accent-blue header collapses to a mid-blue that fails contrast. For buttons sitting on `--header-bg` (or any saturated surface), shift `color` to a theme-aware dimmed token (e.g. `--header-text-dim`) and keep the cursor change - skip `opacity` entirely.
 
+### 1.10 Decorative-dim state - `--opacity-dim`
+
+| Token          | Value | When to use |
+|----------------|-------|-------------|
+| `--opacity-dim` | 0.7   | A *decorative or secondary* element intentionally shown muted at rest: a dimmed type/status icon, a dropdown chevron, a faint accent divider line, a hint/note paragraph, a locked achievement row. |
+
+Distinct from `--opacity-disabled`: that one is reserved for interactive `:disabled` / `.disabled` states, this one is about visual hierarchy. Like the disabled value, there is only one decorative-dim value - don't hand-pick 0.55/0.6/0.75 for the same "recede this decoration" job. **Not** for animation keyframes (0↔1 fades), hover-brighten rest states, or the two-tier done/future progression dims; those carry their own values by design.
+
 ---
 
 ## 2. Shared component classes

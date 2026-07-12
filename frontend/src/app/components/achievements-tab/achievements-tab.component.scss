@@ -47,7 +47,7 @@
 }
 
 .achievement-row--locked {
-  opacity: 0.75;
+  opacity: var(--opacity-dim);
 }
 
 .achievement-info {

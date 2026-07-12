@@ -74,7 +74,7 @@ td {
 
 .type-icon {
   flex-shrink: 0;
-  opacity: 0.7;
+  opacity: var(--opacity-dim);
 }
 
 // The trash icon spins to 90° while its confirm dialog is up, then reverses
