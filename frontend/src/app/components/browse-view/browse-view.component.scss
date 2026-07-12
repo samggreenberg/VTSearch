@@ -318,7 +318,7 @@
   // Blink/WebKit track + thumb.
   &::-webkit-slider-runnable-track {
     height: 3px;
-    border-radius: 2px;
+    border-radius: var(--radius-sm);
     background: var(--border);
   }
 
@@ -337,7 +337,7 @@
   // Firefox track + thumb.
   &::-moz-range-track {
     height: 3px;
-    border-radius: 2px;
+    border-radius: var(--radius-sm);
     background: var(--border);
   }
 

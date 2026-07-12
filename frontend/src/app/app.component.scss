@@ -209,12 +209,12 @@ header {
     // both reuse the shared header tilt keyframes.
     &.trophy-open,
     &.help-open {
-      animation: header-icon-tilt-open 0.3s ease-in-out forwards;
+      animation: header-icon-tilt-open var(--transition-slow) ease-in-out forwards;
     }
 
     &.trophy-close,
     &.help-close {
-      animation: header-icon-tilt-close 0.3s ease-in-out forwards;
+      animation: header-icon-tilt-close var(--transition-slow) ease-in-out forwards;
     }
   }
 
@@ -262,11 +262,11 @@ header {
     color: var(--header-text-dim);
 
     &.gear-open {
-      animation: header-icon-tilt-open 0.3s ease-in-out forwards;
+      animation: header-icon-tilt-open var(--transition-slow) ease-in-out forwards;
     }
 
     &.gear-close {
-      animation: header-icon-tilt-close 0.3s ease-in-out forwards;
+      animation: header-icon-tilt-close var(--transition-slow) ease-in-out forwards;
     }
   }
 
