@@ -30,20 +30,22 @@ without a browser.
 - **Consolidate the remaining ad-hoc token values** — the six alias tokens,
   the `--tracking-wide` letter-spacing token, and the two style-scanner checks
   (broken `var()` refs + deleted-alias usage) have shipped. What's still owed
-  is the rest of the value-drift consolidation: ~11 ad-hoc opacity values that
-  want a decorative-dim opacity token (distinct from the existing
-  `--opacity-disabled`); raw z-indexes on the browse overlays
-  (`browse-view.component.scss` `z-index: 1/2/3`) that want a canvas-overlay
-  `--z-*` token; off-scale transition/animation durations and stray radii that
-  should round onto the existing scales; hand-copied box-shadows that should
-  resolve through `--shadow-sm/md/lg`; and reinvented selected-tile tints that
-  should share one token. Each is judgment-heavy (which opacity sites are
-  "decorative dim" vs. animation vs. disabled; which durations are interactive
-  vs. keyframe timing that would change feel if rounded), so scope each before
-  applying. **Files:** `_variables.scss`, the listed component SCSS. **Note:**
-  the scanner (`.claude/scripts/style-check.py`) already flags any resurrected
-  alias and any broken `var()` — extend it similarly if a new token added here
-  is meant to be enforced.
+  is the rest of the value-drift consolidation, tracked as one GitHub issue per
+  sub-slice (shipped one-per-PR; the umbrella stays here until the last is
+  done): a decorative-dim opacity token for the ~11 ad-hoc opacity values,
+  distinct from the existing `--opacity-disabled` (#2320); a canvas-overlay
+  `--z-*` token for the raw z-indexes on the browse overlays
+  (`browse-view.component.scss` `z-index: 1/2/3`) (#2321); rounding off-scale
+  transition/animation durations and stray radii onto the existing scales
+  (#2322); resolving hand-copied box-shadows through `--shadow-sm/md/lg`
+  (#2323); and sharing one selected-tile tint token (#2324). Each is
+  judgment-heavy (which opacity sites are "decorative dim" vs. animation vs.
+  disabled; which durations are interactive vs. keyframe timing that would
+  change feel if rounded), so scope each before applying. **Files:**
+  `_variables.scss`, the listed component SCSS. **Note:** the scanner
+  (`.claude/scripts/style-check.py`) already flags any resurrected alias and any
+  broken `var()` — extend it similarly if a new token added here is meant to be
+  enforced.
 
 <!-- item-sep -->
 
@@ -68,7 +70,7 @@ without a browser.
 
 <!-- item-sep -->
 
-- **Verify the New Detector Esc dismissal (V5)** — the shared `vt-modal` now
+- **Verify the New Detector Esc dismissal (V5)** (#2325) — the shared `vt-modal` now
   has full focus management (`cdkTrapFocus` + auto-capture; initial focus, Tab
   trap, restore-to-trigger on close). What remains is the reported "Esc doesn't
   always dismiss the New Detector dialog" (V5): `modal.component.ts` has an Esc
@@ -80,7 +82,7 @@ without a browser.
 
 <!-- item-sep -->
 
-- **Unify the icon system** — several inline SVGs are pasted 2–4× (eye/export/
+- **Unify the icon system** (#2326) — several inline SVGs are pasted 2–4× (eye/export/
   trash/combine, the tri-state checkbox), the center-panel toolbar uses raw
   Unicode glyphs (`⟲ ⟳ − +`) and a text "Reset", and there are three different
   success-check renderings. **Fix:** move the duplicated SVGs into the `vt-icon`
@@ -90,7 +92,7 @@ without a browser.
 
 <!-- item-sep -->
 
-- **Simplify header and layout IA** — the 3-panel grid is declared *twice* with
+- **Simplify header and layout IA** (#2327) — the 3-panel grid is declared *twice* with
   conflicting borders (`scss/_layout.scss:5` and `app.component.scss:296`, both
   `300px 1fr 300px`) — a dead, conflicting source of truth. The fixed 300px
   side panels don't scale on wide monitors; the burger menu and the top bar
@@ -110,7 +112,7 @@ without a browser.
 
 <!-- item-sep -->
 
-- **Copy-style guide + sweep** — microcopy drifts three ways: ellipsis is
+- **Copy-style guide + sweep** (#2328) — microcopy drifts three ways: ellipsis is
   written `...`, `…`, and `&hellip;`; Title Case and sentence case are mixed;
   one concept has several names (Train/Label, Find/Autodetect; "model" leaks
   into UI where the product word is "detector"); placeholder casing is
@@ -121,7 +123,7 @@ without a browser.
 
 <!-- item-sep -->
 
-- **Dataset importer picker Back affordance (V6)** — the Add-Dataset picker
+- **Dataset importer picker Back affordance (V6)** (#2329) — the Add-Dataset picker
   (`source-picker.component.html`) uses persistent `.importer-tab-bar` tabs with
   no `.back-btn`; "going back" means clicking a different tab. The sibling
   New-detector › Trained › Server-JSON flow uses the canonical picker → `← Back`
