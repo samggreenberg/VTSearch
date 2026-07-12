@@ -192,7 +192,9 @@ def generate_items(dim: int, items_per_city: int = DEFAULT_ITEMS_PER_CITY) -> li
 
 def total_cities() -> int:
     """Number of leaf cities in the taxonomy (108) — for media rendering math."""
-    return sum(len(cities) for countries in TAXONOMY.values() for states in countries.values() for cities in states.values())
+    return sum(
+        len(cities) for countries in TAXONOMY.values() for states in countries.values() for cities in states.values()
+    )
 
 
 __all__ = [
