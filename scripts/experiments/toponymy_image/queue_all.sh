@@ -12,7 +12,7 @@ step() {
 }
 
 # ---- prepare (download + SigLIP embed) --------------------------------
-step prepare_dataset.py caltech101 --per-cat 20
+# caltech101 prepared during smoke test
 step prepare_dataset.py stanford_dogs --per-cat 15
 step prepare_dataset.py enrico
 step prepare_dataset.py rvl_cdip --per-cat 100
@@ -36,16 +36,15 @@ done
 step make_texts.py mixed tags_oracle
 
 # ---- toponymy fits: all variants under the no-LLM namer ---------------
-for ds in caltech101 stanford_dogs enrico rvl_cdip mixed; do
-    for v in tags_oi600 tags_in21k tags_oracle caption_blip caption_florence blip_plus_ocr caption_qwen3b; do
+# (blip_plus_ocr only where OCR has signal: screens/docs/mixed)
+for ds in caltech101 stanford_dogs; do
+    for v in tags_oi600 tags_in21k tags_oracle caption_blip caption_florence caption_qwen3b; do
         step run_toponymy.py $ds $v keyphrase
     done
 done
-
-# ---- LLM namer on the main contenders ---------------------------------
-for ds in caltech101 stanford_dogs enrico rvl_cdip mixed; do
-    for v in tags_oi600 tags_in21k caption_blip caption_qwen3b; do
-        step run_toponymy.py $ds $v hf
+for ds in enrico rvl_cdip mixed; do
+    for v in tags_oi600 tags_in21k tags_oracle caption_blip caption_florence blip_plus_ocr caption_qwen3b; do
+        step run_toponymy.py $ds $v keyphrase
     done
 done
 
@@ -59,6 +58,13 @@ done
 for v in tags_oi600 tags_in21k caption_blip caption_qwen3b; do
     step run_toponymy.py rvl_cdip $v keyphrase --n-cats 4 --per-cat 50 --out-suffix _sub4x50
     step run_toponymy.py rvl_cdip $v hf --n-cats 4 --per-cat 50 --out-suffix _sub4x50
+done
+
+# ---- LLM namer on the main contenders (last: expendable if time runs out)
+for ds in caltech101 stanford_dogs enrico rvl_cdip mixed; do
+    for v in tags_oi600 tags_in21k caption_blip caption_qwen3b; do
+        step run_toponymy.py $ds $v hf
+    done
 done
 
 # ---- score + render ----------------------------------------------------

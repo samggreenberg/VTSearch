@@ -56,7 +56,8 @@ common.setup_env()
 import numpy as np  # noqa: E402
 
 OI_CSV = "https://storage.googleapis.com/openimages/v7/oidv7-class-descriptions-boxable.csv"
-IN21K_LEMMAS = "https://storage.googleapis.com/bit_models/imagenet21k_wordnet_lemmas.txt"
+# ImageNet-21k class names (the bit_models GCS lemma file now 403s).
+IN21K_LABELS = "https://huggingface.co/datasets/huggingface/label-files/resolve/main/imagenet-22k-id2label.json"
 
 
 def _fetch(url: str, cache_name: str) -> str:
@@ -80,9 +81,11 @@ def openimages_labels() -> list[str]:
 
 
 def in21k_labels() -> list[str]:
-    lines = _fetch(IN21K_LEMMAS, "in21k.txt").splitlines()
-    # each line: "tench, Tinca tinca" - take the first lemma
-    labels = [ln.split(",")[0].strip().replace("_", " ") for ln in lines if ln.strip()]
+    import json
+
+    id2label = json.loads(_fetch(IN21K_LABELS, "in21k.json"))
+    # each value: "tench, Tinca tinca" - take the first lemma
+    labels = [v.split(",")[0].strip().replace("_", " ") for v in id2label.values() if v.strip()]
     return sorted(set(labels))
 
 
@@ -149,8 +152,12 @@ def florence_generate(meta, task, batch_size=8, max_new_tokens=64) -> list[str]:
     model_id = "microsoft/Florence-2-base"
     device = "cuda" if torch.cuda.is_available() else "cpu"
     processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+    # Florence-2's remote code predates transformers' sdpa dispatch check;
+    # eager attention sidesteps the missing _supports_sdpa attribute.
     model = (
-        AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True, torch_dtype=torch.float32)
+        AutoModelForCausalLM.from_pretrained(
+            model_id, trust_remote_code=True, torch_dtype=torch.float32, attn_implementation="eager"
+        )
         .to(device)
         .eval()
     )
@@ -167,11 +174,14 @@ def florence_generate(meta, task, batch_size=8, max_new_tokens=64) -> list[str]:
                 max_new_tokens=max_new_tokens,
                 num_beams=1,
                 do_sample=False,
+                # Remote code expects the legacy tuple KV-cache API that
+                # transformers 4.57 removed; disable the cache entirely.
+                use_cache=False,
             )
         for row, img in zip(out, images):
             raw = processor.batch_decode([row], skip_special_tokens=False)[0]
             parsed = processor.post_process_generation(raw, task=task, image_size=(img.width, img.height))
-            texts.append(str(parsed.get(task, "")).strip())
+            texts.append(str(parsed.get(task, "")).replace("<pad>", "").replace("</s>", "").strip())
         print(f"  florence{task} {min(i + batch_size, len(meta))}/{len(meta)}", flush=True)
     return texts
 
