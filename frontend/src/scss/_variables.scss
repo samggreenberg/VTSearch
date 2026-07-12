@@ -87,6 +87,17 @@
   --z-toast: 5000;
   --z-login: 9999;
 
+  // Canvas-overlay stacking (browse view). A small local scale for the
+  // affordances painted over the UMAP canvas: they live inside the
+  // ``.browse-content`` / ``.browse-main`` stacking contexts, so they need
+  // their own low integers rather than a slot on the global scale above.
+  // ``base`` lifts a hovered/active control just past its siblings (border
+  // overlap); ``overlay`` floats the tool clusters over the canvas;
+  // ``top`` is the pre-reveal cover that sits over everything.
+  --z-canvas-base: 1;
+  --z-canvas-overlay: 2;
+  --z-canvas-top: 3;
+
   // Modal width scale. Dialogs pick one of these instead of hand-rolling a
   // width; keeps chrome consistent across the ~24 modals. `sm` is the simple
   // single-column form (label importer, combine detectors, blank new-detector
