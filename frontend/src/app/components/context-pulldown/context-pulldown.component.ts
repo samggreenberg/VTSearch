@@ -13,6 +13,7 @@ import { DashboardSelectionService } from '../../services/dashboard-selection.se
 import { RunningJobsService, pairKey } from '../../services/running-jobs.service';
 import { SortState } from '../../utils/managed-columns';
 import { DatasetRegistryEntry } from '../../models/api.models';
+import { IconComponent } from '../icon/icon.component';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { isPairCompatible } from '../../utils/context-compat';
 
@@ -60,7 +61,7 @@ interface PulldownRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-context-pulldown',
   standalone: true,
-  imports: [TitleCasePipe],
+  imports: [TitleCasePipe, IconComponent],
   templateUrl: './context-pulldown.component.html',
   styleUrl: './context-pulldown.component.scss',
 })
@@ -89,8 +90,8 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
 
   /** Ids of this pulldown's rows that count as "active" — the selected
    *  table rows while the Dashboard is on screen, otherwise the single
-   *  active/loaded id from `ActiveContextService`. Drives the ✓ glyph,
-   *  the closed-state label, and keyboard focus. */
+   *  active/loaded id from `ActiveContextService`. Drives the active-row
+   *  check icon, the closed-state label, and keyboard focus. */
   private selectedIds: string[] = [];
 
   /** True between an "Add New" click in this pulldown and the resulting
@@ -388,7 +389,8 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   }
 
   glyphFor(row: PulldownRow): string {
-    if (row.active) return '✓';
+    // The active state renders a `vt-icon` check in the template; this getter
+    // only covers the loaded (●) / unloaded (○) dot for inactive rows.
     return row.loaded ? '●' : '○';
   }
 

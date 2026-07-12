@@ -11,6 +11,7 @@ import {
 } from '../../../utils/format-progress';
 import { formatTimestamp } from '../../../utils/format-date';
 import { ContextMenuComponent, ContextMenuItem } from '../../context-menu/context-menu.component';
+import { IconComponent } from '../../icon/icon.component';
 import { buildDetectorCardMenuItems, CARD_MENU_MIN_WIDTH, overflowMenuItems } from '../card-context-menu-items';
 
 @Component({
@@ -18,7 +19,7 @@ import { buildDetectorCardMenuItems, CARD_MENU_MIN_WIDTH, overflowMenuItems } fr
   selector: 'tr[vt-detector-card]',
   standalone: true,
   host: { class: 'entity-card' },
-  imports: [CommonModule, FormsModule, JobProgressComponent, ContextMenuComponent],
+  imports: [CommonModule, FormsModule, JobProgressComponent, ContextMenuComponent, IconComponent],
   templateUrl: './detector-card.component.html',
   styleUrl: './detector-card.component.scss',
 })

@@ -45,7 +45,7 @@
             (click)="pickRow(row)"
             (mouseenter)="focusedIndex = i"
           >
-            <span class="row-glyph" [title]="glyphTitle(row)">{{ glyphFor(row) }}</span>
+            <span class="row-glyph" [title]="glyphTitle(row)">@if (row.active) { <vt-icon type="check" [size]="14"></vt-icon> } @else { {{ glyphFor(row) }} }</span>
             <span class="row-name">{{ row.name }}</span>
             <span class="row-type">· {{ row.mediaType | titlecase }}</span>
             @if (row.busy) {

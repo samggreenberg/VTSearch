@@ -70,6 +70,19 @@ layout — `three-panel`, `results-grid`, `view-options`, `autopilot-progress`,
 these few px. All are already listed below for other reasons; this note records
 the additional layout drift so a drain session knows to expect it.
 
+**Icon-system unification (2026-07-12).** The image-view toolbar's raw
+glyphs (`⟲ ⟳ − +`) and its "Reset" text label became `vt-icon` registry
+icons (`rotate-ccw`/`rotate-cw`/`zoom-out`/`zoom-in`/`zoom-fit`), and several
+duplicated inline SVGs (Browse eye, Export, delete trash, Combine, the
+tri-state selection checkbox) plus stray `✓` success glyphs were routed
+through the `vt-icon` registry. Any frame showing the image toolbar
+(`region-voting`, `three-panel`, `autopilot-vote`), the dashboard tables
+(`dashboard-loaded`, `dashboard-manage`), the Find right pile (`find-view`),
+or the achievements checklist (`achievements`) renders those controls
+slightly differently (a uniform icon in place of a glyph/text, and a couple
+of Browse/Export icons at the registry's heavier stroke). Applies to both
+theme variants; not annotated per-row.
+
 | Shot id | Embedded in | Why it's stale | Flagged |
 |---------|-------------|----------------|---------|
 | `importer-picker` | `docs/user/USER_GUIDE.md#loading-a-dataset` | The shot's caption calls out "per-row readiness badges" (`.badge-ready`/`.badge-embedding`); the 2026-07-09 UI style review Phase 1 fix swapped their unreadable white text for a new `--badge-text-dark` token, changing the badge's rendered text color in both themes. Also: 2026-07-09 light-mode neutral-ramp change (see note above) shifts the light variant's background tone. | 2026-07-09 |
