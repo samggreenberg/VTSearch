@@ -10,41 +10,9 @@
   min-height: 340px;
 }
 
-.settings-tabs {
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  width: 140px;
-  border-right: 1px solid var(--border);
-  padding: var(--space-xs) 0;
-}
-
-.settings-tab {
-  background: none;
-  border: none;
-  border-left: 3px solid transparent;
-  padding: var(--space-sm) var(--space-md);
-  font-size: var(--font-md);
-  font-weight: var(--weight-medium);
-  color: var(--text-secondary);
-  cursor: pointer;
-  text-align: left;
-  transition: color var(--transition-base), background var(--transition-base), border-color var(--transition-base);
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-
-  &:hover {
-    color: var(--text-primary);
-    background: var(--bg-subtle);
-  }
-
-  &--active {
-    color: var(--text-primary);
-    background: var(--bg-subtle);
-    border-left-color: var(--accent);
-  }
-}
+// The vertical tab rail uses the shared `.side-tab-bar` / `.side-tab`
+// primitive defined in `scss/_components.scss`; only the rotating
+// `.settings-tab-icon` (below) is Settings-specific.
 
 .settings-panel {
   flex: 1;
