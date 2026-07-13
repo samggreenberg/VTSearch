@@ -66,6 +66,7 @@ describe('AudioPlayerComponent', () => {
       play: () => Promise.resolve(),
       pause: () => {},
       load: () => {},
+      removeAttribute: () => {},
     } as unknown as HTMLAudioElement;
     // A canvas whose 2D context is unavailable, so the waveform path (which
     // needs decodeAudioData, absent in jsdom) short-circuits after the src is set.
