@@ -555,16 +555,36 @@ def get_embedder_for_medias(media_dict: dict):
     return avail[0] if avail else None
 
 
+def _scrub_server_paths(text: str) -> str:
+    """Rewrite absolute paths under the server data dir to be relative to it.
+
+    A raw OS error (e.g. ``[Errno 36] File name too long: '/srv/app/data/
+    detectors/x.json.tmp'``) carries the absolute server path; surfacing it
+    verbatim in a 500 body leaks the deployment's on-disk layout.  Strip the
+    prefix up to the data dir's parent so the message keeps the useful tail
+    (``data/detectors/x.json.tmp``) without the mount point.
+    """
+    import os
+
+    from vtscore.config import DATA_DIR
+
+    prefix = f"{DATA_DIR.parent}{os.sep}"
+    return text.replace(prefix, "")
+
+
 def format_exception_detail(exc: BaseException) -> str:
     """Return ``"ExcType: first line"`` (or ``"ExcType"`` when the message is empty).
 
     Used in 500 response bodies so the UI can distinguish failure kinds
     (e.g. ``MemoryError`` from ``RuntimeError: embedder X not loaded``)
-    without exposing a multi-line traceback.
+    without exposing a multi-line traceback.  Absolute server paths are
+    scrubbed to their data-dir-relative tail so a raw OS error can't leak the
+    deployment's directory layout.
     """
     text = str(exc)
     first = text.splitlines()[0].strip() if text else ""
-    return f"{type(exc).__name__}: {first}" if first else type(exc).__name__
+    detail = f"{type(exc).__name__}: {first}" if first else type(exc).__name__
+    return _scrub_server_paths(detail)
 
 
 def format_mtime(entry) -> str:

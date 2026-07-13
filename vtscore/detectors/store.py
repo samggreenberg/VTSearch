@@ -8,6 +8,7 @@ persist or inspect detector data without importing the full route blueprint.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import re
@@ -15,6 +16,16 @@ import uuid
 from pathlib import Path
 
 from vtscore.config import DATA_DIR
+
+#: Cap on the slug length so ``<slug>.json`` and its longer atomic-write
+#: sibling ``<slug>.json.<pid>.<uuid>.tmp`` (worst case ~50 extra chars) stay
+#: under the common filesystem ``NAME_MAX`` of 255.  The schema layer already
+#: caps user-supplied names well below this (see
+#: ``vtsearch.schemas.detectors.MAX_NAME_LENGTH``); this is the last-line
+#: backstop for names that reach the store by other paths (combine, CLI,
+#: direct library use) so a write can never raise ``[Errno 36] File name too
+#: long`` — an uncaught ``OSError`` whose message leaks the absolute path.
+_MAX_SLUG_LENGTH = 190
 
 
 def get_detectors_dir() -> Path:
@@ -36,8 +47,18 @@ DETECTORS_DIR = DATA_DIR / "detectors"
 
 
 def _slug(name: str) -> str:
-    """Turn a human-readable name into a filesystem-safe slug."""
-    return re.sub(r"[^a-z0-9_-]+", "_", name.lower()).strip("_") or "detector"
+    """Turn a human-readable name into a filesystem-safe slug.
+
+    Truncated to ``_MAX_SLUG_LENGTH`` so the derived filename stays under the
+    filesystem ``NAME_MAX``.  When truncation drops characters, an 8-hex
+    content hash of the full name is appended so two long names sharing a
+    prefix don't collide onto the same file.
+    """
+    slug = re.sub(r"[^a-z0-9_-]+", "_", name.lower()).strip("_") or "detector"
+    if len(slug) > _MAX_SLUG_LENGTH:
+        digest = hashlib.blake2b(name.encode("utf-8"), digest_size=4).hexdigest()
+        slug = f"{slug[: _MAX_SLUG_LENGTH - len(digest) - 1]}_{digest}"
+    return slug
 
 
 def _detector_path(name: str) -> Path:

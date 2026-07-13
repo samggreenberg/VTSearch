@@ -19,7 +19,7 @@ import re
 import pytest
 
 from vtscore.detectors import store
-from vtscore.detectors.store import _read_detector, _write_detector
+from vtscore.detectors.store import _MAX_SLUG_LENGTH, _read_detector, _slug, _write_detector
 
 
 class TestDetectorAtomicWrite:
@@ -52,6 +52,28 @@ class TestDetectorAtomicWrite:
         _write_detector(path, {"name": "mammals"})
         leftovers = [p.name for p in tmp_path.iterdir() if p.name.endswith(".tmp")]
         assert leftovers == []
+
+    def test_slug_truncates_overlong_name(self):
+        """A pathological name must slug to a length that keeps ``<slug>.json``
+
+        and its ``.tmp`` sibling under the filesystem ``NAME_MAX`` (255), so a
+        write can't raise ``OSError`` (and leak the absolute path).
+        """
+        slug = _slug("a" * 1000)
+        assert len(slug) <= _MAX_SLUG_LENGTH
+
+    def test_slug_overlong_names_do_not_collide(self):
+        """Two distinct long names sharing a prefix get distinct slugs (via the
+
+        appended content hash), so truncation can't silently overwrite files.
+        """
+        a = _slug("z" * 500 + "_alpha")
+        b = _slug("z" * 500 + "_beta")
+        assert a != b
+
+    def test_slug_short_name_unchanged(self):
+        """The truncation path is inert for ordinary names."""
+        assert _slug("Mammals of North America") == "mammals_of_north_america"
 
     def test_tmp_cleaned_up_on_replace_error(self, tmp_path, monkeypatch):
         """A failed ``os.replace`` must not leak the half-written tmp file."""

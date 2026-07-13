@@ -195,6 +195,21 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // human verifies it, so the big buttons read neutral and a click verifies
     // (rather than toggling the presumption off).  Cleared in ngOnDestroy.
     this.voteState.setFindMode(true);
+    // Find/Train share singleton sub-view state (SortStateService /
+    // VoteStateService), so a fresh Dashboard → Find navigation still holds the
+    // previous session's ranking and votes.  Against a *smaller* dataset that
+    // stale ranking briefly renders ids that only existed in the prior dataset,
+    // firing a storm of image 404s.  Reset it here (mirroring reloadForNewPair)
+    // before loading — but NOT when returning from the Browser, where the
+    // preserved ranking + verifications are exactly what we want to keep (see
+    // the runFindLabel guard below).
+    const returningFromBrowse = this.browseSubset.consumeReturningToFind();
+    if (!returningFromBrowse) {
+      this.sortState.setSortResults([], 0);
+      this.sortState.setSortStatus('');
+      this.sortState.setSortProgress(0, 0);
+      this.voteState.clear();
+    }
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
     // The left work queue (ranking minus verified items) is the
@@ -219,7 +234,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // slider in step with whatever the detector was last trained at.
     this.seedInclusion();
 
-    if (!this.browseSubset.consumeReturningToFind()) {
+    if (!returningFromBrowse) {
       this.runFindLabel();
     }
 

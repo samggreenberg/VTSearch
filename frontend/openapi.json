@@ -968,6 +968,7 @@
         "additionalProperties": false,
         "properties": {
           "name": {
+            "maxLength": 128,
             "minLength": 1,
             "type": "string"
           }
@@ -1405,6 +1406,7 @@
         "additionalProperties": false,
         "properties": {
           "name": {
+            "maxLength": 128,
             "minLength": 1,
             "type": "string"
           }
@@ -1719,6 +1721,7 @@
             "type": "array"
           },
           "new_name": {
+            "maxLength": 128,
             "minLength": 1,
             "type": "string"
           }
@@ -1800,6 +1803,7 @@
             "type": "string"
           },
           "name": {
+            "maxLength": 128,
             "minLength": 1,
             "type": "string"
           },
@@ -2107,6 +2111,7 @@
             "type": "string"
           },
           "name": {
+            "maxLength": 128,
             "minLength": 1,
             "type": "string"
           },
@@ -2312,6 +2317,7 @@
         "additionalProperties": false,
         "properties": {
           "name": {
+            "maxLength": 128,
             "minLength": 1,
             "type": "string"
           }
@@ -2445,6 +2451,7 @@
         "additionalProperties": false,
         "properties": {
           "new_name": {
+            "maxLength": 128,
             "minLength": 1,
             "type": "string"
           }

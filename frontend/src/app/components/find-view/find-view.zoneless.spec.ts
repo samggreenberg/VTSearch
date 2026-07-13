@@ -5,6 +5,7 @@ import { provideRouter } from '@angular/router';
 
 import { FindViewComponent } from './find-view.component';
 import { SortStateService } from '../../services/sort-state.service';
+import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 
@@ -102,5 +103,38 @@ describe('FindViewComponent (zoneless canary)', () => {
     sortState.setSortBusy(false);
     await settleZoneless(fixture);
     expect(fixture.nativeElement.querySelector('.find-wait-overlay')).toBeNull();
+  });
+
+  // Find/Train share the singleton SortStateService, so a fresh entry still
+  // holds the previous session's ranking. Against a smaller dataset those stale
+  // ids fire a storm of image 404s; ngOnInit resets the ranking before loading.
+  it('clears the previous session ranking on a fresh entry', async () => {
+    const sortState = TestBed.inject(SortStateService);
+    // Seed a ranking from a "previous" (larger) dataset before ngOnInit runs.
+    sortState.setSortResults([{ id: 999, score: 0.9 }], 0.5);
+    expect(sortState.sortOrder?.length).toBe(1);
+
+    await flushInit();
+    httpMock.match('/api/dataset/status').forEach((req) => req.flush({ display_name: 'x' }));
+    await settleZoneless(fixture);
+
+    // Reset happened before loadMedias(), so no stale id survives to fire a 404.
+    expect(sortState.sortOrder ?? []).toEqual([]);
+  });
+
+  // Returning from the Browser is the exception: the preserved ranking and the
+  // just-recorded verifications are exactly what we keep, so the reset is
+  // skipped.
+  it('preserves the ranking when returning from the Browser', async () => {
+    const sortState = TestBed.inject(SortStateService);
+    const browseSubset = TestBed.inject(BrowseSubsetService);
+    sortState.setSortResults([{ id: 999, score: 0.9 }], 0.5);
+    browseSubset.markReturningToFind();
+
+    await flushInit();
+    httpMock.match('/api/dataset/status').forEach((req) => req.flush({ display_name: 'x' }));
+    await settleZoneless(fixture);
+
+    expect(sortState.sortOrder?.map((s) => s.id)).toEqual([999]);
   });
 });

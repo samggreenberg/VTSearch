@@ -131,3 +131,31 @@ class TestUncaughtExceptionHandler:
         assert body["error"] == "Internal server error"
         assert "RuntimeError" in body.get("detail", "")
         assert "request_id" in body
+
+
+class TestExceptionDetailPathScrub:
+    """``format_exception_detail`` must not leak the absolute server path.
+
+    An OS error (e.g. ENAMETOOLONG on a rename) carries the absolute path;
+    the 500 body scrubs it down to the data-dir-relative tail.
+    """
+
+    def test_data_dir_prefix_is_stripped(self):
+        import os
+
+        from vtscore.config import DATA_DIR
+        from vtsearch.routes._shared import format_exception_detail
+
+        leaked = str(DATA_DIR / "detectors" / "x.json.tmp")
+        detail = format_exception_detail(OSError(f"[Errno 36] File name too long: '{leaked}'"))
+
+        # The absolute mount-point prefix is gone...
+        assert str(DATA_DIR.parent) not in detail
+        # ...but the useful data-dir-relative tail survives.
+        assert f"detectors{os.sep}x.json.tmp" in detail
+
+    def test_ordinary_message_untouched(self):
+        from vtsearch.routes._shared import format_exception_detail
+
+        detail = format_exception_detail(RuntimeError("embedder X not loaded"))
+        assert detail == "RuntimeError: embedder X not loaded"
