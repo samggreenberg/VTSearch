@@ -160,8 +160,13 @@ class SodDataset:
             return syn.split(".")[0] == q_syn
         return _norm(row.get("name", "")) == q_norm
 
-    def class_split(self, category: str, *, neg_count: int, seed: int) -> ClassSplit:
-        """Stream the extract once → positives (+ boxes), and a seeded negative sample."""
+    def class_split(self, category: str, *, neg_multiple: int, seed: int) -> ClassSplit:
+        """Stream the extract once → positives (+ boxes), and a seeded negative sample.
+
+        ``neg_multiple`` sizes the sampled negative pool as ``neg_multiple × n_positives``
+        (capped by the available negatives), so prevalence ≈ ``1/(1+neg_multiple)`` holds
+        constant across classes regardless of how many positives a class has.
+        """
         import numpy as np
 
         q_norm = _norm(category)
@@ -191,6 +196,7 @@ class SodDataset:
             cand = [i for i in cand if self._reader.has(i)]  # type: ignore[union-attr]
             positive_ids = [i for i in positive_ids if self._reader.has(i)]  # type: ignore[union-attr]
         rng = np.random.default_rng(seed)
+        neg_count = neg_multiple * len(positive_ids)  # pool = multiple × positives
         take = min(neg_count, len(cand))
         neg_ids = sorted(int(x) for x in rng.choice(cand, size=take, replace=False)) if take else []
         return ClassSplit(

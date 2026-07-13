@@ -11,9 +11,14 @@ import pytest
 
 from vtscore.eval.error_metrics import f1_at, inclusion_weights, min_weighted_cost, weighted_error
 from vtscore.eval.region_curve import (
+    AutopilotPhaseMachine,
     RegionCurveInputs,
     _flood_context_np,
     _iou_metrics,
+    _select_hard,
+    _select_new,
+    _span_status,
+    evaluate_realistic_curve,
     evaluate_region_curve,
     sample_rv_budget,
     train_rv_head,
@@ -353,3 +358,224 @@ def test_region_curve_region_voting_separates():
     rows = evaluate_region_curve(inputs, "mlp", k_values=[16], seeds=[0, 1, 2], neg_ratio=2)
     # Separable blobs -> the oracle operating point should be clearly good.
     assert min(r["oracle_cost"] for r in rows) < 0.3
+
+
+# --------------------------------------------------------------------------
+# realistic labeling loop (Autopilot active-learning port)
+# --------------------------------------------------------------------------
+
+
+def _realistic_inputs(seed=0, dim=16, n_pos=30, n_neg=90):
+    """RegionCurveInputs with a training pool for the realistic loop: separable
+    positive/negative blobs, region-voting mode (one snapped exemplar per positive
+    image, per-image leaf bags for negatives)."""
+    rng = np.random.default_rng(seed)
+    cpos = np.zeros(dim, np.float32)
+    cpos[0] = 1.0
+    cneg = np.zeros(dim, np.float32)
+    cneg[1] = 1.0
+
+    def blob(c, m):
+        v = c + 0.15 * rng.standard_normal((m, dim)).astype(np.float32)
+        return (v / (np.linalg.norm(v, axis=1, keepdims=True) + 1e-9)).astype(np.float32)
+
+    pool_ids: list[int] = []
+    pool_region_mats: list[np.ndarray] = []
+    pool_region_boxes: list[np.ndarray] = []
+    pool_whole: list[np.ndarray] = []
+    pool_leaf: list[np.ndarray] = []
+    pool_labels: list[int] = []
+    pool_pos_ex: dict[int, np.ndarray] = {}
+
+    def boxes(m):
+        return np.tile(np.array([0.1, 0.1, 0.5, 0.5], np.float32), (m, 1))
+
+    for i in range(n_pos):
+        reg = blob(cpos, int(rng.integers(3, 6)))
+        pool_ids.append(i)
+        pool_region_mats.append(reg)
+        pool_region_boxes.append(boxes(reg.shape[0]))
+        pool_whole.append(reg.mean(0))
+        pool_leaf.append(np.ones(reg.shape[0], dtype=bool))
+        pool_labels.append(1)
+        pool_pos_ex[i] = blob(cpos, 1)  # snapped covering-box exemplar (1, D)
+    for j in range(n_neg):
+        iid = n_pos + j
+        reg = blob(cneg, int(rng.integers(3, 6)))
+        pool_ids.append(iid)
+        pool_region_mats.append(reg)
+        pool_region_boxes.append(boxes(reg.shape[0]))
+        pool_whole.append(reg.mean(0))
+        pool_leaf.append(np.ones(reg.shape[0], dtype=bool))
+        pool_labels.append(0)
+
+    test_mats = [blob(cpos, 3) for _ in range(15)] + [blob(cneg, 3) for _ in range(45)]
+    test_labels = [1] * 15 + [0] * 45
+    return RegionCurveInputs(
+        pos_exemplars=np.vstack(list(pool_pos_ex.values())),
+        neg_train_wholes=np.zeros((0, dim), np.float32),
+        test_region_mats=test_mats,
+        test_labels=test_labels,
+        input_dim=dim,
+        meta={"embedder": "syn", "dataset": "syn", "class": "c", "proposal": "hac"},
+        region_voting=True,
+        pool_ids=pool_ids,
+        pool_region_mats=pool_region_mats,
+        pool_region_boxes=pool_region_boxes,
+        pool_whole_vecs=np.vstack(pool_whole).astype(np.float32),
+        pool_leaf_masks=pool_leaf,
+        pool_labels=pool_labels,
+        pool_pos_exemplars=pool_pos_ex,
+    )
+
+
+def test_phase_machine_table():
+    m = AutopilotPhaseMachine(good_to_start=3, bad_to_start=4)
+    # Below the good/bad floors -> good then bad, regardless of indicators.
+    assert m.next_phase(0, 0, "green", "green", "green") == "good"
+    assert m.next_phase(2, 9, "green", "green", "green") == "good"
+    assert m.next_phase(3, 0, "green", "green", "green") == "bad"
+    assert m.next_phase(5, 3, "green", "green", "green") == "bad"
+    # Past both floors: indicators drive hard/new/done.
+    assert m.next_phase(5, 5, "yellow", "green", "green") == "hard"
+    assert m.next_phase(5, 5, "green", "yellow", "green") == "hard"
+    assert m.next_phase(5, 5, "green", "green", "yellow") == "new"
+    assert m.next_phase(5, 5, "green", "green", "green") == "done"
+
+
+def test_realistic_t_monotonic_and_emergent_mix():
+    inputs = _realistic_inputs()
+    rows = evaluate_realistic_curve(inputs, "mlp", seeds=[0], max_labels=14)
+    ts = [r["t"] for r in rows]
+    assert ts == list(range(1, len(rows) + 1))  # one row per t, strictly 1..N
+    for r in rows:
+        assert r["n_good"] + r["n_bad"] == r["t"]  # emergent mix, sums to total
+        assert r["k"] == r["t"]  # k mirrors t so existing plotting keys work
+        assert np.isfinite(r["cost"])
+    # The mix is emergent, not a fixed neg_ratio: at least one bad appears and the
+    # good:bad ratio is not a constant integer multiple across the curve.
+    assert rows[-1]["n_bad"] >= 1 and rows[-1]["n_good"] >= 1
+
+
+def test_realistic_coldstart_single_class():
+    inputs = _realistic_inputs()
+    rows = evaluate_realistic_curve(inputs, "mlp", seeds=[0], max_labels=6)
+    # t=1 seeds a single positive -> cosine cold-start, finite, no crash.
+    assert rows[0]["t"] == 1
+    assert rows[0]["n_good"] == 1 and rows[0]["n_bad"] == 0
+    assert rows[0]["calib_mode"] == "cosine_coldstart"
+    assert np.isfinite(rows[0]["cost"])
+
+
+def test_realistic_region_voting_engages():
+    inputs = _realistic_inputs()
+    rows = evaluate_realistic_curve(inputs, "mlp", seeds=[0], max_labels=16)
+    # Once both classes exist the MLP (region-voting) path trains -> a non-cosine
+    # calib_mode appears on at least one row.
+    assert any(r["calib_mode"] != "cosine_coldstart" for r in rows)
+
+
+def test_realistic_deterministic():
+    inputs = _realistic_inputs()
+    r1 = evaluate_realistic_curve(inputs, "mlp", seeds=[0], max_labels=8)
+    r2 = evaluate_realistic_curve(inputs, "mlp", seeds=[0], max_labels=8)
+    assert len(r1) == len(r2)
+    for a, b in zip(r1, r2, strict=True):
+        assert (a["t"], a["n_good"], a["n_bad"], a["phase"], a["select_mode"]) == (
+            b["t"],
+            b["n_good"],
+            b["n_bad"],
+            b["phase"],
+            b["select_mode"],
+        )
+        assert np.allclose(a["cost"], b["cost"], atol=1e-9)
+
+
+def test_realistic_oracle_floor():
+    inputs = _realistic_inputs()
+    rows = evaluate_realistic_curve(inputs, "mlp", seeds=[0, 1], max_labels=12)
+    for r in rows:
+        if np.isfinite(r["cost"]) and np.isfinite(r["oracle_cost"]):
+            assert r["cost"] >= r["oracle_cost"] - 1e-6
+
+
+def test_realistic_unsupported_strategy_raises():
+    inputs = _realistic_inputs()
+    with pytest.raises(ValueError, match="select_strategy"):
+        evaluate_realistic_curve(inputs, "mlp", seeds=[0], max_labels=4, select_strategy="hard")
+
+
+def test_select_hard_picks_near_threshold():
+    # Descending scores; threshold falls between ranks -> nearest-rank unlabeled wins.
+    pool_ids = [10, 11, 12, 13, 14]
+    pool_scores = np.array([0.9, 0.7, 0.5, 0.3, 0.1])
+    # thresholdIndex = first rank with score <= 0.55 -> rank 2 (id 12). Nearest
+    # unlabeled to rank 2 is id 12 itself.
+    assert _select_hard(pool_ids, pool_scores, 0.55, labeled=set()) == 12
+    # If 12 is already labeled, the next-nearest ranks (11 @1, 13 @3) tie -> the
+    # lower rank (11) wins on the argsort order.
+    assert _select_hard(pool_ids, pool_scores, 0.55, labeled={12}) == 11
+
+
+def test_select_new_uses_diversity_tree():
+    from vtscore.state.diversity_tree import DiversityTree, auto_max_depth
+
+    inputs = _realistic_inputs(n_pos=40, n_neg=80)
+    vecs = {pid: inputs.pool_whole_vecs[i] for i, pid in enumerate(inputs.pool_ids)}
+    tree = DiversityTree(vecs, k=3, max_depth=auto_max_depth(len(inputs.pool_ids), k=3))
+    idx = {pid: i for i, pid in enumerate(inputs.pool_ids)}
+    scores = np.zeros(len(inputs.pool_ids), dtype=np.float64)
+    level0 = tree.diversity_level()
+    pick = _select_new(tree, inputs.pool_ids, scores, 0.5, labeled=set(), idx=idx)
+    assert pick in inputs.pool_ids
+    tree.label(pick)
+    assert tree.diversity_level() >= level0  # labeling a fresh cluster never lowers coverage
+
+
+def test_span_status_degenerate_tree_is_green():
+    assert _span_status(None) == "green"
+
+
+def test_realistic_return_finals():
+    inputs = _realistic_inputs()
+    rows, finals = evaluate_realistic_curve(inputs, "mlp", seeds=[0, 1], max_labels=10, return_finals=True)
+    assert isinstance(rows, list) and rows
+    assert set(finals) == {0, 1}  # one final per seed
+    for seed in (0, 1):
+        fin = finals[seed]
+        # predict is a callable head that scores a region matrix to one score per row.
+        mat = inputs.test_region_mats[0]
+        scores = np.asarray(fin["predict"](mat))
+        assert scores.shape[0] == mat.shape[0]
+        assert np.isfinite(fin["threshold"])
+        # final matches that seed's LAST row.
+        last = [r for r in rows if r["seed"] == seed][-1]
+        assert (fin["t"], fin["n_good"], fin["n_bad"]) == (last["t"], last["n_good"], last["n_bad"])
+
+
+def test_realistic_trace_contract():
+    inputs = _realistic_inputs()
+    _rows, finals = evaluate_realistic_curve(inputs, "mlp", seeds=[0], max_labels=12, return_finals=True)
+    trace = finals[0]["trace"]
+    # one entry per step, in order 1..t, aligned with the final t.
+    assert [e["t"] for e in trace] == list(range(1, len(trace) + 1))
+    assert len(trace) == finals[0]["t"]
+    first = trace[0]
+    # the seed step is a random cold-start pick: no surfacing score/box, select_mode 'seed'.
+    assert first["select_mode"] == "seed"
+    assert first["surface_score"] is None and first["pred_box"] is None
+    assert first["gt_label"] == "good"  # loop always seeds a positive
+    for e in trace:
+        assert e["gt_label"] in ("good", "bad")
+        assert e["head"] in ("cosine", "mlp")
+        assert e["phase"] in ("good", "bad", "hard", "new", "done")
+        assert np.isfinite(e["threshold"])
+        assert e["n_good"] + e["n_bad"] == e["t"]
+    # once both classes exist, later steps surface via a real head → a pred_box appears.
+    assert any(e["pred_box"] is not None and e["surface_score"] is not None for e in trace)
+
+
+def test_realistic_return_finals_default_is_plain_list():
+    inputs = _realistic_inputs()
+    out = evaluate_realistic_curve(inputs, "mlp", seeds=[0], max_labels=6)
+    assert isinstance(out, list)  # default (return_finals=False) preserves the list contract

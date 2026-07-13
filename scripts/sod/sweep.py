@@ -1,22 +1,21 @@
 #!/usr/bin/env python3
 """Small-object-detection evaluation sweep (orchestrator).
 
-Sweeps ``dataset × class × embedder × proposal × K`` and, for each config, reports
-the cross-calibrated (realistic) inclusion-weighted FPR+FNR vs the few-shot
-annotation count K (plus an oracle reference). The MLP head runs for every
-embedder (primary); the cosine head runs as a zero-shot baseline for text-capable
-embedders. See docs/plans/... (small-object sweep) for the design.
+Sweeps ``dataset × class × embedder × proposal`` and, for each config, runs the
+realistic Autopilot active-learning labeling loop, reporting cost/fpr/fnr/f1/IoU vs
+the total annotation count ``t`` (plus an oracle reference). See docs/plans/...
+(small-object sweep) for the design.
 
 Single-GPU loop for the pilot; ``--array-index/--array-total`` filter cells so the
 same command drops into a SLURM array later. Per-image embeddings are cached to
-npz (``--cache-dir``) so re-runs and multiple K reuse forward passes.
+npz (``--cache-dir``) so re-runs reuse forward passes.
 
 Example (stop sign on COCO):
     srun --partition=gpu --gres=gpu:l40s:1 --cpus-per-task=8 --mem=46G --time=8:00:00 \\ # or --pty bash -l
       .venv/bin/python scripts/sod/sweep.py \\
-        --datasets coco --classes "stop sign" --embedders siglip,dinov2 \\
-        --proposals whole,sliding,dino,hac --k-values 1,2,4,8,16 \\
-        --heads mlp,cosine --seeds 0,1,2 --out-dir docs/experiments/sod-sweep
+        --datasets coco --classes "stop sign" --embedders dinov2,dinov3 \\
+        --proposals hac --region-voting --iterations 3 --max-labels 60 \\
+        --out-dir docs/experiments/sod-sweep --viz
 """
 
 from __future__ import annotations
@@ -32,7 +31,7 @@ from pathlib import Path
 from datasets import SodDataset
 from features import FeatureCache, build_curve_inputs, dump_split, partition_split, slugify
 
-from vtscore.eval.region_curve import evaluate_region_curve
+from vtscore.eval.region_curve import evaluate_realistic_curve
 from vtscore.eval.region_sources import build_region_source
 
 EMBEDDER_ALIASES = {"dinov2": "dinov2_patch", "dinov3": "dinov3_patch"}
@@ -41,10 +40,6 @@ TEXT_EMBEDDERS = {"siglip", "siglip2", "clip"}
 
 def _floats(s: str) -> tuple[float, ...]:
     return tuple(float(x) for x in s.split(",") if x.strip())
-
-
-def _ints(s: str) -> list[int]:
-    return [int(x) for x in s.split(",") if x.strip()]
 
 
 def _strs(s: str) -> list[str]:
@@ -131,7 +126,7 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
         return []
 
     with SodDataset(cell["dataset"]) as ds:
-        split = ds.class_split(cell["class"], neg_count=args.neg_count, seed=args.split_seed)
+        split = ds.class_split(cell["class"], neg_multiple=args.neg_multiple, seed=args.split_seed)
         if not split.positive_ids:
             print(f"  skip {cell}: no positives for class {cell['class']!r}", flush=True)
             return []
@@ -144,7 +139,7 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
                 dataset=cell["dataset"],
                 class_name=cell["class"],
                 split_seed=args.split_seed,
-                neg_count=args.neg_count,
+                neg_multiple=args.neg_multiple,
                 test_fraction=args.test_fraction,
                 split=buckets,
             )
@@ -160,7 +155,6 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
             "alpha": alpha,
             "region_voting": region_voting,
             "negatives_exhaustive": split.negatives_exhaustive,
-            "neg_regions": args.neg_regions,
             "n_pos_total": len(split.positive_ids),
             "n_neg_total": len(split.negative_ids),
         }
@@ -171,37 +165,100 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
             cache,
             class_name=cell["class"],
             meta=meta,
-            neg_regions=args.neg_regions,
             region_voting=region_voting,
+            build_pool=True,
         )
 
+    # One active-learning labeling loop per cell (x-axis = total annotations t). The
+    # MLP head does the work; a text query only seeds the cold-start ranking for
+    # text-capable embedders (DINO uses the seed exemplar).
+    query_vec = None
+    if cell["embedder"] in TEXT_EMBEDDERS:
+        query_vec = source.embed_text(args.prompt_template.format(cell["class"]))
+    result = evaluate_realistic_curve(
+        inputs,
+        "mlp",
+        seeds=range(args.iterations),
+        max_labels=args.max_labels,
+        inclusion=args.inclusion,
+        safe_thresholds=args.safe_thresholds,
+        calibrate_count=args.calibrate_count,
+        cal_fraction=args.cal_fraction,
+        query_vec=query_vec,
+        select_strategy=args.select_strategy,
+        good_to_start=args.good_to_start,
+        bad_to_start=args.bad_to_start,
+        retrain_cadence=args.retrain_cadence,
+        stop_at_done=args.stop_at_done,
+        return_finals=args.viz or args.labeling_trace,
+    )
     rows: list[dict] = []
-    heads = list(args.heads)
-    for head in heads:
-        if head == "cosine" and cell["embedder"] not in TEXT_EMBEDDERS:
-            continue  # DINO has no text encoder
-        query_vec = None
-        k_list = [k for k in args.k_values if k > 0]
-        if head == "cosine":
-            query_vec = source.embed_text(args.prompt_template.format(cell["class"]))
-            if query_vec is None:
-                continue
-            k_list = [0, *k_list]  # zero-shot baseline point
-        rows.extend(
-            evaluate_region_curve(
-                inputs,
-                head,
-                k_values=k_list,
-                seeds=args.seeds,
-                neg_ratio=args.neg_ratio,
-                inclusion=args.inclusion,
-                safe_thresholds=args.safe_thresholds,
-                calibrate_count=args.calibrate_count,
-                cal_fraction=args.cal_fraction,
-                query_vec=query_vec,
-            )
-        )
+    if args.viz or args.labeling_trace:
+        cell_rows, finals = result
+        rows.extend(cell_rows)
+        # Prediction overlays (viz-seed, --viz) + per-iteration labeling trace
+        # (all seeds, --labeling-trace); each gated independently inside.
+        _render_realistic_viz(args, cell, cache_root, buckets, slug, finals)
+    else:
+        rows.extend(result)
     return rows
+
+
+def _render_realistic_viz(args, cell, cache_root: Path, buckets, slug: str, finals: dict) -> None:
+    """Realistic-mode overlays from the in-memory finals of
+    ``evaluate_realistic_curve(return_finals=True)``:
+
+    - with ``--viz``: final-detector TP/FP/FN/TN prediction overlays for the ``--viz-seed``
+      (default 0);
+    - with ``--labeling-trace``: the per-iteration labeling trace (numbered ordered images +
+      trace.csv/json) for **every** seed under ``labeling_trace/``.
+
+    Reopens + primes the dataset once (the loop ran after the cell's ``SodDataset`` block,
+    and a fresh ``SodDataset`` has no ``load_image`` locator until ``class_split``).
+    """
+    from viz import render_labeling_trace, render_predictions_realistic
+
+    viz_seed = args.viz_seed if args.viz_seed is not None else 0
+    try:
+        with SodDataset(cell["dataset"]) as ds:
+            ds.class_split(cell["class"], neg_multiple=args.neg_multiple, seed=args.split_seed)
+            if args.viz:
+                fin = finals.get(viz_seed)
+                if fin is not None:
+                    render_predictions_realistic(
+                        ds,
+                        buckets,
+                        cache_dir=cache_root,
+                        out_dir=args.out_dir / "predictions",
+                        dataset=cell["dataset"],
+                        cls=cell["class"],
+                        embedder=cell["embedder"],
+                        proposal=cell["proposal"],
+                        alpha=cell["alpha"],
+                        slug=slug,
+                        predict=fin["predict"],
+                        thr=fin["threshold"],
+                        t=fin["t"],
+                        gallery_n=args.viz_n,
+                    )
+                else:
+                    print(f"  [predict] skip {cell}: no final head for seed {viz_seed}", flush=True)
+            if args.labeling_trace:
+                for s, f in sorted(finals.items()):
+                    render_labeling_trace(
+                        ds,
+                        buckets,
+                        f["trace"],
+                        out_dir=args.out_dir / "labeling_trace",
+                        dataset=cell["dataset"],
+                        cls=cell["class"],
+                        embedder=cell["embedder"],
+                        proposal=cell["proposal"],
+                        alpha=cell["alpha"],
+                        seed=s,
+                    )
+    except Exception:
+        print(f"  viz realistic error {cell}:\n{traceback.format_exc()}", flush=True)
 
 
 def _write_results(rows: list[dict], out_dir: Path) -> None:
@@ -227,18 +284,13 @@ def main() -> int:
     ap.add_argument("--classes", type=_strs, default=["stop sign"])
     ap.add_argument("--embedders", type=_strs, default=["clip", "siglip", "siglip2", "dinov2", "dinov3"])
     ap.add_argument("--proposals", type=_strs, default=["whole", "sliding", "dino", "hac"])
-    ap.add_argument("--heads", type=_strs, default=["mlp", "cosine"])
-    ap.add_argument("--k-values", type=_ints, default=[1, 2, 4, 8, 16])
-    ap.add_argument("--seeds", type=_ints, default=[0, 1, 2])
     ap.add_argument("--split-seed", type=int, default=0, help="seed for class split + pool partition")
-    ap.add_argument("--neg-count", type=int, default=690, help="size of the sampled evaluation negative pool")
-    ap.add_argument("--neg-ratio", type=int, default=1, help="training negatives per positive (per K)")
     ap.add_argument(
-        "--neg-regions",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="train MLP negatives on proposed-region crops of negative images (matches the test "
-        "distribution for crop/HAC proposals) instead of whole-image vectors",
+        "--neg-multiple",
+        type=int,
+        default=100,
+        help="evaluation negative-pool size as a multiple of the class's positive count "
+        "(pool = neg_multiple × n_positives; prevalence ≈ 1/(1+neg_multiple), constant across classes)",
     )
     ap.add_argument(
         "--region-voting",
@@ -247,7 +299,40 @@ def main() -> int:
         help="faithful app-detector label construction for the hac proposal on dinov2/dinov3: "
         "good votes snap to the nearest HAC node, bad votes flood CLS+leaves as negatives, "
         "bag-aware per-image weighting + grouped cross-calibration (mirrors `vtscore.eval --region-voting`). "
-        "No-op for non-hac proposals; overrides --neg-regions for hac. Uses a distinct 'hac_rv' cache slug.",
+        "No-op for non-hac proposals. Uses a distinct 'hac_rv' cache slug.",
+    )
+    ap.add_argument("--max-labels", type=int, default=60, help="realistic mode: max total annotations t per seed")
+    ap.add_argument(
+        "--iterations",
+        type=int,
+        default=3,
+        help="realistic mode: number of labeling-loop runs (seeds 0..N-1); the plots' seed "
+        "band/lines span these iterations",
+    )
+    ap.add_argument("--good-to-start", type=int, default=3, help="realistic: goods before leaving the 'good' phase")
+    ap.add_argument("--bad-to-start", type=int, default=4, help="realistic: bads before leaving the 'bad' phase")
+    ap.add_argument(
+        "--retrain-cadence", type=int, default=1, help="realistic: retrain every N labels (1 = faithful, per-vote)"
+    )
+    ap.add_argument(
+        "--select-strategy",
+        choices=("autopilot",),
+        default="autopilot",
+        help="realistic: item-selection strategy (only the faithful Autopilot phase machine is wired today)",
+    )
+    ap.add_argument(
+        "--stop-at-done",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="realistic: stop the loop when Autopilot reaches the 'done' phase instead of running to --max-labels",
+    )
+    ap.add_argument(
+        "--labeling-trace",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="realistic: emit labeling_trace/<config>/seed{N}/ — the images labeled in order (per iteration) "
+        "+ trace.csv/json (phase/head/calib/threshold/score per step). Off by default (heavy: one image per "
+        "labeled item × every iteration). Independent of --viz.",
     )
     ap.add_argument("--test-fraction", type=float, default=0.5)
     ap.add_argument("--inclusion", type=int, default=0, help="0=FPR+FNR; >0 favors recall; <0 favors precision")
@@ -265,18 +350,22 @@ def main() -> int:
     ap.add_argument("--cache-dir", type=Path, default=None, help="npz cache dir (default: <out-dir>/cache)")
     ap.add_argument("--array-index", type=int, default=0)
     ap.add_argument("--array-total", type=int, default=1)
-    # Built-in visualization (opt-in): plots + split galleries + MLP prediction overlays.
+    # Built-in visualization (opt-in): plots + split galleries + prediction overlays.
     ap.add_argument(
         "--viz",
         action=argparse.BooleanOptionalAction,
         default=False,
         help="emit plots/galleries/overlays after the sweep",
     )
-    ap.add_argument("--viz-k", type=int, default=None, help="K to render prediction overlays at (default: max K)")
-    ap.add_argument("--viz-seed", type=int, default=None, help="seed for prediction overlays (default: first --seeds)")
+    ap.add_argument(
+        "--viz-seed", type=int, default=None, help="iteration to render prediction overlays for (default: 0)"
+    )
     ap.add_argument("--viz-n", type=int, default=12, help="max images per montage")
     ap.add_argument(
-        "--viz-band", choices=("minmax", "std", "none"), default="std", help="seed-variance band on --viz plots"
+        "--viz-band",
+        choices=("minmax", "std", "none", "all"),
+        default="std",
+        help="seed spread on --viz plots: minmax/std band, none, or 'all' (one thin line per seed)",
     )
     args = ap.parse_args()
 
@@ -342,14 +431,22 @@ def _build_total_timing(prep: list[dict], rows: list[dict]) -> list[dict]:
 
 
 def _run_viz(args, cells: list[dict], cache_root: Path, all_rows: list[dict], out_dir: Path) -> None:
-    """Emit plots + split galleries + MLP prediction overlays after the sweep."""
+    """Emit plots + split galleries after the sweep. (Per-cell prediction overlays and
+    labeling traces are rendered inline in ``_run_cell`` from the loop's final heads.)"""
     from features import prep_timing_summary
     from plots import render_all, render_inference_time
-    from viz import render_predictions, render_split_gallery
+    from viz import render_split_gallery
 
     print("=== viz ===", flush=True)
     if all_rows:
-        render_all(all_rows, out_dir / "plots", band=args.viz_band)
+        render_all(
+            all_rows,
+            out_dir / "plots",
+            metrics=("cost", "fpr", "fnr", "f1", "mean_iou", "corloc"),
+            band=args.viz_band,
+            x_label="total annotations t",
+            x_tag="t",
+        )
     # Total-time bar chart (per-config): embed+propose (cache misses this run) + MLP
     # train+score (always runs, so this has data even on a fully-cached run).
     total_timing = _build_total_timing(prep_timing_summary(), all_rows)
@@ -358,13 +455,11 @@ def _run_viz(args, cells: list[dict], cache_root: Path, all_rows: list[dict], ou
         (out_dir / "time.json").write_text(json.dumps(total_timing, indent=2))
     else:
         print("  timing: no rows to summarize", flush=True)
-    viz_k = args.viz_k if args.viz_k is not None else max((k for k in args.k_values if k > 0), default=1)
-    viz_seed = args.viz_seed if args.viz_seed is not None else (args.seeds[0] if args.seeds else 0)
     for dataset in args.datasets:
         for cls in args.classes:
             try:
                 with SodDataset(dataset) as ds:
-                    cs = ds.class_split(cls, neg_count=args.neg_count, seed=args.split_seed)
+                    cs = ds.class_split(cls, neg_multiple=args.neg_multiple, seed=args.split_seed)
                     if not cs.positive_ids:
                         continue
                     sp = partition_split(cs, args.test_fraction, args.split_seed)
@@ -377,39 +472,6 @@ def _run_viz(args, cells: list[dict], cache_root: Path, all_rows: list[dict], ou
                         gallery_n=args.viz_n,
                         sample_seed=args.split_seed,
                     )
-                    for cell in cells:
-                        if cell["dataset"] != dataset or cell["class"] != cls:
-                            continue
-                        if cell["proposal"] == "hac" and cell["embedder"] not in {"dinov2", "dinov3"}:
-                            continue  # no MLP cache for this combo
-                        rv = (
-                            bool(args.region_voting)
-                            and cell["proposal"] == "hac"
-                            and cell["embedder"] in {"dinov2", "dinov3"}
-                        )
-                        try:
-                            render_predictions(
-                                ds,
-                                sp,
-                                cache_dir=cache_root,
-                                out_dir=out_dir / "predictions",
-                                dataset=dataset,
-                                cls=cls,
-                                embedder=cell["embedder"],
-                                proposal=cell["proposal"],
-                                alpha=cell["alpha"],
-                                slug=_proposal_slug(cell["proposal"], args, cell["alpha"], region_voting=rv),
-                                k=viz_k,
-                                seed=viz_seed,
-                                neg_ratio=args.neg_ratio,
-                                inclusion=args.inclusion,
-                                safe_thresholds=args.safe_thresholds,
-                                gallery_n=args.viz_n,
-                                neg_regions=args.neg_regions,
-                                region_voting=rv,
-                            )
-                        except Exception:
-                            print(f"  viz predict error {cell}:\n{traceback.format_exc()}", flush=True)
             except Exception:
                 print(f"  viz error {dataset}/{cls}:\n{traceback.format_exc()}", flush=True)
 
