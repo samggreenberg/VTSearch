@@ -128,6 +128,14 @@ def _build_entry_metadata(media: dict) -> dict:
     importer_custom = media.get("custom_metadata")
     if importer_custom:
         meta.update(importer_custom)
+    # Humanize "File Size" for export so rows read "8.0 KB" instead of raw
+    # bytes, matching what the focus-view UI shows. ``display_metadata`` keeps
+    # the raw int (the media-list API returns it and the UI formats it
+    # client-side); only this export copy is stringified. Mirrors the frontend
+    # formula in center-panel.component.ts (`formatMetadataValue`).
+    fs = meta.get("File Size")
+    if isinstance(fs, (int, float)) and not isinstance(fs, bool):
+        meta["File Size"] = f"{fs / 1024:.1f} KB"
     return meta
 
 

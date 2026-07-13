@@ -21,7 +21,7 @@ describe('ExportModalComponent', () => {
       { md5: 'b', label: 'bad', filename: 'b.wav' },
       { md5: 'c', label: 'good', filename: 'c.wav', is_correction: true },
     ],
-    available_columns: ['label', 'md5', 'filename', 'category', 'extra'],
+    available_columns: ['label', 'md5', 'filename', 'category', 'extra', 'name'],
   };
 
   beforeEach(async () => {
@@ -76,6 +76,15 @@ describe('ExportModalComponent', () => {
     const keys = component.columns.map((c) => c.key);
     expect(keys).toContain('extra'); // discovered metadata column
     expect(keys).not.toContain('origin'); // always-export keys stay out of the checkboxes
+  });
+
+  it('gives known metadata keys a curated label instead of the raw key', async () => {
+    await flushInit();
+    const nameCol = component.columns.find((c) => c.key === 'name');
+    // The raw key stays for the export payload; only the checkbox label is curated.
+    expect(nameCol?.label).toBe('Source');
+    const extraCol = component.columns.find((c) => c.key === 'extra');
+    expect(extraCol?.label).toBe('Extra'); // unknown keys fall back to title-casing
   });
 
   it('slices the fetched labels by the active category', async () => {
