@@ -30,23 +30,7 @@ the original priority.
 
 <!-- item-sep -->
 
-- **Export "File Size" exports raw bytes (P3)** — `vtscore/media/base.py:329-331`
-  sets `result["File Size"] = fs` where `fs = media.get("file_size")` (raw
-  bytes), so export rows carry `8165` while the focus-view UI formats the same
-  field as "5.7 KB". **Fix:** format the bytes in the enriched export (or rename
-  the column "File Size (bytes)", or offer both). **Files:**
-  `vtscore/media/base.py`.
-
 <!-- item-sep -->
-
-- **Export metadata columns leak raw lowercase keys (P3)** —
-  `export-modal.component.ts:214-222` (`buildColumns`) pushes each discovered
-  metadata column with `label: key` (the raw key verbatim), so lowercase-keyed
-  fields (e.g. `clipper`) surface un-prettified, and the origin `name` column (a
-  demo origin id like `caltech101_m`) reads confusingly beside "Filename".
-  **Fix:** map known keys to display labels (`clipper` → "Clipper",
-  `name`/`origin_name` → "Source"/"Origin") instead of echoing the raw key.
-  **Files:** `export-modal.component.ts`.
 
 <!-- item-sep -->
 
