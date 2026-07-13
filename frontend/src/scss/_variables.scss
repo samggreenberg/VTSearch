@@ -16,15 +16,24 @@
   // Monospace stack: the one place a component should reach for `monospace`.
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  // Font-size scale
-  --font-2xs: 0.7rem;
-  --font-xs: 0.75rem;
-  --font-sm: 0.8rem;
-  --font-md: 0.85rem;     // default for secondary UI text
-  --font-lg: 0.9rem;
-  --font-xl: 1rem;
-  --font-2xl: 1.1rem;
-  --font-3xl: 1.4rem;
+  // Font-size scale. Whole-px steps (at the 16px root) around a 14px base:
+  // 1px increments at the small end where a step must stay subtle, widening
+  // to a ~1.12-1.2 ratio from --font-lg up so adjacent sizes actually read
+  // as different. Values are rem so user font-size preferences still scale.
+  --font-2xs: 0.6875rem;  // 11px - badges, tiny meta text
+  --font-xs: 0.75rem;     // 12px
+  --font-sm: 0.8125rem;   // 13px
+  --font-md: 0.875rem;    // 14px - default for body UI text
+  --font-lg: 1rem;        // 16px
+  --font-xl: 1.125rem;    // 18px
+  --font-2xl: 1.25rem;    // 20px
+  --font-3xl: 1.5rem;     // 24px
+
+  // Letter-spacing (tracking). One canonical "wide" value for the uppercase
+  // micro-labels (section headers, table headers, tier chips) that pepper the
+  // UI - a rendered audit found a dozen hand-picked values (0.02-0.06em, plus
+  // raw 0.5px) all doing the same job. em-based so it tracks the label's font.
+  --tracking-wide: 0.05em;
 
   // Border radius scale
   --radius-sm: 3px;
@@ -57,14 +66,26 @@
 
   // Disabled-state opacity. One value, used everywhere a button or
   // interactive element renders its `:disabled` / `.disabled` state via
-  // opacity. Do not pick a different opacity per component - the audit at
-  // docs/reviews/2026-05-27-style-audit.md found seven different values in
-  // the wild (0.35/0.4/0.45/0.5/0.55/0.6/0.75) and several of them dropped
-  // text below readable contrast. For disabled buttons that sit on a
+  // opacity. Do not pick a different opacity per component - a rendered
+  // style audit found seven different values in the wild
+  // (0.35/0.4/0.45/0.5/0.55/0.6/0.75) and several of them dropped text
+  // below readable contrast. For disabled buttons that sit on a
   // saturated background (e.g. the accent-blue app header), prefer a
   // `color: var(--header-text-dim)` shift over opacity - opacity can't hold
   // contrast on a saturated surface.
   --opacity-disabled: 0.5;
+
+  // Decorative-dim opacity. One value for a *decorative or secondary*
+  // element intentionally shown muted at rest - a dimmed type/status icon,
+  // a dropdown chevron, a faint accent divider line, a hint/note paragraph,
+  // a locked achievement row. Distinct from --opacity-disabled (which is
+  // reserved for interactive `:disabled` / `.disabled` states): this one is
+  // about visual hierarchy, not interactivity. A rendered audit found ~11
+  // sites hand-picking 0.5/0.55/0.6/0.7/0.75 for the same "recede this
+  // decoration" job; they all resolve here now. Do NOT use it for animation
+  // keyframes (0<->1 fades), hover-brighten rest states, or the two-tier
+  // done/future progression dims - those carry their own values by design.
+  --opacity-dim: 0.7;
 
   // Z-index scale (centralised stacking order)
   --z-base: 1;
@@ -77,6 +98,27 @@
   --z-offline-banner: 4500;
   --z-toast: 5000;
   --z-login: 9999;
+
+  // Canvas-overlay stacking (browse view). A small local scale for the
+  // affordances painted over the UMAP canvas: they live inside the
+  // ``.browse-content`` / ``.browse-main`` stacking contexts, so they need
+  // their own low integers rather than a slot on the global scale above.
+  // ``base`` lifts a hovered/active control just past its siblings (border
+  // overlap); ``overlay`` floats the tool clusters over the canvas;
+  // ``top`` is the pre-reveal cover that sits over everything.
+  --z-canvas-base: 1;
+  --z-canvas-overlay: 2;
+  --z-canvas-top: 3;
+
+  // Modal width scale. Dialogs pick one of these instead of hand-rolling a
+  // width; keeps chrome consistent across the ~24 modals. `sm` is the simple
+  // single-column form (label importer, combine detectors, blank new-detector
+  // form); `md` the picker/table dialogs (importer, export, settings, help);
+  // `lg` the media-picker view that needs room for the demo table + folder
+  // browser. Modals with no fixed-width need size to content.
+  --modal-w-sm: 480px;
+  --modal-w-md: 720px;
+  --modal-w-lg: 900px;
 
   // --- Theme colors (dark, default) ---
 
@@ -113,6 +155,11 @@
   --indicator-dot: #555;
   --good-bg: rgba(76, 175, 80, 0.08);
   --bad-bg: rgba(244, 67, 54, 0.08);
+  // Canonical selected/highlight tint. The one accent-tinted fill for a
+  // selected item or tile (selected table rows, entity cards, media items,
+  // bin-popup thumbnails). Do NOT hand-roll a bespoke accent tint per
+  // component (a static audit found a stray `color-mix(accent 18%)` doing the
+  // same job) - reach for this token so the selected-state tint stays uniform.
   --accent-highlight-bg: rgba(124, 138, 255, 0.2);
   --accent-highlight-border: rgba(124, 138, 255, 0.5);
   --missing-border: #3b82f6;
@@ -152,13 +199,7 @@
   // to swap per theme the way --btn-filled-text does for accent-fill buttons.
   --badge-text-dark: #1a1a2e;
 
-  // Aliases used by component SCSS files
-  --border-color: var(--border);
-  --bg-secondary: var(--bg-subtle);
-  --bg-primary: var(--bg-panel);
-  --accent-color: var(--accent);
-  --color-accent: var(--accent);
-  --error: var(--color-bad);
+  // Error-state aliases used by component SCSS files
   --error-text: var(--color-bad);
   --error-border: var(--border-secondary);
   --error-bg: var(--bad-bg);
@@ -244,13 +285,7 @@
   --warning-bg: rgba(184, 121, 0, 0.12);
   --warning-border: rgba(184, 121, 0, 0.35);
 
-  // Aliases
-  --border-color: var(--border);
-  --bg-secondary: var(--bg-subtle);
-  --bg-primary: var(--bg-panel);
-  --accent-color: var(--accent);
-  --color-accent: var(--accent);
-  --error: var(--color-bad);
+  // Error-state aliases
   --error-text: var(--color-bad);
   --error-border: #e57373;
   --error-bg: var(--bad-bg);
@@ -318,13 +353,7 @@
   --warning-bg: rgba(255, 255, 0, 0.15);
   --warning-border: #ffff00;
 
-  // Aliases
-  --border-color: var(--border);
-  --bg-secondary: var(--bg-subtle);
-  --bg-primary: var(--bg-panel);
-  --accent-color: var(--accent);
-  --color-accent: var(--accent);
-  --error: var(--color-bad);
+  // Error-state aliases
   --error-text: var(--color-bad);
   --error-border: #ff4444;
   --error-bg: var(--bad-bg);

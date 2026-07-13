@@ -1,11 +1,11 @@
 <vt-modal title="Help" [open]="true" (closed)="close()">
   <div class="help">
-    <div class="help-tabs" role="tablist">
+    <div class="tab-bar" role="tablist">
       <button
         type="button"
         role="tab"
-        class="help-tab"
-        [class.help-tab--active]="activeTab() === 'shortcuts'"
+        class="tab"
+        [class.active]="activeTab() === 'shortcuts'"
         [attr.aria-selected]="activeTab() === 'shortcuts'"
         (click)="selectTab('shortcuts')"
       >
@@ -14,8 +14,8 @@
       <button
         type="button"
         role="tab"
-        class="help-tab"
-        [class.help-tab--active]="activeTab() === 'guide'"
+        class="tab"
+        [class.active]="activeTab() === 'guide'"
         [attr.aria-selected]="activeTab() === 'guide'"
         (click)="selectTab('guide')"
       >
@@ -74,5 +74,10 @@
         }
       </div>
     }
+
+    <p class="help-footer">
+      Comments, concerns, or suggestions?
+      <a href="mailto:?subject=VTSearch%20Issue%3A">Email us</a>.
+    </p>
   </div>
 </vt-modal>

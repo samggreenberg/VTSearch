@@ -41,6 +41,7 @@ __all__ = [
     "Theme",
     "UserSettings",
     "VALID_ANIMATION_MODES",
+    "coerce_animation_mode",
     "VALID_BROWSE_COLORMAPS",
     "VALID_BROWSE_ICON_SIZES",
     "VALID_FOCUS_MODES",
@@ -51,6 +52,32 @@ __all__ = [
 
 
 Theme = Literal["dark", "light", "highviz", "system"]
+
+
+def coerce_animation_mode(value: Any) -> Any:
+    """Map legacy boolean ``show_animations`` values onto the mode enum.
+
+    The setting was a checkbox boolean until 2026-06-30 (a3a37106 made it a
+    three-way ``AnimationMode``), so settings files written before then (and
+    stale clients echoing an unmigrated GET back into PUT) still carry
+    ``True`` / ``"True"`` / ``"false"``-style values.  True-ish maps to
+    ``"show"``, False-ish to ``"hide"``; canonical modes pass through (case
+    folded), and anything else is returned unchanged so it still fails
+    validation loudly instead of being silently rewritten.
+    """
+    if isinstance(value, bool):
+        return "show" if value else "hide"
+    if isinstance(value, str):
+        folded = value.strip().lower()
+        if folded in ("true", "1", "yes", "on"):
+            return "show"
+        if folded in ("false", "0", "no", "off"):
+            return "hide"
+        if folded in VALID_ANIMATION_MODES:
+            return folded
+    return value
+
+
 # Decorative-motion master switch. ``"show"`` forces animations on even when the
 # OS asks for reduced motion; ``"hide"`` always suppresses them; ``"os"`` defers
 # to the platform ``prefers-reduced-motion`` preference.
@@ -205,7 +232,7 @@ class UserSettings(BaseModel):
     # request, ``"hide"`` always suppresses it, and ``"os"`` follows the
     # platform ``prefers-reduced-motion`` preference. See the "Show Animations"
     # pulldown in the appearance settings.
-    show_animations: AnimationMode = "show"
+    show_animations: Annotated[AnimationMode, BeforeValidator(coerce_animation_mode)] = "show"
     show_metadata: bool = True
     # Set to True once the user dismisses the zero-votes "Use ← / → or click"
     # hint that overlays the Good/Bad buttons when a fresh labeling session
@@ -288,6 +315,11 @@ class UserSettings(BaseModel):
     #   clicks cross one pyramid level (a full 2x). The per-step width factor is
     #   ``2 ** (1 / n)``, so 1 ⇒ 2x, 2 ⇒ √2 (default), 3 ⇒ ∛2. Clamped to 1..3;
     #   empty entries fall back to 2 on the frontend.
+    # - ``browse_signposts``: whether the canvas draws region signposts — the
+    #   named "street sign" labels lettered over the map (see
+    #   docs/plans/vtsbrowse-toponymy.md) — when the projection has labels.
+    #   Toggled by the signpost button on the browse canvas; empty entries
+    #   fall back to on (true) on the frontend.
     browse_colormap: dict[str, BrowseColormap] = Field(default_factory=dict)
     browse_icon_size: dict[str, Annotated[BrowseIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     browse_thumbnail_border: dict[str, Annotated[int, _clamp(*BROWSE_THUMBNAIL_BORDER_PX)]] = Field(
@@ -297,6 +329,7 @@ class UserSettings(BaseModel):
     browse_mouse_zooms_per_level: dict[str, Annotated[int, _clamp(*BROWSE_MOUSE_ZOOMS_PER_LEVEL)]] = Field(
         default_factory=dict
     )
+    browse_signposts: dict[str, bool] = Field(default_factory=dict)
 
     grid_icon_size_left: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     grid_icon_size_right: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)

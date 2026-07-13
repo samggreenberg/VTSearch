@@ -222,13 +222,14 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.importers().length).toBe(7);
   });
 
-  it('should start with no top-level tab selected and a blank content area', async () => {
+  it('should default-select the first populated top-level tab once importers arrive', async () => {
     flushImporters();
     await settleZoneless(fixture);
-    expect(component.activeImporterTab()).toBe('');
-    expect(component.selectedImporter()).toBeNull();
-    const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelectorAll('.importer-subtab').length).toBe(0);
+    // "services" is declared first but has no importers in the mocks, so the
+    // default skips ahead to the first populated category.
+    expect(component.activeImporterTab()).toBe('server');
+    await settleZoneless(fixture);
+    expect(component.importersForActiveTab.length).toBeGreaterThan(0);
   });
 
   it('should pre-select the initialTab once importers and tabs arrive', () => {
@@ -237,17 +238,17 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.activeImporterTab()).toBe('server');
   });
 
-  it('should ignore an initialTab id that no declared/used tab matches', () => {
+  it('should fall back to the first populated tab when initialTab matches nothing', () => {
     component.initialTab = 'no-such-tab';
     flushImporters();
-    expect(component.activeImporterTab()).toBe('');
+    expect(component.activeImporterTab()).toBe('server');
   });
 
   it('should always render the Services tab even when no importers populate it', async () => {
     flushImporters();
     await settleZoneless(fixture);
     const el = fixture.nativeElement as HTMLElement;
-    const tabLabels = Array.from(el.querySelectorAll('.importer-tab')).map(
+    const tabLabels = Array.from(el.querySelectorAll('.tab-bar .tab')).map(
       (b) => (b.textContent || '').trim(),
     );
     expect(tabLabels.some((l) => l.includes('Services'))).toBe(true);

@@ -115,7 +115,7 @@
 
 .images-header-title {
   font-size: var(--font-sm);
-  letter-spacing: 0.05em;
+  letter-spacing: var(--tracking-wide);
   margin: 0;
   color: var(--text-secondary);
   font-weight: var(--weight-regular);
@@ -143,35 +143,13 @@
   margin-left: auto;
 }
 
+// The buttons themselves are the shared `.card-icon-btn` primitive (see
+// `_components.scss`); this cluster just lays them out in the inclusion row.
 .goods-actions {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
   flex-shrink: 0;
-}
-
-.goods-action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-xs);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  line-height: 0;
-  transition: color var(--transition-base), background var(--transition-base);
-
-  &:hover:not(:disabled) {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-  }
-
-  &:disabled {
-    opacity: var(--opacity-disabled);
-    cursor: not-allowed;
-  }
 }
 
 .media-list-container {

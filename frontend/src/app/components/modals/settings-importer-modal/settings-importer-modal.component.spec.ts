@@ -48,7 +48,7 @@ describe('SettingsImporterModalComponent', () => {
   it('should create and render importer cards', async () => {
     await flushInit();
     expect(component).toBeTruthy();
-    expect(fixture.nativeElement.querySelectorAll('.importer-card').length).toBe(1);
+    expect(fixture.nativeElement.querySelectorAll('.picker-card').length).toBe(1);
   });
 
   // Zoneless staleness canary: the success message lands in an HTTP subscribe (an

@@ -1,6 +1,6 @@
 <vt-modal
   [open]="true"
-  [title]="view === 'cropping' ? 'Crop example' : 'Use this example?'"
+  [title]="view === 'cropping' ? 'Crop Example' : 'Use This Example?'"
   (closed)="onCancel()">
   @if (view === 'confirm') {
     <div class="preview">
@@ -22,18 +22,6 @@
       }
     </div>
     <div class="filename">{{ file().name }}</div>
-    <div class="actions">
-      <button type="button" class="primary" (click)="onOk()">OK</button>
-      <button
-        type="button"
-        class="secondary"
-        [disabled]="!cropSupported"
-        [title]="cropSupported ? 'Crop to a sub-region' : 'Cropping not supported for this media type'"
-        (click)="onOkButCrop()">
-        OK but crop
-      </button>
-      <button type="button" class="cancel" (click)="onCancel()">Cancel</button>
-    </div>
   }
 
   @if (view === 'cropping') {
@@ -52,5 +40,20 @@
         (cancelled)="onCropOverlayCancelled()">
       </vt-audio-crop-overlay>
     }
+  }
+
+  @if (view === 'confirm') {
+    <div modal-footer>
+      <button type="button" class="btn btn--secondary" (click)="onCancel()">Cancel</button>
+      <button
+        type="button"
+        class="btn btn--secondary"
+        [disabled]="!cropSupported"
+        [title]="cropSupported ? 'Crop to a sub-region' : 'Cropping not supported for this media type'"
+        (click)="onOkButCrop()">
+        OK but Crop
+      </button>
+      <button type="button" class="btn btn--primary" (click)="onOk()">OK</button>
+    </div>
   }
 </vt-modal>

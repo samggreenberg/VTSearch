@@ -112,7 +112,7 @@ export class LoadSortModalComponent implements OnInit {
 
   onCropConfirmed(result: MediaCropResult): void {
     this.pendingFile = null;
-    this.status.set('Scoring with example media...');
+    this.status.set('Scoring with example media…');
     this.sortingApi.exampleSort(result.file, result.cropParams).subscribe({
       next: (data) => {
         this.status.set('');
@@ -141,8 +141,8 @@ export class LoadSortModalComponent implements OnInit {
   }
 
   loadServerMedia(filename: string): void {
-    this.status.set('Scoring with example media...');
-    this.sortingApi.exampleSortServer({ filename }).subscribe({
+    this.status.set('Scoring with example media…');
+    this.sortingApi.exampleSortServer({ filenames: [filename] }).subscribe({
       next: (data) => {
         this.status.set('');
         this.exampleSortStarted.emit(data);

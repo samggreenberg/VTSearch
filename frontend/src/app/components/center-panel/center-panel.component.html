@@ -34,7 +34,7 @@
     @if (mediaType === 'image' && imageViewer) {
       <div class="image-view-controls">
         <button
-          class="ivc-btn ivc-btn-toggle"
+          class="btn btn--toolbar ivc-btn ivc-btn-toggle"
           [class.active]="imageViewer.marqueeMode"
           (click)="imageViewer.toggleMarqueeMode()"
           [title]="marqueeTitle"
@@ -45,7 +45,7 @@
         </button>
         @if (regionOverlayCapable) {
           <button
-            class="ivc-btn ivc-btn-toggle"
+            class="btn btn--toolbar ivc-btn ivc-btn-toggle"
             [class.active]="imageViewer.highlightMode"
             (click)="imageViewer.toggleHighlightMode()"
             title="Highlight: outline the region the detector matched best"
@@ -56,10 +56,10 @@
           </button>
         }
         <span class="ivc-sep" aria-hidden="true"></span>
-        <button class="ivc-btn" (click)="imageViewer.rotateLeft()" title="Rotate left ([)" aria-label="Rotate image left">&#x21BA;</button>
-        <button class="ivc-btn" (click)="imageViewer.rotateRight()" title="Rotate right (])" aria-label="Rotate image right">&#x21BB;</button>
-        <button class="ivc-btn" (click)="imageViewer.zoomOut()" title="Zoom out (-)" aria-label="Zoom out">&minus;</button>
-        <button class="ivc-btn" (click)="imageViewer.zoomIn()" title="Zoom in (+)" aria-label="Zoom in">+</button>
+        <button class="btn btn--toolbar ivc-btn" (click)="imageViewer.rotateLeft()" title="Rotate left ([)" aria-label="Rotate image left"><vt-icon type="rotate-ccw" [size]="16"></vt-icon></button>
+        <button class="btn btn--toolbar ivc-btn" (click)="imageViewer.rotateRight()" title="Rotate right (])" aria-label="Rotate image right"><vt-icon type="rotate-cw" [size]="16"></vt-icon></button>
+        <button class="btn btn--toolbar ivc-btn" (click)="imageViewer.zoomOut()" title="Zoom out (-)" aria-label="Zoom out"><vt-icon type="zoom-out" [size]="16"></vt-icon></button>
+        <button class="btn btn--toolbar ivc-btn" (click)="imageViewer.zoomIn()" title="Zoom in (+)" aria-label="Zoom in"><vt-icon type="zoom-in" [size]="16"></vt-icon></button>
         <label for="ivc-zoom" class="sr-only">Zoom</label>
         <input
           type="range"
@@ -74,7 +74,7 @@
           aria-label="Zoom level"
         />
         <span class="ivc-zoom-label">{{ imageViewer.zoomLabel }}</span>
-        <button class="ivc-btn" (click)="imageViewer.resetView()" title="Reset view" aria-label="Reset image view">Reset</button>
+        <button class="btn btn--toolbar ivc-btn" (click)="imageViewer.resetView()" title="Reset view" aria-label="Reset image view"><vt-icon type="zoom-fit" [size]="16"></vt-icon></button>
       </div>
     }
 

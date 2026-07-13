@@ -1,8 +1,8 @@
 <div class="importer-picker">
-  <div class="importer-tab-bar">
+  <div class="tab-bar">
     @for (tab of visibleImporterTabs(); track tab.id) {
       <button
-        class="importer-tab"
+        class="tab"
         [class.active]="activeTab() === tab.id"
         (click)="activeTabChange.emit(tab.id)"
         [title]="tabTitle(tab.label)"
@@ -65,7 +65,7 @@
 
       @if (activeDemoTab() && demoCols) {
         <div class="demo-content-area">
-          <table class="demo-table" [class.table-fixed]="demoCols.tableFixed">
+          <table class="data-table data-table--grid demo-table" [class.table-fixed]="demoCols.tableFixed">
             <thead>
               <tr>
                 @for (col of demoCols.columnOrder; track col; let first = $first) {

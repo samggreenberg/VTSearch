@@ -1,5 +1,5 @@
 :host ::ng-deep .modal-content {
-  width: 720px;
+  width: var(--modal-w-md);
 }
 
 .export-section {
@@ -75,9 +75,12 @@
   border-radius: var(--radius-md);
 }
 
+// Builds on the shared `.data-table` primitive (`_data-table.scss`); the
+// knobs retune it to tighter cells and a solid `--border`, and the rules
+// below add the resizable/truncating data-preview behaviour.
 .export-table {
-  width: 100%;
-  border-collapse: collapse;
+  --dt-cell-pad-y: var(--space-xs);
+  --dt-border-color: var(--border);
   font-size: var(--font-sm);
 
   // Once the user drags a divider the component freezes per-column pixel
@@ -100,13 +103,10 @@
 
   th,
   td {
-    padding: var(--space-xs) var(--space-md);
-    text-align: left;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 220px;
-    border-bottom: 1px solid var(--border);
   }
 
   th {
@@ -116,7 +116,7 @@
     font-weight: var(--weight-semibold);
     font-size: var(--font-xs);
     text-transform: uppercase;
-    letter-spacing: 0.02em;
+    letter-spacing: var(--tracking-wide);
 
     // Column resize handle, pinned inside the cell's right edge so the next
     // sticky <th>'s stacking context can't paint over it (the reason the
@@ -209,7 +209,7 @@
 
   &.active {
     color: var(--text-primary);
-    border-bottom-color: var(--color-accent);
+    border-bottom-color: var(--accent);
     font-weight: var(--weight-semibold);
   }
 }
@@ -268,10 +268,4 @@
   justify-content: flex-end;
   gap: var(--space-md);
   margin-top: var(--space-md);
-}
-
-.empty-state {
-  color: var(--text-muted);
-  text-align: center;
-  padding: var(--space-xl);
 }

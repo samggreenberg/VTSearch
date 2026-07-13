@@ -283,6 +283,10 @@ class DetectorRegistryEntrySchema(Schema):
     num_training = fields.Integer()
     text_query = fields.String()
     media_example = fields.String()
+    # Seed-example list (``[{"type": "text"|"media", "value": ...}, ...]``),
+    # mirroring the detector JSON.  The dashboard hands it to the label
+    # session so Autopilot's example sort can use every media example.
+    examples = fields.List(fields.Dict())
     created_by = fields.String()
     created_at = fields.Float()
     # Access list (mirrors datasets): usernames allowed besides the creator,

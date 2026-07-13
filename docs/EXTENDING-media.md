@@ -118,7 +118,7 @@ class CodeMediaType(MediaType):
 
     # --- Media data (required abstract method) ---
 
-    def load_media_data(self, file_path: Path) -> dict:
+    def load_media_data(self, file_path: Path, media_bytes: bytes | None = None) -> dict:
         """Return media-specific fields to merge into the media dict.
 
         The base media dict already contains: id, type, file_size, md5,

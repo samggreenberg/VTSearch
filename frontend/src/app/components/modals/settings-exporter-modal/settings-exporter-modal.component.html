@@ -2,15 +2,15 @@
   @if (view === 'picker') {
     <div class="exporter-picker">
       @if (loading()) {
-        <p class="empty-state">Loading exporters...</p>
+        <p class="empty-state">Loading exporters…</p>
       } @else if (exporters().length === 0) {
         <p class="empty-state">No settings exporters available.</p>
       } @else {
         @for (exp of exporters(); track exp.name) {
-          <button class="exporter-card" (click)="selectExporter(exp)">
-            <span class="exporter-name">@if (exp.icon) {<span class="exporter-icon"><vt-icon [icon]="exp.icon"></vt-icon></span> }{{ exp.display_name || exp.name }}</span>
+          <button class="picker-card" (click)="selectExporter(exp)">
+            <span class="picker-card__title">@if (exp.icon) {<span class="picker-card__icon"><vt-icon [icon]="exp.icon"></vt-icon></span> }{{ exp.display_name || exp.name }}</span>
             @if (exp.description) {
-              <span class="exporter-desc">{{ exp.description }}</span>
+              <span class="picker-card__desc">{{ exp.description }}</span>
             }
           </button>
         }
@@ -99,9 +99,9 @@
       <div class="form-actions" modal-footer>
         <button class="btn btn--secondary" (click)="close()">Cancel</button>
         <button class="btn btn--primary" (click)="submit()" [disabled]="submitting()">
-          <svg aria-hidden="true" [class.icon-waggle]="submitting()" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-5"/><polyline points="15 3 21 3 21 9"/><line x1="12" y1="12" x2="21" y2="3"/></svg>
+          <vt-icon type="export" [size]="16" [class.icon-waggle]="submitting()"></vt-icon>
           @if (submitting()) {
-            Exporting...
+            Exporting…
           } @else {
             Export
           }

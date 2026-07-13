@@ -15,9 +15,11 @@ from __future__ import annotations
 import gc
 import hashlib
 import logging
+import os
 from collections import defaultdict
+from contextlib import closing
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Callable, Generator, Iterator, Optional
 
 from vtscore.datasets.loader import (
     ProgressCallback,
@@ -475,6 +477,119 @@ def _build_per_file_media(
     return media_data
 
 
+# Mirror near_dupes._THREAD_MIN_IMAGES: a decode thread pool only pays off past
+# a handful of files, so tiny imports keep the serial path and skip pool startup.
+_PARALLEL_MIN_FILES = 64
+
+
+def _folder_ingest_workers() -> int:
+    """Worker count for the parallel per-file build (mirrors near_dupes/recaller)."""
+    return min(8, os.cpu_count() or 4)
+
+
+def _make_file_builder(
+    mt: Any,
+    content_vectors: dict[str, Any] | None,
+    content_md5s: dict[str, str] | None,
+    custom_metadata_map: dict[str, dict[str, Any]] | None,
+    thin: bool,
+    origin: dict[str, Any] | None,
+    content_embedder_name: str,
+) -> Callable[[int, Path, str], dict[str, Any]]:
+    """Bind the per-load parameters into a ``build_one(media_id, file_path, rel_path)`` closure."""
+
+    def build_one(media_id: int, file_path: Path, rel_path: str) -> dict[str, Any]:
+        return _build_per_file_media(
+            media_id=media_id,
+            file_path=file_path,
+            rel_path=rel_path,
+            mt=mt,
+            content_vectors=content_vectors,
+            content_md5s=content_md5s,
+            custom_metadata_map=custom_metadata_map,
+            thin=thin,
+            origin=origin,
+            content_embedder_name=content_embedder_name,
+        )
+
+    return build_one
+
+
+def _build_media_in_order(
+    build_specs: list[tuple[int, Path, str]],
+    build_one: Callable[[int, Path, str], dict[str, Any]],
+    *,
+    parallel: bool,
+) -> Generator[tuple[int, Path, str, dict[str, Any]], None, None]:
+    """Yield ``(media_id, file_path, rel_path, media_data)`` for each spec, in submission order.
+
+    The per-file work in *build_one* (disk read + PIL/audio decode + thumbnail
+    encode) is CPU-bound and releases the GIL, so past :data:`_PARALLEL_MIN_FILES`
+    it runs on a small thread pool.  Results are still yielded strictly in
+    submission order, so media IDs and origin ordering are byte-for-byte
+    identical to the serial path regardless of completion order.  Progress
+    reporting and cancellation are the caller's job and run on the consuming
+    (main) thread, keeping the ProgressTracker single-writer.
+
+    On any exception raised by a worker (surfaced by ``future.result()`` in
+    submission order, so the first failing file wins exactly as it would
+    serially) or by the consumer (e.g. ``CancelledError`` from a progress
+    callback), the generator's ``finally`` shuts the pool down with
+    ``cancel_futures=True`` so queued files stop immediately.  Wrap the
+    iteration in :func:`contextlib.closing` to guarantee that runs.
+    """
+    if not parallel or len(build_specs) < _PARALLEL_MIN_FILES:
+        for media_id, file_path, rel_path in build_specs:
+            yield media_id, file_path, rel_path, build_one(media_id, file_path, rel_path)
+        return
+
+    from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415
+
+    executor = ThreadPoolExecutor(max_workers=_folder_ingest_workers())
+    try:
+        futures = [executor.submit(build_one, mid, fp, rp) for mid, fp, rp in build_specs]
+        for (media_id, file_path, rel_path), future in zip(build_specs, futures):
+            yield media_id, file_path, rel_path, future.result()
+    finally:
+        executor.shutdown(cancel_futures=True)
+
+
+def _build_folder_chunk(
+    specs_with_idx: list[tuple[int, int, Path, str]],
+    chunk_idx: int,
+    build_one: Callable[[int, Path, str], dict[str, Any]],
+    on_progress: ProgressCallback,
+    media_type: str,
+    total_files: int,
+    progress_interval: int,
+    thin: bool,
+) -> dict[int, dict[str, Any]]:
+    """Build one chunk's files (parallel within the chunk), preserving submission order.
+
+    *specs_with_idx* carries ``(global_idx, media_id, file_path, rel_path)`` per
+    file.  Progress reporting and cancellation run here on the generator (main)
+    thread; peak memory stays bounded by the chunk size exactly as the serial
+    contract did.  thin mode does no decode, so parallelism buys nothing there —
+    it stays on the serial path.
+    """
+    chunk_medias: dict[int, dict[str, Any]] = {}
+    specs = [(mid, fp, rp) for (_gi, mid, fp, rp) in specs_with_idx]
+    global_idxs = [gi for (gi, _mid, _fp, _rp) in specs_with_idx]
+    with closing(_build_media_in_order(specs, build_one, parallel=not thin)) as built:
+        for global_idx, (mid, _fp, rel_path, media_data) in zip(global_idxs, built):
+            if global_idx % progress_interval == 0 or (total_files and global_idx + 1 == total_files):
+                _emit_per_file_progress(
+                    on_progress,
+                    media_type,
+                    rel_path,
+                    global_idx + 1,
+                    total_files,
+                    chunk_label=f" (chunk {chunk_idx + 1})",
+                )
+            chunk_medias[mid] = media_data
+    return chunk_medias
+
+
 # ---------------------------------------------------------------------------
 # Public folder loaders
 # ---------------------------------------------------------------------------
@@ -560,43 +675,37 @@ def load_dataset_from_folder(
     )
 
     medias.clear()
-    media_id = 1
     _progress_interval = max(1, min(50, total_files // 50)) if total_files > 0 else 1
 
+    build_specs = [
+        (media_id, file_path, file_path.relative_to(folder_path).as_posix())
+        for media_id, file_path in enumerate(media_files, start=1)
+    ]
+    build_one = _make_file_builder(
+        mt, content_vectors, content_md5s, custom_metadata_map, thin, origin, content_embedder_name
+    )
+
+    loaded = 0
     try:
-        for i, file_path in enumerate(media_files):
-            rel_path = file_path.relative_to(folder_path).as_posix()
-
-            if i % _progress_interval == 0 or i + 1 == total_files:
-                _emit_per_file_progress(
-                    on_progress,
-                    media_type,
-                    rel_path,
-                    i + 1,
-                    total_files,
-                    chunk_label="",
-                )
-
-            built = _build_per_file_media(
-                media_id=media_id,
-                file_path=file_path,
-                rel_path=rel_path,
-                mt=mt,
-                content_vectors=content_vectors,
-                content_md5s=content_md5s,
-                custom_metadata_map=custom_metadata_map,
-                thin=thin,
-                origin=origin,
-                content_embedder_name=content_embedder_name,
-            )
-            medias[media_id] = built
-            media_id += 1
+        # thin mode does no decode, so parallelism buys nothing there — keep it serial.
+        with closing(_build_media_in_order(build_specs, build_one, parallel=not thin)) as built:
+            for i, (media_id, file_path, rel_path, media_data) in enumerate(built):
+                if i % _progress_interval == 0 or i + 1 == total_files:
+                    _emit_per_file_progress(
+                        on_progress,
+                        media_type,
+                        rel_path,
+                        i + 1,
+                        total_files,
+                        chunk_label="",
+                    )
+                medias[media_id] = media_data
+                loaded += 1
     except MemoryError:
         medias.clear()
         gc.collect()
         raise MemoryError(
-            f"Out of memory after loading {media_id - 1} of {total_files} files. "
-            "Try a smaller dataset or free up system RAM."
+            f"Out of memory after loading {loaded} of {total_files} files. Try a smaller dataset or free up system RAM."
         )
 
     on_progress("idle", f"Loaded {len(medias)} {media_type} medias from folder", 0, 0)
@@ -691,47 +800,35 @@ def load_dataset_from_folder_chunked(
     # when streaming (total unknown) fall back to a fixed file interval.
     _progress_interval = max(1, min(50, total_files // 50)) if total_files > 0 else 200
 
-    chunk_medias: dict[int, dict[str, Any]] = {}
     media_id = 1
     chunk_index = 0
     media_seen = 0
+    build_one = _make_file_builder(
+        mt, content_vectors, content_md5s, custom_metadata_map, thin, origin, content_embedder_name
+    )
 
+    # Accumulate a chunk's worth of file specs (cheap path ops) before building,
+    # so the build parallelises within the chunk without reading ahead — pulling
+    # one chunk still touches only that chunk's files (streaming laziness).
+    pending: list[tuple[int, int, Path, str]] = []
     for global_idx, file_path in enumerate(file_iter):
         rel_path = file_path.relative_to(folder_path).as_posix()
-
-        if global_idx % _progress_interval == 0 or (total_files and global_idx + 1 == total_files):
-            _emit_per_file_progress(
-                on_progress,
-                media_type,
-                rel_path,
-                global_idx + 1,
-                total_files,
-                chunk_label=f" (chunk {chunk_index + 1})",
-            )
-
-        chunk_medias[media_id] = _build_per_file_media(
-            media_id=media_id,
-            file_path=file_path,
-            rel_path=rel_path,
-            mt=mt,
-            content_vectors=content_vectors,
-            content_md5s=content_md5s,
-            custom_metadata_map=custom_metadata_map,
-            thin=thin,
-            origin=origin,
-            content_embedder_name=content_embedder_name,
-        )
+        pending.append((global_idx, media_id, file_path, rel_path))
         media_id += 1
         media_seen += 1
 
-        if len(chunk_medias) >= chunk_size:
-            yield chunk_medias
-            chunk_medias = {}
+        if len(pending) >= chunk_size:
+            yield _build_folder_chunk(
+                pending, chunk_index, build_one, on_progress, media_type, total_files, _progress_interval, thin
+            )
+            pending = []
             media_id = 1
             chunk_index += 1
 
-    if chunk_medias:
-        yield chunk_medias
+    if pending:
+        yield _build_folder_chunk(
+            pending, chunk_index, build_one, on_progress, media_type, total_files, _progress_interval, thin
+        )
 
     if media_seen == 0:
         # Matches the monolithic loader's empty-folder contract.  Raised after

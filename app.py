@@ -330,8 +330,8 @@ def _set_request_context():
     # Also drop the detector's cached MLP / per-label embedding cache when
     # the active dataset's embedder differs from the one the MLP was
     # trained on; scoring with a cross-space MLP either crashes (different
-    # dim) or silently produces garbage labels (same dim).  See H5 in
-    # docs/plans/logical-bug-audit.md.
+    # dim) or silently produces garbage labels (same dim).  See
+    # logical-bug-audit H5.
     # Skip the lock-taking state-sync for endpoints whose handlers never
     # read the proxies (e.g. the jobs/active spinner poll), so a frequent
     # poll cannot queue on `_state_lock` behind a long-running job.
@@ -482,7 +482,7 @@ def _handle_request_missing_context(exc):
     thread-local pinned context exists. The unloaded-id case is handled
     separately by :func:`_handle_dataset_not_loaded` /
     :func:`_handle_detector_not_loaded` (409 with a specific code). See
-    ``docs/plans/logical-bug-audit.md`` H13.
+    logical-bug-audit H13.
     """
     from flask import request as _req
     from vtsearch.routes._shared import error_response

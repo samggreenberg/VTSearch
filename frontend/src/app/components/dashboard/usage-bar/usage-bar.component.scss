@@ -30,25 +30,3 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-.usage-bar-track {
-  height: 8px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-.usage-bar-fill {
-  height: 100%;
-  background: var(--accent);
-  transition: width var(--transition-slow) ease, background-color var(--transition-slow) ease;
-}
-
-.usage-bar-track.warn .usage-bar-fill {
-  background: var(--text-warning);
-}
-
-.usage-bar-track.critical .usage-bar-fill {
-  background: var(--color-bad);
-}

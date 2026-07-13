@@ -1,6 +1,6 @@
 :host {
   ::ng-deep .modal-content {
-    width: 640px;
+    width: var(--modal-w-md);
     max-width: 95vw;
   }
 }
@@ -29,33 +29,27 @@
   color: var(--text-secondary);
   font-size: var(--font-sm);
   text-transform: uppercase;
-  letter-spacing: .04em;
+  letter-spacing: var(--tracking-wide);
   font-weight: var(--weight-semibold);
 }
 
+// Inherits `.form-input`; only the larger type size and the on-surface
+// background (this input sits directly on the modal surface, not on a
+// subtle inset field) differ from the shared primitive.
 .name-input {
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
   background: var(--bg-surface);
-  color: var(--text-primary);
   font-size: var(--font-xl);
-
-  &:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
 }
 
+// Builds on the shared `.data-table` primitive (`_data-table.scss`); the knobs
+// give it roomier cells and a solid `--border`, and the rules below add the
+// thead/tfoot treatment, numeric/type/action columns, and mismatch rows.
 .combine-table {
-  width: 100%;
-  border-collapse: collapse;
+  --dt-cell-pad-y: var(--space-md);
+  --dt-border-color: var(--border);
   font-size: var(--font-lg);
 
   th, td {
-    padding: var(--space-md) var(--space-md);
-    border-bottom: 1px solid var(--border);
-    text-align: left;
     vertical-align: middle;
   }
 
@@ -64,7 +58,7 @@
     color: var(--text-secondary);
     font-size: var(--font-sm);
     text-transform: uppercase;
-    letter-spacing: .04em;
+    letter-spacing: var(--tracking-wide);
   }
 
   tfoot td {

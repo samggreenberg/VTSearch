@@ -2,15 +2,15 @@
   @if (view === 'picker') {
     <div class="importer-picker">
       @if (loading()) {
-        <p class="empty-state">Loading importers...</p>
+        <p class="empty-state">Loading importers…</p>
       } @else if (importers().length === 0) {
         <p class="empty-state">No settings importers available.</p>
       } @else {
         @for (imp of importers(); track imp.name) {
-          <button class="importer-card" (click)="selectImporter(imp)">
-            <span class="importer-name">@if (imp.icon) {<span class="importer-icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
+          <button class="picker-card" (click)="selectImporter(imp)">
+            <span class="picker-card__title">@if (imp.icon) {<span class="picker-card__icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
             @if (imp.description) {
-              <span class="importer-desc">{{ imp.description }}</span>
+              <span class="picker-card__desc">{{ imp.description }}</span>
             }
           </button>
         }
@@ -107,7 +107,7 @@
         <button class="btn btn--primary" (click)="submit()" [disabled]="submitting()">
           <svg aria-hidden="true" [class.icon-waggle]="submitting()" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           @if (submitting()) {
-            Importing...
+            Importing…
           } @else {
             Import
           }

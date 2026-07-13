@@ -32,41 +32,7 @@
   font-size: var(--font-md);
   color: var(--text-secondary);
   text-align: center;
-  margin-bottom: var(--space-xl);
+  // No bottom margin: this is the last body element; the footer's own
+  // spacing (via `.modal-body` margin-bottom) owns the gap to the actions.
   word-break: break-all;
-}
-
-.actions {
-  display: flex;
-  gap: var(--space-md);
-  justify-content: flex-end;
-
-  button {
-    padding: var(--space-md) var(--space-xl);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border-secondary);
-    cursor: pointer;
-    font-size: var(--font-lg);
-    background: var(--bg-secondary-btn);
-    color: var(--text-primary);
-
-    &:disabled {
-      opacity: var(--opacity-disabled);
-      cursor: not-allowed;
-    }
-
-    &.primary {
-      background: var(--accent);
-      color: var(--btn-primary-text);
-      border-color: transparent;
-    }
-
-    &.secondary {
-      background: var(--bg-secondary-btn);
-    }
-
-    &.cancel {
-      background: transparent;
-    }
-  }
 }

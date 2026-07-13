@@ -835,3 +835,282 @@ def test_projection_params_match(monkeypatch):
     assert proj_route._projection_params_match(legacy) is False
     assert proj_route._projection_params_match(umap_changed) is True
     assert proj_route._projection_params_match(pca) is True
+
+
+class TestProjectionLabels:
+    """``GET /api/projection/labels`` — the region signpost layer."""
+
+    @staticmethod
+    def _build_hex_pyramid(projection_id: str = "label-proj"):
+        rng = np.random.default_rng(7)
+        ctx = get_active_context()
+        ids = list(ctx.medias.keys())[:5]
+        coords = rng.standard_normal((len(ids), 2)).astype(np.float32)
+        proj = Projection(projection_id, ids, coords, "pca")
+        pyr = build_pyramid(proj, n_levels=2)
+        return proj, pyr
+
+    @staticmethod
+    def _label_set(projection_id: str):
+        from vtscore.projection import RegionLabel, make_label_set
+
+        return make_label_set(
+            projection_id,
+            [
+                RegionLabel(level=0, x=0.0, y=0.0, text="animal sounds", score=0.9, source="keyphrase"),
+                RegionLabel(level=1, x=0.5, y=-0.5, text="dog barking", score=0.7, source="keyphrase"),
+            ],
+        )
+
+    def test_idle_when_no_projection(self, client):
+        resp = client.get("/api/projection/labels")
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["status"] == "idle"
+        assert body["labels"] == []
+
+    def test_ready_but_empty_when_no_labeler_has_run(self, client):
+        ctx = get_active_context()
+        proj, pyr = self._build_hex_pyramid()
+        ctx._projection = proj
+        ctx._pyramids = {"hex": pyr}
+
+        resp = client.get("/api/projection/labels")
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["status"] == "ready"
+        assert body["projection_id"] == pyr.projection_id
+        assert body["labels"] == []
+
+        # And the meta advertises the absence, so the client can skip the fetch.
+        assert client.get("/api/projection/meta").get_json()["has_labels"] is False
+
+    def test_serves_labels_for_matching_layout(self, client):
+        ctx = get_active_context()
+        proj, pyr = self._build_hex_pyramid()
+        ctx._projection = proj
+        ctx._pyramids = {"hex": pyr}
+        ctx._region_labels = self._label_set(pyr.projection_id)
+
+        resp = client.get("/api/projection/labels")
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["status"] == "ready"
+        assert body["projection_id"] == pyr.projection_id
+        assert len(body["labels"]) == 2
+        first = body["labels"][0]
+        assert first["text"] == "animal sounds"
+        assert first["level"] == 0
+        assert first["score"] == 0.9
+        assert first["source"] == "keyphrase"
+        assert set(first) == {"level", "x", "y", "text", "score", "source"}
+
+        assert client.get("/api/projection/meta").get_json()["has_labels"] is True
+
+    def test_stale_label_set_is_treated_as_absent(self, client):
+        # Labels are pinned to the layout they were computed from: a set left
+        # over from a previous (re-fit) layout must not be served over the new
+        # coordinates.
+        ctx = get_active_context()
+        proj, pyr = self._build_hex_pyramid("new-layout")
+        ctx._projection = proj
+        ctx._pyramids = {"hex": pyr}
+        ctx._region_labels = self._label_set("old-layout")
+
+        body = client.get("/api/projection/labels").get_json()
+        assert body["status"] == "ready"
+        assert body["labels"] == []
+        assert client.get("/api/projection/meta").get_json()["has_labels"] is False
+
+    def test_subset_labels_are_independent(self, client):
+        # The subset browse carries its own label set; the full-dataset one
+        # must not bleed into it (and vice versa).
+        ctx = get_active_context()
+        proj, pyr = self._build_hex_pyramid("subset-layout")
+        ctx._subset_projection = proj
+        ctx._subset_pyramids = {"hex": pyr}
+        ctx._subset_ids = list(proj.ids)
+        ctx._region_labels = self._label_set("some-other-layout")
+
+        body = client.get("/api/projection/labels?subset=1").get_json()
+        assert body["status"] == "ready"
+        assert body["labels"] == []
+
+        ctx._subset_region_labels = self._label_set(pyr.projection_id)
+        body = client.get("/api/projection/labels?subset=1").get_json()
+        assert len(body["labels"]) == 2
+        assert client.get("/api/projection/meta?subset=1").get_json()["has_labels"] is True
+
+    def test_reset_full_projection_drops_labels(self, client):
+        from vtsearch.routes.projection import _reset_full_projection
+
+        ctx = get_active_context()
+        proj, pyr = self._build_hex_pyramid()
+        ctx._projection = proj
+        ctx._pyramids = {"hex": pyr}
+        ctx._region_labels = self._label_set(pyr.projection_id)
+
+        _reset_full_projection(ctx)
+        assert ctx._region_labels is None
+
+
+class TestPersistedLabelRestore:
+    """Labels persisted in the dataset container are restored on serve.
+
+    The labeling pipeline persists the full-dataset ``RegionLabelSet`` next to
+    the projection; a fresh process (no in-memory set) must serve it back —
+    but only over the exact layout it was computed from, and only while its
+    labeler signature matches the active pipeline's (a ``None`` active
+    signature — no toponymy here — still serves: derived text pinned to the
+    right layout beats nothing).
+    """
+
+    @staticmethod
+    def _persist(tmp_path, projection_id: str, signature: str):
+        import zipfile
+
+        from vtscore.datasets.container import append_region_labels
+
+        pkl = tmp_path / "container.pkl"
+        if not pkl.exists():
+            with zipfile.ZipFile(pkl, "w") as zf:
+                zf.writestr("placeholder", b"")
+        append_region_labels(pkl, TestProjectionLabels._label_set(projection_id), signature)
+        return pkl
+
+    def _serve(self, client, monkeypatch, tmp_path, *, stored_id, stored_sig, active_sig="__unset__"):
+        ctx = get_active_context()
+        proj, pyr = TestProjectionLabels._build_hex_pyramid("live-layout")
+        ctx._projection = proj
+        ctx._pyramids = {"hex": pyr}
+        pkl = self._persist(tmp_path, stored_id, stored_sig)
+        monkeypatch.setattr("vtsearch.routes.projection._pkl_path_for", lambda dataset_id: str(pkl))
+        if active_sig != "__unset__":
+            monkeypatch.setattr("vtscore.projection.signpost_prep.labeler_signature", lambda ctx: active_sig)
+        return client.get("/api/projection/labels").get_json()
+
+    def test_restores_matching_layout(self, client, monkeypatch, tmp_path):
+        # Active signature is None here (the suite reports toponymy
+        # unavailable), so the persisted set serves unconditionally.
+        body = self._serve(client, monkeypatch, tmp_path, stored_id="live-layout", stored_sig="sig-v1")
+        assert body["status"] == "ready"
+        assert [lab["text"] for lab in body["labels"]] == ["animal sounds", "dog barking"]
+        # And it lands in the context cache like a live-built set.
+        assert get_active_context()._region_labels is not None
+
+    def test_matching_signature_serves(self, client, monkeypatch, tmp_path):
+        body = self._serve(
+            client, monkeypatch, tmp_path, stored_id="live-layout", stored_sig="sig-v1", active_sig="sig-v1"
+        )
+        assert len(body["labels"]) == 2
+
+    def test_stale_signature_treated_as_absent(self, client, monkeypatch, tmp_path):
+        body = self._serve(
+            client, monkeypatch, tmp_path, stored_id="live-layout", stored_sig="sig-old", active_sig="sig-new"
+        )
+        assert body["labels"] == []
+
+    def test_wrong_layout_treated_as_absent(self, client, monkeypatch, tmp_path):
+        body = self._serve(client, monkeypatch, tmp_path, stored_id="some-old-layout", stored_sig="sig-v1")
+        assert body["labels"] == []
+
+
+class TestDemoSignpostsLazyBuild:
+    """Ground-truth signposts derived on demand from hierarchical categories.
+
+    A dataset that ships ``/``-separated ``category`` paths (the synthetic
+    world-map demo, Places365, …) lights up the signpost layer with no labeler
+    run: :func:`_label_set_for` builds and caches the signs the first time meta
+    or the labels endpoint is hit.
+    """
+
+    # Europe/Asia → 2 continents, 4 countries, 6 cities; 2 items per leaf city.
+    _PATHS = [
+        "Europe/France/Paris",
+        "Europe/France/Paris",
+        "Europe/France/Lyon",
+        "Europe/France/Lyon",
+        "Europe/Italy/Rome",
+        "Europe/Italy/Rome",
+        "Asia/Japan/Tokyo",
+        "Asia/Japan/Tokyo",
+        "Asia/Japan/Osaka",
+        "Asia/Japan/Osaka",
+        "Asia/China/Beijing",
+        "Asia/China/Beijing",
+    ]
+
+    def _setup(self, ctx, projection_id="demo-signpost-layout"):
+        rng = np.random.default_rng(11)
+        ids = list(ctx.medias.keys())[: len(self._PATHS)]
+        assert len(ids) == len(self._PATHS), "fixture needs at least 12 medias"
+        saved = {i: ctx.medias[i].get("category") for i in ids}
+        for path, mid in zip(self._PATHS, ids):
+            ctx.medias[mid]["category"] = path
+        coords = rng.standard_normal((len(ids), 2)).astype(np.float32)
+        proj = Projection(projection_id, ids, coords, "pca")
+        pyr = build_pyramid(proj, n_levels=2)
+        ctx._projection = proj
+        ctx._pyramids = {"hex": pyr}
+        ctx._region_labels = None
+        return ids, saved, pyr
+
+    def test_meta_and_labels_build_lazily_from_categories(self, client):
+        ctx = get_active_context()
+        ids, saved, pyr = self._setup(ctx)
+        try:
+            # Meta advertises signs even though no labeler ran.
+            meta = client.get("/api/projection/meta").get_json()
+            assert meta["has_labels"] is True
+
+            body = client.get("/api/projection/labels").get_json()
+            assert body["status"] == "ready"
+            assert body["projection_id"] == pyr.projection_id
+            labels = body["labels"]
+            # 2 continents + 4 countries + 6 cities = 12 signs across 3 levels.
+            assert len(labels) == 12
+            by_level: dict[float, list] = {}
+            for lab in labels:
+                by_level.setdefault(lab["level"], []).append(lab["text"])
+            levels = sorted(by_level)
+            assert len(levels) == 3
+            assert levels[0] == 0.0
+            assert set(by_level[levels[0]]) == {"Europe", "Asia"}
+            assert len(by_level[levels[1]]) == 4  # countries
+            assert len(by_level[levels[2]]) == 6  # cities
+            assert all(lab["source"] == "ground-truth" for lab in labels)
+        finally:
+            for mid, cat in saved.items():
+                if cat is None:
+                    ctx.medias[mid].pop("category", None)
+                else:
+                    ctx.medias[mid]["category"] = cat
+
+    def test_cached_and_pinned_to_layout(self, client):
+        ctx = get_active_context()
+        ids, saved, pyr = self._setup(ctx)
+        try:
+            client.get("/api/projection/labels")
+            # The build is cached on the context, pinned to this layout.
+            assert ctx._region_labels is not None
+            assert ctx._region_labels.projection_id == pyr.projection_id
+            assert len(ctx._region_labels.labels) == 12
+        finally:
+            for mid, cat in saved.items():
+                if cat is None:
+                    ctx.medias[mid].pop("category", None)
+                else:
+                    ctx.medias[mid]["category"] = cat
+
+    def test_flat_categories_yield_no_signs(self, client):
+        ctx = get_active_context()
+        proj, pyr = TestProjectionLabels._build_hex_pyramid("flat-layout")
+        ctx._projection = proj
+        ctx._pyramids = {"hex": pyr}
+        ctx._region_labels = None
+        # The generated fixtures carry flat categories (e.g. "test-image"), so
+        # the hierarchical probe declines and no signs are built.
+        body = client.get("/api/projection/labels").get_json()
+        assert body["status"] == "ready"
+        assert body["labels"] == []
+        assert client.get("/api/projection/meta").get_json()["has_labels"] is False

@@ -1,29 +1,10 @@
-:host {
-  display: table-row;
-  cursor: pointer;
-  transition: background var(--transition-fast);
+// Row state, the action cluster (`.card-actions`), and the icon action buttons
+// (`.card-icon-btn`) are the shared entity-card primitive in `_components.scss`.
+// This file keeps only what's unique to the dataset card.
 
-  &:hover {
-    background: var(--bg-hover);
-  }
-
-  &.selected {
-    background: var(--accent-highlight-bg);
-  }
-
-  &.loading-error {
-    background: var(--error-bg);
-  }
-
-  &.dimmed {
-    opacity: 0.35;
-    pointer-events: none;
-    cursor: default;
-
-    &:hover {
-      background: none;
-    }
-  }
+// A dataset whose load failed tints its row (detectors have no load-error row).
+:host(.loading-error) {
+  background: var(--error-bg);
 }
 
 td {
@@ -36,42 +17,15 @@ td {
   text-overflow: ellipsis;
 }
 
-td.actions-col {
-  // Hug the inline action buttons; width is defined once on `.dash-table` and
-  // inherited here (see `_data-table.scss`).
-  width: var(--actions-col-width);
-  text-align: right;
-}
-
 .name-cell {
   display: inline-flex;
   align-items: center;
   gap: var(--space-sm);
 }
 
-.actions-cell {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-xs);
-}
-
+// Pencil/trash icon animations are scoped to their marker classes; the button
+// chrome comes from `.card-icon-btn`.
 .edit-btn {
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  cursor: pointer;
-  padding: var(--space-xs);
-  border-radius: var(--radius-md);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: color var(--transition-base), background var(--transition-base);
-
-  &:hover {
-    background: var(--btn-icon-hover-bg);
-  }
-
   .pencil-active {
     animation: pencil-rotate-open var(--transition-slow) ease-in-out forwards;
   }
@@ -120,72 +74,12 @@ td.actions-col {
 
 .type-icon {
   flex-shrink: 0;
-  opacity: 0.7;
+  opacity: var(--opacity-dim);
 }
 
-.load-btn {
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  cursor: pointer;
-  padding: var(--space-xs);
-  border-radius: var(--radius-md);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: color var(--transition-base), background var(--transition-base);
-
-  &:hover {
-    background: var(--btn-icon-hover-bg);
-  }
-}
-
-.browse-btn {
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  cursor: pointer;
-  padding: var(--space-xs);
-  border-radius: var(--radius-md);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: color var(--transition-base), background var(--transition-base);
-
-  &:hover:not(:disabled) {
-    background: var(--btn-icon-hover-bg);
-  }
-
-  // While its projection pre-builds, the Browse eye keeps waggling but is
-  // `disabled` (the user is just waiting to enter the browse view). Dim it and
-  // drop the pointer/hover affordance so it reads as disabled, not clickable.
-  &:disabled {
-    cursor: default;
-    opacity: var(--opacity-disabled);
-  }
-}
-
-// Delete is inline (every dataset is removed eventually), but destructive, so
-// it reddens on hover to read as Delete rather than just another grey icon.
+// The trash icon spins to 90° while its confirm dialog is up, then reverses
+// back once it resolves (matches the bulk-delete button in the section header).
 .delete-btn {
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  cursor: pointer;
-  padding: var(--space-xs);
-  border-radius: var(--radius-md);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: color var(--transition-base), background var(--transition-base);
-
-  &:hover {
-    color: var(--color-bad);
-    background: var(--bad-bg);
-  }
-
-  // The trash icon spins to 90° while its confirm dialog is up, then reverses
-  // back once it resolves (matches the bulk-delete button in the section header).
   .trash-active {
     animation: trash-rotate var(--transition-slow) ease-in-out forwards;
   }
@@ -199,23 +93,6 @@ td.actions-col {
   to { transform: rotate(90deg); }
 }
 
-.overflow-btn {
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  cursor: pointer;
-  padding: var(--space-xs);
-  border-radius: var(--radius-md);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: color var(--transition-base), background var(--transition-base);
-
-  &:hover {
-    background: var(--btn-icon-hover-bg);
-  }
-}
-
 // Leftmost select column matches the dashboard's header select-col width so
 // the checkbox in each row lines up under the master checkbox.
 td.select-col {
@@ -224,23 +101,6 @@ td.select-col {
   padding-right: 0;
   text-align: center;
   overflow: visible;
-}
-
-.select-checkbox {
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  cursor: pointer;
-  padding: var(--space-xs);
-  border-radius: var(--radius-md);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: color var(--transition-base), background var(--transition-base);
-
-  &:hover {
-    background: var(--btn-icon-hover-bg);
-  }
 }
 
 // Inline loading progress now renders via the shared `vt-job-progress`

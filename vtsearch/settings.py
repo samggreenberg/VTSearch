@@ -85,6 +85,8 @@ if TYPE_CHECKING:
     def set_browse_compact(value: dict[str, bool]) -> None: ...
     def get_browse_mouse_zooms_per_level() -> dict[str, int]: ...
     def set_browse_mouse_zooms_per_level(value: dict[str, int]) -> None: ...
+    def get_browse_signposts() -> dict[str, bool]: ...
+    def set_browse_signposts(value: dict[str, bool]) -> None: ...
     def get_autopilot_top_greens() -> int: ...
     def set_autopilot_top_greens(value: int) -> None: ...
     def get_autopilot_hard_reds() -> int: ...
@@ -497,6 +499,9 @@ def get_user_settings() -> dict[str, Any]:
         user_copy = dict(_user_caches.get(username, {}))
     result = dict(_user_defaults())
     result.update(user_copy)
+    # Same legacy migration as ``get_all`` so settings exports carry a value
+    # a fresh import will accept.
+    result["show_animations"] = get_show_animations()  # type: ignore[name-defined]  # noqa: F821
     result["grid_icon_size_left"] = get_grid_icon_size_left()
     result["grid_icon_size_right"] = get_grid_icon_size_right()
     result["focus_mode_left"] = get_focus_mode_left()
@@ -535,6 +540,11 @@ def get_all() -> dict[str, Any]:
     # (and per-user isolation for named users) is applied consistently: the
     # plain ``result.update(server_copy)`` above would otherwise leak a legacy
     # server-file Auto-Find list to every named user.
+    # ``show_animations`` goes through its accessor so pre-enum settings
+    # files (boolean ``True``/``"True"``; see ``coerce_animation_mode``) are
+    # migrated on read - the raw merge above would leak the legacy value to
+    # GET, and the frontend would echo it into a PUT that 422s.
+    result["show_animations"] = get_show_animations()  # type: ignore[name-defined]  # noqa: F821
     result["autofind_detectors"] = get_autofind_detectors()
     result["autofind_exporter"] = get_autofind_exporter()  # type: ignore[name-defined]  # noqa: F821
     result["autofind_exporter_field_values"] = get_autofind_exporter_field_values()  # type: ignore[name-defined]  # noqa: F821

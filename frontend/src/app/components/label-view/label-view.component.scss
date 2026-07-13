@@ -21,30 +21,8 @@
   min-width: 0;
 }
 
-// 8px hit target with a 4px visible line centered inside; same wider-hit-zone
-// pattern as `.col-resize-handle`, easier to grab than the visible line alone.
-.divider-left {
-  width: 8px;
-  cursor: col-resize;
-  background: transparent;
-  position: relative;
-
-  &::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 2px;
-    width: 4px;
-    background: var(--border);
-    transition: background var(--transition-base);
-  }
-
-  &:hover::after,
-  &.dragging::after {
-    background: var(--accent);
-  }
-}
+// The draggable pane rules use the shared `.pane-divider` primitive
+// (`scss/_components.scss`); `vtPanelResize` adds `.dragging` while dragging.
 
 // LAYOUT INTENT: The center panel child (vt-center-panel) must stretch to fill
 // the entire grid cell. Do NOT add align-items: center or justify-content: center
@@ -55,29 +33,6 @@
   background: var(--bg-panel);
   display: flex;
   min-width: 100px;
-}
-
-.divider-right {
-  width: 8px;
-  cursor: col-resize;
-  background: transparent;
-  position: relative;
-
-  &::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 2px;
-    width: 4px;
-    background: var(--border);
-    transition: background var(--transition-base);
-  }
-
-  &:hover::after,
-  &.dragging::after {
-    background: var(--accent);
-  }
 }
 
 .panel-right {

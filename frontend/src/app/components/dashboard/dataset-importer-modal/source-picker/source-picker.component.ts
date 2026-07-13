@@ -9,7 +9,17 @@ import { ManagedColumns } from '../../../../utils/managed-columns';
 
 /** Shared "where does the media come from?" widget.  Renders the
  *  importer category tab bar + sub-tab bar at the top, then a
- *  source-specific picker below:
+ *  source-specific picker below.
+ *
+ *  Navigation is a *persistent* two-level tab bar: the category tabs
+ *  (`.importer-tab-bar`) and importer sub-tabs (`.importer-subtab-bar`)
+ *  stay on screen while the selected source form renders beneath them.
+ *  This intentionally diverges from the New-detector › Trained flow's
+ *  picker → form → `← Back` shape, and there is deliberately **no**
+ *  `.back-btn` here: the tabs never hide an outer view, so switching
+ *  source is done by clicking a different tab rather than retreating.
+ *  See CLAUDE.md "Nested-modal back buttons" → persistent-tab-picker
+ *  exception (issue #2329).  Source views rendered below the chrome:
  *
  *  - ``demo``                   → media-type tab bar + sortable demo table
  *  - ``server_folder``          → typed absolute-path input
@@ -104,7 +114,7 @@ export class SourcePickerComponent {
   readonly activeDemoTabChange = output<string>();
   readonly demoSelected = output<DemoDatasetEntry>();
 
-  readonly demoLoadingText = input('Loading demo datasets...');
+  readonly demoLoadingText = input('Loading demo datasets…');
   readonly demoEmptyText = input('No demo datasets available.');
   readonly demoNoTabHint = input('Select the media type to demonstrate.');
 

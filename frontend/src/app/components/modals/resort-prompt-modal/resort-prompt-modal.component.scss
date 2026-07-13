@@ -74,38 +74,8 @@
   gap: var(--space-sm);
 }
 
-.importer-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2xs);
-  padding: var(--space-md) var(--space-lg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--bg-subtle);
-  color: var(--text-primary);
-  cursor: pointer;
-  text-align: left;
-  transition: border-color var(--transition-base), background var(--transition-base);
-
-  &:hover {
-    border-color: var(--accent);
-    background: var(--bg-hover);
-  }
-}
-
-.importer-name {
-  font-weight: var(--weight-semibold);
-  font-size: var(--font-lg);
-}
-
-.importer-icon {
-  margin-right: var(--space-xs);
-}
-
-.importer-desc {
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
+// The selectable option cards use the shared `.picker-card` primitive
+// (`frontend/src/scss/_components.scss`).
 
 .browse-list {
   display: flex;
@@ -134,13 +104,6 @@
     border-color: var(--accent);
     background: var(--bg-hover);
   }
-}
-
-.empty-state {
-  color: var(--text-muted);
-  font-size: var(--font-lg);
-  text-align: center;
-  padding: var(--space-xl) 0;
 }
 
 .breadcrumbs {

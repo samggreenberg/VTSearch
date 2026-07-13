@@ -1,41 +1,49 @@
-// Shared sortable/draggable/resizable table used by the dashboard grids.
-// Originally lived inside dashboard.component.scss and pushed that file
-// past the anyComponentStyle budget; hoisted to a global partial so the
-// rules are unencapsulated and per-component CSS stays small.
+// Shared data-table primitives used across the app: the dashboard grids
+// (`.dash-table`), the importer demo picker (`.demo-table`, in
+// `_picker-shared.scss`), the stats modals (`.stats-table`), and the
+// export / results / combine modals. Every table opts onto the base
+// `.data-table` core (width, collapsed borders, cell padding, cell
+// borders); the interactive sortable/draggable/resizable grids additionally
+// carry `.data-table--grid`. Each table then layers only its own deltas.
 //
-// The picker tables in `_picker-shared.scss` use `.demo-table` with a
-// near-identical ruleset; a future cleanup could collapse them, but
-// `.dash-table` keeps a few dashboard-specific bits (pinned select/actions
-// columns, `selected` row state) that don't belong in the picker.
+// These rules live in the global stylesheet (unencapsulated) so a
+// view-encapsulated component template can pull them in just by putting
+// `class="data-table …"` on its `<table>`. The per-table knobs below are CSS
+// custom properties so a variant can retune padding/border without
+// re-declaring the core rules.
+
+// --- Base: the header/row/cell invariants every data table shares ---
+.data-table {
+  // Per-table knobs. Defaults match the most common table (dashboard/picker/
+  // stats); the tighter/wider variants override these in their own rules.
+  --dt-cell-pad-y: var(--space-sm);
+  --dt-cell-pad-x: var(--space-md);
+  --dt-border-color: var(--border-subtle);
+
+  width: 100%;
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: var(--dt-cell-pad-y) var(--dt-cell-pad-x);
+    text-align: left;
+    border-bottom: 1px solid var(--dt-border-color);
+  }
+}
 
 .table-fixed {
   table-layout: fixed;
 }
 
-.dash-table {
-  width: 100%;
-  border-collapse: collapse;
+// --- Interactive grid modifier: sortable / draggable / resizable columns
+//     with a sticky uppercase header and row hover. Shared verbatim by the
+//     dashboard grids (`.dash-table`) and the importer demo picker
+//     (`.demo-table`); each adds only its own deltas. ---
+.data-table--grid {
   font-size: var(--font-md);
 
-  // The Actions column hugs its inline icon buttons rather than flexing with
-  // the table. It carries two 22px buttons at rest (Delete, ⋯) — one 4px gap,
-  // ~48px + the cell's side padding — so it stays tight. When any row in the
-  // table is unloaded (`.actions-has-load`, set by the component) a third Load
-  // button appears, so the column widens to fit three buttons. Pinned via this
-  // width — applied to the header and body cells below, and inherited by the
-  // card rows' own `td.actions-col` — instead of the resizable percentage
-  // system, so it stays narrow in both auto and fixed table-layout.
-  --actions-col-width: 4.5rem;
-
-  &.actions-has-load {
-    --actions-col-width: 6rem;
-  }
-
-  th, td {
-    padding: var(--space-sm) var(--space-md);
-    text-align: left;
-    vertical-align: middle;
-    border-bottom: 1px solid var(--border-subtle);
+  th,
+  td {
     white-space: nowrap;
   }
 
@@ -43,43 +51,8 @@
   // their content. Header cells must NOT clip: they host the resize
   // handle which pokes 6px to the left of the cell's edge.
   td {
-    padding: var(--space-sm) var(--space-md);
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  // Pinned columns: Select on the far left, Name next, Actions on the right.
-  // Actions is held to a fixed content width (see --actions-col-width) and is
-  // excluded from the drag-resize percentage flow, so it never widens.
-  th.actions-col,
-  td.actions-col {
-    width: var(--actions-col-width);
-    text-align: right;
-  }
-
-  // Leftmost select column hosts only the bulk-select checkbox; keep it
-  // narrow and centered so it doesn't crowd the Name column.
-  th.select-col,
-  td.select-col {
-    width: 36px;
-    padding-left: var(--space-md);
-    padding-right: 0;
-    text-align: center;
-  }
-
-  // The select header isn't sortable or draggable; neutralise the inherited
-  // grab cursor and dim the master checkbox toward --text-secondary so it
-  // reads as a header-row control rather than a clickable label.
-  th.select-col {
-    cursor: default;
-
-    .header-checkbox {
-      color: var(--text-secondary);
-
-      &:hover:not(:disabled) {
-        color: var(--text-primary);
-      }
-    }
   }
 
   th {
@@ -92,7 +65,7 @@
     font-weight: var(--weight-medium);
     font-size: var(--font-xs);
     text-transform: uppercase;
-    letter-spacing: 0.03em;
+    letter-spacing: var(--tracking-wide);
     user-select: none;
 
     // Headers (other than name) are draggable for reordering. The text itself
@@ -195,10 +168,80 @@
     &:hover {
       background: var(--bg-hover);
     }
+  }
+}
 
-    &.selected {
-      background: var(--accent-highlight-bg);
-      border-color: var(--accent-highlight-border);
+// --- Dashboard grids: pinned Select/Actions columns and selected-row state
+//     on top of the shared grid. ---
+.dash-table {
+  th,
+  td {
+    vertical-align: middle;
+  }
+
+  // The Actions column hugs its inline icon buttons rather than flexing with
+  // the table. It carries two 22px buttons at rest (Delete, ⋯) — one 4px gap,
+  // ~48px + the cell's side padding — so it stays tight. When any row in the
+  // table is unloaded (`.actions-has-load`, set by the component) a third Load
+  // button appears, so the column widens to fit three buttons. Pinned via this
+  // width — applied to the header and body cells below, and inherited by the
+  // card rows' own `td.actions-col` — instead of the resizable percentage
+  // system, so it stays narrow in both auto and fixed table-layout.
+  --actions-col-width: 4.5rem;
+
+  &.actions-has-load {
+    --actions-col-width: 6rem;
+  }
+
+  // Pinned columns: Select on the far left, Name next, Actions on the right.
+  // Actions is held to a fixed content width (see --actions-col-width) and is
+  // excluded from the drag-resize percentage flow, so it never widens.
+  th.actions-col,
+  td.actions-col {
+    width: var(--actions-col-width);
+    text-align: right;
+  }
+
+  // Leftmost select column hosts only the bulk-select checkbox; keep it
+  // narrow and centered so it doesn't crowd the Name column.
+  th.select-col,
+  td.select-col {
+    width: 36px;
+    padding-left: var(--space-md);
+    padding-right: 0;
+    text-align: center;
+  }
+
+  // The select header isn't sortable or draggable; neutralise the inherited
+  // grab cursor and dim the master checkbox toward --text-secondary so it
+  // reads as a header-row control rather than a clickable label.
+  th.select-col {
+    cursor: default;
+
+    .header-checkbox {
+      color: var(--text-secondary);
+
+      &:hover:not(:disabled) {
+        color: var(--text-primary);
+      }
     }
+  }
+
+  tbody tr.selected {
+    background: var(--accent-highlight-bg);
+    border-color: var(--accent-highlight-border);
+  }
+}
+
+// --- Stats modals (dataset / detector / find): read-only key/value tables
+//     with a semibold secondary header. Shared here so the three modals
+//     don't each redeclare the table; their text helpers stay scoped. ---
+.stats-table {
+  margin-bottom: var(--space-lg);
+
+  th {
+    font-weight: var(--weight-semibold);
+    color: var(--text-secondary);
+    font-size: var(--font-md);
   }
 }

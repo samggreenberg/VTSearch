@@ -1,0 +1,302 @@
+"""Per-media signpost texts — the ``object_to_text`` layer of the sign pipeline.
+
+Toponymy needs *some text per object*: its contrastive (``information_weighted``)
+keyphrase extraction mines the texts of **every** object in the fitted set, not
+just the sampled exemplars it shows the LLM (see
+``docs/plans/vtsbrowse-toponymy.md``).  So the text is a full-corpus,
+per-media artifact — expensive for captioner-class providers, embarrassingly
+cacheable, and independent of any particular clustering.  We therefore compute
+it once and **cache it on the media dict** (``signpost_text`` +
+``signpost_text_source``): media dicts are the dataset pickle's payload, so a
+text computed during ingest persists with the dataset, and every later browse
+or Find→Browse subset re-fit reuses it instead of re-running a model.  Cached
+strings are derived *text*, which the No-Persisted-Vectors rule explicitly
+allows.
+
+Providers are registered per media type.  Phase 1 ships the no-new-models
+tier resolved by the audio/image signpost studies
+(``docs/reports/2026-07-12-toponymy-{audio,image}-signposts.html``):
+
+* **audio** — CLAP zero-shot tags against the AudioSet-527 vocabulary
+  (template ``"The sound of {}"``, top-5), the audio study's locked default;
+* **image** — SigLIP zero-shot tags against the OpenImages-600 vocabulary
+  (template ``"a photo of {}"``, top-5), the image study's no-VLM fallback
+  (the instructed ~3B VLM captioner default is a planned follow-up and slots
+  in as a replacement provider here);
+* **text** — the media's own content, truncated (Toponymy's native case).
+
+Zero-shot tagging costs one text-embed of the vocabulary per (embedder,
+vocabulary) pair — cached process-scoped, never persisted — plus one matrix
+product, so it is effectively free next to the embed pass that precedes it.
+"""
+
+from __future__ import annotations
+
+import logging
+import threading
+from dataclasses import dataclass
+from importlib import resources
+from typing import Any, Callable, Protocol
+
+import numpy as np
+
+logger = logging.getLogger(__name__)
+
+#: Media-dict field holding the cached signpost text (persisted in the pickle).
+TEXT_FIELD = "signpost_text"
+#: Media-dict field stamping which provider+embedder produced the cached text;
+#: a mismatch with the active provider's signature invalidates the cache.
+SOURCE_FIELD = "signpost_text_source"
+
+#: Progress callback shape: ``(current, total, message)``.
+ProgressFn = Callable[[int, int, str], None]
+
+
+class SignpostTextProvider(Protocol):
+    """One way of turning a media item into a short text for Toponymy."""
+
+    @property
+    def name(self) -> str: ...
+
+    def signature(self, embedder: Any) -> str:
+        """Cache key for texts produced by this provider under *embedder*."""
+        ...
+
+    def build_texts(
+        self,
+        ids: list[int],
+        medias: dict[int, dict[str, Any]],
+        matrix: np.ndarray,
+        embedder: Any,
+        on_progress: ProgressFn | None = None,
+    ) -> dict[int, str]:
+        """Return a text per id.  ``matrix`` rows align with ``ids``."""
+        ...
+
+
+@dataclass(frozen=True)
+class ZeroShotTagProvider:
+    """Top-k vocabulary terms by similarity in a cross-modal embedder's space.
+
+    The embedder's text branch embeds every vocabulary term once (through
+    *template*), and each media's tag list is the top-*top_k* terms by dot
+    product against its stored media vector — both sides are L2-normalized at
+    ingest, so the dot product is cosine similarity.  The contrastive work of
+    deciding which tags *distinguish* a cluster is Toponymy's
+    ``information_weighted`` keyphrase stage, not ours; this provider only has
+    to be honest per item.
+    """
+
+    name: str
+    vocab_asset: str
+    template: str
+    top_k: int = 5
+
+    def signature(self, embedder: Any) -> str:
+        return f"{self.name}:{getattr(embedder, 'name', '')}"
+
+    def build_texts(
+        self,
+        ids: list[int],
+        medias: dict[int, dict[str, Any]],
+        matrix: np.ndarray,
+        embedder: Any,
+        on_progress: ProgressFn | None = None,
+    ) -> dict[int, str]:
+        vocab, vocab_vecs = _vocab_vectors(self.vocab_asset, self.template, embedder, on_progress)
+        if vocab_vecs.size == 0 or matrix.size == 0:
+            return {}
+        sims = matrix.astype(np.float32) @ vocab_vecs.T  # (n, v)
+        k = min(self.top_k, sims.shape[1])
+        top = np.argsort(-sims, axis=1)[:, :k]
+        return {mid: ", ".join(vocab[j] for j in top[i]) for i, mid in enumerate(ids)}
+
+
+@dataclass(frozen=True)
+class ContentTextProvider:
+    """The media's own text content, truncated — Toponymy's native case."""
+
+    name: str = "content"
+    field: str = "content"
+    max_chars: int = 2000
+
+    def signature(self, embedder: Any) -> str:
+        return self.name
+
+    def build_texts(
+        self,
+        ids: list[int],
+        medias: dict[int, dict[str, Any]],
+        matrix: np.ndarray,
+        embedder: Any,
+        on_progress: ProgressFn | None = None,
+    ) -> dict[int, str]:
+        out: dict[int, str] = {}
+        for mid in ids:
+            content = medias.get(mid, {}).get(self.field)
+            if isinstance(content, str) and content.strip():
+                out[mid] = content.strip()[: self.max_chars]
+        return out
+
+
+# ---------------------------------------------------------------------------
+# Provider registry (per media type)
+# ---------------------------------------------------------------------------
+
+_PROVIDERS: dict[str, SignpostTextProvider] = {
+    "audio": ZeroShotTagProvider(
+        name="tags:audioset527",
+        vocab_asset="audioset527_labels.txt",
+        template="The sound of {}",
+    ),
+    "image": ZeroShotTagProvider(
+        name="tags:openimages600",
+        vocab_asset="openimages600_labels.txt",
+        template="a photo of {}",
+    ),
+    "text": ContentTextProvider(),
+}
+
+
+def register_signpost_text_provider(media_type: str, provider: SignpostTextProvider) -> None:
+    """Register (or replace) the signpost text provider for *media_type*."""
+    _PROVIDERS[media_type] = provider
+
+
+def provider_for(media_type: str) -> SignpostTextProvider | None:
+    """The registered provider for *media_type*, or ``None`` (no signposts)."""
+    return _PROVIDERS.get(media_type)
+
+
+# ---------------------------------------------------------------------------
+# Vocabulary embedding cache (process-scoped; vectors are never persisted)
+# ---------------------------------------------------------------------------
+
+_vocab_cache: dict[tuple[str, str, str], tuple[list[str], np.ndarray]] = {}
+_vocab_lock = threading.Lock()
+
+
+def _load_vocab(asset: str) -> list[str]:
+    text = (resources.files("vtscore.projection") / "assets" / asset).read_text(encoding="utf-8")
+    return [line.strip() for line in text.splitlines() if line.strip()]
+
+
+def _vocab_vectors(
+    asset: str,
+    template: str,
+    embedder: Any,
+    on_progress: ProgressFn | None = None,
+) -> tuple[list[str], np.ndarray]:
+    """Embed a vocabulary through *embedder*'s text branch, cached per process.
+
+    The cache key includes the embedder name so multi-embedder processes keep
+    one entry per space.  Terms whose embedding fails are dropped from both the
+    returned term list and the matrix, keeping the two aligned.
+    """
+    key = (asset, template, getattr(embedder, "name", ""))
+    with _vocab_lock:
+        cached = _vocab_cache.get(key)
+    if cached is not None:
+        return cached
+
+    terms = _load_vocab(asset)
+    kept: list[str] = []
+    vecs: list[np.ndarray] = []
+    for i, term in enumerate(terms):
+        if on_progress is not None and i % 50 == 0:
+            on_progress(i, len(terms), "Preparing signpost vocabulary…")
+        try:
+            vec = embedder.embed_text(template.format(term))
+        except Exception:
+            vec = None
+        if vec is None:
+            continue
+        kept.append(term)
+        vecs.append(np.asarray(vec, dtype=np.float32))
+    matrix = np.stack(vecs) if vecs else np.empty((0, 0), dtype=np.float32)
+    with _vocab_lock:
+        _vocab_cache[key] = (kept, matrix)
+    return kept, matrix
+
+
+# ---------------------------------------------------------------------------
+# The cache-aware entry point
+# ---------------------------------------------------------------------------
+
+
+def ensure_signpost_texts(
+    medias: dict[int, dict[str, Any]],
+    ids: list[int],
+    matrix: np.ndarray,
+    embedder: Any,
+    on_progress: ProgressFn | None = None,
+) -> dict[int, str] | None:
+    """Return a signpost text per id, computing and caching what's missing.
+
+    Texts cached on the media dicts under a matching provider signature are
+    reused verbatim; only the misses are computed (all of them on the first
+    run, none on a Find→Browse re-fit of an ingest-prepped dataset).  Newly
+    computed texts are stamped back onto the media dicts, so a text computed
+    before the dataset pickle is written persists with the dataset.
+
+    Returns ``None`` when no provider is registered for the medias' type, or
+    when the provider yields no usable text at all.  ``matrix`` rows must
+    align with ``ids`` (the same contract as the embedding submatrix helpers).
+    """
+    if not ids:
+        return None
+    first = medias.get(ids[0]) or {}
+    provider = provider_for(first.get("media_type", ""))
+    if provider is None:
+        return None
+    signature = provider.signature(embedder)
+
+    texts: dict[int, str] = {}
+    missing: list[int] = []
+    for mid in ids:
+        media = medias.get(mid)
+        if media is None:
+            continue
+        cached = media.get(TEXT_FIELD)
+        if isinstance(cached, str) and cached and media.get(SOURCE_FIELD) == signature:
+            texts[mid] = cached
+        else:
+            missing.append(mid)
+
+    if missing:
+        row_of = {mid: i for i, mid in enumerate(ids)}
+        sub = matrix[[row_of[mid] for mid in missing]] if matrix.size else matrix
+        built = provider.build_texts(missing, medias, sub, embedder, on_progress)
+        for mid, text in built.items():
+            media = medias.get(mid)
+            if media is None or not text:
+                continue
+            media[TEXT_FIELD] = text
+            media[SOURCE_FIELD] = signature
+            texts[mid] = text
+
+    return texts or None
+
+
+def texts_signature(medias: dict[int, dict[str, Any]], embedder: Any) -> str | None:
+    """The active provider signature for *medias*, or ``None`` when unsupported."""
+    if not medias:
+        return None
+    first = next(iter(medias.values()))
+    provider = provider_for(first.get("media_type", ""))
+    if provider is None:
+        return None
+    return provider.signature(embedder)
+
+
+__all__ = [
+    "ContentTextProvider",
+    "SignpostTextProvider",
+    "TEXT_FIELD",
+    "SOURCE_FIELD",
+    "ZeroShotTagProvider",
+    "ensure_signpost_texts",
+    "provider_for",
+    "register_signpost_text_provider",
+    "texts_signature",
+]

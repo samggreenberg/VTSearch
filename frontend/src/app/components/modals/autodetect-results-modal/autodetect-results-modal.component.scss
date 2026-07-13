@@ -7,27 +7,27 @@
 }
 
 .results-table-wrapper {
-  max-height: 300px;
+  // Claim the modal body's remaining height and scroll internally, rather
+  // than capping at a fixed height that would nest a second scrollbar inside
+  // the body's own scrollbar. The summary above and export controls below
+  // stay at natural height; this table absorbs the slack.
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   margin-bottom: var(--space-xl);
 }
 
+// Builds on the shared `.data-table` primitive (`_data-table.scss`); the knob
+// tightens the cell padding and the sticky header keeps the column labels
+// visible while the results list scrolls.
 .results-table {
-  width: 100%;
-  border-collapse: collapse;
+  --dt-cell-pad-y: var(--space-xs);
   font-size: var(--font-sm);
-
-  th,
-  td {
-    padding: var(--space-xs) var(--space-md);
-    text-align: left;
-    border-bottom: 1px solid var(--border-subtle);
-  }
 
   th {
     position: sticky;
     top: 0;
-    background: var(--bg-secondary);
+    background: var(--bg-subtle);
   }
 }
 

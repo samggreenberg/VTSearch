@@ -1,15 +1,15 @@
 <vt-modal [title]="title" [open]="true" (closed)="close()">
   @if (loading()) {
-    <p class="empty-state">Loading exporters...</p>
+    <p class="empty-state">Loading exporters…</p>
   } @else if (exporters().length === 0) {
     <p class="empty-state">No exporters available.</p>
   } @else {
     <div class="exporter-picker">
       @for (exp of exporters(); track exp.name) {
-        <button class="exporter-card" (click)="selectExporter(exp)">
-          <span class="exporter-name">@if (exp.icon) {<span class="exporter-icon"><vt-icon [icon]="exp.icon"></vt-icon></span> }{{ exp.display_name || exp.name }}</span>
+        <button class="picker-card" (click)="selectExporter(exp)">
+          <span class="picker-card__title">@if (exp.icon) {<span class="picker-card__icon"><vt-icon [icon]="exp.icon"></vt-icon></span> }{{ exp.display_name || exp.name }}</span>
           @if (exp.description) {
-            <span class="exporter-desc">{{ exp.description }}</span>
+            <span class="picker-card__desc">{{ exp.description }}</span>
           }
         </button>
       }

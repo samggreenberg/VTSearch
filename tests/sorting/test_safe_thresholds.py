@@ -350,18 +350,22 @@ class TestSafeThresholdsEval:
     def test_simulate_voting_iterations_accepts_safe_thresholds(self):
         from vtscore.eval.voting_iterations import simulate_voting_iterations
 
-        medias = self._make_clips()
+        # Plumbing test: a small pool + calibrate_count=1 keeps the per-step
+        # MLP-train/calibrate sweep cheap; the assertion is shape-only.
+        medias = self._make_clips(n=16)
         rows_off = simulate_voting_iterations(
             medias,
             "target",
             seed=42,
             safe_thresholds=False,
+            calibrate_count=1,
         )
         rows_on = simulate_voting_iterations(
             medias,
             "target",
             seed=42,
             safe_thresholds=True,
+            calibrate_count=1,
         )
         # Both should produce valid results
         assert len(rows_off) > 0
@@ -375,12 +379,13 @@ class TestSafeThresholdsEval:
     def test_run_voting_iterations_eval_accepts_safe_thresholds(self):
         from vtscore.eval.voting_iterations import run_voting_iterations_eval
 
-        medias = self._make_clips()
+        medias = self._make_clips(n=16)
         df = run_voting_iterations_eval(
             {"test": medias},
             seeds=[42],
             categories={"test": ["target"]},
             safe_thresholds=True,
+            calibrate_count=1,
         )
         assert len(df) > 0
         assert "cost" in df.columns
@@ -568,12 +573,15 @@ class TestCalibrationFractionEval:
     def test_simulate_voting_iterations_accepts_calibration_fraction(self):
         from vtscore.eval.voting_iterations import simulate_voting_iterations
 
-        medias = self._make_clips()
+        # Plumbing test: small pool + calibrate_count=1 (see the safe-
+        # thresholds twin above).
+        medias = self._make_clips(n=16)
         rows = simulate_voting_iterations(
             medias,
             "target",
             seed=42,
             calibration_fraction=0.3,
+            calibrate_count=1,
         )
         assert len(rows) > 0
         for row in rows:
@@ -582,12 +590,13 @@ class TestCalibrationFractionEval:
     def test_run_voting_iterations_eval_accepts_calibration_fraction(self):
         from vtscore.eval.voting_iterations import run_voting_iterations_eval
 
-        medias = self._make_clips()
+        medias = self._make_clips(n=16)
         df = run_voting_iterations_eval(
             {"test": medias},
             seeds=[42],
             categories={"test": ["target"]},
             calibration_fraction=0.2,
+            calibrate_count=1,
         )
         assert len(df) > 0
 

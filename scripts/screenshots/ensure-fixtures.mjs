@@ -30,13 +30,15 @@ try {
     await page.waitForSelector('.dash-table, .empty-state', { timeout: 30000 });
     await page.waitForTimeout(1200);
   };
-  const hasDataset = (name) => page.locator('vt-dataset-card', { hasText: name }).count();
-  const hasDetector = (name) => page.locator('vt-detector-card', { hasText: name }).count();
+  const hasDataset = (name) => page.locator('tr[vt-dataset-card]', { hasText: name }).count();
+  const hasDetector = (name) => page.locator('tr[vt-detector-card]', { hasText: name }).count();
 
   const importSynthetic = async (name, size, embedderLabel) => {
     await page.locator('button[title="Import a new dataset"]').click();
-    await page.waitForSelector('.importer-tab-bar', { timeout: 15000 });
-    await page.locator('.importer-tab', { hasText: 'Demo' }).click();
+    // The tab bar was renamed .importer-tab-bar -> .tab-bar (.tab) in the
+    // header/layout IA unification; scope to .importer-picker to stay unique.
+    await page.waitForSelector('.importer-picker .tab-bar', { timeout: 15000 });
+    await page.locator('.importer-picker .tab', { hasText: 'Demo' }).click();
     await page.waitForTimeout(600);
     await page.locator('.importer-subtab', { hasText: 'Synthetic Media' }).click();
     await page.waitForSelector('#field-size', { timeout: 10000 });
@@ -51,7 +53,7 @@ try {
     await page.getByRole('button', { name: 'Import', exact: true }).click();
     // wait for the row to finish embedding (progress text gone)
     await page.waitForFunction((n) => {
-      const c = [...document.querySelectorAll('vt-dataset-card')].find((e) => e.textContent.includes(n));
+      const c = [...document.querySelectorAll('tr[vt-dataset-card]')].find((e) => e.textContent.includes(n));
       return c && !/Embedding|Loading dataset/.test(c.textContent);
     }, name, { timeout: 300000 });
     log(`imported ${name}`);
@@ -65,7 +67,7 @@ try {
   // 2. doc-demo detector (blank, image) + a few votes so it is trained
   await goDash();
   if (await hasDetector('doc-demo')) {
-    log('doc-demo exists, skipping');
+    log('doc-demo exists, skipping create');
   } else {
     await page.locator('button[title="Create a new detector"]').click();
     await page.waitForTimeout(800);
@@ -75,30 +77,55 @@ try {
     await page.getByRole('button', { name: 'Create', exact: true }).click();
     await page.waitForTimeout(2000);
     log('created doc-demo');
-    // Train it: enter the label view and vote 5 good / 4 bad.
-    await goDash();
-    const sel = async (tag, name) => {
-      const card = page.locator(tag, { hasText: name }).first();
-      const cb = card.locator('.select-checkbox').first();
-      if ((await cb.getAttribute('aria-checked')) !== 'true') await cb.click();
-      await page.waitForTimeout(300);
-    };
-    await sel('vt-dataset-card', 'syn-imgs');
-    await sel('vt-detector-card', 'doc-demo');
-    await page.getByRole('button', { name: 'Train', exact: true }).click();
-    await page.waitForSelector('.panel-center, vt-center-panel', { timeout: 30000 });
-    await page.waitForTimeout(2000);
-    await page.locator('.left-tab', { hasText: 'Manual' }).click();
-    await page.waitForTimeout(600);
-    const voteItem = async (idx, kind) => {
-      await page.locator('.thumbnail-wrap:visible').nth(idx).click();
-      await page.waitForSelector('.btn-good', { timeout: 8000 }).catch(() => {});
-      await page.waitForTimeout(600);
-      await page.locator(kind === 'good' ? '.btn-good' : '.btn-bad').first().click();
-      await page.waitForTimeout(1100);
-    };
-    for (const i of [0, 1, 2, 3, 4]) await voteItem(i, 'good');
-    for (const i of [5, 6, 7, 8]) await voteItem(i, 'bad');
+  }
+  {
+    // Train it: enforce a baseline of exactly 5 good / 4 bad votes (and no
+    // others) through the votes API - even when doc-demo already existed.
+    // Later shot recipes mutate the votes (find-view adds corrections), so
+    // a rerun against a surviving doc-demo used to drift off the 9-vote
+    // baseline the autopilot-progress shot depends on.
+    const ctx = await page.evaluate(async () => {
+      const ds = await (await fetch('/api/datasets/registry')).json();
+      const det = await (await fetch('/api/detectors/registry')).json();
+      return {
+        dataset: ((ds.datasets || []).find((x) => x.name === 'syn-imgs') || {}).id,
+        detector: ((det.detectors || []).find((x) => x.name === 'doc-demo') || {}).id,
+      };
+    });
+    if (!ctx.dataset || !ctx.detector) throw new Error('fixture context missing: ' + JSON.stringify(ctx));
+    await page.evaluate(async ({ dataset, detector }) => {
+      const h = { 'content-type': 'application/json', 'X-Dataset-Id': dataset, 'X-Detector-Id': detector };
+      // Make sure both contexts are actually loaded server-side; right after
+      // the Create flow the detector load can still be settling and votes
+      // 409 with detector_not_loaded. NB: the load requests must NOT carry
+      // X-Detector-Id - resolving the header for a not-yet-loaded detector
+      // 409s the load call itself.
+      const hLoad = { 'content-type': 'application/json', 'X-Dataset-Id': dataset };
+      await fetch('/api/datasets/registry/' + dataset + '/load', { method: 'POST', headers: hLoad });
+      await fetch('/api/detectors/registry/load', { method: 'POST', headers: hLoad, body: JSON.stringify({ detector_id: detector }) });
+      const until = Date.now() + 30000;
+      while (Date.now() < until) {
+        const s = await (await fetch('/api/dataset/status', { headers: h })).json();
+        if (s.loaded) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      const items = await (await fetch('/api/medias/ids', { headers: h })).json();
+      const ids = items.map((m) => m.id).sort((a, b) => a - b);
+      const vote = async (id, target) => {
+        for (let attempt = 0; attempt < 20; attempt++) {
+          const r = await fetch('/api/medias/' + id + '/vote', { method: 'POST', headers: h, body: JSON.stringify({ target }) });
+          if (r.ok) return;
+          if (r.status !== 409) throw new Error('vote ' + id + ' -> ' + r.status);
+          await new Promise((res) => setTimeout(res, 1000));
+        }
+        throw new Error('vote ' + id + ' still 409 after retries');
+      };
+      for (const id of ids.slice(0, 5)) await vote(id, 'good');
+      for (const id of ids.slice(5, 9)) await vote(id, 'bad');
+      for (const id of ids.slice(9)) await vote(id, 'none');
+    }, ctx);
+    // Give the per-vote retrain a moment to settle before the next step.
+    await page.waitForTimeout(3000);
     log('trained doc-demo (5 good / 4 bad)');
   }
 

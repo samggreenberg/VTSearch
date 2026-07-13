@@ -11,13 +11,15 @@ import {
 } from '../../../utils/format-progress';
 import { formatTimestamp } from '../../../utils/format-date';
 import { ContextMenuComponent, ContextMenuItem } from '../../context-menu/context-menu.component';
+import { IconComponent } from '../../icon/icon.component';
 import { buildDetectorCardMenuItems, CARD_MENU_MIN_WIDTH, overflowMenuItems } from '../card-context-menu-items';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
-  selector: 'vt-detector-card',
+  selector: 'tr[vt-detector-card]',
   standalone: true,
-  imports: [CommonModule, FormsModule, JobProgressComponent, ContextMenuComponent],
+  host: { class: 'entity-card' },
+  imports: [CommonModule, FormsModule, JobProgressComponent, ContextMenuComponent, IconComponent],
   templateUrl: './detector-card.component.html',
   styleUrl: './detector-card.component.scss',
 })

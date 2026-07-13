@@ -16,17 +16,21 @@ from pathlib import Path
 from typing import Any, cast
 
 from vtscore.config import DATA_DIR
+from vtscore.media._toponymy_demo import SOURCE_ID as _TOPONYMY_SOURCE_ID
+from vtscore.media._toponymy_demo import TAXONOMY as _TOPONYMY_TAXONOMY
 from vtscore.media.base import DemoDataset, demo_slice
 from vtscore.media.image._demo_categories import (
     DEMO_CATEGORIES_CALTECH101,
     DEMO_CATEGORIES_CALTECH256,
+    ENRICO_CATEGORIES,
     EUROSAT_CATEGORIES,
     FOOD101_CATEGORIES,
     OPENLOGO_CATEGORIES,
     OXFORD_FLOWERS_CATEGORIES,
     PLACES365_CATEGORIES,
+    RICO_SCREEN2WORDS_CATEGORIES,
     ROXFORD_CATEGORIES,
-    STANFORD_DOGS_CATEGORIES,
+    RVL_CDIP_CATEGORIES,
     UCSF_DOCUMENTS_CATEGORIES,
     VISUAL_GENOME_CATEGORIES,
 )
@@ -40,13 +44,15 @@ def build_demo_datasets() -> list[DemoDataset]:
     from vtscore.datasets.downloader import (  # noqa: PLC0415
         CALTECH101_DOWNLOAD_SIZE_MB,
         CALTECH256_DOWNLOAD_SIZE_MB,
+        ENRICO_DOWNLOAD_SIZE_MB,
         EUROSAT_DOWNLOAD_SIZE_MB,
         FOOD101_DOWNLOAD_SIZE_MB,
         OPENLOGO_DOWNLOAD_SIZE_MB,
         OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
         PLACES365_DOWNLOAD_SIZE_MB,
+        RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
         ROXFORD_IMAGES_DOWNLOAD_SIZE_MB,
-        STANFORD_DOGS_DOWNLOAD_SIZE_MB,
+        RVL_CDIP_DOWNLOAD_SIZE_MB,
         UCSF_IDL_DOWNLOAD_SIZE_MB,
         VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB,
         VISUAL_GENOME_IMAGES_DOWNLOAD_SIZE_MB,
@@ -71,11 +77,23 @@ def build_demo_datasets() -> list[DemoDataset]:
     food_folder = DATA_DIR / "food-101" / "images"
     euro_desc = "Satellite imagery by land use"
     euro_folder = DATA_DIR / "EuroSAT_RGB"
-    dogs_desc = "Dog breeds"
-    dogs_folder = DATA_DIR / "stanford_dogs" / "Images"
     places_desc = "Indoor & outdoor scenes"
     places_folder = DATA_DIR / "places365" / "val_256"
+    rico_folder = DATA_DIR / "rico_screen2words" / "screenshots"
+    rvl_folder = DATA_DIR / "rvl_cdip" / "images"
     return [
+        DemoDataset(
+            id="synthetic_world_image",
+            label="Synthetic World Map (signposts demo)",
+            description=(
+                "Pre-baked 4-level toponymy (Continent → Country → State → City) "
+                "with cheating ground-truth signposts — no download, loads instantly."
+            ),
+            categories=list(_TOPONYMY_TAXONOMY.keys()),
+            source=_TOPONYMY_SOURCE_ID,
+            items_per_category=0,
+            download_size_mb=0,
+        ),
         DemoDataset(
             id="caltech101_s",
             label="Caltech-101 (S)",
@@ -281,54 +299,6 @@ def build_demo_datasets() -> list[DemoDataset]:
             download_size_mb=EUROSAT_DOWNLOAD_SIZE_MB,
         ),
         DemoDataset(
-            id="stanford_dogs_s",
-            label="Stanford Dogs (S)",
-            description=dogs_desc,
-            categories=STANFORD_DOGS_CATEGORIES,
-            source="stanford_dogs",
-            required_folder=dogs_folder,
-            slice_frac_start=0.0,
-            slice_frac_end=1 / 7,
-            items_per_category=171,
-            download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
-        ),
-        DemoDataset(
-            id="stanford_dogs_m",
-            label="Stanford Dogs (M)",
-            description=dogs_desc,
-            categories=STANFORD_DOGS_CATEGORIES,
-            source="stanford_dogs",
-            required_folder=dogs_folder,
-            slice_frac_start=1 / 7,
-            slice_frac_end=3 / 7,
-            items_per_category=171,
-            download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
-        ),
-        DemoDataset(
-            id="stanford_dogs_l",
-            label="Stanford Dogs (L)",
-            description=dogs_desc,
-            categories=STANFORD_DOGS_CATEGORIES,
-            source="stanford_dogs",
-            required_folder=dogs_folder,
-            slice_frac_start=3 / 7,
-            slice_frac_end=None,
-            items_per_category=171,
-            download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
-        ),
-        DemoDataset(
-            id="stanford_dogs_a",
-            label="Stanford Dogs (A)",
-            description=dogs_desc,
-            categories=STANFORD_DOGS_CATEGORIES,
-            source="stanford_dogs",
-            required_folder=dogs_folder,
-            slice_frac_start=0.0,
-            slice_frac_end=None,
-            items_per_category=171,
-            download_size_mb=STANFORD_DOGS_DOWNLOAD_SIZE_MB,
-        ),
-        DemoDataset(
             id="places365_s",
             label="Places365 (S)",
             description=places_desc,
@@ -375,6 +345,161 @@ def build_demo_datasets() -> list[DemoDataset]:
             slice_frac_end=None,
             items_per_category=100,
             download_size_mb=PLACES365_DOWNLOAD_SIZE_MB,
+        ),
+        # Enrico: born-digital mobile-UI *screenshots* (not natural photos),
+        # labeled by screen function.  ~1,460 images over 20 topics (~73/topic,
+        # unevenly), so the S/M/L slices are small; A is the whole set.
+        DemoDataset(
+            id="enrico_s",
+            label="Enrico UI (S)",
+            description="Mobile app UI screenshots by screen type",
+            categories=ENRICO_CATEGORIES,
+            source="enrico",
+            required_folder=DATA_DIR / "enrico",
+            slice_frac_start=0.0,
+            slice_frac_end=1 / 7,
+            items_per_category=73,
+            download_size_mb=ENRICO_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="enrico_m",
+            label="Enrico UI (M)",
+            description="Mobile app UI screenshots by screen type",
+            categories=ENRICO_CATEGORIES,
+            source="enrico",
+            required_folder=DATA_DIR / "enrico",
+            slice_frac_start=1 / 7,
+            slice_frac_end=3 / 7,
+            items_per_category=73,
+            download_size_mb=ENRICO_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="enrico_l",
+            label="Enrico UI (L)",
+            description="Mobile app UI screenshots by screen type",
+            categories=ENRICO_CATEGORIES,
+            source="enrico",
+            required_folder=DATA_DIR / "enrico",
+            slice_frac_start=3 / 7,
+            slice_frac_end=None,
+            items_per_category=73,
+            download_size_mb=ENRICO_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="enrico_a",
+            label="Enrico UI (A)",
+            description="All Enrico mobile UI screenshots across 20 screen-function topics",
+            categories=ENRICO_CATEGORIES,
+            source="enrico",
+            required_folder=DATA_DIR / "enrico",
+            slice_frac_start=0.0,
+            slice_frac_end=None,
+            items_per_category=73,
+            download_size_mb=ENRICO_DOWNLOAD_SIZE_MB,
+        ),
+        # RICO-Screen2Words: mobile-UI screenshots labeled by *app genre* (Google
+        # Play category) rather than screen function.  All variants pull the same
+        # ~1.7 GB train split and extract the 16 curated categories; the slices
+        # differ only in how much of each category they take.
+        DemoDataset(
+            id="rico_screen2words_s",
+            label="RICO App UIs (S)",
+            description="Mobile app UI screenshots by app category",
+            categories=RICO_SCREEN2WORDS_CATEGORIES,
+            source="rico_screen2words",
+            required_folder=rico_folder,
+            slice_frac_start=0.0,
+            slice_frac_end=1 / 7,
+            items_per_category=400,
+            download_size_mb=RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="rico_screen2words_m",
+            label="RICO App UIs (M)",
+            description="Mobile app UI screenshots by app category",
+            categories=RICO_SCREEN2WORDS_CATEGORIES,
+            source="rico_screen2words",
+            required_folder=rico_folder,
+            slice_frac_start=1 / 7,
+            slice_frac_end=3 / 7,
+            items_per_category=400,
+            download_size_mb=RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="rico_screen2words_l",
+            label="RICO App UIs (L)",
+            description="Mobile app UI screenshots by app category",
+            categories=RICO_SCREEN2WORDS_CATEGORIES,
+            source="rico_screen2words",
+            required_folder=rico_folder,
+            slice_frac_start=3 / 7,
+            slice_frac_end=None,
+            items_per_category=400,
+            download_size_mb=RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="rico_screen2words_a",
+            label="RICO App UIs (A)",
+            description="Mobile app UI screenshots across 16 Google Play app categories",
+            categories=RICO_SCREEN2WORDS_CATEGORIES,
+            source="rico_screen2words",
+            required_folder=rico_folder,
+            slice_frac_start=0.0,
+            slice_frac_end=None,
+            items_per_category=400,
+            download_size_mb=RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
+        ),
+        # RVL-CDIP: scanned grayscale *document images* across 16 balanced types
+        # (letter, form, email, invoice, resume, memo, …).  A demo-sized
+        # 300-per-class mirror (~4,800 images); the "document screenshot" corner
+        # of digitally-native imagery with a clean 16-way label set.
+        DemoDataset(
+            id="rvl_cdip_s",
+            label="RVL-CDIP Docs (S)",
+            description="Scanned document images by type",
+            categories=RVL_CDIP_CATEGORIES,
+            source="rvl_cdip",
+            required_folder=rvl_folder,
+            slice_frac_start=0.0,
+            slice_frac_end=1 / 7,
+            items_per_category=300,
+            download_size_mb=RVL_CDIP_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="rvl_cdip_m",
+            label="RVL-CDIP Docs (M)",
+            description="Scanned document images by type",
+            categories=RVL_CDIP_CATEGORIES,
+            source="rvl_cdip",
+            required_folder=rvl_folder,
+            slice_frac_start=1 / 7,
+            slice_frac_end=3 / 7,
+            items_per_category=300,
+            download_size_mb=RVL_CDIP_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="rvl_cdip_l",
+            label="RVL-CDIP Docs (L)",
+            description="Scanned document images by type",
+            categories=RVL_CDIP_CATEGORIES,
+            source="rvl_cdip",
+            required_folder=rvl_folder,
+            slice_frac_start=3 / 7,
+            slice_frac_end=None,
+            items_per_category=300,
+            download_size_mb=RVL_CDIP_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="rvl_cdip_a",
+            label="RVL-CDIP Docs (A)",
+            description="Scanned document images across 16 RVL-CDIP document types",
+            categories=RVL_CDIP_CATEGORIES,
+            source="rvl_cdip",
+            required_folder=rvl_folder,
+            slice_frac_start=0.0,
+            slice_frac_end=None,
+            items_per_category=300,
+            download_size_mb=RVL_CDIP_DOWNLOAD_SIZE_MB,
         ),
         DemoDataset(
             id="roxford5k_s",
@@ -499,6 +624,11 @@ _FILE_SOURCE_DOWNLOADERS: dict[str, str] = {
     "caltech256": "download_caltech256",
     "food101": "download_food101",
     "eurosat": "download_eurosat",
+    # RICO-Screen2Words decodes its HF parquet into a <category>/<id>.jpg tree,
+    # so it plugs straight into the folder-per-class collect path.
+    "rico_screen2words": "download_rico_screen2words",
+    # RVL-CDIP likewise decodes its parquet mirror into <class>/<idx>.png.
+    "rvl_cdip": "download_rvl_cdip",
 }
 
 
@@ -537,27 +667,6 @@ def _collect_oxford_flowers_files(categories, slice_args, on_progress) -> list:
     return _slice_by_category(by_cat, categories, *slice_args)
 
 
-def _collect_stanford_dogs_files(categories, slice_args, on_progress) -> list:
-    from vtscore.datasets.downloader import download_stanford_dogs  # noqa: PLC0415
-
-    images_dir = download_stanford_dogs(on_progress=on_progress)
-    breed_to_folder: dict[str, Path] = {}
-    if images_dir.exists():
-        for folder in images_dir.iterdir():
-            if folder.is_dir() and "-" in folder.name:
-                breed_to_folder[folder.name.split("-", 1)[1]] = folder
-
-    by_cat: dict = {}
-    for cat in categories:
-        folder = breed_to_folder.get(cat)
-        if folder is None:
-            continue
-        for ext in ["*.jpg", "*.jpeg", "*.png"]:
-            for img_path in sorted(folder.glob(ext)):
-                by_cat.setdefault(cat, []).append((img_path, cat))
-    return _slice_by_category(by_cat, categories, *slice_args)
-
-
 def _roxford_category_for(stem: str, landmark_set: frozenset[str]) -> str:
     """Map an Oxford Buildings filename stem to its landmark category.
 
@@ -585,6 +694,45 @@ def _collect_roxford_files(categories, slice_args, on_progress) -> list:
             cat = _roxford_category_for(img_path.stem, landmark_set)
             if cat in categories:
                 by_cat.setdefault(cat, []).append((img_path, cat))
+    return _slice_by_category(by_cat, categories, *slice_args)
+
+
+def _collect_enrico_files(categories, slice_args, on_progress) -> list:
+    """Collect Enrico screenshots grouped by their 20-way design-topic label.
+
+    Screenshots are JPEGs keyed on the Rico screen id; upstream drift means the
+    id shows up either as a flat ``<screen_id>.jpg`` or the older
+    ``<screen_id>-screenshot.jpg``, so we accept both and recover the id from
+    the stem.  The label lives in ``design_topics.csv`` (``screen_id,topic``),
+    whose ``topic`` values are lowercase single tokens (e.g. ``mediaplayer``).
+    We fold each to its display category (``MediaPlayer``) with a
+    case-insensitive lookup so the stored ``category`` matches
+    ``ENRICO_CATEGORIES`` (and the eval queries).
+    """
+    import csv  # noqa: PLC0415
+
+    from vtscore.datasets.downloader import download_enrico  # noqa: PLC0415
+
+    extract_dir = download_enrico(on_progress=on_progress)
+    topics_csv = extract_dir / "design_topics.csv"
+
+    display_by_norm = {c.lower(): c for c in ENRICO_CATEGORIES}
+    id_to_cat: dict[str, str] = {}
+    if topics_csv.exists():
+        with open(topics_csv, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                sid = (row.get("screen_id") or "").strip()
+                cat = display_by_norm.get((row.get("topic") or "").strip().lower())
+                if sid and cat:
+                    id_to_cat[sid] = cat
+
+    by_cat: dict = {}
+    for img_path in sorted(extract_dir.rglob("*.jpg")):
+        stem = img_path.stem
+        sid = stem[: -len("-screenshot")] if stem.endswith("-screenshot") else stem
+        cat = id_to_cat.get(sid)
+        if cat in categories:
+            by_cat.setdefault(cat, []).append((img_path, cat))
     return _slice_by_category(by_cat, categories, *slice_args)
 
 
@@ -851,6 +999,79 @@ def _ensure_image_embedder_loaded(embedder, on_progress) -> None:
             embedder.load_models()
         finally:
             embedder._on_progress = original_cb
+
+
+def _synthetic_tile_png(item) -> bytes:
+    """Render a synthetic place as a small solid-colour PNG tile.
+
+    Hue is a continent family (four quadrants of the wheel), lightness/saturation
+    drift with the leaf-city index, so sibling cities read as shades of one
+    regional colour while continents stay clearly distinct on the map.
+    """
+    import colorsys  # noqa: PLC0415
+    import io  # noqa: PLC0415
+
+    from PIL import Image  # noqa: PLC0415
+
+    from vtscore.media._toponymy_demo import total_cities  # noqa: PLC0415
+
+    n_cities = total_cities()
+    hue = (item.continent_index / 4.0 + (item.city_index / max(1, n_cities)) * 0.08) % 1.0
+    sat = 0.45 + 0.4 * ((item.city_index % 9) / 8.0)
+    val = 0.55 + 0.35 * ((item.city_index % 5) / 4.0)
+    r, g, b = (int(round(c * 255)) for c in colorsys.hsv_to_rgb(hue, sat, val))
+    img = Image.new("RGB", (96, 96), (r, g, b))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _load_synthetic_toponymy(clips, embedder, on_progress, demo_origin) -> None:
+    """Populate *clips* with the synthetic world-map demo (no model, no download).
+
+    Image sibling of the audio synthetic demo: each leaf city is a solid colour
+    tile tagged with its ``Continent/Country/State/City`` path and a pre-baked
+    hierarchical embedding, so browsing lights up the ground-truth signpost
+    layer straight from those paths.  See :mod:`vtscore.media._toponymy_demo`.
+    """
+    import hashlib  # noqa: PLC0415
+
+    from vtscore.media._toponymy_demo import generate_items  # noqa: PLC0415
+    from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
+
+    # SigLIP's image/text space is 768-D; match it so the baked vectors slot into
+    # the primary embedder's slot and text queries don't dimension-clash.
+    items = generate_items(dim=768)
+    total = len(items)
+    on_progress("loading", f"Generating {total} synthetic tiles…", 0, total)
+
+    emb_name = embedder.name if embedder is not None else "siglip"
+    clip_id = 1
+    for i, item in enumerate(items):
+        png_bytes = _synthetic_tile_png(item)
+        thumb = make_image_thumbnail(png_bytes)
+        filename = f"{item.category}/tile{i:04d}.png"
+        clips[clip_id] = {
+            "id": clip_id,
+            "media_type": _MEDIA_TYPE_ID,
+            "embedder": emb_name,
+            "duration": 0,
+            "file_size": len(png_bytes),
+            "md5": hashlib.md5(png_bytes).hexdigest(),
+            "embeddings": {emb_name: item.embedding},
+            "media_bytes": png_bytes,
+            "media_string": None,
+            "thumbnail_bytes": thumb[0] if thumb is not None else None,
+            "filename": filename,
+            "category": item.category,
+            "width": 96,
+            "height": 96,
+            "origin": demo_origin,
+            "origin_name": filename,
+        }
+        clip_id += 1
+        if (i + 1) % 100 == 0:
+            on_progress("loading", f"Generating synthetic tiles… ({i + 1}/{total})", i + 1, total)
 
 
 def _embed_file_images(selected, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
@@ -1181,6 +1402,11 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
     demo_origin: dict = {"importer": "demo", "params": {}}
     slice_args = (slice_start, slice_end, slice_frac_start, slice_frac_end)
 
+    # Synthetic signposts demo: generated in-memory, no download, no model.
+    if source == _TOPONYMY_SOURCE_ID:
+        _load_synthetic_toponymy(clips, embedder, on_progress, demo_origin)
+        return None
+
     if source in _FILE_SOURCE_DOWNLOADERS:
         _embed_file_images(
             _collect_simple_folder_files(source, categories, slice_args, on_progress),
@@ -1203,17 +1429,6 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
         )
         return None
 
-    if source == "stanford_dogs":
-        _embed_file_images(
-            _collect_stanford_dogs_files(categories, slice_args, on_progress),
-            clips,
-            embedder,
-            on_progress,
-            demo_origin,
-            skip_embedding=skip_embedding,
-        )
-        return None
-
     if source == "roxford5k":
         _embed_file_images(
             _collect_roxford_files(categories, slice_args, on_progress),
@@ -1228,6 +1443,17 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
     if source == "openlogo":
         _embed_openlogo_images(
             _collect_openlogo_files(categories, slice_args, on_progress),
+            clips,
+            embedder,
+            on_progress,
+            demo_origin,
+            skip_embedding=skip_embedding,
+        )
+        return None
+
+    if source == "enrico":
+        _embed_file_images(
+            _collect_enrico_files(categories, slice_args, on_progress),
             clips,
             embedder,
             on_progress,

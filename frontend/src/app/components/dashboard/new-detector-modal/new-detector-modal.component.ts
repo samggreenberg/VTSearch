@@ -41,6 +41,18 @@ type ModalView = 'main' | 'media-picker';
 type ModalTab = 'blank' | 'trained';
 type TrainedSubView = 'picker' | 'form';
 
+/** One picked media example in the blank-detector form's vertical stack. */
+interface MediaExampleItem {
+  /** Server-side filename in example_media/ (the persistence key). */
+  value: string;
+  /** Human-readable name shown next to the thumbnail. */
+  display: string;
+  /** Media type used when the example was picked (drives the thumbnail). */
+  mediaType: string;
+  /** True once the thumbnail endpoint failed; falls back to the icon. */
+  thumbFailed: boolean;
+}
+
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-new-detector-modal',
@@ -118,12 +130,10 @@ export class NewDetectorModalComponent implements OnInit {
    *  locked so the user can't accidentally change it. */
   mediaTypeLocked = false;
 
-  // Single example (text or media, not both)
-  readonly exampleType = signal<'text' | 'media' | null>(null);
-  readonly exampleValue = signal('');
-  readonly exampleDisplay = signal('');
-  exampleMediaType = '';
-  readonly exampleThumbFailed = signal(false);
+  // Media examples (a vertical stack; mutually exclusive with the text
+  // example). Each entry has its own Remove button; the Add button below
+  // the stack reopens the picker to append another.
+  readonly mediaExamples = signal<MediaExampleItem[]>([]);
 
   // --- Media picker state (shares structure with the Add Dataset modal) ---
 
@@ -288,14 +298,7 @@ export class NewDetectorModalComponent implements OnInit {
       .saveServerMediaFromMediaId({ media_id: mediaId, crop_params: cropParams })
       .subscribe({
         next: (res) => {
-          this.exampleType.set('media');
-          this.exampleValue.set(res.filename);
-          this.exampleDisplay.set(res.original_name || res.filename);
-          this.exampleMediaType = this.mediaType();
-          this.exampleThumbFailed.set(false);
-          this.pendingText.set('');
-          this.exampleTab.set('media');
-          this.autoFillNameFromExample();
+          this.addMediaExample(res.filename, res.original_name || res.filename, this.mediaType());
           this.submitting.set(false);
         },
         error: (err) => {
@@ -303,6 +306,24 @@ export class NewDetectorModalComponent implements OnInit {
           this.error.set(err.error?.message || 'Failed to load seed media');
         },
       });
+  }
+
+  /** Append a picked media example to the stack. Clears any pending text
+   *  (text and media examples are mutually exclusive), switches to the
+   *  media tab, and auto-fills the name from the first example. */
+  private addMediaExample(value: string, display: string, mediaType: string): void {
+    this.mediaExamples.update((list) => [
+      ...list,
+      { value, display, mediaType, thumbFailed: false },
+    ]);
+    this.pendingText.set('');
+    this.exampleTab.set('media');
+    this.autoFillNameFromExample();
+  }
+
+  /** Remove one media example from the stack. */
+  removeMediaExample(index: number): void {
+    this.mediaExamples.update((list) => list.filter((_, i) => i !== index));
   }
 
   unlockMediaType(): void {
@@ -328,8 +349,9 @@ export class NewDetectorModalComponent implements OnInit {
    *  top-down and leave Name blank. */
   private autoFillNameFromExample(): void {
     if (this.nameTouched) return;
-    if (this.exampleType() === 'media' && this.exampleDisplay()) {
-      this.name.set(this.sanitizeName(this.nameFromFilename(this.exampleDisplay())));
+    const first = this.mediaExamples()[0];
+    if (first?.display) {
+      this.name.set(this.sanitizeName(this.nameFromFilename(first.display)));
     } else if (this.pendingText()) {
       this.name.set(this.sanitizeName(this.pendingText()));
     }
@@ -363,7 +385,7 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   get hasExample(): boolean {
-    return this.exampleType() === 'media' || !!this.pendingText().trim();
+    return this.hasMediaExample || !!this.pendingText().trim();
   }
 
   /**
@@ -381,7 +403,7 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   get hasMediaExample(): boolean {
-    return this.exampleType() === 'media';
+    return this.mediaExamples().length > 0;
   }
 
   get hasPendingText(): boolean {
@@ -721,14 +743,11 @@ export class NewDetectorModalComponent implements OnInit {
     this.demoTypedPathError.set('');
     this.datasetsUiApi.selectBrowsedFile(this.demoFileBrowseSource, raw).subscribe({
       next: (res) => {
-        this.exampleType.set('media');
-        this.exampleValue.set(res.filename);
-        this.exampleDisplay.set(res.original_name || raw);
-        this.exampleMediaType = this.activeDemoTab || this.mediaType();
-        this.exampleThumbFailed.set(false);
-        this.pendingText.set('');
-        this.exampleTab.set('media');
-        this.autoFillNameFromExample();
+        this.addMediaExample(
+          res.filename,
+          res.original_name || raw,
+          this.activeDemoTab || this.mediaType(),
+        );
         this.demoFileLoading.set(false);
         this.view.set('main');
       },
@@ -769,14 +788,11 @@ export class NewDetectorModalComponent implements OnInit {
     this.sfBrowseError.set('');
     this.datasetsUiApi.selectBrowsedFile('server_fs', raw).subscribe({
       next: (res) => {
-        this.exampleType.set('media');
-        this.exampleValue.set(res.filename);
-        this.exampleDisplay.set(res.original_name || raw);
-        this.exampleMediaType = this.mediaType() || this.mediaTypeFromFilename(raw);
-        this.exampleThumbFailed.set(false);
-        this.pendingText.set('');
-        this.exampleTab.set('media');
-        this.autoFillNameFromExample();
+        this.addMediaExample(
+          res.filename,
+          res.original_name || raw,
+          this.mediaType() || this.mediaTypeFromFilename(raw),
+        );
         this.sfFileSelecting.set(false);
         this.view.set('main');
       },
@@ -799,7 +815,8 @@ export class NewDetectorModalComponent implements OnInit {
   /** Local file picker handler.  Used by the drop-zone affordance in both
    *  the main form (next to "Browse Media…") and the Local Folder / Local
    *  Files cards in the media picker.  Multi-file drops (e.g. a folder)
-   *  collapse to the first file since only one example is needed. */
+   *  collapse to the first file — the crop-confirm step handles one file
+   *  at a time; further examples are appended via the "+ Add" button. */
   onLocalFileDropped(files: File[]): void {
     if (files.length === 0) return;
     const file = files[0];
@@ -816,14 +833,11 @@ export class NewDetectorModalComponent implements OnInit {
       .uploadServerMediaFile(file, cropParams ? { mediaType, cropParams } : undefined)
       .subscribe({
         next: (res) => {
-          this.exampleType.set('media');
-          this.exampleValue.set(res.filename);
-          this.exampleDisplay.set(res.original_name || res.filename);
-          this.exampleMediaType = mediaType || this.mediaType();
-          this.exampleThumbFailed.set(false);
-          this.pendingText.set('');
-          this.exampleTab.set('media');
-          this.autoFillNameFromExample();
+          this.addMediaExample(
+            res.filename,
+            res.original_name || res.filename,
+            mediaType || this.mediaType(),
+          );
           // Close the picker if it was open so the user lands back on the form.
           if (this.view() === 'media-picker') this.view.set('main');
         },
@@ -853,39 +867,31 @@ export class NewDetectorModalComponent implements OnInit {
     return '';
   }
 
-  /** URL of the example thumbnail, or null if no media example is selected
-   *  or the thumbnail endpoint already failed (so we fall back to the icon). */
-  get exampleThumbnailUrl(): string | null {
-    if (this.exampleType() !== 'media' || !this.exampleValue() || this.exampleThumbFailed()) {
-      return null;
-    }
-    return `/api/server-media-files/${encodeURIComponent(this.exampleValue())}/thumbnail`;
+  /** URL of one stacked example's thumbnail, or null when its thumbnail
+   *  endpoint already failed (so the row falls back to the icon). */
+  exampleThumbnailUrl(example: MediaExampleItem): string | null {
+    if (!example.value || example.thumbFailed) return null;
+    return `/api/server-media-files/${encodeURIComponent(example.value)}/thumbnail`;
   }
 
-  onExampleThumbError(): void {
-    this.exampleThumbFailed.set(true);
+  onExampleThumbError(index: number): void {
+    this.mediaExamples.update((list) =>
+      list.map((ex, i) => (i === index ? { ...ex, thumbFailed: true } : ex)),
+    );
   }
 
   backToMain(): void {
     this.view.set('main');
   }
 
-  // --- Clear example ---
+  // --- Clear examples ---
 
-  clearExample(): void {
-    this.clearMediaExample();
-    this.pendingText.set('');
-  }
-
-  /** Reset only the media-example fields, leaving any pending text untouched.
-   *  Used both by the "Change" button and when the user starts typing a text
-   *  example (the two kinds are mutually exclusive). */
+  /** Reset only the media-example stack, leaving any pending text untouched.
+   *  Used when the user starts typing a text example (the two kinds are
+   *  mutually exclusive); individual rows are removed via their own
+   *  Remove buttons. */
   private clearMediaExample(): void {
-    this.exampleType.set(null);
-    this.exampleValue.set('');
-    this.exampleDisplay.set('');
-    this.exampleMediaType = '';
-    this.exampleThumbFailed.set(false);
+    this.mediaExamples.set([]);
   }
 
   // --- Trained tab: label importers ---
@@ -1021,15 +1027,12 @@ export class NewDetectorModalComponent implements OnInit {
       return;
     }
 
-    // Accept pending text as the text example on submit
+    // Media examples win over pending text (the two are mutually exclusive
+    // in the form; a non-empty stack means the text field was cleared).
+    const mediaExamples = this.mediaExamples();
     const pendingTrimmed = this.pendingText().trim();
-    if (this.exampleType() !== 'media' && pendingTrimmed) {
-      this.exampleType.set('text');
-      this.exampleValue.set(pendingTrimmed);
-      this.exampleDisplay.set(pendingTrimmed);
-    }
 
-    if (!this.exampleType()) {
+    if (mediaExamples.length === 0 && !pendingTrimmed) {
       this.error.set('An example (text or media) is required');
       return;
     }
@@ -1037,11 +1040,11 @@ export class NewDetectorModalComponent implements OnInit {
     this.submitting.set(true);
     this.error.set('');
 
-    const exampleType = this.exampleType();
-    const exampleValue = this.exampleValue();
-    const textQuery = exampleType === 'text' ? exampleValue : '';
-    const mediaExample = exampleType === 'media' ? exampleValue : '';
-    const examplesPayload = [{ type: exampleType!, value: exampleValue }];
+    const textQuery = mediaExamples.length === 0 ? pendingTrimmed : '';
+    const mediaExample = mediaExamples[0]?.value || '';
+    const examplesPayload = textQuery
+      ? [{ type: 'text', value: textQuery }]
+      : mediaExamples.map((ex) => ({ type: 'media', value: ex.value }));
 
     this.detectorsRegistryApi
       .registerDetector({
@@ -1072,14 +1075,14 @@ export class NewDetectorModalComponent implements OnInit {
     return typeId;
   }
 
-  /** "Browse Images...", "Browse Audio...", "Browse Media..." as a fallback. */
+  /** "Browse Images…", "Browse Audio…", "Browse Media…" as a fallback. */
   get browseMediaLabel(): string {
     const mediaType = this.mediaType();
     const name = mediaType ? this.getMediaTypeLabel(mediaType) : '';
-    if (!name) return 'Browse Media...';
+    if (!name) return 'Browse Media…';
     // audio and text don't take a plural -s in this context.
     const uncountable = mediaType === 'audio' || mediaType === 'text';
-    return `Browse ${uncountable ? name : name + 's'}...`;
+    return `Browse ${uncountable ? name : name + 's'}…`;
   }
 
   /** "Drop an image file here", "Drop a video file here", etc. */

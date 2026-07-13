@@ -10,6 +10,14 @@ import pytest
 import vtscore.projection.umap_projection as up
 from vtscore.projection.umap_projection import Projection, fit_projection
 
+# Several tests below run *real* umap-learn fits (tiny matrices, but the first
+# fit numba-JIT-compiles UMAP's kernels: ~30s of one-off CPU per process, and
+# umap-learn's njit kernels are not disk-cacheable).  Pin this module — plus
+# the one real-fit test in test_gpu_backends.py — to a single xdist worker via
+# `--dist loadgroup` (see run-tests.sh) so the whole run pays the JIT cost
+# once instead of once per worker that happens to pick up a UMAP test.
+pytestmark = pytest.mark.xdist_group("numba-umap-jit")
+
 
 def _matrix(n: int, d: int, seed: int = 0) -> np.ndarray:
     rng = np.random.default_rng(seed)

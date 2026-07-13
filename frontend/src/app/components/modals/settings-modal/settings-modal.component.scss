@@ -1,6 +1,6 @@
 :host {
   ::ng-deep .modal-content {
-    width: 680px;
+    width: var(--modal-w-md);
   }
 }
 
@@ -10,41 +10,9 @@
   min-height: 340px;
 }
 
-.settings-tabs {
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  width: 140px;
-  border-right: 1px solid var(--border-color);
-  padding: var(--space-xs) 0;
-}
-
-.settings-tab {
-  background: none;
-  border: none;
-  border-left: 3px solid transparent;
-  padding: var(--space-sm) var(--space-md);
-  font-size: var(--font-md);
-  font-weight: var(--weight-medium);
-  color: var(--text-secondary);
-  cursor: pointer;
-  text-align: left;
-  transition: color var(--transition-base), background var(--transition-base), border-color var(--transition-base);
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-
-  &:hover {
-    color: var(--text-primary);
-    background: var(--bg-secondary);
-  }
-
-  &--active {
-    color: var(--text-primary);
-    background: var(--bg-secondary);
-    border-left-color: var(--accent-color);
-  }
-}
+// The vertical tab rail uses the shared `.side-tab-bar` / `.side-tab`
+// primitive defined in `scss/_components.scss`; only the rotating
+// `.settings-tab-icon` (below) is Settings-specific.
 
 .settings-panel {
   flex: 1;
@@ -146,56 +114,13 @@
   // contextual divider styling.
   h4 {
     margin: 0;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border);
     padding-bottom: var(--space-xs);
   }
 }
 
-.toggle-group {
-  display: flex;
-  gap: 0;
-}
-
-.toggle-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  flex: 1;
-  justify-content: center;
-  padding: var(--space-xs) var(--space-sm);
-  font-size: var(--font-sm);
-  font-weight: var(--weight-medium);
-  color: var(--text-secondary);
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  cursor: pointer;
-  transition: background var(--transition-base), color var(--transition-base), box-shadow var(--transition-base);
-
-  &:first-child {
-    border-radius: var(--radius-md) 0 0 var(--radius-md);
-  }
-
-  &:last-child {
-    border-radius: 0 var(--radius-md) var(--radius-md) 0;
-    border-left: none;
-  }
-
-  &:hover:not(.toggle-btn--active) {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-  }
-
-  &--active {
-    background: var(--accent-color);
-    color: var(--toggle-active-text);
-    border-color: var(--accent-color);
-    box-shadow: inset 0 1px 3px var(--shadow-dropdown);
-
-    + .toggle-btn {
-      border-left-color: var(--accent-color);
-    }
-  }
-}
+// The View/Focus pickers use the shared `.segmented-toggle` primitive
+// (stretch variant) defined in `scss/_components.scss`.
 
 
 // Read-only value display for the Server Settings tab. Styled to read as
@@ -204,8 +129,8 @@
 // while still sitting under a `.form-label` like every other setting.
 .server-value {
   padding: var(--space-xs) var(--space-sm);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: var(--font-md);
@@ -229,8 +154,8 @@
 .server-list {
   margin: 0;
   padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-xl);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   font-size: var(--font-md);
   display: flex;

@@ -4,39 +4,8 @@
   gap: var(--space-md);
 }
 
-.exporter-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-xs);
-  padding: var(--space-lg) var(--space-xl);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  text-align: left;
-  transition: background var(--transition-base), border-color var(--transition-base);
-  color: var(--text-primary);
-
-  &:hover {
-    background: var(--bg-hover);
-    border-color: var(--accent);
-  }
-}
-
-.exporter-name {
-  font-weight: var(--weight-medium);
-  font-size: var(--font-xl);
-}
-
-.exporter-icon {
-  margin-right: var(--space-xs);
-}
-
-.exporter-desc {
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
+// The selectable option cards use the shared `.picker-card` primitive
+// (`frontend/src/scss/_components.scss`).
 
 .exporter-form {
   display: flex;
@@ -57,10 +26,4 @@
   justify-content: flex-end;
   gap: var(--space-md);
   margin-top: var(--space-md);
-}
-
-.empty-state {
-  color: var(--text-muted);
-  text-align: center;
-  padding: var(--space-xl);
 }

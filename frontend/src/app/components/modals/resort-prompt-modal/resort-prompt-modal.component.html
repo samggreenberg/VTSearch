@@ -9,7 +9,7 @@
 
       <div class="example-columns">
         <div class="example-col">
-          <label class="col-label">New Text Example</label>
+          <label class="col-label">New text example</label>
           <div class="text-input-row">
             <input
               class="form-input"
@@ -22,15 +22,15 @@
           </div>
         </div>
         <div class="example-col">
-          <label class="col-label">New Media Example</label>
-          <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" title="Browse loaded media to pick a new example">Browse Media...</button>
+          <label class="col-label">New media example</label>
+          <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" title="Browse loaded media to pick a new example">Browse Media…</button>
           <input
             #fileInput
             type="file"
             class="hidden-file-input"
             (change)="onLocalFileSelected($event)"
           />
-          <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="fileInput.click()" title="Upload a media file from your computer">Upload File...</button>
+          <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="fileInput.click()" title="Upload a media file from your computer">Upload File…</button>
         </div>
       </div>
 
@@ -54,10 +54,10 @@
         <p class="picker-instructions">Choose a source to browse media from:</p>
         <div class="source-list">
           @for (src of mediaSources(); track src.name) {
-            <button class="importer-card" (click)="selectSource(src)">
-              <span class="importer-name">@if (src.icon) {<span class="importer-icon"><vt-icon [icon]="src.icon"></vt-icon></span> }{{ src.display_name || src.name }}</span>
+            <button class="picker-card" (click)="selectSource(src)">
+              <span class="picker-card__title">@if (src.icon) {<span class="picker-card__icon"><vt-icon [icon]="src.icon"></vt-icon></span> }{{ src.display_name || src.name }}</span>
               @if (src.description) {
-                <span class="importer-desc">{{ src.description }}</span>
+                <span class="picker-card__desc">{{ src.description }}</span>
               }
             </button>
           }
@@ -100,7 +100,7 @@
       }
 
       @if (browseLoading()) {
-        <p class="empty-state">Loading items...</p>
+        <p class="empty-state">Loading items…</p>
       }
 
       @if (selectedSource && !fileBrowsing && !browseLoading() && browseItems().length === 0) {

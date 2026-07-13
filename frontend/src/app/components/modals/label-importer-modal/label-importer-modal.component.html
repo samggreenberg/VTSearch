@@ -2,15 +2,15 @@
   @if (view === 'picker') {
     <div class="importer-picker">
       @if (loading()) {
-        <p class="empty-state">Loading importers...</p>
+        <p class="empty-state">Loading importers…</p>
       } @else if (importers().length === 0) {
         <p class="empty-state">No label importers available.</p>
       } @else {
         @for (imp of importers(); track imp.name) {
-          <button class="importer-card" (click)="selectImporter(imp)">
-            <span class="importer-name">@if (imp.icon) {<span class="importer-icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
+          <button class="picker-card" (click)="selectImporter(imp)">
+            <span class="picker-card__title">@if (imp.icon) {<span class="picker-card__icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
             @if (imp.description) {
-              <span class="importer-desc">{{ imp.description }}</span>
+              <span class="picker-card__desc">{{ imp.description }}</span>
             }
           </button>
         }
@@ -19,7 +19,7 @@
 
     @if (!targetModelName()) {
     <div class="add-media-section">
-      <p class="add-media-heading">Add media directly</p>
+      <p class="add-media-heading">Add Media Directly</p>
       <div class="add-media-buttons">
         <input
           #addBadInput
@@ -33,7 +33,7 @@
           (click)="triggerAddBad()"
           title="Upload a media file and add it to the Bad pile."
         >
-          {{ addingBad() ? 'Adding to Bad pile…' : 'Add media to Bad' }}
+          {{ addingBad() ? 'Adding to Bad Pile…' : 'Add Media to Bad' }}
         </button>
         <input
           #addGoodInput
@@ -47,7 +47,7 @@
           (click)="triggerAddGood()"
           title="Upload a media file and add it to the Good pile."
         >
-          {{ addingGood() ? 'Adding to Good pile…' : 'Add media to Good' }}
+          {{ addingGood() ? 'Adding to Good Pile…' : 'Add Media to Good' }}
         </button>
       </div>
     </div>

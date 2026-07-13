@@ -29,7 +29,7 @@
 .bsp-title {
   margin: 0;
   font-size: var(--font-sm);
-  letter-spacing: 0.05em;
+  letter-spacing: var(--tracking-wide);
   font-weight: var(--weight-regular);
   color: var(--text-primary);
 }
@@ -125,15 +125,6 @@
 .bsp-sort-label {
   font-size: var(--font-2xs);
   color: var(--text-dim);
-}
-
-.bsp-sort-select {
-  padding: var(--space-2xs) var(--space-sm);
-  font-size: var(--font-xs);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
 }
 
 .bsp-view-controls {

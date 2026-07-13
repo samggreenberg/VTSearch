@@ -184,6 +184,7 @@ class FinalizeProgress:
         ("cleanup", 0.05),
         ("dedup", 0.15),
         ("coverage", 0.30),
+        ("signpost_texts", 0.05),
         ("registry", 0.45),
         ("projection", 0.05),
     )

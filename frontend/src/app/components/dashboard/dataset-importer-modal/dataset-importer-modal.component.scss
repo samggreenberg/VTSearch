@@ -14,7 +14,7 @@
 // jumping to fit the demo table.
 :host {
   ::ng-deep .modal-content {
-    width: 720px;
+    width: var(--modal-w-md);
     min-height: 480px;
   }
 }

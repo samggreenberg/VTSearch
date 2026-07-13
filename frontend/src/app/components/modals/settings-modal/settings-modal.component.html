@@ -1,68 +1,68 @@
 <vt-modal title="Settings" [open]="true" (closed)="close()">
   @if (loading()) {
-    <p class="empty-state">Loading settings...</p>
+    <p class="empty-state">Loading settings…</p>
   } @else {
     <div class="settings-layout">
-      <nav class="settings-tabs">
+      <nav class="side-tab-bar">
         <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'appearance'"
+          class="side-tab"
+          [class.side-tab--active]="activeSettingsTab() === 'appearance'"
           (click)="activeSettingsTab.set('appearance')"
           title="Theme, animations, and view layout options">
           <vt-icon type="palette" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'appearance'"></vt-icon>
           Appearance
         </button>
         <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'autofind'"
+          class="side-tab"
+          [class.side-tab--active]="activeSettingsTab() === 'autofind'"
           (click)="activeSettingsTab.set('autofind')"
           title="Detectors that auto-run on import, and what to do with their results">
           <vt-icon type="auto-find" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'autofind'"></vt-icon>
           Auto-Find
         </button>
         <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'autopilot'"
+          class="side-tab"
+          [class.side-tab--active]="activeSettingsTab() === 'autopilot'"
           (click)="activeSettingsTab.set('autopilot')"
           title="Configure the guided autopilot labeling workflow">
           <vt-icon type="steering-wheel" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'autopilot'"></vt-icon>
           Autopilot
         </button>
         <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'browser'"
+          class="side-tab"
+          [class.side-tab--active]="activeSettingsTab() === 'browser'"
           (click)="activeSettingsTab.set('browser')"
           title="Browse map look per media type: bin shape, density colormap, and cell size">
           <vt-icon type="eye" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'browser'"></vt-icon>
           Browser
         </button>
         <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'imports'"
+          class="side-tab"
+          [class.side-tab--active]="activeSettingsTab() === 'imports'"
           (click)="activeSettingsTab.set('imports')"
           title="Default embedder, clipper, and converters to apply when importing each kind of dataset">
           <vt-icon type="import" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'imports'"></vt-icon>
           Import Defaults
         </button>
         <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'server'"
+          class="side-tab"
+          [class.side-tab--active]="activeSettingsTab() === 'server'"
           (click)="activeSettingsTab.set('server')"
           title="Settings fixed when the server started; shared by everyone and read-only here">
           <vt-icon type="server" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'server'"></vt-icon>
           Server
         </button>
         <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'sorting'"
+          class="side-tab"
+          [class.side-tab--active]="activeSettingsTab() === 'sorting'"
           (click)="activeSettingsTab.set('sorting')"
           title="Options that control how sorting and detector tuning behave">
           <vt-icon type="sort-descending" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'sorting'"></vt-icon>
           Sorting
         </button>
         <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'huggingface'"
+          class="side-tab"
+          [class.side-tab--active]="activeSettingsTab() === 'huggingface'"
           (click)="activeSettingsTab.set('huggingface')"
           title="Sign in with HuggingFace to download gated demo datasets and gated AI models">
           <vt-icon type="globe" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'huggingface'"></vt-icon>
@@ -75,8 +75,8 @@
         @if (activeSettingsTab() === 'appearance') {
           <h3>Appearance</h3>
           <div class="form-group">
-            <label class="form-label" title="Color theme for the application interface">Theme</label>
-            <select class="form-select" [ngModel]="settings().theme" (ngModelChange)="onThemeChange($event)" title="Choose the visual color scheme" aria-label="Theme">
+            <label class="form-label" for="setting-theme" title="Color theme for the application interface">Theme</label>
+            <select id="setting-theme" class="form-select" [ngModel]="settings().theme" (ngModelChange)="onThemeChange($event)" title="Choose the visual color scheme">
               <option value="system">System</option>
               <option value="dark">Dark</option>
               <option value="light">Light</option>
@@ -84,8 +84,8 @@
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label" title="Choose whether decorative motion plays across the whole app">Show Animations<vt-field-hint-icon hint="Controls decorative motion across the app. “Show” forces it on, “Hide” turns it off, and “OS Setting” follows your system’s reduce-motion preference."></vt-field-hint-icon></label>
-            <select class="form-select" [ngModel]="settings().show_animations" (ngModelChange)="onAnimationModeChange($event)" title="Choose whether decorative motion plays" aria-label="Show Animations">
+            <label class="form-label" for="setting-animations" title="Choose whether decorative motion plays across the whole app">Show animations<vt-field-hint-icon hint="Controls decorative motion across the app. “Show” forces it on, “Hide” turns it off, and “OS Setting” follows your system’s reduce-motion preference."></vt-field-hint-icon></label>
+            <select id="setting-animations" class="form-select" [ngModel]="settings().show_animations" (ngModelChange)="onAnimationModeChange($event)" title="Choose whether decorative motion plays">
               <option value="show">Show</option>
               <option value="hide">Hide</option>
               <option value="os">OS Setting</option>
@@ -134,19 +134,19 @@
               <div class="view-side-section">
                 <h4 class="subhead" title="Display settings for the left panel (unlabeled media list)">Left Side</h4>
                 <div class="form-group">
-                  <label class="form-label" title="How an item is selected for preview: click to select, or hover to preview on mouseover">Focus Mode:</label>
-                  <div class="toggle-group">
-                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_left', activeViewTab()) === 'click'" (click)="onFocusModeChange('focus_mode_left', activeViewTab(), 'click')" title="Click an item to preview it in the center panel">
+                  <label class="form-label" title="How an item is selected for preview: click to select, or hover to preview on mouseover">Focus mode:</label>
+                  <div class="segmented-toggle segmented-toggle--stretch">
+                    <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getFocusMode('focus_mode_left', activeViewTab()) === 'click'" (click)="onFocusModeChange('focus_mode_left', activeViewTab(), 'click')" title="Click an item to preview it in the center panel">
                       <vt-icon type="cursor-click" [size]="14"></vt-icon> Click
                     </button>
-                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_left', activeViewTab()) === 'hover'" (click)="onFocusModeChange('focus_mode_left', activeViewTab(), 'hover')" title="Hover over an item to immediately preview it">
+                    <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getFocusMode('focus_mode_left', activeViewTab()) === 'hover'" (click)="onFocusModeChange('focus_mode_left', activeViewTab(), 'hover')" title="Hover over an item to immediately preview it">
                       <vt-icon type="cursor-hover" [size]="14"></vt-icon> Hover
                     </button>
                   </div>
                 </div>
                 <div class="form-group">
-                  <label class="form-label" title="Thumbnail size in the media grid">Grid Icon Size:</label>
-                  <select class="form-select" [ngModel]="getGridIconSize('grid_icon_size_left', activeViewTab())" (ngModelChange)="onGridIconSizeChange('grid_icon_size_left', activeViewTab(), $event)" title="Choose thumbnail size for the grid view" aria-label="Left grid icon size">
+                  <label class="form-label" for="setting-grid-icon-left" title="Thumbnail size in the media grid">Grid icon size:</label>
+                  <select id="setting-grid-icon-left" class="form-select" [ngModel]="getGridIconSize('grid_icon_size_left', activeViewTab())" (ngModelChange)="onGridIconSizeChange('grid_icon_size_left', activeViewTab(), $event)" title="Choose thumbnail size for the grid view" aria-label="Left grid icon size">
                     <option value="XS">XS</option>
                     <option value="S">S</option>
                     <option value="M">M</option>
@@ -158,19 +158,19 @@
               <div class="view-side-section">
                 <h4 class="subhead" title="Display settings for the right panel (labeled goods and bads)">Right Side</h4>
                 <div class="form-group">
-                  <label class="form-label" title="How an item is selected for preview: click to select, or hover to preview on mouseover">Focus Mode:</label>
-                  <div class="toggle-group">
-                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_right', activeViewTab()) === 'click'" (click)="onFocusModeChange('focus_mode_right', activeViewTab(), 'click')" title="Click an item to preview it in the center panel">
+                  <label class="form-label" title="How an item is selected for preview: click to select, or hover to preview on mouseover">Focus mode:</label>
+                  <div class="segmented-toggle segmented-toggle--stretch">
+                    <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getFocusMode('focus_mode_right', activeViewTab()) === 'click'" (click)="onFocusModeChange('focus_mode_right', activeViewTab(), 'click')" title="Click an item to preview it in the center panel">
                       <vt-icon type="cursor-click" [size]="14"></vt-icon> Click
                     </button>
-                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_right', activeViewTab()) === 'hover'" (click)="onFocusModeChange('focus_mode_right', activeViewTab(), 'hover')" title="Hover over an item to immediately preview it">
+                    <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getFocusMode('focus_mode_right', activeViewTab()) === 'hover'" (click)="onFocusModeChange('focus_mode_right', activeViewTab(), 'hover')" title="Hover over an item to immediately preview it">
                       <vt-icon type="cursor-hover" [size]="14"></vt-icon> Hover
                     </button>
                   </div>
                 </div>
                 <div class="form-group">
-                  <label class="form-label" title="Thumbnail size in the media grid">Grid Icon Size:</label>
-                  <select class="form-select" [ngModel]="getGridIconSize('grid_icon_size_right', activeViewTab())" (ngModelChange)="onGridIconSizeChange('grid_icon_size_right', activeViewTab(), $event)" title="Choose thumbnail size for the grid view" aria-label="Right grid icon size">
+                  <label class="form-label" for="setting-grid-icon-right" title="Thumbnail size in the media grid">Grid icon size:</label>
+                  <select id="setting-grid-icon-right" class="form-select" [ngModel]="getGridIconSize('grid_icon_size_right', activeViewTab())" (ngModelChange)="onGridIconSizeChange('grid_icon_size_right', activeViewTab(), $event)" title="Choose thumbnail size for the grid view" aria-label="Right grid icon size">
                     <option value="XS">XS</option>
                     <option value="S">S</option>
                     <option value="M">M</option>
@@ -195,12 +195,12 @@
             Safe thresholds
           </label>
           <div class="form-group">
-            <label class="form-label" title="Number of items to check when tuning the detector's cutoff after training">Tuning count</label>
-            <input type="number" class="form-input" [ngModel]="settings().calibrate_count" (ngModelChange)="onNumberChange('calibrate_count', $event)" min="0" title="Number of items to check when tuning the cutoff" />
+            <label class="form-label" for="setting-calibrate-count" title="Number of items to check when tuning the detector's cutoff after training">Tuning count</label>
+            <input id="setting-calibrate-count" type="number" class="form-input" [ngModel]="settings().calibrate_count" (ngModelChange)="onNumberChange('calibrate_count', $event)" min="0" title="Number of items to check when tuning the cutoff" />
           </div>
           <div class="form-group">
-            <label class="form-label" title="Fraction of labeled items to set aside for checking (0 = none, 1 = all)">Tuning fraction</label>
-            <input type="number" class="form-input" [ngModel]="settings().calibration_fraction" (ngModelChange)="onNumberChange('calibration_fraction', $event)" min="0" max="1" step="0.05" title="Fraction of labeled items to set aside for checking (0.0 to 1.0)" />
+            <label class="form-label" for="setting-calibration-fraction" title="Fraction of labeled items to set aside for checking (0 = none, 1 = all)">Tuning fraction</label>
+            <input id="setting-calibration-fraction" type="number" class="form-input" [ngModel]="settings().calibration_fraction" (ngModelChange)="onNumberChange('calibration_fraction', $event)" min="0" max="1" step="0.05" title="Fraction of labeled items to set aside for checking (0.0 to 1.0)" />
           </div>
         }
 
@@ -208,10 +208,11 @@
         @if (activeSettingsTab() === 'imports') {
           <h3>Import Defaults<vt-field-hint-icon hint="Per-media-type defaults that auto-fill the Add Dataset modal when you start a matching import."></vt-field-hint-icon></h3>
           <div class="form-group" title="Streamline the UI for a single media type. Importer and detector flows will hide their media-type pickers and lock to this type; converters that produce other types are filtered out.">
-            <label class="form-label">Solo media type@if (soloMediaTypeNote) {
+            <label class="form-label" for="setting-solo-media-type">Solo media type@if (soloMediaTypeNote) {
               <vt-field-hint-icon [hint]="soloMediaTypeNote"></vt-field-hint-icon>
             }</label>
             <select
+              id="setting-solo-media-type"
               class="form-select"
               [ngModel]="soloMediaTypeSelectValue"
               (ngModelChange)="onSoloMediaTypeChange($event)"
@@ -248,20 +249,20 @@
             Hide autopilot panel
           </label>
           <div class="form-group">
-            <label class="form-label" title="Number of Good votes needed before autopilot moves past the initial good-examples phase"># Good to start</label>
-            <input type="number" class="form-input" [ngModel]="settings().autopilot_top_greens" (ngModelChange)="onNumberChange('autopilot_top_greens', $event)" min="0" title="Good votes required to advance past the first phase" />
+            <label class="form-label" for="setting-autopilot-greens" title="Number of Good votes needed before autopilot moves past the initial good-examples phase"># Good to start</label>
+            <input id="setting-autopilot-greens" type="number" class="form-input" [ngModel]="settings().autopilot_top_greens" (ngModelChange)="onNumberChange('autopilot_top_greens', $event)" min="0" title="Good votes required to advance past the first phase" />
           </div>
           <div class="form-group">
-            <label class="form-label" title="Number of Bad votes needed before autopilot moves past the bad-examples phase"># Bad to start</label>
-            <input type="number" class="form-input" [ngModel]="settings().autopilot_hard_reds" (ngModelChange)="onNumberChange('autopilot_hard_reds', $event)" min="0" title="Bad votes required to advance past the second phase" />
+            <label class="form-label" for="setting-autopilot-reds" title="Number of Bad votes needed before autopilot moves past the bad-examples phase"># Bad to start</label>
+            <input id="setting-autopilot-reds" type="number" class="form-input" [ngModel]="settings().autopilot_hard_reds" (ngModelChange)="onNumberChange('autopilot_hard_reds', $event)" min="0" title="Bad votes required to advance past the second phase" />
           </div>
           <div class="form-group">
-            <label class="form-label" title="How many new votes to collect before autopilot triggers a re-sort (retrain + re-rank)"># Start to re-sort</label>
-            <input type="number" class="form-input" [ngModel]="settings().autopilot_resort_interval" (ngModelChange)="onNumberChange('autopilot_resort_interval', $event)" min="1" title="Votes between automatic re-sorts" />
+            <label class="form-label" for="setting-autopilot-resort" title="How many new votes to collect before autopilot triggers a re-sort (retrain + re-rank)"># Start to re-sort</label>
+            <input id="setting-autopilot-resort" type="number" class="form-input" [ngModel]="settings().autopilot_resort_interval" (ngModelChange)="onNumberChange('autopilot_resort_interval', $event)" min="1" title="Votes between automatic re-sorts" />
           </div>
           <div class="form-group">
-            <label class="form-label" title="Target diversity level for the exploration phase. Higher values mean autopilot will push you to sample from more distinct regions of the dataset.">Goal Diversity</label>
-            <input type="number" class="form-input" [ngModel]="settings().autopilot_goal_diversity" (ngModelChange)="onNumberChange('autopilot_goal_diversity', $event)" min="1" title="Target diversity level for the exploration phase" />
+            <label class="form-label" for="setting-autopilot-diversity" title="Target diversity level for the exploration phase. Higher values mean autopilot will push you to sample from more distinct regions of the dataset.">Goal diversity</label>
+            <input id="setting-autopilot-diversity" type="number" class="form-input" [ngModel]="settings().autopilot_goal_diversity" (ngModelChange)="onNumberChange('autopilot_goal_diversity', $event)" min="1" title="Target diversity level for the exploration phase" />
           </div>
 
         }
@@ -287,23 +288,34 @@
             <div class="view-tab-content browser-tab-content">
               <div class="form-group">
                 <label class="form-label" title="Slide clusters together to close the empty space between them when the map is built">Compaction<vt-field-hint-icon hint="Slides clusters together to close the empty gaps between them. Applies next time the map is built."></vt-field-hint-icon></label>
-                <div class="toggle-group">
-                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), true)" title="Close the empty space between clusters">
+                <div class="segmented-toggle segmented-toggle--stretch">
+                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), true)" title="Close the empty space between clusters">
                     On
                   </button>
-                  <button class="toggle-btn" [class.toggle-btn--active]="!getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), false)" title="Keep the map's original spacing">
+                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="!getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), false)" title="Keep the map's original spacing">
                     Off
                   </button>
                 </div>
               </div>
               <div class="form-group">
-                <label class="form-label" title="Colors the density heatmap. Auto follows your theme: blue (Ocean) in light mode, red→yellow (Heat) in dark mode.">Colormap<vt-field-hint-icon [hint]="browseTabUsesThumbnails(activeBrowseTab()) ? 'Thumbnail datasets (image, video) always use grayscale.' : 'Darker bins mean more items in light mode; brighter bins mean more in dark mode.'"></vt-field-hint-icon></label>
+                <label class="form-label" title="Letter named region signposts over the map when the dataset has them">Signposts<vt-field-hint-icon hint="Names the map's regions like street signs: broad names when zoomed out, finer names as you zoom in. Only shows when the dataset's map has computed labels."></vt-field-hint-icon></label>
+                <div class="segmented-toggle segmented-toggle--stretch">
+                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getBrowseSignposts(activeBrowseTab())" (click)="onBrowseSignpostsChange(activeBrowseTab(), true)" title="Show region signposts on the map">
+                    On
+                  </button>
+                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="!getBrowseSignposts(activeBrowseTab())" (click)="onBrowseSignpostsChange(activeBrowseTab(), false)" title="Hide region signposts">
+                    Off
+                  </button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="setting-browse-colormap" title="Colors the density heatmap. Auto follows your theme: blue (Ocean) in light mode, red→yellow (Heat) in dark mode.">Colormap<vt-field-hint-icon [hint]="browseTabUsesThumbnails(activeBrowseTab()) ? 'Thumbnail datasets (image, video) always use grayscale.' : 'Darker bins mean more items in light mode; brighter bins mean more in dark mode.'"></vt-field-hint-icon></label>
                 @if (browseTabUsesThumbnails(activeBrowseTab())) {
-                  <select class="form-select" disabled aria-label="Browser colormap" title="Thumbnail datasets always use grayscale">
+                  <select id="setting-browse-colormap" class="form-select" disabled aria-label="Browser colormap" title="Thumbnail datasets always use grayscale">
                     <option value="gray" selected>Grayscale</option>
                   </select>
                 } @else {
-                  <select class="form-select" [ngModel]="getBrowseColormap(activeBrowseTab())" (ngModelChange)="onBrowseColormapChange(activeBrowseTab(), $event)" aria-label="Browser colormap">
+                  <select id="setting-browse-colormap" class="form-select" [ngModel]="getBrowseColormap(activeBrowseTab())" (ngModelChange)="onBrowseColormapChange(activeBrowseTab(), $event)" aria-label="Browser colormap">
                     <option value="auto">Auto (match theme)</option>
                     <option value="heat">Heat (red → yellow)</option>
                     <option value="ocean">Ocean (blue)</option>
@@ -312,8 +324,8 @@
                 }
               </div>
               <div class="form-group">
-                <label class="form-label" title="On-screen size of the map cells">Cell size</label>
-                <select class="form-select" [ngModel]="getBrowseIconSize(activeBrowseTab())" (ngModelChange)="onBrowseIconSizeChange(activeBrowseTab(), $event)" aria-label="Browser cell size">
+                <label class="form-label" for="setting-browse-cell-size" title="On-screen size of the map cells">Cell size</label>
+                <select id="setting-browse-cell-size" class="form-select" [ngModel]="getBrowseIconSize(activeBrowseTab())" (ngModelChange)="onBrowseIconSizeChange(activeBrowseTab(), $event)" aria-label="Browser cell size">
                   <option value="XS">XS</option>
                   <option value="S">S</option>
                   <option value="M">M</option>
@@ -326,8 +338,9 @@
                 </select>
               </div>
               <div class="form-group">
-                <label class="form-label" title="Width in pixels of the colored border drawn around stacked (pile) thumbnails">Thumbnail border<vt-field-hint-icon hint="Colored band around stacked thumbnail tiles (image, video); its color shows how many items are piled there. Set to 0 to hide."></vt-field-hint-icon></label>
+                <label class="form-label" for="setting-browse-thumb-border" title="Width in pixels of the colored border drawn around stacked (pile) thumbnails">Thumbnail border<vt-field-hint-icon hint="Colored band around stacked thumbnail tiles (image, video); its color shows how many items are piled there. Set to 0 to hide."></vt-field-hint-icon></label>
                 <input
+                  id="setting-browse-thumb-border"
                   class="form-input"
                   type="number"
                   min="0"
@@ -338,8 +351,8 @@
                   aria-label="Browser thumbnail border width" />
               </div>
               <div class="form-group">
-                <label class="form-label" title="Thumbnail size in the bin popup's grid">Popup thumbnail size<vt-field-hint-icon hint="Thumbnail size in the right-click bin popup. Changing it while browsing is remembered here."></vt-field-hint-icon></label>
-                <select class="form-select" [ngModel]="getPopupGridIconSize(activeBrowseTab())" (ngModelChange)="onPopupGridIconSizeChange(activeBrowseTab(), $event)" aria-label="Bin popup thumbnail size">
+                <label class="form-label" for="setting-browse-popup-size" title="Thumbnail size in the bin popup's grid">Popup thumbnail size<vt-field-hint-icon hint="Thumbnail size in the right-click bin popup. Changing it while browsing is remembered here."></vt-field-hint-icon></label>
+                <select id="setting-browse-popup-size" class="form-select" [ngModel]="getPopupGridIconSize(activeBrowseTab())" (ngModelChange)="onPopupGridIconSizeChange(activeBrowseTab(), $event)" aria-label="Bin popup thumbnail size">
                   <option value="XS">XS</option>
                   <option value="S">S</option>
                   <option value="M">M</option>
@@ -349,14 +362,14 @@
               </div>
               <div class="form-group">
                 <label class="form-label" title="How many mouse-wheel notches (and +/- button clicks) it takes to cross one zoom level of the bin pyramid">Mouse-zooms per level<vt-field-hint-icon hint="How many mouse-wheel notches (or +/- clicks) it takes to cross one zoom level. 1 = 2× per notch; 2 (default) = √2; 3 = ∛2."></vt-field-hint-icon></label>
-                <div class="toggle-group">
-                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseMouseZoomsPerLevel(activeBrowseTab()) === 1" (click)="onBrowseMouseZoomsPerLevelChange(activeBrowseTab(), 1)" title="One notch per level (2× per zoom)">
+                <div class="segmented-toggle segmented-toggle--stretch">
+                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getBrowseMouseZoomsPerLevel(activeBrowseTab()) === 1" (click)="onBrowseMouseZoomsPerLevelChange(activeBrowseTab(), 1)" title="One notch per level (2× per zoom)">
                     1
                   </button>
-                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseMouseZoomsPerLevel(activeBrowseTab()) === 2" (click)="onBrowseMouseZoomsPerLevelChange(activeBrowseTab(), 2)" title="Two notches per level (√2 per zoom) — the default">
+                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getBrowseMouseZoomsPerLevel(activeBrowseTab()) === 2" (click)="onBrowseMouseZoomsPerLevelChange(activeBrowseTab(), 2)" title="Two notches per level (√2 per zoom) — the default">
                     2
                   </button>
-                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseMouseZoomsPerLevel(activeBrowseTab()) === 3" (click)="onBrowseMouseZoomsPerLevelChange(activeBrowseTab(), 3)" title="Three notches per level (∛2 per zoom)">
+                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getBrowseMouseZoomsPerLevel(activeBrowseTab()) === 3" (click)="onBrowseMouseZoomsPerLevelChange(activeBrowseTab(), 3)" title="Three notches per level (∛2 per zoom)">
                     3
                   </button>
                 </div>
@@ -448,17 +461,13 @@
     @if (version()) {
       <span class="settings-version" title="App version (UTC timestamp of the last dev to main merge). Include this when reporting issues.">v {{ version() }}</span>
     }
-    <span class="settings-saved" [class.settings-saved--visible]="savedVisible()" role="status" aria-live="polite" title="Settings auto-save as you change them">&#10003; saved</span>
+    <span class="settings-saved" [class.settings-saved--visible]="savedVisible()" role="status" aria-live="polite" title="Settings auto-save as you change them"><vt-icon type="check" [size]="14"></vt-icon> saved</span>
     <button class="btn btn--secondary" (click)="resetDefaults()" title="Reset all settings to their factory defaults">Default</button>
     <button class="btn btn--secondary" (click)="openImporter()" title="Import settings from a file">Import</button>
     <button class="btn btn--secondary" (click)="openExporter()" aria-label="Export" title="Export settings to a file">
-      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M11 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-5"></path>
-        <polyline points="15 3 21 3 21 9"></polyline>
-        <line x1="12" y1="12" x2="21" y2="3"></line>
-      </svg>
+      <vt-icon type="export" [size]="16"></vt-icon>
     </button>
-    <button class="btn btn--primary" (click)="close()" title="Close the settings panel">Close</button>
+    <button class="btn btn--secondary" (click)="close()" title="Close the settings panel">Done</button>
   </div>
 </vt-modal>
 

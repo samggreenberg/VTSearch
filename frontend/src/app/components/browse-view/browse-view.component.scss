@@ -55,7 +55,7 @@
   position: absolute;
   top: var(--space-md);
   left: var(--space-md);
-  z-index: 2;
+  z-index: var(--z-canvas-overlay);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -119,7 +119,7 @@
 .browse-preload-cover {
   position: absolute;
   inset: 0;
-  z-index: 3;
+  z-index: var(--z-canvas-top);
   background: var(--bg-body);
 }
 
@@ -131,29 +131,8 @@
   overflow: hidden;
 }
 
-// 8px hit target with a 4px visible line centered inside; same pattern as the
-// Find view's panel dividers.
-.browse-divider {
-  width: 8px;
-  cursor: col-resize;
-  background: transparent;
-  position: relative;
-
-  &::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 2px;
-    width: 4px;
-    background: var(--border);
-    transition: background var(--transition-base);
-  }
-
-  &:hover::after {
-    background: var(--accent);
-  }
-}
+// The draggable pane rule uses the shared `.pane-divider` primitive
+// (`scss/_components.scss`).
 
 // The docked side panel: selection list on top, then the overview minimap with
 // the density legend pinned beneath it (roughly a 2:1 split).
@@ -214,9 +193,10 @@
 }
 
 // Zoom (true span) control and on-screen hex size control. Both mirror the
-// grouped pill look of the Find view's grid-size buttons (.vc-btn); the hex
+// grouped pill look of the Find view's grid-size buttons (`.segmented-toggle--compact`); the hex
 // pill reuses the image icon at 11px / 18px, the zoom pill uses +/- glyphs.
 .browse-select,
+.browse-signposts,
 .browse-zoom,
 .browse-size {
   display: inline-flex;
@@ -230,7 +210,7 @@
   min-width: 30px;
   height: 28px;
   padding: 0 var(--space-sm);
-  background: var(--bg-primary);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
   color: var(--text-muted);
   cursor: pointer;
@@ -252,7 +232,7 @@
   &:hover:not(:disabled):not(.browse-size-btn--active) {
     color: var(--text-primary);
     border-color: var(--text-primary);
-    z-index: 1;
+    z-index: var(--z-canvas-base);
   }
 
   &:disabled {
@@ -273,13 +253,13 @@
 
 // The active toggle (region-select) reads as pressed: filled accent surface
 // that stays lit even when not hovered, so the active mode is obvious at a
-// glance. Mirrors the Find view's ``.vc-btn--active`` treatment.
+// glance. Mirrors the Find view's `.segmented-toggle__btn--active` treatment.
 .browse-size-btn--active {
-  background: var(--accent-color);
+  background: var(--accent);
   color: var(--toggle-active-text);
-  border-color: var(--accent-color);
+  border-color: var(--accent);
   box-shadow: inset 0 1px 3px var(--shadow-dropdown);
-  z-index: 1;
+  z-index: var(--z-canvas-base);
 }
 
 // Preview-volume control (audio datasets only), anchored top-left below the
@@ -297,7 +277,7 @@
   margin: 0 0 0 -1px;
   padding: 0 var(--space-sm);
   box-sizing: border-box;
-  background: var(--bg-primary);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   cursor: pointer;
@@ -306,18 +286,18 @@
 
   &:hover {
     border-color: var(--text-primary);
-    z-index: 1;
+    z-index: var(--z-canvas-base);
   }
 
   &:focus-visible {
-    outline: 2px solid var(--accent-color);
+    outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
 
   // Blink/WebKit track + thumb.
   &::-webkit-slider-runnable-track {
     height: 3px;
-    border-radius: 2px;
+    border-radius: var(--radius-sm);
     background: var(--border);
   }
 
@@ -329,14 +309,14 @@
     margin-top: -4.5px; // centre the 12px thumb on the 3px track
     border: none;
     border-radius: 50%;
-    background: var(--accent-color);
+    background: var(--accent);
     cursor: pointer;
   }
 
   // Firefox track + thumb.
   &::-moz-range-track {
     height: 3px;
-    border-radius: 2px;
+    border-radius: var(--radius-sm);
     background: var(--border);
   }
 
@@ -345,7 +325,7 @@
     height: 12px;
     border: none;
     border-radius: 50%;
-    background: var(--accent-color);
+    background: var(--accent);
     cursor: pointer;
   }
 }

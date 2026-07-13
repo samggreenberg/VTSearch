@@ -36,12 +36,12 @@
     />
   </div>
   <div
-    class="divider-left"
+    class="pane-divider"
     (mousedown)="onDividerMouseDown($event)"
   ></div>
   <div class="panel-center">
     @if (sortState.sortBusy) {
-      <div class="find-wait-overlay">
+      <div class="find-wait-overlay" role="status" aria-live="polite">
         <div class="find-wait-content">
           <p class="find-wait-message">Please wait: scoring dataset with detector…</p>
           <vt-progress-bar
@@ -70,7 +70,7 @@
     />
   </div>
   <div
-    class="divider-right"
+    class="pane-divider"
     (mousedown)="onRightDividerMouseDown($event)"
   ></div>
   <div class="panel-right">

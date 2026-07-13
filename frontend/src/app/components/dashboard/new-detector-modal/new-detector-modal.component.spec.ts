@@ -115,14 +115,15 @@ describe('NewDetectorModalComponent', () => {
     expect(component.exampleMediaTabLabel).toBe('Audio');
   });
 
-  it('should drop a selected media example when the user types text', () => {
-    component.exampleType.set('media');
-    component.exampleValue.set('file.wav');
-    component.exampleDisplay.set('file.wav');
+  it('should drop selected media examples when the user types text', () => {
+    component.mediaExamples.set([
+      { value: 'file.wav', display: 'file.wav', mediaType: 'audio', thumbFailed: false },
+      { value: 'file2.wav', display: 'file2.wav', mediaType: 'audio', thumbFailed: false },
+    ]);
     component.exampleTab.set('media');
     expect(component.hasMediaExample).toBe(true);
 
-    // Typing a text example is mutually exclusive with the media example.
+    // Typing a text example is mutually exclusive with the media examples.
     component.onPendingTextInput('dog barking');
 
     expect(component.hasMediaExample).toBe(false);
@@ -131,13 +132,63 @@ describe('NewDetectorModalComponent', () => {
 
   it('should clear pending text when media example is set', () => {
     component.pendingText.set('some text');
-    component.exampleType.set('media');
-    component.exampleValue.set('file.wav');
-    component.exampleDisplay.set('file.wav');
+    component.mediaExamples.set([
+      { value: 'file.wav', display: 'file.wav', mediaType: 'audio', thumbFailed: false },
+    ]);
     component.pendingText.set('');
 
     expect(component.hasMediaExample).toBe(true);
     expect(component.pendingText()).toBe('');
+  });
+
+  it('removes a single example from the stack', () => {
+    component.mediaExamples.set([
+      { value: 'a.jpg', display: 'a.jpg', mediaType: 'image', thumbFailed: false },
+      { value: 'b.jpg', display: 'b.jpg', mediaType: 'image', thumbFailed: false },
+      { value: 'c.jpg', display: 'c.jpg', mediaType: 'image', thumbFailed: false },
+    ]);
+
+    component.removeMediaExample(1);
+
+    expect(component.mediaExamples().map((e) => e.value)).toEqual(['a.jpg', 'c.jpg']);
+    expect(component.hasMediaExample).toBe(true);
+  });
+
+  it('submits every stacked media example in the examples payload', () => {
+    vi.spyOn(component.created, 'emit');
+
+    component.name.set('Red Cars');
+    component.mediaType.set('image');
+    component.mediaExamples.set([
+      { value: 'a.jpg', display: 'a.jpg', mediaType: 'image', thumbFailed: false },
+      { value: 'b.jpg', display: 'b.jpg', mediaType: 'image', thumbFailed: false },
+    ]);
+    component.submit();
+
+    const req = httpMock.expectOne('/api/detectors/registry');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body.media_example).toBe('a.jpg');
+    expect(req.request.body.examples).toEqual([
+      { type: 'media', value: 'a.jpg' },
+      { type: 'media', value: 'b.jpg' },
+    ]);
+    req.flush({ ok: true, detector: { id: '456', name: 'Red Cars' } });
+
+    expect(component.created.emit).toHaveBeenCalledWith('456');
+  });
+
+  it('marks only the failing thumbnail as failed', () => {
+    component.mediaExamples.set([
+      { value: 'a.jpg', display: 'a.jpg', mediaType: 'image', thumbFailed: false },
+      { value: 'b.jpg', display: 'b.jpg', mediaType: 'image', thumbFailed: false },
+    ]);
+
+    component.onExampleThumbError(0);
+
+    expect(component.exampleThumbnailUrl(component.mediaExamples()[0])).toBeNull();
+    expect(component.exampleThumbnailUrl(component.mediaExamples()[1])).toBe(
+      '/api/server-media-files/b.jpg/thumbnail',
+    );
   });
 
   it('should show server error on failure', () => {
@@ -212,9 +263,9 @@ describe('NewDetectorModalComponent', () => {
     expect(component.showNoTextWarning).toBe(true);
 
     // A media example seed (not text-only) → no warning even on a no-text dataset.
-    component.exampleType.set('media');
-    component.exampleValue.set('file.jpg');
-    component.exampleDisplay.set('file.jpg');
+    component.mediaExamples.set([
+      { value: 'file.jpg', display: 'file.jpg', mediaType: 'image', thumbFailed: false },
+    ]);
     expect(component.showNoTextWarning).toBe(false);
   });
 

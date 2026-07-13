@@ -1305,10 +1305,33 @@ class TestEmbedMediaLock:
         t1 = threading.Thread(target=call_embed, args=(0,))
         t2 = threading.Thread(target=call_embed, args=(1,))
 
-        # Save and replace the lock with a fresh one so we don't interfere
-        # with other tests (the class attr is shared).
+        # Save and replace the lock with a fresh one (wrapped so the test can
+        # observe acquire attempts) so we don't interfere with other tests
+        # (the class attr is shared).
+        second_acquire_attempted = threading.Event()
+        acquire_attempts = []
+
+        class _SignalingLock:
+            """Lock wrapper that signals when a second acquire is attempted."""
+
+            def __init__(self):
+                self._lock = threading.Lock()
+
+            def __enter__(self):
+                acquire_attempts.append(threading.current_thread().name)
+                if len(acquire_attempts) >= 2:
+                    second_acquire_attempted.set()
+                self._lock.acquire()
+                return self
+
+            def __exit__(self, *exc):
+                self._lock.release()
+
+        from typing import cast
+
         original_lock = MediaEmbedder._embed_lock
-        MediaEmbedder._embed_lock = threading.Lock()
+        # cast: duck-typed context-manager stand-in for the real Lock.
+        MediaEmbedder._embed_lock = cast(threading.Lock, _SignalingLock())
         try:
             t1.start()
             # Wait for t1 to be inside _embed_media_impl
@@ -1316,10 +1339,9 @@ class TestEmbedMediaLock:
             assert inside.is_set(), "t1 should be inside _embed_media_impl"
 
             t2.start()
-            # Give t2 a moment to hit the lock
-            import time
-
-            time.sleep(0.1)
+            # Wait until t2 has actually reached the lock acquisition
+            # (deterministic; no fixed race-window sleep).
+            assert second_acquire_attempted.wait(timeout=5), "t2 never attempted to acquire the embed lock"
             # t2 should be blocked on the lock; inside should still be set by t1 only
             assert not overlap_detected, "t2 entered _embed_media_impl while t1 was still inside"
 

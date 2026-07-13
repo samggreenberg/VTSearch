@@ -13,10 +13,10 @@
         } @else {
           <div class="source-list">
             @for (src of mediaSources(); track src.name) {
-              <button class="importer-card" (click)="selectSource(src)">
-                <span class="importer-name">@if (src.icon) {<span class="importer-icon"><vt-icon [icon]="src.icon"></vt-icon></span> }{{ src.display_name || src.name }}</span>
+              <button class="picker-card" (click)="selectSource(src)">
+                <span class="picker-card__title">@if (src.icon) {<span class="picker-card__icon"><vt-icon [icon]="src.icon"></vt-icon></span> }{{ src.display_name || src.name }}</span>
                 @if (src.description) {
-                  <span class="importer-desc">{{ src.description }}</span>
+                  <span class="picker-card__desc">{{ src.description }}</span>
                 }
               </button>
             }
@@ -100,7 +100,7 @@
           Local example media
           <input type="file" (change)="onMediaFileSelected($event)" hidden />
         </label>
-        <button class="btn btn--secondary file-btn" (click)="openMediaPicker()" title="Browse server media sources to pick an example file">Browse media sources...</button>
+        <button class="btn btn--secondary file-btn" (click)="openMediaPicker()" title="Browse server media sources to pick an example file">Browse Media Sources…</button>
         @if (serverMediaFiles().length > 0) {
           <h4 class="subhead" title="Example media files available on the server">Server Example Media</h4>
           <div class="file-list">

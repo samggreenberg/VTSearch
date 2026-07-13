@@ -18,6 +18,18 @@ export class LabelSessionService {
   examples: ModelExample[] = [];
   modelName = '';
 
+  /** Server-side filenames of every media example, for Autopilot's example
+   *  sort (plural examples rank against their embedding centroid).  Falls
+   *  back to the scalar `mediaExample` for detectors whose registry entry
+   *  predates the `examples` list. */
+  get mediaExampleFilenames(): string[] {
+    const fromList = this.examples
+      .filter((e) => e.type === 'media' && e.value)
+      .map((e) => e.value);
+    if (fromList.length > 0) return fromList;
+    return this.mediaExample ? [this.mediaExample] : [];
+  }
+
   /** Total votes cast since the last re-sort prompt. */
   resortVoteCount = 0;
 

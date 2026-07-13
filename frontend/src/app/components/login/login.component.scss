@@ -40,23 +40,15 @@ h1 { margin: 0 0 var(--space-xs); }
   gap: var(--space-lg);
 }
 
+// The username field inherits `.form-input` (border, color, focus ring, and
+// placeholder color come from there).  Only the oversized login-card sizing
+// and the panel-toned background differ.
 input {
   padding: var(--space-md) var(--space-lg);
-  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
-  color: var(--text-primary);
   font-size: var(--font-xl);
-  outline: none;
   transition: border-color var(--transition-base);
-
-  &:focus {
-    border-color: var(--accent);
-  }
-
-  &::placeholder {
-    color: var(--text-placeholder);
-  }
 }
 
 button {

@@ -1,8 +1,8 @@
 <div class="view-controls">
-  <div class="vc-group">
+  <div class="segmented-toggle segmented-toggle--compact">
     <button
       type="button"
-      class="vc-btn vc-btn--size"
+      class="segmented-toggle__btn"
       [disabled]="atMinSize() || !currentMediaType()"
       (click)="bumpSize(-1)"
       title="Smaller thumbnails"
@@ -11,7 +11,7 @@
     </button>
     <button
       type="button"
-      class="vc-btn vc-btn--size"
+      class="segmented-toggle__btn"
       [disabled]="atMaxSize() || !currentMediaType()"
       (click)="bumpSize(1)"
       title="Bigger thumbnails"
@@ -21,11 +21,11 @@
   </div>
 
   @if (showFocus()) {
-  <div class="vc-group">
+  <div class="segmented-toggle segmented-toggle--compact">
     <button
       type="button"
-      class="vc-btn"
-      [class.vc-btn--active]="focusMode() === 'click'"
+      class="segmented-toggle__btn"
+      [class.segmented-toggle__btn--active]="focusMode() === 'click'"
       (click)="setFocusMode('click')"
       title="Click to preview"
       aria-label="Click focus mode"
@@ -34,8 +34,8 @@
     </button>
     <button
       type="button"
-      class="vc-btn"
-      [class.vc-btn--active]="focusMode() === 'hover'"
+      class="segmented-toggle__btn"
+      [class.segmented-toggle__btn--active]="focusMode() === 'hover'"
       (click)="setFocusMode('hover')"
       title="Hover to preview"
       aria-label="Hover focus mode"

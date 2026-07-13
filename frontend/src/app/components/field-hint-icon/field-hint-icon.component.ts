@@ -75,7 +75,7 @@ const HOVER_DELAY_MS = 500;
         padding: 6px 8px;
         background: var(--bg-surface);
         color: var(--text-primary);
-        border: 1px solid var(--border-color);
+        border: 1px solid var(--border);
         border-radius: 4px;
         font-size: 12px;
         font-weight: 400;

@@ -281,7 +281,7 @@ class TestServerFileSettingsSource:
         assert "{username}" not in result
 
     def test_resolved_template_path_outside_base_dir_rejected(self, tmp_path):
-        """Regression for ``logical-bug-audit.md`` C9.
+        """Regression for logical-bug-audit C9.
 
         A template containing ``../`` survives per-value sanitization (because
         no template variable is involved), so the resolved path must also be
@@ -392,7 +392,7 @@ class TestServerFileLabelsetSource:
             src.load({"filepath": str(filepath)})
 
     def test_resolved_template_path_outside_base_dir_rejected(self, tmp_path):
-        """Regression for ``logical-bug-audit.md`` C9.
+        """Regression for logical-bug-audit C9.
 
         A template containing ``../`` survives per-value sanitization (because
         the sanitized detector_name has no separators), so the resolved path
@@ -724,7 +724,7 @@ class TestStartupAutoImport:
 class TestSyncFromSourceFreshness:
     """Regression tests for M16 and the two adjacent defects.
 
-    See ``docs/plans/logical-bug-audit.md`` § Settings / sync; M16.
+    See logical-bug-audit § Settings / sync; M16.
     """
 
     def test_source_file_change_triggers_resync_on_next_read(self, tmp_path, isolated_settings):
@@ -1795,6 +1795,7 @@ class TestLabelsetSyncDebounce:
     def test_reset_drops_pending_without_writing(self, tmp_path):
         """reset_label_sync_for_tests cancels the timer instead of running it."""
         from vtscore.labels.sync import (
+            _run_pending_sync,
             reset_label_sync_for_tests,
             sync_to_labelset_source,
         )
@@ -1813,10 +1814,10 @@ class TestLabelsetSyncDebounce:
 
             reset_label_sync_for_tests()
 
-            # Give any (cancelled) timer a chance to fire.
-            import time
-
-            time.sleep(0.3)
+            # Simulate the worst-case race deterministically: a timer that
+            # already fired before cancel() landed runs its callback *after*
+            # the reset.  The pending entry is gone, so it must be a no-op.
+            _run_pending_sync(ctx.detector_id)
 
             assert not (tmp_path / "labels.json").exists()
         finally:

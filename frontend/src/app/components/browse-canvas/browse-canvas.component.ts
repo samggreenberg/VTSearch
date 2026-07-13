@@ -26,12 +26,17 @@ import {
   softFloorZoom,
   type ViewGeomContext,
 } from './view-transform';
+import {
+  layoutSigns,
+  SIGN_FONT_FAMILY,
+  viewLevelForZoom,
+} from './sign-layout';
 import { prefersReducedMotion } from '../../utils/reduced-motion';
-import { readRootZoom } from '../../utils/root-zoom';
 import { onDevicePixelRatioChange } from '../../utils/device-pixel-ratio';
 import type {
   HexCellPayload,
   ProjectionMeta,
+  RegionLabelPayload,
   TilePayload,
   ViewTransform,
 } from '../../models/projection.models';
@@ -137,6 +142,21 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * drives the cursor affordance.
    */
   readonly shiftHeld = input(false);
+  /**
+   * Region signpost labels for the active projection — the named regions the
+   * canvas letters over the map (see ``docs/plans/vtsbrowse-toponymy.md``).
+   * Fetched once per projection by the parent view; empty until a labeler has
+   * run for this dataset. Which signs show at a given moment is a function of
+   * the zoom: see ``sign-layout.ts`` for the visibility/size bands.
+   */
+  readonly labels = input<RegionLabelPayload[]>([]);
+  /**
+   * Whether the signpost layer is drawn at all — the per-media
+   * ``browse_signposts`` setting, surfaced as (and toggled by) the signpost
+   * button in the browse toolbar. Off hides the signs without discarding the
+   * fetched labels, so toggling back on repaints them instantly.
+   */
+  readonly signposts = input(true);
   /**
    * How many wheel notches cross one pyramid level (a full 2x of zoom) — the
    * per-media ``browse_mouse_zooms_per_level`` setting. The per-notch width
@@ -600,6 +620,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (changes['thumbnailBorder'] && !changes['thumbnailBorder'].firstChange) {
       this.requestRedraw();
     }
+    // Labels arriving (they load async, after the tiles) or the signpost layer
+    // toggling only changes the sign overlay; a repaint picks either up.
+    if (
+      (changes['labels'] && !changes['labels'].firstChange) ||
+      (changes['signposts'] && !changes['signposts'].firstChange)
+    ) {
+      this.requestRedraw();
+    }
   }
 
   ngOnDestroy(): void {
@@ -651,14 +679,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const canvas = this.canvasRef.nativeElement;
     canvas.width = this.width * this.dpr;
     canvas.height = this.height * this.dpr;
-    // getBoundingClientRect() returns viewport-coordinate px (CSS layout × root zoom).
-    // canvas.style.width/height must be in CSS px, so divide out the root zoom to
-    // avoid the canvas being visually double-scaled (once by html{zoom:N}, once by
-    // the explicit style override), which would shift hit-test coordinates off the
-    // cursor by the zoom factor.
-    const rootZoom = readRootZoom();
-    canvas.style.width = `${this.width / rootZoom}px`;
-    canvas.style.height = `${this.height / rootZoom}px`;
+    canvas.style.width = `${this.width}px`;
+    canvas.style.height = `${this.height}px`;
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     // A devicePixelRatio change (e.g. dragging to a different-density display)
     // can also cross the full-res threshold, so re-evaluate the tier here.
@@ -965,7 +987,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const tyMax = Math.ceil((from.centerY + halfWy) / tileH + 1);
 
     const cmap = resolveColormap(this.colormap(), this.effectiveTheme());
-    this.selAccent = this.themeColor('--accent-color') || '#4f9dff';
+    this.selAccent = this.themeColor('--accent') || '#4f9dff';
     const selectionActive = this.selection.size > 0;
     const cull = screenRadius * 2;
     // The frozen viewport copy is dropped into the centre afterwards, so a cell
@@ -1229,7 +1251,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // Resolve the colormap against the live theme once per frame, not per cell.
     const cmap = resolveColormap(this.colormap(), this.effectiveTheme());
     // Accent for selection rings + marquee, also resolved once per frame.
-    this.selAccent = this.themeColor('--accent-color') || '#4f9dff';
+    this.selAccent = this.themeColor('--accent') || '#4f9dff';
     const selectionActive = this.selection.size > 0;
 
     // The enlarged cell is deferred and redrawn last (on top of its neighbours)
@@ -1260,6 +1282,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
         selectionActive,
       );
     }
+
+    // Region signposts letter the map above the bins (and the hover-enlarged
+    // cell) but below the transient marquee, like place names on a map layer.
+    if (this.signposts() && this.labels().length > 0) this.drawSigns(ctx);
 
     if (this.marquee) this.drawMarquee(ctx);
 
@@ -1367,6 +1393,58 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     memo._selVer = this.selection.version();
     memo._selState = state;
     return state;
+  }
+
+  /**
+   * Paint the region signposts: theme-aware translucent pills lettered with the
+   * region names whose `level` sits near the current zoom. All the geometry —
+   * which signs are visible, how big, how faded, and the greedy de-clutter —
+   * lives in the framework-free `sign-layout.ts`; this method only measures
+   * text and paints what the layout kept. The view level is *continuous* (the
+   * unrounded form of the LOD picker's level), so signs grow/fade smoothly
+   * through a zoom rather than stepping at level boundaries.
+   */
+  private drawSigns(ctx: CanvasRenderingContext2D): void {
+    const meta = this.meta();
+    if (!meta) return;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const placed = layoutSigns(
+      this.labels(),
+      {
+        transform: this.transform,
+        width: this.width,
+        height: this.height,
+        viewLevel: viewLevelForZoom(meta.base_radius, this.effZoom, this.targetRadius),
+      },
+      (text, fontPx) => {
+        ctx.font = this.signFont(fontPx);
+        return ctx.measureText(text).width;
+      },
+    );
+    const pillBg = this.themeColor('--bg-body') || '#0f1117';
+    const textColor = this.themeColor('--text-primary') || '#e0e0e0';
+    for (const sign of placed) {
+      // The pill sits behind the text at a lower opacity so the sign reads as
+      // lettering over the map, not an opaque card punched through it.
+      ctx.globalAlpha = sign.alpha * 0.6;
+      ctx.fillStyle = pillBg;
+      ctx.beginPath();
+      ctx.roundRect(sign.sx - sign.w / 2, sign.sy - sign.h / 2, sign.w, sign.h, sign.h / 2);
+      ctx.fill();
+      ctx.globalAlpha = sign.alpha;
+      ctx.fillStyle = textColor;
+      ctx.font = this.signFont(sign.fontPx);
+      ctx.fillText(sign.label.text, sign.sx, sign.sy);
+    }
+    ctx.restore();
+  }
+
+  /** Canvas font spec for a sign at `fontPx`. Semibold so the lettering holds
+   *  up over busy density fills without needing an outline. */
+  private signFont(fontPx: number): string {
+    return `600 ${fontPx}px ${SIGN_FONT_FAMILY}`;
   }
 
   /** Translucent fill + dashed accent border for the in-progress marquee. */

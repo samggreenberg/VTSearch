@@ -275,8 +275,8 @@ class MediasDict(dict):
     the counter.  Code that rewrites a media's vector in place must bump it
     itself via :meth:`DatasetContext.bump_media_revision`; the embed / clip
     load stages do this through ``invalidate_embedding_matrix``.  This is
-    the ``media_revision`` follow-up (root-cause Pattern #4) recorded in
-    ``docs/reviews/2026-05-logical-bug-audit.md``.
+    the ``media_revision`` follow-up (logical-bug-audit root-cause
+    Pattern #4).
 
     Over-bumping (bumping when nothing actually changed) is always safe: it
     only forces an unnecessary cache rebuild, never serves a stale one.
@@ -345,8 +345,8 @@ class DatasetContext:
         # advances on every structural mutation of the medias (and on every
         # in-place vector rewrite that calls ``bump_media_revision``); the
         # embedding / region matrix caches key their validity on it instead
-        # of comparing sorted id lists (root-cause Pattern #4, see
-        # ``docs/reviews/2026-05-logical-bug-audit.md``).
+        # of comparing sorted id lists (logical-bug-audit root-cause
+        # Pattern #4).
         "_medias",
         "_media_revision",
         "coverage_atlas",
@@ -391,6 +391,13 @@ class DatasetContext:
         "_projection",
         "_pyramids",
         "_full_job_id",
+        # VTSBrowse region signposts (the "street sign" name layer; see
+        # docs/plans/vtsbrowse-toponymy.md).  A RegionLabelSet computed by the
+        # labeling pipeline for the *current* frozen layout, or None.  The set
+        # carries the projection_id it was fit against, and the labels route
+        # refuses to serve it over a different layout — so a stale set is
+        # inert, never wrong.  Text + 2-D anchors only, no vectors.
+        "_region_labels",
         # VTSBrowse subset projection: an ephemeral UMAP fit over just a subset
         # of this dataset's media ids (e.g. the positives of a Find run),
         # computed on demand and never persisted.  Held alongside the full
@@ -403,6 +410,8 @@ class DatasetContext:
         "_subset_ids",
         "_subset_job_id",
         "_subset_content_version",
+        # Region signposts for the subset layout (mirror of ``_region_labels``).
+        "_subset_region_labels",
         # Role-typed embedder binding (v3 "three-slot" trio; see
         # docs/plans/patch-embedder.md).  A dataset binds up to one
         # text-capable embedder, up to one patch-capable embedder, and up to
@@ -444,10 +453,12 @@ class DatasetContext:
         self._projection: Any = None  # Projection | None
         self._pyramids: dict[str, Any] = {}  # bin_shape -> Pyramid
         self._full_job_id: str | None = None  # in-flight full-dataset build job id
+        self._region_labels: Any = None  # RegionLabelSet | None (signposts, full layout)
         self._subset_projection: Any = None  # Projection | None (ephemeral subset UMAP)
         self._subset_pyramids: dict[str, Any] = {}  # bin_shape -> Pyramid (subset)
         self._subset_ids: list[int] | None = None  # sorted ids the subset layout is fit on
         self._subset_job_id: str | None = None  # in-flight subset build job id
+        self._subset_region_labels: Any = None  # RegionLabelSet | None (signposts, subset)
         # Bumped on each in-place edit of the subset layout (e.g. removing
         # false-positives from a Find browse).  The layout/``projection_id`` is
         # kept stable so the canvas preserves the viewport; this counter changes
@@ -491,7 +502,7 @@ class DatasetContext:
         The embedding-matrix and region-matrix caches compare this single
         int instead of two sorted id lists, so a mutation that changes
         vectors without changing the id set still invalidates them
-        (root-cause Pattern #4 in ``docs/reviews/2026-05-logical-bug-audit.md``).
+        (logical-bug-audit root-cause Pattern #4).
         """
         return self._media_revision
 
@@ -689,7 +700,7 @@ class DetectorContext:
         # ``populate_label_embeddings`` detect a region→none (or any region
         # edit) transition and re-resolve instead of returning a stale
         # region-pooled vector keyed to an element that no longer has a
-        # region.  See ``2026-05-logical-bug-audit.md`` finding M4.
+        # region.  See logical-bug-audit finding M4.
         "label_embedding_regions",
         # Cross-dataset local features (StructuralFeatures) for the labelset's
         # elements, keyed by stable_element_id.  Re-derived from each element's

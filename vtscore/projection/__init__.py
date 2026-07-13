@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from vtscore.projection.compaction import compact_layout
 from vtscore.projection.hexbin import hex_center, hexbin_assign
+from vtscore.projection.labels import RegionLabel, RegionLabelSet, make_label_set
 from vtscore.projection.pyramid import (
     BIN_SHAPES,
     DEFAULT_BIN_SHAPE,
@@ -40,8 +41,11 @@ from vtscore.projection.umap_projection import Projection, fit_projection, remov
 
 __all__ = [
     "Projection",
+    "RegionLabel",
+    "RegionLabelSet",
     "compact_layout",
     "fit_projection",
+    "make_label_set",
     "Pyramid",
     "Tile",
     "HexCell",

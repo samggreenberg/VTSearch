@@ -17,7 +17,7 @@ export class TextViewerComponent implements OnChanges, OnDestroy {
 
   // Signal so the HTTP response (written from a `.subscribe()` callback, which is
   // not on the zoneless CD-notification path) repaints the view.
-  readonly text = signal('Loading...');
+  readonly text = signal('Loading…');
   private sub: Subscription | null = null;
   // See ImageViewerComponent.lastMediaId; avoid re-fetching the text payload
   // every time the metadata cache hydrates a new reference for the same id.
@@ -36,7 +36,7 @@ export class TextViewerComponent implements OnChanges, OnDestroy {
 
   private loadText(): void {
     this.sub?.unsubscribe();
-    this.text.set('Loading...');
+    this.text.set('Loading…');
     this.sub = this.mediasApi.getText(this.media.id).subscribe({
       next: (data) => {
         this.text.set(data.content || '');

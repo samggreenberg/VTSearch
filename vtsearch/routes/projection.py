@@ -21,6 +21,7 @@ from flask_smorest import Blueprint, abort
 
 from vtsearch.schemas.projection import (
     ProjectionBuildResponseSchema,
+    ProjectionLabelsResponseSchema,
     ProjectionMetaSchema,
     SubsetRemoveRequestSchema,
     TileResponseSchema,
@@ -69,6 +70,8 @@ def _subset_meta(ctx, bin_shape: str) -> dict:
         meta["media_type"] = _media_type_for(ctx)
         meta["method"] = ctx._subset_projection.method if ctx._subset_projection else None
         meta["content_version"] = getattr(ctx, "_subset_content_version", 0)
+        label_set = _label_set_for(ctx, pyr, subset=True)
+        meta["has_labels"] = bool(label_set and label_set.labels)
         return meta
 
     if ctx._subset_job_id:
@@ -86,6 +89,95 @@ def _subset_meta(ctx, bin_shape: str) -> dict:
                 return {"status": "error", "error": job.error or "projection build failed"}
 
     return {"status": "idle"}
+
+
+def _label_set_for(ctx, pyr, *, subset: bool):
+    """The context's :class:`RegionLabelSet` for ``pyr``'s layout, or ``None``.
+
+    Labels are pinned to the frozen layout they were computed from: a set whose
+    ``projection_id`` doesn't match the active pyramid's is stale (the layout
+    was re-fit underneath it) and is treated as absent rather than served over
+    the wrong coordinates.
+
+    When no set is cached for this layout, resolution order is: the set the
+    labeling pipeline **persisted** into the dataset container (full layouts
+    only — see :func:`_maybe_load_persisted_labels`), then lazily-derived
+    **ground-truth signposts** from the dataset's category annotations (see
+    :func:`_maybe_build_demo_signposts`).  The result — including an empty
+    set, so a dataset with no signs isn't re-probed on every poll — is cached
+    on the context.  A set left behind by the live labeling pipeline wins: it
+    already matches the layout, so this never overwrites it.
+    """
+    label_set = ctx._subset_region_labels if subset else ctx._region_labels
+    if label_set is not None and label_set.projection_id == pyr.projection_id:
+        return label_set
+
+    built = None if subset else _maybe_load_persisted_labels(ctx, pyr)
+    if built is None:
+        proj = ctx._subset_projection if subset else ctx._projection
+        built = _maybe_build_demo_signposts(proj, pyr, ctx.medias)
+    if subset:
+        ctx._subset_region_labels = built
+    else:
+        ctx._region_labels = built
+    if built is None or built.projection_id != pyr.projection_id:
+        return None
+    return built
+
+
+def _maybe_load_persisted_labels(ctx, pyr):
+    """Restore the signpost labels persisted next to the full-dataset layout.
+
+    Served only over the exact layout they were computed from
+    (``projection_id`` match), and only while their labeler signature still
+    matches what the active pipeline would produce — a changed provider,
+    embedder, or toponymy version makes them stale (recomputing stale labels
+    lazily is a planned follow-up; until then they're treated as absent).
+    When the active pipeline can't label this dataset at all (e.g. toponymy
+    isn't installed here), a persisted set is still served: it's derived text
+    pinned to the right layout, strictly better than nothing.
+    """
+    pkl_path = _pkl_path_for(ctx.dataset_id)
+    if pkl_path is None:
+        return None
+    from vtscore.datasets.container import read_region_labels
+
+    loaded = read_region_labels(pkl_path)
+    if loaded is None:
+        return None
+    label_set, stored_signature = loaded
+    if label_set.projection_id != pyr.projection_id:
+        return None
+    from vtscore.projection.signpost_prep import labeler_signature
+
+    active = labeler_signature(ctx)
+    if active is not None and active != stored_signature:
+        return None
+    return label_set
+
+
+def _maybe_build_demo_signposts(proj, pyr, medias):
+    """Derive ground-truth signposts for ``pyr``'s layout, or ``None``.
+
+    Cheap-probes the medias for a hierarchical (``/``-separated) ``category``
+    first, so non-demo datasets never pull the projection package on the
+    request path or pay for a build.  Returns an id-pinned
+    :class:`RegionLabelSet` (possibly empty) when the layout is usable, else
+    ``None``.
+    """
+    if proj is None or proj.projection_id != pyr.projection_id:
+        return None
+    from vtscore.projection.demo_signposts import has_hierarchical_categories
+
+    if not has_hierarchical_categories(medias):
+        # Cache an empty, id-pinned set so we don't re-probe every poll.
+        from vtscore.projection.labels import make_label_set
+
+        return make_label_set(pyr.projection_id, [])
+
+    from vtscore.projection.demo_signposts import build_category_signposts
+
+    return build_category_signposts(proj, medias)
 
 
 def _media_type_for(ctx) -> str:
@@ -238,6 +330,7 @@ def _reset_full_projection(ctx) -> None:
     """
     ctx._projection = None
     ctx._pyramids = {}
+    ctx._region_labels = None
     pkl_path = _pkl_path_for(ctx.dataset_id)
     if pkl_path is None:
         return
@@ -247,6 +340,26 @@ def _reset_full_projection(ctx) -> None:
         remove_projections(pkl_path)
     except Exception:
         logger.warning("Failed to clear persisted projection for %s", ctx.dataset_id, exc_info=True)
+
+
+def _prep_signposts_best_effort(ctx, proj, job, *, subset: bool) -> None:
+    """Run the signpost labeling pipeline inside a build job, best-effort.
+
+    Called between the pyramid build and the moment the layout is cached on
+    the context: the canvas fetches labels once per ``projection_id`` when the
+    meta first reports ready, so the signs must exist by then.  Any failure
+    (or an environment without toponymy) leaves the map unlettered, never
+    broken — signs are optional decoration.
+    """
+    try:
+        from vtscore.projection.signpost_prep import prep_signposts
+
+        def _on_progress(current: int, total: int, message: str) -> None:
+            job.update_progress(current, total, message)
+
+        prep_signposts(ctx, proj, subset=subset, on_progress=_on_progress)
+    except Exception:
+        logger.warning("Signpost labeling failed for %s", ctx.dataset_id, exc_info=True)
 
 
 def _start_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str, *, force: bool = False) -> dict:
@@ -300,6 +413,7 @@ def _start_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str, *, for
             )
             job.update_progress(0, 1, "building pyramid")
             pyr = build_pyramid(proj, bin_shape=bin_shape)
+            _prep_signposts_best_effort(ctx, proj, job, subset=False)
             job.update_progress(1, 1, "done")
 
             ctx._projection = proj
@@ -366,6 +480,7 @@ def _build_subset(ctx, requested_ids: list[int], bin_shape: str, *, force: bool 
         ctx._subset_ids = sorted_ids
         ctx._subset_job_id = None
         ctx._subset_content_version = 0  # fresh layout — reset the tile cache token
+        ctx._subset_region_labels = None  # signposts were anchored in the dropped layout
 
     return _start_subset_umap_build(ctx, sorted_ids, matrix, bin_shape, force=force)
 
@@ -420,12 +535,17 @@ def _start_subset_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str,
             )
             job.update_progress(0, 1, "building pyramid")
             pyr = build_pyramid(proj, bin_shape=bin_shape)
+            # Fresh signs over just this subset: the contrastive keyphrases
+            # recompute against the subset's own siblings (better than any
+            # filtered dataset-level signs), and the per-media texts were
+            # cached at ingest, so this is the cheap half of the pipeline.
+            _prep_signposts_best_effort(ctx, proj, job, subset=True)
             job.update_progress(1, 1, "done")
 
             ctx._subset_projection = proj
             ctx._subset_pyramids[bin_shape] = pyr
             job.result = (proj, pyr)
-            # Subset projections are ephemeral — never persisted.
+            # Subset projections are ephemeral — never persisted (labels included).
 
     job = projection_jobs.start(sig, _run, dataset_id=ctx.dataset_id)
     ctx._subset_job_id = job.job_id
@@ -571,6 +691,8 @@ def projection_meta():
         meta["media_type"] = _media_type_for(ctx)
         meta["method"] = ctx._projection.method if ctx._projection else None
         meta["content_version"] = 0  # full-dataset layouts are never edited in place
+        label_set = _label_set_for(ctx, pyr, subset=False)
+        meta["has_labels"] = bool(label_set and label_set.labels)
         return meta
 
     if ctx._full_job_id:
@@ -588,6 +710,40 @@ def projection_meta():
                 return {"status": "error", "error": job.error or "projection build failed"}
 
     return {"status": "idle"}
+
+
+@projection_bp.route("/api/projection/labels", methods=["GET"])
+@projection_bp.response(200, ProjectionLabelsResponseSchema)
+def projection_labels():
+    """Return the region signpost labels for the active projection.
+
+    The "street signs" the browse canvas letters over the map (see
+    ``docs/plans/vtsbrowse-toponymy.md``): one entry per named region, each a
+    text + a 2-D anchor in the frozen layout + the pyramid zoom level it
+    belongs to.  The payload is tiny — the client fetches it once per
+    ``projection_id``.
+
+    Labels are optional decoration: a projection whose labeling pipeline
+    hasn't run (or that predates it) answers an empty list, not an error, and
+    ``status`` is ``"idle"`` only when no projection is built at all.  A label
+    set computed for a *different* layout than the active pyramid's is treated
+    as absent — anchors are meaningless off their own layout.
+    """
+    from vtscore.state.core import get_active_context
+
+    ctx = get_active_context()
+    shape = _shape_for(ctx)
+    subset = _is_subset(request.args.get("subset"))
+    pyr = (ctx._subset_pyramids if subset else ctx._pyramids).get(shape)
+    if pyr is None:
+        return {"status": "idle", "labels": []}
+
+    label_set = _label_set_for(ctx, pyr, subset=subset)
+    return {
+        "status": "ready",
+        "projection_id": pyr.projection_id,
+        "labels": label_set.payload() if label_set is not None else [],
+    }
 
 
 @projection_bp.route(

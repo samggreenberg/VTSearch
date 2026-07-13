@@ -99,6 +99,62 @@ class TestCreateDetector:
         assert data["labelset"] == {"labels": []}
 
 
+class TestRegisterDetectorExamples:
+    """Multi-example seeding via POST /api/detectors/registry."""
+
+    _EXAMPLES = [
+        {"type": "media", "value": "a1b2.wav"},
+        {"type": "media", "value": "c3d4.wav"},
+    ]
+
+    def _register(self, client, name="MultiSeed"):
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": name, "media_type": "audio", "examples": self._EXAMPLES},
+        )
+        assert res.status_code == 201
+        return res.get_json()["detector"]
+
+    def test_create_persists_full_examples_list(self, client):
+        entry = self._register(client)
+        assert entry["examples"] == self._EXAMPLES
+
+        files = list(get_detectors_dir().glob("*.json"))
+        assert len(files) == 1
+        data = json.loads(files[0].read_text())
+        assert data["examples"] == self._EXAMPLES
+
+    def test_media_example_scalar_derived_from_first_media_example(self, client):
+        # The scalar stays the display/fallback value: first media example.
+        entry = self._register(client)
+        assert entry["media_example"] == "a1b2.wav"
+
+    def test_registry_list_carries_examples(self, client):
+        detector_id = self._register(client)["id"]
+        res = client.get("/api/detectors/registry")
+        assert res.status_code == 200
+        listed = {d["id"]: d for d in res.get_json()["detectors"]}
+        assert listed[detector_id]["examples"] == self._EXAMPLES
+
+    def test_registry_list_falls_back_to_detector_json_for_legacy_entries(self, client):
+        # Entries registered before the ``examples`` field existed fall back
+        # to the detector JSON (same pattern as embedder_type).
+        from vtscore.detectors import registry as reg_module
+
+        detector_id = self._register(client, name="LegacySeed")["id"]
+
+        def drop_examples(entries):
+            for e in entries:
+                if e["id"] == detector_id:
+                    e.pop("examples", None)
+
+        reg_module._read_modify_write(drop_examples)
+
+        res = client.get("/api/detectors/registry")
+        listed = {d["id"]: d for d in res.get_json()["detectors"]}
+        assert listed[detector_id]["examples"] == self._EXAMPLES
+
+
 class TestListDetectors:
     def test_empty_list(self, client):
         res = client.get("/api/detectors")

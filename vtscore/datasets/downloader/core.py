@@ -108,7 +108,6 @@ OXFORD_FLOWERS_URL = "https://www.robots.ox.ac.uk/~vgg/data/flowers/102/102flowe
 OXFORD_FLOWERS_LABELS_URL = "https://www.robots.ox.ac.uk/~vgg/data/flowers/102/imagelabels.mat"
 FOOD101_URL = "http://data.vision.ee.ethz.ch/cvl/food-101.tar.gz"
 EUROSAT_URL = "https://zenodo.org/records/7711810/files/EuroSAT_RGB.zip"
-STANFORD_DOGS_URL = "https://huggingface.co/datasets/Alanox/stanford-dogs/resolve/main/images.tar.gz"
 PLACES365_URL = "http://data.csail.mit.edu/places/places365/val_256.tar"
 # The official labels file ships inside a ~67 MB tarball alongside
 # train/test/category lists.  The historical raw.githubusercontent.com
@@ -147,6 +146,39 @@ OPENLOGO_DOWNLOAD_WORKERS = 16
 # object annotations (per-object name + pixel bounding box) ship as a separate
 # JSON zip.  Unlike the other image demos this is multi-label ground truth — see
 # docs/plans/visual-genome-dataset.md.
+# Enrico (Enhanced Rico): 1,460 Android mobile-UI screenshots (a curated,
+# de-duplicated Rico subset), each labeled with one of 20 "design topic"
+# categories (screen function: Login, Chat, Maps, Settings, Gallery, …).  MIT
+# licensed.  Ships as a small ``screenshots.zip`` (JPEGs named
+# ``<rico_screen_id>-screenshot.jpg``) plus a separate ``design_topics.csv``
+# (``screen_id,topic``) that carries the labels — the two are fetched together
+# by ``download_enrico``.  This is VTSearch's born-digital *screenshot* demo:
+# unlike the natural-photo image demos, the content is rendered UI, so it
+# stresses the embedder on digitally-native imagery.
+ENRICO_SCREENSHOTS_URL = "https://userinterfaces.aalto.fi/enrico/resources/screenshots.zip"
+# The Aalto-hosted ``design_topics.csv`` now 404s; the upstream Enrico GitHub
+# repo still serves the identical ``screen_id,topic`` file, so we pull it there.
+ENRICO_TOPICS_URL = "https://raw.githubusercontent.com/luileito/enrico/master/design_topics.csv"
+
+# RICO-Screen2Words: 22,417 Android mobile-UI screenshots (built on Rico), each
+# carrying its app's Google Play *category* plus human caption summaries.
+# CC-BY-4.0.  Distributed on the Hub as parquet shards whose ``image`` column is
+# an Image feature (embedded JPEG bytes); ``download_rico_screen2words`` pulls
+# the train split (8 shards ≈ 1.7 GB), decodes each screenshot to a
+# ``<category>/<screenId>.jpg`` file, then deletes the parquet.  Born-digital
+# mobile-UI screenshots — a second, harder-labelled screenshot demo alongside
+# Enrico (app genre vs. screen function).
+RICO_SCREEN2WORDS_REPO_ID = "bevaya/RICO-Screen2Words"
+RICO_SCREEN2WORDS_SHARDS = [f"data/train-{i:05d}-of-00008.parquet" for i in range(8)]
+
+# RVL-CDIP: 16-class document-image classification.  The canonical
+# ``aharley/rvl_cdip`` is a 38 GB tarball (impractical as a demo); instead we
+# pull a demo-sized 300-images-per-class parquet mirror (~4,800 images, ~32 MB)
+# whose ``image``/``label`` columns decode straight into a folder-per-class
+# tree.  The train shard filename carries a content hash, so it is resolved at
+# download time rather than hardcoded.
+RVL_CDIP_REPO_ID = "umair894/rvl_cdip_300_examples_per_class"
+
 VISUAL_GENOME_IMAGES_URL = "https://cs.stanford.edu/people/rak248/VG_100K/images.zip"
 VISUAL_GENOME_IMAGES2_URL = "https://cs.stanford.edu/people/rak248/VG_100K_2/images2.zip"
 VISUAL_GENOME_OBJECTS_URL = "https://homes.cs.washington.edu/~ranjay/visualgenome/data/dataset/objects.json.zip"
@@ -183,10 +215,12 @@ CLOTHO_EVAL_DOWNLOAD_SIZE_MB = 1200
 OXFORD_FLOWERS_DOWNLOAD_SIZE_MB = 330
 FOOD101_DOWNLOAD_SIZE_MB = 5000
 EUROSAT_DOWNLOAD_SIZE_MB = 90
-STANFORD_DOGS_DOWNLOAD_SIZE_MB = 750
 PLACES365_DOWNLOAD_SIZE_MB = 501
 UCSF_IDL_DOWNLOAD_SIZE_MB = 50
 ROXFORD_IMAGES_DOWNLOAD_SIZE_MB = 1850
+ENRICO_DOWNLOAD_SIZE_MB = 110
+RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB = 1720
+RVL_CDIP_DOWNLOAD_SIZE_MB = 32
 OPENLOGO_DOWNLOAD_SIZE_MB = 4640
 VISUAL_GENOME_IMAGES_DOWNLOAD_SIZE_MB = 9700
 VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB = 5300
@@ -644,8 +678,9 @@ def _download_and_extract(
     download_size_mb: int,
     dataset_name: str,
     on_progress: ProgressCallback,
+    is_complete: Optional[Callable[[], bool]] = None,
 ) -> None:
-    """Download an archive and extract it if *check_path* does not already exist.
+    """Download an archive and extract it unless it is already complete.
 
     Supports ``.tar.gz`` / ``.tgz`` (gzip tar), ``.tar`` (uncompressed tar),
     ``.zip``, and ``.7z`` archives.  The archive file is deleted after
@@ -663,11 +698,22 @@ def _download_and_extract(
         extract_to: Directory into which the archive contents are extracted.
         check_path: Path whose existence signals that extraction is already
             complete (often the same as *extract_to* or a subdirectory of it).
+            Ignored when *is_complete* is given.
         download_size_mb: Expected download size in megabytes (for progress).
         dataset_name: Human-readable dataset name used in progress messages.
         on_progress: Progress callback.
+        is_complete: Optional predicate that returns ``True`` when the dataset
+            is already fully extracted.  Prefer this over *check_path* when a
+            bare directory (e.g. an empty, partially-extracted folder) would
+            otherwise be a false positive that blocks re-download: the predicate
+            can require the expected content (labeled images, etc.) to be
+            present rather than merely that a path exists.
     """
-    if check_path.exists():
+
+    def _complete() -> bool:
+        return is_complete() if is_complete is not None else check_path.exists()
+
+    if _complete():
         return
 
     unique_id = uuid.uuid4().hex[:8]
@@ -680,7 +726,7 @@ def _download_and_extract(
         download_file_with_progress(url, temp_archive, download_size_mb * 1024 * 1024, on_progress)
 
         # Another download may have finished while we were downloading.
-        if check_path.exists():
+        if _complete():
             return
 
         # Validate the downloaded file looks like a real archive before trying
@@ -694,7 +740,7 @@ def _download_and_extract(
         _extract_archive(temp_archive, archive_name, temp_extract, dataset_name, on_progress)
 
         # Another download may have finished while we were extracting.
-        if check_path.exists():
+        if _complete():
             return
 
         # Move extracted content to final location.

@@ -177,6 +177,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Keyboard-activate a sortable header. Enter/Space sort the column; Space
+   *  also gets its default page-scroll suppressed. */
+  onDatasetHeaderKeydown(event: KeyboardEvent, col: string): void {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.onDatasetHeaderClick(col);
+    }
+  }
+
+  onDetectorHeaderKeydown(event: KeyboardEvent, col: string): void {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.onDetectorHeaderClick(col);
+    }
+  }
+
   private destroy$ = new Subject<void>();
   private findPolling$ = new Subject<void>();
   private knownDatasetIds = new Set<string>();
@@ -1325,7 +1341,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const findParams = { dataset_ids: datasetIds, detector_ids: detectorIds };
 
     this.datasetState.setLoading(true);
-    this.datasetState.setProgressMessage('Checking labels...');
+    this.datasetState.setProgressMessage('Checking labels…');
 
     // Pre-flight: check if any labels fail to resolve
     this.detectorsFindApi.findCheckLabels(findParams).subscribe({
@@ -1361,7 +1377,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           if (!progress || progress.status === 'idle') return;
 
           this.datasetState.setProgressMessage(
-            formatProgressMessage(progress, 'Running Find...'),
+            formatProgressMessage(progress, 'Running Find…'),
           );
         },
       });
@@ -1372,7 +1388,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private runFind(findParams: Record<string, unknown>): void {
-    this.datasetState.setProgressMessage('Running Find...');
+    this.datasetState.setProgressMessage('Running Find…');
     this.startFindProgressPolling();
 
     this.detectorsFindApi.find(findParams).subscribe({

@@ -269,20 +269,20 @@ class TestExampleSortUpload:
 class TestExampleSortServer:
     """POST /api/example-sort-server; sort by a server-side file."""
 
-    def test_missing_filename_returns_422(self, client):
-        # The example-sort-server schema declares ``filename`` as required,
+    def test_missing_filenames_returns_422(self, client):
+        # The example-sort-server schema declares ``filenames`` as required,
         # so an empty body fails schema-level validation with the standard
         # flask-smorest 422 envelope.
         resp = client.post("/api/example-sort-server", json={})
         assert resp.status_code == 422
-        assert "filename" in resp.get_json()["errors"]["json"]
+        assert "filenames" in resp.get_json()["errors"]["json"]
 
     def test_nonexistent_file_returns_404(self, client, tmp_path, monkeypatch):
         monkeypatch.setattr(
             "vtsearch.routes.media.server._get_server_media_dir",
             lambda: tmp_path,
         )
-        resp = client.post("/api/example-sort-server", json={"filename": "nope.wav"})
+        resp = client.post("/api/example-sort-server", json={"filenames": ["nope.wav"]})
         assert resp.status_code == 404
 
     def test_path_traversal_rejected(self, client, tmp_path, monkeypatch):
@@ -290,7 +290,7 @@ class TestExampleSortServer:
             "vtsearch.routes.media.server._get_server_media_dir",
             lambda: tmp_path,
         )
-        resp = client.post("/api/example-sort-server", json={"filename": "../../etc/passwd"})
+        resp = client.post("/api/example-sort-server", json={"filenames": ["../../etc/passwd"]})
         assert resp.status_code == 400
 
     def test_valid_file_returns_results(self, client, tmp_path, monkeypatch):
@@ -300,7 +300,7 @@ class TestExampleSortServer:
         )
         wav_path = tmp_path / "test.wav"
         wav_path.write_bytes(make_wav_bytes())
-        resp = client.post("/api/example-sort-server", json={"filename": "test.wav"})
+        resp = client.post("/api/example-sort-server", json={"filenames": ["test.wav"]})
         assert resp.status_code == 200
         data = resp.get_json()
         assert "results" in data

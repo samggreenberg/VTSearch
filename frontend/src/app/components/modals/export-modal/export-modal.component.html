@@ -1,8 +1,8 @@
 <vt-modal [title]="modalTitle" [open]="true" (closed)="close()">
   <!-- Category Filter -->
   <div class="export-section">
-    <h3 title="Filter which labeled items to include in the export">Categories</h3>
-    <div class="delimiter-row">
+    <h3 id="export-categories-label" title="Filter which labeled items to include in the export">Categories</h3>
+    <div class="delimiter-row" role="radiogroup" aria-labelledby="export-categories-label">
       <label class="delimiter-option" title="Include both good and bad labeled items">
         <input type="radio" name="labelFilter" value="both" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" />
         All
@@ -44,12 +44,12 @@
       }
     </h3>
     @if (!labelsLoaded()) {
-      <p class="empty-state">Loading labels...</p>
+      <p class="empty-state">Loading labels…</p>
     } @else if (filteredLabels.length === 0) {
       <p class="empty-state">No labeled items to export.</p>
     } @else {
       <div class="table-scroll">
-        <table class="export-table" [class.table-fixed]="tableFixed">
+        <table class="data-table export-table" [class.table-fixed]="tableFixed">
           <thead>
             <tr>
               @for (col of enabledColumns; track col.key) {
@@ -81,7 +81,7 @@
             @if (filteredLabels.length > 50) {
               <tr class="truncated-row">
                 <td [attr.colspan]="enabledColumns.length">
-                  ... {{ filteredLabels.length - 50 | number }} more rows
+                  … {{ filteredLabels.length - 50 | number }} more rows
                 </td>
               </tr>
             }
@@ -232,7 +232,7 @@
             [disabled]="!hasLabels || submitting()"
             title="Send exported data to the selected destination"
           >
-            <svg aria-hidden="true" [class.icon-waggle]="submitting()" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-5"/><polyline points="15 3 21 3 21 9"/><line x1="12" y1="12" x2="21" y2="3"/></svg>
+            <vt-icon type="export" [size]="16" [class.icon-waggle]="submitting()"></vt-icon>
             @if (submitting()) {
               Exporting {{ filteredLabels.length | number }} labels to {{ activeTabExporter.display_name || activeTabExporter.name }}…
             } @else {

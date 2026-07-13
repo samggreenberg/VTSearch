@@ -43,15 +43,60 @@ def _persist_projection_to_container(dataset_id: str, proj, pyr) -> None:
         traceback.print_exc()
 
 
+def _signpost_texts_stage(ctx: DatasetContext, tracker) -> None:
+    """Compute + cache the per-media signpost texts at ingest (opt-in).
+
+    Runs **before** the registry save so the texts land in the dataset
+    pickle: Toponymy's contrastive keyphrase mining needs a text for *every*
+    media (not just sampled exemplars), and the text is the only full-corpus
+    model cost in the sign pipeline — computed once here, every later browse
+    and Find→Browse subset re-fit reuses it.  No-op when signposting isn't
+    possible for this dataset; best-effort by the same contract as the
+    projection stage (the caller wraps it).
+    """
+    from vtscore.projection.signpost_prep import ensure_texts_for_dataset  # noqa: PLC0415
+
+    def _progress(current: int, total: int, message: str) -> None:
+        tracker.check_cancelled()
+        tracker.update(
+            "loading",
+            message,
+            current=current,
+            total=total,
+            step=_TOTAL_LOAD_STEPS,
+            total_steps=_TOTAL_LOAD_STEPS,
+        )
+
+    _progress(0, 0, "Preparing signpost texts…")
+    ensure_texts_for_dataset(ctx, _progress)
+
+
+def _maybe_signpost_texts_stage(ctx: DatasetContext, fin, enabled: bool) -> None:
+    """Run the signpost-texts stage when the projection opt-in is set.
+
+    Owns the opt-in gate and the best-effort wrapper so the load pipeline's
+    task body stays branch-free; a failure here (short of a cancellation
+    raised through the tracker) costs only the cached texts, never the load.
+    """
+    if not enabled:
+        return
+    fin.begin("signpost_texts")
+    try:
+        _signpost_texts_stage(ctx, fin)
+    except Exception:
+        traceback.print_exc()
+
+
 def _build_projection_stage(ctx: DatasetContext, tracker, dataset_id: str) -> None:
-    """Compute + persist the 2-D UMAP projection at ingest (opt-in).
+    """Compute + persist the 2-D UMAP projection and its signposts at ingest (opt-in).
 
     Runs inline as a load stage (after the dataset is registered) so the
     Browse canvas opens instantly instead of paying for the UMAP fit lazily
     on first visit.  This mirrors the on-demand
     ``POST /api/projection/build`` path: fit UMAP on the cached embedding
-    matrix, build the hex-tile pyramid, cache both on the context, and
-    persist them into the dataset container.
+    matrix, build the hex-tile pyramid, run the signpost labeling over the
+    frozen layout (see ``vtscore.projection.signpost_prep``), cache
+    everything on the context, and persist it into the dataset container.
 
     Best-effort by contract: the dataset is already registered and usable
     before this runs, so any failure here (including a cancellation during
@@ -97,6 +142,18 @@ def _build_projection_stage(ctx: DatasetContext, tracker, dataset_id: str) -> No
     # so build exactly the one shape this dataset will ever use.
     media_type = next(iter(ctx.medias.values())).get("media_type") if ctx.medias else None
     pyr = build_pyramid(proj, bin_shape=bin_shape_for_media_type(media_type))
+
+    # Letter the frozen layout before it's cached/persisted, so the first
+    # Browse open finds the signs together with the map (the canvas fetches
+    # labels once per projection_id).  Reuses the texts the pre-registry
+    # stage cached into the pickle; itself best-effort — a labeling failure
+    # must not cost the user the projection they just paid for.
+    try:
+        from vtscore.projection.signpost_prep import prep_signposts  # noqa: PLC0415
+
+        prep_signposts(ctx, proj, subset=False, on_progress=_progress)
+    except Exception:
+        traceback.print_exc()
     _progress(1, 1, "Projection ready")
 
     ctx._projection = proj

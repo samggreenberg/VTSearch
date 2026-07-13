@@ -1,10 +1,10 @@
 <vt-modal [open]="true" [title]="'Stats: ' + detectorName()" (closed)="close()">
   @if (loading()) {
-    <p class="loading-text">Loading stats...</p>
+    <p class="loading-text">Loading stats…</p>
   } @else if (error()) {
     <p class="error-text">{{ error() }}</p>
   } @else if (stats(); as stats) {
-    <table class="stats-table">
+    <table class="data-table stats-table">
       <tbody>
         <tr>
           <td class="stat-label" title="Items you voted good in this detector">Positives</td>
@@ -26,7 +26,7 @@
     </table>
 
     <h3 class="section-title">Creation</h3>
-    <table class="stats-table">
+    <table class="data-table stats-table">
       <tbody>
         <tr>
           <td class="stat-label" title="The media type this detector operates on">Media type</td>
@@ -56,7 +56,7 @@
     </table>
 
     <h3 class="section-title">Provenance</h3>
-    <table class="stats-table">
+    <table class="data-table stats-table">
       <tbody>
         <tr>
           <td class="stat-label" title="When this detector was created">Created</td>

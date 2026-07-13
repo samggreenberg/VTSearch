@@ -16,7 +16,7 @@
 .train-context-label {
   font-size: var(--font-2xs);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--tracking-wide);
   color: var(--text-muted);
   display: block;
   line-height: 1;
@@ -50,14 +50,14 @@
   }
 }
 
+// Inherits `.form-input`; this is a compact, bold inline rename field, so it
+// overrides the type size/weight, the on-surface background, the tighter
+// radius/padding, and caps its width.
 .train-rename-input {
   font-size: var(--font-sm);
   font-weight: var(--weight-semibold);
-  color: var(--text-primary);
   background: var(--bg-surface);
-  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 1px var(--space-xs);
-  width: 100%;
   max-width: 160px;
 }

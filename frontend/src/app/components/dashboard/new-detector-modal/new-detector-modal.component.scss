@@ -3,46 +3,30 @@
 // globally and shared with the Add Dataset modal; only styles unique to
 // this component remain below.
 
-// Pin the modal to a wider size when the media picker is on screen so the
-// demo table and folder browser have room (matches the Add Dataset modal at
-// 900px). The min-height keeps the dialog from collapsing to a thin strip
-// when the picker is in its "no source selected" state.
+// The main form view sizes to `--modal-w-sm`; the modal widens to
+// `--modal-w-lg` when the media picker is on screen so the demo table and
+// folder browser have room (matches the Add Dataset modal). Driving the width
+// from the modal (not the form's own `width`) lets the form fill it, so the
+// Blank form no longer leaves empty side gutters. The min-height keeps the
+// dialog from collapsing to a thin strip in the picker's "no source selected"
+// state.
 :host {
   ::ng-deep .modal-content {
+    width: var(--modal-w-sm);
     min-height: 200px;
   }
 
   &:has(.media-picker) ::ng-deep .modal-content {
-    width: 900px;
+    width: var(--modal-w-lg);
     min-height: 480px;
   }
 }
 
+// Top-level Blank/Trained strip uses the shared `.tab-bar` / `.tab`
+// primitive (`_picker-shared.scss`). It sits as a sibling above the form,
+// so add the bottom spacing the shared primitive intentionally omits.
 .tab-bar {
-  display: flex;
-  gap: var(--space-xs);
-  border-bottom: 1px solid var(--border);
   margin-bottom: var(--space-lg);
-}
-
-.tab-btn {
-  background: none;
-  border: none;
-  padding: var(--space-md) var(--space-xl);
-  font-size: var(--font-lg);
-  font-weight: var(--weight-medium);
-  color: var(--text-muted);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: color var(--transition-base), border-color var(--transition-base);
-
-  &:hover { color: var(--text-primary); }
-
-  &.active {
-    color: var(--text-primary);
-    border-bottom-color: var(--accent);
-  }
 }
 
 .importer-form-header {
@@ -61,8 +45,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);
-  width: 480px;
-  max-width: 100%;
+  // Track the modal width (set on `.modal-content` above) instead of pinning
+  // a fixed width, so the form fills the dialog rather than leaving gutters.
+  width: 100%;
 }
 
 // `.form-group`, `.info-text`, `.error-text` come from `_components.scss`.
@@ -87,7 +72,7 @@
 .example-tab-bar {
   margin-bottom: var(--space-sm);
 
-  .tab-btn {
+  .tab {
     padding: var(--space-sm) var(--space-lg);
     font-size: var(--font-md);
   }
@@ -132,6 +117,19 @@
   height: 22px;
 }
 
+// Vertical stack of picked media examples, each row with its own Remove
+// button, followed by the "+ Add" affordance for appending another.
+.example-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
+}
+
+.add-example-btn {
+  align-self: flex-start;
+}
+
 .example-row {
   display: flex;
   align-items: center;
@@ -140,7 +138,6 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-subtle);
-  margin-top: var(--space-xs);
 }
 
 .example-icon {
@@ -204,43 +201,8 @@
   gap: var(--space-sm);
 }
 
-.importer-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2xs);
-  padding: var(--space-md) var(--space-lg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--bg-subtle);
-  color: var(--text-primary);
-  cursor: pointer;
-  text-align: left;
-  transition: border-color var(--transition-base), background var(--transition-base);
-
-  &:hover {
-    border-color: var(--accent);
-    background: var(--bg-hover);
-  }
-}
-
-.importer-name {
-  font-weight: var(--weight-semibold);
-  font-size: var(--font-lg);
-}
-
-.importer-icon { margin-right: var(--space-xs); }
-
-.importer-desc {
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-
-.empty-state {
-  color: var(--text-muted);
-  font-size: var(--font-lg);
-  text-align: center;
-  padding: var(--space-xl) 0;
-}
+// The selectable option cards use the shared `.picker-card` primitive
+// (`frontend/src/scss/_components.scss`).
 
 // Media-type field row: dropdown + optional unlock button.
 .media-type-row {
@@ -298,7 +260,7 @@
 
 .select-arrow {
   flex-shrink: 0;
-  opacity: 0.6;
+  opacity: var(--opacity-dim);
   transition: transform var(--transition-base);
 
   .custom-select.open & { transform: rotate(180deg); }
@@ -313,7 +275,7 @@
   margin-top: var(--space-2xs);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: var(--bg-primary, var(--bg-subtle));
+  background: var(--bg-panel, var(--bg-subtle));
   box-shadow: var(--shadow-md);
   overflow: hidden;
 }

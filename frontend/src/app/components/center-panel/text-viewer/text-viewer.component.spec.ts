@@ -41,7 +41,7 @@ describe('TextViewerComponent', () => {
     // setInput drives ngOnChanges (the real channel), which kicks off the fetch.
     fixture.componentRef.setInput('media', mockMedia);
     await settleZoneless(fixture);
-    expect(fixture.nativeElement.textContent).toContain('Loading...');
+    expect(fixture.nativeElement.textContent).toContain('Loading…');
     // Flush the in-flight request so afterEach httpMock.verify() sees none
     // dangling. The loading-state assertion above runs before the response.
     httpMock.expectOne('/api/medias/4/text').flush({ content: 'done' });

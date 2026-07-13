@@ -3,33 +3,11 @@
   flex-direction: column;
   gap: var(--space-lg);
   min-width: 360px;
-  max-width: 720px;
+  max-width: var(--modal-w-md);
 }
 
-.help-tabs {
-  display: flex;
-  gap: var(--space-xs);
-  border-bottom: 1px solid var(--border);
-}
-
-.help-tab {
-  background: transparent;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  padding: var(--space-xs) var(--space-sm);
-  color: var(--text-muted);
-  font-size: var(--font-md);
-  cursor: pointer;
-
-  &:hover {
-    color: var(--text-primary);
-  }
-}
-
-.help-tab--active {
-  color: var(--text-primary);
-  border-bottom-color: var(--accent, var(--text-primary));
-}
+// The top-level Keyboard shortcuts / User guide strip uses the shared
+// `.tab-bar` / `.tab` primitive (`_picker-shared.scss`).
 
 .kbd-help {
   display: flex;
@@ -38,7 +16,7 @@
 }
 
 // Secondary tab row: one per shortcut context (Train/Find, Browser, General).
-// A lighter, pill-style variant of the top-level ``.help-tabs`` so the two
+// A lighter, pill-style variant of the top-level ``.tab-bar`` so the two
 // levels read as distinct.
 .kbd-context-tabs {
   display: flex;
@@ -137,6 +115,18 @@
   margin: 0;
   color: var(--text-muted);
   font-size: var(--font-sm);
+}
+
+.help-footer {
+  margin: 0;
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+
+  a {
+    color: var(--accent, var(--text-primary));
+  }
 }
 
 .guide {

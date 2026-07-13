@@ -125,7 +125,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         ),
         PluginField(
             key="media_type",
-            label="Dataset MediaType",
+            label="Dataset media type",
             field_type="select",
             description="Type of media files contained in the archive.",
             default="audio",

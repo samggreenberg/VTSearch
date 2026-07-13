@@ -21,10 +21,28 @@ export class ProgressBarComponent {
    * progress.
    */
   @Input() smooth = false;
+  /**
+   * Optional explicit fill color that overrides the default red -> yellow ->
+   * green gradient. Set it when the bar's semantic isn't "progress toward a
+   * goal": the achievements bar wants a flat accent, and the disk-usage gauge
+   * wants threshold colors keyed the *opposite* way (fuller = worse). Leave
+   * unset (the default) to keep the gradient. Any CSS color string works, so
+   * theme tokens like `var(--accent)` pass straight through.
+   */
+  @Input() fill: string | null = null;
 
   get percentage(): number {
     if (this.max <= 0) return 0;
     return Math.min(100, (this.value / this.max) * 100);
+  }
+
+  /**
+   * The color actually painted onto the fill: the caller's `fill` override when
+   * given, otherwise the computed gradient (`fillColor`). Returns `null` while
+   * indeterminate with no override so the SCSS `--accent` fallback applies.
+   */
+  get resolvedFill(): string | null {
+    return this.fill ?? this.fillColor;
   }
 
   /**

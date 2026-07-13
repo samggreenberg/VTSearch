@@ -91,7 +91,7 @@ export const SHOTS: Shot[] = [
       await h.dashboard();
       // Clean overview, no selection: the fixture build leaves doc-demo selected
       // (selection persists server-side), so deselect every checked row first.
-      for (const tag of ['vt-dataset-card', 'vt-detector-card']) {
+      for (const tag of ['tr[vt-dataset-card]', 'tr[vt-detector-card]']) {
         const checked = `${tag} .select-checkbox[aria-checked="true"]`;
         for (let guard = 0; guard < 20 && (await page.locator(checked).count()); guard++) {
           await page.locator(checked).first().click();
@@ -110,7 +110,7 @@ export const SHOTS: Shot[] = [
       'The Add Dataset dialog: the Demo tab lists ready-made datasets (Downloaded and Synthetic Media), while the Services and Files tabs import your own data',
     themes: BOTH,
     annotations: [
-      { target: '.importer-tab-bar', kind: 'box', label: 'Demo datasets vs. import your own' },
+      { target: '.importer-picker .tab-bar', kind: 'box', label: 'Demo datasets vs. import your own' },
     ],
     async recipe(_page, h) {
       await h.dashboard();
@@ -231,9 +231,9 @@ export const SHOTS: Shot[] = [
         if (((await cb.getAttribute('aria-checked')) === 'true') !== want) await cb.click();
         await h.wait(400);
       };
-      await setSel('vt-dataset-card', 'syn-imgs', false);
-      await setSel('vt-dataset-card', 'syn-patch', true);
-      await setSel('vt-detector-card', 'doc-demo', true);
+      await setSel('tr[vt-dataset-card]', 'syn-imgs', false);
+      await setSel('tr[vt-dataset-card]', 'syn-patch', true);
+      await setSel('tr[vt-detector-card]', 'doc-demo', true);
       await page.getByRole('button', { name: 'Train', exact: true }).click();
       await page.waitForSelector('.panel-center, vt-center-panel', { timeout: 30000 });
       await h.wait(2500);
@@ -312,7 +312,7 @@ export const SHOTS: Shot[] = [
       await h.selectDetectorRow('doc-demo');
       // Open the dataset row's ⋯ overflow menu so the shot shows where Browse,
       // Stats, Rename, and (for detectors) Export now live.
-      await page.locator('vt-dataset-card', { hasText: 'syn-imgs' }).first()
+      await page.locator('tr[vt-dataset-card]', { hasText: 'syn-imgs' }).first()
         .locator('.overflow-btn').first().click();
       await page.waitForSelector('.context-menu', { timeout: 10000 });
       await h.wait(400);

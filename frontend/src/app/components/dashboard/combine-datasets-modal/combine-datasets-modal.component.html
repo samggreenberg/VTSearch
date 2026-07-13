@@ -16,14 +16,14 @@
         <span class="name-label">Name</span>
         <input
           type="text"
-          class="name-input"
+          class="name-input form-input"
           [(ngModel)]="name"
           placeholder="Combined dataset name"
           [disabled]="submitting()"
         />
       </label>
 
-      <table class="combine-table">
+      <table class="data-table combine-table">
         <thead>
           <tr>
             <th class="col-name">Dataset</th>
@@ -98,7 +98,7 @@
       [title]="disabledReason || 'Combine these datasets into a new one'"
     >
       @if (submitting()) {
-        Combining...
+        Combining…
       } @else {
         Combine
       }

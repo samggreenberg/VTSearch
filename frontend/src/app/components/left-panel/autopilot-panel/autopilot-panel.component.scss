@@ -192,6 +192,6 @@
   font-size: var(--font-2xs);
   color: var(--text-primary);
   font-weight: var(--weight-semibold);
-  letter-spacing: 0.5px;
+  letter-spacing: var(--tracking-wide);
   white-space: nowrap;
 }

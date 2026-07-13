@@ -7,6 +7,7 @@ import {
   AutopilotState,
 } from '../../../services/autopilot-state.service';
 import { ToastService } from '../../../services/toast.service';
+import { IconComponent } from '../../icon/icon.component';
 
 export type { AutopilotPhase, AutopilotState };
 
@@ -33,7 +34,7 @@ export interface StepDisplay {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-autopilot-panel',
   standalone: true,
-  imports: [],
+  imports: [IconComponent],
   templateUrl: './autopilot-panel.component.html',
   styleUrl: './autopilot-panel.component.scss',
 })

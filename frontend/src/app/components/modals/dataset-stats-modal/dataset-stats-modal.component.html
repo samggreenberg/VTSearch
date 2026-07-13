@@ -1,10 +1,10 @@
 <vt-modal [open]="true" [title]="'Stats: ' + datasetName()" (closed)="close()">
   @if (loading()) {
-    <p class="loading-text">Loading stats...</p>
+    <p class="loading-text">Loading stats…</p>
   } @else if (error()) {
     <p class="error-text">{{ error() }}</p>
   } @else if (stats(); as stats) {
-    <table class="stats-table">
+    <table class="data-table stats-table">
       <tbody>
         <tr>
           <td class="stat-label" title="Total number of unique media items in this dataset">Media items</td>
@@ -30,7 +30,7 @@
     </table>
 
     <h3 class="section-title">Creation</h3>
-    <table class="stats-table">
+    <table class="data-table stats-table">
       <tbody>
         @if (importerName) {
           <tr>
@@ -57,7 +57,7 @@
 
     @if (fileTypes.length > 0) {
       <h3 class="section-title">File Types</h3>
-      <table class="stats-table">
+      <table class="data-table stats-table">
         <thead>
           <tr>
             <th title="File extension of media items">Extension</th>

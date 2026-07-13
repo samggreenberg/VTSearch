@@ -154,6 +154,86 @@ _IMAGES_L_QUERIES = [
 ]
 
 # ------------------------------------------------------------------
+# Image eval queries  (Enrico - mobile UI screenshots by screen function)
+# Born-digital screenshots, so the queries describe the *screen's function*
+# ("a login screen", "a chat conversation") rather than a photographed subject.
+# ``Bare`` and ``Other`` carry no describable subject and are omitted.
+# ------------------------------------------------------------------
+
+_ENRICO_QUERIES = [
+    EvalQuery("a camera viewfinder screen", "Camera"),
+    EvalQuery("a chat conversation screen with message bubbles", "Chat"),
+    EvalQuery("a phone dialer with a numeric keypad", "Dialer"),
+    EvalQuery("a text or document editor screen", "Editor"),
+    EvalQuery("a form with input fields to fill in", "Form"),
+    EvalQuery("a grid gallery of photos or thumbnails", "Gallery"),
+    EvalQuery("a scrollable list of items", "List"),
+    EvalQuery("a login or sign-in screen", "Login"),
+    EvalQuery("a map view showing streets", "Maps"),
+    EvalQuery("a media player with playback controls", "MediaPlayer"),
+    EvalQuery("a navigation menu or drawer", "Menu"),
+    EvalQuery("a modal dialog or popup overlay", "Modal"),
+    EvalQuery("a news or article feed", "News"),
+    EvalQuery("a user profile screen", "Profile"),
+    EvalQuery("a search screen with a search bar and results", "Search"),
+    EvalQuery("a settings or preferences screen", "Settings"),
+    EvalQuery("a terms of service or legal text screen", "Terms"),
+    EvalQuery("an onboarding or tutorial walkthrough screen", "Tutorial"),
+]
+
+# ------------------------------------------------------------------
+# Image eval queries  (RICO-Screen2Words - mobile UI screenshots by app genre)
+# The label is the app's Google Play category, so the query describes the kind
+# of app the screen belongs to.  A harder signal than Enrico's screen function:
+# two apps in different genres can share a screen layout, so this stresses
+# whether the embedder captures app-domain semantics from a screenshot.
+# ------------------------------------------------------------------
+
+_RICO_SCREEN2WORDS_QUERIES = [
+    EvalQuery("a screen from a books or reference reading app", "Books & Reference"),
+    EvalQuery("a screen from a business app", "Business"),
+    EvalQuery("a screen from a messaging or communication app", "Communication"),
+    EvalQuery("a screen from a banking or finance app", "Finance"),
+    EvalQuery("a screen from a food or drink ordering app", "Food & Drink"),
+    EvalQuery("a screen from a health or fitness tracking app", "Health & Fitness"),
+    EvalQuery("a screen from a maps or navigation app", "Maps & Navigation"),
+    EvalQuery("a screen from a music or audio streaming app", "Music & Audio"),
+    EvalQuery("a screen from a news or magazine app", "News & Magazines"),
+    EvalQuery("a screen from a photography or camera app", "Photography"),
+    EvalQuery("a screen from a productivity app", "Productivity"),
+    EvalQuery("a screen from a shopping or e-commerce app", "Shopping"),
+    EvalQuery("a screen from a social networking app", "Social"),
+    EvalQuery("a screen from a sports app", "Sports"),
+    EvalQuery("a screen from a travel or local guide app", "Travel & Local"),
+    EvalQuery("a screen from a weather forecast app", "Weather"),
+]
+
+# ------------------------------------------------------------------
+# Image eval queries  (RVL-CDIP - scanned document images by type)
+# Digitally-native document images (not photos); the query describes the kind
+# of document.  All 16 classes are describable, so every one gets a query.
+# ------------------------------------------------------------------
+
+_RVL_CDIP_QUERIES = [
+    EvalQuery("a printed advertisement", "advertisement"),
+    EvalQuery("a budget spreadsheet with numbers and totals", "budget"),
+    EvalQuery("an email message with headers", "email"),
+    EvalQuery("a file folder cover sheet", "file folder"),
+    EvalQuery("a blank or filled paper form", "form"),
+    EvalQuery("a handwritten note or letter", "handwritten"),
+    EvalQuery("an invoice or bill", "invoice"),
+    EvalQuery("a typed business letter", "letter"),
+    EvalQuery("an office memo", "memo"),
+    EvalQuery("a newspaper or news article page", "news article"),
+    EvalQuery("presentation slides", "presentation"),
+    EvalQuery("a questionnaire or survey", "questionnaire"),
+    EvalQuery("a resume or CV", "resume"),
+    EvalQuery("a scientific journal publication page", "scientific publication"),
+    EvalQuery("a scientific or technical report", "scientific report"),
+    EvalQuery("a technical specification document", "specification"),
+]
+
+# ------------------------------------------------------------------
 # Text / paragraph eval queries  (20 Newsgroups - 15 categories)
 # All S/M/L share the same categories; queries are identical.
 # ------------------------------------------------------------------
@@ -274,6 +354,32 @@ EVAL_DATASETS: dict[str, dict] = {
     "caltech256_a": {
         "demo_dataset": "caltech256_a",
         "queries": _IMAGES_L_QUERIES,
+    },
+    # Image (born-digital mobile UI screenshots)
+    "enrico_m": {
+        "demo_dataset": "enrico_m",
+        "queries": _ENRICO_QUERIES,
+    },
+    "enrico_a": {
+        "demo_dataset": "enrico_a",
+        "queries": _ENRICO_QUERIES,
+    },
+    "rico_screen2words_m": {
+        "demo_dataset": "rico_screen2words_m",
+        "queries": _RICO_SCREEN2WORDS_QUERIES,
+    },
+    "rico_screen2words_a": {
+        "demo_dataset": "rico_screen2words_a",
+        "queries": _RICO_SCREEN2WORDS_QUERIES,
+    },
+    # Image (scanned document images)
+    "rvl_cdip_m": {
+        "demo_dataset": "rvl_cdip_m",
+        "queries": _RVL_CDIP_QUERIES,
+    },
+    "rvl_cdip_a": {
+        "demo_dataset": "rvl_cdip_a",
+        "queries": _RVL_CDIP_QUERIES,
     },
     # Image (multi-label)
     "visual_genome_s": {

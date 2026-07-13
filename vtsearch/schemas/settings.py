@@ -12,10 +12,11 @@ the schema is flat to match what the frontend sends and receives.
 
 from __future__ import annotations
 
-from marshmallow import Schema, fields, validate
+from marshmallow import Schema, fields, pre_load, validate
 
 from vtsearch.settings_models import (
     VALID_ANIMATION_MODES,
+    coerce_animation_mode,
     VALID_FOCUS_MODES,
     VALID_GRID_ICON_SIZES,
     VALID_THEMES,
@@ -94,6 +95,9 @@ class AppSettingsSchema(Schema):
     browse_compact = _PerMediaTypeBooleanDict()
     # Wheel notches / +/- clicks per pyramid level (1..3), per media type.
     browse_mouse_zooms_per_level = _PerMediaTypeIntDict()
+    # Whether the canvas draws region signposts (named "street sign" labels
+    # over the map), per media type; unset falls back to on.
+    browse_signposts = _PerMediaTypeBooleanDict()
 
     # Per-user, per-media-type
     grid_icon_size_left = _PerMediaTypeStringDict()
@@ -207,6 +211,21 @@ class SettingsUpdateSchema(Schema):
     show_metadata = fields.Boolean()
     label_hint_dismissed = fields.Boolean()
 
+    @pre_load
+    def _migrate_legacy_show_animations(self, data, **kwargs):
+        """Fold pre-enum boolean ``show_animations`` values into the enum.
+
+        Settings files written before the 3-way pulldown (a3a37106) stored a
+        boolean; a client that fetched such a value re-sends it verbatim on
+        the next save, and without this hook the ``OneOf`` validator rejects
+        the entire update (every settings save 422s until the value is fixed
+        by hand).  See ``vtsearch.settings_models.coerce_animation_mode``.
+        """
+        if isinstance(data, dict) and "show_animations" in data:
+            data = dict(data)
+            data["show_animations"] = coerce_animation_mode(data["show_animations"])
+        return data
+
     grid_icon_size_left = fields.Raw()
     grid_icon_size_right = fields.Raw()
     focus_mode_left = fields.Raw()
@@ -235,6 +254,7 @@ class SettingsUpdateSchema(Schema):
     browse_thumbnail_border = fields.Raw()
     browse_compact = fields.Raw()
     browse_mouse_zooms_per_level = fields.Raw()
+    browse_signposts = fields.Raw()
 
     autofind_detectors = fields.List(fields.String())
     # Auto-Find results exporter. ``autofind_exporter`` is validated against the

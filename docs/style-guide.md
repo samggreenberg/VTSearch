@@ -28,16 +28,21 @@ Use the spacing scale for `padding`, `margin`, `gap`, and similar layout offsets
 
 ### 1.2 Font sizes - `--font-*`
 
-| Token         | Value      | When to use |
-|---------------|------------|-------------|
-| `--font-2xs`  | 0.7rem     | Badges, tiny meta text |
-| `--font-xs`   | 0.75rem    | Table headers, captions, subtitle rows |
-| `--font-sm`   | 0.8rem     | Form labels, secondary helper text |
-| `--font-md`   | 0.85rem    | **Default** for body UI text, buttons, inputs, tables |
-| `--font-lg`   | 0.9rem     | Card titles, prominent secondary headings |
-| `--font-xl`   | 1rem       | `<h3>`, section headers |
-| `--font-2xl`  | 1.1rem     | `<h2>`, modal titles |
-| `--font-3xl`  | 1.4rem     | `<h1>`, page-level header, modal-close glyph |
+| Token         | Value           | When to use |
+|---------------|-----------------|-------------|
+| `--font-2xs`  | 0.6875rem (11px) | Badges, tiny meta text |
+| `--font-xs`   | 0.75rem (12px)   | Table headers, captions, subtitle rows |
+| `--font-sm`   | 0.8125rem (13px) | Form labels, secondary helper text |
+| `--font-md`   | 0.875rem (14px)  | **Default** for body UI text, buttons, inputs, tables |
+| `--font-lg`   | 1rem (16px)      | Card titles, prominent secondary headings |
+| `--font-xl`   | 1.125rem (18px)  | `<h3>`, section headers |
+| `--font-2xl`  | 1.25rem (20px)   | `<h2>`, modal titles |
+| `--font-3xl`  | 1.5rem (24px)    | `<h1>`, page-level header, modal-close glyph |
+
+The scale steps 1px at a time through the small sizes (11-14px, where a step
+must stay subtle) and widens to a ~1.12-1.2 ratio from `--font-lg` up, so
+adjacent sizes read as genuinely different. Every step lands on a whole pixel
+at the default 16px root.
 
 There are no other font sizes. `0.78rem`, `0.83rem`, `0.95rem`, `12px`, `13px`, etc. are all violations - they collapse into the table above.
 
@@ -122,9 +127,17 @@ Never use a raw z-index. If you need a new layer, add a token.
 |----------------------|-------|-------------|
 | `--opacity-disabled` | 0.5   | The `opacity` value on every `:disabled` / `.disabled` button or interactive element styled via opacity. |
 
-There is only one disabled opacity. Don't write `opacity: 0.35` or `opacity: 0.4` because it "looks right" - the rendered audit at `docs/reviews/2026-05-27-style-audit.md` found seven different ad-hoc values in the wild and several dropped text below readable contrast.
+There is only one disabled opacity. Don't write `opacity: 0.35` or `opacity: 0.4` because it "looks right" - a rendered style audit found seven different ad-hoc values in the wild, several of which dropped text below readable contrast.
 
 **Don't use opacity to disable text on a saturated background.** Opacity dims the rendered pixels toward the background, so 50% white on the accent-blue header collapses to a mid-blue that fails contrast. For buttons sitting on `--header-bg` (or any saturated surface), shift `color` to a theme-aware dimmed token (e.g. `--header-text-dim`) and keep the cursor change - skip `opacity` entirely.
+
+### 1.10 Decorative-dim state - `--opacity-dim`
+
+| Token          | Value | When to use |
+|----------------|-------|-------------|
+| `--opacity-dim` | 0.7   | A *decorative or secondary* element intentionally shown muted at rest: a dimmed type/status icon, a dropdown chevron, a faint accent divider line, a hint/note paragraph, a locked achievement row. |
+
+Distinct from `--opacity-disabled`: that one is reserved for interactive `:disabled` / `.disabled` states, this one is about visual hierarchy. Like the disabled value, there is only one decorative-dim value - don't hand-pick 0.55/0.6/0.75 for the same "recede this decoration" job. **Not** for animation keyframes (0↔1 fades), hover-brighten rest states, or the two-tier done/future progression dims; those carry their own values by design.
 
 ---
 
@@ -223,6 +236,34 @@ Spacing inside modals:
 - `.modal-header`, `.modal-body` already have `margin-bottom: var(--space-xl)` - **do not** add it again.
 - `.modal-footer` has `gap: var(--space-md)` between buttons.
 - The modal-content uses `--shadow-lg` and `--radius-xl`.
+
+**Width scale.** A dialog that needs a fixed width picks one of the three
+tokens instead of hand-rolling a `px` value; a dialog that sizes to its content
+sets none:
+
+| Token          | Width | Use |
+|----------------|-------|-----|
+| `--modal-w-sm` | 480px | Single-column forms: label importer, combine detectors, the blank new-detector form. |
+| `--modal-w-md` | 720px | Picker / table / settings dialogs: dataset importer, export, settings, keyboard help. |
+| `--modal-w-lg` | 900px | Wide views that need room for a table + browser side by side: the new-detector / dataset media-picker view. |
+
+Set the width on `.modal-content` (via `::ng-deep`), not on an inner wrapper,
+so inner content can `width: 100%` and fill the dialog rather than leaving side
+gutters. A raw `px`/`rem` width on a `.modal-content` is a violation.
+
+**Footer buttons.** Cancel/back on the left, the primary action on the far
+right. **"Close" is never `.btn--primary`.** A Close button dismisses the
+dialog - it commits nothing - so styling it as the primary (accent-fill) action
+misreads as "save". Dismiss buttons are `.btn--secondary`. When a dialog
+auto-saves (e.g. Settings) the dismiss verb is **"Done"**, not "Close", so it
+doesn't imply the changes were pending a commit.
+
+**Close-less dialogs.** A handful of modals set `[showCloseButton]="false"` and
+render no header `×`, on purpose: they are decision points that must be resolved
+by an explicit footer action (or a `← Back`) rather than dismissed ambiguously.
+These are the new-detector modal, the clipper-chooser, combine-detectors,
+resort-prompt, and dialog-host. Every *other* modal keeps the header `×`. Do not
+add `[showCloseButton]="false"` to a new modal without a comparable reason.
 
 #### Back vs Cancel
 
@@ -336,7 +377,99 @@ Avoid them. The right answer is almost always "use a theme variable." If a compo
 
 ---
 
-## 4. Anti-patterns (do not do these)
+## 4. Copy style (voice, casing, vocabulary)
+
+Microcopy is styling too. Visible UI text - button labels, headings, form
+labels, placeholders, hints, empty states, tooltips - follows the same
+"one rule, applied everywhere" discipline as the tokens. The rules below are
+not machine-enforced (casing can't be reliably linted), so they live here and
+are applied by hand during review.
+
+### 4.1 Casing: Title Case for chrome, sentence case for content
+
+Two buckets, one rule each:
+
+- **Title Case** - the framing "chrome" of the UI: **modal titles** (`vt-modal
+  title="…"`), **section headings** (`<h1>`–`<h4>`, `.section-title`,
+  `.dashboard-section-title`), and **button labels** (`.btn`, toolbar/icon
+  buttons with a text label, radio-pill labels). These name a surface or an
+  action, so they read as a title.
+- **sentence case** - everything the user *reads or fills in*: **form field
+  labels** (`.form-label`, `.col-label`), **placeholders**, **hints**
+  (`.form-hint`, `.info-text`), **empty-state messages** (`.empty-state`),
+  **tooltips** (`title="…"`), **aria-labels**, and any inline description or
+  status sentence. Capitalize only the first word and proper nouns.
+
+**Title Case rule.** Capitalize the first and last word and every "major"
+word. Keep these lowercase unless they're first or last: articles (`a`, `an`,
+`the`), coordinating conjunctions (`and`, `but`, `or`, `nor`, `for`, `so`,
+`yet`), and short prepositions (`to`, `of`, `in`, `on`, `at`, `by`, `for`,
+`with`, `from`, …). So it's `Add Media to Bad`, `Sort by Detector`, `Copy to
+Clipboard` (not `Copy To Clipboard`), `Add Corrections to Detector`.
+
+| Surface | Case | Example |
+|---------|------|---------|
+| Modal title | Title Case | `Combine Datasets`, `Crop Example`, `Use This Example?` |
+| Section heading (`h2`–`h4`, `.section-title`) | Title Case | `Detector Accuracy`, `What You'll Get` |
+| Button label | Title Case | `Import Labels`, `Rebuild Map`, `Download Bundle` |
+| Form field label | sentence case | `Detector name`, `Conflict policy`, `Cell size` |
+| Placeholder | sentence case | `Combined dataset name`, `Describe what you're looking for` |
+| Hint / info / empty-state | sentence case | `No detectors yet. Click + to add one.` |
+| Tooltip (`title=`) / aria-label | sentence case | `Order labeled items by time, name, or detector confidence` |
+
+Proper nouns keep their own casing everywhere (`HuggingFace`, `VTSearch`,
+`UMAP`), as do the canonical capitalized buckets **Good** / **Bad** when they
+name the two vote piles (`Add Media to Good`, `Mark this media as a Bad
+example`).
+
+### 4.2 Ellipsis: the `…` character only
+
+Use the single Unicode ellipsis character **`…` (U+2026)**. Never the three-dot
+ASCII `...`, and never the HTML entity `&hellip;`. This holds for both templates
+and any user-facing string literal in a `.ts` file (`signal('Loading…')`,
+status messages, fallback labels).
+
+- **In-progress button/status labels** end in `…`: `Creating…`, `Importing…`,
+  `Combining…`, `Saving…`, `Scoring with example media…`.
+- **Truncation** markers use `…` too (`… 12 more rows`, `text.slice(0, 300) +
+  '…'`).
+- **Placeholders do *not* end in `…`** (see §4.3).
+
+### 4.3 Placeholder format
+
+- **Sentence case**, no trailing ellipsis, no trailing period.
+- For "here's what to type" examples, prefix with `e.g. ` and match the casing
+  of the real value: a free-text query is lowercase (`e.g. dog barking
+  sounds`), a proper name is Title Case (`e.g. Dog Barks`).
+- For "leave blank to get a default" inputs, state that: `Leave blank to use a
+  default name`.
+- For a server/file path, use the shared hint `path/to/file` (or
+  `/absolute/server/path/to/file` when an absolute path is required) - don't
+  invent a new spelling.
+
+### 4.4 Canonical product vocabulary
+
+One concept, one word. The product noun for the trained ranker is
+**detector** - **never** "model" in user-facing text. ("Model" is correct only
+when it genuinely means a HuggingFace **AI model** / embedder, e.g. the gated-model
+download copy in Settings.) Internal identifiers (`ngModel`, `trainMode.model`,
+CSS classes) are exempt - this rule is about *visible* strings only.
+
+| Concept | Canonical word | Don't write |
+|---------|----------------|-------------|
+| The trained ranker (the product's core object) | **detector** | model |
+| Making a detector by voting good/bad | **Train** (verb) / **Learned** (the sort mode) | — |
+| Running a detector across a dataset to score items | **Find** (the action) / **Auto-Find** (the automatic/CLI variant) | — |
+| The two vote piles | **Good** / **Bad** | positives/negatives (in general UI; the ML terms are fine inside a stats table) |
+
+`Train` and `Find` are the two flow verbs surfaced to users; keep them stable.
+Meaning-bearing distinctions are *not* drift and stay as-is: `Verified Good`
+vs. `Good` (a real Find-mode state), and `Positives`/`Negatives` inside the
+detector-stats table (standard ML terminology in that context).
+
+---
+
+## 5. Anti-patterns (do not do these)
 
 1. **Hardcoded `px` / `rem` for padding, margin, gap.** Pick a `--space-*` token.
 2. **Hardcoded font sizes.** Pick a `--font-*` token. `0.78rem`, `0.95rem`, `13px` are all violations.
@@ -361,7 +494,7 @@ Avoid them. The right answer is almost always "use a theme variable." If a compo
 
 ---
 
-## 5. Adding new shared styles
+## 6. Adding new shared styles
 
 When you have a pattern that recurs (the third time you copy similar SCSS from one component to another), promote it to `_components.scss` (general shared) or `_picker-shared.scss` (importer/exporter/picker domain) or `_data-table.scss` (tables). Don't let the same "kind of thing" diverge across components - that's how the codebase ends up with three "small buttons" that all look slightly different.
 
@@ -372,7 +505,7 @@ When you add a new token:
 
 ---
 
-## 6. References
+## 7. References
 
 - `frontend/src/scss/_variables.scss` - every design token.
 - `frontend/src/scss/_components.scss` - buttons, forms, modals, headings, info/error/success text.

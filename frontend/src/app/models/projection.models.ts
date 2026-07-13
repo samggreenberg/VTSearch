@@ -30,6 +30,36 @@ export interface LevelMeta {
   n_cells: number;
 }
 
+/**
+ * One region signpost — a named place on the projection map (see
+ * `docs/plans/vtsbrowse-toponymy.md`). The canvas draws it as a text pill
+ * anchored at `(x, y)` when the view's zoom is near the sign's `level`.
+ */
+export interface RegionLabelPayload {
+  /**
+   * Pyramid zoom level the sign belongs to: 0 = the coarsest layer (continent
+   * names), deeper = finer (countries, then states). May be fractional — the
+   * canvas interpolates visibility/size on a continuous level axis.
+   */
+  level: number;
+  /** Anchor in projection space (the frozen 2-D layout's coordinates). */
+  x: number;
+  y: number;
+  text: string;
+  /** Naming confidence, used as the de-clutter tiebreak (higher wins). */
+  score?: number;
+  /** Which namer produced the sign (e.g. "keyphrase", "llm"). */
+  source?: string;
+}
+
+/** Response of ``GET /api/projection/labels``. */
+export interface ProjectionLabelsResponse {
+  /** "ready" when a projection exists (labels may still be empty), "idle" otherwise. */
+  status: string;
+  projection_id?: string;
+  labels: RegionLabelPayload[];
+}
+
 export interface ProjectionMeta {
   projection_id: string;
   /** Which lattice this metadata's pyramid was binned with. */
@@ -40,6 +70,12 @@ export interface ProjectionMeta {
   point_count: number;
   levels: LevelMeta[];
   media_type?: string;
+  /**
+   * Whether region signpost labels exist for this projection (see
+   * ``GET /api/projection/labels``). Absent/false until a labeler has run,
+   * so the client can skip the labels fetch entirely.
+   */
+  has_labels?: boolean;
   /**
    * Membership version of this projection. 0 for full-dataset layouts; bumped
    * when items are removed from a subset browse in place. Combined with

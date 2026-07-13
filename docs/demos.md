@@ -56,14 +56,22 @@ Datasets are grouped by media type below. Each demo comes in size variants — *
 | **eurosat_m** | Sentinel-2 satellite imagery across EuroSAT land use categories (medium) |
 | **eurosat_l** | Sentinel-2 satellite imagery across EuroSAT land use categories (large) |
 | **eurosat_a** | Sentinel-2 satellite imagery across 10 EuroSAT land use categories (all) |
-| **stanford_dogs_s** | Fine-grained dog breed photos across Stanford Dogs categories (small) |
-| **stanford_dogs_m** | Fine-grained dog breed photos across Stanford Dogs categories (medium) |
-| **stanford_dogs_l** | Fine-grained dog breed photos across Stanford Dogs categories (large) |
-| **stanford_dogs_a** | Fine-grained dog breed photos across 120 Stanford Dogs categories (all) |
 | **places365_s** | Scene photos across 365 Places365 categories (small) |
 | **places365_m** | Scene photos across 365 Places365 categories (medium) |
 | **places365_l** | Scene photos across 365 Places365 categories (large) |
 | **places365_a** | Scene photos across 365 Places365 categories: indoor, outdoor natural, and outdoor man-made environments (all) |
+| **enrico_s** | Born-digital **mobile app UI screenshots** (Enrico, a curated Rico subset) across 20 screen-function topics — login, chat, maps, settings, gallery, media player… (small). Digitally-native imagery, not natural photos |
+| **enrico_m** | Enrico mobile UI screenshots across 20 screen-function topics (medium) |
+| **enrico_l** | Enrico mobile UI screenshots across 20 screen-function topics (large) |
+| **enrico_a** | All ~1,460 Enrico mobile UI screenshots across 20 screen-function topics (all) |
+| **rico_screen2words_s** | Born-digital **mobile app UI screenshots** (RICO-Screen2Words) labeled by **app category** (Google Play genre) — Finance, Shopping, Social, Weather, Maps & Navigation… (small). A harder, semantic label than Enrico's screen function |
+| **rico_screen2words_m** | RICO mobile UI screenshots across 16 app categories (medium) |
+| **rico_screen2words_l** | RICO mobile UI screenshots across 16 app categories (large) |
+| **rico_screen2words_a** | RICO mobile UI screenshots across 16 Google Play app categories (all) |
+| **rvl_cdip_s** | Scanned **document images** (RVL-CDIP, a 300-per-class demo mirror) across 16 balanced document types — letter, form, email, invoice, resume, memo, scientific report… (small). The document-image corner of digitally-native imagery |
+| **rvl_cdip_m** | RVL-CDIP document images across 16 document types (medium) |
+| **rvl_cdip_l** | RVL-CDIP document images across 16 document types (large) |
+| **rvl_cdip_a** | ~4,800 RVL-CDIP document images across 16 document types (all) |
 | **ucsf_documents_a** | Scanned industry document pages from the UCSF Industry Documents Library: tobacco, food, drug, chemical, fossil fuel, and opioids |
 | **roxford5k_s** | ~500 Oxford Buildings photos (a 1/10 slice) for instance matching — same landmark across viewpoints; best paired with the SIFT/VLAD (instance matching) embedder |
 | **roxford5k_a** | All 5,063 Revisited Oxford Buildings photos across 11 landmarks plus distractors — the canonical instance-retrieval benchmark; pair with the SIFT/VLAD (instance matching) embedder |

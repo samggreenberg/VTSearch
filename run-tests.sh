@@ -330,12 +330,17 @@ fi
 #   --no-header: skip the platform/plugin header noise
 #   -q:         quiet mode (dots instead of full test names)
 #   -n auto:    parallel execution via pytest-xdist (one worker per CPU)
+#   --dist loadgroup: like the default load scheduling, except tests marked
+#       @pytest.mark.xdist_group run together on one worker.  Used to pin all
+#       real-UMAP-fit tests to a single worker so the ~30s numba JIT compile
+#       of umap-learn's kernels is paid once per run, not once per worker
+#       (see tests_lib/projection/test_umap_projection.py).
 #
 # Both tests/ (app tier) and tests_lib/ (library tier) are passed in.
 # The two trees have independent conftests; pytest's auto-merge picks
 # the right autouse fixtures per test based on file location.
 if [[ -n "$MARKER_EXPR" ]]; then
-    python -m pytest tests/ tests_lib/ -q --tb=short --no-header -n auto -m "$MARKER_EXPR" "${COV_ARGS[@]}" "${EXTRA_ARGS[@]}"
+    python -m pytest tests/ tests_lib/ -q --tb=short --no-header -n auto --dist loadgroup -m "$MARKER_EXPR" "${COV_ARGS[@]}" "${EXTRA_ARGS[@]}"
 else
-    python -m pytest tests/ tests_lib/ -q --tb=short --no-header -n auto "${COV_ARGS[@]}" "${EXTRA_ARGS[@]}"
+    python -m pytest tests/ tests_lib/ -q --tb=short --no-header -n auto --dist loadgroup "${COV_ARGS[@]}" "${EXTRA_ARGS[@]}"
 fi

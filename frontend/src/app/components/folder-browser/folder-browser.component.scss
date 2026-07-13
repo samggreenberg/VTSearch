@@ -81,7 +81,7 @@
   z-index: var(--z-base);
   font-size: var(--font-2xs);
   text-transform: uppercase;
-  letter-spacing: .03em;
+  letter-spacing: var(--tracking-wide);
   color: var(--text-secondary);
   user-select: none;
 }

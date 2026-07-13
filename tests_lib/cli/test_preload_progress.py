@@ -787,7 +787,8 @@ class TestLoadPretrainedLocalFirst:
         except ImportError:
             pass
 
-    def test_network_fallback_error_propagates(self):
+    @patch("vtscore.media.embedder.time.sleep")
+    def test_network_fallback_error_propagates(self, mock_sleep):
         """If both local and network attempts fail, the network error propagates."""
 
         def fake_load(*args, **kwargs):
@@ -1025,23 +1026,28 @@ class TestTimedProgress:
 
     def test_elapsed_time_updates_during_slow_operation(self):
         """A slow block should produce elapsed-time suffixed messages."""
-        import time
+        import re
+        import threading
 
         calls = []
+        ticked = threading.Event()
 
         def cb(status, message, current, total):
             calls.append((status, message, current, total))
+            if "(" in message:
+                ticked.set()
 
-        with timed_progress(cb, "loading", "Importing torch…", 1, 2):
-            # Sleep long enough for at least one tick (~1s interval)
-            time.sleep(2.5)
+        with timed_progress(cb, "loading", "Importing torch…", 1, 2, tick_interval=0.05):
+            # Block until the ticker has fired at least once (deterministic,
+            # no fixed sleep).
+            assert ticked.wait(timeout=5)
 
         # Should have the initial message plus at least one timed update
         timed_calls = [c for c in calls if "(" in c[1]]
         assert len(timed_calls) >= 1
-        # Check format: "Importing torch… (1s)" / "(2s)"; possibly extended with
+        # Check format: "Importing torch… (Ns)"; possibly extended with
         # ", N modules" when sys.modules grew during the block.
-        assert any("(1s" in c[1] or "(2s" in c[1] for c in timed_calls)
+        assert any(re.search(r"\(\d+s", c[1]) for c in timed_calls)
         # All calls should preserve status, current, total
         for c in calls:
             assert c[0] == "loading"
@@ -1052,21 +1058,25 @@ class TestTimedProgress:
         """If sys.modules grows during the block, the ticker suffix should
         include the count so the user sees a concrete 'still working' signal."""
         import sys
-        import time
+        import threading
         import types
 
         calls = []
+        saw_modules = threading.Event()
 
         def cb(status, message, current, total):
             calls.append(message)
+            if "modules" in message:
+                saw_modules.set()
 
         fake_names = [f"_vtsearch_test_fake_mod_{i}" for i in range(5)]
         try:
-            with timed_progress(cb, "loading", "Importing thing…", 0, 0):
+            with timed_progress(cb, "loading", "Importing thing…", 0, 0, tick_interval=0.05):
                 # Simulate new modules being registered (cheaper than a real import).
                 for name in fake_names:
                     sys.modules[name] = types.ModuleType(name)
-                time.sleep(1.5)
+                # Block until a tick reported the module-count suffix.
+                assert saw_modules.wait(timeout=5)
         finally:
             for name in fake_names:
                 sys.modules.pop(name, None)
@@ -1077,18 +1087,24 @@ class TestTimedProgress:
 
     def test_ticker_stops_after_block_exits(self):
         """The background ticker thread should stop once the with block exits."""
+        import threading
         import time
 
         calls = []
+        ticked = threading.Event()
 
         def cb(status, message, current, total):
             calls.append(time.monotonic())
+            ticked.set()
 
-        with timed_progress(cb, "loading", "test", 0, 1):
-            time.sleep(1.5)
+        with timed_progress(cb, "loading", "test", 0, 1, tick_interval=0.05):
+            assert ticked.wait(timeout=5)
 
         count_during = len(calls)
-        time.sleep(1.5)
+        # The context manager joins the ticker thread on exit, so no further
+        # calls can arrive; a wait of a few tick intervals would catch a
+        # regression where the ticker outlives the block.
+        time.sleep(0.25)
         count_after = len(calls)
 
         # No new calls should arrive after the block exits
@@ -1096,34 +1112,44 @@ class TestTimedProgress:
 
     def test_exception_in_block_still_stops_ticker(self):
         """The ticker should be cleaned up even if the block raises."""
+        import threading
         import time
 
         calls = []
+        ticked = threading.Event()
 
         def cb(status, message, current, total):
             calls.append(message)
+            ticked.set()
 
         try:
-            with timed_progress(cb, "loading", "test", 0, 0):
-                time.sleep(1.5)
+            with timed_progress(cb, "loading", "test", 0, 0, tick_interval=0.05):
+                assert ticked.wait(timeout=5)
                 raise RuntimeError("boom")
         except RuntimeError:
             pass
 
         count_during = len(calls)
-        time.sleep(1.5)
+        # A few tick intervals is enough to catch a leaked ticker.
+        time.sleep(0.25)
         count_after = len(calls)
 
         assert count_after == count_during
 
     def test_works_with_console_progress_wrapper(self, capsys):
         """timed_progress should integrate with _make_console_progress."""
-        import time
+        import threading
 
-        cb = _make_console_progress(lambda *a, **kw: None)
+        ticked = threading.Event()
+        console = _make_console_progress(lambda *a, **kw: None)
 
-        with timed_progress(cb, "loading", "Importing torch…", 1, 2):
-            time.sleep(1.5)
+        def cb(status, message, current, total):
+            console(status, message, current, total)
+            if "(" in message:
+                ticked.set()
+
+        with timed_progress(cb, "loading", "Importing torch…", 1, 2, tick_interval=0.05):
+            assert ticked.wait(timeout=5)
 
         captured = capsys.readouterr()
         # Should see the initial message and at least one elapsed update
@@ -1134,20 +1160,24 @@ class TestTimedProgress:
         module-count delta, clamped one below the estimate so a running import
         can never report 100% (the snap to done is signalled externally)."""
         import sys
-        import time
+        import threading
         import types
 
         calls = []
+        bar_moved = threading.Event()
 
         def cb(status, message, current, total):
             calls.append((current, total))
+            if current > 0:
+                bar_moved.set()
 
         fake = [f"_vt_est_fake_mod_{i}" for i in range(5)]
         try:
-            with timed_progress(cb, "loading", "Importing thing…", est_modules=3):
+            with timed_progress(cb, "loading", "Importing thing…", est_modules=3, tick_interval=0.05):
                 for name in fake:
                     sys.modules[name] = types.ModuleType(name)
-                time.sleep(1.5)
+                # Block until a tick moved the bar off zero.
+                assert bar_moved.wait(timeout=5)
         finally:
             for name in fake:
                 sys.modules.pop(name, None)
@@ -1167,17 +1197,24 @@ class TestTimedProgress:
         never shows 100% (that only happens on completion, via the next phase
         message or cb.flush())."""
         import sys
-        import time
+        import threading
         import types
 
-        cb = _make_console_progress(lambda *a, **kw: None)
+        ticked = threading.Event()
+        console = _make_console_progress(lambda *a, **kw: None)
+
+        def cb(status, message, current, total):
+            console(status, message, current, total)
+            if current > 0:
+                ticked.set()
 
         fake = [f"_vt_est_con_mod_{i}" for i in range(8)]
         try:
-            with timed_progress(cb, "loading", "Importing thing…", est_modules=4):
+            with timed_progress(cb, "loading", "Importing thing…", est_modules=4, tick_interval=0.05):
                 for name in fake:
                     sys.modules[name] = types.ModuleType(name)
-                time.sleep(1.5)
+                # Block until a tick rendered the climbing bar.
+                assert ticked.wait(timeout=5)
         finally:
             for name in fake:
                 sys.modules.pop(name, None)

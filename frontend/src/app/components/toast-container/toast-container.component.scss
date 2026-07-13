@@ -31,7 +31,7 @@
 
   &:hover {
     color: var(--text-primary);
-    border-color: var(--error);
+    border-color: var(--color-bad);
     background: var(--bad-bg);
   }
 }
@@ -41,8 +41,8 @@
   min-width: min(420px, calc(100vw - 24px));
   max-width: min(720px, calc(100vw - 24px));
   background: var(--bg-panel);
-  border: 1px solid var(--error);
-  border-left: 4px solid var(--error);
+  border: 1px solid var(--color-bad);
+  border-left: 4px solid var(--color-bad);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   color: var(--text-primary);
@@ -79,7 +79,7 @@
   flex: 0 0 18px;
   width: 18px;
   height: 18px;
-  color: var(--error);
+  color: var(--color-bad);
   margin-top: 1px;
 }
 
@@ -120,7 +120,7 @@
 
   &:hover {
     background: var(--bad-bg);
-    border-color: var(--error);
+    border-color: var(--color-bad);
   }
 }
 

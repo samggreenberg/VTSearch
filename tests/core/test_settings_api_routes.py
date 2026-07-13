@@ -46,6 +46,48 @@ class TestSettingsAPI:
         assert res.status_code == 200
         assert res.get_json()["browse_colormap"] == {}
 
+    def test_legacy_boolean_show_animations_migrates_on_read_and_save(self, client, isolated_settings):
+        """Pre-enum ``show_animations`` values must not wedge settings saves.
+
+        Until a3a37106 the setting was a boolean; a settings file carrying
+        ``"True"`` used to leak verbatim out of GET /api/settings (blank
+        pulldown in the UI) and then fail the ``OneOf`` validator when the
+        frontend echoed the whole blob back into PUT - every settings save
+        422ed until the file was hand-edited. Legacy True-ish values now read
+        as ``"show"`` and save cleanly.
+        """
+        import json as _json
+
+        from vtsearch import settings as settings_mod
+
+        isolated_settings._user.parent.mkdir(parents=True, exist_ok=True)
+        isolated_settings._user.write_text(_json.dumps({"show_animations": "True"}) + "\n")
+        settings_mod.reset()  # re-read the legacy file
+
+        res = client.get("/api/settings")
+        assert res.status_code == 200
+        assert res.get_json()["show_animations"] == "show"
+
+        # A stale client echoing the legacy value back must still save.
+        res = client.put("/api/settings", json={"show_animations": "True"})
+        assert res.status_code == 200
+        assert settings_mod.get_show_animations() == "show"
+
+    def test_legacy_false_show_animations_maps_to_hide(self, client, isolated_settings):
+        """False-ish legacy values keep their meaning (animations off)."""
+        import json as _json
+
+        from vtsearch import settings as settings_mod
+
+        isolated_settings._user.parent.mkdir(parents=True, exist_ok=True)
+        isolated_settings._user.write_text(_json.dumps({"show_animations": False}) + "\n")
+        settings_mod.reset()
+
+        res = client.get("/api/settings")
+        assert res.status_code == 200
+        assert res.get_json()["show_animations"] == "hide"
+        assert settings_mod.get_show_animations() == "hide"
+
     def test_update_volume(self, client):
         res = client.put(
             "/api/settings",
@@ -742,6 +784,15 @@ class TestBrowserSettings:
         assert data["browse_mouse_zooms_per_level"]["audio"] == 1
         assert data["browse_mouse_zooms_per_level"]["image"] == 3
 
+    def test_update_browse_signposts_per_type(self, client):
+        res = client.put("/api/settings", json={"browse_signposts": {"audio": False, "image": True}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_signposts"]["audio"] is False
+        assert data["browse_signposts"]["image"] is True
+        # Persists across a fresh read.
+        assert client.get("/api/settings").get_json()["browse_signposts"]["audio"] is False
+
     def test_get_settings_includes_browser_prefs(self, client):
         data = client.get("/api/settings").get_json()
         # Present as (possibly empty) dicts so the frontend can index by type.
@@ -751,6 +802,7 @@ class TestBrowserSettings:
             "browse_thumbnail_border",
             "browse_compact",
             "browse_mouse_zooms_per_level",
+            "browse_signposts",
         ):
             assert key in data
             assert isinstance(data[key], dict)
@@ -763,5 +815,6 @@ class TestBrowserSettings:
             "browse_thumbnail_border",
             "browse_compact",
             "browse_mouse_zooms_per_level",
+            "browse_signposts",
         ):
             assert data.get(key, {}) == {}

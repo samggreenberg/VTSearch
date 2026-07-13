@@ -15,6 +15,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
+import { IconComponent } from '../../icon/icon.component';
 import {
   ClipboardColumn,
   ClipboardCopyComponent,
@@ -48,6 +49,7 @@ export interface ColumnDef {
     ModalComponent,
     FieldHintIconComponent,
     ClipboardCopyComponent,
+    IconComponent,
   ],
   templateUrl: './export-modal.component.html',
   styleUrl: './export-modal.component.scss',
@@ -200,6 +202,15 @@ export class ExportModalComponent implements OnInit {
     this.labelsReady.set(true);
   }
 
+  /** ``"media_type"`` → ``"Media type"``: humanize a raw metadata key for
+   *  the column checkbox label. Keys that already read well ("Dimensions",
+   *  "File Size") pass through unchanged; the export payload keeps the raw
+   *  key either way. */
+  private static humanizeColumnKey(key: string): string {
+    const spaced = key.replace(/_/g, ' ').trim();
+    return spaced ? spaced[0].toUpperCase() + spaced.slice(1) : key;
+  }
+
   /** Build column definitions from available_columns or fall back to defaults. */
   private buildColumns(availableColumns?: string[]): void {
     const baseKeys = new Set(ExportModalComponent.BASE_COLUMNS.map((c) => c.key));
@@ -216,7 +227,7 @@ export class ExportModalComponent implements OnInit {
         if (!baseKeys.has(key) && !alwaysKeys.has(key)) {
           this.columns.push({
             key,
-            label: key,
+            label: ExportModalComponent.humanizeColumnKey(key),
             enabled: true,
             isMetadata: true,
           });

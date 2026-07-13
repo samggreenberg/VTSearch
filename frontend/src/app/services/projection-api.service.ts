@@ -5,6 +5,7 @@ import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import type {
   ProjectionMeta,
   ProjectionBuildResponse,
+  ProjectionLabelsResponse,
   TilePayload,
 } from '../models/projection.models';
 
@@ -71,6 +72,24 @@ export class ProjectionApiService {
    */
   reprojectSubset(ids: number[]): Observable<ProjectionBuildResponse> {
     return this.http.post<ProjectionBuildResponse>('/api/projection/build', { ids, force: true });
+  }
+
+  /**
+   * Fetch the region signpost labels for the current projection — the named
+   * regions the canvas renders as "street signs" over the map. Tiny payload
+   * (one entry per named region), fetched once per projection id. A dataset
+   * with no computed labels answers an empty list, not an error; the meta's
+   * ``has_labels`` flag lets callers skip the request entirely.
+   */
+  getLabels(subset = false): Observable<ProjectionLabelsResponse> {
+    const params: Record<string, string> = {};
+    if (subset) params['subset'] = '1';
+    // Signs are optional decoration on the map — a failure to fetch them must
+    // never toast an error over a perfectly working browse view.
+    return this.http.get<ProjectionLabelsResponse>('/api/projection/labels', {
+      params,
+      context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+    });
   }
 
   getTile(

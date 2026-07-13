@@ -25,7 +25,7 @@
   @if (data.auto_export; as ax) {
     <div class="auto-export-status" [class.auto-export-status--error]="!ax.success">
       @if (ax.success) {
-        &#10003; Auto-exported via {{ ax.exporter }}{{ ax.message ? ' — ' + ax.message : '' }}
+        <vt-icon type="check" [size]="14"></vt-icon> Auto-exported via {{ ax.exporter }}{{ ax.message ? ' — ' + ax.message : '' }}
       } @else {
         &#9888; Auto-export via {{ ax.exporter }} failed{{ ax.error ? ': ' + ax.error : '' }}
       }
@@ -37,7 +37,7 @@
     @if (displayHits.length === 0) {
       <p class="empty-state">No hits found.</p>
     } @else {
-      <table class="results-table">
+      <table class="data-table results-table">
         <thead>
           <tr>
             <th title="Source origin of the media item">Origin</th>
@@ -62,7 +62,7 @@
 
   <!-- Export controls -->
   <div class="export-controls">
-    <div class="export-sides">
+    <div class="export-sides" role="radiogroup" aria-label="Filter which predictions to show">
       <label title="Show only items predicted as good"><input type="radio" name="sides" value="good" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Good</label>
       <label title="Show only items predicted as bad"><input type="radio" name="sides" value="bad" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Bad</label>
       <label title="Show both good and bad predictions"><input type="radio" name="sides" value="both" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Both</label>
@@ -106,7 +106,7 @@
       [rows]="clipboardRows"
       [columns]="clipboardColumns"
       buttonVariant="secondary"
-      copyLabel="Copy To Clipboard"
+      copyLabel="Copy to Clipboard"
     ></vt-clipboard-copy>
   </div>
 
