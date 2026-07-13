@@ -41,8 +41,19 @@ def _mean_by_k(rows: list[dict], field: str) -> dict[int, float]:
     return {k: st.mean(vs) for k, vs in by_k.items() if vs}
 
 
+def _series_by_seed(rows: list[dict], field: str) -> dict[int, dict[int, float]]:
+    """Per-seed ``{k: value}`` series (for the ``all`` band = one distinct line per seed)."""
+    out: dict[int, dict[int, float]] = defaultdict(dict)
+    for r in rows:
+        v = r.get(field)
+        if v is not None and v == v:  # skip NaN
+            out[int(r["seed"])][int(r["k"])] = float(v)
+    return out
+
+
 def _stats_by_k(rows: list[dict], field: str, band: str) -> dict[int, tuple[float, float, float]]:
-    """Per-K ``(mean, lo, hi)`` across seeds. ``band`` = minmax | std | none."""
+    """Per-K ``(mean, lo, hi)`` across seeds. ``band`` = minmax | std | none (``all``
+    is handled in the plot: it overlays every seed's own curve instead of a band)."""
     by_k: dict[int, list[float]] = defaultdict(list)
     for r in rows:
         v = r.get(field)
@@ -84,6 +95,7 @@ def _plot_group(
     band: str = "minmax",
     show_oracle: bool,
     show_text_baseline: bool,
+    x_label: str = "K (annotation count)",
 ) -> None:
     import matplotlib
 
@@ -119,13 +131,34 @@ def _plot_group(
                 color_i += 1
             continue
 
+        alpha_tag = f" α{alpha}" if proposal == "hac" else ""
+
+        if band == "all":
+            # One line PER SEED, each its own color + dot markers + a legend entry
+            # naming the config and seed, so every individual iteration is distinct.
+            for seed, series in sorted(_series_by_seed(crows, field).items()):
+                sks = sorted(k for k in series if k > 0)
+                if not sks:
+                    continue
+                ax.plot(
+                    sks,
+                    [series[k] for k in sks],
+                    color=cmap(color_i % 20),
+                    ls=ls,
+                    lw=1.4,
+                    marker="o",
+                    ms=4,
+                    label=f"{embedder}/{proposal}{alpha_tag} — seed {seed}",
+                )
+                color_i += 1
+            continue
+
         stats = _stats_by_k(crows, field, band)
         ks = sorted(k for k in stats if k > 0)
         if not ks:
             continue
         color = cmap(color_i % 20)
         color_i += 1
-        alpha_tag = f" α{alpha}" if proposal == "hac" else ""
         ax.plot(
             ks,
             [stats[k][0] for k in ks],
@@ -136,7 +169,7 @@ def _plot_group(
             ms=5,
             label=f"{embedder}/{proposal}{alpha_tag}",
         )
-        # Seed-variance band (min-max or ±std across --seeds).
+        # Seed-variance band (min-max or ±std across seeds).
         if band != "none":
             ax.fill_between(ks, [stats[k][1] for k in ks], [stats[k][2] for k in ks], color=color, alpha=0.15, lw=0)
         # Oracle companion only makes sense for the combined cost.
@@ -146,7 +179,7 @@ def _plot_group(
             if oks:
                 ax.plot(oks, [oracle_k[k] for k in oks], color=color, ls=ls, lw=1.0, alpha=0.35)
 
-    ax.set_xlabel("K (annotation count)")
+    ax.set_xlabel(x_label)
     ax.set_ylabel(_METRICS.get(field, field))
     ax.set_title(title)
     ax.grid(True, ls=":", alpha=0.4)
@@ -165,23 +198,31 @@ def render_all(
     band: str = "minmax",
     show_oracle: bool = False,
     show_text_baseline: bool = False,
+    x_label: str = "K (annotation count)",
+    x_tag: str = "k",
 ) -> None:
-    """Write one figure per metric per (dataset, class). Reusable by sweep --viz."""
+    """Write one figure per metric per (dataset, class). Reusable by sweep --viz.
+
+    ``x_label``/``x_tag`` let the realistic labeling mode relabel the x-axis to
+    "total annotations t" (rows carry ``k == t`` there, so the plotting stays the
+    same; only the label and file suffix change).
+    """
     groups: dict[tuple, list[dict]] = defaultdict(list)
     for r in rows:
         groups[(r["dataset"], r["class"])].append(r)
     for (dataset, cls), grows in sorted(groups.items()):
         stem = f"{dataset}_{cls.replace(' ', '_')}"
         for field in metrics:
-            out_path = out_dir / f"{stem}_{field}_vs_k.png"
+            out_path = out_dir / f"{stem}_{field}_vs_{x_tag}.png"
             _plot_group(
                 grows,
-                f"{dataset}: {cls} — {field} vs K",
+                f"{dataset}: {cls} — {field} vs {x_tag}",
                 out_path,
                 field=field,
                 band=band,
                 show_oracle=show_oracle,
                 show_text_baseline=show_text_baseline,
+                x_label=x_label,
             )
             print(f"wrote {out_path}")
 
@@ -238,9 +279,10 @@ def main() -> int:
     )
     ap.add_argument(
         "--band-kind",
-        choices=("minmax", "std", "none"),
+        choices=("minmax", "std", "none", "all"),
         default="std",
-        help="seed-variance band around each curve (default: minmax)",
+        help="per-curve seed spread: minmax/std band, none, or 'all' (overlay every seed's "
+        "own curve as a thin line around the mean)",
     )
     args = ap.parse_args()
 
