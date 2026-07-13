@@ -161,12 +161,12 @@ function makeHelpers(page: Page): Helpers {
     },
     async openImporter() {
       await page.locator('button[title="Import a new dataset"]').click();
-      await page.waitForSelector('.importer-tab-bar', { timeout: 15000 });
+      await page.waitForSelector('.importer-picker .tab-bar', { timeout: 15000 });
       await wait(500);
     },
     async openImporterDemo() {
       await h.openImporter();
-      await page.locator('.importer-tab', { hasText: 'Demo' }).click();
+      await page.locator('.importer-picker .tab', { hasText: 'Demo' }).click();
       await wait(700);
     },
     async openImporterSynthetic() {
@@ -176,8 +176,8 @@ function makeHelpers(page: Page): Helpers {
       await wait(500);
     },
     async openSettings() {
-      await page.locator('button.settings-btn').click();
-      await page.waitForSelector('.settings-tab', { timeout: 10000 });
+      await page.locator('button[title="Settings"]').click();
+      await page.waitForSelector('.side-tab', { timeout: 10000 });
       await wait(700);
     },
     async openNewDetector() {
@@ -185,10 +185,10 @@ function makeHelpers(page: Page): Helpers {
       await wait(800);
     },
     async selectDatasetRow(name) {
-      await ensureCardSelected('vt-dataset-card', name);
+      await ensureCardSelected('tr[vt-dataset-card]', name);
     },
     async selectDetectorRow(name) {
-      await ensureCardSelected('vt-detector-card', name);
+      await ensureCardSelected('tr[vt-detector-card]', name);
     },
     async enterLabelView() {
       await h.dashboard();
@@ -215,7 +215,7 @@ function makeHelpers(page: Page): Helpers {
       // Browse moved into the dataset row's ⋯ overflow menu (the inline eye is
       // gone; it now only renders as a *disabled* projection-building button).
       // Open the overflow menu, then click its "Browse dataset" item.
-      const card = page.locator('vt-dataset-card', { hasText: 'syn-imgs' }).first();
+      const card = page.locator('tr[vt-dataset-card]', { hasText: 'syn-imgs' }).first();
       await card.locator('.overflow-btn').first().click();
       await page.locator('.context-menu .menu-item', { hasText: 'Browse dataset' }).first().click();
       await page.waitForURL(/browse/i, { timeout: 15000 }).catch(() => {});

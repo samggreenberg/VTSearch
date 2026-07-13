@@ -113,6 +113,15 @@ export class DatasetImporterModalComponent implements OnInit {
         this.declaredTabs.set(res.tabs || []);
         if (this.initialTab && this.visibleImporterTabs.some((t) => t.id === this.initialTab)) {
           this.selectImporterTab(this.initialTab);
+        } else if (this.visibleImporterTabs.length) {
+          // Land on the first category that actually has importers (falling
+          // back to the first tab) instead of a blank pane. The New Detector
+          // modal pre-selects its first tab, and an unselected two-level tab
+          // bar leaves the whole modal body empty.
+          const tabs = this.visibleImporterTabs;
+          const first =
+            tabs.find((t) => this.orderedImporters.some((imp) => (imp.category || '') === t.id)) ?? tabs[0];
+          this.selectImporterTab(first.id);
         }
       },
     });
@@ -145,8 +154,9 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Tab declarations supplied by the backend (``/api/dataset/all-importers``). */
   readonly declaredTabs = signal<ImporterPickerTab[]>([]);
 
-  /** Currently selected picker tab.  Empty string means no tab is selected
-   *  yet, so the content area below the tab bars stays blank. */
+  /** Currently selected picker tab.  Defaults to the first visible tab as
+   *  soon as the importer list arrives (``ngOnInit``); empty string only
+   *  before that, so the content area is never left blank once loaded. */
   readonly activeImporterTab = signal('');
 
   get orderedImporters(): ImporterInfo[] {

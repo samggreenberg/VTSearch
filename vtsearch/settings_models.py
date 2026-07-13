@@ -41,6 +41,7 @@ __all__ = [
     "Theme",
     "UserSettings",
     "VALID_ANIMATION_MODES",
+    "coerce_animation_mode",
     "VALID_BROWSE_COLORMAPS",
     "VALID_BROWSE_ICON_SIZES",
     "VALID_FOCUS_MODES",
@@ -51,6 +52,32 @@ __all__ = [
 
 
 Theme = Literal["dark", "light", "highviz", "system"]
+
+
+def coerce_animation_mode(value: Any) -> Any:
+    """Map legacy boolean ``show_animations`` values onto the mode enum.
+
+    The setting was a checkbox boolean until 2026-06-30 (a3a37106 made it a
+    three-way ``AnimationMode``), so settings files written before then (and
+    stale clients echoing an unmigrated GET back into PUT) still carry
+    ``True`` / ``"True"`` / ``"false"``-style values.  True-ish maps to
+    ``"show"``, False-ish to ``"hide"``; canonical modes pass through (case
+    folded), and anything else is returned unchanged so it still fails
+    validation loudly instead of being silently rewritten.
+    """
+    if isinstance(value, bool):
+        return "show" if value else "hide"
+    if isinstance(value, str):
+        folded = value.strip().lower()
+        if folded in ("true", "1", "yes", "on"):
+            return "show"
+        if folded in ("false", "0", "no", "off"):
+            return "hide"
+        if folded in VALID_ANIMATION_MODES:
+            return folded
+    return value
+
+
 # Decorative-motion master switch. ``"show"`` forces animations on even when the
 # OS asks for reduced motion; ``"hide"`` always suppresses them; ``"os"`` defers
 # to the platform ``prefers-reduced-motion`` preference.
@@ -205,7 +232,7 @@ class UserSettings(BaseModel):
     # request, ``"hide"`` always suppresses it, and ``"os"`` follows the
     # platform ``prefers-reduced-motion`` preference. See the "Show Animations"
     # pulldown in the appearance settings.
-    show_animations: AnimationMode = "show"
+    show_animations: Annotated[AnimationMode, BeforeValidator(coerce_animation_mode)] = "show"
     show_metadata: bool = True
     # Set to True once the user dismisses the zero-votes "Use ← / → or click"
     # hint that overlays the Good/Bad buttons when a fresh labeling session

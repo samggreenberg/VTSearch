@@ -130,7 +130,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
     fields = [
         PluginField(
             key="media_type",
-            label="Dataset MediaType",
+            label="Dataset media type",
             field_type="select",
             description="Type of media files the dataset ends up holding.",
             default="audio",

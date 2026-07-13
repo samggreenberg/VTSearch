@@ -131,8 +131,9 @@
 
   @if (mode() !== 'find') {
     <div class="export-row">
-      <button class="btn btn--toolbar export-btn" [disabled]="disabled()" (click)="onExport()" aria-label="Export" title="Export labeled items to clipboard, file, email, or webhook">
+      <button class="btn btn--toolbar export-btn" [disabled]="disabled()" (click)="onExport()" title="Export labeled items to clipboard, file, email, or webhook">
         <vt-icon type="export" [size]="16"></vt-icon>
+        Export
       </button>
     </div>
   }

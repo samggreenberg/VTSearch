@@ -44,7 +44,7 @@ class SyntheticDatasetImporter(ImporterBase):
     fields = [
         PluginField(
             key="media_type",
-            label="Dataset MediaType",
+            label="Dataset media type",
             field_type="select",
             description="What kind of media to generate.",
             options=_SUPPORTED_MEDIA_TYPES,
