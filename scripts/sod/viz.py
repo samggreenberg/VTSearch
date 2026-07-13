@@ -77,6 +77,34 @@ def _montage(items: list[tuple[Image.Image, str]], out_path: Path, suptitle: str
     plt.close(fig)
 
 
+def _save_captioned(img: Image.Image, out_path: Path, caption: str) -> None:
+    """Save one image with a wrapped caption above it, sized so the full caption fits.
+
+    Used by the labeling trace (the metadata caption is long and overflowed the tiny
+    single-tile ``_montage`` figure)."""
+    import textwrap  # noqa: PLC0415
+
+    import matplotlib  # noqa: PLC0415
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt  # noqa: PLC0415
+
+    arr = np.asarray(img)
+    h, w = arr.shape[:2]
+    fig_w = 5.0  # wide enough for the wrapped caption at fontsize 8
+    wrapped = "\n".join(textwrap.wrap(caption, width=64)) or caption
+    n_lines = wrapped.count("\n") + 1
+    fig_h = fig_w * (h / max(w, 1)) + 0.28 * n_lines + 0.2
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+    ax.imshow(arr)
+    ax.axis("off")
+    ax.set_title(wrapped, fontsize=8, loc="left", family="monospace")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=110)
+    plt.close(fig)
+
+
 def _sample(ids: list[int], n: int, seed: int) -> list[int]:
     if len(ids) <= n:
         return list(ids)
@@ -180,6 +208,89 @@ def _load_neg_bags(regions_dir: Path, ids: list[int]) -> list[np.ndarray]:
     return bags
 
 
+def _render_overlays(
+    ds: SodDataset,
+    split,
+    regions_dir: Path,
+    predict,
+    *,
+    out_dir: Path,
+    dataset: str,
+    cls: str,
+    embedder: str,
+    proposal: str,
+    alpha: float,
+    gallery_n: int,
+    label: str,
+    thr: float | None = None,
+    blend: tuple[float, int] | None = None,
+) -> None:
+    """Score the test set with ``predict``, bucket TP/FP/FN/TN at the threshold, and
+    montage. Shared by the controlled and realistic prediction paths.
+
+    Threshold: pass ``blend=(raw_thr, n_votes)`` to GMM-blend over the test score
+    distribution (the controlled path's ``--safe-thresholds`` behavior), or a final
+    ``thr`` directly (the realistic path passes the loop's already-blended threshold,
+    which is what the sweep row used). ``label`` is the filename/title suffix
+    (e.g. ``"k8"`` or ``"realistic_t50"``).
+    """
+    # Pass 1: score every test image (winning region), collecting the distribution
+    # so a GMM blend (if requested) fits over the same scores.
+    scored: list[tuple[int, bool, float, tuple]] = []
+    all_scores: list[float] = []
+    for iid, is_pos in [(i, True) for i in split.test_pos] + [(i, False) for i in split.test_neg]:
+        p = regions_dir / f"{iid}.npz"
+        if not p.exists():
+            continue
+        with np.load(p) as z:
+            vecs, boxes = z["vecs"], z["boxes"]
+        if vecs.shape[0] == 0:
+            continue
+        s = np.asarray(predict(vecs))
+        best = int(s.argmax())
+        score = float(s[best])
+        scored.append((iid, is_pos, score, tuple(float(b) for b in boxes[best])))
+        all_scores.append(score)
+
+    if blend is not None:
+        from vtscore.training.thresholds import calculate_safe_threshold
+
+        raw_thr, n_votes = blend
+        thr = calculate_safe_threshold(raw_thr, all_scores, n_votes)
+    if thr is None:
+        thr = 0.5
+
+    # Pass 2: bucket by confusion outcome at thr and draw overlays.
+    groups: dict[str, list[tuple[float, Image.Image, str]]] = {"TP": [], "FP": [], "FN": [], "TN": []}
+    for iid, is_pos, score, best_box in scored:
+        pred_pos = score >= thr
+        tag = ("TP" if pred_pos else "FN") if is_pos else ("FP" if pred_pos else "TN")
+        try:
+            img = ds.load_image(iid)
+        except Exception:
+            continue
+        gt = split.gt_boxes.get(iid, []) if is_pos else []
+        overlay = _draw(img, gt, best_box, score)
+        groups[tag].append((score, overlay, f"{iid}  {score:.2f}"))
+
+    alpha_tag = f"_a{alpha}" if proposal == "hac" else ""
+    tag_out = out_dir / f"{dataset}_{slugify(cls)}_{embedder}_{proposal}{alpha_tag}_mlp_{label}"
+    print(
+        f"  [predict] {embedder}/{proposal} {label} thr={thr:.3f}: "
+        f"TP={len(groups['TP'])} FP={len(groups['FP'])} FN={len(groups['FN'])} TN={len(groups['TN'])}",
+        flush=True,
+    )
+    for tag, items in groups.items():
+        # Sort TP/FP by descending score (most confident first); FN/TN ascending.
+        items.sort(key=lambda t: t[0], reverse=tag in ("TP", "FP"))
+        capped = [(im, ti) for _s, im, ti in items[:gallery_n]]
+        _montage(
+            capped,
+            tag_out / f"{tag}.png",
+            f"{embedder}/{proposal} MLP {label} thr={thr:.3f} — {tag} ({len(items)})",
+        )
+
+
 def render_predictions(
     ds: SodDataset,
     split,
@@ -268,59 +379,127 @@ def render_predictions(
         predict = head.score_rows
         n_votes = k + n_neg
 
-    # Pass 1: score every test image (winning region), collecting the distribution
-    # so the GMM safe-threshold blends over the same scores production sees.
-    scored: list[tuple[int, bool, float, tuple]] = []
-    all_scores: list[float] = []
-    for iid, is_pos in [(i, True) for i in split.test_pos] + [(i, False) for i in split.test_neg]:
-        p = regions_dir / f"{iid}.npz"
-        if not p.exists():
-            continue
-        with np.load(p) as z:
-            vecs, boxes = z["vecs"], z["boxes"]
-        if vecs.shape[0] == 0:
-            continue
-        s = np.asarray(predict(vecs))
-        best = int(s.argmax())
-        score = float(s[best])
-        scored.append((iid, is_pos, score, tuple(float(b) for b in boxes[best])))
-        all_scores.append(score)
+    _render_overlays(
+        ds,
+        split,
+        regions_dir,
+        predict,
+        out_dir=out_dir,
+        dataset=dataset,
+        cls=cls,
+        embedder=embedder,
+        proposal=proposal,
+        alpha=alpha,
+        gallery_n=gallery_n,
+        label=f"k{k}",
+        blend=(raw_thr, n_votes) if safe_thresholds else None,
+        thr=raw_thr,
+    )
 
-    thr = raw_thr
-    if safe_thresholds:
-        from vtscore.training.thresholds import calculate_safe_threshold
 
-        thr = calculate_safe_threshold(raw_thr, all_scores, n_votes)
+def render_predictions_realistic(
+    ds: SodDataset,
+    split,
+    *,
+    cache_dir: Path,
+    out_dir: Path,
+    dataset: str,
+    cls: str,
+    embedder: str,
+    proposal: str,
+    alpha: float,
+    slug: str | None,
+    predict,
+    thr: float,
+    t: int,
+    gallery_n: int,
+) -> None:
+    """Prediction overlays for a realistic run's FINAL detector (at the max ``t``).
 
-    # Pass 2: bucket by confusion outcome at thr and draw overlays.
-    groups: dict[str, list[tuple[float, Image.Image, str]]] = {"TP": [], "FP": [], "FN": [], "TN": []}
-    for iid, is_pos, score, best_box in scored:
-        pred_pos = score >= thr
-        tag = ("TP" if pred_pos else "FN") if is_pos else ("FP" if pred_pos else "TN")
+    ``predict``/``thr`` come from ``evaluate_realistic_curve(return_finals=True)`` — the
+    in-memory head and its loop-final blended threshold (used as-is, not re-blended over
+    the test set). Test region vectors are read from the same npz cache the sweep wrote.
+    """
+    reg = _EMBEDDER_ALIASES.get(embedder, embedder)
+    regions_root = cache_dir / "regions" / dataset / reg
+    slug = _resolve_slug(regions_root, proposal, alpha, slug)
+    if slug is None:
+        print(f"  [predict] skip {embedder}/{proposal}: no cache under {regions_root}", flush=True)
+        return
+    _render_overlays(
+        ds,
+        split,
+        regions_root / slug,
+        predict,
+        out_dir=out_dir,
+        dataset=dataset,
+        cls=cls,
+        embedder=embedder,
+        proposal=proposal,
+        alpha=alpha,
+        gallery_n=gallery_n,
+        label=f"realistic_t{t}",
+        thr=thr,
+    )
+
+
+def render_labeling_trace(
+    ds: SodDataset,
+    split,
+    trace: list[dict],
+    *,
+    out_dir: Path,
+    dataset: str,
+    cls: str,
+    embedder: str,
+    proposal: str,
+    alpha: float,
+    seed: int,
+) -> None:
+    """Write one seed's labeling trace: numbered images in the order the realistic loop
+    labeled them (GT green + the detector's surfacing box/score red, captioned with the
+    phase/head/calib/threshold), plus ``trace.csv`` / ``trace.json`` with the full
+    per-step record. Images are named ``{t:03d}_{iid}_{good|bad}.png`` so they sort in
+    labeling order."""
+    import csv  # noqa: PLC0415
+    import json  # noqa: PLC0415
+
+    alpha_tag = f"_a{alpha}" if proposal == "hac" else ""
+    d = out_dir / f"{dataset}_{slugify(cls)}_{embedder}_{proposal}{alpha_tag}" / f"seed{seed}"
+    d.mkdir(parents=True, exist_ok=True)
+
+    (d / "trace.json").write_text(json.dumps(trace, indent=2))
+    if trace:
+        keys = [
+            "t", "image_id", "gt_label", "select_mode", "phase", "head", "calib_mode", "threshold",
+            "surface_score", "surface_margin", "pred_box", "n_good", "n_bad", "n_votes",
+            "smart", "stable", "span", "cost", "fpr", "fnr", "f1", "stop_recommended",
+        ]  # fmt: skip
+        with (d / "trace.csv").open("w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=keys, extrasaction="ignore")
+            w.writeheader()
+            for e in trace:
+                row = dict(e)
+                pb = e.get("pred_box")
+                row["pred_box"] = " ".join(f"{v:.4f}" for v in pb) if pb else ""
+                w.writerow(row)
+
+    for e in trace:
+        iid = e["image_id"]
         try:
             img = ds.load_image(iid)
         except Exception:
             continue
-        gt = split.gt_boxes.get(iid, []) if is_pos else []
-        overlay = _draw(img, gt, best_box, score)
-        groups[tag].append((score, overlay, f"{iid}  {score:.2f}"))
-
-    alpha_tag = f"_a{alpha}" if proposal == "hac" else ""
-    tag_out = out_dir / f"{dataset}_{slugify(cls)}_{embedder}_{proposal}{alpha_tag}_mlp_k{k}"
-    print(
-        f"  [predict] {embedder}/{proposal} K={k} thr={thr:.3f}: "
-        f"TP={len(groups['TP'])} FP={len(groups['FP'])} FN={len(groups['FN'])} TN={len(groups['TN'])}",
-        flush=True,
-    )
-    for tag, items in groups.items():
-        # Sort TP/FP by descending score (most confident first); FN/TN ascending.
-        items.sort(key=lambda t: t[0], reverse=tag in ("TP", "FP"))
-        capped = [(im, ti) for _s, im, ti in items[:gallery_n]]
-        _montage(
-            capped,
-            tag_out / f"{tag}.png",
-            f"{embedder}/{proposal} MLP K={k} thr={thr:.3f} — {tag} ({len(items)})",
+        gt = split.gt_boxes.get(iid, []) if e["gt_label"] == "good" else []
+        pred = tuple(e["pred_box"]) if e.get("pred_box") else None
+        overlay = _draw(img, gt, pred, e.get("surface_score"))
+        surf = f" surf={e['surface_score']:.2f}" if e.get("surface_score") is not None else ""
+        caption = (
+            f"t{e['t']} id{iid} {e['gt_label']} | {e['select_mode']}->{e['phase']} | "
+            f"{e['head']}/{e['calib_mode']} thr={e['threshold']:.2f}{surf}"
         )
+        _save_captioned(overlay, d / f"{e['t']:03d}_{iid}_{e['gt_label']}.png", caption)
+    print(f"  [trace] {embedder}/{proposal} seed{seed}: {len(trace)} steps -> {d}", flush=True)
 
 
 def cmd_predict(args, ds: SodDataset, split) -> None:
@@ -354,7 +533,9 @@ def main() -> int:
     ap.add_argument("--out-dir", type=Path, required=True)
     # split params (must match the sweep run being inspected)
     ap.add_argument("--split-seed", type=int, default=0)
-    ap.add_argument("--neg-count", type=int, default=690)
+    ap.add_argument(
+        "--neg-multiple", type=int, default=10, help="neg pool = neg_multiple × positives (match the sweep)"
+    )
     ap.add_argument("--test-fraction", type=float, default=0.5)
     ap.add_argument("--gallery-n", type=int, default=24, help="max images per montage")
     # predict-only
@@ -385,7 +566,7 @@ def main() -> int:
     args = ap.parse_args()
 
     with SodDataset(args.dataset) as ds:
-        cs = ds.class_split(args.cls, neg_count=args.neg_count, seed=args.split_seed)
+        cs = ds.class_split(args.cls, neg_multiple=args.neg_multiple, seed=args.split_seed)
         if not cs.positive_ids:
             raise SystemExit(f"no positives for {args.cls!r} in {args.dataset}")
         split = partition_split(cs, args.test_fraction, args.split_seed)

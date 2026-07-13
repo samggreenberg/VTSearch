@@ -151,7 +151,7 @@ def partition_split(split: ClassSplit, test_fraction: float, seed: int) -> Split
 
 
 def dump_split(
-    path: Path, *, dataset: str, class_name: str, split_seed: int, neg_count: int, test_fraction: float, split: Split
+    path: Path, *, dataset: str, class_name: str, split_seed: int, neg_multiple: int, test_fraction: float, split: Split
 ) -> None:
     """Write the split's image ids + counts to JSON for inspection."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -161,7 +161,7 @@ def dump_split(
                 "dataset": dataset,
                 "class": class_name,
                 "split_seed": split_seed,
-                "neg_count": neg_count,
+                "neg_multiple": neg_multiple,
                 "test_fraction": test_fraction,
                 "negatives_exhaustive": split.negatives_exhaustive,
                 "counts": {
@@ -190,6 +190,7 @@ def build_curve_inputs(
     meta: dict,
     neg_regions: bool = False,
     region_voting: bool = False,
+    build_pool: bool = False,
 ) -> RegionCurveInputs:
     """Materialize (cached) vectors from a partitioned :class:`Split`.
 
@@ -206,8 +207,23 @@ def build_curve_inputs(
     have been written by a region-voting :class:`~vtscore.eval.region_sources.RegionSource`
     (one snapped vector per image); use a distinct ``proposal_slug`` so it doesn't
     collide with the box-pool exemplars.
+
+    ``build_pool`` (for the realistic labeling loop) additionally captures a
+    per-training-image pool — id, region matrix, whole vector, leaf mask, label,
+    and (positives only) the good-vote exemplar rows — into the
+    :class:`RegionCurveInputs` ``pool_*`` fields. It re-reads training-positive
+    region npz (already cached; no re-embedding), so it is read-light.
     """
     class_slug = slugify(class_name)
+
+    # Pool accumulators for the realistic labeling loop (empty unless build_pool).
+    pool_ids: list[int] = []
+    pool_region_mats: list[np.ndarray] = []
+    pool_region_boxes: list[np.ndarray] = []
+    pool_whole_list: list[np.ndarray] = []
+    pool_leaf_masks: list[np.ndarray] = []
+    pool_labels: list[int] = []
+    pool_pos_exemplars: dict[int, np.ndarray] = {}
 
     # Positive exemplars: region-voting → one snapped covering-box vector per
     # image (K = good swipes); otherwise one GT-box pool per instance.
@@ -216,6 +232,15 @@ def build_curve_inputs(
         ex = cache.exemplars(source, class_slug, iid, dataset.load_image(iid), split.gt_boxes[iid])
         if ex.shape[0] > 0:
             pos_ex_list.append(ex)
+        if build_pool and ex.shape[0] > 0:
+            boxes, vecs, whole, mask = cache.regions(source, iid, dataset.load_image(iid))
+            pool_ids.append(iid)
+            pool_region_mats.append(vecs)
+            pool_region_boxes.append(boxes)
+            pool_whole_list.append(whole)
+            pool_leaf_masks.append(mask)
+            pool_labels.append(1)
+            pool_pos_exemplars[iid] = ex
     pos_exemplars = np.vstack(pos_ex_list) if pos_ex_list else np.zeros((0, source.input_dim), np.float32)
 
     # Training negatives. Region-voting: one bag per negative image (its CLS+leaf
@@ -224,14 +249,22 @@ def build_curve_inputs(
     neg_list: list[np.ndarray] = []
     neg_bags: list[np.ndarray] = []
     for iid in split.train_neg:
-        _boxes, vecs, whole, mask = cache.regions(source, iid, dataset.load_image(iid))
+        boxes, vecs, whole, mask = cache.regions(source, iid, dataset.load_image(iid))
         if region_voting:
             bag = vecs[mask] if mask.any() else vecs
             if bag.shape[0] > 0:
                 neg_bags.append(bag)
         else:
             neg_list.append(vecs if neg_regions else whole[None, :])
+        if build_pool:
+            pool_ids.append(iid)
+            pool_region_mats.append(vecs)
+            pool_region_boxes.append(boxes)
+            pool_whole_list.append(whole)
+            pool_leaf_masks.append(mask)
+            pool_labels.append(0)
     neg_train = np.vstack(neg_list) if neg_list else np.zeros((0, source.input_dim), np.float32)
+    pool_whole_vecs = np.vstack(pool_whole_list).astype(np.float32) if pool_whole_list else None
 
     # Test set: region matrices + boxes + GT boxes for held-out positives + test negatives.
     test_mats: list[np.ndarray] = []
@@ -261,6 +294,13 @@ def build_curve_inputs(
         test_gt_boxes=test_gt,
         region_voting=region_voting,
         neg_train_bags=neg_bags,
+        pool_ids=pool_ids,
+        pool_region_mats=pool_region_mats,
+        pool_region_boxes=pool_region_boxes,
+        pool_whole_vecs=pool_whole_vecs,
+        pool_leaf_masks=pool_leaf_masks,
+        pool_labels=pool_labels,
+        pool_pos_exemplars=pool_pos_exemplars,
         meta={
             **meta,
             "n_train_pos": len(split.train_pos),

@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from vtscore.eval.error_metrics import f1_at, min_weighted_cost, weighted_error
-from vtscore.eval.scoring_heads import CosineHead, MLPHead, max_pool_with_argmax
+from vtscore.eval.scoring_heads import CosineHead, MLPHead, max_pool_over_images, max_pool_with_argmax
 from vtscore.eval.xcal import cross_calibrated_threshold
 
 
@@ -58,6 +58,19 @@ class RegionCurveInputs:
     # app detector. ``neg_train_wholes`` is unused in this mode.
     region_voting: bool = False
     neg_train_bags: list[np.ndarray] = field(default_factory=list)
+    # Realistic labeling-loop pool (only populated for ``evaluate_realistic_curve``).
+    # These describe the *training* images the simulated user can label, keyed by a
+    # stable image id, so the loop can rank/select them like the app does. All lists
+    # are aligned with ``pool_ids``; ``pool_pos_exemplars`` maps a positive id to its
+    # good-vote training rows ((1,D) snapped covering box in region-voting; (M,D)
+    # GT-box exemplars otherwise). Empty in the controlled mode.
+    pool_ids: list[int] = field(default_factory=list)
+    pool_region_mats: list[np.ndarray] = field(default_factory=list)  # per image: (R_i, D)
+    pool_region_boxes: list[np.ndarray] = field(default_factory=list)  # per image: (R_i, 4), for trace overlays
+    pool_whole_vecs: np.ndarray | None = None  # (N, D) for the diversity tree
+    pool_leaf_masks: list[np.ndarray] = field(default_factory=list)  # per image: (R_i,) bool
+    pool_labels: list[int] = field(default_factory=list)  # 1 pos / 0 neg, aligned with pool_ids
+    pool_pos_exemplars: dict[int, np.ndarray] = field(default_factory=dict)  # positive id -> (m_i, D)
 
 
 def _calib_mode(k: int, n_neg: int, *, safe_thresholds: bool) -> str:
@@ -440,3 +453,621 @@ def evaluate_region_curve(
                 row["compute_ms"] = round((time.perf_counter() - t0) * 1000.0, 3)
                 rows.append(row)
     return rows
+
+
+# ---------------------------------------------------------------------------
+# Realistic labeling loop (faithful port of the app's Autopilot active learning)
+#
+# Instead of a controlled K-positive budget, the simulated user labels one item
+# per step in the order the app would surface it, retraining from scratch each
+# step. The x-axis is ``t`` = total annotations (good+bad); the pos/neg mix
+# EMERGES from prevalence + the selection policy. See the module docstring of the
+# controlled path above for the shared training/threshold conventions.
+# ---------------------------------------------------------------------------
+
+# Autopilot phase → select-mode map (frontend label-view.component.ts:302-326).
+# ``done`` maps to ``new`` so the curve keeps extending past the recommended stop
+# (unless ``stop_at_done``); the row still records ``stop_recommended``.
+_PHASE_TO_SELECT = {"good": "top", "bad": "hard", "hard": "hard", "new": "new", "done": "new"}
+
+# Span "green" node count — mirrors autopilot_goal_diversity (default 40); a k=3
+# tree reaches this at 4 full BFS levels (1+3+9+27). Kept as a constant so this
+# library tier does not depend on app settings.
+_SPAN_GREEN = 40
+_SPAN_YELLOW = 10
+
+
+class AutopilotPhaseMachine:
+    """Faithful port of ``checkPhaseTransition`` (autopilot-state.service.ts:87).
+
+    Stateless in counts: the phase is re-derived from the current good/bad counts
+    and the three indicator colors every step, so it advances (or regresses)
+    deterministically. ``good_to_start``/``bad_to_start`` default to the app's 3/4.
+    """
+
+    def __init__(self, *, good_to_start: int = 3, bad_to_start: int = 4) -> None:
+        self.good_to_start = int(good_to_start)
+        self.bad_to_start = int(bad_to_start)
+
+    def next_phase(self, good: int, bad: int, smart: str, stable: str, span: str) -> str:
+        if good < self.good_to_start:
+            return "good"
+        if bad < self.bad_to_start:
+            return "bad"
+        if smart == "green" and stable == "green":
+            return "done" if span == "green" else "new"
+        return "hard"
+
+
+def _smart_status(cost_history: list[float], good: int, bad: int) -> str:
+    """Error-cost-flatness color (port of ``_compute_smart_status`` shape).
+
+    Faithful to the app's red/yellow/green logic and the ``-0.015`` relative-slope
+    flatness threshold, but regresses the **held-out test cost** we already compute
+    each step instead of the app's cached-model vote-eval error cost (which would
+    require re-implementing the ``_eval_cached_models``/``_live_models`` cache).
+    Test-cost flatness is a strictly better "can I stop?" signal, so this is a
+    deliberate, documented approximation.
+    """
+    if good < 5 or bad < 5:
+        return "red"
+    recent = cost_history[-10:]
+    recent = [c for c in recent if np.isfinite(c)]
+    if len(recent) < 3:
+        return "yellow"
+    n = len(recent)
+    x_mean = (n - 1) / 2.0
+    y_mean = sum(recent) / n
+    numer = sum((i - x_mean) * (recent[i] - y_mean) for i in range(n))
+    denom = sum((i - x_mean) ** 2 for i in range(n))
+    slope = numer / denom if denom else 0.0
+    relative_slope = slope / y_mean if y_mean > 0 else slope
+    return "yellow" if relative_slope < -0.015 else "green"
+
+
+def _stable_status(flip_history: list[dict], good: int, bad: int) -> str:
+    """Prediction-flip-rate color (faithful port of ``_compute_stable_status``).
+
+    ``flip_history`` holds per-step ``{"num_flips", "num_unlabeled"}`` over the
+    still-unlabeled pool. Green iff avg flip rate < 0.5% and max < 1% over the
+    last 10 steps; red until ≥5 good and ≥5 bad; yellow until ≥5 stability entries.
+    """
+    if good < 5 or bad < 5:
+        return "red"
+    if len(flip_history) < 5:
+        return "yellow"
+    recent = flip_history[-10:]
+    rates = [(s["num_flips"] / s["num_unlabeled"]) if s["num_unlabeled"] > 0 else 0.0 for s in recent]
+    avg_rate = sum(rates) / len(rates)
+    if avg_rate < 0.005 and max(rates) < 0.01:
+        return "green"
+    return "yellow"
+
+
+def _span_status(tree) -> str:
+    """Diversity-coverage color (faithful port of the span block, :745-780).
+
+    ``green`` on a degenerate/absent tree; otherwise compares the BFS-consecutive
+    seen-node count to ``min(_SPAN_GREEN, total_nodes)``.
+    """
+    if tree is None:
+        return "green"
+    total = int(tree.total_nodes)
+    if total <= 0:
+        return "green"
+    level = int(tree.diversity_level())
+    green_at = min(_SPAN_GREEN, total)
+    yellow_at = min(_SPAN_YELLOW, green_at)
+    if level >= green_at:
+        return "green"
+    if level >= yellow_at:
+        return "yellow"
+    return "red"
+
+
+def _select_top(pool_ids, pool_scores, labeled, idx):
+    """Highest-scoring unlabeled item (port of the ``top`` select mode)."""
+    best, best_score = None, float("-inf")
+    for i, pid in enumerate(pool_ids):
+        if pid in labeled:
+            continue
+        if pool_scores[i] > best_score:
+            best_score, best = pool_scores[i], pid
+    return best
+
+
+def _select_hard(pool_ids, pool_scores, threshold, labeled):
+    """Unlabeled item nearest the decision boundary (port of the ``hard`` mode).
+
+    Ranks the full pool descending, finds the first rank whose score ≤ threshold,
+    then picks the unlabeled id minimizing ``|rank - thresholdIndex|``. Matches the
+    frontend ``autoSelectNext`` boundary pick (label-view.component.ts:1310-1333).
+    """
+    order = np.argsort(-np.asarray(pool_scores))
+    thr_index = len(order)
+    for rank, pi in enumerate(order):
+        if pool_scores[pi] <= threshold:
+            thr_index = rank
+            break
+    best, best_dist = None, float("inf")
+    for rank, pi in enumerate(order):
+        pid = pool_ids[int(pi)]
+        if pid in labeled:
+            continue
+        d = abs(rank - thr_index)
+        if d < best_dist:
+            best_dist, best = d, pid
+    return best
+
+
+def _select_new(tree, pool_ids, pool_scores, threshold, labeled, idx):
+    """Diversity pick (``new`` mode) via ``DiversityTree.next_sample``; falls back
+    to ``hard`` when the tree is absent/exhausted or returns a labeled id."""
+    if tree is not None:
+        scores_dict = {pid: float(pool_scores[idx[pid]]) for pid in pool_ids}
+        cand = tree.next_sample(scores_dict, threshold)
+        if cand is not None and cand not in labeled:
+            return cand
+    return _select_hard(pool_ids, pool_scores, threshold, labeled)
+
+
+def _select_next(select_mode, tree, pool_ids, pool_scores, threshold, labeled, idx):
+    if select_mode == "top":
+        return _select_top(pool_ids, pool_scores, labeled, idx)
+    if select_mode == "new":
+        return _select_new(tree, pool_ids, pool_scores, threshold, labeled, idx)
+    return _select_hard(pool_ids, pool_scores, threshold, labeled)  # "hard" (and any fallback)
+
+
+def _train_pool_head(
+    inputs: RegionCurveInputs,
+    good_ids: set[int],
+    bad_ids: set[int],
+    head_kind: str,
+    seed: int,
+    idx: dict[int, int],
+    *,
+    inclusion: int,
+    safe_thresholds: bool,
+    calibrate_count: int,
+    cal_fraction: float,
+):
+    """Train a head on the current good/bad votes; returns
+    ``(predict_fn, raw_threshold, n_votes, calib_mode)`` or ``None`` on a
+    single-class / empty budget. Region-voting reuses :func:`train_rv_head`
+    (snapped positives + leaf-flood bags); otherwise a box-pool/whole MLP."""
+    good = sorted(good_ids)
+    bad = sorted(bad_ids)
+    if not good or not bad:
+        return None
+
+    if inputs.region_voting and head_kind == "mlp":
+        pos_rows = np.vstack([inputs.pool_pos_exemplars[i] for i in good]).astype(np.float32)
+        neg_bags: list[np.ndarray] = []
+        for i in bad:
+            mat = inputs.pool_region_mats[idx[i]]
+            mask = inputs.pool_leaf_masks[idx[i]]
+            bag = mat[mask] if mask is not None and mask.any() else mat
+            if bag.shape[0] > 0:
+                neg_bags.append(bag)
+        if not neg_bags:
+            return None
+        trained = train_rv_head(
+            pos_rows,
+            neg_bags,
+            inputs.input_dim,
+            seed,
+            inclusion=inclusion,
+            safe_thresholds=safe_thresholds,
+            calibrate_count=calibrate_count,
+            cal_fraction=cal_fraction,
+        )
+        if trained is None:
+            return None
+        predict, raw_thr, n_votes = trained
+        calib = _calib_mode(len(good), len(neg_bags), safe_thresholds=safe_thresholds)
+        return predict, raw_thr, n_votes, calib
+
+    # Box-pool / whole-image MLP path.
+    pos = np.vstack([inputs.pool_pos_exemplars[i] for i in good]).astype(np.float32)
+    neg = np.vstack([inputs.pool_whole_vecs[idx[i]][None, :] for i in bad]).astype(np.float32)
+    x = np.vstack([pos, neg]).astype(np.float32)
+    y = np.array([1.0] * pos.shape[0] + [0.0] * neg.shape[0], dtype=np.float32)
+    head = MLPHead(inputs.input_dim)
+    raw_thr = cross_calibrated_threshold(
+        x,
+        y,
+        head.trainer_fn(),
+        seed,
+        inclusion_value=inclusion,
+        calibrate_count=calibrate_count,
+        cal_fraction=cal_fraction,
+    )
+    if not np.isfinite(raw_thr):
+        raw_thr = 0.5
+    try:
+        head.fit(x, y, seed)
+    except ValueError:
+        return None
+    n_votes = len(good) + len(bad)
+    calib = _calib_mode(len(good), len(bad), safe_thresholds=safe_thresholds)
+    return head.score_rows, float(raw_thr), n_votes, calib
+
+
+def _cosine_coldstart(inputs: RegionCurveInputs, query_vec: np.ndarray):
+    """Single-class cold-start: cosine to the seed exemplar / text query, with a
+    GMM threshold over the pool's cosine scores. Returns ``(predict_fn, threshold)``."""
+    from vtscore.training.thresholds import calculate_gmm_threshold  # noqa: PLC0415
+
+    head = CosineHead(query_vec)
+    pool_scores = max_pool_over_images(head.score_rows, inputs.pool_region_mats)
+    finite = [float(s) for s in pool_scores if np.isfinite(s)]
+    thr = calculate_gmm_threshold(finite) if finite else 0.5
+    if not np.isfinite(thr):
+        thr = 0.5
+    return head.score_rows, float(thr)
+
+
+def _row_realistic(
+    inputs,
+    head_kind,
+    t,
+    n_good,
+    n_bad,
+    seed,
+    threshold,
+    err,
+    oracle,
+    calib,
+    f1,
+    mean_iou,
+    corloc,
+    phase,
+    select_mode,
+    stop_recommended,
+) -> dict:
+    row = _row(inputs, head_kind, t, n_bad, seed, threshold, err, oracle, calib, f1, mean_iou, corloc)
+    row["n_pos"] = int(n_good)  # override: for the realistic loop n_pos is the good count, not t
+    row["t"] = int(t)
+    row["n_good"] = int(n_good)
+    row["n_bad"] = int(n_bad)
+    row["phase"] = phase
+    row["select_mode"] = select_mode
+    row["stop_recommended"] = bool(stop_recommended)
+    return row
+
+
+def _resolve_step_head(
+    inputs,
+    good_ids,
+    bad_ids,
+    head_kind,
+    seed,
+    idx,
+    cold_query,
+    cached,
+    steps_since_train,
+    *,
+    retrain_cadence,
+    inclusion,
+    safe_thresholds,
+    calibrate_count,
+    cal_fraction,
+):
+    """Return ``(cached, steps_since_train)`` for one step.
+
+    ``cached`` is ``(predict, raw_thr, n_votes, calib, blend)``. Trains a fresh
+    head when both classes exist and a retrain is due (no model yet, cadence
+    elapsed, or the current model is a cold-start); otherwise reuses the cache, or
+    falls back to the cosine cold-start while only one class is labeled.
+    """
+    both = bool(good_ids) and bool(bad_ids)
+    due = cached is None or steps_since_train >= retrain_cadence or not cached[4]
+    if both and due:
+        res = _train_pool_head(
+            inputs,
+            good_ids,
+            bad_ids,
+            head_kind,
+            seed,
+            idx,
+            inclusion=inclusion,
+            safe_thresholds=safe_thresholds,
+            calibrate_count=calibrate_count,
+            cal_fraction=cal_fraction,
+        )
+        if res is not None:
+            predict, raw_thr, n_votes, calib = res
+            return (predict, raw_thr, n_votes, calib, True), 0
+    if cached is None or not both:
+        predict, thr0 = _cosine_coldstart(inputs, cold_query)
+        return (predict, thr0, len(good_ids) + len(bad_ids), "cosine_coldstart", False), 0
+    return cached, steps_since_train + 1
+
+
+def _step_indicators(cost_history, flip_history, prev_pred, cur_pred, tree, good, bad):
+    """Append this step's prediction-flip entry and return ``(smart, stable, span)``."""
+    if prev_pred is not None:
+        common = cur_pred.keys() & prev_pred.keys()
+        flips = sum(1 for pid in common if cur_pred[pid] != prev_pred[pid])
+        flip_history.append({"num_flips": flips, "num_unlabeled": len(common)})
+    return (
+        _smart_status(cost_history, good, bad),
+        _stable_status(flip_history, good, bad),
+        _span_status(tree),
+    )
+
+
+def _realistic_setup(inputs: RegionCurveInputs, seed: int, query_vec: np.ndarray | None):
+    """Per-seed loop setup: pick the seed positive, the cold-start query vector, and
+    build the diversity tree. Returns ``(pool_ids, idx, pool_label, seed_id, cold_query,
+    tree)`` or ``None`` when the pool has no positives."""
+    pool_ids = list(inputs.pool_ids)
+    if not pool_ids:
+        return None
+    idx = {pid: i for i, pid in enumerate(pool_ids)}
+    pool_label = {pid: int(inputs.pool_labels[i]) for i, pid in enumerate(pool_ids)}
+    positives = [pid for pid in pool_ids if pool_label[pid] == 1]
+    if not positives:
+        return None
+    seed_id = positives[int(np.random.default_rng(seed).integers(len(positives)))]
+    # Cold-start query: text query when available (text embedders), else the seed
+    # positive's exemplar (DINO/patch has no text encoder — matches the app's
+    # example-seeded cosine cold-start).
+    if query_vec is not None:
+        cold_query = np.asarray(query_vec, dtype=np.float32)
+    else:
+        cold_query = np.asarray(inputs.pool_pos_exemplars[seed_id], dtype=np.float32).mean(axis=0)
+    # Diversity tree over the pool's whole-image vectors (for the "new" select mode).
+    tree = None
+    if inputs.pool_whole_vecs is not None and len(pool_ids) >= 2:
+        try:
+            from vtscore.state.diversity_tree import DiversityTree, auto_max_depth  # noqa: PLC0415
+
+            vecs = {pid: inputs.pool_whole_vecs[idx[pid]] for pid in pool_ids}
+            tree = DiversityTree(vecs, k=3, max_depth=auto_max_depth(len(pool_ids), k=3))
+        except Exception:
+            tree = None
+    return pool_ids, idx, pool_label, seed_id, cold_query, tree
+
+
+def _surface_meta(predict, inputs: RegionCurveInputs, pi: int, select_mode: str, threshold: float) -> dict:
+    """Why an item was surfaced: its top region + score (and box) under the current head."""
+    sreg = np.asarray(predict(inputs.pool_region_mats[pi])).reshape(-1)
+    bi = int(sreg.argmax())
+    box = inputs.pool_region_boxes[pi][bi] if inputs.pool_region_boxes else None
+    return {
+        "select_mode": select_mode,
+        "surface_score": round(float(sreg[bi]), 6),
+        "surface_margin": round(float(sreg[bi] - threshold), 6),
+        "pred_box": [round(float(v), 6) for v in box] if box is not None else None,
+    }
+
+
+def _realistic_one_seed(
+    inputs: RegionCurveInputs,
+    head_kind: str,
+    seed: int,
+    *,
+    max_labels: int,
+    inclusion: int,
+    safe_thresholds: bool,
+    calibrate_count: int,
+    cal_fraction: float,
+    query_vec: np.ndarray | None,
+    good_to_start: int,
+    bad_to_start: int,
+    retrain_cadence: int,
+    stop_at_done: bool,
+) -> tuple[list[dict], dict | None]:
+    """Run one seed's labeling loop. Returns ``(rows, final)`` where ``final`` is a dict
+    ``{predict, threshold, n_good, n_bad, t, trace}`` for the last step (head + blended
+    threshold the final row measured, plus the per-step trace), or ``None`` when no step ran."""
+    from vtscore.training.thresholds import calculate_safe_threshold  # noqa: PLC0415
+
+    setup = _realistic_setup(inputs, seed, query_vec)
+    if setup is None:
+        return [], None
+    pool_ids, idx, pool_label, seed_id, cold_query, tree = setup
+    test_labels = [int(v) for v in inputs.test_labels]
+
+    machine = AutopilotPhaseMachine(good_to_start=good_to_start, bad_to_start=bad_to_start)
+    good_ids: set[int] = set()
+    bad_ids: set[int] = set()
+    labeled: set[int] = set()
+    cost_history: list[float] = []
+    flip_history: list[dict] = []
+    prev_pred: dict[int, int] | None = None
+    rows: list[dict] = []
+
+    pending = seed_id
+    # Metadata for how ``pending`` was surfaced (filled by the previous step's
+    # selection under that step's head); the seed is a random cold-start pick.
+    pending_meta: dict = {"select_mode": "seed", "surface_score": None, "surface_margin": None, "pred_box": None}
+    cached = None  # (predict, raw_thr, n_votes, calib, blend)
+    steps_since_train = 0
+    trace: list[dict] = []  # per-step labeling record (order, id, phase, head, threshold, …)
+    final: dict | None = None  # {predict, threshold, n_good, n_bad, t, trace} of the last step
+
+    for t in range(1, max_labels + 1):
+        if pending is None:
+            break
+        labeled_id = pending
+        (good_ids if pool_label[labeled_id] == 1 else bad_ids).add(labeled_id)
+        labeled.add(labeled_id)
+        if tree is not None:
+            tree.label(labeled_id)
+
+        cached, steps_since_train = _resolve_step_head(
+            inputs,
+            good_ids,
+            bad_ids,
+            head_kind,
+            seed,
+            idx,
+            cold_query,
+            cached,
+            steps_since_train,
+            retrain_cadence=retrain_cadence,
+            inclusion=inclusion,
+            safe_thresholds=safe_thresholds,
+            calibrate_count=calibrate_count,
+            cal_fraction=cal_fraction,
+        )
+        predict, raw_thr, n_votes, calib, blend = cached
+
+        test_scores, test_argmax = max_pool_with_argmax(predict, inputs.test_region_mats)
+        pool_scores = max_pool_over_images(predict, inputs.pool_region_mats)
+        threshold = (
+            calculate_safe_threshold(raw_thr, [float(s) for s in pool_scores], n_votes)
+            if (blend and safe_thresholds)
+            else raw_thr
+        )
+
+        err = weighted_error(test_scores, [float(v) for v in test_labels], threshold, inclusion)
+        oracle = min_weighted_cost(test_scores, [float(v) for v in test_labels], inclusion)
+        f1 = f1_at(test_scores, test_labels, threshold)
+        mean_iou, corloc = _iou_metrics(inputs, test_argmax)
+        cost_history.append(err["cost"])
+
+        cur_pred = {pid: int(pool_scores[idx[pid]] >= threshold) for pid in pool_ids if pid not in labeled}
+        good, bad = len(good_ids), len(bad_ids)
+        smart, stable, span = _step_indicators(cost_history, flip_history, prev_pred, cur_pred, tree, good, bad)
+        prev_pred = cur_pred
+        phase = machine.next_phase(good, bad, smart, stable, span)
+        select_mode = _PHASE_TO_SELECT[phase]
+        stop_recommended = phase == "done"
+
+        rows.append(
+            _row_realistic(
+                inputs,
+                head_kind,
+                t,
+                good,
+                bad,
+                seed,
+                threshold,
+                err,
+                oracle,
+                calib,
+                f1,
+                mean_iou,
+                corloc,
+                phase,
+                select_mode,
+                stop_recommended,
+            )
+        )
+        # Per-step labeling record: how the item was surfaced (from pending_meta,
+        # the previous step's head) + the state after labeling it.
+        trace.append(
+            {
+                "t": t,
+                "image_id": int(labeled_id),
+                "gt_label": "good" if pool_label[labeled_id] == 1 else "bad",
+                "select_mode": pending_meta["select_mode"],
+                "phase": phase,
+                "head": "cosine" if calib == "cosine_coldstart" else "mlp",
+                "calib_mode": calib,
+                "threshold": round(float(threshold), 6),
+                "surface_score": pending_meta["surface_score"],
+                "surface_margin": pending_meta["surface_margin"],
+                "pred_box": pending_meta["pred_box"],
+                "n_good": good,
+                "n_bad": bad,
+                "n_votes": n_votes,
+                "smart": smart,
+                "stable": stable,
+                "span": span,
+                "cost": err["cost"],
+                "fpr": err["fpr"],
+                "fnr": err["fnr"],
+                "f1": f1,
+                "stop_recommended": stop_recommended,
+            }
+        )
+        final = {
+            "predict": predict,
+            "threshold": float(threshold),
+            "n_good": good,
+            "n_bad": bad,
+            "t": t,
+            "trace": trace,
+        }
+
+        if stop_recommended and stop_at_done:
+            break
+        pending = _select_next(select_mode, tree, pool_ids, pool_scores, threshold, labeled, idx)
+        # Record why the next item was surfaced, to attach to its trace entry next step.
+        if pending is not None:
+            pending_meta = _surface_meta(predict, inputs, idx[pending], select_mode, threshold)
+
+    return rows, final
+
+
+def evaluate_realistic_curve(
+    inputs: RegionCurveInputs,
+    head_kind: str,
+    *,
+    seeds: Sequence[int],
+    max_labels: int = 60,
+    inclusion: int = 0,
+    safe_thresholds: bool = True,
+    calibrate_count: int = 2,
+    cal_fraction: float = 0.5,
+    query_vec: np.ndarray | None = None,
+    select_strategy: str = "autopilot",
+    good_to_start: int = 3,
+    bad_to_start: int = 4,
+    retrain_cadence: int = 1,
+    stop_at_done: bool = False,
+    return_finals: bool = False,
+) -> list[dict] | tuple[list[dict], dict[int, dict]]:
+    """Realistic active-learning labeling curve: cost/fpr/fnr/F1/IoU vs ``t`` (total
+    annotations), one row per ``(seed, t)``.
+
+    Simulates the app's Autopilot loop over ``inputs``' training pool: seed one
+    positive, cold-start rank (cosine-to-exemplar for text-less DINO/patch, else
+    the text query), then per step select the next item by the current phase's mode
+    (good→top, bad/hard→boundary, new→diversity), reveal its ground-truth label,
+    retrain from scratch, re-score, and record. Only ``select_strategy="autopilot"``
+    is wired today (the selection layer is factored so ``top``/``hard``/``new`` can
+    be exposed later).
+
+    When ``return_finals`` is set, returns ``(rows, finals)`` where ``finals`` maps each
+    seed to a dict ``{predict, threshold, n_good, n_bad, t, trace}`` — the in-process
+    final head + blended threshold (e.g. for prediction overlays at the max ``t`` the
+    loop reached) plus the full per-step ``trace`` (order, labeled id, gt label, select
+    mode, phase, head, calib_mode, threshold, surface score/margin, pred_box, indicators,
+    metrics). Default (``False``) returns just ``rows``, preserving the plain-list
+    contract every other caller relies on.
+    """
+    if select_strategy != "autopilot":
+        raise ValueError(f"unsupported select_strategy {select_strategy!r} (only 'autopilot' is wired)")
+    rows: list[dict] = []
+    finals: dict[int, dict] = {}
+    for seed in seeds:
+        t0 = time.perf_counter()
+        seed_rows, final = _realistic_one_seed(
+            inputs,
+            head_kind,
+            int(seed),
+            max_labels=max_labels,
+            inclusion=inclusion,
+            safe_thresholds=safe_thresholds,
+            calibrate_count=calibrate_count,
+            cal_fraction=cal_fraction,
+            query_vec=query_vec,
+            good_to_start=good_to_start,
+            bad_to_start=bad_to_start,
+            retrain_cadence=retrain_cadence,
+            stop_at_done=stop_at_done,
+        )
+        # Amortize the seed's wall-clock over its rows (per-step retrain dominates).
+        per = round((time.perf_counter() - t0) * 1000.0 / max(len(seed_rows), 1), 3)
+        for r in seed_rows:
+            r["compute_ms"] = per
+        rows.extend(seed_rows)
+        if final is not None:
+            finals[int(seed)] = final
+    return (rows, finals) if return_finals else rows
