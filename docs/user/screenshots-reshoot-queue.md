@@ -34,9 +34,13 @@ An empty table means "no known-stale shots" — the desired resting state.
 
 ## Queue
 
-*(empty - no known-stale shots. Queue drained 2026-07-12: the full shot set
-was re-rendered on the GRID after the light-ramp, zoom-removal/type-scale,
-responsive side-track, and icon-unification changes.)*
+The full shot set was re-rendered on the GRID on 2026-07-12 (after the
+light-ramp, zoom-removal/type-scale, responsive side-track, and
+icon-unification changes), so every earlier row is drained. One shot is stale
+again: the Achievements intro-copy simplification (cefadd7c, PR #2347) landed
+*after* that reshoot, so `achievements` needs a re-render for that copy line
+alone.
 
 | Shot id | Embedded in | Why it's stale | Flagged |
 |---------|-------------|----------------|---------|
+| `achievements` | USER_GUIDE.md#achievements | Intro paragraph copy simplified (cefadd7c, 2026-07-12): the old "settings source configured / round-trip between sessions" line now reads "Your progress is saved with your settings, so it carries over between sessions". Landed after the 2026-07-12 full reshoot, so this copy line is the only difference. | 2026-07-12 |
