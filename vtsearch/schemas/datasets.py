@@ -21,6 +21,13 @@ from marshmallow import Schema, ValidationError, fields, validate
 
 from vtsearch.schemas.file_browser import BrowseDirectoryEntrySchema, BrowseFileEntrySchema
 
+#: Upper bound on user-supplied dataset names, mirroring
+#: ``vtsearch.schemas.detectors.MAX_NAME_LENGTH``.  A name past this is already
+#: unusable for display, and capping it here stops an absurdly long name from
+#: ever reaching a filesystem path (and the uncaught ``OSError`` /
+#: absolute-path leak that would follow).
+MAX_NAME_LENGTH = 128
+
 
 def _list_of_strings(value):
     """Validator: value must be a ``list`` whose every entry is a ``str``.
@@ -300,7 +307,7 @@ class DashboardDatasetInfoResponseSchema(Schema):
 class DashboardDatasetRenameRequestSchema(Schema):
     """Body for ``PUT /api/dashboard/dataset-rename``."""
 
-    name = fields.String(required=True, validate=validate.Length(min=1))
+    name = fields.String(required=True, validate=validate.Length(min=1, max=MAX_NAME_LENGTH))
 
 
 class DashboardDatasetRenameResponseSchema(Schema):
@@ -589,7 +596,7 @@ class DatasetRegistryPreloadEmbedderResponseSchema(Schema):
 class DatasetRegistryRenameRequestSchema(Schema):
     """Body for ``PUT /api/datasets/registry/<id>/rename``."""
 
-    name = fields.String(required=True, validate=validate.Length(min=1))
+    name = fields.String(required=True, validate=validate.Length(min=1, max=MAX_NAME_LENGTH))
 
 
 class DatasetRegistryRenameResponseSchema(Schema):

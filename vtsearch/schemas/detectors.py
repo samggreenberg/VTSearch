@@ -72,6 +72,15 @@ from marshmallow import Schema, ValidationError, fields, validate
 
 from vtsearch.schemas.labels import LabeledElementSchema
 
+#: Upper bound on user-supplied detector names.  A name this long is already
+#: past any reasonable display use, and capping it here keeps the derived
+#: ``<slug>.json`` (plus its longer ``.tmp`` sibling) comfortably under the
+#: filesystem ``NAME_MAX`` (255) so a rename/create can never raise an uncaught
+#: ``OSError`` whose message would leak the absolute server path.  The
+#: ``_slug`` truncation in ``vtscore.detectors.store`` is the filesystem-level
+#: backstop for names that reach the store by other paths.
+MAX_NAME_LENGTH = 128
+
 
 def _list_of_strings(value):
     """Validator: *value* must be a ``list`` whose every entry is a ``str``.
@@ -163,7 +172,7 @@ class DetectorCreateRequestSchema(Schema):
     "at least one of these three" as a single declaration).
     """
 
-    name = fields.String(required=True, validate=validate.Length(min=1))
+    name = fields.String(required=True, validate=validate.Length(min=1, max=MAX_NAME_LENGTH))
     media_type = fields.String(required=True, validate=validate.Length(min=1))
     text_query = fields.String(load_default="")
     media_example = fields.String(load_default="")
@@ -197,7 +206,7 @@ class DetectorDeleteResponseSchema(Schema):
 class DetectorRenameRequestSchema(Schema):
     """Body for ``PUT /api/detectors/<name>/rename``."""
 
-    new_name = fields.String(required=True, validate=validate.Length(min=1))
+    new_name = fields.String(required=True, validate=validate.Length(min=1, max=MAX_NAME_LENGTH))
 
 
 class PendingLabelsetMoveSchema(Schema):
@@ -246,7 +255,7 @@ class DetectorCombineRequestSchema(Schema):
         required=True,
         validate=validate.Length(min=2, error="names must be a list of at least 2 detector names"),
     )
-    new_name = fields.String(required=True, validate=validate.Length(min=1))
+    new_name = fields.String(required=True, validate=validate.Length(min=1, max=MAX_NAME_LENGTH))
     conflict_policy = fields.String(load_default="drop")
 
 
@@ -329,7 +338,7 @@ class DetectorRegistryCreateRequestSchema(Schema):
     inside the handler to keep the error message specific.
     """
 
-    name = fields.String(required=True, validate=validate.Length(min=1))
+    name = fields.String(required=True, validate=validate.Length(min=1, max=MAX_NAME_LENGTH))
     media_type = fields.String(required=True, validate=validate.Length(min=1))
     text_query = fields.String(load_default="")
     media_example = fields.String(load_default="")
@@ -403,7 +412,7 @@ class DetectorRegistryRenameRequestSchema(Schema):
     so the discrepancy is deliberate.
     """
 
-    name = fields.String(required=True, validate=validate.Length(min=1))
+    name = fields.String(required=True, validate=validate.Length(min=1, max=MAX_NAME_LENGTH))
 
 
 class DetectorRegistryRenameResponseSchema(Schema):

@@ -20,22 +20,6 @@ Med = confusing; Low = cosmetic) so you can pick the high-value ones first.
 
 <!-- item-sep -->
 
-- **Reset Find sub-view state on dataset change (High)** — opening Find (or
-  Train) against a dataset *smaller* than the previous one fires image requests
-  for media ids that only existed in the prior dataset, producing a storm of
-  404s (edge-states amplified it to ~20 simultaneous). Root cause: the
-  singleton sub-view state isn't reset on entry.
-  `find-view.component.ts` `ngOnInit` (~lines 191-240) does **not** clear shared
-  state — only the in-place `reloadForNewPair()` (~242-254) does
-  (`sortState.setSortResults([])` / `voteState.clear()`). On a fresh
-  Dashboard → Find navigation, `SortStateService.sortOrder` still holds the
-  previous session's ranking, so the grid briefly renders old ids against the
-  new dataset context. **Fix:** clear `sortState`/`voteState` at the top of
-  `ngOnInit` (mirror `reloadForNewPair`'s reset) before `loadMedias()`/
-  `runFindLabel()`, or drop/remap in-flight requests when
-  `activeContext.datasetId` changes. **Files:** `find-view.component.ts`.
-  (Reported as O1 in both sweeps.)
-
 <!-- item-sep -->
 
 - **Autopilot exhausted-state for tiny datasets (High)** — on a 1-item (or
@@ -53,22 +37,6 @@ Med = confusing; Low = cosmetic) so you can pick the high-value ones first.
   the label-view template that renders the blank pane. (edge-states B1.)
 
 <!-- item-sep -->
-
-- **Length guard + safe filename + path-scrub for renames (High)** — no
-  input-length cap exists anywhere, so a very long dataset/detector name
-  overruns the filesystem `NAME_MAX` and raises an uncaught `OSError` whose
-  toast still contains the absolute server path (a path-leak). The rename
-  schemas validate only `Length(min=1)`
-  (`vtsearch/schemas/detectors.py:200`, `vtsearch/schemas/datasets.py:303,592`);
-  `vtscore/detectors/store.py:_slug()` (~line 38) slugifies but never
-  truncates, and `_write_detector` (~line 62) builds a `<slug>.json` plus a
-  longer `.tmp` sibling. **Fix:** (a) add a `Length(max=...)` to the rename/
-  create schemas, (b) truncate/hash the derived filename in `_slug`, and
-  (c) strip or relocate absolute paths out of the user-visible error message
-  (see the error surface `frontend/src/app/utils/api-error.ts` /
-  `toast-container`). **Files:** `schemas/detectors.py`, `schemas/datasets.py`,
-  `store.py`, `api-error.ts`. (edge-states B2 + V5; the optimistic-UI half of
-  B2 is already fixed — the dashboard rename now refreshes only on success.)
 
 <!-- item-sep -->
 
