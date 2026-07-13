@@ -535,11 +535,27 @@ def media_audio(media_id: int):
     media_bytes = _resolve_bytes(c)
     if media_bytes is None:
         abort(404, message="media not available")
-    return send_file(
-        io.BytesIO(media_bytes),
-        mimetype="audio/wav",
-        download_name=f"media_{media_id}.wav",
+    # A stable ``ETag`` (the media's content hash) lets the browser reuse the
+    # audio across re-selections.  The single-fetch object-URL path in the
+    # audio player still issues a cold GET per selection, and other surfaces
+    # (label view, hover preview) re-request the same clip on replay; the ETag
+    # turns those into 304s.  Mirrors the thumbnail route's conditional logic.
+    etag = c.get("md5") or hashlib.md5(media_bytes).hexdigest()
+    if etag in request.if_none_match:
+        resp = make_response("", 304)
+        resp.set_etag(etag)
+        resp.headers["Cache-Control"] = "private, max-age=86400"
+        return resp
+    resp = make_response(
+        send_file(
+            io.BytesIO(media_bytes),
+            mimetype="audio/wav",
+            download_name=f"media_{media_id}.wav",
+        )
     )
+    resp.set_etag(etag)
+    resp.headers["Cache-Control"] = "private, max-age=86400"
+    return resp
 
 
 @medias_bp.route("/api/medias/<int:media_id>/video")

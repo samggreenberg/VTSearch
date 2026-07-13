@@ -93,37 +93,6 @@ canvas renderer, LSH near-dup detection, async jobs with signature caches.
 
 <!-- item-sep -->
 
-- **Single-fetch audio player** — selecting an audio clip downloads the file
-  **twice** and decodes it every time: the `<audio>` element streams
-  `/api/medias/{id}/audio`
-  (`frontend/src/app/components/center-panel/audio-player/audio-player.component.ts:54`
-  + `.html:16`) while `drawWaveform()` independently `fetch()`es the same URL
-  (line 216) and runs `decodeAudioData`. The audio route sends no cache
-  headers (only the thumbnail route sets an ETag — see
-  `vtsearch/routes/media/list.py:683`), so the browser can't dedupe, and
-  re-selecting a previously viewed clip re-pays everything.
-  **Fix (frontend):** fetch once — `drawWaveform`'s fetch already gets the full
-  bytes; hand them to the `<audio>` element via
-  `URL.createObjectURL(new Blob([arrayBuffer], {type}))` (revoke the previous
-  object URL on media change / `ngOnDestroy`). Add a small LRU `Map` (say 20
-  entries) of decoded waveform peaks keyed by
-  `datasetId:mediaId:clipStart:clipEnd` so re-selection skips fetch+decode
-  entirely — cache the downsampled min/max arrays, not the `AudioBuffer`
-  (peaks are ~KB, buffers are ~MB).
-  **Fix (backend, complementary):** add an `ETag` (media md5 is already on the
-  media dict) + `Cache-Control` to the audio media response so even cold
-  object-URL misses turn into 304s. Mirror the thumbnail route's conditional
-  logic in `vtsearch/routes/media/list.py`.
-  **Gotchas:** preserve the existing `AbortController` handling around the
-  fetch (line ~216) and the clip-window drawing logic; the `<audio>` `[src]`
-  swap must not break the `loadedmetadata` gate (component tracks whether
-  metadata has fired for the current src — see the comment at line ~34).
-  `audio-player.component.spec.ts:34` asserts `audioSrc` equals the API URL —
-  update it deliberately. Frontend gate: `./run-tests.sh frontend`.
-  **Files touched:** `audio-player.component.{ts,html,spec.ts}`,
-  `vtsearch/routes/media/list.py` (ETag), maybe a tiny peaks-cache service.
-  Impact: high for audio-heavy voting. Complexity: medium.
-
 ## Tier 3 — worthwhile, more design judgment needed
 
 <!-- item-sep -->
