@@ -119,6 +119,13 @@ def _label_set_for(ctx, pyr, *, subset: bool):
     if subset:
         ctx._subset_region_labels = built
     else:
+        # A background relabel (issue #2404) or build job may have installed a
+        # matching set on ``_region_labels`` while we were resolving the
+        # fallback; don't clobber it with a derived/empty stand-in — the
+        # freshly-built signs already match this layout and are strictly better.
+        current = ctx._region_labels
+        if current is not None and current.projection_id == pyr.projection_id:
+            return current
         ctx._region_labels = built
     if built is None or built.projection_id != pyr.projection_id:
         return None
@@ -131,8 +138,12 @@ def _maybe_load_persisted_labels(ctx, pyr):
     Served only over the exact layout they were computed from
     (``projection_id`` match), and only while their labeler signature still
     matches what the active pipeline would produce — a changed provider,
-    embedder, or toponymy version makes them stale (recomputing stale labels
-    lazily is a planned follow-up; until then they're treated as absent).
+    embedder, or toponymy version makes them stale.  On a stale set we kick a
+    background rebuild (:func:`_kick_relabel_if_idle`) so the signs self-heal
+    to the active pipeline without a forced Re-project (issue #2404), and treat
+    the stale set as absent meanwhile — the map goes briefly unlettered rather
+    than serving signs the active labeler would no longer produce.
+
     When the active pipeline can't label this dataset at all (e.g. toponymy
     isn't installed here), a persisted set is still served: it's derived text
     pinned to the right layout, strictly better than nothing.
@@ -152,8 +163,52 @@ def _maybe_load_persisted_labels(ctx, pyr):
 
     active = labeler_signature(ctx)
     if active is not None and active != stored_signature:
+        _kick_relabel_if_idle(ctx, pyr)
         return None
     return label_set
+
+
+def _kick_relabel_if_idle(ctx, pyr) -> None:
+    """Rebuild a stale persisted label set in the background (issue #2404).
+
+    A persisted set whose ``labeler_signature`` no longer matches the active
+    pipeline is served as absent, but nothing re-runs the labeler while the
+    layout stays cached/persisted — only a forced Re-project re-letters the
+    map.  This kicks a best-effort background job that re-fits the signs over
+    the frozen full-dataset layout and re-persists them under the current
+    signature, so the stale signs self-heal on an ordinary Browse.
+
+    Coalescing: repeated meta/labels polls all land here until the rebuild
+    lands, so a job already in flight for this context short-circuits — one
+    rebuild per stale layout, not one per poll.  Best-effort throughout: a
+    missing projection or a labeling failure just leaves the map unlettered.
+    """
+    proj = ctx._projection
+    if proj is None or proj.projection_id != pyr.projection_id:
+        return
+
+    from vtscore.concurrency.async_jobs import signpost_relabel_jobs
+
+    job_id = ctx._relabel_job_id
+    if job_id:
+        existing = signpost_relabel_jobs.get(job_id)
+        if existing is not None and existing.status in ("running", "pending"):
+            return
+
+    def _run(job):
+        # Runs on the relabel runner's worker thread, which the JobManager has
+        # already bound to this dataset's context.  ``prep_signposts`` (inside
+        # the best-effort wrapper) re-fits the signs, caches them on
+        # ``ctx._region_labels``, and re-persists them under the active
+        # signature — overwriting the empty interim the serve path cached.
+        _prep_signposts_best_effort(ctx, proj, job, subset=False)
+
+    job = signpost_relabel_jobs.start(
+        (ctx.dataset_id, "relabel", proj.projection_id),
+        _run,
+        dataset_id=ctx.dataset_id,
+    )
+    ctx._relabel_job_id = job.job_id
 
 
 def _maybe_build_demo_signposts(proj, pyr, medias):
