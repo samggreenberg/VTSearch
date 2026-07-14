@@ -687,4 +687,53 @@ describe('DashboardComponent', () => {
       expect(setActive).toHaveBeenCalledWith('d1', 'm1');
     });
   });
+
+  describe('onCombineStarted → summary toast', () => {
+    it('reports unique kept vs. duplicates dropped once the combine settles', () => {
+      flushInitialRequests();
+
+      const success = vi.spyOn(component['toast'], 'success');
+      let onComplete: ((completed: any[]) => void) | undefined;
+      vi.spyOn(component['loadingTasksSvc'], 'startProgressPolling').mockImplementation(
+        (_taskId?: string, cb?: (completed: any[]) => void) => {
+          onComplete = cb;
+        },
+      );
+
+      component.onCombineStarted({ taskId: 'tc', numSources: 2, totalItems: 80 });
+      expect(onComplete).toBeTypeOf('function');
+      // No toast until the task settles.
+      expect(success).not.toHaveBeenCalled();
+
+      // Task done: it registered dataset "dc" with 50 unique items, so 30
+      // of the 80 source items were duplicates.
+      onComplete!([{ task_id: 'tc', status: 'idle', dataset_id: 'dc' } as any]);
+      httpMock
+        .expectOne('/api/datasets/registry')
+        .flush({ datasets: [{ id: 'dc', name: 'Combined', media_type: 'audio', num_items: 50 }] });
+
+      expect(success).toHaveBeenCalledWith({
+        message: 'Combined 2 datasets into 1 — 50 unique kept, 30 duplicates dropped',
+      });
+    });
+
+    it('skips the toast when the completed task has no dataset id', () => {
+      flushInitialRequests();
+
+      const success = vi.spyOn(component['toast'], 'success');
+      let onComplete: ((completed: any[]) => void) | undefined;
+      vi.spyOn(component['loadingTasksSvc'], 'startProgressPolling').mockImplementation(
+        (_taskId?: string, cb?: (completed: any[]) => void) => {
+          onComplete = cb;
+        },
+      );
+
+      component.onCombineStarted({ taskId: 'tc', numSources: 2, totalItems: 80 });
+      onComplete!([{ task_id: 'tc', status: 'idle' } as any]);
+
+      // No dataset id → no registry fetch and no toast.
+      httpMock.expectNone('/api/datasets/registry');
+      expect(success).not.toHaveBeenCalled();
+    });
+  });
 });

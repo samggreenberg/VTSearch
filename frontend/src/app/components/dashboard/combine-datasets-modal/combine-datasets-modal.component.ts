@@ -16,6 +16,19 @@ interface CombineRow {
   pkl_path: string;
 }
 
+/**
+ * Payload emitted when a combine kicks off. Carries the pre-dedup source
+ * counts alongside the task id so the dashboard can compute a post-combine
+ * summary toast ("N unique kept, M duplicates dropped") once the background
+ * task settles — the unique count is only knowable from the resulting
+ * dataset, but the duplicate count is `totalItems - uniqueKept`.
+ */
+export interface CombineStartedInfo {
+  taskId: string;
+  numSources: number;
+  totalItems: number;
+}
+
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-combine-datasets-modal',
@@ -32,7 +45,7 @@ export class CombineDatasetsModalComponent implements OnInit {
   @Input() datasets: DatasetRegistryEntry[] = [];
 
   readonly closed = output<void>();
-  readonly combineStarted = output<void>();
+  readonly combineStarted = output<CombineStartedInfo>();
 
   rows: CombineRow[] = [];
   // Signals: written from the media-types / combine subscribes (async, not a
@@ -115,10 +128,12 @@ export class CombineDatasetsModalComponent implements OnInit {
     this.error.set('');
     const paths = this.rows.map((r) => r.pkl_path);
     const name = (this.name || '').trim() || this.defaultName();
+    const numSources = this.rows.length;
+    const totalItems = this.totalItems;
     this.datasetsCrudApi.combineDatasets({ datasets: paths, name }).subscribe({
-      next: () => {
+      next: (res) => {
         this.submitting.set(false);
-        this.combineStarted.emit();
+        this.combineStarted.emit({ taskId: res.task_id, numSources, totalItems });
       },
       error: (err) => {
         this.submitting.set(false);
