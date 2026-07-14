@@ -479,12 +479,20 @@ class TestEmailLabelsetExporter:
         keys = {f.key for f in exp.fields}
         assert "to" in keys
 
-    def test_fields_are_from_and_to(self):
+    def test_fields_are_from_to_and_subject(self):
         from vtscore.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
         keys = {f.key for f in exp.fields}
-        assert keys == {"from", "to"}
+        assert keys == {"from", "to", "subject"}
+
+    def test_subject_field_is_optional_and_templated(self):
+        from vtscore.exporters import get_exporter
+
+        exp = get_exporter("email_smtp")
+        subject = next(f for f in exp.fields if f.key == "subject")
+        assert subject.required is False
+        assert "YYYYMMDD" in subject.template_vars
 
     def test_export_raises_on_missing_to(self):
         from vtscore.exporters import get_exporter
@@ -556,6 +564,55 @@ class TestEmailLabelsetExporter:
         assert recipients == ["you@example.com"]
         assert "message" in result
         assert "you@example.com" in result["message"]
+
+    def _mock_smtp(self):
+        mock_server = MagicMock()
+        mock_smtp_cls = MagicMock()
+        mock_smtp_cls.return_value.__enter__ = MagicMock(return_value=mock_server)
+        mock_smtp_cls.return_value.__exit__ = MagicMock(return_value=False)
+        return mock_server, mock_smtp_cls
+
+    def _sent_subject(self, mock_server):
+        _, _, raw_msg = mock_server.sendmail.call_args.args
+        import email
+
+        return email.message_from_string(raw_msg)["Subject"]
+
+    def test_custom_subject_is_used(self):
+        from vtscore.exporters import get_exporter
+
+        exp = get_exporter("email_smtp")
+        mock_server, mock_smtp_cls = self._mock_smtp()
+
+        with (
+            patch("vtscore.exporters.email_smtp._resolve_mx", return_value="mx.example.com"),
+            patch("vtscore.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls),
+        ):
+            exp.export(
+                SAMPLE_RESULTS,
+                {"from": "me@my-domain.example", "to": "you@example.com", "subject": "Nightly run 2026-07-14"},
+            )
+
+        assert self._sent_subject(mock_server) == "Nightly run 2026-07-14"
+
+    def test_blank_subject_falls_back_to_generated(self):
+        from vtscore.exporters import get_exporter
+
+        exp = get_exporter("email_smtp")
+        mock_server, mock_smtp_cls = self._mock_smtp()
+
+        with (
+            patch("vtscore.exporters.email_smtp._resolve_mx", return_value="mx.example.com"),
+            patch("vtscore.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls),
+        ):
+            exp.export(
+                SAMPLE_RESULTS,
+                {"from": "me@my-domain.example", "to": "you@example.com", "subject": ""},
+            )
+
+        subject = self._sent_subject(mock_server)
+        assert "Auto-Detect" in subject
+        assert "audio" in subject
 
     def test_plain_text_builder(self):
         from vtscore.exporters.email_smtp import _build_plain_text
@@ -723,6 +780,39 @@ class TestExportEndpoint:
         assert data["success"] is True
         assert "you@example.com" in data["message"]
         mock_server.sendmail.assert_called_once()
+
+    def test_email_exporter_substitutes_subject_template(self, client):
+        """A {template} var in the subject is resolved at route ingress."""
+        import re
+
+        mock_server = MagicMock()
+        mock_smtp_cls = MagicMock()
+        mock_smtp_cls.return_value.__enter__ = MagicMock(return_value=mock_server)
+        mock_smtp_cls.return_value.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("vtscore.exporters.email_smtp._resolve_mx", return_value="mx.example.com"),
+            patch("vtscore.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls),
+        ):
+            res = client.post(
+                "/api/exporters/export",
+                json={
+                    "exporter_name": "email_smtp",
+                    "field_values": {
+                        "from": "me@my-domain.example",
+                        "to": "you@example.com",
+                        "subject": "Run {YYYYMMDD}",
+                    },
+                    "results": SAMPLE_RESULTS,
+                },
+            )
+        assert res.status_code == 200
+        import email as _email
+
+        _, _, raw_msg = mock_server.sendmail.call_args.args
+        subject = _email.message_from_string(raw_msg)["Subject"]
+        assert "{YYYYMMDD}" not in subject
+        assert re.fullmatch(r"Run \d{8}", subject)
 
     def test_export_with_empty_results_dict(self, client):
         res = client.post(
