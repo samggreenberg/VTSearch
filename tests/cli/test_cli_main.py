@@ -667,7 +667,7 @@ class TestServerDispatch:
 
 class _FakeApp:
     def __init__(self):
-        self.ran = None
+        self.ran: dict = {}
 
     def run(self, **kwargs):
         self.ran = kwargs
