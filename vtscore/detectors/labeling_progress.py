@@ -73,6 +73,19 @@ _live_models: dict[tuple[frozenset[int], frozenset[int]], tuple[Any, float]] = {
 # call clear_progress_cache internally when the inclusion value changes.
 _progress_lock = threading.RLock()
 
+# Upper bound on the number of unlabeled items the per-step stability
+# forward pass evaluates.  ``/api/labeling-status`` (polled every 2 s during
+# labeling) advances this cache on the request thread, and the stability
+# pass runs a forward over *all* unlabeled media - O(dataset) per new vote.
+# Above this cap we score a deterministic seeded sample of the eligible pool
+# instead, holding the per-poll cost flat as datasets grow.  The "stable"
+# indicator keys off the flip *rate* (num_flips / num_unlabeled), for which a
+# fixed random sample is an unbiased estimator; sampling from the *full*
+# eligible pool (not the shrinking unlabeled set) keeps the monitored ids
+# stable across steps so the step-to-step flip comparison stays meaningful.
+# Mirrors ``_GMM_MAX_SAMPLES`` in ``vtscore.training.thresholds``.
+_STABILITY_MAX_SAMPLES = 50_000
+
 
 def clear_progress_cache() -> None:
     """Clear all cached progress data.
@@ -246,9 +259,19 @@ def _compute_step_stability(
     import torch  # noqa: PLC0415
 
     labeled_ids = _cache_good_ids | _cache_bad_ids
-    unlabeled_ids = [
-        cid for cid in all_media_ids if cid not in labeled_ids and media_embedding(clips_dict.get(cid, {})) is not None
-    ]
+    eligible = [cid for cid in all_media_ids if media_embedding(clips_dict.get(cid, {})) is not None]
+
+    # Bound the forward pass to a deterministic seeded sample of the eligible
+    # pool.  Sampling the full pool (rather than the per-step unlabeled set)
+    # keeps the monitored ids stable across steps, so the flip comparison
+    # against ``_cache_prev_predictions`` below stays over a consistent id set;
+    # the resulting flip *rate* is an unbiased estimate of the true rate.
+    if len(eligible) > _STABILITY_MAX_SAMPLES:
+        rng = np.random.default_rng(42)
+        monitored = set(rng.choice(np.asarray(eligible), size=_STABILITY_MAX_SAMPLES, replace=False).tolist())
+        unlabeled_ids = [cid for cid in eligible if cid not in labeled_ids and cid in monitored]
+    else:
+        unlabeled_ids = [cid for cid in eligible if cid not in labeled_ids]
 
     if not unlabeled_ids:
         return {"time_index": t, "num_labels": num_labels, "num_flips": 0, "num_unlabeled": 0}
