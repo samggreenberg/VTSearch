@@ -159,6 +159,7 @@
           @for (id of row; track trackById($index, id)) {
             <div
               class="bin-popup-entry"
+              [attr.data-entry-id]="id"
               [class.selected]="isSelected(id)"
               [class.focused]="isFocused(id)"
               role="button"
@@ -168,6 +169,7 @@
               [title]="name(id)"
               (click)="onEntryClick(id)"
               (keydown)="onEntryKeydown($event, id)"
+              (focus)="onEntryFocus(id)"
               (mouseenter)="onEntryEnter(id)">
               @if (hasThumbnailUrl(id)) {
                 <span class="bin-popup-thumb-wrap">
