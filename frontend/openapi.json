@@ -3533,6 +3533,9 @@
           "stable": {
             "$ref": "#/components/schemas/StatusIndicator"
           },
+          "stale": {
+            "type": "boolean"
+          },
           "total_count": {
             "type": "integer"
           }
@@ -12513,7 +12516,7 @@
     },
     "/api/labeling-status": {
       "get": {
-        "description": "Returns ``smart``, ``stable``, and ``span`` sub-objects, each with a\n``status`` field of ``\"red\"``, ``\"yellow\"``, or ``\"green\"``.",
+        "description": "Returns ``smart``, ``stable``, and ``span`` sub-objects, each with a\n``status`` field of ``\"red\"``, ``\"yellow\"``, or ``\"green\"``, plus a\n``stale`` flag.\n\nThe frontend polls this every 2 s during labeling.  When the per-step\ncache already covers the full ``label_history`` the status is computed\ninline (cheap: cached-model forward passes over the small labeled set).\nWhen the cache is *behind* - the common case on the first poll after a new\nvote, or after a polarity flip truncated the cache - advancing it would\nretrain one-or-more MLPs and score every unlabeled media, so we return the\nlast-computed snapshot immediately with ``stale = true`` and defer the\nadvancement to a background worker (issue #2397).",
         "operationId": "labeling_status_indicator",
         "responses": {
           "200": {

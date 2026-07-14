@@ -317,6 +317,15 @@ def reset_state():
     from vtscore.security.hf_auth import clear_credential as _clear_hf_credential
 
     _clear_hf_credential()
+
+    # Drain background jobs (joining any live worker) BEFORE clearing the
+    # progress cache: a labeling-status refresh from the previous test writes
+    # the status snapshot at the end of its run, so it must be stopped first or
+    # its late write would survive the clear and leak into this test.
+    from vtscore.concurrency.async_jobs import reset_all_async_jobs_for_tests
+
+    reset_all_async_jobs_for_tests()
+
     clear_progress_cache()
 
     from vtscore.embedding.helpers import clear_text_query_cache as _clear_query_cache
@@ -341,10 +350,6 @@ def reset_state():
     _eval_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
     _loading_tasks.reset_for_tests()
     _model_loading_tasks.reset_for_tests()
-
-    from vtscore.concurrency.async_jobs import reset_all_async_jobs_for_tests
-
-    reset_all_async_jobs_for_tests()
 
     # Cancel any debounced labelset-source push left over from the
     # previous test so its captured contexts don't fire after this

@@ -54,6 +54,14 @@ _cache_bad_ids: set[int] = set()
 _cache_prev_predictions: Optional[dict[int, int]] = None
 _cache_coverage_atlas: Any = None  # CoverageAtlas | None
 
+# Last fully-computed ``/api/labeling-status`` payload (minus the transient
+# ``stale`` flag).  ``compute_labeling_status`` refreshes it on every full
+# compute; the route returns it immediately to pollers while a background
+# worker advances the per-step cache, so the 2 s poll never blocks on an MLP
+# retrain (issue #2397).  Cleared alongside the cache so a stale detector's
+# status is never shown after a detector switch / vote clear.
+_status_snapshot: Optional[dict[str, Any]] = None
+
 # Live models injected by `train_and_score` during sorting.  Keyed by
 # ``(frozenset(good_ids), frozenset(bad_ids))`` so that ``_ensure_cache``
 # can look up the actual model that was used at each label step instead
@@ -72,7 +80,7 @@ def clear_progress_cache() -> None:
     Must be called whenever votes are cleared, medias change, or inclusion
     is altered so that stale models are not reused.
     """
-    global _cache_inclusion, _cache_prev_predictions, _cache_coverage_atlas
+    global _cache_inclusion, _cache_prev_predictions, _cache_coverage_atlas, _status_snapshot
     with _progress_lock:
         _cached_steps.clear()
         _cache_good_ids.clear()
@@ -81,6 +89,10 @@ def clear_progress_cache() -> None:
         _cache_inclusion = None
         _cache_coverage_atlas = None
         _live_models.clear()
+        # Drop the status snapshot too: it belonged to the just-cleared
+        # detector/labelset and would otherwise be served (stale) for the next
+        # one until its first background refresh lands.
+        _status_snapshot = None
 
 
 def invalidate_progress_cache_from(media_id: int) -> None:
@@ -709,6 +721,54 @@ def _compute_stable_status(
     }
 
 
+def _compute_span_status(span_info: Optional[dict[str, Any]]) -> dict[str, Any]:
+    """Compute the Span (diversity-coverage) red/yellow/green status.
+
+    Depends only on the coverage-atlas ``span_info`` passed in from the route
+    (``level`` = consecutive BFS-order seen nodes, ``depth`` = total nodes),
+    not on the per-step MLP cache, so it stays cheap and is reused verbatim by
+    the pending-status placeholder.
+    """
+    # The old metric required 4 full tree levels for green, which in a k=3
+    # tree is 1+3+9+27 = 40 nodes.  We preserve that scale: green at 40
+    # nodes (capped at total), yellow at 10, red below 10.
+    from vtscore.config import CoreConfig  # noqa: PLC0415
+
+    SPAN_GREEN = CoreConfig.from_settings().autopilot_goal_diversity
+    SPAN_YELLOW = 10
+    if span_info is None:
+        return {
+            "status": "red",
+            "reason": "Diversity tree not available.",
+            "level": 0,
+            "depth": 0,
+        }
+
+    level = span_info["level"]
+    tree_total = span_info["depth"]  # total nodes
+    green_at = min(SPAN_GREEN, tree_total)
+    yellow_at = min(SPAN_YELLOW, green_at)
+    if tree_total <= 0:
+        return {"status": "green", "reason": "Degenerate tree.", **span_info}
+    if level >= green_at:
+        return {
+            "status": "green",
+            "reason": "All tree nodes covered." if level >= tree_total else f"{level}/{tree_total} nodes covered.",
+            **span_info,
+        }
+    if level >= yellow_at:
+        return {
+            "status": "yellow",
+            "reason": f"{level}/{tree_total} nodes covered.",
+            **span_info,
+        }
+    return {
+        "status": "red",
+        "reason": "No tree coverage yet." if level == 0 else f"{level}/{tree_total} nodes covered.",
+        **span_info,
+    }
+
+
 def compute_labeling_status(
     clips_dict: dict[int, dict[str, Any]],
     label_history: list[tuple[int, str, float]],
@@ -722,7 +782,16 @@ def compute_labeling_status(
     Returns a dict with ``good_count``, ``bad_count``, ``total_count``, and
     three sub-dicts: ``smart``, ``stable``, and ``span``, each with a
     ``status`` field of ``"red"``, ``"yellow"``, or ``"green"``.
+
+    Advancing the per-step cache (``_ensure_cache``) can retrain MLPs and run a
+    forward pass over every unlabeled media, so this is the *heavy* path.  The
+    result is stashed in ``_status_snapshot`` so the ``/api/labeling-status``
+    route can serve it immediately (marked ``stale``) on subsequent polls while
+    a background worker calls this to advance the cache off the request thread
+    (issue #2397).
     """
+    global _status_snapshot
+
     good = len(current_good_votes)
     bad = len(current_bad_votes)
     total = good + bad
@@ -736,50 +805,9 @@ def compute_labeling_status(
         stable = _compute_stable_status(good, bad, total)
 
     # Span status from coverage atlas info (passed in from the route).
-    # ``level`` is the number of consecutive BFS-order seen nodes and
-    # ``depth`` is the total number of nodes (the maximum diversity level).
-    #
-    # The old metric required 4 full tree levels for green, which in a k=3
-    # tree is 1+3+9+27 = 40 nodes.  We preserve that scale: green at 40
-    # nodes (capped at total), yellow at 10, red below 10.
-    from vtscore.config import CoreConfig  # noqa: PLC0415
+    span = _compute_span_status(span_info)
 
-    SPAN_GREEN = CoreConfig.from_settings().autopilot_goal_diversity
-    SPAN_YELLOW = 10
-    if span_info is None:
-        span = {
-            "status": "red",
-            "reason": "Diversity tree not available.",
-            "level": 0,
-            "depth": 0,
-        }
-    else:
-        level = span_info["level"]
-        tree_total = span_info["depth"]  # total nodes
-        green_at = min(SPAN_GREEN, tree_total)
-        yellow_at = min(SPAN_YELLOW, green_at)
-        if tree_total <= 0:
-            span = {"status": "green", "reason": "Degenerate tree.", **span_info}
-        elif level >= green_at:
-            span = {
-                "status": "green",
-                "reason": "All tree nodes covered." if level >= tree_total else f"{level}/{tree_total} nodes covered.",
-                **span_info,
-            }
-        elif level >= yellow_at:
-            span = {
-                "status": "yellow",
-                "reason": f"{level}/{tree_total} nodes covered.",
-                **span_info,
-            }
-        else:
-            span = {
-                "status": "red",
-                "reason": "No tree coverage yet." if level == 0 else f"{level}/{tree_total} nodes covered.",
-                **span_info,
-            }
-
-    return {
+    result = {
         "good_count": good,
         "bad_count": bad,
         "total_count": total,
@@ -787,6 +815,72 @@ def compute_labeling_status(
         "stable": stable,
         "span": span,
     }
+    # Refresh the snapshot the poll route hands back while the cache is behind.
+    # Store a copy so a caller that mutates the returned dict (e.g. adding the
+    # ``stale`` flag) doesn't retroactively corrupt the snapshot.
+    with _progress_lock:
+        _status_snapshot = dict(result)
+    return result
+
+
+def is_status_cache_fresh(label_history: list[tuple[int, str, float]], inclusion_value: int) -> bool:
+    """Return ``True`` when the per-step cache already covers *label_history*.
+
+    A fresh cache means ``compute_labeling_status`` will not retrain any model,
+    so the route can compute the status inline instead of deferring to a
+    background worker.  A mismatched ``inclusion_value`` counts as not-fresh
+    because :func:`_ensure_cache` would rebuild the cache from scratch.
+    """
+    with _progress_lock:
+        if _cache_inclusion is not None and _cache_inclusion != inclusion_value:
+            return False
+        return len(_cached_steps) >= len(label_history)
+
+
+def _pending_labeling_status(
+    current_good_votes: dict[int, None],
+    current_bad_votes: dict[int, None],
+    span_info: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """Build a status from only the cheap fields (counts + Span).
+
+    The MLP-derived Smart / Stable indicators show a transient "computing"
+    state; :func:`stale_labeling_status` overlays the real ones from the last
+    snapshot when one exists.
+    """
+    good = len(current_good_votes)
+    bad = len(current_bad_votes)
+    computing = {"status": "yellow", "reason": "Computing indicators..."}
+    return {
+        "good_count": good,
+        "bad_count": bad,
+        "total_count": good + bad,
+        "smart": dict(computing),
+        "stable": dict(computing),
+        "span": _compute_span_status(span_info),
+    }
+
+
+def stale_labeling_status(
+    current_good_votes: dict[int, None],
+    current_bad_votes: dict[int, None],
+    span_info: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """Build the poll response served while a background cache refresh is pending.
+
+    Counts and the coverage-atlas Span status are recomputed live (both cheap),
+    so the panel's counters and diversity chip stay accurate the instant a vote
+    lands.  Only the expensive Smart / Stable indicators lag: they come from the
+    last ``compute_labeling_status`` snapshot, or - when none exists yet (first
+    poll after a detector switch / session start) - a transient "computing"
+    placeholder.  The caller stamps ``stale = True`` on the result.
+    """
+    status = _pending_labeling_status(current_good_votes, current_bad_votes, span_info)
+    with _progress_lock:
+        if _status_snapshot is not None:
+            status["smart"] = dict(_status_snapshot["smart"])
+            status["stable"] = dict(_status_snapshot["stable"])
+    return status
 
 
 def calculate_diversity_level_over_time(
