@@ -304,4 +304,40 @@ describe('AutopilotPanelComponent', () => {
     expect(steps[1].state).toBe('future');
     expect(steps[2].state).toBe('future');
   });
+
+  it('caps the good-phase target for display on a tiny dataset', () => {
+    component.datasetSize = 1;
+    component.goodVotes = new Set();
+    component.badVotes = new Set();
+    // Default target is 3, but a 1-item dataset can supply at most 1 good.
+    expect(component.effGoodTarget).toBe(1);
+  });
+
+  it('reaches the exhausted state and renders a note when a 1-item dataset is labeled', async () => {
+    component.datasetSize = 1;
+    component.goodVotes = new Set([1]);
+    component.badVotes = new Set();
+    component.ngOnChanges({
+      goodVotes: { currentValue: component.goodVotes, previousValue: new Set(), firstChange: false, isFirstChange: () => false },
+    });
+    expect(component.state.phase).toBe('exhausted');
+    expect(component.exhausted).toBe(true);
+    await settleZoneless(fixture);
+    const note = fixture.nativeElement.querySelector('.autopilot-exhausted');
+    expect(note).toBeTruthy();
+    expect(note.textContent).toContain('Nothing left to label');
+    // The five-step list is replaced by the terminal note.
+    expect(fixture.nativeElement.querySelectorAll('.ap-step').length).toBe(0);
+  });
+
+  it('does not exhaust while the dataset size is unknown (datasetSize 0)', () => {
+    component.datasetSize = 0;
+    component.goodVotes = new Set([1]);
+    component.badVotes = new Set();
+    component.ngOnChanges({
+      goodVotes: { currentValue: component.goodVotes, previousValue: new Set(), firstChange: false, isFirstChange: () => false },
+    });
+    // Unknown size → uncapped → 1 good is not enough, still in good phase.
+    expect(component.state.phase).toBe('good');
+  });
 });

@@ -93,6 +93,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly rightWidth = signal(300);
   readonly autopilotCollapsed = signal(false);
   readonly autopilotEnabled = signal(true);
+  /** True when autopilot has reached its terminal "exhausted" state — every
+   *  item in a tiny dataset is labeled but the indicators never went green.
+   *  Drives the center-pane "nothing left to label" message so the pane is
+   *  never left blank with a stale item stuck in the metadata strip. */
+  readonly autopilotExhausted = signal(false);
   progressModalMetric: ProgressMetric | null = null;
 
   // SortStateService / VoteStateService are now signal-backed (their value
@@ -303,6 +308,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(pairwise(), takeUntil(this.destroy$))
       .subscribe(([prev, curr]) => {
         if (prev.phase === curr.phase) return;
+        this.autopilotExhausted.set(curr.phase === 'exhausted');
         if (curr.phase === 'good') {
           this.sortState.setSelectMode('top');
           if (curr.retrainMode) {
@@ -1156,6 +1162,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // has already found enough greens (the panel's ngOnChanges may not have run yet).
     this.autopilotStateService.checkPhaseTransition(
       this.voteState.goodVotes.size, this.voteState.badVotes.size,
+      this.mediaState.mediasSignal().length,
     );
     const phase = this.autopilotStateService.state.phase;
     if (phase !== 'good') return;
