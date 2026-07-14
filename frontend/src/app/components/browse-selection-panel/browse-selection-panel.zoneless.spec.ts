@@ -7,6 +7,7 @@ import { BrowseSelectionService } from '../../services/browse-selection.service'
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { makeActiveContextStub } from '../../testing/mocks';
 import { settleZoneless } from '../../testing/settle-resource';
@@ -27,6 +28,11 @@ describe('BrowseSelectionPanelComponent (zoneless canary)', () => {
   let selection: BrowseSelectionService;
   let metaVersion: BehaviorSubject<number>;
   let names: Map<number, string>;
+  let playSpy: ReturnType<typeof vi.spyOn>;
+
+  // Mirrors the component's dwell constant; the waits below clear it with margin.
+  const DWELL_MS = 200;
+  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
   beforeEach(async () => {
     metaVersion = new BehaviorSubject<number>(0);
@@ -38,6 +44,11 @@ describe('BrowseSelectionPanelComponent (zoneless canary)', () => {
       get: ((id: number) =>
         names.has(id) ? { filename: names.get(id) } : undefined) as MediaMetadataCacheService['get'],
     };
+    // jsdom has no real media pipeline; keep play()/load() quiet so the audio
+    // hover path's audition kick-off doesn't spam "Not implemented".
+    playSpy = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
+
     const activeContextStub = makeActiveContextStub();
     const settingsStub: Partial<SettingsStateService> = {
       settingsSignal: signal(null) as SettingsStateService['settingsSignal'],
@@ -59,7 +70,10 @@ describe('BrowseSelectionPanelComponent (zoneless canary)', () => {
     fixture.componentRef.setInput('mediaType', 'audio');
   });
 
-  afterEach(() => fixture.destroy());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fixture.destroy();
+  });
 
   it('repaints the count + list when the selection signal bumps, no manual detectChanges', async () => {
     await settleZoneless(fixture);
@@ -114,5 +128,91 @@ describe('BrowseSelectionPanelComponent (zoneless canary)', () => {
     const copyBtn = entry.querySelector('.bsp-copy .copy-detail-btn') as HTMLButtonElement;
     expect(copyBtn).not.toBeNull();
     expect(copyBtn.getAttribute('title')).toBe('Copy name to clipboard');
+  });
+
+  // --- Hover-to-play audio (issue #2455) -------------------------------------
+  //
+  // Selection entries audition their clip on hover the same way the canvas
+  // hover-preview and bin-popup do: a dwell debounce arms on mouseenter, plays
+  // through a private (never-mounted) audio element, and emits to the shared
+  // top-left `nowPlaying` indicator; mouseleave stops it at once.
+
+  function firstEntry(): HTMLElement {
+    return fixture.nativeElement.querySelector('.bsp-entry') as HTMLElement;
+  }
+
+  it('auditions an audio entry only after the dwell elapses, emitting nowPlaying', async () => {
+    let emitted: NowPlaying | null | undefined;
+    fixture.componentInstance.nowPlaying.subscribe((e) => (emitted = e));
+    selection.addAll([7]);
+    await settleZoneless(fixture);
+
+    firstEntry().dispatchEvent(new MouseEvent('mouseenter'));
+    await settleZoneless(fixture);
+
+    // Before the dwell: nothing auditioning yet.
+    expect(playSpy).not.toHaveBeenCalled();
+    expect(emitted).toBeUndefined();
+
+    await wait(DWELL_MS + 60);
+    await settleZoneless(fixture);
+
+    // After the dwell: playback starts and `nowPlaying` carries the clip's
+    // waveform for the top-left indicator — flagged `loading` until it sounds.
+    expect(playSpy).toHaveBeenCalled();
+    expect(emitted).toEqual({ mediaId: 7, waveUrl: '/api/medias/7/thumbnail', loading: true });
+  });
+
+  it('stops the audition and emits nowPlaying(null) as soon as the cursor leaves', async () => {
+    let emitted: NowPlaying | null | undefined;
+    fixture.componentInstance.nowPlaying.subscribe((e) => (emitted = e));
+    selection.addAll([5]);
+    await settleZoneless(fixture);
+
+    firstEntry().dispatchEvent(new MouseEvent('mouseenter'));
+    await wait(DWELL_MS + 60);
+    await settleZoneless(fixture);
+    expect(emitted?.mediaId).toBe(5);
+
+    // No hover-bridge grace period: the clip stops the instant the entry is left.
+    firstEntry().dispatchEvent(new MouseEvent('mouseleave'));
+    await settleZoneless(fixture);
+    expect(emitted).toBeNull();
+  });
+
+  it('does not audition for non-audio datasets', async () => {
+    fixture.componentRef.setInput('mediaType', 'image');
+    selection.addAll([3]);
+    await settleZoneless(fixture);
+
+    firstEntry().dispatchEvent(new MouseEvent('mouseenter'));
+    await wait(DWELL_MS + 60);
+    await settleZoneless(fixture);
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it('silences a playing entry when it is clicked to remove', async () => {
+    let emitted: NowPlaying | null | undefined;
+    fixture.componentInstance.nowPlaying.subscribe((e) => (emitted = e));
+    selection.addAll([8, 9]);
+    await settleZoneless(fixture);
+
+    // Audition the top entry, then click it to drop it from selection.
+    const entry = firstEntry();
+    entry.dispatchEvent(new MouseEvent('mouseenter'));
+    await wait(DWELL_MS + 60);
+    await settleZoneless(fixture);
+    const playingId = emitted?.mediaId;
+    expect(playingId).not.toBeUndefined();
+
+    entry.dispatchEvent(new MouseEvent('click'));
+    await settleZoneless(fixture);
+
+    // Removal unmounts the entry (no mouseleave fires), so the click path must
+    // silence it directly: nowPlaying clears and that item is gone.
+    expect(emitted).toBeNull();
+    expect(selection.ids()).not.toContain(playingId);
+    expect(selection.ids().length).toBe(1);
   });
 });
