@@ -347,6 +347,47 @@ def get_region_matrix_for_snap(
     return list(sorted_ids), region_matrix, media_index, region_index
 
 
+def segmented_max_pool(
+    flat_scores: np.ndarray,
+    media_index_per_row: np.ndarray,
+    region_index_per_row: np.ndarray,
+    n_media: int,
+) -> tuple[list[float], list[int]]:
+    """Max-pool per-row scores down to one score + winning region per media.
+
+    Shared by the MLP scoring path (:func:`vtscore.detectors.training._score_all_media`)
+    and the region-aware cosine sort (:func:`vtscore.training.region_similarity.cosine_sort_with_boxes`),
+    both of which flatten every ``(media, region)`` pair into one ``(R,)`` score
+    vector (via :func:`get_region_matrix_for_snap`) and need to reduce it back to
+    one score + winning region index per media.
+
+    *media_index_per_row* is non-decreasing and contiguous (every media owns
+    a single run of rows), and every media has at least one row, so each
+    media's rows form one ``reduceat`` segment.  Returns ``(scores,
+    best_region)`` as plain Python lists, where ``best_region[m]`` is the
+    region index of the *first* row achieving media ``m``'s max - matching
+    the strict-``>`` "first wins" tie-break of the original scalar loop.
+
+    Fully vectorised so the scoring tail holds the GIL for microseconds
+    rather than iterating hundreds of thousands of rows in Python.
+    """
+    # Start of each media's contiguous run of rows.
+    seg_starts = np.searchsorted(media_index_per_row, np.arange(n_media))
+    seg_max = np.maximum.reduceat(flat_scores, seg_starts)
+
+    # First row per media that reaches its segment max (region 0 - the
+    # CLS/full-image node - is always row 0 of a segment, so an all-sentinel
+    # media resolves to region 0, exactly as the old -1.0-seeded loop did).
+    is_max = flat_scores >= seg_max[media_index_per_row]
+    cand_rows = np.flatnonzero(is_max)
+    cand_media = media_index_per_row[cand_rows]
+    first_cand = np.searchsorted(cand_media, np.arange(n_media))
+    winning_rows = cand_rows[first_cand]
+    best_region = region_index_per_row[winning_rows]
+
+    return seg_max.tolist(), best_region.tolist()
+
+
 def get_embedding_matrix_for_snap(
     snap: dict,
     embedder_name: str | None = None,
