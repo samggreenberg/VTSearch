@@ -484,6 +484,18 @@ export class NewDetectorModalComponent implements OnInit {
     return !!this.name().trim() && this.hasExample && !this.submitting();
   }
 
+  /** Title for the blank-tab Create button. When enabled, describes the
+   *  action; when disabled, names the specific blocker (missing example or
+   *  missing name) so the user knows what still needs filling in. */
+  get blankSubmitTitle(): string {
+    if (this.canSubmitBlank) return 'Create the detector with the example you provided';
+    if (!this.hasExample) {
+      return `Provide a text or ${this.exampleMediaTabLabel.toLowerCase()} example to create the detector`;
+    }
+    if (!this.name().trim()) return 'Enter a detector name to create the detector';
+    return 'Create the detector';
+  }
+
   get canSubmitTrained(): boolean {
     return (
       !!this.name().trim() &&

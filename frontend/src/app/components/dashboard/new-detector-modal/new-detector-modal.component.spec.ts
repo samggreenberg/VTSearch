@@ -98,6 +98,23 @@ describe('NewDetectorModalComponent', () => {
     expect(component.canSubmitBlank).toBe(true);
   });
 
+  it('should name the blocker in the Create button title when disabled', () => {
+    component.mediaType.set('image');
+    component.name.set('');
+    component.pendingText.set('');
+    component.mediaExamples.set([]);
+    // Missing example takes precedence in the hint.
+    expect(component.blankSubmitTitle).toContain('Provide a text or image example');
+
+    // With an example but no name, the blocker becomes the name.
+    component.pendingText.set('query');
+    expect(component.blankSubmitTitle).toContain('Enter a detector name');
+
+    // Fully ready → success-oriented title.
+    component.name.set('Test');
+    expect(component.blankSubmitTitle).toContain('Create the detector with the example');
+  });
+
   it('should default the example tab to text', () => {
     expect(component.exampleTab()).toBe('text');
   });
