@@ -275,13 +275,13 @@ class TestPartialBatchSkips:
 
         imp = _Imp()
         spec = SourceSpec(source_type="image", converter=None, params={})
-        stream = iter(
-            [
-                (spec, None),
-                (spec, {"filename": "kept.png", "media_bytes": b"K"}),
-                (spec, None),
-            ]
-        )
+        # A partial batch: two failed fetches (None) around one survivor.
+        pairs: list[tuple[SourceSpec, Any]] = [
+            (spec, None),
+            (spec, {"filename": "kept.png", "media_bytes": b"K"}),
+            (spec, None),
+        ]
+        stream = iter(pairs)
         medias: dict = {}
         next_id = imp._ingest_spec_stream(stream, medias, {"importer": "x", "params": {}}, 1)
 
