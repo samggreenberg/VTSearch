@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { DetectorCardComponent } from './detector-card.component';
+import { DashboardLoadingTasksService } from '../../../services/dashboard-loading-tasks.service';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 
@@ -17,10 +18,21 @@ describe('DetectorCardComponent', () => {
     loaded: true,
   };
 
+  // Stub the loading-tasks service so the card doesn't drag in the real
+  // SSE/HTTP DI chain; the card only reads `isCancelling` for the badge.
+  let cancellingIds: Set<string>;
+
   beforeEach(async () => {
+    cancellingIds = new Set<string>();
     await TestBed.configureTestingModule({
       imports: [DetectorCardComponent],
-      providers: [...provideZoneless()],
+      providers: [
+        ...provideZoneless(),
+        {
+          provide: DashboardLoadingTasksService,
+          useValue: { isCancelling: (id: string) => cancellingIds.has(id) },
+        },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DetectorCardComponent);
@@ -51,6 +63,17 @@ describe('DetectorCardComponent', () => {
   it('should display training count', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.textContent).toContain('50');
+    expect(el.querySelector('.empty-hint')).toBeNull();
+  });
+
+  it('should show an "Empty" hint instead of 0 on a zero-training detector', async () => {
+    fixture.componentRef.setInput('detector', { ...mockDetector, num_training: 0, last_trained_at: null });
+    await settleZoneless(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const hint = el.querySelector('.empty-hint');
+    expect(hint).toBeTruthy();
+    expect(hint?.textContent?.trim()).toBe('Empty');
+    expect(component.isUntrained).toBe(true);
   });
 
   it('should enter rename mode on rename button click', async () => {
@@ -138,5 +161,22 @@ describe('DetectorCardComponent', () => {
     fixture.componentRef.setInput('selected', true);
     await settleZoneless(fixture);
     expect(fixture.nativeElement.classList.contains('selected')).toBe(true);
+  });
+
+  it('shows a disabled "Cancelling…" badge on the loading row once its task is cancelling', async () => {
+    const task = { task_id: 'det-1', status: 'running', current: 0, total: 0 };
+    fixture.componentRef.setInput('loadingTask', task);
+    await settleZoneless(fixture);
+    let btn = (fixture.nativeElement as HTMLElement).querySelector('.jp__cancel') as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+    expect(btn.textContent?.trim()).toBe('Cancel');
+
+    cancellingIds.add('det-1');
+    fixture.componentRef.setInput('loadingTask', { ...task });
+    await settleZoneless(fixture);
+
+    btn = (fixture.nativeElement as HTMLElement).querySelector('.jp__cancel') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(btn.textContent?.trim()).toBe('Cancelling…');
   });
 });

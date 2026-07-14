@@ -621,6 +621,25 @@ class MediaEmbedder(ABC):
         return self.name
 
     @property
+    def model_id(self) -> Optional[str]:
+        """Concrete identifier of the pretrained model this embedder loads.
+
+        Usually the HuggingFace Hub repo id of the checkpoint (e.g.
+        ``"google/siglip-base-patch16-224"``).  Unlike :attr:`name` (a VTSearch
+        slug) and :attr:`display_name` (a friendly label), this is the *exact*
+        model a third party would download to reproduce the embedding space, so
+        the portable-detector export surfaces it in the bundle manifest/README to
+        make the bundle fully actionable.
+
+        A direct weights URL is acceptable where there is no plain repo id (e.g.
+        EUPE, loaded from a ``.pt`` URL via ``torch.hub``).  ``None`` (the
+        default) means the embedder has no single downloadable model id worth
+        surfacing — the classical SIFT/VLAD structural embedder, or FaceNet whose
+        weights ship inside ``facenet-pytorch``.
+        """
+        return None
+
+    @property
     @abstractmethod
     def media_type_id(self) -> str:
         """The ``type_id`` of the media type this embedder works with."""
@@ -1029,6 +1048,7 @@ class MediaEmbedder(ABC):
         return {
             "name": self.name,
             "display_name": self.display_name,
+            "model_id": self.model_id,
             "media_type_id": self.media_type_id,
             "is_default": self.is_default,
             "supports_text": self.supports_text,

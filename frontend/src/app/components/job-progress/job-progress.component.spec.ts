@@ -63,6 +63,37 @@ describe('JobProgressComponent', () => {
     expect(stop).toHaveBeenCalled();
   });
 
+  it('swaps the Cancel button for a disabled "Cancelling…" badge and detail when cancelling', async () => {
+    const el = fixture.nativeElement as HTMLElement;
+    fixture.componentRef.setInput('detail', '012/345 FileABC.img');
+    await settleZoneless(fixture);
+    // Before: live, enabled Cancel button.
+    let btn = el.querySelector('.jp__cancel') as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+    expect(btn.textContent?.trim()).toBe('Cancel');
+    expect(el.querySelector('.jp__detail')?.textContent?.trim()).toBe('012/345 FileABC.img');
+
+    fixture.componentRef.setInput('cancelling', true);
+    await settleZoneless(fixture);
+
+    // After: disabled acknowledgement badge, and the detail reads "Cancelling…".
+    btn = el.querySelector('.jp__cancel') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(btn.textContent?.trim()).toBe('Cancelling…');
+    expect(el.querySelector('.jp__detail')?.textContent?.trim()).toBe('Cancelling…');
+  });
+
+  it('does not emit cancel while cancelling (badge has no click handler)', async () => {
+    const emit = vi.spyOn(component.cancel, 'emit');
+    fixture.componentRef.setInput('cancelling', true);
+    await settleZoneless(fixture);
+    const btn = (fixture.nativeElement as HTMLElement).querySelector(
+      '.jp__cancel',
+    ) as HTMLButtonElement;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(emit).not.toHaveBeenCalled();
+  });
+
   it('adds the cell host class in table-cell mode', async () => {
     expect((fixture.nativeElement as HTMLElement).classList.contains('jp-host--cell')).toBe(false);
     fixture.componentRef.setInput('cell', true);

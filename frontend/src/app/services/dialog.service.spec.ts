@@ -46,6 +46,21 @@ describe('VtDialogService', () => {
     expect(result).toBeNull();
   });
 
+  it('confirmDestructiveWithEscape exposes Cancel, escape, and action buttons', async () => {
+    const promise = service.confirmDestructiveWithEscape('Reset?', 'Cannot be undone.', 'Reset', 'Export first…');
+    const labels = service.dialogButtons().map((b) => b.label);
+    expect(labels).toEqual(['Cancel', 'Export first…', 'Reset']);
+    // Cancel is the first non-primary button, so backdrop/Escape dismissal resolves 'cancel'.
+    service.cancel();
+    expect(await promise).toBe('cancel');
+  });
+
+  it('confirmDestructiveWithEscape resolves escape when the escape hatch is chosen', async () => {
+    const promise = service.confirmDestructiveWithEscape('Reset?', 'Cannot be undone.', 'Reset', 'Export first…');
+    service.resolve('escape');
+    expect(await promise).toBe('escape');
+  });
+
   it('getIconType should return correct icon type', () => {
     service.dialogType.set('warning');
     expect(service.getIconType()).toBe('warning');

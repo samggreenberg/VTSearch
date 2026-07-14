@@ -104,6 +104,7 @@
                       [bar]="taskBar(task)"
                       [smooth]="true"
                       cancelTitle="Cancel this dataset load"
+                      [cancelling]="loadingTasksSvc.isCancelling(task.task_id)"
                       (cancel)="loadingTasksSvc.cancelLoadingTask(task.task_id)"
                     />
                   }
@@ -299,7 +300,7 @@
   <vt-combine-datasets-modal
     [datasets]="modals.combineDatasets.datasets"
     (closed)="modals.closeCombineDatasets()"
-    (combineStarted)="onCombineStarted()"
+    (combineStarted)="onCombineStarted($event)"
   />
 }
 

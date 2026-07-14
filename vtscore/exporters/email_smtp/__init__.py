@@ -86,6 +86,13 @@ def _build_html(results: dict[str, Any]) -> str:
     )
 
 
+def _default_subject(results: dict[str, Any]) -> str:
+    """Auto-generated subject used when the user leaves the field blank."""
+    media_type = results.get("media_type", "unknown")
+    total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
+    return f"VTSearch Auto-Detect: {total_hits} hit(s) on {media_type} dataset"
+
+
 def _resolve_mx(domain: str) -> str:
     """Return the highest-priority MX host for *domain*."""
     import dns.resolver  # lazy import – dnspython is optional
@@ -124,6 +131,18 @@ class EmailLabelsetExporter(LabelsetExporter):
             description="The email address to send the results to.",
             placeholder="recipient@example.com",
         ),
+        PluginField(
+            key="subject",
+            label="Subject",
+            field_type="text",
+            required=False,
+            description="Subject line for the email. Leave blank for an auto-generated summary.",
+            hint=(
+                "Template variables: {YYYYMMDD-HHMMSS}, {YYYYMMDD}, {YYYY}, {MM}, {DD}, {detector_name}, {username}."
+            ),
+            placeholder="VTSearch Auto-Detect Results {YYYYMMDD}",
+            template_vars=("YYYYMMDD-HHMMSS", "YYYYMMDD", "YYYY", "MM", "DD", "detector_name", "username"),
+        ),
     ]
 
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
@@ -138,9 +157,11 @@ class EmailLabelsetExporter(LabelsetExporter):
         domain = to_addr.rsplit("@", 1)[1]
         mx_host = _resolve_mx(domain)
 
-        media_type = results.get("media_type", "unknown")
         total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
-        subject = f"VTSearch Auto-Detect: {total_hits} hit(s) on {media_type} dataset"
+        # The framework substitutes any {template} vars into ``subject`` at
+        # ingress (see vtscore.plugins.normalize); a blank field falls back to
+        # the auto-generated summary so existing behaviour is preserved.
+        subject = field_values.get("subject") or _default_subject(results)
 
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject

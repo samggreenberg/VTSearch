@@ -90,6 +90,10 @@ class VideoLanguageBindEmbedder(MediaEmbedder):
         return "LanguageBind (video)"
 
     @property
+    def model_id(self) -> str:
+        return LANGUAGEBIND_VIDEO_MODEL_ID
+
+    @property
     def media_type_id(self) -> str:
         return "video"
 

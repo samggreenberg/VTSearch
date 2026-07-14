@@ -9,6 +9,7 @@ from votes, caching on ``DetectorContext``) lives in
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 import numpy as np
@@ -101,19 +102,26 @@ def _calibration_cache_key(
     function of these inputs (RNG seeded with 42 at every cached call site)
     and are **inclusion-independent** - ``inclusion`` is deliberately *not* in
     the key, so an Inclusion change hits the cache and only re-runs the cheap
-    min-cost search.  The key encodes the raw training vectors (not just label
-    IDs) so a labelset re-resolved to different embeddings - e.g. after the
-    embedder changes - invalidates the cache automatically.  See
+    min-cost search.  The key encodes a hash of the raw training vectors (not
+    just label IDs) so a labelset re-resolved to different embeddings - e.g.
+    after the embedder changes - invalidates the cache automatically.  See
     docs/plans/find-verification-workflow.md.
     """
-    X_bytes = np.stack(X_list).astype(np.float32, copy=False).tobytes()
-    y_bytes = np.asarray(y_list, dtype=np.float32).tobytes()
+    # Hash the raw training vectors rather than embedding them in the key.
+    # The full ``(N_labels x D x 4)``-byte string reaches ~150 MB at 100k
+    # labels and would live in the calibration cache until the next call
+    # invalidates it. blake2b (fast, 128-bit digest) keeps the key tiny while
+    # still changing whenever the labelset re-resolves to different embeddings
+    # (e.g. after the embedder changes); the cache is already invalidated by any
+    # vote change, so the hash is purely for collision resistance.
+    X_hash = hashlib.blake2b(np.stack(X_list).astype(np.float32, copy=False).tobytes()).digest()
+    y_hash = hashlib.blake2b(np.asarray(y_list, dtype=np.float32).tobytes()).digest()
     # Bag membership changes the fold split and per-group max-pool, so a change
     # in grouping must invalidate the cached orderings even when X/y are equal.
     groups_key = tuple(str(g) for g in groups) if groups is not None else None
     return (
-        X_bytes,
-        y_bytes,
+        X_hash,
+        y_hash,
         int(calibrate_count),
         float(calibration_fraction),
         int(hidden_dim),

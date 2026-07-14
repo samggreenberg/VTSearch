@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { DatasetCardComponent } from './dataset-card.component';
+import { DashboardLoadingTasksService } from '../../../services/dashboard-loading-tasks.service';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 
@@ -17,10 +18,21 @@ describe('DatasetCardComponent', () => {
     loaded: true,
   };
 
+  // Stub the loading-tasks service so the card doesn't drag in the real
+  // SSE/HTTP DI chain; the card only reads `isCancelling` for the badge.
+  let cancellingIds: Set<string>;
+
   beforeEach(async () => {
+    cancellingIds = new Set<string>();
     await TestBed.configureTestingModule({
       imports: [DatasetCardComponent],
-      providers: [...provideZoneless()],
+      providers: [
+        ...provideZoneless(),
+        {
+          provide: DashboardLoadingTasksService,
+          useValue: { isCancelling: (id: string) => cancellingIds.has(id) },
+        },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DatasetCardComponent);
@@ -162,5 +174,25 @@ describe('DatasetCardComponent', () => {
     fixture.componentRef.setInput('selected', true);
     await settleZoneless(fixture);
     expect(fixture.nativeElement.classList.contains('selected')).toBe(true);
+  });
+
+  it('shows a disabled "Cancelling…" badge on the loading row once its task is cancelling', async () => {
+    const task = { task_id: 'load-1', status: 'running', current: 0, total: 0 };
+    fixture.componentRef.setInput('loadingTask', task);
+    await settleZoneless(fixture);
+    // Before cancel: a live Cancel button.
+    let btn = (fixture.nativeElement as HTMLElement).querySelector('.jp__cancel') as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+    expect(btn.textContent?.trim()).toBe('Cancel');
+
+    // The service now reports this task as cancelling; re-flow the input so
+    // the getter re-reads the stub.
+    cancellingIds.add('load-1');
+    fixture.componentRef.setInput('loadingTask', { ...task });
+    await settleZoneless(fixture);
+
+    btn = (fixture.nativeElement as HTMLElement).querySelector('.jp__cancel') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(btn.textContent?.trim()).toBe('Cancelling…');
   });
 });

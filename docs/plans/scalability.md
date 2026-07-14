@@ -29,9 +29,7 @@ deferred. Items are independently shippable.
 
 ## Suggested work order (open items, max-leverage first)
 
-1. **S5** (hash the threshold cache key); trivial, eliminates a fat cache key
-   before it becomes a memory landmine.
-2. **S14** (incremental secondary indexes on `DatasetContext`); removes per-request
+1. **S14** (incremental secondary indexes on `DatasetContext`); removes per-request
    O(N) dict rebuilds; medium refactor.
 3. **S1** (mmap embedding matrix); unblocks 1 M+ datasets without OOM. Also
    decouples embeddings from the pickle, which unblocks S15.
@@ -194,12 +192,6 @@ media-reading call site.
 
 ---
 
-### S5: threshold cache key contains full training vectors as bytes
-
-- [ ] #2406 — Hash the threshold cache key instead of storing raw training vectors (fix sketch in the issue)
-
----
-
 ## CPU / time
 
 ### S6: epoch counter for embedding-matrix invalidation — ⏸ GATED (partly shipped)
@@ -294,12 +286,6 @@ debounced (accumulate votes ~2 s, flush once). Long-term, an **append-only
 journal** (one `{id, label}` line per vote) makes the per-vote write O(1)
 regardless of labelset size; a compaction step on load reconstructs the full
 labelset. (Journal deferred until compaction semantics are defined.)
-
----
-
-### S13: label export — full JSON in memory (GUI route)
-
-- [ ] #2407 — Stream the GUI label-export route (fix sketch in the issue; CLI side already streams)
 
 ---
 
@@ -417,7 +403,6 @@ embedder. Shares the S11 approach.
 | **No streaming** for large JSON / pickle payloads | S3, S13, S15 |
 | **Serial I/O** where parallelism is easy | S11, S20 |
 | **No debouncing** on high-frequency write paths | S12 |
-| **Oversized cache keys** containing raw vectors | S5 |
 | **Per-request rebuild** of secondary lookups | S14 |
 
 ---

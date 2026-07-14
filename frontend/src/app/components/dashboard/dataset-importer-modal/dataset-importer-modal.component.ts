@@ -15,6 +15,7 @@ import { DatasetsListingsApiService } from '../../../services/datasets-listings-
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { EmbedderInfo, ImporterInfo, ImporterPickerTab, MediaTypeInfo } from '../../../models/api.models';
 import { DemoDatasetEntry } from '../../../generated/api-client/models/demo-dataset-entry';
+import { toTypeId } from './pickers/shared/media-type.util';
 
 /** Add Dataset modal.  Owns the importer registry, category/importer
  *  tab selection, and the shared media-type registry + Advanced-block
@@ -171,7 +172,36 @@ export class DatasetImporterModalComponent implements OnInit {
         result.push(imp);
       }
     }
-    return result;
+    return result.filter((imp) => this.importerAllowedUnderSolo(imp));
+  }
+
+  /** The set of media ``type_id``s an importer can produce, or ``null``
+   *  when it is media-type agnostic (has no fixed ``media_type`` option
+   *  list - e.g. the folder/file importers, whose type the user picks, or
+   *  the demo importer, which filters its own table).  Options are
+   *  normalised through the media-type registry so an importer that
+   *  declares folder names (``"images"``) and one that declares type_ids
+   *  (``"image"``) both resolve to the canonical id. */
+  private supportedTypeIds(importer: ImporterInfo): Set<string> | null {
+    const field = importer.fields?.find((f) => f.key === 'media_type');
+    const options = field?.options || [];
+    if (!field || options.length === 0) return null;
+    const types = new Set<string>();
+    for (const opt of options) types.add(toTypeId(this.mediaTypes(), opt));
+    return types;
+  }
+
+  /** Whether an importer is offered under the active solo media type.
+   *  With no solo lock every importer is offered; otherwise agnostic
+   *  importers stay (they preselect the solo type) and type-scoped ones
+   *  are hidden unless their option set includes the locked type, so the
+   *  picker never presents an importer that can't produce the one type
+   *  the user is streamlined to. */
+  private importerAllowedUnderSolo(importer: ImporterInfo): boolean {
+    const solo = this.effectiveSoloMediaType;
+    if (!solo) return true;
+    const supported = this.supportedTypeIds(importer);
+    return supported === null || supported.has(solo);
   }
 
   /** Title-case an importer category id when no backend declaration exists.
@@ -196,13 +226,20 @@ export class DatasetImporterModalComponent implements OnInit {
     const declared = [...this.declaredTabs()].sort(
       (a, b) => (a.order ?? 100) - (b.order ?? 100),
     );
-    for (const tab of declared) {
-      visible.push(tab);
-      seen.add(tab.id);
-    }
     const usedCategories = new Set(
       this.orderedImporters.map((imp) => imp.category || '').filter(Boolean),
     );
+    const solo = this.effectiveSoloMediaType;
+    for (const tab of declared) {
+      // Declared tabs normally render even when empty (so categories like
+      // "Services" stay visible before any extension importer is installed).
+      // Under a solo lock that would surface a category with no importer
+      // able to produce the locked type, which is exactly the confusion this
+      // streamlining removes - so drop empty tabs while solo is active.
+      if (solo && !usedCategories.has(tab.id)) continue;
+      visible.push(tab);
+      seen.add(tab.id);
+    }
     for (const id of usedCategories) {
       if (!seen.has(id)) {
         visible.push({ id, label: this.fallbackTabLabel(id) });

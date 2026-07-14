@@ -76,22 +76,33 @@
         role="button"
         tabindex="0"
         [attr.aria-label]="'Selected: ' + entry.name + ' (click to remove)'"
-        title="Click to remove from selection"
+        [title]="entry.name + ' — click to remove from selection'"
         (click)="onEntryClick(entry.id)"
         (keydown)="onEntryKeydown($event, entry.id)">
         @if (hasThumbnailUrl(entry.id)) {
           <span class="bsp-thumb-wrap">
-            <img
-              class="bsp-thumb"
-              [src]="thumbnailUrl(entry.id)"
-              [alt]="entry.name"
-              loading="lazy"
-              (error)="onThumbnailError(thumbnailUrl(entry.id))" />
+            @if (isAudioThumbnail(entry.id)) {
+              <!-- Audio waveform alpha mask tinted to the accent (issue #2369). -->
+              <span
+                class="bsp-thumb-wave waveform-mask"
+                [style.-webkit-mask-image]="'url(' + thumbnailUrl(entry.id) + ')'"
+                [style.mask-image]="'url(' + thumbnailUrl(entry.id) + ')'"></span>
+            } @else {
+              <img
+                class="bsp-thumb"
+                [src]="thumbnailUrl(entry.id)"
+                [alt]="entry.name"
+                loading="lazy"
+                (error)="onThumbnailError(thumbnailUrl(entry.id))" />
+            }
           </span>
         } @else if (placeholderIcon(entry.id)) {
           <span class="bsp-placeholder">{{ placeholderIcon(entry.id) }}</span>
         }
-        <span class="bsp-name-grid">{{ entry.name }}</span>
+        <span class="bsp-name-row">
+          <span class="bsp-name-grid">{{ entry.name }}</span>
+          <vt-copy-detail-button class="bsp-copy" [value]="entry.name" label="name" />
+        </span>
       </div>
     }
   </div>

@@ -9,6 +9,7 @@ import { SettingsStateService } from '../../services/settings-state.service';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
 import { NoFocusStealDirective } from '../../directives/no-focus-steal.directive';
 import { IconComponent } from '../icon/icon.component';
+import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 
 /** Ordering for the selected-item list. No detector confidence in browse, so
@@ -40,7 +41,7 @@ interface SelectionEntry {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-selection-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule, ViewControlsComponent, NoFocusStealDirective, IconComponent],
+  imports: [CommonModule, FormsModule, ViewControlsComponent, NoFocusStealDirective, IconComponent, CopyDetailButtonComponent],
   templateUrl: './browse-selection-panel.component.html',
   styleUrl: './browse-selection-panel.component.scss',
 })
@@ -243,6 +244,12 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
 
   thumbnailUrl(id: number): string {
     return this.activeContext.mediaUrl(`/api/medias/${id}/thumbnail`);
+  }
+
+  /** True when this item's thumbnail is an audio waveform — a theme-agnostic
+   *  alpha-mask PNG (issue #2369) tinted via a CSS mask, not a plain <img>. */
+  isAudioThumbnail(id: number): boolean {
+    return this.metadataCache.get(id)?.media_type === 'audio';
   }
 
   onThumbnailError(url: string): void {

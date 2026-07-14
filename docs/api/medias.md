@@ -471,7 +471,13 @@ POST /api/textsort-suggestions
 GET /api/labels/export
 ```
 
-**Query:** `?goods_only=1` (optional): export only good labels.
+**Query:**
+- `?goods_only=1` (optional): export only good labels.
+- `?format=ndjson` (optional): stream the response as newline-delimited JSON
+  (`application/x-ndjson`), one label entry per line, instead of the buffered
+  `{"labels": [...]}` object. Use for large exports that shouldn't be
+  materialised in memory server-side. The top-level `available_columns` list
+  (see `enrich`) is omitted in this mode.
 
 → LabelSet JSON with per-element origin and MD5 info:
 

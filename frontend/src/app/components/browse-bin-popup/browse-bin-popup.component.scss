@@ -258,6 +258,17 @@
   display: block;
 }
 
+// Audio waveform in the preview pane (issue #2369): the pane already paints the
+// themed surface, so this just masks the accent to the wave, contain-fit to
+// mirror ``.bin-popup-preview-img``'s ``object-fit: contain``. No ``background``
+// — the shared ``.waveform-mask`` accent must win.
+.bin-popup-preview-wave {
+  width: 100%;
+  height: 100%;
+  mask-size: contain;
+  -webkit-mask-size: contain;
+}
+
 // The grid column: a fixed-width stack of the member-count label above the
 // scrolling thumbnail grid, so the popup hugs it plus the preview pane. The
 // count sits at the column's top-left; the grid fills the remaining height.
@@ -401,6 +412,21 @@
   height: var(--popup-cell, 28px);
   border-radius: var(--radius-sm);
   flex-shrink: 0;
+  // Themed surface behind the thumbnail: hidden under a cover-fit <img>, and the
+  // backdrop the tinted audio waveform (issue #2369) sits on.
+  background: var(--bg-body);
+  overflow: hidden;
+}
+
+// Audio waveform in the grid: the shared ``.waveform-mask`` supplies the accent
+// fill and mask chrome; here we cover-fit it (matching the <img> it replaces).
+// No ``background`` — that would out-specify the shared accent and blank the wave.
+.bin-popup-thumb-wave {
+  width: 100%;
+  height: 100%;
+  mask-size: cover;
+  -webkit-mask-size: cover;
+  border-radius: var(--radius-sm);
 }
 
 .bin-popup-thumb {

@@ -206,6 +206,20 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     return '';
   }
 
+  /** Always-present help for the solo-mediaType select, spelling out
+   *  exactly what the lock constrains (so it isn't a mystery toggle), plus
+   *  the CLI-fallback note when one applies. */
+  get soloMediaTypeHint(): string {
+    const base =
+      'Streamlines the whole app to one media type. The Add Dataset picker ' +
+      'hides importers and tabs that can’t produce it and preselects it ' +
+      'on the ones that can; the New Detector media picker and the Import ' +
+      'Defaults tab collapse to just this type; and converters that output ' +
+      'other types are filtered out. Pick "Show everything" to turn it off.';
+    const note = this.soloMediaTypeNote;
+    return note ? `${base} ${note}` : base;
+  }
+
   onSoloMediaTypeChange(value: string): void {
     // Empty string = "Show everything"; the backend stores it as null
     // and still flips the explicit flag so the choice survives a CLI
@@ -559,12 +573,19 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   }
 
   async resetDefaults(): Promise<void> {
-    const ok = await this.dialog.confirmDestructive(
+    const choice = await this.dialog.confirmDestructiveWithEscape(
       'Reset all settings to factory defaults?',
       'Your current preferences (appearance, view modes, autopilot, sorting, and other per-user settings) will be overwritten and cannot be recovered.',
       'Reset',
+      'Export first…',
     );
-    if (!ok) return;
+    if (choice === 'cancel') return;
+    if (choice === 'escape') {
+      // Escape hatch: let the user save their current config before resetting.
+      // Reset is abandoned; they can re-initiate it after exporting.
+      this.openExporter();
+      return;
+    }
     this.settingsApi
       .getDefaults()
       .pipe(takeUntil(this.destroy$))

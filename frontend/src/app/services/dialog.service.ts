@@ -75,6 +75,34 @@ export class VtDialogService {
     }) as Promise<boolean>;
   }
 
+  /**
+   * Like {@link confirmDestructive}, but inserts a middle "escape hatch"
+   * button (e.g. "Export first…") between Cancel and the destructive action,
+   * so the user can save their state before committing. Resolves:
+   *   'confirm' — the destructive action was chosen
+   *   'escape'  — the escape-hatch action was chosen
+   *   'cancel'  — Cancel, Escape key, or backdrop dismissal
+   * Cancel stays the first non-primary button so backdrop/Escape dismissal
+   * (which resolves the first non-primary value) still reads as 'cancel'.
+   */
+  confirmDestructiveWithEscape(
+    question: string,
+    detail: string,
+    actionLabel: string,
+    escapeLabel: string,
+  ): Promise<'confirm' | 'escape' | 'cancel'> {
+    return this.show({
+      message: `${question} ${detail}`,
+      type: 'warning',
+      showInput: false,
+      buttons: [
+        { label: 'Cancel', primary: false, value: 'cancel' },
+        { label: escapeLabel, primary: false, value: 'escape' },
+        { label: actionLabel, primary: true, value: 'confirm' },
+      ],
+    }) as Promise<'confirm' | 'escape' | 'cancel'>;
+  }
+
   prompt(message: string, defaultValue = '', type: DialogType = 'info'): Promise<string | null> {
     return this.show({
       message,

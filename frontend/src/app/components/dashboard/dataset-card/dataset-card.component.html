@@ -49,6 +49,7 @@
       [bar]="taskBar"
       [smooth]="true"
       [cancelTitle]="taskKind() === 'projection' ? 'Cancel building the map' : 'Cancel this dataset load'"
+      [cancelling]="taskCancelling"
       (cancel)="onCancelTask()"
     />
   </td>

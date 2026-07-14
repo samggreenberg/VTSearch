@@ -80,6 +80,26 @@ describe('MediaItemComponent', () => {
     expect(component.thumbnailUrl).toBe('/api/medias/1/thumbnail');
   });
 
+  it('tints the audio waveform via a CSS mask, not a plain <img> (issue #2369)', async () => {
+    // Default mockMedia is audio.
+    await settleZoneless(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    expect(component.isAudioThumbnail).toBe(true);
+    expect(el.querySelector('img.media-thumbnail')).toBeNull();
+    const wave = el.querySelector('.media-thumbnail-wave') as HTMLElement;
+    expect(wave).toBeTruthy();
+    expect(wave.style.maskImage || wave.style.webkitMaskImage).toContain('/api/medias/1/thumbnail');
+  });
+
+  it('renders a plain <img> for image thumbnails', async () => {
+    fixture.componentRef.setInput('media', { ...mockMedia, media_type: 'image' });
+    await settleZoneless(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    expect(component.isAudioThumbnail).toBe(false);
+    expect(el.querySelector('img.media-thumbnail')).toBeTruthy();
+    expect(el.querySelector('.media-thumbnail-wave')).toBeNull();
+  });
+
   it('should not show thumbnail for text type', () => {
     component.media = { ...mockMedia, media_type: 'text' };
     expect(component.thumbnailUrl).toBeNull();

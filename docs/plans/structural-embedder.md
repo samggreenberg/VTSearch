@@ -46,7 +46,6 @@ retrieve-then-geometrically-verify pipeline.
   (good lift at ~250 ms/query), K=100 the quality-sensitive ceiling. The
   geometric re-rank lifts mAP at every K, but Stage-1 is the floor it cannot
   beat — hence growing the codebook.
-- [ ] #2399 — Fill in measured OpenLogo demo media counts
 - **Double SIFT detection.** The embed pass (VLAD) and the local-features pass
   each run SIFT once per image. Acceptable for v1; a combined single-detect pass
   is a cheap later optimisation.

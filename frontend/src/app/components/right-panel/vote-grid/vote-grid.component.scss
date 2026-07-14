@@ -77,6 +77,9 @@
   border-radius: var(--radius-sm);
   flex-shrink: 0;
   overflow: hidden;
+  // Themed surface behind the thumbnail: hidden under a contain-fit <img>, and
+  // the backdrop the tinted audio waveform (issue #2369) sits on.
+  background: var(--bg-surface);
 }
 
 .vote-thumbnail {
@@ -86,6 +89,17 @@
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   display: block;
+}
+
+// Audio waveform (issue #2369): the shared ``.waveform-mask`` supplies the
+// accent fill + mask chrome; contain-fit to mirror ``.vote-thumbnail``. No
+// ``background`` here — the shared accent must win over a component class.
+.vote-thumbnail-wave {
+  width: 100%;
+  height: 100%;
+  mask-size: contain;
+  -webkit-mask-size: contain;
+  border-radius: var(--radius-sm);
 }
 
 .vote-placeholder {

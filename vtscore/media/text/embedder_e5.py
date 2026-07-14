@@ -70,6 +70,10 @@ class TextE5Embedder(MediaEmbedder):
         return "E5 (text)"
 
     @property
+    def model_id(self) -> str:
+        return E5_MODEL_ID
+
+    @property
     def media_type_id(self) -> str:
         return "text"
 

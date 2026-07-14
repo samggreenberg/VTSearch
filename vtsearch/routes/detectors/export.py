@@ -101,9 +101,12 @@ def export_portable_bundle(detector_id: str):
     det_type = _detector_type(det_data)
     score_emb = keying_embedder_for_snap(SimpleNamespace(embedder_type=det_type), snap)
     embedder_display = score_emb or ""
+    embedder_model_id: str | None = None
     if score_emb:
         try:
-            embedder_display = get_embedder(score_emb).display_name
+            emb_obj = get_embedder(score_emb)
+            embedder_display = emb_obj.display_name
+            embedder_model_id = emb_obj.model_id
         except Exception:  # noqa: BLE001 - cosmetic only; fall back to the raw name.
             embedder_display = score_emb
 
@@ -117,6 +120,7 @@ def export_portable_bundle(detector_id: str):
         media_type=media_type,
         embedder=score_emb or "",
         embedder_display_name=embedder_display,
+        embedder_model_id=embedder_model_id,
         embedder_type=det_type,
         embedding_dim=pb.embedding_dim_from_weights(weights),
         threshold=threshold,

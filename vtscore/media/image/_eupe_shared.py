@@ -76,6 +76,10 @@ class _EupeBase(MediaEmbedder):
         self._preprocess: Any = None
 
     @property
+    def model_id(self) -> str:
+        return EUPE_MODEL_ID
+
+    @property
     def media_type_id(self) -> str:
         return "image"
 

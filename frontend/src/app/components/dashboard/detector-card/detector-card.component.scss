@@ -61,6 +61,14 @@ td {
   font-size: var(--font-md);
 }
 
+// A zero-training detector shows this muted "Empty" hint in the # Training
+// column so a freshly created detector reads as new (awaiting labels) rather
+// than broken.
+.empty-hint {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 .type-cell {
   display: inline-flex;
   align-items: center;

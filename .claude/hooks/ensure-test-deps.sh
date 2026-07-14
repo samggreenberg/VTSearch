@@ -43,7 +43,9 @@ pip install --upgrade setuptools -q
 #     we use --ignore-installed to drop fresh copies alongside.
 #   - urllib3 2.6.3 is a real transitive dep (via requests); newer
 #     versions patch CVE-2026-44431/44432.
-pip install --upgrade --ignore-installed pip wheel cryptography pyjwt urllib3 -q
+#   - httplib2 0.20.4 ships pre-installed (via launchpadlib, debian-managed);
+#     0.32.0 patches PYSEC-2026-3444. Unused by VTSearch.
+pip install --upgrade --ignore-installed pip wheel cryptography pyjwt urllib3 httplib2 -q
 
 # Work around debian-managed blinker (no RECORD file, so pip cannot
 # uninstall it).  Force-installing a fresh copy lets Flask pick it up.

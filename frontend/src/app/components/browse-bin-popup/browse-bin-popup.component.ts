@@ -256,6 +256,11 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
 
   /** Currently-playing hover audio source, so re-entering the same row is a no-op. */
   audioSrc = '';
+  /** Media id of the clip currently auditioning, so the buffering listeners can
+   *  re-emit its now-playing state; ``null`` when silent. */
+  private nowPlayingId: number | null = null;
+  /** Whether the one-shot buffering listeners are wired onto the audio element. */
+  private audioListenersAttached = false;
 
   private readonly failedThumbs = new Set<string>();
   /** Ids whose full-res ``/image`` failed; the preview falls back to the
@@ -426,6 +431,13 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
    *  the ones that magnify on the main canvas and are worth a large preview. */
   get showPreview(): boolean {
     return usesThumbnails(this.mediaType());
+  }
+
+  /** True when this popup's thumbnails are audio waveforms: theme-agnostic
+   *  alpha-mask PNGs (issue #2369) rendered as a CSS mask over the accent
+   *  colour rather than a plain <img>, so they recolour with the live theme. */
+  get isAudioWaveform(): boolean {
+    return this.mediaType() === 'audio';
   }
 
   // --- Metadata column ------------------------------------------------------
@@ -809,7 +821,9 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
   /**
    * Move the viewed item one grid step: ``dCol`` along a row, ``dRow`` across
    * rows (a row holds {@link columns} items). Updates the preview pane (image /
-   * video) and the grid's focus ring, and scrolls the target row into view.
+   * video) and the grid's focus ring, scrolls the target row into view, and
+   * moves DOM focus to the walked entry so activation keys (Enter / Space) act
+   * on the highlighted item rather than on whatever entry last held DOM focus.
    * No-op for a singleton/preview-only bin, where there's no grid to walk.
    */
   private moveFocus(dCol: number, dRow: number): void {
@@ -819,7 +833,30 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
     if (next === cur) return;
     this.previewId = this.ids[next];
     this.scrollRowIntoView(next);
+    this.focusEntry(next);
     this.cdr.markForCheck();
+  }
+
+  /**
+   * Move DOM focus onto the grid entry at ``index`` so keyboard activation
+   * (Enter / Space) targets the arrow-walked item. The entry may not be in the
+   * DOM yet — the row was just scrolled into view and the virtual viewport
+   * renders it on a subsequent frame — so query for it after a frame and retry
+   * (bounded) until it exists. ``preventScroll`` keeps the native focus scroll
+   * from fighting {@link scrollRowIntoView}, which already positioned the row.
+   */
+  private focusEntry(index: number, attempt = 0): void {
+    const panel = this.panelRef?.nativeElement;
+    const id = this.ids[index];
+    if (!panel || id == null) return;
+    requestAnimationFrame(() => {
+      const el = panel.querySelector<HTMLElement>(`.bin-popup-entry[data-entry-id="${id}"]`);
+      if (el) {
+        el.focus({ preventScroll: true });
+      } else if (attempt < 5) {
+        this.focusEntry(index, attempt + 1);
+      }
+    });
   }
 
   /** Index of the viewed item within {@link ids}, falling back to the
@@ -919,8 +956,23 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
   onEntryKeydown(event: KeyboardEvent, id: number): void {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
+      // Stop the bubble so the document-level handler's Space fallback (which
+      // acts on {@link previewId}) doesn't also fire and double-toggle. The
+      // focused entry owns its own activation; the fallback is only for when
+      // nothing in the grid holds focus.
+      event.stopPropagation();
       this.onEntryClick(id);
     }
+  }
+
+  /** DOM focus landed on an entry (arrow-walk, Tab, or click). Keep
+   *  {@link previewId} — hence the preview pane, metadata column, and focus
+   *  ring — in step with it so the highlighted item is always the one Enter /
+   *  Space will act on, regardless of how focus arrived. */
+  onEntryFocus(id: number): void {
+    if (this.previewId === id) return;
+    this.previewId = id;
+    this.cdr.markForCheck();
   }
 
   /** True when the item currently shown in the preview pane is selected, so the
@@ -942,6 +994,10 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
   onPreviewKeydown(event: KeyboardEvent): void {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
+      // As with the grid entries: when the preview pane holds focus it owns its
+      // activation, so stop the bubble to keep the document-level Space fallback
+      // from also firing and cancelling the toggle.
+      event.stopPropagation();
       this.onPreviewClick();
     }
   }
@@ -968,14 +1024,18 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
     const src = this.activeContext.mediaUrl(`/api/medias/${id}/audio`);
     if (this.audioSrc === src) return;
     this.audioSrc = src;
+    this.nowPlayingId = id;
     // The autoplay-on-open path may fire before prefetchVisible has hydrated the
     // representative's metadata, so make sure its clip extents are loading (the
     // clip-window handlers read them lazily as they land).
     this.metadataCache.ensureLoaded([id]);
-    this.nowPlaying.emit({ mediaId: id, waveUrl: this.thumbnailUrl(id) });
+    // Starts loading: show the spinner on the now-playing widget until a
+    // ``playing``/``canplay`` event clears it.
+    this.nowPlaying.emit({ mediaId: id, waveUrl: this.thumbnailUrl(id), loading: true });
     setTimeout(() => {
       const el = this.audioRef?.nativeElement;
       if (!el) return;
+      this.attachBufferingListeners(el);
       el.volume = this.volume();
       // Windowed archive-member clips serve the whole file: seek to clip_start
       // and loop within [clip_start, clip_end]. Metadata is read lazily inside
@@ -984,6 +1044,26 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
       el.load();
       el.play().catch(() => {});
     });
+  }
+
+  /** Wire the buffering listeners onto the popup's audio element once (it lives
+   *  for the popup's lifetime, reused across summons). They flip the now-playing
+   *  widget's spinner on while the clip fetches/decodes or stalls to rebuffer,
+   *  and off once it's actually sounding. */
+  private attachBufferingListeners(el: HTMLAudioElement): void {
+    if (this.audioListenersAttached) return;
+    this.audioListenersAttached = true;
+    el.addEventListener('waiting', () => this.emitNowPlaying(true));
+    el.addEventListener('playing', () => this.emitNowPlaying(false));
+    el.addEventListener('canplay', () => this.emitNowPlaying(false));
+  }
+
+  /** Re-emit the now-playing state with a fresh ``loading`` flag. A no-op once
+   *  nothing is auditioning, so events that fire after a stop don't resurrect
+   *  the widget. */
+  private emitNowPlaying(loading: boolean): void {
+    if (this.audioSrc === '' || this.nowPlayingId == null) return;
+    this.nowPlaying.emit({ mediaId: this.nowPlayingId, waveUrl: this.thumbnailUrl(this.nowPlayingId), loading });
   }
 
   /** Cursor left the grid: stop any hover audio and fall the preview back to the
@@ -1005,6 +1085,7 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
       el.currentTime = 0;
     }
     this.audioSrc = '';
+    this.nowPlayingId = null;
     if (wasPlaying) this.nowPlaying.emit(null);
   }
 

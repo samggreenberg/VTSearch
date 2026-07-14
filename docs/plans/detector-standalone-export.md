@@ -10,7 +10,6 @@ weights), and a dedicated modal (not a tab in the label-centric export modal).
 
 ## Open follow-ups
 
-- [ ] #2390 — Surface the exact HuggingFace model id in the README/manifest
 - [ ] #2391 — Add a CLI/exporter-plugin path for portable detector export
 - **Re-import.** The manifest is shaped to be re-importable, but no importer
   reads it back yet. A "import portable detector" flow could rebuild a

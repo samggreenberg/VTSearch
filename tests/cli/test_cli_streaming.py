@@ -63,6 +63,29 @@ def _settings_file_with_detector(tmp_path: Path, detector_name: str) -> Path:
     return p
 
 
+def _settings_file_with_detector_and_exporter(
+    tmp_path: Path,
+    detector_name: str,
+    exporter_name: str,
+    exporter_field_values: dict,
+) -> Path:
+    """Like ``_settings_file_with_detector`` but also configures the Auto-Find exporter.
+
+    Used to exercise the settings-based exporter fallback: a streaming run that
+    passes no ``--exporter`` must pick up this exporter (and its field values)
+    from settings, exactly as the buffered path does.
+    """
+    settings = {
+        "autofind_detectors": [detector_name],
+        "detectors_dir": str(get_detectors_dir()),
+        "autofind_exporter": exporter_name,
+        "autofind_exporter_field_values": {exporter_name: exporter_field_values},
+    }
+    p = tmp_path / "settings.json"
+    p.write_text(json.dumps(settings))
+    return p
+
+
 def _write_pretrained_detector(name: str) -> None:
     from vtscore.detectors.store import _detector_path, _write_detector
 
@@ -182,6 +205,43 @@ class TestStreamingNdjsonExport:
         bad = sorted(h["id"] for h in hits if h["label"] == "bad")
         assert good == [1, 2, 3]
         assert bad == [4, 5]
+
+
+class TestStreamingSettingsExporterFallback:
+    """A streaming run with no ``--exporter`` picks up the exporter from settings.
+
+    The settings-based fallback lives at the top of ``_run_pipeline``, before the
+    buffered/streaming split, so streaming inherits it just like the buffered
+    path: both the exporter name *and* its per-exporter field values come from
+    the settings file when the CLI omits ``--exporter``.
+    """
+
+    def test_streaming_falls_back_to_settings_exporter(self, client, tmp_path, _stub_split_training):
+        out = tmp_path / "hits.ndjson"
+        settings_path = _settings_file_with_detector_and_exporter(
+            tmp_path, "stream-fb", "server_json_file", {"filepath": str(out)}
+        )
+        _write_pretrained_detector("stream-fb")
+        ds_path = tmp_path / "ds.pkl"
+        _write_pickle_dataset(ds_path, {i: _make_audio_media(i) for i in range(1, 6)})
+
+        from vtscore.cli import autodetect_main_chunked
+
+        # No exporter_name / exporter_field_values: both must come from settings.
+        autodetect_main_chunked(
+            dataset_path=str(ds_path),
+            chunk_size=2,
+            settings_path=str(settings_path),
+            stream_results=True,
+        )
+
+        # The file at the settings-configured path exists (name fallback) and
+        # carries the streamed hits (field-value fallback).
+        assert out.exists()
+        meta, hits = _read_ndjson(out)
+        assert meta["format"] == "vtsearch-hits-ndjson/v1"
+        assert {d["detector_name"] for d in meta["detectors"]} == {"stream-fb"}
+        assert sorted(h["id"] for h in hits) == [1, 2, 3]
 
 
 class TestStreamingExporterGuard:

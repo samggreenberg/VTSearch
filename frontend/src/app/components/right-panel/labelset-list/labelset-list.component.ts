@@ -46,6 +46,9 @@ export class LabelsetListComponent implements OnChanges {
       thumbnailUrl: this.buildThumbnailUrl(e),
       fallbackIcon: e.media_type === 'audio' ? '♫' : e.media_type === 'text' ? '¶' : '□',
       missing: e.cid === null || e.cid === undefined,
+      // Audio waveforms are theme-agnostic alpha masks (issue #2369); flag them
+      // so vote-grid tints them via a CSS mask instead of a plain <img>.
+      isAudio: e.media_type === 'audio',
     }));
     return this.sortEntries(entries);
   }

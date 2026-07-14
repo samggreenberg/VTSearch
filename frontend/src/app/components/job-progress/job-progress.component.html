@@ -13,7 +13,17 @@
         >
       }
     </span>
-    @if (cancelTitle !== null) {
+    @if (cancelling) {
+      <button
+        type="button"
+        class="btn btn--cancel btn--sm jp__cancel"
+        disabled
+        aria-live="polite"
+        title="Cancelling — waiting for the job to unwind"
+      >
+        Cancelling…
+      </button>
+    } @else if (cancelTitle !== null) {
       <button
         type="button"
         class="btn btn--cancel btn--sm jp__cancel"
@@ -27,7 +37,7 @@
   <!-- Detail is a fixed-width, ellipsized column and the ETA hugs the right
        edge, so the bar between them keeps both edges still as the text changes. -->
   <div class="jp__bottom">
-    <span class="jp__detail" [title]="detail">{{ detail }}</span>
+    <span class="jp__detail" [title]="cancelling ? 'Cancelling…' : detail">{{ cancelling ? 'Cancelling…' : detail }}</span>
     <vt-progress-bar
       [value]="bar.value"
       [max]="bar.max"
