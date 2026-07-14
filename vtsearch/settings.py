@@ -101,6 +101,8 @@ if TYPE_CHECKING:
     def set_max_concurrent_dataset_embeddings(value: int) -> None: ...
     def get_dataset_max_age_days() -> int | None: ...
     def set_dataset_max_age_days(value: int | None) -> None: ...
+    def get_support_email() -> str: ...
+    def set_support_email(value: str) -> None: ...
     def get_projection_n_neighbors() -> int: ...
     def set_projection_n_neighbors(value: int) -> None: ...
     def get_projection_min_dist() -> float: ...
@@ -179,6 +181,15 @@ _cli_solo_embedders: dict[str, str] = {}
 #: for the lifetime of the process; the setting is not user-editable via
 #: the API (see :func:`get_effective_dataset_max_age_days`).
 _cli_dataset_max_age_days: int | None = None
+
+#: Process-level override for the server-tier ``support_email`` setting, set
+#: by :func:`set_cli_support_email` from the ``--support-email`` flag in
+#: :mod:`app`. ``None`` means "no CLI override" - reads fall through to the
+#: persisted server setting (and then the model default). When a value is set
+#: it applies to every user and wins over the persisted file for the lifetime
+#: of the process; the setting is not user-editable via the API (see
+#: :func:`get_effective_support_email`).
+_cli_support_email: str | None = None
 
 #: Filename used for the per-user settings file inside
 #: ``get_user_data_dir(user)``.
@@ -944,6 +955,46 @@ def get_effective_dataset_max_age_days() -> int | None:
     if _cli_dataset_max_age_days is not None:
         return _cli_dataset_max_age_days
     return get_dataset_max_age_days()  # type: ignore[name-defined]  # autogen'd accessor
+
+
+def set_cli_support_email(value: str | None) -> None:
+    """Set the process-level override for the ``support_email`` setting.
+
+    Called once from ``app.py`` startup when ``--support-email`` is passed on
+    the command line. The value applies server-wide (every user) and is fixed
+    for the process lifetime; :func:`get_effective_support_email` returns it in
+    preference to the persisted server setting. Pass ``None`` (or an empty /
+    whitespace-only string) to clear the override so reads fall back to the
+    persisted file value.
+    """
+    global _cli_support_email
+    if value is not None:
+        value = value.strip() or None
+    _cli_support_email = value
+
+
+def get_cli_support_email() -> str | None:
+    """Return the process-level CLI override (``None`` if unset)."""
+    return _cli_support_email
+
+
+def get_effective_support_email() -> str:
+    """Return the "Email us" support address in force.
+
+    Resolution order:
+
+    1. The process-level CLI override set by :func:`set_cli_support_email`
+       (``--support-email``), which applies to every user for the lifetime of
+       the process.
+    2. The persisted server-tier setting (``data/settings.json``), which
+       defaults to :data:`~vtsearch.settings_models.DEFAULT_SUPPORT_EMAIL`.
+
+    This is the value surfaced at ``/api/settings`` so the Help modal's
+    "Email us" link opens a pre-addressed compose window.
+    """
+    if _cli_support_email is not None:
+        return _cli_support_email
+    return get_support_email()  # type: ignore[name-defined]  # autogen'd accessor
 
 
 def set_cli_solo_embedder(media_type: str, embedder: str | None) -> None:

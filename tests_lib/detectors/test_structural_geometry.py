@@ -21,6 +21,7 @@ def test_fit_scale_translation_recovers_model(st_correspondences):
     src, dst, s_true = st_correspondences
     model, mask = fit_scale_translation(src, dst)
     assert model is not None
+    assert mask is not None
     assert abs(model[0, 0] - s_true) < 1e-3
     assert model[0, 1] == 0.0 and model[1, 0] == 0.0  # no rotation terms
     assert mask.sum() >= 42  # the uncorrupted correspondences

@@ -385,6 +385,10 @@
           "solo_media_type_explicit": {
             "type": "boolean"
           },
+          "support_email": {
+            "readOnly": true,
+            "type": "string"
+          },
           "theme": {
             "enum": [
               "dark",

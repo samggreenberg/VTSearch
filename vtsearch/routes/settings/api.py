@@ -206,6 +206,9 @@ def _with_effective(data: dict) -> dict:
     # force (``--dataset-max-age-days`` wins over the persisted file), so the
     # dashboard's Age-Off column reflects what new datasets are stamped with.
     data["dataset_max_age_days"] = settings.get_effective_dataset_max_age_days()
+    # Surface the CLI/env-overridable "Email us" recipient as the value
+    # actually in force, so the Help modal's mailto link is pre-addressed.
+    data["support_email"] = settings.get_effective_support_email()
     return data
 
 

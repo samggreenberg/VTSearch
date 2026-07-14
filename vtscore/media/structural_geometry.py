@@ -157,11 +157,7 @@ def fit_model(
         reflection = s < 0
 
     inlier_count = int(mask.sum())
-    model_ok = (
-        inlier_count >= _MIN_MODEL_INLIERS
-        and _MIN_SANE_SCALE <= scale <= _MAX_SANE_SCALE
-        and not reflection
-    )
+    model_ok = inlier_count >= _MIN_MODEL_INLIERS and _MIN_SANE_SCALE <= scale <= _MAX_SANE_SCALE and not reflection
 
     mean_err = median_err = spread = 0.0
     inlier_box = None

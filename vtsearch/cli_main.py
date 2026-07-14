@@ -295,6 +295,20 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--support-email",
+        type=str,
+        default=None,
+        dest="support_email",
+        metavar="ADDRESS",
+        help=(
+            "Recipient address for the Help modal's 'Email us' contact link. "
+            "Applies to all users and overrides any persisted support_email in "
+            "the settings file for the lifetime of the process; the value is "
+            "not editable via the settings API. Omit to use the persisted value "
+            "(defaults to the built-in project address)."
+        ),
+    )
+    parser.add_argument(
         "--progress-format",
         type=str,
         default="text",
@@ -514,6 +528,21 @@ def _apply_dataset_max_age(args, parser) -> None:
         from vtsearch.settings import set_cli_dataset_max_age_days
 
         set_cli_dataset_max_age_days(args.dataset_max_age_days)
+
+
+def _apply_support_email(args, parser) -> None:
+    """Validate and stash the process-level ``--support-email`` override."""
+    # --support-email: process-level override for the Help modal's contact
+    # address, applied to every user for the lifetime of the process (not
+    # user-editable via the API). Require a non-empty value so an accidental
+    # blank flag doesn't ship an empty mailto: recipient.
+    if getattr(args, "support_email", None) is not None:
+        email = args.support_email.strip()
+        if not email:
+            parser.error("--support-email must be a non-empty address")
+        from vtsearch.settings import set_cli_support_email
+
+        set_cli_support_email(email)
 
 
 def _authenticate_cli_user(args, parser) -> None:
@@ -783,6 +812,7 @@ def main(app, initialize_server) -> None:
     _apply_hidden_plugins(args, parser)
     _apply_solo_embedders(args, parser)
     _apply_dataset_max_age(args, parser)
+    _apply_support_email(args, parser)
 
     if args.autodetect:
         _run_autodetect(args, parser, importer, exporter)

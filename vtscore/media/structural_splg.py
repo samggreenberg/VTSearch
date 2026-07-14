@@ -71,7 +71,7 @@ class SplgMatcher:
         return self._device
 
     def _get_extractor(self, max_features: int):
-        from lightglue import SuperPoint  # noqa: PLC0415
+        from lightglue import SuperPoint  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
 
         if self._extractor is None or self._extractor_cap != max_features:
             self._extractor = SuperPoint(max_num_keypoints=int(max_features)).eval().to(self.device)
@@ -79,13 +79,11 @@ class SplgMatcher:
         return self._extractor
 
     def _get_matcher(self):
-        from lightglue import LightGlue  # noqa: PLC0415
+        from lightglue import LightGlue  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
 
         if self._matcher is None:
             self._matcher = (
-                LightGlue(features="superpoint", filter_threshold=_LG_FILTER_THRESHOLD)
-                .eval()
-                .to(self.device)
+                LightGlue(features="superpoint", filter_threshold=_LG_FILTER_THRESHOLD).eval().to(self.device)
             )
         return self._matcher
 
@@ -129,9 +127,7 @@ class SplgMatcher:
         ).astype(np.float32)
         return StructuralFeatures(keypoints=kp_arr, descriptors=desc.astype(np.float32))
 
-    def match(
-        self, template: StructuralFeatures, candidate: StructuralFeatures
-    ) -> tuple[np.ndarray, np.ndarray, int]:
+    def match(self, template: StructuralFeatures, candidate: StructuralFeatures) -> tuple[np.ndarray, np.ndarray, int]:
         """LightGlue correspondences ``(src, dst, tentative_count)``.
 
         The tentative count (matches above LightGlue's confidence filter) is

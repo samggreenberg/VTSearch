@@ -132,6 +132,12 @@ class AppSettingsSchema(Schema):
     # gate its Age-Off column. Not in ``SettingsUpdateSchema`` - not
     # editable via PUT.
     dataset_max_age_days = fields.Integer(dump_only=True, allow_none=True)
+    # Server-tier "Email us" recipient. Set via the ``--support-email`` CLI
+    # flag / ``VTSEARCH_SUPPORT_EMAIL`` env var (process-wide, all users) or
+    # the persisted settings file; surfaced read-only here so the Help modal
+    # can build a pre-addressed ``mailto:`` link. Not in
+    # ``SettingsUpdateSchema`` - not editable via PUT.
+    support_email = fields.String(dump_only=True)
 
     # Auto-Find (per-user, editable from the Auto-Find settings tab).
     # ``autofind_detectors`` is each user's own list of detectors that auto-run
