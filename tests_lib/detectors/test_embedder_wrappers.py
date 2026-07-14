@@ -422,14 +422,17 @@ class TestDinoWrapper:
         vec = emb.embed_pil_image(Image.new("RGB", (16, 16)))
         assert vec is not None
         assert vec.shape == (768,)
-        # CLS token is uniform → L2-normalised vector is uniform.
-        assert np.allclose(vec, vec[0])
-        np.testing.assert_allclose(np.linalg.norm(vec), 1.0, atol=1e-5)
+        # embed_pil_image returns the RAW CLS token (index 0), un-normalised;
+        # our fake fills it with 3.0 everywhere, so a bug grabbing the wrong
+        # token (filled with 0.0) would change the result.
+        np.testing.assert_allclose(vec, np.full(768, 3.0, dtype=np.float32), atol=1e-5)
 
     def test_embed_media_from_bytes(self, module_path, class_name):
         emb = self._make(module_path, class_name)
         vec = emb.embed_media({"media_bytes": _png_bytes()})
         assert vec is not None
+        # The public embed_media path L2-normalises the CLS vector.
+        np.testing.assert_allclose(np.linalg.norm(vec), 1.0, atol=1e-5)
 
     def test_embed_media_bad_source(self, module_path, class_name):
         assert self._make(module_path, class_name).embed_media({}) is None
