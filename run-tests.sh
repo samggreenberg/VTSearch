@@ -85,6 +85,10 @@ fi
 #   joblib 1.5.3       PYSEC-2024-277             (no upstream fix)
 #   pyjwt  2.12.1      PYSEC-2025-183             (no upstream fix)
 #   transformers 5.8.1 PYSEC-2025-211..218        (no upstream fix)
+#   httplib2 0.20.4    PYSEC-2026-3444            (not a VTSearch dep; pulled in
+#                                                  by launchpadlib in the Ubuntu
+#                                                  base image, so requirements
+#                                                  can't upgrade it)
 PIP_AUDIT_IGNORE=(
     --ignore-vuln PYSEC-2024-277
     --ignore-vuln PYSEC-2025-183
@@ -96,6 +100,7 @@ PIP_AUDIT_IGNORE=(
     --ignore-vuln PYSEC-2025-216
     --ignore-vuln PYSEC-2025-217
     --ignore-vuln PYSEC-2025-218
+    --ignore-vuln PYSEC-2026-3444
 )
 echo "Running pip-audit..."
 if ! pip-audit "${PIP_AUDIT_IGNORE[@]}" ; then
