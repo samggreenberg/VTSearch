@@ -9,8 +9,9 @@ themes that had no coverage:
 
 - **Bad params** — the ``NotImplementedError`` "you forgot to override this"
   surfaces, the ``_ingest_spec_stream`` unknown-converter guard, and the
-  ``run()`` fallback that swallows a ``ValueError`` from
-  ``effective_source_specs``.
+  ``run()`` fallback that swallows only :class:`MissingMediaTypeError` from
+  ``effective_source_specs`` while propagating every other validation
+  ``ValueError``.
 - **Partial-batch failures** — ``None`` raw pairs and ``None`` converter
   outputs are skipped mid-stream without disturbing the IDs of the survivors.
 - **Cancellation propagation** — a :class:`CancelledError` raised from any
@@ -161,23 +162,24 @@ class TestIngestSpecStreamBadConverter:
 
 
 # ---------------------------------------------------------------------------
-# Bad params: run() swallows ValueError from effective_source_specs
+# Bad params: run() swallows only MissingMediaTypeError, propagates the rest
 # ---------------------------------------------------------------------------
 
 
-class TestRunSwallowsSpecValueError:
-    """``run`` catches ``ValueError`` from ``effective_source_specs`` and falls
-    back to the per-record path.  This is *why* a malformed ``source_specs``
-    value surfaces as a confusing ``list_records`` NotImplementedError instead
-    of a "bad source_specs" message — a characterization test that pins the
-    fallback branch so a regression there is caught at the base level.
+class TestRunPropagatesSpecValueError:
+    """``run`` swallows only :class:`MissingMediaTypeError` (the legitimate
+    "no ``media_type`` declared" fallback trigger); every *other* ``ValueError``
+    from ``effective_source_specs`` — signalling genuinely bad ``source_specs``
+    input — propagates to the caller with its original message instead of being
+    masked by a confusing ``list_records`` ``NotImplementedError``.
     """
 
-    def test_invalid_source_specs_json_falls_back_to_list_records(self):
+    def test_invalid_source_specs_json_propagates(self):
         # Only fetch_source_media is implemented (the spec path); no
         # list_records.  A bad source_specs value makes effective_source_specs
-        # raise ValueError, which run() swallows → fallback → list_records
-        # NotImplementedError.
+        # raise a plain ValueError (not MissingMediaTypeError), which run() now
+        # lets propagate with its real "Invalid source_specs JSON" message —
+        # not the old confusing list_records NotImplementedError.
         class _SpecOnly(DatasetImporter):
             name = "spec_only"
             display_name = "Spec Only"
@@ -188,8 +190,49 @@ class TestRunSwallowsSpecValueError:
                 yield {"filename": "unreached.png", "media_bytes": b"X"}
 
         imp = _SpecOnly()
-        with pytest.raises(NotImplementedError, match="list_records"):
+        with pytest.raises(ValueError, match="Invalid source_specs JSON") as exc:
             imp.run({"media_type": "image", "source_specs": "{not valid json"}, {})
+        # The real cause surfaces, not a NotImplementedError from the fallback.
+        assert not isinstance(exc.value, NotImplementedError)
+
+    def test_missing_media_type_still_falls_back_to_list_records(self):
+        """The one legitimate swallow: no ``media_type`` → per-record fallback.
+
+        A spec-only importer with no ``media_type`` field still routes to the
+        ``list_records`` path, so its unimplemented ``list_records`` surfaces —
+        confirming :class:`MissingMediaTypeError` alone triggers the fallback.
+        """
+
+        class _SpecOnly(DatasetImporter):
+            name = "spec_only_no_mt"
+            display_name = "Spec Only"
+            description = "."
+            fields: list[PluginField] = []  # no media_type → MissingMediaTypeError
+
+            def fetch_source_media(self, spec, field_values, thin=False):
+                yield {"filename": "unreached.png", "media_bytes": b"X"}
+
+        imp = _SpecOnly()
+        with pytest.raises(NotImplementedError, match="list_records"):
+            imp.run({}, {})
+
+    def test_unknown_converter_propagates(self):
+        """A genuinely invalid converter reference surfaces its real message."""
+
+        class _SpecOnly(DatasetImporter):
+            name = "spec_only_bad_conv"
+            display_name = "Spec Only"
+            description = "."
+            fields = [_media_type_field()]
+
+            def fetch_source_media(self, spec, field_values, thin=False):
+                yield {"filename": "unreached.png", "media_bytes": b"X"}
+
+        source_specs = json.dumps(
+            [{"source_type": "video", "converter": "no_such_converter", "params": {}}]
+        )
+        with pytest.raises(ValueError, match="Unknown converter"):
+            _SpecOnly().run({"media_type": "image", "source_specs": source_specs}, {})
 
     def test_non_value_error_is_not_swallowed(self):
         """Only ``ValueError`` is caught; any other error from

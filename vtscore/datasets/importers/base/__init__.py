@@ -75,12 +75,13 @@ from vtscore.plugins import PluginField
 from .core import ImporterBase
 from .dataset_importer import DatasetImporter
 from .origin import DATASET_NAME_FIELD_KEY
-from .specs import PickerView, SourceSpec
+from .specs import MissingMediaTypeError, PickerView, SourceSpec
 
 __all__ = [
     "DATASET_NAME_FIELD_KEY",
     "DatasetImporter",
     "ImporterBase",
+    "MissingMediaTypeError",
     "PickerView",
     "PluginField",
     "SourceSpec",
