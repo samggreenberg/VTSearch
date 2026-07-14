@@ -19,18 +19,7 @@ the original priority.
 
 <!-- item-sep -->
 
-- **Fill in missing demo media counts (P2)** — `vtscore/datasets/demo_counts.py`
-  `DEMO_MEDIA_COUNTS` has exact counts for caltech101, eurosat, reuters21578,
-  20newsgroups, arxiv_abstracts, oxford_flowers_102, ucf101, roxford5k, and
-  bbc_news, but still falls back to an inaccurate estimate for caltech256,
-  places365, urbansound8k, gtzan, speech_commands_v2, hmdb51, kth, ucf101_full,
-  ucsf_documents, and dbpedia. **Fix:** download each and run
-  `scripts/compute_demo_counts.py <id>`, then paste the emitted lines into
-  `demo_counts.py`. **Files:** `vtscore/datasets/demo_counts.py`.
-
-<!-- item-sep -->
-
-<!-- item-sep -->
+- [ ] #2355 — Fill in missing demo media counts
 
 <!-- item-sep -->
 
@@ -44,23 +33,11 @@ the original priority.
 
 <!-- item-sep -->
 
-- **"Email us" mailto has no recipient (`mailto-recipient`, P3)** — the
-  "Email us" affordance now lives in the Help modal
-  (`keyboard-help-modal.component.html`, `.help-footer`) as
-  `mailto:?subject=VTSearch%20Issue%3A` — the subject typo is fixed but the
-  to-address is still empty, so "Email us" opens a blank-recipient compose
-  window. **Fix:** add the recipient address. **Files:**
-  `keyboard-help-modal.component.html`. (The "Simplify header and layout IA"
-  slice that moved this out of the header logo has already shipped.)
+- [ ] #2357 — "Email us" mailto has no recipient
 
 <!-- item-sep -->
 
-- **UCSF Documents listed under Image media type (P3)** —
-  `vtscore/media/image/_demo_sources.py:556` registers `ucsf_documents_a` under
-  the image `_MEDIA_TYPE_ID`, so scanned document pages appear atop the Image
-  demo list. Arguably intentional (pages are images), so this is a labeling
-  call. **Fix:** relabel to signal it's scanned documents, or recategorize.
-  **Files:** `vtscore/media/image/_demo_sources.py`.
+- [ ] #2358 — UCSF Documents listed under Image media type
 
 <!-- item-sep -->
 
@@ -74,8 +51,4 @@ the original priority.
 
 <!-- item-sep -->
 
-- **Header "Data:" label lags the active dataset (P3, verify first)** —
-  reported drift between the dashboard row-checkbox "selected" notion and the
-  header's "active dataset" label. Lower confidence this still reproduces and it
-  overlaps the nav-picker-lag item in `ui-ux-papercuts.md`; confirm in a live
-  browser before scoping, and fold into that item if it's the same root cause.
+- [ ] #2360 — Header "Data:" label lags the active dataset
