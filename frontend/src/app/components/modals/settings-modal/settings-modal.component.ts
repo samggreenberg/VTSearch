@@ -559,12 +559,19 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   }
 
   async resetDefaults(): Promise<void> {
-    const ok = await this.dialog.confirmDestructive(
+    const choice = await this.dialog.confirmDestructiveWithEscape(
       'Reset all settings to factory defaults?',
       'Your current preferences (appearance, view modes, autopilot, sorting, and other per-user settings) will be overwritten and cannot be recovered.',
       'Reset',
+      'Export first…',
     );
-    if (!ok) return;
+    if (choice === 'cancel') return;
+    if (choice === 'escape') {
+      // Escape hatch: let the user save their current config before resetting.
+      // Reset is abandoned; they can re-initiate it after exporting.
+      this.openExporter();
+      return;
+    }
     this.settingsApi
       .getDefaults()
       .pipe(takeUntil(this.destroy$))
