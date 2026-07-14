@@ -96,6 +96,7 @@ from vtscore.state.coverage import (  # noqa: F401
 # Re-export media lookup ----------------------------------------------------
 from vtscore.state.media_lookup import (  # noqa: F401
     _origin_key,
+    build_md5_lookup,
     build_media_lookup,
     collapse_duplicates,
     find_missing_entries,

@@ -353,6 +353,12 @@ def reset_state():
 
     reset_label_sync_for_tests()
 
+    # Drop the TTL-cached detector-file mtimes so a stale entry from a prior
+    # test can't suppress a rehydrate in the next one.
+    from vtscore.detectors.dataset_sync import reset_mtime_cache_for_tests
+
+    reset_mtime_cache_for_tests()
+
     # Reset CLI progress format so a test that flips it to "json" can't
     # leak the choice into the next test.
     from vtscore import cli_progress

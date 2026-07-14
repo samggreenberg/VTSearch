@@ -24,7 +24,10 @@ export class VideoPlayerComponent implements OnChanges, OnDestroy {
   videoSrc = '';
   videoError = false;
 
-  private clipCheckInterval: ReturnType<typeof setInterval> | null = null;
+  // Active clip window bounds while enforcement is on, else null. Enforcement is
+  // driven by the <video> element's (timeupdate) event rather than a polling
+  // timer, so it only runs while the clip is actually playing and progressing.
+  private clipBounds: { start: number; end: number } | null = null;
   // See ImageViewerComponent.lastMediaId; guards against metadata-enrichment
   // ngOnChanges cycles rebuilding videoSrc (and yanking playback) for the
   // same id.
@@ -133,27 +136,29 @@ export class VideoPlayerComponent implements OnChanges, OnDestroy {
   }
 
   private startClipEnforcement(): void {
-    this.stopClipEnforcement();
-    if (this.media?.clip_start == null || this.media?.clip_end == null) return;
-
-    const clipStart = this.media.clip_start;
-    const clipEnd = this.media.clip_end;
-
-    // Poll every 100ms to enforce clip boundaries. When the video
-    // reaches clip_end, loop back to clip_start instead of continuing.
-    this.clipCheckInterval = setInterval(() => {
-      const video = this.videoRef?.nativeElement;
-      if (!video || video.paused) return;
-      if (video.currentTime >= clipEnd || video.currentTime < clipStart) {
-        video.currentTime = clipStart;
-      }
-    }, 100);
+    if (this.media?.clip_start == null || this.media?.clip_end == null) {
+      this.clipBounds = null;
+      return;
+    }
+    // Arm enforcement; the actual boundary check runs in (timeupdate), which the
+    // <video> element fires as playback advances (no timer while paused).
+    this.clipBounds = { start: this.media.clip_start, end: this.media.clip_end };
   }
 
   private stopClipEnforcement(): void {
-    if (this.clipCheckInterval != null) {
-      clearInterval(this.clipCheckInterval);
-      this.clipCheckInterval = null;
+    this.clipBounds = null;
+  }
+
+  // Enforce the clip window as playback advances: when the current time leaves
+  // [start, end), loop back to the window start. Driven by the element's
+  // (timeupdate) event instead of a 100ms polling interval.
+  onTimeUpdate(): void {
+    const bounds = this.clipBounds;
+    if (!bounds) return;
+    const video = this.videoRef?.nativeElement;
+    if (!video || video.paused) return;
+    if (video.currentTime >= bounds.end || video.currentTime < bounds.start) {
+      video.currentTime = bounds.start;
     }
   }
 
