@@ -916,8 +916,8 @@ class TestLoadEmbedderConcurrentCallback:
         mock_mt.load_models = slow_load_models
 
         with unittest.mock.patch("vtscore.media.get", return_value=mock_mt):
-            t1 = threading.Thread(target=_load_embedder_with_progress, args=("audio", 5))
-            t2 = threading.Thread(target=_load_embedder_with_progress, args=("audio", 5))
+            t1 = threading.Thread(target=_load_embedder_with_progress)
+            t2 = threading.Thread(target=_load_embedder_with_progress)
             t1.start()
             t2.start()
             t1.join(timeout=10)
@@ -944,7 +944,7 @@ class TestLoadEmbedderConcurrentCallback:
 
         with unittest.mock.patch("vtsearch.routes.sorting._get_embedder_for_loaded_data", return_value=mock_emb):
             with pytest.raises(RuntimeError):
-                _load_embedder_with_progress("audio", 5)
+                _load_embedder_with_progress()
 
         assert mock_emb._on_progress is original_cb
 
