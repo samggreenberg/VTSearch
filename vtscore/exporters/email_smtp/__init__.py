@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import re
 import smtplib
+from collections import defaultdict
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Any
+from typing import Any, Iterator
 
-from vtscore.exporters.base import PluginField, LabelsetExporter
+from vtscore.exporters.base import PluginField, LabelsetExporter, resolve_stream_batch_size
 
 # Pragmatic address check: a non-empty local part, a single ``@``, and a
 # dotted domain, none of which may contain whitespace.  Not full RFC 5322
@@ -93,6 +94,64 @@ def _default_subject(results: dict[str, Any]) -> str:
     return f"VTSearch Auto-Detect: {total_hits} hit(s) on {media_type} dataset"
 
 
+def _group_batch_by_detector(batch: list[tuple[str, dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:
+    """Group a streamed ``(detector_name, hit)`` batch into ``{detector: [hits]}``."""
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for detector_name, hit in batch:
+        grouped[detector_name].append(hit)
+    return grouped
+
+
+def _build_batch_plain(media_type: str, batch: list[tuple[str, dict[str, Any]]], part: int) -> str:
+    """Render a streamed batch of hits as a plain-text summary."""
+    lines: list[str] = [
+        f"Auto-Detect Results (streamed, part {part})",
+        "=========================================",
+        f"Media Type: {media_type}",
+        f"Hits in this part: {len(batch)}",
+        "",
+    ]
+    for detector_name, hits in _group_batch_by_detector(batch).items():
+        lines.append(f"--- {detector_name} ---")
+        for hit in hits:
+            clip_id = hit.get("id")
+            label = f"Clip #{clip_id}" if clip_id is not None else "Clip"
+            lines.append(f"  {label}: {hit.get('filename', 'N/A')} (score: {hit.get('score', 'N/A')})")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _build_batch_html(media_type: str, batch: list[tuple[str, dict[str, Any]]], part: int) -> str:
+    """Render a streamed batch of hits as a minimal HTML e-mail body."""
+    from html import escape
+
+    rows = ""
+    for detector_name, hits in _group_batch_by_detector(batch).items():
+        hits_html = ""
+        for hit in hits:
+            clip_id = hit.get("id")
+            label = f"Clip #{clip_id}" if clip_id is not None else "Clip"
+            hits_html += (
+                f"<tr><td>{escape(label)}</td>"
+                f"<td>{escape(str(hit.get('filename', 'N/A')))}</td>"
+                f"<td>{escape(str(hit.get('score', 'N/A')))}</td></tr>"
+            )
+        rows += (
+            f"<h3>{escape(str(detector_name))}</h3>"
+            f"<table border='1' cellpadding='4' cellspacing='0'>"
+            f"<tr><th>Clip</th><th>Filename</th><th>Score</th></tr>"
+            f"{hits_html}</table>"
+        )
+    return (
+        f"<html><body>"
+        f"<h2>Auto-Detect Results (streamed, part {part})</h2>"
+        f"<p><strong>Media Type:</strong> {escape(str(media_type))}<br>"
+        f"<strong>Hits in this part:</strong> {len(batch)}</p>"
+        f"{rows}"
+        f"</body></html>"
+    )
+
+
 def _resolve_mx(domain: str) -> str:
     """Return the highest-priority MX host for *domain*."""
     import dns.resolver  # lazy import – dnspython is optional
@@ -143,6 +202,19 @@ class EmailLabelsetExporter(LabelsetExporter):
             placeholder="VTSearch Auto-Detect Results {YYYYMMDD}",
             template_vars=("YYYYMMDD-HHMMSS", "YYYYMMDD", "YYYY", "MM", "DD", "detector_name", "username"),
         ),
+        PluginField(
+            key="batch_size",
+            label="Batch size (streaming)",
+            field_type="number",
+            required=False,
+            default="500",
+            min="1",
+            step="1",
+            description=(
+                "When used with --stream-results, one email is sent per this many hits so a run "
+                "larger than RAM never buffers the whole result set. Ignored for one-shot exports."
+            ),
+        ),
     ]
 
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
@@ -179,6 +251,85 @@ class EmailLabelsetExporter(LabelsetExporter):
 
         return {
             "message": (f"Email with {total_hits} hit(s) sent to {to_addr} via {mx_host}."),
+            "to": to_addr,
+        }
+
+    @property
+    def supports_streaming(self) -> bool:
+        return True
+
+    def export_cli_streaming(
+        self,
+        header: dict[str, Any],
+        records: Iterator[tuple[str, dict[str, Any]]],
+        field_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Send one email per fixed-size batch of hits as chunks stream in.
+
+        A single email cannot hold a result set larger than RAM, so streaming
+        delivery sends the hits in ``batch_size``-sized parts: hits accumulate
+        until a batch fills, that batch is emailed, and the buffer is dropped
+        before the next hit arrives. Peak memory stays bounded by
+        ``batch_size``. Each message resolves the recipient's MX host afresh
+        and opens its own SMTP connection, so a slow scoring run between
+        batches can't leave a connection idle long enough to be dropped. One
+        email is always sent even for an empty run, so the recipient learns the
+        run finished.
+        """
+        from_addr = field_values["from"]
+        to_addr = field_values["to"]
+
+        if not _is_valid_email(from_addr):
+            raise ValueError("Sender email address is invalid.")
+        if not _is_valid_email(to_addr):
+            raise ValueError("Recipient email address is invalid.")
+
+        batch_size = resolve_stream_batch_size(field_values.get("batch_size"))
+        media_type = header.get("media_type", "unknown")
+        # The framework substitutes any {template} vars into ``subject`` at
+        # ingress; a blank field falls back to an auto-generated per-part line.
+        subject_base = field_values.get("subject") or ""
+
+        total_hits = 0
+        parts = 0
+
+        def _send(batch: list[tuple[str, dict[str, Any]]]) -> None:
+            nonlocal parts
+            part = parts + 1
+            if subject_base:
+                subject = f"{subject_base} (part {part})"
+            else:
+                subject = f"VTSearch Auto-Detect: {len(batch)} hit(s) on {media_type} dataset (part {part})"
+
+            domain = to_addr.rsplit("@", 1)[1]
+            mx_host = _resolve_mx(domain)
+
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = from_addr
+            msg["To"] = to_addr
+            msg.attach(MIMEText(_build_batch_plain(media_type, batch, part), "plain", "utf-8"))
+            msg.attach(MIMEText(_build_batch_html(media_type, batch, part), "html", "utf-8"))
+
+            with smtplib.SMTP(mx_host, 25, timeout=30) as server:
+                server.ehlo()
+                server.sendmail(from_addr, [to_addr], msg.as_string())
+            parts += 1
+
+        batch: list[tuple[str, dict[str, Any]]] = []
+        for detector_name, hit in records:
+            batch.append((detector_name, hit))
+            total_hits += 1
+            if len(batch) >= batch_size:
+                _send(batch)
+                batch = []
+        # Flush the trailing partial batch; also fire once for an empty run so
+        # the recipient always gets at least one email.
+        if batch or parts == 0:
+            _send(batch)
+
+        return {
+            "message": (f"Streamed {total_hits} hit(s) to {to_addr} in {parts} email(s)."),
             "to": to_addr,
         }
 

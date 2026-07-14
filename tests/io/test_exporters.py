@@ -479,12 +479,12 @@ class TestEmailLabelsetExporter:
         keys = {f.key for f in exp.fields}
         assert "to" in keys
 
-    def test_fields_are_from_to_and_subject(self):
+    def test_fields_are_from_to_subject_and_batch_size(self):
         from vtscore.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
         keys = {f.key for f in exp.fields}
-        assert keys == {"from", "to", "subject"}
+        assert keys == {"from", "to", "subject", "batch_size"}
 
     def test_subject_field_is_optional_and_templated(self):
         from vtscore.exporters import get_exporter
@@ -958,14 +958,38 @@ class TestStreamingExportSupport:
     def test_streaming_exporters_advertise_support(self):
         from vtscore.exporters import get_exporter
 
-        for name in ("gui", "server_json_file", "server_csv_file"):
+        for name in ("gui", "server_json_file", "server_csv_file", "webhook", "email_smtp"):
             assert get_exporter(name).supports_streaming is True
 
     def test_non_streaming_exporters_do_not(self):
         from vtscore.exporters import get_exporter
 
-        for name in ("email_smtp", "webhook"):
-            assert get_exporter(name).supports_streaming is False
+        # holder is a hidden scaffold exporter with no incremental mode.
+        assert get_exporter("holder").supports_streaming is False
+
+
+class TestResolveStreamBatchSize:
+    """The shared batch-size coercion used by the delivery streamers."""
+
+    def test_none_and_blank_fall_back_to_default(self):
+        from vtscore.exporters.base import resolve_stream_batch_size
+
+        assert resolve_stream_batch_size(None) == 500
+        assert resolve_stream_batch_size("") == 500
+        assert resolve_stream_batch_size(None, default=10) == 10
+
+    def test_int_and_numeric_string(self):
+        from vtscore.exporters.base import resolve_stream_batch_size
+
+        assert resolve_stream_batch_size(3) == 3
+        assert resolve_stream_batch_size("7") == 7
+
+    def test_non_positive_and_garbage_fall_back(self):
+        from vtscore.exporters.base import resolve_stream_batch_size
+
+        assert resolve_stream_batch_size(0) == 500
+        assert resolve_stream_batch_size(-4) == 500
+        assert resolve_stream_batch_size("nope") == 500
 
 
 class TestServerJsonStreaming:
@@ -1080,3 +1104,131 @@ class TestStreamingExportTempCollision:
     def test_csv_concurrent_exports_to_same_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             self._run_collision("server_csv_file", Path(tmp) / "hits.csv")
+
+
+class TestWebhookStreaming:
+    """webhook.export_cli_streaming POSTs hits in fixed-size batches."""
+
+    def _mock_post(self):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.raise_for_status.return_value = None
+        return resp
+
+    def test_batches_hits_into_separate_posts(self):
+        from vtscore.exporters import get_exporter
+
+        with patch("vtscore.exporters.webhook.requests.post", return_value=self._mock_post()) as mock_post:
+            res = get_exporter("webhook").export_cli_streaming(
+                _STREAM_HEADER, _stream_records(), {"url": "https://ex.com/hook", "batch_size": 2}
+            )
+
+        # 3 hits, batch_size 2 → 2 POSTs (2 hits, then 1 hit).
+        assert mock_post.call_count == 2
+        first_payload = mock_post.call_args_list[0].kwargs["json"]
+        second_payload = mock_post.call_args_list[1].kwargs["json"]
+        assert first_payload["format"] == "vtsearch-hits-batch/v1"
+        assert first_payload["batch_index"] == 0
+        assert [h["id"] for h in first_payload["hits"]] == [2, 9]
+        assert first_payload["hits"][0]["detector"] == "dog_bark"
+        assert second_payload["batch_index"] == 1
+        assert [h["id"] for h in second_payload["hits"]] == [4]
+        assert "3 hit(s)" in res["message"]
+        assert "2 batch(es)" in res["message"]
+
+    def test_auth_header_forwarded(self):
+        from vtscore.exporters import get_exporter
+
+        with patch("vtscore.exporters.webhook.requests.post", return_value=self._mock_post()) as mock_post:
+            get_exporter("webhook").export_cli_streaming(
+                _STREAM_HEADER,
+                _stream_records(),
+                {"url": "https://ex.com/hook", "auth_header": "Bearer tok", "batch_size": 100},
+            )
+
+        assert mock_post.call_args_list[0].kwargs["headers"]["Authorization"] == "Bearer tok"
+
+    def test_empty_run_still_posts_once(self):
+        from vtscore.exporters import get_exporter
+
+        def _empty():
+            return
+            yield  # pragma: no cover - makes this a generator
+
+        with patch("vtscore.exporters.webhook.requests.post", return_value=self._mock_post()) as mock_post:
+            res = get_exporter("webhook").export_cli_streaming(_STREAM_HEADER, _empty(), {"url": "https://ex.com/hook"})
+
+        assert mock_post.call_count == 1
+        assert mock_post.call_args_list[0].kwargs["json"]["hits"] == []
+        assert "0 hit(s)" in res["message"]
+        assert "1 batch(es)" in res["message"]
+
+    def test_default_batch_size_sends_single_post(self):
+        from vtscore.exporters import get_exporter
+
+        with patch("vtscore.exporters.webhook.requests.post", return_value=self._mock_post()) as mock_post:
+            get_exporter("webhook").export_cli_streaming(
+                _STREAM_HEADER, _stream_records(), {"url": "https://ex.com/hook"}
+            )
+
+        # Default batch_size is 500, so all 3 hits ride in one POST.
+        assert mock_post.call_count == 1
+        assert len(mock_post.call_args_list[0].kwargs["json"]["hits"]) == 3
+
+
+class TestEmailStreaming:
+    """email_smtp.export_cli_streaming sends one email per fixed-size batch."""
+
+    def _patches(self):
+        server = MagicMock()
+        smtp_cm = MagicMock()
+        smtp_cm.__enter__.return_value = server
+        return (
+            server,
+            patch("vtscore.exporters.email_smtp.smtplib.SMTP", return_value=smtp_cm),
+            patch("vtscore.exporters.email_smtp._resolve_mx", return_value="mx.example.com"),
+        )
+
+    def test_one_email_per_batch(self):
+        from vtscore.exporters import get_exporter
+
+        server, smtp_p, mx_p = self._patches()
+        with smtp_p as smtp, mx_p:
+            res = get_exporter("email_smtp").export_cli_streaming(
+                _STREAM_HEADER,
+                _stream_records(),
+                {"from": "vt@example.com", "to": "user@example.com", "batch_size": 2},
+            )
+
+        # 3 hits, batch_size 2 → 2 emails.
+        assert smtp.call_count == 2
+        assert server.sendmail.call_count == 2
+        assert "3 hit(s)" in res["message"]
+        assert "2 email(s)" in res["message"]
+        assert res["to"] == "user@example.com"
+
+    def test_empty_run_still_sends_one_email(self):
+        from vtscore.exporters import get_exporter
+
+        def _empty():
+            return
+            yield  # pragma: no cover - makes this a generator
+
+        server, smtp_p, mx_p = self._patches()
+        with smtp_p as smtp, mx_p:
+            res = get_exporter("email_smtp").export_cli_streaming(
+                _STREAM_HEADER, _empty(), {"from": "vt@example.com", "to": "user@example.com"}
+            )
+
+        assert smtp.call_count == 1
+        assert server.sendmail.call_count == 1
+        assert "0 hit(s)" in res["message"]
+        assert "1 email(s)" in res["message"]
+
+    def test_invalid_recipient_rejected(self):
+        from vtscore.exporters import get_exporter
+
+        with pytest.raises(ValueError, match="Recipient email address is invalid"):
+            get_exporter("email_smtp").export_cli_streaming(
+                _STREAM_HEADER, _stream_records(), {"from": "vt@example.com", "to": "not-an-email"}
+            )

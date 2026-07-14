@@ -66,7 +66,7 @@ flow still accumulates every hit in memory and buffers the whole result set
 before the exporter writes it. For a media source with more items (and more
 hits) than fit in RAM — e.g. a folder tree of billions of images — add
 `--stream-results` (requires `--chunk-size` and a streaming-capable exporter:
-`server_json_file`, `server_csv_file`, or `gui`):
+`server_json_file`, `server_csv_file`, `gui`, `webhook`, or `email_smtp`):
 
 ```bash
 python app.py --autodetect --importer server_folder --path /data/images \
@@ -82,6 +82,13 @@ line. The tradeoff: streamed hits are ordered by chunk, **not** globally sorted
 by score (sort the NDJSON afterwards if you need a global ranking). Only
 above-threshold (predicted-good) hits are written; add `--keep-negatives` to
 also stream the below-threshold items (tagged `label=bad`).
+
+The delivery exporters stream too, but batch rather than flush per hit:
+`webhook` POSTs the hits in `--batch-size` groups (each request body carries the
+run metadata, a zero-based `batch_index`, and a `hits` array), and `email_smtp`
+sends one email per `--batch-size` hits. Both default to 500 hits per batch and
+always deliver at least once (even for a zero-hit run), so the receiver learns
+the run happened.
 
 **Exporting results**: by default results are printed to the console. Add `--exporter <name>` to send them elsewhere:
 

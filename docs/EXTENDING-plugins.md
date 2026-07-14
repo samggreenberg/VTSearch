@@ -934,12 +934,16 @@ def export_cli_streaming(self, header, records, field_values):
 
 The `--stream-results` CLI path routes to `export_cli_streaming` instead of
 `export_cli`. Built-ins that implement it: `server_json_file` (NDJSON, one hit
-per line), `server_csv_file` (one CSV row per hit), and `gui` (prints each hit).
-Exporters that inherently need the whole payload at once — `email_smtp` (one
-email), `webhook` (one POST) — leave `supports_streaming` at `False`, and
-requesting `--stream-results` with them is rejected with a clear error. Write to
-a sibling `.tmp` path and `os.replace` on success so a crash mid-stream can't
-leave a half-written file at the destination. See
+per line), `server_csv_file` (one CSV row per hit), and `gui` (prints each hit)
+flush per hit; `webhook` and `email_smtp` are **delivery** exporters that can't
+flush one hit at a time, so they batch — accumulating up to a `batch_size` field
+(default 500) and delivering each full batch as its own POST / email before
+dropping it, which keeps peak memory bounded just the same (see
+`vtscore.exporters.base.resolve_stream_batch_size`). An exporter with no
+incremental mode at all leaves `supports_streaming` at `False`, and requesting
+`--stream-results` with it is rejected with a clear error. File-based streamers
+should write to a sibling `.tmp` path and `os.replace` on success so a crash
+mid-stream can't leave a half-written file at the destination. See
 `docs/plans/cli-stream-massive-images.md` for the full design.
 
 **Default class attributes:**
