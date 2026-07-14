@@ -259,3 +259,111 @@ class TestFinalizeProgress:
         t.cancel()
         with pytest.raises(CancelledError):
             fin.check_cancelled()
+
+
+class TestEmbedLoopProgress:
+    """The EmbedLoopProgress proxy spreads a multi-embedder ingest loop across
+    the shared embed step, so the bar advances cumulatively across the loop
+    instead of restarting at 0 for each bound embedder (the v3-trio "static
+    stretch" bug)."""
+
+    def _weights(self):
+        from vtscore.datasets.stages._common import _LOAD_STEP_WEIGHTS
+
+        return _LOAD_STEP_WEIGHTS
+
+    def _embed_tracker(self):
+        from vtscore.datasets.stages._common import _TOTAL_LOAD_STEPS
+
+        t = _tracker()
+        t.set_step_weights(self._weights())
+        # Pretend download finished so the bar sits at the start of the embed
+        # region, where the embed loop takes over.
+        t.update("downloading", "dl", current=1, total=1, step=1, total_steps=_TOTAL_LOAD_STEPS)
+        return t
+
+    def test_single_embedder_forwards_unchanged(self):
+        # n == 1 must behave exactly as the old per-embedder closure: status maps
+        # to its step and current/total pass through verbatim.
+        from vtscore.datasets.stages._common import _STATUS_TO_STEP, _TOTAL_LOAD_STEPS
+        from vtscore.datasets.stages.embedding import EmbedLoopProgress
+
+        calls = []
+
+        class _RecTracker:
+            def check_cancelled(self):
+                pass
+
+            def update(self, status, message="", current=0, total=0, **kw):
+                calls.append((status, current, total, kw.get("step"), kw.get("total_steps")))
+
+        prog = EmbedLoopProgress(_RecTracker(), 1)
+        prog.begin(0)
+        prog("loading", "Loading…", 0, 0)
+        prog("embedding", "Embedding 5…", 2, 5)
+        assert calls == [
+            ("loading", 0, 0, _STATUS_TO_STEP["loading"], _TOTAL_LOAD_STEPS),
+            ("embedding", 2, 5, _STATUS_TO_STEP["embedding"], _TOTAL_LOAD_STEPS),
+        ]
+
+    def test_cumulative_advance_across_embedders(self):
+        # Three embedders, each filling its embed pass 0→total. The overall bar
+        # must advance monotonically across the whole loop and never rewind when
+        # the next embedder restarts its own current at 0.
+        from vtscore.datasets.stages.embedding import EmbedLoopProgress
+
+        t = self._embed_tracker()
+        prog = EmbedLoopProgress(t, 3)
+        overalls = []
+
+        def emb_pass(idx):
+            prog.begin(idx)
+            prog("embedding", "Embedding 4…", 0, 4)
+            overalls.append(t.get()["overall"])
+            prog("embedding", "Embedding 4…", 4, 4)
+            overalls.append(t.get()["overall"])
+
+        emb_pass(0)
+        mid_first = t.get()["overall"]
+        emb_pass(1)
+        emb_pass(2)
+
+        assert overalls == sorted(overalls)  # never rewinds across the loop
+        # Finishing the first embedder must NOT fill the whole embed slice —
+        # the 2nd/3rd embedders still have room to advance (the fix).
+        from vtscore.datasets.stages._common import _TOTAL_LOAD_STEPS
+
+        t.update("embedding", "done", current=1, total=1, step=3, total_steps=_TOTAL_LOAD_STEPS)
+        full_embed = t.get()["overall"]
+        assert mid_first < full_embed
+
+    def test_later_embedder_model_load_does_not_rewind(self):
+        # A 2nd/3rd embedder loads its own model mid-loop. Folding that "loading"
+        # into the embed step (rather than reporting step 2) keeps the step
+        # number from going backwards, which would reset the overall clock and
+        # slam the bar to the step-2 floor.
+        from vtscore.datasets.stages.embedding import EmbedLoopProgress
+
+        t = self._embed_tracker()
+        prog = EmbedLoopProgress(t, 2)
+
+        prog.begin(0)
+        prog("loading", "Loading model…", 0, 0)
+        prog("embedding", "Embedding 4…", 4, 4)
+        after_first = t.get()["overall"]
+
+        prog.begin(1)
+        prog("loading", "Loading model…", 0, 0)  # would be step 2 → rewind, if not folded
+        after_second_load = t.get()["overall"]
+
+        assert after_second_load >= after_first
+
+    def test_check_cancelled_forwards_to_real_tracker(self):
+        from vtscore.concurrency.progress import CancelledError
+        from vtscore.datasets.stages.embedding import EmbedLoopProgress
+
+        t = self._embed_tracker()
+        prog = EmbedLoopProgress(t, 3)
+        t.cancel()
+        with pytest.raises(CancelledError):
+            prog.check_cancelled()

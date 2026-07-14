@@ -378,6 +378,75 @@ def _ordered_load_embedders(medias: dict[int, dict[str, Any]], requested: list[s
     return names or [""]
 
 
+class EmbedLoopProgress:
+    """Tracker proxy that spreads a multi-embedder ingest loop across the embed step.
+
+    :func:`_embed_missing_stage` runs each bound embedder (v3 trio: text / patch
+    / structural picks) in turn, and every :func:`embed_missing` call reports its
+    own ``current``/``total`` starting from 0.  Forwarded straight to the tracker
+    those restart the within-step fraction each embedder, so the first embedder
+    fills the embed slice and the tracker's monotonic clamp then pins the unified
+    bar for the 2nd/3rd embedders — no backslide, but a long static stretch.
+
+    This proxy gives each embedder an equal, ordered sub-range of the embed step
+    (step 3) and rewrites the within-embedder fraction into the active range
+    before forwarding, so the bar fills once, cumulatively, across the whole loop
+    instead of per embedder.  An embedder that does no work (e.g. a reload whose
+    side-channels are already present) simply emits nothing and leaves its slice
+    unfilled; the next embedder jumps the bar forward, which is monotonic.
+
+    The **first** embedder's model-load keeps the dedicated model-load step
+    (step 2) so its weighted slice of the bar still fills; **later** embedders'
+    model loads fold into the embed step at their sub-range floor, because a step
+    number going *backwards* (3 → 2) reads as a brand-new job and would reset the
+    overall clock (see :meth:`ProgressTracker._compute_overall`).
+
+    Single-embedder loads (``n_embedders <= 1``) forward every update unchanged,
+    so their pacing — download / model-load / embed / finalize — is untouched.
+    """
+
+    #: Resolution of the synthetic within-step counter forwarded to the real
+    #: tracker (the embed fraction 0..1 is reported as ``current`` out of this).
+    _SCALE = 1000
+
+    def __init__(self, tracker, n_embedders: int) -> None:
+        self._tracker = tracker
+        self._n = max(int(n_embedders), 1)
+        self._idx = 0
+
+    def begin(self, idx: int) -> None:
+        """Activate embedder *idx*; subsequent calls map into its sub-range."""
+        self._idx = idx
+
+    def check_cancelled(self) -> None:
+        self._tracker.check_cancelled()
+
+    def __call__(self, status: str, message: str = "", current: int = 0, total: int = 0) -> None:
+        self._tracker.check_cancelled()
+        if self._n <= 1:
+            step = _STATUS_TO_STEP.get(status, _STATUS_TO_STEP["embedding"])
+            self._tracker.update(status, message, current, total, step=step, total_steps=_TOTAL_LOAD_STEPS)
+            return
+        # First embedder's model-load keeps the model-load step so its bar slice
+        # fills; everything else folds into the embed step's cumulative range.
+        if status == "loading" and self._idx == 0:
+            self._tracker.update(
+                status, message, current, total, step=_STATUS_TO_STEP["loading"], total_steps=_TOTAL_LOAD_STEPS
+            )
+            return
+        within = current / total if total and total > 0 else 0.0
+        within = min(max(within, 0.0), 1.0)
+        frac = (self._idx + within) / self._n
+        self._tracker.update(
+            status,
+            message,
+            int(frac * self._SCALE),
+            self._SCALE,
+            step=_STATUS_TO_STEP["embedding"],
+            total_steps=_TOTAL_LOAD_STEPS,
+        )
+
+
 def _embed_missing_stage(
     ctx: DatasetContext,
     tracker,
@@ -390,13 +459,14 @@ def _embed_missing_stage(
     ``media["embeddings"]`` carries a per-embedder vector, the patch embedder
     also populates ``patch_regions`` / ``patch_grid``, and the structural
     embedder populates ``local_features``.
+
+    Progress is routed through :class:`EmbedLoopProgress` so a multi-embedder
+    loop reports cumulative progress across the embed step rather than restarting
+    the bar at 0 for each embedder.
     """
-
-    def _emb_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
-        tracker.check_cancelled()
-        step = _STATUS_TO_STEP.get(status, _STATUS_TO_STEP["embedding"])
-        tracker.update(status, message, current, total, step=step, total_steps=_TOTAL_LOAD_STEPS)
-
-    for name in _ordered_load_embedders(ctx.medias, requested_embedders):
-        embed_missing(ctx.medias, name, on_progress=_emb_progress)
+    names = _ordered_load_embedders(ctx.medias, requested_embedders)
+    progress = EmbedLoopProgress(tracker, len(names))
+    for idx, name in enumerate(names):
+        progress.begin(idx)
+        embed_missing(ctx.medias, name, on_progress=progress)
     invalidate_embedding_matrix(ctx)
