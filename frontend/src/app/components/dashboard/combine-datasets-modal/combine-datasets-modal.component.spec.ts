@@ -101,16 +101,18 @@ describe('CombineDatasetsModalComponent', () => {
       ds('b', 'Bravo', 'audio', 20, '/x/b.pkl'),
     ]);
 
-    let started = false;
-    component.combineStarted.subscribe(() => { started = true; });
+    let emitted: { taskId: string; numSources: number; totalItems: number } | undefined;
+    component.combineStarted.subscribe((info) => { emitted = info; });
 
     component.submit();
     const req = httpMock.expectOne('/api/dataset/combine');
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({ datasets: ['/x/a.pkl', '/x/b.pkl'], name: 'Alpha + Bravo' });
-    req.flush({ ok: true });
+    req.flush({ ok: true, message: 'Combining datasets...', task_id: 't-combine' });
 
-    expect(started).toBe(true);
+    // The emitted payload carries the task id plus the pre-dedup source
+    // counts the dashboard needs for its summary toast.
+    expect(emitted).toEqual({ taskId: 't-combine', numSources: 2, totalItems: 30 });
     expect(component.submitting()).toBe(false);
   });
 

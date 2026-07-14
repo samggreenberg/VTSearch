@@ -299,7 +299,7 @@
   <vt-combine-datasets-modal
     [datasets]="modals.combineDatasets.datasets"
     (closed)="modals.closeCombineDatasets()"
-    (combineStarted)="onCombineStarted()"
+    (combineStarted)="onCombineStarted($event)"
   />
 }
 

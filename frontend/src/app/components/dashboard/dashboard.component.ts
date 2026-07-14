@@ -43,7 +43,10 @@ import { SkeletonComponent } from '../skeleton/skeleton.component';
 import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
 import { DetectorCardComponent } from './detector-card/detector-card.component';
-import { CombineDatasetsModalComponent } from './combine-datasets-modal/combine-datasets-modal.component';
+import {
+  CombineDatasetsModalComponent,
+  CombineStartedInfo,
+} from './combine-datasets-modal/combine-datasets-modal.component';
 import { CombineDetectorsModalComponent } from './combine-detectors-modal/combine-detectors-modal.component';
 import { LabelExporterModalComponent } from '../modals/label-exporter-modal/label-exporter-modal.component';
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
@@ -556,9 +559,35 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.modals.openCombineDatasets(targets);
   }
 
-  onCombineStarted(): void {
+  onCombineStarted(info: CombineStartedInfo): void {
     this.modals.closeCombineDatasets();
-    this.loadingTasksSvc.startProgressPolling();
+    this.loadingTasksSvc.startProgressPolling(info.taskId, (completed) =>
+      this.emitCombineSummaryToast(info, completed),
+    );
+  }
+
+  /**
+   * Emit the post-combine summary toast once the background task settles.
+   * Sources can collapse under MD5 dedup (e.g. 80 → 50) with no other
+   * feedback, so tell the user how many unique items were kept vs. how
+   * many duplicates were dropped. The unique count is read from the freshly
+   * created dataset (identified by the completed task's ``dataset_id``);
+   * duplicates dropped is the pre-dedup source total minus that.
+   */
+  private emitCombineSummaryToast(info: CombineStartedInfo, completed: LoadingTask[]): void {
+    const datasetId = completed.find((t) => t.task_id === info.taskId)?.dataset_id;
+    if (!datasetId) return;
+    this.datasetsRegistryApi.getRegistry().subscribe((res) => {
+      const ds = (res.datasets || []).find((d) => (d as DatasetRegistryEntry).id === datasetId);
+      if (!ds) return;
+      const uniqueKept = Number((ds as DatasetRegistryEntry)['num_items'] ?? 0);
+      const dropped = Math.max(0, info.totalItems - uniqueKept);
+      this.toast.success({
+        message:
+          `Combined ${info.numSources} datasets into 1 — ` +
+          `${uniqueKept} unique kept, ${dropped} ${dropped === 1 ? 'duplicate' : 'duplicates'} dropped`,
+      });
+    });
   }
 
   /**

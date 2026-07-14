@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { DashboardComponent } from './dashboard.component';
+import { LoadingTask } from '../../models/api.models';
 import { LabelSessionService } from '../../services/label-session.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { provideZoneless } from '../../testing/zoneless-testbed';
@@ -645,9 +646,9 @@ describe('DashboardComponent', () => {
       const activeCtx = component['activeContext'];
       const setActive = vi.spyOn(activeCtx, 'setActivePair');
       // Capture the completion callback instead of running the real SSE poll.
-      let onComplete: (() => void) | undefined;
+      let onComplete: ((completed: LoadingTask[]) => void) | undefined;
       vi.spyOn(component['loadingTasksSvc'], 'startProgressPolling').mockImplementation(
-        (_taskId?: string, cb?: () => void) => {
+        (_taskId?: string, cb?: (completed: LoadingTask[]) => void) => {
           onComplete = cb;
         },
       );
@@ -659,7 +660,7 @@ describe('DashboardComponent', () => {
       expect(setActive).not.toHaveBeenCalled();
       expect(onComplete).toBeTypeOf('function');
 
-      onComplete!();
+      onComplete!([]);
       expect(setActive).toHaveBeenCalledWith('d1', '');
     });
 
@@ -685,6 +686,55 @@ describe('DashboardComponent', () => {
       expect(setActive).not.toHaveBeenCalled();
       onComplete!();
       expect(setActive).toHaveBeenCalledWith('d1', 'm1');
+    });
+  });
+
+  describe('onCombineStarted → summary toast', () => {
+    it('reports unique kept vs. duplicates dropped once the combine settles', () => {
+      flushInitialRequests();
+
+      const success = vi.spyOn(component['toast'], 'success');
+      let onComplete: ((completed: any[]) => void) | undefined;
+      vi.spyOn(component['loadingTasksSvc'], 'startProgressPolling').mockImplementation(
+        (_taskId?: string, cb?: (completed: any[]) => void) => {
+          onComplete = cb;
+        },
+      );
+
+      component.onCombineStarted({ taskId: 'tc', numSources: 2, totalItems: 80 });
+      expect(onComplete).toBeTypeOf('function');
+      // No toast until the task settles.
+      expect(success).not.toHaveBeenCalled();
+
+      // Task done: it registered dataset "dc" with 50 unique items, so 30
+      // of the 80 source items were duplicates.
+      onComplete!([{ task_id: 'tc', status: 'idle', dataset_id: 'dc' } as any]);
+      httpMock
+        .expectOne('/api/datasets/registry')
+        .flush({ datasets: [{ id: 'dc', name: 'Combined', media_type: 'audio', num_items: 50 }] });
+
+      expect(success).toHaveBeenCalledWith({
+        message: 'Combined 2 datasets into 1 — 50 unique kept, 30 duplicates dropped',
+      });
+    });
+
+    it('skips the toast when the completed task has no dataset id', () => {
+      flushInitialRequests();
+
+      const success = vi.spyOn(component['toast'], 'success');
+      let onComplete: ((completed: any[]) => void) | undefined;
+      vi.spyOn(component['loadingTasksSvc'], 'startProgressPolling').mockImplementation(
+        (_taskId?: string, cb?: (completed: any[]) => void) => {
+          onComplete = cb;
+        },
+      );
+
+      component.onCombineStarted({ taskId: 'tc', numSources: 2, totalItems: 80 });
+      onComplete!([{ task_id: 'tc', status: 'idle' } as any]);
+
+      // No dataset id → no registry fetch and no toast.
+      httpMock.expectNone('/api/datasets/registry');
+      expect(success).not.toHaveBeenCalled();
     });
   });
 });

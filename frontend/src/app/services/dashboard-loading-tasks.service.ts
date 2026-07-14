@@ -63,8 +63,12 @@ export class DashboardLoadingTasksService {
    * firing when a dataset was loaded while another import was running.
    * Each dataset callback carries the task id it belongs to (when known)
    * so an *unrelated* task's failure doesn't suppress it.
+   *
+   * Callbacks receive the settling SSE snapshot so a caller can read the
+   * completed task's association fields (e.g. its ``dataset_id``) without a
+   * second poll — used by the combine-datasets summary toast.
    */
-  private datasetPollCallbacks: Array<{ taskId: string; cb: () => void }> = [];
+  private datasetPollCallbacks: Array<{ taskId: string; cb: (completedTasks: LoadingTask[]) => void }> = [];
   private detectorPollCallbacks: Array<() => void> = [];
 
   constructor() {
@@ -135,7 +139,7 @@ export class DashboardLoadingTasksService {
     return this.detectorLoadingTasks.find((t) => t.detector_id === modelId);
   }
 
-  startProgressPolling(awaitTaskId?: string, onComplete?: () => void): void {
+  startProgressPolling(awaitTaskId?: string, onComplete?: (completedTasks: LoadingTask[]) => void): void {
     // Register any task we've been told to expect.  See the field
     // comment on `awaitedTaskIds` for why this is needed.
     if (awaitTaskId) {
@@ -209,7 +213,7 @@ export class DashboardLoadingTasksService {
             for (const entry of callbacks) {
               const suppressed = entry.taskId ? failedIds.has(entry.taskId) : failed.length > 0;
               if (!suppressed) {
-                entry.cb();
+                entry.cb(tasks);
               }
             }
           }
