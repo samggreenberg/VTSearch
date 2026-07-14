@@ -207,10 +207,8 @@
         <!-- Import Defaults -->
         @if (activeSettingsTab() === 'imports') {
           <h3>Import Defaults<vt-field-hint-icon hint="Per-media-type defaults that auto-fill the Add Dataset modal when you start a matching import."></vt-field-hint-icon></h3>
-          <div class="form-group" title="Streamline the UI for a single media type. Importer and detector flows will hide their media-type pickers and lock to this type; converters that produce other types are filtered out.">
-            <label class="form-label" for="setting-solo-media-type">Solo media type@if (soloMediaTypeNote) {
-              <vt-field-hint-icon [hint]="soloMediaTypeNote"></vt-field-hint-icon>
-            }</label>
+          <div class="form-group" title="Streamline the app to a single media type: the Add Dataset picker hides importers and tabs that can't produce it (and preselects it on the rest), the New Detector media picker and Import Defaults collapse to this type, and converters that output other types are filtered out.">
+            <label class="form-label" for="setting-solo-media-type">Solo media type<vt-field-hint-icon [hint]="soloMediaTypeHint"></vt-field-hint-icon></label>
             <select
               id="setting-solo-media-type"
               class="form-select"

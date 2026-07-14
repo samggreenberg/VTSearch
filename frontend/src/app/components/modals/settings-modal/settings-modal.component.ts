@@ -206,6 +206,20 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     return '';
   }
 
+  /** Always-present help for the solo-mediaType select, spelling out
+   *  exactly what the lock constrains (so it isn't a mystery toggle), plus
+   *  the CLI-fallback note when one applies. */
+  get soloMediaTypeHint(): string {
+    const base =
+      'Streamlines the whole app to one media type. The Add Dataset picker ' +
+      'hides importers and tabs that can’t produce it and preselects it ' +
+      'on the ones that can; the New Detector media picker and the Import ' +
+      'Defaults tab collapse to just this type; and converters that output ' +
+      'other types are filtered out. Pick "Show everything" to turn it off.';
+    const note = this.soloMediaTypeNote;
+    return note ? `${base} ${note}` : base;
+  }
+
   onSoloMediaTypeChange(value: string): void {
     // Empty string = "Show everything"; the backend stores it as null
     // and still flips the explicit flag so the choice survives a CLI

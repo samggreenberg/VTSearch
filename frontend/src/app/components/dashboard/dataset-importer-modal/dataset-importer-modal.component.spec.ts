@@ -160,18 +160,18 @@ describe('DatasetImporterModalComponent', () => {
    *  ``/api/embedders`` (no media_type), ``/api/media-types``, and the
    *  settings load (``/api/settings``).  Flush all of them so each test
    *  starts from a clean request queue. */
-  function flushInitRequests(): void {
+  function flushInitRequests(settings: Record<string, unknown> = {}): void {
     httpMock.expectOne(req => req.url === '/api/embedders' && !req.params.get('media_type'))
       .flush({ embedders: [] });
     httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
     TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
-    httpMock.expectOne('/api/settings').flush({});
+    httpMock.expectOne('/api/settings').flush(settings);
   }
 
-  function flushImporters(): void {
+  function flushImporters(settings: Record<string, unknown> = {}): void {
     TestBed.tick(); // run ngOnInit under zoneless (issues the init GETs); also resolves the static picker ViewChilds
     httpMock.expectOne('/api/dataset/all-importers').flush({ importers: mockImporters, tabs: mockTabs });
-    flushInitRequests();
+    flushInitRequests(settings);
   }
 
   /** Flush the embedder + clipper fetches and the embedder-aware demo-list
@@ -257,6 +257,64 @@ describe('DatasetImporterModalComponent', () => {
     // tab renders but importersForActiveTab is empty when selected.
     component.selectImporterTab('services');
     expect(component.importersForActiveTab.length).toBe(0);
+  });
+
+  describe('solo media-type filtering', () => {
+    // A type-scoped importer (only produces image/video) sitting in its own
+    // category, plus the always-agnostic Local folder/files pair.
+    const soloImporters = [
+      { name: 'local_folder', display_name: 'Folder', picker_view: 'local_folder', category: 'local', fields: [] },
+      { name: 'local_files', display_name: 'Files', picker_view: 'local_files', category: 'local', fields: [] },
+      {
+        name: 'synthetic',
+        display_name: 'Synthetic',
+        picker_view: 'form',
+        category: 'synth',
+        fields: [{ key: 'media_type', field_type: 'select', label: 'Media Type', options: ['image', 'video'] }],
+      },
+    ];
+    const soloTabs = [
+      { id: 'local', label: 'Local', order: 10 },
+      { id: 'synth', label: 'Synthetic', order: 20 },
+    ];
+
+    function initSolo(solo: string | null): void {
+      TestBed.tick();
+      httpMock.expectOne('/api/dataset/all-importers').flush({ importers: soloImporters, tabs: soloTabs });
+      flushInitRequests(solo ? { effective_solo_media_type: solo } : {});
+    }
+
+    it('hides type-scoped importers whose options exclude the locked type', () => {
+      initSolo('audio');
+      // synthetic can only produce image/video, so under an audio lock it is
+      // dropped - and its now-empty "Synthetic" tab disappears with it.
+      const names = component.orderedImporters.map((i) => i.name);
+      expect(names).not.toContain('synthetic');
+      expect(component.visibleImporterTabs.map((t) => t.id)).toEqual(['local']);
+    });
+
+    it('keeps type-scoped importers whose options include the locked type', () => {
+      initSolo('image');
+      const names = component.orderedImporters.map((i) => i.name);
+      expect(names).toContain('synthetic');
+      expect(component.visibleImporterTabs.map((t) => t.id)).toEqual(['local', 'synth']);
+    });
+
+    it('keeps agnostic importers under any lock', () => {
+      initSolo('audio');
+      // local_folder / local_files declare no media_type field, so they
+      // produce whatever the user points them at and always stay offered.
+      const names = component.orderedImporters.map((i) => i.name);
+      expect(names).toContain('local_folder');
+      expect(names).toContain('local_files');
+    });
+
+    it('shows every importer and tab when no lock is set', () => {
+      initSolo(null);
+      const names = component.orderedImporters.map((i) => i.name);
+      expect(names).toContain('synthetic');
+      expect(component.visibleImporterTabs.map((t) => t.id)).toEqual(['local', 'synth']);
+    });
   });
 
   it('should render inner importer sub-tabs for the active category', async () => {
