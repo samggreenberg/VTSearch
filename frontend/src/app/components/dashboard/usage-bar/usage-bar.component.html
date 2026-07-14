@@ -1,6 +1,6 @@
 @if (usage()) {
   <div class="usage-bar" [title]="title">
     <div class="usage-bar-label">{{ label() }}: {{ freeText }}</div>
-    <vt-progress-bar [value]="usedPct" [max]="100" [fill]="fillColor" />
+    <vt-progress-bar [value]="usedPct" [max]="100" polarity="high-bad" />
   </div>
 }

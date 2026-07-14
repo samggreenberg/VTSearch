@@ -1,5 +1,12 @@
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 
+/**
+ * Which direction of a progress bar reads as "good", picking the fill gradient.
+ * - `'high-good'`: a fuller bar is better (progress toward a goal).
+ * - `'high-bad'`: a fuller bar is worse (a consumed resource like disk or RAM).
+ */
+export type ProgressPolarity = 'high-good' | 'high-bad';
+
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-progress-bar',
@@ -22,14 +29,17 @@ export class ProgressBarComponent {
    */
   @Input() smooth = false;
   /**
-   * Optional explicit fill color that overrides the default red -> yellow ->
-   * green gradient. Set it when the bar's semantic isn't "progress toward a
-   * goal": the achievements bar wants a flat accent, and the disk-usage gauge
-   * wants threshold colors keyed the *opposite* way (fuller = worse). Leave
-   * unset (the default) to keep the gradient. Any CSS color string works, so
-   * theme tokens like `var(--accent)` pass straight through.
+   * Whether a fuller bar is good or bad, which picks the direction of the
+   * red -> yellow -> green fill gradient:
+   * - `'high-good'` (default): reddest empty, greenest full. Use it for
+   *   "progress toward a goal" bars (the achievements bar), where more is
+   *   better and green rewards it.
+   * - `'high-bad'`: greenest empty, reddest full. Use it for consumed-resource
+   *   gauges (disk / RAM), where a fuller bar is *worse* so it should redden as
+   *   it fills.
+   * The two are mirror images: `'high-bad'` colors by `100 - percentage`.
    */
-  @Input() fill: string | null = null;
+  @Input() polarity: ProgressPolarity = 'high-good';
 
   get percentage(): number {
     if (this.max <= 0) return 0;
@@ -37,17 +47,10 @@ export class ProgressBarComponent {
   }
 
   /**
-   * The color actually painted onto the fill: the caller's `fill` override when
-   * given, otherwise the computed gradient (`fillColor`). Returns `null` while
-   * indeterminate with no override so the SCSS `--accent` fallback applies.
-   */
-  get resolvedFill(): string | null {
-    return this.fill ?? this.fillColor;
-  }
-
-  /**
    * Continuous red -> yellow -> green fill color, matching the CMD progress
-   * bar gradient: reddest at 0%, yellowest at 50%, greenest at 100%. Built
+   * bar gradient. For `'high-good'` (the default) it is reddest at 0%,
+   * yellowest at 50%, greenest at 100%; for `'high-bad'` the ramp is mirrored
+   * (greenest empty, reddest full) by coloring off `100 - percentage`. Built
    * from the theme's `--color-bad` / `--text-warning` / `--color-good`
    * variables via `color-mix` so it stays correct in every theme (light,
    * dark, high-visibility) without hardcoding RGB values here.
@@ -57,7 +60,7 @@ export class ProgressBarComponent {
    */
   get fillColor(): string | null {
     if (this.indeterminate) return null;
-    const pct = this.percentage;
+    const pct = this.polarity === 'high-bad' ? 100 - this.percentage : this.percentage;
     if (pct <= 50) {
       const t = (pct / 50) * 100;
       return `color-mix(in srgb, var(--text-warning) ${t}%, var(--color-bad))`;
