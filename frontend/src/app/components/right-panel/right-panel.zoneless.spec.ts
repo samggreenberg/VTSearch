@@ -1,11 +1,12 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 
 import { RightPanelComponent } from './right-panel.component';
 import { VoteStateService } from '../../services/vote-state.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
+import { provideHttpTesting } from '../../testing/test-providers';
 
 /**
  * Zoneless staleness canary for the right panel (docs/plans/zoneless-migration.md,
@@ -24,7 +25,7 @@ describe('RightPanelComponent (zoneless votes canary)', () => {
   beforeEach(async () => {
     await configureZoneless({
       imports: [RightPanelComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideHttpTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(RightPanelComponent);

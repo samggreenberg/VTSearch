@@ -1,12 +1,13 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
+
 import { HttpRequest } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController } from '@angular/common/http/testing';
 import { Subject } from 'rxjs';
 import { ProgressModalComponent } from './progress-modal.component';
 import { ProgressEventsService } from '../../../services/progress-events.service';
 import { VotingIterationsResponse } from '../../../models/api.models';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { provideHttpTesting } from '../../../testing/test-providers';
 
 describe('ProgressModalComponent', () => {
   let component: ProgressModalComponent;
@@ -22,8 +23,7 @@ describe('ProgressModalComponent', () => {
       imports: [ProgressModalComponent],
       providers: [
         ...provideZoneless(),
-        provideHttpClient(),
-        provideHttpClientTesting(),
+        ...provideHttpTesting(),
         { provide: ProgressEventsService, useValue: { votingIterations$ } },
       ],
     }).compileComponents();

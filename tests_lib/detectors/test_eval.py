@@ -25,6 +25,7 @@ from vtscore.eval.runner import (
     eval_learned_sort,
     eval_text_sort,
     format_results_json,
+    run_eval,
 )
 
 
@@ -688,3 +689,140 @@ class TestRegionVotingLearnedSort:
         assert all(b == (0.2, 0.2, 0.6, 0.6) for b in boxes_on.values())
         # Baseline: no boxes passed at all.
         assert boxes_off is None
+
+
+# =====================================================================
+# Runner: failure paths
+# =====================================================================
+
+
+class TestEvalTextSortFailures:
+    """eval_text_sort's error branches: unembeddable query, empty medias."""
+
+    def _one_cat_clips(self):
+        rng = np.random.RandomState(0)
+        medias = {}
+        for media_id in range(1, 6):
+            emb = rng.standard_normal(16).astype(np.float32)
+            medias[media_id] = {
+                "id": media_id,
+                "embeddings": {"siglip": emb},
+                "category": "cat",
+                "media_type": "image",
+            }
+        return medias
+
+    def test_unembeddable_query_raises(self):
+        """When ``embed_text_query`` returns ``None`` (no embedder for the media
+        type, or an embed failure), the query cannot be ranked and the runner
+        raises rather than silently scoring everything at zero."""
+        medias = self._one_cat_clips()
+        queries = [EvalQuery("a cat", "cat")]
+
+        with patch("vtscore.embedding.helpers.embed_text_query", return_value=None):
+            with pytest.raises(RuntimeError, match="Could not embed query"):
+                eval_text_sort(medias, queries, "image")
+
+    def test_empty_medias_yields_zero_metrics(self):
+        """An empty media set (e.g. a category with nothing loaded) must not
+        crash: the query ranks an empty list and reports zeroed metrics."""
+        queries = [EvalQuery("a cat", "cat")]
+        with patch("vtscore.embedding.helpers.embed_text_query", return_value=np.ones(16, dtype=np.float32)):
+            results = eval_text_sort({}, queries, "image", k_values=[5])
+        assert len(results) == 1
+        qm = results[0]
+        assert qm.num_total == 0
+        assert qm.num_relevant == 0
+        assert qm.average_precision == 0.0
+
+    def test_query_targeting_absent_category_is_all_negative(self):
+        """A query whose target category has no medias reports zero relevant
+        and AP 0 (closed-world), without raising."""
+        medias = self._one_cat_clips()
+        queries = [EvalQuery("a dog", "dog")]  # no "dog" medias exist
+        with patch("vtscore.embedding.helpers.embed_text_query", return_value=np.ones(16, dtype=np.float32)):
+            results = eval_text_sort(medias, queries, "image", k_values=[5])
+        assert results[0].num_relevant == 0
+        assert results[0].average_precision == 0.0
+
+
+class TestEvalLearnedSortFailures:
+    """eval_learned_sort's skip branches: empty test set, absent category."""
+
+    def _two_by_two_clips(self):
+        """Exactly 2 target + 2 other medias — the minimum that passes the
+        ``< 2`` guard, so the empty-test-set branch is what does the skipping."""
+        rng = np.random.RandomState(3)
+        medias = {}
+        media_id = 1
+        for _ in range(2):
+            medias[media_id] = {
+                "id": media_id,
+                "embeddings": {"siglip": rng.standard_normal(8).astype(np.float32)},
+                "category": "cat_a",
+                "media_type": "image",
+            }
+            media_id += 1
+        for _ in range(2):
+            medias[media_id] = {
+                "id": media_id,
+                "embeddings": {"siglip": rng.standard_normal(8).astype(np.float32)},
+                "category": "cat_b",
+                "media_type": "image",
+            }
+            media_id += 1
+        return medias
+
+    def test_empty_test_set_is_skipped(self):
+        """With ``train_fraction=1.0`` every media lands in the train split, so
+        the held-out test set is empty and the category is skipped before any
+        model is trained."""
+        medias = self._two_by_two_clips()
+        queries = [EvalQuery("category a", "cat_a")]
+        results = eval_learned_sort(medias, queries, train_fraction=1.0, seed=42)
+        assert results == []
+
+    def test_absent_category_is_skipped(self):
+        """A query whose target category has zero positives (fewer than 2
+        medias) is skipped, not evaluated on an all-negative pool."""
+        medias = self._two_by_two_clips()
+        queries = [EvalQuery("a rare thing", "cat_zzz")]
+        results = eval_learned_sort(medias, queries, train_fraction=0.5, seed=42)
+        assert results == []
+
+
+class TestRunEvalFailures:
+    """run_eval's dataset-resolution and load-failure branches all *skip* the
+    offending dataset and keep going, returning results only for the datasets
+    that resolved and loaded."""
+
+    def test_unknown_eval_dataset_id_is_skipped(self, capsys):
+        results = run_eval(dataset_ids=["definitely_not_a_dataset"], mode="text")
+        assert results == []
+        assert "unknown eval dataset" in capsys.readouterr().err
+
+    def test_missing_demo_dataset_is_skipped(self, capsys):
+        """An eval config that references a demo dataset which isn't registered
+        is skipped with a warning (guards against a stale EVAL_DATASETS entry)."""
+        from unittest.mock import patch as _patch
+
+        from vtscore.eval.config import EVAL_DATASETS
+
+        fake = {"demo_dataset": "no_such_demo", "queries": [EvalQuery("x", "y")]}
+        with _patch.dict(EVAL_DATASETS, {"fake_eval": fake}, clear=False):
+            results = run_eval(dataset_ids=["fake_eval"], mode="text")
+        assert results == []
+        assert "not found" in capsys.readouterr().err
+
+    def test_dataset_load_failure_is_skipped(self, capsys):
+        """If ``load_demo_dataset`` raises (download/embed failure), the dataset
+        is skipped with an ERROR line rather than aborting the whole run."""
+        from unittest.mock import patch as _patch
+
+        def _boom(*args, **kwargs):
+            raise RuntimeError("simulated download failure")
+
+        with _patch("vtscore.datasets.loader.load_demo_dataset", side_effect=_boom):
+            results = run_eval(dataset_ids=["esc50_s"], mode="text")
+        assert results == []
+        assert "ERROR loading dataset" in capsys.readouterr().err

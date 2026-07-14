@@ -611,6 +611,17 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
                     flush=True,
                 )
 
+    # Deployment-level "Email us" recipient override from the environment,
+    # same rationale as the dataset-retention block above: the gunicorn images
+    # never parse ``--support-email``. An explicit CLI flag always wins.
+    from vtsearch.settings import get_cli_support_email, set_cli_support_email
+
+    if get_cli_support_email() is None:
+        _env_support_email = (os.environ.get("VTSEARCH_SUPPORT_EMAIL") or "").strip()
+        if _env_support_email:
+            set_cli_support_email(_env_support_email)
+            print(f"\U0001f4e7 Support email: {_env_support_email} (from VTSEARCH_SUPPORT_EMAIL)", flush=True)
+
     print("\U0001f4da Loading ML libraries...", flush=True)
     initialize_models(on_progress=lambda *a, **k: None)
     # ``--solo-media-type`` (process-level CLI fallback) tells us which

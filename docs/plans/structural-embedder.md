@@ -46,10 +46,7 @@ retrieve-then-geometrically-verify pipeline.
   (good lift at ~250 ms/query), K=100 the quality-sensitive ceiling. The
   geometric re-rank lifts mAP at every K, but Stage-1 is the floor it cannot
   beat — hence growing the codebook.
-- **OpenLogo measured counts.** The `openlogo` demo's advertised
-  `DEMO_MEDIA_COUNTS` currently falls back to the per-category estimate
-  (approximate for a flat-sliced multi-label source, as with Visual Genome);
-  measure the real entries once the 4.6 GB set has been downloaded and counted.
+- [ ] #2399 — Fill in measured OpenLogo demo media counts
 - **Double SIFT detection.** The embed pass (VLAD) and the local-features pass
   each run SIFT once per image. Acceptable for v1; a combined single-detect pass
   is a cheap later optimisation.

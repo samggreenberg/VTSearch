@@ -60,10 +60,20 @@
     (resizeEnd)="onLeftResizeEnd($event)"
   ></div>
   <div class="panel-center">
-    <vt-center-panel
-      [media]="mediaState.selectedMedia"
-      (mediaVoted)="onMediaVoted($event)"
-    />
+    @if (autopilotExhausted()) {
+      <div class="autopilot-exhausted-pane" role="status">
+        <p class="autopilot-exhausted-heading">Nothing left to label</p>
+        <p class="autopilot-exhausted-body">
+          Autopilot has labeled every item in this dataset. Review your votes in the
+          side panels, or export your results.
+        </p>
+      </div>
+    } @else {
+      <vt-center-panel
+        [media]="mediaState.selectedMedia"
+        (mediaVoted)="onMediaVoted($event)"
+      />
+    }
   </div>
   <div
     class="pane-divider"

@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController } from '@angular/common/http/testing';
+
 import { DetectorsFindApiService } from './detectors-find-api.service';
+import { provideHttpTesting } from '../testing/test-providers';
 
 describe('DetectorsFindApiService', () => {
   let service: DetectorsFindApiService;
@@ -9,7 +10,7 @@ describe('DetectorsFindApiService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideHttpTesting()],
     });
     service = TestBed.inject(DetectorsFindApiService);
     httpMock = TestBed.inject(HttpTestingController);

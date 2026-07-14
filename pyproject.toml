@@ -152,11 +152,10 @@ max-complexity = 10
 # safe_pickle_load is the centralized helper that calls pickle.load on
 # whitelisted bytes; flagging it would defeat the purpose of the wrapper.
 "vtscore/security/pickle.py" = ["S301"]
-# Intentional `git` / `unrar` / `ffmpeg` invocations: arguments are
+# Intentional `git` / `ffmpeg` invocations: arguments are
 # project-controlled paths, no shell expansion.
 "vtsearch/__init__.py" = ["S603", "S607"]
 "vtscore/converters/video2audio.py" = ["S603"]
-"vtscore/datasets/downloader/video.py" = ["S603", "S607"]
 "vtsearch/routes/media/list.py" = ["S603"]
 # Atom feed parsing for the arXiv text-dataset downloader.
 "vtscore/datasets/downloader/text.py" = ["S314"]
@@ -198,17 +197,25 @@ DEP001 = [
     "rarfile",
     "whisper",
     "mediapipe",
+    "lightglue",
     "facenet_pytorch",
     "torchvision",
     "safetensors",
     "huggingface_hub",
     "cuml",
+    # SuperPoint/LightGlue structural backend: lazily imported inside method
+    # bodies (guarded, GPU-oriented); users opt in by installing lightglue.
+    "lightglue",
     # Installed `--no-deps` by the install scripts (its transformers<5 pin is
     # empirically unnecessary; see docs/plans/vtsbrowse-toponymy.md), so it
     # cannot be declared here — declaring it would put its pins back in the
     # resolver. Its real deps ARE declared (fast_hdbscan et al.); the smoke
     # test in tests_lib/projection guards the --no-deps bypass.
     "toponymy",
+    # SuperPoint/LightGlue backend for the structural (SPLG) image embedder,
+    # imported lazily inside ``vtscore.media.structural_splg`` methods and
+    # opt-in only (users install ``lightglue`` to enable structural matching).
+    "lightglue",
 ]
 # DEP003: imported as a transitive of another declared dependency.
 # ``safetensors`` and ``torchvision`` ship with ``transformers`` / ``torch``

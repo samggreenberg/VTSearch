@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { ThemeService } from './theme.service';
+import { provideHttpTesting } from '../testing/test-providers';
 
 interface StubMediaQueryList {
   matches: boolean;
@@ -62,7 +63,7 @@ describe('ThemeService', () => {
     // Default: OS prefers dark.
     installStub(false);
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideHttpTesting()],
     });
     service = TestBed.inject(ThemeService);
     httpMock = TestBed.inject(HttpTestingController);

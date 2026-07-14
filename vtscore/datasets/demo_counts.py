@@ -35,13 +35,23 @@ source's S/M/L slices partition its categories, so ``S + M + L == A`` holds as
 a consistency check.
 
 * ``caltech101_*`` (image) — 412 / 838 / 1704 / 2954
+* ``caltech256_*`` (image) — 534 / 1087 / 2179 / 3800
 * ``eurosat_*`` (image) — 3853 / 7713 / 15434 / 27000
 * ``oxford_flowers_102_a`` (image) — 8189
+* ``places365_*`` (image) — 5110 / 10220 / 21170 / 36500
+* ``ucsf_documents_a`` (image) — 150 (6 categories × 25 PDFs each)
 * ``reuters21578_*`` (text) — 1361 / 2731 / 5463 / 9555
 * ``20newsgroups_*`` (text) — 1194 / 2389 / 4775 / 8358
 * ``arxiv_abstracts_*`` (text) — 28 / 57 / 115 / 200
 * ``bbc_news_a`` (text) — 2225
+* ``wikipedia_topics_*`` (dbpedia text) — 89992 / 179998 / 360010 / 630000
+* ``gtzan_a`` (audio) — 1000 (one media per track; AppleDouble sidecars skipped)
+* ``urbansound8k_*`` (audio) — 1240 / 2497 / 4995 / 8732
+* ``speech_commands_v2_*`` (audio) — 15104 / 30238 / 60487 / 105829
 * ``ucf101_*`` (video) — 55 / 114 / 236 / 405 (one media per video file)
+* ``ucf101_full_*`` (video) — 1857 / 3808 / 7655 / 13320
+* ``hmdb51_*`` (video) — 943 / 1929 / 3882 / 6754 (HuggingFace zip mirror)
+* ``kth_*`` (video) — 84 / 168 / 347 / 599
 
 Datasets whose categories are uniform (e.g. ESC-50 at 40 clips/category,
 Food-101 at 1000/category, AG News / IMDB which are class-balanced) are already
@@ -67,21 +77,55 @@ DEMO_MEDIA_COUNTS: dict[str, int] = {
     "caltech101_l": 1704,
     "caltech101_m": 838,
     "caltech101_s": 412,
+    "caltech256_a": 3800,
+    "caltech256_l": 2179,
+    "caltech256_m": 1087,
+    "caltech256_s": 534,
     "eurosat_a": 27000,
     "eurosat_l": 15434,
     "eurosat_m": 7713,
     "eurosat_s": 3853,
+    "gtzan_a": 1000,
+    "hmdb51_a": 6754,
+    "hmdb51_l": 3882,
+    "hmdb51_m": 1929,
+    "hmdb51_s": 943,
+    "kth_a": 599,
+    "kth_l": 347,
+    "kth_m": 168,
+    "kth_s": 84,
     "oxford_flowers_102_a": 8189,
+    "places365_a": 36500,
+    "places365_l": 21170,
+    "places365_m": 10220,
+    "places365_s": 5110,
     "reuters21578_a": 9555,
     "reuters21578_l": 5463,
     "reuters21578_m": 2731,
     "reuters21578_s": 1361,
     "roxford5k_a": 5063,
     "roxford5k_s": 501,
+    "speech_commands_v2_a": 105829,
+    "speech_commands_v2_l": 60487,
+    "speech_commands_v2_m": 30238,
+    "speech_commands_v2_s": 15104,
     "ucf101_a": 405,
+    "ucf101_full_a": 13320,
+    "ucf101_full_l": 7655,
+    "ucf101_full_m": 3808,
+    "ucf101_full_s": 1857,
     "ucf101_l": 236,
     "ucf101_m": 114,
     "ucf101_s": 55,
+    "ucsf_documents_a": 150,
+    "urbansound8k_a": 8732,
+    "urbansound8k_l": 4995,
+    "urbansound8k_m": 2497,
+    "urbansound8k_s": 1240,
+    "wikipedia_topics_a": 630000,
+    "wikipedia_topics_l": 360010,
+    "wikipedia_topics_m": 179998,
+    "wikipedia_topics_s": 89992,
 }
 
 

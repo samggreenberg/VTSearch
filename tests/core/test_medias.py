@@ -608,6 +608,20 @@ class TestMediaAudio:
         resp = client.get("/api/medias/0/audio")
         assert resp.status_code == 404
 
+    def test_sets_etag_and_cache_control(self, client):
+        resp = client.get("/api/medias/1/audio")
+        assert resp.status_code == 200
+        assert resp.headers.get("ETag")
+        assert resp.headers.get("Cache-Control") == "private, max-age=86400"
+
+    def test_conditional_request_returns_304(self, client):
+        first = client.get("/api/medias/1/audio")
+        etag = first.headers["ETag"]
+        second = client.get("/api/medias/1/audio", headers={"If-None-Match": etag})
+        assert second.status_code == 304
+        assert second.headers.get("Cache-Control") == "private, max-age=86400"
+        assert second.data == b""
+
 
 class TestAddToPile:
     """Tests for POST /api/medias/add-to-pile."""

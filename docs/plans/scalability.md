@@ -196,21 +196,7 @@ media-reading call site.
 
 ### S5: threshold cache key contains full training vectors as bytes
 
-**File:** `vtscore/training/thresholds.py:109` (`_calibration_cache_key`)
-
-```python
-X_bytes = np.stack(X_list).astype(np.float32, copy=False).tobytes()
-y_bytes = np.asarray(y_list, dtype=np.float32).tobytes()
-```
-
-For `N_labels` labels at D=384 this creates an `(N_labels × D × 4)` byte string on
-every threshold computation: ~15 MB at 10 k labels, 150 MB at 100 k. The tuple
-lives in the detector's calibration cache until the next call invalidates it.
-
-**Fix:** Hash the vectors instead of storing them —
-`hashlib.blake2b(X_bytes).digest()` (fast, 128-bit) so the key is always tiny.
-The cache already lives on the detector context and is invalidated by any vote
-change, so the hash is purely for collision resistance.
+- [ ] #2406 — Hash the threshold cache key instead of storing raw training vectors (fix sketch in the issue)
 
 ---
 
@@ -313,19 +299,7 @@ labelset. (Journal deferred until compaction semantics are defined.)
 
 ### S13: label export — full JSON in memory (GUI route)
 
-**Files:** `vtsearch/routes/labels/vote.py` (`export_labels`),
-`vtscore/datasets/labelset.py` (`to_dict`)
-
-**Partly shipped:** CLI autodetect results stream via `--stream-results` (NDJSON /
-streamed CSV; see [`cli-stream-massive-images.md`](cli-stream-massive-images.md)).
-
-**Still open:** the GUI `export_labels` route returns a buffered
-`labelset.to_dict()` — `to_dict` builds `[e.to_dict() for e in self.elements]`, a
-fully materialised list (~50 MB at 100 k labels), which Flask then JSON-encodes.
-
-**Fix:** Stream the response with `flask.stream_with_context` + a generator that
-encodes one element at a time. Simplest: add a `?format=ndjson` query param and
-keep the default response identical.
+- [ ] #2407 — Stream the GUI label-export route (fix sketch in the issue; CLI side already streams)
 
 ---
 

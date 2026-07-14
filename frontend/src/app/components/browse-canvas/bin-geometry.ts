@@ -141,3 +141,63 @@ const SQUARE_GEOMETRY: BinGeometry = {
 export function binGeometry(shape: BinShape | undefined): BinGeometry {
   return shape === 'square' ? SQUARE_GEOMETRY : HEX_GEOMETRY;
 }
+
+/** The minimum a hit-test needs of a cell: its centre in projection space. */
+export interface CellCentre {
+  cx: number;
+  cy: number;
+}
+
+/**
+ * The nearest cell to projection-space point `(px, py)` among `cells`, returned
+ * only if that point falls *inside* it (per `geom.contains` at `radius`) — so it
+ * resolves to `null` over blank space between bins. This is the pure core of the
+ * canvas hover/click hit-test: the component gathers the candidate cells from the
+ * covering tiles around the cursor, then this picks the one under it. Kept
+ * framework-free (no tile cache, no transform) so the "nearest-then-contains"
+ * rule is unit-testable on its own.
+ */
+export function pickCell<T extends CellCentre>(
+  cells: Iterable<T>,
+  px: number,
+  py: number,
+  geom: BinGeometry,
+  radius: number,
+): T | null {
+  let best: T | null = null;
+  let bestDist = Infinity;
+  for (const cell of cells) {
+    const cdx = cell.cx - px;
+    const cdy = cell.cy - py;
+    const dist = cdx * cdx + cdy * cdy;
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = cell;
+    }
+  }
+  if (best && geom.contains(best.cx - px, best.cy - py, radius)) return best;
+  return null;
+}
+
+/**
+ * Half-extents (screen px) of a hovered break-out thumbnail with the given
+ * `aspect` (image width / height), centred on a cell of screen `radius` and
+ * grown as large as possible under one rule: no neighbour cell's centre may be
+ * covered. A neighbour at offset `(dx, dy)·radius` stays uncovered while the
+ * half-height `hh ≤ max(|dx|·radius / aspect, |dy|·radius)`; the binding
+ * neighbour is the tightest of `offsets`, and the rectangle's edge then just
+ * touches that centre. Wide images grow until they reach the side neighbours,
+ * tall ones until they reach the top/bottom. Pulled out of the canvas component
+ * so the neighbour-centre rule is unit-testable without an `HTMLImageElement`.
+ */
+export function hoverThumbHalfExtents(
+  aspect: number,
+  radius: number,
+  offsets: readonly NeighborOffset[],
+): { hw: number; hh: number } {
+  let hh = Infinity;
+  for (const { dx, dy } of offsets) {
+    hh = Math.min(hh, Math.max((Math.abs(dx) * radius) / aspect, Math.abs(dy) * radius));
+  }
+  return { hw: aspect * hh, hh };
+}

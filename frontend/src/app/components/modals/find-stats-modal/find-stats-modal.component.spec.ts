@@ -1,9 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { FindStatsModalComponent } from './find-stats-modal.component';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
+import { provideHttpTesting } from '../../../testing/test-providers';
 
 describe('FindStatsModalComponent', () => {
   let component: FindStatsModalComponent;
@@ -34,7 +35,7 @@ describe('FindStatsModalComponent', () => {
   beforeEach(async () => {
     await configureZoneless({
       imports: [FindStatsModalComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideHttpTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(FindStatsModalComponent);

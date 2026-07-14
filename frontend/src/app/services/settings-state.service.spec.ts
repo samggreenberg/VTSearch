@@ -1,8 +1,9 @@
 import { TestBed } from '@angular/core/testing';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController } from '@angular/common/http/testing';
+
 import { SettingsStateService } from './settings-state.service';
 import { settleResource } from '../testing/settle-resource';
+import { provideHttpTesting } from '../testing/test-providers';
 
 describe('SettingsStateService', () => {
   let service: SettingsStateService;
@@ -28,7 +29,7 @@ describe('SettingsStateService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideHttpTesting()],
     });
     service = TestBed.inject(SettingsStateService);
     httpMock = TestBed.inject(HttpTestingController);

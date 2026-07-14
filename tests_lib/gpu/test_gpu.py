@@ -21,7 +21,6 @@ Coverage areas
 """
 
 import gc
-from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -584,47 +583,43 @@ class TestDetectorGPU:
 
 
 class TestCLAPEmbeddingGPU:
-    """Test CLAP (audio) embedding model on GPU.
+    """Exercise the CLAP audio embedder's own wrapper (load + forward) on GPU.
 
-    These tests download the CLAP model on first run and may be slow.
+    These route the *real* VTSearch pre/post-processing - librosa decode,
+    deterministic 10 s truncation, the ClapProcessor call, the audio / text
+    projection heads, and the base-class L2-normalisation - through CUDA,
+    rather than re-implementing the forward pass against raw ``transformers``
+    as this file used to.  A *fresh* :class:`AudioClapEmbedder` instance is
+    used so the session-wide embedder stub (which patches the registered
+    singletons) does not intercept the call.  Downloads the CLAP model on
+    first run and may be slow.
     """
 
     def test_clap_model_loads_on_gpu(self, device):
-        from transformers import ClapModel
+        from vtscore.media.audio.embedder_clap import AudioClapEmbedder
 
-        from vtscore.config import CLAP_MODEL_ID, MODELS_CACHE_DIR
-
-        model = ClapModel.from_pretrained(CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=str(MODELS_CACHE_DIR)).to(
-            device
-        )
-        # Mirrors what to_compute_device() does inside the CLAP embedder.
-        param = next(model.parameters())
-        assert param.device.type == "cuda"
+        emb = AudioClapEmbedder()
+        emb.load_models()
+        # to_compute_device() inside the wrapper moves the model to CUDA.
+        assert next(emb._model.parameters()).device.type == "cuda"
 
     def test_clap_text_embedding_on_gpu(self, device):
-        from transformers import ClapModel, ClapProcessor
+        from vtscore.media.audio.embedder_clap import AudioClapEmbedder
 
-        from vtscore.config import CLAP_MODEL_ID, MODELS_CACHE_DIR
-
-        cache_dir = str(MODELS_CACHE_DIR)
-        model = ClapModel.from_pretrained(CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir).to(device)
-        # ClapProcessor's __call__ stub doesn't enumerate the runtime kwargs.
-        processor = cast(Any, ClapProcessor.from_pretrained(CLAP_MODEL_ID, cache_dir=cache_dir))
-
-        inputs = processor(text=["a dog barking"], return_tensors="pt")
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-        with torch.no_grad():
-            outputs = model.text_model(**inputs)
-            vec = model.text_projection(outputs.pooler_output).detach().cpu().numpy()[0]
-
+        emb = AudioClapEmbedder()
+        vec = emb.embed_text("a dog barking")
+        assert vec is not None
         assert vec.shape == (512,)
         assert np.isfinite(vec).all()
+        # The wrapper L2-normalises every text vector.
+        np.testing.assert_allclose(np.linalg.norm(vec), 1.0, atol=1e-4)
 
     def test_clap_audio_embedding_on_gpu(self, device, tmp_path):
         import soundfile as sf
-        from transformers import ClapModel, ClapProcessor
 
-        from vtscore.config import CLAP_MODEL_ID, CLAP_SAMPLE_RATE, MODELS_CACHE_DIR
+        from vtscore.config import CLAP_SAMPLE_RATE
+        from vtscore.media.audio.embedder_clap import AudioClapEmbedder
+        from vtscore.media.embedder import media_from_path
 
         # Generate a short sine wave
         duration = 1.0
@@ -633,116 +628,90 @@ class TestCLAPEmbeddingGPU:
         wav_path = tmp_path / "test.wav"
         sf.write(str(wav_path), audio, CLAP_SAMPLE_RATE)
 
-        cache_dir = str(MODELS_CACHE_DIR)
-        model = ClapModel.from_pretrained(CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir).to(device)
-        processor = cast(Any, ClapProcessor.from_pretrained(CLAP_MODEL_ID, cache_dir=cache_dir))
-
-        inputs = processor(
-            audio=audio,
-            sampling_rate=CLAP_SAMPLE_RATE,
-            return_tensors="pt",
-            padding="max_length",
-            max_length=480000,
-            truncation="rand_trunc",
-        )
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-        with torch.no_grad():
-            outputs = model.audio_model(**inputs)
-            vec = model.audio_projection(outputs.pooler_output).detach().cpu().numpy()[0]
-
+        emb = AudioClapEmbedder()
+        vec = emb.embed_media(media_from_path(wav_path))
+        assert vec is not None
         assert vec.shape == (512,)
         assert np.isfinite(vec).all()
+        np.testing.assert_allclose(np.linalg.norm(vec), 1.0, atol=1e-4)
 
 
 class TestXCLIPEmbeddingGPU:
-    """Test X-CLIP (video) embedding model on GPU."""
+    """Exercise the X-CLIP video embedder's own wrapper on GPU.
+
+    Routes the real wrapper (processor call, ``get_video_features`` /
+    ``get_text_features``, ``extract_tensor``, L2-normalisation) through CUDA
+    via a fresh :class:`VideoXClipEmbedder`, rather than raw ``transformers``.
+    """
 
     def test_xclip_model_loads_on_gpu(self, device):
-        from transformers import XCLIPModel
+        from vtscore.media.video.embedder_xclip import VideoXClipEmbedder
 
-        from vtscore.config import MODELS_CACHE_DIR, XCLIP_MODEL_ID
-
-        model = XCLIPModel.from_pretrained(XCLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=str(MODELS_CACHE_DIR)).to(
-            device
-        )
-        # Mirrors what to_compute_device() does inside the X-CLIP embedder.
-        param = next(model.parameters())
-        assert param.device.type == "cuda"
+        emb = VideoXClipEmbedder()
+        emb.load_models()
+        assert next(emb._model.parameters()).device.type == "cuda"
 
     def test_xclip_text_embedding_on_gpu(self, device):
-        from transformers import XCLIPModel, XCLIPProcessor
+        from vtscore.media.video.embedder_xclip import VideoXClipEmbedder
 
-        from vtscore.config import MODELS_CACHE_DIR, XCLIP_MODEL_ID
-
-        cache_dir = str(MODELS_CACHE_DIR)
-        model = XCLIPModel.from_pretrained(XCLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir).to(device)
-        processor = XCLIPProcessor.from_pretrained(XCLIP_MODEL_ID, cache_dir=cache_dir, use_fast=False)
-
-        inputs = processor(text=["a person walking"], return_tensors="pt")
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-        with torch.no_grad():
-            from vtscore.media.embedder import extract_tensor as _extract_tensor
-
-            vec = _extract_tensor(model.get_text_features(**inputs)).detach().cpu().numpy()[0]
-
+        emb = VideoXClipEmbedder()
+        vec = emb.embed_text("a person walking")
+        assert vec is not None
         assert vec.ndim == 1
         assert np.isfinite(vec).all()
 
-    def test_xclip_video_embedding_on_gpu(self, device):
+    def test_xclip_video_embedding_on_gpu(self, device, monkeypatch):
         from PIL import Image
-        from transformers import XCLIPModel, XCLIPProcessor
 
-        from vtscore.config import MODELS_CACHE_DIR, XCLIP_MODEL_ID
+        from vtscore.media.video import embedder_xclip
 
-        cache_dir = str(MODELS_CACHE_DIR)
-        model = XCLIPModel.from_pretrained(XCLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir).to(device)
-        processor = XCLIPProcessor.from_pretrained(XCLIP_MODEL_ID, cache_dir=cache_dir, use_fast=False)
-
-        # Create 8 dummy frames
+        emb = embedder_xclip.VideoXClipEmbedder()
+        # Feed deterministic frames straight into the wrapper's forward path
+        # so we exercise the model plumbing without needing a real video file.
         frames = [Image.new("RGB", (224, 224), color=(i * 30, 100, 200)) for i in range(8)]
-        inputs = processor(images=[list(frames)], return_tensors="pt")
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-        with torch.no_grad():
-            from vtscore.media.embedder import extract_tensor as _extract_tensor
-
-            vec = _extract_tensor(model.get_video_features(**inputs)).detach().cpu().numpy()[0]
-
+        monkeypatch.setattr(embedder_xclip, "sample_video_frames", lambda media, n: frames)
+        vec = emb.embed_media({"media_path": "/fake.mp4"})
+        assert vec is not None
         assert vec.ndim == 1
         assert np.isfinite(vec).all()
 
 
 class TestE5EmbeddingGPU:
-    """Test E5 (text/paragraph) embedding model on GPU."""
+    """Exercise the E5 text embedder's own wrapper on GPU.
+
+    Routes the real wrapper (``query:`` / ``passage:`` prefixing, the
+    sentence-transformers ``encode`` call, L2-normalisation) through CUDA via
+    a fresh :class:`TextE5Embedder`, rather than calling ``SentenceTransformer``
+    directly.
+    """
 
     def test_e5_model_loads_on_gpu(self, device):
-        from sentence_transformers import SentenceTransformer
+        from vtscore.media.text.embedder_e5 import TextE5Embedder
 
-        from vtscore.config import E5_MODEL_ID, MODELS_CACHE_DIR
-
-        model = SentenceTransformer(E5_MODEL_ID, cache_folder=str(MODELS_CACHE_DIR), device=str(device))
-        vec = model.encode("query: test sentence", normalize_embeddings=True)
+        emb = TextE5Embedder()
+        vec = emb.embed_text("test sentence")
+        assert vec is not None
         assert vec.ndim == 1
         assert np.isfinite(vec).all()
 
     def test_e5_passage_embedding_on_gpu(self, device):
-        from sentence_transformers import SentenceTransformer
+        from vtscore.media.text.embedder_e5 import TextE5Embedder
 
-        from vtscore.config import E5_MODEL_ID, MODELS_CACHE_DIR
-
-        model = SentenceTransformer(E5_MODEL_ID, cache_folder=str(MODELS_CACHE_DIR), device=str(device))
-        vec = model.encode("passage: The quick brown fox jumps over the lazy dog.", normalize_embeddings=True)
+        emb = TextE5Embedder()
+        # embed_media applies the ``passage:`` prefix under the hood.
+        vec = emb.embed_media({"media_string": "The quick brown fox jumps over the lazy dog."})
+        assert vec is not None
         assert vec.ndim == 1
         assert np.isfinite(vec).all()
 
     def test_e5_query_passage_same_space(self, device):
         """Query and passage embeddings should have the same dimensionality."""
-        from sentence_transformers import SentenceTransformer
+        from vtscore.media.text.embedder_e5 import TextE5Embedder
 
-        from vtscore.config import E5_MODEL_ID, MODELS_CACHE_DIR
-
-        model = SentenceTransformer(E5_MODEL_ID, cache_folder=str(MODELS_CACHE_DIR), device=str(device))
-        q_vec = model.encode("query: animals", normalize_embeddings=True)
-        p_vec = model.encode("passage: Dogs are loyal companions.", normalize_embeddings=True)
+        emb = TextE5Embedder()
+        q_vec = emb.embed_text("animals")
+        p_vec = emb.embed_media({"media_string": "Dogs are loyal companions."})
+        assert q_vec is not None and p_vec is not None
         assert q_vec.shape == p_vec.shape
         # Cosine similarity should be defined (both are unit vectors)
         sim = float(np.dot(q_vec, p_vec))

@@ -1,12 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
-import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+
 import { AppComponent } from './app.component';
 import { provideRouter } from '@angular/router';
 import { MediaStateService } from './services/media-state.service';
 import { DatasetStateService } from './services/dataset-state.service';
 import { provideZoneless } from './testing/zoneless-testbed';
+import { provideHttpTesting } from './testing/test-providers';
 
 describe('AppComponent', () => {
   beforeEach(async () => {
@@ -15,8 +15,7 @@ describe('AppComponent', () => {
       providers: [
         ...provideZoneless(),
         provideRouter([]),
-        provideHttpClient(),
-        provideHttpClientTesting(),
+        ...provideHttpTesting(),
       ],
     }).compileComponents();
   });

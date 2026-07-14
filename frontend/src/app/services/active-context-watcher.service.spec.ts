@@ -1,6 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+
 import { provideRouter } from '@angular/router';
 import { ActiveContextWatcherService } from './active-context-watcher.service';
 import { ActiveContextService } from './active-context.service';
@@ -9,6 +8,7 @@ import { ToastService } from './toast.service';
 import { DatasetRegistryEntry } from '../models/api.models';
 import { DetectorRegistryEntry } from '../generated/api-client/models/detector-registry-entry';
 import { configureZoneless } from '../testing/zoneless-testbed';
+import { provideHttpTesting } from '../testing/test-providers';
 
 describe('ActiveContextWatcherService', () => {
   let watcher: ActiveContextWatcherService;
@@ -43,7 +43,7 @@ describe('ActiveContextWatcherService', () => {
 
   beforeEach(() => {
     configureZoneless({
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [...provideHttpTesting(), provideRouter([])],
     });
     watcher = TestBed.inject(ActiveContextWatcherService);
     activeContext = TestBed.inject(ActiveContextService);

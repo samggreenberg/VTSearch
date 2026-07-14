@@ -50,3 +50,21 @@ class TestDemoMediaCounts:
         ll = DEMO_MEDIA_COUNTS["caltech101_l"]
         a = DEMO_MEDIA_COUNTS["caltech101_a"]
         assert s + m + ll == a
+
+    def test_all_smla_partitions_sum_to_full(self):
+        # Every source whose recorded counts include all four S/M/L/A variants
+        # slices its categories with the partitioning fractions [0,1/7],
+        # [1/7,3/7], [3/7,1], so S + M + L must equal A. This locks in the
+        # measured counts for every uneven-category source at once.
+        bases = sorted(k[:-2] for k in DEMO_MEDIA_COUNTS if k.endswith("_a"))
+        checked = []
+        for base in bases:
+            if all(f"{base}_{v}" in DEMO_MEDIA_COUNTS for v in ("s", "m", "l")):
+                s = DEMO_MEDIA_COUNTS[f"{base}_s"]
+                m = DEMO_MEDIA_COUNTS[f"{base}_m"]
+                ll = DEMO_MEDIA_COUNTS[f"{base}_l"]
+                a = DEMO_MEDIA_COUNTS[f"{base}_a"]
+                assert s + m + ll == a, f"{base}: {s}+{m}+{ll} != {a}"
+                checked.append(base)
+        # Guard against the check silently becoming a no-op.
+        assert {"caltech256", "places365", "kth", "urbansound8k"} <= set(checked)

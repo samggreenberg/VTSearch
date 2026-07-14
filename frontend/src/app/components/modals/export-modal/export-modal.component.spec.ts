@@ -1,10 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { ExportModalComponent } from './export-modal.component';
 import { ToastService } from '../../../services/toast.service';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleResource } from '../../../testing/settle-resource';
+import { provideHttpTesting } from '../../../testing/test-providers';
 
 describe('ExportModalComponent', () => {
   let component: ExportModalComponent;
@@ -21,13 +22,13 @@ describe('ExportModalComponent', () => {
       { md5: 'b', label: 'bad', filename: 'b.wav' },
       { md5: 'c', label: 'good', filename: 'c.wav', is_correction: true },
     ],
-    available_columns: ['label', 'md5', 'filename', 'category', 'extra'],
+    available_columns: ['label', 'md5', 'filename', 'category', 'extra', 'name'],
   };
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ExportModalComponent],
-      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ExportModalComponent);
@@ -76,6 +77,15 @@ describe('ExportModalComponent', () => {
     const keys = component.columns.map((c) => c.key);
     expect(keys).toContain('extra'); // discovered metadata column
     expect(keys).not.toContain('origin'); // always-export keys stay out of the checkboxes
+  });
+
+  it('gives known metadata keys a curated label instead of the raw key', async () => {
+    await flushInit();
+    const nameCol = component.columns.find((c) => c.key === 'name');
+    // The raw key stays for the export payload; only the checkbox label is curated.
+    expect(nameCol?.label).toBe('Source');
+    const extraCol = component.columns.find((c) => c.key === 'extra');
+    expect(extraCol?.label).toBe('Extra'); // unknown keys fall back to title-casing
   });
 
   it('slices the fetched labels by the active category', async () => {

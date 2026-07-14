@@ -19,79 +19,20 @@ the original priority.
 
 <!-- item-sep -->
 
-- **Fill in missing demo media counts (P2)** — `vtscore/datasets/demo_counts.py`
-  `DEMO_MEDIA_COUNTS` has exact counts for caltech101, eurosat, reuters21578,
-  20newsgroups, arxiv_abstracts, oxford_flowers_102, ucf101, roxford5k, and
-  bbc_news, but still falls back to an inaccurate estimate for caltech256,
-  places365, urbansound8k, gtzan, speech_commands_v2, hmdb51, kth, ucf101_full,
-  ucsf_documents, and dbpedia. **Fix:** download each and run
-  `scripts/compute_demo_counts.py <id>`, then paste the emitted lines into
-  `demo_counts.py`. **Files:** `vtscore/datasets/demo_counts.py`.
+<!-- item-sep -->
+
+- [ ] #2382 — Add a confidence signal to the Goods count header
 
 <!-- item-sep -->
 
-- **Export "File Size" exports raw bytes (P3)** — `vtscore/media/base.py:329-331`
-  sets `result["File Size"] = fs` where `fs = media.get("file_size")` (raw
-  bytes), so export rows carry `8165` while the focus-view UI formats the same
-  field as "5.7 KB". **Fix:** format the bytes in the enriched export (or rename
-  the column "File Size (bytes)", or offer both). **Files:**
-  `vtscore/media/base.py`.
+<!-- item-sep -->
+
+- [ ] #2358 — UCSF Documents listed under Image media type
 
 <!-- item-sep -->
 
-- **Export metadata columns leak raw lowercase keys (P3)** —
-  `export-modal.component.ts:214-222` (`buildColumns`) pushes each discovered
-  metadata column with `label: key` (the raw key verbatim), so lowercase-keyed
-  fields (e.g. `clipper`) surface un-prettified, and the origin `name` column (a
-  demo origin id like `caltech101_m`) reads confusingly beside "Filename".
-  **Fix:** map known keys to display labels (`clipper` → "Clipper",
-  `name`/`origin_name` → "Source"/"Origin") instead of echoing the raw key.
-  **Files:** `export-modal.component.ts`.
+- [ ] #2383 — Move keyboard focus off the Good button during Autopilot "Find Initial Bads"
 
 <!-- item-sep -->
 
-- **Goods count over-reports with no confidence signal (P2)** —
-  `right-panel/labelset-list/labelset-list.component.html:3` renders just
-  `Goods ({{ elements().length }})`; because the auto threshold leans toward
-  recall, this reads as N confident hits when many are low-confidence. **Fix:**
-  surface the score/threshold or a confidence band in the hits header so users
-  calibrate trust. **Files:** `labelset-list.component.html` (+ whatever feeds
-  the count).
-
-<!-- item-sep -->
-
-- **"Email us" mailto has no recipient (`mailto-recipient`, P3)** — the
-  "Email us" affordance now lives in the Help modal
-  (`keyboard-help-modal.component.html`, `.help-footer`) as
-  `mailto:?subject=VTSearch%20Issue%3A` — the subject typo is fixed but the
-  to-address is still empty, so "Email us" opens a blank-recipient compose
-  window. **Fix:** add the recipient address. **Files:**
-  `keyboard-help-modal.component.html`. (The "Simplify header and layout IA"
-  slice that moved this out of the header logo has already shipped.)
-
-<!-- item-sep -->
-
-- **UCSF Documents listed under Image media type (P3)** —
-  `vtscore/media/image/_demo_sources.py:556` registers `ucsf_documents_a` under
-  the image `_MEDIA_TYPE_ID`, so scanned document pages appear atop the Image
-  demo list. Arguably intentional (pages are images), so this is a labeling
-  call. **Fix:** relabel to signal it's scanned documents, or recategorize.
-  **Files:** `vtscore/media/image/_demo_sources.py`.
-
-<!-- item-sep -->
-
-- **Bads-phase default focus on the Good button (P3)** — during Autopilot's
-  "Find Initial Bads" phase nothing moves keyboard focus to the Bad action, so
-  pressing Enter can mislabel. There's no focus-follows-phase logic in
-  `label-view.component.{html,ts}`. **Fix:** move default focus to the phase's
-  primary action (or to neither button) as the phase changes. Verify in a live
-  browser before shipping — the repro is hard to confirm statically. **Files:**
-  `label-view.component.ts`.
-
-<!-- item-sep -->
-
-- **Header "Data:" label lags the active dataset (P3, verify first)** —
-  reported drift between the dashboard row-checkbox "selected" notion and the
-  header's "active dataset" label. Lower confidence this still reproduces and it
-  overlaps the nav-picker-lag item in `ui-ux-papercuts.md`; confirm in a live
-  browser before scoping, and fold into that item if it's the same root cause.
+- [ ] #2360 — Header "Data:" label lags the active dataset

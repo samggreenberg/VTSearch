@@ -1,5 +1,5 @@
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { CenterPanelComponent } from './center-panel.component';
@@ -7,6 +7,7 @@ import { Media } from '../../models/api.models';
 import { ANIMATIONS_OFF_CLASS } from '../../utils/reduced-motion';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleZoneless } from '../../testing/settle-resource';
+import { provideHttpTesting } from '../../testing/test-providers';
 
 /**
  * Zoneless staleness canary for the center panel (docs/plans/zoneless-migration.md,
@@ -45,7 +46,7 @@ describe('CenterPanelComponent (zoneless keyboard canary)', () => {
   beforeEach(async () => {
     configureZoneless({
       imports: [CenterPanelComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideHttpTesting()],
     });
     fixture = TestBed.createComponent(CenterPanelComponent);
     component = fixture.componentInstance;

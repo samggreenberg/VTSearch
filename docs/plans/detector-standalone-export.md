@@ -10,14 +10,8 @@ weights), and a dedicated modal (not a tab in the label-centric export modal).
 
 ## Open follow-ups
 
-- **Exact HF model id in the README/manifest.** Today the bundle names the
-  embedder (`siglip`) and its display name (`SigLIP (general images)`) but not
-  the concrete HuggingFace repo id, because there's no uniform `model_id` on the
-  `MediaEmbedder` ABC. Surfacing it would make the README fully actionable.
-- **Exporter-plugin / CLI path.** The export is GUI-only. A `LabelsetExporter`-
-  style plugin (or a `--exporter portable_detector` autodetect destination)
-  would let CI/automation produce the bundle headlessly. The user picked the
-  dedicated modal for now; this is the deferred "both" option.
+- [ ] #2390 — Surface the exact HuggingFace model id in the README/manifest
+- [ ] #2391 — Add a CLI/exporter-plugin path for portable detector export
 - **Re-import.** The manifest is shaped to be re-importable, but no importer
   reads it back yet. A "import portable detector" flow could rebuild a
   read-only, score-only detector from a bundle.

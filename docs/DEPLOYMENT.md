@@ -26,6 +26,7 @@ installation and getting started, see [SETUP.md](SETUP.md).
 | `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key (**set this to a random value in production**) |
 | `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). `INFO`/`DEBUG` also turn on the per-request access log. |
 | `VTSEARCH_MODELS_DIR` | `data/models` | Directory for HuggingFace model cache |
+| `VTSEARCH_SUPPORT_EMAIL` | built-in project address | Recipient for the Help modal's "Email us" link. Overrides the persisted `support_email` setting for the process lifetime (all users; not editable via the API). Equivalent to the `--support-email` CLI flag, for the gunicorn images that never parse `argv`; an explicit flag wins. |
 
 ### Dataset-ingest concurrency
 
@@ -394,7 +395,8 @@ and auto-saved on every change. Schema:
   "saved_datasets_dir": "data/saved_datasets",
   "detectors_dir": "data/detectors",
   "max_concurrent_dataset_downloads": 1,
-  "max_concurrent_dataset_embeddings": 1
+  "max_concurrent_dataset_embeddings": 1,
+  "support_email": "sam.greenberg@gmail.com"
 }
 ```
 
@@ -425,6 +427,13 @@ Notable fields:
   These match the autodetect described under
   [Dataset-ingest concurrency](#dataset-ingest-concurrency) above. An
   explicit value in `settings.json` always wins.
+- `support_email`: recipient for the Help modal's "Email us" contact
+  link. Server-tier (shared across all users); defaults to the built-in
+  project address. Override per instance by editing this key, or at
+  startup with the `--support-email` CLI flag / `VTSEARCH_SUPPORT_EMAIL`
+  env var (either applies process-wide and wins over the persisted
+  value). Surfaced read-only at `GET /api/settings`; not editable via
+  `PUT`.
 - `settings_source` (not shown above; excluded from defaults): opt-in
   bidirectional sync. Set to a plugin name + field values to auto-export
   every settings change and auto-import at startup. See `settings_io/sources/`.

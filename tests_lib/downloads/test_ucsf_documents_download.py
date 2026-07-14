@@ -75,6 +75,40 @@ class TestDownloadUcsfDocuments:
         assert (result / "Tobacco").is_dir()
         assert len(list((result / "Tobacco").glob("*.pdf"))) == 2
 
+    def test_caps_docs_per_category_when_solr_overreturns(self, tmp_path):
+        """Only docs_per_category PDFs download even if Solr returns more.
+
+        The live UCSF IDL Solr endpoint ignores the ``rows`` limit and returns
+        up to 1000 ids per query, so the downloader must cap client-side or it
+        would pull ~1000 PDFs per category instead of docs_per_category.
+        """
+        from vtscore.datasets import downloader as dl_module
+
+        # Solr hands back 10 ids despite a rows=3 request.
+        solr_resp = _fake_solr_response([f"abcd{i:04d}" for i in range(10)])
+        mock_response = MagicMock()
+        mock_response.json.return_value = solr_resp
+        mock_response.raise_for_status = MagicMock()
+
+        downloads = []
+
+        def fake_download(url, dest, size, cb):
+            dest.write_bytes(b"%PDF-1.0 stub")
+            downloads.append(dest.name)
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
+            patch("requests.get", return_value=mock_response),
+        ):
+            result = dl_module.download_ucsf_documents(
+                categories=["Tobacco"],
+                docs_per_category=3,
+                on_progress=lambda *a: None,
+            )
+
+        assert len(list((result / "Tobacco").glob("*.pdf"))) == 3
+
     def test_constructs_correct_download_url(self, tmp_path):
         """PDF download URLs follow the UCSF split-character scheme."""
         from vtscore.datasets import downloader as dl_module

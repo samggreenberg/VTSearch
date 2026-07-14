@@ -400,6 +400,24 @@ Because the Docker images launch under gunicorn (which never parses
 init; an explicit `--dataset-max-age-days` flag wins over it. The
 LabBench image pins `VTSEARCH_DATASET_MAX_AGE_DAYS=14`.
 
+**Support email** (`--support-email ADDRESS`): set the recipient for the
+Help modal's "Email us" contact link so it opens a pre-addressed compose
+window:
+
+```bash
+python app.py --support-email support@example.org
+```
+
+Like `--dataset-max-age-days`, this is a **server-wide override**: it
+applies to every user, overrides the persisted `support_email` in the
+settings file for the lifetime of the process, and is **not** editable
+via the Settings dialog or the settings API (it is exposed read-only so
+the frontend can build the `mailto:` link). Omit the flag to use the
+persisted value, which defaults to the built-in project address. The
+same override is also available as the `VTSEARCH_SUPPORT_EMAIL`
+environment variable for the gunicorn-launched Docker images; an
+explicit `--support-email` flag wins over it.
+
 ## Inspecting plugins and the API schema
 
 `python app.py --list-plugins` enumerates every auto-discovered plugin;

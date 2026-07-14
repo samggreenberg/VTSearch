@@ -1,11 +1,12 @@
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { OfflineBannerComponent } from './offline-banner.component';
 import { ConnectionStateService } from '../../services/connection-state.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleZoneless } from '../../testing/settle-resource';
+import { provideHttpTesting } from '../../testing/test-providers';
 
 /**
  * Zoneless staleness canary for the offline banner (docs/plans/zoneless-migration.md,
@@ -25,7 +26,7 @@ describe('OfflineBannerComponent (zoneless)', () => {
   beforeEach(async () => {
     configureZoneless({
       imports: [OfflineBannerComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideHttpTesting()],
     });
     fixture = TestBed.createComponent(OfflineBannerComponent);
     connection = TestBed.inject(ConnectionStateService);

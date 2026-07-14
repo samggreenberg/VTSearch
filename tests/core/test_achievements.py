@@ -15,6 +15,8 @@ from __future__ import annotations
 import json
 import pathlib
 
+import pytest
+
 import app as app_module  # noqa: F401  (triggers conftest media init)
 from vtsearch import achievements
 from vtsearch import settings as settings_mod
@@ -881,6 +883,79 @@ class TestActionHooks:
 # ---------------------------------------------------------------------------
 # enable_achievements opt-out
 # ---------------------------------------------------------------------------
+
+
+class TestAchievementSchemas:
+    """Direct serialization tests for ``vtsearch/schemas/achievements.py``.
+
+    The routes dump/validate through these schemas, but exercising them
+    against a real :func:`get_full_state` payload pins their field contract
+    (and their ``required`` flags) independently of the HTTP layer.
+    """
+
+    def test_state_schema_dumps_full_state(self):
+        from typing import cast
+
+        from vtsearch.schemas.achievements import AchievementStateSchema
+
+        achievements.record_vote("det-1", media_type="audio")
+        achievements.record_find(50)
+        dumped = cast(dict, AchievementStateSchema().dump(achievements.get_full_state()))
+        assert dumped["tier_names"] == ["Bronze", "Silver", "Gold", "Platinum"]
+        entry = next(a for a in dumped["achievements"] if a["id"] == "votes_cast")
+        assert set(entry) == {
+            "id",
+            "name",
+            "description",
+            "icon",
+            "tiers",
+            "counter",
+            "tier_idx",
+            "next_threshold",
+        }
+        assert {d["id"] for d in dumped["docs"]} == {"readme", "user_guide", "cli", "api"}
+        assert [h["hour"] for h in dumped["hours"]] == list(range(24))
+
+    def test_state_schema_round_trips_via_load(self):
+        from typing import cast
+
+        from vtsearch.schemas.achievements import AchievementStateSchema
+
+        schema = AchievementStateSchema()
+        state = achievements.get_full_state()
+        # dump → load must not raise ValidationError (every required field present).
+        loaded = cast(dict, schema.load(cast(dict, schema.dump(state))))
+        assert loaded["tier_names"] == ["Bronze", "Silver", "Gold", "Platinum"]
+
+    def test_acknowledge_request_rejects_missing_tier_idx(self):
+        from marshmallow import ValidationError
+
+        from vtsearch.schemas.achievements import AcknowledgeRequestSchema
+
+        with pytest.raises(ValidationError):
+            AcknowledgeRequestSchema().load({})
+
+    def test_acknowledge_request_rejects_non_int_tier_idx(self):
+        from marshmallow import ValidationError
+
+        from vtsearch.schemas.achievements import AcknowledgeRequestSchema
+
+        # strict=True forbids a float/bool masquerading as the integer index.
+        with pytest.raises(ValidationError):
+            AcknowledgeRequestSchema().load({"tier_idx": "2"})
+
+    def test_check_phrase_response_allows_null_doc_fields(self):
+        from vtsearch.schemas.achievements import CheckPhraseResponseSchema
+
+        dumped = CheckPhraseResponseSchema().dump(
+            {"matched": False, "doc_id": None, "doc_name": None, "already_read": False}
+        )
+        assert dumped == {
+            "matched": False,
+            "doc_id": None,
+            "doc_name": None,
+            "already_read": False,
+        }
 
 
 class TestDisableAchievements:

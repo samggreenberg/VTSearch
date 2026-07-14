@@ -10,6 +10,7 @@ import { MediaMetadataCacheService } from '../../services/media-metadata-cache.s
 import { ActiveContextService } from '../../services/active-context.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
+import { makeActiveContextStub } from '../../testing/mocks';
 import { settleZoneless } from '../../testing/settle-resource';
 
 /**
@@ -55,9 +56,7 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
       get: () => undefined,
       ensureLoaded: () => {},
     };
-    const activeContextStub: Partial<ActiveContextService> = {
-      mediaUrl: (p: string) => p,
-    };
+    const activeContextStub = makeActiveContextStub();
     const settingsStub: Partial<SettingsStateService> = {
       settingsSignal: settings as unknown as SettingsStateService['settingsSignal'],
       load: () => {},

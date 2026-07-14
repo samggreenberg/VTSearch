@@ -202,11 +202,23 @@ export class ExportModalComponent implements OnInit {
     this.labelsReady.set(true);
   }
 
+  /** Display labels for known metadata keys whose generic humanization would
+   *  read poorly. ``name`` is a demo origin id (e.g. ``caltech101_m``) that
+   *  reads confusingly as "Name" beside "Filename", so it surfaces as
+   *  "Source"; ``origin_name`` (when present) as "Origin". */
+  private static readonly KNOWN_COLUMN_LABELS: Record<string, string> = {
+    name: 'Source',
+    origin_name: 'Origin',
+  };
+
   /** ``"media_type"`` → ``"Media type"``: humanize a raw metadata key for
-   *  the column checkbox label. Keys that already read well ("Dimensions",
-   *  "File Size") pass through unchanged; the export payload keeps the raw
-   *  key either way. */
+   *  the column checkbox label. Known keys (see ``KNOWN_COLUMN_LABELS``) get a
+   *  curated label; the rest are title-cased from the raw key. Keys that
+   *  already read well ("Dimensions", "File Size") pass through unchanged; the
+   *  export payload keeps the raw key either way. */
   private static humanizeColumnKey(key: string): string {
+    const known = ExportModalComponent.KNOWN_COLUMN_LABELS[key];
+    if (known) return known;
     const spaced = key.replace(/_/g, ' ').trim();
     return spaced ? spaced[0].toUpperCase() + spaced.slice(1) : key;
   }

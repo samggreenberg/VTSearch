@@ -680,3 +680,23 @@ class TestAvailableColumnsNoDuplicates:
         cols = data["available_columns"]
         category_cols = [c for c in cols if c.lower() == "category"]
         assert len(category_cols) == 1, f"Expected 1 category column, got: {category_cols}"
+
+
+class TestEnrichedFileSizeFormatting:
+    """The enriched export humanizes File Size instead of emitting raw bytes."""
+
+    def test_file_size_formatted_as_kb(self):
+        """``_build_entry_metadata`` stringifies File Size to match the UI."""
+        from vtsearch.routes.labels.vote import _build_entry_metadata
+
+        media = {"media_type": "image", "file_size": 8192, "width": 4, "height": 4}
+        meta = _build_entry_metadata(media)
+        assert meta["File Size"] == "8.0 KB"
+
+    def test_display_metadata_keeps_raw_bytes(self):
+        """The media-list path (display_metadata) keeps the raw int unchanged."""
+        from vtscore.media import get as get_media_type
+
+        media = {"media_type": "image", "file_size": 8192, "width": 4, "height": 4}
+        meta = get_media_type("image").display_metadata(media)
+        assert meta["File Size"] == 8192

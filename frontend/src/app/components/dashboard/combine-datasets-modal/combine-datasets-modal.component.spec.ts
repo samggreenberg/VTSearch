@@ -1,10 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { CombineDatasetsModalComponent } from './combine-datasets-modal.component';
 import { DatasetRegistryEntry } from '../../../models/api.models';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
+import { provideHttpTesting } from '../../../testing/test-providers';
 
 describe('CombineDatasetsModalComponent', () => {
   let component: CombineDatasetsModalComponent;
@@ -29,7 +30,7 @@ describe('CombineDatasetsModalComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [CombineDatasetsModalComponent],
-      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(CombineDatasetsModalComponent);

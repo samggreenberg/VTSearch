@@ -18,7 +18,27 @@ describe('AudioPlayerComponent', () => {
     custom_metadata: {},
   };
 
+  let originalFetch: typeof globalThis.fetch;
+  let originalCreate: typeof URL.createObjectURL;
+  let originalRevoke: typeof URL.revokeObjectURL;
+
   beforeEach(async () => {
+    // Single-fetch path: the component downloads the clip once and feeds the
+    // bytes to the <audio> element via an object URL. jsdom implements neither
+    // fetch's media pipeline nor createObjectURL usefully, so stub them.
+    originalFetch = globalThis.fetch;
+    originalCreate = URL.createObjectURL;
+    originalRevoke = URL.revokeObjectURL;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      blob: () => Promise.resolve(new Blob([new Uint8Array([0])], { type: 'audio/wav' })),
+    }) as unknown as typeof globalThis.fetch;
+    URL.createObjectURL = vi.fn(() => 'blob:mock-url');
+    URL.revokeObjectURL = vi.fn();
+    // jsdom logs "Not implemented" for these; keep the audio path quiet.
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+
     await TestBed.configureTestingModule({
       imports: [AudioPlayerComponent],
       providers: [...provideZoneless(), ActiveContextService],
@@ -27,16 +47,46 @@ describe('AudioPlayerComponent', () => {
     component = fixture.componentInstance;
   });
 
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    URL.createObjectURL = originalCreate;
+    URL.revokeObjectURL = originalRevoke;
+    vi.restoreAllMocks();
+  });
+
   it('should create', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should set audioSrc when media changes', () => {
+  it('downloads the audio once and drives the <audio> element from an object URL', async () => {
+    const fakeAudio = {
+      src: '',
+      volume: 0,
+      paused: true,
+      play: () => Promise.resolve(),
+      pause: () => {},
+      load: () => {},
+      removeAttribute: () => {},
+    } as unknown as HTMLAudioElement;
+    // A canvas whose 2D context is unavailable, so the waveform path (which
+    // needs decodeAudioData, absent in jsdom) short-circuits after the src is set.
+    const fakeCanvas = {
+      getContext: () => null,
+      getBoundingClientRect: () => ({ width: 0 }) as DOMRect,
+      width: 600,
+      height: 120,
+    } as unknown as HTMLCanvasElement;
     component.media = mockMedia;
-    component.ngOnChanges({
-      media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
-    });
-    expect(component.audioSrc).toBe('/api/medias/1/audio');
+    component.audioRef = { nativeElement: fakeAudio } as ElementRef<HTMLAudioElement>;
+    component.canvasRef = { nativeElement: fakeCanvas } as ElementRef<HTMLCanvasElement>;
+
+    await (component as unknown as { loadAudio(): Promise<void> }).loadAudio();
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith('/api/medias/1/audio', expect.anything());
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(fakeAudio.src).toBe('blob:mock-url');
+    expect(component.audioSrc).toBe('blob:mock-url');
   });
 
   it('should render canvas and audio elements', async () => {

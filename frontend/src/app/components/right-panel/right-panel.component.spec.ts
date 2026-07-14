@@ -1,9 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { RightPanelComponent } from './right-panel.component';
 import { VoteStateService } from '../../services/vote-state.service';
 import { provideZoneless } from '../../testing/zoneless-testbed';
+import { provideHttpTesting } from '../../testing/test-providers';
 
 describe('RightPanelComponent', () => {
   let component: RightPanelComponent;
@@ -13,7 +14,7 @@ describe('RightPanelComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [RightPanelComponent],
-      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(RightPanelComponent);

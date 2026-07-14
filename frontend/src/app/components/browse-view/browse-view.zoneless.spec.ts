@@ -16,6 +16,7 @@ import { VtDialogService } from '../../services/dialog.service';
 import { ToastService } from '../../services/toast.service';
 import type { ProjectionMeta } from '../../models/projection.models';
 import { configureZoneless } from '../../testing/zoneless-testbed';
+import { makeActiveContextStub } from '../../testing/mocks';
 import { settleZoneless } from '../../testing/settle-resource';
 
 /**
@@ -44,13 +45,12 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       setContentVersion: noop,
       clear: noop,
     };
-    const activeContextStub: Partial<ActiveContextService> = {
+    const activeContextStub = makeActiveContextStub({
       pair$: EMPTY,
       datasetId: '',
       modelId: '',
       setActive: noop,
-      mediaUrl: (p: string) => p,
-    };
+    });
     const datasetsStub: Partial<DatasetsRegistryApiService> = {
       getStatus: () => of({ display_name: 'Canary DS', media_type: 'audio' }) as ReturnType<
         DatasetsRegistryApiService['getStatus']

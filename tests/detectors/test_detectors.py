@@ -246,6 +246,37 @@ class TestRenameDetector:
         )
         assert res.status_code == 404
 
+    def test_rename_overlong_name_rejected(self, client):
+        """A name past ``MAX_NAME_LENGTH`` is rejected at the schema (422),
+
+        so the write never reaches the filesystem where an over-long
+        ``<slug>.json.tmp`` would raise ``OSError`` and leak the server path.
+        """
+        from vtsearch.schemas.detectors import MAX_NAME_LENGTH
+
+        client.post(
+            "/api/detectors",
+            json={"name": "Test", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.put(
+            "/api/detectors/Test/rename",
+            json={"new_name": "x" * (MAX_NAME_LENGTH + 1)},
+        )
+        assert res.status_code == 422
+
+    def test_create_overlong_name_rejected(self, client):
+        from vtsearch.schemas.detectors import MAX_NAME_LENGTH
+
+        res = client.post(
+            "/api/detectors",
+            json={
+                "name": "n" * (MAX_NAME_LENGTH + 1),
+                "media_type": "audio",
+                "text_query": "test",
+            },
+        )
+        assert res.status_code == 422
+
     def test_rename_missing_new_name(self, client):
         client.post(
             "/api/detectors",

@@ -2,22 +2,22 @@
 
 **Status:** Active playbook. First round of all four tasks ran 2026-05-27/28;
 the task bodies below are reusable templates for future rounds. The
-point-in-time reports those runs produced were consolidated into topic plans;
-the surviving open findings now live there, keyed by finding ID:
-
-- Task 1 — Rendered style audit → [`ui-style-polish.md`](ui-style-polish.md)
-- Task 2 — Empty / edge-state sweep → [`ui-ux-papercuts.md`](ui-ux-papercuts.md)
-- Task 3 — End-to-end flow walkthrough → [`ui-ux-papercuts.md`](ui-ux-papercuts.md)
-- Task 4 — Long-running-op observability → [`progress-ux.md`](progress-ux.md)
+point-in-time reports those runs produced were triaged into concrete findings:
+the style audit's surviving items live in [`ui-style-polish.md`](ui-style-polish.md)
+(a genuine umbrella of shared-primitive/token work), and every discrete
+papercut/bug from Tasks 2–4 was promoted to a GitHub issue.
 
 **Deliverable model (changed).** Earlier rounds wrote a dated point-in-time
-report under `docs/reviews/`. That directory is gone: record surviving findings
-as named, `<!-- item-sep -->`-separated open items in the relevant topic plan
-above (matching the plan-file policy in `CLAUDE.md`). Keep the run's screenshots
-as throwaway working artifacts (a scratch dir, or attached to the PR) — they are
-evidence for the write-up, not committed docs. The per-task prompts below still
-describe the old report-file shape; treat "produce a report" as "append open
-items to the topic plan" and the `docs/reviews/...` paths in them as historical.
+report under `docs/reviews/`; a later convention appended findings to topic
+plan files. Both are superseded: under the plans-vs-issues policy in `CLAUDE.md`,
+each surviving finding that is a concrete, independently-shippable
+papercut/bug/small feature is filed as its **own GitHub issue** (not a plan-file
+bullet). Reserve a plan file only for a genuine multi-step design narrative that
+a batch of findings share. Keep the run's screenshots as throwaway working
+artifacts (a scratch dir, or attached to the PR) — they are evidence for the
+write-up, not committed docs. The per-task prompts below still describe the old
+report-file shape; treat "produce a report" as "file the concrete findings as
+issues" and the `docs/reviews/...` paths in them as historical.
 
 **Scope:** Exercise VTSearch through the Claude Chrome extension on a
 CPU-only Linux laptop, using Claude's ability to *see* the rendered
@@ -372,8 +372,8 @@ done.
 - Pair Task 1 with a parallel `/style-check` run and cross-reference
   the findings; produces a "static caught / vision caught / both"
   breakdown that tells us what the static skill actually misses.
-- If Task 4 surfaces consistent observability gaps, fold them into a
-  follow-up `progress-ux.md` plan rather than fixing piecemeal.
+- If Task 4 surfaces consistent observability gaps, file each concrete
+  gap as its own GitHub issue rather than fixing piecemeal.
 - The first run of any task is also a test of *the testing setup*
   itself (extension reliability, screenshot ergonomics, prompt
   clarity); expect to refine the draft prompts after run 1.

@@ -83,6 +83,13 @@ def load_audio_metadata_from_folders(audio_dir: Path, categories: list[str]) -> 
 
         for ext in ["*.wav", "*.mp3", "*.flac", "*.ogg", "*.m4a", "*.au"]:
             for audio_path in category_folder.glob(ext):
+                # Skip macOS AppleDouble sidecars ("._name.wav") and other
+                # dotfiles: the ``*.wav`` glob matches them by extension, but
+                # they are metadata resource forks, not real audio (the GTZAN
+                # tarball ships one per track, which would otherwise double the
+                # count and load 1000 undecodable junk clips).
+                if audio_path.name.startswith("."):
+                    continue
                 metadata[f"{category_name}/{audio_path.name}"] = {
                     "category": category_name,
                     "path": audio_path,
@@ -297,6 +304,12 @@ def load_video_metadata_from_folders(video_dir: Path, categories: list[str]) -> 
         # Use category/filename as key to avoid collisions across categories.
         for ext in ["*.mp4", "*.avi", "*.mov", "*.webm", "*.mkv"]:
             for video_path in category_folder.glob(ext):
+                # Skip macOS AppleDouble sidecars ("._name.avi") and other
+                # dotfiles that the extension glob would otherwise match as if
+                # they were real video (see the audio loader for the GTZAN case
+                # this guards against).
+                if video_path.name.startswith("."):
+                    continue
                 metadata[f"{category_name}/{video_path.name}"] = {
                     "category": category_name,
                     "path": video_path,
