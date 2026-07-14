@@ -74,10 +74,12 @@ class TestStabilitySubsample:
 
         lp._cache_prev_predictions = None
         _run_step(clips, _model())
+        assert lp._cache_prev_predictions is not None
         first = set(lp._cache_prev_predictions)
 
         lp._cache_prev_predictions = None
         _run_step(clips, _model())
+        assert lp._cache_prev_predictions is not None
         second = set(lp._cache_prev_predictions)
 
         assert first == second
