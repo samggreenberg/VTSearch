@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import io
 from types import SimpleNamespace
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -629,7 +630,7 @@ class TestLanguageBindWrapper:
         vec = emb.embed_text("a cat playing")
         assert vec is not None
         assert vec.shape == (768,)
-        _args, kwargs = emb._tokenizer.calls[0]
+        _args, kwargs = cast(Any, emb._tokenizer).calls[0]
         assert kwargs["max_length"] == 77
         assert kwargs["padding"] == "max_length"
 
@@ -712,8 +713,12 @@ class TestE5Wrapper:
         from vtscore.media.text.embedder_e5 import TextE5Embedder
 
         emb = TextE5Embedder()
-        emb._model = _FakeSentenceTransformer(dim)
+        emb._model = cast(Any, _FakeSentenceTransformer(dim))
         return emb
+
+    @staticmethod
+    def _encode_calls(emb):
+        return cast(Any, emb._model).encode_calls
 
     def test_read_text_prefers_media_string(self):
         from vtscore.media.text.embedder_e5 import _read_text
@@ -737,7 +742,7 @@ class TestE5Wrapper:
         vec = emb.embed_media({"media_string": "hello world"})
         assert vec is not None
         assert vec.shape == (768,)
-        sentences, kwargs = emb._model.encode_calls[0]
+        sentences, kwargs = self._encode_calls(emb)[0]
         assert sentences == "passage: hello world"
         assert kwargs["normalize_embeddings"] is True
 
@@ -748,13 +753,13 @@ class TestE5Wrapper:
     def test_embed_text_uses_query_prefix(self):
         emb = self._make()
         emb.embed_text("what is a dog")
-        sentences, _kwargs = emb._model.encode_calls[0]
+        sentences, _kwargs = self._encode_calls(emb)[0]
         assert sentences == "query: what is a dog"
 
     def test_embed_text_passage_prefix(self):
         emb = self._make()
         emb.embed_text_passage("some passage")
-        sentences, _kwargs = emb._model.encode_calls[0]
+        sentences, _kwargs = self._encode_calls(emb)[0]
         assert sentences == "passage: some passage"
 
     def test_bulk_skips_empty_and_batches_ready(self):
@@ -769,7 +774,7 @@ class TestE5Wrapper:
         assert out[1] is None
         assert out[0] is not None and out[2] is not None
         # Only the two ready passages were sent to encode, prefixed.
-        sentences, kwargs = emb._model.encode_calls[0]
+        sentences, kwargs = self._encode_calls(emb)[0]
         assert sentences == ["passage: first", "passage: third"]
         assert kwargs["normalize_embeddings"] is True
 
@@ -777,7 +782,7 @@ class TestE5Wrapper:
         emb = self._make()
         out = emb._embed_media_bulk_impl([{"media_string": ""}, {}])
         assert out == [None, None]
-        assert emb._model.encode_calls == []
+        assert self._encode_calls(emb) == []
 
 
 # ===========================================================================
