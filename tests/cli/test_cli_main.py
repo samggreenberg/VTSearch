@@ -158,6 +158,12 @@ class TestListPlugins:
         out = capsys.readouterr().out
         assert "importers" in out
 
+    def test_list_plugins_plain_exits_zero(self, monkeypatch, capsys):
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--list-plugins"])
+        assert exc.value.code == 0
+        assert capsys.readouterr().out.strip()
+
     def test_unknown_plugin_family_errors(self, monkeypatch, capsys):
         with pytest.raises(SystemExit) as exc:
             _run_main(monkeypatch, ["--list-plugins", "--plugin-family", "no_such_family"])
@@ -260,6 +266,17 @@ class TestAutodetectWiring:
         assert args[2] == "server_json_file"
         assert args[3]["filepath"] == "/out.json"
 
+    def test_json_progress_format_reroutes_callback(self, monkeypatch):
+        _AutodetectRecorder(monkeypatch)
+        seen = {}
+        import vtscore.media as media_mod
+
+        monkeypatch.setattr(media_mod, "set_progress_callback", lambda cb: seen.setdefault("cb", cb))
+        # cli_main imports set_progress_callback at module load, so patch the bound name too.
+        monkeypatch.setattr(cli_main, "set_progress_callback", lambda cb: seen.setdefault("cb", cb))
+        _run_main(monkeypatch, ["--autodetect", "--dataset", "x.pkl", "--progress-format", "json"])
+        assert "cb" in seen
+
 
 # ---------------------------------------------------------------------------
 # Autodetect flag validation / error exits
@@ -308,11 +325,180 @@ class TestAutodetectValidation:
 
 
 # ---------------------------------------------------------------------------
+# --import-labels-into wiring
+# ---------------------------------------------------------------------------
+
+
+class TestImportLabels:
+    def test_dry_run_label_import_emits_plan_and_dispatches(self, monkeypatch, capsys):
+        rec = _AutodetectRecorder(monkeypatch)
+        _run_main(
+            monkeypatch,
+            [
+                "--autodetect",
+                "--dataset",
+                "x.pkl",
+                "--import-labels-into",
+                "det",
+                "--label-importer-file",
+                "labels.json",
+                "--dry-run",
+            ],
+        )
+        out = capsys.readouterr().out
+        assert "DRY RUN" in out
+        assert "det" in out
+        # Dry-run still dispatches to the (mocked) autodetect run.
+        assert "autodetect_main" in rec.calls
+
+    def test_dry_run_label_import_json_format(self, monkeypatch, capsys):
+        self_rec = _AutodetectRecorder(monkeypatch)
+        _run_main(
+            monkeypatch,
+            [
+                "--autodetect",
+                "--dataset",
+                "x.pkl",
+                "--progress-format",
+                "json",
+                "--import-labels-into",
+                "det",
+                "--label-importer-file",
+                "labels.json",
+                "--dry-run",
+            ],
+        )
+        # NDJSON event carries the dry-run marker; no trailing text print.
+        out = capsys.readouterr().out
+        assert "labels_import_dry_run" in out
+        assert "autodetect_main" in self_rec.calls
+
+    def test_real_label_import_calls_importer(self, monkeypatch, tmp_path):
+        rec = _AutodetectRecorder(monkeypatch)
+        import vtscore.cli as vtcli
+
+        seen = {}
+
+        def _fake_import(detector, importer, filepath):
+            seen.update(detector=detector, importer=importer, filepath=filepath)
+            return (3, 1)
+
+        monkeypatch.setattr(vtcli, "import_labels_into_detector_from_file", _fake_import)
+        settings_path = tmp_path / "settings.json"
+        settings_path.write_text("{}")
+        _run_main(
+            monkeypatch,
+            [
+                "--autodetect",
+                "--dataset",
+                "x.pkl",
+                "--settings",
+                str(settings_path),
+                "--import-labels-into",
+                "det",
+                "--label-importer",
+                "server_json_file",
+                "--label-importer-file",
+                "labels.json",
+            ],
+        )
+        assert seen == {"detector": "det", "importer": "server_json_file", "filepath": "labels.json"}
+        assert "autodetect_main" in rec.calls
+
+    def test_label_import_failure_exits_one(self, monkeypatch, capsys):
+        _AutodetectRecorder(monkeypatch)
+        import vtscore.cli as vtcli
+
+        def _boom(*a, **k):
+            raise ValueError("bad labels file")
+
+        monkeypatch.setattr(vtcli, "import_labels_into_detector_from_file", _boom)
+        with pytest.raises(SystemExit) as exc:
+            _run_main(
+                monkeypatch,
+                [
+                    "--autodetect",
+                    "--dataset",
+                    "x.pkl",
+                    "--import-labels-into",
+                    "det",
+                    "--label-importer-file",
+                    "labels.json",
+                ],
+            )
+        assert exc.value.code == 1
+
+
+# ---------------------------------------------------------------------------
 # --user / --api-key authentication
 # ---------------------------------------------------------------------------
 
 
 class TestCliUserAuth:
+    def test_authenticate_user_happy_path(self, monkeypatch):
+        import argparse
+
+        import vtsearch.auth as auth_mod
+
+        class _FakeProvider:
+            def __init__(self, keys_file=None):
+                pass
+
+            def is_authenticated(self, req):
+                return True
+
+            def get_user(self, req):
+                return "alice"
+
+        set_users = []
+        monkeypatch.setattr(auth_mod, "ApiKeyLoginProvider", _FakeProvider)
+        monkeypatch.setattr(auth_mod, "set_thread_user", lambda u: set_users.append(u))
+
+        parser = cli_main._build_parser()
+        cli_main._authenticate_cli_user(argparse.Namespace(user="alice", api_key="key"), parser)
+        assert set_users == ["alice"]
+
+    def test_authenticate_wrong_user_errors(self, monkeypatch, capsys):
+        import argparse
+
+        import vtsearch.auth as auth_mod
+
+        class _FakeProvider:
+            def __init__(self, keys_file=None):
+                pass
+
+            def is_authenticated(self, req):
+                return True
+
+            def get_user(self, req):
+                return "bob"
+
+        monkeypatch.setattr(auth_mod, "ApiKeyLoginProvider", _FakeProvider)
+        parser = cli_main._build_parser()
+        with pytest.raises(SystemExit) as exc:
+            cli_main._authenticate_cli_user(argparse.Namespace(user="alice", api_key="key"), parser)
+        assert exc.value.code == 2
+        assert "authenticates as 'bob'" in capsys.readouterr().err
+
+    def test_authenticate_invalid_key_errors(self, monkeypatch, capsys):
+        import argparse
+
+        import vtsearch.auth as auth_mod
+
+        class _FakeProvider:
+            def __init__(self, keys_file=None):
+                pass
+
+            def is_authenticated(self, req):
+                return False
+
+        monkeypatch.setattr(auth_mod, "ApiKeyLoginProvider", _FakeProvider)
+        parser = cli_main._build_parser()
+        with pytest.raises(SystemExit) as exc:
+            cli_main._authenticate_cli_user(argparse.Namespace(user="alice", api_key="bad"), parser)
+        assert exc.value.code == 2
+        assert "Invalid --api-key" in capsys.readouterr().err
+
     def test_user_without_api_key_errors(self, monkeypatch, capsys):
         with pytest.raises(SystemExit) as exc:
             _run_main(monkeypatch, ["--autodetect", "--dataset", "x.pkl", "--user", "alice"])
@@ -361,6 +547,18 @@ class TestApplyOverrides:
         monkeypatch.setattr(cli_main, "_run_server", lambda *a: None)
         _run_main(monkeypatch, ["--hide-plugin", "importers:server_folder"])
         assert "server_folder" in settings_mod._cli_hidden_plugins.get("importers", set())
+
+    def test_hide_plugin_empty_half_errors(self, monkeypatch, capsys):
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--hide-plugin", "importers:"])
+        assert exc.value.code == 2
+        assert "empty family or name" in capsys.readouterr().err
+
+    def test_solo_embedder_empty_half_errors(self, monkeypatch, capsys):
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--solo-embedder", "image="])
+        assert exc.value.code == 2
+        assert "must be non-empty" in capsys.readouterr().err
 
     def test_solo_embedder_missing_equals_errors(self, monkeypatch, capsys):
         with pytest.raises(SystemExit) as exc:
@@ -457,3 +655,104 @@ class TestServerDispatch:
         monkeypatch.setattr(cli_main, "_run_server", lambda args, app, init: seen.update(app=app, init=init))
         _run_main(monkeypatch, [], app="APP", initialize_server="INIT")
         assert seen == {"app": "APP", "init": "INIT"}
+
+    def test_unknown_flag_without_plugins_errors(self, monkeypatch, capsys):
+        # No importer/exporter to consume it, no pipeline: the leftover flag
+        # is surfaced by a full re-parse in _resolve_plugins.
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--totally-unknown-flag"])
+        assert exc.value.code == 2
+        assert "unrecognized arguments" in capsys.readouterr().err
+
+
+class _FakeApp:
+    def __init__(self):
+        self.ran = None
+
+    def run(self, **kwargs):
+        self.ran = kwargs
+
+
+class TestRunServer:
+    def _patch_preflight(self, monkeypatch):
+        monkeypatch.setattr(cli_main, "_acquire_single_instance_lock", lambda port: object())
+        monkeypatch.setattr(cli_main, "_preflight_port", lambda port: None)
+
+    def test_run_server_trivial_login(self, monkeypatch):
+        import argparse
+
+        import vtsearch.auth as auth_mod
+
+        provs = []
+        monkeypatch.setattr(auth_mod, "set_login_provider", lambda p: provs.append(p))
+        self._patch_preflight(monkeypatch)
+
+        init_calls = {}
+        app = _FakeApp()
+        cli_main._run_server(
+            argparse.Namespace(login="trivial", port=5055, local=True),
+            app,
+            lambda **kw: init_calls.update(kw),
+        )
+        assert app.ran["port"] == 5055
+        assert init_calls["mode_label"] == "LOCAL"
+        assert len(provs) == 1
+
+    def test_run_server_api_key_login_and_default_port(self, monkeypatch):
+        import argparse
+
+        import vtsearch.auth as auth_mod
+
+        provs = []
+        monkeypatch.setattr(auth_mod, "set_login_provider", lambda p: provs.append(p))
+        self._patch_preflight(monkeypatch)
+        monkeypatch.delenv("VTSEARCH_PORT", raising=False)
+
+        app = _FakeApp()
+        cli_main._run_server(
+            argparse.Namespace(login="api_key", port=None, local=False),
+            app,
+            lambda **kw: None,
+        )
+        # Falls back to the default 5000 when neither --port nor env is set.
+        assert app.ran["port"] == 5000
+        assert len(provs) == 1
+
+    def test_run_server_no_login_provider(self, monkeypatch):
+        import argparse
+
+        import vtsearch.auth as auth_mod
+
+        provs = []
+        monkeypatch.setattr(auth_mod, "set_login_provider", lambda p: provs.append(p))
+        self._patch_preflight(monkeypatch)
+        monkeypatch.setenv("VTSEARCH_PORT", "6001")
+
+        app = _FakeApp()
+        cli_main._run_server(argparse.Namespace(login=None, port=None, local=True), app, lambda **kw: None)
+        # No --login: no provider activated; port comes from VTSEARCH_PORT.
+        assert provs == []
+        assert app.ran["port"] == 6001
+
+
+class TestSoloEmbedderCrossType:
+    def test_embedder_valid_but_wrong_type_errors(self, monkeypatch, capsys):
+        from vtscore.media import all_embedders, all_type_ids, embedders_for_type
+
+        all_names = {e.name for e in all_embedders()}
+        # Find (type, embedder) where the embedder exists globally but is not
+        # registered for that type.
+        pair = None
+        for mt in sorted(all_type_ids()):
+            for_type = {e.name for e in embedders_for_type(mt)}
+            other = all_names - for_type
+            if other:
+                pair = (mt, sorted(other)[0])
+                break
+        if pair is None:
+            pytest.skip("no cross-type embedder pair available")
+        mt, emb = pair
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--solo-embedder", f"{mt}={emb}"])
+        assert exc.value.code == 2
+        assert "not registered for media type" in capsys.readouterr().err

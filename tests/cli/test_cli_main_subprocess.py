@@ -1,15 +1,16 @@
-"""End-to-end subprocess coverage for ``app.py``'s CLI entry point.
+"""End-to-end subprocess smoke test for ``app.py``'s CLI entry point.
 
-Unlike the rest of ``tests/cli/`` (which calls the ``vtscore.cli``
-``autodetect_*`` functions directly), these spawn a fresh ``python app.py``
-process so the full ``vtsearch.cli_main`` dispatch path - argparse build,
-two-pass parsing, ``_apply_*`` overrides, ``_run_autodetect`` ->
-``_dispatch_autodetect`` - is exercised the way a real CLI invocation hits
-it. They guard the seam between ``app.py``'s ``__main__`` block and
-``cli_main.main(app, initialize_server)``.
+The bulk of the ``vtsearch.cli_main`` dispatch surface — argparse build,
+two-pass parsing, ``_apply_*`` overrides, flag validation, error exits, and
+the autodetect/pipeline/server wiring — is covered in-process (and far
+faster) by ``test_cli_main.py``, which calls ``cli_main.main`` directly with
+the heavy stages mocked.
 
-Marked ``slow`` because each spawns an interpreter that imports the whole
-app; ``--dry-run`` keeps it model-free.
+This one ``slow`` subprocess test remains to guard the single thing an
+in-process test can't reach: the real seam between ``app.py``'s ``__main__``
+block and ``cli_main.main(app, initialize_server)`` when a fresh interpreter
+actually imports the whole app and runs a full ``--autodetect`` dispatch.
+``--dry-run`` keeps it model-free.
 """
 
 from __future__ import annotations
@@ -65,13 +66,3 @@ def test_app_autodetect_dry_run_via_subprocess(tmp_path):
     assert "Exporter: server_json_file" in result.stdout
     # Critical: dry-run must not actually run the exporter.
     assert not out_path.exists()
-
-
-@pytest.mark.slow
-def test_app_autodetect_missing_target_errors_via_subprocess():
-    """``--autodetect`` with neither ``--dataset`` nor ``--importer`` exits 2
-    with the dispatch helper's specific message (argparse ``parser.error``)."""
-    result = _run_app("--autodetect")
-
-    assert result.returncode == 2
-    assert "requires either --dataset" in result.stderr
