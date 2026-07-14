@@ -14,17 +14,8 @@
   ballparks (e.g. on a non-cuML GPU host the coverage k-means can outweigh the
   registry save), not measured; a future pass could record real per-sub-stage
   durations and feed them back in, mirroring the device-aware top-level weights.
-- **Multi-embedder (v3 trio) holds mid-embed.** `_embed_missing_stage` loops
-  over each bound embedder; each `embed_missing` call restarts its `current` at
-  0, so after the first embedder fills the embed slice the clamp holds the bar
-  steady through the 2nd/3rd embedders. No backslide, but a long static stretch.
-  Rare for demo imports (single embedder); fix by reporting cumulative progress
-  across the embedder loop.
-- **Text sort (`sort` channel) is not unified.** `vtsearch/routes/sorting.py`
-  encodes its 3 phases as `current/total` (current = step index) rather than
-  the `step`/`total_steps` fields, so it gets no `overall` and stays a coarse
-  3-step bar. Refactor it to report `step`/`total_steps` (with the embedder
-  load as a real sub-progress) to get the unified bar + overall ETA there too.
+- [ ] #2394 — Report cumulative embed progress across the multi-embedder (v3 trio) loop
+- [ ] #2395 — Migrate text-sort progress to `step`/`total_steps` for the unified bar + ETA
 - **Indeterminate sub-steps park at the step floor.** A phase that reports no
   `total` (e.g. model load) sits the bar at its weighted floor until the next
   phase. That's honest but static; per-step weights (now shipped) mitigate it,
