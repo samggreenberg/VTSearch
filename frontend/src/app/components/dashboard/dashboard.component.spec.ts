@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { DashboardComponent } from './dashboard.component';
+import { LoadingTask } from '../../models/api.models';
 import { LabelSessionService } from '../../services/label-session.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { provideZoneless } from '../../testing/zoneless-testbed';
@@ -645,9 +646,9 @@ describe('DashboardComponent', () => {
       const activeCtx = component['activeContext'];
       const setActive = vi.spyOn(activeCtx, 'setActivePair');
       // Capture the completion callback instead of running the real SSE poll.
-      let onComplete: (() => void) | undefined;
+      let onComplete: ((completed: LoadingTask[]) => void) | undefined;
       vi.spyOn(component['loadingTasksSvc'], 'startProgressPolling').mockImplementation(
-        (_taskId?: string, cb?: () => void) => {
+        (_taskId?: string, cb?: (completed: LoadingTask[]) => void) => {
           onComplete = cb;
         },
       );
@@ -659,7 +660,7 @@ describe('DashboardComponent', () => {
       expect(setActive).not.toHaveBeenCalled();
       expect(onComplete).toBeTypeOf('function');
 
-      onComplete!();
+      onComplete!([]);
       expect(setActive).toHaveBeenCalledWith('d1', '');
     });
 
