@@ -87,6 +87,12 @@ class LabelingStatusResponseSchema(Schema):
     smart = fields.Nested(StatusIndicatorSchema, required=True)
     stable = fields.Nested(StatusIndicatorSchema, required=True)
     span = fields.Nested(StatusIndicatorSchema, required=True)
+    # ``true`` while a background worker is advancing the per-step cache: the
+    # ``smart`` / ``stable`` indicators reflect the last-computed snapshot (or a
+    # transient "computing" placeholder), not the current labelset yet. Cleared
+    # on the first poll after the refresh lands. Optional so existing clients /
+    # mocks that omit it stay valid. See issue #2397.
+    stale = fields.Boolean()
 
 
 # ---------------------------------------------------------------------------

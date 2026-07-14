@@ -16,6 +16,8 @@ from vtscore.detectors.labeling_progress import (
     calculate_error_cost_over_time,
     calculate_prediction_stability_over_time,
     compute_labeling_status,
+    is_status_cache_fresh,
+    stale_labeling_status,
 )
 from vtsearch.schemas.eval import (
     EvalTrainAndScoreCancelResponseSchema,
@@ -68,6 +70,45 @@ def labeling_progress():
         abort(500, message="Labeling progress computation failed")
 
 
+def _schedule_status_refresh(span_info) -> None:
+    """Kick (or coalesce into) a single background labeling-status cache build.
+
+    Snapshots the inputs on the request thread - like ``eval_train_and_score``
+    - so the worker advances the per-step cache against a consistent labelset
+    even if more votes arrive mid-refresh; the next stale poll simply schedules
+    another pass.  ``JobManager`` coalesces the rapid poll burst into one
+    in-flight refresh per (dataset, detector) so we never fan out parallel
+    retrains.
+    """
+    from vtscore.concurrency.async_jobs import labeling_status_jobs
+    from vtscore.state.core import get_active_context, get_active_detector_context
+
+    clips = snapshot_medias()
+    inclusion = get_inclusion()
+    history = list(label_history)
+    good_snap = dict(good_votes)
+    bad_snap = dict(bad_votes)
+
+    ds_ctx = get_active_context()
+    det_ctx = get_active_detector_context()
+
+    signature = (ds_ctx.dataset_id, det_ctx.detector_id, len(history), inclusion)
+
+    def _run(job):
+        # ``compute_labeling_status`` advances the per-step cache under
+        # ``_progress_lock`` and refreshes ``_status_snapshot``; the return
+        # value is unused - the next poll reads the snapshot.  The lock is
+        # taken only inside the worker, never across the HTTP response.
+        compute_labeling_status(clips, history, good_snap, bad_snap, inclusion, span_info=span_info)
+
+    labeling_status_jobs.start(
+        signature,
+        _run,
+        dataset_id=ds_ctx.dataset_id,
+        detector_id=det_ctx.detector_id,
+    )
+
+
 @eval_bp.route("/api/labeling-status", methods=["GET"])
 @eval_bp.response(200, LabelingStatusResponseSchema)
 @eval_bp.alt_response(500, description="Labeling-status computation failed.")
@@ -75,14 +116,40 @@ def labeling_status_indicator():
     """Return per-metric red/yellow/green labeling statuses.
 
     Returns ``smart``, ``stable``, and ``span`` sub-objects, each with a
-    ``status`` field of ``"red"``, ``"yellow"``, or ``"green"``.
+    ``status`` field of ``"red"``, ``"yellow"``, or ``"green"``, plus a
+    ``stale`` flag.
+
+    The frontend polls this every 2 s during labeling.  When the per-step
+    cache already covers the full ``label_history`` the status is computed
+    inline (cheap: cached-model forward passes over the small labeled set).
+    When the cache is *behind* - the common case on the first poll after a new
+    vote, or after a polarity flip truncated the cache - advancing it would
+    retrain one-or-more MLPs and score every unlabeled media, so we return the
+    last-computed snapshot immediately with ``stale = true`` and defer the
+    advancement to a background worker (issue #2397).
     """
     try:
         tree = get_coverage_atlas()
         span = tree.span_info() if tree is not None else None
-        return compute_labeling_status(
-            snapshot_medias(), label_history, good_votes, bad_votes, get_inclusion(), span_info=span
-        )
+        inclusion = get_inclusion()
+
+        if is_status_cache_fresh(label_history, inclusion):
+            status = compute_labeling_status(
+                snapshot_medias(), label_history, good_votes, bad_votes, inclusion, span_info=span
+            )
+            status["stale"] = False
+            return status
+
+        # Cache is behind: serve the last snapshot now, advance the cache in
+        # the background.  ``stale_labeling_status`` keeps the cheap fields
+        # (counts + Span) live and lags only the MLP-derived Smart / Stable
+        # indicators, falling back to a "computing" placeholder when no
+        # snapshot exists yet (rapid votes at session start, or the first poll
+        # after a detector switch cleared the cache).
+        _schedule_status_refresh(span)
+        status = stale_labeling_status(good_votes, bad_votes, span)
+        status["stale"] = True
+        return status
     except Exception:
         import logging
 

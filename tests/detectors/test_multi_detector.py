@@ -486,9 +486,21 @@ class TestLabelingStatusResetOnDetectorSwitch:
         for mid in [16, 17, 18, 19, 20]:
             apply_label(mid, "bad")
 
-        # Call labeling-status to populate the progress cache
+        # Call labeling-status to populate the progress cache.  The endpoint now
+        # advances the per-step cache on a background worker (issue #2397), so
+        # wait for that refresh to finish before inspecting the cache - and so
+        # no in-flight job re-populates it after the unregister below.
+        import time
+
+        from vtscore.concurrency.async_jobs import labeling_status_jobs
+
         res = client.get("/api/labeling-status")
         assert res.status_code == 200
+
+        deadline = time.time() + 30
+        while time.time() < deadline and labeling_status_jobs.active_jobs():
+            for job in labeling_status_jobs.active_jobs():
+                job.done_event.wait(timeout=1.0)
 
         with _progress_lock:
             cached_before = len(_cached_steps)
