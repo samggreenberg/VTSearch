@@ -138,8 +138,7 @@ class EmailLabelsetExporter(LabelsetExporter):
             required=False,
             description="Subject line for the email. Leave blank for an auto-generated summary.",
             hint=(
-                "Template variables: {YYYYMMDD-HHMMSS}, {YYYYMMDD}, {YYYY}, {MM}, {DD}, "
-                "{detector_name}, {username}."
+                "Template variables: {YYYYMMDD-HHMMSS}, {YYYYMMDD}, {YYYY}, {MM}, {DD}, {detector_name}, {username}."
             ),
             placeholder="VTSearch Auto-Detect Results {YYYYMMDD}",
             template_vars=("YYYYMMDD-HHMMSS", "YYYYMMDD", "YYYY", "MM", "DD", "detector_name", "username"),
