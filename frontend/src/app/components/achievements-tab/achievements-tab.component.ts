@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, effect, inject, OnDestroy, OnInit } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  effect,
+  inject,
+  OnDestroy,
+  OnInit,
+} from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
@@ -38,6 +46,7 @@ interface AchievementRow extends AchievementEntry {
 export class AchievementsTabComponent implements OnInit, OnDestroy {
   private achievements = inject(AchievementsService);
   private settingsState = inject(SettingsStateService);
+  private cdr = inject(ChangeDetectorRef);
 
   rows: AchievementRow[] = [];
   docs: DocEntry[] = [];
@@ -108,6 +117,7 @@ export class AchievementsTabComponent implements OnInit, OnDestroy {
     this.submitting = true;
     this.achievements.checkPhrase(phrase).subscribe((result) => {
       this.submitting = false;
+      this.cdr.markForCheck();
       if (result.matched && !result.already_read) {
         this.phraseStatus = {
           kind: 'success',
@@ -138,6 +148,10 @@ export class AchievementsTabComponent implements OnInit, OnDestroy {
       (sum, a) => sum + (a.tier_idx >= 0 ? 1 << a.tier_idx : 0),
       0,
     );
+    // OnPush + manual subscribe under a zoneless app: the state stream (and the
+    // async phrase-check refresh) mutate these fields outside any CD-scheduling
+    // signal, so nudge the view to re-render (mirrors context-pulldown).
+    this.cdr.markForCheck();
   }
 
   private toRow(a: AchievementEntry): AchievementRow {
