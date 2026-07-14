@@ -97,10 +97,22 @@ describe('BrowseViewComponent (zoneless canary)', () => {
         { provide: BrowseSubsetService, useValue: subsetStub },
         { provide: MediasApiService, useValue: mediasStub },
         // ngOnInit calls MediaTypeCapabilityService.ensureLoaded(), which lazily
-        // resolves this service to fetch the thumbnail-type registry.
+        // resolves this service to fetch the thumbnail-type registry. The canary
+        // DS is audio, so the served set must mark audio as thumbnail-backed.
         {
           provide: DatasetsListingsApiService,
-          useValue: { getMediaTypes: () => of({ media_types: [] }) },
+          useValue: {
+            getMediaTypes: () =>
+              of({
+                media_types: [
+                  { type_id: 'image', name: 'Image', has_thumbnail: true },
+                  { type_id: 'video', name: 'Video', has_thumbnail: true },
+                  { type_id: 'document', name: 'Document', has_thumbnail: true },
+                  { type_id: 'audio', name: 'Audio', has_thumbnail: true },
+                  { type_id: 'text', name: 'Text', has_thumbnail: false },
+                ],
+              }),
+          },
         },
         { provide: VtDialogService, useValue: {} },
         { provide: ToastService, useValue: { error: () => {}, success: () => {} } },
