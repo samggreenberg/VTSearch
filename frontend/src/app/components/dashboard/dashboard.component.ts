@@ -465,12 +465,29 @@ export class DashboardComponent implements OnInit, OnDestroy {
    *  from these id lists (filtered to ids still in the registry so a
    *  pruned-away id can't inflate the "Multiple" count). */
   private pushTopBarLabels(): void {
-    this.dashSelection.setDatasetIds(
-      this.datasets.filter((d) => this.selectedDatasetIds.has(d.id)).map((d) => d.id),
-    );
-    this.dashSelection.setDetectorIds(
-      this.detectors.filter((d) => this.selectedDetectorIds.has(d.id)).map((d) => d.id),
-    );
+    const datasetIds = this.datasets
+      .filter((d) => this.selectedDatasetIds.has(d.id))
+      .map((d) => d.id);
+    const detectorIds = this.detectors
+      .filter((d) => this.selectedDetectorIds.has(d.id))
+      .map((d) => d.id);
+    this.dashSelection.setDatasetIds(datasetIds);
+    this.dashSelection.setDetectorIds(detectorIds);
+    // While the Dashboard is on screen the pulldowns read the mirrored table
+    // selection above; the moment it unmounts they fall back to the
+    // active-context *intent*. Without also mirroring a lone pick into that
+    // intent, a freshly imported/created (implicitly selected) item is
+    // forgotten by the pulldowns as soon as you leave the Dashboard by any
+    // route that doesn't load a context — the picker snaps back to "Select
+    // a …". Mirror only an unambiguous single selection; a 0- or
+    // multi-selection leaves intent untouched so we never blank out the
+    // intent of an already-loaded pair. Intent-only (never `setActive`), so
+    // the HTTP interceptor keeps tagging the still-loaded pair, per the H25
+    // intent/active split.
+    const soleDataset = datasetIds.length === 1 ? datasetIds[0] : this.activeContext.intentDatasetId;
+    const soleDetector =
+      detectorIds.length === 1 ? detectorIds[0] : this.activeContext.intentModelId;
+    this.activeContext.setIntent(soleDataset, soleDetector);
   }
 
   toggleDatasetSelection(id: string, event: MouseEvent): void {

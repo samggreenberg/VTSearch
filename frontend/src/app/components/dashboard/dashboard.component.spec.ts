@@ -6,6 +6,7 @@ import { DashboardComponent } from './dashboard.component';
 import { LoadingTask } from '../../models/api.models';
 import { LabelSessionService } from '../../services/label-session.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
+import { ActiveContextService } from '../../services/active-context.service';
 import { provideZoneless } from '../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../testing/test-providers';
 
@@ -148,6 +149,47 @@ describe('DashboardComponent', () => {
     // selects only the new ones (same behavior as datasets above).
     expect(component.selectedDetectorIds.has('m1')).toBe(false);
     expect(component.selectedDetectorIds.has('m2')).toBe(true);
+  });
+
+  it('mirrors an implicitly selected dataset into the active-context intent', () => {
+    // Off the Dashboard the top-bar pulldowns read the active-context intent
+    // (not the mirrored table selection), so an auto-selected import must land
+    // there too or the picker forgets it the moment the Dashboard unmounts.
+    const activeContext = TestBed.inject(ActiveContextService);
+    const datasets = [{ id: 'd1', name: 'Only One' }];
+    flushInitialRequests(datasets);
+    expect(component.selectedDatasetIds.has('d1')).toBe(true);
+    expect(activeContext.intentDatasetId).toBe('d1');
+  });
+
+  it('mirrors an implicitly selected model into the active-context intent', () => {
+    const activeContext = TestBed.inject(ActiveContextService);
+    const models = [{ id: 'm1', name: 'Only One' }];
+    flushInitialRequests([], models);
+    expect(component.selectedDetectorIds.has('m1')).toBe(true);
+    expect(activeContext.intentModelId).toBe('m1');
+  });
+
+  it('does not blank out the intent when the selection is empty or multiple', () => {
+    // A 0- or multi-selection is ambiguous, so it must leave a previously
+    // loaded pair's intent alone rather than snapping the picker to a
+    // placeholder.
+    const activeContext = TestBed.inject(ActiveContextService);
+    activeContext.setActivePair('d0', 'm0');
+    const datasets = [
+      { id: 'd1', name: 'First' },
+      { id: 'd2', name: 'Second' },
+    ];
+    flushInitialRequests(datasets);
+    // Multiple datasets on initial load → nothing auto-selected, so the
+    // empty-selection mirror leaves the loaded pair's intent untouched.
+    expect(component.selectedDatasetIds.size).toBe(0);
+    expect(activeContext.intentDatasetId).toBe('d0');
+    // Select both at once → an ambiguous multi-selection also leaves it alone.
+    component.toggleAllDatasets();
+    expect(component.selectedDatasetIds.size).toBe(2);
+    expect(activeContext.intentDatasetId).toBe('d0');
+    expect(activeContext.intentModelId).toBe('m0');
   });
 
   it('should toggle dataset selection on click', () => {
