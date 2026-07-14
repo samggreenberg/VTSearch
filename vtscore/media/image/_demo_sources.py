@@ -526,8 +526,9 @@ def build_demo_datasets() -> list[DemoDataset]:
             download_size_mb=ROXFORD_IMAGES_DOWNLOAD_SIZE_MB,
         ),
         # OpenLogo is multi-label (an image may show several brands) and sliced
-        # flat over the image list, so — like Visual Genome — the advertised
-        # count is only an approximation of the per-category average.
+        # flat over the image list, so the per-category ``items_per_category``
+        # estimate does not apply; the advertised count comes from the measured
+        # DEMO_MEDIA_COUNTS entries instead (see vtscore/datasets/demo_counts.py).
         DemoDataset(
             id="openlogo_s",
             label="OpenLogo (S)",
