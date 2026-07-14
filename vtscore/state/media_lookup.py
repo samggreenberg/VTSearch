@@ -59,6 +59,24 @@ def build_media_lookup(
     return origin_lookup, md5_lookup, name_lookup
 
 
+def build_md5_lookup(
+    media_dict: dict[int, dict[str, Any]],
+) -> dict[str, list[int]]:
+    """Build only the MD5 → media-ID lookup from *media_dict*.
+
+    Equivalent to the ``md5_lookup`` element of :func:`build_media_lookup`, but
+    skips constructing the origin and name dicts (which entail a per-item
+    ``json.dumps`` of every origin).  Use this when the caller only needs to
+    resolve a content hash to media IDs, e.g. add-to-pile dedup.
+    """
+    md5_lookup: dict[str, list[int]] = {}
+    for media in media_dict.values():
+        md5 = media.get("md5", "")
+        if md5:
+            md5_lookup.setdefault(md5, []).append(media["id"])
+    return md5_lookup
+
+
 def resolve_media_ids(
     entry: dict[str, Any],
     origin_lookup: dict[str, list[int]],
