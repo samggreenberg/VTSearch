@@ -47,6 +47,14 @@ export class JobProgressComponent {
   /** Cancel-button label. */
   @Input() cancelLabel = 'Cancel';
   /**
+   * Cancel-acknowledgement mode. Backends take a while to unwind, so once the
+   * user has clicked Cancel we swap the live button for a disabled
+   * "Cancelling…" badge and replace the per-item detail with "Cancelling…", so
+   * the row visibly acknowledges the click instead of freezing in its
+   * pre-cancel state and inviting repeated clicks.
+   */
+  @Input() cancelling = false;
+  /**
    * Table-cell mode: pin the host to the cell width (`width: 0; min-width:
    * 100%`) and give the detail slot a fixed width, so the loading row's text
    * never feeds the auto column-sizing algorithm.

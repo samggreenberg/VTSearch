@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { Subject } from 'rxjs';
+import { of, Subject } from 'rxjs';
 
 import { DashboardLoadingTasksService } from './dashboard-loading-tasks.service';
 import { AchievementsService } from './achievements.service';
@@ -54,8 +54,8 @@ describe('DashboardLoadingTasksService', () => {
       setLoading: vi.fn(),
     };
     const achievementsStub = { refresh: vi.fn() };
-    const datasetsRegistryApiStub = { cancelTask: vi.fn() };
-    const detectorsRegistryApiStub = { cancelDetectorLoadingTask: vi.fn() };
+    const datasetsRegistryApiStub = { cancelTask: vi.fn(() => of(null)) };
+    const detectorsRegistryApiStub = { cancelDetectorLoadingTask: vi.fn(() => of(null)) };
 
     configureZoneless({
       providers: [
@@ -150,6 +150,45 @@ describe('DashboardLoadingTasksService', () => {
 
     detectorLoadingTasks$.next([task({ task_id: 'det-other' })]);
     expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('flags a task as cancelling on cancel and clears it once it leaves the active list', () => {
+    service.startProgressPolling();
+    loadingTasks$.next([task({ task_id: 'load-1', status: 'running' })]);
+    expect(service.isCancelling('load-1')).toBe(false);
+
+    service.cancelLoadingTask('load-1');
+    expect(service.isCancelling('load-1')).toBe(true);
+
+    // Still unwinding: the task is reported active, so the flag stays set.
+    loadingTasks$.next([task({ task_id: 'load-1', status: 'running' })]);
+    expect(service.isCancelling('load-1')).toBe(true);
+
+    // Backend finished cancelling: the task goes idle (with the Cancelled
+    // sentinel that gets filtered out), leaving the active list → flag clears.
+    loadingTasks$.next([task({ task_id: 'load-1', error: 'Cancelled' })]);
+    expect(service.isCancelling('load-1')).toBe(false);
+  });
+
+  it('flags a detector task as cancelling and clears it when it settles', () => {
+    service.startDetectorProgressPolling();
+    detectorLoadingTasks$.next([task({ task_id: 'det-1', status: 'running' })]);
+
+    service.cancelDetectorLoadingTask('det-1');
+    expect(service.isCancelling('det-1')).toBe(true);
+
+    detectorLoadingTasks$.next([task({ task_id: 'det-1', error: 'Cancelled' })]);
+    expect(service.isCancelling('det-1')).toBe(false);
+  });
+
+  it('drops cancelling flags on backend restart', () => {
+    service.startProgressPolling();
+    loadingTasks$.next([task({ task_id: 'load-1', status: 'running' })]);
+    service.cancelLoadingTask('load-1');
+    expect(service.isCancelling('load-1')).toBe(true);
+
+    serverReset$.next();
+    expect(service.isCancelling('load-1')).toBe(false);
   });
 
   it('clears pending callbacks on backend restart', () => {
