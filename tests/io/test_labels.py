@@ -1,4 +1,12 @@
+import json
+
 import app as app_module
+
+
+def _read_ndjson(resp):
+    """Parse a streamed NDJSON export response into a list of label dicts."""
+    text = resp.get_data(as_text=True)
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 
 class TestExportLabels:
@@ -44,6 +52,76 @@ class TestExportLabels:
         resp = client.get("/api/labels/export")
         data = resp.get_json()
         assert "dataset_creation_info" not in data
+
+
+class TestExportLabelsNdjson:
+    """The streaming ``?format=ndjson`` variant of ``GET /api/labels/export`` (S13)."""
+
+    def test_empty_export_streams_nothing(self, client):
+        resp = client.get("/api/labels/export?format=ndjson")
+        assert resp.status_code == 200
+        assert resp.mimetype == "application/x-ndjson"
+        assert _read_ndjson(resp) == []
+
+    def test_streams_one_line_per_label(self, client):
+        app_module.good_votes.update({k: None for k in [1, 2]})
+        app_module.bad_votes.update({k: None for k in [3, 4]})
+        resp = client.get("/api/labels/export?format=ndjson")
+        assert resp.mimetype == "application/x-ndjson"
+        rows = _read_ndjson(resp)
+        assert len(rows) == 4
+        assert all("md5" in r and "label" in r for r in rows)
+
+    def test_ndjson_matches_buffered_labels(self, client):
+        """The streamed rows equal the buffered ``labels`` list, entry for entry."""
+        app_module.good_votes.update({k: None for k in [1, 3, 5]})
+        app_module.bad_votes.update({k: None for k in [2, 4]})
+
+        buffered = client.get("/api/labels/export").get_json()["labels"]
+        streamed = _read_ndjson(client.get("/api/labels/export?format=ndjson"))
+        assert streamed == buffered
+
+    def test_goods_only_filter(self, client):
+        app_module.good_votes.update({k: None for k in [1, 2]})
+        app_module.bad_votes.update({k: None for k in [3, 4]})
+        resp = client.get("/api/labels/export?format=ndjson&goods_only=true")
+        rows = _read_ndjson(resp)
+        assert len(rows) == 2
+        assert all(r["label"] == "good" for r in rows)
+
+    def test_corrections_filter_streams_only_changed(self, client):
+        from vtsearch.state import set_find_initial_labels
+
+        set_find_initial_labels({1: "good", 2: "bad", 3: "good"})
+        app_module.good_votes.update({1: None, 2: None})  # 2 was bad -> correction
+        app_module.bad_votes[3] = None  # 3 was good -> correction
+
+        resp = client.get("/api/labels/export?format=ndjson&label_filter=corrections")
+        rows = _read_ndjson(resp)
+        assert len(rows) == 2
+        assert all(r["is_correction"] is True for r in rows)
+        md5s = {r["md5"] for r in rows}
+        assert app_module.medias[2]["md5"] in md5s
+        assert app_module.medias[3]["md5"] in md5s
+
+    def test_corrections_filter_empty_without_find_labels(self, client):
+        app_module.good_votes[1] = None
+        app_module.bad_votes[2] = None
+        resp = client.get("/api/labels/export?format=ndjson&label_filter=corrections")
+        assert _read_ndjson(resp) == []
+
+    def test_enrich_attaches_custom_metadata_but_no_available_columns(self, client):
+        app_module.good_votes[1] = None
+        resp = client.get("/api/labels/export?format=ndjson&enrich=true")
+        rows = _read_ndjson(resp)
+        assert len(rows) == 1
+        # ``available_columns`` is a whole-set aggregate and is never a row.
+        assert all("labels" not in r and "available_columns" not in r for r in rows)
+        assert "custom_metadata" in rows[0]
+
+    def test_invalid_format_rejected(self, client):
+        resp = client.get("/api/labels/export?format=csv")
+        assert resp.status_code == 422
 
 
 class TestImportLabels:

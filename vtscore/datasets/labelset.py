@@ -20,7 +20,7 @@ work; new consumers get the additional provenance fields.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterator
 
 
 @dataclass
@@ -260,6 +260,19 @@ class LabelSet:
         if self.detector_meta is not None:
             out["detector_meta"] = dict(self.detector_meta)
         return out
+
+    def iter_dicts(self) -> Iterator[dict[str, Any]]:
+        """Yield each element's serialised dict one at a time.
+
+        The streaming counterpart to :meth:`to_dict`'s ``labels`` list: it
+        never materialises the full ``[e.to_dict() for e in self.elements]``
+        list (~50 MB at 100 k labels), so a label export can be encoded
+        element-by-element.  Used by the GUI ``?format=ndjson`` export path
+        (scalability item S13); ``detector_meta`` is not emitted here since
+        NDJSON carries one label per line, not the top-level wrapper.
+        """
+        for e in self.elements:
+            yield e.to_dict()
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> LabelSet:

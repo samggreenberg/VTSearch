@@ -12582,6 +12582,20 @@
               "default": false,
               "type": "boolean"
             }
+          },
+          {
+            "description": "Response encoding. ``json`` (default) returns the buffered ``{labels: [...]}`` object. ``ndjson`` streams one label entry per line (newline-delimited JSON, ``application/x-ndjson``) so large exports are never materialised in memory; the top-level ``available_columns`` list is omitted in this mode since it's a whole-set aggregate a streamed response can't compute.",
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "json",
+              "enum": [
+                "json",
+                "ndjson"
+              ],
+              "type": "string"
+            }
           }
         ],
         "responses": {
