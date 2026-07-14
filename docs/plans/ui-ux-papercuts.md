@@ -22,20 +22,6 @@ Med = confusing; Low = cosmetic) so you can pick the high-value ones first.
 
 <!-- item-sep -->
 
-- **Autopilot exhausted-state for tiny datasets (High)** — on a 1-item (or
-  otherwise small) dataset, autopilot's "Find Initial Goods" needs 3 goods and
-  the bad phase needs 4 bads; those targets are unreachable, so autopilot never
-  advances, shows no "exhausted" state, and the center pane goes blank while the
-  metadata strip keeps the stale item. `autopilot-state.service.ts`
-  `INITIAL_STATE` hardcodes `goodToStart: 3, badToStart: 4`, and
-  `checkPhaseTransition()` (~87-108) gates purely on `count < target` with no
-  dataset-size awareness and no terminal branch (the `'done'` phase needs
-  ≥5 good/5 bad, so small datasets can never reach it). **Fix:** cap each phase
-  target at `min(target, remainingUnlabeledCount)` and add an explicit
-  "dataset exhausted / nothing left to label" terminal state that renders a
-  message instead of a blank pane. **Files:** `autopilot-state.service.ts`,
-  the label-view template that renders the blank pane. (edge-states B1.)
-
 <!-- item-sep -->
 
 <!-- item-sep -->
