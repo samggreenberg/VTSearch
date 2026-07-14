@@ -130,12 +130,16 @@ describe('hex-render.util', () => {
   });
 
   describe('HEX_ANGLES', () => {
-    it('is a pointy-top hexagon: six vertices, first straight up', () => {
+    it('is a pointy-top hexagon: six vertices 60° apart, one straight up', () => {
       expect(HEX_ANGLES).toHaveLength(6);
-      // First vertex at -90° (straight up) for a pointy-top hex.
-      expect(HEX_ANGLES[0]).toBeCloseTo(-Math.PI / 2);
+      // First vertex at -30° (top-right of the pointy-top silhouette).
+      expect(HEX_ANGLES[0]).toBeCloseTo(-Math.PI / 6);
       // Vertices are spaced 60° apart.
       expect(HEX_ANGLES[1] - HEX_ANGLES[0]).toBeCloseTo(Math.PI / 3);
+      // A pointy-top hex has a vertex pointing straight up: in screen coords
+      // (y grows down) that is sin = -1, i.e. some angle ≡ -90° (mod 360°).
+      const hasTopVertex = HEX_ANGLES.some((a) => Math.sin(a) < -0.999);
+      expect(hasTopVertex).toBe(true);
     });
   });
 
@@ -177,10 +181,13 @@ describe('hex-render.util', () => {
       // One moveTo (first vertex) + five lineTo (remaining vertices) = 6 total.
       expect(ctx.moveTo).toHaveBeenCalledOnce();
       expect(ctx.lineTo).toHaveBeenCalledTimes(5);
-      // First vertex sits straight up from the centre at the circumradius.
+      // First vertex is at angle -30° on the circumradius-5 circle about (10, 20).
       const [x, y] = ctx.moveTo.mock.calls[0];
-      expect(x).toBeCloseTo(10);
-      expect(y).toBeCloseTo(20 - 5);
+      expect(x).toBeCloseTo(10 + 5 * Math.cos(-Math.PI / 6));
+      expect(y).toBeCloseTo(20 + 5 * Math.sin(-Math.PI / 6));
+      // Every traced vertex sits on the circumradius circle.
+      const dist = Math.hypot(x - 10, y - 20);
+      expect(dist).toBeCloseTo(5);
     });
   });
 
