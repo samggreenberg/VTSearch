@@ -81,7 +81,13 @@
         </td>
       }
       @case ('num_training') {
-        <td>{{ (detector.num_training ?? 0) | number }}</td>
+        <td>
+          @if (isUntrained) {
+            <span class="empty-hint" title="This detector has no labels yet — add some to train it">Empty</span>
+          } @else {
+            {{ (detector.num_training ?? 0) | number }}
+          }
+        </td>
       }
       @case ('last_trained_at') {
         <td>{{ formatDate(detector.last_trained_at) }}</td>

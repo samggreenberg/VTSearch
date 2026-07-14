@@ -51,6 +51,17 @@ describe('DetectorCardComponent', () => {
   it('should display training count', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.textContent).toContain('50');
+    expect(el.querySelector('.empty-hint')).toBeNull();
+  });
+
+  it('should show an "Empty" hint instead of 0 on a zero-training detector', async () => {
+    fixture.componentRef.setInput('detector', { ...mockDetector, num_training: 0, last_trained_at: null });
+    await settleZoneless(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const hint = el.querySelector('.empty-hint');
+    expect(hint).toBeTruthy();
+    expect(hint?.textContent?.trim()).toBe('Empty');
+    expect(component.isUntrained).toBe(true);
   });
 
   it('should enter rename mode on rename button click', async () => {

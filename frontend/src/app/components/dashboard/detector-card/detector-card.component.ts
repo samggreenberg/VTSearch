@@ -84,6 +84,13 @@ export class DetectorCardComponent {
   readonly checkboxToggle = output<void>();
   readonly security = output<void>();
 
+  /** True for a just-created detector that has never been trained (no labels
+   *  yet). Drives the "Empty" hint so a fresh detector reads as new rather than
+   *  broken. */
+  get isUntrained(): boolean {
+    return (this.detector?.num_training ?? 0) === 0;
+  }
+
   /** True when the current user created this detector (only the creator may
    *  rename/delete it or edit its access list). */
   get isOwner(): boolean {
