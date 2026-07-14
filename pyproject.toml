@@ -202,6 +202,9 @@ DEP001 = [
     "safetensors",
     "huggingface_hub",
     "cuml",
+    # SuperPoint/LightGlue structural backend: lazily imported inside method
+    # bodies (guarded, GPU-oriented); users opt in by installing lightglue.
+    "lightglue",
     # Installed `--no-deps` by the install scripts (its transformers<5 pin is
     # empirically unnecessary; see docs/plans/vtsbrowse-toponymy.md), so it
     # cannot be declared here — declaring it would put its pins back in the
