@@ -153,9 +153,23 @@ describe('ManagedColumns: column order & persistence', () => {
   });
 });
 
+/**
+ * Minimal stand-in for the DragEvent.dataTransfer that jsdom omits: enough of
+ * the surface (setData/getData plus the effect flags) for the reorder handlers.
+ */
+function fakeDataTransfer(): DataTransfer {
+  const store = new Map<string, string>();
+  return {
+    effectAllowed: 'none',
+    dropEffect: 'none',
+    setData: (type: string, val: string) => store.set(type, val),
+    getData: (type: string) => store.get(type) ?? '',
+  } as unknown as DataTransfer;
+}
+
 /** Drive a full drag from `source` dropped onto `target`. */
 function reorder(mc: ManagedColumns<Col>, source: Col, target: Col): void {
-  const dt = new DataTransfer();
+  const dt = fakeDataTransfer();
   mc.onColDragStart({ dataTransfer: dt, preventDefault() {} } as unknown as DragEvent, source);
   mc.onColDrop({ dataTransfer: dt, preventDefault() {} } as unknown as DragEvent, target);
 }
@@ -169,7 +183,7 @@ describe('ManagedColumns: drag-reorder', () => {
   it('onColDragStart records the dragged column and clears any drop target', () => {
     const mc = make();
     mc.dropTargetCol = 'size';
-    const dt = new DataTransfer();
+    const dt = fakeDataTransfer();
     mc.onColDragStart({ dataTransfer: dt, preventDefault() {} } as unknown as DragEvent, 'name');
     expect(mc.dragCol).toBe('name');
     expect(mc.dropTargetCol).toBeNull();
@@ -184,7 +198,7 @@ describe('ManagedColumns: drag-reorder', () => {
     startResizeOn(mc);
     let prevented = false;
     mc.onColDragStart(
-      { dataTransfer: new DataTransfer(), preventDefault: () => (prevented = true) } as unknown as DragEvent,
+      { dataTransfer: fakeDataTransfer(), preventDefault: () => (prevented = true) } as unknown as DragEvent,
       'name',
     );
     expect(prevented).toBe(true);
@@ -195,7 +209,7 @@ describe('ManagedColumns: drag-reorder', () => {
     const mc = make();
     mc.dragCol = 'name';
     let prevented = false;
-    const dt = new DataTransfer();
+    const dt = fakeDataTransfer();
     mc.onColDragOver(
       { dataTransfer: dt, preventDefault: () => (prevented = true) } as unknown as DragEvent,
       'date',
@@ -211,7 +225,7 @@ describe('ManagedColumns: drag-reorder', () => {
     mc.dragCol = 'name';
     let prevented = false;
     mc.onColDragOver(
-      { dataTransfer: new DataTransfer(), preventDefault: () => (prevented = true) } as unknown as DragEvent,
+      { dataTransfer: fakeDataTransfer(), preventDefault: () => (prevented = true) } as unknown as DragEvent,
       'name',
     );
     expect(prevented).toBe(false);
