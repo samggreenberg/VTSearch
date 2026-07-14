@@ -96,4 +96,23 @@ describe('BrowseSelectionPanelComponent (zoneless canary)', () => {
     nameEl = fixture.nativeElement.querySelector('.bsp-name-grid, .bsp-name');
     expect(nameEl!.textContent).toContain('kestrel.wav');
   });
+
+  it('exposes the full name via the entry tooltip and a per-entry copy button', async () => {
+    selection.addAll([7]);
+    names.set(7, 'a-very-long-filename-that-gets-truncated.wav');
+    metaVersion.next(1);
+    await settleZoneless(fixture);
+
+    // The entry title carries the full name (not the old hardcoded string), so
+    // hovering surfaces it even when the on-screen text is truncated/hidden.
+    const entry = fixture.nativeElement.querySelector('.bsp-entry') as HTMLElement;
+    expect(entry.getAttribute('title')).toBe(
+      'a-very-long-filename-that-gets-truncated.wav — click to remove from selection',
+    );
+
+    // A copy-detail button sits beside each entry, wired to copy the full name.
+    const copyBtn = entry.querySelector('.bsp-copy .copy-detail-btn') as HTMLButtonElement;
+    expect(copyBtn).not.toBeNull();
+    expect(copyBtn.getAttribute('title')).toBe('Copy name to clipboard');
+  });
 });
