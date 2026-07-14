@@ -435,6 +435,7 @@ def _score_all_media(
     from vtscore.embedding.matrix import (  # noqa: PLC0415
         get_embedding_matrix_for_snap,
         get_region_matrix_for_snap,
+        segmented_max_pool,
     )
 
     resolved = embedder_name if embedder_name is not None else _score_embedder_for_snap(clips_dict)
@@ -468,45 +469,8 @@ def _score_all_media(
         # any real score (in ``[0, 1]``) for the same media.
         flat_scores = sigmoid_to_finite_array(model(X_all)).astype(np.float64, copy=False)
 
-    scores, best_region = _segmented_max_pool(flat_scores, media_index_per_row, region_index_per_row, len(all_ids))
+    scores, best_region = segmented_max_pool(flat_scores, media_index_per_row, region_index_per_row, len(all_ids))
     return all_ids, scores, best_region
-
-
-def _segmented_max_pool(
-    flat_scores: np.ndarray,
-    media_index_per_row: np.ndarray,
-    region_index_per_row: np.ndarray,
-    n_media: int,
-) -> tuple[list[float], list[int]]:
-    """Max-pool per-row scores down to one score + winning region per media.
-
-    *media_index_per_row* is non-decreasing and contiguous (every media owns
-    a single run of rows), and every media has at least one row, so each
-    media's rows form one ``reduceat`` segment.  Returns ``(scores,
-    best_region)`` as plain Python lists, where ``best_region[m]`` is the
-    region index of the *first* row achieving media ``m``'s max - matching
-    the strict-``>`` "first wins" tie-break of the original scalar loop.
-
-    Fully vectorised so the per-vote scoring tail holds the GIL for
-    microseconds rather than iterating hundreds of thousands of rows in
-    Python (which, in the background training thread, would stall the
-    ``gthread`` pool serving the next vote).
-    """
-    # Start of each media's contiguous run of rows.
-    seg_starts = np.searchsorted(media_index_per_row, np.arange(n_media))
-    seg_max = np.maximum.reduceat(flat_scores, seg_starts)
-
-    # First row per media that reaches its segment max (region 0 - the
-    # CLS/full-image node - is always row 0 of a segment, so an all-sentinel
-    # media resolves to region 0, exactly as the old -1.0-seeded loop did).
-    is_max = flat_scores >= seg_max[media_index_per_row]
-    cand_rows = np.flatnonzero(is_max)
-    cand_media = media_index_per_row[cand_rows]
-    first_cand = np.searchsorted(cand_media, np.arange(n_media))
-    winning_rows = cand_rows[first_cand]
-    best_region = region_index_per_row[winning_rows]
-
-    return seg_max.tolist(), best_region.tolist()
 
 
 def _format_results(
