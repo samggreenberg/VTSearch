@@ -314,15 +314,14 @@ describe('AutopilotPanelComponent', () => {
   });
 
   it('reaches the exhausted state and renders a note when a 1-item dataset is labeled', async () => {
-    component.datasetSize = 1;
-    component.goodVotes = new Set([1]);
-    component.badVotes = new Set();
-    component.ngOnChanges({
-      goodVotes: { currentValue: component.goodVotes, previousValue: new Set(), firstChange: false, isFirstChange: () => false },
-    });
+    // Drive the inputs the way the template binding does, so OnPush re-renders
+    // and ngOnChanges fires the dataset-size-aware phase check.
+    fixture.componentRef.setInput('datasetSize', 1);
+    fixture.componentRef.setInput('goodVotes', new Set([1]));
+    fixture.componentRef.setInput('badVotes', new Set());
+    await settleZoneless(fixture);
     expect(component.state.phase).toBe('exhausted');
     expect(component.exhausted).toBe(true);
-    await settleZoneless(fixture);
     const note = fixture.nativeElement.querySelector('.autopilot-exhausted');
     expect(note).toBeTruthy();
     expect(note.textContent).toContain('Nothing left to label');
@@ -330,13 +329,11 @@ describe('AutopilotPanelComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('.ap-step').length).toBe(0);
   });
 
-  it('does not exhaust while the dataset size is unknown (datasetSize 0)', () => {
-    component.datasetSize = 0;
-    component.goodVotes = new Set([1]);
-    component.badVotes = new Set();
-    component.ngOnChanges({
-      goodVotes: { currentValue: component.goodVotes, previousValue: new Set(), firstChange: false, isFirstChange: () => false },
-    });
+  it('does not exhaust while the dataset size is unknown (datasetSize 0)', async () => {
+    fixture.componentRef.setInput('datasetSize', 0);
+    fixture.componentRef.setInput('goodVotes', new Set([1]));
+    fixture.componentRef.setInput('badVotes', new Set());
+    await settleZoneless(fixture);
     // Unknown size → uncapped → 1 good is not enough, still in good phase.
     expect(component.state.phase).toBe('good');
   });
