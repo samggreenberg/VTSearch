@@ -160,7 +160,7 @@ describe('SettingsModalComponent', () => {
 
   it('should reset to defaults after confirmation', async () => {
     await flushInit();
-    vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(true));
+    vi.spyOn(component['dialog'], 'confirmDestructiveWithEscape').mockReturnValue(Promise.resolve('confirm'));
     component.resetDefaults();
     // Drain the confirm() promise continuation that issues the GET.
     await new Promise<void>((resolve) => setTimeout(resolve));
@@ -175,9 +175,19 @@ describe('SettingsModalComponent', () => {
 
   it('should not reset when confirmation is declined', async () => {
     await flushInit();
-    vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(false));
+    vi.spyOn(component['dialog'], 'confirmDestructiveWithEscape').mockReturnValue(Promise.resolve('cancel'));
     component.resetDefaults();
     await new Promise<void>((resolve) => setTimeout(resolve));
+    httpMock.expectNone('/api/settings/defaults');
+  });
+
+  it('should open the exporter and skip reset when the escape hatch is chosen', async () => {
+    await flushInit();
+    vi.spyOn(component['dialog'], 'confirmDestructiveWithEscape').mockReturnValue(Promise.resolve('escape'));
+    expect(component.showExporterModal).toBe(false);
+    component.resetDefaults();
+    await new Promise<void>((resolve) => setTimeout(resolve));
+    expect(component.showExporterModal).toBe(true);
     httpMock.expectNone('/api/settings/defaults');
   });
 
