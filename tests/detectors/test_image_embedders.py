@@ -37,6 +37,7 @@ class TestImageClipEmbedder:
         assert ImageClipEmbedder().to_dict() == {
             "name": "clip",
             "display_name": "CLIP (general images)",
+            "model_id": "openai/clip-vit-base-patch32",
             "media_type_id": "image",
             "is_default": False,
             "supports_text": True,
@@ -110,6 +111,7 @@ class TestImageSiglip2Embedder:
         assert ImageSiglip2Embedder().to_dict() == {
             "name": "siglip2",
             "display_name": "SigLIP 2 (general images)",
+            "model_id": "google/siglip2-base-patch16-224",
             "media_type_id": "image",
             "is_default": False,
             "supports_text": True,
@@ -179,6 +181,7 @@ class TestImageDinov2SingleEmbedder:
         assert ImageDinov2SingleEmbedder().to_dict() == {
             "name": "dinov2_single",
             "display_name": "DINOv2 single (image vector)",
+            "model_id": "facebook/dinov2-base",
             "media_type_id": "image",
             "is_default": False,
             "supports_text": False,
@@ -245,6 +248,7 @@ class TestImageDinov2PatchEmbedder:
         assert ImageDinov2PatchEmbedder().to_dict() == {
             "name": "dinov2_patch",
             "display_name": "DINOv2 patch (region-aware images)",
+            "model_id": "facebook/dinov2-base",
             "media_type_id": "image",
             "is_default": False,
             "supports_text": False,
@@ -293,6 +297,7 @@ class TestImageDinov3SingleEmbedder:
         assert ImageDinov3SingleEmbedder().to_dict() == {
             "name": "dinov3_single",
             "display_name": "DINOv3 single (image vector)",
+            "model_id": "facebook/dinov3-vitb16-pretrain-lvd1689m",
             "media_type_id": "image",
             "is_default": False,
             "supports_text": False,
@@ -357,6 +362,7 @@ class TestImageDinov3PatchEmbedder:
         assert ImageDinov3PatchEmbedder().to_dict() == {
             "name": "dinov3_patch",
             "display_name": "DINOv3 patch (region-aware images)",
+            "model_id": "facebook/dinov3-vitb16-pretrain-lvd1689m",
             "media_type_id": "image",
             "is_default": False,
             "supports_text": False,
@@ -641,6 +647,7 @@ class TestImageFaceEmbedder:
         assert ImageFaceEmbedder().to_dict() == {
             "name": "face",
             "display_name": "FaceNet (face identity, 512d)",
+            "model_id": None,
             "media_type_id": "image",
             "is_default": False,
             "supports_text": False,
