@@ -366,17 +366,32 @@ def _merge_detector_results(
     accumulated: dict[str, dict[str, Any]],
     new_chunk: dict[str, dict[str, Any]],
 ) -> None:
-    """Merge detector results from a new chunk into *accumulated* in-place."""
+    """Merge detector results from a new chunk into *accumulated* in-place.
+
+    Hits are appended, not sorted: this path holds every hit in RAM by
+    design, so it defers ordering to a single final :func:`_sort_detector_results`
+    pass rather than re-sorting the growing list on every chunk.
+    """
     for det_name, det_result in new_chunk.items():
         if det_name not in accumulated:
             accumulated[det_name] = det_result
         else:
             accumulated[det_name]["hits"].extend(det_result["hits"])
             accumulated[det_name]["total_hits"] += det_result["total_hits"]
-            accumulated[det_name]["hits"].sort(key=lambda x: x["score"], reverse=True)
             if "negative_hits" in det_result:
                 accumulated[det_name].setdefault("negative_hits", []).extend(det_result["negative_hits"])
-                accumulated[det_name]["negative_hits"].sort(key=lambda x: x["score"], reverse=True)
+
+
+def _sort_detector_results(accumulated: dict[str, dict[str, Any]]) -> None:
+    """Sort every detector's hit lists by score descending, in place.
+
+    Run once after all chunks have been merged, replacing the per-chunk sort
+    that :func:`_merge_detector_results` used to do.
+    """
+    for det_result in accumulated.values():
+        det_result["hits"].sort(key=lambda x: x["score"], reverse=True)
+        if "negative_hits" in det_result:
+            det_result["negative_hits"].sort(key=lambda x: x["score"], reverse=True)
 
 
 def _load_pickle_whole(dataset_path: str) -> Iterator[dict[int, dict[str, Any]]]:
@@ -628,6 +643,8 @@ def _run_live_pipeline(
 
     if not merged_results:
         raise ValueError(empty_error)
+
+    _sort_detector_results(merged_results)
 
     if chunk_num > 1:
         cli_progress.emit(
