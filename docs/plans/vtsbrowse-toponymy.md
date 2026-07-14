@@ -106,11 +106,7 @@
 
 <!-- item-sep -->
 
-- **Lazy recompute of stale labels** — a persisted label set whose
-  `labeler_signature` no longer matches the active pipeline is treated as
-  absent, and nothing currently rebuilds it (the build job won't rerun while
-  the pyramid is cached/persisted); only a forced Re-project re-letters.
-  Kick a background labeling job from the serve path on signature mismatch.
+- [ ] #2404 — Rebuild persisted signpost label sets on `labeler_signature` mismatch
 
 <!-- item-sep -->
 
@@ -122,9 +118,7 @@
 
 <!-- item-sep -->
 
-- **KeyphraseNamer sibling dedup** — cheap pass that appends the first
-  non-shared keyphrase when sibling signs collide (38% dups on speech maps;
-  ~0–3% on image maps, so audio is the driver).
+- [ ] #2405 — Dedup colliding sibling signs in KeyphraseNamer
 
 <!-- item-sep -->
 
@@ -140,9 +134,8 @@
 
 <!-- item-sep -->
 
-- **Image demo dataset fixes** — RVL-CDIP single-class mirror (#2291), Enrico
-  URL/layout rot (#2292); working replacements prototyped in
-  `scripts/experiments/toponymy_image/`.
+- [ ] #2291 — RVL-CDIP single-class mirror
+- [ ] #2292 — Enrico URL/layout rot
 
 <!-- item-sep -->
 

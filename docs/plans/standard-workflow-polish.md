@@ -23,13 +23,7 @@ the original priority.
 
 <!-- item-sep -->
 
-- **Goods count over-reports with no confidence signal (P2)** —
-  `right-panel/labelset-list/labelset-list.component.html:3` renders just
-  `Goods ({{ elements().length }})`; because the auto threshold leans toward
-  recall, this reads as N confident hits when many are low-confidence. **Fix:**
-  surface the score/threshold or a confidence band in the hits header so users
-  calibrate trust. **Files:** `labelset-list.component.html` (+ whatever feeds
-  the count).
+- [ ] #2382 — Add a confidence signal to the Goods count header
 
 <!-- item-sep -->
 
@@ -41,13 +35,7 @@ the original priority.
 
 <!-- item-sep -->
 
-- **Bads-phase default focus on the Good button (P3)** — during Autopilot's
-  "Find Initial Bads" phase nothing moves keyboard focus to the Bad action, so
-  pressing Enter can mislabel. There's no focus-follows-phase logic in
-  `label-view.component.{html,ts}`. **Fix:** move default focus to the phase's
-  primary action (or to neither button) as the phase changes. Verify in a live
-  browser before shipping — the repro is hard to confirm statically. **Files:**
-  `label-view.component.ts`.
+- [ ] #2383 — Move keyboard focus off the Good button during Autopilot "Find Initial Bads"
 
 <!-- item-sep -->
 

@@ -13,15 +13,7 @@ mode (browse is now rooted at `/`, matching the unrestricted import validation).
 
 ## Open follow-ups
 
-- **Empty Services tab.** The base `DatasetImporter.category` default is
-  `"services"`, and every services-category importer ships
-  `hidden_from_picker=True` (recaller, http_archive, pickle, combine_datasets),
-  so a stock install shows an empty Services tab ("No importers in this
-  category."). `visibleImporterTabs` renders all declared tabs unconditionally,
-  contradicting `tabs.py`'s documented "only show tabs with ≥1 visible
-  importer." Follow-up: hide tabs with zero visible importers and/or give the
-  Services tab an empty-state that explains it's the extension surface. (Audited
-  but intentionally not changed in Phase 1.)
+- [ ] #2386 — Hide dataset-importer tabs that have zero visible importers (empty Services tab)
 - **Relative-entry resolution in server_files manifests.** Relative paths inside
   a `.txt`/`.npz` resolve against the **manifest file's own directory**, not
   CWD — easy to trip. Consider documenting in the field hint or resolving

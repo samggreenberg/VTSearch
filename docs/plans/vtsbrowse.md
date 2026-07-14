@@ -88,20 +88,16 @@ Pieces of the live feature left open, to pick up alongside the follow-ups above:
 - **Canvas selection actions** — selection is tracked (`BrowseSelectionService`)
   but not acted on: export / seed detector / subset projection, plus a minimap
   overlay.
-- **Keyboard nav focus** — canvas keyboard nav doesn't move DOM focus, so
-  Enter/Space toggles the DOM-focused entry, not the arrow-walked one.
+- [ ] #2400 — Browse canvas: sync DOM focus to the keyboard-navigated entry
 - **Detector-positives browse** — clipped/region positives are embedded
   image-level (not patch-pooled); no server-side TTL for the ephemeral
   `__detpos__<id>` context; preview bytes held in memory for the session.
 - **Bin-popup ordering** — true 1-D-UMAP member ordering (currently a Hilbert
   order over the 2-D coords) would need a second fit + a persisted `order` field
   on `Projection`.
-- **Bin-popup preview** — the large preview pane is gated on `usesThumbnails`
-  (image/video); documents get a grid thumbnail but no large preview.
-- **Rep re-centring** — a surviving representative is not re-centred after a
-  lopsided partial removal (lazily re-centre if wanted).
-- **Zoom-out border fill** — a zoom-out past the 2× overscan cap or past uncached
-  tiles still shows black falloff.
+- [ ] #2403 — Browse bin-popup: large-preview path for document media
+- [ ] #2402 — Browse: re-centre a bin's representative after a lopsided partial removal
+- [ ] #2401 — Browse canvas: fill black border falloff on zoom-out past overscan/uncached tiles
 
 ## Design spec (living)
 
