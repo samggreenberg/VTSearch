@@ -331,7 +331,6 @@ class TestReembedWorkerBody:
         assert detector_loading_tasks.is_finished(task_id)
 
     def test_worker_reports_repr_for_message_less_exception(self, monkeypatch):
-        from vtscore.concurrency.progress import detector_loading_tasks
 
         class _Blank(Exception):
             def __str__(self):
