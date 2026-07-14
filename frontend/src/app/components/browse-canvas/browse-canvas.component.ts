@@ -13,7 +13,7 @@ import {
   type ResolvedColormap,
   usesThumbnails,
 } from './hex-render.util';
-import { binGeometry, BinGeometry } from './bin-geometry';
+import { binGeometry, BinGeometry, hoverThumbHalfExtents, pickCell } from './bin-geometry';
 import {
   clampedTransform,
   computeFitZoom,
@@ -1656,11 +1656,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    */
   private hoverThumbRect(img: HTMLImageElement, radius: number): { hw: number; hh: number } {
     const aspect = img.naturalWidth / img.naturalHeight;
-    let hh = Infinity;
-    for (const { dx, dy } of this.geom.neighborOffsets()) {
-      hh = Math.min(hh, Math.max((Math.abs(dx) * radius) / aspect, Math.abs(dy) * radius));
-    }
-    return { hw: aspect * hh, hh };
+    return hoverThumbHalfExtents(aspect, radius, this.geom.neighborOffsets());
   }
 
   /**
@@ -2691,28 +2687,17 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const txEst = Math.floor(px / tileW);
     const tyEst = Math.floor(py / tileH);
 
-    let best: HexCellPayload | null = null;
-    let bestDist = Infinity;
-
+    // Gather every cell from the 3×3 block of tiles around the cursor, then let
+    // the pure `pickCell` rule find the nearest-and-containing one (or null over
+    // blank space). The tile lookup stays here; the geometry is testable on its own.
+    const candidates: HexCellPayload[] = [];
     for (let dtx = -1; dtx <= 1; dtx++) {
       for (let dty = -1; dty <= 1; dty++) {
         const tile = this.tileCache.getCached(level, txEst + dtx, tyEst + dty);
-        if (!tile) continue;
-        for (const cell of tile.cells) {
-          const cdx = cell.cx - px;
-          const cdy = cell.cy - py;
-          const dist = cdx * cdx + cdy * cdy;
-          if (dist < bestDist) {
-            bestDist = dist;
-            best = cell;
-          }
-        }
+        if (tile) candidates.push(...tile.cells);
       }
     }
 
-    if (best && geom.contains(best.cx - px, best.cy - py, radius)) {
-      return best;
-    }
-    return null;
+    return pickCell(candidates, px, py, geom, radius);
   }
 }
