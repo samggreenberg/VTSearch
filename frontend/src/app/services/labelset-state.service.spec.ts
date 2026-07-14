@@ -18,7 +18,8 @@ describe('LabelsetStateService', () => {
   beforeEach(() => {
     response = { good: [], bad: [], media_type: '' } as DetectorLabelsDetailResponse;
     getLabelsDetail = vi.fn((): Observable<DetectorLabelsDetailResponse> => of(response));
-    voteLabelElement = vi.fn(() => of({})); // resolves synchronously by default
+    // Resolves synchronously by default; some tests swap in a pending Subject.
+    voteLabelElement = vi.fn((): Observable<unknown> => of({}));
     TestBed.configureTestingModule({
       providers: [
         LabelsetStateService,
@@ -68,7 +69,7 @@ describe('LabelsetStateService', () => {
     response = { good: [view('a', 'good')], bad: [], media_type: 'audio' };
     service.setModel('m1');
     // Pending vote so the follow-up refresh does not overwrite optimistic state.
-    voteLabelElement.mockReturnValueOnce(new Subject());
+    voteLabelElement.mockReturnValueOnce(new Subject<unknown>());
 
     service.vote('a', 'good');
     expect(voteLabelElement).toHaveBeenCalledWith('m1', 'a', 'remove');
@@ -80,7 +81,7 @@ describe('LabelsetStateService', () => {
   it('voting the opposite direction flips the element and sends the clicked target', () => {
     response = { good: [view('a', 'good')], bad: [], media_type: 'audio' };
     service.setModel('m1');
-    voteLabelElement.mockReturnValueOnce(new Subject());
+    voteLabelElement.mockReturnValueOnce(new Subject<unknown>());
 
     service.vote('a', 'bad');
     expect(voteLabelElement).toHaveBeenCalledWith('m1', 'a', 'bad');

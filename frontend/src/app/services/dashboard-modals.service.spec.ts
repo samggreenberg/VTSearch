@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import { DashboardModalsService } from './dashboard-modals.service';
-import { DatasetRegistryEntry } from '../models/api.models';
+import { AutoDetectResultsData, DatasetRegistryEntry } from '../models/api.models';
 
 describe('DashboardModalsService', () => {
   let service: DashboardModalsService;
@@ -60,7 +60,7 @@ describe('DashboardModalsService', () => {
   });
 
   it('openFindResults carries the results payload; close resets to an empty result', () => {
-    const data = { results: { a: [1, 2] } };
+    const data: AutoDetectResultsData = { results: { det: { hits: [] } } };
     service.openFindResults(data);
     expect(service.findResults).toEqual({ open: true, data });
     service.closeFindResults();
