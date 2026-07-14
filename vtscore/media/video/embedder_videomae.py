@@ -121,6 +121,10 @@ class VideoVideoMAEEmbedder(MediaEmbedder):
         return "VideoMAE v2 (action features)"
 
     @property
+    def model_id(self) -> str:
+        return VIDEOMAE_MODEL_ID
+
+    @property
     def media_type_id(self) -> str:
         return "video"
 

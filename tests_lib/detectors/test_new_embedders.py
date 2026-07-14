@@ -55,6 +55,7 @@ class TestImageSiglipEmbedderProperties:
         assert d == {
             "name": "siglip",
             "display_name": "SigLIP (general images)",
+            "model_id": "google/siglip-base-patch16-224",
             "media_type_id": "image",
             "is_default": True,
             "supports_text": True,
@@ -152,6 +153,7 @@ class TestAudioClapMusicEmbedderProperties:
         assert d == {
             "name": "clap_music",
             "display_name": "CLAP (music)",
+            "model_id": "laion/larger_clap_music_and_speech",
             "media_type_id": "audio",
             "is_default": False,
             "supports_text": True,
@@ -229,6 +231,7 @@ class TestAudioClapGeneralEmbedderProperties:
         assert d == {
             "name": "clap_general",
             "display_name": "CLAP (general 2024)",
+            "model_id": "laion/larger_clap_general",
             "media_type_id": "audio",
             "is_default": False,
             "supports_text": True,
@@ -287,6 +290,7 @@ class TestAudioASTEmbedderProperties:
         assert d == {
             "name": "ast",
             "display_name": "AST (audio spectrogram)",
+            "model_id": "MIT/ast-finetuned-audioset-10-10-0.4593",
             "media_type_id": "audio",
             "is_default": False,
             "supports_text": False,
@@ -345,6 +349,7 @@ class TestAudioWhisperEncoderEmbedderProperties:
         assert d == {
             "name": "whisper_encoder",
             "display_name": "Whisper encoder (speech)",
+            "model_id": "openai/whisper-base",
             "media_type_id": "audio",
             "is_default": False,
             "supports_text": False,
@@ -419,6 +424,7 @@ class TestAudioParaSpeechClapEmbedderProperties:
         assert d == {
             "name": "paraspeechclap",
             "display_name": "ParaSpeechCLAP (speech style)",
+            "model_id": "ajd12342/paraspeechclap-combined",
             "media_type_id": "audio",
             "is_default": False,
             "supports_text": True,
@@ -514,6 +520,7 @@ class TestTextBGEEmbedderProperties:
         assert d == {
             "name": "bge",
             "display_name": "BGE (text)",
+            "model_id": "BAAI/bge-base-en-v1.5",
             "media_type_id": "text",
             "is_default": False,
             "supports_text": True,
@@ -645,6 +652,7 @@ class TestVideoLanguageBindEmbedderProperties:
         assert d == {
             "name": "languagebind",
             "display_name": "LanguageBind (video)",
+            "model_id": "LanguageBind/LanguageBind_Video_V1.5_FT",
             "media_type_id": "video",
             "is_default": False,
             "supports_text": True,
@@ -738,6 +746,7 @@ class TestVideoMAEEmbedderProperties:
         assert d == {
             "name": "videomae",
             "display_name": "VideoMAE v2 (action features)",
+            "model_id": "OpenGVLab/VideoMAEv2-Base",
             "media_type_id": "video",
             "is_default": False,
             "supports_text": False,

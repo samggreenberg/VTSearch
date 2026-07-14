@@ -277,6 +277,8 @@ class TestSiftVladEmbedder:
         assert d["supports_geometric_verification"] is True
         assert d["supports_patch_regions"] is False
         assert d["supports_text"] is False
+        # Classical local-feature embedder has no single downloadable model id.
+        assert d["model_id"] is None
 
     def test_load_models_sets_matcher_and_codebook(self):
         emb = self._fresh_embedder()

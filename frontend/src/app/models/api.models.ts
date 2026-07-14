@@ -352,6 +352,15 @@ export interface EmbedderInfo {
    * users can still see the registry key.
    */
   display_name?: string;
+  /**
+   * Concrete pretrained-model identifier the embedder loads — usually a
+   * HuggingFace repo id (e.g. ``"google/siglip-base-patch16-224"``), or a
+   * direct weights URL. ``null`` for embedders with no single downloadable
+   * model id (e.g. the classical SIFT/VLAD structural embedder). Surfaced in
+   * the portable-detector export bundle so a recipient knows exactly which
+   * model to run new media through.
+   */
+  model_id?: string | null;
   media_type_id: string;
   /**
    * Whether this embedder is the recommended default for its media type

@@ -65,6 +65,10 @@ class _Dinov3Base(MediaEmbedder):
         self._processor: Any = None
 
     @property
+    def model_id(self) -> str:
+        return DINOV3_MODEL_ID
+
+    @property
     def media_type_id(self) -> str:
         return "image"
 
