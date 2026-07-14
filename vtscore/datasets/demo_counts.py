@@ -50,6 +50,7 @@ a consistency check.
 * ``speech_commands_v2_*`` (audio) — 15104 / 30238 / 60487 / 105829
 * ``ucf101_*`` (video) — 55 / 114 / 236 / 405 (one media per video file)
 * ``ucf101_full_*`` (video) — 1857 / 3808 / 7655 / 13320
+* ``hmdb51_*`` (video) — 943 / 1929 / 3882 / 6754 (HuggingFace zip mirror)
 * ``kth_*`` (video) — 84 / 168 / 347 / 599
 
 Datasets whose categories are uniform (e.g. ESC-50 at 40 clips/category,
@@ -85,6 +86,10 @@ DEMO_MEDIA_COUNTS: dict[str, int] = {
     "eurosat_m": 7713,
     "eurosat_s": 3853,
     "gtzan_a": 1000,
+    "hmdb51_a": 6754,
+    "hmdb51_l": 3882,
+    "hmdb51_m": 1929,
+    "hmdb51_s": 943,
     "kth_a": 599,
     "kth_l": 347,
     "kth_m": 168,
