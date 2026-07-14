@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { DatasetImporterModalComponent } from './dataset-importer-modal.component';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
-import { settleZoneless } from '../../../testing/settle-resource';
+import { settleResource, settleZoneless } from '../../../testing/settle-resource';
 import { getTabLabel } from './pickers/shared/media-type.util';
 import { provideHttpTesting } from '../../../testing/test-providers';
 
@@ -278,14 +278,17 @@ describe('DatasetImporterModalComponent', () => {
       { id: 'synth', label: 'Synthetic', order: 20 },
     ];
 
-    function initSolo(solo: string | null): void {
+    async function initSolo(solo: string | null): Promise<void> {
       TestBed.tick();
       httpMock.expectOne('/api/dataset/all-importers').flush({ importers: soloImporters, tabs: soloTabs });
       flushInitRequests(solo ? { effective_solo_media_type: solo } : {});
+      // The settings rxResource commits its value on a microtask, so let it
+      // land before reading the solo-dependent getters.
+      await settleResource();
     }
 
-    it('hides type-scoped importers whose options exclude the locked type', () => {
-      initSolo('audio');
+    it('hides type-scoped importers whose options exclude the locked type', async () => {
+      await initSolo('audio');
       // synthetic can only produce image/video, so under an audio lock it is
       // dropped - and its now-empty "Synthetic" tab disappears with it.
       const names = component.orderedImporters.map((i) => i.name);
@@ -293,15 +296,15 @@ describe('DatasetImporterModalComponent', () => {
       expect(component.visibleImporterTabs.map((t) => t.id)).toEqual(['local']);
     });
 
-    it('keeps type-scoped importers whose options include the locked type', () => {
-      initSolo('image');
+    it('keeps type-scoped importers whose options include the locked type', async () => {
+      await initSolo('image');
       const names = component.orderedImporters.map((i) => i.name);
       expect(names).toContain('synthetic');
       expect(component.visibleImporterTabs.map((t) => t.id)).toEqual(['local', 'synth']);
     });
 
-    it('keeps agnostic importers under any lock', () => {
-      initSolo('audio');
+    it('keeps agnostic importers under any lock', async () => {
+      await initSolo('audio');
       // local_folder / local_files declare no media_type field, so they
       // produce whatever the user points them at and always stay offered.
       const names = component.orderedImporters.map((i) => i.name);
@@ -309,8 +312,8 @@ describe('DatasetImporterModalComponent', () => {
       expect(names).toContain('local_files');
     });
 
-    it('shows every importer and tab when no lock is set', () => {
-      initSolo(null);
+    it('shows every importer and tab when no lock is set', async () => {
+      await initSolo(null);
       const names = component.orderedImporters.map((i) => i.name);
       expect(names).toContain('synthetic');
       expect(component.visibleImporterTabs.map((t) => t.id)).toEqual(['local', 'synth']);
