@@ -74,6 +74,18 @@ class ResizeObserverMock {
 }
 (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = ResizeObserverMock;
 
+// --- Element.scrollIntoView -------------------------------------------------
+// Several components scroll a focused/active row into view (context-pulldown,
+// media-list, folder-browser, import-config). jsdom has no layout engine and
+// omits scrollIntoView, throwing "not a function" — often from a deferred
+// setTimeout callback that surfaces as an unhandled error rather than a test
+// failure. An inert no-op keeps those paths quiet.
+Object.defineProperty(Element.prototype, 'scrollIntoView', {
+  configurable: true,
+  writable: true,
+  value: () => {},
+});
+
 // --- HTMLMediaElement play/pause/load --------------------------------------
 // The audio/video players call these; jsdom throws "Not implemented".
 Object.defineProperties(HTMLMediaElement.prototype, {
