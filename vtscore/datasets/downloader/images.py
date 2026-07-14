@@ -571,12 +571,21 @@ def download_rico_screen2words(on_progress: Optional[ProgressCallback] = None) -
 def download_rvl_cdip(on_progress: Optional[ProgressCallback] = None) -> Path:
     """Download a demo-sized RVL-CDIP mirror as a folder-per-class document tree.
 
-    Pulls the ~4,800-image (300-per-class) parquet mirror, decodes each
-    document image into ``<dir>/images/<class>/<idx>.png`` (the integer ``label``
-    column indexes ``RVL_CDIP_CATEGORIES``), then deletes the parquet.  The
-    result is an ordinary folder-per-class tree reusing the Caltech/Food-101
-    collect path.  Scanned grayscale document images — the "document screenshot"
-    corner of digitally-native imagery.
+    Pulls the class-balanced ``jordyvl/rvl_cdip_100_examples_per_class`` parquet
+    mirror (all three splits: train 50 + test 25 + validation 25 per class =
+    ~1,600 images across 16 classes), decodes each document image into
+    ``<dir>/images/<class>/<idx>.png`` (the integer ``label`` column indexes
+    ``RVL_CDIP_CATEGORIES``), then deletes the parquet.  The result is an
+    ordinary folder-per-class tree reusing the Caltech/Food-101 collect path.
+    Scanned grayscale document images — the "document screenshot" corner of
+    digitally-native imagery.
+
+    Completion is detected by requiring *every* one of the 16 class folders to
+    contain at least one decoded ``*.png`` — not merely that some ``*.png``
+    exists anywhere under ``images/``.  A bare any-file probe would let an
+    interrupted decode (which populates classes one at a time) masquerade as a
+    finished download and permanently block re-download, yielding a partial or
+    single-class dataset.
 
     Returns:
         Path to the ``images/`` directory (the folder-per-class root).
@@ -595,7 +604,12 @@ def download_rvl_cdip(on_progress: Optional[ProgressCallback] = None) -> Path:
     base = _core.DATA_DIR / "rvl_cdip"
     images_dir = base / "images"
 
-    if images_dir.is_dir() and next(images_dir.rglob("*.png"), None) is not None:
+    def _is_complete() -> bool:
+        if not images_dir.is_dir():
+            return False
+        return all(next((images_dir / cat).glob("*.png"), None) is not None for cat in RVL_CDIP_CATEGORIES)
+
+    if _is_complete():
         return images_dir
 
     def category_of(row: dict) -> Optional[str]:
@@ -604,9 +618,11 @@ def download_rvl_cdip(on_progress: Optional[ProgressCallback] = None) -> Path:
             return RVL_CDIP_CATEGORIES[label]
         return None
 
-    shard_names = list_parquet_shards(_core.RVL_CDIP_REPO_ID, "data/train")
+    # Pull every split's shard (``data/train-*``, ``data/test-*``,
+    # ``data/validation-*``); one balanced 100/class tree needs all three.
+    shard_names = list_parquet_shards(_core.RVL_CDIP_REPO_ID, "data/")
     if not shard_names:
-        raise RuntimeError(f"No train parquet shards found in {_core.RVL_CDIP_REPO_ID}")
+        raise RuntimeError(f"No parquet shards found in {_core.RVL_CDIP_REPO_ID}")
 
     shards_dir = base / "parquet"
     shard_paths = download_parquet_shards(

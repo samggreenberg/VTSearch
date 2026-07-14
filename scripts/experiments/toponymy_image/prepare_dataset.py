@@ -193,11 +193,12 @@ RVL_PARQUET_URLS = [
 def prepare_rvl_cdip(args) -> None:
     """Direct parquet path for RVL-CDIP.
 
-    NOTE: found during this study — the vtscore demo mirror
-    (``umair894/rvl_cdip_300_examples_per_class``) actually contains ONLY the
+    NOTE: found during this study — the original vtscore demo mirror
+    (``umair894/rvl_cdip_300_examples_per_class``) actually contained ONLY the
     300 ``invoice`` examples in its single train shard, so the demo importer
-    yields a one-class dataset. This uses the balanced
-    ``jordyvl/rvl_cdip_100_examples_per_class`` mirror (16 classes) instead.
+    yielded a one-class dataset (issue #2291). Both this script and the vtscore
+    demo now use the balanced ``jordyvl/rvl_cdip_100_examples_per_class`` mirror
+    (16 classes).
     """
     import io
 
