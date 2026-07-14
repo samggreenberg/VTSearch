@@ -1,14 +1,14 @@
 import { TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+
 import { VtDialogService } from './dialog.service';
+import { provideHttpTesting } from '../testing/test-providers';
 
 describe('VtDialogService', () => {
   let service: VtDialogService;
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideHttpTesting()],
     });
     service = TestBed.inject(VtDialogService);
   });

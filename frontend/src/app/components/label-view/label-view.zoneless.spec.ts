@@ -1,11 +1,12 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 
 import { LabelViewComponent } from './label-view.component';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
+import { provideHttpTesting } from '../../testing/test-providers';
 
 /**
  * Zoneless staleness canary for the label view (docs/plans/zoneless-migration.md,
@@ -30,7 +31,7 @@ describe('LabelViewComponent (zoneless dataset-name canary)', () => {
   beforeEach(async () => {
     await configureZoneless({
       imports: [LabelViewComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [...provideHttpTesting(), provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LabelViewComponent);

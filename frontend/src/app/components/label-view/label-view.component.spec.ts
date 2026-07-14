@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { LabelViewComponent } from './label-view.component';
 import { LabelSessionService } from '../../services/label-session.service';
@@ -11,6 +11,7 @@ import { SortStateService } from '../../services/sort-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { settleResource } from '../../testing/settle-resource';
 import { provideZoneless } from '../../testing/zoneless-testbed';
+import { provideHttpTesting } from '../../testing/test-providers';
 
 describe('LabelViewComponent', () => {
   let component: LabelViewComponent;
@@ -22,8 +23,7 @@ describe('LabelViewComponent', () => {
       imports: [LabelViewComponent],
       providers: [
         ...provideZoneless(),
-        provideHttpClient(),
-        provideHttpClientTesting(),
+        ...provideHttpTesting(),
         provideRouter([]),
       ],
     }).compileComponents();

@@ -1,10 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { ExportModalComponent } from './export-modal.component';
 import { ToastService } from '../../../services/toast.service';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleResource } from '../../../testing/settle-resource';
+import { provideHttpTesting } from '../../../testing/test-providers';
 
 describe('ExportModalComponent', () => {
   let component: ExportModalComponent;
@@ -27,7 +28,7 @@ describe('ExportModalComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ExportModalComponent],
-      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ExportModalComponent);

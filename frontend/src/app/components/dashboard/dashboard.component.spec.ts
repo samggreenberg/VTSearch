@@ -1,11 +1,12 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { DashboardComponent } from './dashboard.component';
 import { LabelSessionService } from '../../services/label-session.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { provideZoneless } from '../../testing/zoneless-testbed';
+import { provideHttpTesting } from '../../testing/test-providers';
 
 describe('DashboardComponent', () => {
   let component: DashboardComponent;
@@ -15,7 +16,7 @@ describe('DashboardComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [DashboardComponent],
-      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [...provideZoneless(), ...provideHttpTesting(), provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DashboardComponent);

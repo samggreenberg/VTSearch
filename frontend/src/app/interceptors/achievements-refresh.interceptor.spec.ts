@@ -1,9 +1,10 @@
 import { TestBed } from '@angular/core/testing';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common/http';
+import { HttpTestingController } from '@angular/common/http/testing';
+import { HttpClient } from '@angular/common/http';
 
 import { achievementsRefreshInterceptor } from './achievements-refresh.interceptor';
 import { AchievementsService } from '../services/achievements.service';
+import { provideHttpTesting } from '../testing/test-providers';
 
 /**
  * The achievements-refresh interceptor nudges AchievementsService after any
@@ -19,8 +20,7 @@ describe('achievementsRefreshInterceptor', () => {
     achievements = { refresh: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
-        provideHttpClient(withInterceptors([achievementsRefreshInterceptor])),
-        provideHttpClientTesting(),
+        ...provideHttpTesting(achievementsRefreshInterceptor),
         { provide: AchievementsService, useValue: achievements },
       ],
     });

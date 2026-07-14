@@ -1,6 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+
 import { provideRouter } from '@angular/router';
 import { BehaviorSubject, Subject } from 'rxjs';
 
@@ -13,6 +12,7 @@ import { ProgressEventsService } from './progress-events.service';
 import { configureZoneless } from '../testing/zoneless-testbed';
 import { DatasetRegistryEntry, LoadingTask } from '../models/api.models';
 import { DetectorRegistryEntry } from '../generated/api-client/models/detector-registry-entry';
+import { provideHttpTesting } from '../testing/test-providers';
 
 /**
  * Regression spec for logical-bug-audit H25: "Active dataset pair is set
@@ -134,8 +134,7 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
 
     configureZoneless({
       providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
+        ...provideHttpTesting(),
         provideRouter([]),
         { provide: DatasetStateService, useValue: datasetStateStub },
         { provide: DatasetsRegistryApiService, useValue: datasetsRegistryApiStub },

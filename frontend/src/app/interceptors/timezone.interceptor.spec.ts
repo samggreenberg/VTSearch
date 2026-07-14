@@ -1,8 +1,9 @@
 import { TestBed } from '@angular/core/testing';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common/http';
+import { HttpTestingController } from '@angular/common/http/testing';
+import { HttpClient } from '@angular/common/http';
 
 import { timezoneInterceptor } from './timezone.interceptor';
+import { provideHttpTesting } from '../testing/test-providers';
 
 /**
  * The timezone interceptor carries the browser's local UTC offset to the
@@ -17,8 +18,7 @@ describe('timezoneInterceptor', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [
-        provideHttpClient(withInterceptors([timezoneInterceptor])),
-        provideHttpClientTesting(),
+        ...provideHttpTesting(timezoneInterceptor),
       ],
     });
     http = TestBed.inject(HttpClient);

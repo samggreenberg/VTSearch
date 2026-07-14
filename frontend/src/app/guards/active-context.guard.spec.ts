@@ -10,8 +10,7 @@ import {
   provideRouter,
 } from '@angular/router';
 import { isObservable, of } from 'rxjs';
-import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+
 import { activeContextGuard } from './active-context.guard';
 import { ActiveContextService } from '../services/active-context.service';
 import { ContextSwitchService } from '../services/context-switch.service';
@@ -20,6 +19,7 @@ import { ToastService } from '../services/toast.service';
 import { DatasetRegistryEntry } from '../models/api.models';
 import { DetectorRegistryEntry } from '../generated/api-client/models/detector-registry-entry';
 import { configureZoneless } from '../testing/zoneless-testbed';
+import { provideHttpTesting } from '../testing/test-providers';
 
 describe('activeContextGuard', () => {
   let router: Router;
@@ -73,8 +73,7 @@ describe('activeContextGuard', () => {
   beforeEach(() => {
     configureZoneless({
       providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
+        ...provideHttpTesting(),
         provideRouter([]),
       ],
     });

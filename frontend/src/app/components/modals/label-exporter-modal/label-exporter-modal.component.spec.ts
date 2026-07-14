@@ -1,10 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { LabelExporterModalComponent } from './label-exporter-modal.component';
 import { ToastService } from '../../../services/toast.service';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../../testing/settle-resource';
+import { provideHttpTesting } from '../../../testing/test-providers';
 
 describe('LabelExporterModalComponent', () => {
   let component: LabelExporterModalComponent;
@@ -19,7 +20,7 @@ describe('LabelExporterModalComponent', () => {
   beforeEach(async () => {
     await configureZoneless({
       imports: [LabelExporterModalComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideHttpTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LabelExporterModalComponent);

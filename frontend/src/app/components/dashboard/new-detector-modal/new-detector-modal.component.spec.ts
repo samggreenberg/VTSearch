@@ -1,8 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { NewDetectorModalComponent } from './new-detector-modal.component';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { provideHttpTesting } from '../../../testing/test-providers';
 
 describe('NewDetectorModalComponent', () => {
   let component: NewDetectorModalComponent;
@@ -12,7 +13,7 @@ describe('NewDetectorModalComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [NewDetectorModalComponent],
-      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(NewDetectorModalComponent);
@@ -328,7 +329,7 @@ describe('NewDetectorModalComponent with defaultMediaType', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [NewDetectorModalComponent],
-      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(NewDetectorModalComponent);

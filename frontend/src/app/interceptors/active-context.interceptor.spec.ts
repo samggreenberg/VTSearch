@@ -1,9 +1,10 @@
 import { TestBed } from '@angular/core/testing';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common/http';
+import { HttpTestingController } from '@angular/common/http/testing';
+import { HttpClient } from '@angular/common/http';
 
 import { activeContextInterceptor } from './active-context.interceptor';
 import { ActiveContextService } from '../services/active-context.service';
+import { provideHttpTesting } from '../testing/test-providers';
 
 /**
  * The active-context interceptor stamps `X-Dataset-Id` / `X-Detector-Id` on
@@ -19,8 +20,7 @@ describe('activeContextInterceptor', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [
-        provideHttpClient(withInterceptors([activeContextInterceptor])),
-        provideHttpClientTesting(),
+        ...provideHttpTesting(activeContextInterceptor),
       ],
     });
     http = TestBed.inject(HttpClient);

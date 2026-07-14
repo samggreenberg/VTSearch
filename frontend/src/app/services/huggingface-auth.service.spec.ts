@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController } from '@angular/common/http/testing';
+
 import { HuggingFaceAuthService, HfAuthStatus } from './huggingface-auth.service';
+import { provideHttpTesting } from '../testing/test-providers';
 
 describe('HuggingFaceAuthService', () => {
   let service: HuggingFaceAuthService;
@@ -9,7 +10,7 @@ describe('HuggingFaceAuthService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideHttpTesting()],
     });
     service = TestBed.inject(HuggingFaceAuthService);
     httpMock = TestBed.inject(HttpTestingController);

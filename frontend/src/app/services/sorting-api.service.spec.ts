@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController } from '@angular/common/http/testing';
+
 import { SortingApiService } from './sorting-api.service';
+import { provideHttpTesting } from '../testing/test-providers';
 
 describe('SortingApiService', () => {
   let service: SortingApiService;
@@ -9,7 +10,7 @@ describe('SortingApiService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideHttpTesting()],
     });
     service = TestBed.inject(SortingApiService);
     httpMock = TestBed.inject(HttpTestingController);

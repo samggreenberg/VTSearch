@@ -2,12 +2,12 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Subject } from 'rxjs';
 import { vi } from 'vitest';
 import { SimpleChange } from '@angular/core';
-import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+
 import { MediaListComponent } from './media-list.component';
 import { Media } from '../../../models/api.models';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { provideHttpTesting } from '../../../testing/test-providers';
 
 describe('MediaListComponent', () => {
   let component: MediaListComponent;
@@ -22,7 +22,7 @@ describe('MediaListComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [MediaListComponent],
-      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(MediaListComponent);
@@ -184,7 +184,7 @@ describe('MediaListComponent scroll-prefetch re-wiring', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [MediaListComponent],
-      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
     }).compileComponents();
     fixture = TestBed.createComponent(MediaListComponent);
     component = fixture.componentInstance;
