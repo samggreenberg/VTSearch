@@ -52,6 +52,10 @@ class AudioASTEmbedder(MediaEmbedder):
         return "AST (audio spectrogram)"
 
     @property
+    def model_id(self) -> str:
+        return AST_MODEL_ID
+
+    @property
     def media_type_id(self) -> str:
         return "audio"
 

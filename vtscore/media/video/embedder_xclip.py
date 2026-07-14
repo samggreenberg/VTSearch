@@ -52,6 +52,10 @@ class VideoXClipEmbedder(MediaEmbedder):
         return "X-CLIP (video)"
 
     @property
+    def model_id(self) -> str:
+        return XCLIP_MODEL_ID
+
+    @property
     def media_type_id(self) -> str:
         return "video"
 

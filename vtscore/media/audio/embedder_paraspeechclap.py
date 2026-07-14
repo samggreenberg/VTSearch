@@ -79,6 +79,12 @@ class AudioParaSpeechClapEmbedder(MediaEmbedder):
         return "ParaSpeechCLAP (speech style)"
 
     @property
+    def model_id(self) -> str:
+        # The identifying artifact is the ParaSpeechCLAP checkpoint repo; the
+        # WavLM/Granite towers it reconstructs are surfaced in the module docs.
+        return PARASPEECHCLAP_CHECKPOINT_REPO
+
+    @property
     def media_type_id(self) -> str:
         return "audio"
 

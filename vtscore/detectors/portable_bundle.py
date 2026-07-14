@@ -135,6 +135,7 @@ def build_manifest(
     media_type: str,
     embedder: str,
     embedder_display_name: str,
+    embedder_model_id: str | None,
     embedder_type: str,
     embedding_dim: int,
     threshold: float,
@@ -147,8 +148,12 @@ def build_manifest(
 
     Captures everything a consumer needs to score with the bundle: the embedder
     to run new media through, the embedding dimensionality, the scoring
-    convention (sigmoid + threshold), and provenance.  ``contains_media_data``
-    is always ``False`` - the manifest documents that the bundle carries the
+    convention (sigmoid + threshold), and provenance.  ``embedder_model_id`` is
+    the concrete pretrained-model identifier (a HuggingFace repo id, e.g.
+    ``"google/siglip-base-patch16-224"``, or a direct weights URL) so a recipient
+    knows exactly which model to run new media through; it may be ``None`` for
+    embedders with no single downloadable model id.  ``contains_media_data`` is
+    always ``False`` - the manifest documents that the bundle carries the
     classifier only, never embeddings or raw media.
     """
     return {
@@ -160,6 +165,7 @@ def build_manifest(
         "embedder": {
             "name": embedder,
             "display_name": embedder_display_name,
+            "model_id": embedder_model_id,
             "type": embedder_type,
             "embedding_dim": embedding_dim,
         },
@@ -188,6 +194,10 @@ def render_readme(manifest: dict[str, Any]) -> str:
     dim = emb["embedding_dim"]
     threshold = scoring["threshold"]
     emb_label = emb["display_name"] or emb["name"]
+    model_id = emb.get("model_id")
+    # Surface the exact pretrained model so the bundle is fully actionable: the
+    # recipient can go straight to the source instead of guessing from the slug.
+    model_id_clause = f" The exact pretrained model is **`{model_id}`** - use that checkpoint." if model_id else ""
     return f"""# Portable detector: {manifest["detector_name"]}
 
 This is a **standalone scoring model** exported from
@@ -209,7 +219,7 @@ well they match the trained detector, without needing VTSearch itself.
 ## How to score your own items
 
 1. **Embed** each item with the **{emb_label}** embedder
-   (VTSearch embedder id: `{emb["name"]}`, type: `{emb["type"] or "n/a"}`).
+   (VTSearch embedder id: `{emb["name"]}`, type: `{emb["type"] or "n/a"}`).{model_id_clause}
    This must be the *same* embedder family the detector was trained on, and it
    must produce a **{dim}-dimensional** vector. This bundle does **not** include
    the embedder - obtain it separately.

@@ -55,6 +55,10 @@ class ImageSiglip2Embedder(MediaEmbedder):
         return "SigLIP 2 (general images)"
 
     @property
+    def model_id(self) -> str:
+        return SIGLIP2_MODEL_ID
+
+    @property
     def media_type_id(self) -> str:
         return "image"
 

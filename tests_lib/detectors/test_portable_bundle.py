@@ -35,6 +35,7 @@ def _sample_manifest(weights: dict) -> dict:
         media_type="image",
         embedder="siglip",
         embedder_display_name="SigLIP (general images)",
+        embedder_model_id="google/siglip-base-patch16-224",
         embedder_type="semantic",
         embedding_dim=pb.embedding_dim_from_weights(weights),
         threshold=0.6123456,
@@ -87,6 +88,7 @@ class TestManifest:
         assert manifest["format"] == pb.BUNDLE_FORMAT
         assert manifest["format_version"] == pb.BUNDLE_FORMAT_VERSION
         assert manifest["embedder"]["name"] == "siglip"
+        assert manifest["embedder"]["model_id"] == "google/siglip-base-patch16-224"
         assert manifest["embedder"]["embedding_dim"] == 768
         assert manifest["scoring"]["activation"] == "sigmoid"
         # Threshold is rounded but preserved.
@@ -99,9 +101,32 @@ class TestManifest:
         readme = pb.render_readme(_sample_manifest(weights))
         assert "SigLIP (general images)" in readme
         assert "siglip" in readme
+        assert "google/siglip-base-patch16-224" in readme  # exact HF model id
         assert "768" in readme  # embedding dim
         assert "0.612346" in readme  # threshold
         assert "onnxruntime" in readme  # inference snippet
+
+    def test_readme_omits_model_id_when_absent(self):
+        """Embedders with no model id (e.g. SIFT/VLAD) still render cleanly."""
+        weights = _trained_weights(input_dim=768)
+        manifest = pb.build_manifest(
+            detector_name="Cats",
+            media_type="image",
+            embedder="sift_vlad",
+            embedder_display_name="SIFT/VLAD (instances)",
+            embedder_model_id=None,
+            embedder_type="structural",
+            embedding_dim=pb.embedding_dim_from_weights(weights),
+            threshold=0.5,
+            good_count=3,
+            bad_count=2,
+            exported_by="vtsearch test",
+            exported_at="2026-06-30T00:00:00Z",
+        )
+        assert manifest["embedder"]["model_id"] is None
+        readme = pb.render_readme(manifest)
+        assert "SIFT/VLAD (instances)" in readme
+        assert "exact pretrained model" not in readme
 
 
 class TestBundle:

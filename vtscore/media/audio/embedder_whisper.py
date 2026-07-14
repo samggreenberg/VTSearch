@@ -59,6 +59,10 @@ class AudioWhisperEncoderEmbedder(MediaEmbedder):
         return "Whisper encoder (speech)"
 
     @property
+    def model_id(self) -> str:
+        return WHISPER_MODEL_ID
+
+    @property
     def media_type_id(self) -> str:
         return "audio"
 

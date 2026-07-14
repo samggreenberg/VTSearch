@@ -49,6 +49,10 @@ class ImageClipEmbedder(MediaEmbedder):
         return "CLIP (general images)"
 
     @property
+    def model_id(self) -> str:
+        return CLIP_MODEL_ID
+
+    @property
     def media_type_id(self) -> str:
         return "image"
 
