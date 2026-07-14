@@ -122,10 +122,37 @@ describe('BrowseHoverPreviewComponent (zoneless canary)', () => {
     await settleZoneless(fixture);
 
     // After the dwell: playback starts and `nowPlaying` carries the clip's
-    // waveform for the top-left indicator — still no panel in the canvas.
+    // waveform for the top-left indicator — flagged `loading` until the clip is
+    // actually sounding — still no panel in the canvas.
     expect(playSpy).toHaveBeenCalled();
-    expect(emitted).toEqual({ mediaId: 7, waveUrl: '/api/medias/7/thumbnail' });
+    expect(emitted).toEqual({ mediaId: 7, waveUrl: '/api/medias/7/thumbnail', loading: true });
     expect(fixture.nativeElement.querySelector('.hover-player')).toBeNull();
+  });
+
+  it('clears the loading flag once the clip starts sounding, and re-sets it on rebuffer', async () => {
+    fixture.componentRef.setInput('mediaType', 'audio');
+    let emitted: NowPlaying | null | undefined;
+    fixture.componentInstance.nowPlaying.subscribe((e) => (emitted = e));
+
+    fixture.componentRef.setInput('hover', hoverEvent(9));
+    await wait(DWELL_MS + 60);
+    await settleZoneless(fixture);
+
+    // Auditioning starts in the loading state (fetch/decode not done yet).
+    expect(emitted).toEqual({ mediaId: 9, waveUrl: '/api/medias/9/thumbnail', loading: true });
+
+    // The reused (never-mounted) audio element drives the buffering listeners.
+    const audioEl = (fixture.componentInstance as unknown as { audioEl: HTMLAudioElement }).audioEl;
+
+    // The element reports it's now playing → spinner clears.
+    audioEl.dispatchEvent(new Event('playing'));
+    await settleZoneless(fixture);
+    expect(emitted).toEqual({ mediaId: 9, waveUrl: '/api/medias/9/thumbnail', loading: false });
+
+    // A stall to rebuffer mid-play → spinner returns.
+    audioEl.dispatchEvent(new Event('waiting'));
+    await settleZoneless(fixture);
+    expect(emitted).toEqual({ mediaId: 9, waveUrl: '/api/medias/9/thumbnail', loading: true });
   });
 
   it('debounces the dwell so sweeping across bins plays only the settled one', async () => {

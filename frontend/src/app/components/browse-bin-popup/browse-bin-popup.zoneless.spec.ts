@@ -280,8 +280,20 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     await settlePasses(fixture);
 
     // The window opened auditioning the representative (id 8), not the list's
-    // first member (id 7), and surfaced it on the shared now-playing indicator.
-    expect(played.at(-1)).toEqual({ mediaId: 8, waveUrl: '/api/medias/8/thumbnail' });
+    // first member (id 7), and surfaced it on the shared now-playing indicator —
+    // flagged `loading` until the clip is actually sounding.
+    expect(played.at(-1)).toEqual({ mediaId: 8, waveUrl: '/api/medias/8/thumbnail', loading: true });
+
+    // The clip's audio element drives the buffering spinner: `playing` clears
+    // the loading flag, a `waiting` stall re-sets it.
+    const audioEl = fixture.nativeElement.querySelector('audio') as HTMLAudioElement;
+    audioEl.dispatchEvent(new Event('playing'));
+    await settlePasses(fixture);
+    expect(played.at(-1)).toEqual({ mediaId: 8, waveUrl: '/api/medias/8/thumbnail', loading: false });
+
+    audioEl.dispatchEvent(new Event('waiting'));
+    await settlePasses(fixture);
+    expect(played.at(-1)).toEqual({ mediaId: 8, waveUrl: '/api/medias/8/thumbnail', loading: true });
 
     playStub.mockRestore();
     loadStub.mockRestore();
