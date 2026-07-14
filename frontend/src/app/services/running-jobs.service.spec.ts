@@ -85,6 +85,25 @@ describe('RunningJobsService', () => {
     }
   });
 
+  it('ignores interval ticks while a poll is still in flight (exhaustMap)', async () => {
+    vi.useFakeTimers();
+    try {
+      subs.push(service.busyPairs$.subscribe());
+
+      await vi.advanceTimersByTimeAsync(0);
+      const inFlight = httpMock.expectOne('/api/jobs/active');
+
+      // A tick fires while the first request is still pending: exhaustMap must
+      // NOT issue a second request (at most one poll in flight at a time).
+      await vi.advanceTimersByTimeAsync(5000);
+      httpMock.expectNone('/api/jobs/active');
+
+      inFlight.flush({ busy_pairs: [] });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('stops polling and clears state once the last observer unsubscribes', async () => {
     vi.useFakeTimers();
     try {

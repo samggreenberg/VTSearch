@@ -78,6 +78,16 @@ describe('TileCacheService', () => {
     expect(service.getCached(2, 1, 1)).toBeNull();
   });
 
+  it('re-setting the same projection id keeps the cache warm', () => {
+    service.setProjectionId('p1');
+    service.getTile(2, 1, 1)?.subscribe();
+    expect(service.getCached(2, 1, 1)).not.toBeNull();
+
+    // A no-op id set must not clear the cache (only a *change* invalidates).
+    service.setProjectionId('p1');
+    expect(service.getCached(2, 1, 1)).not.toBeNull();
+  });
+
   it('setContentVersion re-keys entries so a stale version misses', () => {
     service.setProjectionId('p1');
     service.getTile(2, 1, 1)?.subscribe();
