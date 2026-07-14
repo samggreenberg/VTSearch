@@ -207,7 +207,9 @@ class TestTriggerSchedulesReembed:
 
         task_id = embedder_sync.maybe_start_label_reembed(det_ctx, {}, spawn=spawn)
 
+        assert task_id is not None
         tracker = detector_loading_tasks.get_tracker(task_id)
+        assert tracker is not None
         snap = tracker.get()
         assert snap["status"] == "loading"
         expected_display = embedder_sync.embedder_display_name("siglip")
@@ -256,7 +258,16 @@ class TestReembedWorkerBody:
         det_ctx = _with_cached_labelset(_det_ctx("clap"))
         spawn = _CaptureSpawn()
         task_id = embedder_sync.maybe_start_label_reembed(det_ctx, {"name": "my detector"}, spawn=spawn)
+        assert task_id is not None
         return task_id, spawn.target, det_ctx
+
+    @staticmethod
+    def _tracker(task_id: str):
+        from vtscore.concurrency.progress import detector_loading_tasks
+
+        tracker = detector_loading_tasks.get_tracker(task_id)
+        assert tracker is not None
+        return tracker
 
     def test_worker_reports_progress_then_settles_idle(self, monkeypatch):
         from vtscore.concurrency.progress import detector_loading_tasks
@@ -272,9 +283,7 @@ class TestReembedWorkerBody:
         task_id, worker, det_ctx = self._schedule(monkeypatch, train_stub)
 
         progress_seen: list[tuple] = []
-        detector_loading_tasks.get_tracker(task_id).subscribe(
-            lambda s: progress_seen.append((s["status"], s["current"], s["total"]))
-        )
+        self._tracker(task_id).subscribe(lambda s: progress_seen.append((s["status"], s["current"], s["total"])))
 
         worker()
 
@@ -285,7 +294,7 @@ class TestReembedWorkerBody:
         # The embedder's mid-flight callback was surfaced as a loading update.
         assert ("loading", 3, 10) in progress_seen
         # Success settles the tracker back to idle with no error.
-        final = detector_loading_tasks.get_tracker(task_id).get()
+        final = self._tracker(task_id).get()
         assert final["status"] == "idle"
         assert not final.get("error")
         # The worker marks the task finished in its ``finally``.
@@ -301,7 +310,7 @@ class TestReembedWorkerBody:
 
         worker()
 
-        final = detector_loading_tasks.get_tracker(task_id).get()
+        final = self._tracker(task_id).get()
         assert final["status"] == "idle"
         assert final["error"] == "embedder blew up"
         assert detector_loading_tasks.is_finished(task_id)
@@ -316,7 +325,7 @@ class TestReembedWorkerBody:
 
         worker()
 
-        final = detector_loading_tasks.get_tracker(task_id).get()
+        final = self._tracker(task_id).get()
         assert final["status"] == "idle"
         assert final["error"] == "Cancelled"
         assert detector_loading_tasks.is_finished(task_id)
@@ -335,7 +344,7 @@ class TestReembedWorkerBody:
 
         worker()
 
-        final = detector_loading_tasks.get_tracker(task_id).get()
+        final = self._tracker(task_id).get()
         assert final["status"] == "idle"
         # Falls back to repr()/a default rather than an empty error string.
         assert final["error"]
