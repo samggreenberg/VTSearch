@@ -633,3 +633,39 @@ class TestLoadDemoSourceKth:
                 clips={},
                 on_progress=lambda *a: None,
             )
+
+
+class TestLoadVideoMetadataFromFolders:
+    """load_video_metadata_from_folders scanning behavior."""
+
+    def test_scans_category_subdirectories(self, tmp_path):
+        """Finds video files in matching category subdirectories."""
+        from vtscore.datasets.loader import load_video_metadata_from_folders
+
+        for cat in ("walking", "boxing"):
+            d = tmp_path / cat
+            d.mkdir()
+            (d / f"{cat}_01.avi").write_bytes(b"RIFF")
+
+        # Unrelated folder should be ignored.
+        other = tmp_path / "jogging"
+        other.mkdir()
+        (other / "jogging_01.avi").write_bytes(b"RIFF")
+
+        metadata = load_video_metadata_from_folders(tmp_path, ["walking", "boxing"])
+        assert len(metadata) == 2
+        assert {m["category"] for m in metadata.values()} == {"walking", "boxing"}
+
+    def test_skips_appledouble_dotfiles(self, tmp_path):
+        """macOS AppleDouble sidecars ('._clip.avi') are not counted."""
+        from vtscore.datasets.loader import load_video_metadata_from_folders
+
+        d = tmp_path / "walking"
+        d.mkdir()
+        (d / "walking_01.avi").write_bytes(b"RIFF")
+        (d / "._walking_01.avi").write_bytes(b"\x00\x05\x16\x07")  # AppleDouble
+        (d / ".DS_Store").write_bytes(b"junk")
+
+        metadata = load_video_metadata_from_folders(tmp_path, ["walking"])
+        assert len(metadata) == 1
+        assert list(metadata) == ["walking/walking_01.avi"]

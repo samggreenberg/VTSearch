@@ -243,6 +243,25 @@ class TestLoadAudioMetadataFromFolders:
         metadata = load_audio_metadata_from_folders(tmp_path, ["blues"])
         assert len(metadata) == 1
 
+    def test_skips_appledouble_dotfiles(self, tmp_path):
+        """macOS AppleDouble sidecars ('._track.wav') are not counted.
+
+        The GTZAN tarball ships one such resource fork per real track; the
+        '*.wav' glob matches them by extension, so without a dotfile guard
+        the count would double and 1000 undecodable junk clips would load.
+        """
+        from vtscore.datasets.loader import load_audio_metadata_from_folders
+
+        d = tmp_path / "blues"
+        d.mkdir()
+        (d / "blues.00001.wav").write_bytes(b"RIFF")
+        (d / "._blues.00001.wav").write_bytes(b"\x00\x05\x16\x07")  # AppleDouble
+        (d / ".DS_Store").write_bytes(b"junk")
+
+        metadata = load_audio_metadata_from_folders(tmp_path, ["blues"])
+        assert len(metadata) == 1
+        assert list(metadata) == ["blues/blues.00001.wav"]
+
 
 # ---------------------------------------------------------------------------
 # load_urbansound8k_metadata
