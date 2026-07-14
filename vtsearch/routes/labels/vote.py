@@ -108,7 +108,7 @@ def _make_correction_annotator(all_medias: dict):
             md5_to_id[md5_val] = mid
 
     def annotate(entry: dict) -> None:
-        media_id = md5_to_id.get(entry.get("md5"))
+        media_id = md5_to_id.get(entry.get("md5", ""))
         if media_id is not None and media_id in find_initial:
             entry["is_correction"] = entry.get("label") != find_initial[media_id]
         else:
