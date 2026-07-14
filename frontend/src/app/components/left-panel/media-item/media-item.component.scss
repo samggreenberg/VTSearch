@@ -54,6 +54,11 @@
   flex-shrink: 0;
   line-height: 0;
   width: 100%;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  // Themed surface behind the thumbnail: hidden under a cover-fit <img> or the
+  // opaque placeholder, and the backdrop for the tinted audio waveform (#2369).
+  background: var(--bg-surface);
 }
 
 .media-thumbnail {
@@ -61,6 +66,18 @@
   height: auto;
   aspect-ratio: 1;
   object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+// Audio waveform (issue #2369): the shared ``.waveform-mask`` supplies the
+// accent fill + mask chrome; cover-fit to mirror ``.media-thumbnail``. No
+// ``background`` here — the shared accent must win over a component class.
+.media-thumbnail-wave {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  mask-size: cover;
+  -webkit-mask-size: cover;
   border-radius: var(--radius-sm);
 }
 

@@ -53,6 +53,12 @@ export class MediaItemComponent implements OnChanges {
     return null;
   }
 
+  /** True when {@link thumbnailUrl} is an audio waveform \u2014 a theme-agnostic
+   *  alpha-mask PNG (issue #2369) tinted via a CSS mask, not a plain <img>. */
+  get isAudioThumbnail(): boolean {
+    return !!this.thumbnailUrl && this.media.media_type === 'audio';
+  }
+
   get placeholderIcon(): string | null {
     if (this.thumbnailUrl) return null;
     if (this.media.media_type === 'audio') return '\u266B';

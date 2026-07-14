@@ -14,7 +14,17 @@
 >
   <div class="thumbnail-wrap">
     @if (thumbnailUrl) {
-      <img class="media-thumbnail" [src]="thumbnailUrl" [alt]="displayName" loading="lazy" (error)="onThumbnailError()" />
+      @if (isAudioThumbnail) {
+        <!-- Audio waveform alpha mask tinted to the accent (issue #2369). -->
+        <span
+          class="media-thumbnail-wave waveform-mask"
+          [attr.aria-label]="displayName"
+          [style.-webkit-mask-image]="'url(' + thumbnailUrl + ')'"
+          [style.mask-image]="'url(' + thumbnailUrl + ')'"
+        ></span>
+      } @else {
+        <img class="media-thumbnail" [src]="thumbnailUrl" [alt]="displayName" loading="lazy" (error)="onThumbnailError()" />
+      }
     } @else if (placeholderIcon) {
       <span class="media-placeholder">{{ placeholderIcon }}</span>
     }

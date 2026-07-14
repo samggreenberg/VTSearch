@@ -245,6 +245,12 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
     return this.activeContext.mediaUrl(`/api/medias/${id}/thumbnail`);
   }
 
+  /** True when this item's thumbnail is an audio waveform — a theme-agnostic
+   *  alpha-mask PNG (issue #2369) tinted via a CSS mask, not a plain <img>. */
+  isAudioThumbnail(id: number): boolean {
+    return this.metadataCache.get(id)?.media_type === 'audio';
+  }
+
   onThumbnailError(url: string): void {
     if (url) this.thumbnailFailedUrls.add(url);
   }

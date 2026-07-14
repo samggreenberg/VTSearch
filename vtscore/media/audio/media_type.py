@@ -61,9 +61,15 @@ def _synthetic_tone_wav(city_index: int, n_cities: int) -> bytes:
     return buf.getvalue()
 
 
-# Waveform colours (dark background, bright waveform)
-_BG_COLOR = (30, 30, 30)
-_WAVE_COLOR = (0, 180, 255)
+# Waveform thumbnails are theme-agnostic alpha masks, not pre-coloured images:
+# the wave is painted fully opaque and the background left fully transparent, so
+# no colour is baked into the PNG.  The frontend tints the mask to the live
+# theme at render time — browse-canvas tiles via an offscreen ``source-in`` fill,
+# the top-left now-playing indicator via a CSS ``mask`` — so one PNG serves the
+# dark / light / highviz themes equally and recolours instantly on a theme
+# switch, with no staleness and nothing theme-specific frozen into demo-dataset
+# pickles.  See issue #2369.
+_WAVE_FILL = (255, 255, 255, 255)  # opaque; only the alpha channel is used downstream
 
 # Process-scoped cache of decoded ``(samples, sr)`` keyed by an archive member.
 # A windowed archive-member manifest fans one member into many clip windows
@@ -110,7 +116,15 @@ def _render_waveform(audio_data, *, size: int = _THUMB_SIZE) -> bytes | None:
     amp = size // 2
     mid = size // 2
 
-    img = Image.new("RGB", (size, size), _BG_COLOR)
+    # Transparent background so the frontend can tint the shape to any theme;
+    # only the wave strokes are opaque (they form the alpha mask).  The
+    # background is transparent *white* (not transparent black): giving the
+    # hidden pixels the same RGB as the opaque wave means downscaling only ever
+    # averages white-with-white, so shrinking a thumbnail to XS/M can't pull dark
+    # RGB out of the "empty" pixels and fringe the wave.  Both render paths
+    # (canvas ``source-in`` tint, CSS ``mask``) then key off the alpha channel
+    # alone, so the wave stays clean at any size.
+    img = Image.new("RGBA", (size, size), (255, 255, 255, 0))
     draw = ImageDraw.Draw(img)
 
     for i in range(cols):
@@ -119,7 +133,7 @@ def _render_waveform(audio_data, *, size: int = _THUMB_SIZE) -> bytes | None:
         # Ensure at least 1px line
         if y_top == y_bot:
             y_bot += 1
-        draw.line([(i, y_top), (i, y_bot)], fill=_WAVE_COLOR)
+        draw.line([(i, y_top), (i, y_bot)], fill=_WAVE_FILL)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=True)

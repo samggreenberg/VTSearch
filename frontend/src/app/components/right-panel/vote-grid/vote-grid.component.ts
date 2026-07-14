@@ -31,6 +31,10 @@ export interface VoteGridEntry {
   fallbackIcon: string | null;
   /** True when the item isn't present in the current dataset. */
   missing: boolean;
+  /** True when {@link thumbnailUrl} is an audio waveform: a theme-agnostic
+   *  alpha-mask PNG (issue #2369) that must be tinted via a CSS mask rather
+   *  than shown as a plain <img>, so it recolours with the live theme. */
+  isAudio?: boolean;
 }
 
 /** Media types the thumbnail route can render a tile for. */

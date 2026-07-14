@@ -121,6 +121,9 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy {
       thumbnailUrl: this.buildThumbnailUrl(media, id),
       fallbackIcon: this.buildFallbackIcon(media),
       missing: !this.mediaMap.has(id),
+      // Audio waveforms are theme-agnostic alpha masks (issue #2369); flag them
+      // so vote-grid tints them via a CSS mask instead of a plain <img>.
+      isAudio: media?.media_type === 'audio',
     };
   }
 

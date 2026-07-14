@@ -136,6 +136,25 @@ describe('VoteGridComponent', () => {
     expect(el.querySelector('.vote-placeholder')?.textContent).toContain('♫');
   });
 
+  it('renders a plain <img> for non-audio thumbnails', async () => {
+    await setInputs({ entries: makeEntries(1, { thumbnailUrl: '/api/medias/1/thumbnail' }) });
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('img.vote-thumbnail')).toBeTruthy();
+    expect(el.querySelector('.vote-thumbnail-wave')).toBeNull();
+  });
+
+  it('tints audio waveforms via a CSS mask instead of a plain <img> (issue #2369)', async () => {
+    await setInputs({
+      entries: makeEntries(1, { thumbnailUrl: '/api/medias/1/thumbnail', isAudio: true }),
+    });
+    const el = fixture.nativeElement as HTMLElement;
+    // No raw <img> — a masked element carries the wave shape.
+    expect(el.querySelector('img.vote-thumbnail')).toBeNull();
+    const wave = el.querySelector('.vote-thumbnail-wave') as HTMLElement;
+    expect(wave).toBeTruthy();
+    expect(wave.style.maskImage || wave.style.webkitMaskImage).toContain('/api/medias/1/thumbnail');
+  });
+
   it('marks missing entries and labels them in the aria text', async () => {
     await setInputs({ label: 'good', entries: makeEntries(1, { missing: true }) });
     const el = fixture.nativeElement as HTMLElement;

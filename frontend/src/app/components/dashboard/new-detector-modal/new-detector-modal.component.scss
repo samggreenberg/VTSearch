@@ -154,6 +154,18 @@
   border-radius: var(--radius-sm);
   flex-shrink: 0;
   background: var(--bg-subtle);
+  overflow: hidden;
+}
+
+// Audio waveform (issue #2369): fills the surface ``.example-thumbnail`` box and
+// masks the accent to the wave shape; the shared ``.waveform-mask`` supplies the
+// accent fill + mask chrome, cover-fit to mirror the <img>'s ``object-fit``.
+.example-thumbnail-wave {
+  display: block;
+  width: 100%;
+  height: 100%;
+  mask-size: cover;
+  -webkit-mask-size: cover;
 }
 
 .example-label {

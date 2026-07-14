@@ -23,6 +23,32 @@ class TestGenerateWaveformThumbnail:
         img = Image.open(io.BytesIO(result))
         assert img.size == (128, 128)
 
+    def test_is_theme_agnostic_alpha_mask(self):
+        """The thumbnail bakes in no colour: transparent background, opaque wave.
+
+        This is the contract the frontend relies on to tint the waveform to the
+        live theme (issue #2369) — an RGBA image whose corners are fully
+        transparent and whose alpha channel actually varies (the wave is drawn).
+        """
+        from PIL import Image
+
+        wav_bytes = generate_wav(440.0, 1.0)
+        result = generate_waveform_thumbnail(wav_bytes)
+        assert result is not None
+        img = Image.open(io.BytesIO(result))
+        assert img.mode == "RGBA"
+        # Corners are background → fully transparent, and *white* RGB (matching
+        # the wave) so downscaling can't fringe the wave with dark pixels.
+        w, h = img.size
+        for xy in ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)):
+            assert img.getpixel(xy) == (255, 255, 255, 0)
+        # The wave itself is drawn → some pixels are opaque.
+        alphas = img.getchannel("A").getextrema()
+        assert alphas == (0, 255)
+        # Colour is carried entirely by alpha: every pixel is white RGB.
+        rgb = img.convert("RGB")
+        assert rgb.getextrema() == ((255, 255), (255, 255), (255, 255))
+
     def test_custom_size(self):
         from PIL import Image
 

@@ -42,7 +42,16 @@
   >
     @if (entry.thumbnailUrl && !thumbnailFailedUrls.has(entry.thumbnailUrl)) {
       <span class="vote-thumbnail-wrap">
-        <img class="vote-thumbnail" [src]="entry.thumbnailUrl" [alt]="entry.name" loading="lazy" (error)="onThumbnailError(entry.thumbnailUrl)" />
+        @if (entry.isAudio) {
+          <!-- Audio waveform alpha mask tinted to the accent (issue #2369). -->
+          <span
+            class="vote-thumbnail-wave waveform-mask"
+            [style.-webkit-mask-image]="'url(' + entry.thumbnailUrl + ')'"
+            [style.mask-image]="'url(' + entry.thumbnailUrl + ')'"
+          ></span>
+        } @else {
+          <img class="vote-thumbnail" [src]="entry.thumbnailUrl" [alt]="entry.name" loading="lazy" (error)="onThumbnailError(entry.thumbnailUrl)" />
+        }
       </span>
     } @else if (entry.fallbackIcon) {
       <span class="vote-placeholder">{{ entry.fallbackIcon }}</span>
