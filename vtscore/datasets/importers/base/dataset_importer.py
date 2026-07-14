@@ -13,7 +13,12 @@ from __future__ import annotations
 from typing import Any, Iterator
 
 from .core import ImporterBase
-from .specs import SourceSpec, _fill_converter_output_fields, _parse_multi_media_specs
+from .specs import (
+    MissingMediaTypeError,
+    SourceSpec,
+    _fill_converter_output_fields,
+    _parse_multi_media_specs,
+)
 
 
 class DatasetImporter(ImporterBase):
@@ -111,6 +116,13 @@ class DatasetImporter(ImporterBase):
                 :meth:`fetch_all_source_media`, :meth:`fetch_source_media`,
                 or the :meth:`list_records` + :meth:`fetch_record` hooks are
                 implemented by the subclass.
+            ValueError: If ``source_specs`` is genuinely invalid (bad JSON,
+                a non-object entry, an unknown source_type or converter, a
+                converter that does not bridge source→output, or bad
+                converter params).  Only :class:`MissingMediaTypeError` — the
+                "no ``media_type`` declared" subtype — is swallowed to trigger
+                the per-record fallback; every other validation ``ValueError``
+                propagates with its original message.
             Exception: Any exception propagates to the route handler, which
                 stores it in the progress tracker as an error message.
         """
@@ -119,7 +131,12 @@ class DatasetImporter(ImporterBase):
 
         try:
             specs = self.effective_source_specs(field_values)
-        except ValueError:
+        except MissingMediaTypeError:
+            # Legitimate "bare service importer" case: no output media_type
+            # declared, so fall through to the per-record hooks below.  Any
+            # *other* ValueError (bad JSON, unknown source_type/converter,
+            # mismatched converter, bad params) is genuine invalid input and
+            # propagates to the user with its original message.
             specs = []
 
         if specs:
