@@ -167,6 +167,100 @@ class TestImporterMetadata:
             "params": {"paths_file": "/a/list.txt", "media_type": "audio"},
         }
 
+    def test_archive_member_importer_hidden_from_picker(self):
+        # The archive-member importer is folded into the Manifest tab: it stays
+        # registered (so its origins/byte-serving resolve) but no longer shows a
+        # third sub-tab under Files (issue #2484).
+        imp = get_importer("local_archive_member")
+        assert imp is not None
+        assert imp.hidden_from_picker is True
+
+
+def _make_archive_manifest(tmp_path: Path):
+    """Build a one-shard tar + an archive-member ``.npz`` manifest referencing it."""
+    import io
+    import tarfile
+
+    import numpy as np
+
+    members = {"chunk_a.mp4": b"AAAA" * 8, "chunk_b.mp4": b"BBBB" * 8}
+    archive = tmp_path / "shard_000000.tar"
+    with tarfile.open(archive, "w") as tf:
+        for name, payload in members.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(payload)
+            tf.addfile(info, io.BytesIO(payload))
+
+    rng = np.random.default_rng(11)
+    vectors = rng.standard_normal((len(members), 512)).astype(np.float32)
+    manifest = tmp_path / "manifest.npz"
+    np.savez(
+        manifest,
+        vectors=vectors,
+        members=np.array(list(members)),
+        archives=np.array(str(archive)),
+        embedder_name=np.array("xclip"),
+    )
+    return manifest, archive
+
+
+class TestManifestArchiveMemberDelegation:
+    """The Manifest importer auto-detects an archive-member ``.npz`` and delegates
+    to the no-extraction ``local_archive_member`` importer (issue #2484)."""
+
+    def test_run_delegates_and_stamps_archive_member_origin(self, tmp_path):
+        manifest, archive = _make_archive_manifest(tmp_path)
+        imp = get_importer("server_files")
+
+        medias: dict[int, dict] = {}
+        imp.run({"paths_file": str(manifest), "media_type": "video"}, medias)
+
+        assert len(medias) == 2
+        for media in medias.values():
+            # Delegated import stamps ``local_archive_member`` origins so
+            # byte-streaming and Find-from-origin resolve by name.
+            assert media["origin"]["importer"] == "local_archive_member"
+            assert media["origin"]["params"]["manifest"] == str(manifest.resolve())
+            assert media["archive_member"]["path"] == str(archive)
+            assert media["media_bytes"] is None
+
+    def test_run_chunked_yields_archive_members(self, tmp_path):
+        manifest, _archive = _make_archive_manifest(tmp_path)
+        imp = get_importer("server_files")
+
+        merged: dict[int, dict] = {}
+        for chunk in imp.run_chunked({"paths_file": str(manifest), "media_type": "video"}, chunk_size=64):
+            merged.update(chunk)
+
+        assert len(merged) == 2
+        assert all(m["origin"]["importer"] == "local_archive_member" for m in merged.values())
+
+    def test_run_cli_delegates(self, tmp_path):
+        manifest, _archive = _make_archive_manifest(tmp_path)
+        imp = get_importer("server_files")
+
+        medias: dict[int, dict] = {}
+        imp.run_cli({"paths_file": str(manifest), "media_type": "video"}, medias)
+
+        assert len(medias) == 2
+        assert all(m["origin"]["importer"] == "local_archive_member" for m in medias.values())
+
+    def test_plain_path_manifest_is_not_treated_as_archive(self, tmp_path):
+        # A .npz of file paths (no ``members`` array) must still take the normal
+        # symlink-and-embed path, not the archive-member branch.
+        assert ServerFilesDatasetImporter._archive_manifest_path({"paths_file": str(tmp_path / "none.npz")}) is None
+
+        import numpy as np
+
+        manifest = tmp_path / "paths.npz"
+        np.savez(manifest, filenames=np.array(["a.wav"]), vectors=np.zeros((1, 512), dtype=np.float32))
+        assert ServerFilesDatasetImporter._archive_manifest_path({"paths_file": str(manifest)}) is None
+
+    def test_text_paths_file_is_not_an_archive_manifest(self, tmp_path):
+        listing = tmp_path / "list.txt"
+        listing.write_text("/a.wav\n")
+        assert ServerFilesDatasetImporter._archive_manifest_path({"paths_file": str(listing)}) is None
+
     def test_reference_files_field_excluded_from_origin(self):
         """``reference_files`` is a storage choice, not part of source identity."""
         imp = ServerFilesDatasetImporter()
