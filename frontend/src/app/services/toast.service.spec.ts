@@ -70,6 +70,17 @@ describe('ToastService', () => {
     }
   });
 
+  it('error() toasts persist past the success auto-dismiss window', async () => {
+    vi.useFakeTimers();
+    try {
+      service.error({ message: 'stays' });
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(service.toasts.length).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('dedupKey replaces the existing toast instead of stacking', () => {
     service.error({ message: 'first', dedupKey: 'k' });
     service.error({ message: 'second', dedupKey: 'k' });
