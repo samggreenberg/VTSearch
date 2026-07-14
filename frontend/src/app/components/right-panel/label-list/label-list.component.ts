@@ -6,7 +6,8 @@ import { Media } from '../../../models/api.models';
 import { LabelSortMode } from '../label-sort/label-sort.component';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
-import { THUMBNAIL_MEDIA_TYPES, VoteGridComponent, VoteGridEntry } from '../vote-grid/vote-grid.component';
+import { MediaTypeCapabilityService } from '../../../services/media-type-capability.service';
+import { VoteGridComponent, VoteGridEntry } from '../vote-grid/vote-grid.component';
 
 export interface LabelEntry extends VoteGridEntry {
   id: number;
@@ -26,6 +27,7 @@ export interface LabelEntry extends VoteGridEntry {
 export class LabelListComponent implements OnInit, OnChanges, OnDestroy {
   private activeContext = inject(ActiveContextService);
   private metadataCache = inject(MediaMetadataCacheService);
+  private mediaTypeCaps = inject(MediaTypeCapabilityService);
 
   @Input() label: 'good' | 'bad' = 'good';
   @Input() ids: number[] = [];
@@ -128,7 +130,7 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private buildThumbnailUrl(media: Media | undefined, id: number): string {
-    if (!media || !THUMBNAIL_MEDIA_TYPES.has(media.media_type)) return '';
+    if (!media || !this.mediaTypeCaps.usesThumbnails(media.media_type)) return '';
     // Downscaled tile, not the full-resolution ``/image``: the labeled set can
     // hold hundreds of items, and decoding every full-size bitmap at once
     // exhausts browser memory.

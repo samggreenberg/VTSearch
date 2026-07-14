@@ -13,7 +13,6 @@ import {
   SQRT3,
   traceCellPath,
   traceHexPath,
-  usesThumbnails,
   type CanvasTheme,
 } from './hex-render.util';
 
@@ -24,20 +23,6 @@ import {
  * that records the path commands `traceHexPath` / `traceCellPath` emit.
  */
 describe('hex-render.util', () => {
-  describe('usesThumbnails', () => {
-    it('is true for the four thumbnail-backed media types', () => {
-      for (const t of ['image', 'video', 'document', 'audio']) {
-        expect(usesThumbnails(t)).toBe(true);
-      }
-    });
-
-    it('is false for flat-density types like text', () => {
-      expect(usesThumbnails('text')).toBe(false);
-      expect(usesThumbnails('anything-else')).toBe(false);
-      expect(usesThumbnails('')).toBe(false);
-    });
-  });
-
   describe('resolveColormap', () => {
     it("picks Ocean in light mode and Heat in dark/high-viz for 'auto'", () => {
       // Ocean darkens with density (low end lighter than high); Heat brightens.

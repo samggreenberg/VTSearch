@@ -6,12 +6,12 @@ import { BrowseSelectionService } from '../../services/browse-selection.service'
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
 import { IconComponent } from '../icon/icon.component';
 import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { applyClipWindow, clearClipWindow } from '../../utils/clip-window';
-import { usesThumbnails } from '../browse-canvas/hex-render.util';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
@@ -160,6 +160,7 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
   private metadataCache = inject(MediaMetadataCacheService);
   private activeContext = inject(ActiveContextService);
   private settingsState = inject(SettingsStateService);
+  private mediaTypeCaps = inject(MediaTypeCapabilityService);
   private cdr = inject(ChangeDetectorRef);
   private injector = inject(Injector);
 
@@ -430,7 +431,7 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
   /** True for media types that carry real visual thumbnails (image / video):
    *  the ones that magnify on the main canvas and are worth a large preview. */
   get showPreview(): boolean {
-    return usesThumbnails(this.mediaType());
+    return this.mediaTypeCaps.usesThumbnails(this.mediaType());
   }
 
   /** True when this popup's thumbnails are audio waveforms: theme-agnostic
@@ -1099,13 +1100,7 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
     const url = this.thumbnailUrl(id);
     if (this.failedThumbs.has(url)) return false;
     const media = this.metadataCache.get(id);
-    return (
-      !!media &&
-      (media.media_type === 'image' ||
-        media.media_type === 'video' ||
-        media.media_type === 'document' ||
-        media.media_type === 'audio')
-    );
+    return !!media && this.mediaTypeCaps.usesThumbnails(media.media_type);
   }
 
   thumbnailUrl(id: number): string {

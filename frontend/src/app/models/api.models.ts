@@ -207,7 +207,8 @@ export interface MediaTypeInfo {
   file_extensions?: string[];
   /** Whether items of this type have a browsable thumbnail (image/video/document,
    *  and audio via its waveform PNG). Drives the VTSBrowse square-vs-hex bin shape
-   *  and thumbnail painting; canonical source for ``usesThumbnails``. */
+   *  and thumbnail painting; the single source of truth the frontend reads via
+   *  ``MediaTypeCapabilityService.usesThumbnails``. */
   has_thumbnail?: boolean;
 }
 

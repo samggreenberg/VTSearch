@@ -12,6 +12,7 @@ import { DetectorsRegistryApiService } from '../../services/detectors-registry-a
 import { SettingsStateService } from '../../services/settings-state.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { MediasApiService } from '../../services/medias-api.service';
+import { DatasetsListingsApiService } from '../../services/datasets-listings-api.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { ToastService } from '../../services/toast.service';
 import type { ProjectionMeta } from '../../models/projection.models';
@@ -95,6 +96,12 @@ describe('BrowseViewComponent (zoneless canary)', () => {
         { provide: SettingsStateService, useValue: settingsStub },
         { provide: BrowseSubsetService, useValue: subsetStub },
         { provide: MediasApiService, useValue: mediasStub },
+        // ngOnInit calls MediaTypeCapabilityService.ensureLoaded(), which lazily
+        // resolves this service to fetch the thumbnail-type registry.
+        {
+          provide: DatasetsListingsApiService,
+          useValue: { getMediaTypes: () => of({ media_types: [] }) },
+        },
         { provide: VtDialogService, useValue: {} },
         { provide: ToastService, useValue: { error: () => {}, success: () => {} } },
         { provide: ActivatedRoute, useValue: routeStub },
