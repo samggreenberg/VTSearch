@@ -332,6 +332,87 @@ class TestDisplayLabelsetExporter:
         assert "3" in result["message"]
 
 
+class TestGuiOriginFormatting:
+    """The gui exporter's ``_format_origin`` and its use in the CLI/streaming
+    output paths (origin display string preceding the name)."""
+
+    def test_format_origin_none_is_empty(self):
+        from vtscore.exporters.gui import _format_origin
+
+        assert _format_origin({"filename": "x.wav"}) == ""  # no "origin" key
+        assert _format_origin({"origin": None}) == ""
+
+    def test_format_origin_renders_display_string(self):
+        from vtscore.exporters.gui import _format_origin
+
+        hit = {"origin": {"importer": "http_archive", "params": {"url": "https://ex.com/d.zip"}}}
+        assert _format_origin(hit) == "http_archive(https://ex.com/d.zip)"
+
+    def test_format_origin_importerless_falls_back_to_str(self):
+        from vtscore.exporters.gui import _format_origin
+
+        # A malformed origin dict (no "importer") makes Origin.from_dict raise;
+        # the helper degrades to ``str(origin)`` rather than crashing the export.
+        hit = {"origin": {"params": {"path": "/data"}}}
+        out = _format_origin(hit)
+        assert out == str({"params": {"path": "/data"}})
+
+    def test_export_cli_name_falls_back_to_filename(self, capsys):
+        from vtscore.exporters import get_exporter
+
+        results = {
+            "detectors_run": 1,
+            "results": {
+                "det1": {
+                    "total_hits": 1,
+                    "hits": [{"id": 1, "filename": "only_filename.wav", "score": 0.9}],
+                },
+            },
+        }
+        get_exporter("gui").export_cli(results, {})
+        captured = capsys.readouterr()
+        # No origin_name and no origin → prints just the bare filename.
+        assert "only_filename.wav" in captured.out
+
+    def test_export_cli_streaming_prints_origin_before_name(self, capsys):
+        from vtscore.exporters import get_exporter
+
+        header = {"detectors": ["det1"]}
+
+        def records():
+            yield (
+                "det1",
+                {
+                    "id": 1,
+                    "filename": "clip.mp4",
+                    "origin_name": "clip.mp4",
+                    "origin": {"importer": "server_folder", "params": {"path": "/vids"}},
+                    "label": "good",
+                },
+            )
+            # A bad hit is skipped in the streaming (predicted-Good) output.
+            yield "det1", {"id": 2, "filename": "skip.mp4", "label": "bad"}
+
+        res = get_exporter("gui").export_cli_streaming(header, records(), {})
+        captured = capsys.readouterr()
+        assert "folder(/vids)" in captured.out
+        assert "clip.mp4" in captured.out
+        assert "skip.mp4" not in captured.out
+        assert "1 hit(s)" in res["message"]
+        assert "1 detector(s)" in res["message"]
+
+    def test_export_cli_streaming_no_good_hits(self, capsys):
+        from vtscore.exporters import get_exporter
+
+        def records():
+            yield "det1", {"id": 1, "filename": "b.mp4", "label": "bad"}
+
+        res = get_exporter("gui").export_cli_streaming({"detectors": ["det1"]}, records(), {})
+        captured = capsys.readouterr()
+        assert "No items predicted as Good" in captured.out
+        assert "0 hit(s)" in res["message"]
+
+
 # ---------------------------------------------------------------------------
 # Server JSON file exporter
 # ---------------------------------------------------------------------------
