@@ -1,10 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+
 import { ToastContainerComponent } from './toast-container.component';
 import { ToastService } from '../../services/toast.service';
 import { provideZoneless } from '../../testing/zoneless-testbed';
 import { settleZoneless } from '../../testing/settle-resource';
+import { provideHttpTesting } from '../../testing/test-providers';
 
 describe('ToastContainerComponent', () => {
   let fixture: ComponentFixture<ToastContainerComponent>;
@@ -13,7 +13,7 @@ describe('ToastContainerComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ToastContainerComponent],
-      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ToastContainerComponent);

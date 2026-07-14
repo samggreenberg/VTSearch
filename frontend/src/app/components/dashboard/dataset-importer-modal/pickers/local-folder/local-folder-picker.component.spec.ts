@@ -1,8 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { LocalFolderPickerComponent } from './local-folder-picker.component';
 import { provideZoneless } from '../../../../../testing/zoneless-testbed';
+import { provideHttpTesting } from '../../../../../testing/test-providers';
 
 describe('LocalFolderPickerComponent', () => {
   let component: LocalFolderPickerComponent;
@@ -19,7 +20,7 @@ describe('LocalFolderPickerComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [LocalFolderPickerComponent],
-      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LocalFolderPickerComponent);

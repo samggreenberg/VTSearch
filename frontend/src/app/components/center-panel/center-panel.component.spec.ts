@@ -1,10 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { CenterPanelComponent } from './center-panel.component';
 import { EmbedderInfo, Media } from '../../models/api.models';
 import { RegionBox } from './image-viewer/image-viewer.component';
 import { provideZoneless } from '../../testing/zoneless-testbed';
+import { provideHttpTesting } from '../../testing/test-providers';
 
 describe('CenterPanelComponent', () => {
   let component: CenterPanelComponent;
@@ -22,7 +23,7 @@ describe('CenterPanelComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [CenterPanelComponent],
-      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
     }).compileComponents();
     fixture = TestBed.createComponent(CenterPanelComponent);
     component = fixture.componentInstance;

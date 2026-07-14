@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 
 import { FindViewComponent } from './find-view.component';
@@ -8,6 +8,7 @@ import { SortStateService } from '../../services/sort-state.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
+import { provideHttpTesting } from '../../testing/test-providers';
 
 /**
  * Zoneless staleness canary for the Find view (docs/plans/zoneless-migration.md,
@@ -32,7 +33,7 @@ describe('FindViewComponent (zoneless canary)', () => {
   beforeEach(async () => {
     await configureZoneless({
       imports: [FindViewComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [...provideHttpTesting(), provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(FindViewComponent);

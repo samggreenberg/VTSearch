@@ -1,10 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { DatasetImporterModalComponent } from './dataset-importer-modal.component';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 import { getTabLabel } from './pickers/shared/media-type.util';
+import { provideHttpTesting } from '../../../testing/test-providers';
 
 describe('DatasetImporterModalComponent', () => {
   let component: DatasetImporterModalComponent;
@@ -136,7 +137,7 @@ describe('DatasetImporterModalComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [DatasetImporterModalComponent],
-      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DatasetImporterModalComponent);

@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController } from '@angular/common/http/testing';
+
 import { ProcessorsApiService } from './processors-api.service';
+import { provideHttpTesting } from '../testing/test-providers';
 
 describe('ProcessorsApiService', () => {
   let service: ProcessorsApiService;
@@ -9,7 +10,7 @@ describe('ProcessorsApiService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideHttpTesting()],
     });
     service = TestBed.inject(ProcessorsApiService);
     httpMock = TestBed.inject(HttpTestingController);

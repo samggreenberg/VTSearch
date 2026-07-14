@@ -1,17 +1,12 @@
 import { TestBed } from '@angular/core/testing';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import {
-  HttpClient,
-  HttpContext,
-  HttpErrorResponse,
-  provideHttpClient,
-  withInterceptors,
-} from '@angular/common/http';
+import { HttpTestingController } from '@angular/common/http/testing';
+import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http';
 
 import { errorInterceptor, SKIP_ERROR_TOAST } from './error.interceptor';
 import { ActiveContextService } from '../services/active-context.service';
 import { CONNECTION_PROBE, ConnectionStateService } from '../services/connection-state.service';
 import { ToastService } from '../services/toast.service';
+import { provideHttpTesting } from '../testing/test-providers';
 
 /**
  * The error interceptor is the global error-to-toast funnel and the
@@ -31,8 +26,7 @@ describe('errorInterceptor', () => {
     toast = { error: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
-        provideHttpClient(withInterceptors([errorInterceptor])),
-        provideHttpClientTesting(),
+        ...provideHttpTesting(errorInterceptor),
         { provide: ToastService, useValue: toast },
       ],
     });

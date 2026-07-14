@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController } from '@angular/common/http/testing';
+
 import { DatasetStateService } from './dataset-state.service';
+import { provideHttpTesting } from '../testing/test-providers';
 
 describe('DatasetStateService', () => {
   let service: DatasetStateService;
@@ -9,7 +10,7 @@ describe('DatasetStateService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideHttpTesting()],
     });
     service = TestBed.inject(DatasetStateService);
     httpMock = TestBed.inject(HttpTestingController);

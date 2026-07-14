@@ -6,6 +6,7 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import type { HexHoverEvent } from '../browse-canvas/browse-canvas.component';
 import { configureZoneless } from '../../testing/zoneless-testbed';
+import { makeActiveContextStub } from '../../testing/mocks';
 import { settleZoneless } from '../../testing/settle-resource';
 
 /**
@@ -56,9 +57,7 @@ describe('BrowseHoverPreviewComponent (zoneless canary)', () => {
     playSpy = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
 
-    const activeContextStub: Partial<ActiveContextService> = {
-      mediaUrl: (p: string) => p,
-    };
+    const activeContextStub = makeActiveContextStub();
     // The audio hover path reads clip extents through the metadata cache; stub it
     // so the component constructs without pulling the real root service (and its
     // HttpClient dependency) into the test injector.

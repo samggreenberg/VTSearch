@@ -1,8 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { DetectorPortableExportModalComponent } from './detector-portable-export-modal.component';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { provideHttpTesting } from '../../../testing/test-providers';
 
 describe('DetectorPortableExportModalComponent', () => {
   let component: DetectorPortableExportModalComponent;
@@ -12,7 +13,7 @@ describe('DetectorPortableExportModalComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [DetectorPortableExportModalComponent],
-      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DetectorPortableExportModalComponent);

@@ -1,10 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+
+import { HttpTestingController } from '@angular/common/http/testing';
 import { TextViewerComponent } from './text-viewer.component';
 import { Media } from '../../../models/api.models';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
+import { provideHttpTesting } from '../../../testing/test-providers';
 
 describe('TextViewerComponent', () => {
   let component: TextViewerComponent;
@@ -22,7 +23,7 @@ describe('TextViewerComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [TextViewerComponent],
-      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
     }).compileComponents();
     fixture = TestBed.createComponent(TextViewerComponent);
     component = fixture.componentInstance;
