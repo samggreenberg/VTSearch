@@ -95,21 +95,25 @@ class _FakeCapture:
         self.released = True
 
 
-def _fake_cv2(**capture_cfg) -> types.ModuleType:
-    """Build a fake ``cv2`` module whose ``VideoCapture`` yields ``_FakeCapture``."""
-    mod = types.ModuleType("cv2")
-    mod.CAP_PROP_FRAME_COUNT = _PROP_FRAME_COUNT
-    mod.CAP_PROP_FPS = _PROP_FPS
-    mod.CAP_PROP_POS_FRAMES = _PROP_POS_FRAMES
-    mod.COLOR_BGR2RGB = _COLOR_BGR2RGB
-    mod.VideoCapture = lambda _path: _FakeCapture(**capture_cfg)
+def _fake_cv2(**capture_cfg) -> types.SimpleNamespace:
+    """Build a fake ``cv2`` module whose ``VideoCapture`` yields ``_FakeCapture``.
+
+    A ``SimpleNamespace`` stands in for the module object in ``sys.modules``;
+    ``import cv2`` binds to whatever is registered there.
+    """
 
     def cvt_color(frame, code):
         assert code == _COLOR_BGR2RGB
         return frame[..., ::-1].copy()
 
-    mod.cvtColor = cvt_color
-    return mod
+    return types.SimpleNamespace(
+        CAP_PROP_FRAME_COUNT=_PROP_FRAME_COUNT,
+        CAP_PROP_FPS=_PROP_FPS,
+        CAP_PROP_POS_FRAMES=_PROP_POS_FRAMES,
+        COLOR_BGR2RGB=_COLOR_BGR2RGB,
+        VideoCapture=lambda _path: _FakeCapture(**capture_cfg),
+        cvtColor=cvt_color,
+    )
 
 
 @pytest.fixture
@@ -159,7 +163,9 @@ class TestMiddleFrameThumbnail:
         with Image.open(io.BytesIO(out)) as img:
             # The fill byte encodes the seeked frame index (50); BGR->RGB moves
             # the fake's channel-0 fill into the blue channel.
-            assert img.convert("RGB").getpixel((0, 0))[2] == 50
+            pixel = img.convert("RGB").getpixel((0, 0))
+            assert isinstance(pixel, tuple)
+            assert pixel[2] == 50
 
     def test_from_file_returns_png(self, install_fake_cv2, tmp_path):
         install_fake_cv2(frame_count=40)
