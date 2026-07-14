@@ -83,9 +83,7 @@ class SplgMatcher:
 
         if self._matcher is None:
             self._matcher = (
-                LightGlue(features="superpoint", filter_threshold=_LG_FILTER_THRESHOLD)
-                .eval()
-                .to(self.device)
+                LightGlue(features="superpoint", filter_threshold=_LG_FILTER_THRESHOLD).eval().to(self.device)
             )
         return self._matcher
 
@@ -129,9 +127,7 @@ class SplgMatcher:
         ).astype(np.float32)
         return StructuralFeatures(keypoints=kp_arr, descriptors=desc.astype(np.float32))
 
-    def match(
-        self, template: StructuralFeatures, candidate: StructuralFeatures
-    ) -> tuple[np.ndarray, np.ndarray, int]:
+    def match(self, template: StructuralFeatures, candidate: StructuralFeatures) -> tuple[np.ndarray, np.ndarray, int]:
         """LightGlue correspondences ``(src, dst, tentative_count)``.
 
         The tentative count (matches above LightGlue's confidence filter) is
