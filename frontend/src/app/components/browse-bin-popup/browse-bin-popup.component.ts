@@ -816,7 +816,9 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
   /**
    * Move the viewed item one grid step: ``dCol`` along a row, ``dRow`` across
    * rows (a row holds {@link columns} items). Updates the preview pane (image /
-   * video) and the grid's focus ring, and scrolls the target row into view.
+   * video) and the grid's focus ring, scrolls the target row into view, and
+   * moves DOM focus to the walked entry so activation keys (Enter / Space) act
+   * on the highlighted item rather than on whatever entry last held DOM focus.
    * No-op for a singleton/preview-only bin, where there's no grid to walk.
    */
   private moveFocus(dCol: number, dRow: number): void {
@@ -826,7 +828,30 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
     if (next === cur) return;
     this.previewId = this.ids[next];
     this.scrollRowIntoView(next);
+    this.focusEntry(next);
     this.cdr.markForCheck();
+  }
+
+  /**
+   * Move DOM focus onto the grid entry at ``index`` so keyboard activation
+   * (Enter / Space) targets the arrow-walked item. The entry may not be in the
+   * DOM yet — the row was just scrolled into view and the virtual viewport
+   * renders it on a subsequent frame — so query for it after a frame and retry
+   * (bounded) until it exists. ``preventScroll`` keeps the native focus scroll
+   * from fighting {@link scrollRowIntoView}, which already positioned the row.
+   */
+  private focusEntry(index: number, attempt = 0): void {
+    const panel = this.panelRef?.nativeElement;
+    const id = this.ids[index];
+    if (!panel || id == null) return;
+    requestAnimationFrame(() => {
+      const el = panel.querySelector<HTMLElement>(`.bin-popup-entry[data-entry-id="${id}"]`);
+      if (el) {
+        el.focus({ preventScroll: true });
+      } else if (attempt < 5) {
+        this.focusEntry(index, attempt + 1);
+      }
+    });
   }
 
   /** Index of the viewed item within {@link ids}, falling back to the
@@ -926,8 +951,23 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
   onEntryKeydown(event: KeyboardEvent, id: number): void {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
+      // Stop the bubble so the document-level handler's Space fallback (which
+      // acts on {@link previewId}) doesn't also fire and double-toggle. The
+      // focused entry owns its own activation; the fallback is only for when
+      // nothing in the grid holds focus.
+      event.stopPropagation();
       this.onEntryClick(id);
     }
+  }
+
+  /** DOM focus landed on an entry (arrow-walk, Tab, or click). Keep
+   *  {@link previewId} — hence the preview pane, metadata column, and focus
+   *  ring — in step with it so the highlighted item is always the one Enter /
+   *  Space will act on, regardless of how focus arrived. */
+  onEntryFocus(id: number): void {
+    if (this.previewId === id) return;
+    this.previewId = id;
+    this.cdr.markForCheck();
   }
 
   /** True when the item currently shown in the preview pane is selected, so the
@@ -949,6 +989,10 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
   onPreviewKeydown(event: KeyboardEvent): void {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
+      // As with the grid entries: when the preview pane holds focus it owns its
+      // activation, so stop the bubble to keep the document-level Space fallback
+      // from also firing and cancelling the toggle.
+      event.stopPropagation();
       this.onPreviewClick();
     }
   }
