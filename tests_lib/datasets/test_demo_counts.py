@@ -51,6 +51,16 @@ class TestDemoMediaCounts:
         a = DEMO_MEDIA_COUNTS["caltech101_a"]
         assert s + m + ll == a
 
+    def test_openlogo_recorded_counts(self):
+        # OpenLogo is multi-label and sliced *flat* over the in-vocab image list
+        # (not per-category), so the per-category estimate does not apply and
+        # these measured counts are required. Measured from the source's
+        # samples.json: 11985 images carry >=1 in-vocab brand; (S) is the first
+        # 1/10 of that flat list, floor(11985 * 0.1) == 1198.
+        assert DEMO_MEDIA_COUNTS["openlogo_a"] == 11985
+        assert DEMO_MEDIA_COUNTS["openlogo_s"] == 1198
+        assert DEMO_MEDIA_COUNTS["openlogo_s"] == int(DEMO_MEDIA_COUNTS["openlogo_a"] * (1 / 10))
+
     def test_all_smla_partitions_sum_to_full(self):
         # Every source whose recorded counts include all four S/M/L/A variants
         # slices its categories with the partitioning fractions [0,1/7],

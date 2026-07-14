@@ -37,6 +37,8 @@ a consistency check.
 * ``caltech101_*`` (image) — 412 / 838 / 1704 / 2954
 * ``caltech256_*`` (image) — 534 / 1087 / 2179 / 3800
 * ``eurosat_*`` (image) — 3853 / 7713 / 15434 / 27000
+* ``openlogo_*`` (image) — 1198 (S) / 11985 (A); multi-label, sliced flat over
+  the image list, so S is 1/10 of A rather than a category partition
 * ``oxford_flowers_102_a`` (image) — 8189
 * ``places365_*`` (image) — 5110 / 10220 / 21170 / 36500
 * ``ucsf_documents_a`` (image) — 150 (6 categories × 25 PDFs each)
@@ -94,6 +96,8 @@ DEMO_MEDIA_COUNTS: dict[str, int] = {
     "kth_l": 347,
     "kth_m": 168,
     "kth_s": 84,
+    "openlogo_a": 11985,
+    "openlogo_s": 1198,
     "oxford_flowers_102_a": 8189,
     "places365_a": 36500,
     "places365_l": 21170,
