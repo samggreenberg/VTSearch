@@ -157,9 +157,7 @@ def cosine_sort_with_boxes(
         # stable; region rows and the query are both unit-norm, so the matvec
         # is the cosine similarity of each region against the query.
         flat_sims = (region_matrix @ query_vec).astype(np.float64, copy=False)
-        scores, best_region = segmented_max_pool(
-            flat_sims, media_index_per_row, region_index_per_row, len(all_ids)
-        )
+        scores, best_region = segmented_max_pool(flat_sims, media_index_per_row, region_index_per_row, len(all_ids))
         region_results: list[dict[str, Any]] = []
         for cid, sim, bri in zip(all_ids, scores, best_region, strict=True):
             entry: dict[str, Any] = {"id": cid, "similarity": round(sim, 4)}
