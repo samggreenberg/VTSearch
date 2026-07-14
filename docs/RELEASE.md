@@ -60,15 +60,19 @@ converted to plaintext.
 
 ## 4. Rebuild the punch-card graphic
 
-Refresh the PR-merge data and regenerate the image:
+`scripts/punchcard/punchcard.py` is a **pure renderer**: it reads the
+hand-maintained data file `scripts/punchcard/pr_merges.txt` (one
+`<pr_number>|<merged_at_utc_iso8601>` line per merged PR) and rewrites the PNG.
+It does **not** generate the data file — you refresh that yourself first.
 
-- Update `scripts/punchcard/pr_merges.txt` with the PRs merged since the last
-  release (one `<pr_number>|<merged_at_utc_iso8601>` line each; see the module
-  docstring in `scripts/punchcard/punchcard.py` for how the file is generated
-  from the GitHub API).
+- Append a line for each PR merged into `dev` since the last release. These are
+  the same PRs you enumerate for the release range in step 3 / step 6; take each
+  one's number and its merge timestamp (`merged_at`, UTC ISO 8601) and add
+  `<pr_number>|<merged_at>` to `scripts/punchcard/pr_merges.txt`. The file is
+  sorted-unique by PR number, so keep it that way.
 - Run `python scripts/punchcard/punchcard.py`, which rewrites
   `scripts/punchcard/vtsearch_pr_punchcard.png`.
-- Commit the regenerated PNG (and the updated `pr_merges.txt`).
+- Commit the regenerated PNG and the updated `pr_merges.txt`.
 
 ## 5. Open the release PR
 
