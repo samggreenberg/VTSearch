@@ -29,9 +29,7 @@ deferred. Items are independently shippable.
 
 ## Suggested work order (open items, max-leverage first)
 
-1. **S5** (hash the threshold cache key); trivial, eliminates a fat cache key
-   before it becomes a memory landmine.
-2. **S14** (incremental secondary indexes on `DatasetContext`); removes per-request
+1. **S14** (incremental secondary indexes on `DatasetContext`); removes per-request
    O(N) dict rebuilds; medium refactor.
 3. **S1** (mmap embedding matrix); unblocks 1 M+ datasets without OOM. Also
    decouples embeddings from the pickle, which unblocks S15.
@@ -191,12 +189,6 @@ into the embedding matrix on load (S1), replacing `media["embedding"]` with a
 row-index pointer — ~60–70% smaller per-item dict at 384-dim. The full columnar
 rewrite (per-field NumPy arrays or a Polars frame) is deferred: it touches every
 media-reading call site.
-
----
-
-### S5: threshold cache key contains full training vectors as bytes
-
-- [ ] #2406 — Hash the threshold cache key instead of storing raw training vectors (fix sketch in the issue)
 
 ---
 
@@ -417,7 +409,6 @@ embedder. Shares the S11 approach.
 | **No streaming** for large JSON / pickle payloads | S3, S13, S15 |
 | **Serial I/O** where parallelism is easy | S11, S20 |
 | **No debouncing** on high-frequency write paths | S12 |
-| **Oversized cache keys** containing raw vectors | S5 |
 | **Per-request rebuild** of secondary lookups | S14 |
 
 ---
