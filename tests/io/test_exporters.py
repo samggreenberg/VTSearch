@@ -1151,12 +1151,8 @@ class TestWebhookStreaming:
     def test_empty_run_still_posts_once(self):
         from vtscore.exporters import get_exporter
 
-        def _empty():
-            return
-            yield  # pragma: no cover - makes this a generator
-
         with patch("vtscore.exporters.webhook.requests.post", return_value=self._mock_post()) as mock_post:
-            res = get_exporter("webhook").export_cli_streaming(_STREAM_HEADER, _empty(), {"url": "https://ex.com/hook"})
+            res = get_exporter("webhook").export_cli_streaming(_STREAM_HEADER, iter([]), {"url": "https://ex.com/hook"})
 
         assert mock_post.call_count == 1
         assert mock_post.call_args_list[0].kwargs["json"]["hits"] == []
@@ -1210,14 +1206,10 @@ class TestEmailStreaming:
     def test_empty_run_still_sends_one_email(self):
         from vtscore.exporters import get_exporter
 
-        def _empty():
-            return
-            yield  # pragma: no cover - makes this a generator
-
         server, smtp_p, mx_p = self._patches()
         with smtp_p as smtp, mx_p:
             res = get_exporter("email_smtp").export_cli_streaming(
-                _STREAM_HEADER, _empty(), {"from": "vt@example.com", "to": "user@example.com"}
+                _STREAM_HEADER, iter([]), {"from": "vt@example.com", "to": "user@example.com"}
             )
 
         assert smtp.call_count == 1
