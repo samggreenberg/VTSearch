@@ -1,40 +1,11 @@
 """Video dataset downloaders: UCF-101 subset, UCF-101 full, HMDB51, KTH Actions."""
 
 import shutil
-import subprocess
 from pathlib import Path
 from typing import Optional
 
 from vtscore.datasets.downloader import core as _core
 from vtscore.datasets.downloader.core import ProgressCallback
-
-
-def _extract_rar(rar_path: Path, extract_to: Path) -> None:
-    """Extract a RAR archive using the system ``unrar`` command.
-
-    Raises ``RuntimeError`` with installation instructions when ``unrar``
-    is not found on the system PATH, or if extraction hangs / fails.
-    """
-    extract_to.mkdir(parents=True, exist_ok=True)
-    try:
-        subprocess.run(
-            ["unrar", "x", "-o+", "-y", str(rar_path), str(extract_to) + "/"],
-            check=True,
-            capture_output=True,
-            # Cap at 30 minutes. A malformed RAR could otherwise hang the
-            # loader thread indefinitely.
-            timeout=1800,
-        )
-    except FileNotFoundError:
-        raise RuntimeError(
-            "The 'unrar' command is required to extract HMDB51 but was not found. "
-            "Install it with: apt-get install unrar (Debian/Ubuntu) or "
-            "brew install unrar (macOS)."
-        ) from None
-    except subprocess.TimeoutExpired as e:
-        raise RuntimeError(
-            f"unrar timed out after {e.timeout}s while extracting {rar_path.name}. The archive may be corrupt."
-        ) from None
 
 
 def download_ucf101_subset(on_progress: Optional[ProgressCallback] = None) -> Path:
@@ -109,12 +80,14 @@ def download_ucf101_subset(on_progress: Optional[ProgressCallback] = None) -> Pa
 def download_hmdb51(on_progress: Optional[ProgressCallback] = None) -> Path:
     """Download and extract the HMDB51 dataset.
 
-    Downloads the ~2 GB ``hmdb51_org.rar`` archive from the Serre Lab,
-    extracts the outer RAR (which contains 51 per-category ``.rar`` files),
-    then extracts each inner RAR into its own category subdirectory under
-    ``VIDEO_DIR / "hmdb51"``.
+    Downloads the ~2 GB ``hmdb51.zip`` from a public HuggingFace mirror and
+    extracts it into ``VIDEO_DIR / "hmdb51"`` with one subdirectory per action
+    class of ``.avi`` files.  The archive already carries the canonical
+    ``hmdb51/<category>/*.avi`` tree, so extraction needs no ``unrar`` step.
 
-    Requires the ``unrar`` command to be installed on the system.
+    (The original Serre-Lab ``hmdb51_org.rar`` URL is dead, and the lab's page
+    now offers only Google Drive links that 404, so the loader relies on the
+    HuggingFace mirror — see ``HMDB51_URL``.)
 
     Args:
         on_progress: Optional progress callback.
@@ -133,43 +106,22 @@ def download_hmdb51(on_progress: Optional[ProgressCallback] = None) -> Path:
     if video_dir.exists() and any(video_dir.glob("*/*.avi")):
         return video_dir
 
-    import uuid
+    # The zip's single top-level folder is ``hmdb51/``; extract it under
+    # DATA_DIR then move its category subdirectories into VIDEO_DIR/hmdb51.
+    extract_dir = _core.DATA_DIR / "hmdb51"
+    _core._download_and_extract(
+        url=_core.HMDB51_URL,
+        archive_name="hmdb51.zip",
+        extract_to=_core.DATA_DIR,
+        check_path=extract_dir,
+        download_size_mb=_core.HMDB51_DOWNLOAD_SIZE_MB,
+        dataset_name="HMDB51",
+        on_progress=on_progress,
+    )
 
-    unique_id = uuid.uuid4().hex[:8]
-    archive_path = _core.DATA_DIR / f".dl_{unique_id}_hmdb51_org.rar"
-    staging_dir = _core.DATA_DIR / f".extract_{unique_id}_hmdb51"
-    _core.DATA_DIR.mkdir(exist_ok=True, parents=True)
-
-    try:
-        on_progress("downloading", "Starting HMDB51 download...", 0, 0)
-        _core.download_file_with_progress(
-            _core.HMDB51_URL,
-            archive_path,
-            _core.HMDB51_DOWNLOAD_SIZE_MB * 1024 * 1024,
-            on_progress,
-        )
-
-        if video_dir.exists() and any(video_dir.glob("*/*.avi")):
-            return video_dir
-
-        # Extract outer RAR → 51 per-category .rar files.
-        on_progress("downloading", "Extracting HMDB51 (outer archive)...", 0, 0)
-        _extract_rar(archive_path, staging_dir)
-
-        # Extract each inner .rar into a category subdirectory.
-        inner_rars = sorted(staging_dir.glob("*.rar"))
-        total_rars = len(inner_rars)
-        video_dir.mkdir(parents=True, exist_ok=True)
-
-        for i, rar_file in enumerate(inner_rars):
-            cat_name = rar_file.stem  # e.g. "brush_hair"
-            on_progress("downloading", f"Extracting HMDB51 ({cat_name})...", i + 1, total_rars)
-            cat_dir = video_dir / cat_name
-            _extract_rar(rar_file, cat_dir)
-    finally:
-        archive_path.unlink(missing_ok=True)
-        if staging_dir.exists():
-            shutil.rmtree(staging_dir, ignore_errors=True)
+    video_dir.mkdir(parents=True, exist_ok=True)
+    _core._move_tree_contents(extract_dir, video_dir)
+    shutil.rmtree(extract_dir, ignore_errors=True)
 
     return video_dir
 

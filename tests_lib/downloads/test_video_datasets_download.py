@@ -14,7 +14,15 @@ import numpy as np
 
 
 class TestDownloadHmdb51:
-    """Verify download_hmdb51 downloads, extracts nested RARs, and organises."""
+    """Verify download_hmdb51 downloads the zip, extracts, and organises."""
+
+    def _make_hmdb51_zip(self, zip_path: Path) -> None:
+        """Create a minimal hmdb51.zip with the canonical hmdb51/<cat>/ tree."""
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            for cat in ("brush_hair", "cartwheel", "catch"):
+                for i in range(3):
+                    fname = f"hmdb51/{cat}/{cat}_video_{i}.avi"
+                    zf.writestr(fname, b"RIFF" + b"\x00" * 20 + b"AVI ")
 
     def test_extracts_into_category_dirs(self, tmp_path):
         """download_hmdb51 should create per-category dirs with .avi files."""
@@ -23,33 +31,16 @@ class TestDownloadHmdb51:
         data_dir = tmp_path / "data"
         data_dir.mkdir()
         video_dir = data_dir / "video"
-
-        # Simulate what _extract_rar does: create category dirs with .avi files.
-        call_log = []
-
-        def fake_extract_rar(rar_path, extract_to):
-            call_log.append(rar_path.name)
-            if "hmdb51_org" in rar_path.name:
-                # Outer RAR: create inner .rar stubs
-                extract_to.mkdir(parents=True, exist_ok=True)
-                for cat in ("brush_hair", "cartwheel", "catch"):
-                    (extract_to / f"{cat}.rar").write_bytes(b"Rar!")
-            else:
-                # Inner RAR: create .avi files in the target dir
-                extract_to.mkdir(parents=True, exist_ok=True)
-                cat = rar_path.stem
-                for i in range(3):
-                    (extract_to / f"{cat}_video_{i}.avi").write_bytes(b"RIFF" + b"\x00" * 20 + b"AVI ")
+        zip_path = tmp_path / "hmdb51.zip"
+        self._make_hmdb51_zip(zip_path)
 
         with (
             patch.object(vid_module._core, "DATA_DIR", data_dir),
             patch.object(vid_module._core, "VIDEO_DIR", video_dir),
-            patch.object(
-                vid_module._core,
-                "download_file_with_progress",
-                lambda url, dest, size, cb: dest.write_bytes(b"Rar!"),
+            patch(
+                "vtscore.datasets.downloader.core.download_file_with_progress",
+                lambda url, dest, size, cb: shutil.copy(str(zip_path), str(dest)),
             ),
-            patch.object(vid_module, "_extract_rar", fake_extract_rar),
         ):
             result = vid_module.download_hmdb51(on_progress=lambda *a: None)
 
@@ -59,6 +50,30 @@ class TestDownloadHmdb51:
         assert (result / "cartwheel").is_dir()
         assert (result / "catch").is_dir()
         assert len(list((result / "brush_hair").glob("*.avi"))) == 3
+
+    def test_staging_dir_cleaned_up(self, tmp_path):
+        """The DATA_DIR/hmdb51 staging directory is removed after moving."""
+        from vtscore.datasets.downloader import video as vid_module
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        video_dir = data_dir / "video"
+        zip_path = tmp_path / "hmdb51.zip"
+        self._make_hmdb51_zip(zip_path)
+
+        with (
+            patch.object(vid_module._core, "DATA_DIR", data_dir),
+            patch.object(vid_module._core, "VIDEO_DIR", video_dir),
+            patch(
+                "vtscore.datasets.downloader.core.download_file_with_progress",
+                lambda url, dest, size, cb: shutil.copy(str(zip_path), str(dest)),
+            ),
+        ):
+            vid_module.download_hmdb51(on_progress=lambda *a: None)
+
+        assert not (data_dir / "hmdb51").exists(), "Staging directory should be removed after moving"
+        leftover_dl = [p for p in data_dir.iterdir() if p.name.startswith(".dl_")]
+        assert not leftover_dl, f"Temp archive files should be cleaned up: {leftover_dl}"
 
     def test_skips_if_already_present(self, tmp_path):
         """If hmdb51/ already has videos, skip download entirely."""
@@ -75,9 +90,8 @@ class TestDownloadHmdb51:
         with (
             patch.object(vid_module._core, "DATA_DIR", data_dir),
             patch.object(vid_module._core, "VIDEO_DIR", video_dir),
-            patch.object(
-                vid_module._core,
-                "download_file_with_progress",
+            patch(
+                "vtscore.datasets.downloader.core.download_file_with_progress",
                 lambda *a, **kw: download_called.append(True),
             ),
         ):
@@ -85,64 +99,6 @@ class TestDownloadHmdb51:
 
         assert not download_called, "download should be skipped when cache exists"
         assert result.exists()
-
-    def test_temp_files_cleaned_up(self, tmp_path):
-        """Temp archive and staging dir should be removed after extraction."""
-        from vtscore.datasets.downloader import video as vid_module
-
-        data_dir = tmp_path / "data"
-        data_dir.mkdir()
-        video_dir = data_dir / "video"
-
-        def fake_extract_rar(rar_path, extract_to):
-            extract_to.mkdir(parents=True, exist_ok=True)
-            if rar_path.name.startswith(".dl_"):
-                # Treat as outer
-                for cat in ("run",):
-                    (extract_to / f"{cat}.rar").write_bytes(b"Rar!")
-            elif rar_path.suffix == ".rar" and not rar_path.name.startswith(".dl_"):
-                # Treat as outer if in staging, inner otherwise
-                if "hmdb51_org" in rar_path.name:
-                    for cat in ("run",):
-                        (extract_to / f"{cat}.rar").write_bytes(b"Rar!")
-                else:
-                    cat = rar_path.stem
-                    (extract_to / f"{cat}_v1.avi").write_bytes(b"RIFF" + b"\x00" * 20 + b"AVI ")
-
-        with (
-            patch.object(vid_module._core, "DATA_DIR", data_dir),
-            patch.object(vid_module._core, "VIDEO_DIR", video_dir),
-            patch.object(
-                vid_module._core,
-                "download_file_with_progress",
-                lambda url, dest, size, cb: dest.write_bytes(b"Rar!"),
-            ),
-            patch.object(vid_module, "_extract_rar", fake_extract_rar),
-        ):
-            vid_module.download_hmdb51(on_progress=lambda *a: None)
-
-        # No temp download files should remain in data_dir.
-        leftover_dl = [p for p in data_dir.iterdir() if p.name.startswith(".dl_")]
-        assert not leftover_dl, f"Temp archive files should be cleaned up: {leftover_dl}"
-        leftover_ex = [p for p in data_dir.iterdir() if p.name.startswith(".extract_")]
-        assert not leftover_ex, f"Temp staging dirs should be cleaned up: {leftover_ex}"
-
-
-class TestExtractRar:
-    """Unit tests for the _extract_rar helper."""
-
-    def test_raises_when_unrar_missing(self, tmp_path):
-        """_extract_rar raises RuntimeError with install instructions when unrar is absent."""
-        import pytest
-
-        from vtscore.datasets.downloader.video import _extract_rar
-
-        rar_file = tmp_path / "test.rar"
-        rar_file.write_bytes(b"Rar!")
-
-        with patch("subprocess.run", side_effect=FileNotFoundError("unrar")):
-            with pytest.raises(RuntimeError, match="unrar"):
-                _extract_rar(rar_file, tmp_path / "out")
 
 
 # ---------------------------------------------------------------------------
