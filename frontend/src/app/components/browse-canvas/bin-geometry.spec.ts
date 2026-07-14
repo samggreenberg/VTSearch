@@ -170,12 +170,12 @@ describe('bin-geometry', () => {
     });
 
     it('honours the geometry shape for the contains check', () => {
-      // A point that is inside a square cell but outside the hex circle of the
-      // same radius: at (r·0.7, r·0.7) with r=5 → dist²=49.0 > 25 (outside hex),
-      // but |x|,|y| = 3.5 < half-side 4.33 (inside square).
+      // A point inside a square cell but outside the hex circle of the same
+      // radius: at (4, 4) with r=5 → dist²=32 > 25 (outside the hex circle), but
+      // |x|,|y| = 4 < half-side 4.33 (inside the square).
       const one = [{ cx: 0, cy: 0, id: 'a' }];
-      expect(pickCell(one, 3.5, 3.5, hex, 5)).toBeNull();
-      expect(pickCell(one, 3.5, 3.5, square, 5)?.id).toBe('a');
+      expect(pickCell(one, 4, 4, hex, 5)).toBeNull();
+      expect(pickCell(one, 4, 4, square, 5)?.id).toBe('a');
     });
   });
 
