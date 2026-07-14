@@ -1014,6 +1014,78 @@ class TestPersistedLabelRestore:
         body = self._serve(client, monkeypatch, tmp_path, stored_id="some-old-layout", stored_sig="sig-v1")
         assert body["labels"] == []
 
+    def test_stale_signature_kicks_background_relabel(self, client, monkeypatch, tmp_path):
+        # A persisted set whose signature no longer matches the active pipeline
+        # is served absent, but a background rebuild is kicked so the signs
+        # self-heal to the active labeler without a forced Re-project (#2404).
+        import threading
+
+        from vtscore.concurrency.async_jobs import signpost_relabel_jobs
+        from vtscore.projection import RegionLabel, make_label_set
+
+        ctx = get_active_context()
+        rebuilt = make_label_set(
+            "live-layout",
+            [RegionLabel(level=0, x=0.0, y=0.0, text="rebuilt sign", score=0.5, source="keyphrase")],
+        )
+
+        started = threading.Event()
+        proceed = threading.Event()
+
+        def _fake_prep(c, proj, *, subset, on_progress=None):
+            # Block until the test has observed the interim (unlettered) serve,
+            # then install the rebuilt signs exactly as the real pipeline does.
+            started.set()
+            assert proceed.wait(timeout=5)
+            c._region_labels = rebuilt
+            return rebuilt
+
+        monkeypatch.setattr("vtscore.projection.signpost_prep.prep_signposts", _fake_prep)
+
+        # First serve: stale set detected → absent now, rebuild kicked.
+        body = self._serve(
+            client, monkeypatch, tmp_path, stored_id="live-layout", stored_sig="sig-old", active_sig="sig-new"
+        )
+        assert body["labels"] == []
+        job_id = ctx._relabel_job_id
+        assert job_id
+        assert started.wait(timeout=5)
+
+        # A second poll while the rebuild is in flight coalesces onto the same
+        # job instead of queueing another.
+        assert client.get("/api/projection/labels").get_json()["labels"] == []
+        assert ctx._relabel_job_id == job_id
+        assert len(signpost_relabel_jobs.active_jobs()) == 1
+
+        # Let the rebuild finish; the signs self-heal on the next serve.
+        proceed.set()
+        job = signpost_relabel_jobs.get(job_id)
+        assert job is not None
+        assert job.done_event.wait(timeout=10)
+
+        body = client.get("/api/projection/labels").get_json()
+        assert [lab["text"] for lab in body["labels"]] == ["rebuilt sign"]
+        assert client.get("/api/projection/meta").get_json()["has_labels"] is True
+
+    def test_relabel_not_kicked_without_projection(self, client, monkeypatch, tmp_path):
+        # The kick needs the frozen layout in hand; a stale set with no live
+        # projection just serves absent (no crash, no job).
+        from vtscore.concurrency.async_jobs import signpost_relabel_jobs
+
+        ctx = get_active_context()
+        pkl = self._persist(tmp_path, "live-layout", "sig-old")
+        monkeypatch.setattr("vtsearch.routes.projection._pkl_path_for", lambda dataset_id: str(pkl))
+        monkeypatch.setattr("vtscore.projection.signpost_prep.labeler_signature", lambda ctx: "sig-new")
+
+        proj, pyr = TestProjectionLabels._build_hex_pyramid("live-layout")
+        ctx._pyramids = {"hex": pyr}
+        ctx._projection = None  # layout not resolved into the context
+
+        body = client.get("/api/projection/labels").get_json()
+        assert body["labels"] == []
+        assert ctx._relabel_job_id is None
+        assert signpost_relabel_jobs.active_jobs() == []
+
 
 class TestDemoSignpostsLazyBuild:
     """Ground-truth signposts derived on demand from hierarchical categories.

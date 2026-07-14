@@ -472,6 +472,16 @@ labeling_status_jobs = JobManager("labeling-status")
 #: Background runner for ``/api/projection/build`` (VTSBrowse UMAP + pyramid).
 projection_jobs = JobManager("projection")
 
+#: Background runner that rebuilds a persisted signpost label set whose
+#: ``labeler_signature`` no longer matches the active pipeline (issue #2404).
+#: Kicked from the projection serve path when it detects the mismatch, so stale
+#: signs self-heal without a forced Re-project.  Kept on its own single slot so
+#: a self-heal never queues behind (or delays) a user-visible UMAP build in
+#: ``projection_jobs``.  Like ``labeling_status_jobs`` it is an internal
+#: refresh, not a user-visible training job, so it is intentionally absent from
+#: ``JOB_MANAGERS`` below (no ``/api/jobs/active`` spinner).
+signpost_relabel_jobs = JobManager("signpost-relabel")
+
 #: Logical name → :class:`JobManager` lookup used by ``/api/jobs/active`` to
 #: enumerate which (dataset_id, detector_id) pairs currently have background
 #: work in flight. The string keys are the public job-type names exposed in
@@ -510,6 +520,7 @@ def reset_all_async_jobs_for_tests() -> None:
     """Reset every singleton job manager.  Called from the autouse fixture."""
     for mgr in JOB_MANAGERS.values():
         mgr.reset_for_tests()
-    # Not in ``JOB_MANAGERS`` (it is deliberately hidden from
-    # ``/api/jobs/active``), so reset it explicitly for test isolation.
+    # Not in ``JOB_MANAGERS`` (they are deliberately hidden from
+    # ``/api/jobs/active``), so reset them explicitly for test isolation.
     labeling_status_jobs.reset_for_tests()
+    signpost_relabel_jobs.reset_for_tests()
