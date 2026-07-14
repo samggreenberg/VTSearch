@@ -30,7 +30,6 @@ import {
 import {
   DEFAULT_THUMBNAIL_BORDER,
   MAX_THUMBNAIL_BORDER,
-  usesThumbnails,
 } from '../../browse-canvas/hex-render.util';
 
 @Component({
@@ -385,10 +384,11 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   /**
    * True when *typeId* paints cells with thumbnails (image/video). These types
    * are pinned to grayscale, so the colormap picker is hidden for them and the
-   * UI shows a fixed read-only value instead.
+   * UI shows a fixed read-only value instead. Data-driven from the served
+   * ``has_thumbnail`` field on the media types this modal already loaded.
    */
   browseTabUsesThumbnails(typeId: string): boolean {
-    return usesThumbnails(typeId);
+    return this.mediaTypes().some((mt) => mt.type_id === typeId && mt.has_thumbnail === true);
   }
 
   getBrowseIconSize(typeId: string): string {

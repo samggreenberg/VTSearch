@@ -6,6 +6,7 @@ import { BrowseSelectionService } from '../../services/browse-selection.service'
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
 import { NoFocusStealDirective } from '../../directives/no-focus-steal.directive';
 import { IconComponent } from '../icon/icon.component';
@@ -57,6 +58,7 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   private metadataCache = inject(MediaMetadataCacheService);
   private activeContext = inject(ActiveContextService);
   private settingsState = inject(SettingsStateService);
+  private mediaTypeCaps = inject(MediaTypeCapabilityService);
 
   /** Active media type, used to resolve the per-type view-mode + size prefs. */
   readonly mediaType = input('');
@@ -357,13 +359,7 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
     const url = this.thumbnailUrl(id);
     if (url && this.thumbnailFailedUrls.has(url)) return false;
     const media = this.metadataCache.get(id);
-    return (
-      !!media &&
-      (media.media_type === 'image' ||
-        media.media_type === 'video' ||
-        media.media_type === 'document' ||
-        media.media_type === 'audio')
-    );
+    return !!media && this.mediaTypeCaps.usesThumbnails(media.media_type);
   }
 
   thumbnailUrl(id: number): string {

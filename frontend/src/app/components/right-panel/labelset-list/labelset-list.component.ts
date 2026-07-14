@@ -3,7 +3,8 @@ import { CommonModule } from '@angular/common';
 import type { DetectorLabelView } from '../../../generated/api-client/models/detector-label-view';
 import { LabelSortMode } from '../label-sort/label-sort.component';
 import { DetectorsCrudApiService } from '../../../services/detectors-crud-api.service';
-import { THUMBNAIL_MEDIA_TYPES, VoteGridComponent, VoteGridEntry } from '../vote-grid/vote-grid.component';
+import { MediaTypeCapabilityService } from '../../../services/media-type-capability.service';
+import { VoteGridComponent, VoteGridEntry } from '../vote-grid/vote-grid.component';
 
 interface SortedElement extends DetectorLabelView, VoteGridEntry {
   confidence: number;
@@ -19,6 +20,7 @@ interface SortedElement extends DetectorLabelView, VoteGridEntry {
 })
 export class LabelsetListComponent implements OnChanges {
   private detectorsCrudApi = inject(DetectorsCrudApiService);
+  private mediaTypeCaps = inject(MediaTypeCapabilityService);
 
   readonly label = input<'good' | 'bad'>('good');
   readonly elements = input<DetectorLabelView[]>([]);
@@ -55,7 +57,7 @@ export class LabelsetListComponent implements OnChanges {
 
   private buildThumbnailUrl(entry: DetectorLabelView): string {
     const modelName = this.modelName();
-    if (!modelName || !THUMBNAIL_MEDIA_TYPES.has(entry.media_type)) return '';
+    if (!modelName || !this.mediaTypeCaps.usesThumbnails(entry.media_type)) return '';
     let url = this.detectorsCrudApi.labelThumbnailUrl(modelName, entry.id);
     // The route crops to the element's stored region box server-side; fold the
     // box into the URL so a re-vote with a different box busts the cached tile

@@ -389,6 +389,7 @@ describe('BrowseBinPopupComponent (keyboard focus sync)', () => {
     cdr: { markForCheck: () => void };
     panelRef?: { nativeElement: { querySelector: (sel: string) => HTMLElement | null } };
     mediaType: () => string;
+    mediaTypeCaps: { usesThumbnails: (t: string) => boolean };
     scrollRowIntoView: (index: number) => void;
     selection: { has: (id: number) => boolean; addAll: (ids: number[]) => void; remove: (id: number) => void };
     moveFocus(dCol: number, dRow: number): void;
@@ -403,6 +404,7 @@ describe('BrowseBinPopupComponent (keyboard focus sync)', () => {
     state.cdr = { markForCheck: vi.fn() };
     // Non-thumbnail media so `previewOnly` is false and the grid path is live.
     state.mediaType = () => 'text';
+    state.mediaTypeCaps = { usesThumbnails: (t: string) => t !== 'text' };
     state.scrollRowIntoView = vi.fn();
     state.selection = { has: () => false, addAll: vi.fn(), remove: vi.fn() };
     return { component, state };

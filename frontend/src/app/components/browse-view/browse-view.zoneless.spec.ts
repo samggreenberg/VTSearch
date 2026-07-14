@@ -12,6 +12,7 @@ import { DetectorsRegistryApiService } from '../../services/detectors-registry-a
 import { SettingsStateService } from '../../services/settings-state.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { MediasApiService } from '../../services/medias-api.service';
+import { DatasetsListingsApiService } from '../../services/datasets-listings-api.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { ToastService } from '../../services/toast.service';
 import type { ProjectionMeta } from '../../models/projection.models';
@@ -95,6 +96,24 @@ describe('BrowseViewComponent (zoneless canary)', () => {
         { provide: SettingsStateService, useValue: settingsStub },
         { provide: BrowseSubsetService, useValue: subsetStub },
         { provide: MediasApiService, useValue: mediasStub },
+        // ngOnInit calls MediaTypeCapabilityService.ensureLoaded(), which lazily
+        // resolves this service to fetch the thumbnail-type registry. The canary
+        // DS is audio, so the served set must mark audio as thumbnail-backed.
+        {
+          provide: DatasetsListingsApiService,
+          useValue: {
+            getMediaTypes: () =>
+              of({
+                media_types: [
+                  { type_id: 'image', name: 'Image', has_thumbnail: true },
+                  { type_id: 'video', name: 'Video', has_thumbnail: true },
+                  { type_id: 'document', name: 'Document', has_thumbnail: true },
+                  { type_id: 'audio', name: 'Audio', has_thumbnail: true },
+                  { type_id: 'text', name: 'Text', has_thumbnail: false },
+                ],
+              }),
+          },
+        },
         { provide: VtDialogService, useValue: {} },
         { provide: ToastService, useValue: { error: () => {}, success: () => {} } },
         { provide: ActivatedRoute, useValue: routeStub },

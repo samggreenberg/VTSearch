@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, Input, input, OnChanges, ou
 import { CommonModule } from '@angular/common';
 import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
+import { MediaTypeCapabilityService } from '../../../services/media-type-capability.service';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -13,6 +14,7 @@ import { ActiveContextService } from '../../../services/active-context.service';
 })
 export class MediaItemComponent implements OnChanges {
   private activeContext = inject(ActiveContextService);
+  private mediaTypeCaps = inject(MediaTypeCapabilityService);
 
   @Input({ required: true }) media!: Media;
   @Input() active = false;
@@ -43,7 +45,7 @@ export class MediaItemComponent implements OnChanges {
 
   get thumbnailUrl(): string | null {
     if (this.thumbnailFailed) return null;
-    if (this.media.media_type === 'image' || this.media.media_type === 'video' || this.media.media_type === 'document' || this.media.media_type === 'audio') {
+    if (this.mediaTypeCaps.usesThumbnails(this.media.media_type)) {
       // Use the downscaled thumbnail endpoint, not the full-resolution
       // ``/image`` route: a grid of hundreds of high-res items would otherwise
       // force the browser to decode every full-size bitmap at once and exhaust

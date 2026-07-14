@@ -4,6 +4,7 @@ import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { BrowseViewportService } from '../../services/browse-viewport.service';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
+import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import {
   densityColor,
   resolveColormap,
@@ -11,7 +12,6 @@ import {
   type BrowseColormapId,
   type CanvasTheme,
   type ResolvedColormap,
-  usesThumbnails,
 } from './hex-render.util';
 import { binGeometry, BinGeometry, hoverThumbHalfExtents, pickCell } from './bin-geometry';
 import {
@@ -85,6 +85,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private activeContext = inject(ActiveContextService);
   private viewport = inject(BrowseViewportService);
   private selection = inject(BrowseSelectionService);
+  private mediaTypeCaps = inject(MediaTypeCapabilityService);
 
   @ViewChild('canvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
   readonly meta = input<ProjectionMeta | null>(null);
@@ -496,7 +497,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   /** True when cells should be painted with the central item's thumbnail. */
   private get thumbnailMode(): boolean {
-    return usesThumbnails(this.mediaType());
+    return this.mediaTypeCaps.usesThumbnails(this.mediaType());
   }
 
   /** At the largest zoom levels a cell is drawn wider (in device px) than the
