@@ -228,9 +228,7 @@ class TestRunPropagatesSpecValueError:
             def fetch_source_media(self, spec, field_values, thin=False):
                 yield {"filename": "unreached.png", "media_bytes": b"X"}
 
-        source_specs = json.dumps(
-            [{"source_type": "video", "converter": "no_such_converter", "params": {}}]
-        )
+        source_specs = json.dumps([{"source_type": "video", "converter": "no_such_converter", "params": {}}])
         with pytest.raises(ValueError, match="Unknown converter"):
             _SpecOnly().run({"media_type": "image", "source_specs": source_specs}, {})
 
