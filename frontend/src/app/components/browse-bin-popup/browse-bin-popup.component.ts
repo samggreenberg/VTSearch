@@ -428,6 +428,13 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
     return usesThumbnails(this.mediaType());
   }
 
+  /** True when this popup's thumbnails are audio waveforms: theme-agnostic
+   *  alpha-mask PNGs (issue #2369) rendered as a CSS mask over the accent
+   *  colour rather than a plain <img>, so they recolour with the live theme. */
+  get isAudioWaveform(): boolean {
+    return this.mediaType() === 'audio';
+  }
+
   // --- Metadata column ------------------------------------------------------
   // A column carrying the same fields the Train/Find center panel shows for the
   // focused item (name, media type, custom metadata, MD5). For thumbnail media

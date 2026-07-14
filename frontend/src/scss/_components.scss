@@ -875,3 +875,18 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 .icon-waggle {
   animation: icon-waggle 2s ease-in-out infinite;
 }
+
+// Theme-agnostic waveform tint (issue #2369). Audio waveform thumbnails are
+// alpha-mask PNGs — a transparent image whose only opaque pixels are the wave —
+// so they carry no baked-in colour and can be tinted to any theme at render
+// time. ``.waveform-mask`` paints the accent colour and masks it to the wave
+// shape; the ``mask-image`` URL is set per-instance via a style binding, and
+// callers set the box size, ``mask-size`` (fill / contain / cover, matching the
+// ``object-fit`` the raw <img> used), and any surface background behind it.
+.waveform-mask {
+  background: var(--accent);
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+}

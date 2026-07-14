@@ -85,17 +85,29 @@
   gap: var(--space-xs);
 }
 
-// The waveform PNG of whatever clip is currently auditioning; the same
-// thumbnail painted on its tile, stretched wide (time on X) to read at a
-// glance as "this is what's making noise".
+// The waveform of whatever clip is currently auditioning; the same shape
+// painted on its tile, stretched wide (time on X) to read at a glance as
+// "this is what's making noise". The PNG is a theme-agnostic alpha mask
+// (issue #2369): the box is the themed surface (matching the browse tile) and
+// the inner fill masks the accent colour to the wave shape, so it recolours
+// with the live theme instead of showing baked-in pixels.
 .browse-now-playing-wave {
-  display: block;
   width: 120px;
   height: 36px;
-  object-fit: fill;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--bg-surface);
+  overflow: hidden;
+}
+
+// Tinted wave; the shared ``.waveform-mask`` supplies the accent fill and mask
+// repeat/position. Here we only stretch it to fill the box (time on X),
+// mirroring the old ``object-fit: fill`` of the raw <img>.
+.browse-now-playing-wave-fill {
+  width: 100%;
+  height: 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-size: 100% 100%;
 }
 
 // Ready-state layout: the canvas region, a draggable divider, and the docked

@@ -112,11 +112,22 @@
         (click)="onPreviewClick()"
         (keydown)="onPreviewKeydown($event)">
         @if (previewUrl()) {
-          <img
-            class="bin-popup-preview-img"
-            [src]="previewUrl()"
-            [alt]="previewId != null ? name(previewId) : ''"
-            (error)="onPreviewError()" />
+          @if (isAudioWaveform) {
+            <!-- Audio waveform: tint the theme-agnostic alpha mask (issue #2369)
+                 instead of showing baked-in pixels. -->
+            <div
+              class="bin-popup-preview-wave waveform-mask"
+              role="img"
+              [attr.aria-label]="previewId != null ? name(previewId) : ''"
+              [style.-webkit-mask-image]="'url(' + previewUrl() + ')'"
+              [style.mask-image]="'url(' + previewUrl() + ')'"></div>
+          } @else {
+            <img
+              class="bin-popup-preview-img"
+              [src]="previewUrl()"
+              [alt]="previewId != null ? name(previewId) : ''"
+              (error)="onPreviewError()" />
+          }
         }
       </div>
     }
@@ -171,12 +182,20 @@
               (mouseenter)="onEntryEnter(id)">
               @if (hasThumbnailUrl(id)) {
                 <span class="bin-popup-thumb-wrap">
-                  <img
-                    class="bin-popup-thumb"
-                    [src]="thumbnailUrl(id)"
-                    [alt]="name(id)"
-                    loading="lazy"
-                    (error)="onThumbnailError(thumbnailUrl(id))" />
+                  @if (isAudioWaveform) {
+                    <!-- Audio waveform alpha mask tinted to the accent (issue #2369). -->
+                    <span
+                      class="bin-popup-thumb-wave waveform-mask"
+                      [style.-webkit-mask-image]="'url(' + thumbnailUrl(id) + ')'"
+                      [style.mask-image]="'url(' + thumbnailUrl(id) + ')'"></span>
+                  } @else {
+                    <img
+                      class="bin-popup-thumb"
+                      [src]="thumbnailUrl(id)"
+                      [alt]="name(id)"
+                      loading="lazy"
+                      (error)="onThumbnailError(thumbnailUrl(id))" />
+                  }
                 </span>
               } @else {
                 <span class="bin-popup-placeholder">{{ placeholderIcon(id) }}</span>

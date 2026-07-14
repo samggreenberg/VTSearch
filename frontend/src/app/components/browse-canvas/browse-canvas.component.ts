@@ -193,6 +193,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   /** Media ids whose thumbnail failed to load, so we don't retry every frame. */
   private thumbFailed = new Set<number>();
   private readonly MAX_THUMBS = 2048;
+  /** Audio waveform thumbnails are theme-agnostic alpha masks (issue #2369);
+   *  this caches each one tinted to the current theme's accent colour so the
+   *  {@link ImageBitmap}-style ``source-in`` fill runs once per (clip, theme),
+   *  not per frame. Cleared whenever the raw {@link thumbCache} is (dataset /
+   *  level switch) and — via {@link retintWaveforms} — on a theme flip. */
+  private tintedThumbCache = new Map<number, HTMLCanvasElement>();
   /** Resolution tier the {@link thumbCache} is currently filled at. Flips to
    * ``true`` once the zoom is large enough that {@link getThumb} fetches the
    * full-res ``/image`` instead of the capped ``/thumbnail``; crossing the
@@ -330,6 +336,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   // Accent colour resolved from the live theme once per frame, used for the
   // selection rings and the marquee rectangle.
   private selAccent = '#4f9dff';
+
+  // Waveform tint colours resolved from the live theme once per frame. Audio
+  // datasets paint each tile as a themed surface (``waveSurface``) with the
+  // wave masked in the accent (``waveAccent``); see {@link drawCell} and
+  // issue #2369. ``waveformTint`` is the per-frame "this dataset is audio" flag.
+  private waveformTint = false;
+  private waveAccent = '#4f9dff';
+  private waveSurface = '#1a1d27';
 
   private hoveredCell: HexCellPayload | null = null;
   /**
@@ -502,6 +516,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.thumbsAreFullRes = this.useFullResThumbs;
     this.thumbCache.clear();
     this.thumbFailed.clear();
+    this.tintedThumbCache.clear();
   }
 
   /** Geometry (hex or square) for the active projection's bin shape. */
@@ -552,7 +567,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       this.ngZone.runOutsideAngular(() => this.resize());
     });
 
-    this.themeObserver = new MutationObserver(() => this.requestRedraw());
+    this.themeObserver = new MutationObserver(() => {
+      // A theme flip changes the accent the waveform masks are tinted with, so
+      // drop the tinted cache (issue #2369); each visible wave re-tints on the
+      // redraw below. The raw mask cache is untouched — the masks are
+      // theme-agnostic, so nothing needs re-fetching.
+      this.tintedThumbCache.clear();
+      this.requestRedraw();
+    });
     this.themeObserver.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['data-theme'],
@@ -591,6 +613,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
         this.framedByUser = false;
         this.thumbCache.clear();
         this.thumbFailed.clear();
+        this.tintedThumbCache.clear();
         // A new projection (media-type switch / rebuild) re-lays-out every item,
         // so the old selection no longer maps to what's on screen — drop it. A
         // bin-shape toggle keeps the same projection id and selection, since the
@@ -661,6 +684,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     document.removeEventListener('mouseup', this.boundMouseUp);
     this.thumbCache.clear();
     this.thumbFailed.clear();
+    this.tintedThumbCache.clear();
   }
 
   private resize(): void {
@@ -1252,6 +1276,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const cmap = resolveColormap(this.colormap(), this.effectiveTheme());
     // Accent for selection rings + marquee, also resolved once per frame.
     this.selAccent = this.themeColor('--accent') || '#4f9dff';
+    // Waveform tint colours (audio only), likewise resolved once per frame; the
+    // tinted-mask cache is rebuilt against these on a theme flip.
+    this.waveformTint = this.mediaType() === 'audio';
+    if (this.waveformTint) {
+      this.waveAccent = this.themeColor('--accent') || '#4f9dff';
+      this.waveSurface = this.themeColor('--bg-surface') || '#1a1d27';
+    }
     const selectionActive = this.selection.size > 0;
 
     // The enlarged cell is deferred and redrawn last (on top of its neighbours)
@@ -1500,7 +1531,20 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (thumb) {
       ctx.save();
       ctx.clip();
-      if (trim) {
+      if (this.waveformTint) {
+        // Audio: the thumbnail is a theme-agnostic alpha mask (issue #2369).
+        // Fill the cell with the themed surface, then paint the wave tinted to
+        // the accent colour — so the tile matches dark / light / highviz and
+        // recolours on a theme flip instead of showing baked-in pixels.
+        ctx.fillStyle = this.waveSurface;
+        ctx.fill();
+        const tinted = this.getTintedThumb(cell.rep_id, thumb);
+        if (trim) {
+          ctx.drawImage(tinted, cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2);
+        } else {
+          this.drawImageCover(ctx, tinted, cx, cy, radius);
+        }
+      } else if (trim) {
         ctx.drawImage(thumb, cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2);
       } else {
         this.drawImageCover(ctx, thumb, cx, cy, radius);
@@ -1627,18 +1671,23 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     ctx.closePath();
   }
 
-  /** Cover-fit an image over the hex's 2*radius square (the path must be clipped). */
+  /** Cover-fit an image over the hex's 2*radius square (the path must be clipped).
+   *  Accepts a tinted waveform canvas (issue #2369) as well as a raw image; a
+   *  canvas exposes its intrinsic size as ``width``/``height`` rather than
+   *  ``naturalWidth``/``naturalHeight``. */
   private drawImageCover(
     ctx: CanvasRenderingContext2D,
-    img: HTMLImageElement,
+    img: HTMLImageElement | HTMLCanvasElement,
     cx: number,
     cy: number,
     radius: number,
   ): void {
+    const iw = img instanceof HTMLCanvasElement ? img.width : img.naturalWidth;
+    const ih = img instanceof HTMLCanvasElement ? img.height : img.naturalHeight;
     const size = radius * 2;
-    const scale = Math.max(size / img.naturalWidth, size / img.naturalHeight);
-    const dw = img.naturalWidth * scale;
-    const dh = img.naturalHeight * scale;
+    const scale = Math.max(size / iw, size / ih);
+    const dw = iw * scale;
+    const dh = ih * scale;
     ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
   }
 
@@ -1726,7 +1775,41 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     for (const key of this.thumbCache.keys()) {
       if (i++ >= toRemove) break;
       this.thumbCache.delete(key);
+      // Drop the matching tinted mask (issue #2369) so it can't outlive its
+      // raw source and leak; it re-tints on demand if the clip is revisited.
+      this.tintedThumbCache.delete(key);
     }
+  }
+
+  /**
+   * Return the audio waveform thumbnail tinted to the live theme's accent
+   * colour, built once per (clip, theme) and cached (issue #2369).
+   *
+   * The raw thumbnail is a theme-agnostic alpha mask — a transparent PNG whose
+   * only opaque pixels are the wave. Painting it to an offscreen canvas and
+   * compositing the accent through ``source-in`` recolours just the wave,
+   * leaving the background transparent so the tile's themed surface (filled by
+   * the caller) shows through. The tinted cache is cleared on a theme flip and
+   * whenever the raw {@link thumbCache} is, so it never serves a stale colour.
+   */
+  private getTintedThumb(representativeId: number, src: HTMLImageElement): HTMLCanvasElement {
+    const cached = this.tintedThumbCache.get(representativeId);
+    if (cached) return cached;
+
+    const w = src.naturalWidth || 1;
+    const h = src.naturalHeight || 1;
+    const off = document.createElement('canvas');
+    off.width = w;
+    off.height = h;
+    const octx = off.getContext('2d');
+    if (octx) {
+      octx.drawImage(src, 0, 0);
+      octx.globalCompositeOperation = 'source-in';
+      octx.fillStyle = this.waveAccent;
+      octx.fillRect(0, 0, w, h);
+    }
+    this.tintedThumbCache.set(representativeId, off);
+    return off;
   }
 
   private themeColor(varName: string): string {

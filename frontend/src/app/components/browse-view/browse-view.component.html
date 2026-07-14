@@ -67,7 +67,17 @@
             @if (mediaType() === 'audio') {
               <div class="browse-now-playing">
                 @if (nowPlaying(); as np) {
-                  <img class="browse-now-playing-wave" [src]="np.waveUrl" alt="" aria-hidden="true" />
+                  <!-- The waveform PNG is a theme-agnostic alpha mask (issue #2369):
+                       the surface box mirrors the browse tile, and the inner element
+                       masks the accent colour to the wave shape so it recolours with
+                       the theme instead of showing baked-in pixels. -->
+                  <div class="browse-now-playing-wave" aria-hidden="true">
+                    <div
+                      class="browse-now-playing-wave-fill waveform-mask"
+                      [style.-webkit-mask-image]="'url(' + np.waveUrl + ')'"
+                      [style.mask-image]="'url(' + np.waveUrl + ')'"
+                    ></div>
+                  </div>
                 }
                 <div class="browse-volume" role="group" aria-label="Preview volume">
                   <button
