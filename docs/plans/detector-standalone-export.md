@@ -2,15 +2,17 @@
 
 **Status:** The open follow-ups below remain.
 
-Background: Phase 1 shipped a scoring-only, portable zip bundle export (GUI-only)
-for any saved detector — an ONNX MLP with sigmoid baked in, a `manifest.json`, and
-a `README.md`, deliberately carrying no embeddings or raw media. Settled design
-decisions: scoring-only (not re-trainable), ONNX (not TensorFlow or raw JSON
-weights), and a dedicated modal (not a tab in the label-centric export modal).
+Background: shipped so far is a scoring-only, portable zip bundle export for any
+saved detector — an ONNX MLP with sigmoid baked in, a `manifest.json`, and a
+`README.md`, deliberately carrying no embeddings or raw media. Available both via
+a dedicated GUI modal and headlessly via the `portable_detector` results exporter
+(`--autodetect --exporter portable_detector`, writing one bundle per trained
+detector; see `docs/CLI.md`). Settled design decisions: scoring-only (not
+re-trainable), ONNX (not TensorFlow or raw JSON weights), and a dedicated modal
+(not a tab in the label-centric export modal).
 
 ## Open follow-ups
 
-- [ ] #2391 — Add a CLI/exporter-plugin path for portable detector export
 - **Re-import.** The manifest is shaped to be re-importable, but no importer
   reads it back yet. A "import portable detector" flow could rebuild a
   read-only, score-only detector from a bundle.

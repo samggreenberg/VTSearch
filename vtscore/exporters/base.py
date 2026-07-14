@@ -154,6 +154,56 @@ class LabelsetExporter(PluginBase):
         return self.export(results, field_values)
 
     # ------------------------------------------------------------------
+    # Trained-detector CLI support (portable-detector export)
+    # ------------------------------------------------------------------
+
+    @property
+    def needs_trained_detectors(self) -> bool:
+        """Whether this exporter consumes the trained classifiers, not the hits.
+
+        Almost every exporter serialises the scored *results* (the hit lists).
+        The portable-detector exporter is the exception: it serialises the
+        trained MLP itself (an ONNX scoring bundle), so it needs the in-memory
+        detectors the CLI pipeline just trained rather than their output.  When
+        this returns ``True`` the pipeline routes to :meth:`export_cli_detectors`
+        instead of :meth:`export_cli`; results-consuming exporters leave it
+        ``False``.
+        """
+        return False
+
+    def export_cli_detectors(
+        self,
+        detectors: list[dict[str, Any]],
+        field_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Export the trained detectors themselves (not the scored hits).
+
+        Called by the CLI/pipeline path for exporters whose
+        :attr:`needs_trained_detectors` is ``True``.  *detectors* is the list
+        of trained detectors the pipeline produced against the loaded dataset;
+        each entry is a descriptor dict with these keys::
+
+            {
+              "detector_name": str,        # the detector's name
+              "media_type":    str,        # audio / image / video / ...
+              "weights":       dict,       # serialize_weights() nested lists
+              "threshold":     float,      # decision threshold
+              "embedder":      str,        # concrete embedder name it trained in
+              "embedder_type": str,        # the detector's locked embedder type
+              "good_count":    int,        # labelset good count
+              "bad_count":     int,        # labelset bad count
+            }
+
+        Returns a status dict with at minimum a ``"message"`` key, like
+        :meth:`export`.
+
+        Raises:
+            NotImplementedError: If the exporter does not export trained
+                detectors (the default).
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not export trained detectors")
+
+    # ------------------------------------------------------------------
     # Streaming CLI support (massive sources)
     # ------------------------------------------------------------------
 

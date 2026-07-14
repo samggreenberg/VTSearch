@@ -99,7 +99,28 @@ python app.py --autodetect --dataset data.pkl --settings settings.json --exporte
 python app.py --autodetect --dataset data.pkl --settings settings.json --exporter email_smtp --to recipient@example.com
 ```
 
-Available exporters: `server_json_file` (JSON to server path), `server_csv_file` (CSV to server path), `webhook` (HTTP POST, optional `--auth-header`), `email_smtp` (SMTP email, requires `--to`), `gui` (default: print to console).
+Available exporters: `server_json_file` (JSON to server path), `server_csv_file` (CSV to server path), `webhook` (HTTP POST, optional `--auth-header`), `email_smtp` (SMTP email, requires `--to`), `portable_detector` (standalone ONNX scoring bundles; see below), `gui` (default: print to console).
+
+**Exporting the detectors themselves** (`portable_detector`): instead of the
+scored hits, write one standalone, portable scoring bundle per detector the run
+trained — an ONNX MLP (sigmoid baked in) plus a `manifest.json` and `README.md`,
+carrying **no embeddings and no raw media**. This is the headless counterpart to
+the GUI's portable-export modal, letting CI/automation produce a shareable
+scoring model. The `--dataset`/`--importer` still supplies the embedder space the
+detector trains in; the media is embedded but the hits are discarded.
+
+```bash
+# One bundle per Auto-Find detector, named after the detector.
+python app.py --autodetect --dataset data.pkl --settings settings.json \
+  --exporter portable_detector --filepath 'data/{detector_name}-detector.zip'
+```
+
+The `--filepath` accepts `{detector_name}` (and the date variables
+`{YYYYMMDD-HHMMSS}`, `{YYYYMMDD}`, `{YYYY}`, `{MM}`, `{DD}`, `{username}`). When
+the path omits `{detector_name}` and the run trained more than one detector, the
+detector name is inserted before the extension so bundles don't overwrite each
+other. Detectors whose scoring isn't the plain 2-layer MLP (patch DINOv2/v3,
+structural SIFT/VLAD) are skipped with a note rather than failing the run.
 
 **How to get the files:**
 
