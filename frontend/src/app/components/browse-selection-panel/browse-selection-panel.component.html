@@ -76,7 +76,7 @@
         role="button"
         tabindex="0"
         [attr.aria-label]="'Selected: ' + entry.name + ' (click to remove)'"
-        title="Click to remove from selection"
+        [title]="entry.name + ' — click to remove from selection'"
         (click)="onEntryClick(entry.id)"
         (keydown)="onEntryKeydown($event, entry.id)">
         @if (hasThumbnailUrl(entry.id)) {
@@ -99,7 +99,10 @@
         } @else if (placeholderIcon(entry.id)) {
           <span class="bsp-placeholder">{{ placeholderIcon(entry.id) }}</span>
         }
-        <span class="bsp-name-grid">{{ entry.name }}</span>
+        <span class="bsp-name-row">
+          <span class="bsp-name-grid">{{ entry.name }}</span>
+          <vt-copy-detail-button class="bsp-copy" [value]="entry.name" label="name" />
+        </span>
       </div>
     }
   </div>
