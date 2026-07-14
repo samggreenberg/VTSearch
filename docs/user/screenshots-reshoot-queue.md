@@ -44,3 +44,4 @@ alone.
 | Shot id | Embedded in | Why it's stale | Flagged |
 |---------|-------------|----------------|---------|
 | `achievements` | USER_GUIDE.md#achievements | Intro paragraph copy simplified (cefadd7c, 2026-07-12): the old "settings source configured / round-trip between sessions" line now reads "Your progress is saved with your settings, so it carries over between sessions". Landed after the 2026-07-12 full reshoot, so this copy line is the only difference. | 2026-07-12 |
+| `importer-picker` | USER_GUIDE.md (demo importer) | The demo-dataset catalogue's "# Media" column (`demo.num_files`) now shows measured exact counts instead of the old per-category-average estimate for caltech256, places365, ucsf_documents, gtzan, urbansound8k, speech_commands_v2, ucf101_full, kth, hmdb51, and wikipedia_topics (issue #2355). The visible rows for the shown media type advertise different numbers than the captured PNG. | 2026-07-14 |

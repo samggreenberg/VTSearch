@@ -89,6 +89,11 @@ def download_ucsf_documents(  # noqa: C901
         except Exception:
             docs = []
 
+        # The UCSF IDL Solr endpoint ignores the ``rows`` limit and returns up
+        # to 1000 ids per query, so cap client-side; otherwise every category
+        # would download ~1000 PDFs instead of ``docs_per_category``.
+        docs = docs[:docs_per_category]
+
         # Download each PDF using the UCSF split-character URL scheme.
         for doc in docs:
             doc_id = doc.get("id", "")

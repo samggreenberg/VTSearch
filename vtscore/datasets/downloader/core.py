@@ -184,7 +184,11 @@ VISUAL_GENOME_IMAGES2_URL = "https://cs.stanford.edu/people/rak248/VG_100K_2/ima
 VISUAL_GENOME_OBJECTS_URL = "https://homes.cs.washington.edu/~ranjay/visualgenome/data/dataset/objects.json.zip"
 
 # HMDB51
-HMDB51_URL = "http://serre-lab.clps.brown.edu/wp-content/uploads/2013/10/hmdb51_org.rar"
+# The original Serre-Lab RAR (hmdb51_org.rar) is dead — its host now redirects
+# to a homepage that serves HTML — and the lab's current page offers the data
+# only via Google Drive links that 404.  Use a public HuggingFace zip mirror
+# that carries the same ``hmdb51/<category>/*.avi`` tree (no unrar needed).
+HMDB51_URL = "https://huggingface.co/datasets/jili5044/hmdb51/resolve/main/hmdb51.zip"
 
 # UCF101 full (ZIP mirror on HuggingFace - no auth required)
 UCF101_FULL_URL = "https://huggingface.co/datasets/quchenyuan/UCF101-ZIP/resolve/main/UCF-101.zip"
