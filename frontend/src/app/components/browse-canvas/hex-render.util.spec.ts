@@ -154,27 +154,24 @@ describe('hex-render.util', () => {
   });
 
   // A minimal stand-in for the 2D context, recording just the path calls the
-  // trace helpers make so we can assert the shape without a real canvas.
+  // trace helpers make so we can assert the shape without a real canvas. The
+  // vi.fn() mocks keep their `.mock` type; `ctx` is the cast passed to the
+  // trace helpers (which want a full CanvasRenderingContext2D).
   function stubCtx() {
-    return {
+    const fns = {
       beginPath: vi.fn(),
       moveTo: vi.fn(),
       lineTo: vi.fn(),
       closePath: vi.fn(),
       arc: vi.fn(),
-    } as unknown as CanvasRenderingContext2D & {
-      beginPath: ReturnType<typeof vi.fn>;
-      moveTo: ReturnType<typeof vi.fn>;
-      lineTo: ReturnType<typeof vi.fn>;
-      closePath: ReturnType<typeof vi.fn>;
-      arc: ReturnType<typeof vi.fn>;
     };
+    return { ...fns, ctx: fns as unknown as CanvasRenderingContext2D };
   }
 
   describe('traceHexPath', () => {
     it('traces six vertices centred on (cx, cy) at the circumradius', () => {
       const ctx = stubCtx();
-      traceHexPath(ctx, 10, 20, 5);
+      traceHexPath(ctx.ctx, 10, 20, 5);
       expect(ctx.beginPath).toHaveBeenCalledOnce();
       expect(ctx.closePath).toHaveBeenCalledOnce();
       // One moveTo (first vertex) + five lineTo (remaining vertices) = 6 total.
@@ -190,7 +187,7 @@ describe('hex-render.util', () => {
   describe('traceCellPath', () => {
     it('draws the inscribed disc for a singleton', () => {
       const ctx = stubCtx();
-      traceCellPath(ctx, 10, 20, 5, true);
+      traceCellPath(ctx.ctx, 10, 20, 5, true);
       expect(ctx.arc).toHaveBeenCalledOnce();
       const [cx, cy, r] = ctx.arc.mock.calls[0];
       expect(cx).toBe(10);
@@ -202,7 +199,7 @@ describe('hex-render.util', () => {
 
     it('draws the full hexagon for a pile (non-single)', () => {
       const ctx = stubCtx();
-      traceCellPath(ctx, 10, 20, 5, false);
+      traceCellPath(ctx.ctx, 10, 20, 5, false);
       expect(ctx.arc).not.toHaveBeenCalled();
       expect(ctx.moveTo).toHaveBeenCalledOnce();
       expect(ctx.lineTo).toHaveBeenCalledTimes(5);

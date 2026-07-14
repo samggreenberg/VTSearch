@@ -95,8 +95,10 @@ describe('bin-geometry', () => {
 
   // A minimal stand-in for the 2D context, recording the path calls traceCell
   // makes so we can assert disc-vs-hex / roundRect-vs-rect without a real canvas.
+  // The vi.fn() mocks keep their `.mock` type; `ctx` is the cast passed to
+  // traceCell (which wants a full CanvasRenderingContext2D).
   function stubCtx() {
-    return {
+    const fns = {
       beginPath: vi.fn(),
       moveTo: vi.fn(),
       lineTo: vi.fn(),
@@ -104,36 +106,37 @@ describe('bin-geometry', () => {
       arc: vi.fn(),
       rect: vi.fn(),
       roundRect: vi.fn(),
-    } as unknown as CanvasRenderingContext2D & Record<string, ReturnType<typeof vi.fn>>;
+    };
+    return { ...fns, ctx: fns as unknown as CanvasRenderingContext2D };
   }
 
   describe('traceCell', () => {
     it('hex singleton draws a disc, pile draws a polygon', () => {
       const single = stubCtx();
-      hex.traceCell(single, 0, 0, 5, true);
+      hex.traceCell(single.ctx, 0, 0, 5, true);
       expect(single.arc).toHaveBeenCalledOnce();
 
       const pile = stubCtx();
-      hex.traceCell(pile, 0, 0, 5, false);
+      hex.traceCell(pile.ctx, 0, 0, 5, false);
       expect(pile.arc).not.toHaveBeenCalled();
       expect(pile.lineTo).toHaveBeenCalled();
     });
 
     it('square singleton uses roundRect, pile uses rect', () => {
       const single = stubCtx();
-      square.traceCell(single, 0, 0, 5, true);
+      square.traceCell(single.ctx, 0, 0, 5, true);
       expect(single.roundRect).toHaveBeenCalledOnce();
       expect(single.rect).not.toHaveBeenCalled();
 
       const pile = stubCtx();
-      square.traceCell(pile, 0, 0, 5, false);
+      square.traceCell(pile.ctx, 0, 0, 5, false);
       expect(pile.rect).toHaveBeenCalledOnce();
       expect(pile.roundRect).not.toHaveBeenCalled();
     });
 
     it('square cell has side radius·√3 centred on (cx, cy)', () => {
       const ctx = stubCtx();
-      square.traceCell(ctx, 10, 20, 5, false);
+      square.traceCell(ctx.ctx, 10, 20, 5, false);
       const [x, y, w, h] = ctx.rect.mock.calls[0];
       const side = 5 * SQRT3;
       expect(w).toBeCloseTo(side);
