@@ -84,6 +84,20 @@ class LabelsExportQuerySchema(Schema):
             ),
         },
     )
+    format = fields.String(
+        load_default="json",
+        validate=validate.OneOf(["json", "ndjson"]),
+        metadata={
+            "description": (
+                "Response encoding. ``json`` (default) returns the buffered "
+                "``{labels: [...]}`` object. ``ndjson`` streams one label entry "
+                "per line (newline-delimited JSON, ``application/x-ndjson``) so "
+                "large exports are never materialised in memory; the top-level "
+                "``available_columns`` list is omitted in this mode since it's a "
+                "whole-set aggregate a streamed response can't compute."
+            ),
+        },
+    )
 
     class Meta:
         # Tolerate unrelated query params (e.g. ``dataset_id`` /

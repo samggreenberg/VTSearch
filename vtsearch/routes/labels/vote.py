@@ -83,19 +83,23 @@ def _select_vote_pools(
     return good_votes, ({} if goods_only else bad_votes)
 
 
-def _annotate_corrections(result: dict, all_medias: dict) -> None:
-    """Add ``is_correction`` to every label entry in *result* (mutates in place).
+def _make_correction_annotator(all_medias: dict):
+    """Return a per-entry ``is_correction`` annotator, or ``None`` when no find-initial state exists.
 
     A label is a correction when the detector's pre-vote label
     (``find_initial_labels``) differs from the current label. When there is
     no find-initial state (no detector was run, or the vote came from
-    outside Find), no entries are annotated.
+    outside Find), we return ``None`` so callers skip annotation entirely.
+
+    The ``md5 -> media_id`` map is built once here so the returned closure is
+    O(1) per entry, letting both the buffered and the streaming export paths
+    annotate one element at a time without re-scanning ``all_medias``.
     """
     from vtsearch.state import get_find_initial_labels
 
     find_initial = get_find_initial_labels()
     if not find_initial:
-        return
+        return None
 
     md5_to_id: dict[str, int] = {}
     for mid, m in all_medias.items():
@@ -103,12 +107,23 @@ def _annotate_corrections(result: dict, all_medias: dict) -> None:
         if md5_val and md5_val not in md5_to_id:
             md5_to_id[md5_val] = mid
 
-    for entry in result["labels"]:
-        media_id = md5_to_id.get(entry.get("md5"))
+    def annotate(entry: dict) -> None:
+        media_id = md5_to_id.get(entry.get("md5", ""))
         if media_id is not None and media_id in find_initial:
             entry["is_correction"] = entry.get("label") != find_initial[media_id]
         else:
             entry["is_correction"] = False
+
+    return annotate
+
+
+def _annotate_corrections(result: dict, all_medias: dict) -> None:
+    """Add ``is_correction`` to every label entry in *result* (mutates in place)."""
+    annotate = _make_correction_annotator(all_medias)
+    if annotate is None:
+        return
+    for entry in result["labels"]:
+        annotate(entry)
 
 
 def _build_entry_metadata(media: dict) -> dict:
@@ -142,8 +157,13 @@ def _build_entry_metadata(media: dict) -> dict:
 _BASE_EXPORT_COLUMNS = ["label", "md5", "origin_name", "filename", "category", "origin"]
 
 
-def _enrich_with_metadata(result: dict, all_medias: dict) -> None:
-    """Attach ``custom_metadata`` per entry and the ``available_columns`` list.
+def _make_enricher(all_medias: dict):
+    """Return a per-entry ``custom_metadata`` enricher.
+
+    The returned callable mutates one label entry in place (attaching
+    ``custom_metadata`` when the media has any) and returns the set of
+    metadata keys it added, so a streaming caller can annotate elements one
+    at a time.  The ``md5 -> media`` map is built once here.
 
     Flattens origin params so fields like ``contentID`` / ``mediaID`` /
     ``media_url`` surface as selectable export columns alongside the
@@ -151,15 +171,25 @@ def _enrich_with_metadata(result: dict, all_medias: dict) -> None:
     """
     md5_to_media = {m["md5"]: m for m in all_medias.values() if m.get("md5")}
 
-    all_meta_keys: set[str] = set()
-    for entry in result["labels"]:
+    def enrich(entry: dict) -> set[str]:
         media = md5_to_media.get(entry.get("md5"))
         if not media:
-            continue
+            return set()
         meta = _build_entry_metadata(media)
-        if meta:
-            entry["custom_metadata"] = meta
-            all_meta_keys.update(meta.keys())
+        if not meta:
+            return set()
+        entry["custom_metadata"] = meta
+        return set(meta.keys())
+
+    return enrich
+
+
+def _enrich_with_metadata(result: dict, all_medias: dict) -> None:
+    """Attach ``custom_metadata`` per entry and the ``available_columns`` list."""
+    enrich = _make_enricher(all_medias)
+    all_meta_keys: set[str] = set()
+    for entry in result["labels"]:
+        all_meta_keys.update(enrich(entry))
 
     base_lower = {c.lower() for c in _BASE_EXPORT_COLUMNS}
     extra_keys = sorted(k for k in all_meta_keys if k.lower() not in base_lower)
@@ -196,6 +226,10 @@ def export_labels(query: dict):
         bads,
         vote_region_boxes=snap.vote_region_boxes,
     )
+
+    if query["format"] == "ndjson":
+        return _stream_labels_ndjson(labelset, all_medias, label_filter, query["enrich"])
+
     result: dict = labelset.to_dict()
 
     _annotate_corrections(result, all_medias)
@@ -206,6 +240,45 @@ def export_labels(query: dict):
         _enrich_with_metadata(result, all_medias)
 
     return result
+
+
+def _stream_labels_ndjson(labelset, all_medias: dict, label_filter: str, enrich: bool):
+    """Stream the labelset as newline-delimited JSON, one label entry per line (S13).
+
+    Encodes one :class:`~vtscore.datasets.labelset.LabeledElement` at a time
+    via :meth:`LabelSet.iter_dicts`, wrapped in ``flask.stream_with_context``
+    so the buffered ``[e.to_dict() for e in elements]`` list (~50 MB at 100 k
+    labels) is never held in memory.  Each line carries the same
+    ``is_correction`` / ``custom_metadata`` annotations the buffered response
+    would attach, applied in the same order (annotate corrections, drop
+    non-corrections under ``label_filter=corrections``, then enrich).
+
+    The top-level ``available_columns`` list has no place in NDJSON: it's a
+    whole-set aggregate that can't be emitted before the last row is seen, and
+    consumers of a streamed export derive columns from the rows themselves.
+    """
+    import json
+
+    from flask import Response, stream_with_context
+
+    annotate = _make_correction_annotator(all_medias)
+    enricher = _make_enricher(all_medias) if enrich else None
+    corrections_only = label_filter == "corrections"
+
+    def generate():
+        for entry in labelset.iter_dicts():
+            if annotate is not None:
+                annotate(entry)
+            if corrections_only and not entry.get("is_correction"):
+                continue
+            if enricher is not None:
+                enricher(entry)
+            yield json.dumps(entry) + "\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="application/x-ndjson",
+    )
 
 
 @labels_bp.route("/api/labels/import", methods=["POST"])
