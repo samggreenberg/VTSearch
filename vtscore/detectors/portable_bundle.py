@@ -197,11 +197,7 @@ def render_readme(manifest: dict[str, Any]) -> str:
     model_id = emb.get("model_id")
     # Surface the exact pretrained model so the bundle is fully actionable: the
     # recipient can go straight to the source instead of guessing from the slug.
-    model_id_clause = (
-        f" The exact pretrained model is **`{model_id}`** - use that checkpoint."
-        if model_id
-        else ""
-    )
+    model_id_clause = f" The exact pretrained model is **`{model_id}`** - use that checkpoint." if model_id else ""
     return f"""# Portable detector: {manifest["detector_name"]}
 
 This is a **standalone scoring model** exported from
