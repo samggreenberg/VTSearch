@@ -104,6 +104,7 @@
                       [bar]="taskBar(task)"
                       [smooth]="true"
                       cancelTitle="Cancel this dataset load"
+                      [cancelling]="loadingTasksSvc.isCancelling(task.task_id)"
                       (cancel)="loadingTasksSvc.cancelLoadingTask(task.task_id)"
                     />
                   }

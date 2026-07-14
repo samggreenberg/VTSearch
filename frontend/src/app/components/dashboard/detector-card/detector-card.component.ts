@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostBinding, HostListener, Input, input, output, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostBinding, HostListener, Input, inject, input, output, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
@@ -13,6 +13,7 @@ import { formatTimestamp } from '../../../utils/format-date';
 import { ContextMenuComponent, ContextMenuItem } from '../../context-menu/context-menu.component';
 import { IconComponent } from '../../icon/icon.component';
 import { buildDetectorCardMenuItems, CARD_MENU_MIN_WIDTH, overflowMenuItems } from '../card-context-menu-items';
+import { DashboardLoadingTasksService } from '../../../services/dashboard-loading-tasks.service';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -24,6 +25,8 @@ import { buildDetectorCardMenuItems, CARD_MENU_MIN_WIDTH, overflowMenuItems } fr
   styleUrl: './detector-card.component.scss',
 })
 export class DetectorCardComponent {
+  private readonly loadingTasksSvc = inject(DashboardLoadingTasksService);
+
   @Input() detector: any;
   readonly currentUser = input('');
   readonly isDefaultLogin = input(true);
@@ -267,5 +270,12 @@ export class DetectorCardComponent {
     const task = this.loadingTask;
     if (!task) return { header: '', subtitle: '', detail: '', eta: '' };
     return formatProgressHeader(task, 'detector', task.embedder);
+  }
+
+  /** True once Cancel has been clicked on this row's task and the backend is
+   *  still unwinding it; swaps the Cancel button for a "Cancelling…" badge. */
+  get taskCancelling(): boolean {
+    const task = this.loadingTask;
+    return !!task && this.loadingTasksSvc.isCancelling(task.task_id);
   }
 }

@@ -44,6 +44,13 @@ export class DashboardLoadingTasksService {
   private readonly _loadingTasks = signal<LoadingTask[]>([]);
   private readonly _detectorLoadingTasks = signal<LoadingTask[]>([]);
 
+  // Task ids the user has clicked Cancel on but whose backend hasn't finished
+  // unwinding yet. Drives the per-row "Cancelling…" acknowledgement badge so
+  // the row doesn't freeze in its pre-cancel state and invite repeated clicks.
+  // Pruned to the active set on every SSE snapshot (a task that has left the
+  // active list is done cancelling), so the flag clears itself.
+  private readonly _cancellingTaskIds = signal<ReadonlySet<string>>(new Set());
+
   private polling$ = new Subject<void>();
   private detectorPolling$ = new Subject<void>();
 
@@ -102,7 +109,33 @@ export class DashboardLoadingTasksService {
     this.detectorPollingActive = false;
     this._loadingTasks.set([]);
     this._detectorLoadingTasks.set([]);
+    this._cancellingTaskIds.set(new Set());
     this.datasetState.setLoading(false);
+  }
+
+  /** True while the user has cancelled `taskId` but the backend is still
+   *  unwinding it (the task is still in the active list). */
+  isCancelling(taskId: string): boolean {
+    return this._cancellingTaskIds().has(taskId);
+  }
+
+  private markCancelling(taskId: string): void {
+    if (this._cancellingTaskIds().has(taskId)) return;
+    const next = new Set(this._cancellingTaskIds());
+    next.add(taskId);
+    this._cancellingTaskIds.set(next);
+  }
+
+  /** Drop any cancelling flag whose task is no longer active — the backend has
+   *  finished unwinding it, so the row is about to leave the table. */
+  private pruneCancelling(activeTaskIds: Set<string>): void {
+    const current = this._cancellingTaskIds();
+    if (current.size === 0) return;
+    const next = new Set<string>();
+    for (const id of current) {
+      if (activeTaskIds.has(id)) next.add(id);
+    }
+    if (next.size !== current.size) this._cancellingTaskIds.set(next);
   }
 
   get loadingTasks(): LoadingTask[] {
@@ -179,6 +212,7 @@ export class DashboardLoadingTasksService {
           const failed = errored.filter((t) => t.error !== 'Cancelled');
 
           this._loadingTasks.set([...active, ...failed]);
+          this.pruneCancelling(new Set(active.map((t) => t.task_id)));
 
           // Detect tasks that just completed successfully so we can
           // refresh the registry immediately (not only when ALL finish).
@@ -242,6 +276,7 @@ export class DashboardLoadingTasksService {
           const failed = errored.filter((t) => t.error !== 'Cancelled');
 
           this._detectorLoadingTasks.set([...active, ...failed]);
+          this.pruneCancelling(new Set(active.map((t) => t.task_id)));
 
           // Detect tasks that just completed successfully
           const justFinished = tasks.filter(
@@ -274,6 +309,7 @@ export class DashboardLoadingTasksService {
   }
 
   cancelLoadingTask(taskId: string): void {
+    this.markCancelling(taskId);
     this.datasetsRegistryApi.cancelTask(taskId).subscribe();
   }
 
@@ -282,6 +318,7 @@ export class DashboardLoadingTasksService {
   }
 
   cancelDetectorLoadingTask(taskId: string): void {
+    this.markCancelling(taskId);
     this.detectorsRegistryApi.cancelDetectorLoadingTask(taskId).subscribe();
   }
 
