@@ -365,4 +365,5 @@ def slow_load():
 - `docs/ML.md` — training/scoring details.
 - `docs/EXTENDING.md` + `docs/EXTENDING-plugins.md` + `docs/EXTENDING-media.md` + `docs/EXTENDING-processors.md` — how to add plugins.
 - `docs/plans/` — future-work design docs (open/proposed; shipped work is pruned out, not archived); check here before adding a "Phase N" feature.
+- `docs/RELEASE.md` — the `dev` → `main` release runbook (the procedure the Dev2Main Routine follows: vulture audit, release summary, punch-card refresh, release PR, issue close-out, plan-pointer prune).
 - `docs/style-guide.md` — frontend SCSS conventions.
