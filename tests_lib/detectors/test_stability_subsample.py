@@ -37,7 +37,14 @@ def _model(dim: int = 8) -> nn.Sequential:
 
 def _run_step(clips: dict[int, dict], model: nn.Sequential) -> dict | None:
     all_media_ids = sorted(clips.keys())
-    return lp._compute_step_stability(model, threshold=0.5, clips_dict=clips, all_media_ids=all_media_ids, t=1, num_labels=len(lp._cache_good_ids) + len(lp._cache_bad_ids))
+    return lp._compute_step_stability(
+        model,
+        threshold=0.5,
+        clips_dict=clips,
+        all_media_ids=all_media_ids,
+        t=1,
+        num_labels=len(lp._cache_good_ids) + len(lp._cache_bad_ids),
+    )
 
 
 class TestStabilitySubsample:
