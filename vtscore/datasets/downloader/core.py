@@ -173,11 +173,14 @@ RICO_SCREEN2WORDS_SHARDS = [f"data/train-{i:05d}-of-00008.parquet" for i in rang
 
 # RVL-CDIP: 16-class document-image classification.  The canonical
 # ``aharley/rvl_cdip`` is a 38 GB tarball (impractical as a demo); instead we
-# pull a demo-sized 300-images-per-class parquet mirror (~4,800 images, ~32 MB)
-# whose ``image``/``label`` columns decode straight into a folder-per-class
-# tree.  The train shard filename carries a content hash, so it is resolved at
-# download time rather than hardcoded.
-RVL_CDIP_REPO_ID = "umair894/rvl_cdip_300_examples_per_class"
+# pull a demo-sized, class-balanced 100-images-per-class parquet mirror whose
+# ``image``/``label`` columns decode straight into a folder-per-class tree.
+# All three splits (train 50 + test 25 + validation 25 per class = ~1,600
+# images across 16 classes, ~180 MB) are pulled so every class is represented.
+# The shard filenames carry a content hash, so they are resolved at download
+# time rather than hardcoded.  (The former ``umair894`` 300-per-class mirror
+# was abandoned: its single shard held only the ``invoice`` class.)
+RVL_CDIP_REPO_ID = "jordyvl/rvl_cdip_100_examples_per_class"
 
 VISUAL_GENOME_IMAGES_URL = "https://cs.stanford.edu/people/rak248/VG_100K/images.zip"
 VISUAL_GENOME_IMAGES2_URL = "https://cs.stanford.edu/people/rak248/VG_100K_2/images2.zip"
@@ -224,7 +227,7 @@ UCSF_IDL_DOWNLOAD_SIZE_MB = 50
 ROXFORD_IMAGES_DOWNLOAD_SIZE_MB = 1850
 ENRICO_DOWNLOAD_SIZE_MB = 110
 RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB = 1720
-RVL_CDIP_DOWNLOAD_SIZE_MB = 32
+RVL_CDIP_DOWNLOAD_SIZE_MB = 180
 OPENLOGO_DOWNLOAD_SIZE_MB = 4640
 VISUAL_GENOME_IMAGES_DOWNLOAD_SIZE_MB = 9700
 VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB = 5300

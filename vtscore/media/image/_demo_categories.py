@@ -878,26 +878,28 @@ VISUAL_GENOME_CATEGORIES = [
 # screenshots — the "document screenshot" corner of digitally-native imagery,
 # and a clean 16-way label set for retrieval eval.  ORDER MATTERS: these are the
 # ClassLabel ``names`` of the demo-sized parquet mirror we pull
-# (``umair894/rvl_cdip_300_examples_per_class``), so the integer ``label``
-# column indexes directly into this list.  Do not reorder without re-checking
-# the mirror's ClassLabel ordering.
+# (``jordyvl/rvl_cdip_100_examples_per_class``), so the integer ``label``
+# column indexes directly into this list.  This is the *canonical* RVL-CDIP
+# ClassLabel ordering (letter=0 … memo=15), not alphabetical — the mirror
+# inherits it from ``aharley/rvl_cdip``.  Do not reorder without re-checking
+# the mirror's ClassLabel ordering (its dataset card's ``class_label.names``).
 RVL_CDIP_CATEGORIES = [
-    "advertisement",
-    "budget",
-    "email",
-    "file folder",
-    "form",
-    "handwritten",
-    "invoice",
     "letter",
-    "memo",
+    "form",
+    "email",
+    "handwritten",
+    "advertisement",
+    "scientific report",
+    "scientific publication",
+    "specification",
+    "file folder",
     "news article",
+    "budget",
+    "invoice",
     "presentation",
     "questionnaire",
     "resume",
-    "scientific publication",
-    "scientific report",
-    "specification",
+    "memo",
 ]
 
 

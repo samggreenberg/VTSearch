@@ -68,10 +68,10 @@ Datasets are grouped by media type below. Each demo comes in size variants — *
 | **rico_screen2words_m** | RICO mobile UI screenshots across 16 app categories (medium) |
 | **rico_screen2words_l** | RICO mobile UI screenshots across 16 app categories (large) |
 | **rico_screen2words_a** | RICO mobile UI screenshots across 16 Google Play app categories (all) |
-| **rvl_cdip_s** | Scanned **document images** (RVL-CDIP, a 300-per-class demo mirror) across 16 balanced document types — letter, form, email, invoice, resume, memo, scientific report… (small). The document-image corner of digitally-native imagery |
+| **rvl_cdip_s** | Scanned **document images** (RVL-CDIP, a class-balanced 100-per-class demo mirror) across 16 balanced document types — letter, form, email, invoice, resume, memo, scientific report… (small). The document-image corner of digitally-native imagery |
 | **rvl_cdip_m** | RVL-CDIP document images across 16 document types (medium) |
 | **rvl_cdip_l** | RVL-CDIP document images across 16 document types (large) |
-| **rvl_cdip_a** | ~4,800 RVL-CDIP document images across 16 document types (all) |
+| **rvl_cdip_a** | ~1,600 RVL-CDIP document images across 16 document types (all) |
 | **ucsf_documents_a** | Scanned industry document pages from the UCSF Industry Documents Library: tobacco, food, drug, chemical, fossil fuel, and opioids |
 | **roxford5k_s** | ~500 Oxford Buildings photos (a 1/10 slice) for instance matching — same landmark across viewpoints; best paired with the SIFT/VLAD (instance matching) embedder |
 | **roxford5k_a** | All 5,063 Revisited Oxford Buildings photos across 11 landmarks plus distractors — the canonical instance-retrieval benchmark; pair with the SIFT/VLAD (instance matching) embedder |
