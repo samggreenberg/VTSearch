@@ -13,6 +13,11 @@ export interface NowPlaying {
   mediaId: number;
   /** The clip's waveform PNG — the same thumbnail painted on its tile. */
   waveUrl: string;
+  /** ``true`` while the clip is still fetching/decoding and hasn't begun to
+   *  sound yet (or has stalled to rebuffer mid-play); drives the loading
+   *  spinner on the now-playing widget. Flips to ``false`` once playback is
+   *  actually audible. */
+  loading: boolean;
 }
 
 /** How long (ms) the cursor must rest on an audio bin before its clip starts
@@ -55,6 +60,9 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   /** Never mounted in the DOM — audio here is heard, not shown; the top-left
    *  indicator is the only visual feedback that it's playing. */
   private readonly audioEl = new Audio();
+  /** Waveform PNG of the clip currently auditioning, kept so the buffering
+   *  listeners below can re-emit the now-playing state without recomputing it. */
+  private nowPlayingWaveUrl = '';
 
   constructor() {
     // Keep the live element's volume in sync when the toolbar slider moves
@@ -62,6 +70,13 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
     effect(() => {
       this.audioEl.volume = this.volume();
     });
+    // Buffering feedback: while the clip is fetching/decoding (or stalls to
+    // rebuffer), the widget shows a spinner; once it's actually sounding, the
+    // spinner clears. Listeners are attached once to the reused element and
+    // guarded by ``playingMediaId`` so stray events after a stop are ignored.
+    this.audioEl.addEventListener('waiting', () => this.emitNowPlaying(true));
+    this.audioEl.addEventListener('playing', () => this.emitNowPlaying(false));
+    this.audioEl.addEventListener('canplay', () => this.emitNowPlaying(false));
   }
 
   // --- Text / count popup (text + any other non-thumbnail type) --------------
@@ -157,6 +172,7 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   private playAudio(mediaId: number): void {
     this.playingMediaId = mediaId;
     const waveUrl = this.activeContext.mediaUrl(`/api/medias/${mediaId}/thumbnail`);
+    this.nowPlayingWaveUrl = waveUrl;
     // Hydrate clip extents (clip_start/clip_end) so windowed clips loop within
     // their window; applyClipWindow reads them lazily as they land.
     this.metadataCache.ensureLoaded([mediaId]);
@@ -165,7 +181,17 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
     this.audioEl.src = this.activeContext.mediaUrl(`/api/medias/${mediaId}/audio`);
     this.audioEl.load();
     this.audioEl.play().catch(() => {});
-    this.nowPlaying.emit({ mediaId, waveUrl });
+    // Starts loading: show the spinner until a ``playing``/``canplay`` event
+    // (wired in the constructor) clears it.
+    this.nowPlaying.emit({ mediaId, waveUrl, loading: true });
+  }
+
+  /** Re-emit the now-playing state with a fresh ``loading`` flag, from the
+   *  buffering listeners. A no-op once nothing is auditioning, so events that
+   *  fire after a stop don't resurrect the widget. */
+  private emitNowPlaying(loading: boolean): void {
+    if (this.playingMediaId == null) return;
+    this.nowPlaying.emit({ mediaId: this.playingMediaId, waveUrl: this.nowPlayingWaveUrl, loading });
   }
 
   private stopAudio(): void {

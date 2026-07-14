@@ -256,6 +256,11 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
 
   /** Currently-playing hover audio source, so re-entering the same row is a no-op. */
   audioSrc = '';
+  /** Media id of the clip currently auditioning, so the buffering listeners can
+   *  re-emit its now-playing state; ``null`` when silent. */
+  private nowPlayingId: number | null = null;
+  /** Whether the one-shot buffering listeners are wired onto the audio element. */
+  private audioListenersAttached = false;
 
   private readonly failedThumbs = new Set<string>();
   /** Ids whose full-res ``/image`` failed; the preview falls back to the
@@ -1019,14 +1024,18 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
     const src = this.activeContext.mediaUrl(`/api/medias/${id}/audio`);
     if (this.audioSrc === src) return;
     this.audioSrc = src;
+    this.nowPlayingId = id;
     // The autoplay-on-open path may fire before prefetchVisible has hydrated the
     // representative's metadata, so make sure its clip extents are loading (the
     // clip-window handlers read them lazily as they land).
     this.metadataCache.ensureLoaded([id]);
-    this.nowPlaying.emit({ mediaId: id, waveUrl: this.thumbnailUrl(id) });
+    // Starts loading: show the spinner on the now-playing widget until a
+    // ``playing``/``canplay`` event clears it.
+    this.nowPlaying.emit({ mediaId: id, waveUrl: this.thumbnailUrl(id), loading: true });
     setTimeout(() => {
       const el = this.audioRef?.nativeElement;
       if (!el) return;
+      this.attachBufferingListeners(el);
       el.volume = this.volume();
       // Windowed archive-member clips serve the whole file: seek to clip_start
       // and loop within [clip_start, clip_end]. Metadata is read lazily inside
@@ -1035,6 +1044,26 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
       el.load();
       el.play().catch(() => {});
     });
+  }
+
+  /** Wire the buffering listeners onto the popup's audio element once (it lives
+   *  for the popup's lifetime, reused across summons). They flip the now-playing
+   *  widget's spinner on while the clip fetches/decodes or stalls to rebuffer,
+   *  and off once it's actually sounding. */
+  private attachBufferingListeners(el: HTMLAudioElement): void {
+    if (this.audioListenersAttached) return;
+    this.audioListenersAttached = true;
+    el.addEventListener('waiting', () => this.emitNowPlaying(true));
+    el.addEventListener('playing', () => this.emitNowPlaying(false));
+    el.addEventListener('canplay', () => this.emitNowPlaying(false));
+  }
+
+  /** Re-emit the now-playing state with a fresh ``loading`` flag. A no-op once
+   *  nothing is auditioning, so events that fire after a stop don't resurrect
+   *  the widget. */
+  private emitNowPlaying(loading: boolean): void {
+    if (this.audioSrc === '' || this.nowPlayingId == null) return;
+    this.nowPlaying.emit({ mediaId: this.nowPlayingId, waveUrl: this.thumbnailUrl(this.nowPlayingId), loading });
   }
 
   /** Cursor left the grid: stop any hover audio and fall the preview back to the
@@ -1056,6 +1085,7 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
       el.currentTime = 0;
     }
     this.audioSrc = '';
+    this.nowPlayingId = null;
     if (wasPlaying) this.nowPlaying.emit(null);
   }
 
