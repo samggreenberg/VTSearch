@@ -289,12 +289,6 @@ labelset. (Journal deferred until compaction semantics are defined.)
 
 ---
 
-### S13: label export — full JSON in memory (GUI route)
-
-- [ ] #2407 — Stream the GUI label-export route (fix sketch in the issue; CLI side already streams)
-
----
-
 ### S14: incremental secondary lookups on `DatasetContext`
 
 **File:** `vtscore/state/core.py`, plus routes that rebuild lookup dicts

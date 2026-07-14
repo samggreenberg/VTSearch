@@ -88,7 +88,6 @@ Pieces of the live feature left open, to pick up alongside the follow-ups above:
 - **Canvas selection actions** — selection is tracked (`BrowseSelectionService`)
   but not acted on: export / seed detector / subset projection, plus a minimap
   overlay.
-- [ ] #2400 — Browse canvas: sync DOM focus to the keyboard-navigated entry
 - **Detector-positives browse** — clipped/region positives are embedded
   image-level (not patch-pooled); no server-side TTL for the ephemeral
   `__detpos__<id>` context; preview bytes held in memory for the session.
