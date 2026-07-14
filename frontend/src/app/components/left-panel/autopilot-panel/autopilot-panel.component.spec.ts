@@ -304,4 +304,37 @@ describe('AutopilotPanelComponent', () => {
     expect(steps[1].state).toBe('future');
     expect(steps[2].state).toBe('future');
   });
+
+  it('caps the good-phase target for display on a tiny dataset', () => {
+    component.datasetSize = 1;
+    component.goodVotes = new Set();
+    component.badVotes = new Set();
+    // Default target is 3, but a 1-item dataset can supply at most 1 good.
+    expect(component.effGoodTarget).toBe(1);
+  });
+
+  it('reaches the exhausted state and renders a note when a 1-item dataset is labeled', async () => {
+    // Drive the inputs the way the template binding does, so OnPush re-renders
+    // and ngOnChanges fires the dataset-size-aware phase check.
+    fixture.componentRef.setInput('datasetSize', 1);
+    fixture.componentRef.setInput('goodVotes', new Set([1]));
+    fixture.componentRef.setInput('badVotes', new Set());
+    await settleZoneless(fixture);
+    expect(component.state.phase).toBe('exhausted');
+    expect(component.exhausted).toBe(true);
+    const note = fixture.nativeElement.querySelector('.autopilot-exhausted');
+    expect(note).toBeTruthy();
+    expect(note.textContent).toContain('Nothing left to label');
+    // The five-step list is replaced by the terminal note.
+    expect(fixture.nativeElement.querySelectorAll('.ap-step').length).toBe(0);
+  });
+
+  it('does not exhaust while the dataset size is unknown (datasetSize 0)', async () => {
+    fixture.componentRef.setInput('datasetSize', 0);
+    fixture.componentRef.setInput('goodVotes', new Set([1]));
+    fixture.componentRef.setInput('badVotes', new Set());
+    await settleZoneless(fixture);
+    // Unknown size → uncapped → 1 good is not enough, still in good phase.
+    expect(component.state.phase).toBe('good');
+  });
 });

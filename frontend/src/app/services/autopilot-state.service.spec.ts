@@ -235,6 +235,69 @@ describe('AutopilotStateService', () => {
     expect(service.state.retrainMode).toBe(false);
   });
 
+  it('caps the good target so a 1-item dataset can advance past the good phase', () => {
+    service.activate();
+    // 1-item dataset: default good target is 3, but only 1 item exists.
+    // Voting that single item good should satisfy the (capped) good target.
+    service.checkPhaseTransition(1, 0, 1);
+    expect(service.state.phase).not.toBe('good');
+  });
+
+  it('reaches the exhausted terminal state when a tiny dataset is fully labeled', () => {
+    service.activate();
+    // 1-item dataset, single item voted good: nothing left to label and the
+    // indicators can never go green, so autopilot lands in "exhausted".
+    service.checkPhaseTransition(1, 0, 1);
+    expect(service.state.phase).toBe('exhausted');
+  });
+
+  it('reaches exhausted regardless of whether the lone item was voted good or bad', () => {
+    service.activate();
+    service.checkPhaseTransition(0, 1, 1); // single item voted bad
+    expect(service.state.phase).toBe('exhausted');
+  });
+
+  it('reaches exhausted on a small dataset that cannot meet the good+bad quorum', () => {
+    service.activate();
+    // 5 items: cannot reach 3 good AND 4 bad (needs 7). Fully labeled → exhausted.
+    service.checkPhaseTransition(3, 2, 5);
+    expect(service.state.phase).toBe('exhausted');
+  });
+
+  it('does not go exhausted while unlabeled items remain', () => {
+    service.activate();
+    // 10-item dataset, only 2 labeled: still in an early phase, not exhausted.
+    service.checkPhaseTransition(1, 1, 10);
+    expect(service.state.phase).not.toBe('exhausted');
+  });
+
+  it('prefers the all-green done state over exhausted when indicators are green', () => {
+    service.activate();
+    service.updateFromLabelingStatus(
+      makeStatus({ status: 'green' }, { status: 'green' }, { status: 'green' }),
+    );
+    // Fully labeled AND all green: the happy "done" path wins over "exhausted".
+    service.checkPhaseTransition(3, 2, 5);
+    expect(service.state.phase).toBe('done');
+  });
+
+  it('regresses out of exhausted when an unlabeled item reappears (vote cleared)', () => {
+    service.activate();
+    service.checkPhaseTransition(1, 0, 1);
+    expect(service.state.phase).toBe('exhausted');
+    // User clears the vote: now nothing is labeled again and the item is
+    // available, so the phase regresses to the good phase.
+    service.checkPhaseTransition(0, 0, 1);
+    expect(service.state.phase).toBe('good');
+  });
+
+  it('leaves targets uncapped when totalCount is unknown (default 0)', () => {
+    service.activate();
+    // No size passed: 1 good is not enough for the default target of 3.
+    service.checkPhaseTransition(1, 0);
+    expect(service.state.phase).toBe('good');
+  });
+
   it('state$ should emit on changes', () => new Promise<void>((done) => {
     const phases: string[] = [];
     service.state$.subscribe((s) => phases.push(s.phase));

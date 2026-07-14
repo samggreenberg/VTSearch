@@ -45,6 +45,13 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
   @Input() goodVotes: Set<number> = new Set();
   @Input() badVotes: Set<number> = new Set();
   /**
+   * Number of items in the active dataset. Feeds the dataset-size-aware phase
+   * targets: on a tiny collection the default 3-good / 4-bad targets are
+   * unreachable, so they're capped to what the dataset can supply. ``0`` means
+   * unknown (still loading); the service leaves the targets uncapped then.
+   */
+  @Input() datasetSize = 0;
+  /**
    * Total "good" labels in the active detector's saved labelset, across all
    * datasets it has been used with.  When both this and ``labelsetBadCount``
    * are positive at activation time, autopilot enters retrain mode and uses
@@ -68,6 +75,31 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
 
   get running(): boolean {
     return this.autopilotState.running;
+  }
+
+  /** Terminal state: every item labeled but the indicators never went green
+   *  (typical of a tiny dataset that can't reach the good+bad quorum). */
+  get exhausted(): boolean {
+    return this.state.phase === 'exhausted';
+  }
+
+  /** Items still carrying no vote, or ``Infinity`` while the dataset size is
+   *  unknown or inconsistent with the vote counts (mirrors the service's
+   *  uncapped behavior during load; see ``checkPhaseTransition``). */
+  private get remainingUnlabeled(): number {
+    const raw = this.datasetSize - this.goodVotes.size - this.badVotes.size;
+    if (this.datasetSize <= 0 || raw < 0) return Infinity;
+    return raw;
+  }
+
+  /** Good-vote target for the current dataset, capped to what it can supply. */
+  get effGoodTarget(): number {
+    return Math.min(this.state.goodToStart, this.goodVotes.size + this.remainingUnlabeled);
+  }
+
+  /** Bad-vote target for the current dataset, capped to what it can supply. */
+  get effBadTarget(): number {
+    return Math.min(this.state.badToStart, this.badVotes.size + this.remainingUnlabeled);
   }
 
   get steps(): StepDisplay[] {
@@ -106,15 +138,26 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
       this.autopilotState.updateFromLabelingStatus(this.labelingStatus);
     }
 
-    if (changes['goodVotes'] || changes['badVotes'] || changes['labelingStatus']) {
+    if (changes['goodVotes'] || changes['badVotes'] || changes['labelingStatus'] || changes['datasetSize']) {
       const prevPhase = this.autopilotState.state.phase;
-      this.autopilotState.checkPhaseTransition(this.goodVotes.size, this.badVotes.size);
-      if (prevPhase !== 'done' && this.autopilotState.state.phase === 'done' && !this.completionAlerted) {
-        this.completionAlerted = true;
-        this.toastService.success({
-          message: 'Autopilot complete',
-          detail: 'All quality indicators are green. You can continue labeling or export your results.',
-        });
+      this.autopilotState.checkPhaseTransition(
+        this.goodVotes.size, this.badVotes.size, this.datasetSize,
+      );
+      const phase = this.autopilotState.state.phase;
+      if (prevPhase !== phase && !this.completionAlerted) {
+        if (phase === 'done') {
+          this.completionAlerted = true;
+          this.toastService.success({
+            message: 'Autopilot complete',
+            detail: 'All quality indicators are green. You can continue labeling or export your results.',
+          });
+        } else if (phase === 'exhausted') {
+          this.completionAlerted = true;
+          this.toastService.success({
+            message: 'Nothing left to label',
+            detail: 'Autopilot has labeled every item in this dataset. Review your votes or export your results.',
+          });
+        }
       }
     }
   }
@@ -131,7 +174,9 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
     // (e.g. user labeled 23 goods in Manual mode before switching to Autopilot).
     // ngOnChanges ran before ngOnInit so `running` was false and the check was
     // skipped; do it now so the phase cascades (good→bad→hard) before we emit.
-    this.autopilotState.checkPhaseTransition(this.goodVotes.size, this.badVotes.size);
+    this.autopilotState.checkPhaseTransition(
+      this.goodVotes.size, this.badVotes.size, this.datasetSize,
+    );
     this.started.emit();
   }
 
@@ -237,9 +282,9 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
     const st = this.state;
     switch (phase) {
       case 'good':
-        return `${this.goodVotes.size}/${st.goodToStart} good labels`;
+        return `${this.goodVotes.size}/${this.effGoodTarget} good labels`;
       case 'bad':
-        return `${this.badVotes.size}/${st.badToStart} bad labels`;
+        return `${this.badVotes.size}/${this.effBadTarget} bad labels`;
       case 'hard': {
         // No count target here — the phase ends when the smart and stable
         // indicators (the dots rendered right after this text) both go green.

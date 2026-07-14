@@ -35,6 +35,34 @@
   min-width: 100px;
 }
 
+// Terminal autopilot state: every item labeled but the indicators never went
+// green (tiny dataset). Replaces the media viewer so the pane is never blank.
+.autopilot-exhausted-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--space-sm);
+  padding: var(--space-lg);
+}
+
+.autopilot-exhausted-heading {
+  margin: 0;
+  font-size: var(--font-xl);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.autopilot-exhausted-body {
+  margin: 0;
+  max-width: 36ch;
+  font-size: var(--font-md);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
 .panel-right {
   overflow: hidden;
   background: var(--bg-panel);
