@@ -122,6 +122,12 @@ BROWSE_MOUSE_ZOOMS_PER_LEVEL: tuple[int, int] = (1, 3)
 # ceiling matches the frontend's absolute preview cap.
 POPUP_PREVIEW_SIZE_PX: tuple[int, int] = (96, 720)
 
+# Default recipient for the Help modal's "Email us" affordance. A per-instance
+# operator can override it with the ``--support-email`` CLI flag or the
+# persisted ``support_email`` server setting (see
+# ``vtsearch.settings.get_effective_support_email``).
+DEFAULT_SUPPORT_EMAIL: str = "sam.greenberg@gmail.com"
+
 
 def _clamp(lo: float, hi: float):
     """Return a :class:`BeforeValidator` that clamps numeric input to ``[lo, hi]``."""
@@ -200,6 +206,15 @@ class ServerSettings(BaseModel):
     # datasets are stamped with an ``expires_at`` timestamp based on this
     # value.  ``None`` (the default) means datasets never expire.
     dataset_max_age_days: int | None = None
+
+    # Recipient address for the Help modal's "Email us" contact affordance.
+    # Shared across all users (single-file server tier); a per-instance
+    # operator overrides it with the ``--support-email`` CLI flag (which wins
+    # for the process lifetime) or by editing this key in the settings file.
+    # The frontend reads the effective value from ``/api/settings`` to build
+    # the ``mailto:`` link. See
+    # :func:`vtsearch.settings.get_effective_support_email`.
+    support_email: str = DEFAULT_SUPPORT_EMAIL
 
     # Browse UMAP projection knobs (Stage 1).  They change the map layout, so
     # a per-deployment operator may want to tune them.  The persisted

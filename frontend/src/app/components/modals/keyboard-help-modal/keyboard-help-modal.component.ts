@@ -1,4 +1,13 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, output, SecurityContext, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  OnInit,
+  output,
+  SecurityContext,
+  signal,
+} from '@angular/core';
 
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
@@ -6,6 +15,11 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { marked } from 'marked';
 import { ModalComponent } from '../../modal/modal.component';
 import { ThemeService, EffectiveTheme } from '../../../services/theme.service';
+import { SettingsStateService } from '../../../services/settings-state.service';
+
+/** Fallback "Email us" recipient used until server settings resolve. Matches
+ *  the backend default (``vtsearch.settings_models.DEFAULT_SUPPORT_EMAIL``). */
+const DEFAULT_SUPPORT_EMAIL = 'sam.greenberg@gmail.com';
 
 interface Shortcut {
   keys: string[];
@@ -58,6 +72,16 @@ export class KeyboardHelpModalComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly themeService = inject(ThemeService);
+  private readonly settingsState = inject(SettingsStateService);
+
+  /** ``mailto:`` href for the "Email us" footer link, pre-addressed to the
+   *  server's configured support address (``--support-email`` /
+   *  ``VTSEARCH_SUPPORT_EMAIL`` / the persisted ``support_email`` setting),
+   *  falling back to the built-in default until settings load. */
+  readonly mailtoHref = computed(() => {
+    const email = this.settingsState.settingsSignal()?.support_email?.trim() || DEFAULT_SUPPORT_EMAIL;
+    return `mailto:${encodeURIComponent(email)}?subject=VTSearch%20Issue%3A`;
+  });
 
   readonly activeTab = signal<Tab>('shortcuts');
   /** Which shortcut context's panel is shown under the "Keyboard shortcuts" tab. */
