@@ -347,9 +347,7 @@ class TestVideoDisplayMetadata:
         self.mt = VideoMediaType()
 
     def test_full_metadata(self):
-        md = self.mt.display_metadata(
-            {"category": "Archery", "duration": 3.5, "file_size": 2048, "id": 1}
-        )
+        md = self.mt.display_metadata({"category": "Archery", "duration": 3.5, "file_size": 2048, "id": 1})
         assert md["Category"] == "Archery"
         assert md["Duration"] == 3.5
         assert md["File Size"] == 2048
@@ -366,9 +364,7 @@ class TestVideoDisplayMetadata:
         assert self.mt.display_metadata({}) == {}
 
     def test_merges_base_clip_fields(self):
-        md = self.mt.display_metadata(
-            {"category": "Archery", "clip_start": 1.0, "clip_end": 2.0}
-        )
+        md = self.mt.display_metadata({"category": "Archery", "clip_start": 1.0, "clip_end": 2.0})
         # Type-specific field is present, and base-class clip fields are merged in.
         assert md["Category"] == "Archery"
         assert md["Clip Start"] == 1.0
