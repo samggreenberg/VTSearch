@@ -222,9 +222,7 @@ class TestTriggerSchedulesReembed:
         det_ctx = _with_cached_labelset(_det_ctx("clap"), media_type="audio")
         spawn = _CaptureSpawn()
 
-        task_id = embedder_sync.maybe_start_label_reembed(
-            det_ctx, {"media_type": "image"}, spawn=spawn
-        )
+        task_id = embedder_sync.maybe_start_label_reembed(det_ctx, {"media_type": "image"}, spawn=spawn)
 
         task = next(t for t in detector_loading_tasks.list_tasks() if t["task_id"] == task_id)
         assert task["media_type"] == "audio"
@@ -238,9 +236,7 @@ class TestTriggerSchedulesReembed:
         det_ctx.cached_labelset_media_type = ""  # no cached media type
         spawn = _CaptureSpawn()
 
-        task_id = embedder_sync.maybe_start_label_reembed(
-            det_ctx, {"media_type": "image"}, spawn=spawn
-        )
+        task_id = embedder_sync.maybe_start_label_reembed(det_ctx, {"media_type": "image"}, spawn=spawn)
 
         task = next(t for t in detector_loading_tasks.list_tasks() if t["task_id"] == task_id)
         assert task["media_type"] == "image"
