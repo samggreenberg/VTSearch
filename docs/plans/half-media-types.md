@@ -90,14 +90,3 @@ document by pretending its raw bytes are an image — render it *as a document*.
 
 <!-- item-sep -->
 
-## Done (do not re-open)
-
-- **#2403 — document large preview.** `DocumentMediaType.image_response()`
-  renders the first PDF page to PNG (memoised on the in-memory media, never
-  persisted), so `/api/medias/<id>/image` returns a real picture and the
-  bin-popup preview pane (`showPreview`, already gated on
-  `usesThumbnails('document') == true`) shows a crisp page instead of falling
-  back to the tiny grid thumbnail. The same hook makes the browse **grid**
-  thumbnail render on demand for documents that carry no precomputed
-  `thumbnail_bytes`. Non-PDF documents (`.doc` / `.ppt`, which PyMuPDF can't
-  rasterise) return `None` and fall back to the placeholder icon.

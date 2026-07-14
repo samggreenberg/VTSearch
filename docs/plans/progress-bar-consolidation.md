@@ -14,8 +14,6 @@
   ballparks (e.g. on a non-cuML GPU host the coverage k-means can outweigh the
   registry save), not measured; a future pass could record real per-sub-stage
   durations and feed them back in, mirroring the device-aware top-level weights.
-- [ ] #2394 — Report cumulative embed progress across the multi-embedder (v3 trio) loop
-- [ ] #2395 — Migrate text-sort progress to `step`/`total_steps` for the unified bar + ETA
 - **Indeterminate sub-steps park at the step floor.** A phase that reports no
   `total` (e.g. model load) sits the bar at its weighted floor until the next
   phase. That's honest but static; per-step weights (now shipped) mitigate it,
