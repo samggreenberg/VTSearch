@@ -68,7 +68,7 @@
 
       @if (tab === 'blank') {
         <div class="form-group example-group">
-          <label class="col-label">Example</label>
+          <label class="col-label">Example <span class="required">*</span></label>
           <div class="tab-bar example-tab-bar" role="tablist">
             <button type="button" class="tab" role="tab"
               [class.active]="exampleTab() === 'text'"
@@ -129,6 +129,12 @@
                 ></vt-drop-zone>
               }
             </div>
+          }
+
+          @if (!hasExample) {
+            <p class="info-text example-empty-hint">
+              Provide a text or {{ exampleMediaTabLabel.toLowerCase() }} example to create the detector.
+            </p>
           }
         </div>
       }
@@ -333,7 +339,7 @@
       <button class="btn btn--secondary" (click)="close()" title="Discard this detector and close the dialog">Cancel</button>
       @if (tab === 'blank') {
         <button class="btn btn--primary" [disabled]="!canSubmitBlank" (click)="submit()"
-          title="Create the detector with the example you provided">
+          [title]="blankSubmitTitle">
           {{ submitting() ? 'Creating…' : 'Create' }}
         </button>
       } @else {
