@@ -19,15 +19,11 @@ the original priority.
 
 <!-- item-sep -->
 
-- [ ] #2355 — Fill in missing demo media counts
-
 <!-- item-sep -->
 
 - [ ] #2382 — Add a confidence signal to the Goods count header
 
 <!-- item-sep -->
-
-- [ ] #2357 — "Email us" mailto has no recipient
 
 <!-- item-sep -->
 
