@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from vtscore.datasets.importers._npz_vectors import (
+    is_archive_member_manifest,
     read_npz_embedder_name,
     read_npz_filenames_and_vectors,
     validate_manifest_embedder_name,
@@ -198,9 +199,10 @@ class ServerFilesDatasetImporter(DatasetImporter):
     name = "server_files"
     display_name = "Manifest"
     description = (
-        "Read a server-side file listing media paths (text file, one per line, "
-        "OR a .npz archive that also supplies pre-computed embedding vectors) "
-        "and embed every listed file"
+        "Read a server-side manifest and import the media it lists. Accepts a text "
+        "file of media paths (one per line), a .npz of paths plus pre-computed "
+        "embedding vectors, or a .npz that references members inside tar/zip shards "
+        "and streams them without extraction (WebDataset-style corpora)"
     )
     icon = "\U0001f5c2"  # 🗂 - falls back to a generic file icon
     picker_view = "form"
@@ -226,8 +228,11 @@ class ServerFilesDatasetImporter(DatasetImporter):
             hint=(
                 "Accepted formats:\n"
                 " • .txt / .list - UTF-8 text, one path per line (lines starting with # are comments).\n"
-                " • .npz - NumPy archive of paths plus pre-computed embedding vectors;\n"
+                " • .npz (paths) - NumPy archive of paths plus pre-computed embedding vectors;\n"
                 "   listed files skip re-embedding and use the supplied vectors.\n"
+                " • .npz (archive members) - a manifest with a 'members' + 'archives' array\n"
+                "   references media packed inside tar/zip shards; the bytes stream on demand\n"
+                "   with no extraction (built for WebDataset-style corpora too large to copy).\n"
                 "Symlinks are followed; directory entries are scanned recursively for media files."
             ),
             accept=".txt,.list,.npz",
@@ -259,6 +264,37 @@ class ServerFilesDatasetImporter(DatasetImporter):
             if f.key == "media_type":
                 f.options = all_folder_names()
                 break
+
+    @staticmethod
+    def _archive_manifest_path(field_values: dict[str, Any]) -> Path | None:
+        """Return the paths-file path when it is an archive-member ``.npz``, else ``None``.
+
+        The ``Manifest`` importer front-ends two ``.npz`` shapes: a plain
+        *path → vector* manifest and a *member → vector* archive manifest.  A
+        manifest that references tar/zip members (a ``members`` array) is handled
+        by the no-extraction :mod:`local_archive_member` importer, which this
+        importer delegates to so the user never picks between two tabs.
+        """
+        raw = (field_values.get("paths_file") or "").strip()
+        if not raw:
+            return None
+        p = Path(raw)
+        return p if is_archive_member_manifest(p) else None
+
+    @staticmethod
+    def _delegate_archive_fields(field_values: dict[str, Any]) -> dict[str, Any]:
+        """Remap this importer's field values onto the archive-member importer's fields."""
+        return {
+            "manifest": field_values.get("paths_file", ""),
+            "media_type": field_values.get("media_type", "video"),
+        }
+
+    @staticmethod
+    def _archive_member_importer():
+        """Return the registered no-extraction archive-member importer singleton."""
+        from vtscore.datasets.importers import get_importer  # noqa: PLC0415
+
+        return get_importer("local_archive_member")
 
     def _stage_paths(
         self, field_values: dict[str, Any], media_type_id: str
@@ -372,6 +408,13 @@ class ServerFilesDatasetImporter(DatasetImporter):
     def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         from vtscore.media import get_by_folder_name  # noqa: PLC0415
 
+        if self._archive_manifest_path(field_values) is not None:
+            # An archive-member .npz: hand off to the no-extraction importer,
+            # which stamps ``local_archive_member`` origins so byte-streaming and
+            # Find-from-origin keep resolving by name.
+            self._archive_member_importer().run(self._delegate_archive_fields(field_values), medias, thin=thin)
+            return
+
         specs = self.effective_source_specs(field_values)
         output_type = get_by_folder_name(field_values.get("media_type", "")).type_id
 
@@ -417,6 +460,9 @@ class ServerFilesDatasetImporter(DatasetImporter):
             raise FileNotFoundError(f"Paths file not found: {paths_file}")
         if not paths_file.is_file():
             raise IsADirectoryError(f"Paths file must be a file: {paths_file}")
+        if self._archive_manifest_path(field_values) is not None:
+            self._archive_member_importer().run_cli(self._delegate_archive_fields(field_values), medias, thin=thin)
+            return
         self.run(field_values, medias, thin=thin)
 
     @property
@@ -430,6 +476,15 @@ class ServerFilesDatasetImporter(DatasetImporter):
         thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
         from vtscore.media import get as media_get, get_by_folder_name  # noqa: PLC0415
+
+        if self._archive_manifest_path(field_values) is not None:
+            # Archive-member import isn't chunked (each media is a lightweight
+            # vector reference, no bytes read); run it whole and yield one chunk.
+            chunk: dict[int, dict[str, Any]] = {}
+            self._archive_member_importer().run(self._delegate_archive_fields(field_values), chunk, thin=thin)
+            if chunk:
+                yield chunk
+            return
 
         specs = self.effective_source_specs(field_values)
         output_type = get_by_folder_name(field_values.get("media_type", "")).type_id
@@ -497,6 +552,12 @@ class ServerFilesDatasetImporter(DatasetImporter):
             raise FileNotFoundError(f"Paths file not found: {paths_file}")
         if not paths_file.is_file():
             raise IsADirectoryError(f"Paths file must be a file: {paths_file}")
+        if self._archive_manifest_path(field_values) is not None:
+            chunk: dict[int, dict[str, Any]] = {}
+            self._archive_member_importer().run_cli(self._delegate_archive_fields(field_values), chunk, thin=thin)
+            if chunk:
+                yield chunk
+            return
         yield from self.run_chunked(field_values, chunk_size, thin=thin)
 
     def default_display_name(self, field_values: dict[str, Any]) -> str:

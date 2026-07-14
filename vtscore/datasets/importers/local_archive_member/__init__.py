@@ -85,6 +85,13 @@ class LocalArchiveMemberImporter(ImporterBase):
     icon = "\U0001f4e6"  # 📦
     picker_view = "form"
     category = "server"
+    # Hidden from the tabbed picker: this importer is no longer its own sub-tab
+    # under Files.  The ``Manifest`` importer (``server_files``) auto-detects an
+    # archive-member ``.npz`` and delegates here, so the user meets a single
+    # "Manifest" entry instead of a confusing third tab (issue #2484).  The
+    # importer stays fully registered so its ``local_archive_member`` media
+    # origins, byte-streaming, and Find-from-origin source keep resolving by name.
+    hidden_from_picker = True
 
     fields = [
         PluginField(

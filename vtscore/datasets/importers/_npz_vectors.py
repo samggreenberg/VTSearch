@@ -103,6 +103,32 @@ def validate_manifest_embedder_name(
     )
 
 
+def is_archive_member_manifest(npz_path: Path) -> bool:
+    """Return ``True`` if *npz_path* is a no-extraction **archive-member** manifest.
+
+    The ``Manifest`` importer accepts two shapes of ``.npz`` under one field: a
+    plain *path → vector* manifest (files that live on disk) and an
+    *archive-member* manifest (members packed inside tar/zip shards, streamed
+    without extraction).  They are told apart by a single distinguishing array:
+    an archive-member manifest carries a ``members`` (or ``member``) array,
+    which a plain path manifest never has.  This lets the importer auto-detect
+    the shape and dispatch to the archive-member path, so users never pick
+    between two tabs for what is, to them, "a manifest of pre-computed vectors".
+
+    Only ``.npz`` files can be archive manifests; a ``.txt`` / ``.list`` paths
+    file never is.  Never raises -- returns ``False`` on a missing file, a
+    non-``.npz`` suffix, or any read error.
+    """
+    p = Path(npz_path)
+    if p.suffix.lower() != ".npz" or not p.is_file():
+        return False
+    try:
+        with np.load(p, allow_pickle=False) as data:
+            return any(k in data.files for k in _MEMBERS_KEYS)
+    except Exception:
+        return False
+
+
 def read_npz_filenames_and_vectors(npz_path: Path) -> dict[str, np.ndarray]:
     """Return a ``{filename: vector}`` mapping read from *npz_path*.
 

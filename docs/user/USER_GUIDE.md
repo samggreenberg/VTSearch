@@ -179,25 +179,25 @@ Some corpora are too large to unpack. WebDataset-style collections pack
 tens of thousands of audio/video chunks inside a handful of multi-GB
 `shard_*.tar` (or `.zip`) files - the multivent-raw `videos/` set alone
 is **4.1 TB across 667 shards** - so extracting a second on-disk copy
-is a non-starter. The **Server → Archive members (no extract)** importer
-(📦 in the importer picker) loads a chosen subset of those chunks
-**without unpacking anything**: each imported media records only
-`{archive path, member name}` and streams that single tar/zip member on
-demand (HTTP Range), so playing a clip transfers a few seconds of bytes
-rather than the whole shard. Nothing is written to disk, and no member
-data is read at import time - the importer only walks each referenced
-shard's tar headers to confirm the member exists and record its size.
+is a non-starter. The **Files → Manifest** importer handles this case too:
+point its *Paths file* field at a `.npz` that references members inside
+tar/zip shards, and VTSearch loads a chosen subset of those chunks
+**without unpacking anything**. The importer auto-detects the archive-member
+shape (a manifest with a `members` array) and switches to the
+no-extraction path - there is no separate tab or mode to pick. Each
+imported media records only `{archive path, member name}` and streams that
+single tar/zip member on demand (HTTP Range), so playing a clip transfers a
+few seconds of bytes rather than the whole shard. Nothing is written to
+disk, and no member data is read at import time - the importer only walks
+each referenced shard's tar headers to confirm the member exists and record
+its size.
 
-The importer has two fields:
+Set the *Dataset MediaType* to the kind of media the referenced members
+hold (e.g. `video` or `audio`). Because the manifest supplies the
+embeddings, the import needs no GPU and skips the embed stage entirely.
 
-- **Dataset MediaType** - the kind of media the referenced members hold
-  (e.g. `video` or `audio`).
-- **Manifest (.npz)** - a server-path field pointing at a single `.npz`
-  manifest that pairs the chosen members with their **pre-computed**
-  vectors. Because the embeddings are supplied, the import needs no GPU
-  and skips the embed stage entirely.
-
-**Manifest schema.** The `.npz` holds these arrays, one entry per row:
+**Manifest schema.** The archive-member `.npz` holds these arrays, one
+entry per row:
 
 | Array | Shape | Required | Meaning |
 |-------|-------|----------|---------|
