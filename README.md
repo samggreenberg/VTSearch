@@ -9,6 +9,16 @@ A trainable media search tool. VTSearch searches collections of audio clips, ima
 
 > **New to VTSearch?** Read **[docs/user/USER_GUIDE.md](docs/user/USER_GUIDE.md)** for a walkthrough of loading a dataset, training a detector with Autopilot (or applying an existing one), and exporting the matches. Most users never need anything else.
 
+## Quick start
+
+```bash
+bash scripts/install.sh                            # install Python deps (auto-detects CPU vs GPU)
+cd frontend && npm install && npm run build:prod   # build the Angular frontend into static/
+cd .. && python app.py --local                     # start the app at http://localhost:5000
+```
+
+See [docs/SETUP.md](docs/SETUP.md) for prerequisites, virtual environment setup, and the full walkthrough.
+
 ## Setup and running tests
 
 See [docs/SETUP.md](docs/SETUP.md) for prerequisites, getting the code, virtual environment setup, installing dependencies, and running the test suite.
