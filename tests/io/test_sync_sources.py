@@ -473,6 +473,190 @@ class TestSettingsSourceConfig:
 
 
 # ---------------------------------------------------------------------------
+# Deployment-wide default settings source with per-user opt-out
+# ---------------------------------------------------------------------------
+
+
+class TestDefaultSettingsSourceInheritance:
+    """``ServerSettings.default_settings_source`` inheritance + opt-out.
+
+    Precedence (resolved once, in
+    ``UserSettingsStore.resolve_settings_source``): a user's own
+    ``settings_source`` wins; ``{"source_name": "none"}`` is an explicit
+    opt-out; otherwise the user inherits the deployment-wide default. These
+    tests exercise the resolver directly and across all four sync entry
+    points that read it - initial load, needs-sync check, pull, and push -
+    plus the active-source route's ``inherited`` flag.
+    """
+
+    @staticmethod
+    def _cfg(path):
+        return {"source_name": "server_json_file", "field_values": {"filepath": str(path)}}
+
+    # -- resolver precedence --------------------------------------------
+
+    def test_no_default_no_user_resolves_none(self, isolated_settings):
+        from vtsearch import settings
+
+        cfg, inherited = settings._store.resolve_settings_source("default")
+        assert cfg is None
+        assert inherited is False
+
+    def test_user_with_no_explicit_key_inherits_default(self, tmp_path, isolated_settings):
+        from vtsearch import settings
+
+        default_file = tmp_path / "deployment.json"
+        settings.set_default_settings_source(self._cfg(default_file))
+
+        cfg, inherited = settings._store.resolve_settings_source("default")
+        assert cfg is not None
+        assert cfg["field_values"]["filepath"] == str(default_file)
+        assert inherited is True
+
+    def test_user_explicit_source_overrides_default(self, tmp_path, isolated_settings):
+        from vtsearch import settings
+
+        settings.set_default_settings_source(self._cfg(tmp_path / "deployment.json"))
+        settings.set_settings_source_config(self._cfg(tmp_path / "mine.json"))
+
+        cfg, inherited = settings._store.resolve_settings_source("default")
+        assert cfg is not None
+        assert cfg["field_values"]["filepath"] == str(tmp_path / "mine.json")
+        assert inherited is False
+
+    def test_opt_out_sentinel_beats_default(self, tmp_path, isolated_settings):
+        from vtsearch import settings
+
+        settings.set_default_settings_source(self._cfg(tmp_path / "deployment.json"))
+        settings.set_settings_source_config({"source_name": "none"})
+
+        cfg, inherited = settings._store.resolve_settings_source("default")
+        assert cfg is None
+        assert inherited is False
+
+    def test_default_named_none_is_treated_as_no_default(self, isolated_settings):
+        from vtsearch import settings
+
+        # A deployment default explicitly set to the opt-out sentinel means
+        # "no deployment-wide source", same as ``None``.
+        settings.set_default_settings_source({"source_name": "none"})
+
+        cfg, inherited = settings._store.resolve_settings_source("default")
+        assert cfg is None
+        assert inherited is False
+
+    def test_get_settings_source_config_resolved_reports_inheritance(self, tmp_path, isolated_settings):
+        from vtsearch import settings
+
+        settings.set_default_settings_source(self._cfg(tmp_path / "deployment.json"))
+
+        cfg, inherited = settings.get_settings_source_config_resolved()
+        assert cfg is not None
+        assert inherited is True
+        # The plain accessor returns just the effective config.
+        plain = settings.get_settings_source_config()
+        assert plain is not None
+        assert plain["field_values"]["filepath"] == str(tmp_path / "deployment.json")
+
+    # -- entry point 1 + 3: initial load / pull -------------------------
+
+    def test_initial_load_pulls_from_inherited_default(self, tmp_path, isolated_settings):
+        from vtsearch import settings
+
+        default_file = tmp_path / "deployment.json"
+        default_file.write_text(json.dumps({"volume": 0.33, "theme": "light"}))
+        settings.set_default_settings_source(self._cfg(default_file))
+
+        # A first read of any user setting hydrates the cache, resolves the
+        # inherited default, and pulls it.
+        assert settings.get_volume() == 0.33
+        assert settings.get_theme() == "light"
+
+    def test_manual_sync_uses_inherited_default(self, tmp_path, isolated_settings):
+        from vtsearch import settings
+
+        default_file = tmp_path / "deployment.json"
+        default_file.write_text(json.dumps({"volume": 0.71}))
+        settings.set_default_settings_source(self._cfg(default_file))
+
+        imported = settings.sync_from_settings_source()
+        assert imported is not None
+        assert imported["volume"] == 0.71
+        assert settings.get_volume() == 0.71
+
+    # -- entry point 2: needs-sync check --------------------------------
+
+    def test_inherited_default_resyncs_on_source_change(self, tmp_path, isolated_settings):
+        import os
+
+        from vtsearch import settings
+
+        default_file = tmp_path / "deployment.json"
+        default_file.write_text(json.dumps({"volume": 0.40}))
+        settings.set_default_settings_source(self._cfg(default_file))
+        assert settings.get_volume() == 0.40
+
+        # External writer bumps the source; peek_version (st_mtime_ns) changes.
+        default_file.write_text(json.dumps({"volume": 0.80}))
+        new_mtime = default_file.stat().st_mtime_ns + 10_000_000_000
+        os.utime(default_file, ns=(new_mtime, new_mtime))
+        settings._sync_state["default"].last_check_monotonic -= 5.0
+
+        # Next read picks up the new value via the inherited default.
+        assert settings.get_volume() == 0.80
+
+    # -- entry point 4: push --------------------------------------------
+
+    def test_local_write_pushes_to_inherited_default(self, tmp_path, isolated_settings):
+        from vtsearch import settings
+
+        default_file = tmp_path / "deployment.json"
+        default_file.write_text(json.dumps({"volume": 0.5}))
+        settings.set_default_settings_source(self._cfg(default_file))
+
+        settings.get_volume()  # prime (pull)
+        settings.set_volume(0.66)  # local change -> push to inherited default
+
+        data = json.loads(default_file.read_text())
+        assert data["volume"] == 0.66
+        # The sync-target key is never exported into the target itself.
+        assert "settings_source" not in data
+        assert "default_settings_source" not in data
+
+    # -- opt-out disables every sync path -------------------------------
+
+    def test_opt_out_disables_pull_and_push(self, tmp_path, isolated_settings):
+        from vtsearch import settings
+
+        default_file = tmp_path / "deployment.json"
+        default_file.write_text(json.dumps({"volume": 0.22}))
+        settings.set_default_settings_source(self._cfg(default_file))
+        settings.set_settings_source_config({"source_name": "none"})
+
+        # A local write is not pushed to the deployment default...
+        settings.set_volume(0.9)
+        assert json.loads(default_file.read_text())["volume"] == 0.22
+        # ...and the local value is authoritative (no pull overwrote it).
+        assert settings.get_volume() == 0.9
+
+    def test_clear_falls_back_to_inherited_default(self, tmp_path, isolated_settings):
+        from vtsearch import settings
+
+        default_file = tmp_path / "deployment.json"
+        settings.set_default_settings_source(self._cfg(default_file))
+
+        # User overrides with their own explicit source, then clears it.
+        settings.set_settings_source_config(self._cfg(tmp_path / "mine.json"))
+        assert settings.get_settings_source_config_resolved()[1] is False
+        settings.set_settings_source_config(None)
+
+        cfg, inherited = settings.get_settings_source_config_resolved()
+        assert cfg is not None
+        assert cfg["field_values"]["filepath"] == str(default_file)
+        assert inherited is True
+
+
+# ---------------------------------------------------------------------------
 # Settings sync-on-change
 # ---------------------------------------------------------------------------
 
@@ -1555,6 +1739,56 @@ class TestSettingsSourcesAPI:
         data = resp.get_json()
         assert data["ok"] is True
         assert "volume" in data["keys"]
+
+    def test_explicit_source_reports_not_inherited(self, client, tmp_path, isolated_settings):
+        client.put(
+            "/api/settings-sources/active",
+            json={"source_name": "server_json_file", "field_values": {"filepath": str(tmp_path / "u.json")}},
+        )
+        cfg = client.get("/api/settings-sources/active").get_json()
+        assert cfg["inherited"] is False
+
+    def test_inherited_default_reported_on_active(self, client, tmp_path, isolated_settings):
+        from vtsearch import settings
+
+        settings.set_default_settings_source(
+            {"source_name": "server_json_file", "field_values": {"filepath": str(tmp_path / "deployment.json")}}
+        )
+        resp = client.get("/api/settings-sources/active")
+        assert resp.status_code == 200
+        cfg = resp.get_json()
+        assert cfg is not None
+        assert cfg["source_name"] == "server_json_file"
+        assert cfg["inherited"] is True
+
+    def test_put_none_opts_out_of_default(self, client, tmp_path, isolated_settings):
+        from vtsearch import settings
+
+        settings.set_default_settings_source(
+            {"source_name": "server_json_file", "field_values": {"filepath": str(tmp_path / "deployment.json")}}
+        )
+        resp = client.put("/api/settings-sources/active", json={"source_name": "none"})
+        assert resp.status_code == 200
+        assert resp.get_json()["ok"] is True
+        # Opted out: the effective source resolves to null despite the default.
+        assert client.get("/api/settings-sources/active").get_json() is None
+
+    def test_clear_reinherits_default_via_route(self, client, tmp_path, isolated_settings):
+        from vtsearch import settings
+
+        settings.set_default_settings_source(
+            {"source_name": "server_json_file", "field_values": {"filepath": str(tmp_path / "deployment.json")}}
+        )
+        # Override, then clear.
+        client.put(
+            "/api/settings-sources/active",
+            json={"source_name": "server_json_file", "field_values": {"filepath": str(tmp_path / "u.json")}},
+        )
+        assert client.get("/api/settings-sources/active").get_json()["inherited"] is False
+        client.put("/api/settings-sources/active", json={})
+        cfg = client.get("/api/settings-sources/active").get_json()
+        assert cfg is not None
+        assert cfg["inherited"] is True
 
 
 # ---------------------------------------------------------------------------

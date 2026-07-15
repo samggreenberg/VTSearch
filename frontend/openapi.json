@@ -4887,6 +4887,9 @@
             "additionalProperties": {},
             "type": "object"
           },
+          "inherited": {
+            "type": "boolean"
+          },
           "source_name": {
             "type": "string"
           }
@@ -14083,6 +14086,7 @@
     },
     "/api/settings-sources/active": {
       "get": {
+        "description": "``inherited`` is ``true`` when the effective source is the deployment-wide\n``default_settings_source`` rather than the user's own key. A user who has\nopted out (``{\"source_name\": \"none\"}``) or for whom no source resolves\ngets a literal ``null``.",
         "operationId": "get_active_settings_source",
         "responses": {
           "200": {
@@ -14099,13 +14103,13 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Return the active settings source config, or null.",
+        "summary": "Return the active settings source config (with ``inherited``), or null.",
         "tags": [
           "sync_sources"
         ]
       },
       "put": {
-        "description": "A body of ``{}`` or one with empty ``source_name`` clears the active\nsource; otherwise both fields specify the new source.",
+        "description": "A body of ``{}`` or one with empty ``source_name`` clears the user's\nexplicit source so they inherit the deployment-wide default (if any).\n``source_name: \"none\"`` records an explicit opt-out (no source even when\na default exists). Otherwise both fields specify the new source.",
         "operationId": "set_active_settings_source",
         "requestBody": {
           "content": {

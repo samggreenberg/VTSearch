@@ -224,6 +224,20 @@ class ServerSettings(BaseModel):
     projection_n_neighbors: Annotated[int, _clamp(2, 200)] = PROJECTION_N_NEIGHBORS
     projection_min_dist: Annotated[float, _clamp(0.0, 0.99)] = PROJECTION_MIN_DIST
 
+    # Deployment-wide default settings sync source. Same
+    # ``{"source_name": ..., "field_values": ...}`` shape as the per-user
+    # ``settings_source`` key, but shared across the whole instance. A user
+    # with no explicit ``settings_source`` of their own inherits this; a user
+    # whose ``settings_source`` is ``{"source_name": "none"}`` explicitly opts
+    # out (no source, even when a default exists). ``None`` (the default)
+    # means there is no deployment-wide source. The precedence
+    # (user-explicit > deployment-default > none) is resolved in one place -
+    # :meth:`vtsearch.settings_store.UserSettingsStore.resolve_settings_source` -
+    # so every sync path agrees. To personalise per user, template the
+    # ``field_values`` (e.g. ``{"filepath": "data/user-settings/{username}.json"}``)
+    # just as with the per-user key.
+    default_settings_source: dict[str, Any] | None = None
+
 
 class UserSettings(BaseModel):
     """Per-user settings persisted in ``<user_data_dir>/user_settings.json``."""

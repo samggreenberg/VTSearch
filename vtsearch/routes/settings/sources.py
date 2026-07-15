@@ -62,16 +62,22 @@ def list_settings_sources_route():
 @sync_sources_bp.route("/api/settings-sources/active", methods=["GET"])
 @sync_sources_bp.response(200, SyncSourceConfigSchema)
 def get_active_settings_source():
-    """Return the active settings source config, or null."""
+    """Return the active settings source config (with ``inherited``), or null.
+
+    ``inherited`` is ``true`` when the effective source is the deployment-wide
+    ``default_settings_source`` rather than the user's own key. A user who has
+    opted out (``{"source_name": "none"}``) or for whom no source resolves
+    gets a literal ``null``.
+    """
     from vtsearch import settings
 
-    cfg = settings.get_settings_source_config()
+    cfg, inherited = settings.get_settings_source_config_resolved()
     # ``jsonify(None)`` short-circuits flask-smorest's schema.dump, which
     # would otherwise turn ``None`` into ``{}``. The frontend expects a
-    # literal ``null`` when no source is configured.
+    # literal ``null`` when no source is active.
     if cfg is None:
         return jsonify(None)
-    return cfg
+    return {**cfg, "inherited": inherited}
 
 
 @sync_sources_bp.route("/api/settings-sources/active", methods=["PUT"])
@@ -81,8 +87,10 @@ def get_active_settings_source():
 def set_active_settings_source(body: dict):
     """Set or clear the active settings source.
 
-    A body of ``{}`` or one with empty ``source_name`` clears the active
-    source; otherwise both fields specify the new source.
+    A body of ``{}`` or one with empty ``source_name`` clears the user's
+    explicit source so they inherit the deployment-wide default (if any).
+    ``source_name: "none"`` records an explicit opt-out (no source even when
+    a default exists). Otherwise both fields specify the new source.
     """
     from vtsearch import settings
     from vtsearch.settings_io.sources import get_settings_source
@@ -91,6 +99,12 @@ def set_active_settings_source(body: dict):
     if not source_name:
         settings.set_settings_source_config(None)
         return {"ok": True, "message": "Settings source cleared."}
+
+    if source_name == "none":
+        # Explicit opt-out: store the sentinel so the precedence resolver
+        # returns no source for this user even if a deployment default exists.
+        settings.set_settings_source_config({"source_name": "none"})
+        return {"ok": True, "message": "Settings source opted out."}
 
     source = get_settings_source(source_name)
     if source is None:
