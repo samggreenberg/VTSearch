@@ -57,11 +57,33 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-PredictFn = Callable[[np.ndarray], np.ndarray]
-"""Callable returning P(positive) in [0, 1] for each row of X."""
+PredictFn = Callable[[np.ndarray], "np.ndarray | tuple[np.ndarray, np.ndarray]"]
+"""Callable returning per-row P(positive) - optionally with per-item std.
+
+A plain trainer returns just ``scores`` (P(positive) in ``[0, 1]``).  An
+*ensemble* trainer returns ``(scores, per_item_std)`` where ``scores`` is
+the mean sigmoid across ensemble members and ``per_item_std`` is the
+member-to-member standard deviation - a cheap epistemic-uncertainty
+signal.  Callers that only need the ranking pull ``scores`` out via
+:func:`_as_scores`; callers that want the uncertainty (the diagnostic
+``std_mean`` column) unpack the tuple explicitly.
+"""
 
 TrainerFn = Callable[[np.ndarray, np.ndarray, int], PredictFn]
 """Trainer signature: ``(X_train, y_train, seed) -> predict_fn``."""
+
+
+def _as_scores(result: "np.ndarray | tuple[np.ndarray, np.ndarray]") -> np.ndarray:
+    """Return the score array from a ``predict()`` result.
+
+    Ensemble trainers return ``(scores, per_item_std)``; every other
+    trainer returns a bare score array.  This collapses both to the score
+    array so ranking metrics and threshold calibration don't have to care
+    which trainer produced the prediction.
+    """
+    if isinstance(result, tuple):
+        return np.asarray(result[0], dtype=np.float64)
+    return np.asarray(result, dtype=np.float64)
 
 
 def _train_mlp(X: np.ndarray, y: np.ndarray, seed: int) -> PredictFn:
@@ -83,6 +105,46 @@ def _train_mlp(X: np.ndarray, y: np.ndarray, seed: int) -> PredictFn:
     return predict
 
 
+def _train_mlp_ensemble_factory(n_seeds: int) -> TrainerFn:
+    """Build a trainer that averages *n_seeds* seed-varied MLPs.
+
+    Each member is a full :func:`vtscore.training.mlp.train_model` run on
+    the same labels but a different weight-init/dropout seed, so the
+    ensemble captures the MLP's epistemic uncertainty (how much the
+    decision surface wobbles under reseeding) rather than aleatoric label
+    noise.  The returned ``predict`` reports the mean sigmoid as the score
+    and the member-to-member standard deviation as ``per_item_std`` - high
+    where the members disagree, low where they agree.
+    """
+
+    def trainer(X: np.ndarray, y: np.ndarray, seed: int) -> PredictFn:
+        import torch  # noqa: PLC0415
+
+        from vtscore.training.mlp import train_model
+
+        X_t = torch.from_numpy(np.asarray(X, dtype=np.float32))
+        y_t = torch.from_numpy(np.asarray(y, dtype=np.float32)).unsqueeze(1)
+        input_dim = X.shape[1]
+        # Distinct seeds per member: ``seed + k`` keeps the whole ensemble a
+        # deterministic function of the cell's ``seed`` while decorrelating
+        # the members' weight inits.
+        models = [train_model(X_t, y_t, input_dim=input_dim, seed=seed + k) for k in range(n_seeds)]
+
+        def predict(X_test: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+            X_arr = np.asarray(X_test, dtype=np.float32)
+            member_scores: list[np.ndarray] = []
+            for model in models:
+                with torch.no_grad():
+                    t = torch.from_numpy(X_arr).to(next(model.parameters()).device)
+                    member_scores.append(torch.sigmoid(model(t)).squeeze(1).cpu().numpy())
+            stacked = np.stack(member_scores, axis=0)  # (n_seeds, n_items)
+            return stacked.mean(axis=0), stacked.std(axis=0)
+
+        return predict
+
+    return trainer
+
+
 def _train_svm_factory(kernel: str) -> TrainerFn:
     """Build a sweep-shaped trainer that fits an SVM with the given kernel."""
 
@@ -102,6 +164,14 @@ TRAINERS: dict[str, TrainerFn] = {
     "mlp": _train_mlp,
     "svm_linear": _train_svm_factory("linear"),
     "svm_rbf": _train_svm_factory("rbf"),
+    # MLP ensembles: N seed-varied members, mean sigmoid as the score and
+    # member disagreement as per-item uncertainty.  Registered at 3/5/7/10
+    # members so the sweep can trace how ranking quality and the reported
+    # ``std_mean`` move with ensemble size.
+    "mlp_ens3": _train_mlp_ensemble_factory(3),
+    "mlp_ens5": _train_mlp_ensemble_factory(5),
+    "mlp_ens7": _train_mlp_ensemble_factory(7),
+    "mlp_ens10": _train_mlp_ensemble_factory(10),
 }
 
 
@@ -139,6 +209,31 @@ def _auroc(scores: np.ndarray, labels: np.ndarray) -> float:
     n_neg = float(neg.size)
     u = pos_rank_sum - n_pos * (n_pos + 1) / 2.0
     return float(u / (n_pos * n_neg))
+
+
+def _auroc_std_err(scores: np.ndarray, labels: np.ndarray, auroc: float) -> float:
+    """Hanley-McNeil analytic standard error of the AUROC.
+
+    Uses the closed-form variance estimate from Hanley & McNeil (1982),
+    ``Var = [A(1-A) + (n_pos-1)(Q1 - A²) + (n_neg-1)(Q2 - A²)] /
+    (n_pos·n_neg)`` with ``Q1 = A/(2-A)`` and ``Q2 = 2A²/(1+A)``.  It is a
+    deterministic function of the AUROC and the class counts, so it needs
+    neither bootstrapping nor ensemble members - it is emitted for every
+    trainer as the ``std_err_auroc`` diagnostic, giving an error bar on
+    the ranking metric that complements the ensemble's ``std_mean``.
+
+    Returns ``nan`` when either class is empty or *auroc* is not finite
+    (the AUROC itself is undefined there).
+    """
+    pos = int((labels == 1).sum())
+    neg = int((labels == 0).sum())
+    if pos == 0 or neg == 0 or not np.isfinite(auroc):
+        return float("nan")
+    a = float(auroc)
+    q1 = a / (2.0 - a)
+    q2 = 2.0 * a * a / (1.0 + a)
+    var = (a * (1.0 - a) + (pos - 1) * (q1 - a * a) + (neg - 1) * (q2 - a * a)) / (pos * neg)
+    return float(np.sqrt(max(0.0, var)))
 
 
 def _average_precision(scores: np.ndarray, labels: np.ndarray) -> float:
@@ -307,6 +402,8 @@ threshold from the labels alone."
 _DIAGNOSTIC_METRICS: tuple[str, ...] = (
     "brier",
     "f1_at_0.5",
+    "std_err_auroc",
+    "std_mean",
     "predict_seconds",
 )
 """Kept on every row but excluded from the default summary.
@@ -316,6 +413,14 @@ probability with 0.5 as the operating point - neither holds in VTSearch
 (the MLP's sigmoid is uncalibrated and the operating point is the
 cross-calibrated threshold).  They stay available for anyone debugging
 score-distribution shapes.
+
+``std_err_auroc`` is the Hanley-McNeil analytic standard error of the
+AUROC - an error bar on the ranking metric, computable for every
+trainer.  ``std_mean`` is the mean per-item ensemble uncertainty (the
+member-to-member sigmoid std, averaged over the test set); it is
+``nan`` for non-ensemble trainers, which report a single score with no
+spread.  Both are diagnostics: they characterise confidence, not
+ranking quality, so they stay out of the headline summary.
 """
 
 _ROW_COLUMNS: tuple[str, ...] = (
@@ -379,7 +484,7 @@ def _cross_calibrated_threshold(
             predict = trainer_fn(X_train[tr_idx], y_train[tr_idx], seed + k)
         except ValueError:
             continue
-        cal_scores = np.asarray(predict(X_train[cal_idx]), dtype=np.float64).tolist()
+        cal_scores = _as_scores(predict(X_train[cal_idx])).tolist()
         cal_labels = [float(v) for v in y_train[cal_idx]]
         t = find_optimal_threshold(cal_scores, cal_labels, inclusion_value)
         # ``find_optimal_threshold`` can return +/-inf on degenerate
@@ -426,10 +531,22 @@ def evaluate_one(
     train_seconds = time.monotonic() - t0
 
     t0 = time.monotonic()
-    scores = predict(pool.test_X)
+    prediction = predict(pool.test_X)
     predict_seconds = time.monotonic() - t0
 
+    # Ensemble trainers return ``(scores, per_item_std)``; plain trainers
+    # return just ``scores``.  ``std_mean`` averages the per-item spread over
+    # the test set (mean epistemic uncertainty) and is ``nan`` when the trainer
+    # reports no spread.
+    if isinstance(prediction, tuple):
+        scores = np.asarray(prediction[0], dtype=np.float64)
+        std_mean = float(np.mean(np.asarray(prediction[1], dtype=np.float64)))
+    else:
+        scores = np.asarray(prediction, dtype=np.float64)
+        std_mean = float("nan")
+
     labels = pool.test_y
+    auroc = _auroc(scores, labels)
 
     # Cross-calibrated threshold mirrors the production path: split the
     # *training* labels (no test info leaks in), find the optimal
@@ -451,7 +568,7 @@ def evaluate_one(
         "n_pos": int((y_train == 1).sum()),
         "n_neg": int((y_train == 0).sum()),
         "seed": int(seed),
-        "auroc": _auroc(scores, labels),
+        "auroc": auroc,
         "average_precision": _average_precision(scores, labels),
         "best_f1": _best_f1(scores, labels),
         "xcal_threshold": float(xcal_thr),
@@ -459,6 +576,8 @@ def evaluate_one(
         "train_seconds": round(train_seconds, 4),
         "brier": _brier(np.clip(scores, 0.0, 1.0), labels),
         "f1_at_0.5": _f1_at(scores, labels, 0.5),
+        "std_err_auroc": _auroc_std_err(scores, labels, auroc),
+        "std_mean": std_mean,
         "predict_seconds": round(predict_seconds, 4),
     }
 
