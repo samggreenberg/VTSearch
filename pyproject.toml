@@ -52,6 +52,14 @@ dependencies = [
     "sentencepiece",
     "protobuf",
     "Pillow",
+    # SigLIP-L image embedder: loads open_clip's ``ViT-SO400M-14-SigLIP-384``
+    # checkpoint so its 1152-d vectors match galleries embedded by open_clip
+    # itself. ``timm`` (vision backbones) and ``ftfy`` (text cleanup) are
+    # runtime deps of open_clip we never import directly — declared so a plain
+    # install covers SigLIP-L, ignored under deptry DEP002 (transitive-only).
+    "open_clip_torch",
+    "timm",
+    "ftfy",
     "ultralytics",
     "opencv-python-headless",
     "imageio-ffmpeg",
@@ -187,6 +195,7 @@ extend_exclude = [
 "imageio-ffmpeg" = "imageio_ffmpeg"
 "flask-smorest" = "flask_smorest"
 "sentence-transformers" = "sentence_transformers"
+"open_clip_torch" = "open_clip"
 
 [tool.deptry.per_rule_ignores]
 # DEP001: imported but not declared. These are optional / opportunistic
@@ -262,6 +271,11 @@ DEP002 = [
     "gunicorn",
     "sentencepiece",
     "protobuf",
+    # Runtime deps of ``open_clip_torch`` (the SigLIP-L embedder's loader):
+    # ``timm`` supplies vision backbones and ``ftfy`` cleans up text. open_clip
+    # imports them; our code never does, so they are declared-but-not-imported.
+    "timm",
+    "ftfy",
     # Loaded via importorskip in the portable-export test; never imported
     # statically, so deptry can't see the use.
     "onnxruntime",
