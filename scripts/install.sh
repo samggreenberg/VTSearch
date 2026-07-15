@@ -818,10 +818,15 @@ vts_install_precommit() {
 # --- toponymy (VTSBrowse signpost naming) ------------------------------------
 # Two quirks force a dedicated step (see docs/plans/vtsbrowse-toponymy.md):
 #   - apricot-select (a real toponymy dep, declared in pyproject.toml) ships a
-#     legacy setup.py that crashes under modern setuptools' bdist
-#     ("AttributeError: install_layout"); building under the stdlib-distutils
-#     shim works. It must be installed BEFORE the main requirements pass, or
-#     that pass fails trying to build it without the shim.
+#     legacy setup.py sdist. It must be installed BEFORE the main requirements
+#     pass so its build quirks stay contained to this step. Do NOT wrap it in
+#     SETUPTOOLS_USE_DISTUTILS=stdlib: pip's isolated build env installs the
+#     latest setuptools, and setuptools >= 74 refuses to even import with that
+#     value set, so the build dies with "BackendUnavailable: Cannot import
+#     'setuptools.build_meta'" (and Python >= 3.12 has no stdlib distutils for
+#     the shim to point at anyway). The historical "AttributeError:
+#     install_layout" crash the shim once worked around no longer reproduces
+#     with current setuptools (verified on Python 3.12 and 3.14).
 #   - toponymy 0.5.2 pins transformers<5.0.0, which a plain install would
 #     honor by downgrading the app's transformers stack; the pin is
 #     empirically unnecessary for our usage (validated end-to-end on
@@ -829,7 +834,7 @@ vts_install_precommit() {
 #     dependencies declared in pyproject.toml instead. The tests_lib
 #     projection smoke test guards this bypass against future breakage.
 vts_install_toponymy() {
-    SETUPTOOLS_USE_DISTUTILS=stdlib pip install apricot-select --progress-bar on
+    pip install apricot-select --progress-bar on
     pip install --no-deps "toponymy==0.5.2" --progress-bar on
 }
 
