@@ -681,15 +681,6 @@ EUROSAT_CATEGORIES = [
     "SeaLake",
 ]
 
-UCSF_DOCUMENTS_CATEGORIES = [
-    "Tobacco",
-    "Food",
-    "Drug",
-    "Chemical",
-    "Fossil Fuel",
-    "Opioids",
-]
-
 # Revisited Oxford Buildings (ROxford5k) landmark categories.  Each is a
 # filename prefix in the Oxford Buildings image set (e.g. ``all_souls_000013``);
 # the 11 named landmarks are the dataset's query buildings.  ``other`` collects

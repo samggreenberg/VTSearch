@@ -508,8 +508,9 @@ class TestApiEmbeddersResponseShape:
         entries = {e["name"]: e for e in body["embedders"]}
         # All image embedders must be present; four CLIP-family bimodal
         # models (siglip, siglip2, siglip_l, clip), single/patch pairs for
-        # DINOv2/DINOv3/EUPE, the FaceNet face-identity embedder, and the
-        # SIFT/VLAD structural embedder.
+        # DINOv2/DINOv3/EUPE, and the SIFT/VLAD structural embedder.  The
+        # FaceNet face-identity embedder is *not* here — it belongs to the
+        # separate ``face`` media type now.
         assert set(entries) == {
             "siglip",
             "siglip2",
@@ -522,7 +523,6 @@ class TestApiEmbeddersResponseShape:
             "eupe_single",
             "eupe_patch",
             "sift_vlad",
-            "face",
         }
         # Shape: every entry has the three capability fields, with bool /
         # Optional[str] types.
@@ -578,7 +578,7 @@ class TestApiEmbeddersResponseShape:
         # verification; every semantic embedder reports False.
         assert entries["sift_vlad"]["supports_geometric_verification"] is True
         assert entries["sift_vlad"]["supports_text"] is False
-        for name in ("siglip", "clip", "dinov2_patch", "face"):
+        for name in ("siglip", "clip", "dinov2_patch"):
             assert entries[name]["supports_geometric_verification"] is False
 
 
@@ -615,97 +615,3 @@ class TestSortRouteRejectsTextWhenUnsupported:
         finally:
             medias.clear()
             medias.update(saved)
-
-
-class TestImageFaceEmbedder:
-    def test_name(self):
-        from vtscore.media.image.embedder_face import ImageFaceEmbedder
-
-        assert ImageFaceEmbedder().name == "face"
-
-    def test_media_type_id(self):
-        from vtscore.media.image.embedder_face import ImageFaceEmbedder
-
-        assert ImageFaceEmbedder().media_type_id == "image"
-
-    def test_is_not_default(self):
-        from vtscore.media.image.embedder_face import ImageFaceEmbedder
-
-        assert ImageFaceEmbedder().is_default is False
-
-    def test_does_not_support_text(self):
-        """FaceNet has no text branch; face-identity space has no
-        analogue of 'a photo of a cat', so text queries must be hidden
-        in the UI for face-embedder datasets."""
-        from vtscore.media.image.embedder_face import ImageFaceEmbedder
-
-        assert ImageFaceEmbedder().supports_text is False
-
-    def test_does_not_support_patch_regions(self):
-        from vtscore.media.image.embedder_face import ImageFaceEmbedder
-
-        assert ImageFaceEmbedder().supports_patch_regions is False
-
-    def test_to_dict(self):
-        from vtscore.media.image.embedder_face import ImageFaceEmbedder
-
-        assert ImageFaceEmbedder().to_dict() == {
-            "name": "face",
-            "display_name": "FaceNet (face identity, 512d)",
-            "model_id": None,
-            "media_type_id": "image",
-            "is_default": False,
-            "supports_text": False,
-            "supports_patch_regions": False,
-            "supports_geometric_verification": False,
-            "license_notice": None,
-        }
-
-    def test_registered_in_registry(self):
-        from vtscore.media import get_embedder
-
-        emb = get_embedder("face")
-        assert emb.name == "face"
-        assert emb.media_type_id == "image"
-
-    def test_embed_text_returns_none(self):
-        """FaceNet's text branch should always yield ``None``; there is no
-        text encoder in face-identity space."""
-        from vtscore.media.image.embedder_face import ImageFaceEmbedder
-
-        assert ImageFaceEmbedder().embed_text("a face") is None
-
-    def test_embed_media_returns_none_when_not_loaded(self):
-        from vtscore.media.image.embedder_face import ImageFaceEmbedder
-
-        emb = ImageFaceEmbedder()
-        with patch.object(emb, "load_models"):
-            result = emb.embed_media({"media_path": "/nonexistent.jpg"})
-        assert result is None
-
-    def test_load_models_idempotent(self):
-        from vtscore.media.image.embedder_face import ImageFaceEmbedder
-
-        emb = ImageFaceEmbedder()
-        emb._model = MagicMock()
-        emb.load_models()
-        assert isinstance(emb._model, MagicMock)
-
-    def test_l2_normalises_output(self):
-        """Vectors out of FaceNet must be unit-norm so cosine ranking works."""
-        import numpy as np
-
-        from vtscore.media.image.embedder_face import ImageFaceEmbedder
-
-        emb = ImageFaceEmbedder()
-        v = np.array([3.0, 4.0, 0.0], dtype=np.float32)
-        out = emb._l2_normalise(v)
-        assert abs(float(np.linalg.norm(out)) - 1.0) < 1e-6
-        # Zero vector survives without NaN.
-        z = emb._l2_normalise(np.zeros(3, dtype=np.float32))
-        assert not np.isnan(z).any()
-        # Bulk: each row independently normalised.
-        batch = np.array([[3.0, 4.0, 0.0], [0.0, 0.0, 5.0]], dtype=np.float32)
-        out_b = emb._l2_normalise(batch)
-        assert abs(float(np.linalg.norm(out_b[0])) - 1.0) < 1e-6
-        assert abs(float(np.linalg.norm(out_b[1])) - 1.0) < 1e-6

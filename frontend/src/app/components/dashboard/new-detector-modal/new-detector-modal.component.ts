@@ -677,8 +677,13 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   private buildDemoTabs(): void {
-    const grouped = new Set(this.demos().map((d) => d.media_type));
-    const registryOrder = this.mediaTypeInfos().map((mt) => mt.type_id);
+    // Seeding a detector needs an *embeddable* example, so a convert-out half
+    // type (e.g. document) has no meaningful example to pick here — filter its
+    // tab out even though it has demo datasets in the Add-Dataset flow.
+    const infos = this.mediaTypeInfos();
+    const embeddable = new Set(infos.filter((mt) => mt.embeddable !== false).map((mt) => mt.type_id));
+    const grouped = new Set(this.demos().map((d) => d.media_type).filter((mt) => embeddable.has(mt)));
+    const registryOrder = infos.map((mt) => mt.type_id).filter((mt) => embeddable.has(mt));
     const tabs = registryOrder.filter((mt) => grouped.has(mt));
     for (const mt of grouped) {
       if (!tabs.includes(mt)) tabs.push(mt);

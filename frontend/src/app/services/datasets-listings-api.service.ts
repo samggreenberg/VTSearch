@@ -53,8 +53,8 @@ export class DatasetsListingsApiService {
     );
   }
 
-  getDemoList(embedder?: string, clipper?: string): Observable<DemoDatasetListResponse> {
-    return demoDatasetList(this.http, this.config.rootUrl, { embedder, clipper }).pipe(
+  getDemoList(embedder?: string, clipper?: string, converter?: string): Observable<DemoDatasetListResponse> {
+    return demoDatasetList(this.http, this.config.rootUrl, { embedder, clipper, converter }).pipe(
       map((r) => r.body),
     );
   }

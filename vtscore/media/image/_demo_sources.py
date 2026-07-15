@@ -31,7 +31,6 @@ from vtscore.media.image._demo_categories import (
     RICO_SCREEN2WORDS_CATEGORIES,
     ROXFORD_CATEGORIES,
     RVL_CDIP_CATEGORIES,
-    UCSF_DOCUMENTS_CATEGORIES,
     VISUAL_GENOME_CATEGORIES,
 )
 
@@ -53,7 +52,6 @@ def build_demo_datasets() -> list[DemoDataset]:
         RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
         ROXFORD_IMAGES_DOWNLOAD_SIZE_MB,
         RVL_CDIP_DOWNLOAD_SIZE_MB,
-        UCSF_IDL_DOWNLOAD_SIZE_MB,
         VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB,
         VISUAL_GENOME_IMAGES_DOWNLOAD_SIZE_MB,
         VISUAL_GENOME_OBJECTS_DOWNLOAD_SIZE_MB,
@@ -554,18 +552,6 @@ def build_demo_datasets() -> list[DemoDataset]:
             items_per_category=156,
             download_size_mb=OPENLOGO_DOWNLOAD_SIZE_MB,
         ),
-        DemoDataset(
-            id="ucsf_documents_a",
-            label="UCSF Documents (A)",
-            description="Scanned document pages",
-            categories=UCSF_DOCUMENTS_CATEGORIES,
-            source="ucsf_documents",
-            required_folder=DATA_DIR / "ucsf_documents",
-            slice_frac_start=0.0,
-            slice_frac_end=None,
-            items_per_category=25,
-            download_size_mb=UCSF_IDL_DOWNLOAD_SIZE_MB,
-        ),
         # Visual Genome is multi-label and sliced flat over the image list (not
         # per-category), so the advertised count is only approximate — see
         # docs/plans/visual-genome-dataset.md (real-download verification is a
@@ -750,36 +736,6 @@ def _collect_places365_files(categories, slice_args, on_progress) -> list:
         if meta["category"] in categories:
             by_cat.setdefault(meta["category"], []).append((meta["path"], meta["category"]))
     return _slice_by_category(by_cat, categories, *slice_args)
-
-
-def _collect_ucsf_doc_pages(categories, slice_args, on_progress) -> list:
-    """Returns a list of (page_name, PIL.Image, category) tuples."""
-    from vtscore.datasets.downloader import download_ucsf_documents  # noqa: PLC0415
-    from vtscore.datasets.pdf import render_pdf_pages  # noqa: PLC0415
-
-    docs_dir = download_ucsf_documents(categories, on_progress=on_progress)
-
-    by_cat_pages: dict = {}
-    for cat in categories:
-        cat_dir = docs_dir / cat
-        if not cat_dir.is_dir():
-            continue
-        for pdf_path in sorted(cat_dir.glob("*.pdf")):
-            try:
-                pages = render_pdf_pages(pdf_path, dpi=150)
-                if pages:
-                    by_cat_pages.setdefault(cat, []).append(pages[0])
-            except Exception:
-                continue
-
-    selected_pages: list = []
-    slice_start, slice_end, slice_frac_start, slice_frac_end = slice_args
-    for cat in categories:
-        for page_name, pil_image in demo_slice(
-            by_cat_pages.get(cat, []), slice_start, slice_end, slice_frac_start, slice_frac_end
-        ):
-            selected_pages.append((page_name, pil_image, cat))
-    return selected_pages
 
 
 def _collect_cifar10_images(categories, slice_args, on_progress) -> list:
@@ -1467,17 +1423,6 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
     if source == "places365":
         _embed_file_images(
             _collect_places365_files(categories, slice_args, on_progress),
-            clips,
-            embedder,
-            on_progress,
-            demo_origin,
-            skip_embedding=skip_embedding,
-        )
-        return None
-
-    if source == "ucsf_documents":
-        _embed_pil_pages(
-            _collect_ucsf_doc_pages(categories, slice_args, on_progress),
             clips,
             embedder,
             on_progress,

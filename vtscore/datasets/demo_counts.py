@@ -41,7 +41,8 @@ a consistency check.
   the image list, so S is 1/10 of A rather than a category partition
 * ``oxford_flowers_102_a`` (image) — 8189
 * ``places365_*`` (image) — 5110 / 10220 / 21170 / 36500
-* ``ucsf_documents_a`` (image) — 150 (6 categories × 25 PDFs each)
+* ``ucsf_documents_a`` (document) — 150 (6 categories × 25 PDFs each); the
+  Document demo converts each PDF to page images on load via ``document2image``
 * ``reuters21578_*`` (text) — 1361 / 2731 / 5463 / 9555
 * ``20newsgroups_*`` (text) — 1194 / 2389 / 4775 / 8358
 * ``arxiv_abstracts_*`` (text) — 28 / 57 / 115 / 200

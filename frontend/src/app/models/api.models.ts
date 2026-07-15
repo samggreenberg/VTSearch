@@ -224,6 +224,18 @@ export interface MediaTypeInfo {
    *  and thumbnail painting; the single source of truth the frontend reads via
    *  ``MediaTypeCapabilityService.usesThumbnails``. */
   has_thumbnail?: boolean;
+  /** Whether this type is a first-class *ingestion* category the user picks when
+   *  importing (folder scan, file upload). ``false`` for a *convert-in* half type
+   *  like ``face`` that only ever arises from converting another type. */
+  importable?: boolean;
+  /** Whether this type can be embedded (and therefore sorted / browsed / text-
+   *  queried) on its own. ``false`` for a *convert-out* half type like
+   *  ``document`` that must be converted first. */
+  embeddable?: boolean;
+  /** Embeddable target type_ids a non-embeddable type can convert into (first =
+   *  default). ``["image", "text"]`` for ``document``; empty for a directly-
+   *  embeddable type. */
+  converts_to?: string[];
 }
 
 export interface MediaTypeDetectionResponse {
