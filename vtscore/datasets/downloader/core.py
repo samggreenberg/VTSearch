@@ -20,6 +20,7 @@ from urllib.parse import urljoin
 import requests
 
 from vtscore.config import DATA_DIR
+from vtscore.security.archive import safe_tar_extract
 from vtscore.security.hf_auth import GatedResourceError, auth_header_for_url
 from vtscore.security.url_validation import validate_url
 
@@ -636,10 +637,11 @@ def _extract_archive(
     """Extract *archive_path* into *dest_dir*, dispatching by filename suffix.
 
     Supports ``.tar.gz`` / ``.tgz`` (gzip tar), ``.tar`` (uncompressed tar),
-    ``.zip``, and ``.7z`` archives.  Tar members are extracted with
-    ``filter="data"`` (which rejects unsafe absolute/traversal paths); zip and
-    7z members are validated against *dest_dir* to guard against path traversal
-    (zip-slip).  Raises ``ValueError`` for an unsupported archive format.
+    ``.zip``, and ``.7z`` archives.  Tar members go through
+    :func:`~vtscore.security.archive.safe_tar_extract` (which rejects unsafe
+    absolute/traversal/link paths); zip and 7z members are validated against
+    *dest_dir* to guard against path traversal (zip-slip).  Raises
+    ``ValueError`` for an unsupported archive format.
     """
     suffix = archive_name.lower()
     if suffix.endswith((".tar.gz", ".tgz", ".tar")):
@@ -656,7 +658,7 @@ def _extract_archive(
                 for i, member in enumerate(tar_ref):
                     if i % 100 == 0:
                         on_progress("downloading", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes)
-                    tar_ref.extract(member, dest_dir, filter="data")
+                    safe_tar_extract(tar_ref, member, dest_dir)
         on_progress("downloading", f"Extracting {dataset_name}...", total_bytes, total_bytes)
     elif suffix.endswith(".zip"):
         from vtscore.datasets.archive import _reject_traversal
