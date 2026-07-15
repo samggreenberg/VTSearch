@@ -55,6 +55,7 @@ FieldType = Literal[
 ]
 
 __all__ = [
+    "EntryPointTombstone",
     "FieldType",
     "PluginBase",
     "PluginField",
@@ -489,6 +490,51 @@ class PluginBase:
 
 
 # ---------------------------------------------------------------------------
+# Entry-point tombstone: defer a plugin's own ImportError to first use
+# ---------------------------------------------------------------------------
+
+
+class EntryPointTombstone:
+    """Placeholder for an entry-point plugin whose *own* import raised.
+
+    When a third-party entry point fails to load (e.g. a missing optional
+    dependency such as ``open_clip`` for a ``siglip_l`` embedder), we don't
+    want that single failure to crash discovery for every other plugin.
+    Instead the registry registers one of these under the entry point's name
+    so the plugin still *resolves* via :meth:`PluginRegistry.get`, and the
+    original error is re-raised only when the plugin is actually invoked
+    (any attribute access other than :attr:`name` / private / dunder names).
+
+    Tombstones are deliberately kept out of :meth:`PluginRegistry.list` so
+    listing/serialising the plugin family (which touches ``to_dict``,
+    ``display_name``, ``ui_mode``, ...) never trips over them; the broken
+    plugin only bites the caller who deliberately asks for it by name.
+
+    The object is a plain, picklable value: :attr:`name`, the entry-point
+    ``value`` string, and the captured exception all live in ``__dict__``,
+    so ``pickle.loads(pickle.dumps(tombstone))`` round-trips and the restored
+    copy re-raises the same error on use.
+    """
+
+    def __init__(self, name: str, value: str, error: BaseException) -> None:
+        self.name = name
+        self._ep_value = value
+        self._error = error
+
+    def __getattr__(self, attr: str) -> Any:
+        # Private / dunder lookups (``__reduce_ex__``, ``__getstate__``,
+        # ``__deepcopy__``, ...) must fall through with AttributeError so
+        # pickle and copy keep working; only "real" plugin attribute/method
+        # access re-raises the deferred import error.
+        if attr.startswith("_"):
+            raise AttributeError(attr)
+        raise ImportError(
+            f"Plugin {self.name!r} (entry point {self._ep_value!r}) is unavailable "
+            f"because its import failed: {self._error}"
+        ) from self._error
+
+
+# ---------------------------------------------------------------------------
 # PluginRegistry: generic auto-discovery registry
 # ---------------------------------------------------------------------------
 
@@ -548,6 +594,10 @@ class PluginRegistry(Generic[T]):
         self._discover_modules = discover_modules
         self._entry_point_group = entry_point_group
         self._items: dict[str, T] = {}
+        #: Entry-point plugins whose own import raised, keyed by entry-point
+        #: name.  Resolvable via :meth:`get` (re-raising the original error on
+        #: use) but deliberately excluded from :meth:`list`.
+        self._tombstones: dict[str, EntryPointTombstone] = {}
         self._discovered = False
         self._discovering = False
         self._lock = threading.Lock()
@@ -601,8 +651,12 @@ class PluginRegistry(Generic[T]):
 
         Each entry point in :attr:`_entry_point_group` is resolved to an
         object that's treated like a sentinel value; its ``.name`` is the
-        registry key.  Failures are surfaced as warnings so a single bad
-        third-party plugin can't break the rest of the registry.
+        registry key.  When an entry point's *own* import raises (e.g. a
+        missing optional dependency), the failure is surfaced as a warning
+        and a :class:`EntryPointTombstone` is registered under the entry-point
+        name so the plugin still resolves via :meth:`get` and the original
+        error is deferred to first use — a single bad third-party plugin can't
+        break discovery for the rest of the registry.
 
         Built-in plugins (discovered by the package scan above) take
         precedence: an entry point whose name clashes with a built-in is
@@ -624,10 +678,18 @@ class PluginRegistry(Generic[T]):
             try:
                 plugin = ep.load()
             except Exception as exc:
+                # The plugin's *own* import raised (e.g. a missing optional
+                # dependency).  Don't crash discovery: register a tombstone
+                # under the entry-point name so the plugin still resolves and
+                # the original error is deferred to first use.  A built-in of
+                # the same name still wins (it's already in ``_items``).
                 warnings.warn(
-                    f"Failed to load {self._label} entry point {ep.name!r} from {ep.value!r}: {exc}",
+                    f"Failed to load {self._label} entry point {ep.name!r} from {ep.value!r}: {exc}; "
+                    f"deferring the error to first use of {ep.name!r}",
                     stacklevel=2,
                 )
+                if ep.name not in self._items:
+                    self._tombstones[ep.name] = EntryPointTombstone(ep.name, ep.value, exc)
                 continue
             plugin_name = getattr(plugin, "name", None)
             if not plugin_name:
@@ -713,12 +775,25 @@ class PluginRegistry(Generic[T]):
     # -- Public API ---------------------------------------------------------
 
     def get(self, name: str) -> T | None:
-        """Return the registered plugin with *name*, or ``None``."""
+        """Return the registered plugin with *name*, or ``None``.
+
+        Falls back to a tombstone for an entry-point plugin whose own import
+        failed (see :class:`EntryPointTombstone`); the returned object
+        re-raises the original error the moment it is actually invoked.
+        """
         self._ensure_discovered()
-        return self._items.get(name)
+        item = self._items.get(name)
+        if item is not None:
+            return item
+        return self._tombstones.get(name)  # type: ignore[return-value]
 
     def list(self) -> list[T]:
-        """Return all registered plugins in discovery order."""
+        """Return all registered plugins in discovery order.
+
+        Tombstones for failed entry-point imports are excluded so that
+        listing/serialising a plugin family never trips over a broken plugin;
+        such plugins are reachable only by an explicit :meth:`get`.
+        """
         self._ensure_discovered()
         return list(self._items.values())
 

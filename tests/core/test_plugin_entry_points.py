@@ -86,7 +86,7 @@ class TestEntryPointDiscovery:
         # And a warning was emitted explaining the skip.
         assert any("clashes with built-in" in str(w.message) for w in caught)
 
-    def test_failed_load_warns_and_continues(self, monkeypatch):
+    def test_failed_load_warns_and_defers_to_first_use(self, monkeypatch):
         good = _DummyPlugin("good_plugin")
         boom = _FakeEntryPoint("broken", "pkg:OBJ", RuntimeError("nope"))
         ok = _FakeEntryPoint("good", "pkg:OBJ", good)
@@ -100,10 +100,87 @@ class TestEntryPointDiscovery:
                 label="test plugin",
                 entry_point_group="vtsearch.test_family",
             )
+            # A broken entry point does not stop a healthy sibling from resolving.
             assert registry.get("good_plugin") is good
-        assert registry.get("broken") is None
         # A warning was raised for the failure.
         assert any("Failed to load" in str(w.message) for w in caught)
+
+        # The broken plugin now resolves to a tombstone (not None)...
+        tombstone = registry.get("broken")
+        assert tombstone is not None
+        assert tombstone.name == "broken"
+        # ...but it is kept out of list() so serialising the family is safe.
+        assert tombstone not in registry.list()
+        assert good in registry.list()
+
+    def test_tombstone_raises_original_error_on_invoke(self, monkeypatch):
+        boom = _FakeEntryPoint("broken", "pkg.mod:OBJ", RuntimeError("open_clip is not installed"))
+        _patch_entry_points(monkeypatch, [boom])
+
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            registry: PluginRegistry = PluginRegistry(
+                package="vtscore.plugins",
+                sentinel="TEST_SENTINEL_NEVER_PRESENT",
+                label="test plugin",
+                entry_point_group="vtsearch.test_family",
+            )
+
+        tombstone = registry.get("broken")
+        assert tombstone is not None
+        # Accessing any real plugin attribute / method surfaces the original
+        # error message, chained from the captured exception.
+        with pytest.raises(ImportError, match="open_clip is not installed") as excinfo:
+            tombstone.run()
+        assert isinstance(excinfo.value.__cause__, RuntimeError)
+
+    def test_tombstone_survives_pickle(self, monkeypatch):
+        import pickle
+
+        boom = _FakeEntryPoint("broken", "pkg.mod:OBJ", RuntimeError("missing dep"))
+        _patch_entry_points(monkeypatch, [boom])
+
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            registry: PluginRegistry = PluginRegistry(
+                package="vtscore.plugins",
+                sentinel="TEST_SENTINEL_NEVER_PRESENT",
+                label="test plugin",
+                entry_point_group="vtsearch.test_family",
+            )
+
+        tombstone = registry.get("broken")
+        restored = pickle.loads(pickle.dumps(tombstone))
+        assert restored.name == "broken"
+        # The restored copy still defers the original error to first use.
+        with pytest.raises(ImportError, match="missing dep"):
+            restored.export()
+
+    def test_built_in_wins_over_failed_entry_point(self, monkeypatch):
+        from vtscore.datasets.importers import list_importers
+
+        built_in_names = {imp.name for imp in list_importers()}
+        assert "server_folder" in built_in_names
+
+        # An entry point named after a built-in whose import blows up must
+        # not tombstone over the working built-in.
+        boom = _FakeEntryPoint("server_folder", "rogue:OBJ", RuntimeError("nope"))
+        _patch_entry_points(monkeypatch, [boom])
+
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            registry: PluginRegistry = PluginRegistry(
+                package="vtscore.datasets.importers",
+                sentinel="IMPORTER",
+                label="dataset importer",
+                entry_point_group="vtsearch.test_family",
+            )
+
+        # The built-in still resolves and is a real, usable importer.
+        entry = registry.get("server_folder")
+        assert entry is not None
+        assert entry.name == "server_folder"
+        assert entry.to_dict()["name"] == "server_folder"
 
     def test_entry_point_without_name_is_skipped(self, monkeypatch):
         class _NoName:
