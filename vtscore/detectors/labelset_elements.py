@@ -43,11 +43,22 @@ def find_element_by_id(elements: list[LabeledElement], target_id: str) -> tuple[
     return None
 
 
-def resolve_current_dataset_cid(elem: LabeledElement) -> int | None:
+def resolve_current_dataset_cid(
+    elem: LabeledElement,
+    lookups: tuple[dict[str, list[int]], dict[str, list[int]], dict[str, list[int]]] | None = None,
+) -> int | None:
     """Return the cid in the active dataset that matches *elem*, or ``None``.
 
     Matches by origin+name first, then by MD5.  Only consults the dataset
     snapshot - does not trigger origin-file resolution.
+
+    When *lookups* is provided (the ``(origin_lookup, md5_lookup, name_lookup)``
+    triple from :func:`~vtscore.state.media_lookup.build_media_lookup`), it is
+    used directly and no snapshot is taken.  Loop callers that resolve many
+    elements against the same dataset build the tables **once** and thread them
+    through, turning an O(labels × N) poll into O(N + labels).  When *lookups*
+    is ``None`` the tables are built from a fresh :func:`snapshot_medias`, the
+    single-element convenience path.
 
     Returning a single cid (``cids[0]``) from the union returned by
     :func:`~vtscore.state.media_lookup.resolve_media_ids` is safe because
@@ -64,10 +75,12 @@ def resolve_current_dataset_cid(elem: LabeledElement) -> int | None:
         snapshot_medias,
     )
 
-    snap = snapshot_medias()
-    if not snap:
-        return None
-    origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
+    if lookups is None:
+        snap = snapshot_medias()
+        if not snap:
+            return None
+        lookups = build_media_lookup(snap)
+    origin_lookup, md5_lookup, name_lookup = lookups
     cids = resolve_media_ids(elem.to_dict(), origin_lookup, md5_lookup, name_lookup)
     return cids[0] if cids else None
 
@@ -99,14 +112,19 @@ def build_element_view(
     media_type: str,
     click_times: Mapping[int, float | int],
     learned_scores: Mapping[int, float],
+    lookups: tuple[dict[str, list[int]], dict[str, list[int]], dict[str, list[int]]] | None = None,
 ) -> dict[str, Any]:
     """Build the JSON-serialisable dict the frontend consumes for *elem*.
 
     Includes a current-dataset ``cid`` (and its click-time / learned-score)
     when the element resolves into the active dataset; otherwise those
     fields are ``null``.
+
+    *lookups* is threaded straight into :func:`resolve_current_dataset_cid`;
+    pass the pre-built ``build_media_lookup`` triple when calling this in a
+    loop so the lookup tables aren't rebuilt per element.
     """
-    cid = resolve_current_dataset_cid(elem)
+    cid = resolve_current_dataset_cid(elem, lookups)
     name = elem.origin_name or elem.filename or (elem.md5[:12] if elem.md5 else "")
 
     score = -1.0
@@ -138,7 +156,7 @@ def build_labels_detail(detector_data: dict[str, Any]) -> dict[str, Any]:
 
     Returns ``{"good": [...], "bad": [...], "media_type": "..."}``.
     """
-    from vtscore.state import get_active_detector_context
+    from vtscore.state import build_media_lookup, get_active_detector_context, snapshot_medias
 
     media_type = detector_data.get("media_type", "") or ""
     labelset = LabelSet.from_dict(detector_data.get("labelset") or {})
@@ -146,6 +164,12 @@ def build_labels_detail(detector_data: dict[str, Any]) -> dict[str, Any]:
     det_ctx = get_active_detector_context()
     click_times = dict(det_ctx.vote_click_times)
     learned_scores = dict(det_ctx.last_learned_scores)
+
+    # Build the origin/md5/name lookup tables once and thread them through every
+    # element's view, so the labels-detail poll is O(N + labels) instead of
+    # O(labels × N) (each per-element rebuild would json.dumps every origin).
+    snap = snapshot_medias()
+    lookups = build_media_lookup(snap) if snap else None
 
     good: list[dict[str, Any]] = []
     bad: list[dict[str, Any]] = []
@@ -155,6 +179,7 @@ def build_labels_detail(detector_data: dict[str, Any]) -> dict[str, Any]:
             media_type=media_type,
             click_times=click_times,
             learned_scores=learned_scores,
+            lookups=lookups,
         )
         if el.label == "good":
             good.append(view)
