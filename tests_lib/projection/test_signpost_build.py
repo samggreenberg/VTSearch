@@ -175,6 +175,32 @@ class TestAvailability:
         monkeypatch.setattr(util, "find_spec", lambda name: None)
         assert sb.signposting_available() is False
 
+    def test_require_signposting_true_when_present(self, monkeypatch):
+        monkeypatch.setattr(sb, "signposting_available", lambda: True)
+        assert sb.require_signposting() is True
+
+    def test_require_signposting_logs_loudly_when_missing(self, monkeypatch, caplog):
+        import logging
+
+        monkeypatch.setattr(sb, "signposting_available", lambda: False)
+        # Reset the one-time latch so the error is emitted for this test.
+        monkeypatch.setattr(sb, "_missing_toponymy_warned", False)
+        with caplog.at_level(logging.ERROR, logger=sb.logger.name):
+            assert sb.require_signposting() is False
+        assert any("toponymy" in r.message.lower() for r in caplog.records)
+        assert any("install.sh" in r.message for r in caplog.records)
+        assert all(r.levelno == logging.ERROR for r in caplog.records)
+
+    def test_require_signposting_logs_only_once(self, monkeypatch, caplog):
+        import logging
+
+        monkeypatch.setattr(sb, "signposting_available", lambda: False)
+        monkeypatch.setattr(sb, "_missing_toponymy_warned", False)
+        with caplog.at_level(logging.ERROR, logger=sb.logger.name):
+            assert sb.require_signposting() is False
+            assert sb.require_signposting() is False
+        assert sum("toponymy" in r.message.lower() for r in caplog.records) == 1
+
     def test_version_string_when_missing(self, monkeypatch):
         from importlib import metadata
 

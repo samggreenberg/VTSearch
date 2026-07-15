@@ -475,7 +475,13 @@ def _no_signpost_pipeline(monkeypatch):
     """
     from vtscore.projection import signpost_prep
 
+    # The build paths gate on require_signposting; the serve / signature paths
+    # on the quiet probe.  Stub both off so every app-tier path skips prep
+    # deterministically — and stubbing require_signposting (rather than letting
+    # it compute False) also keeps its one-time "install broken" error out of
+    # the suite, since nothing is actually broken here.
     monkeypatch.setattr(signpost_prep, "signposting_available", lambda: False)
+    monkeypatch.setattr(signpost_prep, "require_signposting", lambda: False)
 
 
 @pytest.fixture(autouse=True)

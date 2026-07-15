@@ -23,9 +23,15 @@ Split of work between the stages (what must be computed when):
 * **Clustering + naming** are layout-scoped and cheap (a ~5-D UMAP + the
   fit), so they run fresh per layout, full or subset.
 
-Everything is best-effort: any missing prerequisite (no toponymy install, no
-text-capable embedder, no provider for the media type) returns ``None`` and
-the map simply stays unlettered.
+Everything is best-effort: any missing prerequisite returns ``None`` and the
+map simply stays unlettered.  The prerequisites are not equal, though.  A
+missing text-capable embedder or a media type with no provider is a routine,
+data-dependent skip (silent).  A missing ``toponymy`` install is *not*:
+``scripts/install.sh`` installs it unconditionally, so its absence is a broken
+environment, and the build paths gate on :func:`~vtscore.projection.signpost_build.require_signposting`
+(which logs a one-time error) rather than the silent probe.  The serve /
+signature paths still use the quiet probe, since a ``None`` there is expected
+on every poll.
 """
 
 from __future__ import annotations
@@ -36,6 +42,7 @@ from typing import TYPE_CHECKING, Any, Callable
 from vtscore.projection.signpost_build import (
     _MIN_POINTS,
     build_region_labels,
+    require_signposting,
     signposting_available,
     toponymy_version,
 )
@@ -117,7 +124,7 @@ def ensure_texts_for_dataset(ctx: Any, on_progress: ProgressFn | None = None) ->
     text-model calls.  No-op when signposting isn't possible for this dataset
     (no toponymy install, no text-capable embedder, no provider).
     """
-    if not signposting_available():
+    if not require_signposting():
         return
     embedder = _text_embedder(ctx)
     if embedder is None:
@@ -207,7 +214,7 @@ def _prep_prerequisites(ctx: Any, proj: "Projection") -> tuple[list[int], str, A
     topic tree (bail *before* paying for texts), or a media type with no
     registered text provider.
     """
-    if not signposting_available():
+    if not require_signposting():
         return None
     embedder = _text_embedder(ctx)
     if embedder is None:
