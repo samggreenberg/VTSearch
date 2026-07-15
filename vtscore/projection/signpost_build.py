@@ -64,8 +64,46 @@ ProgressFn = Callable[[int, int, str], None]
 
 
 def signposting_available() -> bool:
-    """Whether the ``toponymy`` library is importable in this environment."""
+    """Whether the ``toponymy`` library is importable in this environment.
+
+    The silent probe: the serve / signature paths gate on this without
+    complaint, because those run on every projection poll and a ``None``
+    result there is routine.  Build paths use :func:`require_signposting`
+    instead, which treats a missing install as the error it is.
+    """
     return util.find_spec("toponymy") is not None
+
+
+#: One-time latch so a missing-toponymy install shouts exactly once per
+#: process, not on every build attempt (subset re-fits, relabel jobs, …).
+_missing_toponymy_warned = False
+
+
+def require_signposting() -> bool:
+    """Gate a signpost *build*, logging loudly if ``toponymy`` is missing.
+
+    Unlike :func:`signposting_available` (the quiet probe), ``toponymy`` is not
+    a soft optional at build time: ``scripts/install.sh`` installs it
+    unconditionally (alongside ``apricot-select``), so its absence when a build
+    actually runs means a broken or incomplete install, not a dataset that
+    legitimately can't be lettered.  We still degrade gracefully — the caller
+    returns ``None`` and the map stays unlettered rather than crashing — but we
+    surface the misconfiguration with a one-time ``error`` log so it can't hide
+    behind the genuinely-quiet no-embedder / no-provider skips.  Returns whether
+    signposting can proceed.
+    """
+    if signposting_available():
+        return True
+    global _missing_toponymy_warned
+    if not _missing_toponymy_warned:
+        _missing_toponymy_warned = True
+        logger.error(
+            "VTSBrowse signposts are disabled: the required 'toponymy' library "
+            "is not importable. It is installed by scripts/install.sh (which "
+            "also installs its apricot-select dependency); re-run that script to "
+            "repair this environment. Maps will render unlettered until then."
+        )
+    return False
 
 
 def toponymy_version() -> str:
@@ -285,6 +323,7 @@ __all__ = [
     "EmbedderTextEncoder",
     "build_region_labels",
     "make_keyphrase_namer",
+    "require_signposting",
     "signposting_available",
     "toponymy_version",
 ]
