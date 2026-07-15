@@ -10,6 +10,7 @@ from typing import Optional
 
 from vtscore.datasets.downloader import core as _core
 from vtscore.datasets.downloader.core import ProgressCallback
+from vtscore.security.archive import safe_tar_extract
 
 
 def download_cifar10(on_progress: Optional[ProgressCallback] = None) -> Path:
@@ -127,7 +128,7 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
             with tarfile.open(inner_tar, "r:gz") as tar_ref:
                 _extract_members(
                     tar_ref.getmembers(),
-                    lambda member, tar_ref=tar_ref: tar_ref.extract(member, inner_dest, filter="data"),
+                    lambda member, tar_ref=tar_ref: safe_tar_extract(tar_ref, member, inner_dest),
                     on_progress,
                     "Extracting 101_ObjectCategories...",
                     start=0,
