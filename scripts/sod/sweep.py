@@ -28,7 +28,7 @@ import traceback
 from pathlib import Path
 
 # scripts/sod is sys.path[0] when run as `python scripts/sod/sweep.py`.
-from datasets import SodDataset
+from datasets import GUI_MIN_BOX_FRAC, SodDataset
 from features import FeatureCache, build_curve_inputs, dump_split, partition_split, slugify
 
 from vtscore.eval.region_curve import evaluate_realistic_curve
@@ -126,7 +126,9 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
         return []
 
     with SodDataset(cell["dataset"]) as ds:
-        split = ds.class_split(cell["class"], neg_multiple=args.neg_multiple, seed=args.split_seed)
+        split = ds.class_split(
+            cell["class"], neg_multiple=args.neg_multiple, seed=args.split_seed, min_box_frac=args.min_box_frac
+        )
         if not split.positive_ids:
             print(f"  skip {cell}: no positives for class {cell['class']!r}", flush=True)
             return []
@@ -221,7 +223,9 @@ def _render_realistic_viz(args, cell, cache_root: Path, buckets, slug: str, fina
     viz_seed = args.viz_seed if args.viz_seed is not None else 0
     try:
         with SodDataset(cell["dataset"]) as ds:
-            ds.class_split(cell["class"], neg_multiple=args.neg_multiple, seed=args.split_seed)
+            ds.class_split(
+                cell["class"], neg_multiple=args.neg_multiple, seed=args.split_seed, min_box_frac=args.min_box_frac
+            )
             if args.viz:
                 fin = finals.get(viz_seed)
                 if fin is not None:
@@ -249,6 +253,8 @@ def _render_realistic_viz(args, cell, cache_root: Path, buckets, slug: str, fina
                         ds,
                         buckets,
                         f["trace"],
+                        cache_dir=cache_root,
+                        slug=slug,
                         out_dir=args.out_dir / "labeling_trace",
                         dataset=cell["dataset"],
                         cls=cell["class"],
@@ -285,6 +291,14 @@ def main() -> int:
     ap.add_argument("--embedders", type=_strs, default=["clip", "siglip", "siglip2", "dinov2", "dinov3"])
     ap.add_argument("--proposals", type=_strs, default=["whole", "sliding", "dino", "hac"])
     ap.add_argument("--split-seed", type=int, default=0, help="seed for class split + pool partition")
+    ap.add_argument(
+        "--min-box-frac",
+        type=float,
+        default=GUI_MIN_BOX_FRAC,
+        help="drop GT boxes smaller than this fraction of the image on either axis — the GUI's "
+        f"drawable-box floor (default {GUI_MIN_BOX_FRAC}); an image stays positive if any box "
+        "survives. 0 disables (keep all boxes).",
+    )
     ap.add_argument(
         "--neg-multiple",
         type=int,
@@ -459,7 +473,9 @@ def _run_viz(args, cells: list[dict], cache_root: Path, all_rows: list[dict], ou
         for cls in args.classes:
             try:
                 with SodDataset(dataset) as ds:
-                    cs = ds.class_split(cls, neg_multiple=args.neg_multiple, seed=args.split_seed)
+                    cs = ds.class_split(
+                        cls, neg_multiple=args.neg_multiple, seed=args.split_seed, min_box_frac=args.min_box_frac
+                    )
                     if not cs.positive_ids:
                         continue
                     sp = partition_split(cs, args.test_fraction, args.split_seed)

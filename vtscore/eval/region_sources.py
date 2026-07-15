@@ -101,6 +101,26 @@ def _covering_box(boxes: list[Box]) -> Box:
     return (min(xs0), min(ys0), max(xs1), max(ys1))
 
 
+def _node_cell_masks(tree, grid_shape: tuple[int, int]) -> np.ndarray:
+    """Per-node patch-cell union masks for a region tree (shape ``(N, H, W)`` bool).
+
+    Leaf = its own ``cell_mask``; CLS (index 0, no mask, no children) = all-True (the whole
+    image); internal = union of its children's masks. Computed bottom-up over the flat list
+    (build order guarantees children precede their parent), so one pass suffices."""
+    n = len(tree)
+    h, w = grid_shape
+    masks = np.zeros((n, h, w), dtype=bool)
+    for i, r in enumerate(tree):
+        if r.cell_mask is not None:
+            masks[i] = np.asarray(r.cell_mask, dtype=bool)
+        elif r.children is None:  # CLS full-image node
+            masks[i] = True
+        else:
+            a, b = r.children
+            masks[i] = masks[a] | masks[b]
+    return masks
+
+
 def _denorm_boxes(boxes: np.ndarray, w: int, h: int) -> list[Box]:
     """(N,4) normalized boxes -> pixel-coordinate box tuples."""
     out: list[Box] = []
@@ -202,6 +222,19 @@ class PreparedImage:
     # region-voting negative set). ``None`` when the source has no tree structure
     # (crop/sliding/whole), where every candidate is a leaf by construction.
     leaf_mask: np.ndarray | None = None
+    # (N, 2) int, aligned with ``boxes``/``vecs``: the two child indices (into this
+    # same flat node list) of each HAC merge node, or ``(-1, -1)`` for a childless
+    # node (CLS + leaves). Lets the labeling-trace visualizer redraw the HAC
+    # dendrogram. ``None`` when the source has no tree structure (crop/sliding/whole).
+    children: np.ndarray | None = None
+    # (N, H, W) bool, aligned with ``boxes``: each node's patch-cell union footprint
+    # (leaf = its own cell mask, CLS = all-True, internal = union of children). Lets the
+    # labeling-trace visualizer draw masked-cell pixel thumbnails (the true footprint, not
+    # the loose bbox). ``None`` for tree-less sources.
+    cell_masks: np.ndarray | None = None
+    # (H, W) float, the per-patch CLS→patch attention/saliency grid, for the trace's
+    # inferno attention overlay. ``None`` for tree-less sources.
+    saliency: np.ndarray | None = None
 
 
 class RegionSource(Protocol):
@@ -335,19 +368,29 @@ class _PatchSource:
                 z,
                 np.zeros((0, self.input_dim), np.float32),
                 leaf_mask=np.ones(1, dtype=bool),
+                children=np.full((1, 2), -1, dtype=int),
             )
         whole_vec = np.asarray(pe.cls_vec, dtype=np.float32)
         tree = None
+        cell_masks: np.ndarray | None = None
+        saliency: np.ndarray | None = None
         if self._proposer is None:
             tree = build_region_tree(pe, k=self._k, alpha=self._alpha)
             boxes = np.asarray([r.box for r in tree], dtype=np.float32)
             vecs = np.asarray([r.vec for r in tree], dtype=np.float32)
             # Childless nodes (CLS + HAC leaves) — the set a Bad vote floods.
             leaf_mask = np.asarray([r.children is None for r in tree], dtype=bool)
+            # Child indices (into this same flat list) for redrawing the dendrogram;
+            # (-1, -1) for childless nodes. Indices already align with ``boxes``.
+            children = np.asarray([r.children if r.children is not None else (-1, -1) for r in tree], dtype=int)
+            # Per-node patch-cell union masks + the attention grid, for the trace viz.
+            cell_masks = _node_cell_masks(tree, np.asarray(pe.patch_saliency).shape)
+            saliency = np.asarray(pe.patch_saliency, dtype=np.float32)
         else:
             boxes = self._proposer(image)
             vecs = np.asarray([box_to_vote_vector(pe.patch_grid, _as_box(b)) for b in boxes], dtype=np.float32)
             leaf_mask = np.ones(boxes.shape[0], dtype=bool)
+            children = np.full((boxes.shape[0], 2), -1, dtype=int)  # flat pool: no hierarchy
         exemplars = np.zeros((0, self.input_dim), np.float32)
         if gt_boxes:
             if self._region_voting and tree is not None:
@@ -362,7 +405,16 @@ class _PatchSource:
                 exemplars = np.asarray(
                     [box_to_vote_vector(pe.patch_grid, _as_box(b)) for b in gt_boxes], dtype=np.float32
                 )
-        return PreparedImage(boxes=boxes, vecs=vecs, whole_vec=whole_vec, exemplars=exemplars, leaf_mask=leaf_mask)
+        return PreparedImage(
+            boxes=boxes,
+            vecs=vecs,
+            whole_vec=whole_vec,
+            exemplars=exemplars,
+            leaf_mask=leaf_mask,
+            children=children,
+            cell_masks=cell_masks,
+            saliency=saliency,
+        )
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:  # noqa: ARG002
         return None

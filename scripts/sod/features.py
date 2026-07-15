@@ -12,7 +12,7 @@ Split (seeded, per dataset/class/seed):
   (the ~10× pool that measures FPR on the test set)
 
 Two caches (npz):
-* ``regions/<dataset>/<embedder>/<proposal_slug>/<id>.npz`` → boxes, vecs, whole_vec
+* ``regions/<dataset>/<embedder>/<proposal_slug>/<id>.npz`` → boxes, vecs, whole_vec, leaf_mask, children
 * ``exemplars/<dataset>/<class>/<embedder>/<proposal_slug>/<id>.npz`` → exemplars
 """
 
@@ -34,6 +34,15 @@ from datasets import Box, ClassSplit, SodDataset  # sibling module (scripts/sod 
 
 def slugify(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", s.strip().lower()).strip("-")
+
+
+def _boxes_key(gt_boxes) -> str:
+    """Short stable digest of a GT-box set, for the exemplar cache filename. Order-
+    independent (boxes sorted) so it depends only on the box geometry, not list order."""
+    import hashlib  # noqa: PLC0415
+
+    s = ";".join(f"{x0:.5f},{y0:.5f},{x1:.5f},{y1:.5f}" for x0, y0, x1, y1 in sorted(map(tuple, gt_boxes)))
+    return hashlib.md5(s.encode(), usedforsecurity=False).hexdigest()[:8]
 
 
 # Per-image inference timing (embed + propose), accumulated on cache MISS across
@@ -85,31 +94,52 @@ class FeatureCache:
 
     def regions(
         self, source: RegionSource, image_id: int, image
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """(region_boxes (R,4), region_vecs (R,D), whole_vec (D,), leaf_mask (R,)) for an image, cached.
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """(region_boxes (R,4), region_vecs (R,D), whole_vec (D,), leaf_mask (R,), children (R,2)) cached.
 
         ``leaf_mask`` is True for the childless nodes (CLS + HAC leaves) a Bad
         vote floods in region-voting mode; all-True for sources without a tree.
-        Older caches without the key back-fill to all-True.
+        ``children`` holds each HAC merge node's two child indices into this same
+        flat list (``(-1, -1)`` for childless nodes), for redrawing the dendrogram.
+        Older caches without a key back-fill to all-True / all-``(-1, -1)``.
         """
         path = self._regions_dir / f"{image_id}.npz"
         if path.exists():
             with np.load(path) as z:
                 boxes, vecs, whole = z["boxes"], z["vecs"], z["whole_vec"]
                 mask = z["leaf_mask"] if "leaf_mask" in z else np.ones(boxes.shape[0], dtype=bool)
-                return boxes, vecs, whole, mask
+                children = z["children"] if "children" in z else np.full((boxes.shape[0], 2), -1, dtype=int)
+                return boxes, vecs, whole, mask, children
         t0 = time.perf_counter()
         prep = source.prepare(image)  # embed + propose: the per-image inference cost
         _record_prep_time(self._dataset, self._embedder, self._proposal_slug, time.perf_counter() - t0)
         mask = prep.leaf_mask if prep.leaf_mask is not None else np.ones(prep.boxes.shape[0], dtype=bool)
-        np.savez_compressed(path, boxes=prep.boxes, vecs=prep.vecs, whole_vec=prep.whole_vec, leaf_mask=mask)
-        return prep.boxes, prep.vecs, prep.whole_vec, mask
+        children = prep.children if prep.children is not None else np.full((prep.boxes.shape[0], 2), -1, dtype=int)
+        # cell_masks (N,H,W) + saliency (H,W) are optional viz payloads (HAC path only);
+        # store them only when present so tree-less sources don't write empty arrays. The
+        # labeling-trace renderer reads them straight from this npz (they are NOT returned
+        # here — build_curve_inputs doesn't need them).
+        extra = {}
+        if prep.cell_masks is not None:
+            extra["cell_masks"] = prep.cell_masks
+        if prep.saliency is not None:
+            extra["saliency"] = prep.saliency
+        np.savez_compressed(
+            path, boxes=prep.boxes, vecs=prep.vecs, whole_vec=prep.whole_vec, leaf_mask=mask, children=children, **extra
+        )
+        return prep.boxes, prep.vecs, prep.whole_vec, mask, children
 
     def exemplars(self, source: RegionSource, class_slug: str, image_id: int, image, gt_boxes) -> np.ndarray:
-        """(M,D) GT-box exemplar vectors for a positive image, cached."""
+        """(M,D) GT-box exemplar vectors for a positive image, cached.
+
+        The exemplar is a pure function of the image's GT boxes, which now vary with the
+        ``min_box_frac`` sub-floor filter (:meth:`SodDataset.class_split`), so the cache key
+        includes a hash of ``gt_boxes`` — a different box set (e.g. a different filter, or a
+        tiny box dropped) recomputes instead of returning a stale file keyed on image id alone.
+        """
         d = self._exem_root / class_slug / self._embedder / self._proposal_slug
         d.mkdir(parents=True, exist_ok=True)
-        path = d / f"{image_id}.npz"
+        path = d / f"{image_id}_{_boxes_key(gt_boxes)}.npz"
         if path.exists():
             with np.load(path) as z:
                 return z["exemplars"]
@@ -233,7 +263,7 @@ def build_curve_inputs(
         if ex.shape[0] > 0:
             pos_ex_list.append(ex)
         if build_pool and ex.shape[0] > 0:
-            boxes, vecs, whole, mask = cache.regions(source, iid, dataset.load_image(iid))
+            boxes, vecs, whole, mask, _children = cache.regions(source, iid, dataset.load_image(iid))
             pool_ids.append(iid)
             pool_region_mats.append(vecs)
             pool_region_boxes.append(boxes)
@@ -249,7 +279,7 @@ def build_curve_inputs(
     neg_list: list[np.ndarray] = []
     neg_bags: list[np.ndarray] = []
     for iid in split.train_neg:
-        boxes, vecs, whole, mask = cache.regions(source, iid, dataset.load_image(iid))
+        boxes, vecs, whole, mask, _children = cache.regions(source, iid, dataset.load_image(iid))
         if region_voting:
             bag = vecs[mask] if mask.any() else vecs
             if bag.shape[0] > 0:
@@ -272,13 +302,13 @@ def build_curve_inputs(
     test_gt: list[list] = []
     test_labels: list[int] = []
     for iid in split.test_pos:
-        boxes, vecs, _whole, _mask = cache.regions(source, iid, dataset.load_image(iid))
+        boxes, vecs, _whole, _mask, _children = cache.regions(source, iid, dataset.load_image(iid))
         test_mats.append(vecs)
         test_boxes.append(boxes)
         test_gt.append(split.gt_boxes.get(iid, []))
         test_labels.append(1)
     for iid in split.test_neg:
-        boxes, vecs, _whole, _mask = cache.regions(source, iid, dataset.load_image(iid))
+        boxes, vecs, _whole, _mask, _children = cache.regions(source, iid, dataset.load_image(iid))
         test_mats.append(vecs)
         test_boxes.append(boxes)
         test_gt.append([])
