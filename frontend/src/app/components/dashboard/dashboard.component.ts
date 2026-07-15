@@ -48,7 +48,7 @@ import {
   CombineStartedInfo,
 } from './combine-datasets-modal/combine-datasets-modal.component';
 import { CombineDetectorsModalComponent } from './combine-detectors-modal/combine-detectors-modal.component';
-import { LabelExporterModalComponent } from '../modals/label-exporter-modal/label-exporter-modal.component';
+import { ExportModalComponent } from '../modals/export-modal/export-modal.component';
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
 import { DetectorStatsModalComponent } from '../modals/detector-stats-modal/detector-stats-modal.component';
@@ -67,7 +67,7 @@ import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
     DetectorCardComponent,
     CombineDatasetsModalComponent,
     CombineDetectorsModalComponent,
-    LabelExporterModalComponent,
+    ExportModalComponent,
     LabelImporterModalComponent,
     DatasetStatsModalComponent,
     DetectorStatsModalComponent,
