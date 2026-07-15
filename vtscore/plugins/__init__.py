@@ -54,8 +54,16 @@ FieldType = Literal[
     "checkbox",
 ]
 
+#: A single dropdown option returned by ``get_field_options``.  Either a
+#: plain string (the value is shown verbatim as the label) or a
+#: ``(value, label)`` tuple (the option submits the opaque ``value`` while
+#: displaying the friendly ``label``).  The API layer coerces both shapes
+#: to ``{"value", "label"}`` before serialising them to the frontend.
+FieldOption = str | tuple[str, str]
+
 __all__ = [
     "EntryPointTombstone",
+    "FieldOption",
     "FieldType",
     "PluginBase",
     "PluginField",
@@ -140,6 +148,12 @@ class PluginField:
     #: listed field changes, the frontend re-fetches options for this field.
     #: Only meaningful when :attr:`dynamic_options` is ``True``.
     depends_on: list[str] = field(default_factory=list)
+    #: For ``"select"`` fields: when ``True``, the dropdown renders as a
+    #: combobox the user can type an arbitrary value into, even one the
+    #: option list doesn't include.  When the option list refreshes, a
+    #: typed value that isn't in the new list is kept (a strict ``select``
+    #: — the default — clears such a value instead).
+    allow_free_text: bool = False
     #: For ``"number"`` fields: minimum allowed value (string form, empty = no min).
     min: str = ""
     #: For ``"number"`` fields: maximum allowed value (string form, empty = no max).
@@ -205,6 +219,7 @@ class PluginField:
             "hint": self.hint,
             "dynamic_options": self.dynamic_options,
             "depends_on": list(self.depends_on),
+            "allow_free_text": self.allow_free_text,
             "min": self.min,
             "max": self.max,
             "step": self.step,

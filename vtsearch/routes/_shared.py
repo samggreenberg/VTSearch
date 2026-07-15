@@ -329,6 +329,29 @@ def get_plugin_or_404(get_fn, list_fn, name: str, type_label: str):
     )
 
 
+def _normalise_option(option: Any) -> dict[str, str]:
+    """Coerce a ``get_field_options`` entry to a ``{"value", "label"}`` dict.
+
+    Accepts both shapes a plugin may return (see
+    :data:`vtscore.plugins.FieldOption`):
+
+    - a plain string ``"foo"`` → ``{"value": "foo", "label": "foo"}`` (the
+      value is shown verbatim as its own label);
+    - a ``(value, label)`` 2-tuple/list ``("id", "Name")`` →
+      ``{"value": "id", "label": "Name"}`` (the option submits the opaque
+      ``value`` while displaying the friendly ``label``).
+
+    Any other iterable is coerced via ``str`` on each part; a stray
+    single-element pair falls back to using the value as its own label.
+    """
+    if isinstance(option, (tuple, list)):
+        value = str(option[0]) if len(option) > 0 else ""
+        label = str(option[1]) if len(option) > 1 else value
+        return {"value": value, "label": label}
+    text = str(option)
+    return {"value": text, "label": text}
+
+
 def get_json_or_400():
     """Parse the request body as JSON, returning a 400 response on failure.
 

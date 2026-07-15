@@ -2832,6 +2832,22 @@
         ],
         "type": "object"
       },
+      "FieldOptions": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ],
+        "type": "object"
+      },
       "FillFromSortRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3247,7 +3263,7 @@
         "properties": {
           "options": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/FieldOptions"
             },
             "type": "array"
           }

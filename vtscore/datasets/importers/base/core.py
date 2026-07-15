@@ -15,10 +15,11 @@ instead, which layers that machinery on top of this base.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Iterator
 
-from vtscore.plugins import PluginBase, PluginField
+from vtscore.plugins import FieldOption, PluginBase, PluginField
 
 from .origin import _dataset_name_field, _field_in_origin, _serialise_origin_value
 
@@ -316,7 +317,7 @@ class ImporterBase(PluginBase):
         self,
         field_key: str,
         current_values: dict[str, Any],
-    ) -> list[str]:
+    ) -> Sequence[FieldOption]:
         """Return the dropdown options for *field_key* given current form values.
 
         Override this on importers that declare any
@@ -334,7 +335,9 @@ class ImporterBase(PluginBase):
                 (or empty strings for unfilled fields).
 
         Returns:
-            The list of allowed option strings for the dropdown.
+            The allowed options for the dropdown.  Each option is either a
+            plain string (shown verbatim) or a ``(value, label)`` tuple (the
+            option submits the opaque ``value`` while displaying ``label``).
 
         Raises:
             NotImplementedError: When the importer declares no dynamic
