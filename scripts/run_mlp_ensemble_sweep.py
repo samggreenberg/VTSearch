@@ -329,8 +329,7 @@ def main(argv: list[str] | None = None) -> int:
         "--max-votes",
         type=int,
         default=40,
-        help="Cap on votes cast per cell (keeps the ensemble_std order tractable). "
-        "Pass 0 for no cap.",
+        help="Cap on votes cast per cell (keeps the ensemble_std order tractable). Pass 0 for no cap.",
     )
     ap.add_argument(
         "--n-ensemble",

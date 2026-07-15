@@ -715,9 +715,12 @@ class TestVoteOrderAxis:
 
     def test_ensemble_std_deterministic(self):
         medias = _make_separable_clips(n_per_cat=8)
-        kw = dict(vote_order="ensemble_std", n_ensemble=3, max_votes=8, calibrate_count=1)
-        rows1 = simulate_voting_iterations(medias, "alpha", seed=1, **kw)
-        rows2 = simulate_voting_iterations(medias, "alpha", seed=1, **kw)
+        rows1 = simulate_voting_iterations(
+            medias, "alpha", seed=1, vote_order="ensemble_std", n_ensemble=3, max_votes=8, calibrate_count=1
+        )
+        rows2 = simulate_voting_iterations(
+            medias, "alpha", seed=1, vote_order="ensemble_std", n_ensemble=3, max_votes=8, calibrate_count=1
+        )
         assert len(rows1) == len(rows2)
         for a, b in zip(rows1, rows2):
             assert {k: v for k, v in a.items() if k != "elapsed_seconds"} == {
