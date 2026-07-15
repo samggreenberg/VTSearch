@@ -104,7 +104,7 @@ class TestLoadDemoSourceVggface2:
 
     def test_vggface2_populates_clips_with_person_categories(self, tmp_path):
         """Photos are grouped under the person's display name, not the n-id."""
-        from vtscore.media.image import _demo_sources
+        from vtscore.datasets import downloader as dl_module
         from vtscore.media.image.media_type import ImageMediaType
 
         # Real on-disk fixture the collector will glob.
@@ -117,7 +117,7 @@ class TestLoadDemoSourceVggface2:
 
         mt = ImageMediaType()
         clips: dict = {}
-        with patch.object(_demo_sources, "download_vggface2", return_value=test_dir):
+        with patch.object(dl_module, "download_vggface2", return_value=test_dir):
             mt.load_demo_source(
                 source="vggface2",
                 categories=[_EWAN[1], _KATIE[1]],
@@ -133,7 +133,7 @@ class TestLoadDemoSourceVggface2:
 
     def test_vggface2_items_per_category_slice_is_applied(self, tmp_path):
         """slice_end caps the number of photos taken per person."""
-        from vtscore.media.image import _demo_sources
+        from vtscore.datasets import downloader as dl_module
         from vtscore.media.image.media_type import ImageMediaType
 
         test_dir = tmp_path / "test"
@@ -144,7 +144,7 @@ class TestLoadDemoSourceVggface2:
 
         mt = ImageMediaType()
         clips: dict = {}
-        with patch.object(_demo_sources, "download_vggface2", return_value=test_dir):
+        with patch.object(dl_module, "download_vggface2", return_value=test_dir):
             mt.load_demo_source(
                 source="vggface2",
                 categories=[_EWAN[1]],
