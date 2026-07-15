@@ -301,7 +301,7 @@ class TestAllowFreeTextValidation:
         # A free-text combobox round-trips an arbitrary typed value even
         # though it isn't one of the declared static options.
         schema = self._schema_for(allow_free_text=True)
-        loaded = schema.load({"choice": "typed-by-hand"})
+        loaded: dict = schema.load({"choice": "typed-by-hand"})
         assert loaded["choice"] == "typed-by-hand"
 
     def test_strict_select_rejects_off_list_value(self):
