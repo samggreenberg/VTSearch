@@ -956,7 +956,8 @@ The discovery and field-declaration scaffolding shared by every plugin family.
 class PluginField:
     """One configurable input for a plugin. key, label, field_type, description,
     accept, options, default, required, placeholder, dynamic_options, depends_on,
-    min, max, step. Validated by the plugin framework at registration time."""
+    allow_free_text, min, max, step. Validated by the plugin framework at
+    registration time."""
 
 class PluginBase:
     """Mixin providing CLI-arg parsing, JSON serialisation, and the `name`,

@@ -539,10 +539,23 @@ class ImporterFieldOptionsRequestSchema(Schema):
     values = fields.Dict(load_default=dict)
 
 
+class FieldOptionsSchema(Schema):
+    """A single dropdown option for a dynamic-options field.
+
+    ``value`` is what the form submits; ``label`` is the friendly text
+    shown in the dropdown.  For plain-string options the two coincide; for
+    ``(value, label)`` tuple options they differ so a dropdown can submit
+    an opaque id while displaying a human-readable name.
+    """
+
+    value = fields.String(required=True)
+    label = fields.String(required=True)
+
+
 class ImporterFieldOptionsResponseSchema(Schema):
     """Response for ``POST /api/dataset/import/<importer_name>/options``."""
 
-    options = fields.List(fields.String(), required=True)
+    options = fields.List(fields.Nested(FieldOptionsSchema), required=True)
 
 
 # ---------------------------------------------------------------------------
@@ -713,6 +726,7 @@ __all__ = [
     "EmbeddersListResponseSchema",
     "DatasetRegistryOkResponseSchema",
     "DatasetRegistryPreloadEmbedderResponseSchema",
+    "FieldOptionsSchema",
     "ImporterFieldOptionsRequestSchema",
     "ImporterFieldOptionsResponseSchema",
     "MediaTypesListResponseSchema",

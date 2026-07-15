@@ -119,6 +119,25 @@
                 [(ngModel)]="formValues[field.key]"
                 [placeholder]="field.placeholder || field.description || field.label || field.key"
               />
+            } @else if (field.field_type === 'select' && field.allow_free_text) {
+              <input
+                [id]="'lif-' + field.key"
+                type="text"
+                class="form-input"
+                [attr.list]="'lif-' + field.key + '-list'"
+                [(ngModel)]="formValues[field.key]"
+                [disabled]="!!dynamicFieldLoading()[field.key]"
+                [placeholder]="dynamicFieldLoading()[field.key] ? 'Loading…' : (field.placeholder || field.description || field.label || field.key)"
+                (ngModelChange)="onFormFieldChanged(field.key)"
+              />
+              <datalist [id]="'lif-' + field.key + '-list'">
+                @for (opt of optionsFor(field); track opt.value) {
+                  <option [value]="opt.value">{{ opt.label }}</option>
+                }
+              </datalist>
+              @if (field.dynamic_options && dynamicFieldError()[field.key]) {
+                <p class="error-text">{{ dynamicFieldError()[field.key] }}</p>
+              }
             } @else if (field.field_type === 'select') {
               <select
                 [id]="'lif-' + field.key"
@@ -132,8 +151,8 @@
                 } @else if (field.dynamic_options && optionsFor(field).length === 0 && !dynamicFieldError()[field.key]) {
                   <option value="">No options available</option>
                 }
-                @for (opt of optionsFor(field); track opt) {
-                  <option [value]="opt">{{ opt }}</option>
+                @for (opt of optionsFor(field); track opt.value) {
+                  <option [value]="opt.value">{{ opt.label }}</option>
                 }
               </select>
               @if (field.dynamic_options && dynamicFieldError()[field.key]) {

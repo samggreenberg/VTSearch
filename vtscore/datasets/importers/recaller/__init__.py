@@ -63,9 +63,11 @@ the original ReCaller order.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, Iterator
 
 from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
+from vtscore.plugins import FieldOption
 from vtscore.media import all_folder_names
 
 
@@ -205,7 +207,7 @@ class ReCallerDatasetImporter(DatasetImporter):
         ),
     ]
 
-    def get_field_options(self, field_key: str, current_values: dict[str, Any]) -> list[str]:
+    def get_field_options(self, field_key: str, current_values: dict[str, Any]) -> Sequence[FieldOption]:
         """Populate ``query_id`` from ReCaller, scoped by the output type."""
         if field_key == "query_id":
             output_type = current_values.get("media_type") or "audio"

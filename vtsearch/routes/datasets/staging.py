@@ -38,7 +38,12 @@ from vtscore.datasets.registry import (
     register_dataset as _reg_register,
 )
 from vtsearch.auth import get_current_user
-from vtsearch.routes._shared import get_plugin_or_404, register_plugin_typed_routes, validate_plugin_args
+from vtsearch.routes._shared import (
+    _normalise_option,
+    get_plugin_or_404,
+    register_plugin_typed_routes,
+    validate_plugin_args,
+)
 from vtsearch.routes.datasets._helpers import _extract_clipper_params
 from vtsearch.schemas.datasets import (
     ClearStagingResponseSchema,
@@ -414,7 +419,7 @@ def importer_field_options(body: dict, importer_name: str):
 
     if not isinstance(options, list):
         abort(500, message="get_field_options must return a list")
-    return {"options": [str(o) for o in options]}
+    return {"options": [_normalise_option(o) for o in options]}
 
 
 # ---------------------------------------------------------------------------

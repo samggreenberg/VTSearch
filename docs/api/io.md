@@ -67,7 +67,9 @@ POST /api/label-importers/field-options/{importer_name}
 Returns the dropdown options for a dynamic-options field on a label importer
 (used to populate dependent selects in the importer form).
 
-→ `{"options": [...]}`
+→ `{"options": [{"value": "...", "label": "..."}, ...]}` (each option carries a
+`value` to submit and a `label` to display; they coincide for plain-string
+options and differ for `(value, label)` tuples).
 
 Errors: 400 (unknown/non-dynamic field key), 404 (unknown importer),
 501 (importer does not implement `get_field_options`),

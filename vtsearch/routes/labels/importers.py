@@ -58,6 +58,7 @@ from flask_smorest import abort
 
 from vtscore.labels.importers import get_label_importer, list_label_importers
 from vtsearch.routes._shared import (
+    _normalise_option,
     get_plugin_or_404,
     register_plugin_typed_routes,
     require_dataset_header,
@@ -183,7 +184,7 @@ def label_importer_field_options(body: dict, importer_name: str):
 
     if not isinstance(options, list):
         abort(500, message="get_field_options must return a list")
-    return {"options": [str(o) for o in options]}
+    return {"options": [_normalise_option(o) for o in options]}
 
 
 # ---------------------------------------------------------------------------
