@@ -135,6 +135,75 @@ class TestSecondEmbedderPass:
 
 
 # ---------------------------------------------------------------------------
+# Requested-embedder stamping: an npz/sidecar import ships a vector but no
+# embedder name (blank sentinel key); the caller's pick is stamped onto it.
+# ---------------------------------------------------------------------------
+
+
+class TestRequestedEmbedderStamping:
+    def test_blank_name_stamped_on_explicit_pick(self):
+        # Pre-embedded media: vector under the blank sentinel key, no recorded
+        # embedder (the npz/sidecar shape).  A named pick stamps that name on,
+        # and the pre-computed vector is kept (no re-embed).
+        emb = _fake_embedder("siglip", dim=4)
+        rng = np.random.default_rng(1)
+        vecs = {i: rng.standard_normal(4).astype(np.float32) for i in range(1, 4)}
+        medias = {i: {"media_type": "audio", "embeddings": {"": vecs[i]}} for i in range(1, 4)}
+
+        with (
+            mock.patch("vtscore.media.get_embedder", return_value=emb),
+            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
+        ):
+            embed_missing(medias, "siglip")
+
+        # No re-embed: the pre-computed vectors were stamped, not replaced.
+        assert emb.embed_media_bulk.call_count == 0
+        for i, m in medias.items():
+            assert m["embedder"] == "siglip"
+            assert set(m["embeddings"]) == {"siglip"}
+            np.testing.assert_array_equal(m["embeddings"]["siglip"], vecs[i])
+            np.testing.assert_array_equal(media_embedding(m, "siglip"), vecs[i])
+
+    def test_blank_name_left_blank_when_no_pick(self):
+        # No explicit pick → the blank sentinel key is left untouched (the
+        # nameless vector still resolves as the primary via media_embedding).
+        emb = _fake_embedder("audio_default", dim=4)
+        rng = np.random.default_rng(2)
+        vecs = {i: rng.standard_normal(4).astype(np.float32) for i in range(1, 4)}
+        medias = {i: {"media_type": "audio", "embeddings": {"": vecs[i]}} for i in range(1, 4)}
+
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
+            embed_missing(medias)
+
+        assert emb.embed_media_bulk.call_count == 0
+        for i, m in medias.items():
+            assert not m.get("embedder")
+            assert set(m["embeddings"]) == {""}
+            np.testing.assert_array_equal(media_embedding(m), vecs[i])
+
+    def test_importer_set_name_preserved(self):
+        # The importer recorded a real embedder name; a different pick must not
+        # overwrite it (only blank-named media are stamped).
+        emb = _fake_embedder("siglip", dim=4)
+        rng = np.random.default_rng(3)
+        vecs = {i: rng.standard_normal(4).astype(np.float32) for i in range(1, 4)}
+        medias = {
+            i: {"media_type": "audio", "embedder": "real_name", "embeddings": {"real_name": vecs[i]}}
+            for i in range(1, 4)
+        }
+
+        with (
+            mock.patch("vtscore.media.get_embedder", return_value=emb),
+            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
+        ):
+            embed_missing(medias, "siglip")
+
+        for i, m in medias.items():
+            assert m["embedder"] == "real_name"
+            np.testing.assert_array_equal(m["embeddings"]["real_name"], vecs[i])
+
+
+# ---------------------------------------------------------------------------
 # Persistence: per-embedder vectors round-trip through save/reload
 # ---------------------------------------------------------------------------
 
