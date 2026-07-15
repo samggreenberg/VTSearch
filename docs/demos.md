@@ -79,6 +79,8 @@ Datasets are grouped by media type below. Each demo comes in size variants — *
 | **visual_genome_m** | Visual Genome scenes (a 2/50 slice) — multi-label over 100 object types, with ground-truth boxes |
 | **visual_genome_l** | Visual Genome scenes (a 4/50 slice) — multi-label over 100 object types, with ground-truth boxes |
 | **visual_genome_a** | All Visual Genome scenes — multi-label over 100 object types, with ground-truth boxes (large; ~15 GB download) |
+| **vggface2_faces_s** | In-the-wild **celebrity face photos** (VGGFace2 test split) across a curated, gender-balanced set of 40 identities — the **same person recurs many times** across varied poses, ages, lighting, and profile/blurry shots, so `category` = person. 15 photos/person (small). The natural ground truth for **same-person identity matching**, and a good set to run the face localizer / `image2face` converter on |
+| **vggface2_faces_m** | VGGFace2 in-the-wild face photos across the same 40 identities, 40 photos/person (medium) — a fuller per-person set for training and eval |
 
 ## Text
 
