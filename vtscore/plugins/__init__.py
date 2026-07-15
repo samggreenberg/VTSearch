@@ -448,7 +448,7 @@ class PluginBase:
                 continue
             if f.default:
                 kwargs["default"] = f.default
-            if f.field_type == "select" and f.options:
+            if f.field_type == "select" and f.options and not f.allow_free_text:
                 kwargs["choices"] = f.options
             if f.field_type == "number":
                 kwargs["type"] = int if f.is_integer_number() else float

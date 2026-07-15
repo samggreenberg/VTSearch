@@ -19,7 +19,7 @@ import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.co
 import { LabelImportersApiService } from '../../../services/label-importers-api.service';
 import { MediasApiService } from '../../../services/medias-api.service';
 import { VoteStateService } from '../../../services/vote-state.service';
-import { ImporterField } from '../../../models/api.models';
+import { FieldOption, ImporterField } from '../../../models/api.models';
 import type { LabelImporterEntry } from '../../../generated/api-client/models/label-importer-entry';
 import { apiErrorMessage } from '../../../utils/api-error';
 
@@ -79,7 +79,7 @@ export class LabelImporterModalComponent implements OnDestroy {
       (this.importersResource.error() ? 'Failed to load label importers' : ''),
   );
   readonly successMessage = signal('');
-  readonly dynamicFieldOptions = signal<Record<string, string[]>>({});
+  readonly dynamicFieldOptions = signal<Record<string, FieldOption[]>>({});
   readonly dynamicFieldLoading = signal<Record<string, boolean>>({});
   readonly dynamicFieldError = signal<Record<string, string>>({});
   readonly addingGood = signal(false);
@@ -142,11 +142,12 @@ export class LabelImporterModalComponent implements OnDestroy {
     }
   }
 
-  optionsFor(field: ImporterField): string[] {
+  optionsFor(field: ImporterField): FieldOption[] {
     if (field.dynamic_options) {
       return this.dynamicFieldOptions()[field.key] || [];
     }
-    return field.options || [];
+    // Static options are plain strings; render each as its own label.
+    return (field.options || []).map((o) => ({ value: o, label: o }));
   }
 
   private refreshDynamicFieldOptions(field: ImporterField): void {
@@ -159,15 +160,18 @@ export class LabelImporterModalComponent implements OnDestroy {
       .getFieldOptions(importer.name, key, { ...this.formValues })
       .subscribe({
         next: (res) => {
-          const options = res.options || [];
+          const options: FieldOption[] = res.options || [];
           this.dynamicFieldOptions.update((m) => ({ ...m, [key]: options }));
           this.dynamicFieldLoading.update((m) => ({ ...m, [key]: false }));
           const current = this.formValues[key];
-          if (current && !options.includes(String(current))) {
+          const inList = options.some((o) => o.value === String(current));
+          // Strict selects clear a value the new list no longer offers; a
+          // free-text combobox keeps whatever the user typed.
+          if (current && !inList && !field.allow_free_text) {
             this.formValues[key] = '';
           }
           if (!this.formValues[key] && field.required && options.length > 0) {
-            this.formValues[key] = options[0];
+            this.formValues[key] = options[0].value;
           }
         },
         error: (err) => {

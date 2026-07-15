@@ -48,6 +48,34 @@ class _StubImporter(DatasetImporter):
             return [f"{mt}-q1", f"{mt}-q2"]
         return super().get_field_options(field_key, current_values)
 
+
+class _MixedOptionImporter(DatasetImporter):
+    """Importer whose ``get_field_options`` mixes plain strings and
+    ``(value, label)`` tuples, plus a free-text combobox field."""
+
+    name = "_stub_mixed_options"
+    display_name = "Stub Mixed Options"
+    description = "Test importer with mixed string/tuple options."
+    fields = [
+        PluginField(
+            "query_id",
+            "Query",
+            "select",
+            dynamic_options=True,
+            allow_free_text=True,
+        ),
+    ]
+
+    def get_field_options(self, field_key, current_values):
+        if field_key == "query_id":
+            # A plain string (value == label) and a (value, label) tuple
+            # (opaque id shown under a friendly name).
+            return ["plain", ("q-123", "Friendly Name")]
+        return super().get_field_options(field_key, current_values)
+
+    def run(self, field_values, medias, thin=False):  # pragma: no cover; unused here
+        return None
+
     def run(self, field_values, medias, thin=False):  # pragma: no cover; unused here
         return None
 
@@ -78,6 +106,7 @@ class TestPluginFieldDynamicAttrs:
         f = PluginField(key="x", label="X", field_type="text")
         assert f.dynamic_options is False
         assert f.depends_on == []
+        assert f.allow_free_text is False
 
     def test_to_dict_round_trip(self):
         f = PluginField(
@@ -86,10 +115,16 @@ class TestPluginFieldDynamicAttrs:
             field_type="select",
             dynamic_options=True,
             depends_on=["a", "b"],
+            allow_free_text=True,
         )
         d = f.to_dict()
         assert d["dynamic_options"] is True
         assert d["depends_on"] == ["a", "b"]
+        assert d["allow_free_text"] is True
+
+    def test_to_dict_allow_free_text_defaults_false(self):
+        f = PluginField(key="q", label="Q", field_type="select", options=["a"])
+        assert f.to_dict()["allow_free_text"] is False
 
     def test_depends_on_is_independent_per_instance(self):
         # default_factory=list should not be shared between instances.
@@ -134,7 +169,37 @@ class TestImporterFieldOptionsRoute:
         )
         assert resp.status_code == 200
         body = resp.get_json()
-        assert body == {"options": ["image-q1", "image-q2"]}
+        # Plain strings coerce to ``{"value", "label"}`` with value == label.
+        assert body == {
+            "options": [
+                {"value": "image-q1", "label": "image-q1"},
+                {"value": "image-q2", "label": "image-q2"},
+            ]
+        }
+
+    def test_mixed_string_and_tuple_options(self, client):
+        """A ``get_field_options`` returning both plain strings and
+        ``(value, label)`` tuples coerces each to ``{"value", "label"}``."""
+        from vtscore.datasets.importers import get_importer
+
+        registry = get_importer.__self__
+        registry._ensure_discovered()
+        stub = _MixedOptionImporter()
+        registry._items[stub.name] = stub
+        try:
+            resp = client.post(
+                self.URL_TEMPLATE.format(name=stub.name),
+                json={"field_key": "query_id", "values": {}},
+            )
+            assert resp.status_code == 200
+            assert resp.get_json() == {
+                "options": [
+                    {"value": "plain", "label": "plain"},
+                    {"value": "q-123", "label": "Friendly Name"},
+                ]
+            }
+        finally:
+            registry._items.pop(stub.name, None)
 
     def test_unknown_importer_returns_404(self, client):
         resp = client.post(
@@ -210,6 +275,41 @@ class TestImporterFieldOptionsRoute:
             assert resp.get_json()["message"] == "remote service down"
         finally:
             registry._items.pop(stub.name, None)
+
+
+# ---------------------------------------------------------------------------
+# allow_free_text: off-list values survive server-side validation
+# ---------------------------------------------------------------------------
+
+
+class TestAllowFreeTextValidation:
+    def _schema_for(self, **field_kwargs):
+        from vtscore.plugins.schema import make_plugin_arg_schema
+
+        class Imp(DatasetImporter):
+            name = "_t_free_text"
+            display_name = "T"
+            description = "T"
+            fields = [PluginField("choice", "Choice", "select", options=["a", "b"], **field_kwargs)]
+
+            def run(self, field_values, medias, thin=False):
+                return None
+
+        return make_plugin_arg_schema(Imp())()
+
+    def test_free_text_select_accepts_off_list_value(self):
+        # A free-text combobox round-trips an arbitrary typed value even
+        # though it isn't one of the declared static options.
+        schema = self._schema_for(allow_free_text=True)
+        loaded = schema.load({"choice": "typed-by-hand"})
+        assert loaded["choice"] == "typed-by-hand"
+
+    def test_strict_select_rejects_off_list_value(self):
+        from marshmallow import ValidationError
+
+        schema = self._schema_for()
+        with pytest.raises(ValidationError):
+            schema.load({"choice": "typed-by-hand"})
 
 
 # ---------------------------------------------------------------------------
