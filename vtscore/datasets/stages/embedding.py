@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from vtscore.embedding.matrix import invalidate_embedding_matrix
 from vtscore.embedding.media_vectors import (
+    EMBEDDINGS_KEY,
+    UNKNOWN_EMBEDDER_KEY,
     ensure_embeddings_dict,
     media_embedder_names,
     media_embedding,
@@ -90,6 +92,33 @@ def _resolve_embedder(
         avail = embedders_for_type(media_type)
         emb = avail[0] if avail else None
     return emb
+
+
+def _stamp_requested_embedder(medias: dict[int, dict[str, Any]], embedder_name: str) -> None:
+    """Stamp the requested *embedder_name* onto pre-embedded media whose name is blank.
+
+    An npz/sidecar importer that ships a pre-computed vector but not its
+    producing embedder stores it under the blank sentinel key
+    (:data:`UNKNOWN_EMBEDDER_KEY`) with no recorded ``media["embedder"]``.  When
+    the caller named an embedder for this load, that nameless vector *is* that
+    embedder's vector — the archive just didn't carry the name — so re-key it
+    under *embedder_name* and record the primary.  This lets
+    ``media_embedding(m, embedder_name)`` resolve, so the named-missing check
+    below won't needlessly re-embed the media and downstream binding won't fall
+    back to the media-type default (a dimension mismatch when the pick differs).
+
+    Only media whose embedder name is blank are touched; an importer-set name is
+    never overwritten.
+    """
+    for m in medias.values():
+        if m.get("embedder"):
+            continue
+        embs = m.get(EMBEDDINGS_KEY)
+        if not isinstance(embs, dict) or UNKNOWN_EMBEDDER_KEY not in embs:
+            continue
+        vec = embs.pop(UNKNOWN_EMBEDDER_KEY)
+        embs.setdefault(embedder_name, vec)
+        m["embedder"] = embedder_name
 
 
 def _noop_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
@@ -255,6 +284,14 @@ def embed_missing(
     emb = _resolve_embedder(medias, embedder_name, media_type)
     if emb is None:
         return
+
+    # A pre-embedded media whose producing embedder the archive didn't record
+    # (npz/sidecar import → vector under the blank sentinel key) carries the
+    # caller's named embedder when one was given: stamp that name so the vector
+    # resolves under it rather than being re-embedded or leaving downstream
+    # binding to fall back to the media-type default (dimension mismatch).
+    if embedder_name:
+        _stamp_requested_embedder(medias, embedder_name)
 
     # Which items still need *this* embedder's vector.
     missing = _missing_for_embedder(medias, emb, embedder_name)
