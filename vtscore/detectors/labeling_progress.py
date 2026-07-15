@@ -117,7 +117,7 @@ def invalidate_progress_cache_from(media_id: int) -> None:
     appearance onward are discarded so they can be retrained and their
     stability/evaluation metrics recomputed.
     """
-    global _cache_prev_predictions, _cache_coverage_atlas
+    global _cache_prev_predictions, _status_snapshot
     with _progress_lock:
         # Find the first cached step that includes media_id in its training data.
         truncate_at = None
@@ -133,31 +133,40 @@ def invalidate_progress_cache_from(media_id: int) -> None:
             _live_models.clear()
             return
 
-        if truncate_at == 0:
-            # Media was present from the very first step - full clear.
-            clear_progress_cache()
-            return
-
         # Keep steps [0, truncate_at); discard the rest.
         del _cached_steps[truncate_at:]
 
-        # Restore running ID sets from the last kept step.
-        last = _cached_steps[-1]
+        # Restore the running ID sets to the surviving prefix's final state.
         _cache_good_ids.clear()
-        _cache_good_ids.update(last["good_ids"])
         _cache_bad_ids.clear()
-        _cache_bad_ids.update(last["bad_ids"])
+        if _cached_steps:
+            last = _cached_steps[-1]
+            _cache_good_ids.update(last["good_ids"])
+            _cache_bad_ids.update(last["bad_ids"])
+        else:
+            # truncate_at == 0: media was present from the very first step, so
+            # the whole prefix is gone and no label survives.  No cached step
+            # remains to source the Smart / Stable indicators from, so drop the
+            # stale snapshot (parity with the old step-0 full-clear path).
+            _status_snapshot = None
 
         # Reset the stability prediction chain - it will restart from the
         # truncation point when _ensure_cache replays the remaining history.
         _cache_prev_predictions = None
 
-        # Rebuild the coverage atlas on next _ensure_cache call so its label
-        # state is re-synced from the truncation point forward.
-        _cache_coverage_atlas = None
-
         # Clear live models - some may have been trained with the old label.
         _live_models.clear()
+
+        # Rewind the coverage-atlas overlay and replay the surviving labels
+        # rather than nulling the atlas (which would force a full hierarchical
+        # k-means rebuild on the next /api/labeling-status poll, starving the
+        # request pool at scale).  The structure is unchanged - only labels
+        # moved - so the atlas object identity survives the invalidate.
+        if _cache_coverage_atlas is not None:
+            _cache_coverage_atlas.reset_labeled()
+            for mid in _cache_good_ids | _cache_bad_ids:
+                if mid in _cache_coverage_atlas.vector_to_leaf:
+                    _cache_coverage_atlas.label(mid, good=mid in _cache_good_ids)
 
 
 def inject_live_model(
@@ -177,8 +186,36 @@ def inject_live_model(
         _live_models[key] = (model, threshold)
 
 
+def _active_context_atlas() -> Any:
+    """Return the active dataset context's coverage atlas, or ``None``.
+
+    Read *without* acquiring ``_state_lock``: this runs under ``_progress_lock``
+    (see the lock-ordering note at module top), which forbids taking
+    ``_state_lock`` while held.  ``get_active_context()`` itself takes no lock,
+    and the atlas it returns is only ever *read* here (its structure is
+    immutable once built), so the lock-free read is safe - at worst a stale
+    reference fails the id-set match below and we fall back to a fresh build.
+    In the ``/api/labeling-status`` background worker the dataset context is
+    bound thread-locally by ``JobManager``, so this resolves the right atlas.
+    """
+    try:
+        from vtscore.state.core import get_active_context  # noqa: PLC0415
+
+        return get_active_context().coverage_atlas
+    except Exception:
+        return None
+
+
 def _build_coverage_atlas(clips_dict: dict[int, dict[str, Any]]) -> Any:
-    """Build a CoverageAtlas from clip embeddings, or ``None`` if no embeddings."""
+    """Build a CoverageAtlas from clip embeddings, or ``None`` if no embeddings.
+
+    When the active dataset context already holds an atlas over *exactly* this
+    id set, its hierarchical-k-means structure is identical to what a rebuild
+    would produce, so we :meth:`~CoverageAtlas.structural_clone` it (sharing the
+    node table by reference, fresh label overlay) instead of re-fitting under
+    ``_progress_lock`` - which otherwise starves the request pool at N in the
+    few-thousands on every polarity-flip invalidate.
+    """
     vectors: dict[int, np.ndarray] = {
         cid: np.asarray(media_embedding(media), dtype=np.float32)
         for cid, media in clips_dict.items()
@@ -186,6 +223,11 @@ def _build_coverage_atlas(clips_dict: dict[int, dict[str, Any]]) -> Any:
     }
     if not vectors:
         return None
+
+    ctx_atlas = _active_context_atlas()
+    if ctx_atlas is not None and ctx_atlas.vector_to_leaf.keys() == vectors.keys():
+        return ctx_atlas.structural_clone()
+
     from vtscore.state.coverage_atlas import CoverageAtlas  # noqa: PLC0415
 
     return CoverageAtlas(vectors, k=3)
@@ -417,10 +459,12 @@ def _ensure_cache(
 
     if _cache_coverage_atlas is None:
         _cache_coverage_atlas = _build_coverage_atlas(clips_dict)
-        # After a partial invalidation (_cache_coverage_atlas was set to None
-        # but _cache_good_ids/_cache_bad_ids still contain IDs from kept
-        # steps), seed the fresh atlas with those pre-existing labels so that
-        # coverage_level() is correct for subsequently replayed events.
+        # A freshly built (or cloned) atlas starts with an empty label overlay.
+        # Defensively seed it with any labels already accumulated in the
+        # running ID sets so coverage_level() is correct before the history
+        # replay below runs; normally these sets are empty at first build
+        # (invalidate rewinds and replays its atlas in place rather than
+        # nulling it, so this branch no longer runs mid-history).
         if _cache_coverage_atlas is not None:
             for mid in _cache_good_ids | _cache_bad_ids:
                 if mid in _cache_coverage_atlas.vector_to_leaf:

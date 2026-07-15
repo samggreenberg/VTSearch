@@ -53,7 +53,7 @@ def clear_votes() -> None:
         ctx.find_eval_stale = False
         ds_atlas = get_active_context().coverage_atlas
         if ds_atlas is not None:
-            ds_atlas.reset_evidence()
+            ds_atlas.reset_labeled()
     # ``_progress_lock`` is acquired strictly outside ``_state_lock`` so the
     # two locks never establish a cross-module ordering (audit M1).
     clear_progress_cache()

@@ -201,8 +201,7 @@ class TestLookup:
 
 
 def _covered(atlas, name):
-    node = atlas.nodes[name]
-    return node["n_pos"] + node["n_neg"] > 0
+    return atlas.n_pos(name) + atlas.n_neg(name) > 0
 
 
 class TestEvidence:
@@ -215,15 +214,15 @@ class TestEvidence:
         # Walk from leaf to root; all should carry positive evidence
         node = leaf
         while node is not None:
-            assert atlas.nodes[node]["n_pos"] == 1
+            assert atlas.n_pos(node) == 1
             node = atlas.nodes[node]["parent"]
 
     def test_initially_no_evidence(self):
         vecs = _make_vectors(100)
         atlas = CoverageAtlas(vecs, k=2, min_node_size=10)
-        for node in atlas.nodes.values():
-            assert node["n_pos"] == 0
-            assert node["n_neg"] == 0
+        for name in atlas.nodes:
+            assert atlas.n_pos(name) == 0
+            assert atlas.n_neg(name) == 0
 
     def test_label_tracks_labeled_ids(self):
         vecs = _make_vectors(50)
@@ -237,18 +236,18 @@ class TestEvidence:
         atlas = CoverageAtlas(vecs, k=2, min_node_size=20)
         atlas.label(1, good=True)
         atlas.label(1, good=True)
-        assert atlas.nodes["0"]["n_pos"] == 1
+        assert atlas.n_pos("0") == 1
         assert atlas.labeled_ids == {1}
 
     def test_relabel_moves_evidence_between_channels(self):
         vecs = _make_vectors(50)
         atlas = CoverageAtlas(vecs, k=2, min_node_size=20)
         atlas.label(1, good=True)
-        assert atlas.nodes["0"]["n_pos"] == 1
-        assert atlas.nodes["0"]["n_neg"] == 0
+        assert atlas.n_pos("0") == 1
+        assert atlas.n_neg("0") == 0
         atlas.label(1, good=False)
-        assert atlas.nodes["0"]["n_pos"] == 0
-        assert atlas.nodes["0"]["n_neg"] == 1
+        assert atlas.n_pos("0") == 0
+        assert atlas.n_neg("0") == 1
 
     def test_per_class_counts_accumulate(self):
         vecs = _make_vectors(50)
@@ -256,8 +255,8 @@ class TestEvidence:
         atlas.label(1, good=True)
         atlas.label(2, good=True)
         atlas.label(3, good=False)
-        assert atlas.nodes["0"]["n_pos"] == 2
-        assert atlas.nodes["0"]["n_neg"] == 1
+        assert atlas.n_pos("0") == 2
+        assert atlas.n_neg("0") == 1
 
 
 # ---------------------------------------------------------------------------
@@ -287,15 +286,15 @@ class TestUnlabeling:
         atlas.label(v2, good=False)
 
         # Root should carry evidence from both
-        assert atlas.nodes["0"]["n_pos"] == 1
-        assert atlas.nodes["0"]["n_neg"] == 1
+        assert atlas.n_pos("0") == 1
+        assert atlas.n_neg("0") == 1
 
         atlas.unlabel(v1)
 
         # Root should still be covered (v2 keeps the other branch alive)
         assert _covered(atlas, "0")
-        assert atlas.nodes["0"]["n_pos"] == 0
-        assert atlas.nodes["0"]["n_neg"] == 1
+        assert atlas.n_pos("0") == 0
+        assert atlas.n_neg("0") == 1
 
     def test_unlabel_same_leaf_keeps_coverage(self):
         """If another labeled vector is in the same leaf, leaf stays covered."""
@@ -321,20 +320,20 @@ class TestUnlabeling:
 # ---------------------------------------------------------------------------
 
 
-class TestResetEvidence:
-    def test_reset_evidence_clears_everything(self):
+class TestResetLabeled:
+    def test_reset_labeled_clears_everything(self):
         vecs = _make_clustered_vectors([30, 30], dim=32)
         atlas = CoverageAtlas(vecs, k=2, min_node_size=10)
         atlas.label(1, good=True)
         atlas.label(31, good=False)
         assert len(atlas.labeled_ids) == 2
 
-        atlas.reset_evidence()
+        atlas.reset_labeled()
         assert atlas.labeled_ids == set()
         assert atlas.coverage_level() == 0
-        for node in atlas.nodes.values():
-            assert node["n_pos"] == 0
-            assert node["n_neg"] == 0
+        for name in atlas.nodes:
+            assert atlas.n_pos(name) == 0
+            assert atlas.n_neg(name) == 0
 
     def test_reset_then_relabel_picks_up_new_state(self):
         """After reset, label calls reproduce the evidence state from scratch."""
@@ -344,7 +343,7 @@ class TestResetEvidence:
         leaf1 = atlas.lookup(1)
         assert _covered(atlas, leaf1)
 
-        atlas.reset_evidence()
+        atlas.reset_labeled()
         # Label a different vector; only its leaf+ancestors should be covered.
         atlas.label(31, good=True)
         leaf31 = atlas.lookup(31)
@@ -354,8 +353,44 @@ class TestResetEvidence:
 
     def test_reset_on_empty_atlas_is_noop(self):
         atlas = CoverageAtlas({}, k=2)
-        atlas.reset_evidence()  # must not raise
+        atlas.reset_labeled()  # must not raise
         assert atlas.labeled_ids == set()
+
+
+class TestStructuralClone:
+    def test_clone_shares_structure_by_reference(self):
+        vecs = _make_vectors(120)
+        atlas = CoverageAtlas(vecs, k=3, min_node_size=10)
+        clone = atlas.structural_clone()
+
+        # The expensive, immutable maps are shared by reference (no re-fit).
+        assert clone.nodes is atlas.nodes
+        assert clone.vector_to_leaf is atlas.vector_to_leaf
+        assert clone.nodes_by_depth is atlas.nodes_by_depth
+        assert clone.center is atlas.center
+        assert clone.k == atlas.k
+        assert clone.max_depth == atlas.max_depth
+        assert clone.min_node_size == atlas.min_node_size
+
+    def test_clone_has_independent_empty_overlay(self):
+        vecs = _make_vectors(120)
+        atlas = CoverageAtlas(vecs, k=3, min_node_size=10)
+        first = next(iter(vecs))
+        atlas.label(first, good=True)
+
+        clone = atlas.structural_clone()
+        # Clone starts label-clean even though the original carries evidence.
+        assert clone.labeled_ids == set()
+        assert clone.coverage_level() == 0
+        assert all(clone.n_pos(name) == 0 and clone.n_neg(name) == 0 for name in clone.nodes)
+
+        # Labeling the clone must not disturb the original, and vice versa.
+        second = next(i for i in vecs if i != first)
+        clone.label(second, good=False)
+        assert clone.labeled_ids == {second}
+        assert atlas.labeled_ids == {first}
+        assert atlas.n_pos("0") == 1 and atlas.n_neg("0") == 0
+        assert clone.n_pos("0") == 0 and clone.n_neg("0") == 1
 
 
 # ---------------------------------------------------------------------------
@@ -588,7 +623,7 @@ class TestNextSample:
         # covered, so BFS lands on the larger cluster's (uncovered) child.
         atlas.label(41, good=True)
         children = atlas.nodes["0"]["children"]
-        target = next(c for c in children if not (atlas.nodes[c]["n_pos"] + atlas.nodes[c]["n_neg"]))
+        target = next(c for c in children if not (atlas.n_pos(c) + atlas.n_neg(c)))
         node = atlas.nodes[target]
         assert node["rbar"] >= 0.1, "cluster cell should have a concentrated direction"
         return atlas, node
@@ -1016,7 +1051,7 @@ class TestSerialization:
 
         clone = CoverageAtlas.from_serializable(atlas.to_serializable())
         assert clone.labeled_ids == set()
-        assert all(n["n_pos"] == 0 and n["n_neg"] == 0 for n in clone.nodes.values())
+        assert all(clone.n_pos(name) == 0 and clone.n_neg(name) == 0 for name in clone.nodes)
         # Labeling still works against the restored topology.
         clone.label(first, good=True)
         assert clone.coverage_level() >= 1

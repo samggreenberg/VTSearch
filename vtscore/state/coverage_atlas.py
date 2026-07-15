@@ -175,8 +175,11 @@ class CoverageAtlas:
         self.min_node_size = min_node_size
 
         # Node storage: name -> {ids, children, depth, parent, n, mu, rbar,
-        # t_quantiles, n_pos, n_neg}.  ``ids`` is sorted most-typical-first
-        # (descending mu . x) so ids[0] is the node's representative element.
+        # t_quantiles}.  ``ids`` is sorted most-typical-first (descending
+        # mu . x) so ids[0] is the node's representative element.  Node records
+        # are *immutable* once built — evidence lives in the separate overlay
+        # dicts below — so :meth:`structural_clone` can share this map (and the
+        # two below) by reference across atlases with independent labels.
         self.nodes: dict[str, dict] = {}
         # Vector ID -> leaf node name
         self.vector_to_leaf: dict[int, str] = {}
@@ -184,7 +187,12 @@ class CoverageAtlas:
         self.nodes_by_depth: dict[int, list[str]] = {}
         # Geometry: dataset mean direction subtracted before renormalizing.
         self.center: np.ndarray = np.zeros(0, dtype=np.float32)
-        # Evidence state: vector ID -> is_good (session state, not persisted)
+        # Label overlay (session state, not persisted; per-instance so a
+        # structural clone's labels never touch the original's):
+        #   node name -> positive / negative evidence count (absent = 0),
+        #   vector ID -> is_good.
+        self._n_pos: dict[str, int] = {}
+        self._n_neg: dict[str, int] = {}
         self._labeled: dict[int, bool] = {}
 
         if vectors:
@@ -353,8 +361,6 @@ class CoverageAtlas:
             "mu": mu,
             "rbar": rlen / n if n else 0.0,
             "t_quantiles": [float(q) for q in np.quantile(t_loo, _CALIBRATION_GRID)] if n else [],
-            "n_pos": 0,
-            "n_neg": 0,
             "_order": order,
         }
 
@@ -387,28 +393,41 @@ class CoverageAtlas:
         self._shift_evidence(vector_id, prev, -1)
 
     def _shift_evidence(self, vector_id: int, good: bool, delta: int) -> None:
-        key = "n_pos" if good else "n_neg"
+        overlay = self._n_pos if good else self._n_neg
         node = self.vector_to_leaf[vector_id]
         while node is not None:
-            self.nodes[node][key] += delta
+            count = overlay.get(node, 0) + delta
+            if count:
+                overlay[node] = count
+            else:
+                overlay.pop(node, None)
             node = self.nodes[node]["parent"]
 
-    def reset_evidence(self) -> None:
-        """Zero every node's evidence counts and forget every labeled vector ID.
+    def n_pos(self, name: str) -> int:
+        """Return the positive-evidence count accumulated at node *name*."""
+        return self._n_pos.get(name, 0)
+
+    def n_neg(self, name: str) -> int:
+        """Return the negative-evidence count accumulated at node *name*."""
+        return self._n_neg.get(name, 0)
+
+    def reset_labeled(self) -> None:
+        """Rewind the label overlay: drop every evidence count and labeled ID.
 
         Used when the labeled set is replaced wholesale - e.g. votes are
         cleared, or the active detector is swapped on the same dataset and
         the atlas's evidence state needs to be rebuilt from the new
-        detector's votes (see :func:`resync_coverage_atlas_to_detector`).
+        detector's votes (see :func:`resync_coverage_atlas_to_detector`) - or
+        when the per-step labeling-progress cache is truncated and its atlas
+        is rewound and replayed instead of rebuilt.  The shared node structure
+        is untouched, so it is safe to call on a :meth:`structural_clone`.
         """
-        for node in self.nodes.values():
-            node["n_pos"] = 0
-            node["n_neg"] = 0
+        self._n_pos.clear()
+        self._n_neg.clear()
         self._labeled.clear()
 
     def _covered(self, name: str) -> bool:
-        node = self.nodes[name]
-        return node["n_pos"] + node["n_neg"] > 0
+        return self._n_pos.get(name, 0) + self._n_neg.get(name, 0) > 0
 
     def coverage_level(self) -> int:
         """Return the number of consecutive evidence-bearing nodes in BFS order.
@@ -655,8 +674,6 @@ class CoverageAtlas:
                     "mu": np.asarray(node["mu"], dtype=np.float32),
                     "rbar": node["rbar"],
                     "t_quantiles": node["t_quantiles"],
-                    "n_pos": 0,
-                    "n_neg": 0,
                 }
                 for name, node in data["nodes"].items()
             }
@@ -664,8 +681,37 @@ class CoverageAtlas:
             atlas.nodes_by_depth = data["nodes_by_depth"]
         except KeyError as exc:
             raise ValueError(f"Incomplete coverage-atlas cache: missing {exc}") from exc
+        atlas._n_pos = {}
+        atlas._n_neg = {}
         atlas._labeled = {}
         return atlas
+
+    def structural_clone(self) -> CoverageAtlas:
+        """Return a new atlas sharing this atlas's structure, with empty labels.
+
+        The clone reuses the node table, per-vector leaf assignment, depth
+        index, geometry, and build parameters *by reference* - none of which
+        the evidence path ever rewrites - while starting with a fresh, empty
+        label overlay (``_n_pos`` / ``_n_neg`` / ``_labeled``).  Building the
+        structure is the expensive part (hierarchical k-means over every
+        embedding); cloning skips it entirely, so a second atlas over the same
+        id set - e.g. the labeling-progress per-step atlas mirroring the
+        dataset context's - costs a few dict allocations instead of a full
+        re-fit.  Labeling either atlas never affects the other because the
+        overlay dicts are per-instance.
+        """
+        clone = self.__class__.__new__(self.__class__)
+        clone.k = self.k
+        clone.max_depth = self.max_depth
+        clone.min_node_size = self.min_node_size
+        clone.center = self.center
+        clone.nodes = self.nodes
+        clone.vector_to_leaf = self.vector_to_leaf
+        clone.nodes_by_depth = self.nodes_by_depth
+        clone._n_pos = {}
+        clone._n_neg = {}
+        clone._labeled = {}
+        return clone
 
     def span_info(self) -> dict:
         """Return span level details for the labeling progress indicator.
