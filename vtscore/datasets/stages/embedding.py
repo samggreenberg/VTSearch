@@ -108,8 +108,10 @@ def _stamp_requested_embedder(medias: dict[int, dict[str, Any]], embedder_name: 
     back to the media-type default (a dimension mismatch when the pick differs).
 
     Only media whose embedder name is blank are touched; an importer-set name is
-    never overwritten.
+    never overwritten.  A no-op when *embedder_name* is blank (no pick to stamp).
     """
+    if not embedder_name:
+        return
     for m in medias.values():
         if m.get("embedder"):
             continue
@@ -290,8 +292,7 @@ def embed_missing(
     # caller's named embedder when one was given: stamp that name so the vector
     # resolves under it rather than being re-embedded or leaving downstream
     # binding to fall back to the media-type default (dimension mismatch).
-    if embedder_name:
-        _stamp_requested_embedder(medias, embedder_name)
+    _stamp_requested_embedder(medias, embedder_name)
 
     # Which items still need *this* embedder's vector.
     missing = _missing_for_embedder(medias, emb, embedder_name)
