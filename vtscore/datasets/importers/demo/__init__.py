@@ -202,6 +202,7 @@ def _source_directory(source: str) -> Path | None:
             "openlogo": DATA_DIR / "openlogo" / "data",
             "ucsf_documents": DATA_DIR / "ucsf_documents",
             "cifar10_sample": DATA_DIR / "cifar-10-batches-py",
+            "vggface2": DATA_DIR / "vggface2" / "test",
             # Audio sources
             "esc50": DATA_DIR / "ESC-50-master" / "audio",
             "gtzan": DATA_DIR / "gtzan" / "genres",
