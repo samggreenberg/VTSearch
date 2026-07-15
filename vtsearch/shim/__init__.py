@@ -178,6 +178,7 @@ def build_core_config(settings_path: str | Path | None = None) -> CoreConfig:
         autofind_exporter_field_values={
             name: dict(vals) for name, vals in _settings.get_autofind_exporter_field_values().items()
         },
+        signpost_captioner=dict(_settings.get_browse_signpost_captioner()),
     )
 
 
