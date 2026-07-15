@@ -18,8 +18,9 @@
 > (`namer|texts_provider:embedder|toponymy=version`) and served only over a
 > matching `projection_id` + signature. `toponymy==0.5.2` installs
 > `--no-deps` (its `transformers<5` pin is empirically unnecessary; real deps
-> declared in `pyproject.toml`; `apricot-select` builds under the
-> stdlib-distutils shim); the `slow`-marked smoke test in
+> declared in `pyproject.toml`; `apricot-select` builds as a plain sdist —
+> no SETUPTOOLS_USE_DISTUTILS shim, which setuptools >= 74 rejects at
+> import); the `slow`-marked smoke test in
 > `tests_lib/projection/test_toponymy_smoke.py` guards that bypass.
 > Decision evidence lives in the experiment reports:
 > **`docs/reports/2026-07-12-toponymy-audio-signposts.html`** and
