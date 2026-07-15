@@ -72,4 +72,5 @@ def test_restored_atlas_starts_with_clean_evidence_state():
     assert restore_coverage_atlas_from_cache(ctx, snap) is True
     # No votes replayed yet: the restored atlas must look unlabeled.
     assert ctx.coverage_atlas.labeled_ids == set()
-    assert all(n["n_pos"] == 0 and n["n_neg"] == 0 for n in ctx.coverage_atlas.nodes.values())
+    atlas = ctx.coverage_atlas
+    assert all(atlas.n_pos(name) == 0 and atlas.n_neg(name) == 0 for name in atlas.nodes)

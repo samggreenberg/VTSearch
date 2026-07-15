@@ -29,8 +29,7 @@ def _build_atlas():
 
 
 def _covered(atlas, name):
-    node = atlas.nodes[name]
-    return node["n_pos"] + node["n_neg"] > 0
+    return atlas.n_pos(name) + atlas.n_neg(name) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -64,8 +63,8 @@ class TestBuildCoverageAtlas:
         atlas = _build_atlas()
         assert 1 in atlas.labeled_ids
         assert 2 in atlas.labeled_ids
-        assert atlas.nodes["0"]["n_pos"] == 1
-        assert atlas.nodes["0"]["n_neg"] == 1
+        assert atlas.n_pos("0") == 1
+        assert atlas.n_neg("0") == 1
 
     def test_rebuild_clears_old_state(self):
         atlas1 = _build_atlas()
@@ -247,7 +246,7 @@ class TestVoteUpdatesAtlas:
         resp = client.post(f"/api/medias/{cid}/vote", json={"target": "good"})
         assert resp.status_code == 200
         assert cid in atlas.labeled_ids
-        assert atlas.nodes["0"]["n_pos"] == 1
+        assert atlas.n_pos("0") == 1
 
     def test_bad_vote_labels_atlas(self, client):
         atlas = _build_atlas()
@@ -255,7 +254,7 @@ class TestVoteUpdatesAtlas:
         resp = client.post(f"/api/medias/{cid}/vote", json={"target": "bad"})
         assert resp.status_code == 200
         assert cid in atlas.labeled_ids
-        assert atlas.nodes["0"]["n_neg"] == 1
+        assert atlas.n_neg("0") == 1
 
     def test_unvote_unlabels_atlas(self, client):
         atlas = _build_atlas()
@@ -273,12 +272,12 @@ class TestVoteUpdatesAtlas:
         cid = 3
         client.post(f"/api/medias/{cid}/vote", json={"target": "good"})
         assert cid in atlas.labeled_ids
-        assert atlas.nodes["0"]["n_pos"] == 1
+        assert atlas.n_pos("0") == 1
         # Switch to bad
         client.post(f"/api/medias/{cid}/vote", json={"target": "bad"})
         assert cid in atlas.labeled_ids
-        assert atlas.nodes["0"]["n_pos"] == 0
-        assert atlas.nodes["0"]["n_neg"] == 1
+        assert atlas.n_pos("0") == 0
+        assert atlas.n_neg("0") == 1
 
 
 # ---------------------------------------------------------------------------
@@ -584,7 +583,7 @@ class TestClearVotesResetsAtlas:
 
         assert atlas.coverage_level() == 0
         assert atlas.labeled_ids == set()
-        assert all(n["n_pos"] == 0 and n["n_neg"] == 0 for n in atlas.nodes.values())
+        assert all(atlas.n_pos(name) == 0 and atlas.n_neg(name) == 0 for name in atlas.nodes)
 
     def test_next_sample_starts_over_after_clear_votes(self, client):
         """After clearing votes, the very first uncovered node is the root again."""

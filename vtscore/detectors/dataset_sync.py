@@ -160,7 +160,7 @@ def ensure_votes_match_active_dataset() -> None:
             det_ctx.cached_labelset_mtime = 0.0
             det_ctx.cached_labelset_media_type = ""
             if ds_ctx.coverage_atlas is not None:
-                ds_ctx.coverage_atlas.reset_evidence()
+                ds_ctx.coverage_atlas.reset_labeled()
         return
 
     from vtscore.datasets.labelset import LabelSet
