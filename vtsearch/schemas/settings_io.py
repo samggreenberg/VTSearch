@@ -120,10 +120,16 @@ class SyncSourceConfigSchema(Schema):
     ``{"source_name": "...", "field_values": {...}}``.  This schema
     describes the populated form; the ``null`` case is documented via
     ``response(... )`` and the handler returning ``None``.
+
+    ``inherited`` is dumped only by ``GET /api/settings-sources/active``:
+    it is ``true`` when the effective source comes from the deployment-wide
+    ``default_settings_source`` rather than the user's own key.  It is absent
+    from the labelset-source response (which does not inherit).
     """
 
     source_name = fields.String(required=True)
     field_values = fields.Dict(load_default=dict)
+    inherited = fields.Boolean()
 
 
 class SetSyncSourceRequestSchema(Schema):
@@ -131,9 +137,12 @@ class SetSyncSourceRequestSchema(Schema):
     ``PUT /api/detectors/<name>/labelset-source``.
 
     A body of ``{}`` or one with empty ``source_name`` clears the active
-    source.  Otherwise both fields specify the new source.  ``source_name``
-    is declared as optional so the clear-by-empty-body shape continues to
-    work; the handler 404s on unknown source names.
+    source (the user then inherits the deployment-wide default, if any).
+    ``source_name: "none"`` is an explicit opt-out: the user has no source
+    even when a deployment default exists.  Otherwise both fields specify the
+    new source.  ``source_name`` is declared as optional so the
+    clear-by-empty-body shape continues to work; the handler 404s on unknown
+    source names (but accepts the sentinel ``"none"``).
     """
 
     source_name = fields.String(load_default="")
