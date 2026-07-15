@@ -7,7 +7,11 @@ embeddings so no real model downloads are needed.
 import numpy as np
 import pandas as pd
 
+import pytest
+
 from vtscore.eval.voting_iterations import (
+    VOTE_ORDERS,
+    _balanced_vote_sequence,
     _good_training_vec,
     _inclusion_weights,
     _make_vote_sequence,
@@ -619,3 +623,162 @@ class TestRegionVotingSimulate:
         )
         assert not df.empty
         assert (df["category"] == "apple").all()
+
+
+# ------------------------------------------------------------------
+# Vote-order / n_ensemble / max_votes axes
+# ------------------------------------------------------------------
+
+_ROW_KEYS = {
+    "seed",
+    "dataset",
+    "category",
+    "t",
+    "n_good",
+    "n_bad",
+    "cost",
+    "fpr",
+    "fnr",
+    "elapsed_seconds",
+}
+
+
+class TestBalancedVoteSequence:
+    def test_running_counts_stay_balanced(self):
+        medias = _make_separable_clips(n_per_cat=8)
+        sim_ids = list(medias.keys())
+        rng = np.random.RandomState(0)
+        seq = _balanced_vote_sequence(sim_ids, medias, "alpha", rng)
+        # Same set of votes as a plain shuffle, just reordered.
+        assert {cid for cid, _ in seq} == set(sim_ids)
+        # First two votes are one good + one bad (earliest trainable step).
+        assert {seq[0][1], seq[1][1]} == {"good", "bad"}
+        # Running good/bad counts never drift more than one apart.
+        n_good = n_bad = 0
+        for _, label in seq:
+            if label == "good":
+                n_good += 1
+            else:
+                n_bad += 1
+            assert abs(n_good - n_bad) <= 1
+
+    def test_handles_single_class_pool(self):
+        # All 'alpha' → every vote is good; sequence is just the goods.
+        medias = _make_separable_clips(n_per_cat=6)
+        alpha_ids = [cid for cid, m in medias.items() if m["category"] == "alpha"]
+        rng = np.random.RandomState(0)
+        seq = _balanced_vote_sequence(alpha_ids, medias, "alpha", rng)
+        assert len(seq) == len(alpha_ids)
+        assert all(label == "good" for _, label in seq)
+
+
+class TestVoteOrderAxis:
+    def test_vote_orders_constant_matches_supported(self):
+        assert set(VOTE_ORDERS) == {"shuffle", "balanced", "ensemble_std"}
+
+    def test_default_is_shuffle(self):
+        # Omitting vote_order reproduces the explicit "shuffle" run exactly.
+        medias = _make_separable_clips(n_per_cat=8)
+        default = simulate_voting_iterations(medias, "alpha", seed=3, calibrate_count=1)
+        shuffle = simulate_voting_iterations(medias, "alpha", seed=3, vote_order="shuffle", calibrate_count=1)
+        assert len(default) == len(shuffle)
+        for a, b in zip(default, shuffle):
+            assert {k: v for k, v in a.items() if k != "elapsed_seconds"} == {
+                k: v for k, v in b.items() if k != "elapsed_seconds"
+            }
+
+    def test_unknown_vote_order_raises(self):
+        medias = _make_separable_clips(n_per_cat=6)
+        with pytest.raises(ValueError, match="vote_order"):
+            simulate_voting_iterations(medias, "alpha", seed=0, vote_order="nope")
+
+    @pytest.mark.parametrize("order", ["shuffle", "balanced", "ensemble_std"])
+    def test_row_schema_stable_across_orders(self, order):
+        medias = _make_separable_clips(n_per_cat=8)
+        rows = simulate_voting_iterations(
+            medias, "alpha", seed=0, vote_order=order, n_ensemble=3, max_votes=8, calibrate_count=1
+        )
+        assert rows
+        for row in rows:
+            assert set(row.keys()) == _ROW_KEYS
+            assert np.isfinite(row["cost"])
+
+    def test_balanced_starts_trainable_immediately(self):
+        # Balanced ordering makes the first two votes 1 good + 1 bad, so the
+        # earliest scored step is t=2 with a 1-vs-1 model.
+        medias = _make_separable_clips(n_per_cat=8)
+        rows = simulate_voting_iterations(medias, "alpha", seed=0, vote_order="balanced", calibrate_count=1)
+        assert rows
+        assert rows[0]["t"] == 2
+        assert rows[0]["n_good"] == 1
+        assert rows[0]["n_bad"] == 1
+
+    def test_ensemble_std_deterministic(self):
+        medias = _make_separable_clips(n_per_cat=8)
+        rows1 = simulate_voting_iterations(
+            medias, "alpha", seed=1, vote_order="ensemble_std", n_ensemble=3, max_votes=8, calibrate_count=1
+        )
+        rows2 = simulate_voting_iterations(
+            medias, "alpha", seed=1, vote_order="ensemble_std", n_ensemble=3, max_votes=8, calibrate_count=1
+        )
+        assert len(rows1) == len(rows2)
+        for a, b in zip(rows1, rows2):
+            assert {k: v for k, v in a.items() if k != "elapsed_seconds"} == {
+                k: v for k, v in b.items() if k != "elapsed_seconds"
+            }
+
+    def test_n_ensemble_axis_runs(self):
+        medias = _make_separable_clips(n_per_cat=10)
+        for n in (2, 5):
+            rows = simulate_voting_iterations(
+                medias, "alpha", seed=0, vote_order="ensemble_std", n_ensemble=n, max_votes=6, calibrate_count=1
+            )
+            assert rows
+            assert all(np.isfinite(r["cost"]) for r in rows)
+
+
+class TestMaxVotes:
+    def test_caps_shuffle_steps(self):
+        medias = _make_separable_clips(n_per_cat=12)
+        rows = simulate_voting_iterations(medias, "alpha", seed=0, max_votes=5, calibrate_count=1)
+        # No scored step can exceed the vote cap.
+        assert rows
+        assert max(r["t"] for r in rows) <= 5
+
+    def test_caps_ensemble_std_steps(self):
+        medias = _make_separable_clips(n_per_cat=12)
+        rows = simulate_voting_iterations(
+            medias, "alpha", seed=0, vote_order="ensemble_std", n_ensemble=3, max_votes=5, calibrate_count=1
+        )
+        assert rows
+        assert max(r["t"] for r in rows) <= 5
+
+
+class TestRunEvalThreadsVoteOrder:
+    @pytest.mark.parametrize("order", ["balanced", "ensemble_std"])
+    def test_run_eval_threads_vote_order(self, order):
+        medias = _make_separable_clips(n_per_cat=8)
+        df = run_voting_iterations_eval(
+            dataset_clips={"ds1": medias},
+            seeds=[0],
+            categories={"ds1": ["alpha"]},
+            vote_order=order,
+            n_ensemble=3,
+            max_votes=8,
+            calibrate_count=1,
+        )
+        assert not df.empty
+        # Row schema is unchanged by vote_order (selection never leaks into
+        # the per-step evaluation columns).
+        assert list(df.columns) == [
+            "seed",
+            "dataset",
+            "category",
+            "t",
+            "n_good",
+            "n_bad",
+            "cost",
+            "fpr",
+            "fnr",
+            "elapsed_seconds",
+        ]
