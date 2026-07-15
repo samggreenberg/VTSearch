@@ -48,6 +48,9 @@ class _StubImporter(DatasetImporter):
             return [f"{mt}-q1", f"{mt}-q2"]
         return super().get_field_options(field_key, current_values)
 
+    def run(self, field_values, medias, thin=False):  # pragma: no cover; unused here
+        return None
+
 
 class _MixedOptionImporter(DatasetImporter):
     """Importer whose ``get_field_options`` mixes plain strings and
@@ -72,9 +75,6 @@ class _MixedOptionImporter(DatasetImporter):
             # (opaque id shown under a friendly name).
             return ["plain", ("q-123", "Friendly Name")]
         return super().get_field_options(field_key, current_values)
-
-    def run(self, field_values, medias, thin=False):  # pragma: no cover; unused here
-        return None
 
     def run(self, field_values, medias, thin=False):  # pragma: no cover; unused here
         return None
