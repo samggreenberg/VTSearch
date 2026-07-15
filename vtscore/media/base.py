@@ -240,6 +240,48 @@ class MediaType(ABC):
     #: surfaced to the frontend via :meth:`to_dict` / ``GET /api/media-types``.
     has_thumbnail: bool = False
 
+    #: Embeddable ``type_id``s a **non-embeddable** type can convert into
+    #: (first entry = default).  This is one of the two orthogonal
+    #: capabilities that ``MediaType`` used to conflate — see
+    #: :attr:`importable` / :attr:`embeddable`.  ``document`` sets
+    #: ``["image", "text"]`` (a PDF page → image, or its extracted text);
+    #: a directly-embeddable type leaves this empty.  A *convert-out* "half
+    #: type" is precisely ``embeddable is False and converts_to != []`` — a
+    #: category that *mandates* a conversion step before it can be searched.
+    converts_to: list[str] = []
+
+    @property
+    def importable(self) -> bool:
+        """Whether this type is a first-class *ingestion* category the user
+        picks when importing (folder scan, file upload, native demo tab).
+
+        Every *full* type (image/audio/text/video) and every *convert-out*
+        half type (``document``: importable but not embeddable) is importable.
+        A *convert-in* half type — one that only ever arises from converting
+        **another** type, like ``face`` (cropped out of images, never imported
+        from a ``.face`` file) — overrides this to ``False``.  Import surfaces
+        (folder-import media picker, importer media-type tabs) filter on this
+        flag; browse / sort / demo surfaces show every type.
+        """
+        return True
+
+    @property
+    def embeddable(self) -> bool:
+        """Whether this type can be embedded on its own (has ≥1 registered
+        embedder), and is therefore directly sortable / browsable / text-
+        queryable.
+
+        Derived from the embedder registry
+        (:func:`~vtscore.media.embedders_for_type`) so it stays ``True`` for
+        image/audio/video/text and ``False`` for a *convert-out* half type
+        like ``document`` automatically, with nothing to keep in sync.  A type
+        with ``embeddable is False`` must be converted (see :attr:`converts_to`)
+        before it enters the embedding space.
+        """
+        from vtscore.media import embedders_for_type  # noqa: PLC0415
+
+        return bool(embedders_for_type(self.type_id))
+
     # ------------------------------------------------------------------
     # Identity
     # ------------------------------------------------------------------
@@ -539,6 +581,9 @@ class MediaType(ABC):
             "loops": self.loops,
             "file_extensions": self.file_extensions,
             "has_thumbnail": self.has_thumbnail,
+            "importable": self.importable,
+            "embeddable": self.embeddable,
+            "converts_to": list(self.converts_to),
         }
 
     @abstractmethod

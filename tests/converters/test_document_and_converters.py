@@ -105,9 +105,36 @@ class TestDocumentMediaType:
         mt = DocumentMediaType()
         assert mt.loops is False
 
-    def test_no_demo_datasets(self):
+    def test_half_type_capabilities(self):
         mt = DocumentMediaType()
-        assert mt.demo_datasets == []
+        assert mt.importable is True
+        assert mt.embeddable is False
+        assert mt.converts_to == ["image", "text"]
+
+    def test_demo_datasets_has_ucsf(self):
+        mt = DocumentMediaType()
+        ids = [d.id for d in mt.demo_datasets]
+        assert "ucsf_documents_a" in ids
+
+    def test_load_demo_source_rejects_unknown(self):
+        mt = DocumentMediaType()
+        with pytest.raises(ValueError):
+            mt.load_demo_source("not_a_source", [], 0, None, {})
+
+    def test_image_response_renders_first_pdf_page(self):
+        mt = DocumentMediaType()
+        media = {"id": 5, "filename": "report.pdf", "media_bytes": _make_two_page_pdf()}
+        resp = mt.image_response(media)
+        assert resp is not None
+        assert resp.mimetype == "image/png"
+        assert resp.data[:8] == b"\x89PNG\r\n\x1a\n"
+        # Memoised in-memory so a repeat fetch skips the re-render.
+        assert media.get("thumbnail_bytes") == resp.data
+
+    def test_image_response_none_for_non_pdf(self):
+        mt = DocumentMediaType()
+        media = {"id": 6, "filename": "slides.ppt", "media_bytes": b"not-a-pdf"}
+        assert mt.image_response(media) is None
 
     def test_embed_text_returns_none(self):
         mt = DocumentMediaType()

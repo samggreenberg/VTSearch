@@ -1072,8 +1072,14 @@ class TestAllEmbeddersRegistration:
             "eupe_single",
             "eupe_patch",
             "sift_vlad",
-            "face",
         }
+
+    def test_embedders_for_face(self):
+        """The FaceNet embedder belongs to the ``face`` media type, not image."""
+        from vtscore.media import embedders_for_type
+
+        names = {e.name for e in embedders_for_type("face")}
+        assert names == {"face"}
 
     def test_siglip_is_still_default_image_embedder(self):
         """SigLIP must remain the first (default) image embedder so callers

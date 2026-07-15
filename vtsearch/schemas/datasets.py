@@ -169,13 +169,17 @@ class _DemoDatasetEntrySchema(Schema):
 class DemoDatasetListQuerySchema(Schema):
     """Query string for ``GET /api/dataset/demo-list``.
 
-    Both fields are optional cache-key filters: when supplied, a cached
+    All three fields are optional cache-key filters: when supplied, a cached
     pkl is only considered ``"ready"`` if it was produced with the same
-    embedder / clipper.
+    embedder / clipper / converter.  ``converter`` names a convert-on-load
+    step (e.g. ``document2image`` for the Document demo tab) and only affects
+    demos whose media type matches the converter's source type — those are
+    cached under the ``{name}__{converter}`` pickle key.
     """
 
     embedder = fields.String(load_default="")
     clipper = fields.String(load_default="")
+    converter = fields.String(load_default="")
 
 
 class DemoDatasetListResponseSchema(Schema):

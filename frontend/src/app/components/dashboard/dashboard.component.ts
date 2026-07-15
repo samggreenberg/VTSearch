@@ -1109,6 +1109,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       embedders?: string[];
       clipper?: string;
       clipper_params?: Record<string, number | string>;
+      converter?: string;
       dataset_name?: string;
       build_projection?: boolean;
       merge_near_duplicates?: boolean;
@@ -1122,6 +1123,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
         params['clipper_params'] = extras.clipper_params;
       }
     }
+    // Convert-on-load step (e.g. document2image for the Document demo tab):
+    // the resulting dataset has the converter's target type.
+    if (extras.converter) params['converter'] = extras.converter;
     const userName = (extras.dataset_name || '').trim();
     if (userName) params['dataset_name'] = userName;
     if (extras.build_projection) params['build_projection'] = 'true';

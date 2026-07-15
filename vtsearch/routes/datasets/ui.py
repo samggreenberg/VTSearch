@@ -157,12 +157,13 @@ def demo_dataset_list(query: dict):
     * ``"needs_embedding"`` – source data is downloaded but not yet embedded.
     * ``"needs_download"`` – source data must be downloaded (and then embedded).
     """
-    from vtscore.converters import list_converters_for_source
+    from vtscore.converters import get_converter, list_converters_for_source
     from vtscore.media import get as media_get
     from vtsearch.settings import filter_visible_plugins
 
     requested_embedder = query.get("embedder", "").strip()
     requested_clipper = query.get("clipper", "").strip()
+    requested_converter = query.get("converter", "").strip()
 
     demos = []
     for name, dataset_info in DEMO_DATASETS.items():
@@ -172,7 +173,17 @@ def demo_dataset_list(query: dict):
         except KeyError:
             continue
 
-        pkl_file = EMBEDDINGS_DIR / f"{name}.pkl"
+        # A convert-on-load demo (e.g. the Document tab converting PDFs to
+        # image pages) caches under a converter-specific pickle key.  The
+        # converter only applies to demos whose media type is its source type,
+        # so an unrelated tab's converter never shifts this demo's cache key.
+        cache_key = name
+        if requested_converter:
+            conv = get_converter(requested_converter)
+            if conv is not None and conv.source_type == media_type:
+                cache_key = f"{name}__{requested_converter}"
+
+        pkl_file = EMBEDDINGS_DIR / f"{cache_key}.pkl"
         has_pkl = pkl_file.exists()
         required_folder = dataset_info.get("required_folder")
 

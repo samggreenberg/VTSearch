@@ -1,18 +1,19 @@
-"""Image embedder - FaceNet face-identity space (facenet-pytorch).
+"""Face embedder - FaceNet face-identity space (facenet-pytorch).
 
-Embeds (cropped) face images into a 512-dim identity space using
+Embeds cropped face images into a 512-dim identity space using
 ``facenet-pytorch``'s ``InceptionResnetV1`` with VGGFace2 weights. The
 output vector lives in **face-identity space**, not generic content
 space - two photos of the same person score close together regardless
 of pose / lighting / clothing, while two photos of different people in
 similar scenes score far apart.
 
-Typically paired with
-:class:`~vtscore.media.image.clipper.ImageFaceClipper` so that each
-input image is first split into one crop per detected face. The
-embedder also works on un-clipped images (the model just sees a 160×160
-resize without explicit detection), but results are much better when
-the input is already a face-centred crop.
+This is the embedder for the :class:`~vtscore.media.face.media_type.FaceMediaType`
+*convert-in* half type: faces never arrive from a native import, they are
+cropped out of images by the ``image2face`` converter
+(:class:`~vtscore.converters.image2face.Image2FaceMediaConverter`), and each
+crop is embedded here. The model also works on un-cropped images (it just
+sees a 160×160 resize without explicit detection), but results are much
+better when the input is already a face-centred crop.
 
 ``facenet-pytorch`` is an opt-in dependency (declared in pyproject's
 ``DEP001`` ignore-list, same pattern as ``mediapipe``). If it is not
@@ -39,7 +40,7 @@ if TYPE_CHECKING:
 _INPUT_SIZE = 160  # facenet-pytorch's InceptionResnetV1 input resolution.
 
 
-class ImageFaceEmbedder(MediaEmbedder):
+class FaceEmbedder(MediaEmbedder):
     """Embeds face images using FaceNet (InceptionResnetV1, VGGFace2)."""
 
     def __init__(self) -> None:
@@ -56,7 +57,7 @@ class ImageFaceEmbedder(MediaEmbedder):
 
     @property
     def media_type_id(self) -> str:
-        return "image"
+        return "face"
 
     @property
     def is_default(self) -> bool:
@@ -160,4 +161,4 @@ class ImageFaceEmbedder(MediaEmbedder):
             )
 
 
-EMBEDDER = ImageFaceEmbedder()
+EMBEDDER = FaceEmbedder()

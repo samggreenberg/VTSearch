@@ -64,6 +64,17 @@ export class DemoPickerComponent {
   readonly demoClippers = signal<ClipperInfo[]>([]);
   readonly selectedDemoClipper = signal('');
   readonly demoClipperParamValues = signal<Record<string, number | string>>({});
+  /** For a *convert-out* half-type tab (e.g. ``document``), the embeddable
+   *  targets it can convert into (``converts_to``). Empty for a normal
+   *  embeddable tab. Drives the "Convert to" selector. */
+  readonly activeTabConvertsTo = signal<string[]>([]);
+  /** The chosen embeddable target type for a non-embeddable tab (e.g.
+   *  ``image``), or ``''`` for a normal tab. */
+  readonly selectedConverterTarget = signal('');
+  /** The convert-on-load converter name (e.g. ``document2image``), or ``''``
+   *  when the active tab is directly embeddable. Passed to demo-list status
+   *  queries and the load payload. */
+  readonly selectedDemoConverter = signal('');
   /** Optional user-supplied dataset name.  Empty means "use the demo
    *  entry's label". */
   demoDatasetName = '';
@@ -212,6 +223,10 @@ export class DemoPickerComponent {
     }
   }
 
+  private mediaTypeInfo(typeId: string): MediaTypeInfo | undefined {
+    return this.mediaTypes().find((t) => t.type_id === typeId);
+  }
+
   private loadDemoEmbedders(mediaType: string): void {
     this.selectedDemoPatchEmbedder.set('');
     this.selectedDemoStructuralEmbedder.set('');
@@ -221,13 +236,33 @@ export class DemoPickerComponent {
       this.demoClippers.set([]);
       this.selectedDemoClipper.set('');
       this.demoClipperParamValues.set({});
+      this.activeTabConvertsTo.set([]);
+      this.selectedConverterTarget.set('');
+      this.selectedDemoConverter.set('');
       return;
     }
-    this.datasetsListingsApi.getEmbedders(mediaType).subscribe({
+    // A *convert-out* half type (document: embeddable === false) has no
+    // embedder of its own — its demos load through a converter to an
+    // embeddable target (converts_to). Offer those targets and load the
+    // embedder/clipper choices for the (default) target instead.
+    const info = this.mediaTypeInfo(mediaType);
+    const convertsTo = info && info.embeddable === false ? info.converts_to || [] : [];
+    this.activeTabConvertsTo.set(convertsTo);
+    this.applyConverterTarget(mediaType, convertsTo.length ? convertsTo[0] : '');
+  }
+
+  /** Set the convert-on-load target for the active tab and (re)load the
+   *  embedder/clipper choices for whichever type is actually embeddable
+   *  (the target for a non-embeddable tab, else the tab itself). */
+  private applyConverterTarget(sourceType: string, target: string): void {
+    this.selectedConverterTarget.set(target);
+    this.selectedDemoConverter.set(target ? `${sourceType}2${target}` : '');
+    const embeddableType = target || sourceType;
+    this.datasetsListingsApi.getEmbedders(embeddableType).subscribe({
       next: (embedders) => {
         this.demoEmbedders.set(embedders);
         this.selectedDemoEmbedder.set(
-          this.importDefaults.pickInitialEmbedder(embedders, mediaType, this.mediaTypes(), this.guessedMediaEmbedder),
+          this.importDefaults.pickInitialEmbedder(embedders, embeddableType, this.mediaTypes(), this.guessedMediaEmbedder),
         );
         this.updateDemoStatuses();
         if (this.selectedDemoEmbedder()) {
@@ -235,13 +270,19 @@ export class DemoPickerComponent {
         }
       },
     });
-    this.datasetsListingsApi.getClippers(mediaType).subscribe({
+    this.datasetsListingsApi.getClippers(embeddableType).subscribe({
       next: (clippers) => {
         this.demoClippers.set(clippers);
         this.selectedDemoClipper.set(clippers.length > 0 ? clippers[0].name : '');
         this.demoClipperParamValues.set({});
       },
     });
+  }
+
+  /** Handler for the "Convert to" selector on a non-embeddable tab. */
+  onConverterTargetChange(target: string): void {
+    this.applyConverterTarget(this.activeTab(), target);
+    this.cdr.markForCheck();
   }
 
   /** The demo clipper the user actually chose, or ``''`` when it is a
@@ -298,7 +339,7 @@ export class DemoPickerComponent {
    *  clipper so the backend can authoritatively determine each demo's
    *  status. */
   private refetchDemoStatuses(embedder: string, clipper?: string): void {
-    this.datasetsListingsApi.getDemoList(embedder, clipper).subscribe({
+    this.datasetsListingsApi.getDemoList(embedder, clipper, this.selectedDemoConverter()).subscribe({
       next: (demoRes) => {
         this.demos.set(demoRes.datasets || []);
       },
@@ -372,11 +413,13 @@ export class DemoPickerComponent {
     const userName = (this.demoDatasetName || '').trim();
     const embedders = composeEmbedders(this.selectedDemoEmbedder(), this.selectedDemoPatchEmbedder(), this.selectedDemoStructuralEmbedder());
     const effClipper = this.effectiveDemoClipper();
+    const converter = this.selectedDemoConverter();
     this.demoDatasetSelected.emit({
       ...demo,
       embedder: this.selectedDemoEmbedder(),
       ...(embedders ? { embedders } : {}),
       ...(effClipper ? { clipper: effClipper, clipper_params: { ...this.demoClipperParamValues() } } : {}),
+      ...(converter ? { converter } : {}),
       dataset_name: userName,
       build_projection: this.buildProjection,
       merge_near_duplicates: this.mergeNearDuplicates,
