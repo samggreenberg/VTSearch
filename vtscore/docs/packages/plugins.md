@@ -47,8 +47,9 @@ sentinel attribute (`IMPORTER`, `EXPORTER`, `LABEL_IMPORTER`, …) as a
 plugin keyed by `plugin.name`. It then walks the matching
 `importlib.metadata` entry-point group so third-party packages can drop
 plugins in without forking the repo. Built-ins take precedence on name
-clashes; a broken third-party entry point warns and is skipped without
-disturbing the rest of the registry. The result is exposed as a
+clashes; a third-party entry point whose own import raises warns and is
+registered as a tombstone (deferring the original error to first use)
+without disturbing the rest of the registry. The result is exposed as a
 standard `(get, list)` accessor pair every family re-exports.
 
 ## `PluginField`
@@ -304,7 +305,7 @@ my_exporter = "my_pkg.exporter:EXPORTER"
 After `pip install` of your package, the plugin appears in
 `list_importers()` / `list_exporters()` / etc. without any code change
 to `vtscore`. The discovery routine is `_discover_entry_points()` at
-`vtscore/plugins/__init__.py:388`.
+`vtscore/plugins/__init__.py:649`.
 
 ### Invariants
 
@@ -313,14 +314,20 @@ to `vtscore`. The discovery routine is `_discover_entry_points()` at
   point is skipped and a `UserWarning` is emitted. This prevents an
   installed third-party package from accidentally shadowing a core
   plugin.
-- **Broken entry points warn and skip.** Any exception during
-  `entry_point.load()`, a missing `name` attribute on the loaded
-  object, or any other malformedness produces a `UserWarning` and is
-  skipped. One broken third-party plugin cannot block discovery of the
-  rest of the registry.
-- **No name attribute → rejected.** Entry-point objects without a
-  truthy `.name` attribute warn and skip - there's no fallback to the
-  entry-point name on the registry side.
+- **Broken entry points warn and defer to first use.** When
+  `entry_point.load()` raises — typically the plugin's *own* import
+  failing on a missing optional dependency (e.g. `open_clip` absent for
+  a `siglip_l` embedder) — the registry emits a `UserWarning` and
+  registers an `EntryPointTombstone` under the entry-point name. The
+  tombstone resolves via `get(name)` but re-raises the original error the
+  moment it's actually invoked, and is kept out of `list()` so
+  serialising the family never trips over it. One broken third-party
+  plugin cannot block discovery of the rest of the registry, and the
+  original error is surfaced (not swallowed) when someone tries to use
+  the plugin.
+- **No name attribute → rejected.** Entry-point objects that load
+  successfully but expose no truthy `.name` attribute warn and skip -
+  there's no fallback to the entry-point name on the registry side.
 
 If you need to verify your entry point is registering correctly, the
 inventory CLI is the fastest check:
