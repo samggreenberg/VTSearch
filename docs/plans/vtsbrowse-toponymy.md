@@ -71,22 +71,37 @@
 
 <!-- item-sep -->
 
-- **Audio captioner provider** — `MU-NLPC/whisper-small-audio-captioning`
-  (1 GB, ~90 s / 2k clips) produced the cleanest signs on both ESC-50 and
-  uncurated Clotho; promote it to the audio default once validated on GTZAN
-  + one more real-world set (its Clotho result is flattered by training
-  data). Slots in as a replacement provider in `signpost_texts`.
+> **Shipped (opt-in):** the image (`Qwen2.5-VL-3B`) and audio
+> (`MU-NLPC/whisper-small-audio-captioning`) captioner providers now exist in
+> `vtscore/projection/signpost_captioners.py`, wired per media type behind the
+> `browse_signpost_captioner` setting with the zero-shot tag provider retained
+> as a `FallbackTextProvider` (model-load or per-item decode failure degrades
+> to tags). Default stays **tags**; the items below are the validation still
+> owed before either captioner can become the *default*.
 
 <!-- item-sep -->
 
-- **Image VLM captioner provider** — the image study's resolved default: an
-  instructed ~3B VLM one-liner (Qwen2.5-VL-3B class; prompt states type +
-  subject + key visible text; 214 s / 1k images, ~8 GB alongside SigLIP),
-  computed once at ingest and cached like the tag texts; SigLIP tags remain
-  the no-VLM fallback (they collapse on fine-grained subsets: 0–14%
-  breed-sign hit vs 56–78% for the captioner). Validate the prompt on a
-  real-world uncurated image dump before shipping as default, and measure
-  caption cache size vs pickle bloat.
+- **Audio captioner: validate + promote to default** — the whisper captioner
+  (1 GB, ~90 s / 2k clips) produced the cleanest signs on ESC-50 and Clotho;
+  still owed before it becomes the audio default: validate on GTZAN + one more
+  real-world set (its Clotho result is flattered by training data).
+
+<!-- item-sep -->
+
+- **Image VLM captioner: validate + promote to default** — the Qwen2.5-VL-3B
+  provider (214 s / 1k images, ~8 GB alongside SigLIP) beats the SigLIP tag
+  fallback on fine-grained subsets (0–14% breed-sign hit vs 56–78%). Still
+  owed before making it the image default: validate the prompt on a real-world
+  uncurated image dump, and measure caption cache size vs pickle bloat.
+
+<!-- item-sep -->
+
+- **Captioner total-failure cache staleness** — when a captioner is enabled but
+  its model can't load at all, `FallbackTextProvider` serves tags for every
+  item yet stamps them under the *captioner* signature, so a later run with the
+  model repaired won't recompute (the signature still matches). Acceptable
+  best-effort for now; revisit alongside the "Post-hoc text persistence"
+  follow-up if captioner adoption makes it bite.
 
 <!-- item-sep -->
 

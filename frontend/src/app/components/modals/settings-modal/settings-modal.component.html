@@ -306,6 +306,19 @@
                   </button>
                 </div>
               </div>
+              @if (browseTabHasCaptioner(activeBrowseTab())) {
+                <div class="form-group">
+                  <label class="form-label" title="How signpost region names are generated for this media type">Signpost text<vt-field-hint-icon hint="Tags names regions from a fixed vocabulary (fast, no download). Captions runs a generative model to describe each item (sharper on fine-grained sets, but downloads a multi-GB model and runs at build time)."></vt-field-hint-icon></label>
+                  <div class="segmented-toggle segmented-toggle--stretch">
+                    <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="!getBrowseSignpostCaptioner(activeBrowseTab())" (click)="onBrowseSignpostCaptionerChange(activeBrowseTab(), false)" title="Name regions from a fixed tag vocabulary (fast, no download)">
+                      Tags
+                    </button>
+                    <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getBrowseSignpostCaptioner(activeBrowseTab())" (click)="onBrowseSignpostCaptionerChange(activeBrowseTab(), true)" title="Describe each item with a generative model (downloads a multi-GB model)">
+                      Captions
+                    </button>
+                  </div>
+                </div>
+              }
               <div class="form-group">
                 <label class="form-label" for="setting-browse-colormap" title="Colors the density heatmap. Auto follows your theme: blue (Ocean) in light mode, red→yellow (Heat) in dark mode.">Colormap<vt-field-hint-icon [hint]="browseTabUsesThumbnails(activeBrowseTab()) ? 'Thumbnail datasets (image, video) always use grayscale.' : 'Darker bins mean more items in light mode; brighter bins mean more in dark mode.'"></vt-field-hint-icon></label>
                 @if (browseTabUsesThumbnails(activeBrowseTab())) {

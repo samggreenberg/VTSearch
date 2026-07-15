@@ -480,6 +480,34 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
+  /** Media types that ship a generative signpost captioner (image VLM / audio
+   *  captioner). Others only ever use the zero-shot tag texts, so the source
+   *  toggle is hidden for them. Mirrors the backend `_CAPTIONERS` registry in
+   *  `vtscore/projection/signpost_texts.py`. */
+  browseTabHasCaptioner(typeId: string): boolean {
+    return typeId === 'image' || typeId === 'audio';
+  }
+
+  /** Whether *typeId*'s signpost texts come from the generative captioner
+   *  (VLM / audio captioner) instead of the zero-shot tags. Defaults to tags
+   *  (false), since the captioner downloads a multi-GB model. */
+  getBrowseSignpostCaptioner(typeId: string): boolean {
+    const dict = this.settings().browse_signpost_captioner as Record<string, boolean> | undefined;
+    return dict?.[typeId] ?? false;
+  }
+
+  /** Write the per-media-type signpost-text-source toggle and persist. Takes
+   *  effect on the next projection build / Re-project, since signpost texts are
+   *  computed and cached at build time. */
+  onBrowseSignpostCaptionerChange(typeId: string, value: boolean): void {
+    const dict = { ...((this.settings().browse_signpost_captioner as Record<string, boolean> | undefined) || {}) };
+    dict[typeId] = value;
+    this.settings.update(
+      (s) => ({ ...(s as Record<string, unknown>), browse_signpost_captioner: dict }) as AppSettings,
+    );
+    this.save();
+  }
+
   // --- Browser tab: right-click bin-popup thumbnail size ---
   // The bin popup keeps its own per-media-type thumbnail size
   // (``grid_icon_size_popup``), independent of the left/right panels. The

@@ -216,3 +216,102 @@ class TestEnsureSignpostTexts:
 
     def test_empty_ids_returns_none(self):
         assert st.ensure_signpost_texts({}, [], np.empty((0, 0)), None) is None
+
+
+class _DictProvider:
+    """Primary-like provider that returns a fixed subset of texts, ignores matrix."""
+
+    def __init__(self, texts: dict[int, str], name: str = "caption:test"):
+        self._texts = texts
+        self.name = name
+
+    def signature(self, embedder):
+        return self.name
+
+    def build_texts(self, ids, medias, matrix, embedder, on_progress=None):
+        return {mid: self._texts[mid] for mid in ids if mid in self._texts}
+
+
+class _RaisingProvider:
+    name = "caption:broken"
+
+    def signature(self, embedder):
+        return self.name
+
+    def build_texts(self, ids, medias, matrix, embedder, on_progress=None):
+        raise RuntimeError("model failed to load")
+
+
+class _RecordingFallback:
+    name = "tags:rec"
+
+    def __init__(self):
+        self.seen_ids: list[int] | None = None
+        self.seen_rows: list[list[float]] | None = None
+
+    def signature(self, embedder):
+        return self.name
+
+    def build_texts(self, ids, medias, matrix, embedder, on_progress=None):
+        self.seen_ids = list(ids)
+        self.seen_rows = [list(map(float, matrix[i])) for i in range(len(ids))]
+        return {mid: f"tag-{mid}" for mid in ids}
+
+
+class TestFallbackTextProvider:
+    def test_primary_covers_all_skips_fallback(self):
+        fallback = _RecordingFallback()
+        fp = st.FallbackTextProvider(_DictProvider({1: "cap1", 2: "cap2"}), fallback)
+        texts = fp.build_texts([1, 2], {1: {}, 2: {}}, np.zeros((2, 3), dtype=np.float32), None)
+        assert texts == {1: "cap1", 2: "cap2"}
+        assert fallback.seen_ids is None  # nothing missing → fallback untouched
+
+    def test_partial_fills_missing_from_fallback(self):
+        fallback = _RecordingFallback()
+        fp = st.FallbackTextProvider(_DictProvider({1: "cap1"}), fallback)
+        texts = fp.build_texts([1, 2], {1: {}, 2: {}}, np.zeros((2, 3), dtype=np.float32), None)
+        assert texts == {1: "cap1", 2: "tag-2"}
+        assert fallback.seen_ids == [2]  # only the miss went to the fallback
+
+    def test_primary_raises_all_from_fallback(self):
+        fallback = _RecordingFallback()
+        fp = st.FallbackTextProvider(_RaisingProvider(), fallback)
+        texts = fp.build_texts([1, 2], {1: {}, 2: {}}, np.zeros((2, 3), dtype=np.float32), None)
+        assert texts == {1: "tag-1", 2: "tag-2"}
+        assert fallback.seen_ids == [1, 2]
+
+    def test_fallback_gets_aligned_matrix_rows(self):
+        fallback = _RecordingFallback()
+        fp = st.FallbackTextProvider(_DictProvider({1: "cap1"}), fallback)  # id 2,3 miss
+        matrix = np.array([[1, 1], [2, 2], [3, 3]], dtype=np.float32)
+        fp.build_texts([1, 2, 3], {1: {}, 2: {}, 3: {}}, matrix, None)
+        # The fallback must receive exactly the missing ids' rows, in order.
+        assert fallback.seen_ids == [2, 3]
+        assert fallback.seen_rows == [[2.0, 2.0], [3.0, 3.0]]
+
+    def test_signature_composes_both_sides(self):
+        fp = st.FallbackTextProvider(_DictProvider({}, name="cap:x"), _RecordingFallback())
+        assert fp.signature(None) == "cap:x|fallback=tags:rec"
+
+
+class TestCaptionerSelection:
+    def test_default_returns_base_provider(self):
+        # No captioner opt-in (CoreConfig default {}) → the tag/content base.
+        image, audio = st.provider_for("image"), st.provider_for("audio")
+        assert image is not None and image.name == "tags:openimages600"
+        assert audio is not None and audio.name == "tags:audioset527"
+
+    def test_enabled_wraps_captioner_over_base(self, monkeypatch):
+        monkeypatch.setattr(st, "_captioner_enabled", lambda mt: mt == "image")
+        provider = st.provider_for("image")
+        assert isinstance(provider, st.FallbackTextProvider)
+        assert provider.primary.name == "caption:qwen2.5-vl-3b"
+        assert provider.fallback.name == "tags:openimages600"
+        # A type without opt-in still gets its bare base.
+        audio = st.provider_for("audio")
+        assert audio is not None and audio.name == "tags:audioset527"
+
+    def test_enabled_but_no_captioner_returns_base(self, monkeypatch):
+        # text has no captioner registered; opting it in is a no-op.
+        monkeypatch.setattr(st, "_captioner_enabled", lambda mt: True)
+        assert isinstance(st.provider_for("text"), st.ContentTextProvider)

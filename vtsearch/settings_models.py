@@ -359,6 +359,10 @@ class UserSettings(BaseModel):
         default_factory=dict
     )
     browse_signposts: dict[str, bool] = Field(default_factory=dict)
+    # - ``browse_signpost_captioner``: whether a media type's signpost texts come
+    #   from the generative captioner (image VLM / audio captioner) instead of
+    #   the default zero-shot tags. Empty entries fall back to tags (false).
+    browse_signpost_captioner: dict[str, bool] = Field(default_factory=dict)
 
     grid_icon_size_left: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     grid_icon_size_right: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)

@@ -28,6 +28,13 @@ tier resolved by the audio/image signpost studies
 Zero-shot tagging costs one text-embed of the vocabulary per (embedder,
 vocabulary) pair — cached process-scoped, never persisted — plus one matrix
 product, so it is effectively free next to the embed pass that precedes it.
+
+The no-new-models tier above is the default.  A media type can additionally
+opt into a **generative captioner** (image VLM / audio captioner; see
+:mod:`vtscore.projection.signpost_captioners`) via the
+``browse_signpost_captioner`` setting: :func:`provider_for` then returns the
+captioner wrapped in a :class:`FallbackTextProvider` over the tag provider, so
+a missing model or an undecodable item quietly degrades to tags.
 """
 
 from __future__ import annotations
@@ -139,10 +146,61 @@ class ContentTextProvider:
         return out
 
 
+@dataclass(frozen=True)
+class FallbackTextProvider:
+    """A *primary* provider with a *fallback* for whatever it can't produce.
+
+    Used to letter a media type with its generative captioner while keeping the
+    zero-shot tag provider as a safety net: if the captioner's model can't load
+    at all its ``build_texts`` raises and we caption *everything* from the
+    fallback; if it loads but a particular item won't decode, only that item's
+    text comes from the fallback.  The composite signature encodes both, so
+    turning the captioner on or off (or swapping either side) invalidates the
+    cached texts.
+    """
+
+    primary: SignpostTextProvider
+    fallback: SignpostTextProvider
+
+    @property
+    def name(self) -> str:
+        return f"{self.primary.name}+{self.fallback.name}"
+
+    def signature(self, embedder: Any) -> str:
+        return f"{self.primary.signature(embedder)}|fallback={self.fallback.signature(embedder)}"
+
+    def build_texts(
+        self,
+        ids: list[int],
+        medias: dict[int, dict[str, Any]],
+        matrix: np.ndarray,
+        embedder: Any,
+        on_progress: ProgressFn | None = None,
+    ) -> dict[int, str]:
+        try:
+            produced = self.primary.build_texts(ids, medias, matrix, embedder, on_progress)
+        except Exception:
+            logger.warning(
+                "Signpost captioner %r failed to run; falling back to %r.",
+                self.primary.name,
+                self.fallback.name,
+                exc_info=True,
+            )
+            produced = {}
+        missing = [mid for mid in ids if not produced.get(mid)]
+        if missing:
+            row_of = {mid: i for i, mid in enumerate(ids)}
+            sub = matrix[[row_of[mid] for mid in missing]] if matrix.size else matrix
+            filled = self.fallback.build_texts(missing, medias, sub, embedder, on_progress)
+            produced = {**filled, **produced}
+        return produced
+
+
 # ---------------------------------------------------------------------------
 # Provider registry (per media type)
 # ---------------------------------------------------------------------------
 
+#: Base (always-available, no-new-model) providers.
 _PROVIDERS: dict[str, SignpostTextProvider] = {
     "audio": ZeroShotTagProvider(
         name="tags:audioset527",
@@ -157,15 +215,53 @@ _PROVIDERS: dict[str, SignpostTextProvider] = {
     "text": ContentTextProvider(),
 }
 
+#: Generative captioner providers (opt-in per media type via the
+#: ``browse_signpost_captioner`` setting).  Populated at import from
+#: :mod:`vtscore.projection.signpost_captioners`; the heavy model deps stay
+#: lazy inside each provider, so importing the captioners here is cheap.
+_CAPTIONERS: dict[str, SignpostTextProvider] = {}
+
 
 def register_signpost_text_provider(media_type: str, provider: SignpostTextProvider) -> None:
-    """Register (or replace) the signpost text provider for *media_type*."""
+    """Register (or replace) the base signpost text provider for *media_type*."""
     _PROVIDERS[media_type] = provider
 
 
+def register_signpost_captioner(media_type: str, provider: SignpostTextProvider) -> None:
+    """Register (or replace) the generative captioner for *media_type*."""
+    _CAPTIONERS[media_type] = provider
+
+
+def _captioner_enabled(media_type: str) -> bool:
+    """Whether the user opted this media type into the generative captioner.
+
+    Reads the ``signpost_captioner`` map off the library-tier
+    :class:`~vtscore.config.CoreConfig` (the app populates it from the
+    ``browse_signpost_captioner`` setting).  Any failure — no builder
+    installed, missing field — reads as "off", so the safe tag default holds.
+    """
+    try:
+        from vtscore.config import CoreConfig  # noqa: PLC0415
+
+        return bool(CoreConfig.from_settings().signpost_captioner.get(media_type, False))
+    except Exception:
+        return False
+
+
 def provider_for(media_type: str) -> SignpostTextProvider | None:
-    """The registered provider for *media_type*, or ``None`` (no signposts)."""
-    return _PROVIDERS.get(media_type)
+    """The active provider for *media_type*, or ``None`` (no signposts).
+
+    Returns the base (tag / content) provider unless the user enabled the
+    generative captioner for this media type, in which case the captioner is
+    returned wrapped in a :class:`FallbackTextProvider` over the base — so a
+    model-load or per-item decode failure quietly degrades to tags.
+    """
+    base = _PROVIDERS.get(media_type)
+    if _captioner_enabled(media_type):
+        captioner = _CAPTIONERS.get(media_type)
+        if captioner is not None:
+            return FallbackTextProvider(captioner, base) if base is not None else captioner
+    return base
 
 
 # ---------------------------------------------------------------------------
@@ -289,14 +385,32 @@ def texts_signature(medias: dict[int, dict[str, Any]], embedder: Any) -> str | N
     return provider.signature(embedder)
 
 
+def _register_default_captioners() -> None:
+    """Populate ``_CAPTIONERS`` with the bundled image/audio captioners.
+
+    Import-time and cheap: the captioner module keeps torch/transformers lazy,
+    so this only wires up the (opt-in) instances — nothing loads a model until
+    a captioner-enabled build actually runs.
+    """
+    from vtscore.projection.signpost_captioners import AUDIO_CAPTIONER, IMAGE_CAPTIONER  # noqa: PLC0415
+
+    _CAPTIONERS.setdefault("image", IMAGE_CAPTIONER)
+    _CAPTIONERS.setdefault("audio", AUDIO_CAPTIONER)
+
+
+_register_default_captioners()
+
+
 __all__ = [
     "ContentTextProvider",
+    "FallbackTextProvider",
     "SignpostTextProvider",
     "TEXT_FIELD",
     "SOURCE_FIELD",
     "ZeroShotTagProvider",
     "ensure_signpost_texts",
     "provider_for",
+    "register_signpost_captioner",
     "register_signpost_text_provider",
     "texts_signature",
 ]

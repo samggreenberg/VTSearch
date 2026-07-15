@@ -767,6 +767,15 @@ class TestBrowserSettings:
         # Persists across a fresh read.
         assert client.get("/api/settings").get_json()["browse_compact"]["audio"] is False
 
+    def test_update_browse_signpost_captioner_per_type(self, client):
+        res = client.put("/api/settings", json={"browse_signpost_captioner": {"image": True, "audio": False}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_signpost_captioner"]["image"] is True
+        assert data["browse_signpost_captioner"]["audio"] is False
+        # Persists across a fresh read.
+        assert client.get("/api/settings").get_json()["browse_signpost_captioner"]["image"] is True
+
     def test_update_browse_mouse_zooms_per_level_per_type(self, client):
         res = client.put("/api/settings", json={"browse_mouse_zooms_per_level": {"audio": 1, "image": 3}})
         assert res.status_code == 200
