@@ -66,7 +66,7 @@ class RegionCurveInputs:
     # GT-box exemplars otherwise). Empty in the controlled mode.
     pool_ids: list[int] = field(default_factory=list)
     pool_region_mats: list[np.ndarray] = field(default_factory=list)  # per image: (R_i, D)
-    pool_region_boxes: list[np.ndarray] = field(default_factory=list)  # per image: (R_i, 4), for trace overlays
+    pool_region_boxes: list[np.ndarray] = field(default_factory=list)  # per image: (R_i, 4), for the surfacing pred_box
     pool_whole_vecs: np.ndarray | None = None  # (N, D) for the diversity tree
     pool_leaf_masks: list[np.ndarray] = field(default_factory=list)  # per image: (R_i,) bool
     pool_labels: list[int] = field(default_factory=list)  # 1 pos / 0 neg, aligned with pool_ids
@@ -118,8 +118,9 @@ def _iou_metrics(inputs: RegionCurveInputs, argmax: np.ndarray) -> tuple[float, 
         ai = int(argmax[i])
         if not gts or ai < 0 or ai >= len(boxes):
             continue
-        pred = tuple(float(v) for v in boxes[ai])
-        ious.append(max(box_iou(pred, tuple(float(v) for v in g)) for g in gts))
+        b = boxes[ai]
+        pred = (float(b[0]), float(b[1]), float(b[2]), float(b[3]))
+        ious.append(max(box_iou(pred, (float(g[0]), float(g[1]), float(g[2]), float(g[3]))) for g in gts))
     if not ious:
         return float("nan"), float("nan")
     return round(sum(ious) / len(ious), 6), round(sum(v >= 0.5 for v in ious) / len(ious), 6)
@@ -555,7 +556,7 @@ def _span_status(tree) -> str:
     total = int(tree.total_nodes)
     if total <= 0:
         return "green"
-    level = int(tree.diversity_level())
+    level = int(tree.coverage_level())
     green_at = min(_SPAN_GREEN, total)
     yellow_at = min(_SPAN_YELLOW, green_at)
     if level >= green_at:
@@ -601,7 +602,7 @@ def _select_hard(pool_ids, pool_scores, threshold, labeled):
 
 
 def _select_new(tree, pool_ids, pool_scores, threshold, labeled, idx):
-    """Diversity pick (``new`` mode) via ``DiversityTree.next_sample``; falls back
+    """Diversity pick (``new`` mode) via ``CoverageAtlas.next_sample``; falls back
     to ``hard`` when the tree is absent/exhausted or returns a labeled id."""
     if tree is not None:
         scores_dict = {pid: float(pool_scores[idx[pid]]) for pid in pool_ids}
@@ -669,6 +670,7 @@ def _train_pool_head(
         return predict, raw_thr, n_votes, calib
 
     # Box-pool / whole-image MLP path.
+    assert inputs.pool_whole_vecs is not None  # populated by build_pool for this path
     pos = np.vstack([inputs.pool_pos_exemplars[i] for i in good]).astype(np.float32)
     neg = np.vstack([inputs.pool_whole_vecs[idx[i]][None, :] for i in bad]).astype(np.float32)
     x = np.vstack([pos, neg]).astype(np.float32)
@@ -822,17 +824,20 @@ def _realistic_setup(inputs: RegionCurveInputs, seed: int, query_vec: np.ndarray
     tree = None
     if inputs.pool_whole_vecs is not None and len(pool_ids) >= 2:
         try:
-            from vtscore.state.diversity_tree import DiversityTree, auto_max_depth  # noqa: PLC0415
+            from vtscore.state.coverage_atlas import CoverageAtlas, auto_max_depth  # noqa: PLC0415
 
             vecs = {pid: inputs.pool_whole_vecs[idx[pid]] for pid in pool_ids}
-            tree = DiversityTree(vecs, k=3, max_depth=auto_max_depth(len(pool_ids), k=3))
+            tree = CoverageAtlas(vecs, k=3, max_depth=auto_max_depth(len(pool_ids), k=3))
         except Exception:
             tree = None
     return pool_ids, idx, pool_label, seed_id, cold_query, tree
 
 
 def _surface_meta(predict, inputs: RegionCurveInputs, pi: int, select_mode: str, threshold: float) -> dict:
-    """Why an item was surfaced: its top region + score (and box) under the current head."""
+    """Why an item was surfaced: its top region + score (and box) under the current head,
+    plus the full per-region score vector and the matched (argmax) region index. These are
+    the head-dependent bits the trace carries; the region geometry (boxes, cell masks, HAC
+    children, attention) is re-read from the region npz at trace-render time, not stored here."""
     sreg = np.asarray(predict(inputs.pool_region_mats[pi])).reshape(-1)
     bi = int(sreg.argmax())
     box = inputs.pool_region_boxes[pi][bi] if inputs.pool_region_boxes else None
@@ -841,6 +846,8 @@ def _surface_meta(predict, inputs: RegionCurveInputs, pi: int, select_mode: str,
         "surface_score": round(float(sreg[bi]), 6),
         "surface_margin": round(float(sreg[bi] - threshold), 6),
         "pred_box": [round(float(v), 6) for v in box] if box is not None else None,
+        "region_scores": [round(float(s), 6) for s in sreg],
+        "matched_region": bi,
     }
 
 
@@ -882,8 +889,16 @@ def _realistic_one_seed(
 
     pending = seed_id
     # Metadata for how ``pending`` was surfaced (filled by the previous step's
-    # selection under that step's head); the seed is a random cold-start pick.
-    pending_meta: dict = {"select_mode": "seed", "surface_score": None, "surface_margin": None, "pred_box": None}
+    # selection under that step's head); the seed is a random cold-start pick, so it
+    # carries no head score — only the head-independent region geometry for its trace.
+    pending_meta: dict = {
+        "select_mode": "seed",
+        "surface_score": None,
+        "surface_margin": None,
+        "pred_box": None,
+        "region_scores": None,
+        "matched_region": None,
+    }
     cached = None  # (predict, raw_thr, n_votes, calib, blend)
     steps_since_train = 0
     trace: list[dict] = []  # per-step labeling record (order, id, phase, head, threshold, …)
@@ -896,7 +911,7 @@ def _realistic_one_seed(
         (good_ids if pool_label[labeled_id] == 1 else bad_ids).add(labeled_id)
         labeled.add(labeled_id)
         if tree is not None:
-            tree.label(labeled_id)
+            tree.label(labeled_id, pool_label[labeled_id] == 1)
 
         cached, steps_since_train = _resolve_step_head(
             inputs,
@@ -973,6 +988,8 @@ def _realistic_one_seed(
                 "surface_score": pending_meta["surface_score"],
                 "surface_margin": pending_meta["surface_margin"],
                 "pred_box": pending_meta["pred_box"],
+                "region_scores": pending_meta.get("region_scores"),
+                "matched_region": pending_meta.get("matched_region"),
                 "n_good": good,
                 "n_bad": bad,
                 "n_votes": n_votes,

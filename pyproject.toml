@@ -343,7 +343,7 @@ exclude_lines = [
 # docs/reports/*.html are generated experiment reports with embedded
 # base64 image data URIs, the same class of binary-ish content *.svg is
 # already skipped for.
-skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv,*docs/reports/*.html,*vtscore/projection/assets*"
+skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv,*docs/reports/*.html,*vtscore/projection/assets*,vg_class_counts.csv, lvis_class_counts.csv"
 # Domain terms (clap/siglip/xclip = embedder names; wrest/caller/recaller =
 # extension scaffold names), legitimate code identifiers (numer/denom in
 # slope formulas, medias as the global state proxy, goup as a TS method,

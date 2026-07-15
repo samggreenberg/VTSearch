@@ -27,6 +27,13 @@ from PIL import Image
 
 Box = tuple[float, float, float, float]
 
+# Minimum drawable annotation size in the GUI: a Good-vote box narrower than this
+# fraction of the image on EITHER axis is rejected client-side (``MIN_BOX_SIZE`` in
+# frontend .../image-viewer/image-viewer.component.ts). We mirror it here so the sweep
+# never trains/evaluates on GT boxes a human annotator could not have drawn. ``0.0``
+# disables the filter (keep every box).
+GUI_MIN_BOX_FRAC = 0.01
+
 EXTERNAL = Path("/exp/scale26/datasets/external")
 
 _CONFIG = {
@@ -160,12 +167,20 @@ class SodDataset:
             return syn.split(".")[0] == q_syn
         return _norm(row.get("name", "")) == q_norm
 
-    def class_split(self, category: str, *, neg_multiple: int, seed: int) -> ClassSplit:
+    def class_split(
+        self, category: str, *, neg_multiple: int, seed: int, min_box_frac: float = GUI_MIN_BOX_FRAC
+    ) -> ClassSplit:
         """Stream the extract once → positives (+ boxes), and a seeded negative sample.
 
         ``neg_multiple`` sizes the sampled negative pool as ``neg_multiple × n_positives``
         (capped by the available negatives), so prevalence ≈ ``1/(1+neg_multiple)`` holds
         constant across classes regardless of how many positives a class has.
+
+        ``min_box_frac`` (default: the GUI's :data:`GUI_MIN_BOX_FRAC`) drops any GT box
+        below that fraction of the image on **either** axis — the same rule the annotation
+        GUI enforces on a drawn box — so the sweep never sees an un-drawable annotation.
+        Filtering is per-box: an image stays a positive as long as ≥1 of its class boxes
+        survives; only surviving boxes populate ``gt_boxes``. Pass ``0.0`` to keep all boxes.
         """
         import numpy as np
 
@@ -173,6 +188,7 @@ class SodDataset:
         q_syn = q_norm.replace(" ", "_")
         pos_boxes: dict[int, list[Box]] = {}
         all_ids: set[int] = set()
+        class_ids: set[int] = set()  # every image containing the class, pre size-filter
         locator: dict[int, tuple[str, str]] = {}
 
         with gzip.open(self._extract, "rt", encoding="utf-8") as fh:
@@ -183,15 +199,19 @@ class SodDataset:
                 if self._kind == "coco_lvis":
                     locator[iid] = (str(row["split"]), str(row["file_name"]))
                 if self._row_matches(row, q_norm, q_syn):
-                    pos_boxes.setdefault(iid, []).append(
-                        (float(row["x0"]), float(row["y0"]), float(row["x1"]), float(row["y1"]))
-                    )
+                    class_ids.add(iid)
+                    x0, y0, x1, y1 = float(row["x0"]), float(row["y0"]), float(row["x1"]), float(row["y1"])
+                    # Skip boxes a human couldn't draw in the GUI (below the floor on either axis).
+                    if (x1 - x0) < min_box_frac or (y1 - y0) < min_box_frac:
+                        continue
+                    pos_boxes.setdefault(iid, []).append((x0, y0, x1, y1))
 
         self._locator = locator
         positive_ids = sorted(pos_boxes)
-        pos_set = set(positive_ids)
-        # Sorted candidate pool → reproducible seeded sample (VG: only ids we can read).
-        cand = [i for i in sorted(all_ids) if i not in pos_set]
+        # Exclude EVERY class-containing image from the negative pool — including images
+        # dropped as positives because all their class boxes were sub-floor (they still
+        # contain the class, so they'd be false negatives). Such images are ignored entirely.
+        cand = [i for i in sorted(all_ids) if i not in class_ids]
         if self._kind == "vg":
             cand = [i for i in cand if self._reader.has(i)]  # type: ignore[union-attr]
             positive_ids = [i for i in positive_ids if self._reader.has(i)]  # type: ignore[union-attr]
