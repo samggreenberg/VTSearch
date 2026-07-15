@@ -52,6 +52,7 @@ families share this one field type; each family's base module re-exports
 | `placeholder` | `str`       | `""`     | Hint shown as placeholder text in the input widget      |
 | `dynamic_options` | `bool`  | `False`  | When `True`, options for this `"select"` field are fetched at runtime from the plugin's `get_field_options()` method (see [Dynamic field options](#dynamic-field-options)) |
 | `depends_on`  | `list[str]` | `[]`     | Other field keys whose values this field's options depend on; the frontend re-fetches whenever any depended-on field changes |
+| `allow_free_text` | `bool`  | `False`  | For `"select"` fields: render as a combobox the user can type an arbitrary value into (even one the option list omits). On refresh, a typed value absent from the new list is kept; a strict `select` clears it |
 | `clears`      | `list[str]` | `[]`     | Field keys this field is mutually exclusive with; entering a non-empty value here blanks each listed field in the UI (list each peer back for symmetry), so only one of the set is active at a time |
 
 ### PluginBase
@@ -346,7 +347,7 @@ to the framework.
 |--------|-----------|-------------|
 | `_fetch_records_bulk_impl()` | `(records: list, field_values: dict, thin: bool) -> list[dict | None]` | Batched fetch hook. Default loops `fetch_record`. Override to issue concurrent / batched I/O |
 | `run_cli()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | CLI variant; default delegates to `run()`. Override when `run()` expects FileStorage objects |
-| `get_field_options()` | `(field_key: str, current_values: dict) -> list[str]` | Compute dropdown options for fields declared with `dynamic_options=True`. See [Dynamic field options](#dynamic-field-options) |
+| `get_field_options()` | `(field_key: str, current_values: dict) -> Sequence[FieldOption]` | Compute dropdown options for fields declared with `dynamic_options=True`; each option is a plain string or a `(value, label)` tuple. See [Dynamic field options](#dynamic-field-options) |
 | `run_chunked()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | Yield chunks of medias for piecewise processing. Set `supports_chunked = True` |
 | `run_chunked_cli()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | CLI variant of `run_chunked()` |
 | `build_origin()` | `(field_values: dict) -> dict` | Build an origin dict for provenance tracking. Default uses importer name + string field values |
@@ -552,6 +553,23 @@ class ReCallerImporter(DatasetImporter):
         return super().get_field_options(field_key, current_values)
 ```
 
+Each returned option is either a plain string (shown verbatim as its own
+label) or a `(value, label)` tuple — a `FieldOption` — so a dropdown can
+submit an opaque id while displaying a friendly name:
+
+```python
+    def get_field_options(self, field_key, current_values):
+        if field_key == "query_id":
+            # Submit the id, show the title.
+            return [(q.id, q.title) for q in _list_recent_queries(...)]
+        return super().get_field_options(field_key, current_values)
+```
+
+Pair `dynamic_options` (or a plain static `"select"`) with
+`allow_free_text=True` to let the user type an arbitrary value the option
+list doesn't include; the field renders as a combobox instead of a strict
+dropdown.
+
 The frontend wiring is fully automatic:
 
 1. When the user opens your importer, the modal pre-fetches options for
@@ -563,9 +581,11 @@ The frontend wiring is fully automatic:
    inline next to the field.
 
 API contract: `POST /api/dataset/import/<name>/options` with body
-`{"field_key": "...", "values": {...}}` returns `{"options": [...]}`.
-Any exception your `get_field_options()` raises is returned as a 502
-with the exception message; perfect for surfacing remote-service
+`{"field_key": "...", "values": {...}}` returns
+`{"options": [{"value": "...", "label": "..."}, ...]}` — both the plain-
+string and `(value, label)` shapes are coerced to `{value, label}` before
+serialisation. Any exception your `get_field_options()` raises is returned
+as a 502 with the exception message; perfect for surfacing remote-service
 errors directly to the user.
 
 ### How it gets invoked
@@ -934,12 +954,16 @@ def export_cli_streaming(self, header, records, field_values):
 
 The `--stream-results` CLI path routes to `export_cli_streaming` instead of
 `export_cli`. Built-ins that implement it: `server_json_file` (NDJSON, one hit
-per line), `server_csv_file` (one CSV row per hit), and `gui` (prints each hit).
-Exporters that inherently need the whole payload at once — `email_smtp` (one
-email), `webhook` (one POST) — leave `supports_streaming` at `False`, and
-requesting `--stream-results` with them is rejected with a clear error. Write to
-a sibling `.tmp` path and `os.replace` on success so a crash mid-stream can't
-leave a half-written file at the destination. See
+per line), `server_csv_file` (one CSV row per hit), and `gui` (prints each hit)
+flush per hit; `webhook` and `email_smtp` are **delivery** exporters that can't
+flush one hit at a time, so they batch — accumulating up to a `batch_size` field
+(default 500) and delivering each full batch as its own POST / email before
+dropping it, which keeps peak memory bounded just the same (see
+`vtscore.exporters.base.resolve_stream_batch_size`). An exporter with no
+incremental mode at all leaves `supports_streaming` at `False`, and requesting
+`--stream-results` with it is rejected with a clear error. File-based streamers
+should write to a sibling `.tmp` path and `os.replace` on success so a crash
+mid-stream can't leave a half-written file at the destination. See
 `docs/plans/cli-stream-massive-images.md` for the full design.
 
 **Default class attributes:**

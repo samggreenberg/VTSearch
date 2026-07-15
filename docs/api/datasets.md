@@ -214,7 +214,9 @@ current form snapshot, optional).
 Calls the importer's `get_field_options(field_key, values)` and returns
 dropdown options for a [dynamic-options field](../EXTENDING-plugins.md#dynamic-field-options).
 
-→ `{"options": ["a", "b", "c"]}`
+→ `{"options": [{"value": "a", "label": "A"}, {"value": "b", "label": "b"}]}`
+(each option carries a `value` to submit and a `label` to display; the two
+coincide for plain-string options and differ for `(value, label)` tuples).
 
 400 (unknown / non-dynamic field), 404 (unknown importer), 501 (not
 implemented), 502 (remote error).

@@ -274,6 +274,7 @@ class UserSettingsStore:
         server_path: Callable[[], Path],
         user_path: Callable[[str], Path],
         apply_settings: Callable[[dict[str, Any], set[str] | None], None],
+        server_default_source: Callable[[], dict[str, Any] | None],
         server_keys: frozenset[str],
         fallback_keys: frozenset[str],
         exclude_from_source_export: set[str],
@@ -289,6 +290,7 @@ class UserSettingsStore:
         self._server_path = server_path
         self._user_path = user_path
         self._apply_settings = apply_settings
+        self._server_default_source = server_default_source
         self._server_keys = server_keys
         self._fallback_keys = fallback_keys
         self._exclude_from_source_export = exclude_from_source_export
@@ -315,6 +317,47 @@ class UserSettingsStore:
                 lock = threading.RLock()
                 self._user_sync_locks[username] = lock
             return lock
+
+    # -- settings-source precedence resolver -----------------------------
+
+    def resolve_settings_source(self, username: str) -> tuple[dict[str, Any] | None, bool]:
+        """Resolve *username*'s effective settings-source config and its origin.
+
+        This is the single precedence resolver every sync path reads (initial
+        load, needs-sync check, pull, push, and the active-source route), so
+        they can never disagree about which source a user is bound to.
+
+        Precedence:
+
+        1. The user's own ``settings_source`` key, when it names a source.
+           A value of ``{"source_name": "none"}`` is an explicit opt-out and
+           resolves to *no source* even if a deployment default exists.
+        2. Otherwise the deployment-wide ``default_settings_source`` server
+           setting, when it names a (non-``"none"``) source - the user
+           *inherits* it.
+        3. Otherwise no source.
+
+        Returns ``(config, inherited)`` where ``config`` is the effective
+        ``{"source_name", "field_values"}`` dict (or ``None`` when no source
+        is active) and ``inherited`` is ``True`` only when the config comes
+        from the deployment default rather than the user's own key.
+
+        Reads the user cache under ``settings_lock``; the caller is
+        responsible for having loaded it (every sync path does). Safe to call
+        while already holding ``settings_lock`` (it is reentrant) and while
+        holding the per-user sync lock.
+        """
+        with self._lock:
+            user_cfg = self._user_caches.get(username, {}).get("settings_source")
+        if isinstance(user_cfg, dict) and user_cfg.get("source_name"):
+            if user_cfg["source_name"] == "none":
+                # Explicit per-user opt-out: no source, and not inherited.
+                return None, False
+            return user_cfg, False
+        default_cfg = self._server_default_source()
+        if isinstance(default_cfg, dict) and default_cfg.get("source_name") and default_cfg["source_name"] != "none":
+            return default_cfg, True
+        return None, False
 
     # -- cache loaders ---------------------------------------------------
 
@@ -391,9 +434,8 @@ class UserSettingsStore:
             # the sync path so we don't recurse or fire another peek probe.
             if username in self._syncing:
                 return cache
-            cfg = cache.get("settings_source")
-            has_source = isinstance(cfg, dict) and bool(cfg.get("source_name"))
-            if not has_source:
+            cfg, _inherited = self.resolve_settings_source(username)
+            if cfg is None:
                 return cache
             state = self._sync_state.get(username)
             if state is not None and state.last_sync_succeeded:
@@ -430,8 +472,8 @@ class UserSettingsStore:
         """
         with self._lock:
             state = self._sync_state.get(username)
-            cache_cfg = self._user_caches.get(username, {}).get("settings_source")
-        if not isinstance(cache_cfg, dict) or not cache_cfg.get("source_name"):
+            cache_cfg, _inherited = self.resolve_settings_source(username)
+        if cache_cfg is None:
             return False
 
         now = time.monotonic()
@@ -547,10 +589,10 @@ class UserSettingsStore:
         once the rate-limit window elapses.
         """
         with self._lock:
-            cache_cfg = self._user_caches.get(username, {}).get("settings_source")
+            cache_cfg, _inherited = self.resolve_settings_source(username)
             state = self._sync_state.setdefault(username, UserSyncState())
             dirty_snapshot = set(state.dirty_keys)
-        if not isinstance(cache_cfg, dict) or not cache_cfg.get("source_name"):
+        if cache_cfg is None:
             return
 
         from vtsearch.settings_io.sources import get_settings_source
@@ -751,9 +793,14 @@ class UserSettingsStore:
         ``dirty_keys`` cleared) - source now matches local, so the next
         :meth:`ensure_user_loaded` short-circuits via the fast path
         instead of pulling back the values we just pushed.
+
+        The active source is resolved through :meth:`resolve_settings_source`
+        (not read off *data*), so a user who inherits the deployment-wide
+        default - or who has explicitly opted out with ``"none"`` - pushes to
+        the same source every other sync path reads.
         """
-        cfg = data.get("settings_source")
-        if not isinstance(cfg, dict) or not cfg.get("source_name"):
+        cfg, _inherited = self.resolve_settings_source(username)
+        if cfg is None:
             return
 
         from vtsearch.settings_io.sources import get_settings_source

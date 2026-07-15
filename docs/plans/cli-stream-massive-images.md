@@ -19,7 +19,5 @@ python app.py --autodetect --importer server_folder --path /data/images \
   or a bounded top-K heap mode (`--max-results N`) that keeps the best N hits
   globally sorted at `O(K)` RAM. (Streamed output is currently chunk-ordered —
   an accepted Phase 1 tradeoff.)
-- [ ] #2393 — Make the non-streaming merge path sort once instead of per chunk
-- [ ] #2392 — Streaming delivery for `email_smtp` / `webhook` exporters
 - **Resume / checkpoint** for multi-hour billion-image runs (record the last
   completed chunk so an interrupted run can restart mid-tree).

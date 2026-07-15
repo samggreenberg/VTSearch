@@ -156,6 +156,15 @@ export interface ImportDefaultsForMediaType {
 }
 export type ImportDefaultsByMediaType = Record<string, ImportDefaultsForMediaType>;
 
+/** A single dropdown option for a dynamic-options field.  ``value`` is
+ *  what the form submits; ``label`` is the friendly text shown in the
+ *  dropdown.  They coincide for plain-string options and differ for
+ *  ``(value, label)`` tuple options (submit an opaque id, show a name). */
+export interface FieldOption {
+  value: string;
+  label: string;
+}
+
 export interface ImporterField {
   key: string;
   field_type: string;
@@ -179,6 +188,11 @@ export interface ImporterField {
   dynamic_options?: boolean;
   /** Field keys whose values this field's options depend on. */
   depends_on?: string[];
+  /** For ``select`` fields: when true, render as a combobox the user can
+   *  type an arbitrary value into (even one the option list omits).  When
+   *  the options refresh, a typed value absent from the new list is kept;
+   *  a strict select clears it. */
+  allow_free_text?: boolean;
   /** For ``number`` fields: minimum allowed value (empty = no min). */
   min?: string;
   /** For ``number`` fields: maximum allowed value (empty = no max). */
@@ -207,7 +221,8 @@ export interface MediaTypeInfo {
   file_extensions?: string[];
   /** Whether items of this type have a browsable thumbnail (image/video/document,
    *  and audio via its waveform PNG). Drives the VTSBrowse square-vs-hex bin shape
-   *  and thumbnail painting; canonical source for ``usesThumbnails``. */
+   *  and thumbnail painting; the single source of truth the frontend reads via
+   *  ``MediaTypeCapabilityService.usesThumbnails``. */
   has_thumbnail?: boolean;
 }
 

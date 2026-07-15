@@ -1,4 +1,5 @@
 import app as app_module
+import vtscore.detectors.labeling_progress as labeling_progress
 from vtscore.detectors.labeling_progress import (
     _cache_good_ids,
     _cache_bad_ids,
@@ -11,6 +12,8 @@ from vtscore.detectors.labeling_progress import (
 )
 from vtscore.embedding.media_vectors import media_embedding
 from vtsearch.state import (
+    build_coverage_atlas,
+    get_coverage_atlas,
     medias,
     label_history,
 )
@@ -526,6 +529,74 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         # Invalidate a media that never appeared in the cache
         invalidate_progress_cache_from(999)
         assert len(_cached_steps) == 2, "Cache should not change for unknown media"
+
+
+class TestProgressAtlasClonesAndSurvivesInvalidate:
+    """The per-step progress atlas clones the dataset context's atlas and its
+    object identity survives cache invalidation.
+
+    Building the coverage structure is hierarchical k-means over every
+    embedding; nulling the progress atlas on every polarity flip forced a full
+    re-fit under ``_progress_lock`` on the next ``/api/labeling-status`` poll.
+    Instead ``_build_coverage_atlas`` clones the context atlas (shared node
+    table, fresh label overlay) and ``invalidate_progress_cache_from`` rewinds
+    and replays that overlay in place rather than discarding the atlas.
+    """
+
+    def _vote(self, client, votes):
+        for cid, target in votes:
+            resp = client.post(f"/api/medias/{cid}/vote", json={"target": target})
+            assert resp.status_code == 200
+
+    def test_progress_atlas_clones_context_atlas(self, client):
+        build_coverage_atlas()
+        ctx_atlas = get_coverage_atlas()
+        assert ctx_atlas is not None
+
+        self._vote(client, [(1, "good"), (2, "bad")])
+        _ensure_cache(medias, label_history, 0)
+
+        prog_atlas = labeling_progress._cache_coverage_atlas
+        assert prog_atlas is not None
+        assert prog_atlas is not ctx_atlas
+        # Immutable structure is shared by reference (no re-fit)...
+        assert prog_atlas.nodes is ctx_atlas.nodes
+        assert prog_atlas.vector_to_leaf is ctx_atlas.vector_to_leaf
+        assert prog_atlas.nodes_by_depth is ctx_atlas.nodes_by_depth
+        # ...while the label overlay is an independent object.
+        assert prog_atlas._n_pos is not ctx_atlas._n_pos
+        assert prog_atlas._n_neg is not ctx_atlas._n_neg
+        assert prog_atlas._labeled is not ctx_atlas._labeled
+
+    def test_partial_invalidate_preserves_atlas_identity(self, client):
+        build_coverage_atlas()
+        # Steps: 0=(3,good), 1=(4,bad), 2=(1,good), 3=(2,bad); media 1 at step 2.
+        self._vote(client, [(3, "good"), (4, "bad"), (1, "good"), (2, "bad")])
+        _ensure_cache(medias, label_history, 0)
+        atlas_before = labeling_progress._cache_coverage_atlas
+        assert atlas_before is not None
+        assert atlas_before.labeled_ids == {1, 2, 3, 4}
+
+        # Switch media 1 (good→bad): steps 2-3 discarded, atlas rewound in place.
+        self._vote(client, [(1, "bad")])
+        atlas_after = labeling_progress._cache_coverage_atlas
+        assert atlas_after is atlas_before, "atlas rebuilt instead of rewound"
+        # Overlay rewound to the surviving prefix (steps 0-1): media 3 good, 4 bad.
+        assert atlas_after.labeled_ids == {3, 4}
+
+    def test_step0_invalidate_preserves_atlas_identity(self, client):
+        build_coverage_atlas()
+        self._vote(client, [(1, "good"), (2, "bad")])
+        _ensure_cache(medias, label_history, 0)
+        atlas_before = labeling_progress._cache_coverage_atlas
+        assert atlas_before is not None
+
+        # Switch media 1, present from step 0: whole prefix gone, atlas emptied.
+        self._vote(client, [(1, "bad")])
+        assert len(_cached_steps) == 0
+        atlas_after = labeling_progress._cache_coverage_atlas
+        assert atlas_after is atlas_before, "atlas rebuilt on step-0 invalidate"
+        assert atlas_after.labeled_ids == set()
 
 
 class TestStableIndicatorThresholds:

@@ -123,6 +123,34 @@ describe('ExportModalComponent', () => {
     expect(successSpy.mock.calls[0][0].message).toBe('Exported 2 labels to Server JSON');
   });
 
+  it('seeds formValues from field defaults and carries field_values on the POST', async () => {
+    await flushInit();
+    // An exporter with a required field opens its form (rather than exporting
+    // immediately) with each field's default seeded into `formValues`.
+    const exporter = {
+      name: 'server_json_file',
+      display_name: 'Server JSON',
+      fields: [
+        {
+          key: 'format',
+          field_type: 'select',
+          options: ['json', 'csv'],
+          default: 'csv',
+          required: true,
+        },
+      ],
+    };
+    component.startExporter(exporter as never);
+    expect(component.selectedExporter).toBe(exporter);
+    expect(component.formValues['format']).toBe('csv');
+
+    // Submitting the form carries the seeded field values on the run-export POST.
+    component.submitForm();
+    const req = httpMock.expectOne('/api/exporters/export');
+    expect(req.request.body.field_values).toEqual({ format: 'csv' });
+    req.flush({ success: true });
+  });
+
   it('emits closed on close', async () => {
     await flushInit();
     vi.spyOn(component.closed, 'emit');

@@ -20,6 +20,7 @@ from urllib.parse import urljoin
 import requests
 
 from vtscore.config import DATA_DIR
+from vtscore.security.archive import safe_tar_extract
 from vtscore.security.hf_auth import GatedResourceError, auth_header_for_url
 from vtscore.security.url_validation import validate_url
 
@@ -173,11 +174,14 @@ RICO_SCREEN2WORDS_SHARDS = [f"data/train-{i:05d}-of-00008.parquet" for i in rang
 
 # RVL-CDIP: 16-class document-image classification.  The canonical
 # ``aharley/rvl_cdip`` is a 38 GB tarball (impractical as a demo); instead we
-# pull a demo-sized 300-images-per-class parquet mirror (~4,800 images, ~32 MB)
-# whose ``image``/``label`` columns decode straight into a folder-per-class
-# tree.  The train shard filename carries a content hash, so it is resolved at
-# download time rather than hardcoded.
-RVL_CDIP_REPO_ID = "umair894/rvl_cdip_300_examples_per_class"
+# pull a demo-sized, class-balanced 100-images-per-class parquet mirror whose
+# ``image``/``label`` columns decode straight into a folder-per-class tree.
+# All three splits (train 50 + test 25 + validation 25 per class = ~1,600
+# images across 16 classes, ~180 MB) are pulled so every class is represented.
+# The shard filenames carry a content hash, so they are resolved at download
+# time rather than hardcoded.  (The former ``umair894`` 300-per-class mirror
+# was abandoned: its single shard held only the ``invoice`` class.)
+RVL_CDIP_REPO_ID = "jordyvl/rvl_cdip_100_examples_per_class"
 
 VISUAL_GENOME_IMAGES_URL = "https://cs.stanford.edu/people/rak248/VG_100K/images.zip"
 VISUAL_GENOME_IMAGES2_URL = "https://cs.stanford.edu/people/rak248/VG_100K_2/images2.zip"
@@ -224,11 +228,15 @@ UCSF_IDL_DOWNLOAD_SIZE_MB = 50
 ROXFORD_IMAGES_DOWNLOAD_SIZE_MB = 1850
 ENRICO_DOWNLOAD_SIZE_MB = 110
 RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB = 1720
-RVL_CDIP_DOWNLOAD_SIZE_MB = 32
+RVL_CDIP_DOWNLOAD_SIZE_MB = 180
 OPENLOGO_DOWNLOAD_SIZE_MB = 4640
-VISUAL_GENOME_IMAGES_DOWNLOAD_SIZE_MB = 9700
-VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB = 5300
-VISUAL_GENOME_OBJECTS_DOWNLOAD_SIZE_MB = 110
+# Verified against the servers' Content-Length (2026-07-14): images.zip is
+# 9,730,308,001 B (9280 MiB), images2.zip 5,471,658,058 B (5218 MiB), and
+# objects.json.zip 55,323,929 B (53 MiB).  These only seed the "Downloading
+# ~X GB" message / progress fallback — the real total comes from Content-Length.
+VISUAL_GENOME_IMAGES_DOWNLOAD_SIZE_MB = 9280
+VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB = 5218
+VISUAL_GENOME_OBJECTS_DOWNLOAD_SIZE_MB = 53
 HMDB51_DOWNLOAD_SIZE_MB = 2000
 UCF101_FULL_DOWNLOAD_SIZE_MB = 6960
 KTH_DOWNLOAD_SIZE_MB = 1150
@@ -629,10 +637,11 @@ def _extract_archive(
     """Extract *archive_path* into *dest_dir*, dispatching by filename suffix.
 
     Supports ``.tar.gz`` / ``.tgz`` (gzip tar), ``.tar`` (uncompressed tar),
-    ``.zip``, and ``.7z`` archives.  Tar members are extracted with
-    ``filter="data"`` (which rejects unsafe absolute/traversal paths); zip and
-    7z members are validated against *dest_dir* to guard against path traversal
-    (zip-slip).  Raises ``ValueError`` for an unsupported archive format.
+    ``.zip``, and ``.7z`` archives.  Tar members go through
+    :func:`~vtscore.security.archive.safe_tar_extract` (which rejects unsafe
+    absolute/traversal/link paths); zip and 7z members are validated against
+    *dest_dir* to guard against path traversal (zip-slip).  Raises
+    ``ValueError`` for an unsupported archive format.
     """
     suffix = archive_name.lower()
     if suffix.endswith((".tar.gz", ".tgz", ".tar")):
@@ -649,7 +658,7 @@ def _extract_archive(
                 for i, member in enumerate(tar_ref):
                     if i % 100 == 0:
                         on_progress("downloading", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes)
-                    tar_ref.extract(member, dest_dir, filter="data")
+                    safe_tar_extract(tar_ref, member, dest_dir)
         on_progress("downloading", f"Extracting {dataset_name}...", total_bytes, total_bytes)
     elif suffix.endswith(".zip"):
         from vtscore.datasets.archive import _reject_traversal

@@ -47,6 +47,7 @@ from typing import TYPE_CHECKING, Any, Callable, Iterator, Optional
 from uuid import uuid4
 
 from vtscore.config import DATA_DIR
+from vtscore.security.archive import safe_tar_extract
 from vtscore.security.path_validation import glob_top_level, rglob_follow_symlinks
 
 if TYPE_CHECKING:
@@ -190,8 +191,7 @@ def extract_archive(
                     i,
                     total,
                 )
-                _reject_traversal(extract_dir_resolved, member.name)
-                tf.extract(member, extract_dir, filter="data")
+                safe_tar_extract(tf, member, extract_dir)
 
     elif name.endswith(".rar"):
         try:

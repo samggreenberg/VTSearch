@@ -106,7 +106,6 @@
 
 <!-- item-sep -->
 
-- [ ] #2404 — Rebuild persisted signpost label sets on `labeler_signature` mismatch
 
 <!-- item-sep -->
 

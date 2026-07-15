@@ -37,6 +37,7 @@ except ImportError:  # pragma: no cover - Windows
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "atomic_write_bytes",
     "atomic_write_json",
     "atomic_write_text",
     "file_lock",
@@ -104,6 +105,32 @@ def atomic_write_text(path: Path | str, text: str) -> None:
     except Exception:
         # Best-effort tmp cleanup so a failed write doesn't leak a
         # half-written tmp file next to the destination.
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def atomic_write_bytes(path: Path | str, data: bytes) -> None:
+    """Write *data* to *path* atomically (binary twin of :func:`atomic_write_text`).
+
+    Writes to a per-writer-unique sibling ``.tmp`` file, ``fsync``\\ s it, then
+    renames into place via :func:`os.replace`, so a concurrent reader always
+    sees either the pre- or post-write content, never a partial write.  Parent
+    directories are created if needed.  Used for binary artifacts such as the
+    portable-detector zip bundle.
+    """
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(f"{p.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
+    try:
+        with open(tmp, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, p)
+    except Exception:
         try:
             os.unlink(tmp)
         except FileNotFoundError:

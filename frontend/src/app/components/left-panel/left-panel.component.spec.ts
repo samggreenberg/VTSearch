@@ -216,9 +216,11 @@ describe('LeftPanelComponent', () => {
       // Metadata arrives late with a custom display name: the header must
       // upgrade instead of staying stuck on the fallback. The resource value
       // commits on a microtask and the deriving effect runs on the next tick,
-      // so settle before asserting.
-      const req = httpMock.expectOne((r) => r.url.includes('/api/media-types'));
-      req.flush({ media_types: [{ type_id: 'audio', name: 'Sound Clips' }] });
+      // so settle before asserting. Two GETs match here — the header's own
+      // rxResource read and the shared MediaTypeCapabilityService.ensureLoaded()
+      // fired in ngOnInit — so flush them all with the same payload.
+      const reqs = httpMock.match((r) => r.url.includes('/api/media-types'));
+      reqs.forEach((r) => r.flush({ media_types: [{ type_id: 'audio', name: 'Sound Clips' }] }));
       await settleResource();
       expect(component.mediaTypeName()).toBe('Sound Clips');
     });

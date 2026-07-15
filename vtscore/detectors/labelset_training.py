@@ -30,6 +30,24 @@ log = logging.getLogger(__name__)
 ProgressCallback = Callable[[str, int, int], None]
 
 
+def _lookups_for_snap(
+    snap: dict[int, dict[str, Any]] | None,
+) -> tuple[dict[str, list[int]], dict[str, list[int]], dict[str, list[int]]] | None:
+    """Build the ``(origin, md5, name)`` media-lookup triple for *snap*, once.
+
+    Returns ``None`` when *snap* is empty/absent (the in-dataset resolution
+    paths are all guarded on ``if snap:`` anyway).  Loop callers build this a
+    single time and thread it into :func:`resolve_current_dataset_cid` so the
+    per-element cid resolution is O(1) instead of rebuilding the tables (which
+    ``json.dumps`` every origin) for each of ``labels`` elements.
+    """
+    if not snap:
+        return None
+    from vtscore.state import build_media_lookup
+
+    return build_media_lookup(snap)
+
+
 def _embedder_for_active_dataset(snap: dict[int, dict[str, Any]] | None) -> str:
     """Return the embedder name to use for fresh resolve+embed work.
 
@@ -234,6 +252,7 @@ def _resolve_uncached_embedding(
     *,
     media_type: str,
     embedder_name: str,
+    lookups: tuple[dict[str, list[int]], dict[str, list[int]], dict[str, list[int]]] | None = None,
 ) -> np.ndarray | None:
     """Produce a training vector for *elem*, not consulting the cache.
 
@@ -242,12 +261,15 @@ def _resolve_uncached_embedding(
     the media's nearest ``patch_regions`` node when the element carries one).
     Falls back to the cross-dataset path - resolve via the importer and embed
     freshly.  Returns ``None`` when neither path produces a vector.
+
+    *lookups* is the pre-built ``build_media_lookup`` triple for *snap*; loop
+    callers pass it so the cid resolution doesn't rebuild the tables per element.
     """
     from vtscore.detectors.labelset_elements import resolve_current_dataset_cid
     from vtscore.detectors.training import pool_box_from_media
 
     if snap:
-        cid = resolve_current_dataset_cid(elem)
+        cid = resolve_current_dataset_cid(elem, lookups)
         if cid is not None and cid in snap:
             media = snap[cid]
             pooled = pool_box_from_media(media, elem.region_box)
@@ -275,6 +297,7 @@ def _resolve_negative_leaves(
     *,
     media_type: str,
     embedder_name: str,
+    lookups: tuple[dict[str, list[int]], dict[str, list[int]], dict[str, list[int]]] | None = None,
 ) -> list[np.ndarray] | None:
     """Leaf negatives (CLS + HAC leaves) for a Bad *elem* on a patch dataset.
 
@@ -284,12 +307,15 @@ def _resolve_negative_leaves(
     non-patch datasets/elements (and clipper-bearing origins, whose patch grid
     we can't reconstruct) so the caller falls back to a single image-level
     negative - i.e. no flooding, the pre-change behaviour.
+
+    *lookups* is the pre-built ``build_media_lookup`` triple for *snap*; loop
+    callers pass it so the cid resolution doesn't rebuild the tables per element.
     """
     from vtscore.detectors.labelset_elements import resolve_current_dataset_cid
     from vtscore.detectors.resolver import resolve_file_context
 
     if snap:
-        cid = resolve_current_dataset_cid(elem)
+        cid = resolve_current_dataset_cid(elem, lookups)
         if cid is not None and cid in snap:
             return _leaves_from_regions(snap[cid].get("patch_regions"))
 
@@ -339,6 +365,11 @@ def populate_label_embeddings(
 
     neg_cache: dict[str, list[np.ndarray]] = det_ctx.label_negative_regions
 
+    # Build the origin/md5/name lookup tables once from *snap* and thread them
+    # through every element's cid resolution, so the pass is O(N + labels)
+    # instead of O(labels × N).
+    lookups = _lookups_for_snap(snap)
+
     for idx, elem in enumerate(labelset.elements):
         eid = stable_element_id(elem)
         # Bad elements on a patch dataset flood their CLS + leaf negatives (the
@@ -347,7 +378,9 @@ def populate_label_embeddings(
         # (``_resolve_negative_leaves`` returns None), leaving the Bad element
         # to contribute its single image-level vector below.
         if elem.label == "bad" and eid not in neg_cache:
-            leaves = _resolve_negative_leaves(elem, snap, media_type=media_type, embedder_name=embedder_name)
+            leaves = _resolve_negative_leaves(
+                elem, snap, media_type=media_type, embedder_name=embedder_name, lookups=lookups
+            )
             if leaves is not None:
                 neg_cache[eid] = leaves
 
@@ -364,7 +397,9 @@ def populate_label_embeddings(
             cached += 1
             continue
 
-        emb = _resolve_uncached_embedding(elem, snap, media_type=media_type, embedder_name=embedder_name)
+        emb = _resolve_uncached_embedding(
+            elem, snap, media_type=media_type, embedder_name=embedder_name, lookups=lookups
+        )
         if emb is not None:
             cache[eid] = emb
             region_cache[eid] = elem.region_box
@@ -437,6 +472,7 @@ def _resolve_uncached_local_features(
     snap: dict[int, dict[str, Any]] | None,
     *,
     embedder,
+    lookups: tuple[dict[str, list[int]], dict[str, list[int]], dict[str, list[int]]] | None = None,
 ) -> Any | None:
     """Re-derive *elem*'s :class:`StructuralFeatures`, not consulting the cache.
 
@@ -447,6 +483,9 @@ def _resolve_uncached_local_features(
     **full** (unfiltered) feature set is returned; any ``region_box`` is applied
     downstream at template-build time.  Returns ``None`` when neither path
     yields features.
+
+    *lookups* is the pre-built ``build_media_lookup`` triple for *snap*; loop
+    callers pass it so the cid resolution doesn't rebuild the tables per element.
     """
     from vtscore.detectors.labelset_elements import resolve_current_dataset_cid
     from vtscore.detectors.resolver import resolve_file_context
@@ -454,7 +493,7 @@ def _resolve_uncached_local_features(
     from vtscore.media.structural import StructuralFeatures
 
     if snap:
-        cid = resolve_current_dataset_cid(elem)
+        cid = resolve_current_dataset_cid(elem, lookups)
         if cid is not None and cid in snap:
             feats = snap[cid].get("local_features")
             if isinstance(feats, StructuralFeatures) and feats.count > 0:
@@ -513,13 +552,16 @@ def populate_label_local_features(
         return 0
 
     cache: dict[str, Any] = det_ctx.label_local_features
+    # Build the origin/md5/name lookup tables once and thread them through,
+    # so this pass is O(N + labels) instead of O(labels × N).
+    lookups = _lookups_for_snap(snap)
     for elem in labelset.elements:
         if elem.label not in ("good", "bad"):
             continue
         eid = stable_element_id(elem)
         if eid in cache:
             continue
-        feats = _resolve_uncached_local_features(elem, snap, embedder=embedder)
+        feats = _resolve_uncached_local_features(elem, snap, embedder=embedder, lookups=lookups)
         if feats is not None:
             cache[eid] = feats
     return len(cache)

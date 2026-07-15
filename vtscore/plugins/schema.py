@@ -137,7 +137,9 @@ def _build_select(pf: PluginField, kwargs: dict) -> fields.Field:
     validators: list = []
     if pf.required:
         validators.append(_non_empty_after_strip)
-    if pf.options and not pf.dynamic_options:
+    # ``allow_free_text`` selects accept any typed value, so they skip the
+    # ``OneOf`` restriction that a strict select applies to its options.
+    if pf.options and not pf.dynamic_options and not pf.allow_free_text:
         validators.append(validate.OneOf([*pf.options, ""] if not pf.required else pf.options))
     if validators:
         kwargs["validate"] = validators

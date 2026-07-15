@@ -239,9 +239,11 @@
             class="browse-side-selection"
             [mediaType]="mediaType()"
             [canVerify]="subset"
+            [volume]="volume()"
             (verifyGood)="onVerify('good')"
             (verifyBad)="onVerify('bad')"
             (selectAllInView)="onSelectAllInView()"
+            (nowPlaying)="onNowPlaying($event)"
           />
           <div class="browse-side-meta">
             <div class="browse-side-minimap">

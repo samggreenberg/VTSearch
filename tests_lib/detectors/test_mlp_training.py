@@ -83,3 +83,41 @@ class TestJobCancellation:
         X, y = _balanced_xy()
         model = train_model(X, y, input_dim=8, hidden_dim=4)
         assert sum(p.numel() for p in model.parameters()) > 0
+
+
+class TestEarlyStopDeterminism:
+    """The per-epoch ``weighted_loss.item()`` host-device sync is skipped on
+    CUDA (checked only on the patience-check cadence).  On CPU the read is
+    free, so the per-epoch early-stop path is kept unchanged.  These tests pin
+    that the CPU training path stays bit-for-bit deterministic across runs, so
+    the sync-cadence change can't silently perturb the early-stop decision on
+    the path the whole test suite exercises.
+    """
+
+    def _params_flat(self, model):
+        return torch.cat([p.detach().reshape(-1) for p in model.parameters()])
+
+    def test_same_seed_same_weights(self):
+        """Two runs with the same seed produce identical weights."""
+        X, y = _balanced_xy(seed=7)
+        m1 = train_model(X, y, input_dim=8, hidden_dim=4, seed=123)
+        m2 = train_model(X, y, input_dim=8, hidden_dim=4, seed=123)
+        assert torch.equal(self._params_flat(m1), self._params_flat(m2))
+
+    def test_early_stop_fires_deterministically(self, monkeypatch):
+        """With a tiny patience the loss plateaus and early-stop fires the same
+        way every run: identical trained weights across repeated calls.
+
+        ``train_model`` reads ``TRAIN_EPOCHS`` / ``TRAIN_PATIENCE`` off
+        ``config`` at call time, so patching the attributes forces the
+        early-stop branch without an env-var reload.
+        """
+        from vtscore import config
+
+        monkeypatch.setattr(config, "TRAIN_PATIENCE", 3, raising=False)
+        monkeypatch.setattr(config, "TRAIN_EPOCHS", 500, raising=False)
+
+        X, y = _balanced_xy(seed=3)
+        m1 = train_model(X, y, input_dim=8, hidden_dim=4, seed=99)
+        m2 = train_model(X, y, input_dim=8, hidden_dim=4, seed=99)
+        assert torch.equal(self._params_flat(m1), self._params_flat(m2))

@@ -12,20 +12,48 @@ interface ChartPadding {
   left: number;
 }
 
+/** Theme colors resolved once per render (see ChartsService.resolvePalette). */
+interface ChartPalette {
+  border: string;
+  borderSubtle: string;
+  accent: string;
+  colorGood: string;
+  textSecondary: string;
+  textMuted: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ChartsService {
   private readonly padding: ChartPadding = { top: 20, right: 20, bottom: 40, left: 50 };
 
-  private themeColor(varName: string): string {
-    return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  // Resolve every theme color this chart needs in a single getComputedStyle
+  // pass. getComputedStyle forces a style recalc, so calling it per-color (as
+  // the old themeColor() did, ~8-10x per render) was the cost; reading multiple
+  // properties off one live declaration is cheap.
+  private resolvePalette(): ChartPalette {
+    const style = getComputedStyle(document.documentElement);
+    const read = (varName: string) => style.getPropertyValue(varName).trim();
+    return {
+      border: read('--border'),
+      borderSubtle: read('--border-subtle'),
+      accent: read('--accent'),
+      colorGood: read('--color-good'),
+      textSecondary: read('--text-secondary'),
+      textMuted: read('--text-muted'),
+    };
   }
 
-  private drawAxes(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  private drawAxes(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    borderColor: string,
+  ): void {
     const { top, left } = this.padding;
     const chartWidth = width - left - this.padding.right;
     const chartHeight = height - top - this.padding.bottom;
 
-    ctx.strokeStyle = this.themeColor('--border');
+    ctx.strokeStyle = borderColor;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(left, top);
@@ -34,12 +62,17 @@ export class ChartsService {
     ctx.stroke();
   }
 
-  private drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  private drawGrid(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    gridColor: string,
+  ): void {
     const { top, left } = this.padding;
     const chartWidth = width - left - this.padding.right;
     const chartHeight = height - top - this.padding.bottom;
 
-    ctx.strokeStyle = this.themeColor('--border-subtle');
+    ctx.strokeStyle = gridColor;
     ctx.lineWidth = 1;
     for (let i = 1; i <= 5; i++) {
       const y = top + (chartHeight * i) / 5;
@@ -73,8 +106,13 @@ export class ChartsService {
     }
   }
 
-  private showEmpty(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    ctx.fillStyle = this.themeColor('--text-muted');
+  private showEmpty(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    mutedColor: string,
+  ): void {
+    ctx.fillStyle = mutedColor;
     ctx.font = '14px sans-serif';
     ctx.fillText('No data available', 20, height / 2);
   }
@@ -82,9 +120,10 @@ export class ChartsService {
   renderErrorCostChart(canvas: HTMLCanvasElement, data: ErrorCostDataPoint[]): void {
     const ctx = canvas.getContext('2d')!;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const palette = this.resolvePalette();
 
     if (!data || data.length === 0) {
-      this.showEmpty(ctx, canvas.width, canvas.height);
+      this.showEmpty(ctx, canvas.width, canvas.height, palette.textMuted);
       return;
     }
 
@@ -102,14 +141,14 @@ export class ChartsService {
     const yScale = (val: number) =>
       top + chartHeight - ((val - minCost) / (maxCost - minCost || 1)) * chartHeight;
 
-    this.drawAxes(ctx, canvas.width, canvas.height);
-    this.drawGrid(ctx, canvas.width, canvas.height);
+    this.drawAxes(ctx, canvas.width, canvas.height, palette.border);
+    this.drawGrid(ctx, canvas.width, canvas.height, palette.borderSubtle);
 
     const xs = numLabels.map(xScale);
     const ys = errorCosts.map(yScale);
-    this.drawLine(ctx, xs, ys, this.themeColor('--accent'));
+    this.drawLine(ctx, xs, ys, palette.accent);
 
-    ctx.fillStyle = this.themeColor('--text-secondary');
+    ctx.fillStyle = palette.textSecondary;
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('Number of Labels', canvas.width / 2, canvas.height - 10);
@@ -131,9 +170,10 @@ export class ChartsService {
   renderStabilityChart(canvas: HTMLCanvasElement, data: StabilityDataPoint[]): void {
     const ctx = canvas.getContext('2d')!;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const palette = this.resolvePalette();
 
     if (!data || data.length === 0) {
-      this.showEmpty(ctx, canvas.width, canvas.height);
+      this.showEmpty(ctx, canvas.width, canvas.height, palette.textMuted);
       return;
     }
 
@@ -149,14 +189,14 @@ export class ChartsService {
     const xScale = (val: number) => left + (val / maxLabels) * chartWidth;
     const yScale = (val: number) => top + chartHeight - (val / maxFlips) * chartHeight;
 
-    this.drawAxes(ctx, canvas.width, canvas.height);
-    this.drawGrid(ctx, canvas.width, canvas.height);
+    this.drawAxes(ctx, canvas.width, canvas.height, palette.border);
+    this.drawGrid(ctx, canvas.width, canvas.height, palette.borderSubtle);
 
     const xs = numLabels.map(xScale);
     const ys = numFlips.map(yScale);
-    this.drawLine(ctx, xs, ys, this.themeColor('--color-good'));
+    this.drawLine(ctx, xs, ys, palette.colorGood);
 
-    ctx.fillStyle = this.themeColor('--text-secondary');
+    ctx.fillStyle = palette.textSecondary;
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('Number of Labels', canvas.width / 2, canvas.height - 10);
@@ -178,9 +218,10 @@ export class ChartsService {
   renderDiversityChart(canvas: HTMLCanvasElement, data: DiversityDataPoint[], goalDiversity = 40): void {
     const ctx = canvas.getContext('2d')!;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const palette = this.resolvePalette();
 
     if (!data || data.length === 0) {
-      this.showEmpty(ctx, canvas.width, canvas.height);
+      this.showEmpty(ctx, canvas.width, canvas.height, palette.textMuted);
       return;
     }
 
@@ -201,11 +242,11 @@ export class ChartsService {
     const yScale = (val: number) =>
       top + chartHeight - ((val - minLevel) / (maxLevel - minLevel || 1)) * chartHeight;
 
-    this.drawAxes(ctx, canvas.width, canvas.height);
-    this.drawGrid(ctx, canvas.width, canvas.height);
+    this.drawAxes(ctx, canvas.width, canvas.height, palette.border);
+    this.drawGrid(ctx, canvas.width, canvas.height, palette.borderSubtle);
 
     // Draw green threshold line (diversity indicator turns green at goal level)
-    ctx.strokeStyle = this.themeColor('--color-good');
+    ctx.strokeStyle = palette.colorGood;
     ctx.lineWidth = 1;
     ctx.setLineDash([6, 4]);
     const greenY = yScale(greenLevel);
@@ -215,16 +256,16 @@ export class ChartsService {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    ctx.fillStyle = this.themeColor('--color-good');
+    ctx.fillStyle = palette.colorGood;
     ctx.font = '11px sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(`green (${greenLevel})`, left + chartWidth - 70, greenY - 5);
 
     const xs = numLabels.map(xScale);
     const ys = levels.map(yScale);
-    this.drawLine(ctx, xs, ys, this.themeColor('--accent'));
+    this.drawLine(ctx, xs, ys, palette.accent);
 
-    ctx.fillStyle = this.themeColor('--text-secondary');
+    ctx.fillStyle = palette.textSecondary;
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('Number of Labels', canvas.width / 2, canvas.height - 10);

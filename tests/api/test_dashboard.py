@@ -242,6 +242,7 @@ class TestGuessMediaType:
     These tests verify the underlying data contracts that the frontend logic relies on.
     """
 
+    @pytest.mark.usefixtures("angular_bundle")
     def test_js_contains_guessing_logic(self, client):
         """main.js should include the media-type guessing code."""
         resp = client.get("/static/main.js")

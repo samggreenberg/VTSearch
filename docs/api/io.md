@@ -38,10 +38,11 @@ Available built-in exporters: `server_json_file`, `server_csv_file`, `webhook`,
 
 **Streaming support** (CLI `--autodetect --stream-results` for sources larger
 than RAM): `server_json_file` (NDJSON), `server_csv_file`, and `gui` write hits
-incrementally; `webhook` and `email_smtp` do not (they need the whole payload).
-This applies to the CLI streaming path only — the `POST /api/exporters/export`
-route above always receives a fully-materialised results dict. See
-[CLI.md](../CLI.md) and `docs/plans/cli-stream-massive-images.md`.
+incrementally; `webhook` and `email_smtp` deliver in `batch_size`-sized batches
+(one POST / one email per batch) so they too stay bounded. This applies to the
+CLI streaming path only — the `POST /api/exporters/export` route above always
+receives a fully-materialised results dict. See [CLI.md](../CLI.md) and
+`docs/plans/cli-stream-massive-images.md`.
 
 ---
 
@@ -66,7 +67,9 @@ POST /api/label-importers/field-options/{importer_name}
 Returns the dropdown options for a dynamic-options field on a label importer
 (used to populate dependent selects in the importer form).
 
-→ `{"options": [...]}`
+→ `{"options": [{"value": "...", "label": "..."}, ...]}` (each option carries a
+`value` to submit and a `label` to display; they coincide for plain-string
+options and differ for `(value, label)` tuples).
 
 Errors: 400 (unknown/non-dynamic field key), 404 (unknown importer),
 501 (importer does not implement `get_field_options`),

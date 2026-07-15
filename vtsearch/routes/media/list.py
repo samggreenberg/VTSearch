@@ -47,7 +47,7 @@ from vtsearch.routes._shared import (
 from vtsearch.state import (
     _state_lock,
     apply_label,
-    build_media_lookup,
+    build_md5_lookup,
     get_media,
     medias,
     next_media_id,
@@ -1040,7 +1040,7 @@ def _insert_or_collide(new_media: dict[str, Any], file_md5: str) -> tuple[list[i
     is returned with ``is_new=True``.
     """
     with _state_lock:
-        _, md5_lookup_now, _ = build_media_lookup(medias)
+        md5_lookup_now = build_md5_lookup(medias)
         collided_cids = md5_lookup_now.get(file_md5, [])
         if collided_cids:
             return list(collided_cids), collided_cids[0], False
@@ -1084,7 +1084,7 @@ def add_media_to_pile():
     # before insertion (see below) because embedding holds no lock and a
     # concurrent upload of the same bytes could land between the two.
     snap = snapshot_medias()
-    _, md5_lookup, _ = build_media_lookup(snap)
+    md5_lookup = build_md5_lookup(snap)
     existing_cids = md5_lookup.get(file_md5, [])
 
     if existing_cids:

@@ -119,6 +119,39 @@ describe('LabelImporterModalComponent', () => {
     expect(cards.length).toBe(2);
   });
 
+  it('coerces static string options into {value,label} pairs', async () => {
+    await flushInit();
+    const staticSelect = { key: 's', field_type: 'select', options: ['x', 'y'] } as any;
+    expect(component.optionsFor(staticSelect)).toEqual([
+      { value: 'x', label: 'x' },
+      { value: 'y', label: 'y' },
+    ]);
+  });
+
+  it('keeps a typed free-text value the refreshed options omit', async () => {
+    await flushInit();
+    const field = { key: 'q', field_type: 'select', dynamic_options: true, allow_free_text: true } as any;
+    component.selectedImporter = { name: 'imp', fields: [field] } as any;
+    component.formValues['q'] = 'hand-typed';
+    (component as any).refreshDynamicFieldOptions(field);
+    httpMock
+      .expectOne((req) => req.url.endsWith('/api/label-importers/field-options/imp'))
+      .flush({ options: [{ value: 'a', label: 'A' }] });
+    expect(component.formValues['q']).toBe('hand-typed');
+  });
+
+  it('clears a strict-select value the refreshed options omit', async () => {
+    await flushInit();
+    const field = { key: 'q', field_type: 'select', dynamic_options: true } as any;
+    component.selectedImporter = { name: 'imp', fields: [field] } as any;
+    component.formValues['q'] = 'stale';
+    (component as any).refreshDynamicFieldOptions(field);
+    httpMock
+      .expectOne((req) => req.url.endsWith('/api/label-importers/field-options/imp'))
+      .flush({ options: [{ value: 'a', label: 'A' }] });
+    expect(component.formValues['q']).toBe('');
+  });
+
   it('should emit closed on close', async () => {
     await flushInit();
     vi.spyOn(component.closed, 'emit');

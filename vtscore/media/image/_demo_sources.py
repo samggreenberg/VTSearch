@@ -450,9 +450,10 @@ def build_demo_datasets() -> list[DemoDataset]:
             download_size_mb=RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
         ),
         # RVL-CDIP: scanned grayscale *document images* across 16 balanced types
-        # (letter, form, email, invoice, resume, memo, …).  A demo-sized
-        # 300-per-class mirror (~4,800 images); the "document screenshot" corner
-        # of digitally-native imagery with a clean 16-way label set.
+        # (letter, form, email, invoice, resume, memo, …).  A demo-sized,
+        # class-balanced 100-per-class mirror (~1,600 images); the "document
+        # screenshot" corner of digitally-native imagery with a clean 16-way
+        # label set.
         DemoDataset(
             id="rvl_cdip_s",
             label="RVL-CDIP Docs (S)",
@@ -462,7 +463,7 @@ def build_demo_datasets() -> list[DemoDataset]:
             required_folder=rvl_folder,
             slice_frac_start=0.0,
             slice_frac_end=1 / 7,
-            items_per_category=300,
+            items_per_category=100,
             download_size_mb=RVL_CDIP_DOWNLOAD_SIZE_MB,
         ),
         DemoDataset(
@@ -474,7 +475,7 @@ def build_demo_datasets() -> list[DemoDataset]:
             required_folder=rvl_folder,
             slice_frac_start=1 / 7,
             slice_frac_end=3 / 7,
-            items_per_category=300,
+            items_per_category=100,
             download_size_mb=RVL_CDIP_DOWNLOAD_SIZE_MB,
         ),
         DemoDataset(
@@ -486,7 +487,7 @@ def build_demo_datasets() -> list[DemoDataset]:
             required_folder=rvl_folder,
             slice_frac_start=3 / 7,
             slice_frac_end=None,
-            items_per_category=300,
+            items_per_category=100,
             download_size_mb=RVL_CDIP_DOWNLOAD_SIZE_MB,
         ),
         DemoDataset(
@@ -498,7 +499,7 @@ def build_demo_datasets() -> list[DemoDataset]:
             required_folder=rvl_folder,
             slice_frac_start=0.0,
             slice_frac_end=None,
-            items_per_category=300,
+            items_per_category=100,
             download_size_mb=RVL_CDIP_DOWNLOAD_SIZE_MB,
         ),
         DemoDataset(

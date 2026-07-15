@@ -398,6 +398,13 @@ class DatasetContext:
         # refuses to serve it over a different layout — so a stale set is
         # inert, never wrong.  Text + 2-D anchors only, no vectors.
         "_region_labels",
+        # In-flight background relabel job id (issue #2404).  When the serve
+        # path finds a persisted label set whose ``labeler_signature`` no
+        # longer matches the active pipeline, it kicks a background rebuild so
+        # the stale signs self-heal; this tracks that job so repeated polls
+        # coalesce onto the one rebuild instead of queueing a fresh one each
+        # time.  Shares the ``signpost_relabel_jobs`` runner across datasets.
+        "_relabel_job_id",
         # VTSBrowse subset projection: an ephemeral UMAP fit over just a subset
         # of this dataset's media ids (e.g. the positives of a Find run),
         # computed on demand and never persisted.  Held alongside the full
@@ -454,6 +461,7 @@ class DatasetContext:
         self._pyramids: dict[str, Any] = {}  # bin_shape -> Pyramid
         self._full_job_id: str | None = None  # in-flight full-dataset build job id
         self._region_labels: Any = None  # RegionLabelSet | None (signposts, full layout)
+        self._relabel_job_id: str | None = None  # in-flight signpost-relabel job id (#2404)
         self._subset_projection: Any = None  # Projection | None (ephemeral subset UMAP)
         self._subset_pyramids: dict[str, Any] = {}  # bin_shape -> Pyramid (subset)
         self._subset_ids: list[int] | None = None  # sorted ids the subset layout is fit on

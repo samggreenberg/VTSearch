@@ -606,10 +606,9 @@ class TestMergeDetectorResults:
         _merge_detector_results(acc, new)
         assert acc["det_a"]["total_hits"] == 2
         assert len(acc["det_a"]["hits"]) == 2
-        # Verify sorted by score descending
-        assert acc["det_a"]["hits"][0]["score"] >= acc["det_a"]["hits"][1]["score"]
 
-    def test_merge_sorts_descending(self):
+    def test_merge_appends_without_sorting(self):
+        """Merge only concatenates; ordering is deferred to _sort_detector_results."""
         from vtscore.cli import _merge_detector_results
 
         acc = {
@@ -629,8 +628,36 @@ class TestMergeDetectorResults:
             }
         }
         _merge_detector_results(acc, new)
+        # Appended in chunk order, not re-sorted per chunk.
+        assert [h["filename"] for h in acc["det_a"]["hits"]] == ["low.wav", "high.wav"]
+
+    def test_sort_orders_descending(self):
+        from vtscore.cli import _merge_detector_results, _sort_detector_results
+
+        acc = {
+            "det_a": {
+                "detector_name": "det_a",
+                "threshold": 0.5,
+                "total_hits": 1,
+                "hits": [{"filename": "low.wav", "score": 0.5}],
+                "negative_hits": [{"filename": "neg_low.wav", "score": 0.1}],
+            }
+        }
+        new = {
+            "det_a": {
+                "detector_name": "det_a",
+                "threshold": 0.5,
+                "total_hits": 1,
+                "hits": [{"filename": "high.wav", "score": 0.99}],
+                "negative_hits": [{"filename": "neg_high.wav", "score": 0.3}],
+            }
+        }
+        _merge_detector_results(acc, new)
+        _sort_detector_results(acc)
         assert acc["det_a"]["hits"][0]["filename"] == "high.wav"
         assert acc["det_a"]["hits"][1]["filename"] == "low.wav"
+        assert acc["det_a"]["negative_hits"][0]["filename"] == "neg_high.wav"
+        assert acc["det_a"]["negative_hits"][1]["filename"] == "neg_low.wav"
 
     def test_merge_multiple_detectors(self):
         from vtscore.cli import _merge_detector_results

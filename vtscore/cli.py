@@ -214,7 +214,21 @@ def _load_and_train_detectors(
                 "The original media may not be reachable from the CLI - for example, "
                 "labels collected through the local_folder importer have no resolve_file() path."
             )
-        out[det_name] = {"mlp": det_ctx.model, "threshold": det_ctx.threshold}
+        # Alongside the scoring artifacts (mlp/threshold), carry the metadata a
+        # portable-detector export needs so the exporter never re-reads the
+        # detector file: the concrete embedder space it trained in, its locked
+        # type, and the labelset good/bad tallies.
+        from vtscore.detectors.embedder_type import detector_embedder_type_from_data  # noqa: PLC0415
+
+        out[det_name] = {
+            "mlp": det_ctx.model,
+            "threshold": det_ctx.threshold,
+            "embedder": det_ctx.embedder or "",
+            "media_type": det_media_type or media_type,
+            "embedder_type": detector_embedder_type_from_data(det),
+            "good_count": sum(1 for el in labelset.elements if el.label == "good"),
+            "bad_count": sum(1 for el in labelset.elements if el.label == "bad"),
+        }
     return out
 
 
@@ -300,8 +314,15 @@ def _run_exporter(
     exporter_name: str,
     field_values: dict[str, Any],
     results: dict[str, Any],
+    detector_mlps: dict[str, dict[str, Any]] | None = None,
 ) -> None:
-    """Validate and run a named exporter, printing its confirmation message."""
+    """Validate and run a named exporter, printing its confirmation message.
+
+    Most exporters consume the scored *results*.  An exporter that instead
+    exports the trained classifiers themselves (``needs_trained_detectors``,
+    the portable-detector bundle) is handed the *detector_mlps* the pipeline
+    trained, via :meth:`LabelsetExporter.export_cli_detectors`.
+    """
     from vtscore.exporters import get_exporter
 
     exporter = get_exporter(exporter_name)
@@ -310,9 +331,40 @@ def _run_exporter(
         raise ValueError(f"Unknown exporter: {exporter_name}. Available: {', '.join(available)}")
 
     exporter.validate_cli_field_values(field_values)
-    result = exporter.export_cli(results, field_values)
+    if getattr(exporter, "needs_trained_detectors", False):
+        descriptors = _portable_detector_descriptors(detector_mlps or {})
+        result = exporter.export_cli_detectors(descriptors, field_values)
+    else:
+        result = exporter.export_cli(results, field_values)
     message = result.get("message", "Export complete.")
     cli_progress.emit("export_complete", text=message, message=message)
+
+
+def _portable_detector_descriptors(detector_mlps: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    """Serialise each trained detector into a portable-export descriptor.
+
+    Turns the pipeline's ``{name: {"mlp", "threshold", ...}}`` map into the
+    list of plain-data dicts :meth:`LabelsetExporter.export_cli_detectors`
+    consumes - the live torch model is reduced to nested-list weights here so
+    the exporter itself stays torch-free.
+    """
+    from vtscore.detectors.training import serialize_weights
+
+    descriptors: list[dict[str, Any]] = []
+    for name, info in detector_mlps.items():
+        descriptors.append(
+            {
+                "detector_name": name,
+                "media_type": info.get("media_type", "") or "",
+                "weights": serialize_weights(info["mlp"]),
+                "threshold": info["threshold"],
+                "embedder": info.get("embedder", "") or "",
+                "embedder_type": info.get("embedder_type", "") or "",
+                "good_count": int(info.get("good_count", 0)),
+                "bad_count": int(info.get("bad_count", 0)),
+            }
+        )
+    return descriptors
 
 
 def import_labels_into_detector_from_file(
@@ -366,17 +418,32 @@ def _merge_detector_results(
     accumulated: dict[str, dict[str, Any]],
     new_chunk: dict[str, dict[str, Any]],
 ) -> None:
-    """Merge detector results from a new chunk into *accumulated* in-place."""
+    """Merge detector results from a new chunk into *accumulated* in-place.
+
+    Hits are appended, not sorted: this path holds every hit in RAM by
+    design, so it defers ordering to a single final :func:`_sort_detector_results`
+    pass rather than re-sorting the growing list on every chunk.
+    """
     for det_name, det_result in new_chunk.items():
         if det_name not in accumulated:
             accumulated[det_name] = det_result
         else:
             accumulated[det_name]["hits"].extend(det_result["hits"])
             accumulated[det_name]["total_hits"] += det_result["total_hits"]
-            accumulated[det_name]["hits"].sort(key=lambda x: x["score"], reverse=True)
             if "negative_hits" in det_result:
                 accumulated[det_name].setdefault("negative_hits", []).extend(det_result["negative_hits"])
-                accumulated[det_name]["negative_hits"].sort(key=lambda x: x["score"], reverse=True)
+
+
+def _sort_detector_results(accumulated: dict[str, dict[str, Any]]) -> None:
+    """Sort every detector's hit lists by score descending, in place.
+
+    Run once after all chunks have been merged, replacing the per-chunk sort
+    that :func:`_merge_detector_results` used to do.
+    """
+    for det_result in accumulated.values():
+        det_result["hits"].sort(key=lambda x: x["score"], reverse=True)
+        if "negative_hits" in det_result:
+            det_result["negative_hits"].sort(key=lambda x: x["score"], reverse=True)
 
 
 def _load_pickle_whole(dataset_path: str) -> Iterator[dict[int, dict[str, Any]]]:
@@ -629,6 +696,8 @@ def _run_live_pipeline(
     if not merged_results:
         raise ValueError(empty_error)
 
+    _sort_detector_results(merged_results)
+
     if chunk_num > 1:
         cli_progress.emit(
             "chunks_done",
@@ -638,7 +707,7 @@ def _run_live_pipeline(
         )
 
     results = _build_multi_results_dict(merged_results, media_type or "unknown")
-    _run_exporter(exporter_name or "gui", exporter_field_values or {}, results)
+    _run_exporter(exporter_name or "gui", exporter_field_values or {}, results, detector_mlps)
 
 
 def _list_streaming_exporter_names() -> list[str]:

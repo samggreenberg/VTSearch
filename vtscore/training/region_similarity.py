@@ -125,26 +125,53 @@ def cosine_sort_with_boxes(
 
     Performance: zero overhead for legacy single-vector snapshots - we
     detect them via :func:`_snapshot_has_patch_regions` and take the
-    fast vectorised numpy path.  Patch-region snapshots iterate per-
-    media and are O(N · K) where K is the per-image region count
-    (typically 23).
+    fast vectorised numpy path.  Patch-region snapshots flatten every
+    ``(media, region)`` pair into one ``(R, D)`` matrix (cached on the
+    dataset context) and score them with a single matvec + segmented
+    max-pool, so the whole snapshot is one BLAS call rather than N·K
+    interpreter round-trips (K ~ the per-image region count, typically 23).
     """
     if not snap:
         return [], []
 
     use_regions = _snapshot_has_patch_regions(snap) if region_aware is None else region_aware
     if use_regions and _snapshot_has_patch_regions(snap):
-        results: list[dict] = []
-        sims: list[float] = []
-        for cid, m in snap.items():
-            sim, box = score_against_query(m, query_vec, embedder_name)
-            entry = {"id": cid, "similarity": round(sim, 4)}
-            if box is not None:
-                entry["best_region"] = list(box)
-            results.append(entry)
-            sims.append(sim)
-        results.sort(key=lambda x: x["similarity"], reverse=True)
-        return results, sims
+        # Vectorised mirror of the MLP scoring path (``_score_all_media``):
+        # flatten every (media, region) pair into one (R, D) matrix, take a
+        # single matvec against the query, then segment-max-pool back down to
+        # one score + winning region per media.  Replaces the per-media,
+        # per-region Python loop that made this O(N·K) in interpreter
+        # round-trips on a user-facing sort.
+        from vtscore.embedding.matrix import get_region_matrix_for_snap, segmented_max_pool  # noqa: PLC0415
+
+        # A zero/degenerate query dots to 0 everywhere; preserve the old
+        # ``score_against_query`` behaviour of scoring 0 with no best_region.
+        if float(np.linalg.norm(query_vec)) == 0:
+            zero_results: list[dict[str, Any]] = [{"id": cid, "similarity": 0.0} for cid in snap]
+            return zero_results, [0.0] * len(snap)
+
+        all_ids, region_matrix, media_index_per_row, region_index_per_row = get_region_matrix_for_snap(snap)
+        if not all_ids:
+            return [], []
+        # float64 matches the MLP path's max-pool dtype and keeps round(.,4)
+        # stable; region rows and the query are both unit-norm, so the matvec
+        # is the cosine similarity of each region against the query.
+        flat_sims = (region_matrix @ query_vec).astype(np.float64, copy=False)
+        scores, best_region = segmented_max_pool(flat_sims, media_index_per_row, region_index_per_row, len(all_ids))
+        region_results: list[dict[str, Any]] = []
+        for cid, sim, bri in zip(all_ids, scores, best_region, strict=True):
+            entry: dict[str, Any] = {"id": cid, "similarity": round(sim, 4)}
+            regions = snap[cid].get("patch_regions")
+            if regions and 0 <= bri < len(regions):
+                entry["best_region"] = list(regions[bri].box)
+            else:
+                # Region-less media in a region-aware snapshot: the winning
+                # "region" is the full-image vector, so its box is the whole
+                # image - matching the legacy per-media path's (0, 0, 1, 1).
+                entry["best_region"] = [0.0, 0.0, 1.0, 1.0]
+            region_results.append(entry)
+        region_results.sort(key=lambda x: x["similarity"], reverse=True)
+        return region_results, scores
 
     # Fast path: pure single-vector cosine via one matrix-vector product.
     # Both the stored embeddings and *query_vec* are unit-norm (normalized

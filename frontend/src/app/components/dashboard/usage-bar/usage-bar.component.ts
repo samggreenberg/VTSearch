@@ -32,19 +32,6 @@ export class UsageBarComponent {
     return (usage.used / usage.total) * 100;
   }
 
-  /**
-   * Threshold fill color for the disk gauge, keyed the opposite way to
-   * vt-progress-bar's "progress" gradient: a fuller disk is *worse*, so it
-   * ramps accent -> warning (>=80%) -> bad (>=95%). Passed to the shared bar
-   * via its `fill` override so the gradient never applies here.
-   */
-  get fillColor(): string {
-    const pct = this.usedPct;
-    if (pct >= 95) return 'var(--color-bad)';
-    if (pct >= 80) return 'var(--text-warning)';
-    return 'var(--accent)';
-  }
-
   get freeText(): string {
     const usage = this.usage();
     if (!usage) return '';

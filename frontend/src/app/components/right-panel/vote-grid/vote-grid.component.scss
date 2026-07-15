@@ -95,8 +95,12 @@
 // accent fill + mask chrome; contain-fit to mirror ``.vote-thumbnail``. No
 // ``background`` here — the shared accent must win over a component class.
 .vote-thumbnail-wave {
+  // ``display: block`` is required: the wave is a <span> (a non-replaced inline
+  // element, unlike the <img> it replaced), so without it ``width``/``height``
+  // are ignored and the box collapses to nothing (issue #2369 regression).
+  display: block;
   width: 100%;
-  height: 100%;
+  aspect-ratio: 1;
   mask-size: contain;
   -webkit-mask-size: contain;
   border-radius: var(--radius-sm);

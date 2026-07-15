@@ -28,11 +28,11 @@ import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { MediasApiService } from '../../services/medias-api.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { ToastService } from '../../services/toast.service';
+import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import {
   BROWSE_COLORMAP_IDS,
   DEFAULT_THUMBNAIL_BORDER,
   MAX_THUMBNAIL_BORDER,
-  usesThumbnails,
   type BrowseColormapId,
 } from '../browse-canvas/hex-render.util';
 import type { ProjectionMeta, RegionLabelPayload } from '../../models/projection.models';
@@ -79,6 +79,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private mediasApi = inject(MediasApiService);
   private dialog = inject(VtDialogService);
   private toast = inject(ToastService);
+  private mediaTypeCaps = inject(MediaTypeCapabilityService);
   private ngZone = inject(NgZone);
 
   @ViewChild(BrowseCanvasComponent) private canvas?: BrowseCanvasComponent;
@@ -338,6 +339,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.setupShiftListeners();
     this.settingsState.load();
+    // Data-drive the thumbnail-type set (bin shape, grayscale pinning, per-item
+    // thumbnails in the popup/selection panel) from the served has_thumbnail.
+    this.mediaTypeCaps.ensureLoaded();
 
     // Subset mode: the Find view handed off a set of positive ids to project
     // on their own. Detect it from the query param + the in-memory handoff.
@@ -523,7 +527,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     // Thumbnail media (image/video) are pinned to grayscale so the colourful
     // density presets never tint real thumbnails; the saved per-type value is
     // ignored for them (the Settings UI hides the picker to match).
-    if (usesThumbnails(mt)) {
+    if (this.mediaTypeCaps.usesThumbnails(mt)) {
       this.colormap.set('gray');
     } else {
       const cmap = mt ? this.perMediaValue(s.browse_colormap, mt) : '';
@@ -1084,7 +1088,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   /** Message on the pre-reveal cover: names thumbnails for media that paint
    *  them (the case this cover exists for), the projection otherwise. */
   get preloadMessage(): string {
-    return usesThumbnails(this.mediaType()) ? 'Loading thumbnails…' : 'Loading map…';
+    return this.mediaTypeCaps.usesThumbnails(this.mediaType()) ? 'Loading thumbnails…' : 'Loading map…';
   }
 
   private loadProjection(): void {

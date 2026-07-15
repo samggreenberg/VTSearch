@@ -8,7 +8,7 @@ statistically indistinguishable from the full-sample fit and (b) is determinist
 ic and bounded.
 """
 
-import time
+from unittest import mock
 
 import numpy as np
 
@@ -67,12 +67,25 @@ class TestGmmSubsample:
         assert 0.45 < threshold < 0.55
 
     def test_large_input_is_bounded(self):
-        """A 1M-point fit stays fast because only the subsample is fit.
+        """A 1M-point fit never hands the GMM more than ``_GMM_MAX_SAMPLES`` rows.
 
-        Generous ceiling (5s) so this is not flaky on a loaded machine; the
-        un-subsampled fit on 1M points would be far slower.
+        Spy on ``GaussianMixture.fit`` and assert the row count it receives is
+        capped by the subsample. This asserts the cap directly instead of timing
+        the call, so it stays deterministic under xdist load (a wall-clock bound
+        is flaky on a busy machine).
         """
+        from sklearn.mixture import GaussianMixture  # noqa: PLC0415
+
         scores = _bimodal_scores(1_000_000, seed=5)
-        start = time.perf_counter()
-        calculate_gmm_threshold(scores)
-        assert time.perf_counter() - start < 5.0
+        seen_rows: list[int] = []
+        original_fit = GaussianMixture.fit
+
+        def spy_fit(self, X, *args, **kwargs):
+            seen_rows.append(np.asarray(X).shape[0])
+            return original_fit(self, X, *args, **kwargs)
+
+        with mock.patch.object(GaussianMixture, "fit", spy_fit):
+            calculate_gmm_threshold(scores)
+
+        assert seen_rows, "GaussianMixture.fit was never called"
+        assert all(n <= _GMM_MAX_SAMPLES for n in seen_rows)

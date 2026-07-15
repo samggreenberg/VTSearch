@@ -28,6 +28,7 @@ import { Media, MediaTypeInfo } from '../../models/api.models';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import { DatasetsListingsApiService } from '../../services/datasets-listings-api.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
+import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 
 export type { SortMode, SelectMode, SortedItem };
@@ -144,6 +145,7 @@ export class LeftPanelComponent implements OnInit, OnChanges {
 
   private readonly datasetsListingsApi = inject(DatasetsListingsApiService);
   private readonly embedderCaps = inject(EmbedderCapabilityService);
+  private readonly mediaTypeCaps = inject(MediaTypeCapabilityService);
 
   // Media-type metadata rides `rxResource`: loads once on creation (no request
   // signal = eager), wrapping the existing generated-client read so the
@@ -173,6 +175,7 @@ export class LeftPanelComponent implements OnInit, OnChanges {
 
   ngOnInit(): void {
     this.embedderCaps.ensureLoaded();
+    this.mediaTypeCaps.ensureLoaded();
     if (this.panelMode() === 'find') {
       // Find mode doesn't use tabs; keep manual as a no-op default
       this.activeTab = 'manual';

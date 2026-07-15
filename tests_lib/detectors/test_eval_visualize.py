@@ -80,7 +80,7 @@ def _make_learned_sort_result(dataset_id="test_ds", media_type="image") -> Datas
     return dr
 
 
-def _make_voting_iterations_df(n_seeds=2, n_steps=10) -> pd.DataFrame:
+def _make_voting_iterations_df(n_seeds=2, n_steps=10, strategy="random") -> pd.DataFrame:
     rows = []
     for seed in range(n_seeds):
         rng = np.random.RandomState(seed)
@@ -94,6 +94,7 @@ def _make_voting_iterations_df(n_seeds=2, n_steps=10) -> pd.DataFrame:
                     "seed": seed,
                     "dataset": "ds1",
                     "category": "alpha",
+                    "strategy": strategy,
                     "t": t,
                     "cost": cost,
                     "fpr": fpr,
@@ -105,7 +106,7 @@ def _make_voting_iterations_df(n_seeds=2, n_steps=10) -> pd.DataFrame:
     # so pyright can't see list[str] satisfies the Axes alias.
     return pd.DataFrame(
         rows,
-        columns=["seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"],  # pyright: ignore[reportArgumentType]
+        columns=["seed", "dataset", "category", "strategy", "t", "cost", "fpr", "fnr", "elapsed_seconds"],  # pyright: ignore[reportArgumentType]
     )
 
 
@@ -251,3 +252,46 @@ class TestPlotVotingIterations:
         for p in paths:
             header = p.read_bytes()[:8]
             assert header[:4] == b"\x89PNG"
+
+
+class TestPlotVotingIterationsFaceting:
+    """When >1 acquisition strategy is present the charts facet by strategy."""
+
+    def _multi_strategy_df(self, strategies=("random", "margin", "entropy")):
+        frames = [_make_voting_iterations_df(n_seeds=2, strategy=s) for s in strategies]
+        return pd.concat(frames, ignore_index=True)
+
+    def test_multiple_strategies_still_two_plots(self, tmp_dir):
+        df = self._multi_strategy_df()
+        paths = plot_voting_iterations(df, output_dir=tmp_dir)
+        assert {p.name for p in paths} == {
+            "voting_iterations_cost.png",
+            "voting_iterations_fpr_fnr.png",
+        }
+        for p in paths:
+            assert p.exists()
+            assert p.read_bytes()[:4] == b"\x89PNG"
+
+    def test_single_strategy_column_renders(self, tmp_dir):
+        """A one-strategy frame renders un-faceted (single-axes) without error."""
+        df = _make_voting_iterations_df(n_seeds=2, strategy="random")
+        paths = plot_voting_iterations(df, output_dir=tmp_dir)
+        assert len(paths) == 2
+        for p in paths:
+            assert p.stat().st_size > 0
+
+    def test_missing_strategy_column_is_backwards_compatible(self, tmp_dir):
+        """A pre-strategy frame (no ``strategy`` column) still renders."""
+        df = _make_voting_iterations_df(n_seeds=2)
+        df = df.drop(columns=["strategy"])
+        paths = plot_voting_iterations(df, output_dir=tmp_dir)
+        assert len(paths) == 2
+        for p in paths:
+            assert p.exists()
+
+    def test_many_strategies_facet(self, tmp_dir):
+        df = self._multi_strategy_df(strategies=("random", "margin", "entropy", "bald", "coreset"))
+        paths = plot_voting_iterations(df, output_dir=tmp_dir)
+        assert len(paths) == 2
+        for p in paths:
+            assert p.read_bytes()[:4] == b"\x89PNG"

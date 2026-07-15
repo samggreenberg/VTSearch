@@ -956,7 +956,8 @@ The discovery and field-declaration scaffolding shared by every plugin family.
 class PluginField:
     """One configurable input for a plugin. key, label, field_type, description,
     accept, options, default, required, placeholder, dynamic_options, depends_on,
-    min, max, step. Validated by the plugin framework at registration time."""
+    allow_free_text, min, max, step. Validated by the plugin framework at
+    registration time."""
 
 class PluginBase:
     """Mixin providing CLI-arg parsing, JSON serialisation, and the `name`,
@@ -1168,8 +1169,8 @@ def list_exporters() -> list[LabelsetExporter]: ...
 #   server_json_file, server_csv_file, webhook, email_smtp, gui (display-only,
 #   hidden_from_picker), holder (scaffold, hidden_from_picker until API client lands).
 # Streaming-capable (export_cli_streaming): server_json_file (NDJSON),
-#   server_csv_file, gui. webhook / email_smtp need the whole payload at once,
-#   so they are not streamable.
+#   server_csv_file, gui (per-hit flush); webhook, email_smtp (batched delivery,
+#   one POST / email per batch_size hits).
 ```
 
 ---

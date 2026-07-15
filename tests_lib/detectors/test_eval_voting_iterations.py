@@ -6,11 +6,11 @@ embeddings so no real model downloads are needed.
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from vtscore.eval.voting_iterations import (
     _good_training_vec,
     _inclusion_weights,
-    _make_vote_sequence,
     _split_media_ids,
     run_voting_iterations_eval,
     simulate_voting_iterations,
@@ -123,25 +123,6 @@ class TestSplitClipIds:
         assert test1 == test2
 
 
-class TestMakeVoteSequence:
-    def test_all_clips_voted(self):
-        medias = _make_separable_clips(n_per_cat=5)
-        sim_ids = list(medias.keys())[:5]
-        rng = np.random.RandomState(42)
-        seq = _make_vote_sequence(sim_ids, medias, "alpha", rng)
-        assert len(seq) == 5
-        assert {cid for cid, _ in seq} == set(sim_ids)
-
-    def test_labels_match_category(self):
-        medias = _make_separable_clips(n_per_cat=5)
-        sim_ids = list(medias.keys())
-        rng = np.random.RandomState(42)
-        seq = _make_vote_sequence(sim_ids, medias, "alpha", rng)
-        for cid, label in seq:
-            expected = "good" if medias[cid]["category"] == "alpha" else "bad"
-            assert label == expected
-
-
 # ------------------------------------------------------------------
 # Unit tests: simulate_voting_iterations
 # ------------------------------------------------------------------
@@ -179,6 +160,7 @@ class TestSimulateVotingIterations:
             "seed",
             "dataset",
             "category",
+            "strategy",
             "t",
             "n_good",
             "n_bad",
@@ -189,6 +171,7 @@ class TestSimulateVotingIterations:
         }
         for row in rows:
             assert set(row.keys()) == expected_keys
+            assert row["strategy"] == "random"
 
     def test_vote_counts_reported(self):
         """Each row carries the good/bad vote counts the model was trained on.
@@ -408,6 +391,7 @@ class TestRunVotingIterationsEval:
             "seed",
             "dataset",
             "category",
+            "strategy",
             "t",
             "n_good",
             "n_bad",
@@ -619,3 +603,131 @@ class TestRegionVotingSimulate:
         )
         assert not df.empty
         assert (df["category"] == "apple").all()
+
+
+# ------------------------------------------------------------------
+# Active-learning strategy axis
+# ------------------------------------------------------------------
+
+_STRATEGIES = [
+    "random",
+    "margin",
+    "entropy",
+    "bald",
+    "ensemble_std",
+    "eig",
+    "coreset",
+    "balanced",
+    "density_margin",
+    "density_entropy",
+]
+
+
+class TestStrategyAxis:
+    """``strategy=`` / ``strategies=`` / ``max_steps=`` axes and the result column."""
+
+    def test_default_strategy_is_random(self):
+        medias = _make_separable_clips(n_per_cat=6)
+        rows = simulate_voting_iterations(medias, "alpha", seed=42, calibrate_count=1)
+        assert rows
+        assert all(r["strategy"] == "random" for r in rows)
+
+    @pytest.mark.parametrize("strategy", _STRATEGIES)
+    def test_every_strategy_produces_finite_rows(self, strategy):
+        medias = _make_separable_clips(n_per_cat=8, dim=12)
+        rows = simulate_voting_iterations(
+            medias,
+            "alpha",
+            seed=3,
+            strategy=strategy,
+            calibrate_count=1,
+            max_steps=8,
+            atlas_min_node_size=3,
+        )
+        assert rows  # every sampler drives the loop end-to-end
+        for row in rows:
+            assert row["strategy"] == strategy
+            assert np.isfinite(row["cost"])
+            assert np.isfinite(row["fpr"])
+            assert np.isfinite(row["fnr"])
+            # One vote per step, so the counts still sum to t.
+            assert row["n_good"] + row["n_bad"] == row["t"]
+
+    def test_max_steps_caps_votes(self):
+        medias = _make_separable_clips(n_per_cat=20)
+        rows = simulate_voting_iterations(medias, "alpha", seed=1, strategy="margin", calibrate_count=1, max_steps=5)
+        assert rows
+        # No row can reflect more than max_steps votes cast.
+        assert max(r["t"] for r in rows) <= 5
+
+    def test_strategy_determinism(self):
+        medias = _make_separable_clips(n_per_cat=10)
+        a = simulate_voting_iterations(medias, "alpha", seed=7, strategy="entropy", calibrate_count=1, max_steps=8)
+        b = simulate_voting_iterations(medias, "alpha", seed=7, strategy="entropy", calibrate_count=1, max_steps=8)
+        assert [r["t"] for r in a] == [r["t"] for r in b]
+        assert [r["cost"] for r in a] == [r["cost"] for r in b]
+
+    def test_unknown_strategy_raises(self):
+        medias = _make_separable_clips(n_per_cat=6)
+        with pytest.raises(KeyError):
+            simulate_voting_iterations(medias, "alpha", seed=1, strategy="does_not_exist", calibrate_count=1)
+
+    def test_run_eval_strategies_axis(self):
+        medias = _make_separable_clips(n_per_cat=8)
+        df = run_voting_iterations_eval(
+            dataset_clips={"ds1": medias},
+            seeds=[1, 2],
+            categories={"ds1": ["alpha"]},
+            strategies=["random", "margin"],
+            calibrate_count=1,
+            max_steps=8,
+        )
+        assert set(df["strategy"].unique()) == {"random", "margin"}
+        # seed x strategy cross-product all present.
+        combos = df.groupby(["seed", "strategy"]).ngroups
+        assert combos == 4
+
+    def test_run_eval_defaults_to_random(self):
+        medias = _make_separable_clips(n_per_cat=6)
+        df = run_voting_iterations_eval(
+            dataset_clips={"ds1": medias},
+            seeds=[1],
+            categories={"ds1": ["alpha"]},
+            calibrate_count=1,
+        )
+        assert set(df["strategy"].unique()) == {"random"}
+
+
+class TestBalancedStrategy:
+    """The oracle ``balanced`` strategy keeps the running Good/Bad counts even."""
+
+    def test_running_counts_stay_balanced(self):
+        # Every scored step's good/bad counts never drift more than one apart,
+        # and the first trainable step is a 1-vs-1 model at t=2.
+        medias = _make_separable_clips(n_per_cat=8)
+        rows = simulate_voting_iterations(medias, "alpha", seed=0, strategy="balanced", calibrate_count=1)
+        assert rows
+        assert rows[0]["t"] == 2
+        assert rows[0]["n_good"] == 1
+        assert rows[0]["n_bad"] == 1
+        for row in rows:
+            assert abs(row["n_good"] - row["n_bad"]) <= 1
+
+    def test_handles_single_class_pool(self):
+        # All 'alpha' → the held-out split has no negatives, so the run returns
+        # no rows; the balanced selector must reach that early-return without
+        # tripping on an all-one-class pool.
+        medias = {cid: m for cid, m in _make_separable_clips(n_per_cat=6).items() if m["category"] == "alpha"}
+        rows = simulate_voting_iterations(medias, "alpha", seed=0, strategy="balanced", calibrate_count=1)
+        assert rows == []
+
+
+class TestEnsembleStdStrategy:
+    """The ``ensemble_std`` deep-ensemble sampler is deterministic per seed."""
+
+    def test_ensemble_std_deterministic(self):
+        medias = _make_separable_clips(n_per_cat=8)
+        a = simulate_voting_iterations(medias, "alpha", seed=1, strategy="ensemble_std", max_steps=8, calibrate_count=1)
+        b = simulate_voting_iterations(medias, "alpha", seed=1, strategy="ensemble_std", max_steps=8, calibrate_count=1)
+        assert [r["t"] for r in a] == [r["t"] for r in b]
+        assert [r["cost"] for r in a] == [r["cost"] for r in b]

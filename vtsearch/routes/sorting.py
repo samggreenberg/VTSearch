@@ -73,7 +73,7 @@ from vtsearch.state import (
     snapshot_medias,
     vote_region_boxes,
 )
-from vtscore.concurrency.progress import update_sort_progress
+from vtscore.concurrency.progress import sort_progress, update_sort_progress
 
 if TYPE_CHECKING:
     from vtscore.media.embedder import MediaEmbedder
@@ -84,8 +84,26 @@ sorting_bp = Blueprint(
     description="Text / example / learned sort, votes, inclusion, safe-thresholds, coverage atlas.",
 )
 
+# Text-sort proceeds in three phases: load the embedding model, embed the text
+# query, then score every media by cosine similarity.  Reported as
+# ``step``/``total_steps`` (not ``current``/``total``) so the sort channel gets
+# the unified whole-job bar and an overall ETA, with the model load surfaced as
+# real sub-progress within step 1.
+_SORT_STEPS = 3
+# The model load dominates wall-clock on a cold start (seconds to pull CLAP /
+# SigLIP weights); embedding one short query is trivial; scoring scales with the
+# dataset but is vectorised.  Paces the unified bar; the overall ETA
+# self-corrects from measured elapsed-vs-fraction regardless of these weights.
+#                     load  embed  score
+_SORT_STEP_WEIGHTS = [0.75, 0.05, 0.20]
 
-def _cosine_sort(query_vec, *, role: str = "score"):
+
+def _sort_idle() -> None:
+    """Reset the sort progress bar to idle, clearing the whole-job step frame."""
+    update_sort_progress("idle", "", step=None, total_steps=None)
+
+
+def _cosine_sort(query_vec, *, role: str = "score", snap=None):
     """Sort all loaded medias by cosine similarity to *query_vec*.
 
     Returns ``(results, threshold)`` where *results* is a list of
@@ -104,6 +122,10 @@ def _cosine_sort(query_vec, *, role: str = "score"):
     take a fast vectorised numpy path with no per-result box.
 
     Both paths live in :mod:`vtscore.training.region_similarity`.
+
+    *snap* lets the caller thread in a medias snapshot it already took, so a
+    single handler doesn't copy the full medias dict under ``_state_lock`` more
+    than once per request; when ``None`` a fresh snapshot is taken.
     """
     from vtscore.state.core import get_active_context  # noqa: PLC0415
     from vtscore.training.region_similarity import cosine_sort_with_boxes  # noqa: PLC0415
@@ -114,7 +136,8 @@ def _cosine_sort(query_vec, *, role: str = "score"):
     # valid only when the query was scored against that same embedder.
     region_aware = embedder_name is not None and embedder_name == ctx.patch_embedder
 
-    snap = snapshot_medias()
+    if snap is None:
+        snap = snapshot_medias()
     results, sims_list = cosine_sort_with_boxes(snap, query_vec, embedder_name, region_aware=region_aware)
     threshold = calculate_gmm_threshold(sims_list)
     return results, round(threshold, 4)
@@ -123,12 +146,18 @@ def _cosine_sort(query_vec, *, role: str = "score"):
 _embedder_load_lock = threading.Lock()
 
 
-def _get_embedder_for_loaded_data():
-    """Return the appropriate embedder for the currently loaded dataset."""
-    return get_embedder_for_medias(snapshot_medias())
+def _get_embedder_for_loaded_data(snap=None):
+    """Return the appropriate embedder for the currently loaded dataset.
+
+    *snap* threads in an already-taken medias snapshot to avoid re-copying the
+    medias dict under ``_state_lock``; when ``None`` a fresh snapshot is taken.
+    """
+    if snap is None:
+        snap = snapshot_medias()
+    return get_embedder_for_medias(snap)
 
 
-def _score_embedder_for_loaded_data() -> tuple["MediaEmbedder | None", str | None]:
+def _score_embedder_for_loaded_data(snap=None) -> tuple["MediaEmbedder | None", str | None]:
     """Return ``(embedder, embedder_name)`` for the dataset's score embedder.
 
     The score embedder is the patch slot if bound, else the text slot (the v3
@@ -148,18 +177,23 @@ def _score_embedder_for_loaded_data() -> tuple["MediaEmbedder | None", str | Non
             return get_embedder(score_name), score_name
         except KeyError:
             pass
-    return _get_embedder_for_loaded_data(), score_name
+    return _get_embedder_for_loaded_data(snap), score_name
 
 
-def _load_embedder_with_progress(media_type, total_steps):
-    """Load the embedding model, forwarding progress to the sort progress bar.
+def _load_embedder_with_progress(snap=None):
+    """Load the embedding model, forwarding its load progress to step 1 of the bar.
 
     If the model is already loaded this is a no-op.  A lock serialises
     concurrent callers so that only one request touches ``_on_progress``
     at a time, preventing the save/restore from trampling another
-    request's callback.
+    request's callback.  The model-load ``cur``/``tot`` is reported as the
+    within-step progress of step 1, so the unified bar animates during the
+    load instead of parking at a step floor.
+
+    *snap* threads in an already-taken medias snapshot to avoid re-copying the
+    medias dict under ``_state_lock``; when ``None`` a fresh snapshot is taken.
     """
-    emb = _get_embedder_for_loaded_data()
+    emb = _get_embedder_for_loaded_data(snap)
     if emb is None:
         return
 
@@ -167,9 +201,11 @@ def _load_embedder_with_progress(media_type, total_steps):
         if getattr(emb, "_model", None) is not None:
             return
 
-        update_sort_progress("sorting", "Loading embedder…", 0, total_steps)
+        update_sort_progress("sorting", "Loading embedder…", 0, 0, step=1, total_steps=_SORT_STEPS)
         original_cb = emb._on_progress
-        emb._on_progress = lambda status, msg, cur, tot: update_sort_progress("sorting", msg, cur, tot)
+        emb._on_progress = lambda status, msg, cur, tot: update_sort_progress(
+            "sorting", msg, cur, tot, step=1, total_steps=_SORT_STEPS
+        )
         try:
             emb.load_models()
         finally:
@@ -185,17 +221,16 @@ def sort_clips(body: dict):
     """Return medias sorted by cosine similarity to a text query."""
     text = body.get("text", "").strip()
     if not text:
-        update_sort_progress("idle")
+        _sort_idle()
         abort(400, message="text is required")
 
     snap = snapshot_medias()
     if not snap:
-        update_sort_progress("idle")
+        _sort_idle()
         abort(400, message="No medias loaded")
 
     first = next(iter(snap.values()))
     media_type = first.get("media_type", "audio")
-    total_steps = 3  # load embedder, embed query, compute similarities
 
     # Resolve the dataset's bound text embedder (v3 routing table). Reject the
     # request up-front when no text slot is bound (a vision-only dataset, e.g.
@@ -207,7 +242,7 @@ def sort_clips(body: dict):
     ctx = get_active_context()
     embedder_name = ctx.routed_embedder("text")
     if embedder_name is None:
-        update_sort_progress("idle")
+        _sort_idle()
         primary = first.get("embedder", "") or "this dataset's embedder"
         abort(
             400,
@@ -216,21 +251,22 @@ def sort_clips(body: dict):
             ),
         )
 
+    sort_progress.set_step_weights(_SORT_STEP_WEIGHTS)
     try:
-        _load_embedder_with_progress(media_type, total_steps)
-        update_sort_progress("sorting", "Embedding text query…", 1, total_steps)
+        _load_embedder_with_progress(snap)
+        update_sort_progress("sorting", "Embedding text query…", 0, 0, step=2, total_steps=_SORT_STEPS)
 
         from vtsearch import settings
 
         enrich = settings.get_enrich_descriptions()
         text_vec = embed_text_query(text, media_type, enrich=enrich, embedder_name=embedder_name)
         if text_vec is None:
-            update_sort_progress("idle")
+            _sort_idle()
             abort(500, message=f"Could not embed text for media type {media_type}")
 
-        update_sort_progress("sorting", "Computing similarities…", 2, total_steps)
-        results, threshold = _cosine_sort(text_vec, role="text")
-        update_sort_progress("idle")
+        update_sort_progress("sorting", "Computing similarities…", 0, 0, step=3, total_steps=_SORT_STEPS)
+        results, threshold = _cosine_sort(text_vec, role="text", snap=snap)
+        _sort_idle()
         return {"results": results, "threshold": threshold}
     except Exception as exc:
         from werkzeug.exceptions import HTTPException
@@ -241,7 +277,7 @@ def sort_clips(body: dict):
             # in a 500.
             raise
         logging.getLogger(__name__).exception("text sort failed")
-        update_sort_progress("idle")
+        _sort_idle()
         abort(500, message=f"Text sort failed: {format_exception_detail(exc)}")
 
 
@@ -633,7 +669,7 @@ def _example_sort_from_paths(file_paths: list[Path]) -> tuple:
 
     # Embed the examples with the dataset's score embedder so the query shares
     # the space the haystack is scored against.
-    emb, _score_name = _score_embedder_for_loaded_data()
+    emb, _score_name = _score_embedder_for_loaded_data(snap)
     if emb is None:
         raise ValueError("No embedder available for loaded dataset")
     from vtscore.media.embedder import media_from_path  # noqa: PLC0415
@@ -652,7 +688,7 @@ def _example_sort_from_paths(file_paths: list[Path]) -> tuple:
         normed = [v / n if (n := float(np.linalg.norm(v))) > 0 else v for v in embeddings]
         query_vec = np.mean(np.stack(normed), axis=0)
 
-    results, threshold = _cosine_sort(query_vec)
+    results, threshold = _cosine_sort(query_vec, snap=snap)
 
     # Stage-2 structural re-rank (a no-op for non-structural datasets): for a
     # SIFT/VLAD dataset, geometrically verify the VLAD shortlist against the

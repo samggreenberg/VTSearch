@@ -56,7 +56,7 @@ internals**, **Dev tooling & docs**.
   `vulture: <N> findings triaged.`
 
 Use the summary verbatim as the PR body (step 6) and also output it in chat,
-converted to plaintext.
+written in plaintext, so the MD formatting can be copied.
 
 ## 4. Rebuild the punch-card graphic
 

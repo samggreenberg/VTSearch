@@ -259,6 +259,30 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.importersForActiveTab.length).toBe(0);
   });
 
+  it('should not leak a stale generic form into an empty category tab', async () => {
+    flushImporters();
+    // Open a generic-form importer so the (always-mounted) generic form
+    // picker holds a form for it.
+    component.selectImporter(genericForm());
+    httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    await settleZoneless(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const formPicker = el.querySelector('vt-generic-form-picker') as HTMLElement;
+    expect((formPicker as HTMLElement & { hidden: boolean }).hidden).toBe(false);
+
+    // Switch to the empty Services category: nothing is selected, so the
+    // generic form picker (which still carries the previous importer's form)
+    // must be hidden rather than leaking that stale form below the empty
+    // "No importers in this category." message.
+    component.selectImporterTab('services');
+    expect(component.selectedImporter()).toBeNull();
+    await settleZoneless(fixture);
+    expect((formPicker as HTMLElement & { hidden: boolean }).hidden).toBe(true);
+    const emptyState = el.querySelector('.empty-state--inline');
+    expect((emptyState?.textContent || '').trim()).toBe('No importers in this category.');
+  });
+
   describe('solo media-type filtering', () => {
     // A type-scoped importer (only produces image/video) sitting in its own
     // category, plus the always-agnostic Local folder/files pair.

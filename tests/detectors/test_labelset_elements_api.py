@@ -180,6 +180,64 @@ class TestLabelsDetail:
 
 
 # ---------------------------------------------------------------------------
+# resolve_current_dataset_cid: threaded lookups short-circuit the rebuild
+# ---------------------------------------------------------------------------
+
+
+class TestResolveWithThreadedLookups:
+    """`resolve_current_dataset_cid` accepts a pre-built ``build_media_lookup``
+    triple so loop callers resolve every element against one set of tables
+    instead of rebuilding them (O(labels × N) → O(N + labels))."""
+
+    def _elem(self):
+        from vtscore.datasets.labelset import LabeledElement
+
+        return LabeledElement.from_dict(
+            {
+                "md5": "a1" * 16,
+                "label": "good",
+                "origin": {"importer": "test", "params": {}},
+                "origin_name": "alpha.wav",
+                "filename": "alpha.wav",
+            }
+        )
+
+    def test_passing_lookups_skips_snapshot_and_rebuild(self, monkeypatch):
+        """When ``lookups`` is passed, neither ``snapshot_medias`` nor
+        ``build_media_lookup`` runs; resolution uses the supplied tables."""
+        import vtscore.state as state_mod
+        from vtscore.detectors.labelset_elements import resolve_current_dataset_cid
+        from vtscore.state.media_lookup import build_media_lookup
+
+        media = {
+            7: {
+                "id": 7,
+                "md5": "a1" * 16,
+                "origin": {"importer": "test", "params": {}},
+                "origin_name": "alpha.wav",
+            }
+        }
+        lookups = build_media_lookup(media)
+
+        def _boom(*args, **kwargs):
+            raise AssertionError("per-call rebuild must be short-circuited when lookups are provided")
+
+        monkeypatch.setattr(state_mod, "snapshot_medias", _boom)
+        monkeypatch.setattr(state_mod, "build_media_lookup", _boom)
+
+        assert resolve_current_dataset_cid(self._elem(), lookups) == 7
+
+    def test_no_lookups_falls_back_to_snapshot_build(self, monkeypatch):
+        """Without ``lookups`` the single-element path builds tables from a
+        fresh snapshot; an empty snapshot resolves to ``None``."""
+        import vtscore.state as state_mod
+        from vtscore.detectors.labelset_elements import resolve_current_dataset_cid
+
+        monkeypatch.setattr(state_mod, "snapshot_medias", lambda: {})
+        assert resolve_current_dataset_cid(self._elem()) is None
+
+
+# ---------------------------------------------------------------------------
 # POST /api/detectors/<name>/labels/<id>/vote
 # ---------------------------------------------------------------------------
 

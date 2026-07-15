@@ -232,6 +232,14 @@ def train_model(
     from contextlib import nullcontext  # noqa: PLC0415
 
     use_amp = device.type == "cuda"
+    # Reading ``weighted_loss.item()`` forces a host-device sync that stalls the
+    # CUDA stream every epoch. On GPU, only sync (and run the early-stop check)
+    # every few epochs; when no improvement is seen at a checkpoint we advance
+    # the patience counter by the whole interval, so early-stop still fires at
+    # roughly ``patience`` epochs. On CPU/MPS the read is free, so we keep the
+    # per-epoch cadence and the CPU path stays bit-for-bit as before (the seeded
+    # early-stop test exercises exactly this path).
+    loss_check_interval = 5 if device.type == "cuda" else 1
     # Prefer the modern ``torch.amp.GradScaler("cuda", ...)`` API; fall back
     # to the legacy ``torch.cuda.amp.GradScaler`` on torch <2.3.
     grad_scaler_cls = getattr(torch.amp, "GradScaler", None)
@@ -242,7 +250,7 @@ def train_model(
     autocast_ctx = torch.autocast(device_type="cuda") if use_amp else nullcontext()
     with torch.random.fork_rng(), torch.enable_grad():
         torch.manual_seed(seed)
-        for _ in range(epochs):
+        for epoch in range(epochs):
             # Honour a cancel of the background job that owns this thread at
             # the epoch boundary; a no-op outside a job (see
             # ``async_jobs.check_job_cancelled``).
@@ -255,12 +263,14 @@ def train_model(
             scaler.scale(weighted_loss).backward()
             scaler.step(optimizer)
             scaler.update()
+            if (epoch + 1) % loss_check_interval != 0:
+                continue
             cur = weighted_loss.item()
             if cur < best_loss - min_delta:
                 best_loss = cur
                 epochs_since_improve = 0
             else:
-                epochs_since_improve += 1
+                epochs_since_improve += loss_check_interval
                 if patience > 0 and epochs_since_improve >= patience:
                     break
 

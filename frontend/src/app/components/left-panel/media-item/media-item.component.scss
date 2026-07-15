@@ -19,7 +19,13 @@
 
   &.active {
     background: var(--accent-highlight-bg);
-    border-left: 2px solid var(--accent);
+    // Selection lives in its own channel: an inset accent ring layered on top
+    // of whatever vote border is present, so the feedback is identical on good,
+    // bad, and non-voted items (#2350). The old ``border-left`` trick reused the
+    // border channel and was a silent no-op on "good" items, whose border is
+    // already fully solid. ``box-shadow`` also avoids the reflow the left edge
+    // caused on non-voted items.
+    box-shadow: inset 0 0 0 2px var(--accent);
   }
 
   &.labeled-good {
@@ -32,14 +38,6 @@
     background: var(--bad-bg);
     border: 2px dashed var(--color-bad);
     padding: var(--space-2xs);
-  }
-
-  &.active.labeled-good {
-    border-left: 2px solid var(--color-good);
-  }
-
-  &.active.labeled-bad {
-    border-left: 2px solid var(--color-bad);
   }
 
   &:focus-visible {

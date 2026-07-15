@@ -126,27 +126,39 @@ describe('ProgressBarComponent', () => {
     });
   });
 
-  describe('fill override', () => {
-    it('resolvedFill falls back to the gradient when no override is set', () => {
-      component.value = 50;
-      component.max = 100;
-      expect(component.resolvedFill).toBe(component.fillColor);
+  describe('polarity: high-bad', () => {
+    beforeEach(() => {
+      component.polarity = 'high-bad';
     });
 
-    it('resolvedFill uses the override when set, ignoring the gradient', () => {
-      component.value = 50;
+    it('should be greenest at 0% (empty is good)', () => {
+      component.value = 0;
       component.max = 100;
-      component.fill = 'var(--accent)';
-      expect(component.resolvedFill).toBe('var(--accent)');
+      expect(component.fillColor).toBe('color-mix(in srgb, var(--color-good) 100%, var(--text-warning))');
     });
 
-    it('paints the override color as the background style', async () => {
-      fixture.componentRef.setInput('value', 50);
-      fixture.componentRef.setInput('max', 100);
-      fixture.componentRef.setInput('fill', 'var(--accent)');
-      await settleZoneless(fixture);
-      const fill = fixture.nativeElement.querySelector('.progress-fill') as HTMLElement;
-      expect(fill.style.background).toBe('var(--accent)');
+    it('should be yellowest at 50%', () => {
+      component.value = 50;
+      component.max = 100;
+      expect(component.fillColor).toBe('color-mix(in srgb, var(--text-warning) 100%, var(--color-bad))');
+    });
+
+    it('should be reddest at 100% (full is bad)', () => {
+      component.value = 100;
+      component.max = 100;
+      expect(component.fillColor).toBe('color-mix(in srgb, var(--text-warning) 0%, var(--color-bad))');
+    });
+
+    it('mirrors the high-good gradient', () => {
+      component.value = 25;
+      component.max = 100;
+      // 25% under high-bad colors as 75% would under high-good.
+      expect(component.fillColor).toBe('color-mix(in srgb, var(--color-good) 50%, var(--text-warning))');
+    });
+
+    it('should be null while indeterminate', () => {
+      component.indeterminate = true;
+      expect(component.fillColor).toBeNull();
     });
   });
 });

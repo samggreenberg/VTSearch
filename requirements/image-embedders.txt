@@ -3,6 +3,8 @@
 # Image-only deployment that ships every supported image embedder:
 #   * SigLIP   (google/siglip-base-patch16-224)         - default, text-capable, ungated
 #   * SigLIP 2 (google/siglip2-base-patch16-224)        - text-capable, ungated
+#   * SigLIP-L (open_clip ViT-SO400M-14-SigLIP-384)     - text-capable, ungated, 1152-d
+
 #   * CLIP     (openai/clip-vit-base-patch32)           - text-capable, ungated
 #   * DINOv2   (facebook/dinov2-base)                   - image-only, ungated
 #   * DINOv3   (facebook/dinov3-vitb16-pretrain-lvd1689m) - image-only, gated
@@ -57,3 +59,11 @@ tokenizers
 # trust_remote_code=True. einops is the only extra runtime dep its
 # custom code typically pulls in.
 einops
+
+# ── SigLIP-L (open_clip ViT-SO400M-14-SigLIP-384) ────────────────────
+# Loaded through open_clip (not transformers) so its 1152-d vectors match
+# galleries embedded by open_clip itself. timm / ftfy are open_clip's own
+# runtime deps.
+open_clip_torch
+timm
+ftfy

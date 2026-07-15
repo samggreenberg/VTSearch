@@ -6,15 +6,23 @@ import { BrowseSelectionService } from '../../services/browse-selection.service'
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
 import { NoFocusStealDirective } from '../../directives/no-focus-steal.directive';
 import { IconComponent } from '../icon/icon.component';
 import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
+import { applyClipWindow, clearClipWindow } from '../../utils/clip-window';
+import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
 
 /** Ordering for the selected-item list. No detector confidence in browse, so
  *  the choices are recency (selection order), name, and id. */
 type SelectionSortMode = 'time-desc' | 'time-asc' | 'name-asc' | 'name-desc' | 'id-asc';
+
+/** How long (ms) the cursor must rest on an audio entry before its clip starts
+ *  auditioning, so sweeping down a large multi-select list doesn't fire a burst
+ *  of plays. Matches the canvas hover-preview's dwell (`AUDIO_DWELL_MS`). */
+const AUDIO_DWELL_MS = 200;
 
 interface SelectionEntry {
   id: number;
@@ -50,6 +58,7 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   private metadataCache = inject(MediaMetadataCacheService);
   private activeContext = inject(ActiveContextService);
   private settingsState = inject(SettingsStateService);
+  private mediaTypeCaps = inject(MediaTypeCapabilityService);
 
   /** Active media type, used to resolve the per-type view-mode + size prefs. */
   readonly mediaType = input('');
@@ -77,6 +86,15 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
    */
   readonly selectAllInView = output<void>();
 
+  /** Preview-audio volume (0–1), driven by the Browse toolbar's volume control,
+   *  so hover audition here stays in lockstep with the canvas + bin-popup. */
+  readonly volume = input(1);
+
+  /** The clip now auditioning from a hovered audio entry (for the top-left
+   *  now-playing indicator), or ``null`` once the hover clears — the same shared
+   *  output the canvas and bin-popup drive. */
+  readonly nowPlaying = output<NowPlaying | null>();
+
   // These are template-bound and written from the selection-refresh and
   // settings `effect()`s and the metadata-cache `version$` subscribe — none of
   // which schedule CD for a plain field under zoneless — so they are signals.
@@ -91,7 +109,31 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   private readonly thumbnailFailedUrls = new Set<string>();
   private readonly subs: Subscription[] = [];
 
+  // --- Audio audition state machine (mirrors browse-hover-preview) -----------
+  /** Never mounted in the DOM — audio here is heard, not shown; the top-left
+   *  now-playing indicator is the only visual feedback that it's playing. */
+  private readonly audioEl = new Audio();
+  /** Waveform PNG of the clip currently auditioning, kept so the buffering
+   *  listeners can re-emit the now-playing state without recomputing it. */
+  private nowPlayingWaveUrl = '';
+  private dwellTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingMediaId: number | null = null;
+  private playingMediaId: number | null = null;
+
   constructor() {
+    // Keep the live element's volume in sync when the toolbar slider moves
+    // mid-playback; starting a clip also seeds it.
+    effect(() => {
+      this.audioEl.volume = this.volume();
+    });
+    // Buffering feedback: while the clip is fetching/decoding (or stalls to
+    // rebuffer), the widget shows a spinner; once it's actually sounding, the
+    // spinner clears. Listeners are attached once to the reused element and
+    // guarded by ``playingMediaId`` so stray events after a stop are ignored.
+    this.audioEl.addEventListener('waiting', () => this.emitNowPlaying(true));
+    this.audioEl.addEventListener('playing', () => this.emitNowPlaying(false));
+    this.audioEl.addEventListener('canplay', () => this.emitNowPlaying(false));
+
     effect(() => {
       const settings = this.settingsState.settingsSignal();
       if (!settings) return;
@@ -122,6 +164,8 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     for (const sub of this.subs) sub.unsubscribe();
+    this.cancelDwell();
+    this.stopAudio();
   }
 
   private refreshSelection(): void {
@@ -217,13 +261,95 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
 
   /** Clicking a selected item drops it from the selection. */
   onEntryClick(id: number): void {
+    // The entry is about to leave the list (its element unmounts, so no
+    // mouseleave will fire): silence it now if it's the one auditioning.
+    if (this.playingMediaId === id || this.pendingMediaId === id) this.stopAudio();
     this.selection.remove(id);
   }
 
   onEntryKeydown(event: KeyboardEvent, id: number): void {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      this.selection.remove(id);
+      this.onEntryClick(id);
+    }
+  }
+
+  // --- Audio audition on hover (audio only) ----------------------------------
+
+  /**
+   * Cursor entered an entry: for audio datasets, arm the dwell debounce so the
+   * clip starts auditioning once the cursor settles, matching the canvas
+   * hover-preview. A no-op for every other media type — Browse only plays sound
+   * for audio.
+   */
+  onEntryEnter(id: number): void {
+    if (this.mediaType() !== 'audio') return;
+    this.scheduleAudio(id);
+  }
+
+  /** Cursor left an entry: cancel a pending audition and stop anything playing.
+   *  There is no pane to bridge the cursor onto, so hover-off silences at once
+   *  (the same as the canvas path). */
+  onEntryLeave(): void {
+    this.cancelDwell();
+    this.stopAudio();
+  }
+
+  private scheduleAudio(mediaId: number): void {
+    // Already auditioning this exact clip: keep it (don't restart).
+    if (this.playingMediaId === mediaId) return;
+
+    // Debounce: (re)arm the dwell so a sweep down the list keeps resetting it and
+    // only the entry the cursor settles on actually plays.
+    this.pendingMediaId = mediaId;
+    this.cancelDwell();
+    this.dwellTimer = setTimeout(() => {
+      this.dwellTimer = null;
+      const id = this.pendingMediaId;
+      this.pendingMediaId = null;
+      if (id != null) this.playAudio(id);
+    }, AUDIO_DWELL_MS);
+  }
+
+  private playAudio(mediaId: number): void {
+    this.playingMediaId = mediaId;
+    const waveUrl = this.activeContext.mediaUrl(`/api/medias/${mediaId}/thumbnail`);
+    this.nowPlayingWaveUrl = waveUrl;
+    // Hydrate clip extents (clip_start/clip_end) so windowed clips loop within
+    // their window; applyClipWindow reads them lazily as they land.
+    this.metadataCache.ensureLoaded([mediaId]);
+    this.audioEl.volume = this.volume();
+    applyClipWindow(this.audioEl, () => this.metadataCache.get(mediaId));
+    this.audioEl.src = this.activeContext.mediaUrl(`/api/medias/${mediaId}/audio`);
+    this.audioEl.load();
+    this.audioEl.play().catch(() => {});
+    // Starts loading: show the spinner until a ``playing``/``canplay`` event
+    // (wired in the constructor) clears it.
+    this.nowPlaying.emit({ mediaId, waveUrl, loading: true });
+  }
+
+  /** Re-emit the now-playing state with a fresh ``loading`` flag, from the
+   *  buffering listeners. A no-op once nothing is auditioning, so events that
+   *  fire after a stop don't resurrect the widget. */
+  private emitNowPlaying(loading: boolean): void {
+    if (this.playingMediaId == null) return;
+    this.nowPlaying.emit({ mediaId: this.playingMediaId, waveUrl: this.nowPlayingWaveUrl, loading });
+  }
+
+  private stopAudio(): void {
+    this.pendingMediaId = null;
+    if (this.playingMediaId == null) return;
+    this.playingMediaId = null;
+    clearClipWindow(this.audioEl);
+    this.audioEl.pause();
+    this.audioEl.currentTime = 0;
+    this.nowPlaying.emit(null);
+  }
+
+  private cancelDwell(): void {
+    if (this.dwellTimer) {
+      clearTimeout(this.dwellTimer);
+      this.dwellTimer = null;
     }
   }
 
@@ -233,13 +359,7 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
     const url = this.thumbnailUrl(id);
     if (url && this.thumbnailFailedUrls.has(url)) return false;
     const media = this.metadataCache.get(id);
-    return (
-      !!media &&
-      (media.media_type === 'image' ||
-        media.media_type === 'video' ||
-        media.media_type === 'document' ||
-        media.media_type === 'audio')
-    );
+    return !!media && this.mediaTypeCaps.usesThumbnails(media.media_type);
   }
 
   thumbnailUrl(id: number): string {

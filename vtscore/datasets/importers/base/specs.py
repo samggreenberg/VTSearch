@@ -18,7 +18,25 @@ import json
 from dataclasses import dataclass, field as dc_field
 from typing import Any
 
-__all__ = ["SourceSpec", "PickerView"]
+__all__ = ["SourceSpec", "PickerView", "MissingMediaTypeError"]
+
+
+class MissingMediaTypeError(ValueError):
+    """The import declares no output ``media_type`` field.
+
+    Distinct from the other :class:`ValueError`\\ s raised while parsing
+    ``source_specs`` (bad JSON, unknown source_type/converter, mismatched
+    converter, bad params), which all signal genuinely *invalid* user input.
+    This one signals the *legitimate* "bare service importer" case, where
+    :meth:`DatasetImporter.run` should fall through to the per-record
+    (``list_records`` / ``fetch_record``) path.  ``run`` catches only this
+    subtype so real validation errors propagate to the user with their
+    original message instead of being masked by a confusing
+    ``NotImplementedError`` from the fallback path.
+
+    It remains a :class:`ValueError` so existing ``except ValueError``
+    validation call sites keep treating it as one.
+    """
 
 
 @dataclass
@@ -81,7 +99,7 @@ def _parse_multi_media_specs(raw: Any, output_type: str) -> list[SourceSpec]:
         specs_raw = list(raw)
 
     if not output_type:
-        raise ValueError("import requires a 'media_type' (output) field")
+        raise MissingMediaTypeError("import requires a 'media_type' (output) field")
 
     if not specs_raw:
         specs_raw = [{"source_type": output_type, "converter": None, "params": {}}]

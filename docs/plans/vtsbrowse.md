@@ -94,9 +94,7 @@ Pieces of the live feature left open, to pick up alongside the follow-ups above:
 - **Bin-popup ordering** — true 1-D-UMAP member ordering (currently a Hilbert
   order over the 2-D coords) would need a second fit + a persisted `order` field
   on `Projection`.
-- [ ] #2403 — Browse bin-popup: large-preview path for document media
 - [ ] #2402 — Browse: re-centre a bin's representative after a lopsided partial removal
-- [ ] #2401 — Browse canvas: fill black border falloff on zoom-out past overscan/uncached tiles
 
 ## Design spec (living)
 

@@ -120,7 +120,7 @@
   </vt-source-picker>
 
   <vt-generic-form-picker
-    [hidden]="activePickerView === 'demo' || activePickerView === 'local_folder' || activePickerView === 'local_files' || activePickerView === 'server_folder'"
+    [hidden]="!selectedImporter() || activePickerView === 'demo' || activePickerView === 'local_folder' || activePickerView === 'local_files' || activePickerView === 'server_folder'"
     [importers]="importers()"
     [mediaTypes]="mediaTypes()"
     [guessedMediaType]="guessedMediaType"

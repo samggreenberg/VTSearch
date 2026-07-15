@@ -7,7 +7,9 @@ import pytest
 
 from vtscore.eval.label_curve import (
     TRAINERS,
+    _as_scores,
     _auroc,
+    _auroc_std_err,
     _average_precision,
     _best_f1,
     _brier,
@@ -93,6 +95,37 @@ class TestMetricHelpers:
         scores = np.array([0.9, 0.6, 0.4, 0.1])
         labels = np.array([1, 1, 0, 0])
         assert _best_f1(scores, labels) == pytest.approx(1.0)
+
+    def test_auroc_std_err_finite_and_nonneg(self):
+        # Non-degenerate AUROC → a finite, non-negative Hanley-McNeil SE.
+        scores = np.array([0.9, 0.7, 0.6, 0.3, 0.2, 0.1])
+        labels = np.array([1, 1, 0, 1, 0, 0])
+        auroc = _auroc(scores, labels)
+        se = _auroc_std_err(scores, labels, auroc)
+        assert np.isfinite(se)
+        assert se >= 0.0
+
+    def test_auroc_std_err_zero_for_perfect_separation(self):
+        # A=1.0 makes every variance term vanish → SE == 0.
+        scores = np.array([0.9, 0.8, 0.2, 0.1])
+        labels = np.array([1, 1, 0, 0])
+        assert _auroc_std_err(scores, labels, 1.0) == pytest.approx(0.0)
+
+    def test_auroc_std_err_nan_when_single_class(self):
+        scores = np.array([0.9, 0.8, 0.7])
+        labels = np.array([1, 1, 1])
+        assert np.isnan(_auroc_std_err(scores, labels, float("nan")))
+
+
+class TestAsScores:
+    def test_passes_through_plain_array(self):
+        arr = np.array([0.1, 0.9, 0.5])
+        np.testing.assert_array_equal(_as_scores(arr), arr)
+
+    def test_extracts_scores_from_tuple(self):
+        scores = np.array([0.1, 0.9])
+        std = np.array([0.01, 0.02])
+        np.testing.assert_array_equal(_as_scores((scores, std)), scores)
 
 
 class TestSplitPool:
@@ -196,6 +229,8 @@ class TestEvaluateOne:
         "train_seconds",
         "brier",
         "f1_at_0.5",
+        "std_err_auroc",
+        "std_mean",
         "predict_seconds",
     )
 
@@ -214,6 +249,10 @@ class TestEvaluateOne:
         assert np.isfinite(row["xcal_threshold"])
         # f1_at_xcal should be high too on this trivially-separable data.
         assert row["f1_at_xcal"] > 0.7
+        # A non-ensemble trainer reports no per-item spread.
+        assert np.isnan(row["std_mean"])
+        # But the analytic AUROC standard error is always available.
+        assert np.isfinite(row["std_err_auroc"])
 
     def test_returns_row_schema_for_mlp(self):
         clips = _synth_dataset(n_pos=20, n_neg=20)
@@ -232,6 +271,85 @@ class TestEvaluateOne:
         assert pool is not None
         with pytest.raises(KeyError):
             evaluate_one(pool, trainer_name="random_forest", n_labels=10, seed=0)
+
+
+class TestEnsembleTrainers:
+    """The ``mlp_ens{N}`` factories: mean sigmoid + per-item disagreement."""
+
+    @pytest.mark.parametrize("name", ["mlp_ens3", "mlp_ens5", "mlp_ens7", "mlp_ens10"])
+    def test_registered(self, name):
+        assert name in TRAINERS
+
+    def test_predict_returns_scores_and_std(self):
+        # A 5-member ensemble's predict() returns (mean_sigmoid, per_item_std)
+        # with member disagreement strictly positive on real (noisy) inits.
+        rng = np.random.default_rng(0)
+        X = rng.standard_normal((20, 6)).astype(np.float32)
+        X[:10, 0] += 1.5
+        X[10:, 0] -= 1.5
+        y = np.array([1] * 10 + [0] * 10, dtype=np.int32)
+        predict = TRAINERS["mlp_ens5"](X, y, 0)
+        out = predict(X)
+        assert isinstance(out, tuple)
+        scores, std = out
+        assert scores.shape == (20,)
+        assert std.shape == (20,)
+        assert np.all(scores >= 0.0) and np.all(scores <= 1.0)
+        assert np.all(std >= 0.0)
+        # Distinct member seeds ⇒ some genuine disagreement somewhere.
+        assert float(std.max()) > 0.0
+
+    def test_evaluate_one_emits_std_mean(self):
+        clips = _synth_dataset(n_pos=20, n_neg=20)
+        pool = _build_split_pool(clips, "target", seed=0, sim_fraction=0.5)
+        assert pool is not None
+        row = evaluate_one(pool, trainer_name="mlp_ens3", n_labels=10, seed=0)
+        assert row is not None
+        assert row["trainer"] == "mlp_ens3"
+        # Ensemble trainers report a finite, non-negative mean uncertainty
+        # (unlike single-model trainers, whose std_mean is nan).
+        assert np.isfinite(row["std_mean"])
+        assert row["std_mean"] >= 0.0
+        assert np.isfinite(row["std_err_auroc"])
+        assert 0.0 <= row["auroc"] <= 1.0
+
+    def test_ensemble_is_deterministic_for_fixed_seed(self):
+        clips = _synth_dataset(n_pos=20, n_neg=20)
+        pool = _build_split_pool(clips, "target", seed=0, sim_fraction=0.5)
+        assert pool is not None
+        row_a = evaluate_one(pool, trainer_name="mlp_ens3", n_labels=10, seed=1)
+        row_b = evaluate_one(pool, trainer_name="mlp_ens3", n_labels=10, seed=1)
+        assert row_a is not None and row_b is not None
+        assert row_a["auroc"] == row_b["auroc"]
+        assert row_a["std_mean"] == row_b["std_mean"]
+
+    def test_sweep_diagnostic_columns_present(self):
+        clips = _synth_dataset(n_pos=20, n_neg=20)
+        df = run_label_curve_eval(
+            dataset_clips={"synth": clips},
+            trainers=("mlp_ens3",),
+            label_counts=(10,),
+            seeds=(0,),
+            categories={"synth": ["target"]},
+            progress=False,
+        )
+        assert not df.empty
+        assert {"std_err_auroc", "std_mean"} <= set(df.columns)
+        assert df["std_mean"].notna().all()
+
+    def test_summary_include_diagnostics_has_std_mean(self):
+        clips = _synth_dataset(n_pos=20, n_neg=20)
+        df = run_label_curve_eval(
+            dataset_clips={"synth": clips},
+            trainers=("mlp_ens3",),
+            label_counts=(10,),
+            seeds=(0, 1),
+            categories={"synth": ["target"]},
+            progress=False,
+        )
+        summary = summarise(df, include_diagnostics=True)
+        assert "std_mean_mean" in summary.columns
+        assert "std_err_auroc_mean" in summary.columns
 
 
 class TestRunLabelCurveEval:
@@ -367,3 +485,7 @@ class TestRegistryIntrospection:
         assert "mlp" in TRAINERS
         assert "svm_linear" in TRAINERS
         assert "svm_rbf" in TRAINERS
+
+    def test_ensemble_trainers_registered(self):
+        for n in (3, 5, 7, 10):
+            assert f"mlp_ens{n}" in TRAINERS

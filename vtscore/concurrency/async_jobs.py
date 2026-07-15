@@ -425,11 +425,26 @@ class JobManager:
             return out
 
     def reset_for_tests(self) -> None:
-        """Cancel any running job and clear all stored state."""
+        """Cancel any running job, wait for its worker to exit, and clear state.
+
+        The join is what keeps background work from one test out of the next:
+        a daemon worker that outlived its test could otherwise mutate shared
+        module state (e.g. the labeling-status snapshot) after the next test's
+        reset_state has already cleared it.  Only the single running job owns a
+        live thread (pending slots never spawned one), so we wait on its
+        ``done_event`` - which ``_run_inner`` sets on every exit path,
+        including the cooperative-cancel unwind - before dropping state.
+        """
         with self._lock:
+            running = self._jobs.get(self._current_id) if self._current_id else None
             for j in self._jobs.values():
                 if j.status in ("running", "pending"):
                     j.cancel()
+        if running is not None and running.status == "running":
+            # Bounded: the deep loops poll ``check_job_cancelled`` frequently,
+            # so a cancelled job unwinds promptly; the timeout is a safety net.
+            running.done_event.wait(timeout=10)
+        with self._lock:
             self._jobs.clear()
             self._current_id = None
             self._pending = None
@@ -447,8 +462,25 @@ learned_sort_jobs = JobManager("learned-sort")
 #: Background runner for ``/api/eval/train-and-score``.
 eval_jobs = JobManager("eval-train-score")
 
+#: Background runner that advances the labeling-status per-step cache off the
+#: ``/api/labeling-status`` poll thread (issue #2397).  Not surfaced in
+#: ``/api/jobs/active`` - it is an internal refresh of a cheap 2 s poll, not a
+#: user-visible training job - so it is intentionally absent from
+#: ``JOB_MANAGERS`` below.
+labeling_status_jobs = JobManager("labeling-status")
+
 #: Background runner for ``/api/projection/build`` (VTSBrowse UMAP + pyramid).
 projection_jobs = JobManager("projection")
+
+#: Background runner that rebuilds a persisted signpost label set whose
+#: ``labeler_signature`` no longer matches the active pipeline (issue #2404).
+#: Kicked from the projection serve path when it detects the mismatch, so stale
+#: signs self-heal without a forced Re-project.  Kept on its own single slot so
+#: a self-heal never queues behind (or delays) a user-visible UMAP build in
+#: ``projection_jobs``.  Like ``labeling_status_jobs`` it is an internal
+#: refresh, not a user-visible training job, so it is intentionally absent from
+#: ``JOB_MANAGERS`` below (no ``/api/jobs/active`` spinner).
+signpost_relabel_jobs = JobManager("signpost-relabel")
 
 #: Logical name → :class:`JobManager` lookup used by ``/api/jobs/active`` to
 #: enumerate which (dataset_id, detector_id) pairs currently have background
@@ -488,3 +520,7 @@ def reset_all_async_jobs_for_tests() -> None:
     """Reset every singleton job manager.  Called from the autouse fixture."""
     for mgr in JOB_MANAGERS.values():
         mgr.reset_for_tests()
+    # Not in ``JOB_MANAGERS`` (they are deliberately hidden from
+    # ``/api/jobs/active``), so reset them explicitly for test isolation.
+    labeling_status_jobs.reset_for_tests()
+    signpost_relabel_jobs.reset_for_tests()

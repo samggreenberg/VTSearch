@@ -1,6 +1,6 @@
 # Visual Genome demo dataset (multi-label + region annotations)
 
-**Status:** Region-vote eval reporting, richer vocab matching, real download verification, and attributes/relationships remain open (see Open follow-ups).
+**Status:** Region-vote eval reporting, richer vocab matching, and attributes/relationships remain open (see Open follow-ups).
 
 VG is the first demo dataset with per-image **multi-label** ground truth (an image is in `man` **and** `apple` at once) and stored **bounding-box region** annotations. Every other demo dataset is single-label and pretend-disjoint (`category == target` is positive, everything else negative). Membership here is closed-world binary: a category is positive if it's in the image's annotated object set, negative otherwise (VG incompleteness → a few accepted false negatives). The vocabulary is a static hardcoded top-100 VG object list (`VISUAL_GENOME_CATEGORIES`), identical across all `visual_genome_{s,m,l,a}` slices.
 
@@ -13,4 +13,3 @@ VG is the first demo dataset with per-image **multi-label** ground truth (an ima
 - **Attributes & relationships.** VG also ships `attributes.json` and
   `relationships.json` (e.g. "red apple", "man holding apple"). Out of scope for
   Phase 1; potential future eval axes.
-- [ ] #2388 — Smoke-check the hardcoded VG download URLs/sizes against a real download

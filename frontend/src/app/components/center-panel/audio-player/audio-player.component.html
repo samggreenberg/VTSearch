@@ -15,6 +15,7 @@
   loop
   [attr.aria-label]="media.filename || 'Audio media'"
   (loadedmetadata)="onLoadedMetadata()"
+  (timeupdate)="onTimeUpdate()"
   (volumechange)="onVolumeChange()"
   (play)="onPlay()"
   (pause)="onPause()"

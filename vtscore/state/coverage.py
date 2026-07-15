@@ -57,7 +57,7 @@ def resync_coverage_atlas_to_detector(
     atlas = ds_ctx.coverage_atlas
     if atlas is None:
         return
-    atlas.reset_evidence()
+    atlas.reset_labeled()
     for cid in det_ctx.good_votes:
         if cid in atlas.vector_to_leaf:
             atlas.label(cid, good=True)

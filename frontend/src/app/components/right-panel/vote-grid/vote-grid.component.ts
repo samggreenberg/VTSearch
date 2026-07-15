@@ -37,14 +37,6 @@ export interface VoteGridEntry {
   isAudio?: boolean;
 }
 
-/** Media types the thumbnail route can render a tile for. */
-export const THUMBNAIL_MEDIA_TYPES: ReadonlySet<string> = new Set([
-  'image',
-  'video',
-  'document',
-  'audio',
-]);
-
 /**
  * Entry count above which the pile switches to CDK virtual scrolling.
  * Mirrors the left grid's ``GRID_VIRTUAL_THRESHOLD`` and its rationale: a few

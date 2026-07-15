@@ -78,7 +78,9 @@
         [attr.aria-label]="'Selected: ' + entry.name + ' (click to remove)'"
         [title]="entry.name + ' — click to remove from selection'"
         (click)="onEntryClick(entry.id)"
-        (keydown)="onEntryKeydown($event, entry.id)">
+        (keydown)="onEntryKeydown($event, entry.id)"
+        (mouseenter)="onEntryEnter(entry.id)"
+        (mouseleave)="onEntryLeave()">
         @if (hasThumbnailUrl(entry.id)) {
           <span class="bsp-thumb-wrap">
             @if (isAudioThumbnail(entry.id)) {

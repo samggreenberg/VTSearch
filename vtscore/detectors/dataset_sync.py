@@ -22,6 +22,8 @@ can't slip in between the (request-boundary) rehydrate and the composition.
 
 from __future__ import annotations
 
+import threading
+import time
 from typing import Any, NamedTuple
 
 
@@ -31,6 +33,45 @@ def _detector_file_mtime(path) -> float:
         return path.stat().st_mtime
     except OSError:
         return 0.0
+
+
+# Rate-limit the per-request detector-file stat in the outside-lock freshness
+# pre-check.  ``before_request`` calls it on every non-exempt request (votes
+# polls, thumbnails, media bytes), so a burst of requests would otherwise
+# ``stat()`` the same JSON dozens of times a second.  A short TTL (mirrors
+# ``_FRESHNESS_CHECK_INTERVAL`` in ``settings_store.py``) collapses that to at
+# most one stat per file per interval.  Only the *pre-check* uses this; the
+# authoritative re-check inside ``_state_lock`` still does a raw ``stat()``, so
+# a stale cache costs at most one spurious lock acquisition (which then
+# early-returns) and never corrupts vote state.
+_MTIME_CHECK_INTERVAL = 1.0
+_mtime_cache: dict[str, tuple[float, float]] = {}
+_mtime_cache_lock = threading.Lock()
+
+
+def _detector_file_mtime_cached(path) -> float:
+    """TTL-cached :func:`_detector_file_mtime` for the outside-lock pre-check.
+
+    Returns the last-seen mtime for *path* without re-``stat``-ing when the
+    previous stat is younger than ``_MTIME_CHECK_INTERVAL`` seconds; otherwise
+    stats afresh and refreshes the cache entry.
+    """
+    key = str(path)
+    now = time.monotonic()
+    with _mtime_cache_lock:
+        cached = _mtime_cache.get(key)
+        if cached is not None and (now - cached[0]) < _MTIME_CHECK_INTERVAL:
+            return cached[1]
+    mtime = _detector_file_mtime(path)
+    with _mtime_cache_lock:
+        _mtime_cache[key] = (now, mtime)
+    return mtime
+
+
+def reset_mtime_cache_for_tests() -> None:
+    """Drop the TTL-cached detector-file mtimes (test isolation only)."""
+    with _mtime_cache_lock:
+        _mtime_cache.clear()
 
 
 def ensure_votes_match_active_dataset() -> None:
@@ -85,7 +126,7 @@ def ensure_votes_match_active_dataset() -> None:
         return
 
     path = _detector_path(entry["name"])
-    current_mtime = _detector_file_mtime(path)
+    current_mtime = _detector_file_mtime_cached(path)
 
     if (
         det_ctx.votes_dataset_id == ds_ctx.dataset_id
@@ -119,7 +160,7 @@ def ensure_votes_match_active_dataset() -> None:
             det_ctx.cached_labelset_mtime = 0.0
             det_ctx.cached_labelset_media_type = ""
             if ds_ctx.coverage_atlas is not None:
-                ds_ctx.coverage_atlas.reset_evidence()
+                ds_ctx.coverage_atlas.reset_labeled()
         return
 
     from vtscore.datasets.labelset import LabelSet

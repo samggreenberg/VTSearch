@@ -92,7 +92,10 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   // whenever the metadata cache hydrates; without this guard, every cache
   // refresh would re-`loadAudio()` and snap playback back to t=0.
   private lastMediaId: number | null = null;
-  private clipCheckInterval: ReturnType<typeof setInterval> | null = null;
+  // Active clip window bounds while enforcement is on, else null. Enforcement is
+  // driven by the <audio> element's (timeupdate) event rather than a polling
+  // timer, so it only runs while the clip is actually playing and progressing.
+  private clipBounds: { start: number; end: number } | null = null;
   // Whether (loadedmetadata) has fired for the current audioSrc. Clip bounds
   // (clip_start/clip_end) often arrive via batch hydration *after* the audio
   // has already loaded, on a later ngOnChanges with the same media id; in that
@@ -175,27 +178,29 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   }
 
   private startClipEnforcement(): void {
-    this.stopClipEnforcement();
-    if (this.media?.clip_start == null || this.media?.clip_end == null) return;
-
-    const clipStart = this.media.clip_start;
-    const clipEnd = this.media.clip_end;
-
-    // Poll every 100ms to enforce clip boundaries. When the audio reaches
-    // clip_end, loop back to clip_start instead of continuing.
-    this.clipCheckInterval = setInterval(() => {
-      const audio = this.audioRef?.nativeElement;
-      if (!audio || audio.paused) return;
-      if (audio.currentTime >= clipEnd || audio.currentTime < clipStart) {
-        audio.currentTime = clipStart;
-      }
-    }, 100);
+    if (this.media?.clip_start == null || this.media?.clip_end == null) {
+      this.clipBounds = null;
+      return;
+    }
+    // Arm enforcement; the actual boundary check runs in (timeupdate), which the
+    // <audio> element fires as playback advances (no timer while paused).
+    this.clipBounds = { start: this.media.clip_start, end: this.media.clip_end };
   }
 
   private stopClipEnforcement(): void {
-    if (this.clipCheckInterval != null) {
-      clearInterval(this.clipCheckInterval);
-      this.clipCheckInterval = null;
+    this.clipBounds = null;
+  }
+
+  // Enforce the clip window as playback advances: when the current time leaves
+  // [start, end), loop back to the window start. Driven by the element's
+  // (timeupdate) event instead of a 100ms polling interval.
+  onTimeUpdate(): void {
+    const bounds = this.clipBounds;
+    if (!bounds) return;
+    const audio = this.audioRef?.nativeElement;
+    if (!audio || audio.paused) return;
+    if (audio.currentTime >= bounds.end || audio.currentTime < bounds.start) {
+      audio.currentTime = bounds.start;
     }
   }
 

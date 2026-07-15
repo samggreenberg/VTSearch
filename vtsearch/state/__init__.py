@@ -28,6 +28,7 @@ from vtscore.state import (  # noqa: F401
     assign_click_time,
     build_coverage_atlas,
     build_coverage_atlas_for_context,
+    build_md5_lookup,
     build_media_lookup,
     clear_all,
     clear_all_contexts,

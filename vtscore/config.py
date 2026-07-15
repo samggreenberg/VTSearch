@@ -219,6 +219,12 @@ XCLIP_MODEL_ID = "microsoft/xclip-base-patch32"
 E5_MODEL_ID = "intfloat/e5-base-v2"
 SIGLIP_MODEL_ID = "google/siglip-base-patch16-224"
 SIGLIP2_MODEL_ID = "google/siglip2-base-patch16-224"
+# SigLIP-L: the SO400M/384 checkpoint, loaded via ``open_clip`` (not
+# transformers) so its 1152-d vectors match galleries produced by open_clip's
+# own ``ViT-SO400M-14-SigLIP-384`` model.  The arch name is the open_clip
+# model key; the ``webli`` tag selects the WebLI-pretrained weights.
+SIGLIP_L_MODEL_ID = "ViT-SO400M-14-SigLIP-384"
+SIGLIP_L_PRETRAINED = "webli"
 CLIP_MODEL_ID = "openai/clip-vit-base-patch32"
 DINOV2_MODEL_ID = "facebook/dinov2-base"
 DINOV3_MODEL_ID = "facebook/dinov3-vitb16-pretrain-lvd1689m"
