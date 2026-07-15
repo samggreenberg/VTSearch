@@ -218,6 +218,12 @@
           "browse_panel_width": {
             "type": "integer"
           },
+          "browse_signpost_captioner": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object"
+          },
           "browse_signposts": {
             "additionalProperties": {
               "type": "boolean"
@@ -4718,6 +4724,7 @@
           "browse_panel_width": {
             "type": "integer"
           },
+          "browse_signpost_captioner": {},
           "browse_signposts": {},
           "browse_thumbnail_border": {},
           "calibrate_count": {
