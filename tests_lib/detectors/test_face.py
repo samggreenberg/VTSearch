@@ -94,19 +94,19 @@ class TestFaceMediaType:
         assert resp.data == buf.getvalue()
 
     def test_image_response_returns_crop_bytes(self):
-        from vtscore.media import get
+        from vtscore.media.face.media_type import FaceMediaType
 
         buf = io.BytesIO()
         Image.new("RGB", (16, 16), (10, 20, 30)).save(buf, format="PNG")
         media = {"id": 2, "filename": "x_face_1.png", "media_bytes": buf.getvalue()}
-        resp = get("face").image_response(media)
+        resp = FaceMediaType().image_response(media)
         assert resp is not None
         assert resp.data == buf.getvalue()
 
     def test_image_response_none_when_no_bytes(self):
-        from vtscore.media import get
+        from vtscore.media.face.media_type import FaceMediaType
 
-        assert get("face").image_response({"id": 3, "filename": "a.png"}) is None
+        assert FaceMediaType().image_response({"id": 3, "filename": "a.png"}) is None
 
 
 # ---------------------------------------------------------------------------

@@ -5,7 +5,6 @@ import wave
 
 import pytest
 
-from vtscore.embedding.media_vectors import media_embedding
 from vtscore.media.audio.audio_generator import generate_wav
 from vtscore.media.clipper import MediaClipper
 

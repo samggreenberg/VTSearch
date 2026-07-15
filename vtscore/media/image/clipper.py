@@ -438,4 +438,3 @@ class ImageObjectClipper(MediaClipper):
         d["padding"] = self._padding
         d["model_id"] = self._model_id
         return d
-
