@@ -27,12 +27,14 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
 
-from datasets import Box, SodDataset
+from datasets import GUI_MIN_BOX_FRAC, Box, SodDataset
 from features import partition_split, slugify
 
 _EMBEDDER_ALIASES = {"dinov2": "dinov2_patch", "dinov3": "dinov3_patch"}
 _GT_COLOR = (60, 220, 60)
 _PRED_COLOR = (240, 60, 60)
+_MATCH_COLOR = (240, 60, 60)  # surfacing argmax — the region that made the model pick this image
+_SNAP_COLOR = (60, 120, 240)  # good-vote snapped best-IoU-to-GT node — the training target
 
 
 # ---------------------------------------------------------------------------
@@ -40,8 +42,13 @@ _PRED_COLOR = (240, 60, 60)
 # ---------------------------------------------------------------------------
 
 
-def _draw(img: Image.Image, gt: list[Box], pred: Box | None, score: float | None) -> Image.Image:
-    """Draw GT boxes (green) and, optionally, the predicted box + score (red)."""
+def _draw(
+    img: Image.Image, gt: list[Box], pred: Box | None, score: float | None, snap: Box | None = None
+) -> Image.Image:
+    """Draw GT boxes (green), optionally the predicted box + score (red), and optionally the
+    good-vote **snapped** region (blue) — the patch that becomes the training positive for the
+    next MLP. Blue is drawn last (on top) so it stays visible even when it coincides with red
+    (i.e. the detector already fired on the region it will train on)."""
     im = img.convert("RGB").copy()
     d = ImageDraw.Draw(im)
     w, h = im.width, im.height
@@ -52,6 +59,9 @@ def _draw(img: Image.Image, gt: list[Box], pred: Box | None, score: float | None
         d.rectangle((x0 * w, y0 * h, x1 * w, y1 * h), outline=_PRED_COLOR, width=2)
         if score is not None:
             d.text((max(0, x0 * w) + 2, max(0, y0 * h) + 2), f"{score:.2f}", fill=_PRED_COLOR)
+    if snap is not None:
+        x0, y0, x1, y1 = snap
+        d.rectangle((x0 * w, y0 * h, x1 * w, y1 * h), outline=_SNAP_COLOR, width=2)
     return im
 
 
@@ -103,6 +113,290 @@ def _save_captioned(img: Image.Image, out_path: Path, caption: str) -> None:
     fig.tight_layout()
     fig.savefig(out_path, dpi=110)
     plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# HAC region-tree interpretability (labeling trace)
+# ---------------------------------------------------------------------------
+
+
+def _iou(a: Box, b: Box) -> float:
+    ix0, iy0 = max(a[0], b[0]), max(a[1], b[1])
+    ix1, iy1 = min(a[2], b[2]), min(a[3], b[3])
+    iw, ih = max(0.0, ix1 - ix0), max(0.0, iy1 - iy0)
+    inter = iw * ih
+    ua = max(0.0, a[2] - a[0]) * max(0.0, a[3] - a[1])
+    ub = max(0.0, b[2] - b[0]) * max(0.0, b[3] - b[1])
+    union = ua + ub - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _covering_box(boxes: list[Box]) -> Box:
+    """Union rectangle of all GT instance boxes (matches region_sources._covering_box)."""
+    return (
+        min(b[0] for b in boxes),
+        min(b[1] for b in boxes),
+        max(b[2] for b in boxes),
+        max(b[3] for b in boxes),
+    )
+
+
+def _snapped_index(gt_boxes: list[Box], region_boxes: list[Box]) -> int | None:
+    """The region a Good vote snaps to: best-IoU node vs the GT covering box (region_sources.py:357)."""
+    if not gt_boxes or not region_boxes:
+        return None
+    cover = _covering_box(gt_boxes)
+    ious = [_iou(cover, tuple(rb)) for rb in region_boxes]
+    return int(np.argmax(ious)) if ious else None
+
+
+# Reference-style HAC-tree rendering, adapted from scripts/run_hac_tree_sweep.py
+# (that script is throwaway; this is the reusable SOD-tier port). Node thumbnails are
+# masked to their patch-cell union — the true footprint, not the loose bbox — laid out
+# by HAC merge depth, with a twin attention panel. We add MLP-score labels + matched
+# (surfacing) / snapped (good-vote) rings on top.
+_LEAF_RING = (255, 215, 0)  # yellow — HAC leaf
+_INTERNAL_RING = (40, 170, 200)  # cyan — HAC merge node
+
+
+def _cell_thumb(full_rgb: np.ndarray, mask: np.ndarray | None, box, size: tuple[int, int]) -> Image.Image:
+    """Thumbnail of a node. With a patch ``mask`` (H,W bool): block-upsample it to image
+    res, crop to its tight bbox, dim outside-mask pixels, fit into ``size`` (the reference
+    masked-cell look). Without a mask (old cache): fall back to a plain ``box`` crop."""
+    h_img, w_img = full_rgb.shape[:2]
+    full = np.ascontiguousarray(full_rgb, dtype=np.uint8)
+    pad = (250, 250, 250)
+    if mask is None:
+        x0, y0, x1, y1 = (float(v) for v in box)
+        px0, py0 = int(x0 * w_img), int(y0 * h_img)
+        px1, py1 = max(px0 + 1, int(x1 * w_img)), max(py0 + 1, int(y1 * h_img))
+        crop_img = Image.fromarray(full[py0:py1, px0:px1, :], mode="RGB")
+    else:
+        h_grid, w_grid = mask.shape
+        row_edges = np.linspace(0, h_img, h_grid + 1).astype(int)
+        col_edges = np.linspace(0, w_img, w_grid + 1).astype(int)
+        full_mask = np.zeros((h_img, w_img), dtype=bool)
+        for r in range(h_grid):
+            for c in range(w_grid):
+                if mask[r, c]:
+                    full_mask[row_edges[r] : row_edges[r + 1], col_edges[c] : col_edges[c + 1]] = True
+        if not full_mask.any():
+            return Image.new("RGB", size, pad)
+        ys, xs = np.where(full_mask)
+        py0, py1 = int(ys.min()), int(ys.max()) + 1
+        px0, px1 = int(xs.min()), int(xs.max()) + 1
+        crop = full[py0:py1, px0:px1, :]
+        inside = full_mask[py0:py1, px0:px1, None]
+        masked = np.where(inside, crop, np.array((210, 210, 210), dtype=np.uint8)[None, None, :])
+        crop_img = Image.fromarray(masked, mode="RGB")
+    target_w, target_h = size
+    cw, ch = crop_img.size
+    scale = min(target_w / cw, target_h / ch)
+    new = crop_img.resize((max(1, int(cw * scale)), max(1, int(ch * scale))), Image.LANCZOS)
+    cell = Image.new("RGB", size, pad)
+    cell.paste(new, ((target_w - new.width) // 2, (target_h - new.height) // 2))
+    return cell
+
+
+def _saliency_overlay(image: Image.Image, saliency: np.ndarray) -> np.ndarray:
+    """Image-resolution (H,W,3) uint8 inferno attention overlay: block-upsample the
+    (side,side) per-patch saliency, colormap it, blend over a dimmed grayscale of the
+    image (port of run_hac_tree_sweep._saliency_full_rgb)."""
+    import matplotlib  # noqa: PLC0415
+
+    matplotlib.use("Agg")
+
+    side_h, side_w = saliency.shape
+    w_img, h_img = image.size
+    sal = saliency.astype(np.float32)
+    sal = sal / max(float(sal.max()), 1e-8)
+    row_edges = np.linspace(0, h_img, side_h + 1).astype(int)
+    col_edges = np.linspace(0, w_img, side_w + 1).astype(int)
+    sal_full = np.zeros((h_img, w_img), dtype=np.float32)
+    for r in range(side_h):
+        for c in range(side_w):
+            sal_full[row_edges[r] : row_edges[r + 1], col_edges[c] : col_edges[c + 1]] = sal[r, c]
+    heat = (matplotlib.colormaps["inferno"](sal_full)[:, :, :3] * 255.0).astype(np.uint8)
+    gray = np.asarray(image.convert("L"), dtype=np.float32)
+    base = (gray * 0.55 + 40.0)[:, :, None].repeat(3, axis=2)
+    blended = base * 0.4 + heat.astype(np.float32) * 0.6
+    return np.clip(blended, 0, 255).astype(np.uint8)
+
+
+def _layout_tree(boxes: np.ndarray, children: np.ndarray, k: int):
+    """(col, depth, ch, max_depth) over the HAC nodes (global indices 1..N-1; CLS at 0 is
+    excluded — it's shown as the corner image). In-order DFS from the root (last node),
+    visiting the child whose subtree holds the leftmost leaf first so left→right roughly
+    tracks the image (port of run_hac_tree_sweep._layout_tree)."""
+    n = len(boxes)
+    ch = {g: (int(children[g][0]), int(children[g][1])) for g in range(1, n) if int(children[g][0]) >= 0}
+    leaf_cx = {g: (float(boxes[g][0]) + float(boxes[g][2])) / 2.0 for g in range(1, n) if g not in ch}
+    min_cx = dict(leaf_cx)
+    depth = {g: 0 for g in leaf_cx}
+    for g in range(1, n):  # increasing order: an internal's children have smaller indices
+        if g in ch:
+            a, b = ch[g]
+            min_cx[g] = min(min_cx[a], min_cx[b])
+            depth[g] = max(depth[a], depth[b]) + 1
+    col: dict[int, float] = {}
+    slot = [0]
+
+    def visit(g: int) -> None:
+        if g not in ch:
+            col[g] = float(slot[0])
+            slot[0] += 1
+            return
+        a, b = ch[g]
+        first, second = (a, b) if min_cx[a] <= min_cx[b] else (b, a)
+        visit(first)
+        visit(second)
+        col[g] = (col[first] + col[second]) / 2.0
+
+    # Visit every root (a node no other node lists as a child). A proper HAC tree has one
+    # (the last-built internal); a hierarchy-less cache (old npz whose ``children`` back-filled
+    # to all -1) has every node as its own root, so they lay out as a flat row instead of
+    # collapsing to a single node.
+    referenced = {c for pair in ch.values() for c in pair}
+    for r in sorted(g for g in range(1, n) if g not in referenced):
+        visit(r)
+    return col, depth, ch, (max(depth.values()) if depth else 0)
+
+
+def _tree_panel(
+    base_rgb: np.ndarray,
+    corner_rgb: np.ndarray,
+    boxes: np.ndarray,
+    cell_masks: np.ndarray | None,
+    children: np.ndarray,
+    k: int,
+    scores: list | None,
+    matched: int | None,
+    snapped: int | None,
+    *,
+    title: str,
+    thumb: int = 84,
+    gap_x: int = 8,
+    gap_y: int = 30,
+    margin: int = 14,
+) -> Image.Image:
+    """One HAC panel: masked-cell node thumbnails cut from ``base_rgb``, laid out by merge
+    depth with parent→child edges, the full ``corner_rgb`` tucked in the top-left. Leaves
+    ringed yellow / internals cyan, the surfacing match red and the snapped match blue, each
+    node labeled with its MLP score."""
+    col, depth, ch, max_depth = _layout_tree(boxes, children, k)
+    cell_w = thumb + gap_x
+    row_pitch = thumb + gap_y
+    title_h = 18
+    tree_top = title_h + margin
+    # Width by the actual number of leaf columns: k for a proper tree, up to 2K-1 for a
+    # hierarchy-less (old-cache) flat row — so nodes never overflow the canvas.
+    n_cols = int(max(col.values())) + 1 if col else 1
+    canvas_w = int(n_cols * cell_w + 2 * margin)
+    canvas_h = int(tree_top + thumb + max_depth * row_pitch + margin + 12)  # +12 for score labels
+    canvas = Image.new("RGB", (canvas_w, canvas_h), (250, 250, 250))
+    draw = ImageDraw.Draw(canvas)
+    nodes = list(col)  # global indices 1..N-1
+
+    def center(g: int) -> tuple[int, int]:
+        cx = int(margin + thumb / 2 + col[g] * cell_w)
+        cy = int(tree_top + thumb / 2 + (max_depth - depth[g]) * row_pitch)
+        return cx, cy
+
+    # Corner image: largest scale that clears every node thumbnail (nodes leave the
+    # upper-left empty), clamped to the canvas.
+    corner = Image.fromarray(np.ascontiguousarray(corner_rgb, dtype=np.uint8), mode="RGB")
+    iw, ih = corner.size
+    caps = [max((cx - thumb / 2 - margin) / iw, (cy - thumb / 2 - tree_top) / ih) for cx, cy in map(center, nodes)]
+    caps += [(canvas_w - 2 * margin) / iw, (canvas_h - margin - tree_top) / ih]
+    scale = max(0.0, min(caps)) if caps else 0.0
+    if scale > 0:
+        cimg = corner.resize((max(1, int(iw * scale)), max(1, int(ih * scale))), Image.LANCZOS)
+        canvas.paste(cimg, (margin, tree_top))
+        # The CLS full-image node is global index 0, shown as this corner image (not a tree
+        # node); ring it when the surfacing/snapped match is the whole-image node, and label
+        # its score, so a CLS match is still visible.
+        if matched == 0:
+            outline, ow = _MATCH_COLOR, 3
+        elif snapped == 0:
+            outline, ow = _SNAP_COLOR, 3
+        else:
+            outline, ow = (60, 60, 60), 1
+        draw.rectangle(
+            (margin - 1, tree_top - 1, margin + cimg.width, tree_top + cimg.height), outline=outline, width=ow
+        )
+        if scores is not None and len(scores):
+            draw.text((margin + 1, tree_top + 1), f"CLS {scores[0]:.2f}", fill=(255, 255, 255))
+
+    draw.rectangle((0, 0, canvas_w, title_h), fill=(0, 0, 0))
+    draw.text((4, 3), title, fill=(255, 255, 255))
+
+    for g in nodes:  # edges first, thumbnails on top
+        if g in ch:
+            pcx, pcy = center(g)
+            for cgi in ch[g]:
+                ccx, ccy = center(cgi)
+                draw.line([(pcx, pcy + thumb // 2), (ccx, ccy - thumb // 2)], fill=(120, 120, 120), width=1)
+
+    for g in nodes:
+        cx, cy = center(g)
+        tx, ty = cx - thumb // 2, cy - thumb // 2
+        mask = cell_masks[g] if cell_masks is not None else None
+        canvas.paste(_cell_thumb(base_rgb, mask, boxes[g], (thumb, thumb)), (tx, ty))
+        if g == matched:
+            ring, wd = _MATCH_COLOR, 3
+        elif g == snapped:
+            ring, wd = _SNAP_COLOR, 3
+        else:
+            ring, wd = (_LEAF_RING if g not in ch else _INTERNAL_RING), 2
+        draw.rectangle((tx, ty, tx + thumb, ty + thumb), outline=ring, width=wd)
+        if scores is not None and g < len(scores):
+            draw.text((tx + 1, ty + thumb + 1), f"{scores[g]:.2f}", fill=(20, 20, 20))
+    return canvas
+
+
+def _render_hac_composite(
+    image: Image.Image,
+    boxes: np.ndarray,
+    cell_masks: np.ndarray | None,
+    saliency: np.ndarray | None,
+    children: np.ndarray,
+    scores: list | None,
+    matched: int | None,
+    snapped: int | None,
+    out_path: Path,
+    caption: str,
+) -> None:
+    """The reference render_config_tree look, per labeling step: the HAC tree drawn twice
+    side by side — left over the image pixels, right over the inferno attention overlay —
+    with MLP scores + matched/snapped rings, captioned. Saved to ``out_path``."""
+    n = len(boxes)
+    if n < 2:  # need at least CLS + one leaf
+        return
+    k = n // 2  # CLS + K leaves + (K-1) internals = 2K nodes
+    img_rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
+    panels = [_tree_panel(img_rgb, img_rgb, boxes, cell_masks, children, k, scores, matched, snapped, title="image")]
+    if saliency is not None:
+        heat = _saliency_overlay(image, saliency)
+        panels.append(
+            _tree_panel(heat, heat, boxes, cell_masks, children, k, scores, matched, snapped, title="attention")
+        )
+
+    gap, bar = 12, 20
+    total_w = sum(p.width for p in panels) + gap * (len(panels) - 1)
+    body_h = max(p.height for p in panels)
+    out = Image.new("RGB", (total_w, body_h + bar), (250, 250, 250))
+    d = ImageDraw.Draw(out)
+    d.rectangle((0, 0, total_w, bar), fill=(0, 0, 0))
+    d.text((4, 5), caption, fill=(255, 255, 255))
+    x = 0
+    for i, p in enumerate(panels):
+        out.paste(p, (x, bar))
+        x += p.width
+        if i < len(panels) - 1:
+            d.line([(x + gap // 2, bar), (x + gap // 2, bar + body_h)], fill=(180, 180, 180), width=1)
+            x += gap
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out.save(out_path)
 
 
 def _sample(ids: list[int], n: int, seed: int) -> list[int]:
@@ -443,11 +737,29 @@ def render_predictions_realistic(
     )
 
 
+def _load_region_viz(regions_dir: Path, iid: int):
+    """Per-image HAC geometry for the trace viz, straight from the region npz:
+    ``(boxes (N,4), children (N,2), cell_masks (N,H,W)|None, saliency (H,W)|None)``.
+    Returns ``None`` if the npz is missing; ``cell_masks``/``saliency`` are ``None`` for
+    caches written before this feature (renderer degrades: box crops / no attention)."""
+    path = regions_dir / f"{iid}.npz"
+    if not path.exists():
+        return None
+    with np.load(path) as z:
+        boxes = z["boxes"]
+        children = z["children"] if "children" in z else np.full((boxes.shape[0], 2), -1, dtype=int)
+        cell_masks = z["cell_masks"] if "cell_masks" in z else None
+        saliency = z["saliency"] if "saliency" in z else None
+    return boxes, children, cell_masks, saliency
+
+
 def render_labeling_trace(
     ds: SodDataset,
     split,
     trace: list[dict],
     *,
+    cache_dir: Path,
+    slug: str | None,
     out_dir: Path,
     dataset: str,
     cls: str,
@@ -457,10 +769,19 @@ def render_labeling_trace(
     seed: int,
 ) -> None:
     """Write one seed's labeling trace: numbered images in the order the realistic loop
-    labeled them (GT green + the detector's surfacing box/score red, captioned with the
-    phase/head/calib/threshold), plus ``trace.csv`` / ``trace.json`` with the full
-    per-step record. Images are named ``{t:03d}_{iid}_{good|bad}.png`` so they sort in
-    labeling order."""
+    labeled them, plus ``trace.csv`` / ``trace.json``. Per step, two images (named
+    ``{t:03d}_{iid}_{good|bad}_*`` so they sort in labeling order):
+
+    * ``…_pred.png`` — GT green + the detector's surfacing box/score red.
+    * ``…_hac.png``  — the reference-style HAC composite (see :func:`_render_hac_composite`):
+      the region tree drawn twice — masked-cell pixel thumbnails on the left, the same tree
+      over the inferno attention overlay on the right — with each node's MLP score and the
+      surfacing match (red) / good-vote snapped match (blue) ringed.
+
+    HAC geometry (region boxes, HAC children, per-node cell masks, patch saliency) is read
+    from the cell's region npz under ``regions_dir``; only the head-dependent per-region MLP
+    scores + matched index come from the trace. The snapped good-vote match (best-IoU node
+    vs the GT covering box) is computed here from the npz boxes + class GT (good votes only)."""
     import csv  # noqa: PLC0415
     import json  # noqa: PLC0415
 
@@ -468,11 +789,65 @@ def render_labeling_trace(
     d = out_dir / f"{dataset}_{slugify(cls)}_{embedder}_{proposal}{alpha_tag}" / f"seed{seed}"
     d.mkdir(parents=True, exist_ok=True)
 
+    # Resolve the same region-npz dir the sweep wrote (holds boxes/children/cell_masks/saliency).
+    regions_root = cache_dir / "regions" / dataset / _EMBEDDER_ALIASES.get(embedder, embedder)
+    resolved = _resolve_slug(regions_root, proposal, alpha, slug)
+    regions_dir = regions_root / resolved if resolved is not None else None
+
     (d / "trace.json").write_text(json.dumps(trace, indent=2))
+    snapped_by_t: dict[int, int | None] = {}
+
+    for e in trace:
+        iid = e["image_id"]
+        try:
+            img = ds.load_image(iid)
+        except Exception:
+            continue
+        stem = f"{e['t']:03d}_{iid}_{e['gt_label']}"
+        gt = split.gt_boxes.get(iid, []) if e["gt_label"] == "good" else []
+        pred = tuple(e["pred_box"]) if e.get("pred_box") else None
+        # ``surf`` = the surfacing head's top-region score (the head that CHOSE this image,
+        # i.e. the previous step). ``surf_thr`` = that same head's decision threshold
+        # (score − margin) — compare the node scores against THIS, not ``thr``. ``thr`` is
+        # the post-label head's threshold (retrained after this image was labeled), shown
+        # for reference; the two heads differ by one vote.
+        surf = ""
+        if e.get("surface_score") is not None:
+            surf = f" surf={e['surface_score']:.2f}"
+            if e.get("surface_margin") is not None:
+                surf += f" surf_thr={e['surface_score'] - e['surface_margin']:.2f}"
+        caption = (
+            f"t{e['t']} id{iid} {e['gt_label']} | {e['select_mode']}->{e['phase']} | "
+            f"{e['head']}/{e['calib_mode']} thr={e['threshold']:.2f}{surf}"
+        )
+        # Load the region npz first (holds the boxes) so the snapped good-vote region — the
+        # patch that becomes the next MLP's training positive — can be drawn on BOTH outputs.
+        viz = _load_region_viz(regions_dir, iid) if regions_dir is not None else None
+        snapped = None
+        snap_box = None
+        if viz is not None:
+            boxes, children, cell_masks, saliency = viz
+            snapped = _snapped_index(gt, [tuple(b) for b in boxes]) if gt else None
+            if snapped is not None:
+                snap_box = tuple(float(v) for v in boxes[snapped])
+        snapped_by_t[e["t"]] = snapped
+        # 1. Single-pred overlay: GT green + surfacing region red + snapped (next-MLP) region blue.
+        _save_captioned(_draw(img, gt, pred, e.get("surface_score"), snap=snap_box), d / f"{stem}_pred.png", caption)
+        # 2. The reference-style HAC composite (needs the region npz for this image).
+        if viz is None:
+            continue
+        matched = e.get("matched_region")
+        _render_hac_composite(
+            img, boxes, cell_masks, saliency, children, e.get("region_scores"),
+            matched, snapped, d / f"{stem}_hac.png",
+            caption + f" | match={matched} snap={snapped}",
+        )  # fmt: skip
+
     if trace:
         keys = [
             "t", "image_id", "gt_label", "select_mode", "phase", "head", "calib_mode", "threshold",
-            "surface_score", "surface_margin", "pred_box", "n_good", "n_bad", "n_votes",
+            "surface_score", "surface_margin", "pred_box", "matched_region", "snapped_region",
+            "n_good", "n_bad", "n_votes",
             "smart", "stable", "span", "cost", "fpr", "fnr", "f1", "stop_recommended",
         ]  # fmt: skip
         with (d / "trace.csv").open("w", newline="") as fh:
@@ -482,23 +857,8 @@ def render_labeling_trace(
                 row = dict(e)
                 pb = e.get("pred_box")
                 row["pred_box"] = " ".join(f"{v:.4f}" for v in pb) if pb else ""
+                row["snapped_region"] = snapped_by_t.get(e["t"])
                 w.writerow(row)
-
-    for e in trace:
-        iid = e["image_id"]
-        try:
-            img = ds.load_image(iid)
-        except Exception:
-            continue
-        gt = split.gt_boxes.get(iid, []) if e["gt_label"] == "good" else []
-        pred = tuple(e["pred_box"]) if e.get("pred_box") else None
-        overlay = _draw(img, gt, pred, e.get("surface_score"))
-        surf = f" surf={e['surface_score']:.2f}" if e.get("surface_score") is not None else ""
-        caption = (
-            f"t{e['t']} id{iid} {e['gt_label']} | {e['select_mode']}->{e['phase']} | "
-            f"{e['head']}/{e['calib_mode']} thr={e['threshold']:.2f}{surf}"
-        )
-        _save_captioned(overlay, d / f"{e['t']:03d}_{iid}_{e['gt_label']}.png", caption)
     print(f"  [trace] {embedder}/{proposal} seed{seed}: {len(trace)} steps -> {d}", flush=True)
 
 
@@ -536,6 +896,12 @@ def main() -> int:
     ap.add_argument(
         "--neg-multiple", type=int, default=10, help="neg pool = neg_multiple × positives (match the sweep)"
     )
+    ap.add_argument(
+        "--min-box-frac",
+        type=float,
+        default=GUI_MIN_BOX_FRAC,
+        help="drop GT boxes below this fraction of the image on either axis (match the sweep; 0 disables)",
+    )
     ap.add_argument("--test-fraction", type=float, default=0.5)
     ap.add_argument("--gallery-n", type=int, default=24, help="max images per montage")
     # predict-only
@@ -566,7 +932,9 @@ def main() -> int:
     args = ap.parse_args()
 
     with SodDataset(args.dataset) as ds:
-        cs = ds.class_split(args.cls, neg_multiple=args.neg_multiple, seed=args.split_seed)
+        cs = ds.class_split(
+            args.cls, neg_multiple=args.neg_multiple, seed=args.split_seed, min_box_frac=args.min_box_frac
+        )
         if not cs.positive_ids:
             raise SystemExit(f"no positives for {args.cls!r} in {args.dataset}")
         split = partition_split(cs, args.test_fraction, args.split_seed)

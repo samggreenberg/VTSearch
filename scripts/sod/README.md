@@ -56,6 +56,15 @@ flood leaves) is reused when `--region-voting` is set on `hac`+dinov2/dinov3.
 - Prevalence is set by `--neg-multiple` (default 100 → negative pool = 100 × positives, so
   prevalence ≈ 1/(1+m), constant across classes but positive-rich vs a real deployment);
   a true-prevalence knob is future work.
+- `--min-box-frac` (default `0.01`, the GUI's drawable-box floor) drops GT boxes below that
+  fraction of the image on **either** axis — the same rule the annotation GUI enforces on a
+  drawn box — so the sweep never trains/evaluates on an un-drawable annotation. Filtering is
+  **per-box**: an image stays a positive as long as ≥1 of its class boxes survives (only the
+  survivors feed the covering box / exemplars / metrics); an image whose class boxes are *all*
+  sub-floor is dropped entirely and, since it still contains the class, is also kept out of the
+  negative pool. Pass `--min-box-frac 0` to keep every box. (The exemplar cache is keyed on a
+  hash of each image's GT boxes, so changing this value recomputes cleanly rather than reusing a
+  stale file.)
 
 ## Run (pilot: stop sign on COCO, single GPU)
 One command — add `--viz` and the sweep also emits all the figures at the end:
@@ -82,13 +91,23 @@ Outputs (under `--out-dir`, gitignored):
   `time.png` total-time stacked bar), `time.json`, `splits_gallery/` (bucket montages
   with GT boxes), `predictions/` (per-config MLP TP/FP/FN/TN overlays)
 - with `--labeling-trace` in **realistic** mode (off by default; independent of `--viz`),
-  `labeling_trace/<config>/seed{N}/` (one dir **per iteration**): the images the loop labeled **in order**
-  (`{t:03d}_{iid}_{good|bad}.png`, GT green + the detector's surfacing box/score red,
-  captioned with step/label/select-mode→phase/head/calib_mode/threshold), plus
-  `trace.csv` + `trace.json` with the full per-step record (order, id, gt label, select
+  `labeling_trace/<config>/seed{N}/` (one dir **per iteration**): the images the loop labeled **in order**,
+  two PNGs per step (both prefixed `{t:03d}_{iid}_{good|bad}` so they sort in labeling order):
+  - `…_pred.png` — GT green + the detector's surfacing box/score red (captioned with
+    step/label/select-mode→phase/head/calib_mode/threshold),
+  - `…_hac.png` — the HAC **composite** (the `run_hac_tree_sweep.py` look): the region tree
+    drawn **twice** side by side — **left** = masked patch-cell **pixel** thumbnails laid out by
+    merge depth with parent→child edges (leaves→merges, the tree "being built"), **right** = the
+    same tree over the **inferno attention/saliency** overlay — each node labeled with its **MLP
+    detector score**, the **surfacing match** ringed red (region that made the model pick this
+    image) and the good-vote **snapped match** ringed blue (best-IoU HAC node vs the GT covering box);
+  plus `trace.csv` + `trace.json` with the full per-step record (order, id, gt label, select
   mode, phase, head, `calib_mode` [cosine_coldstart vs gmm/blend/xcal], threshold,
-  surface score/margin, pred box, n_good/n_bad/n_votes, smart/stable/span indicators,
-  cost/fpr/fnr/f1)
+  surface score/margin, pred box, matched/snapped region index, per-region scores [json only],
+  n_good/n_bad/n_votes, smart/stable/span indicators, cost/fpr/fnr/f1).
+  The composite reads HAC geometry (region boxes, `children`, per-node `cell_masks`, patch
+  `saliency`) from the region npz; caches written before this feature degrade gracefully
+  (box-crop thumbnails when `cell_masks` absent, pixel-only when `saliency` absent) until re-run.
 
 ## Metric / threshold
 `cost = w_fpr·FPR + w_fnr·FNR` (rates), weights from `--inclusion` (0 → FPR+FNR).
@@ -144,19 +163,19 @@ this spread is large (calibration noise), so treat close curves as not significa
 srun --partition=gpu --gres=gpu:l40s:1 --cpus-per-task=8 --mem=46G --time=8:00:00 --pty bash -l
 
 # coco stop sign (CLIP/SigLIP/SigLIP 2, whole/sliding)
-python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders clip,siglip,siglip2 --proposals whole,sliding --max-labels 50 --out-dir docs/experiments/sod-sweep-realistic/coco-stopsign-clip-siglip-siglip2-whole-sliding --viz
+python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders clip,siglip,siglip2 --proposals whole,sliding --max-labels 50 --out-dir docs/experiments/sod-sweep/coco-stopsign-clip-siglip-siglip2-whole-sliding --viz
 
 # coco stop sign HAC sweep (dinov2/dinov3, alpha=0.3,0.5,0.7):
 
 # no region voting
-python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov2,dinov3 --proposals hac --hac-alpha 0.3,0.5,0.7 --max-labels 50 --out-dir docs/experiments/sod-sweep-realistic/coco-stopsign-dinov2-dinov3-hac-alphas-3-5-7-no-region-voting --viz
+python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov2,dinov3 --proposals hac --hac-alpha 0.3,0.5,0.7 --max-labels 50 --out-dir docs/experiments/sod-sweep/coco-stopsign-dinov2-dinov3-hac-alphas-3-5-7-no-region-voting --viz
 
 # region voting
-python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov2,dinov3 --proposals hac --hac-alpha 0.3,0.5,0.7 --max-labels 50 --out-dir docs/experiments/sod-sweep-realistic/coco-stopsign-dinov2-dinov3-hac-alphas-3-5-7-region-voting --region-voting --viz
+python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov2,dinov3 --proposals hac --hac-alpha 0.3,0.5,0.7 --max-labels 50 --out-dir docs/experiments/sod-sweep/coco-stopsign-dinov2-dinov3-hac-alphas-3-5-7-region-voting --region-voting --viz
 
 # traffic light
 python scripts/sod/sweep.py --datasets lvis --classes "traffic light" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov2,dinov3 --proposals hac --hac-alpha 0.1,0.3,0.5,0.7,0.9 --max-labels 50 --out-dir docs/experiments/sod-sweep-lvis-traffic-light-dinov2-dinov3-hac-alphas-1-3-5-7-9-region-voting --region-voting --viz
 
 # 5 iterations with band=all + labeling trace
-python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --hac-alpha 0.5 --max-labels 50 --out-dir docs/experiments/sod-sweep-realistic/coco-stopsign-dinov3-hac-alphas-5-region-voting-viz-band-all --region-voting --viz --viz-band all --iterations 5 --labeling-trace
+python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --hac-alpha 0.5 --max-labels 50 --out-dir docs/experiments/sod-sweep/coco-stopsign-dinov3-hac-alphas-5-region-voting-5-viz-bands --region-voting --viz --viz-band all --iterations 5 --labeling-trace # --min-box-frac 0.05
 ```

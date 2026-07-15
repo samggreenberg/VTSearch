@@ -23,7 +23,7 @@ from vtscore.eval.region_curve import (
     sample_rv_budget,
     train_rv_head,
 )
-from vtscore.eval.region_sources import _covering_box
+from vtscore.eval.region_sources import PreparedImage, _covering_box
 from vtscore.eval.scoring_heads import CosineHead, MLPHead, max_pool_over_images
 
 
@@ -517,19 +517,19 @@ def test_select_hard_picks_near_threshold():
     assert _select_hard(pool_ids, pool_scores, 0.55, labeled={12}) == 11
 
 
-def test_select_new_uses_diversity_tree():
-    from vtscore.state.diversity_tree import DiversityTree, auto_max_depth
+def test_select_new_uses_coverage_atlas():
+    from vtscore.state.coverage_atlas import CoverageAtlas, auto_max_depth
 
     inputs = _realistic_inputs(n_pos=40, n_neg=80)
     vecs = {pid: inputs.pool_whole_vecs[i] for i, pid in enumerate(inputs.pool_ids)}
-    tree = DiversityTree(vecs, k=3, max_depth=auto_max_depth(len(inputs.pool_ids), k=3))
+    tree = CoverageAtlas(vecs, k=3, max_depth=auto_max_depth(len(inputs.pool_ids), k=3))
     idx = {pid: i for i, pid in enumerate(inputs.pool_ids)}
     scores = np.zeros(len(inputs.pool_ids), dtype=np.float64)
-    level0 = tree.diversity_level()
+    level0 = tree.coverage_level()
     pick = _select_new(tree, inputs.pool_ids, scores, 0.5, labeled=set(), idx=idx)
     assert pick in inputs.pool_ids
-    tree.label(pick)
-    assert tree.diversity_level() >= level0  # labeling a fresh cluster never lowers coverage
+    tree.label(pick, True)
+    assert tree.coverage_level() >= level0  # labeling a fresh cluster never lowers coverage
 
 
 def test_span_status_degenerate_tree_is_green():
@@ -571,11 +571,40 @@ def test_realistic_trace_contract():
         assert e["phase"] in ("good", "bad", "hard", "new", "done")
         assert np.isfinite(e["threshold"])
         assert e["n_good"] + e["n_bad"] == e["t"]
+    # The seed step has no head → no per-region scores or matched region.
+    assert first["region_scores"] is None and first["matched_region"] is None
     # once both classes exist, later steps surface via a real head → a pred_box appears.
     assert any(e["pred_box"] is not None and e["surface_score"] is not None for e in trace)
+    # …and those steps carry the full per-region MLP score vector + the matched (argmax) region.
+    # (The geometry the trace viz needs — boxes, cell masks, HAC children, attention — is re-read
+    # from the region npz at render time, not stored in the trace.)
+    scored = [e for e in trace if e["region_scores"] is not None]
+    assert scored, "expected at least one head-scored step"
+    for e in scored:
+        assert e["matched_region"] == int(np.argmax(e["region_scores"]))
 
 
 def test_realistic_return_finals_default_is_plain_list():
     inputs = _realistic_inputs()
     out = evaluate_realistic_curve(inputs, "mlp", seeds=[0], max_labels=6)
     assert isinstance(out, list)  # default (return_finals=False) preserves the list contract
+
+
+def test_prepared_image_viz_fields_contract():
+    """``PreparedImage`` carries the HAC viz payload the region cache persists and the
+    labeling-trace composite redraws: ``children`` (merge links), ``cell_masks`` (per-node
+    patch footprints), ``saliency`` (attention grid). All default None (tree-less sources)."""
+    base = dict(
+        boxes=np.zeros((2, 4), np.float32),
+        vecs=np.zeros((2, 3), np.float32),
+        whole_vec=np.zeros(3, np.float32),
+        exemplars=np.zeros((0, 3), np.float32),
+    )
+    p0 = PreparedImage(**base)
+    assert p0.children is None and p0.cell_masks is None and p0.saliency is None  # no tree
+    ch = np.array([[-1, -1], [0, 1]], dtype=int)  # (-1,-1) = childless; [0,1] = a merge node
+    masks = np.zeros((2, 4, 4), dtype=bool)
+    sal = np.zeros((4, 4), dtype=np.float32)
+    p = PreparedImage(**base, children=ch, cell_masks=masks, saliency=sal)
+    assert np.array_equal(p.children, ch)
+    assert p.cell_masks.shape == (2, 4, 4) and p.saliency.shape == (4, 4)
