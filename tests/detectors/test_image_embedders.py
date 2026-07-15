@@ -506,12 +506,14 @@ class TestApiEmbeddersResponseShape:
         assert resp.status_code == 200
         body = resp.get_json()
         entries = {e["name"]: e for e in body["embedders"]}
-        # All image embedders must be present; three CLIP-family bimodal
-        # models, single/patch pairs for DINOv2/DINOv3/EUPE, the FaceNet
-        # face-identity embedder, and the SIFT/VLAD structural embedder.
+        # All image embedders must be present; four CLIP-family bimodal
+        # models (siglip, siglip2, siglip_l, clip), single/patch pairs for
+        # DINOv2/DINOv3/EUPE, the FaceNet face-identity embedder, and the
+        # SIFT/VLAD structural embedder.
         assert set(entries) == {
             "siglip",
             "siglip2",
+            "siglip_l",
             "clip",
             "dinov2_single",
             "dinov2_patch",
@@ -531,6 +533,7 @@ class TestApiEmbeddersResponseShape:
             assert entry["license_notice"] is None or isinstance(entry["license_notice"], str)
         # Specific expectations.
         assert entries["siglip"]["supports_text"] is True
+        assert entries["siglip_l"]["supports_text"] is True
         for name in (
             "dinov2_single",
             "dinov2_patch",
@@ -547,6 +550,7 @@ class TestApiEmbeddersResponseShape:
         for name in (
             "siglip",
             "siglip2",
+            "siglip_l",
             "clip",
             "dinov2_single",
             "dinov3_single",
@@ -558,6 +562,7 @@ class TestApiEmbeddersResponseShape:
         for name in (
             "siglip",
             "siglip2",
+            "siglip_l",
             "clip",
             "dinov2_single",
             "dinov2_patch",
