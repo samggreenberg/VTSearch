@@ -37,6 +37,11 @@ class DocumentMediaType(MediaType):
     #: Documents render a first-page thumbnail: a browsable-thumbnail type.
     has_thumbnail = True
 
+    #: A document is a *convert-out* half type: importable but not embeddable.
+    #: It must be turned into an image (rasterised pages) or text (extracted
+    #: body) before it can be embedded.  Image is the default (first entry).
+    converts_to = ["image", "text"]
+
     def __init__(self) -> None:
         self._on_progress: ProgressCallback = _noop_progress
 
@@ -123,4 +128,38 @@ class DocumentMediaType(MediaType):
             data=data,
             mimetype=mimetype,
             download_name=f"media_{media['id']}{ext}",
+        )
+
+    def image_response(self, media: dict) -> MediaResponse | None:
+        """Return the document's **first page** rasterised to PNG, or *None*.
+
+        A document has no natively-visual bytes the grid / VTSBrowse bin-popup
+        can paint (the raw ``application/pdf`` stream is not an image), so the
+        media route delegates to this hook the same way it does for audio
+        waveforms and video mid-frames.  Only PDFs rasterise (via
+        :func:`~vtscore.datasets.pdf.render_pdf_page_png`); ``.doc`` / ``.ppt``
+        return ``None`` and fall back to a placeholder.  The rendered page is
+        memoised on the media in-memory (never persisted) so repeated fetches
+        of the same item skip the re-render.
+        """
+        thumb = media.get("thumbnail_bytes")
+        if not thumb:
+            filename = media.get("filename", "")
+            ext = Path(filename).suffix.lower() if filename else ".pdf"
+            if ext not in ("", ".pdf"):
+                return None
+            data = self._resolve_media_bytes(media)
+            if not data:
+                return None
+            from vtscore.datasets.pdf import render_pdf_page_png  # noqa: PLC0415
+
+            thumb = render_pdf_page_png(data, page_index=0)
+            if thumb:
+                media["thumbnail_bytes"] = thumb
+        if not thumb:
+            return None
+        return MediaResponse(
+            data=thumb,
+            mimetype="image/png",
+            download_name=f"media_{media['id']}_page1.png",
         )
