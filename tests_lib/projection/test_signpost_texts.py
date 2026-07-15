@@ -297,8 +297,9 @@ class TestFallbackTextProvider:
 class TestCaptionerSelection:
     def test_default_returns_base_provider(self):
         # No captioner opt-in (CoreConfig default {}) → the tag/content base.
-        assert st.provider_for("image").name == "tags:openimages600"
-        assert st.provider_for("audio").name == "tags:audioset527"
+        image, audio = st.provider_for("image"), st.provider_for("audio")
+        assert image is not None and image.name == "tags:openimages600"
+        assert audio is not None and audio.name == "tags:audioset527"
 
     def test_enabled_wraps_captioner_over_base(self, monkeypatch):
         monkeypatch.setattr(st, "_captioner_enabled", lambda mt: mt == "image")
@@ -307,7 +308,8 @@ class TestCaptionerSelection:
         assert provider.primary.name == "caption:qwen2.5-vl-3b"
         assert provider.fallback.name == "tags:openimages600"
         # A type without opt-in still gets its bare base.
-        assert st.provider_for("audio").name == "tags:audioset527"
+        audio = st.provider_for("audio")
+        assert audio is not None and audio.name == "tags:audioset527"
 
     def test_enabled_but_no_captioner_returns_base(self, monkeypatch):
         # text has no captioner registered; opting it in is a no-op.

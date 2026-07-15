@@ -62,7 +62,6 @@ QWEN_PROMPT = (
 #: explode the batch — the same envelope the study's framework used.
 _QWEN_MIN_PIXELS = 256 * 28 * 28
 _QWEN_MAX_PIXELS = 768 * 28 * 28
-_QWEN_MAX_SIDE = 1280
 
 
 def _load_image_model(model_id: str, on_progress: ProgressFn | None = None) -> tuple[Any, Any, str]:
@@ -146,9 +145,7 @@ def _load_audio_model(model_id: str, on_progress: ProgressFn | None = None) -> t
     tokenizer = load_pretrained_local_first(
         WhisperTokenizer.from_pretrained, model_id, language="en", task="transcribe", token=hf_token()
     )
-    feature_extractor = load_pretrained_local_first(
-        WhisperFeatureExtractor.from_pretrained, model_id, token=hf_token()
-    )
+    feature_extractor = load_pretrained_local_first(WhisperFeatureExtractor.from_pretrained, model_id, token=hf_token())
     style_ids = tokenizer("", text_target=_AUDIO_STYLE_PREFIX, return_tensors="pt").labels[:, :-1]
     return model, tokenizer, feature_extractor, device, style_ids
 
