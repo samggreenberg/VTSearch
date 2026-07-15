@@ -943,3 +943,62 @@ ENRICO_CATEGORIES = [
     "Terms",
     "Tutorial",
 ]
+
+
+# ------------------------------------------------------------------
+# VGGFace2 (Faces demo) - a curated identity subset
+# ------------------------------------------------------------------
+# The VGGFace2 test split ships 500 identities as ``test/n######/*.jpg``
+# folders; the Faces demo uses a hand-picked, gender-balanced subset of 40
+# well-populated identities (each has 469+ in-the-wild photos with wide pose,
+# age and lighting variation).  Each entry is ``(class_id, display_name)``:
+# the class id is the on-disk folder name, the display name is the ``category``
+# label the demo stamps on every photo of that person (and the ground-truth
+# identity the eval framework scores).  Names are taken from VGGFace2's own
+# ``identity_meta.csv`` and restricted to plain ASCII so the label round-trips
+# cleanly through the UI and eval queries.
+VGGFACE2_IDENTITIES: list[tuple[str, str]] = [
+    ("n000149", "Aishwarya Rai Bachchan"),
+    ("n000363", "Alodia Gosiengfiao"),
+    ("n000659", "Anne-Marie Duff"),
+    ("n000667", "Annette Bening"),
+    ("n001190", "Brendan Rodgers"),
+    ("n001368", "Carlo Conti"),
+    ("n001708", "Clare Grant"),
+    ("n002389", "Edward Furlong"),
+    ("n002664", "Evangelos Venizelos"),
+    ("n002684", "Ewan McGregor"),
+    ("n002878", "Frank de Boer"),
+    ("n002880", "Frankie Muniz"),
+    ("n003001", "Genelia DSouza"),
+    ("n003205", "Gregg Popovich"),
+    ("n003217", "Grzegorz Schetyna"),
+    ("n003298", "Haley Joel Osment"),
+    ("n003461", "Himesh Reshammiya"),
+    ("n003554", "Ileana DCruz"),
+    ("n004050", "Jessica Seinfeld"),
+    ("n004563", "Kareena Kapoor Khan"),
+    ("n004586", "Karl Urban"),
+    ("n004652", "Katie Holmes"),
+    ("n004738", "Kevin Dillon"),
+    ("n004743", "Kevin Jonas"),
+    ("n004813", "Kim Wilde"),
+    ("n004826", "Kimora Lee Simmons"),
+    ("n005159", "Liam Neeson"),
+    ("n005179", "Lin Dan"),
+    ("n005226", "Liza Minnelli"),
+    ("n005490", "Manuel Neuer"),
+    ("n005666", "Marissa Jaret Winokur"),
+    ("n005723", "Martha Reeves"),
+    ("n005758", "Marvin Humes"),
+    ("n006772", "Park Bo-young"),
+    ("n007368", "Ricky Schroder"),
+    ("n008183", "Spencer Pratt"),
+    ("n008710", "Trudie Styler"),
+    ("n008937", "Vivica A. Fox"),
+    ("n008989", "Wendi Deng Murdoch"),
+    ("n009123", "Yulia Volkova"),
+]
+
+# Display-name category list, in the same order as ``VGGFACE2_IDENTITIES``.
+VGGFACE2_CATEGORIES: list[str] = [name for _cid, name in VGGFACE2_IDENTITIES]

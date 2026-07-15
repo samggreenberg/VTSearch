@@ -100,6 +100,8 @@ from vtscore.datasets.downloader.core import (
     UCSF_IDL_DOWNLOAD_SIZE_MB,
     URBANSOUND8K_DOWNLOAD_SIZE_MB,
     URBANSOUND8K_URL,
+    VGGFACE2_TEST_DOWNLOAD_SIZE_MB,
+    VGGFACE2_TEST_URL,
     VIDEO_DIR,
     VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB,
     VISUAL_GENOME_IMAGES2_URL,
@@ -139,6 +141,7 @@ from vtscore.datasets.downloader.images import (
     download_rico_screen2words,
     download_roxford5k,
     download_rvl_cdip,
+    download_vggface2,
     download_visual_genome,
 )
 
@@ -254,6 +257,8 @@ __all__ = [
     "UCSF_IDL_DOWNLOAD_URL",
     "URBANSOUND8K_DOWNLOAD_SIZE_MB",
     "URBANSOUND8K_URL",
+    "VGGFACE2_TEST_DOWNLOAD_SIZE_MB",
+    "VGGFACE2_TEST_URL",
     "VIDEO_DIR",
     "VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB",
     "VISUAL_GENOME_IMAGES2_URL",
@@ -282,6 +287,7 @@ __all__ = [
     "download_rico_screen2words",
     "download_roxford5k",
     "download_rvl_cdip",
+    "download_vggface2",
     "download_visual_genome",
     # Video
     "download_hmdb51",

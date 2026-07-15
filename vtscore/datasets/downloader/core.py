@@ -58,6 +58,13 @@ SAMPLE_VIDEOS_URL = "https://github.com/sample-datasets/video-clips/archive/refs
 CIFAR10_URL = "https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz"
 CALTECH101_URL = "https://data.caltech.edu/records/mzrjq-6wc02/files/caltech-101.zip"
 CALTECH256_URL = "https://data.caltech.edu/records/nyy15-4j048/files/256_ObjectCategories.tar?download=1"
+# VGGFace2 test split (500 identities, folder-per-identity ``test/n######/*.jpg``),
+# served as a single gzip tarball from the HuggingFace mirror of the (now
+# account-gated) Oxford VGG release.  We use only the test split - it is the
+# smaller half (~2 GB vs the 37 GB train tar) yet still carries hundreds of
+# in-the-wild, pose/age-varied photos per person, which is exactly what the
+# Faces demo needs.
+VGGFACE2_TEST_URL = "https://huggingface.co/datasets/ProgramComputer/VGGFace2/resolve/main/data/vggface2_test.tar.gz"
 UCF101_SUBSET_URL = "https://huggingface.co/datasets/sayakpaul/ucf101-subset/resolve/main/UCF101_subset.tar.gz"
 # 20 Newsgroups is fetched via scikit-learn, but we pre-download its archive
 # ourselves (through download_file_with_progress) so the transfer gets a
@@ -206,6 +213,7 @@ ESC50_DOWNLOAD_SIZE_MB = 600
 SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB = 150
 CIFAR10_DOWNLOAD_SIZE_MB = 170
 CALTECH101_DOWNLOAD_SIZE_MB = 131
+VGGFACE2_TEST_DOWNLOAD_SIZE_MB = 1935
 CALTECH256_DOWNLOAD_SIZE_MB = 1200
 UCF101_SUBSET_DOWNLOAD_SIZE_MB = 171
 BBC_NEWS_DOWNLOAD_SIZE_MB = 2
