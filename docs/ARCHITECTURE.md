@@ -71,19 +71,23 @@ VTSearch/
 │   │   ├── audio/                  Audio media type, embedders (CLAP, CLAP-Music, CLAP-General,
 │   │   │                           ParaSpeechCLAP, AST, Whisper), clippers, SpeechExtractor
 │   │   ├── image/                  Image media type, embedders (SigLIP default; SigLIP2, CLIP,
-│   │   │                           Face, SIFT-VLAD single-vector; DINOv2, DINOv3, EUPE each with
+│   │   │                           SIFT-VLAD single-vector; DINOv2, DINOv3, EUPE each with
 │   │   │                           single + patch variants), clippers, ImageClassExtractor,
 │   │   │                           FaceLocalizer, OCRExtractor
 │   │   ├── text/                   Text media type, embedders (E5 default, BGE), clippers
 │   │   ├── video/                  Video media type, embedders (X-CLIP default, LanguageBind,
 │   │   │                           VideoMAE), clippers
-│   │   └── document/               Document media type (no embedder; convert first), clipper
+│   │   ├── document/               Document media type — convert-out half type (importable, no
+│   │   │                           embedder; converts_to image/text), clipper, UCSF demo
+│   │   └── face/                   Face media type — convert-in half type (embeddable, not
+│   │                               importable; FaceNet embedder), fed by the image2face converter
 │   │
 │   ├── converters/                 Media type converters (auto-discovered via CONVERTER sentinel)
 │   │   ├── audio2image.py          Mel/CQT spectrogram rendering
 │   │   ├── audio2text.py           Whisper ASR transcription
 │   │   ├── document2image.py       PDF page rendering
 │   │   ├── document2text.py        Text extraction from documents
+│   │   ├── image2face.py           Face localisation + crop (MediaPipe) → face type
 │   │   ├── image2text.py           OCR (PaddleOCR)
 │   │   ├── video2audio.py          Audio track extraction
 │   │   └── video2image.py          Frame sampling

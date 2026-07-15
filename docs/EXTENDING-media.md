@@ -202,6 +202,16 @@ changes to `vtscore/media/__init__.py` are needed.
 | `folder_import_name` | `str`       | `type_id`          | Alias for folder imports (matches `type_id`) |
 | `dir_key`            | `str`       | `type_id + "_dir"` | Key in pickle files for external dir       |
 | `pickle_extra_fields`| `list[str]` | `[]`               | Extra fields to preserve in pickle round-trips (e.g. `["width", "height"]`) |
+| `importable`         | `bool`      | `True`             | Whether the user imports this type natively (folder scan). Set `False` for a *convert-in* half type produced only by a converter (e.g. `face`) |
+| `converts_to`        | `list[str]` | `[]`               | For a non-embeddable *convert-out* half type (e.g. `document`), the embeddable targets it converts into (first = default), e.g. `["image", "text"]` |
+
+> **Half media types.** `MediaType` separates two orthogonal capabilities:
+> `importable` (a native ingestion category) and `embeddable` (has a registered
+> embedder — derived automatically). A *convert-out* half type is importable
+> but not embeddable and declares `converts_to` (`document`); a *convert-in*
+> half type is embeddable but sets `importable = False` and has empty
+> `file_extensions` (`face`, produced by the `image2face` converter). Full
+> types are both.
 
 **Optional overridable methods:**
 
