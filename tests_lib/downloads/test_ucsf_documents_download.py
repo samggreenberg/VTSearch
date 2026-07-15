@@ -1,11 +1,7 @@
 """Tests for UCSF Industry Documents demo dataset download and load_demo_source integration."""
 
 from pathlib import Path
-from typing import Any, cast
 from unittest.mock import MagicMock, patch
-
-import numpy as np
-from PIL import Image
 
 
 # ---------------------------------------------------------------------------
@@ -251,61 +247,33 @@ class TestDownloadUcsfDocuments:
 
 
 # ---------------------------------------------------------------------------
-# load_demo_source: ucsf_documents branch
+# load_demo_source: ucsf_documents branch (now on the Document type)
 # ---------------------------------------------------------------------------
 
 
 class TestLoadDemoSourceUcsfDocuments:
-    """ImageMediaType.load_demo_source with source='ucsf_documents'."""
+    """DocumentMediaType.load_demo_source with source='ucsf_documents'.
 
-    def _make_image_media_type(self):
-        from vtscore.media.image.media_type import ImageMediaType
+    The demo now lives on the Document type and produces **raw-PDF document**
+    clips (one per PDF); rendering PDF pages to images is the ``document2image``
+    converter's job at load time, not this method's.
+    """
 
-        # _model / _processor are runtime-only attrs set by load_models on the
-        # subclass; not declared on the ABC, so cast to Any to assign them.
-        mt = cast(Any, ImageMediaType())
-        mt._model = MagicMock()
-        mt._processor = MagicMock()
-        return mt
+    def _make_document_media_type(self):
+        from vtscore.media.document.media_type import DocumentMediaType
 
-    def _make_fake_embedder(self):
-        emb = MagicMock()
-        emb.name = "siglip"
-        emb.media_type_id = "image"
-        emb._model = True
-        emb._on_progress = lambda *a: None
-        emb.embed_media.return_value = np.zeros(768)
-        emb.embed_pil_image.return_value = np.zeros(768)
-        return emb
-
-    def _fake_render(self, page_count: int = 1, width: int = 100, height: int = 80):
-        """Return a render_pdf_pages replacement that yields tiny PIL images."""
-
-        def render(pdf_path, dpi=150):
-            pages = []
-            for i in range(page_count):
-                img = Image.new("RGB", (width, height), color=(200, 200, 200))
-                page_name = f"{pdf_path.name}-{i + 1}"
-                pages.append((page_name, img))
-            return pages
-
-        return render
+        return DocumentMediaType()
 
     def test_ucsf_documents_populates_clips(self, tmp_path):
         """load_demo_source with source='ucsf_documents' fills the clips dict."""
         from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import pdf as pdf_module
 
         docs_dir = _make_ucsf_fixture(tmp_path, ["Tobacco", "Food"], docs_per_cat=2)
 
-        mt = self._make_image_media_type()
-        emb = self._make_fake_embedder()
+        mt = self._make_document_media_type()
         clips: dict = {}
 
-        with (
-            patch.object(dl_module, "download_ucsf_documents", return_value=docs_dir),
-            patch.object(pdf_module, "render_pdf_pages", self._fake_render()),
-        ):
+        with patch.object(dl_module, "download_ucsf_documents", return_value=docs_dir):
             mt.load_demo_source(
                 source="ucsf_documents",
                 categories=["Tobacco", "Food"],
@@ -313,7 +281,6 @@ class TestLoadDemoSourceUcsfDocuments:
                 slice_end=10,
                 clips=clips,
                 on_progress=lambda *a: None,
-                embedder=emb,
             )
 
         assert len(clips) == 4  # 2 docs × 2 categories
@@ -321,20 +288,15 @@ class TestLoadDemoSourceUcsfDocuments:
         assert categories_seen == {"Tobacco", "Food"}
 
     def test_clips_have_expected_fields(self, tmp_path):
-        """Each clip dict contains all required image media fields."""
+        """Each clip is a raw-PDF document media, not a rendered image."""
         from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import pdf as pdf_module
 
         docs_dir = _make_ucsf_fixture(tmp_path, ["Drug"], docs_per_cat=1)
 
-        mt = self._make_image_media_type()
-        emb = self._make_fake_embedder()
+        mt = self._make_document_media_type()
         clips: dict = {}
 
-        with (
-            patch.object(dl_module, "download_ucsf_documents", return_value=docs_dir),
-            patch.object(pdf_module, "render_pdf_pages", self._fake_render()),
-        ):
+        with patch.object(dl_module, "download_ucsf_documents", return_value=docs_dir):
             mt.load_demo_source(
                 source="ucsf_documents",
                 categories=["Drug"],
@@ -342,34 +304,27 @@ class TestLoadDemoSourceUcsfDocuments:
                 slice_end=10,
                 clips=clips,
                 on_progress=lambda *a: None,
-                embedder=emb,
             )
 
         assert len(clips) == 1
         clip = clips[1]
-        assert clip["media_type"] == "image"
+        assert clip["media_type"] == "document"
         assert clip["category"] == "Drug"
-        assert clip["media_bytes"] is not None
-        assert clip["width"] == 100
-        assert clip["height"] == 80
-        assert clip["filename"].endswith(".png")
-        assert clip["origin"] == {"importer": "demo", "params": {}}
+        assert clip["media_bytes"] == b"%PDF-1.0 stub"
+        assert clip["filename"].endswith(".pdf")
+        # Documents are not embedded here.
+        assert clip["embeddings"] == {}
 
     def test_slice_is_applied(self, tmp_path):
-        """slice_start/slice_end limits pages per category."""
+        """slice_start/slice_end limits documents per category."""
         from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import pdf as pdf_module
 
         docs_dir = _make_ucsf_fixture(tmp_path, ["Tobacco"], docs_per_cat=10)
 
-        mt = self._make_image_media_type()
-        emb = self._make_fake_embedder()
+        mt = self._make_document_media_type()
         clips: dict = {}
 
-        with (
-            patch.object(dl_module, "download_ucsf_documents", return_value=docs_dir),
-            patch.object(pdf_module, "render_pdf_pages", self._fake_render()),
-        ):
+        with patch.object(dl_module, "download_ucsf_documents", return_value=docs_dir):
             mt.load_demo_source(
                 source="ucsf_documents",
                 categories=["Tobacco"],
@@ -377,74 +332,22 @@ class TestLoadDemoSourceUcsfDocuments:
                 slice_end=5,
                 clips=clips,
                 on_progress=lambda *a: None,
-                embedder=emb,
             )
 
-        # Only docs[2:5] = 3 pages.
+        # Only docs[2:5] = 3 documents.
         assert len(clips) == 3
 
-    def test_uses_first_page_only(self, tmp_path):
-        """Only the first page of multi-page PDFs is used."""
-        from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import pdf as pdf_module
+    def test_unknown_source_raises(self, tmp_path):
+        """An unrecognised demo source is rejected."""
+        import pytest
 
-        docs_dir = _make_ucsf_fixture(tmp_path, ["Chemical"], docs_per_cat=2)
-
-        mt = self._make_image_media_type()
-        emb = self._make_fake_embedder()
-        clips: dict = {}
-
-        # Each PDF has 5 pages, but only page 1 should be used per doc.
-        with (
-            patch.object(dl_module, "download_ucsf_documents", return_value=docs_dir),
-            patch.object(pdf_module, "render_pdf_pages", self._fake_render(page_count=5)),
-        ):
+        mt = self._make_document_media_type()
+        with pytest.raises(ValueError):
             mt.load_demo_source(
-                source="ucsf_documents",
-                categories=["Chemical"],
+                source="not_a_source",
+                categories=[],
                 slice_start=0,
-                slice_end=10,
-                clips=clips,
+                slice_end=None,
+                clips={},
                 on_progress=lambda *a: None,
-                embedder=emb,
             )
-
-        # 2 docs × 1 page each = 2 clips.
-        assert len(clips) == 2
-
-    def test_skips_failed_pdf_renders(self, tmp_path):
-        """PDFs that fail to render are silently skipped."""
-        from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import pdf as pdf_module
-
-        docs_dir = _make_ucsf_fixture(tmp_path, ["Opioids"], docs_per_cat=3)
-
-        mt = self._make_image_media_type()
-        emb = self._make_fake_embedder()
-        clips: dict = {}
-
-        call_count = [0]
-
-        def flaky_render(pdf_path, dpi=150):
-            call_count[0] += 1
-            if call_count[0] == 2:
-                raise RuntimeError("corrupt PDF")
-            img = Image.new("RGB", (100, 80), color=(200, 200, 200))
-            return [(f"{pdf_path.name}-1", img)]
-
-        with (
-            patch.object(dl_module, "download_ucsf_documents", return_value=docs_dir),
-            patch.object(pdf_module, "render_pdf_pages", flaky_render),
-        ):
-            mt.load_demo_source(
-                source="ucsf_documents",
-                categories=["Opioids"],
-                slice_start=0,
-                slice_end=10,
-                clips=clips,
-                on_progress=lambda *a: None,
-                embedder=emb,
-            )
-
-        # 3 docs, 1 fails → 2 clips.
-        assert len(clips) == 2
