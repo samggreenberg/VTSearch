@@ -415,10 +415,10 @@ def _plot_iterations_metric(
         # are directly comparable.
         ncols = len(strategies)
         fig, axes = plt.subplots(1, ncols, figsize=(5 * ncols, 4.5), squeeze=False, sharey=True)
-        for si, strat in enumerate(strategies):
+        for si, strategy in enumerate(strategies):
             ax = axes[0][si]
-            n_groups = _draw_metric_lines(ax, df[df["strategy"] == strat], metric)
-            ax.set_title(strat, fontsize=11)
+            n_groups = _draw_metric_lines(ax, df[df["strategy"] == strategy], metric)
+            ax.set_title(strategy, fontsize=11)
             ax.set_xlabel("Voting Iteration (t)")
             if si == 0:
                 ax.set_ylabel(ylabel)
@@ -459,10 +459,10 @@ def _plot_fpr_fnr_faceted(df: "Any", strategies: list[str], out: Path) -> Path:
 
     ncols = len(strategies)
     fig, axes = plt.subplots(1, ncols, figsize=(5 * ncols, 4.5), squeeze=False, sharey=True)
-    for si, strat in enumerate(strategies):
+    for si, strategy in enumerate(strategies):
         ax = axes[0][si]
-        _draw_fpr_fnr_aggregate(ax, df[df["strategy"] == strat])
-        ax.set_title(strat, fontsize=11)
+        _draw_fpr_fnr_aggregate(ax, df[df["strategy"] == strategy])
+        ax.set_title(strategy, fontsize=11)
         ax.set_xlabel("Voting Iteration (t)")
         if si == 0:
             ax.set_ylabel("Rate")
