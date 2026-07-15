@@ -6,14 +6,19 @@ For each combination of seed *s*, dataset *d*, and target category *c*:
    **D_test** (held-out) using *s* to control the random split.
 2. Assign ground-truth labels based on *c*: medias whose ``"category"``
    matches *c* are positive (``good``), others are negative (``bad``).
-3. Create a shuffled voting sequence from D_sim (order controlled by *s*).
-4. Iterate through the voting sequence.  At each step *t* (once at least
-   one good **and** one bad vote exist), train a model on votes so far,
-   find a threshold, score D_test, and record the inclusion-weighted cost
-   (``fpr_weight * FPR + fnr_weight * FNR``).
+3. Vote on D_sim one item at a time, choosing *which* item to vote on next
+   with an active-learning acquisition strategy (order seeded by *s*).
+4. At each step *t* (once at least one good **and** one bad vote exist),
+   train a model on votes so far, find a threshold, score D_test, and record
+   the inclusion-weighted cost (``fpr_weight * FPR + fnr_weight * FNR``).
+
+Which item the simulated user votes on at each step is chosen by an
+**active-learning acquisition strategy** (see :mod:`vtscore.eval.al_strategies`);
+``random`` reproduces the uniform-order baseline, while uncertainty/diversity
+strategies query more informative items first.
 
 The result is a :class:`pandas.DataFrame` with columns
-``seed, dataset, category, t, n_good, n_bad, cost, fpr, fnr``.
+``seed, dataset, category, strategy, t, n_good, n_bad, cost, fpr, fnr``.
 
 ``n_good``/``n_bad`` are the number of good/bad votes the model was trained
 on for that row. The very first scored step has only one of each, so its
@@ -35,6 +40,7 @@ if TYPE_CHECKING:
     import torch
 
 from vtscore.embedding.media_vectors import media_embedding
+from vtscore.eval.al_strategies import ALContext, select_next
 from vtscore.eval.labels import media_is_positive, region_box_for_category
 from vtscore.training.mlp import _auto_hidden_dim, train_model
 from vtscore.training.thresholds import (
@@ -65,74 +71,6 @@ def _split_media_ids(
     shuffled = rng.permutation(all_ids).tolist()
     n_sim = max(1, int(len(shuffled) * sim_fraction))
     return shuffled[:n_sim], shuffled[n_sim:]
-
-
-VOTE_ORDERS: tuple[str, ...] = ("shuffle", "balanced", "ensemble_std")
-"""Supported ``vote_order`` strategies for :func:`simulate_voting_iterations`.
-
-- ``shuffle`` - the historical default: vote on the simulation set in a
-  seeded random order.
-- ``balanced`` - greedily interleave Good and Bad votes so the running
-  label set stays class-balanced (the earliest trainable step is 1-vs-1,
-  and the counts never drift far apart afterwards).
-- ``ensemble_std`` - active-learning order: at each step train an
-  N-member MLP ensemble on the votes so far, score the un-voted pool, and
-  vote next on the item the ensemble disagrees about most (highest
-  member-to-member sigmoid std).  The ensemble is used *only* to pick the
-  next vote; the per-step cost is still measured with the single
-  production MLP, exactly as the other orders measure it.
-"""
-
-
-def _make_vote_sequence(
-    sim_ids: list[int],
-    clips_dict: dict[int, dict[str, Any]],
-    target_category: str,
-    rng: np.random.RandomState,
-) -> list[tuple[int, str]]:
-    """Build a shuffled list of ``(media_id, label)`` pairs from simulation IDs."""
-    votes = [(cid, "good" if media_is_positive(clips_dict[cid], target_category) else "bad") for cid in sim_ids]
-    order = rng.permutation(len(votes))
-    return [votes[i] for i in order]
-
-
-def _balanced_vote_sequence(
-    sim_ids: list[int],
-    clips_dict: dict[int, dict[str, Any]],
-    target_category: str,
-    rng: np.random.RandomState,
-) -> list[tuple[int, str]]:
-    """Interleave Good/Bad votes so the running label set stays balanced.
-
-    Splits the sim votes by ground-truth class, shuffles each class, then
-    greedily appends whichever class is currently under-represented.  The
-    first two votes are therefore one Good and one Bad (training starts at
-    ``t=2`` with a 1-vs-1 model), and the good/bad counts stay within one
-    of each other for the whole sequence - isolating "does class balance
-    during voting help?" from the vote *content*, which is identical to
-    the ``shuffle`` order's pool.
-    """
-    goods = [(cid, "good") for cid in sim_ids if media_is_positive(clips_dict[cid], target_category)]
-    bads = [(cid, "bad") for cid in sim_ids if not media_is_positive(clips_dict[cid], target_category)]
-    rng.shuffle(goods)
-    rng.shuffle(bads)
-
-    out: list[tuple[int, str]] = []
-    gi = bi = 0
-    n_good = n_bad = 0
-    while gi < len(goods) or bi < len(bads):
-        # Take a Good when both remain and Goods are not ahead; otherwise
-        # take whichever class still has items left.
-        take_good = (gi < len(goods) and bi < len(bads) and n_good <= n_bad) or bi >= len(bads)
-        if take_good and gi < len(goods):
-            out.append(goods[gi])
-            gi += 1
-            n_good += 1
-        else:
-            out.append(bads[bi])
-            bi += 1
-            n_bad += 1
-    return out
 
 
 def _good_training_vec(
@@ -247,19 +185,96 @@ def _evaluate_on_test(
     return {"cost": round(cost, 6), "fpr": round(fpr, 6), "fnr": round(fnr, 6)}
 
 
-def _build_train_xy(
+# ------------------------------------------------------------------
+# Active-learning acquisition helpers
+# ------------------------------------------------------------------
+
+
+def _score_pool(
+    model: torch.nn.Sequential,
+    pool_ids: list[int],
+    clips_dict: dict[int, dict[str, Any]],
+) -> dict[int, float]:
+    """Return ``{pool_id: sigmoid score}`` for the current model over the pool.
+
+    Scores each pool item by its single whole-image vector - the fast path the
+    acquisition strategies rank uncertainty over.  This intentionally uses the
+    whole-image embedding even for patch datasets (where *test* scoring
+    max-pools over regions): acquisition only needs a monotone uncertainty
+    signal to order the pool, and the whole-image score is a cheap, adequate
+    proxy for that ordering.
+    """
+    import numpy as np  # noqa: PLC0415
+    import torch  # noqa: PLC0415
+
+    if not pool_ids:
+        return {}
+    embs = np.array([media_embedding(clips_dict[cid]) for cid in pool_ids])
+    X = torch.tensor(embs, dtype=torch.float32).to(next(model.parameters()).device)
+    with torch.no_grad():
+        scores = torch.sigmoid(model(X)).squeeze(1).cpu().tolist()
+    return dict(zip(pool_ids, scores, strict=True))
+
+
+def _build_eval_atlas(embeddings: dict[int, np.ndarray], min_node_size: int) -> Any:
+    """Build a coverage atlas over *embeddings* for the ``density_*`` strategies.
+
+    Returns ``None`` when there are no vectors.  Uses the same hierarchical
+    k-means partition the live dataset builds (see
+    :class:`~vtscore.state.coverage_atlas.CoverageAtlas`); *min_node_size* is
+    exposed so a caller with a small simulation set can drive the partition
+    deeper than the production floor (20) and actually resolve density cells.
+    """
+    from vtscore.state.coverage_atlas import CoverageAtlas, auto_max_depth  # noqa: PLC0415
+
+    if not embeddings:
+        return None
+    return CoverageAtlas(
+        embeddings,
+        k=3,
+        max_depth=auto_max_depth(len(embeddings), k=3, min_node_size=min_node_size),
+        min_node_size=min_node_size,
+    )
+
+
+def _train_and_calibrate(
     good_votes: dict[int, None],
     bad_votes: dict[int, None],
     clips_dict: dict[int, dict[str, Any]],
     target_category: str,
+    *,
     region_voting: bool,
-) -> tuple[list[np.ndarray], list[float]]:
-    """Assemble the ``(X_list, y_list)`` training data from the current votes.
+    input_dim: int,
+    inclusion: int,
+    calibrate_count: int,
+    calibration_fraction: float,
+) -> tuple[torch.nn.Sequential, float, int, int]:
+    """Train the step's model and calibrate its threshold from the current votes.
 
-    Good votes region-pool their ground-truth box when *region_voting* is on
-    (and the media supports it); bad votes always train on the whole-image
-    vector - matching the live detector, where only Yes-votes carry a region.
+    Returns ``(model, threshold, hidden_dim, n_labels)``.  Good votes region-pool
+    their ground-truth box when *region_voting* is on (and the media supports
+    it); Bad votes always train on the whole-image vector - matching the live
+    detector, where only Yes-votes carry a region.
+
+    The threshold matches the production ``_train_and_score_xy`` /
+    ``train_and_threshold`` pipeline exactly so the reported cost measures what
+    the live detector computes:
+
+    * ``hidden_dim`` is sized from the *full* label count and forced onto the
+      calibration folds, so the fold models share the final model's architecture
+      (production passes this into ``cross_calibration_threshold_cached``).
+      Letting each fold auto-size to its own smaller train split would train
+      narrower fold nets and report a threshold the live pipeline never produces.
+    * the fold splits use a fresh ``RandomState(42)`` - the fixed seed
+      ``cross_calibration_threshold_cached`` always calibrates with - rather than
+      the shared per-seed simulation RNG, so the calibration is byte-for-byte
+      what production runs for this vote set.  The eval seed still varies the
+      data (which media are voted, in what order, and the held-out test split);
+      only the calibration folds are pinned, as they are in production.
     """
+    import numpy as np  # noqa: PLC0415
+    import torch  # noqa: PLC0415
+
     X_list: list[np.ndarray] = []
     y_list: list[float] = []
     for vid in good_votes:
@@ -268,48 +283,9 @@ def _build_train_xy(
     for vid in bad_votes:
         X_list.append(media_embedding(clips_dict[vid]))
         y_list.append(0.0)
-    return X_list, y_list
-
-
-def _score_step(
-    good_votes: dict[int, None],
-    bad_votes: dict[int, None],
-    clips_dict: dict[int, dict[str, Any]],
-    target_category: str,
-    *,
-    region_voting: bool,
-    region_aware: bool,
-    inclusion: int,
-    safe_thresholds: bool,
-    sim_clips: dict[int, dict[str, Any]] | None,
-    X_all_clips: Any,
-    calibrate_count: int,
-    calibration_fraction: float,
-    test_ids: list[int],
-    t: int,
-    seed: int,
-    dataset_name: str,
-    start_time: float,
-) -> dict[str, Any]:
-    """Train one production MLP on the current votes and score the test set.
-
-    This is the per-step body shared by every ``vote_order``: it trains and
-    thresholds exactly the way the live ``_train_and_score_xy`` /
-    ``train_and_threshold`` pipeline does (hidden dim sized from the full label
-    count and forced onto the calibration folds, folds calibrated with a fresh
-    ``RandomState(42)``), evaluates on the held-out test set, and returns one
-    result row.  Keeping it single-MLP is deliberate: even under the
-    ``ensemble_std`` order the *reported* cost measures what the real detector
-    computes; the ensemble only chooses which item to vote on next.
-    """
-    import numpy as np  # noqa: PLC0415
-    import torch  # noqa: PLC0415
-
-    X_list, y_list = _build_train_xy(good_votes, bad_votes, clips_dict, target_category, region_voting)
 
     X = torch.tensor(np.array(X_list), dtype=torch.float32)
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
-    input_dim = X.shape[1]
     n_labels = len(good_votes) + len(bad_votes)
 
     hidden_dim = _auto_hidden_dim(n_labels)
@@ -324,87 +300,7 @@ def _score_step(
         hidden_dim=hidden_dim,
     )
     model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
-
-    if safe_thresholds:
-        threshold = _blend_safe_threshold(threshold, model, region_aware, sim_clips, X_all_clips, n_labels)
-
-    metrics = _evaluate_on_test(
-        model, threshold, clips_dict, test_ids, target_category, inclusion, region_aware=region_aware
-    )
-
-    return {
-        "seed": seed,
-        "dataset": dataset_name,
-        "category": target_category,
-        "t": t,
-        "n_good": len(good_votes),
-        "n_bad": len(bad_votes),
-        **metrics,
-        "elapsed_seconds": round(time.monotonic() - start_time, 3),
-    }
-
-
-def _ensemble_uncertainty_pick(
-    remaining: list[tuple[int, str]],
-    good_votes: dict[int, None],
-    bad_votes: dict[int, None],
-    clips_dict: dict[int, dict[str, Any]],
-    target_category: str,
-    region_voting: bool,
-    n_ensemble: int,
-) -> int:
-    """Index into *remaining* of the item the ensemble is least sure about.
-
-    Trains *n_ensemble* seed-varied MLPs on the current votes, scores every
-    un-voted item's whole-image vector with each member, and returns the index
-    of the item with the highest member-to-member sigmoid std (maximal
-    epistemic disagreement).  Whole-image vectors are used for the selection
-    scoring regardless of region awareness - the pick is an active-learning
-    heuristic, so a single fast vector per candidate is enough; the eventual
-    per-step cost is still measured region-aware in :func:`_score_step`.
-    """
-    import numpy as np  # noqa: PLC0415
-    import torch  # noqa: PLC0415
-
-    X_list, y_list = _build_train_xy(good_votes, bad_votes, clips_dict, target_category, region_voting)
-    X = torch.tensor(np.array(X_list), dtype=torch.float32)
-    y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
-    input_dim = X.shape[1]
-    hidden_dim = _auto_hidden_dim(len(good_votes) + len(bad_votes))
-
-    cand_embs = np.array([media_embedding(clips_dict[cid]) for cid, _ in remaining])
-    X_cand = torch.tensor(cand_embs, dtype=torch.float32)
-
-    member_scores: list[np.ndarray] = []
-    for k in range(n_ensemble):
-        # Fixed member seeds (42 + k) keep the pick a deterministic function of
-        # the votes cast so far, so the whole ``ensemble_std`` walk is
-        # reproducible for a given eval seed.
-        model = train_model(X, y, input_dim, seed=42 + k, hidden_dim=hidden_dim)
-        with torch.no_grad():
-            member_scores.append(torch.sigmoid(model(X_cand)).squeeze(1).cpu().numpy())
-    std = np.stack(member_scores, axis=0).std(axis=0)
-    return int(np.argmax(std))
-
-
-def _bootstrap_pick(remaining: list[tuple[int, str]], good_votes: dict[int, None], bad_votes: dict[int, None]) -> int:
-    """Pick the next vote before the model is trainable (no ensemble yet).
-
-    Until there is at least one Good and one Bad vote the ensemble can't be
-    trained, so this steers toward a trainable state fast: if exactly one class
-    is present, take the first item of the missing class; otherwise take the
-    first remaining item (the seeded shuffle already fixed the order).
-    """
-    need: str | None = None
-    if good_votes and not bad_votes:
-        need = "bad"
-    elif bad_votes and not good_votes:
-        need = "good"
-    if need is not None:
-        for i, (_, lbl) in enumerate(remaining):
-            if lbl == need:
-                return i
-    return 0
+    return model, threshold, hidden_dim, n_labels
 
 
 # ------------------------------------------------------------------
@@ -423,9 +319,9 @@ def simulate_voting_iterations(  # noqa: C901
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
     region_voting: bool = False,
-    vote_order: str = "shuffle",
-    n_ensemble: int = 5,
-    max_votes: Optional[int] = None,
+    strategy: str = "random",
+    max_steps: Optional[int] = None,
+    atlas_min_node_size: int = 20,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -451,32 +347,30 @@ def simulate_voting_iterations(  # noqa: C901
             Scoring is unaffected by this flag - a patch dataset always scores
             region-aware (max-pool over regions), so the only thing this toggles
             is the Good-vote training vector, isolating region voting's effect.
-        vote_order: Which strategy orders the votes (see :data:`VOTE_ORDERS`):
-            ``"shuffle"`` (default, seeded random), ``"balanced"`` (interleave
-            Good/Bad so the running label set stays balanced), or
-            ``"ensemble_std"`` (active learning - vote next on the item an MLP
-            ensemble disagrees about most).
-        n_ensemble: Number of MLP members trained per step to pick the next
-            vote under ``vote_order="ensemble_std"``.  Ignored by the other
-            orders (default 5).
-        max_votes: Optional cap on how many votes are cast.  ``None`` (default)
-            walks the entire simulation set.  Handy for the expensive
-            ``ensemble_std`` order, which retrains ``n_ensemble`` models per
-            step.
+        strategy: Active-learning acquisition strategy naming *which* pool item
+            the simulated user labels next (see
+            :data:`vtscore.eval.al_strategies.STRATEGIES`).  ``"random"``
+            (default) picks uniformly - the baseline every other strategy is
+            measured against.  Uncertainty strategies (``margin``, ``entropy``,
+            ``bald``, ``eig``) query the item the current model is least sure
+            about; ``coreset`` maximises embedding-space coverage; ``density_*``
+            variants up-weight sparsely-populated coverage-atlas cells.  Before a
+            trainable model exists (fewer than one Good *and* one Bad vote) every
+            strategy falls back to a random pick.
+        max_steps: Cap on the number of voting steps (pool items labelled).
+            ``None`` (default) votes on the entire simulation set.
+        atlas_min_node_size: Minimum leaf population for the coverage atlas the
+            ``density_*`` strategies read (default 20, the production floor).
+            Lower it for small simulation sets so density cells actually resolve.
+            Ignored for non-density strategies (no atlas is built).
 
     Returns:
-        List of row dicts with keys ``seed, dataset, category, t, n_good,
-        n_bad, cost, fpr, fnr, elapsed_seconds``. ``n_good``/``n_bad`` report
-        the vote counts behind each row so callers can tell apart metrics
-        learned from a 1-vs-1 model and a many-vs-many one.  The row schema is
-        identical across every ``vote_order`` - selection strategy never leaks
-        into per-step evaluation, which always uses the single production MLP.
+        List of row dicts with keys ``seed, dataset, category, strategy, t,
+        n_good, n_bad, cost, fpr, fnr, elapsed_seconds``. ``n_good``/``n_bad``
+        report the vote counts behind each row so callers can tell apart metrics
+        learned from a 1-vs-1 model and a many-vs-many one.
     """
     import numpy as np  # noqa: PLC0415
-    import torch  # noqa: PLC0415
-
-    if vote_order not in VOTE_ORDERS:
-        raise ValueError(f"Unknown vote_order {vote_order!r}; choices: {list(VOTE_ORDERS)}")
 
     rng = np.random.RandomState(seed)
     # Note: no torch.manual_seed() here - train_model handles its own
@@ -498,6 +392,20 @@ def simulate_voting_iterations(  # noqa: C901
     # detector scores them, regardless of how the Good votes were assembled.
     region_aware = any(clips_dict[cid].get("patch_regions") for cid in clips_dict)
 
+    import torch  # noqa: PLC0415
+
+    # Whole-image embeddings of the simulation pool.  These feed the acquisition
+    # strategies (uncertainty scoring, coreset distances, the density atlas);
+    # the Good-vote *training* vector can still be region-pooled below when
+    # ``region_voting`` is on.
+    sim_embeddings: dict[int, np.ndarray] = {
+        cid: np.asarray(media_embedding(clips_dict[cid]), dtype=np.float32) for cid in sim_ids
+    }
+    input_dim = int(next(iter(sim_embeddings.values())).shape[0])
+
+    # The ``density_*`` strategies read a coverage atlas built over the pool.
+    atlas = _build_eval_atlas(sim_embeddings, atlas_min_node_size) if strategy.startswith("density_") else None
+
     # Pre-compute embeddings for safe-threshold GMM scoring.  Restrict to the
     # simulation set so the held-out ``test_ids`` never feed into the GMM that
     # picks the threshold - otherwise the test scores leak into calibration
@@ -515,77 +423,95 @@ def simulate_voting_iterations(  # noqa: C901
 
     good_votes: dict[int, None] = {}
     bad_votes: dict[int, None] = {}
+    labeled: dict[int, float] = {}
     rows: list[dict[str, Any]] = []
 
-    # Shared per-step scoring: identical across vote orders, so the reported
-    # cost always measures the single production MLP (the ensemble, when used,
-    # only influences which item is voted on next).
-    def _step(t: int) -> None:
-        rows.append(
-            _score_step(
-                good_votes,
-                bad_votes,
-                clips_dict,
-                target_category,
-                region_voting=region_voting,
-                region_aware=region_aware,
-                inclusion=inclusion,
-                safe_thresholds=safe_thresholds,
-                sim_clips=sim_clips,
-                X_all_clips=X_all_clips,
-                calibrate_count=calibrate_count,
-                calibration_fraction=calibration_fraction,
-                test_ids=test_ids,
-                t=t,
-                seed=seed,
-                dataset_name=dataset_name,
-                start_time=start_time,
-            )
+    # Acquisition proceeds one vote at a time: the strategy picks the next pool
+    # item using the *current* model (the one trained at the previous step), the
+    # item's ground-truth label is revealed, and a fresh model is trained on all
+    # votes so far.  Before a trainable model exists every strategy falls back to
+    # a random pick (``model=None`` in the context below), so a cold start is
+    # always a random warm-up until one Good and one Bad vote coexist.
+    pool = sorted(sim_ids)
+    # Ground-truth pool labels for the ``balanced`` oracle strategy (ignored by
+    # every label-blind strategy); cheap to build once up front.
+    pool_labels = {cid: (1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0) for cid in sim_ids}
+    model: torch.nn.Sequential | None = None
+    threshold = 0.5
+    pool_scores: dict[int, float] = {}
+    prev_hidden_dim: int | None = None
+    n_steps = len(pool) if max_steps is None else min(max_steps, len(pool))
+
+    for t in range(1, n_steps + 1):
+        if not pool:
+            break
+        ctx = ALContext(
+            pool_ids=pool,
+            embeddings=sim_embeddings,
+            labeled=labeled,
+            scores=pool_scores,
+            model=model,
+            threshold=threshold,
+            input_dim=input_dim,
+            hidden_dim=prev_hidden_dim,
+            atlas=atlas,
+            rng=rng,
+            pool_labels=pool_labels,
         )
-
-    if vote_order == "ensemble_std":
-        # Adaptive walk: the next vote depends on the current ensemble's
-        # uncertainty, so the sequence can't be precomputed.  The seeded
-        # shuffle only fixes the starting pool order and the bootstrap /
-        # tie-break order before the model is trainable.
-        remaining = _make_vote_sequence(sim_ids, clips_dict, target_category, rng)
-        cap = len(remaining) if max_votes is None else min(max_votes, len(remaining))
-        for t in range(1, cap + 1):
-            if not good_votes or not bad_votes:
-                idx = _bootstrap_pick(remaining, good_votes, bad_votes)
-            else:
-                idx = _ensemble_uncertainty_pick(
-                    remaining, good_votes, bad_votes, clips_dict, target_category, region_voting, n_ensemble
-                )
-            cid, label = remaining.pop(idx)
-            if label == "good":
-                good_votes[cid] = None
-            else:
-                bad_votes[cid] = None
-            if not good_votes or not bad_votes:
-                continue
-            _step(t)
-        return rows
-
-    # Static orders: the whole sequence is fixed up front.
-    if vote_order == "balanced":
-        vote_seq = _balanced_vote_sequence(sim_ids, clips_dict, target_category, rng)
-    else:  # "shuffle"
-        vote_seq = _make_vote_sequence(sim_ids, clips_dict, target_category, rng)
-    if max_votes is not None:
-        vote_seq = vote_seq[:max_votes]
-
-    for t, (cid, label) in enumerate(vote_seq, start=1):
-        if label == "good":
+        cid = select_next(strategy, ctx)
+        pool.remove(cid)
+        if media_is_positive(clips_dict[cid], target_category):
             good_votes[cid] = None
+            labeled[cid] = 1.0
         else:
             bad_votes[cid] = None
+            labeled[cid] = 0.0
 
         # Need at least 1 good and 1 bad to train
         if not good_votes or not bad_votes:
+            model = None
             continue
 
-        _step(t)
+        model, threshold, hidden_dim, n_labels = _train_and_calibrate(
+            good_votes,
+            bad_votes,
+            clips_dict,
+            target_category,
+            region_voting=region_voting,
+            input_dim=input_dim,
+            inclusion=inclusion,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+        )
+
+        # Apply safe threshold blending if enabled
+        if safe_thresholds:
+            threshold = _blend_safe_threshold(threshold, model, region_aware, sim_clips, X_all_clips, n_labels)
+
+        # Evaluate on held-out test set
+        metrics = _evaluate_on_test(
+            model, threshold, clips_dict, test_ids, target_category, inclusion, region_aware=region_aware
+        )
+
+        # Score the remaining pool with the fresh model so the next step's
+        # acquisition strategy ranks it; record the width for the next step's
+        # ``eig`` counterfactual retrains.
+        pool_scores = _score_pool(model, pool, clips_dict)
+        prev_hidden_dim = hidden_dim
+
+        rows.append(
+            {
+                "seed": seed,
+                "dataset": dataset_name,
+                "category": target_category,
+                "strategy": strategy,
+                "t": t,
+                "n_good": len(good_votes),
+                "n_bad": len(bad_votes),
+                **metrics,
+                "elapsed_seconds": round(time.monotonic() - start_time, 3),
+            }
+        )
 
     return rows
 
@@ -605,9 +531,9 @@ def run_voting_iterations_eval(
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
     region_voting: bool = False,
-    vote_order: str = "shuffle",
-    n_ensemble: int = 5,
-    max_votes: Optional[int] = None,
+    strategies: Optional[list[str]] = None,
+    max_steps: Optional[int] = None,
+    atlas_min_node_size: int = 20,
 ) -> pd.DataFrame:
     """Run the voting-iterations evaluation over multiple seeds/datasets/categories.
 
@@ -631,17 +557,23 @@ def run_voting_iterations_eval(
         region_voting: When ``True``, Good votes train on the ground-truth
             region-pooled vector for patch datasets (see
             :func:`simulate_voting_iterations`).
-        vote_order: Vote-ordering strategy - ``"shuffle"``, ``"balanced"``, or
-            ``"ensemble_std"`` (see :func:`simulate_voting_iterations`).
-        n_ensemble: Ensemble size for ``vote_order="ensemble_std"`` selection.
-        max_votes: Optional cap on votes cast per (seed, dataset, category).
+        strategies: Active-learning acquisition strategies to compare (see
+            :data:`vtscore.eval.al_strategies.STRATEGIES`).  Each strategy is a
+            fourth cross-product axis (seed x dataset x category x strategy) and
+            its name is recorded in the ``strategy`` result column.  ``None``
+            (default) runs only ``"random"``.
+        max_steps: Cap on the number of voting steps per run (see
+            :func:`simulate_voting_iterations`).
+        atlas_min_node_size: Minimum coverage-atlas leaf population for the
+            ``density_*`` strategies (see :func:`simulate_voting_iterations`).
 
     Returns:
         A :class:`~pandas.DataFrame` with columns ``seed, dataset, category,
-        t, n_good, n_bad, cost, fpr, fnr, elapsed_seconds``.
+        strategy, t, n_good, n_bad, cost, fpr, fnr, elapsed_seconds``.
     """
     import pandas as pd  # noqa: PLC0415
 
+    strategy_list = strategies if strategies is not None else ["random"]
     all_rows: list[dict[str, Any]] = []
 
     for ds_name, clips_dict in dataset_clips.items():
@@ -659,27 +591,40 @@ def run_voting_iterations_eval(
 
         for seed in seeds:
             for cat in target_cats:
-                rows = simulate_voting_iterations(
-                    clips_dict,
-                    target_category=cat,
-                    seed=seed,
-                    dataset_name=ds_name,
-                    inclusion=inclusion,
-                    sim_fraction=sim_fraction,
-                    safe_thresholds=safe_thresholds,
-                    calibrate_count=calibrate_count,
-                    calibration_fraction=calibration_fraction,
-                    region_voting=region_voting,
-                    vote_order=vote_order,
-                    n_ensemble=n_ensemble,
-                    max_votes=max_votes,
-                )
-                all_rows.extend(rows)
+                for strategy in strategy_list:
+                    rows = simulate_voting_iterations(
+                        clips_dict,
+                        target_category=cat,
+                        seed=seed,
+                        dataset_name=ds_name,
+                        inclusion=inclusion,
+                        sim_fraction=sim_fraction,
+                        safe_thresholds=safe_thresholds,
+                        calibrate_count=calibrate_count,
+                        calibration_fraction=calibration_fraction,
+                        region_voting=region_voting,
+                        strategy=strategy,
+                        max_steps=max_steps,
+                        atlas_min_node_size=atlas_min_node_size,
+                    )
+                    all_rows.extend(rows)
 
     return pd.DataFrame(
         all_rows,
         columns=pd.Index(
-            ["seed", "dataset", "category", "t", "n_good", "n_bad", "cost", "fpr", "fnr", "elapsed_seconds"]
+            [
+                "seed",
+                "dataset",
+                "category",
+                "strategy",
+                "t",
+                "n_good",
+                "n_bad",
+                "cost",
+                "fpr",
+                "fnr",
+                "elapsed_seconds",
+            ]
         ),
     )
 
@@ -694,9 +639,9 @@ def run_voting_iterations_eval_from_pickles(
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
     region_voting: bool = False,
-    vote_order: str = "shuffle",
-    n_ensemble: int = 5,
-    max_votes: Optional[int] = None,
+    strategies: Optional[list[str]] = None,
+    max_steps: Optional[int] = None,
+    atlas_min_node_size: int = 20,
 ) -> pd.DataFrame:
     """Convenience wrapper that loads datasets from pickle files.
 
@@ -714,15 +659,16 @@ def run_voting_iterations_eval_from_pickles(
         region_voting: When ``True``, Good votes train on the ground-truth
             region-pooled vector for patch datasets (see
             :func:`simulate_voting_iterations`).
-        vote_order: Vote-ordering strategy - ``"shuffle"``, ``"balanced"``, or
-            ``"ensemble_std"`` (see :func:`simulate_voting_iterations`).
-        n_ensemble: Ensemble size for ``vote_order="ensemble_std"`` selection.
-        max_votes: Optional cap on votes cast per (seed, dataset, category).
+        strategies: Acquisition strategies to compare (see
+            :func:`run_voting_iterations_eval`).
+        max_steps: Cap on the number of voting steps per run.
+        atlas_min_node_size: Minimum coverage-atlas leaf population for the
+            ``density_*`` strategies.
 
     Returns:
         A :class:`~pandas.DataFrame` identical to :func:`run_voting_iterations_eval`
-        (columns: ``seed, dataset, category, t, n_good, n_bad, cost, fpr, fnr,
-        elapsed_seconds``).
+        (columns: ``seed, dataset, category, strategy, t, n_good, n_bad, cost,
+        fpr, fnr, elapsed_seconds``).
     """
     from vtscore.datasets.loader import load_dataset_from_pickle
 
@@ -742,7 +688,7 @@ def run_voting_iterations_eval_from_pickles(
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
         region_voting=region_voting,
-        vote_order=vote_order,
-        n_ensemble=n_ensemble,
-        max_votes=max_votes,
+        strategies=strategies,
+        max_steps=max_steps,
+        atlas_min_node_size=atlas_min_node_size,
     )

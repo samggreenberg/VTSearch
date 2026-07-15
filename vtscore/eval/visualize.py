@@ -25,6 +25,11 @@ Charts produced by :func:`plot_voting_iterations`:
    averaged with a shaded ±1 std-dev band.
 2. **FPR / FNR over voting iterations** - similar layout, with
    separate lines for FPR and FNR.
+
+When the results carry more than one active-learning acquisition
+``strategy`` (the ``strategy`` column has >1 unique value), both charts
+**facet by strategy** - one subplot per strategy - so the strategies can be
+compared side by side.  A single-strategy frame renders exactly as before.
 """
 
 from __future__ import annotations
@@ -322,12 +327,15 @@ def plot_voting_iterations(
     """Generate visualisation PNGs from voting-iterations eval results.
 
     When multiple seeds are present, lines are averaged per
-    ``(dataset, category)`` and a shaded ±1 std-dev band is drawn.
+    ``(dataset, category)`` and a shaded ±1 std-dev band is drawn.  When the
+    frame carries more than one acquisition ``strategy`` both charts facet by
+    strategy (one subplot each).
 
     Args:
-        df: :class:`pandas.DataFrame` with columns
-            ``seed, dataset, category, t, n_good, n_bad, cost, fpr, fnr`` as
-            returned by :func:`run_voting_iterations_eval`.
+        df: :class:`pandas.DataFrame` with columns ``seed, dataset, category,
+            strategy, t, n_good, n_bad, cost, fpr, fnr`` as returned by
+            :func:`run_voting_iterations_eval`.  A ``strategy`` column is
+            optional; when absent the charts render un-faceted.
         output_dir: Directory to write PNG files into (created if needed).
 
     Returns:
@@ -357,17 +365,26 @@ def plot_voting_iterations(
     return generated
 
 
-def _plot_iterations_metric(
-    df: "Any",
-    metric: str,
-    ylabel: str,
-    out: Path,
-) -> Path:
+def _strategies_in(df: "Any") -> list[str]:
+    """Return the sorted distinct acquisition strategies present in *df*.
+
+    Empty when the frame has no ``strategy`` column (pre-strategy results), so
+    callers treat that as the single-strategy (un-faceted) case.
+    """
+    if "strategy" not in df.columns:
+        return []
+    return sorted(df["strategy"].unique())
+
+
+def _draw_metric_lines(ax: "Any", df: "Any", metric: str) -> int:
+    """Draw one mean±std line per ``(dataset, category)`` group onto *ax*.
+
+    Returns the number of groups drawn so the caller can decide whether a legend
+    is legible.
+    """
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots(figsize=(9, 5))
     palette = plt.cm.tab10.colors  # type: ignore[attr-defined]
-
     grouped = list(df.groupby(["dataset", "category"]))
     for idx, ((ds, cat), group) in enumerate(grouped):
         colour = palette[idx % len(palette)]
@@ -379,15 +396,80 @@ def _plot_iterations_metric(
         ax.plot(t, mean, label=f"{ds}: {cat}", color=colour, linewidth=1.5)
         if (std > 0).any():
             ax.fill_between(t, mean - std, mean + std, alpha=0.15, color=colour)
+    return len(grouped)
 
+
+def _plot_iterations_metric(
+    df: "Any",
+    metric: str,
+    ylabel: str,
+    out: Path,
+) -> Path:
+    import matplotlib.pyplot as plt
+
+    strategies = _strategies_in(df)
+    path = out / f"voting_iterations_{metric}.png"
+
+    if len(strategies) > 1:
+        # Facet by strategy: one subplot per strategy, shared y so the curves
+        # are directly comparable.
+        ncols = len(strategies)
+        fig, axes = plt.subplots(1, ncols, figsize=(5 * ncols, 4.5), squeeze=False, sharey=True)
+        for si, strat in enumerate(strategies):
+            ax = axes[0][si]
+            n_groups = _draw_metric_lines(ax, df[df["strategy"] == strat], metric)
+            ax.set_title(strat, fontsize=11)
+            ax.set_xlabel("Voting Iteration (t)")
+            if si == 0:
+                ax.set_ylabel(ylabel)
+            if 0 < n_groups <= 15:
+                ax.legend(fontsize=7, loc="best")
+        fig.suptitle(f"Voting Iterations: {ylabel} (by strategy)")
+        fig.tight_layout()
+        fig.savefig(path, dpi=150)
+        plt.close(fig)
+        return path
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    n_groups = _draw_metric_lines(ax, df, metric)
     ax.set_xlabel("Voting Iteration (t)")
     ax.set_ylabel(ylabel)
     ax.set_title(f"Voting Iterations: {ylabel}")
-    if len(grouped) <= 15:
+    if n_groups <= 15:
         ax.legend(fontsize=7, loc="best")
 
     fig.tight_layout()
-    path = out / f"voting_iterations_{metric}.png"
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    return path
+
+
+def _draw_fpr_fnr_aggregate(ax: "Any", df: "Any") -> None:
+    """Draw pooled mean FPR and FNR (over all groups/seeds) vs ``t`` onto *ax*."""
+    agg = df.groupby("t").agg(fpr_mean=("fpr", "mean"), fnr_mean=("fnr", "mean")).reset_index()
+    t = agg["t"].values
+    ax.plot(t, agg["fpr_mean"].values, label="FPR", color="#C44E52", linewidth=1.5)
+    ax.plot(t, agg["fnr_mean"].values, label="FNR", color="#4C72B0", linewidth=1.5)
+    ax.set_ylim(-0.05, 1.05)
+
+
+def _plot_fpr_fnr_faceted(df: "Any", strategies: list[str], out: Path) -> Path:
+    """Facet by strategy: one subplot per strategy, pooled FPR/FNR trade-off."""
+    import matplotlib.pyplot as plt
+
+    ncols = len(strategies)
+    fig, axes = plt.subplots(1, ncols, figsize=(5 * ncols, 4.5), squeeze=False, sharey=True)
+    for si, strat in enumerate(strategies):
+        ax = axes[0][si]
+        _draw_fpr_fnr_aggregate(ax, df[df["strategy"] == strat])
+        ax.set_title(strat, fontsize=11)
+        ax.set_xlabel("Voting Iteration (t)")
+        if si == 0:
+            ax.set_ylabel("Rate")
+        ax.legend(fontsize=8)
+    fig.suptitle("Voting Iterations: FPR & FNR (by strategy)")
+    fig.tight_layout()
+    path = out / "voting_iterations_fpr_fnr.png"
     fig.savefig(path, dpi=150)
     plt.close(fig)
     return path
@@ -395,6 +477,10 @@ def _plot_iterations_metric(
 
 def _plot_iterations_fpr_fnr(df: "Any", out: Path) -> Path:
     import matplotlib.pyplot as plt
+
+    strategies = _strategies_in(df)
+    if len(strategies) > 1:
+        return _plot_fpr_fnr_faceted(df, strategies, out)
 
     groups = list(df.groupby(["dataset", "category"]))
     n_groups = len(groups)

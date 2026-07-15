@@ -10,13 +10,14 @@ results (CSVs, plots, a README) under ``docs/experiments/mlp-ensemble/``:
    any ranking (AUROC / F1@xcal) over one MLP, and traces the ensemble's
    reported per-item uncertainty (``std_mean``) as labels accumulate.
 
-2. **Voting-order axis** (`vtscore.eval.voting_iterations`) - simulates
-   voting under ``vote_order ∈ {shuffle, balanced, ensemble_std}`` and
-   plots the inclusion-weighted cost against the number of votes cast.
-   Answers "does choosing the next vote by ensemble disagreement (active
-   learning) reach a low cost in fewer votes than random or class-balanced
-   ordering?"  Per-step cost is always the single production MLP; the
-   ensemble only *selects* the next vote.
+2. **Voting-strategy axis** (`vtscore.eval.voting_iterations`) - simulates
+   voting under acquisition ``strategy ∈ {random, balanced, ensemble_std}``
+   (the unified-registry successors of the old shuffle/balanced/ensemble_std
+   orders) and plots the inclusion-weighted cost against the number of votes
+   cast.  Answers "does choosing the next vote by ensemble disagreement
+   (active learning) reach a low cost in fewer votes than random or
+   class-balanced ordering?"  Per-step cost is always the single production
+   MLP; the strategy only *selects* the next vote.
 
 Usage::
 
@@ -25,7 +26,7 @@ Usage::
         --out-dir docs/experiments/mlp-ensemble \\
         --label-counts 5 10 20 50 \\
         --seeds 0 1 2 \\
-        --max-votes 40
+        --max-steps 40
 
 Designed to be deleted once the results are committed.
 """
@@ -37,8 +38,9 @@ import math
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from vtscore.eval.al_strategies import available_strategies
 from vtscore.eval.label_curve import run_label_curve_eval, summarise
-from vtscore.eval.voting_iterations import VOTE_ORDERS, run_voting_iterations_eval
+from vtscore.eval.voting_iterations import run_voting_iterations_eval
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -47,6 +49,10 @@ DEFAULT_DATASETS = ("urbansound8k_s",)
 DEFAULT_LABEL_COUNTS = (5, 10, 20, 50)
 DEFAULT_SEEDS = (0, 1, 2)
 DEFAULT_ENSEMBLE_SIZES = (3, 5, 7, 10)
+# Acquisition strategies compared in the voting axis: the random baseline, the
+# class-balanced oracle order, and the deep-ensemble uncertainty sampler (the
+# unified-registry successors of the old shuffle/balanced/ensemble_std orders).
+DEFAULT_VOTING_STRATEGIES = ("random", "balanced", "ensemble_std")
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +161,7 @@ def plot_label_curve(summary: "pd.DataFrame", out_dir: Path) -> list[Path]:
 
 
 def plot_voting_orders(df: "pd.DataFrame", out_dir: Path) -> list[Path]:
-    """Cost vs votes cast, one line per vote_order (averaged over cells)."""
+    """Cost vs votes cast, one line per acquisition strategy (averaged over cells)."""
     import matplotlib.pyplot as plt
 
     generated: list[Path] = []
@@ -164,19 +170,19 @@ def plot_voting_orders(df: "pd.DataFrame", out_dir: Path) -> list[Path]:
 
     palette = plt.cm.tab10.colors  # type: ignore[attr-defined]
     fig, ax = plt.subplots(figsize=(8, 5))
-    for idx, order in enumerate(sorted(df["vote_order"].unique())):
-        sub = df[df["vote_order"] == order]
+    for idx, strategy in enumerate(sorted(df["strategy"].unique())):
+        sub = df[df["strategy"] == strategy]
         agg = sub.groupby("t")["cost"].agg(["mean", "std"]).reset_index()
         colour = palette[idx % len(palette)]
         t = agg["t"].to_numpy()
         mean = agg["mean"].to_numpy()
         std = agg["std"].fillna(0).to_numpy()
-        ax.plot(t, mean, label=order, color=colour, linewidth=1.5)
+        ax.plot(t, mean, label=strategy, color=colour, linewidth=1.5)
         if (std > 0).any():
             ax.fill_between(t, mean - std, mean + std, alpha=0.12, color=colour)
     ax.set_xlabel("Votes cast (t)")
     ax.set_ylabel("Inclusion-weighted cost")
-    ax.set_title("Voting cost by vote_order")
+    ax.set_title("Voting cost by acquisition strategy")
     ax.legend(fontsize=8, loc="best")
     fig.tight_layout()
     path = out_dir / "voting_cost_by_order.png"
@@ -198,9 +204,8 @@ def write_report(
     label_counts: tuple[int, ...],
     seeds: tuple[int, ...],
     ensemble_sizes: tuple[int, ...],
-    vote_orders: tuple[str, ...],
-    max_votes: int | None,
-    n_ensemble: int,
+    strategies: tuple[str, ...],
+    max_steps: int | None,
     label_summary: "pd.DataFrame",
     voting_df: "pd.DataFrame",
 ) -> None:
@@ -218,8 +223,8 @@ def write_report(
         f"Datasets: {', '.join(f'`{d}`' for d in datasets)} · "
         f"label counts: {list(label_counts)} · seeds: {list(seeds)} · "
         f"ensemble sizes: {list(ensemble_sizes)} · "
-        f"vote orders: {list(vote_orders)} · "
-        f"max_votes: {max_votes} · ensemble_std n_ensemble: {n_ensemble}."
+        f"voting strategies: {list(strategies)} · "
+        f"max_steps: {max_steps}."
     )
     lines.append("")
 
@@ -247,20 +252,20 @@ def write_report(
     lines.extend(_trainer_headline_table(label_summary))
     lines.append("")
 
-    # ---- Voting-order axis -------------------------------------------------
-    lines.append("## 2. Voting order - does ensemble-uncertainty selection help?")
+    # ---- Voting-strategy axis ----------------------------------------------
+    lines.append("## 2. Acquisition strategy - does ensemble-uncertainty selection help?")
     lines.append("")
     lines.append(
         "Cost is the inclusion-weighted `fpr_weight·FPR + fnr_weight·FNR` "
         "on a held-out test split, measured with the single production MLP "
-        "at every step.  `shuffle` votes in random order, `balanced` keeps "
-        "the running label set class-balanced, and `ensemble_std` votes "
-        "next on the item an N-member ensemble disagrees about most (active "
-        "learning).  A lower curve, or the same cost reached at a smaller "
-        "`t`, means the ordering is more label-efficient."
+        "at every step.  `random` votes in random order, `balanced` keeps "
+        "the running label set class-balanced (an oracle order), and "
+        "`ensemble_std` votes next on the item an N-member ensemble disagrees "
+        "about most (active learning).  A lower curve, or the same cost "
+        "reached at a smaller `t`, means the strategy is more label-efficient."
     )
     lines.append("")
-    lines.append("![Cost by vote_order](voting_cost_by_order.png)")
+    lines.append("![Cost by strategy](voting_cost_by_order.png)")
     lines.append("")
     lines.extend(_voting_headline_table(voting_df))
     lines.append("")
@@ -268,7 +273,7 @@ def write_report(
     lines.append("## Files")
     lines.append("")
     lines.append("- `label_curve.csv` - one row per (dataset, category, trainer, n_labels, seed).")
-    lines.append("- `voting_iterations.csv` - one row per (vote_order, seed, dataset, category, t).")
+    lines.append("- `voting_iterations.csv` - one row per (strategy, seed, dataset, category, t).")
     lines.append("- `*.png` - the plots embedded above.")
     lines.append("")
 
@@ -292,13 +297,13 @@ def _trainer_headline_table(summary: "pd.DataFrame") -> list[str]:
 def _voting_headline_table(df: "pd.DataFrame") -> list[str]:
     if df.empty:
         return ["_(no rows - every cell was skipped)_"]
-    rows = ["| vote_order | steps | final cost | min cost |", "|---|---|---|---|"]
-    for order in sorted(df["vote_order"].unique()):
-        sub = df[df["vote_order"] == order]
+    rows = ["| strategy | steps | final cost | min cost |", "|---|---|---|---|"]
+    for strategy in sorted(df["strategy"].unique()):
+        sub = df[df["strategy"] == strategy]
         # Final cost = mean cost at the largest t reached per (seed, dataset, category).
         finals = sub.sort_values("t").groupby(["seed", "dataset", "category"]).tail(1)
         rows.append(
-            f"| `{order}` | {int(sub['t'].max())} | "
+            f"| `{strategy}` | {int(sub['t'].max())} | "
             f"{float(finals['cost'].mean()):.4f} | {float(sub['cost'].min()):.4f} |"
         )
     return rows
@@ -317,25 +322,19 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--seeds", nargs="+", type=int, default=list(DEFAULT_SEEDS))
     ap.add_argument("--ensemble-sizes", nargs="+", type=int, default=list(DEFAULT_ENSEMBLE_SIZES))
     ap.add_argument(
-        "--vote-orders",
+        "--strategies",
         nargs="+",
-        default=list(VOTE_ORDERS),
-        choices=list(VOTE_ORDERS),
-        help="Vote orders to compare in the voting-iterations axis.",
+        default=list(DEFAULT_VOTING_STRATEGIES),
+        choices=available_strategies(),
+        help="Acquisition strategies to compare in the voting-iterations axis.",
     )
     ap.add_argument("--categories", nargs="+", default=None, metavar="CAT")
     ap.add_argument("--inclusion", type=int, default=0)
     ap.add_argument(
-        "--max-votes",
+        "--max-steps",
         type=int,
         default=40,
-        help="Cap on votes cast per cell (keeps the ensemble_std order tractable). Pass 0 for no cap.",
-    )
-    ap.add_argument(
-        "--n-ensemble",
-        type=int,
-        default=5,
-        help="Ensemble size used for ensemble_std vote selection (default 5).",
+        help="Cap on votes cast per cell (keeps the ensemble_std strategy tractable). Pass 0 for no cap.",
     )
     ap.add_argument("--no-voting", action="store_true", help="Skip the voting-iterations axis.")
     ap.add_argument("--no-label-curve", action="store_true", help="Skip the label-curve axis.")
@@ -356,7 +355,7 @@ def main(argv: list[str] | None = None) -> int:
         dataset_clips[demo_id] = _load_dataset(demo_id)
 
     categories = {ds: args.categories for ds in dataset_clips} if args.categories else None
-    max_votes = None if args.max_votes in (0, None) else args.max_votes
+    max_steps = None if args.max_steps in (0, None) else args.max_steps
 
     label_summary = pd.DataFrame()
     voting_df = pd.DataFrame()
@@ -380,24 +379,17 @@ def main(argv: list[str] | None = None) -> int:
         for p in plot_label_curve(label_summary, args.out_dir):
             print(f"  plot -> {p.name}", flush=True)
 
-    # ---- Voting-order axis -------------------------------------------------
+    # ---- Voting-strategy axis ----------------------------------------------
     if not args.no_voting:
-        print(f"\nVoting-iterations sweep: vote_orders={args.vote_orders}", flush=True)
-        frames: list[pd.DataFrame] = []
-        for order in args.vote_orders:
-            print(f"  vote_order={order}", flush=True)
-            df = run_voting_iterations_eval(
-                dataset_clips=dataset_clips,
-                seeds=list(args.seeds),
-                categories=categories,
-                inclusion=args.inclusion,
-                vote_order=order,
-                n_ensemble=args.n_ensemble,
-                max_votes=max_votes,
-            )
-            df["vote_order"] = order
-            frames.append(df)
-        voting_df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        print(f"\nVoting-iterations sweep: strategies={args.strategies}", flush=True)
+        voting_df = run_voting_iterations_eval(
+            dataset_clips=dataset_clips,
+            seeds=list(args.seeds),
+            categories=categories,
+            inclusion=args.inclusion,
+            strategies=list(args.strategies),
+            max_steps=max_steps,
+        )
         voting_df.to_csv(args.out_dir / "voting_iterations.csv", index=False)
         print(f"  wrote {len(voting_df)} rows -> voting_iterations.csv", flush=True)
         for p in plot_voting_orders(voting_df, args.out_dir):
@@ -411,9 +403,8 @@ def main(argv: list[str] | None = None) -> int:
         label_counts=tuple(args.label_counts),
         seeds=tuple(args.seeds),
         ensemble_sizes=tuple(args.ensemble_sizes),
-        vote_orders=tuple(args.vote_orders),
-        max_votes=max_votes,
-        n_ensemble=args.n_ensemble,
+        strategies=tuple(args.strategies),
+        max_steps=max_steps,
         label_summary=label_summary,
         voting_df=voting_df,
     )
