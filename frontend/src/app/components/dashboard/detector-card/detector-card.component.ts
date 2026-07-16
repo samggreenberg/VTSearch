@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostBinding, HostListener, Input, inject, input, output, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, effect, inject, input, output, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
@@ -19,7 +19,12 @@ import { DashboardLoadingTasksService } from '../../../services/dashboard-loadin
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'tr[vt-detector-card]',
   standalone: true,
-  host: { class: 'entity-card' },
+  host: {
+    class: 'entity-card',
+    '[class.selected]': 'selected()',
+    '[class.dimmed]': 'dimmed()',
+    '[class.loading-error]': 'hasLoadingError',
+  },
   imports: [CommonModule, FormsModule, JobProgressComponent, ContextMenuComponent, IconComponent],
   templateUrl: './detector-card.component.html',
   styleUrl: './detector-card.component.scss',
@@ -27,31 +32,31 @@ import { DashboardLoadingTasksService } from '../../../services/dashboard-loadin
 export class DetectorCardComponent {
   private readonly loadingTasksSvc = inject(DashboardLoadingTasksService);
 
-  @Input() detector: any;
+  readonly detector = input<any>(undefined);
   readonly currentUser = input('');
   readonly isDefaultLogin = input(true);
-  @Input() columnOrder: string[] = [];
-  @Input() @HostBinding('class.selected') selected = false;
-  @Input() @HostBinding('class.dimmed') dimmed = false;
-  @Input() loadingTask?: LoadingTask;
+  readonly columnOrder = input<string[]>([]);
+  readonly selected = input(false);
+  readonly dimmed = input(false);
+  readonly loadingTask = input<LoadingTask | undefined>(undefined);
 
   /** True while this row's delete-confirm dialog is open (driven by the
    *  dashboard's `deletingDetectorId`). Spins the trash icon to 90° while open;
    *  the reverse animation plays back to 0° once the dialog resolves. */
-  @Input()
-  set deleting(value: boolean) {
-    if (value && !this._deleting) this.wasDeleting = true;
-    this._deleting = value;
-  }
-  get deleting(): boolean {
-    return this._deleting;
-  }
-  private _deleting = false;
+  readonly deleting = input(false);
   wasDeleting = false;
+  private previousDeleting = false;
 
-  @HostBinding('class.loading-error')
   get hasLoadingError(): boolean {
-    return !!this.loadingTask?.error;
+    return !!this.loadingTask()?.error;
+  }
+
+  constructor() {
+    effect(() => {
+      const value = this.deleting();
+      if (value && !this.previousDeleting) this.wasDeleting = true;
+      this.previousDeleting = value;
+    });
   }
 
   readonly rowClick = output<MouseEvent>();
@@ -67,7 +72,7 @@ export class DetectorCardComponent {
     if (this.editing) return;
     // A loading/errored row shows a progress bar in place of the actions, so
     // there is nothing to act on.
-    if (this.loadingTask) return;
+    if (this.loadingTask()) return;
     event.preventDefault();
     // Right-click gets the complete action list; the ⋯ button gets the overflow
     // subset (see openMenuAt).
@@ -91,16 +96,16 @@ export class DetectorCardComponent {
    *  yet). Drives the "Empty" hint so a fresh detector reads as new rather than
    *  broken. */
   get isUntrained(): boolean {
-    return (this.detector?.num_training ?? 0) === 0;
+    return (this.detector()?.num_training ?? 0) === 0;
   }
 
   /** True when the current user created this detector (only the creator may
    *  rename/delete it or edit its access list). */
   get isOwner(): boolean {
-    return this.detector?.created_by === this.currentUser();
+    return this.detector()?.created_by === this.currentUser();
   }
 
-  @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
+  readonly renameInput = viewChild<ElementRef<HTMLInputElement>>('renameInput');
 
   editing = false;
   wasEditing = false;
@@ -120,8 +125,8 @@ export class DetectorCardComponent {
   beginRename(): void {
     this.editing = true;
     this.wasEditing = true;
-    this.editName = this.detector.name;
-    setTimeout(() => this.renameInput?.nativeElement.focus());
+    this.editName = this.detector().name;
+    setTimeout(() => this.renameInput()?.nativeElement.focus());
   }
 
   /** Open the shared action menu at a viewport point.
@@ -130,7 +135,7 @@ export class DetectorCardComponent {
    *  Browse, Delete) so the ⋯ button reads as "more" while right-click stays
    *  complete. */
   private openMenuAt(x: number, y: number, overflow: boolean): void {
-    const items = buildDetectorCardMenuItems(this.detector, {
+    const items = buildDetectorCardMenuItems(this.detector(), {
       isDefaultLogin: this.isDefaultLogin(),
       isOwner: this.isOwner,
     });
@@ -187,7 +192,7 @@ export class DetectorCardComponent {
 
   confirmRename(): void {
     const trimmed = this.editName.trim();
-    if (trimmed && trimmed !== this.detector.name) {
+    if (trimmed && trimmed !== this.detector().name) {
       this.rename.emit(trimmed);
     }
     this.editing = false;
@@ -204,7 +209,7 @@ export class DetectorCardComponent {
   }
 
   onDeleteAnimationEnd(): void {
-    if (!this._deleting) {
+    if (!this.deleting()) {
       this.wasDeleting = false;
     }
   }
@@ -248,26 +253,28 @@ export class DetectorCardComponent {
 
   // `vt-job-progress` stops the click before it reaches the row, so no event.
   onCancelTask(): void {
-    if (this.loadingTask) {
-      this.cancelTask.emit(this.loadingTask.task_id);
+    const task = this.loadingTask();
+    if (task) {
+      this.cancelTask.emit(task.task_id);
     }
   }
 
   onDismissTask(event: MouseEvent): void {
     event.stopPropagation();
-    if (this.loadingTask) {
-      this.dismissTask.emit(this.loadingTask.task_id);
+    const task = this.loadingTask();
+    if (task) {
+      this.dismissTask.emit(task.task_id);
     }
   }
 
   taskBar(): ProgressBarState {
-    const t = this.loadingTask;
+    const t = this.loadingTask();
     if (!t) return { value: 0, max: 1, indeterminate: true };
     return progressBarState(t);
   }
 
   get taskProgressInfo(): ProgressHeader {
-    const task = this.loadingTask;
+    const task = this.loadingTask();
     if (!task) return { header: '', subtitle: '', detail: '', eta: '' };
     return formatProgressHeader(task, 'detector', task.embedder);
   }
@@ -275,7 +282,7 @@ export class DetectorCardComponent {
   /** True once Cancel has been clicked on this row's task and the backend is
    *  still unwinding it; swaps the Cancel button for a "Cancelling…" badge. */
   get taskCancelling(): boolean {
-    const task = this.loadingTask;
+    const task = this.loadingTask();
     return !!task && this.loadingTasksSvc.isCancelling(task.task_id);
   }
 }

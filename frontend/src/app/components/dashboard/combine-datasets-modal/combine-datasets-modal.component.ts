@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, Input, OnInit, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, OnInit, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -42,7 +42,7 @@ export class CombineDatasetsModalComponent implements OnInit {
   private datasetsListingsApi = inject(DatasetsListingsApiService);
 
   /** Datasets pre-selected on the dashboard when the modal was opened. */
-  @Input() datasets: DatasetRegistryEntry[] = [];
+  readonly datasets = input<DatasetRegistryEntry[]>([]);
 
   readonly closed = output<void>();
   readonly combineStarted = output<CombineStartedInfo>();
@@ -56,7 +56,7 @@ export class CombineDatasetsModalComponent implements OnInit {
   name = '';
 
   ngOnInit(): void {
-    this.rows = this.datasets
+    this.rows = this.datasets()
       .map((d) => ({
         id: d.id,
         name: d.name,
