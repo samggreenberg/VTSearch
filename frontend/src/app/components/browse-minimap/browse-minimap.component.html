@@ -2,7 +2,7 @@
 @if (meta()?.point_count; as count) {
   <span class="minimap-count">{{ count | number }} {{ countNoun() }}</span>
 }
-@if (!dock) {
+@if (!dock()) {
   <button
     type="button"
     class="minimap-close"

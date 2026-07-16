@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, ElementRef, HostBinding, inject, Input, input, NgZone, OnChanges, OnDestroy, OnInit, output, SimpleChanges, ViewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, model, NgZone, OnDestroy, output, untracked, viewChild } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { BrowseViewportService, ViewportBounds } from '../../services/browse-viewport.service';
@@ -39,10 +39,11 @@ export const MINIMAP_MAX_HEIGHT = 450;
   selector: 'vt-browse-minimap',
   standalone: true,
   imports: [IconComponent, DecimalPipe],
+  host: { '[class.dock]': 'dock()' },
   templateUrl: './browse-minimap.component.html',
   styleUrl: './browse-minimap.component.scss',
 })
-export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
+export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
   private ngZone = inject(NgZone);
   private tileCache = inject(TileCacheService);
   private viewport = inject(BrowseViewportService);
@@ -59,10 +60,13 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     this.requestRedraw();
   });
 
-  @ViewChild('canvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
+  private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
   readonly meta = input<ProjectionMeta | null>(null);
-  @Input() width = 200;
-  @Input() height = 150;
+  /** Rendered size (CSS px). Models rather than plain inputs because the
+   *  minimap writes them back itself: dock mode tracks its container's box and
+   *  the floating corner handle resizes by drag. */
+  readonly width = model(200);
+  readonly height = model(150);
   /** Density colormap preset; mirrors the main canvas so the overview matches. */
   readonly colormap = input<BrowseColormapId>('auto');
   /**
@@ -75,9 +79,43 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
    * meta-row) and sizes its canvas to fit via a {@link ResizeObserver},
    * rather than floating over the canvas at an explicit size. In this mode
    * the close button and corner resize handle are hidden — the panel owns
-   * the geometry — but click/drag-to-navigate stays live.
+   * the geometry — but click/drag-to-navigate stays live. Mirrored onto the
+   * host's ``dock`` class via the component's ``host`` binding.
    */
-  @Input() @HostBinding('class.dock') dock = false;
+  readonly dock = input(false);
+
+  // The input→resize/redraw dispatch that used to live in ngOnChanges (signal
+  // inputs don't fire it). Bodies run untracked so incidental reads can't
+  // widen the triggers; work needing the 2D context waits for ngAfterViewInit
+  // (which does the initial sizing/paint itself, as ngOnInit used to).
+
+  /** A size change (parent binding, dock observer, or the corner drag — the
+   *  models funnel all three here) rebuilds the canvas backing store. */
+  private readonly sizeChanged = effect(() => {
+    this.width();
+    this.height();
+    if (!this.ctx) return;
+    untracked(() => {
+      this.resizeCanvas();
+      this.requestRedraw();
+    });
+  });
+
+  /** Fresh meta: request the overview level's tiles and repaint. */
+  private readonly metaChanged = effect(() => {
+    this.meta();
+    if (!this.ctx) return;
+    untracked(() => {
+      this.requestOverviewTiles();
+      this.requestRedraw();
+    });
+  });
+
+  /** A colormap change only recolours the heatmap; repaint. */
+  private readonly colormapChanged = effect(() => {
+    this.colormap();
+    untracked(() => this.requestRedraw());
+  });
   /** Hide request from the close button (floating mode only). */
   readonly closed = output<void>();
   /** Final size after a resize drag, for persistence (floating mode only). */
@@ -117,9 +155,9 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   private boundNavMove = this.onNavMove.bind(this);
   private boundNavUp = this.onNavUp.bind(this);
 
-  ngOnInit(): void {
-    this.ctx = this.canvasRef.nativeElement.getContext('2d')!;
-    if (this.dock) this.startDockSizing();
+  ngAfterViewInit(): void {
+    this.ctx = this.canvasRef().nativeElement.getContext('2d')!;
+    if (this.dock()) this.startDockSizing();
     this.resizeCanvas();
 
     // A pure devicePixelRatio change doesn't resize the element, so re-run the
@@ -149,21 +187,6 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     this.requestRedraw();
   }
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (!this.ctx) return;
-    if (changes['width'] || changes['height']) {
-      this.resizeCanvas();
-      this.requestRedraw();
-    }
-    if (changes['meta'] && !changes['meta'].firstChange) {
-      this.requestOverviewTiles();
-      this.requestRedraw();
-    }
-    if (changes['colormap'] && !changes['colormap'].firstChange) {
-      this.requestRedraw();
-    }
-  }
-
   ngOnDestroy(): void {
     this.tileLoadSub?.unsubscribe();
     this.viewportSub?.unsubscribe();
@@ -178,8 +201,8 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   /**
    * Docked mode: track the host element's box and resize the canvas to fill
    * it, so the overview grows/shrinks with the side panel's divider drag. The
-   * observer fires outside Angular, so the resize never triggers change
-   * detection — only a canvas repaint.
+   * observer fires outside Angular; writing the size models triggers the
+   * {@link sizeChanged} effect, which rebuilds the backing store and repaints.
    */
   private startDockSizing(): void {
     const el = this.host.nativeElement;
@@ -187,14 +210,13 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
       this.resizeObserver = new ResizeObserver(() => {
         const w = Math.max(MINIMAP_MIN_WIDTH, Math.round(el.clientWidth));
         const h = Math.max(MINIMAP_MIN_HEIGHT, Math.round(el.clientHeight));
-        if (w === this.width && h === this.height) return;
-        this.width = w;
-        this.height = h;
-        this.resizeCanvas();
+        if (w === this.width() && h === this.height()) return;
+        this.width.set(w);
+        this.height.set(h);
         // A large size change can shift the overview pyramid level, so make
-        // sure the tiles for the new level are requested before repainting.
+        // sure the tiles for the new level are requested before the repaint
+        // the size effect schedules.
         this.requestOverviewTiles();
-        this.requestRedraw();
       });
       this.resizeObserver.observe(el);
     });
@@ -202,11 +224,11 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
 
   private resizeCanvas(): void {
     this.dpr = window.devicePixelRatio || 1;
-    const canvas = this.canvasRef.nativeElement;
-    canvas.width = Math.round(this.width * this.dpr);
-    canvas.height = Math.round(this.height * this.dpr);
-    canvas.style.width = `${this.width}px`;
-    canvas.style.height = `${this.height}px`;
+    const canvas = this.canvasRef().nativeElement;
+    canvas.width = Math.round(this.width() * this.dpr);
+    canvas.height = Math.round(this.height() * this.dpr);
+    canvas.style.width = `${this.width()}px`;
+    canvas.style.height = `${this.height()}px`;
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
   }
 
@@ -295,8 +317,8 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     const dataW = xmax - xmin || 1;
     const dataH = ymax - ymin || 1;
     const margin = 4;
-    const availW = this.width - margin * 2;
-    const availH = this.height - margin * 2;
+    const availW = this.width() - margin * 2;
+    const availH = this.height() - margin * 2;
     let scale = Math.min(availW / dataW, availH / dataH);
     for (let i = 0; i < 3; i++) {
       const level = this.overviewLevel({ scale });
@@ -307,19 +329,19 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private projToMap(px: number, py: number, f: { scale: number; cx: number; cy: number }): [number, number] {
-    return [this.width / 2 + (px - f.cx) * f.scale, this.height / 2 + (py - f.cy) * f.scale];
+    return [this.width() / 2 + (px - f.cx) * f.scale, this.height() / 2 + (py - f.cy) * f.scale];
   }
 
   private mapToProj(mx: number, my: number, f: { scale: number; cx: number; cy: number }): [number, number] {
-    return [f.cx + (mx - this.width / 2) / f.scale, f.cy + (my - this.height / 2) / f.scale];
+    return [f.cx + (mx - this.width() / 2) / f.scale, f.cy + (my - this.height() / 2) / f.scale];
   }
 
   private draw(): void {
     const ctx = this.ctx;
     if (!ctx) return;
-    ctx.clearRect(0, 0, this.width, this.height);
+    ctx.clearRect(0, 0, this.width(), this.height());
     ctx.fillStyle = this.themeColor('--bg-body');
-    ctx.fillRect(0, 0, this.width, this.height);
+    ctx.fillRect(0, 0, this.width(), this.height());
 
     const f = this.fit();
     if (f) {
@@ -371,7 +393,7 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     // Frame the minimap so it reads as a distinct panel over the canvas.
     ctx.strokeStyle = this.themeColor('--border');
     ctx.lineWidth = 1;
-    ctx.strokeRect(0.5, 0.5, this.width - 1, this.height - 1);
+    ctx.strokeRect(0.5, 0.5, this.width() - 1, this.height() - 1);
   }
 
   /** Pull all cached cells of the overview *level* covering the extent. */
@@ -467,12 +489,12 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   private recenterFromEvent(event: MouseEvent): void {
     const f = this.fit();
     if (!f) return;
-    const rect = this.canvasRef.nativeElement.getBoundingClientRect();
+    const rect = this.canvasRef().nativeElement.getBoundingClientRect();
     // Scale the cursor offset by the rendered-size ratio so the math stays
     // correct even if the canvas element is ever rendered at a size other
     // than this.width/height (e.g. under a CSS transform).
-    const mx = (event.clientX - rect.left) * (this.width / (rect.width || 1));
-    const my = (event.clientY - rect.top) * (this.height / (rect.height || 1));
+    const mx = (event.clientX - rect.left) * (this.width() / (rect.width || 1));
+    const my = (event.clientY - rect.top) * (this.height() / (rect.height || 1));
     const [px, py] = this.mapToProj(mx, my, f);
     this.viewport.requestRecenter(px, py);
   }
@@ -491,8 +513,8 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     this.resizing = true;
     this.resizeStartX = event.clientX;
     this.resizeStartY = event.clientY;
-    this.resizeStartW = this.width;
-    this.resizeStartH = this.height;
+    this.resizeStartW = this.width();
+    this.resizeStartH = this.height();
     document.addEventListener('mousemove', this.boundResizeMove);
     document.addEventListener('mouseup', this.boundResizeUp);
   }
@@ -500,23 +522,24 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   private onResizeMove(event: MouseEvent): void {
     if (!this.resizing) return;
     // Anchored bottom-right: dragging the top-left handle up/left grows it.
+    // The model writes drive the resize/repaint via the size effect.
     const dw = this.resizeStartX - event.clientX;
     const dh = this.resizeStartY - event.clientY;
-    this.width = Math.round(
-      Math.max(MINIMAP_MIN_WIDTH, Math.min(MINIMAP_MAX_WIDTH, this.resizeStartW + dw)),
+    this.width.set(
+      Math.round(Math.max(MINIMAP_MIN_WIDTH, Math.min(MINIMAP_MAX_WIDTH, this.resizeStartW + dw))),
     );
-    this.height = Math.round(
-      Math.max(MINIMAP_MIN_HEIGHT, Math.min(MINIMAP_MAX_HEIGHT, this.resizeStartH + dh)),
+    this.height.set(
+      Math.round(
+        Math.max(MINIMAP_MIN_HEIGHT, Math.min(MINIMAP_MAX_HEIGHT, this.resizeStartH + dh)),
+      ),
     );
-    this.resizeCanvas();
-    this.requestRedraw();
   }
 
   private onResizeUp(): void {
     if (!this.resizing) return;
     this.resizing = false;
     this.detachResizeListeners();
-    this.resized.emit({ width: this.width, height: this.height });
+    this.resized.emit({ width: this.width(), height: this.height() });
   }
 
   private detachResizeListeners(): void {
