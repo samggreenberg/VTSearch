@@ -218,6 +218,12 @@
           "browse_panel_width": {
             "type": "integer"
           },
+          "browse_signpost_captioner": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object"
+          },
           "browse_signposts": {
             "additionalProperties": {
               "type": "boolean"
@@ -4718,6 +4724,7 @@
           "browse_panel_width": {
             "type": "integer"
           },
+          "browse_signpost_captioner": {},
           "browse_signposts": {},
           "browse_thumbnail_border": {},
           "calibrate_count": {
@@ -5897,6 +5904,7 @@
               "clotho_l",
               "clotho_a",
               "synthetic_world_audio",
+              "ucsf_documents_a",
               "synthetic_world_image",
               "caltech101_s",
               "caltech101_m",
@@ -5935,11 +5943,12 @@
               "roxford5k_a",
               "openlogo_s",
               "openlogo_a",
-              "ucsf_documents_a",
               "visual_genome_s",
               "visual_genome_m",
               "visual_genome_l",
               "visual_genome_a",
+              "vggface2_faces_s",
+              "vggface2_faces_m",
               "20newsgroups_s",
               "20newsgroups_m",
               "20newsgroups_l",
@@ -6026,6 +6035,7 @@
             "enum": [
               "audio",
               "document",
+              "face",
               "image",
               "text",
               "video",
@@ -6085,6 +6095,7 @@
             "enum": [
               "audio",
               "document",
+              "face",
               "image",
               "text",
               "video",
@@ -6217,6 +6228,7 @@
             "enum": [
               "audio",
               "document",
+              "face",
               "image",
               "text",
               "video",
@@ -6273,6 +6285,7 @@
             "enum": [
               "audio",
               "document",
+              "face",
               "image",
               "text",
               "video",
@@ -6335,6 +6348,7 @@
             "enum": [
               "audio",
               "document",
+              "face",
               "image",
               "text",
               "video",
@@ -6613,6 +6627,7 @@
               "clotho_l",
               "clotho_a",
               "synthetic_world_audio",
+              "ucsf_documents_a",
               "synthetic_world_image",
               "caltech101_s",
               "caltech101_m",
@@ -6651,11 +6666,12 @@
               "roxford5k_a",
               "openlogo_s",
               "openlogo_a",
-              "ucsf_documents_a",
               "visual_genome_s",
               "visual_genome_m",
               "visual_genome_l",
               "visual_genome_a",
+              "vggface2_faces_s",
+              "vggface2_faces_m",
               "20newsgroups_s",
               "20newsgroups_m",
               "20newsgroups_l",
@@ -6722,6 +6738,7 @@
             "enum": [
               "audio",
               "document",
+              "face",
               "image",
               "text",
               "video",
@@ -6757,6 +6774,7 @@
             "enum": [
               "audio",
               "document",
+              "face",
               "image",
               "text",
               "video",
@@ -6817,6 +6835,7 @@
             "enum": [
               "audio",
               "document",
+              "face",
               "image",
               "text",
               "video",
@@ -6849,6 +6868,7 @@
             "enum": [
               "audio",
               "document",
+              "face",
               "image",
               "text",
               "video",
@@ -6887,6 +6907,7 @@
             "enum": [
               "audio",
               "document",
+              "face",
               "image",
               "text",
               "video",
@@ -8294,6 +8315,15 @@
           {
             "in": "query",
             "name": "clipper",
+            "required": false,
+            "schema": {
+              "default": "",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "converter",
             "required": false,
             "schema": {
               "default": "",

@@ -14,7 +14,7 @@ import {
  * Falls back to a generic "file" icon for unrecognised values.
  */
 const KNOWN_TYPES = new Set([
-  'audio', 'image', 'file-text', 'video', 'document',
+  'audio', 'image', 'file-text', 'video', 'document', 'face',
   'server', 'globe', 'email', 'satellite',
   'folder', 'folder-open', 'upload',
   'graduation', 'arrow-up', 'shuffle', 'elephant', 'cloud',

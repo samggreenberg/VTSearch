@@ -106,6 +106,36 @@ describe('FindViewComponent (zoneless canary)', () => {
     expect(fixture.nativeElement.querySelector('.find-wait-overlay')).toBeNull();
   });
 
+  // O12 (issue #2373): at 1000+ items the scoring overlay must surface real
+  // progress — a determinate bar plus a thousands-separated "N / total" count
+  // and an ETA chip — through the same SortStateService setters the find$ SSE
+  // subscription writes. Verified live against a 1,200-item dataset; a warm
+  // run finishes sub-second, so this pins the template contract the live run
+  // is too fast to observe.
+  it('renders a determinate bar, formatted count, and ETA for a large-dataset scoring run', async () => {
+    await flushInit();
+    httpMock.match('/api/dataset/status').forEach((req) => req.flush({ display_name: 'x' }));
+    await settleZoneless(fixture);
+
+    const sortState = TestBed.inject(SortStateService);
+    sortState.setSortBusy(true);
+    sortState.setSortStatus('Scoring 1200 items…');
+    sortState.setSortProgress(476, 1200, 0.79, 42);
+    await settleZoneless(fixture);
+
+    const overlay = fixture.nativeElement.querySelector('.find-wait-overlay');
+    expect(overlay).not.toBeNull();
+    // The whole-job `overall` fraction drives a determinate bar.
+    const track = overlay!.querySelector('[role="progressbar"]') as HTMLElement;
+    expect(track.getAttribute('aria-valuenow')).toBe('0.79');
+    expect(track.getAttribute('aria-valuemax')).toBe('1');
+    const fill = overlay!.querySelector('.progress-fill') as HTMLElement;
+    expect(fill.className).not.toContain('indeterminate');
+    // The count renders with a thousands separator so 1200 reads as 1,200.
+    expect(overlay!.querySelector('.find-wait-count')!.textContent).toContain('476 / 1,200');
+    expect(overlay!.querySelector('.find-wait-eta')!.textContent).toContain('sec');
+  });
+
   // Find/Train share the singleton SortStateService, so a fresh entry still
   // holds the previous session's ranking. Against a smaller dataset those stale
   // ids fire a storm of image 404s; ngOnInit resets the ranking before loading.

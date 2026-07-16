@@ -87,6 +87,8 @@ Each eval dataset wraps a demo dataset and defines text queries targeting specif
 | `caltech256_a` | Image | caltech256_a | 25 Caltech-256 categories (backpack, butterfly, camel, giraffe, lighthouse, etc.) |
 | `visual_genome_s` | Image (multi-label) | visual_genome_s | ~40 Visual Genome object categories (person, car, dog, tree, building, etc.); an image can be a positive for several at once |
 | `visual_genome_m` | Image (multi-label) | visual_genome_m | ~40 Visual Genome object categories |
+| `vggface2_faces_s` | Image (faces) | vggface2_faces_s | 40 celebrity identities; `category` = person, so learned sort measures same-person identity matching (train on a few of a person's photos → recover their held-out photos) |
+| `vggface2_faces_m` | Image (faces) | vggface2_faces_m | 40 celebrity identities (40 photos/person) |
 | `20newsgroups_s` | Text | 20newsgroups_s | 15 topics (sports, science, cars, religion, politics, medicine, etc.) |
 | `20newsgroups_m` | Text | 20newsgroups_m | 15 topics |
 | `20newsgroups_l` | Text | 20newsgroups_l | 15 topics |

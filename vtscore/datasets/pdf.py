@@ -52,6 +52,43 @@ def render_pdf_pages(pdf_path: Path, dpi: int = 150) -> list[tuple[str, "Image.I
     return pages
 
 
+def render_pdf_page_png(pdf_bytes: bytes, page_index: int = 0, dpi: int = 150) -> bytes | None:
+    """Render one page of an **in-memory** PDF to PNG bytes.
+
+    Used by :meth:`~vtscore.media.document.media_type.DocumentMediaType.image_response`
+    to give a document media a real page thumbnail/preview without writing the
+    rendered page to disk.  Returns ``None`` when the bytes are not a readable
+    PDF or *page_index* is out of range (e.g. a ``.doc`` / ``.ppt`` that fitz
+    cannot rasterise) — callers fall back to a placeholder.
+
+    Args:
+        pdf_bytes: Raw PDF file bytes.
+        page_index: 0-indexed page to render (default the first page).
+        dpi: Render resolution.
+    """
+    import fitz  # noqa: PLC0415  (pymupdf)
+    from PIL import Image as PILImage  # noqa: PLC0415
+
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    except Exception:
+        return None
+    try:
+        if page_index < 0 or page_index >= len(doc):
+            return None
+        zoom = dpi / 72.0
+        matrix = fitz.Matrix(zoom, zoom)
+        pix = doc[page_index].get_pixmap(matrix=matrix)
+        img = PILImage.frombytes("RGB", (pix.width, pix.height), pix.samples)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+    except Exception:
+        return None
+    finally:
+        doc.close()
+
+
 def load_pdf_images_into(
     folder: Path,
     medias: dict[int, dict[str, Any]],

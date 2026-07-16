@@ -45,6 +45,41 @@ def download_cifar10(on_progress: Optional[ProgressCallback] = None) -> Path:
     return extract_dir
 
 
+def download_vggface2(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download and extract the VGGFace2 **test split** (the Faces demo source).
+
+    Downloads ``vggface2_test.tar.gz`` from the configured
+    ``VGGFACE2_TEST_URL`` (a public HuggingFace mirror, no auth) into
+    ``DATA_DIR`` if not already present, then extracts it and deletes the
+    archive to reclaim disk space.  The tarball unpacks to a
+    ``test/n######/*.jpg`` tree - one folder per identity (500 people, ~340
+    photos each) - which the Faces demo maps to ``category`` = person.
+
+    Args:
+        on_progress: Optional progress callback. Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``test/`` directory holding the per-identity subfolders
+        (e.g. ``data/vggface2/test``).
+    """
+    if on_progress is None:
+        on_progress = _core._default_progress()
+
+    extract_dir = _core.DATA_DIR / "vggface2"
+    test_dir = extract_dir / "test"
+    _core._download_and_extract(
+        url=_core.VGGFACE2_TEST_URL,
+        archive_name="vggface2_test.tar.gz",
+        extract_to=extract_dir,
+        check_path=test_dir,
+        download_size_mb=_core.VGGFACE2_TEST_DOWNLOAD_SIZE_MB,
+        dataset_name="VGGFace2 (test split)",
+        on_progress=on_progress,
+    )
+    return test_dir
+
+
 def _extract_members(members, extract_one, on_progress, message: str, *, start: int) -> None:
     """Extract *members* one at a time, reporting progress every 100 items.
 

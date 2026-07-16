@@ -86,6 +86,19 @@ Object.defineProperty(Element.prototype, 'scrollIntoView', {
   value: () => {},
 });
 
+// --- CSS.escape -------------------------------------------------------------
+// import-config builds a `#${CSS.escape(id)}` selector to scroll the active
+// combobox option into view. jsdom omits the `CSS` namespace object entirely,
+// so the reference throws "Cannot read properties of undefined" from the
+// deferred queueMicrotask callback (surfacing as an unhandled error, not a
+// test failure). Provide a minimal, spec-correct escape() so the selector is
+// built and the (stubbed) scrollIntoView above runs.
+if (typeof (globalThis as { CSS?: unknown }).CSS === 'undefined') {
+  (globalThis as unknown as { CSS: { escape(value: string): string } }).CSS = {
+    escape: (value: string) => String(value).replace(/[^a-zA-Z0-9_-]/g, (ch) => `\\${ch}`),
+  };
+}
+
 // --- HTMLMediaElement play/pause/load --------------------------------------
 // The audio/video players call these; jsdom throws "Not implemented".
 Object.defineProperties(HTMLMediaElement.prototype, {

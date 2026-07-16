@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from vtscore.media.image._demo_categories import VGGFACE2_CATEGORIES
+
 
 @dataclass
 class EvalQuery:
@@ -325,6 +327,17 @@ _VISUAL_GENOME_QUERIES = [
 ]
 
 # ------------------------------------------------------------------
+# Faces eval queries  (VGGFace2 - one query per curated identity)
+# ------------------------------------------------------------------
+# Identity is the ground-truth category, so the meaningful mode here is
+# learned sort: vote a few of a person's photos Good, train the MLP, and
+# measure whether their held-out photos are recovered.  The text is the
+# person's name so text-sort still has a (weaker) name->photo query to score.
+
+_FACES_QUERIES = [EvalQuery(f"a photo of {name}", name) for name in VGGFACE2_CATEGORIES]
+
+
+# ------------------------------------------------------------------
 # Registry - keyed by demo dataset ID
 # ------------------------------------------------------------------
 
@@ -354,6 +367,15 @@ EVAL_DATASETS: dict[str, dict] = {
     "caltech256_a": {
         "demo_dataset": "caltech256_a",
         "queries": _IMAGES_L_QUERIES,
+    },
+    # Image (faces - same-person identity matching)
+    "vggface2_faces_s": {
+        "demo_dataset": "vggface2_faces_s",
+        "queries": _FACES_QUERIES,
+    },
+    "vggface2_faces_m": {
+        "demo_dataset": "vggface2_faces_m",
+        "queries": _FACES_QUERIES,
     },
     # Image (born-digital mobile UI screenshots)
     "enrico_m": {

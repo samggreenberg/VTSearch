@@ -27,12 +27,6 @@ the original priority.
 
 <!-- item-sep -->
 
-- [ ] #2358 — UCSF Documents listed under Image media type
-
-<!-- item-sep -->
-
 - [ ] #2383 — Move keyboard focus off the Good button during Autopilot "Find Initial Bads"
 
 <!-- item-sep -->
-
-- [ ] #2360 — Header "Data:" label lags the active dataset

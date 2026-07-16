@@ -357,6 +357,14 @@ class CoreConfig:
     autofind_exporter: str = ""
     autofind_exporter_field_values: dict[str, dict[str, str]] = field(default_factory=dict)
 
+    # Per-media-type opt-in to the generative signpost captioner (image VLM /
+    # audio captioner) instead of the default zero-shot tag texts.  ``{}`` (the
+    # default) means tags for every type.  Read by
+    # :func:`vtscore.projection.signpost_texts.provider_for`.  Defaulted here so
+    # library-only ``CoreConfig(...)`` constructions without the app shim keep
+    # working unchanged.
+    signpost_captioner: dict[str, bool] = field(default_factory=dict)
+
     @classmethod
     def from_settings(cls, settings_path: str | Path | None = None) -> CoreConfig:
         """Snapshot the current user's ``vtsearch.settings`` into a CoreConfig.

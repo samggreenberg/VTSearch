@@ -1,6 +1,5 @@
 from vtscore.media.image.clipper import (
     ImageDefaultClipper,
-    ImageFaceClipper,
     ImageObjectClipper,
     ImageTilingClipper,
 )
@@ -11,5 +10,4 @@ CLIPPERS = [
     ImageDefaultClipper(),
     ImageTilingClipper(),
     ImageObjectClipper(),
-    ImageFaceClipper(),
 ]

@@ -41,10 +41,12 @@ def ctx(monkeypatch):
     """A context of ``_N`` audio medias with vectors under the fake embedder.
 
     The fit itself is stubbed, so these tests run whether or not toponymy is
-    installed — availability is patched to True and re-patched off by the
+    installed — availability is patched to True (both the quiet probe the
+    signature path uses and the loud build-path gate) and re-patched off by the
     tests that cover the unavailable path.
     """
     monkeypatch.setattr(sp, "signposting_available", lambda: True)
+    monkeypatch.setattr(sp, "require_signposting", lambda: True)
     rng = np.random.default_rng(7)
     context = DatasetContext("signpost-test")
     for mid in range(1, _N + 1):
@@ -149,7 +151,9 @@ class TestPrepSignposts:
         assert sp.prep_signposts(ctx, _proj(ctx), subset=False) is None
 
     def test_unavailable_toponymy_bails(self, ctx, stub_pipeline, monkeypatch):
-        monkeypatch.setattr(sp, "signposting_available", lambda: False)
+        # The build path gates on require_signposting (the loud gate), not the
+        # quiet probe — a missing install is surfaced, but the build still bails.
+        monkeypatch.setattr(sp, "require_signposting", lambda: False)
         assert sp.prep_signposts(ctx, _proj(ctx), subset=False) is None
 
     def test_tiny_layout_bails_before_texts(self, ctx, stub_pipeline, monkeypatch):

@@ -146,9 +146,13 @@ def labeling_status_indicator():
         # indicators, falling back to a "computing" placeholder when no
         # snapshot exists yet (rapid votes at session start, or the first poll
         # after a detector switch cleared the cache).
-        _schedule_status_refresh(span)
+        # Read the snapshot *before* kicking the refresh: the worker rewrites
+        # ``_status_snapshot`` as soon as it finishes, so scheduling first
+        # races it against this request's read and the response could reflect
+        # the in-flight recompute instead of the previous snapshot.
         status = stale_labeling_status(good_votes, bad_votes, span)
         status["stale"] = True
+        _schedule_status_refresh(span)
         return status
     except Exception:
         import logging

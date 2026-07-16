@@ -22,53 +22,54 @@ through.
 
 ## The model (shipped)
 
-`MediaType` now names both capabilities explicitly, and every subsystem keys
-off the right one:
+`MediaType` now names the two orthogonal capabilities it used to conflate, and
+every subsystem keys off the right one:
 
+- `MediaType.importable: bool` — whether the type is a first-class *ingestion*
+  category the user picks when importing (folder scan, file upload). Defaults
+  `True`; a *convert-in* half type overrides it to `False`.
+- `MediaType.embeddable: bool` — derived from the embedder registry
+  (`embedders_for_type(type_id)`), so it is `False` for a *convert-out* half
+  type and `True` for image/audio/video/text automatically, nothing to sync.
 - `MediaType.converts_to: list[str]` — embeddable `type_id`s a non-embeddable
   type can convert into (first = default). `document → ["image", "text"]`;
   empty for a directly-embeddable type.
-- `MediaType.embeddable: bool` — derived from the embedder registry
-  (`embedders_for_type(type_id)`), so it is `False` for a half type and `True`
-  for image/audio/video/text automatically, with nothing to keep in sync.
 
-Both are in `MediaType.to_dict()` → `GET /api/media-types`, and on the frontend
-`MediaTypeInfo` (`embeddable?`, `converts_to?`). A "half type" is precisely
-`embeddable == False and converts_to != []` — *a category that mandates a
-conversion step*. The definition generalises past `document` (a future
-`archive` / `email` type would fit the same mold).
+All three are in `MediaType.to_dict()` → `GET /api/media-types`, and on the
+frontend `MediaTypeInfo` (`importable?`, `embeddable?`, `converts_to?`).
+
+There are **two mirror-image half types**, split along the two axes:
+
+- **Convert-out** (`importable && !embeddable && converts_to != []`):
+  `document`. A category the user ingests but which mandates a conversion step
+  before it can be searched. Generalises to a future `archive` / `email` type.
+- **Convert-in** (`embeddable && !importable`): `face`. A category that is
+  never imported natively — it only ever arises from converting *another* type
+  (a face is cropped out of an image by `image2face`). It has its own embedder
+  (FaceNet identity space) but no file extensions.
 
 **Guiding principle:** surface the **ingestion category** wherever the user
-differentiates (folder import, demo tabs); surface the **embedded identity**
-only *downstream of conversion* (the browse map, sort). Never render a
-document by pretending its raw bytes are an image — render it *as a document*.
+differentiates (folder import, demo tabs — filter by `importable`); surface the
+**embedded identity** only *downstream of conversion* (the browse map, sort,
+detector-example pickers — filter by `embeddable`). Never render a document by
+pretending its raw bytes are an image — render it *as a document*.
 
 <!-- item-sep -->
 
 ## Open work
 
-- **#2358 — full Document demo tab (convert-on-load).** Interim shipped: the
-  UCSF demo is relabelled so its document→image provenance is explicit while it
-  stays in the Image list. The structural finish is to move it to a real
-  **Document** demo tab whose load applies a converter:
+<!-- item-sep -->
 
-  - Move the `ucsf_documents_a` `DemoDataset` from `image/_demo_sources.py` to
-    `DocumentMediaType.demo_datasets`, and implement
-    `DocumentMediaType.load_demo_source("ucsf_documents", …)` to produce
-    *document* (raw-PDF) clips (download via `download_ucsf_documents`).
-  - Teach the demo picker (`…/pickers/demo/demo-picker.component.ts`) to handle
-    a non-embeddable active tab: read `converts_to[0]`, load embedders for that
-    *target* type, and pass `converter=document2image` (default; offer
-    `document2text`) on load. Today `loadDemoEmbedders(mediaType)` assumes the
-    tab type is embeddable and returns `[]` for `document`.
-  - Reconcile demo-status caching: the converter changes the pickle cache key
-    (`{dataset}__{converter}`), but `getDemoList(embedder, clipper)` does not
-    pass a converter, so per-demo `ready / needs_embedding / needs_download`
-    status must learn the converter dimension. Update
-    `vtscore/datasets/demo_counts.py` if the entry's advertised count moves.
-
-  The `document` `image_response` hook (below) already gives these document
-  clips a real thumbnail/preview, so a Document tab renders correctly.
+- **Convert-in output types in the folder importer.** The importer's output
+  media-type dropdown is populated from `all_folder_names()` (every registered
+  type), so a *convert-in* type like `face` shows up as a native folder type
+  even though it can't be scanned from files (empty `file_extensions`).
+  Selecting it works — the `image2face` converter row is the real mechanism —
+  but the "include face files directly" native row is a no-op. A cleaner UX
+  would drive the output dropdown off `importable` (native scan types) *plus*
+  convert-in targets reachable via a converter, instead of the raw registry
+  list. Until then `importable` is surfaced but only filters the import-defaults
+  settings and the detector-example demo tabs.
 
 <!-- item-sep -->
 
