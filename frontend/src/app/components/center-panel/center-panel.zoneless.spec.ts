@@ -170,31 +170,28 @@ describe('CenterPanelComponent', () => {
   });
 
   it('should show audio player for audio media', () => {
-    component.media = mockMedia;
+    fixture.componentRef.setInput('media', mockMedia);
     TestBed.tick();
     expect(fixture.nativeElement.querySelector('vt-audio-player')).toBeTruthy();
   });
 
   it('should show image viewer for image media', () => {
-    component.media = { ...mockMedia, media_type: 'image' };
-    // The image-view-controls block (`@if (mediaType === 'image' && imageViewer)`)
-    // gates on the `imageViewer` ViewChild, which only resolves partway through
-    // the first change-detection pass. The zoom-slider bindings it renders then
-    // settle to their real values within that same pass, which dev-mode's
-    // check-no-changes guard flags as NG0100. Skip that guard (pass `false`); the
-    // behaviour is dev-mode-only and does not occur in production.
-    fixture.detectChanges(false);
+    fixture.componentRef.setInput('media', { ...mockMedia, media_type: 'image' });
+    // The image-view-controls block gates on the `imageViewer` view query, now a
+    // signal: it resolves after the first pass and schedules a clean follow-up
+    // render, so no NG0100 workaround is needed.
+    TestBed.tick();
     expect(fixture.nativeElement.querySelector('vt-image-viewer')).toBeTruthy();
   });
 
   it('should show video player for video media', () => {
-    component.media = { ...mockMedia, media_type: 'video' };
+    fixture.componentRef.setInput('media', { ...mockMedia, media_type: 'video' });
     TestBed.tick();
     expect(fixture.nativeElement.querySelector('vt-video-player')).toBeTruthy();
   });
 
   it('should show text viewer for text media', () => {
-    component.media = { ...mockMedia, media_type: 'text' };
+    fixture.componentRef.setInput('media', { ...mockMedia, media_type: 'text' });
     TestBed.tick();
     expect(fixture.nativeElement.querySelector('vt-text-viewer')).toBeTruthy();
     // The rendered text-viewer fetches its paragraph on init; flush it so the
@@ -203,19 +200,19 @@ describe('CenterPanelComponent', () => {
   });
 
   it('should show document viewer for document media', () => {
-    component.media = { ...mockMedia, media_type: 'document' };
+    fixture.componentRef.setInput('media', { ...mockMedia, media_type: 'document' });
     TestBed.tick();
     expect(fixture.nativeElement.querySelector('vt-document-viewer')).toBeTruthy();
   });
 
   it('should show voting overlay when media is selected', () => {
-    component.media = mockMedia;
+    fixture.componentRef.setInput('media', mockMedia);
     TestBed.tick();
     expect(fixture.nativeElement.querySelector('vt-voting-overlay')).toBeTruthy();
   });
 
   it('should display metadata', () => {
-    component.media = mockMedia;
+    fixture.componentRef.setInput('media', mockMedia);
     TestBed.tick();
     const text = fixture.nativeElement.textContent;
     expect(text).toContain('test.wav');
@@ -224,7 +221,7 @@ describe('CenterPanelComponent', () => {
   });
 
   it('should send vote request on castVote', () => {
-    component.media = mockMedia;
+    fixture.componentRef.setInput('media', mockMedia);
     component.showAnimations.set(false);
     TestBed.tick();
 
@@ -245,7 +242,7 @@ describe('CenterPanelComponent', () => {
   });
 
   it('should prevent double voting', () => {
-    component.media = mockMedia;
+    fixture.componentRef.setInput('media', mockMedia);
     component.showAnimations.set(false);
     TestBed.tick();
     component.isVoting.set(true);
@@ -263,16 +260,14 @@ describe('CenterPanelComponent', () => {
   });
 
   it('should clear swipe class when media changes', () => {
-    component.media = mockMedia;
+    fixture.componentRef.setInput('media', mockMedia);
     TestBed.tick();
     // Simulate swipe ending
     component.swipeClass.set('swipe-right');
 
-    // Change to new media (triggers ngOnChanges)
-    component.media = { ...mockMedia, id: 2, filename: 'next.wav' };
-    component.ngOnChanges({
-      media: { currentValue: component.media, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
-    });
+    // Change to new media (triggers the media-change effect)
+    fixture.componentRef.setInput('media', { ...mockMedia, id: 2, filename: 'next.wav' });
+    TestBed.tick();
 
     expect(component.swipeClass()).toBe('');
   });
@@ -295,13 +290,9 @@ describe('CenterPanelComponent', () => {
     const box: RegionBox = [0.1, 0.2, 0.5, 0.6];
 
     function setup(): void {
-      component.media = imageMedia;
+      fixture.componentRef.setInput('media', imageMedia);
       component.showAnimations.set(false);
-      // Skip dev-mode check-no-changes: rendering the image-view-controls (gated
-      // on the `imageViewer` ViewChild) settles the zoom-slider bindings within
-      // the first CD pass, which the guard would otherwise flag as NG0100. This
-      // is dev-mode-only and does not occur in production.
-      fixture.detectChanges(false);
+      TestBed.tick();
     }
 
     it('attaches region_box to a yes-vote when a box is drawn', () => {
@@ -355,13 +346,9 @@ describe('CenterPanelComponent', () => {
     const box: RegionBox = [0.1, 0.2, 0.5, 0.6];
 
     function setup(): void {
-      component.media = imageMedia;
+      fixture.componentRef.setInput('media', imageMedia);
       component.showAnimations.set(false);
-      // Skip dev-mode check-no-changes: rendering the image-view-controls (gated
-      // on the `imageViewer` ViewChild) settles the zoom-slider bindings within
-      // the first CD pass, which the guard would otherwise flag as NG0100. This
-      // is dev-mode-only and does not occur in production.
-      fixture.detectChanges(false);
+      TestBed.tick();
     }
 
     it('arms on first ← without firing a request, fires on second ←', () => {
@@ -411,15 +398,8 @@ describe('CenterPanelComponent', () => {
       expect(component.pendingBadConfirm()).toBe(true);
 
       const next: Media = { ...imageMedia, id: 2, filename: 'next.png' };
-      component.media = next;
-      component.ngOnChanges({
-        media: {
-          currentValue: next,
-          previousValue: imageMedia,
-          firstChange: false,
-          isFirstChange: () => false,
-        },
-      });
+      fixture.componentRef.setInput('media', next);
+      TestBed.tick();
       expect(component.pendingBadConfirm()).toBe(false);
       expect(component.currentRegionBox).toBeNull();
     });
@@ -464,31 +444,31 @@ describe('CenterPanelComponent', () => {
     }
 
     it('hides the overlay toggle when the embedder is single-vector (neither capability)', () => {
-      component.media = imageMedia;
+      fixture.componentRef.setInput('media', imageMedia);
       withEmbedders([info({})]);
       expect(component.regionOverlayCapable).toBe(false);
     });
 
     it('shows the overlay toggle for patch-region embedders', () => {
-      component.media = imageMedia;
+      fixture.componentRef.setInput('media', imageMedia);
       withEmbedders([info({ supports_patch_regions: true })]);
       expect(component.regionOverlayCapable).toBe(true);
     });
 
     it('shows the overlay toggle for structural embedders (geometric verification)', () => {
-      component.media = imageMedia;
+      fixture.componentRef.setInput('media', imageMedia);
       withEmbedders([info({ supports_geometric_verification: true })]);
       expect(component.regionOverlayCapable).toBe(true);
     });
 
     it('defaults to no overlay when the embedder is unknown / not yet loaded', () => {
-      component.media = imageMedia;
+      fixture.componentRef.setInput('media', imageMedia);
       withEmbedders([]);
       expect(component.regionOverlayCapable).toBe(false);
     });
 
     it('nudges marquee copy toward boxing the pattern on structural datasets', () => {
-      component.media = imageMedia;
+      fixture.componentRef.setInput('media', imageMedia);
       withEmbedders([info({ supports_geometric_verification: true })]);
       expect(component.structuralDataset).toBe(true);
       expect(component.marqueeTitle).toContain('box the pattern you want to match');
@@ -496,7 +476,7 @@ describe('CenterPanelComponent', () => {
     });
 
     it('keeps generic marquee copy on non-structural datasets', () => {
-      component.media = imageMedia;
+      fixture.componentRef.setInput('media', imageMedia);
       withEmbedders([info({ supports_patch_regions: true })]);
       expect(component.structuralDataset).toBe(false);
       expect(component.marqueeTitle).toContain('draw a region');

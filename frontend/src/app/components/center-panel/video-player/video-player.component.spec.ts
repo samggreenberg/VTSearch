@@ -1,4 +1,3 @@
-import { ElementRef } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { VideoPlayerComponent } from './video-player.component';
 import { ActiveContextService } from '../../../services/active-context.service';
@@ -32,11 +31,9 @@ describe('VideoPlayerComponent', () => {
   });
 
   it('should set videoSrc when media changes', () => {
-    component.media = mockMedia;
-    component.ngOnChanges({
-      media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
-    });
-    expect(component.videoSrc).toBe('/api/medias/3/video');
+    fixture.componentRef.setInput('media', mockMedia);
+    TestBed.tick();
+    expect(component.videoSrc()).toBe('/api/medias/3/video');
   });
 
   it('should render video element', async () => {
@@ -48,41 +45,33 @@ describe('VideoPlayerComponent', () => {
     expect(video.hasAttribute('loop')).toBe(true);
   });
 
-  it('seeks into the clip window when clip extents arrive after the video loaded', () => {
+  it('seeks into the clip window when clip extents arrive after the video loaded', async () => {
     // A clipped media first renders as a stub (no clip_start/clip_end), so the
     // (loadedmetadata) event fires before the extents are known. The batch
     // response then enriches the same media id with clip_start/clip_end on a
-    // later ngOnChanges. The player must snap into the window at that point.
-    const fakeVideo = {
-      volume: 0,
-      currentTime: 0,
-      paused: true,
-      play: () => Promise.resolve(),
-      pause: () => {},
-      // ngOnDestroy tears the element down via removeAttribute('src')/load();
-      // the stub needs both so cleanup doesn't throw.
-      removeAttribute: () => {},
-      load: () => {},
-    } as unknown as HTMLVideoElement;
-    component.videoRef = { nativeElement: fakeVideo } as ElementRef<HTMLVideoElement>;
-
+    // later change of the `media` input. The player must snap into the window
+    // at that point.
     const stub: Media = { id: 7, media_type: 'video', filename: 'clip.mp4', md5: 'abc', custom_metadata: {} };
-    component.media = stub;
-    component.ngOnChanges({
-      media: { currentValue: stub, previousValue: null, firstChange: true, isFirstChange: () => true },
+    fixture.componentRef.setInput('media', stub);
+    await settleZoneless(fixture);
+
+    // jsdom has no media pipeline; give the real element a working currentTime.
+    const video: HTMLVideoElement = fixture.nativeElement.querySelector('video');
+    let currentTime = 0;
+    Object.defineProperty(video, 'currentTime', {
+      configurable: true,
+      get: () => currentTime,
+      set: (v: number) => (currentTime = v),
     });
+
     // Video loads against the stub: no clip window yet, so no seek.
     component.onLoadedMetadata();
-    expect(fakeVideo.currentTime).toBe(0);
+    expect(video.currentTime).toBe(0);
 
     // Batch hydration delivers the clip extents for the same id.
     const hydrated: Media = { ...stub, clip_start: 5, clip_end: 10 };
-    component.media = hydrated;
-    component.ngOnChanges({
-      media: { currentValue: hydrated, previousValue: stub, firstChange: false, isFirstChange: () => false },
-    });
-    expect(fakeVideo.currentTime).toBe(5);
-
-    component.ngOnDestroy();
+    fixture.componentRef.setInput('media', hydrated);
+    await settleZoneless(fixture);
+    expect(video.currentTime).toBe(5);
   });
 });

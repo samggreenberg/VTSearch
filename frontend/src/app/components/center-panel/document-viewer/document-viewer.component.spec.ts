@@ -32,14 +32,12 @@ describe('DocumentViewerComponent', () => {
   });
 
   it('should set mediaSrc when media changes', () => {
-    component.media = mockMedia;
-    component.ngOnChanges({
-      media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
-    });
+    fixture.componentRef.setInput('media', mockMedia);
+    TestBed.tick();
     // mediaSrc is a trusted SafeResourceUrl (required by the `<object [data]>`
     // RESOURCE_URL sink); unwrap it to assert the underlying media URL.
     const sanitizer = TestBed.inject(DomSanitizer);
-    expect(sanitizer.sanitize(SecurityContext.RESOURCE_URL, component.mediaSrc)).toBe(
+    expect(sanitizer.sanitize(SecurityContext.RESOURCE_URL, component.mediaSrc())).toBe(
       '/api/medias/5/media',
     );
   });

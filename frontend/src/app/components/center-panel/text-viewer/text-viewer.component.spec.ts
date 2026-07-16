@@ -39,7 +39,7 @@ describe('TextViewerComponent', () => {
   });
 
   it('should display loading initially', async () => {
-    // setInput drives ngOnChanges (the real channel), which kicks off the fetch.
+    // setInput drives the media-change effect (the real channel), which kicks off the fetch.
     fixture.componentRef.setInput('media', mockMedia);
     await settleZoneless(fixture);
     expect(fixture.nativeElement.textContent).toContain('Loading…');
