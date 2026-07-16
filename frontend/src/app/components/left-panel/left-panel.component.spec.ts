@@ -1,7 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { HttpTestingController } from '@angular/common/http/testing';
-import { SimpleChange } from '@angular/core';
 import { LeftPanelComponent } from './left-panel.component';
 import type { Media } from '../../models/api.models';
 import { settleResource } from '../../testing/settle-resource';
@@ -28,7 +27,7 @@ describe('LeftPanelComponent', () => {
   });
 
   it('should default to autopilot tab', () => {
-    expect(component.activeTab).toBe('autopilot');
+    expect(component.activeTab()).toBe('autopilot');
   });
 
   it('should emit autopilotStart on init', () => {
@@ -41,54 +40,50 @@ describe('LeftPanelComponent', () => {
 
   it('should switch to manual tab', () => {
     component.setTab('manual');
-    expect(component.activeTab).toBe('manual');
+    expect(component.activeTab()).toBe('manual');
   });
 
   it('should default to manual tab when autopilotEnabled is false', () => {
     const fresh = TestBed.createComponent(LeftPanelComponent);
     const comp = fresh.componentInstance;
-    comp.autopilotEnabled = false;
+    fresh.componentRef.setInput('autopilotEnabled', false);
     vi.spyOn(comp.autopilotStart, 'emit');
     TestBed.tick();
-    expect(comp.activeTab).toBe('manual');
+    expect(comp.activeTab()).toBe('manual');
     expect(comp.autopilotStart.emit).not.toHaveBeenCalled();
   });
 
   it('should default to manual and not start autopilot when autopilotDisabled', () => {
     const fresh = TestBed.createComponent(LeftPanelComponent);
     const comp = fresh.componentInstance;
-    comp.autopilotDisabled = true;
+    fresh.componentRef.setInput('autopilotDisabled', true);
     vi.spyOn(comp.autopilotStart, 'emit');
     TestBed.tick();
-    expect(comp.activeTab).toBe('manual');
+    expect(comp.activeTab()).toBe('manual');
     expect(comp.autopilotStart.emit).not.toHaveBeenCalled();
   });
 
   it('should fall back to manual when autopilot becomes disabled after starting', () => {
     // Default init lands on the autopilot tab.
-    expect(component.activeTab).toBe('autopilot');
+    expect(component.activeTab()).toBe('autopilot');
     vi.spyOn(component.autopilotStop, 'emit');
-    component.autopilotDisabled = true;
-    component.ngOnChanges({
-      autopilotDisabled: new SimpleChange(false, true, false),
-    });
-    expect(component.activeTab).toBe('manual');
+    fixture.componentRef.setInput('autopilotDisabled', true);
+    TestBed.tick();
+    expect(component.activeTab()).toBe('manual');
     expect(component.autopilotStop.emit).toHaveBeenCalled();
   });
 
   it('should ignore clicks on the autopilot tab while it is disabled', () => {
     component.setTab('manual');
-    component.autopilotDisabled = true;
+    fixture.componentRef.setInput('autopilotDisabled', true);
+    TestBed.tick();
     vi.spyOn(component.autopilotStart, 'emit');
     component.setTab('autopilot');
-    expect(component.activeTab).toBe('manual');
+    expect(component.activeTab()).toBe('manual');
     expect(component.autopilotStart.emit).not.toHaveBeenCalled();
   });
 
   it('should disable the autopilot tab button when autopilotDisabled', () => {
-    // setInput fires ngOnChanges and marks the host dirty so the tick repaints
-    // consistently (a direct field write leaves derived tab state unsettled,
-    // which under zoneless surfaces as an NG0100 in the verify pass).
     fixture.componentRef.setInput('autopilotDisabled', true);
     TestBed.tick();
     const el = fixture.nativeElement as HTMLElement;
@@ -104,10 +99,6 @@ describe('LeftPanelComponent', () => {
   });
 
   it('should render manual tab content when switched', () => {
-    // Drive the switch through the tab button's (click) — a bound listener that
-    // marks the view dirty — so the panel repaints cleanly under zoneless
-    // (calling setTab() directly leaves the host undirtied and the tab
-    // conditional unsettled across the verify pass).
     const el = fixture.nativeElement as HTMLElement;
     (el.querySelectorAll<HTMLButtonElement>('.left-tab')[0]).click(); // Manual
     TestBed.tick();
@@ -177,10 +168,7 @@ describe('LeftPanelComponent', () => {
     const stub = (media_type: string): Media => ({ id: 1, media_type }) as Media;
 
     function setMedias(medias: Media[]): void {
-      component.medias = medias;
-      component.ngOnChanges({
-        medias: new SimpleChange(undefined, medias, false),
-      });
+      fixture.componentRef.setInput('medias', medias);
     }
 
     it('derives the type label from the first grid item', () => {
@@ -215,10 +203,10 @@ describe('LeftPanelComponent', () => {
 
       // Metadata arrives late with a custom display name: the header must
       // upgrade instead of staying stuck on the fallback. The resource value
-      // commits on a microtask and the deriving effect runs on the next tick,
-      // so settle before asserting. Two GETs match here — the header's own
-      // rxResource read and the shared MediaTypeCapabilityService.ensureLoaded()
-      // fired in ngOnInit — so flush them all with the same payload.
+      // commits on a microtask, so settle before asserting. Two GETs match
+      // here — the header's own rxResource read and the shared
+      // MediaTypeCapabilityService.ensureLoaded() fired in ngOnInit — so flush
+      // them all with the same payload.
       const reqs = httpMock.match((r) => r.url.includes('/api/media-types'));
       reqs.forEach((r) => r.flush({ media_types: [{ type_id: 'audio', name: 'Sound Clips' }] }));
       await settleResource();

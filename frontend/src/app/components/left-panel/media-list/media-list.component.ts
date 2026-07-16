@@ -1,4 +1,4 @@
-import { AfterViewChecked, ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, ElementRef, inject, Input, input, NgZone, OnChanges, OnDestroy, OnInit, output, SimpleChanges, ViewChild } from '@angular/core';
+import { AfterViewChecked, ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, effect, ElementRef, inject, input, NgZone, OnDestroy, OnInit, output, untracked, viewChild } from '@angular/core';
 
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { Subject, Subscription } from 'rxjs';
@@ -53,18 +53,18 @@ type GridRow = { kind: 'items'; items: OrderedItem[] } | { kind: 'threshold' };
   templateUrl: './media-list.component.html',
   styleUrl: './media-list.component.scss',
 })
-export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, OnDestroy {
+export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
   private metadataCache = inject(MediaMetadataCacheService);
   private mediaState = inject(MediaStateService);
   private cdr = inject(ChangeDetectorRef);
   private zone = inject(NgZone);
 
-  @Input() medias: Media[] = [];
-  @Input() sortOrder: SortedItem[] | null = null;
-  @Input() threshold: number | null = null;
+  readonly medias = input<Media[]>([]);
+  readonly sortOrder = input<SortedItem[] | null>(null);
+  readonly threshold = input<number | null>(null);
   readonly selectedId = input<number | null>(null);
-  @Input() goodVotes: Set<number> = new Set();
-  @Input() badVotes: Set<number> = new Set();
+  readonly goodVotes = input<Set<number>>(new Set());
+  readonly badVotes = input<Set<number>>(new Set());
   readonly gridGoalWidth = input<number>(80);
   readonly focusMode = input<'click' | 'hover'>('click');
   readonly showScores = input(true);
@@ -79,8 +79,8 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     x: number;
     y: number;
 }>();
-  @ViewChild('listContainer') listContainer!: ElementRef<HTMLDivElement>;
-  @ViewChild(CdkVirtualScrollViewport) virtualViewport?: CdkVirtualScrollViewport;
+  readonly listContainer = viewChild<ElementRef<HTMLDivElement>>('listContainer');
+  readonly virtualViewport = viewChild(CdkVirtualScrollViewport);
 
   /** Cached ordered items, rebuilt only when inputs change, not on every CD cycle. */
   cachedOrderedItems: OrderedItem[] = [];
@@ -102,6 +102,10 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
    * autoscroll, since the target may be off-screen.
    */
   private clickSelectedId: number | null = null;
+  /** True once the selection effect has seen its initial ``selectedId``. */
+  private selectedIdSeen = false;
+  /** Previous ``gridGoalWidth`` value; ``null`` until the rebuild effect's first run. */
+  private prevGridGoalWidth: number | null = null;
   private readonly destroy$ = new Subject<void>();
   /** The viewport instance whose ``scrolledIndexChange`` is currently subscribed. */
   private scrollSubscribedViewport?: CdkVirtualScrollViewport;
@@ -118,6 +122,62 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
   // zoneless (the old plain-field-written-from-an-effect path went stale).
   readonly loadingMedias = computed(() => this.mediaState.isLoading());
   readonly skeletonPlaceholders = Array.from({ length: 12 });
+
+  constructor() {
+    // Only autoscroll the newly-selected item into view in click mode. In hover
+    // mode the selection follows the cursor, so scrolling the item to the top
+    // would shift what's under the mouse, re-trigger selection, and scroll
+    // again — an infinite autoscroll loop. Let the hovered item stay put.
+    //
+    // And when the selection was driven by clicking a card in this grid, the
+    // item is already visible, so scrolling it into view is jarring and
+    // unnecessary — suppress the autoscroll for that id. Selections from
+    // elsewhere (keyboard, vote auto-advance, stripe overview) may target an
+    // off-screen item, so those still autoscroll.
+    //
+    // This effect tracks only ``selectedId``; the body runs untracked so a
+    // ``focusMode`` flip alone never queues a scroll. The queued flag is
+    // consumed by ``ngAfterViewChecked`` after the view has repainted with the
+    // new active item.
+    effect(() => {
+      const selectedId = this.selectedId();
+      untracked(() => {
+        if (!this.selectedIdSeen) {
+          this.selectedIdSeen = true;
+          return;
+        }
+        const clickedInThisGrid = selectedId === this.clickSelectedId;
+        this.clickSelectedId = null;
+        if (this.focusMode() === 'click' && !clickedInThisGrid) {
+          this.pendingScrollToSelected = true;
+        }
+      });
+    });
+
+    // Rebuild the ordered-items cache when (and only when) the inputs that
+    // shape it change. The dependencies are read explicitly up front and the
+    // work runs untracked, because ``rebuildOrderedItems`` also touches the
+    // ``virtualViewport`` view query (via prefetch) — tracking that would
+    // re-trigger a rebuild every time the ``@if`` branches swap the viewport
+    // instance. A ``gridGoalWidth`` change additionally invalidates the
+    // measured row stride and recomputes the column count *before* the rows
+    // are rebuilt, mirroring the old ``ngOnChanges`` order.
+    effect(() => {
+      const goalWidth = this.gridGoalWidth();
+      this.medias();
+      this.sortOrder();
+      this.threshold();
+      this.showScores();
+      untracked(() => {
+        if (this.prevGridGoalWidth !== null && goalWidth !== this.prevGridGoalWidth) {
+          this.gridHeightMeasured = false;
+          this.recomputeGridColumns();
+        }
+        this.prevGridGoalWidth = goalWidth;
+        this.rebuildOrderedItems();
+      });
+    });
+  }
 
   ngOnInit(): void {
     // When the cache hydrates new items, re-enrich the displayed rows so
@@ -146,63 +206,28 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     return this.cachedOrderedItems.length > GRID_VIRTUAL_THRESHOLD;
   }
 
-  ngOnChanges(changes: SimpleChanges): void {
-    // Only autoscroll the newly-selected item into view in click mode. In hover
-    // mode the selection follows the cursor, so scrolling the item to the top
-    // would shift what's under the mouse, re-trigger selection, and scroll
-    // again — an infinite autoscroll loop. Let the hovered item stay put.
-    //
-    // And when the selection was driven by clicking a card in this grid, the
-    // item is already visible, so scrolling it into view is jarring and
-    // unnecessary — suppress the autoscroll for that id. Selections from
-    // elsewhere (keyboard, vote auto-advance, stripe overview) may target an
-    // off-screen item, so those still autoscroll.
-    if (changes['selectedId'] && !changes['selectedId'].firstChange) {
-      const clickedInThisGrid = changes['selectedId'].currentValue === this.clickSelectedId;
-      this.clickSelectedId = null;
-      if (this.focusMode() === 'click' && !clickedInThisGrid) {
-        this.pendingScrollToSelected = true;
-      }
-    }
-
-    // A wider/narrower goal width changes how many cards fit per grid row and
-    // the height of each card, so recompute columns and re-measure the stride.
-    if (changes['gridGoalWidth'] && !changes['gridGoalWidth'].firstChange) {
-      this.gridHeightMeasured = false;
-      this.recomputeGridColumns();
-    }
-
-    // Rebuild cache only when relevant inputs change.
-    if (
-      changes['medias'] ||
-      changes['sortOrder'] ||
-      changes['threshold'] ||
-      changes['showScores'] ||
-      changes['gridGoalWidth']
-    ) {
-      this.rebuildOrderedItems();
-    }
-  }
-
   private rebuildOrderedItems(): void {
-    // ``this.medias`` carries stubs (``{id, type, embedder?}``) from
+    // ``this.medias()`` carries stubs (``{id, type, embedder?}``) from
     // ``/api/medias/ids``.  Look up the cached full metadata for visible
     // rows; fall back to the stub so the row renders immediately and gets
     // upgraded once the batch fetch lands.
-    const stubMap = new Map(this.medias.map((m) => [m.id, m]));
+    const medias = this.medias();
+    const sortOrder = this.sortOrder();
+    const threshold = this.threshold();
+    const stubMap = new Map(medias.map((m) => [m.id, m]));
     const enrich = (id: number): Media | undefined =>
       this.metadataCache.get(id) ?? stubMap.get(id);
 
     const items: OrderedItem[] = [];
 
-    if (this.sortOrder && this.sortOrder.length > 0) {
+    if (sortOrder && sortOrder.length > 0) {
       let thresholdInserted = false;
-      for (const sorted of this.sortOrder) {
+      for (const sorted of sortOrder) {
         const media = enrich(sorted.id);
         if (!media) continue;
 
         let showThreshold = false;
-        if (!thresholdInserted && this.threshold !== null && sorted.score < this.threshold) {
+        if (!thresholdInserted && threshold !== null && sorted.score < threshold) {
           showThreshold = true;
           thresholdInserted = true;
         }
@@ -214,7 +239,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
         });
       }
     } else {
-      for (const stub of this.medias) {
+      for (const stub of medias) {
         const media = this.metadataCache.get(stub.id) ?? stub;
         items.push({ media, score: null, showThreshold: false });
       }
@@ -228,7 +253,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
 
     // `cachedOrderedItems`/`gridRows` are plain template-bound arrays; this
     // method runs from the async `metadataCache.version$` subscribe (an
-    // unpatched callback) as well as the sync `ngOnChanges` path, so notify the
+    // unpatched callback) as well as the input-driven effect, so notify the
     // scheduler explicitly to repaint the list under zoneless.
     this.cdr.markForCheck();
   }
@@ -266,7 +291,8 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
    * when the column count changed (so callers know to rebuild the rows).
    */
   private recomputeGridColumns(): boolean {
-    const el = this.virtualViewport?.elementRef.nativeElement ?? this.listContainer?.nativeElement;
+    const el =
+      this.virtualViewport()?.elementRef.nativeElement ?? this.listContainer()?.nativeElement;
     if (!el) return false;
     const inner = el.clientWidth - 2 * GRID_GAP_PX;
     if (inner <= 0) return false;
@@ -277,15 +303,15 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
   }
 
   getVoteLabel(id: number): 'good' | 'bad' | null {
-    if (this.goodVotes.has(id)) return 'good';
-    if (this.badVotes.has(id)) return 'bad';
+    if (this.goodVotes().has(id)) return 'good';
+    if (this.badVotes().has(id)) return 'bad';
     return null;
   }
 
   onMediaSelect(id: number): void {
     // Remember that this selection came from a click on a visible card so the
     // resulting ``selectedId`` change doesn't autoscroll an already-on-screen
-    // item into view (see ``ngOnChanges``).
+    // item into view (see the selection effect in the constructor).
     this.clickSelectedId = id;
     this.mediaSelect.emit(id);
   }
@@ -299,11 +325,13 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
   }
 
   ngAfterViewChecked(): void {
+    const virtualViewport = this.virtualViewport();
+
     // Keep the grid viewport measured: a ResizeObserver tracks width (→ column
     // count) and the first rendered card's height (→ CDK row stride).  Tear it
     // down when we leave grid-virtual mode so the list viewport isn't probed
     // for grid cards that don't exist.
-    if (this.useGridVirtual && this.virtualViewport) {
+    if (this.useGridVirtual && virtualViewport) {
       this.setupGridViewport();
     } else if (this.observedViewportEl) {
       this.resizeObserver?.disconnect();
@@ -314,15 +342,15 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     if (this.pendingScrollToSelected) {
       this.pendingScrollToSelected = false;
       const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth';
-      if (this.useGridVirtual && this.virtualViewport) {
+      if (this.useGridVirtual && virtualViewport) {
         // In virtual-scroll mode, find the index and scroll to it.  Grid cards
         // are chunked into rows, so map the item index to its row first.
         const idx = this.cachedOrderedItems.findIndex((i) => i.media.id === this.selectedId());
         if (idx >= 0) {
-          this.virtualViewport.scrollToIndex(this.itemIndexToRow(idx), behavior);
+          virtualViewport.scrollToIndex(this.itemIndexToRow(idx), behavior);
         }
-      } else if (this.listContainer) {
-        const activeEl = this.listContainer.nativeElement.querySelector('.media-item.active');
+      } else if (this.listContainer()) {
+        const activeEl = this.listContainer()!.nativeElement.querySelector('.media-item.active');
         if (activeEl) {
           activeEl.scrollIntoView({ block: 'nearest', behavior });
         }
@@ -335,10 +363,10 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     // threshold), and a subscription left on the old instance's completed
     // stream never fires again — silently killing scroll-driven metadata
     // prefetch. Mirrors the `observedViewportEl` re-observe pattern above.
-    if (this.virtualViewport && this.scrollSubscribedViewport !== this.virtualViewport) {
-      this.scrollSubscribedViewport = this.virtualViewport;
+    if (virtualViewport && this.scrollSubscribedViewport !== virtualViewport) {
+      this.scrollSubscribedViewport = virtualViewport;
       this.scrollSub?.unsubscribe();
-      this.scrollSub = this.virtualViewport.scrolledIndexChange
+      this.scrollSub = virtualViewport.scrolledIndexChange
         .pipe(takeUntil(this.destroy$))
         .subscribe(() => this.prefetchVisibleMetadata());
     }
@@ -346,7 +374,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
 
   /** Observe the grid viewport for width/height changes (runs outside Angular). */
   private setupGridViewport(): void {
-    const vp = this.virtualViewport?.elementRef.nativeElement;
+    const vp = this.virtualViewport()?.elementRef.nativeElement;
     if (!vp || this.observedViewportEl === vp) {
       // Already observing the right element.  Re-measure only until the row
       // height has been captured from a real card, so the steady state doesn't
@@ -373,7 +401,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     let changed = this.recomputeGridColumns();
     if (changed) this.rebuildGridRows();
 
-    const vp = this.virtualViewport?.elementRef.nativeElement;
+    const vp = this.virtualViewport()?.elementRef.nativeElement;
     const card = vp?.querySelector('vt-media-item .media-item') as HTMLElement | null;
     if (card) {
       const measured = Math.round(card.getBoundingClientRect().height + GRID_GAP_PX);
@@ -414,8 +442,9 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
 
   scrollToIndex(index: number): void {
     const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth';
-    if (this.useGridVirtual && this.virtualViewport) {
-      this.virtualViewport.scrollToIndex(this.itemIndexToRow(index), behavior);
+    const virtualViewport = this.virtualViewport();
+    if (this.useGridVirtual && virtualViewport) {
+      virtualViewport.scrollToIndex(this.itemIndexToRow(index), behavior);
       // After scrolling, select the item at this index.
       const item = this.cachedOrderedItems[index];
       if (item) {
@@ -423,8 +452,9 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
       }
       return;
     }
-    if (!this.listContainer) return;
-    const container = this.listContainer.nativeElement;
+    const listContainer = this.listContainer();
+    if (!listContainer) return;
+    const container = listContainer.nativeElement;
     const items = container.querySelectorAll('vt-media-item');
     const target = items[index] as HTMLElement | undefined;
     if (!target) return;
@@ -464,17 +494,18 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     const total = this.cachedOrderedItems.length;
     if (total === 0) return;
 
-    if (!this.useGridVirtual || !this.virtualViewport) {
+    const virtualViewport = this.virtualViewport();
+    if (!this.useGridVirtual || !virtualViewport) {
       const ids = this.cachedOrderedItems.map((item) => item.media.id);
       this.metadataCache.ensureLoaded(ids);
       return;
     }
 
-    const viewportEl = this.virtualViewport.elementRef.nativeElement;
+    const viewportEl = virtualViewport.elementRef.nativeElement;
     const viewportHeight = viewportEl.clientHeight || 600;
 
     // The virtualized units are rows of ``gridColumns`` cards.
-    const startRow = this.virtualViewport.measureScrollOffset('top') / this.gridRowHeight;
+    const startRow = virtualViewport.measureScrollOffset('top') / this.gridRowHeight;
     const visibleRows = Math.ceil(viewportHeight / this.gridRowHeight);
     const cols = Math.max(1, this.gridColumns);
     const bufferRows = Math.ceil(PREFETCH_BUFFER / cols);

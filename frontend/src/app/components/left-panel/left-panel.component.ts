@@ -4,14 +4,12 @@ import {
   computed,
   effect,
   inject,
-  Input,
   input,
-  OnChanges,
   OnInit,
   output,
   signal,
-  SimpleChanges,
-  ViewChild,
+  untracked,
+  viewChild,
 } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
@@ -52,8 +50,8 @@ export type { SortMode, SelectMode, SortedItem };
   templateUrl: './left-panel.component.html',
   styleUrl: './left-panel.component.scss',
 })
-export class LeftPanelComponent implements OnInit, OnChanges {
-  @Input() medias: Media[] = [];
+export class LeftPanelComponent implements OnInit {
+  readonly medias = input<Media[]>([]);
   readonly sortOrder = input<SortedItem[] | null>(null);
   readonly threshold = input<number | null>(null);
   readonly selectedId = input<number | null>(null);
@@ -72,7 +70,7 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   readonly sortMode = input<SortMode>('text');
   readonly selectMode = input<SelectMode>('top');
   readonly inclusion = input<number>(0);
-  @Input() sortBusy = false;
+  readonly sortBusy = input(false);
   readonly sortStatus = input('');
   readonly sortProgress = input(0);
   readonly sortProgressTotal = input(0);
@@ -84,7 +82,7 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   readonly loadSortLabel = input('');
   readonly textQuery = input('');
   readonly autopilotCollapsed = input(false);
-  @Input() autopilotEnabled = true;
+  readonly autopilotEnabled = input(true);
   /**
    * True when Autopilot cannot run on the active (dataset, detector) pair: the
    * dataset's embedder can't search by text, the detector has no media-example
@@ -93,13 +91,13 @@ export class LeftPanelComponent implements OnInit, OnChanges {
    * panel falls back to Manual. It re-enables once Learn sort becomes available
    * (the parent flips this back to ``false`` once both label classes exist).
    */
-  @Input() autopilotDisabled = false;
+  readonly autopilotDisabled = input(false);
   /** 'label' = full labeling UI (default), 'find' = simplified media-only view */
   readonly panelMode = input<'label' | 'find'>('label');
   /** Disable all interaction (used during Find scoring). */
   readonly disabled = input(false);
   /** Display name of the current dataset. */
-  @Input() datasetName = '';
+  readonly datasetName = input('');
 
   readonly sortModeChange = output<SortMode>();
   readonly selectModeChange = output<SelectMode>();
@@ -134,14 +132,9 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   readonly autopilotToggleCollapse = output<void>();
   readonly autopilotEnabledChange = output<boolean>();
 
-  @ViewChild(MediaListComponent) mediaListComponent!: MediaListComponent;
+  readonly mediaListComponent = viewChild(MediaListComponent);
 
-  activeTab: 'manual' | 'autopilot' = 'autopilot';
-  // Written from the constructor `effect()`s (when media-type / embedder
-  // metadata arrives) as well as the sync `ngOnChanges` path, so signals — an
-  // effect writing a plain template-bound field does not repaint under zoneless.
-  readonly mediaTypeName = signal('Media');
-  readonly textSortAvailable = signal(true);
+  readonly activeTab = signal<'manual' | 'autopilot'>('autopilot');
 
   private readonly datasetsListingsApi = inject(DatasetsListingsApiService);
   private readonly embedderCaps = inject(EmbedderCapabilityService);
@@ -150,8 +143,7 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   // Media-type metadata rides `rxResource`: loads once on creation (no request
   // signal = eager), wrapping the existing generated-client read so the
   // interceptor chain still applies. Embedder capability metadata comes from
-  // the shared `EmbedderCapabilityService` cache instead. The derived labels
-  // live in plain fields recomputed by the effects below + `ngOnChanges`.
+  // the shared `EmbedderCapabilityService` cache instead.
   private readonly mediaTypesResource = rxResource({
     stream: () => this.datasetsListingsApi.getMediaTypes(),
   });
@@ -159,17 +151,56 @@ export class LeftPanelComponent implements OnInit, OnChanges {
     () => this.mediaTypesResource.value()?.media_types ?? [],
   );
 
+  /**
+   * Media-type label shown in the grid header, derived from the current grid
+   * contents.  Tracks both the medias and the media-type metadata so the
+   * header never lags behind the grid: it resets to ``'Media'`` when the grid
+   * empties, and upgrades from the capitalized fallback to the proper display
+   * name once the metadata finishes loading (which can arrive *after* the
+   * first batch of medias).
+   */
+  readonly mediaTypeName = computed(() => {
+    const medias = this.medias();
+    const typeId = medias.length > 0 ? medias[0].media_type : '';
+    if (!typeId) return 'Media';
+    const info = this.mediaTypeInfos().find((mt) => mt.type_id === typeId);
+    return info?.name ?? typeId.charAt(0).toUpperCase() + typeId.slice(1);
+  });
+
+  /**
+   * Whether the active dataset's embedder can embed text queries.  If the
+   * embedder is unknown (e.g. embedders haven't loaded yet, or the media
+   * doesn't carry an embedder field), default to ``true`` so we never hide a
+   * working feature.  ``supportsTextAny`` reads the capability signal, so this
+   * recomputes when the registry loads.
+   */
+  readonly textSortAvailable = computed(() => {
+    const medias = this.medias();
+    const first = medias.length > 0 ? medias[0] : null;
+    const names = first?.embedders ?? (first?.embedder ? [first.embedder] : []);
+    return this.embedderCaps.supportsTextAny(names);
+  });
+
+  /** Previous ``autopilotDisabled`` value; ``null`` until the effect's first run. */
+  private prevAutopilotDisabled: boolean | null = null;
+
   constructor() {
-    // Re-derive the header label / text-sort gate when the metadata arrives
-    // (it can land after the first batch of medias). Effects auto-dispose with
-    // the component, so no manual unsubscribe is needed.
     effect(() => {
-      this.mediaTypeInfos();
-      this.updateMediaTypeName();
-    });
-    effect(() => {
-      this.embedderCaps.infos();
-      this.updateTextSortAvailable();
+      const disabled = this.autopilotDisabled();
+      untracked(() => {
+        const first = this.prevAutopilotDisabled === null;
+        this.prevAutopilotDisabled = disabled;
+        if (first) return;
+        // Autopilot just became impossible (e.g. medias loaded and revealed a
+        // no-text embedder, after we optimistically started on entry). Fall
+        // back to Manual so the user can label by hand; the doomed text sort is
+        // also skipped upstream. When it flips back to available we leave the
+        // user where they are and just re-enable the tab.
+        if (disabled && this.activeTab() === 'autopilot') {
+          this.activeTab.set('manual');
+          this.autopilotStop.emit();
+        }
+      });
     });
   }
 
@@ -178,62 +209,14 @@ export class LeftPanelComponent implements OnInit, OnChanges {
     this.mediaTypeCaps.ensureLoaded();
     if (this.panelMode() === 'find') {
       // Find mode doesn't use tabs; keep manual as a no-op default
-      this.activeTab = 'manual';
+      this.activeTab.set('manual');
     } else {
-      const startAutopilot = this.autopilotEnabled && !this.autopilotDisabled;
-      this.activeTab = startAutopilot ? 'autopilot' : 'manual';
+      const startAutopilot = this.autopilotEnabled() && !this.autopilotDisabled();
+      this.activeTab.set(startAutopilot ? 'autopilot' : 'manual');
       if (startAutopilot) {
         this.autopilotStart.emit();
       }
     }
-  }
-
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['medias']) {
-      this.updateMediaTypeName();
-      this.updateTextSortAvailable();
-    }
-    if (changes['autopilotDisabled'] && !changes['autopilotDisabled'].firstChange) {
-      // Autopilot just became impossible (e.g. medias loaded and revealed a
-      // no-text embedder, after we optimistically started on entry). Fall back
-      // to Manual so the user can label by hand; the doomed text sort is also
-      // skipped upstream. When it flips back to available we leave the user
-      // where they are and just re-enable the tab.
-      if (this.autopilotDisabled && this.activeTab === 'autopilot') {
-        this.activeTab = 'manual';
-        this.autopilotStop.emit();
-      }
-    }
-  }
-
-  /**
-   * Re-derive the media-type label shown in the grid header from the current
-   * grid contents.  Always recomputes (no memo on the type id) so the header
-   * never lags behind the grid: it resets to ``'Media'`` when the grid empties,
-   * and upgrades from the capitalized fallback to the proper display name once
-   * the media-type metadata finishes loading (which can arrive *after* the
-   * first batch of medias).
-   */
-  private updateMediaTypeName(): void {
-    const typeId = this.medias.length > 0 ? this.medias[0].media_type : '';
-    if (!typeId) {
-      this.mediaTypeName.set('Media');
-      return;
-    }
-    const info = this.mediaTypeInfos().find((mt) => mt.type_id === typeId);
-    this.mediaTypeName.set(info?.name ?? typeId.charAt(0).toUpperCase() + typeId.slice(1));
-  }
-
-  /**
-   * Resolve whether the active dataset's embedder can embed text queries.
-   * If the embedder is unknown (e.g. embedders haven't loaded yet, or the
-   * media doesn't carry an embedder field), default to ``true`` so we never
-   * hide a working feature.
-   */
-  private updateTextSortAvailable(): void {
-    const first = this.medias.length > 0 ? this.medias[0] : null;
-    const names = first?.embedders ?? (first?.embedder ? [first.embedder] : []);
-    this.textSortAvailable.set(this.embedderCaps.supportsTextAny(names));
   }
 
   /**
@@ -256,22 +239,20 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   }
 
   onStripeClick(index: number): void {
-    if (this.mediaListComponent) {
-      this.mediaListComponent.scrollToIndex(index);
-    }
+    this.mediaListComponent()?.scrollToIndex(index);
   }
 
   setTab(tab: 'manual' | 'autopilot'): void {
     // Autopilot can't be entered while it has no way to seed a first sort.
-    if (tab === 'autopilot' && this.autopilotDisabled) return;
-    if (tab === this.activeTab) {
+    if (tab === 'autopilot' && this.autopilotDisabled()) return;
+    if (tab === this.activeTab()) {
       if (tab === 'autopilot') {
         this.autopilotRefocus.emit();
       }
       return;
     }
-    const previous = this.activeTab;
-    this.activeTab = tab;
+    const previous = this.activeTab();
+    this.activeTab.set(tab);
     if (previous === 'autopilot') {
       this.autopilotStop.emit();
     }
