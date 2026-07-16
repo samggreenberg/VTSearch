@@ -71,6 +71,12 @@ def _synthetic_tone_wav(city_index: int, n_cities: int) -> bytes:
 # pickles.  See issue #2369.
 _WAVE_FILL = (255, 255, 255, 255)  # opaque; only the alpha channel is used downstream
 
+# Vertical gain applied to the RMS envelope before it's drawn.  RMS of full-scale
+# audio is well under 1.0 (a full-scale sine is ~0.71), so a modest boost lets a
+# typical clip use a healthy share of the frame's height while quiet passages stay
+# thin — without loud columns clamping edge-to-edge.  See ``_render_waveform``.
+_WAVE_GAIN = 1.4
+
 # Process-scoped cache of decoded ``(samples, sr)`` keyed by an archive member.
 # A windowed archive-member manifest fans one member into many clip windows
 # (e.g. ~14 × 10 s CLAP windows per chunk), each its own media; without this
@@ -84,10 +90,18 @@ _decode_cache_lock = threading.Lock()
 
 
 def _render_waveform(audio_data, *, size: int = _THUMB_SIZE) -> bytes | None:
-    """Draw a min/max amplitude envelope of *audio_data* onto a square PNG.
+    """Draw an RMS amplitude envelope of *audio_data* onto a square PNG.
 
     Returns PNG bytes, or ``None`` for empty/undrawable input.  Shared by every
     waveform generator so the pixel rendering lives in one place.
+
+    The envelope is the per-column *RMS* (energy), not the min/max peak.  A
+    min/max envelope saturates to full height on loud, dense real-world audio —
+    a single peak sample in a column's ~thousand-sample span pins that column
+    top-to-bottom, so a whole clip (rain, fire, insects…) fills every column and
+    the alpha mask tints to a solid rectangle (issue #2555).  RMS follows the
+    loudness contour instead: quiet passages stay thin, loud ones grow, and the
+    thumbnail reads as a waveform rather than a filled block.
     """
     try:
         import numpy as np  # noqa: PLC0415
@@ -98,19 +112,17 @@ def _render_waveform(audio_data, *, size: int = _THUMB_SIZE) -> bytes | None:
     if audio_data is None or len(audio_data) == 0:
         return None
 
-    # Compute min/max envelope across `size` columns
+    # Compute the RMS (energy) envelope across `size` columns.
     samples = len(audio_data)
     step = max(1, samples // size)
     cols = min(size, samples)
 
-    mins = np.empty(cols, dtype=np.float32)
-    maxs = np.empty(cols, dtype=np.float32)
+    rms = np.empty(cols, dtype=np.float32)
     for i in range(cols):
         start = i * step
         end = min(start + step, samples)
         chunk = audio_data[start:end]
-        mins[i] = chunk.min()
-        maxs[i] = chunk.max()
+        rms[i] = float(np.sqrt(np.mean(np.square(chunk, dtype=np.float64)))) if len(chunk) else 0.0
 
     # Normalise to pixel range
     amp = size // 2
@@ -128,8 +140,12 @@ def _render_waveform(audio_data, *, size: int = _THUMB_SIZE) -> bytes | None:
     draw = ImageDraw.Draw(img)
 
     for i in range(cols):
-        y_top = int(mid - maxs[i] * amp)
-        y_bot = int(mid - mins[i] * amp)
+        # Draw the column symmetric about the midline, its half-height the gained
+        # RMS clamped to the frame so loud columns cap at the edges rather than
+        # overrun them.
+        h = min(1.0, float(rms[i]) * _WAVE_GAIN) * amp
+        y_top = int(mid - h)
+        y_bot = int(mid + h)
         # Ensure at least 1px line
         if y_top == y_bot:
             y_bot += 1
@@ -143,7 +159,7 @@ def _render_waveform(audio_data, *, size: int = _THUMB_SIZE) -> bytes | None:
 def generate_waveform_thumbnail(audio_bytes: bytes, *, filename: str = "", size: int = _THUMB_SIZE) -> bytes | None:
     """Render a waveform thumbnail as a PNG image from raw audio bytes.
 
-    Decodes the audio with librosa, computes the min/max amplitude envelope, and
+    Decodes the audio with librosa, computes the RMS amplitude envelope, and
     draws it onto a square PIL image.  Returns PNG bytes, or ``None`` if the
     audio cannot be decoded.
 
