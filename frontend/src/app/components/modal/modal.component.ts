@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, HostListener, Input, OnDestroy, effect, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, OnDestroy, effect, input, output } from '@angular/core';
 import { CdkTrapFocus } from '@angular/cdk/a11y';
 
 /**
@@ -23,7 +23,7 @@ const openModalStack: ModalComponent[] = [];
 export class ModalComponent implements OnDestroy {
   readonly title = input('');
   readonly open = input(false);
-  @Input() showCloseButton = true;
+  readonly showCloseButton = input(true);
   readonly closed = output<void>();
 
   constructor() {

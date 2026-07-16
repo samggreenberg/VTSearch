@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, input, OnChanges, OnInit, output, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { map } from 'rxjs/operators';
@@ -24,7 +24,7 @@ import {
   templateUrl: './file-browser.component.html',
   styleUrl: './file-browser.component.scss',
 })
-export class FileBrowserComponent implements OnInit, OnChanges {
+export class FileBrowserComponent {
   private fileBrowserApi = inject(FileBrowserApiService);
 
   /** Comma-separated extensions to filter files, e.g. ".csv,.json" */
@@ -55,14 +55,14 @@ export class FileBrowserComponent implements OnInit, OnChanges {
       })),
     );
 
-  ngOnInit(): void {
-    this.inputValue = this.value();
-  }
-
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['value']) {
+  constructor() {
+    // Signal inputs don't fire `ngOnChanges`, so mirror the `value` input into
+    // the editable `inputValue` field whenever the parent pushes a new value
+    // (also seeds it on first render). User keystrokes change `inputValue` via
+    // ngModel without touching `value`, so they never trigger this reset.
+    effect(() => {
       this.inputValue = this.value();
-    }
+    });
   }
 
   openBrowser(): void {

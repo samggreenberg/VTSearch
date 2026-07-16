@@ -4,7 +4,7 @@
   [style.width.px]="size()"
   [style.height.px]="size()"
   [attr.aria-label]="iconType() + ' badge'">
-  @if (showOuterRing || tierIdx === -1) {
+  @if (showOuterRing || tierIdx() === -1) {
     <svg
       class="achievement-decoration"
       [attr.width]="size()"
@@ -16,7 +16,7 @@
       stroke-linecap="round"
       stroke-linejoin="round"
       aria-hidden="true">
-      @if (tierIdx === -1) {
+      @if (tierIdx() === -1) {
         <circle cx="50" cy="50" r="46" stroke-width="3" stroke-dasharray="4 4" />
       }
       @if (showOuterRing) {
