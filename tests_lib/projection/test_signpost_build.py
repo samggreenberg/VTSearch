@@ -189,12 +189,12 @@ class TestKeyphraseNamerParsing:
         # The header layout Toponymy's `combined` disambiguation prompt uses:
         # bare `"N. name":` lines at column 0, keyword lines indented below.
         prompt = (
-            'You are an expert in images.\n\n'
+            "You are an expert in images.\n\n"
             '"1. man boy lily shirt":\n'
-            ' - Keywords for this group include: man, boy, lily, shirt\n'
+            " - Keywords for this group include: man, boy, lily, shirt\n"
             '"2. man boy jacket lily":\n'
-            ' - Keywords for this group include: man, boy, jacket, lily\n\n'
-            'The response should be formatted as JSON in the format\n'
+            " - Keywords for this group include: man, boy, jacket, lily\n\n"
+            "The response should be formatted as JSON in the format\n"
             '    {"new_topic_name_mapping": {<1. OLD_NAME1>: <NEW_NAME1>, ... }, ...}\n'
         )
         result = sb._keyphrase_disambiguation(prompt)
@@ -212,7 +212,7 @@ class TestKeyphraseNamerParsing:
         # continuing past the colon) must not be miscounted as a topic header.
         prompt = (
             '"1. only real topic":\n'
-            ' - Keywords for this group include: alpha, beta\n\n'
+            " - Keywords for this group include: alpha, beta\n\n"
             '    {"new_topic_name_mapping": {"1. OLD_NAME1": "NEW_NAME1"}, "topic_specificities": [0.5]}\n'
         )
         mapping = sb._keyphrase_disambiguation(prompt)["new_topic_name_mapping"]
@@ -225,9 +225,9 @@ class TestKeyphraseNamerParsing:
         old_names = ["man boy lily shirt", "man boy jacket lily"]
         prompt = (
             '"1. man boy lily shirt":\n'
-            ' - Keywords for this group include: man, boy\n'
+            " - Keywords for this group include: man, boy\n"
             '"2. man boy jacket lily":\n'
-            ' - Keywords for this group include: man, jacket\n'
+            " - Keywords for this group include: man, jacket\n"
         )
         mapping = sb._keyphrase_disambiguation(prompt)["new_topic_name_mapping"]
         assert len(mapping) == len(old_names)

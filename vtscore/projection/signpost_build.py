@@ -173,9 +173,7 @@ def _keyphrase_disambiguation(prompt: str) -> dict[str, Any]:
     back to the original topic) guarantees the one-per-topic count and lets
     the fix succeed on the first attempt, silently.
     """
-    mapping = {
-        f"{index}. {name}": name for index, name in _DISAMBIGUATION_HEADER_RE.findall(prompt)
-    }
+    mapping = {f"{index}. {name}": name for index, name in _DISAMBIGUATION_HEADER_RE.findall(prompt)}
     return {"new_topic_name_mapping": mapping, "topic_specificities": [0.5] * len(mapping)}
 
 
