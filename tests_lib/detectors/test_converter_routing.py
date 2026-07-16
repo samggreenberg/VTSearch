@@ -60,9 +60,7 @@ def _fake_embed_factory(dim: int = 4):
 
 class TestRouteAndEmbed:
     def test_identity_route_preserves_source_ids(self, monkeypatch):
-        monkeypatch.setattr(
-            "vtscore.datasets.stages.embedding.embed_missing", _fake_embed_factory()
-        )
+        monkeypatch.setattr("vtscore.datasets.stages.embedding.embed_missing", _fake_embed_factory())
         src = {1: {"media_type": "image"}, 2: {"media_type": "image"}}
         scoring, mapping = cr.route_and_embed(src, "image", "clip")
 
@@ -83,9 +81,7 @@ class TestRouteAndEmbed:
         monkeypatch.setattr(
             cr, "converter_route_for", lambda s, t: _FakeConv() if (s, t) == ("video", "image") else None
         )
-        monkeypatch.setattr(
-            "vtscore.datasets.stages.embedding.embed_missing", _fake_embed_factory()
-        )
+        monkeypatch.setattr("vtscore.datasets.stages.embedding.embed_missing", _fake_embed_factory())
         src = {5: {"media_type": "video"}}
         scoring, mapping = cr.route_and_embed(src, "image", "clip")
 
@@ -96,9 +92,7 @@ class TestRouteAndEmbed:
             assert m["media_type"] == "image"
 
     def test_unroutable_media_are_dropped(self, monkeypatch):
-        monkeypatch.setattr(
-            "vtscore.datasets.stages.embedding.embed_missing", _fake_embed_factory()
-        )
+        monkeypatch.setattr("vtscore.datasets.stages.embedding.embed_missing", _fake_embed_factory())
         # A text media with no route to image is silently omitted.
         src = {1: {"media_type": "image"}, 2: {"media_type": "text"}}
         scoring, mapping = cr.route_and_embed(src, "image", "clip")
