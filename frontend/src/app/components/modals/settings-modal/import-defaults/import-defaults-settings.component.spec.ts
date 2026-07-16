@@ -100,8 +100,8 @@ describe('ImportDefaultsSettingsComponent', () => {
     });
   });
 
-  /** Create + init the component with the given inputs. Returns after ngOnInit
-   *  (and its synchronous listing subscriptions) has run. */
+  /** Create + init the component with the given inputs. Returns after the
+   *  tab-seeding effect (and its synchronous listing subscriptions) has run. */
   async function create(inputs: {
     mediaTypes?: MediaTypeInfo[];
     defaults?: ImportDefaultsByMediaType;

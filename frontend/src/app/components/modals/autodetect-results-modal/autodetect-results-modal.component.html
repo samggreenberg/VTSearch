@@ -1,8 +1,8 @@
 <vt-modal title="Auto-Detect Results" [open]="true" (closed)="close()">
   <!-- Summary -->
   <div class="results-summary">
-    <span><strong>Media Type:</strong> {{ data.media_type }}</span>
-    <span><strong>Detectors Run:</strong> {{ data.detectors_run }}</span>
+    <span><strong>Media Type:</strong> {{ data().media_type }}</span>
+    <span><strong>Detectors Run:</strong> {{ data().detectors_run }}</span>
     @if (exportSides === 'good') {
       <span><strong>Good Results:</strong> {{ goodCount }}</span>
     } @else if (exportSides === 'bad') {
@@ -13,16 +13,16 @@
   </div>
 
   <!-- Stale Auto-Find references (detector files deleted out from under the list) -->
-  @if (data.missing_detectors?.length) {
+  @if (data().missing_detectors?.length) {
     <div class="auto-export-status auto-export-status--error">
-      &#9888; Skipped {{ data.missing_detectors!.length }} Auto-Find detector(s) whose
-      file no longer exists: {{ data.missing_detectors!.join(', ') }}.
+      &#9888; Skipped {{ data().missing_detectors!.length }} Auto-Find detector(s) whose
+      file no longer exists: {{ data().missing_detectors!.join(', ') }}.
       Remove them from your Auto-Find list in Settings.
     </div>
   }
 
   <!-- Auto-export status (only when a results exporter ran) -->
-  @if (data.auto_export; as ax) {
+  @if (data().auto_export; as ax) {
     <div class="auto-export-status" [class.auto-export-status--error]="!ax.success">
       @if (ax.success) {
         <vt-icon type="check" [size]="14"></vt-icon> Auto-exported via {{ ax.exporter }}{{ ax.message ? ' — ' + ax.message : '' }}

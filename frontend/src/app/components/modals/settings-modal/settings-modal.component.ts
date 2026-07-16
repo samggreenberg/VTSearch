@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, Input, OnDestroy, OnInit, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, OnDestroy, OnInit, output, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { forkJoin, Subject } from 'rxjs';
@@ -51,7 +51,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   /** HuggingFace sign-in state, surfaced to the "HuggingFace" settings tab. */
   readonly hfStatus = this.hfAuth.status;
 
-  @Input() preselectedViewTab = '';
+  readonly preselectedViewTab = input('');
   readonly closed = output<void>();
 
   readonly settings = signal<AppSettings>({ volume: 50 });
@@ -129,7 +129,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
         this.embeddersByType.set(byType);
         const mediaTypes = this.mediaTypes();
         if (mediaTypes.length > 0) {
-          const preselected = this.preselectedViewTab;
+          const preselected = this.preselectedViewTab();
           if (preselected && mediaTypes.some((mt) => mt.type_id === preselected)) {
             this.activeViewTab.set(preselected);
             this.activeSettingsTab.set('appearance');

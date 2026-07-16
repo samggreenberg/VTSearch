@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, input, OnChanges, OnInit, output, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 
@@ -38,8 +38,18 @@ import {
   templateUrl: './import-defaults-settings.component.html',
   styleUrl: './import-defaults-settings.component.scss',
 })
-export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
+export class ImportDefaultsSettingsComponent {
   private datasetsListingsApi = inject(DatasetsListingsApiService);
+
+  constructor() {
+    // Re-pick the active tab whenever the media-type list or the solo-type
+    // filter changes. Replaces the old `ngOnInit` + `ngOnChanges` (signal
+    // inputs don't fire `ngOnChanges`); reading both inputs via `visibleTypes`
+    // inside `pickInitialTab` is what this effect tracks. As a component effect
+    // it runs before the first template check, so the initial tab is set with
+    // no flash, and again on every subsequent input change.
+    effect(() => this.pickInitialTab());
+  }
 
   /** All registered media types; drives the per-mediaType tab strip. */
   readonly mediaTypes = input<MediaTypeInfo[]>([]);
@@ -62,16 +72,6 @@ export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
   clippersByType: Record<string, ClipperInfo[]> = {};
   convertersByType: Record<string, ConverterInfo[]> = {};
   loadingByType: Record<string, boolean> = {};
-
-  ngOnInit(): void {
-    this.pickInitialTab();
-  }
-
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['mediaTypes'] || changes['effectiveSoloMediaType']) {
-      this.pickInitialTab();
-    }
-  }
 
   private pickInitialTab(): void {
     const visible = this.visibleTypes;

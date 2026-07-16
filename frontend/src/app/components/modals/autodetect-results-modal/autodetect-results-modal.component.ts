@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, Input, OnDestroy, OnInit, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, OnDestroy, OnInit, output, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
@@ -28,7 +28,7 @@ import { IconComponent } from '../../icon/icon.component';
 export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
   private exportersApi = inject(ExportersApiService);
 
-  @Input() data: AutoDetectResultsData = { results: {} };
+  readonly data = input<AutoDetectResultsData>({ results: {} });
   readonly closed = output<void>();
 
   exportSides: 'good' | 'bad' | 'both' = 'good';
@@ -69,7 +69,7 @@ export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
 
   get allHits(): AutoDetectHit[] {
     const hits: AutoDetectHit[] = [];
-    for (const result of Object.values(this.data.results || {})) {
+    for (const result of Object.values(this.data().results || {})) {
       for (const hit of result.hits || []) {
         hits.push(hit);
       }
@@ -79,7 +79,7 @@ export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
 
   get goodCount(): number {
     let total = 0;
-    for (const result of Object.values(this.data.results || {})) {
+    for (const result of Object.values(this.data().results || {})) {
       total += (result.hits || []).length;
     }
     return total;
@@ -87,7 +87,7 @@ export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
 
   get badCount(): number {
     let total = 0;
-    for (const result of Object.values(this.data.results || {})) {
+    for (const result of Object.values(this.data().results || {})) {
       total += (result.negative_hits || []).length;
     }
     return total;
@@ -95,7 +95,7 @@ export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
 
   get displayHits(): AutoDetectHit[] {
     const hits: AutoDetectHit[] = [];
-    for (const result of Object.values(this.data.results || {})) {
+    for (const result of Object.values(this.data().results || {})) {
       if (this.exportSides === 'good') {
         hits.push(...(result.hits || []));
       } else if (this.exportSides === 'bad') {

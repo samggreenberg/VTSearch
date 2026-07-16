@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, input, OnChanges, OnDestroy, OnInit, output, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, input, OnDestroy, OnInit, output } from '@angular/core';
 import { TitleCasePipe } from '@angular/common';
 
 import { FormsModule } from '@angular/forms';
@@ -50,9 +50,21 @@ export interface AutoFindExporterChange {
   templateUrl: './auto-find-settings.component.html',
   styleUrl: './auto-find-settings.component.scss',
 })
-export class AutoFindSettingsComponent implements OnInit, OnChanges, OnDestroy {
+export class AutoFindSettingsComponent implements OnInit, OnDestroy {
   private detectorsRegistryApi = inject(DetectorsRegistryApiService);
   private exportersApi = inject(ExportersApiService);
+
+  constructor() {
+    // Seed the active tab + working field-values from the inputs, and re-seed
+    // whenever the parent pushes new values. Replaces the old `ngOnInit`
+    // seeding + `ngOnChanges` (signal inputs don't fire `ngOnChanges`). As a
+    // component effect this runs before the first template check, so the
+    // initial tab/values are set with no flash.
+    effect(() => {
+      this.activeExporter = this.autofindExporter() || '';
+      this.fieldValues = this.cloneFieldValues(this.autofindExporterFieldValues());
+    });
+  }
 
   /** Currently configured results-exporter name ('' = no auto-export). */
   readonly autofindExporter = input('');
@@ -78,19 +90,7 @@ export class AutoFindSettingsComponent implements OnInit, OnChanges, OnDestroy {
 
   private destroy$ = new Subject<void>();
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['autofindExporter']) {
-      this.activeExporter = this.autofindExporter() || '';
-    }
-    if (changes['autofindExporterFieldValues']) {
-      this.fieldValues = this.cloneFieldValues(this.autofindExporterFieldValues());
-    }
-  }
-
   ngOnInit(): void {
-    this.activeExporter = this.autofindExporter() || '';
-    this.fieldValues = this.cloneFieldValues(this.autofindExporterFieldValues());
-
     this.detectorsRegistryApi
       .getRegistry()
       .pipe(takeUntil(this.destroy$))

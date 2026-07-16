@@ -5,7 +5,7 @@ import {
   ElementRef,
   input,
   output,
-  ViewChild,
+  viewChild,
 } from '@angular/core';
 
 
@@ -31,7 +31,9 @@ export class ImageCropOverlayComponent implements AfterViewInit {
   readonly applied = output<ImageCropResult>();
   readonly cancelled = output<void>();
 
-  @ViewChild('img') imgRef!: ElementRef<HTMLImageElement>;
+  // Always in the DOM (not behind `@if`), so a required query is safe and it
+  // resolves before `ngAfterViewInit`, where the cached-image check reads it.
+  readonly imgRef = viewChild.required<ElementRef<HTMLImageElement>>('img');
 
   /** Crop box in *displayed* (CSS) pixel coordinates relative to the image element. */
   cropX = 0;
@@ -51,14 +53,14 @@ export class ImageCropOverlayComponent implements AfterViewInit {
 
   ngAfterViewInit(): void {
     // Image may already be loaded if cached.
-    const img = this.imgRef.nativeElement;
+    const img = this.imgRef().nativeElement;
     if (img.complete && img.naturalWidth > 0) {
       this.onImageLoaded();
     }
   }
 
   onImageLoaded(): void {
-    const img = this.imgRef.nativeElement;
+    const img = this.imgRef().nativeElement;
     this.naturalW = img.naturalWidth;
     this.naturalH = img.naturalHeight;
     this.displayW = img.clientWidth;
@@ -71,7 +73,7 @@ export class ImageCropOverlayComponent implements AfterViewInit {
   }
 
   onPointerDown(event: PointerEvent): void {
-    const rect = this.imgRef.nativeElement.getBoundingClientRect();
+    const rect = this.imgRef().nativeElement.getBoundingClientRect();
     const px = event.clientX - rect.left;
     const py = event.clientY - rect.top;
     this.dragMode = this.hitTest(px, py);
@@ -85,7 +87,7 @@ export class ImageCropOverlayComponent implements AfterViewInit {
 
   onPointerMove(event: PointerEvent): void {
     if (this.dragMode === 'none') return;
-    const rect = this.imgRef.nativeElement.getBoundingClientRect();
+    const rect = this.imgRef().nativeElement.getBoundingClientRect();
     const px = event.clientX - rect.left;
     const py = event.clientY - rect.top;
     const dx = px - this.dragStartX;

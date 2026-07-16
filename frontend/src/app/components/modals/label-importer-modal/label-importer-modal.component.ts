@@ -8,7 +8,7 @@ import {
   OnDestroy,
   output,
   signal,
-  ViewChild,
+  viewChild,
 } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 
@@ -45,8 +45,10 @@ export class LabelImporterModalComponent implements OnDestroy {
   readonly closed = output<void>();
   readonly imported = output<void>();
 
-  @ViewChild('addGoodInput') addGoodInput!: ElementRef<HTMLInputElement>;
-  @ViewChild('addBadInput') addBadInput!: ElementRef<HTMLInputElement>;
+  // Optional queries: both file inputs live behind `@if (!targetModelName())`,
+  // so they resolve to `undefined` when a target model is set.
+  readonly addGoodInput = viewChild<ElementRef<HTMLInputElement>>('addGoodInput');
+  readonly addBadInput = viewChild<ElementRef<HTMLInputElement>>('addBadInput');
 
   view: ModalView = 'picker';
 
@@ -255,11 +257,11 @@ export class LabelImporterModalComponent implements OnDestroy {
 
 
   triggerAddGood(): void {
-    this.addGoodInput.nativeElement.click();
+    this.addGoodInput()?.nativeElement.click();
   }
 
   triggerAddBad(): void {
-    this.addBadInput.nativeElement.click();
+    this.addBadInput()?.nativeElement.click();
   }
 
   onAddToPile(event: Event, label: 'good' | 'bad'): void {

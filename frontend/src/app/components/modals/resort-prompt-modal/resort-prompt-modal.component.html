@@ -42,7 +42,7 @@
 
   @if (view === 'prompt') {
     <div modal-footer>
-      <button class="btn btn--secondary" (click)="onKeep()" title="Continue sorting with the current example">Keep Current{{ keepLabelsCount ? ' for ' + keepLabelsCount + ' more labels' : '' }}</button>
+      <button class="btn btn--secondary" (click)="onKeep()" title="Continue sorting with the current example">Keep Current{{ keepLabelsCount() ? ' for ' + keepLabelsCount() + ' more labels' : '' }}</button>
     </div>
   }
 

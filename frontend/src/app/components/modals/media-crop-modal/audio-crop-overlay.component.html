@@ -9,9 +9,9 @@
   <div class="loading">Decoding audio…</div>
 }
 
-@if (audioUrl) {
+@if (audioUrl()) {
   <audio
-    [src]="audioUrl"
+    [src]="audioUrl()"
     controls
     (loadedmetadata)="onAudioLoadedMetadata($event)">
   </audio>

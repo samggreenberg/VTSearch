@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, Input, OnDestroy, OnInit, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, OnDestroy, OnInit, output, signal } from '@angular/core';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsCrudApiService } from '../../../services/detectors-crud-api.service';
 import { apiErrorMessage } from '../../../utils/api-error';
@@ -21,7 +21,7 @@ interface Example {
 export class ExamplesEditorModalComponent implements OnInit, OnDestroy {
   private detectorsCrudApi = inject(DetectorsCrudApiService);
 
-  @Input() modelName = '';
+  readonly modelName = input('');
   readonly closed = output<void>();
   readonly saved = output<void>();
 
@@ -35,11 +35,12 @@ export class ExamplesEditorModalComponent implements OnInit, OnDestroy {
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnInit(): void {
-    if (!this.modelName) {
+    const modelName = this.modelName();
+    if (!modelName) {
       this.loading.set(false);
       return;
     }
-    this.detectorsCrudApi.get(this.modelName).subscribe({
+    this.detectorsCrudApi.get(modelName).subscribe({
       next: (data: any) => {
         this.examples.set(data.examples || []);
         this.loading.set(false);
@@ -75,7 +76,7 @@ export class ExamplesEditorModalComponent implements OnInit, OnDestroy {
     this.saving.set(true);
     this.error.set('');
     this.status.set('');
-    this.detectorsCrudApi.setExamples(this.modelName, this.examples()).subscribe({
+    this.detectorsCrudApi.setExamples(this.modelName(), this.examples()).subscribe({
       next: () => {
         this.saving.set(false);
         this.status.set('Saved.');
