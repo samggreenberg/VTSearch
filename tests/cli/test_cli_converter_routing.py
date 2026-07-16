@@ -83,6 +83,40 @@ class TestCliConverterRouting:
         results = _score_medias_with_detectors(medias, detector_mlps)
         assert results == {}
 
+    def test_reclip_fanout_aggregates_to_one_hit(self, client, monkeypatch):
+        # A detector carrying a re-clip spec splits each media into clips; the
+        # per-clip scores collapse back to a single hit on the source media.
+        def _fake_apply_clipper(clips_dict, name, params, on_progress=None, chain_steps=None, embedder=None):
+            clips_dict.clear()
+            for i in (1, 2):
+                clips_dict[i] = {
+                    "media_type": "audio",
+                    "embeddings": {"fake": np.ones(4, dtype=np.float32)},
+                    "embedder": "fake",
+                    "filename": f"clip{i}",
+                }
+
+        monkeypatch.setattr("vtscore.datasets.stages.clipper._apply_clipper", _fake_apply_clipper)
+
+        medias = {9: {"id": 9, "media_type": "audio", "filename": "rec.wav"}}
+        detector_mlps = {
+            "det": {
+                "mlp": _constant_mlp(),
+                "threshold": 0.5,
+                "media_type": "audio",
+                "embedder": "fake",
+                "clipper": "sound_tiling",
+                "clipper_params": {"duration": "2.0"},
+            },
+        }
+
+        results = _score_medias_with_detectors(medias, detector_mlps)
+        det = results["det"]
+        all_ids = {h["id"] for h in det["hits"]} | {h["id"] for h in det["negative_hits"]}
+        # Two clips of source media 9 collapse to one hit on 9.
+        assert all_ids == {9}
+        assert len(det["hits"]) + len(det["negative_hits"]) == 1
+
     def test_homogeneous_direct_scoring_one_hit_per_media(self, client, monkeypatch):
         _stub_embed(monkeypatch)
         medias = {
