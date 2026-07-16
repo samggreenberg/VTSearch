@@ -142,6 +142,41 @@ class EmbedderTextEncoder:
         return np.stack(out) if out else np.empty((0, self._dim), dtype=np.float32)
 
 
+#: Matches one topic header in a Toponymy disambiguation prompt. The
+#: ``combined`` prompt format (the one a no-system-prompt namer gets) lists
+#: each colliding topic as a bare ``"N. topic name":`` line at column 0; the
+#: capture groups are the 1-based index and the topic name. Anchoring at line
+#: start (no leading ``\s*``) and requiring the line to *end* right after the
+#: ``":`` keeps the JSON output-format example (``{<1. OLD_NAME1>: …}``,
+#: indented and continuing past the colon) from being mistaken for a header.
+_DISAMBIGUATION_HEADER_RE = re.compile(r'^"(\d+)\.\s(.+?)":\s*$', re.MULTILINE)
+
+
+def _keyphrase_topic_name(prompt: str) -> str:
+    """The top keyphrase for a single-topic naming prompt (or ``"unnamed"``)."""
+    match = re.search(r"Keywords for this group include:\s*([^\n]+)", prompt)
+    name = match.group(1).split(",")[0].strip() if match else ""
+    return name or "unnamed"
+
+
+def _keyphrase_disambiguation(prompt: str) -> dict[str, Any]:
+    """Echo old names back for a duplicate-name disambiguation prompt.
+
+    A no-LLM namer cannot invent new distinctions, so every colliding topic
+    keeps the name Toponymy already gave it. The one thing that *must* be
+    right is the mapping's length: Toponymy's ``default_extract_topic_names``
+    raises ``ValueError`` unless the mapping has exactly one entry per topic,
+    and that exception drives three ``wait_random_exponential(4, 10)`` retries
+    per cluster before a ``UserWarning`` is emitted — the console flood and
+    multi-second-per-cluster stall of issue #2558. Parsing every
+    ``"N. name":`` header (keyed as ``f"{i}. {name}"`` so the library maps it
+    back to the original topic) guarantees the one-per-topic count and lets
+    the fix succeed on the first attempt, silently.
+    """
+    mapping = {f"{index}. {name}": name for index, name in _DISAMBIGUATION_HEADER_RE.findall(prompt)}
+    return {"new_topic_name_mapping": mapping, "topic_specificities": [0.5] * len(mapping)}
+
+
 def make_keyphrase_namer() -> Any:
     """The no-LLM namer: answer every naming prompt with the top keyphrase.
 
@@ -161,12 +196,8 @@ def make_keyphrase_namer() -> Any:
 
         def _respond(self, prompt: str) -> str:
             if "new_topic_name_mapping" in prompt:
-                names = re.findall(r"^\s*(\d+)\.\s*(.+?)\s*$", prompt, re.MULTILINE)
-                mapping = {f"{i}. {n}": n for i, n in names}
-                return json.dumps({"new_topic_name_mapping": mapping, "topic_specificities": [0.5] * len(mapping)})
-            match = re.search(r"Keywords for this group include:\s*([^\n]+)", prompt)
-            name = match.group(1).split(",")[0].strip() if match else ""
-            return json.dumps({"topic_name": name or "unnamed", "topic_specificity": 0.5})
+                return json.dumps(_keyphrase_disambiguation(prompt))
+            return json.dumps({"topic_name": _keyphrase_topic_name(prompt), "topic_specificity": 0.5})
 
         def _call_llm(self, prompt: str, temperature: float, max_tokens: int) -> str:
             return self._respond(prompt)
@@ -208,6 +239,8 @@ def _fit_topic_layers(
     is our glue, everything inside (including the namer, so stubbed callers
     never import toponymy) is the library's responsibility.
     """
+    import warnings  # noqa: PLC0415
+
     from toponymy import Toponymy  # noqa: PLC0415
     from toponymy.clustering import ToponymyClusterer  # noqa: PLC0415
 
@@ -223,11 +256,19 @@ def _fit_topic_layers(
         corpus_description=corpus_description,
         show_progress_bars=False,
     )
-    model.fit(
-        texts,
-        embedding_vectors.astype(np.float32),
-        clusterable_vectors.astype(np.float32),
-    )
+    # Toponymy narrates naming hiccups through ``warnings.warn`` (naming
+    # fallbacks, disambiguation retries). The KeyphraseNamer above keeps those
+    # from firing, but the library is a moving target and its per-topic
+    # warnings would flood the CLI (issue #2558) if any slipped through; they
+    # are advisory noise we can't act on, so suppress toponymy-origin warnings
+    # for the duration of the fit (other libraries' warnings still surface).
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", module=r"toponymy(\..*)?")
+        model.fit(
+            texts,
+            embedding_vectors.astype(np.float32),
+            clusterable_vectors.astype(np.float32),
+        )
     return [
         (list(names), np.asarray(layer.cluster_labels))
         for names, layer in zip(model.topic_names_, model.cluster_layers_)

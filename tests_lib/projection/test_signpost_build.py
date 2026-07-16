@@ -168,6 +168,75 @@ class TestScaling:
         assert sb._base_min_cluster_size(50_000) == 167
 
 
+class TestKeyphraseNamerParsing:
+    """The no-LLM namer's prompt parsing (issue #2558).
+
+    Exercised without importing toponymy — these are the module-level parse
+    helpers the ``KeyphraseNamer`` delegates to. The disambiguation test
+    reproduces the ``combined`` prompt layout the real library builds and the
+    contract its ``default_extract_topic_names`` enforces: exactly one mapping
+    entry per topic, keyed ``f"{i}. {name}"``.
+    """
+
+    def test_topic_name_uses_top_keyphrase(self):
+        prompt = "Here is the group.\n - Keywords for this group include: dog barking, puppy, howl\n"
+        assert sb._keyphrase_topic_name(prompt) == "dog barking"
+
+    def test_topic_name_defaults_when_no_keywords(self):
+        assert sb._keyphrase_topic_name("nothing useful here") == "unnamed"
+
+    def test_disambiguation_maps_every_topic(self):
+        # The header layout Toponymy's `combined` disambiguation prompt uses:
+        # bare `"N. name":` lines at column 0, keyword lines indented below.
+        prompt = (
+            "You are an expert in images.\n\n"
+            '"1. man boy lily shirt":\n'
+            " - Keywords for this group include: man, boy, lily, shirt\n"
+            '"2. man boy jacket lily":\n'
+            " - Keywords for this group include: man, boy, jacket, lily\n\n"
+            "The response should be formatted as JSON in the format\n"
+            '    {"new_topic_name_mapping": {<1. OLD_NAME1>: <NEW_NAME1>, ... }, ...}\n'
+        )
+        result = sb._keyphrase_disambiguation(prompt)
+        mapping = result["new_topic_name_mapping"]
+        # One entry per topic (the length Toponymy requires), keyed so the
+        # library's default_extract_topic_names maps each back to its topic.
+        assert mapping == {
+            "1. man boy lily shirt": "man boy lily shirt",
+            "2. man boy jacket lily": "man boy jacket lily",
+        }
+        assert result["topic_specificities"] == [0.5, 0.5]
+
+    def test_disambiguation_ignores_output_format_example(self):
+        # The JSON output-format example (indented, `<1. …>` placeholders,
+        # continuing past the colon) must not be miscounted as a topic header.
+        prompt = (
+            '"1. only real topic":\n'
+            " - Keywords for this group include: alpha, beta\n\n"
+            '    {"new_topic_name_mapping": {"1. OLD_NAME1": "NEW_NAME1"}, "topic_specificities": [0.5]}\n'
+        )
+        mapping = sb._keyphrase_disambiguation(prompt)["new_topic_name_mapping"]
+        assert mapping == {"1. only real topic": "only real topic"}
+
+    def test_disambiguation_round_trips_through_library_extractor(self):
+        # Mirror toponymy.templates.default_extract_topic_names: given a mapping
+        # of the right length, it recovers one name per topic in order without
+        # raising. This is the exact contract issue #2558 was violating.
+        old_names = ["man boy lily shirt", "man boy jacket lily"]
+        prompt = (
+            '"1. man boy lily shirt":\n'
+            " - Keywords for this group include: man, boy\n"
+            '"2. man boy jacket lily":\n'
+            " - Keywords for this group include: man, jacket\n"
+        )
+        mapping = sb._keyphrase_disambiguation(prompt)["new_topic_name_mapping"]
+        assert len(mapping) == len(old_names)
+        recovered = []
+        for i, old in enumerate(old_names, start=1):
+            recovered.append(mapping.get(f"{i}. {old}", old))
+        assert recovered == old_names
+
+
 class TestAvailability:
     def test_availability_probe_does_not_import(self, monkeypatch):
         import importlib.util as util
