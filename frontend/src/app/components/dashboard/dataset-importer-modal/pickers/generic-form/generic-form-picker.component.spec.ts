@@ -28,7 +28,7 @@ describe('GenericFormPickerComponent', () => {
 
     fixture = TestBed.createComponent(GenericFormPickerComponent);
     component = fixture.componentInstance;
-    component.importers = [importer];
+    fixture.componentRef.setInput('importers', [importer]);
     httpMock = TestBed.inject(HttpTestingController);
   });
 

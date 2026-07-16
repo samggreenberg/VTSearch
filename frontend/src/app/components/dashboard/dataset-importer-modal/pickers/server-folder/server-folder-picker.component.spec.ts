@@ -24,11 +24,11 @@ describe('ServerFolderPickerComponent', () => {
 
     fixture = TestBed.createComponent(ServerFolderPickerComponent);
     component = fixture.componentInstance;
-    component.importers = [serverFolderImporter];
-    component.mediaTypes = [
+    fixture.componentRef.setInput('importers', [serverFolderImporter]);
+    fixture.componentRef.setInput('mediaTypes', [
       { type_id: 'audio', name: 'Audio', folder_import_name: 'audio' } as any,
       { type_id: 'image', name: 'Image', folder_import_name: 'image' } as any,
-    ];
+    ]);
     httpMock = TestBed.inject(HttpTestingController);
   });
 
