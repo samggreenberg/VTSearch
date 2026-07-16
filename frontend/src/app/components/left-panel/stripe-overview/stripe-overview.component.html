@@ -1,7 +1,7 @@
 @if (visible) {
   <div class="stripe-overview" role="img" aria-label="Media minimap" title="Minimap of all items in sort order. Green = good votes, red = bad votes, white = selected. Click to jump." (click)="onStripeClick($event)" tabindex="0" (keydown.enter)="onStripeKeyboard()" (keydown.space)="onStripeKeyboard()">
     <div class="stripe-container">
-      @for (dot of cachedDots; track $index) {
+      @for (dot of cachedDots(); track $index) {
         <div
           class="stripe-dot"
           [class.good]="dot.type === 'good'"
@@ -11,10 +11,10 @@
         ></div>
       }
 
-      @if (cachedThresholdPosition !== null) {
+      @if (cachedThresholdPosition() !== null) {
         <div
           class="stripe-threshold"
-          [style.top.%]="cachedThresholdPosition"
+          [style.top.%]="cachedThresholdPosition()"
         ></div>
       }
     </div>

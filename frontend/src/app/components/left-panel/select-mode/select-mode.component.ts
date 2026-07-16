@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import { SelectMode } from '../left-panel.component';
 
@@ -11,7 +11,7 @@ import { SelectMode } from '../left-panel.component';
   styleUrl: './select-mode.component.scss',
 })
 export class SelectModeComponent {
-  @Input() selectMode: SelectMode = 'top';
+  readonly selectMode = input<SelectMode>('top');
 
   readonly selectModeChange = output<SelectMode>();
 

@@ -1,8 +1,8 @@
 <div class="progress-check-bar">
-  @if (sortBusy) {
+  @if (sortBusy()) {
     <div class="sort-overlay" aria-live="polite">
       <vt-job-progress
-        [header]="sortStatus"
+        [header]="sortStatus()"
         [eta]="sortEta"
         [bar]="sortBar"
         cancelTitle="Cancel the running sort"

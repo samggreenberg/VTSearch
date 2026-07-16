@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, Input, input, OnChanges, OnInit, output, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, input, OnInit, output } from '@angular/core';
 
 import type { LabelingStatusResponse } from '../../../generated/api-client/models/labeling-status-response';
 import {
@@ -38,28 +38,28 @@ export interface StepDisplay {
   templateUrl: './autopilot-panel.component.html',
   styleUrl: './autopilot-panel.component.scss',
 })
-export class AutopilotPanelComponent implements OnInit, OnChanges {
+export class AutopilotPanelComponent implements OnInit {
   autopilotState = inject(AutopilotStateService);
   private toastService = inject(ToastService);
 
-  @Input() goodVotes: Set<number> = new Set();
-  @Input() badVotes: Set<number> = new Set();
+  readonly goodVotes = input<Set<number>>(new Set());
+  readonly badVotes = input<Set<number>>(new Set());
   /**
    * Number of items in the active dataset. Feeds the dataset-size-aware phase
    * targets: on a tiny collection the default 3-good / 4-bad targets are
    * unreachable, so they're capped to what the dataset can supply. ``0`` means
    * unknown (still loading); the service leaves the targets uncapped then.
    */
-  @Input() datasetSize = 0;
+  readonly datasetSize = input(0);
   /**
    * Total "good" labels in the active detector's saved labelset, across all
    * datasets it has been used with.  When both this and ``labelsetBadCount``
    * are positive at activation time, autopilot enters retrain mode and uses
    * learned sort throughout instead of starting with text/example sort.
    */
-  @Input() labelsetGoodCount = 0;
-  @Input() labelsetBadCount = 0;
-  @Input() labelingStatus: LabelingStatusResponse | null = null;
+  readonly labelsetGoodCount = input(0);
+  readonly labelsetBadCount = input(0);
+  readonly labelingStatus = input<LabelingStatusResponse | null>(null);
   readonly collapsed = input(false);
 
   readonly started = output<void>();
@@ -68,6 +68,44 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
   readonly refocus = output<void>();
 
   private completionAlerted = false;
+
+  constructor() {
+    // Signal inputs don't fire ``ngOnChanges``; this effect replaces the old
+    // change hook. It re-runs whenever the vote sets, dataset size, or labeling
+    // status change, driving the same phase-transition + completion-toast logic.
+    effect(() => {
+      // Read every reactive input so the effect tracks them as dependencies.
+      const goodVotes = this.goodVotes();
+      const badVotes = this.badVotes();
+      const datasetSize = this.datasetSize();
+      const labelingStatus = this.labelingStatus();
+
+      if (!this.running) return;
+
+      if (labelingStatus) {
+        this.autopilotState.updateFromLabelingStatus(labelingStatus);
+      }
+
+      const prevPhase = this.autopilotState.state.phase;
+      this.autopilotState.checkPhaseTransition(goodVotes.size, badVotes.size, datasetSize);
+      const phase = this.autopilotState.state.phase;
+      if (prevPhase !== phase && !this.completionAlerted) {
+        if (phase === 'done') {
+          this.completionAlerted = true;
+          this.toastService.success({
+            message: 'Autopilot complete',
+            detail: 'All quality indicators are green. You can continue labeling or export your results.',
+          });
+        } else if (phase === 'exhausted') {
+          this.completionAlerted = true;
+          this.toastService.success({
+            message: 'Nothing left to label',
+            detail: 'Autopilot has labeled every item in this dataset. Review your votes or export your results.',
+          });
+        }
+      }
+    });
+  }
 
   get state(): AutopilotState {
     return this.autopilotState.state;
@@ -87,19 +125,20 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
    *  unknown or inconsistent with the vote counts (mirrors the service's
    *  uncapped behavior during load; see ``checkPhaseTransition``). */
   private get remainingUnlabeled(): number {
-    const raw = this.datasetSize - this.goodVotes.size - this.badVotes.size;
-    if (this.datasetSize <= 0 || raw < 0) return Infinity;
+    const datasetSize = this.datasetSize();
+    const raw = datasetSize - this.goodVotes().size - this.badVotes().size;
+    if (datasetSize <= 0 || raw < 0) return Infinity;
     return raw;
   }
 
   /** Good-vote target for the current dataset, capped to what it can supply. */
   get effGoodTarget(): number {
-    return Math.min(this.state.goodToStart, this.goodVotes.size + this.remainingUnlabeled);
+    return Math.min(this.state.goodToStart, this.goodVotes().size + this.remainingUnlabeled);
   }
 
   /** Bad-vote target for the current dataset, capped to what it can supply. */
   get effBadTarget(): number {
-    return Math.min(this.state.badToStart, this.badVotes.size + this.remainingUnlabeled);
+    return Math.min(this.state.badToStart, this.badVotes().size + this.remainingUnlabeled);
   }
 
   get steps(): StepDisplay[] {
@@ -131,51 +170,20 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
     this.activate();
   }
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (!this.running) return;
-
-    if (changes['labelingStatus'] && this.labelingStatus) {
-      this.autopilotState.updateFromLabelingStatus(this.labelingStatus);
-    }
-
-    if (changes['goodVotes'] || changes['badVotes'] || changes['labelingStatus'] || changes['datasetSize']) {
-      const prevPhase = this.autopilotState.state.phase;
-      this.autopilotState.checkPhaseTransition(
-        this.goodVotes.size, this.badVotes.size, this.datasetSize,
-      );
-      const phase = this.autopilotState.state.phase;
-      if (prevPhase !== phase && !this.completionAlerted) {
-        if (phase === 'done') {
-          this.completionAlerted = true;
-          this.toastService.success({
-            message: 'Autopilot complete',
-            detail: 'All quality indicators are green. You can continue labeling or export your results.',
-          });
-        } else if (phase === 'exhausted') {
-          this.completionAlerted = true;
-          this.toastService.success({
-            message: 'Nothing left to label',
-            detail: 'Autopilot has labeled every item in this dataset. Review your votes or export your results.',
-          });
-        }
-      }
-    }
-  }
-
   activate(): void {
     if (this.running) return;
     this.completionAlerted = false;
     // Retrain mode: the detector already has good+bad labels (carried over
     // from a previous dataset), so learned sort is available immediately and
     // autopilot should skip the initial text-mode phase.
-    const retrainMode = this.labelsetGoodCount > 0 && this.labelsetBadCount > 0;
+    const retrainMode = this.labelsetGoodCount() > 0 && this.labelsetBadCount() > 0;
     this.autopilotState.activate(retrainMode);
     // Immediately check whether existing votes already satisfy early phases
     // (e.g. user labeled 23 goods in Manual mode before switching to Autopilot).
-    // ngOnChanges ran before ngOnInit so `running` was false and the check was
-    // skipped; do it now so the phase cascades (good→bad→hard) before we emit.
+    // The phase-transition effect only acts once `running` is true, so seed the
+    // check here so the phase cascades (good→bad→hard) before we emit.
     this.autopilotState.checkPhaseTransition(
-      this.goodVotes.size, this.badVotes.size, this.datasetSize,
+      this.goodVotes().size, this.badVotes().size, this.datasetSize(),
     );
     this.started.emit();
   }
@@ -282,15 +290,15 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
     const st = this.state;
     switch (phase) {
       case 'good':
-        return `${this.goodVotes.size}/${this.effGoodTarget} good labels`;
+        return `${this.goodVotes().size}/${this.effGoodTarget} good labels`;
       case 'bad':
-        return `${this.badVotes.size}/${this.effBadTarget} bad labels`;
+        return `${this.badVotes().size}/${this.effBadTarget} bad labels`;
       case 'hard': {
         // No count target here — the phase ends when the smart and stable
         // indicators (the dots rendered right after this text) both go green.
         // That explanation lives in the tooltip (phaseDetailTitle); the visible
         // text stays a bare count so it never overflows the panel.
-        const total = this.goodVotes.size + this.badVotes.size;
+        const total = this.goodVotes().size + this.badVotes().size;
         return `${total} labels`;
       }
       case 'new':

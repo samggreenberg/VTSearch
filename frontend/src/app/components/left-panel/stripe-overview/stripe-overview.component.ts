@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, input, OnChanges, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import { SortedItem } from '../left-panel.component';
 
@@ -10,62 +10,64 @@ import { SortedItem } from '../left-panel.component';
   templateUrl: './stripe-overview.component.html',
   styleUrl: './stripe-overview.component.scss',
 })
-export class StripeOverviewComponent implements OnChanges {
-  @Input() sortOrder: SortedItem[] | null = null;
-  @Input() threshold: number | null = null;
-  @Input() selectedId: number | null = null;
-  @Input() goodVotes: Set<number> = new Set();
-  @Input() badVotes: Set<number> = new Set();
+export class StripeOverviewComponent {
+  readonly sortOrder = input<SortedItem[] | null>(null);
+  readonly threshold = input<number | null>(null);
+  readonly selectedId = input<number | null>(null);
+  readonly goodVotes = input<Set<number>>(new Set());
+  readonly badVotes = input<Set<number>>(new Set());
   readonly totalCount = input(0);
   readonly stripeClick = output<number>();
 
-  /** Cached dots, rebuilt only when inputs change. */
-  cachedDots: { top: number; type: 'good' | 'bad' | 'selected' }[] = [];
-  /** Cached threshold position, rebuilt only when inputs change. */
-  cachedThresholdPosition: number | null = null;
+  /** Dots, recomputed automatically when the inputs they depend on change. */
+  readonly cachedDots = computed(() => this.buildDots());
+  /** Threshold position, recomputed automatically when inputs change. */
+  readonly cachedThresholdPosition = computed(() => this.buildThresholdPosition());
 
   onStripeKeyboard(): void {
-    if (!this.sortOrder || this.sortOrder.length === 0) return;
-    const midIndex = Math.floor(this.sortOrder.length / 2);
+    const sortOrder = this.sortOrder();
+    if (!sortOrder || sortOrder.length === 0) return;
+    const midIndex = Math.floor(sortOrder.length / 2);
     this.stripeClick.emit(midIndex);
   }
 
   onStripeClick(event: MouseEvent): void {
-    if (!this.sortOrder || this.sortOrder.length === 0) return;
+    const sortOrder = this.sortOrder();
+    if (!sortOrder || sortOrder.length === 0) return;
     const el = event.currentTarget as HTMLElement;
     const rect = el.getBoundingClientRect();
     const y = event.clientY - rect.top;
     const percentage = y / rect.height;
-    const index = Math.max(0, Math.min(Math.floor(percentage * this.sortOrder.length), this.sortOrder.length - 1));
+    const index = Math.max(0, Math.min(Math.floor(percentage * sortOrder.length), sortOrder.length - 1));
     this.stripeClick.emit(index);
   }
 
   get visible(): boolean {
-    return this.sortOrder !== null && this.sortOrder.length > 0;
-  }
-
-  ngOnChanges(): void {
-    this.cachedDots = this.buildDots();
-    this.cachedThresholdPosition = this.buildThresholdPosition();
+    const sortOrder = this.sortOrder();
+    return sortOrder !== null && sortOrder.length > 0;
   }
 
   private buildDots(): { top: number; type: 'good' | 'bad' | 'selected' }[] {
-    if (!this.sortOrder || this.sortOrder.length === 0) return [];
+    const sortOrder = this.sortOrder();
+    if (!sortOrder || sortOrder.length === 0) return [];
 
+    const goodVotes = this.goodVotes();
+    const badVotes = this.badVotes();
+    const selectedId = this.selectedId();
     const result: { top: number; type: 'good' | 'bad' | 'selected' }[] = [];
-    const total = this.sortOrder.length;
+    const total = sortOrder.length;
 
     for (let i = 0; i < total; i++) {
-      const item = this.sortOrder[i];
+      const item = sortOrder[i];
       const topPct = (i / total) * 100;
 
-      if (this.goodVotes.has(item.id)) {
+      if (goodVotes.has(item.id)) {
         result.push({ top: topPct, type: 'good' });
-      } else if (this.badVotes.has(item.id)) {
+      } else if (badVotes.has(item.id)) {
         result.push({ top: topPct, type: 'bad' });
       }
 
-      if (item.id === this.selectedId) {
+      if (item.id === selectedId) {
         result.push({ top: topPct, type: 'selected' });
       }
     }
@@ -74,10 +76,12 @@ export class StripeOverviewComponent implements OnChanges {
   }
 
   private buildThresholdPosition(): number | null {
-    if (!this.sortOrder || this.threshold === null) return null;
-    const total = this.sortOrder.length;
+    const sortOrder = this.sortOrder();
+    const threshold = this.threshold();
+    if (!sortOrder || threshold === null) return null;
+    const total = sortOrder.length;
     for (let i = 0; i < total; i++) {
-      if (this.sortOrder[i].score < this.threshold) {
+      if (sortOrder[i].score < threshold) {
         return (i / total) * 100;
       }
     }
