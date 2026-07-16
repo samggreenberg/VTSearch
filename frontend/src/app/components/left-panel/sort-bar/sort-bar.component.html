@@ -1,33 +1,33 @@
 <div class="sort-bar">
   <div class="sort-mode-group" role="radiogroup" aria-labelledby="sort-mode-label">
     <span class="sort-label" id="sort-mode-label" title="Choose how items are ranked. Text uses a search query, Learned trains on your votes, Load applies a saved detector.">Sort:</span>
-    <label class="sort-radio" [class.active]="sortMode === 'text'" [title]="textDisabled ? 'This dataset’s embedder does not support text queries.' : 'Rank items by how well they match a text description you type in.'">
+    <label class="sort-radio" [class.active]="sortMode() === 'text'" [title]="textDisabled ? 'This dataset’s embedder does not support text queries.' : 'Rank items by how well they match a text description you type in.'">
       <input
         type="radio"
         name="sortMode"
         value="text"
-        [checked]="sortMode === 'text'"
+        [checked]="sortMode() === 'text'"
         [disabled]="textDisabled"
         (change)="onSortModeChange('text')"
       />
       Text
     </label>
-    <label class="sort-radio" [class.active]="sortMode === 'load'" title="Load a previously saved detector and rank items by how well it thinks they match.">
+    <label class="sort-radio" [class.active]="sortMode() === 'load'" title="Load a previously saved detector and rank items by how well it thinks they match.">
       <input
         type="radio"
         name="sortMode"
         value="load"
-        [checked]="sortMode === 'load'"
+        [checked]="sortMode() === 'load'"
         (change)="onSortModeChange('load')"
       />
       Load
     </label>
-    <label class="sort-radio" [class.active]="sortMode === 'learned'" title="Train a detector on your good/bad votes and rank items by how strong a match it thinks each one is. Requires at least 1 good and 1 bad vote.">
+    <label class="sort-radio" [class.active]="sortMode() === 'learned'" title="Train a detector on your good/bad votes and rank items by how strong a match it thinks each one is. Requires at least 1 good and 1 bad vote.">
       <input
         type="radio"
         name="sortMode"
         value="learned"
-        [checked]="sortMode === 'learned'"
+        [checked]="sortMode() === 'learned'"
         [disabled]="learnedDisabled"
         (change)="onSortModeChange('learned')"
       />
@@ -36,7 +36,7 @@
   </div>
 
   <div class="sort-mode-content">
-    @if (sortMode === 'text') {
+    @if (sortMode() === 'text') {
       @if (textDisabled) {
         <div class="text-sort-wrap">
           <span class="sort-hint">This dataset’s embedder does not support text queries.</span>
@@ -64,7 +64,7 @@
       }
     }
 
-    @if (sortMode === 'learned') {
+    @if (sortMode() === 'learned') {
       <div class="learned-sort-wrap">
         @if (learnedDisabled) {
           <span class="sort-hint">Need at least 1 good and 1 bad label</span>
@@ -74,11 +74,11 @@
       </div>
     }
 
-    @if (sortMode === 'load') {
+    @if (sortMode() === 'load') {
       <div class="load-sort-wrap">
         <div class="load-sort-row">
-          @if (loadSortLabel) {
-            <span class="sort-desc">{{ loadSortLabel }}</span>
+          @if (loadSortLabel()) {
+            <span class="sort-desc">{{ loadSortLabel() }}</span>
           } @else {
             <span class="sort-hint">No sort loaded</span>
           }

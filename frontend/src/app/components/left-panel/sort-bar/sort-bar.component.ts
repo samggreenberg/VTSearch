@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, input, OnInit, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, OnInit, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { SortMode } from '../left-panel.component';
@@ -13,15 +13,15 @@ import { LoadSortModalComponent } from '../../modals/load-sort-modal/load-sort-m
   styleUrl: './sort-bar.component.scss',
 })
 export class SortBarComponent implements OnInit {
-  @Input() sortMode: SortMode = 'text';
-  @Input() loadSortLabel = '';
+  readonly sortMode = input<SortMode>('text');
+  readonly loadSortLabel = input('');
   readonly initialTextQuery = input('');
   /**
    * True when the active detector (or active votes, when no detector is
    * loaded) has at least one good and one bad label available for training.
    * Drives the gating of the "Learned" sort mode.
    */
-  @Input() learnedSortAvailable = false;
+  readonly learnedSortAvailable = input(false);
   /**
    * True when the active dataset's embedder supports text queries. ``false``
    * for vision-only encoders (DINOv3, Perception Encoder); disables the
@@ -67,7 +67,7 @@ export class SortBarComponent implements OnInit {
   }
 
   get learnedDisabled(): boolean {
-    return !this.learnedSortAvailable;
+    return !this.learnedSortAvailable();
   }
 
   get textDisabled(): boolean {

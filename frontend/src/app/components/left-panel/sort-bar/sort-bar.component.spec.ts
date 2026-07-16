@@ -23,7 +23,7 @@ describe('SortBarComponent', () => {
   });
 
   it('should default to text sort mode', () => {
-    expect(component.sortMode).toBe('text');
+    expect(component.sortMode()).toBe('text');
   });
 
   it('should show text input when in text mode', async () => {

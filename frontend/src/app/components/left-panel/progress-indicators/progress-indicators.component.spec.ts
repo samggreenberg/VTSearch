@@ -34,14 +34,14 @@ describe('ProgressIndicatorsComponent', () => {
   });
 
   it('should reflect labeling status', () => {
-    component.labelingStatus = {
+    fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,
       bad_count: 0,
       total_count: 0,
       smart: { status: 'green' },
       stable: { status: 'yellow' },
       span: { status: '' },
-    };
+    });
     expect(component.smartStatus).toBe('green');
     expect(component.stableStatus).toBe('yellow');
     expect(component.spanStatus).toBe('');
@@ -59,38 +59,38 @@ describe('ProgressIndicatorsComponent', () => {
   });
 
   it('should show smart subtext with cost', () => {
-    component.labelingStatus = {
+    fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,
       bad_count: 0,
       total_count: 0,
       smart: { status: 'yellow', cost: 0.123 },
       stable: { status: '' },
       span: { status: '' },
-    };
+    });
     expect(component.smartSubtext).toBe('Cost: 0.123');
   });
 
   it('should show stable subtext with flips', () => {
-    component.labelingStatus = {
+    fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,
       bad_count: 0,
       total_count: 0,
       smart: { status: '' },
       stable: { status: 'yellow', flips: 5 },
       span: { status: '' },
-    };
+    });
     expect(component.stableSubtext).toBe('Flips: 5');
   });
 
   it('should show span subtext with diversity level', () => {
-    component.labelingStatus = {
+    fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,
       bad_count: 0,
       total_count: 0,
       smart: { status: '' },
       stable: { status: '' },
       span: { status: 'green', diversity_level: 2.5, max_level: 4 },
-    };
+    });
     expect(component.spanSubtext).toBe('3/4');
   });
 
@@ -130,27 +130,27 @@ describe('ProgressIndicatorsComponent', () => {
   });
 
   it('should include live subtext in smart tooltip when available', () => {
-    component.labelingStatus = {
+    fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,
       bad_count: 0,
       total_count: 0,
       smart: { status: 'yellow', cost: 0.456 },
       stable: { status: '' },
       span: { status: '' },
-    };
+    });
     expect(component.smartTooltip).toContain('Cost: 0.456');
     expect(component.smartTooltip).toContain('Smart: the model fits your votes consistently.');
   });
 
   it('should include live subtext in stable tooltip when available', () => {
-    component.labelingStatus = {
+    fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,
       bad_count: 0,
       total_count: 0,
       smart: { status: '' },
       stable: { status: 'yellow', flips: 7 },
       span: { status: '' },
-    };
+    });
     expect(component.stableTooltip).toContain('Flips: 7');
     expect(component.stableTooltip).toContain('Stable: predictions stopped shifting between retrains.');
   });

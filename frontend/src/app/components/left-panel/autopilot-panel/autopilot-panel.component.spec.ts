@@ -48,56 +48,46 @@ describe('AutopilotPanelComponent', () => {
     expect(steps.length).toBe(5);
   });
 
-  it('should transition from good to bad phase', () => {
-    component.goodVotes = new Set([1, 2, 3]);
-    component.ngOnChanges({
-      goodVotes: { currentValue: component.goodVotes, previousValue: new Set(), firstChange: false, isFirstChange: () => false },
-    });
+  it('should transition from good to bad phase', async () => {
+    fixture.componentRef.setInput('goodVotes', new Set([1, 2, 3]));
+    await settleZoneless(fixture);
     expect(component.state.phase).toBe('bad');
   });
 
-  it('should transition from bad to hard phase', () => {
-    // Advance to bad phase first
-    component.goodVotes = new Set([1, 2, 3]);
-    autopilotState.checkPhaseTransition(3, 0);
+  it('should transition from bad to hard phase', async () => {
+    fixture.componentRef.setInput('goodVotes', new Set([1, 2, 3]));
+    await settleZoneless(fixture);
     expect(component.state.phase).toBe('bad');
 
-    component.badVotes = new Set([4, 5, 6, 7]);
-    component.ngOnChanges({
-      badVotes: { currentValue: component.badVotes, previousValue: new Set(), firstChange: false, isFirstChange: () => false },
-    });
+    fixture.componentRef.setInput('badVotes', new Set([4, 5, 6, 7]));
+    await settleZoneless(fixture);
     expect(component.state.phase).toBe('hard');
   });
 
-  it('should transition from hard to new when smart+stable are green', () => {
+  it('should transition from hard to new when smart+stable are green', async () => {
     // Advance to hard phase
-    component.goodVotes = new Set([1, 2, 3]);
-    component.badVotes = new Set([4, 5, 6, 7]);
-    autopilotState.checkPhaseTransition(3, 0);
-    autopilotState.checkPhaseTransition(3, 4);
+    fixture.componentRef.setInput('goodVotes', new Set([1, 2, 3]));
+    fixture.componentRef.setInput('badVotes', new Set([4, 5, 6, 7]));
+    await settleZoneless(fixture);
     expect(component.state.phase).toBe('hard');
 
-    component.labelingStatus = {
+    fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,
       bad_count: 0,
       total_count: 0,
       smart: { status: 'green' },
       stable: { status: 'green' },
       span: { status: '' },
-    };
-    component.ngOnChanges({
-      labelingStatus: { currentValue: component.labelingStatus, previousValue: null, firstChange: false, isFirstChange: () => false },
     });
+    await settleZoneless(fixture);
     expect(component.state.phase).toBe('new');
   });
 
-  it('should transition from new to done when span is green', () => {
+  it('should transition from new to done when span is green', async () => {
     // Advance to new phase
-    component.goodVotes = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    component.badVotes = new Set([11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
-    autopilotState.checkPhaseTransition(3, 0);
-    autopilotState.checkPhaseTransition(3, 4);
-    autopilotState.updateFromLabelingStatus({
+    fixture.componentRef.setInput('goodVotes', new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]));
+    fixture.componentRef.setInput('badVotes', new Set([11, 12, 13, 14, 15, 16, 17, 18, 19, 20]));
+    fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,
       bad_count: 0,
       total_count: 0,
@@ -105,30 +95,26 @@ describe('AutopilotPanelComponent', () => {
       stable: { status: 'green' },
       span: { status: '' },
     });
-    autopilotState.checkPhaseTransition(10, 10);
+    await settleZoneless(fixture);
     expect(component.state.phase).toBe('new');
 
-    component.labelingStatus = {
+    fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,
       bad_count: 0,
       total_count: 0,
       smart: { status: 'green' },
       stable: { status: 'green' },
       span: { status: 'green' },
-    };
-    component.ngOnChanges({
-      labelingStatus: { currentValue: component.labelingStatus, previousValue: null, firstChange: false, isFirstChange: () => false },
     });
+    await settleZoneless(fixture);
     expect(component.state.phase).toBe('done');
   });
 
-  it('should bounce from new back to hard when smart drops to yellow', () => {
+  it('should bounce from new back to hard when smart drops to yellow', async () => {
     // Advance to new phase
-    component.goodVotes = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    component.badVotes = new Set([11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
-    autopilotState.checkPhaseTransition(3, 0);
-    autopilotState.checkPhaseTransition(3, 4);
-    autopilotState.updateFromLabelingStatus({
+    fixture.componentRef.setInput('goodVotes', new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]));
+    fixture.componentRef.setInput('badVotes', new Set([11, 12, 13, 14, 15, 16, 17, 18, 19, 20]));
+    fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,
       bad_count: 0,
       total_count: 0,
@@ -136,21 +122,19 @@ describe('AutopilotPanelComponent', () => {
       stable: { status: 'green' },
       span: { status: '' },
     });
-    autopilotState.checkPhaseTransition(10, 10);
+    await settleZoneless(fixture);
     expect(component.state.phase).toBe('new');
 
     // A surprise vote causes smart to drop
-    component.labelingStatus = {
+    fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,
       bad_count: 0,
       total_count: 0,
       smart: { status: 'yellow' },
       stable: { status: 'green' },
       span: { status: 'yellow' },
-    };
-    component.ngOnChanges({
-      labelingStatus: { currentValue: component.labelingStatus, previousValue: null, firstChange: false, isFirstChange: () => false },
     });
+    await settleZoneless(fixture);
     expect(component.state.phase).toBe('hard');
   });
 
@@ -204,30 +188,30 @@ describe('AutopilotPanelComponent', () => {
     expect(component.started.emit).not.toHaveBeenCalled();
   });
 
-  it('should regress from hard to good when vote counts drop to zero', () => {
+  it('should regress from hard to good when vote counts drop to zero', async () => {
     // Advance to hard phase with sufficient votes
-    autopilotState.checkPhaseTransition(3, 4);
+    fixture.componentRef.setInput('goodVotes', new Set([1, 2, 3]));
+    fixture.componentRef.setInput('badVotes', new Set([4, 5, 6, 7]));
+    await settleZoneless(fixture);
     expect(component.state.phase).toBe('hard');
 
     // Votes are cleared (e.g. new detector session); phase should regress
-    component.goodVotes = new Set();
-    component.badVotes = new Set();
-    component.ngOnChanges({
-      goodVotes: { currentValue: component.goodVotes, previousValue: new Set([1, 2, 3]), firstChange: false, isFirstChange: () => false },
-    });
+    fixture.componentRef.setInput('goodVotes', new Set());
+    fixture.componentRef.setInput('badVotes', new Set());
+    await settleZoneless(fixture);
     expect(component.state.phase).toBe('good');
   });
 
-  it('should regress from hard to bad when good count drops below threshold', () => {
-    autopilotState.checkPhaseTransition(3, 4);
+  it('should regress from hard to bad when good count drops below threshold', async () => {
+    fixture.componentRef.setInput('goodVotes', new Set([1, 2, 3]));
+    fixture.componentRef.setInput('badVotes', new Set([4, 5, 6, 7]));
+    await settleZoneless(fixture);
     expect(component.state.phase).toBe('hard');
 
     // Good votes drop below threshold but bad are still sufficient
-    component.goodVotes = new Set([1]);
-    component.badVotes = new Set([4, 5, 6, 7]);
-    component.ngOnChanges({
-      goodVotes: { currentValue: component.goodVotes, previousValue: new Set([1, 2, 3]), firstChange: false, isFirstChange: () => false },
-    });
+    fixture.componentRef.setInput('goodVotes', new Set([1]));
+    fixture.componentRef.setInput('badVotes', new Set([4, 5, 6, 7]));
+    await settleZoneless(fixture);
     expect(component.state.phase).toBe('good');
   });
 
@@ -277,8 +261,8 @@ describe('AutopilotPanelComponent', () => {
   it('activate without labelset labels should not enter retrain mode', async () => {
     autopilotState.clear();
     const fresh = TestBed.createComponent(AutopilotPanelComponent);
-    fresh.componentInstance.labelsetGoodCount = 0;
-    fresh.componentInstance.labelsetBadCount = 0;
+    fresh.componentRef.setInput('labelsetGoodCount', 0);
+    fresh.componentRef.setInput('labelsetBadCount', 0);
     await settleZoneless(fresh);
     expect(fresh.componentInstance.state.retrainMode).toBe(false);
   });
@@ -288,10 +272,10 @@ describe('AutopilotPanelComponent', () => {
     const fresh = TestBed.createComponent(AutopilotPanelComponent);
     // Simulate "trained on DatasetA, switched to DatasetB with 0 votes here":
     // current-dataset goodVotes/badVotes empty, but labelset counts positive.
-    fresh.componentInstance.labelsetGoodCount = 5;
-    fresh.componentInstance.labelsetBadCount = 4;
-    fresh.componentInstance.goodVotes = new Set();
-    fresh.componentInstance.badVotes = new Set();
+    fresh.componentRef.setInput('labelsetGoodCount', 5);
+    fresh.componentRef.setInput('labelsetBadCount', 4);
+    fresh.componentRef.setInput('goodVotes', new Set());
+    fresh.componentRef.setInput('badVotes', new Set());
     await settleZoneless(fresh);
     expect(fresh.componentInstance.state.retrainMode).toBe(true);
     // Still in 'good' phase since current-dataset votes are below threshold.
@@ -306,16 +290,16 @@ describe('AutopilotPanelComponent', () => {
   });
 
   it('caps the good-phase target for display on a tiny dataset', () => {
-    component.datasetSize = 1;
-    component.goodVotes = new Set();
-    component.badVotes = new Set();
+    fixture.componentRef.setInput('datasetSize', 1);
+    fixture.componentRef.setInput('goodVotes', new Set());
+    fixture.componentRef.setInput('badVotes', new Set());
     // Default target is 3, but a 1-item dataset can supply at most 1 good.
     expect(component.effGoodTarget).toBe(1);
   });
 
   it('reaches the exhausted state and renders a note when a 1-item dataset is labeled', async () => {
     // Drive the inputs the way the template binding does, so OnPush re-renders
-    // and ngOnChanges fires the dataset-size-aware phase check.
+    // and the phase-transition effect fires the dataset-size-aware phase check.
     fixture.componentRef.setInput('datasetSize', 1);
     fixture.componentRef.setInput('goodVotes', new Set([1]));
     fixture.componentRef.setInput('badVotes', new Set());
