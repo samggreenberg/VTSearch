@@ -1,10 +1,10 @@
 <div
   class="media-item"
-  [class.active]="active"
-  [class.labeled-good]="voteLabel === 'good'"
-  [class.labeled-bad]="voteLabel === 'bad'"
+  [class.active]="active()"
+  [class.labeled-good]="voteLabel() === 'good'"
+  [class.labeled-bad]="voteLabel() === 'bad'"
   role="option"
-  [attr.aria-selected]="active"
+  [attr.aria-selected]="active()"
   tabindex="0"
   (click)="onClick()"
   (contextmenu)="onContextMenu($event)"
@@ -30,7 +30,7 @@
     }
   </div>
   <span class="media-name-grid">{{ displayName }}</span>
-  @if (score !== null) {
-    <span class="media-score" title="How strong a match the detector thinks this is">{{ score | number:'1.2-2' }}</span>
+  @if (score() !== null) {
+    <span class="media-score" title="How strong a match the detector thinks this is">{{ score() | number:'1.2-2' }}</span>
   }
 </div>

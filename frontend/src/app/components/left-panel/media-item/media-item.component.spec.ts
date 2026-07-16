@@ -38,12 +38,12 @@ describe('MediaItemComponent', () => {
   });
 
   it('should fall back to description when no filename', () => {
-    component.media = { ...mockMedia, filename: '', description: 'A sound' };
+    fixture.componentRef.setInput('media', { ...mockMedia, filename: '', description: 'A sound' });
     expect(component.displayName).toBe('A sound');
   });
 
   it('should fall back to id when no filename or description', () => {
-    component.media = { ...mockMedia, filename: '', description: undefined };
+    fixture.componentRef.setInput('media', { ...mockMedia, filename: '', description: undefined });
     expect(component.displayName).toBe('#1');
   });
 
@@ -76,7 +76,7 @@ describe('MediaItemComponent', () => {
   });
 
   it('should show thumbnail for image type', () => {
-    component.media = { ...mockMedia, media_type: 'image' };
+    fixture.componentRef.setInput('media', { ...mockMedia, media_type: 'image' });
     expect(component.thumbnailUrl).toBe('/api/medias/1/thumbnail');
   });
 
@@ -101,7 +101,7 @@ describe('MediaItemComponent', () => {
   });
 
   it('should not show thumbnail for text type', () => {
-    component.media = { ...mockMedia, media_type: 'text' };
+    fixture.componentRef.setInput('media', { ...mockMedia, media_type: 'text' });
     expect(component.thumbnailUrl).toBeNull();
   });
 
@@ -109,14 +109,13 @@ describe('MediaItemComponent', () => {
     expect(component.thumbnailUrl).toBe('/api/medias/1/thumbnail');
     component.onThumbnailError();
     expect(component.thumbnailUrl).toBeNull();
-    expect(component.placeholderIcon).toBe('\u266B');
+    expect(component.placeholderIcon).toBe('♫');
   });
 
   it('should reset thumbnailFailed when media changes', () => {
     component.onThumbnailError();
     expect(component.thumbnailUrl).toBeNull();
-    component.media = { ...mockMedia, id: 2 };
-    component.ngOnChanges({ media: {} as any });
+    fixture.componentRef.setInput('media', { ...mockMedia, id: 2 });
     expect(component.thumbnailUrl).toBe('/api/medias/2/thumbnail');
   });
 

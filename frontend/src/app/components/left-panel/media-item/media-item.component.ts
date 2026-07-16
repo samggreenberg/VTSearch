@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, Input, input, OnChanges, output, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, linkedSignal, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
@@ -12,14 +12,14 @@ import { MediaTypeCapabilityService } from '../../../services/media-type-capabil
   templateUrl: './media-item.component.html',
   styleUrl: './media-item.component.scss',
 })
-export class MediaItemComponent implements OnChanges {
+export class MediaItemComponent {
   private activeContext = inject(ActiveContextService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
 
-  @Input({ required: true }) media!: Media;
-  @Input() active = false;
-  @Input() voteLabel: 'good' | 'bad' | null = null;
-  @Input() score: number | null = null;
+  readonly media = input.required<Media>();
+  readonly active = input(false);
+  readonly voteLabel = input<'good' | 'bad' | null>(null);
+  readonly score = input<number | null>(null);
   readonly focusMode = input<'click' | 'hover'>('click');
 
   readonly select = output<number>();
@@ -33,54 +33,51 @@ export class MediaItemComponent implements OnChanges {
     y: number;
 }>();
 
-  thumbnailFailed = false;
-  private lastMediaId: number | null = null;
-
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['media'] && this.media.id !== this.lastMediaId) {
-      this.thumbnailFailed = false;
-      this.lastMediaId = this.media.id;
-    }
-  }
+  /** Resets to ``false`` whenever the card is recycled for a different media. */
+  private readonly thumbnailFailed = linkedSignal<number, boolean>({
+    source: () => this.media().id,
+    computation: () => false,
+  });
 
   get thumbnailUrl(): string | null {
-    if (this.thumbnailFailed) return null;
-    if (this.mediaTypeCaps.usesThumbnails(this.media.media_type)) {
+    if (this.thumbnailFailed()) return null;
+    if (this.mediaTypeCaps.usesThumbnails(this.media().media_type)) {
       // Use the downscaled thumbnail endpoint, not the full-resolution
       // ``/image`` route: a grid of hundreds of high-res items would otherwise
       // force the browser to decode every full-size bitmap at once and exhaust
       // memory. The same thumbnail is reused at every zoom level.
-      return this.activeContext.mediaUrl(`/api/medias/${this.media.id}/thumbnail`);
+      return this.activeContext.mediaUrl(`/api/medias/${this.media().id}/thumbnail`);
     }
     return null;
   }
 
-  /** True when {@link thumbnailUrl} is an audio waveform \u2014 a theme-agnostic
+  /** True when {@link thumbnailUrl} is an audio waveform — a theme-agnostic
    *  alpha-mask PNG (issue #2369) tinted via a CSS mask, not a plain <img>. */
   get isAudioThumbnail(): boolean {
-    return !!this.thumbnailUrl && this.media.media_type === 'audio';
+    return !!this.thumbnailUrl && this.media().media_type === 'audio';
   }
 
   get placeholderIcon(): string | null {
     if (this.thumbnailUrl) return null;
-    if (this.media.media_type === 'audio') return '\u266B';
-    if (this.media.media_type === 'text') return '\u00B6';
-    return '\u25A1';
+    if (this.media().media_type === 'audio') return '♫';
+    if (this.media().media_type === 'text') return '¶';
+    return '□';
   }
 
   onThumbnailError(): void {
-    this.thumbnailFailed = true;
+    this.thumbnailFailed.set(true);
   }
 
   get displayName(): string {
-    return this.media.filename || this.media.description || `#${this.media.id}`;
+    const media = this.media();
+    return media.filename || media.description || `#${media.id}`;
   }
 
   onClick(): void {
     if (this.focusMode() === 'hover') {
-      this.vote.emit({ id: this.media.id, vote: 'bad' });
+      this.vote.emit({ id: this.media().id, vote: 'bad' });
     } else {
-      this.select.emit(this.media.id);
+      this.select.emit(this.media().id);
     }
   }
 
@@ -90,16 +87,16 @@ export class MediaItemComponent implements OnChanges {
       // context menu is intentionally not available so speed-labeling stays
       // fast. Users can still seed a detector via the dashboard.
       event.preventDefault();
-      this.vote.emit({ id: this.media.id, vote: 'good' });
+      this.vote.emit({ id: this.media().id, vote: 'good' });
       return;
     }
     event.preventDefault();
-    this.contextRequest.emit({ id: this.media.id, x: event.clientX, y: event.clientY });
+    this.contextRequest.emit({ id: this.media().id, x: event.clientX, y: event.clientY });
   }
 
   onMouseEnter(): void {
     if (this.focusMode() === 'hover') {
-      this.select.emit(this.media.id);
+      this.select.emit(this.media().id);
     }
   }
 }

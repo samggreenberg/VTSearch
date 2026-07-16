@@ -1,6 +1,6 @@
-<div class="left-panel" [class.collapsed-autopilot]="panelMode() === 'label' && activeTab === 'autopilot' && autopilotCollapsed()" [class.disabled]="disabled()">
-  @if (datasetName && !(panelMode() === 'label' && activeTab === 'autopilot' && autopilotCollapsed())) {
-    <div class="dataset-name" [title]="datasetName">{{ datasetName }}</div>
+<div class="left-panel" [class.collapsed-autopilot]="panelMode() === 'label' && activeTab() === 'autopilot' && autopilotCollapsed()" [class.disabled]="disabled()">
+  @if (datasetName() && !(panelMode() === 'label' && activeTab() === 'autopilot' && autopilotCollapsed())) {
+    <div class="dataset-name" [title]="datasetName()">{{ datasetName() }}</div>
   }
   @if (panelMode() === 'find') {
     <!-- Find mode: simplified view (inclusion control, media list header, media items, and stripe). -->
@@ -47,19 +47,19 @@
 
       <div class="images-header">
         <h3 class="images-header-title">
-          {{ mediaTypeName() }}s ({{ (sortOrder()?.length ?? medias.length) | number }})
+          {{ mediaTypeName() }}s ({{ (sortOrder()?.length ?? medias().length) | number }})
         </h3>
         <vt-view-controls
           side="left"
-          [currentMediaType]="medias.length > 0 ? medias[0].media_type : ''"
+          [currentMediaType]="medias().length > 0 ? medias()[0].media_type : ''"
           class="view-controls-slot" />
 
       </div>
 
-      @if (sortBusy) {
+      @if (sortBusy()) {
         <vt-progress-indicators
           [labelingStatus]="null"
-          [sortBusy]="sortBusy"
+          [sortBusy]="sortBusy()"
           [sortStatus]="sortStatus()"
           [sortProgress]="sortProgress()"
           [sortProgressTotal]="sortProgressTotal()"
@@ -71,7 +71,7 @@
 
       <div class="media-list-container">
         <vt-media-list
-          [medias]="medias"
+          [medias]="medias()"
           [sortOrder]="sortOrder()"
           [threshold]="threshold()"
           [selectedId]="selectedId()"
@@ -89,38 +89,38 @@
           [selectedId]="selectedId()"
           [goodVotes]="goodVotes()"
           [badVotes]="badVotes()"
-          [totalCount]="medias.length"
+          [totalCount]="medias().length"
           (stripeClick)="onStripeClick($event)"
         />
       </div>
     </div>
   } @else {
     <!-- Label mode: full labeling UI with tabs -->
-    @if (!(activeTab === 'autopilot' && autopilotCollapsed())) {
+    @if (!(activeTab() === 'autopilot' && autopilotCollapsed())) {
       <div class="left-tabs" role="tablist" aria-label="Panel mode">
         <button
           class="left-tab"
           role="tab"
-          [class.active]="activeTab === 'manual'"
-          [attr.aria-selected]="activeTab === 'manual'"
+          [class.active]="activeTab() === 'manual'"
+          [attr.aria-selected]="activeTab() === 'manual'"
           (click)="setTab('manual')"
           title="Browse and label items manually with full control over sort mode, selection strategy, and inclusion."
         >Manual</button>
         <button
           class="left-tab"
           role="tab"
-          [class.active]="activeTab === 'autopilot'"
-          [attr.aria-selected]="activeTab === 'autopilot'"
-          [disabled]="autopilotDisabled"
+          [class.active]="activeTab() === 'autopilot'"
+          [attr.aria-selected]="activeTab() === 'autopilot'"
+          [disabled]="autopilotDisabled()"
           (click)="setTab('autopilot')"
-          [title]="autopilotDisabled
+          [title]="autopilotDisabled()
             ? 'Autopilot needs a way to start its first sort. This dataset\'s embedder can\'t search by text, so label a few good and bad examples in Manual mode to enable it.'
             : 'Autopilot guides you through labeling in phases: good examples, bad examples, refining the good/bad cutoff, and covering a broad mix of items.'"
         ><span class="label-full">Autopilot</span><span class="label-short">Auto</span></button>
       </div>
     }
 
-    @if (activeTab === 'manual') {
+    @if (activeTab() === 'manual') {
       <div class="tab-panel-manual" role="tabpanel" aria-label="Manual mode">
         <vt-sort-bar
           [sortMode]="sortMode()"
@@ -143,7 +143,7 @@
 
         <vt-progress-indicators
           [labelingStatus]="labelingStatus()"
-          [sortBusy]="sortBusy"
+          [sortBusy]="sortBusy()"
           [sortStatus]="sortStatus()"
           [sortProgress]="sortProgress()"
           [sortProgressTotal]="sortProgressTotal()"
@@ -162,17 +162,17 @@
 
         <div class="images-header">
           <h3 class="images-header-title">
-            {{ mediaTypeName() }}s ({{ medias.length | number }})
+            {{ mediaTypeName() }}s ({{ medias().length | number }})
           </h3>
           <vt-view-controls
             side="left"
-            [currentMediaType]="medias.length > 0 ? medias[0].media_type : ''"
+            [currentMediaType]="medias().length > 0 ? medias()[0].media_type : ''"
             class="view-controls-slot" />
         </div>
 
         <div class="media-list-container">
           <vt-media-list
-            [medias]="medias"
+            [medias]="medias()"
             [sortOrder]="sortOrder()"
             [threshold]="threshold()"
             [selectedId]="selectedId()"
@@ -191,7 +191,7 @@
             [selectedId]="selectedId()"
             [goodVotes]="goodVotes()"
             [badVotes]="badVotes()"
-            [totalCount]="medias.length"
+            [totalCount]="medias().length"
             (stripeClick)="onStripeClick($event)"
           />
         </div>
@@ -201,7 +201,7 @@
         <vt-autopilot-panel
           [goodVotes]="goodVotes()"
           [badVotes]="badVotes()"
-          [datasetSize]="medias.length"
+          [datasetSize]="medias().length"
           [labelsetGoodCount]="labelsetGoodCount()"
           [labelsetBadCount]="labelsetBadCount()"
           [labelingStatus]="labelingStatus()"
@@ -215,4 +215,3 @@
     }
   }
 </div>
-
