@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, inject, Input, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, inject, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../icon/icon.component';
@@ -41,7 +41,7 @@ export class ImportConfigComponent {
   /** Two-way bound output media type (folder_import_name, e.g.
    *  ``"images"``).  Parent reloads embedders/clippers/source-specs on
    *  every change. */
-  @Input() mediaType = '';
+  readonly mediaType = input('');
   readonly mediaTypeChange = output<string>();
 
   /** ``folder_import_name`` values to show in the dropdown (same list
@@ -60,7 +60,7 @@ export class ImportConfigComponent {
   /** Pre-formatted hint string from
    *  :meth:`DatasetImporterModalComponent.detectionHint`.  Empty hides
    *  the chip entirely. */
-  @Input() detectionHint = '';
+  readonly detectionHint = input('');
 
   /** Whether the custom dropdown is currently expanded. */
   open = false;
@@ -116,7 +116,7 @@ export class ImportConfigComponent {
    *  point. */
   private openPopup(): void {
     this.open = true;
-    const selected = this.mediaTypeOptions().indexOf(this.mediaType);
+    const selected = this.mediaTypeOptions().indexOf(this.mediaType());
     this.activeIndex = selected >= 0 ? selected : 0;
   }
 
@@ -127,7 +127,7 @@ export class ImportConfigComponent {
 
   select(opt: string): void {
     this.close();
-    if (opt !== this.mediaType) {
+    if (opt !== this.mediaType()) {
       this.mediaTypeChange.emit(opt);
     }
   }

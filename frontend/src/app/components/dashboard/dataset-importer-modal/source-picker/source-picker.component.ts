@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../icon/icon.component';
@@ -68,7 +68,7 @@ export class SourcePickerComponent {
 
   /** Importers whose ``category`` matches ``activeTab`` (i.e. the
    *  sub-tabs to render). */
-  @Input() importersForActiveTab: ImporterInfo[] = [];
+  readonly importersForActiveTab = input<ImporterInfo[]>([]);
 
   readonly activeTab = input('');
   readonly selectedImporter = input<ImporterInfo | null>(null);
@@ -108,7 +108,7 @@ export class SourcePickerComponent {
   readonly demoLoading = input(false);
   readonly demoTabs = input<string[]>([]);
   readonly activeDemoTab = input('');
-  @Input() demoCols: ManagedColumns | null = null;
+  readonly demoCols = input<ManagedColumns | null>(null);
   readonly mediaTypes = input<MediaTypeInfo[]>([]);
 
   readonly activeDemoTabChange = output<string>();
@@ -141,7 +141,7 @@ export class SourcePickerComponent {
 
   // === Server folder source view ===
 
-  @Input() sfPathInputValue = '';
+  readonly sfPathInputValue = input('');
   readonly sfPathInputValueChange = output<string>();
   /** Fired when the user finalises the typed path (Enter or blur). */
   readonly sfPathApplied = output<void>();
@@ -158,8 +158,8 @@ export class SourcePickerComponent {
   // === Local folder/files source view ===
 
   readonly lfPickerKind = input<'folder' | 'files'>('folder');
-  @Input() lfFiles: File[] = [];
-  @Input() lfFolderName = '';
+  readonly lfFiles = input<File[]>([]);
+  readonly lfFolderName = input('');
   readonly lfFilesDropped = output<File[]>();
 
   /** ``vt-drop-zone`` label rendered when ``lfPickerKind === 'folder'``. */
@@ -218,7 +218,8 @@ export class SourcePickerComponent {
   }
 
   onDemoHeaderClick(col: string): void {
-    if (this.demoCols?.meta(col).sortable) this.demoCols.sortBy(col);
+    const cols = this.demoCols();
+    if (cols?.meta(col).sortable) cols.sortBy(col);
   }
 
   demoRowDisabled(demo: DemoDatasetEntry): boolean {

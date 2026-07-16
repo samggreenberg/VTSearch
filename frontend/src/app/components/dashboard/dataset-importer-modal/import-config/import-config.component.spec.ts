@@ -71,14 +71,14 @@ describe('ImportConfigComponent', () => {
 
   describe('open/close behaviour', () => {
     it('toggle opens the popup and seeds the highlight on the current selection', () => {
-      component.mediaType = 'image';
+      fixture.componentRef.setInput('mediaType', 'image');
       component.toggle();
       expect(component.open).toBe(true);
       expect(component.activeIndex).toBe(options.indexOf('image'));
     });
 
     it('toggle seeds the highlight on the first option when nothing is selected', () => {
-      component.mediaType = '';
+      fixture.componentRef.setInput('mediaType', '');
       component.toggle();
       expect(component.activeIndex).toBe(0);
     });
@@ -93,7 +93,7 @@ describe('ImportConfigComponent', () => {
 
   describe('select', () => {
     it('emits mediaTypeChange and closes when a new value is chosen', () => {
-      component.mediaType = 'audio';
+      fixture.componentRef.setInput('mediaType', 'audio');
       component.open = true;
       let emitted = '';
       component.mediaTypeChange.subscribe((v: string) => (emitted = v));
@@ -103,7 +103,7 @@ describe('ImportConfigComponent', () => {
     });
 
     it('does not emit when the current value is re-selected', () => {
-      component.mediaType = 'audio';
+      fixture.componentRef.setInput('mediaType', 'audio');
       let emitted = false;
       component.mediaTypeChange.subscribe(() => (emitted = true));
       component.select('audio');
@@ -146,7 +146,7 @@ describe('ImportConfigComponent', () => {
     });
 
     it('Enter commits the highlighted option', () => {
-      component.mediaType = 'audio';
+      fixture.componentRef.setInput('mediaType', 'audio');
       component.toggle();
       component.activeIndex = 1;
       let emitted = '';

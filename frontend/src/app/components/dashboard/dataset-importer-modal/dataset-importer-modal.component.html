@@ -9,40 +9,40 @@
     (importerSelected)="selectImporter($event)"
     [activePickerView]="activePickerView"
     [mediaTypes]="mediaTypes()"
-    [demos]="demoPicker.demos()"
-    [filteredDemos]="demoPicker.filteredDemos"
-    [demoLoading]="demoPicker.demoLoading()"
-    [demoTabs]="demoPicker.demoTabs()"
-    [activeDemoTab]="demoPicker.activeTab()"
-    (activeDemoTabChange)="demoPicker.selectDemoTabWithEmbedder($event)"
-    [demoCols]="demoPicker.demoCols"
+    [demos]="demoPicker().demos()"
+    [filteredDemos]="demoPicker().filteredDemos"
+    [demoLoading]="demoPicker().demoLoading()"
+    [demoTabs]="demoPicker().demoTabs()"
+    [activeDemoTab]="demoPicker().activeTab()"
+    (activeDemoTabChange)="demoPicker().selectDemoTabWithEmbedder($event)"
+    [demoCols]="demoPicker().demoCols"
     [showDemoMediaTypeTabs]="false"
-    [selectedDemoName]="demoPicker.selectedDemo()?.name || ''"
-    (demoSelected)="demoPicker.selectDemo($event)"
-    [sfPathInputValue]="serverFolderPicker.pathInputValue()"
-    (sfPathInputValueChange)="serverFolderPicker.onPathInput($event)"
-    (sfPathApplied)="serverFolderPicker.applyPathInput()"
-    [lfPickerKind]="localFolderPicker.pickerKind()"
-    [lfFiles]="localFolderPicker.files()"
-    [lfFolderName]="localFolderPicker.folderName"
-    (lfFilesDropped)="localFolderPicker.onFilesDropped($event)"
+    [selectedDemoName]="demoPicker().selectedDemo()?.name || ''"
+    (demoSelected)="demoPicker().selectDemo($event)"
+    [sfPathInputValue]="serverFolderPicker().pathInputValue()"
+    (sfPathInputValueChange)="serverFolderPicker().onPathInput($event)"
+    (sfPathApplied)="serverFolderPicker().applyPathInput()"
+    [lfPickerKind]="localFolderPicker().pickerKind()"
+    [lfFiles]="localFolderPicker().files()"
+    [lfFolderName]="localFolderPicker().folderName"
+    (lfFilesDropped)="localFolderPicker().onFilesDropped($event)"
   >
     <ng-container demoBefore>
       @if (!effectiveSoloMediaType) {
         <vt-import-config
           mediaTypeFieldId="demo-media-type"
-          [mediaType]="demoPicker.activeTab()"
-          (mediaTypeChange)="demoPicker.selectDemoTabWithEmbedder($event)"
-          [mediaTypeOptions]="demoPicker.demoTabs()"
-          [mediaTypeOptionLabels]="demoPicker.mediaTypeLabels"
-          [mediaTypeOptionIcons]="demoPicker.demoMediaTypeIcons"
+          [mediaType]="demoPicker().activeTab()"
+          (mediaTypeChange)="demoPicker().selectDemoTabWithEmbedder($event)"
+          [mediaTypeOptions]="demoPicker().demoTabs()"
+          [mediaTypeOptionLabels]="demoPicker().mediaTypeLabels"
+          [mediaTypeOptionIcons]="demoPicker().demoMediaTypeIcons"
         ></vt-import-config>
       }
     </ng-container>
 
     <ng-container demoAfter>
       <vt-demo-picker
-        [guessedMediaType]="guessedMediaType"
+        [guessedMediaType]="guessedMediaType()"
         [guessedMediaEmbedder]="guessedMediaEmbedder()"
         [buildProjection]="buildProjection"
         (buildProjectionChange)="buildProjection = $event"
@@ -56,12 +56,12 @@
       @if (!effectiveSoloMediaType) {
         <vt-import-config
           mediaTypeFieldId="sf-media-type"
-          [mediaType]="serverFolderPicker.mediaType()"
-          (mediaTypeChange)="serverFolderPicker.onMediaTypeChange($event)"
-          [mediaTypeOptions]="serverFolderPicker.mediaTypeOptions"
-          [mediaTypeOptionLabels]="serverFolderPicker.mediaTypeOptionLabels"
-          [mediaTypeOptionIcons]="serverFolderPicker.mediaTypeOptionIcons"
-          [detectionHint]="serverFolderPicker.detectionHint()"
+          [mediaType]="serverFolderPicker().mediaType()"
+          (mediaTypeChange)="serverFolderPicker().onMediaTypeChange($event)"
+          [mediaTypeOptions]="serverFolderPicker().mediaTypeOptions"
+          [mediaTypeOptionLabels]="serverFolderPicker().mediaTypeOptionLabels"
+          [mediaTypeOptionIcons]="serverFolderPicker().mediaTypeOptionIcons"
+          [detectionHint]="serverFolderPicker().detectionHint()"
         ></vt-import-config>
       }
     </ng-container>
@@ -70,7 +70,7 @@
       <vt-server-folder-picker
         [importers]="importers()"
         [mediaTypes]="mediaTypes()"
-        [guessedMediaType]="guessedMediaType"
+        [guessedMediaType]="guessedMediaType()"
         [guessedMediaEmbedder]="guessedMediaEmbedder()"
         [buildProjection]="buildProjection"
         (buildProjectionChange)="buildProjection = $event"
@@ -81,7 +81,7 @@
     </ng-container>
 
     <ng-container lfInfo>
-      @if (localFolderPicker.pickerKind() === 'folder') {
+      @if (localFolderPicker().pickerKind() === 'folder') {
         <p class="info-text">Pick a folder on <strong>this computer</strong> (running your browser).</p>
       } @else {
         <p class="info-text">
@@ -94,12 +94,12 @@
       @if (!effectiveSoloMediaType) {
         <vt-import-config
           mediaTypeFieldId="lf-media-type"
-          [mediaType]="localFolderPicker.mediaType"
-          (mediaTypeChange)="localFolderPicker.onMediaTypeChange($event)"
-          [mediaTypeOptions]="localFolderPicker.mediaTypeOptions"
-          [mediaTypeOptionLabels]="localFolderPicker.mediaTypeOptionLabels"
-          [mediaTypeOptionIcons]="localFolderPicker.mediaTypeOptionIcons"
-          [detectionHint]="localFolderPicker.detectionHint()"
+          [mediaType]="localFolderPicker().mediaType"
+          (mediaTypeChange)="localFolderPicker().onMediaTypeChange($event)"
+          [mediaTypeOptions]="localFolderPicker().mediaTypeOptions"
+          [mediaTypeOptionLabels]="localFolderPicker().mediaTypeOptionLabels"
+          [mediaTypeOptionIcons]="localFolderPicker().mediaTypeOptionIcons"
+          [detectionHint]="localFolderPicker().detectionHint()"
         ></vt-import-config>
       }
     </ng-container>
@@ -108,7 +108,7 @@
       <vt-local-folder-picker
         [importers]="importers()"
         [mediaTypes]="mediaTypes()"
-        [guessedMediaType]="guessedMediaType"
+        [guessedMediaType]="guessedMediaType()"
         [guessedMediaEmbedder]="guessedMediaEmbedder()"
         [buildProjection]="buildProjection"
         (buildProjectionChange)="buildProjection = $event"
@@ -123,7 +123,7 @@
     [hidden]="!selectedImporter() || activePickerView === 'demo' || activePickerView === 'local_folder' || activePickerView === 'local_files' || activePickerView === 'server_folder'"
     [importers]="importers()"
     [mediaTypes]="mediaTypes()"
-    [guessedMediaType]="guessedMediaType"
+    [guessedMediaType]="guessedMediaType()"
     [guessedMediaEmbedder]="guessedMediaEmbedder()"
     [buildProjection]="buildProjection"
     (buildProjectionChange)="buildProjection = $event"
@@ -136,8 +136,8 @@
   @if (activePickerView !== 'demo' && activePickerView !== 'local_folder' && activePickerView !== 'local_files' && activePickerView !== 'server_folder' && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="genericFormPicker.submit()" [disabled]="genericFormPicker.submitting() || !genericFormPicker.canSubmit">
-        @if (genericFormPicker.submitting()) {
+      <button class="btn btn--primary" (click)="genericFormPicker().submit()" [disabled]="genericFormPicker().submitting() || !genericFormPicker().canSubmit">
+        @if (genericFormPicker().submitting()) {
           Importing…
         } @else {
           Import
@@ -149,8 +149,8 @@
   @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="localFolderPicker.submit()" [disabled]="localFolderPicker.submitting() || localFolderPicker.files().length === 0">
-        @if (localFolderPicker.submitting()) {
+      <button class="btn btn--primary" (click)="localFolderPicker().submit()" [disabled]="localFolderPicker().submitting() || localFolderPicker().files().length === 0">
+        @if (localFolderPicker().submitting()) {
           Uploading…
         } @else {
           Upload &amp; Import
@@ -162,8 +162,8 @@
   @if (activePickerView === 'server_folder' && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="serverFolderPicker.submit()" [disabled]="serverFolderPicker.submitting() || !serverFolderPicker.folderPath()">
-        @if (serverFolderPicker.submitting()) {
+      <button class="btn btn--primary" (click)="serverFolderPicker().submit()" [disabled]="serverFolderPicker().submitting() || !serverFolderPicker().folderPath()">
+        @if (serverFolderPicker().submitting()) {
           Importing…
         } @else {
           Import
@@ -175,7 +175,7 @@
   @if (activePickerView === 'demo' && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="demoPicker.submit()" [disabled]="!demoPicker.selectedDemo()">Import</button>
+      <button class="btn btn--primary" (click)="demoPicker().submit()" [disabled]="!demoPicker().selectedDemo()">Import</button>
     </div>
   }
 </vt-modal>
