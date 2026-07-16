@@ -135,10 +135,15 @@ skipped entirely (with a note). When a converter fans one media out into several
 media by **max**: the video is a positive hit when *any* of its frames clears the
 threshold, and it surfaces as a single hit on the video, not one per frame.
 
-A detector trained on a specific clipper granularity (its `input_spec.clipper`)
-is still skipped when the loaded dataset wasn't clipped to match; re-load the
-dataset with the matching clipper to score it. (Auto-clipping at scoring time is
-future work — see `docs/plans/cli-detector-converter.md`.)
+**Matching the detector's clipper granularity.** A detector trained on a
+specific clipper (its `input_spec.clipper` — e.g. 2-second audio tiles, or an
+image grid) is **re-clipped at scoring time** when the loaded dataset wasn't
+already clipped to match: each routed, target-typed media is split with the
+detector's clipper and the clips are re-embedded, so a raw dataset is scored at
+the granularity the detector expects. The per-clip scores fold back to the source
+media by the same **max** rule as converter fan-out. A dataset already loaded
+with the matching clipper is scored as-is (no redundant re-clip), and a detector
+with no `input_spec.clipper` scores whole media.
 
 **How to get the files:**
 
