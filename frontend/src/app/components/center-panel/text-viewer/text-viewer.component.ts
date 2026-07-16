@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, Input, OnChanges, OnDestroy, signal, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, input, OnDestroy, signal, untracked } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { MediasApiService } from '../../../services/medias-api.service';
 import { Media } from '../../../models/api.models';
@@ -10,10 +10,10 @@ import { Media } from '../../../models/api.models';
   templateUrl: './text-viewer.component.html',
   styleUrl: './text-viewer.component.scss',
 })
-export class TextViewerComponent implements OnChanges, OnDestroy {
+export class TextViewerComponent implements OnDestroy {
   private mediasApi = inject(MediasApiService);
 
-  @Input() media!: Media;
+  readonly media = input.required<Media>();
 
   // Signal so the HTTP response (written from a `.subscribe()` callback, which is
   // not on the zoneless CD-notification path) repaints the view.
@@ -23,21 +23,23 @@ export class TextViewerComponent implements OnChanges, OnDestroy {
   // every time the metadata cache hydrates a new reference for the same id.
   private lastMediaId: number | null = null;
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['media'] && this.media && this.media.id !== this.lastMediaId) {
-      this.lastMediaId = this.media.id;
-      this.loadText();
-    }
+  constructor() {
+    effect(() => {
+      const media = this.media();
+      if (media.id === this.lastMediaId) return;
+      this.lastMediaId = media.id;
+      untracked(() => this.loadText(media.id));
+    });
   }
 
   ngOnDestroy(): void {
     this.sub?.unsubscribe();
   }
 
-  private loadText(): void {
+  private loadText(mediaId: number): void {
     this.sub?.unsubscribe();
     this.text.set('Loading…');
-    this.sub = this.mediasApi.getText(this.media.id).subscribe({
+    this.sub = this.mediasApi.getText(mediaId).subscribe({
       next: (data) => {
         this.text.set(data.content || '');
       },

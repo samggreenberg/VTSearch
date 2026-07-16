@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, inject, Input, OnChanges, OnDestroy, output, signal, SimpleChanges, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
 import { NgStyle } from '@angular/common';
 import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
@@ -22,16 +22,16 @@ const MIN_BOX_SIZE = 0.01; // 1% of the image; below this we treat a draw as a s
   templateUrl: './image-viewer.component.html',
   styleUrl: './image-viewer.component.scss',
 })
-export class ImageViewerComponent implements OnChanges, OnDestroy {
+export class ImageViewerComponent implements OnDestroy {
   private activeContext = inject(ActiveContextService);
 
-  @Input() media!: Media;
+  readonly media = input.required<Media>();
   /**
    * True while the parent is in the v2 "bad-vote-with-box discard confirm" armed state.
    * The viewer uses it to (a) render the box with a sticky red pulse, and (b) route Esc /
    * mouse-on-box back to the parent via `armedConfirmCanceled` instead of clearing the box.
    */
-  @Input() pendingBadConfirm = false;
+  readonly pendingBadConfirm = input(false);
   /**
    * The region the detector/embedder matched best at inference, as a normalised
    * ``[x0, y0, x1, y1]`` box (the argmax over patch regions that produced this
@@ -41,7 +41,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
    * the Highlight toggle (``highlightMode``) is on; purely informational, never
    * interactive (no drag/resize, no vote semantics).
    */
-  @Input() highlightBox: RegionBox | null = null;
+  readonly highlightBox = input<RegionBox | null>(null);
   readonly regionBoxChange = output<RegionBox | null>();
   /**
    * Fired when the user does something that cancels the armed bad-vote-confirm without
@@ -50,17 +50,28 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
    */
   readonly armedConfirmCanceled = output<void>();
 
-  @ViewChild('imageWrap') wrapRef!: ElementRef<HTMLDivElement>;
-  @ViewChild('imageEl') imageRef!: ElementRef<HTMLImageElement>;
+  // Public: the coord-transform specs substitute a stub wrap element here.
+  readonly wrapRef = viewChild<ElementRef<HTMLDivElement>>('imageWrap');
+  private readonly imageRef = viewChild<ElementRef<HTMLImageElement>>('imageEl');
 
-  imageSrc = '';
-  imageReady = false;
-  zoom = 1;
-  rotation = 0;
-  zoomLabel = '1×';
+  // Signals: written from the media-change effect below and read in the
+  // template, so plain fields would leave the view stale under zoneless.
+  readonly imageSrc = signal('');
+  readonly imageReady = signal(false);
+  // zoom/rotation are signals: they are written from the keyboard-shortcut
+  // dispatch (an un-bound RxJS callback in CenterPanelComponent) and from the
+  // parent's toolbar buttons (click handlers bound in the PARENT's template,
+  // which mark only the parent dirty) — with a plain field, this OnPush view's
+  // transform binding silently went stale until some unrelated CD repainted it.
+  readonly zoom = signal(1);
+  readonly rotation = signal(0);
+  readonly zoomLabel = computed(() => {
+    const z = this.zoom();
+    return (z === Math.floor(z) ? z.toFixed(0) : z.toFixed(1)) + '×';
+  });
   // Track the id of the media we last reset for. The `media` input reference
   // changes whenever `MediaMetadataCacheService` hydrates richer metadata for
-  // the same id; re-running ngOnChanges for those enrichments would clobber
+  // the same id; re-running the media-change effect for those enrichments would clobber
   // `imageReady=true` back to false and, since `imageSrc` is the same string,
   // Angular wouldn't re-fire the `<img>` load event, leaving the canvas
   // permanently hidden behind `visibility: hidden`.
@@ -77,13 +88,15 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   // viewer behaves as if Shift were held: cursor is a crosshair and a left-drag draws a
   // new region instead of panning. Shift+drag remains a power-user shortcut even when
   // the toggle is off; toggling the button just turns the gesture on without a modifier.
-  marqueeMode = false;
+  // Signal for the same parent-toolbar reason as `zoom`: toggled from the
+  // parent's template, read here (crosshair cursor / region-mode class).
+  readonly marqueeMode = signal(false);
   // Sticky toggle exposed by the Highlight button in .image-view-controls. While
   // true the viewer overlays a neutral white/black dashed box (`highlightBox`)
   // around the region the detector matched best at inference. Independent of marqueeMode -
   // both can be on at once (the highlight is read-only and sits behind the
   // interactive voting box).
-  highlightMode = false;
+  readonly highlightMode = signal(false);
   // renderedW/H are written from a raw ResizeObserver callback (un-patched, no CD
   // under zoneless), so they are signals; reading them in the template keeps the
   // overlay geometry fresh when the wrap resizes.
@@ -112,26 +125,31 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
 
   constructor() {
     this.setupWindowKeyListeners();
-  }
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['media'] && this.media && this.media.id !== this.lastMediaId) {
-      this.lastMediaId = this.media.id;
-      this.imageReady = false;
-      this.imageSrc = this.activeContext.mediaUrl(`/api/medias/${this.media.id}/image`);
-      this.resetView();
-      this.clearRegionBox({ emit: true });
-    }
+    // Reset the viewport for a new image when the media id changes. The id
+    // guard skips same-id metadata-enrichment reference changes (see
+    // lastMediaId above); zoom/rotation/marquee state intentionally persists.
+    effect(() => {
+      const media = this.media();
+      if (media.id === this.lastMediaId) return;
+      this.lastMediaId = media.id;
+      this.imageReady.set(false);
+      this.imageSrc.set(this.activeContext.mediaUrl(`/api/medias/${media.id}/image`));
+      untracked(() => {
+        this.resetView();
+        this.clearRegionBox({ emit: true });
+      });
+    });
   }
 
   onImageLoad(): void {
-    this.imageReady = true;
+    this.imageReady.set(true);
     this.recomputeRenderedSize();
     this.attachWrapResizeObserver();
   }
 
   onImageError(): void {
-    this.imageReady = true;
+    this.imageReady.set(true);
   }
 
   ngOnDestroy(): void {
@@ -145,33 +163,33 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   }
 
   onZoomInput(event: Event): void {
-    this.zoom = parseFloat((event.target as HTMLInputElement).value);
+    this.zoom.set(parseFloat((event.target as HTMLInputElement).value));
     this.applyTransform();
   }
 
   rotateLeft(): void {
-    this.rotation -= 90;
+    this.rotation.update((r) => r - 90);
     this.applyTransform();
   }
 
   rotateRight(): void {
-    this.rotation += 90;
+    this.rotation.update((r) => r + 90);
     this.applyTransform();
   }
 
   zoomIn(): void {
-    this.zoom = this.clampZoom(this.zoom + 0.15 * this.zoom);
+    this.zoom.update((z) => this.clampZoom(z + 0.15 * z));
     this.applyTransform();
   }
 
   zoomOut(): void {
-    this.zoom = this.clampZoom(this.zoom - 0.15 * this.zoom);
+    this.zoom.update((z) => this.clampZoom(z - 0.15 * z));
     this.applyTransform();
   }
 
   resetView(): void {
-    this.zoom = 1;
-    this.rotation = 0;
+    this.zoom.set(1);
+    this.rotation.set(0);
     this.panX.set(0);
     this.panY.set(0);
     this.applyTransform();
@@ -179,17 +197,17 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
 
   onWheel(event: WheelEvent): void {
     event.preventDefault();
-    const oldZoom = this.zoom;
+    const oldZoom = this.zoom();
     const delta = event.deltaY > 0 ? -0.15 : 0.15;
-    this.zoom = this.clampZoom(this.zoom + delta * this.zoom);
+    this.zoom.set(this.clampZoom(oldZoom + delta * oldZoom));
 
-    const wrap = this.wrapRef?.nativeElement;
+    const wrap = this.wrapRef()?.nativeElement;
     if (wrap) {
       const rect = wrap.getBoundingClientRect();
       const s = this.layoutScale(wrap, rect);
       const cx = (event.clientX - rect.left - rect.width / 2) / s;
       const cy = (event.clientY - rect.top - rect.height / 2) / s;
-      const ratio = this.zoom / oldZoom;
+      const ratio = this.zoom() / oldZoom;
       this.panX.set(cx - ratio * (cx - this.panX()));
       this.panY.set(cy - ratio * (cy - this.panY()));
     }
@@ -198,20 +216,20 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
 
   /** True when a drag should draw a region (either Shift-held or Marquee toggle on). */
   get regionDrawActive(): boolean {
-    return this.shiftHeld() || this.marqueeMode;
+    return this.shiftHeld() || this.marqueeMode();
   }
 
   toggleMarqueeMode(): void {
-    this.marqueeMode = !this.marqueeMode;
+    this.marqueeMode.update((v) => !v);
   }
 
   toggleHighlightMode(): void {
-    this.highlightMode = !this.highlightMode;
+    this.highlightMode.update((v) => !v);
   }
 
   /** True when the best-match highlight box should be drawn over the image. */
   get highlightVisible(): boolean {
-    return this.highlightMode && this.highlightBoxStyle !== null;
+    return this.highlightMode() && this.highlightBoxStyle !== null;
   }
 
   /** Percent-position style for the best-match highlight overlay.  Returns null
@@ -220,7 +238,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
    *  frame round everything.  (This overlay is the only place a best-match region
    *  is drawn - thumbnails never render a best-region outline.) */
   get highlightBoxStyle(): { [k: string]: string } | null {
-    const box = this.highlightBox;
+    const box = this.highlightBox();
     if (!box || box.length !== 4) return null;
     const [x0, y0, x1, y1] = box;
     if (![x0, y0, x1, y1].every((v) => Number.isFinite(v))) return null;
@@ -246,7 +264,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
       if (!local) return;
       const x = clamp01(local.x);
       const y = clamp01(local.y);
-      if (this.pendingBadConfirm) this.armedConfirmCanceled.emit();
+      if (this.pendingBadConfirm()) this.armedConfirmCanceled.emit();
       // Remember the prior box so we can restore it on a zero-area release;
       // a stray Shift-click on empty space must not throw away real work.
       this.drag = { kind: 'draw', anchor: { x, y }, previousBox: this.regionBox() };
@@ -277,7 +295,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     event.preventDefault();
     const local = this.screenToImageNormalized(event);
     if (!local) return;
-    if (this.pendingBadConfirm) this.armedConfirmCanceled.emit();
+    if (this.pendingBadConfirm()) this.armedConfirmCanceled.emit();
     this.drag = { kind: 'move', startLocal: local, startBox: box };
     this.setupWindowMouseListeners();
   }
@@ -287,7 +305,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     if (event.button !== 0 || !box) return;
     event.stopPropagation();
     event.preventDefault();
-    if (this.pendingBadConfirm) this.armedConfirmCanceled.emit();
+    if (this.pendingBadConfirm()) this.armedConfirmCanceled.emit();
     this.drag = { kind: 'resize', handle, startBox: box };
     this.setupWindowMouseListeners();
   }
@@ -308,7 +326,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   }
 
   get imageTransform(): string {
-    return `translate(${this.panX()}px, ${this.panY()}px) scale(${this.zoom}) rotate(${this.rotation}deg)`;
+    return `translate(${this.panX()}px, ${this.panY()}px) scale(${this.zoom()}) rotate(${this.rotation()}deg)`;
   }
 
   get wrapCursor(): string {
@@ -329,12 +347,12 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     };
   }
 
+  // Clamp the pan back into range for the current zoom/rotation; call after
+  // any zoom/rotation change. (zoomLabel is a computed off `zoom` now.)
   private applyTransform(): void {
     const max = this.getMaxPan();
     this.panX.set(Math.max(-max.x, Math.min(max.x, this.panX())));
     this.panY.set(Math.max(-max.y, Math.min(max.y, this.panY())));
-    const zoomVal = this.zoom;
-    this.zoomLabel = (zoomVal === Math.floor(zoomVal) ? zoomVal.toFixed(0) : zoomVal.toFixed(1)) + '×';
   }
 
   private clampZoom(val: number): number {
@@ -342,8 +360,8 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   }
 
   private recomputeRenderedSize(): void {
-    const img = this.imageRef?.nativeElement;
-    const wrap = this.wrapRef?.nativeElement;
+    const img = this.imageRef()?.nativeElement;
+    const wrap = this.wrapRef()?.nativeElement;
     if (!img || !wrap) return;
     const natW = img.naturalWidth;
     const natH = img.naturalHeight;
@@ -366,7 +384,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   }
 
   private attachWrapResizeObserver(): void {
-    const wrap = this.wrapRef?.nativeElement;
+    const wrap = this.wrapRef()?.nativeElement;
     if (!wrap || this.resizeObserver) return;
     if (typeof ResizeObserver === 'undefined') return;
     this.resizeObserver = new ResizeObserver(() => this.recomputeRenderedSize());
@@ -374,19 +392,19 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   }
 
   private getMaxPan(): { x: number; y: number } {
-    const wrap = this.wrapRef?.nativeElement;
+    const wrap = this.wrapRef()?.nativeElement;
     const renderedW = this.renderedW();
     const renderedH = this.renderedH();
     if (!wrap || !renderedW || !renderedH) return { x: 0, y: 0 };
     const wrapW = wrap.clientWidth;
     const wrapH = wrap.clientHeight;
-    const rot = ((this.rotation % 360) + 360) % 360;
+    const rot = ((this.rotation() % 360) + 360) % 360;
     const swapped = rot === 90 || rot === 270;
     const effW = swapped ? renderedH : renderedW;
     const effH = swapped ? renderedW : renderedH;
     return {
-      x: Math.max(0, (effW * this.zoom - wrapW) / 2),
-      y: Math.max(0, (effH * this.zoom - wrapH) / 2),
+      x: Math.max(0, (effW * this.zoom() - wrapW) / 2),
+      y: Math.max(0, (effH * this.zoom() - wrapH) / 2),
     };
   }
 
@@ -408,7 +426,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
    *  Returns null when the image isn't laid out yet. Public so tests can drive it
    *  with a mocked wrapRef + arbitrary pan/zoom/rotate state. */
   screenToImageNormalized(event: MouseEvent): { x: number; y: number } | null {
-    const wrap = this.wrapRef?.nativeElement;
+    const wrap = this.wrapRef()?.nativeElement;
     const renderedW = this.renderedW();
     const renderedH = this.renderedH();
     if (!wrap || !renderedW || !renderedH) return null;
@@ -416,9 +434,9 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     const s = this.layoutScale(wrap, rect);
     const dx = (event.clientX - (rect.left + rect.width / 2)) / s - this.panX();
     const dy = (event.clientY - (rect.top + rect.height / 2)) / s - this.panY();
-    const sx = dx / this.zoom;
-    const sy = dy / this.zoom;
-    const rad = (-this.rotation * Math.PI) / 180;
+    const sx = dx / this.zoom();
+    const sy = dy / this.zoom();
+    const rad = (-this.rotation() * Math.PI) / 180;
     const cos = Math.cos(rad);
     const sin = Math.sin(rad);
     const rx = sx * cos - sy * sin;
@@ -454,7 +472,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     if (d.kind === 'pan') {
       // clientX deltas are VISUAL px (the app renders at zoom: 1.1) but panX is
       // a LAYOUT-px transform value; convert so the image tracks the cursor 1:1.
-      const wrap = this.wrapRef?.nativeElement;
+      const wrap = this.wrapRef()?.nativeElement;
       const s = wrap ? this.layoutScale(wrap, wrap.getBoundingClientRect()) : 1;
       this.panX.set(d.originX + (e.clientX - d.startX) / s);
       this.panY.set(d.originY + (e.clientY - d.startY) / s);
@@ -570,7 +588,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     // keeps the box (per the v2 patch-embedder plan, drawing a box is real work,
     // and Esc should be the "I changed my mind about voting no" out, not "throw
     // away the box"). Only consume the key if we actually had an action to take.
-    if (this.pendingBadConfirm) {
+    if (this.pendingBadConfirm()) {
       e.preventDefault();
       this.armedConfirmCanceled.emit();
       return;

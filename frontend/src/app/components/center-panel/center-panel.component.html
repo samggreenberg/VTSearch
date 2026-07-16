@@ -1,15 +1,15 @@
-<div class="center-panel" [class.empty]="!media">
-  @if (!media) {
+<div class="center-panel" [class.empty]="!media()">
+  @if (!media()) {
     <p class="placeholder-text">Select a media item to view</p>
   } @else {
     <div class="media-swipe-wrapper" [class]="mediaType === 'audio' ? '' : swipeClass()">
       @switch (mediaType) {
         @case ('audio') {
-          <vt-audio-player [media]="media" [volume]="volume()" [audioPlaying]="audioPlaying()" [swipeClass]="swipeClass()" (playingChanged)="onPlayingChanged($event)"></vt-audio-player>
+          <vt-audio-player [media]="media()!" [volume]="volume()" [audioPlaying]="audioPlaying()" [swipeClass]="swipeClass()" (playingChanged)="onPlayingChanged($event)"></vt-audio-player>
         }
         @case ('image') {
           <vt-image-viewer
-            [media]="media"
+            [media]="media()!"
             [pendingBadConfirm]="pendingBadConfirm()"
             [highlightBox]="highlightBox"
             (regionBoxChange)="onRegionBoxChange($event)"
@@ -17,40 +17,40 @@
           ></vt-image-viewer>
         }
         @case ('video') {
-          <vt-video-player [media]="media" [volume]="volume()" [audioPlaying]="audioPlaying()" (playingChanged)="onPlayingChanged($event)"></vt-video-player>
+          <vt-video-player [media]="media()!" [volume]="volume()" [audioPlaying]="audioPlaying()" (playingChanged)="onPlayingChanged($event)"></vt-video-player>
         }
         @case ('text') {
-          <vt-text-viewer [media]="media"></vt-text-viewer>
+          <vt-text-viewer [media]="media()!"></vt-text-viewer>
         }
         @case ('document') {
-          <vt-document-viewer [media]="media"></vt-document-viewer>
+          <vt-document-viewer [media]="media()!"></vt-document-viewer>
         }
         @default {
-          <vt-document-viewer [media]="media"></vt-document-viewer>
+          <vt-document-viewer [media]="media()!"></vt-document-viewer>
         }
       }
     </div>
 
-    @if (mediaType === 'image' && imageViewer) {
+    @if (mediaType === 'image' && imageViewer(); as imageViewer) {
       <div class="image-view-controls">
         <button
           class="btn btn--toolbar ivc-btn ivc-btn-toggle"
-          [class.active]="imageViewer.marqueeMode"
+          [class.active]="imageViewer.marqueeMode()"
           (click)="imageViewer.toggleMarqueeMode()"
           [title]="marqueeTitle"
           [attr.aria-label]="marqueeAriaLabel"
-          [attr.aria-pressed]="imageViewer.marqueeMode"
+          [attr.aria-pressed]="imageViewer.marqueeMode()"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 2.5" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="0.5"/></svg>
         </button>
         @if (regionOverlayCapable) {
           <button
             class="btn btn--toolbar ivc-btn ivc-btn-toggle"
-            [class.active]="imageViewer.highlightMode"
+            [class.active]="imageViewer.highlightMode()"
             (click)="imageViewer.toggleHighlightMode()"
             title="Highlight: outline the region the detector matched best"
             aria-label="Highlight: outline best-matched region"
-            [attr.aria-pressed]="imageViewer.highlightMode"
+            [attr.aria-pressed]="imageViewer.highlightMode()"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4l6 6-8 8-6-6z"/><path d="M6 12l-2.5 6.5L10 16z" fill="currentColor"/></svg>
           </button>
@@ -68,12 +68,12 @@
           [min]="imageViewer.minZoom"
           [max]="imageViewer.maxZoom"
           [step]="imageViewer.zoomStep"
-          [value]="imageViewer.zoom"
+          [value]="imageViewer.zoom()"
           (input)="imageViewer.onZoomInput($event)"
           title="Zoom"
           aria-label="Zoom level"
         />
-        <span class="ivc-zoom-label">{{ imageViewer.zoomLabel }}</span>
+        <span class="ivc-zoom-label">{{ imageViewer.zoomLabel() }}</span>
         <button class="btn btn--toolbar ivc-btn" (click)="imageViewer.resetView()" title="Reset view" aria-label="Reset image view"><vt-icon type="zoom-fit" [size]="16"></vt-icon></button>
       </div>
     }
@@ -107,8 +107,8 @@
           <div class="metadata-item">
             <span class="metadata-label">Name</span>
             <div class="metadata-value-row">
-              <vt-copy-detail-button [value]="media.filename || 'Media #' + media.id" label="Name" />
-              <span class="metadata-value">{{ media.filename || 'Media #' + media.id }}</span>
+              <vt-copy-detail-button [value]="media()!.filename || 'Media #' + media()!.id" label="Name" />
+              <span class="metadata-value">{{ media()!.filename || 'Media #' + media()!.id }}</span>
             </div>
           </div>
           <div class="metadata-item">
@@ -130,8 +130,8 @@
           <div class="metadata-item">
             <span class="metadata-label">MD5</span>
             <div class="metadata-value-row">
-              <vt-copy-detail-button [value]="media.md5 || ''" label="MD5" />
-              <span class="metadata-value metadata-md5">{{ media.md5 }}</span>
+              <vt-copy-detail-button [value]="media()!.md5 || ''" label="MD5" />
+              <span class="metadata-value metadata-md5">{{ media()!.md5 }}</span>
             </div>
           </div>
         </div>

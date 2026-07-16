@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, inject, Input, input, OnChanges, OnDestroy, output, signal, SimpleChanges, untracked, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
 import { KeyValuePipe, TitleCasePipe } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { EmbedderInfo, Media } from '../../models/api.models';
@@ -37,7 +37,7 @@ import { prefersReducedMotion } from '../../utils/reduced-motion';
   templateUrl: './center-panel.component.html',
   styleUrl: './center-panel.component.scss',
 })
-export class CenterPanelComponent implements OnChanges, OnDestroy {
+export class CenterPanelComponent implements OnDestroy {
   private mediasApi = inject(MediasApiService);
   private keyboard = inject(KeyboardService);
   voteState = inject(VoteStateService);
@@ -45,16 +45,16 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   private sortState = inject(SortStateService);
   private datasetsListingsApi = inject(DatasetsListingsApiService);
 
-  @Input() media: Media | null = null;
+  readonly media = input<Media | null>(null);
   readonly disabled = input(false);
   readonly mediaVoted = output<{
     id: number;
     vote: 'good' | 'bad';
 }>();
 
-  @ViewChild(AudioPlayerComponent) audioPlayer?: AudioPlayerComponent;
-  @ViewChild(ImageViewerComponent) imageViewer?: ImageViewerComponent;
-  @ViewChild(VideoPlayerComponent) videoPlayer?: VideoPlayerComponent;
+  readonly audioPlayer = viewChild(AudioPlayerComponent);
+  readonly imageViewer = viewChild(ImageViewerComponent);
+  readonly videoPlayer = viewChild(VideoPlayerComponent);
 
   // These fields are written from non-bound callbacks — the keyboard-shortcut
   // dispatch (`KeyboardService.action$`), HTTP/vote subscriptions, and timers —
@@ -121,17 +121,19 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
       this.voteState.badVotes;
       untracked(() => this.maybeDismissLabelHint());
     });
-  }
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['media']) {
+    // Reset per-item transient state on every media change (including same-id
+    // reference changes from metadata-cache hydration, matching the old
+    // ngOnChanges behavior).
+    effect(() => {
+      this.media();
       this.swipeClass.set('');
       // Navigating to another item clears the armed bad-vote-confirm state.
       // ImageViewer also clears its own regionBox on media change and will emit null;
       // resetting eagerly here keeps state coherent across the swap.
       this.pendingBadConfirm.set(false);
       this.currentRegionBox = null;
-    }
+    });
   }
 
   ngOnDestroy(): void {
@@ -145,17 +147,13 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
 
   /** Stop all media playback (used on navigation away). */
   stopPlayback(): void {
-    if (this.audioPlayer) {
-      const audio = this.audioPlayer.audioRef?.nativeElement;
-      if (audio) {
-        audio.pause();
-      }
+    const audio = this.audioPlayer()?.audioRef()?.nativeElement;
+    if (audio) {
+      audio.pause();
     }
-    if (this.videoPlayer) {
-      const video = this.videoPlayer.videoRef?.nativeElement;
-      if (video) {
-        video.pause();
-      }
+    const video = this.videoPlayer()?.videoRef()?.nativeElement;
+    if (video) {
+      video.pause();
     }
   }
 
@@ -173,7 +171,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
       this.keyboard.action$.subscribe((action) => {
         switch (action.type) {
           case 'vote':
-            if (this.media && action.direction && !this.disabled()) {
+            if (this.media() && action.direction && !this.disabled()) {
               this.castVote(action.direction);
             }
             break;
@@ -183,18 +181,22 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
           case 'playback':
             this.togglePlayback();
             break;
-          case 'zoom':
-            if (this.imageViewer && action.zoomDirection) {
-              if (action.zoomDirection === 'in') this.imageViewer.zoomIn();
-              else this.imageViewer.zoomOut();
+          case 'zoom': {
+            const imageViewer = this.imageViewer();
+            if (imageViewer && action.zoomDirection) {
+              if (action.zoomDirection === 'in') imageViewer.zoomIn();
+              else imageViewer.zoomOut();
             }
             break;
-          case 'rotate':
-            if (this.imageViewer && action.rotateDirection) {
-              if (action.rotateDirection === 'left') this.imageViewer.rotateLeft();
-              else this.imageViewer.rotateRight();
+          }
+          case 'rotate': {
+            const imageViewer = this.imageViewer();
+            if (imageViewer && action.rotateDirection) {
+              if (action.rotateDirection === 'left') imageViewer.rotateLeft();
+              else imageViewer.rotateRight();
             }
             break;
+          }
           case 'undo':
             if (!this.disabled() && !this.isVoting()) this.voteState.undo();
             break;
@@ -226,14 +228,14 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   }
 
   get mediaType(): string {
-    return this.media?.media_type || 'audio';
+    return this.media()?.media_type || 'audio';
   }
 
   /** The embedder names bound to the focused media (the v3 trio).  Prefers the
    *  full ``embeddings`` key set the backend now ships under ``embedders``;
    *  falls back to the singular primary for older payloads. */
   private boundEmbedderNames(): string[] {
-    const m = this.media;
+    const m = this.media();
     if (!m) return [];
     if (m.embedders && m.embedders.length > 0) return m.embedders;
     return m.embedder ? [m.embedder] : [];
@@ -288,19 +290,22 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
    *  ``null`` when the media wasn't scored or carries no region. Passed to the
    *  image viewer, which draws it only while Highlight is toggled on. */
   get highlightBox(): RegionBox | null {
-    if (!this.media) return null;
-    const id = this.media.id;
+    const media = this.media();
+    if (!media) return null;
+    const id = media.id;
     const box = this.sortState.sortOrder?.find((s) => s.id === id)?.bestRegion;
     if (!box || box.length !== 4) return null;
     return [box[0], box[1], box[2], box[3]];
   }
 
   get isGood(): boolean {
-    return this.media ? this.voteState.effectiveGood(this.media.id) : false;
+    const media = this.media();
+    return media ? this.voteState.effectiveGood(media.id) : false;
   }
 
   get isBad(): boolean {
-    return this.media ? this.voteState.effectiveBad(this.media.id) : false;
+    const media = this.media();
+    return media ? this.voteState.effectiveBad(media.id) : false;
   }
 
   /** True when the labeling session is fresh (no votes yet across either
@@ -312,9 +317,10 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   }
 
   get customMetadata(): Record<string, unknown> {
-    if (!this.media) return {};
+    const media = this.media();
+    if (!media) return {};
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (this.media as any)['custom_metadata'] as Record<string, unknown> || {};
+    return (media as any)['custom_metadata'] as Record<string, unknown> || {};
   }
 
   /** Human-readable label for an item used in undo toasts. */
@@ -341,7 +347,8 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   }
 
   castVote(vote: 'good' | 'bad'): void {
-    if (!this.media || this.isVoting()) return;
+    const media = this.media();
+    if (!media || this.isVoting()) return;
 
     // Region annotations only attach to yes-votes (salient-area semantics).
     // A no-vote with a box drawn arms a sticky discard-confirm state; the first
@@ -351,7 +358,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     // fresh Shift-drag, or item navigation clear armed without voting.
     if (vote === 'bad' && this.currentRegionBox && !this.pendingBadConfirm()) {
       this.pendingBadConfirm.set(true);
-      this.imageViewer?.pulseRegionBox();
+      this.imageViewer()?.pulseRegionBox();
       return;
     }
 
@@ -360,21 +367,21 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     this.isVoting.set(true);
 
     this.voteState
-      .submitToggleVoteAndRecord(this.media.id, vote, this.mediaDisplayName(this.media), regionBox)
+      .submitToggleVoteAndRecord(media.id, vote, this.mediaDisplayName(media), regionBox)
       .subscribe({
         next: () => {
-          const animate = this.showAnimations() && !!this.media && !prefersReducedMotion();
+          const animate = this.showAnimations() && !!this.media() && !prefersReducedMotion();
           if (animate) {
             this.swipeClass.set(vote === 'good' ? 'swipe-right' : 'swipe-left');
             this.spinningVote.set(vote);
             if (this.spinTimer) clearTimeout(this.spinTimer);
             this.spinTimer = setTimeout(() => this.spinningVote.set(null), 300);
             setTimeout(() => {
-              this.mediaVoted.emit({ id: this.media!.id, vote });
+              this.mediaVoted.emit({ id: this.media()!.id, vote });
               this.isVoting.set(false);
             }, 180);
           } else {
-            this.mediaVoted.emit({ id: this.media!.id, vote });
+            this.mediaVoted.emit({ id: this.media()!.id, vote });
             this.isVoting.set(false);
           }
         },
@@ -402,12 +409,8 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
 
   private adjustVolume(delta: number): void {
     this.volume.set(Math.max(0, Math.min(1, this.volume() + delta)));
-    if (this.audioPlayer) {
-      this.audioPlayer.adjustVolume(delta);
-    }
-    if (this.videoPlayer) {
-      this.videoPlayer.adjustVolume(delta);
-    }
+    this.audioPlayer()?.adjustVolume(delta);
+    this.videoPlayer()?.adjustVolume(delta);
     this.settingsState.update({ volume: this.volume() }).subscribe();
   }
 
@@ -432,24 +435,16 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   };
 
   private resumePlayback(): void {
-    if (this.audioPlayer) {
-      const audio = this.audioPlayer.audioRef?.nativeElement;
-      if (audio) audio.play().catch(() => {});
-    }
-    if (this.videoPlayer) {
-      const video = this.videoPlayer.videoRef?.nativeElement;
-      if (video) video.play().catch(() => {});
-    }
+    const audio = this.audioPlayer()?.audioRef()?.nativeElement;
+    if (audio) audio.play().catch(() => {});
+    const video = this.videoPlayer()?.videoRef()?.nativeElement;
+    if (video) video.play().catch(() => {});
   }
 
   private togglePlayback(): void {
     this.audioPlaying.set(!this.audioPlaying());
-    if (this.audioPlayer) {
-      this.audioPlayer.togglePlayback();
-    }
-    if (this.videoPlayer) {
-      this.videoPlayer.togglePlayback();
-    }
+    this.audioPlayer()?.togglePlayback();
+    this.videoPlayer()?.togglePlayback();
     this.settingsState.update({ audio_playing: this.audioPlaying() }).subscribe();
   }
 }

@@ -2,17 +2,17 @@
   #videoEl
   controls
   loop
-  [src]="videoSrc"
-  [attr.aria-label]="media.filename || 'Video media'"
+  [src]="videoSrc()"
+  [attr.aria-label]="media().filename || 'Video media'"
   class="video-element"
-  [class.hidden]="videoError"
+  [class.hidden]="videoError()"
   (loadedmetadata)="onLoadedMetadata()"
   (timeupdate)="onTimeUpdate()"
   (play)="onPlay()"
   (pause)="onPause()"
   (error)="onError()"
 ></video>
-@if (videoError) {
+@if (videoError()) {
   <div class="video-error">
     <span class="error-icon" title="Video format error">&#9888;</span>
     <span>Video cannot be played. If the format requires transcoding, install ffmpeg on the server.</span>

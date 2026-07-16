@@ -111,78 +111,63 @@ describe('ImageViewerComponent', () => {
   });
 
   it('should set imageSrc when media changes', () => {
-    component.media = mockMedia;
-    component.ngOnChanges({
-      media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
-    });
-    expect(component.imageSrc).toBe('/api/medias/2/image');
+    fixture.componentRef.setInput('media', mockMedia);
+    TestBed.tick();
+    expect(component.imageSrc()).toBe('/api/medias/2/image');
   });
 
   it('should hide image until loaded to prevent flash of old image', () => {
-    component.media = mockMedia;
-    component.ngOnChanges({
-      media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
-    });
-    expect(component.imageReady).toBe(false);
+    fixture.componentRef.setInput('media', mockMedia);
+    TestBed.tick();
+    expect(component.imageReady()).toBe(false);
 
     component.onImageLoad();
-    expect(component.imageReady).toBe(true);
+    expect(component.imageReady()).toBe(true);
   });
 
   it('should reset imageReady when media changes', () => {
-    component.media = mockMedia;
-    component.ngOnChanges({
-      media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
-    });
+    fixture.componentRef.setInput('media', mockMedia);
+    TestBed.tick();
     component.onImageLoad();
-    expect(component.imageReady).toBe(true);
+    expect(component.imageReady()).toBe(true);
 
     const nextMedia = { ...mockMedia, id: 3, filename: 'next.png' };
-    component.media = nextMedia;
-    component.ngOnChanges({
-      media: { currentValue: nextMedia, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
-    });
-    expect(component.imageReady).toBe(false);
+    fixture.componentRef.setInput('media', nextMedia);
+    TestBed.tick();
+    expect(component.imageReady()).toBe(false);
   });
 
   // Regression: when MediaMetadataCacheService hydrates the stub into a
   // fully-typed Media for the same id, MediaStateService.selectedMedia returns
-  // a *new reference*, which used to retrigger this ngOnChanges body. That
+  // a *new reference*, which used to retrigger the media-change reset. That
   // flipped `imageReady` back to false while leaving `imageSrc` unchanged, so
   // Angular's property binding skipped the DOM write and no fresh (load) event
   // fired, leaving the canvas hidden behind `visibility: hidden`. The id
   // guard keeps the loaded state stable across enrichment events.
   it('should not reset imageReady when the media reference changes but id is the same', () => {
-    component.media = mockMedia;
-    component.ngOnChanges({
-      media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
-    });
+    fixture.componentRef.setInput('media', mockMedia);
+    TestBed.tick();
     component.onImageLoad();
-    expect(component.imageReady).toBe(true);
+    expect(component.imageReady()).toBe(true);
 
     // Same id, new object reference (typical metadata-cache enrichment).
     const enriched: Media = { ...mockMedia, filename: 'real-name.png' };
-    component.media = enriched;
-    component.ngOnChanges({
-      media: { currentValue: enriched, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
-    });
-    expect(component.imageReady).toBe(true);
+    fixture.componentRef.setInput('media', enriched);
+    TestBed.tick();
+    expect(component.imageReady()).toBe(true);
   });
 
   it('should show image on error to avoid stuck black screen', () => {
-    component.media = mockMedia;
-    component.ngOnChanges({
-      media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
-    });
-    expect(component.imageReady).toBe(false);
+    fixture.componentRef.setInput('media', mockMedia);
+    TestBed.tick();
+    expect(component.imageReady()).toBe(false);
 
     component.onImageError();
-    expect(component.imageReady).toBe(true);
+    expect(component.imageReady()).toBe(true);
   });
 
   it('should render image element', () => {
-    component.media = mockMedia;
-    component.imageSrc = '/api/medias/2/image';
+    fixture.componentRef.setInput('media', mockMedia);
     TestBed.tick();
     expect(fixture.nativeElement.querySelector('img')).toBeTruthy();
   });
@@ -197,21 +182,21 @@ describe('ImageViewerComponent', () => {
   });
 
   it('should reset view', () => {
-    component.zoom = 2;
-    component.rotation = 90;
+    component.zoom.set(2);
+    component.rotation.set(90);
     component.resetView();
-    expect(component.zoom).toBe(1);
-    expect(component.rotation).toBe(0);
+    expect(component.zoom()).toBe(1);
+    expect(component.rotation()).toBe(0);
   });
 
   it('should rotate left', () => {
     component.rotateLeft();
-    expect(component.rotation).toBe(-90);
+    expect(component.rotation()).toBe(-90);
   });
 
   it('should rotate right', () => {
     component.rotateRight();
-    expect(component.rotation).toBe(90);
+    expect(component.rotation()).toBe(90);
   });
 
   it('should generate transform string', () => {
@@ -233,7 +218,7 @@ describe('ImageViewerComponent', () => {
     function setupWrap(component: ImageViewerComponent) {
       component.renderedW.set(100);
       component.renderedH.set(100);
-      component.wrapRef = {
+      (component as unknown as { wrapRef: () => ElementRef<HTMLDivElement> }).wrapRef = () => ({
         nativeElement: {
           getBoundingClientRect: () => ({
             left: 0,
@@ -247,7 +232,7 @@ describe('ImageViewerComponent', () => {
             toJSON: () => ({}),
           }),
         } as unknown as HTMLDivElement,
-      } as ElementRef<HTMLDivElement>;
+      } as ElementRef<HTMLDivElement>);
     }
 
     function makeEvent(clientX: number, clientY: number): MouseEvent {
@@ -278,7 +263,7 @@ describe('ImageViewerComponent', () => {
 
     it('compensates for zoom: screen offsets shrink in image coords as zoom grows', () => {
       setupWrap(component);
-      component.zoom = 2;
+      component.zoom.set(2);
       // 25px right of centre at 2× zoom should be 12.5px in image coords =
       // 0.125 normalised, so image x = 0.625.
       const local = component.screenToImageNormalized(makeEvent(75, 50))!;
@@ -288,7 +273,7 @@ describe('ImageViewerComponent', () => {
 
     it('compensates for pan: translating the image shifts the inferred image coords', () => {
       setupWrap(component);
-      component.zoom = 2;
+      component.zoom.set(2);
       // Image translated 20px right; a click at screen 70 used to map to image
       // 0.7 at zoom 2 (50px = 0.5 + 20/100/2 * 2... see math). Concretely:
       // dx = 70 - 50 - 20 = 0; sx = 0; image x = 0.5.
@@ -300,7 +285,7 @@ describe('ImageViewerComponent', () => {
 
     it('inverts rotation: a click on the screen-right edge maps to the image-top edge at 90° CW', () => {
       setupWrap(component);
-      component.rotation = 90;
+      component.rotation.set(90);
       // Positive rotation rotates the image clockwise, so screen-right is image-top.
       const local = component.screenToImageNormalized(makeEvent(100, 50))!;
       expect(local.x).toBeCloseTo(0.5, 5);
@@ -318,7 +303,7 @@ describe('ImageViewerComponent', () => {
       // cursor (proportional to distance from centre, sign-flipping across it).
       component.renderedW.set(100);
       component.renderedH.set(100);
-      component.wrapRef = {
+      (component as unknown as { wrapRef: () => ElementRef<HTMLDivElement> }).wrapRef = () => ({
         nativeElement: {
           clientWidth: 100,
           clientHeight: 100,
@@ -334,7 +319,7 @@ describe('ImageViewerComponent', () => {
             toJSON: () => ({}),
           }),
         } as unknown as HTMLDivElement,
-      } as ElementRef<HTMLDivElement>;
+      } as ElementRef<HTMLDivElement>);
       // Visual centre is at (55, 55). A click 11 visual px right of centre is
       // 10 layout px → 0.1 normalised, so image x = 0.6, y stays 0.5.
       const local = component.screenToImageNormalized(makeEvent(66, 55))!;
@@ -344,10 +329,10 @@ describe('ImageViewerComponent', () => {
 
     it('combines pan + zoom + rotate self-consistently', () => {
       setupWrap(component);
-      component.zoom = 2;
+      component.zoom.set(2);
       component.panX.set(10);
       component.panY.set(-5);
-      component.rotation = 90;
+      component.rotation.set(90);
       // Map a couple of points and verify the transform is invertible:
       // taking two points on screen and rotating by the matching angle, the
       // image-coord differences should respect rotation (a screen-x delta
@@ -372,20 +357,20 @@ describe('ImageViewerComponent', () => {
   describe('region box coord stability', () => {
     it('does not mutate the box coords when zoom changes', () => {
       component.regionBox.set([0.1, 0.2, 0.5, 0.6]);
-      component.zoom = 2;
+      component.zoom.set(2);
       expect(component.regionBox()).toEqual([0.1, 0.2, 0.5, 0.6]);
-      component.zoom = 4;
+      component.zoom.set(4);
       expect(component.regionBox()).toEqual([0.1, 0.2, 0.5, 0.6]);
-      component.zoom = 1;
+      component.zoom.set(1);
       expect(component.regionBox()).toEqual([0.1, 0.2, 0.5, 0.6]);
     });
 
     it('keeps regionBoxStyle (percent-of-stage) stable across zoom changes', () => {
       component.regionBox.set([0.1, 0.2, 0.5, 0.6]);
       const before = component.regionBoxStyle;
-      component.zoom = 3;
+      component.zoom.set(3);
       expect(component.regionBoxStyle).toEqual(before);
-      component.rotation = 45;
+      component.rotation.set(45);
       expect(component.regionBoxStyle).toEqual(before);
     });
 
@@ -404,7 +389,7 @@ describe('ImageViewerComponent', () => {
     function setupWrap(component: ImageViewerComponent) {
       component.renderedW.set(100);
       component.renderedH.set(100);
-      component.wrapRef = {
+      (component as unknown as { wrapRef: () => ElementRef<HTMLDivElement> }).wrapRef = () => ({
         nativeElement: {
           getBoundingClientRect: () => ({
             left: 0,
@@ -418,7 +403,7 @@ describe('ImageViewerComponent', () => {
             toJSON: () => ({}),
           }),
         } as unknown as HTMLDivElement,
-      } as ElementRef<HTMLDivElement>;
+      } as ElementRef<HTMLDivElement>);
     }
 
     it('keeps the prior box when a Shift-click resolves to zero area', () => {
@@ -474,7 +459,7 @@ describe('ImageViewerComponent', () => {
     function setupWrap(component: ImageViewerComponent) {
       component.renderedW.set(100);
       component.renderedH.set(100);
-      component.wrapRef = {
+      (component as unknown as { wrapRef: () => ElementRef<HTMLDivElement> }).wrapRef = () => ({
         nativeElement: {
           getBoundingClientRect: () => ({
             left: 0,
@@ -488,7 +473,7 @@ describe('ImageViewerComponent', () => {
             toJSON: () => ({}),
           }),
         } as unknown as HTMLDivElement,
-      } as ElementRef<HTMLDivElement>;
+      } as ElementRef<HTMLDivElement>);
     }
 
     function mouseEventAt(x: number, y: number): MouseEvent {
@@ -559,7 +544,7 @@ describe('ImageViewerComponent', () => {
     function setupWrap(component: ImageViewerComponent) {
       component.renderedW.set(100);
       component.renderedH.set(100);
-      component.wrapRef = {
+      (component as unknown as { wrapRef: () => ElementRef<HTMLDivElement> }).wrapRef = () => ({
         nativeElement: {
           getBoundingClientRect: () => ({
             left: 0,
@@ -573,15 +558,15 @@ describe('ImageViewerComponent', () => {
             toJSON: () => ({}),
           }),
         } as unknown as HTMLDivElement,
-      } as ElementRef<HTMLDivElement>;
+      } as ElementRef<HTMLDivElement>);
     }
 
     it('starts off and flips on toggle', () => {
-      expect(component.marqueeMode).toBe(false);
+      expect(component.marqueeMode()).toBe(false);
       component.toggleMarqueeMode();
-      expect(component.marqueeMode).toBe(true);
+      expect(component.marqueeMode()).toBe(true);
       component.toggleMarqueeMode();
-      expect(component.marqueeMode).toBe(false);
+      expect(component.marqueeMode()).toBe(false);
     });
 
     it('reports regionDrawActive when either Shift is held or marquee is on', () => {
@@ -589,19 +574,19 @@ describe('ImageViewerComponent', () => {
       component.shiftHeld.set(true);
       expect(component.regionDrawActive).toBe(true);
       component.shiftHeld.set(false);
-      component.marqueeMode = true;
+      component.marqueeMode.set(true);
       expect(component.regionDrawActive).toBe(true);
     });
 
     it('shows a crosshair cursor when marquee mode is on', () => {
       expect(component.wrapCursor).not.toBe('crosshair');
-      component.marqueeMode = true;
+      component.marqueeMode.set(true);
       expect(component.wrapCursor).toBe('crosshair');
     });
 
     it('starts a draw-drag on mousedown when marquee mode is on (no Shift required)', () => {
       setupWrap(component);
-      component.marqueeMode = true;
+      component.marqueeMode.set(true);
 
       const ev: MouseEvent = {
         button: 0,
@@ -618,35 +603,35 @@ describe('ImageViewerComponent', () => {
     });
 
     it('persists across media changes', () => {
-      component.marqueeMode = true;
+      fixture.componentRef.setInput('media', mockMedia);
+      TestBed.tick();
+      component.marqueeMode.set(true);
       const next: Media = { ...mockMedia, id: 99, filename: 'b.png' };
-      component.media = next;
-      component.ngOnChanges({
-        media: { currentValue: next, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
-      });
-      expect(component.marqueeMode).toBe(true);
+      fixture.componentRef.setInput('media', next);
+      TestBed.tick();
+      expect(component.marqueeMode()).toBe(true);
     });
   });
 
   describe('best-match highlight overlay', () => {
     it('starts off and flips on toggle', () => {
-      expect(component.highlightMode).toBe(false);
+      expect(component.highlightMode()).toBe(false);
       component.toggleHighlightMode();
-      expect(component.highlightMode).toBe(true);
+      expect(component.highlightMode()).toBe(true);
       component.toggleHighlightMode();
-      expect(component.highlightMode).toBe(false);
+      expect(component.highlightMode()).toBe(false);
     });
 
     it('is not visible until both the toggle is on and a box is present', () => {
       expect(component.highlightVisible).toBe(false);
-      component.highlightMode = true;
+      component.highlightMode.set(true);
       expect(component.highlightVisible).toBe(false); // no box yet
-      component.highlightBox = [0.1, 0.2, 0.6, 0.7];
+      fixture.componentRef.setInput('highlightBox', [0.1, 0.2, 0.6, 0.7]);
       expect(component.highlightVisible).toBe(true);
     });
 
     it('positions the box as percent-of-stage', () => {
-      component.highlightBox = [0.1, 0.2, 0.6, 0.8];
+      fixture.componentRef.setInput('highlightBox', [0.1, 0.2, 0.6, 0.8]);
       expect(component.highlightBoxStyle).toEqual({
         left: '10.000%',
         top: '20.000%',
@@ -656,31 +641,31 @@ describe('ImageViewerComponent', () => {
     });
 
     it('rejects malformed, degenerate, and near-full-image boxes', () => {
-      component.highlightBox = null;
+      fixture.componentRef.setInput('highlightBox', null);
       expect(component.highlightBoxStyle).toBeNull();
-      component.highlightBox = [0.5, 0.5, 0.4, 0.6]; // x1 < x0 -> zero/negative width
+      fixture.componentRef.setInput('highlightBox', [0.5, 0.5, 0.4, 0.6]); // x1 < x0 -> zero/negative width
       expect(component.highlightBoxStyle).toBeNull();
-      component.highlightBox = [0, 0, 1, 1]; // whole-image fallback
+      fixture.componentRef.setInput('highlightBox', [0, 0, 1, 1]); // whole-image fallback
       expect(component.highlightBoxStyle).toBeNull();
-      component.highlightBox = [0, 0, NaN, 0.5];
+      fixture.componentRef.setInput('highlightBox', [0, 0, NaN, 0.5]);
       expect(component.highlightBoxStyle).toBeNull();
     });
 
     it('persists the toggle across media changes', () => {
-      component.highlightMode = true;
+      fixture.componentRef.setInput('media', mockMedia);
+      TestBed.tick();
+      component.highlightMode.set(true);
       const next: Media = { ...mockMedia, id: 77, filename: 'c.png' };
-      component.media = next;
-      component.ngOnChanges({
-        media: { currentValue: next, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
-      });
-      expect(component.highlightMode).toBe(true);
+      fixture.componentRef.setInput('media', next);
+      TestBed.tick();
+      expect(component.highlightMode()).toBe(true);
     });
   });
 
   describe('armed-confirm cancel routing', () => {
     it('emits armedConfirmCanceled instead of clearing the box when Esc is pressed while armed', () => {
       component.regionBox.set([0.1, 0.2, 0.5, 0.6]);
-      component.pendingBadConfirm = true;
+      fixture.componentRef.setInput('pendingBadConfirm', true);
       let canceled = false;
       let cleared = false;
       component.armedConfirmCanceled.subscribe(() => (canceled = true));
@@ -696,7 +681,7 @@ describe('ImageViewerComponent', () => {
 
     it('clears the box on Esc when no armed confirm is pending', () => {
       component.regionBox.set([0.1, 0.2, 0.5, 0.6]);
-      component.pendingBadConfirm = false;
+      fixture.componentRef.setInput('pendingBadConfirm', false);
       let emitted: RegionBox | null | undefined = undefined;
       component.regionBoxChange.subscribe((v) => (emitted = v));
       const esc = new KeyboardEvent('keydown', { key: 'Escape' });
