@@ -50,7 +50,11 @@ describe('AudioCropOverlayComponent', () => {
       setPointerCapture: capture,
       releasePointerCapture: release,
     };
-    component.canvasRef = { nativeElement: canvas } as unknown as ElementRef<HTMLCanvasElement>;
+    // `canvasRef` is a signal query; stub it with a zero-arg function returning
+    // the fake canvas so `this.canvasRef()` works without a real view/query
+    // resolution (and `draw()` short-circuits on the null 2D context).
+    (component as unknown as { canvasRef: () => ElementRef<HTMLCanvasElement> }).canvasRef =
+      () => ({ nativeElement: canvas }) as unknown as ElementRef<HTMLCanvasElement>;
 
     // Pretend the waveform decoded to a 10s clip with the full range selected.
     component.duration = DURATION;

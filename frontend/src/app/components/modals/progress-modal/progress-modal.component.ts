@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, inject, Input, input, OnDestroy, OnInit, output, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, inject, input, OnDestroy, OnInit, output, viewChild } from '@angular/core';
 
 import { Subject, takeUntil, timer, switchMap, filter, take } from 'rxjs';
 import { ModalComponent } from '../../modal/modal.component';
@@ -30,11 +30,12 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
   private settingsState = inject(SettingsStateService);
   private progressEvents = inject(ProgressEventsService);
 
-  @Input() metric: ProgressMetric = 'smart';
+  readonly metric = input<ProgressMetric>('smart');
   readonly useCachedHistory = input(false);
   readonly closed = output<void>();
 
-  @ViewChild('chartCanvas') chartCanvas!: ElementRef<HTMLCanvasElement>;
+  // Optional query: the canvas only renders in the results `@else` branch.
+  readonly chartCanvas = viewChild<ElementRef<HTMLCanvasElement>>('chartCanvas');
 
   analyzing = true;
   analysisProgress = 0;
@@ -47,7 +48,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
 
   get title(): string {
-    switch (this.metric) {
+    switch (this.metric()) {
       case 'smart':
         return 'Smart: Detector Accuracy Over Time';
       case 'stable':
@@ -72,7 +73,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
 
   private loadCachedHistory(): void {
     this.analyzing = true;
-    this.sortingApi.getIndicatorScoreHistory(this.metric).subscribe({
+    this.sortingApi.getIndicatorScoreHistory(this.metric()).subscribe({
       next: (res) => {
         this.analyzing = false;
         this.chartData = (res.history || []) as ErrorCostDataPoint[] | StabilityDataPoint[] | DiversityDataPoint[];
@@ -120,7 +121,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
     // `pollEvalJob()` against an already-completed `destroy$` (RxJS
     // `takeUntil` never fires on a pre-completed notifier), leaking a poller.
     this.sortingApi
-      .trainAndScore(this.metric)
+      .trainAndScore(this.metric())
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (res) => {
@@ -183,9 +184,9 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
 
   private applyEvalResult(res: EvalTrainAndScoreResponse): void {
     this.analyzing = false;
-    if (this.metric === 'smart') {
+    if (this.metric() === 'smart') {
       this.chartData = (res.error_cost || []) as ErrorCostDataPoint[];
-    } else if (this.metric === 'stable') {
+    } else if (this.metric() === 'stable') {
       this.chartData = (res.stability || []) as StabilityDataPoint[];
     } else {
       this.chartData = (res.diversity || []) as DiversityDataPoint[];
@@ -194,9 +195,10 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
   }
 
   private renderChart(): void {
-    if (!this.chartCanvas) return;
-    const canvas = this.chartCanvas.nativeElement;
-    switch (this.metric) {
+    const chartCanvas = this.chartCanvas();
+    if (!chartCanvas) return;
+    const canvas = chartCanvas.nativeElement;
+    switch (this.metric()) {
       case 'smart':
         this.chartsService.renderErrorCostChart(canvas, this.chartData as ErrorCostDataPoint[]);
         break;

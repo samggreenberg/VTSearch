@@ -152,7 +152,7 @@ describe('AutoFindSettingsComponent', () => {
     expect(fv.server_json_file.filepath).toBe('/saved.json');
   });
 
-  it('reacts to input changes via ngOnChanges', async () => {
+  it('reacts to input changes via the seeding effect', async () => {
     await create();
     expect(component.activeExporter).toBe('');
 

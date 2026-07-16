@@ -3,11 +3,10 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
-  Input,
   input,
   OnDestroy,
   output,
-  ViewChild,
+  viewChild,
 } from '@angular/core';
 import { decodeAudioBuffer } from '../../../utils/decode-audio';
 
@@ -30,13 +29,15 @@ const HANDLE_HIT_PX = 12;
   styleUrl: './audio-crop-overlay.component.scss',
 })
 export class AudioCropOverlayComponent implements AfterViewInit, OnDestroy {
-  @Input() audioUrl = '';
+  readonly audioUrl = input('');
   /** Original audio file, used to decode the waveform. */
   readonly audioFile = input<File>();
   readonly applied = output<AudioCropResult>();
   readonly cancelled = output<void>();
 
-  @ViewChild('canvas') canvasRef!: ElementRef<HTMLCanvasElement>;
+  // Always in the DOM (not behind `@if`), so a required query is safe and it
+  // resolves before `ngAfterViewInit`, where the first draw is scheduled.
+  readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
 
   duration = 0;
   start = 0;
@@ -106,7 +107,7 @@ export class AudioCropOverlayComponent implements AfterViewInit, OnDestroy {
   }
 
   private draw(): void {
-    const canvas = this.canvasRef?.nativeElement;
+    const canvas = this.canvasRef().nativeElement;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -146,7 +147,7 @@ export class AudioCropOverlayComponent implements AfterViewInit, OnDestroy {
 
   onPointerDown(event: PointerEvent): void {
     if (this.duration <= 0) return;
-    const canvas = this.canvasRef.nativeElement;
+    const canvas = this.canvasRef().nativeElement;
     const rect = canvas.getBoundingClientRect();
     const px = event.clientX - rect.left;
     const sec = (px / rect.width) * this.duration;
@@ -181,7 +182,7 @@ export class AudioCropOverlayComponent implements AfterViewInit, OnDestroy {
 
   onPointerMove(event: PointerEvent): void {
     if (this.dragMode === 'none' || this.duration <= 0) return;
-    const canvas = this.canvasRef.nativeElement;
+    const canvas = this.canvasRef().nativeElement;
     const rect = canvas.getBoundingClientRect();
     const px = event.clientX - rect.left;
     const sec = Math.max(0, Math.min((px / rect.width) * this.duration, this.duration));
@@ -209,7 +210,7 @@ export class AudioCropOverlayComponent implements AfterViewInit, OnDestroy {
   onPointerUp(event: PointerEvent): void {
     if (this.dragMode === 'none') return;
     this.dragMode = 'none';
-    this.canvasRef.nativeElement.releasePointerCapture(event.pointerId);
+    this.canvasRef().nativeElement.releasePointerCapture(event.pointerId);
   }
 
   apply(): void {

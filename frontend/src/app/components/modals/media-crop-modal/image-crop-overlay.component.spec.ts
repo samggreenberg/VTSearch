@@ -41,7 +41,11 @@ describe('ImageCropOverlayComponent', () => {
       getBoundingClientRect: () =>
         ({ left: 0, top: 0, width: DISP_W, height: DISP_H }) as DOMRect,
     };
-    component.imgRef = { nativeElement: img } as unknown as ElementRef<HTMLImageElement>;
+    // `imgRef` is a signal query; stub it with a zero-arg function returning
+    // the fake element so `this.imgRef()` reads the deterministic dimensions
+    // without a real view/query resolution.
+    (component as unknown as { imgRef: () => ElementRef<HTMLImageElement> }).imgRef =
+      () => ({ nativeElement: img }) as ElementRef<HTMLImageElement>;
   }
 
   beforeEach(() => {
