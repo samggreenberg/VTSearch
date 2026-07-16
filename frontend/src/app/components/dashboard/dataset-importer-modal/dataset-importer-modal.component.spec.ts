@@ -189,6 +189,9 @@ describe('DatasetImporterModalComponent', () => {
         req.url === '/api/dataset/demo-list' && req.params.get('embedder') === embedders[0].name,
       ).flush({ datasets: mockDemos });
     }
+    httpMock.expectOne(req =>
+      req.url === '/api/converters' && req.params.get('source') === tab,
+    ).flush({ converters: [] });
   }
 
   /** Open the demo picker and flush the always-issued requests.  Opening
@@ -949,5 +952,9 @@ describe('DatasetImporterModalComponent', () => {
     );
     expect(refetchReq.request.method).toBe('GET');
     refetchReq.flush({ datasets: mockDemos });
+
+    httpMock.expectOne(req =>
+      req.url === '/api/converters' && req.params.get('source') === 'audio',
+    ).flush({ converters: [] });
   });
 });
