@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { ProgressBarState } from '../../utils/format-progress';
 
@@ -27,25 +27,25 @@ import { ProgressBarState } from '../../utils/format-progress';
   imports: [ProgressBarComponent],
   templateUrl: './job-progress.component.html',
   styleUrl: './job-progress.component.scss',
-  host: { '[class.jp-host--cell]': 'cell' },
+  host: { '[class.jp-host--cell]': 'cell()' },
 })
 export class JobProgressComponent {
   /** One-line title, e.g. "Loading dataset · Step 2 of 4 · Downloading source". */
-  @Input() header = '';
+  readonly header = input('');
   /** Longer explanation surfaced behind the `(?)` chip; empty hides the chip. */
-  @Input() description = '';
+  readonly description = input('');
   /** Per-item detail (left of the bar), e.g. "012/345 FileABC.img". */
-  @Input() detail = '';
+  readonly detail = input('');
   /** Right-justified status, e.g. "5.5 min left" or "45%". */
-  @Input() eta = '';
+  readonly eta = input('');
   /** Bar fill state; defaults to an indeterminate spinner. */
-  @Input() bar: ProgressBarState = { value: 0, max: 1, indeterminate: true };
+  readonly bar = input<ProgressBarState>({ value: 0, max: 1, indeterminate: true });
   /** Ease the fill for multi-phase jobs (see `vt-progress-bar`'s `smooth`). */
-  @Input() smooth = false;
+  readonly smooth = input(false);
   /** Cancel-button tooltip; `null` hides the button entirely. */
-  @Input() cancelTitle: string | null = 'Cancel';
+  readonly cancelTitle = input<string | null>('Cancel');
   /** Cancel-button label. */
-  @Input() cancelLabel = 'Cancel';
+  readonly cancelLabel = input('Cancel');
   /**
    * Cancel-acknowledgement mode. Backends take a while to unwind, so once the
    * user has clicked Cancel we swap the live button for a disabled
@@ -53,13 +53,13 @@ export class JobProgressComponent {
    * the row visibly acknowledges the click instead of freezing in its
    * pre-cancel state and inviting repeated clicks.
    */
-  @Input() cancelling = false;
+  readonly cancelling = input(false);
   /**
    * Table-cell mode: pin the host to the cell width (`width: 0; min-width:
    * 100%`) and give the detail slot a fixed width, so the loading row's text
    * never feeds the auto column-sizing algorithm.
    */
-  @Input() cell = false;
+  readonly cell = input(false);
 
   readonly cancel = output<void>();
 
