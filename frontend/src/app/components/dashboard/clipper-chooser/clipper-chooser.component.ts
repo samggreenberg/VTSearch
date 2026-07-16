@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, OnChanges, output, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -17,7 +17,7 @@ export interface ClipperSelection {
   templateUrl: './clipper-chooser.component.html',
   styleUrl: './clipper-chooser.component.scss',
 })
-export class ClipperChooserComponent implements OnChanges {
+export class ClipperChooserComponent {
   readonly open = input(false);
   readonly clippers = input<ClipperInfo[]>([]);
 
@@ -28,10 +28,16 @@ export class ClipperChooserComponent implements OnChanges {
   /** Per-clipper parameter values, keyed by clipper name then param key. */
   paramValues: Record<string, Record<string, number | string>> = {};
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['open'] && this.open()) {
-      this.initTabs();
-    }
+  private wasOpen = false;
+
+  constructor() {
+    effect(() => {
+      const isOpen = this.open();
+      if (isOpen && !this.wasOpen) {
+        this.initTabs();
+      }
+      this.wasOpen = isOpen;
+    });
   }
 
   private initTabs(): void {
