@@ -1,4 +1,4 @@
-import { afterNextRender, AfterViewChecked, AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, ElementRef, HostListener, inject, Injector, input, OnChanges, OnDestroy, output, SimpleChanges, ViewChild } from '@angular/core';
+import { afterNextRender, AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, ElementRef, HostListener, inject, Injector, input, OnDestroy, output, untracked, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { Subscription } from 'rxjs';
@@ -154,7 +154,7 @@ const PREVIEW_SIZE_STEPS = [120, 160, 208, 272, 352, 448, 560, 640, 720] as cons
   templateUrl: './browse-bin-popup.component.html',
   styleUrl: './browse-bin-popup.component.scss',
 })
-export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit, OnChanges, OnDestroy {
+export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   private host = inject<ElementRef<HTMLElement>>(ElementRef);
   private selection = inject(BrowseSelectionService);
   private metadataCache = inject(MediaMetadataCacheService);
@@ -195,10 +195,10 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
    *  the hover clears. */
   readonly nowPlaying = output<NowPlaying | null>();
 
-  @ViewChild('panel') private panelRef?: ElementRef<HTMLElement>;
-  @ViewChild('header') private headerRef?: ElementRef<HTMLElement>;
-  @ViewChild(CdkVirtualScrollViewport) private viewport?: CdkVirtualScrollViewport;
-  @ViewChild('audioEl') private audioRef?: ElementRef<HTMLAudioElement>;
+  private readonly panelRef = viewChild<ElementRef<HTMLElement>>('panel');
+  private readonly headerRef = viewChild<ElementRef<HTMLElement>>('header');
+  private readonly viewport = viewChild(CdkVirtualScrollViewport);
+  private readonly audioRef = viewChild<ElementRef<HTMLAudioElement>>('audioEl');
 
   /** Clamped on-screen position; starts at the anchor and is nudged inward. */
   left = 0;
@@ -275,10 +275,94 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
   constructor() {
     // Keep the hover-to-hear preview element in step with the Browse toolbar's
     // volume slider mid-playback; ``onEntryEnter`` also seeds it when a clip
-    // starts.
+    // starts. Tracking the view query also re-seeds when the element mounts.
     effect(() => {
-      const el = this.audioRef?.nativeElement;
+      const el = this.audioRef()?.nativeElement;
       if (el) el.volume = this.volume();
+    });
+    // The input→state dispatch that used to live in ngOnChanges (signal inputs
+    // don't fire it). Each effect tracks exactly the inputs its old ngOnChanges
+    // arm keyed on, and runs its body untracked so incidental signal reads
+    // inside (mediaType in playAudio, settings-backed getters in place()) can't
+    // widen the triggers.
+    //
+    // A fresh bin (new member ids / representative): reset the popup's content.
+    effect(() => {
+      const memberIds = this.memberIds();
+      this.repId();
+      untracked(() => {
+        this.ids = memberIds ?? [];
+        this.stopAudio();
+        // Open on the bin's representative (the centroid whose thumbnail the user
+        // right-clicked) so the pane is never blank and the detail view starts on
+        // the same image — not the 1-D list's first item, which differs.
+        this.previewId = this.representativeId();
+        // Auto-play the representative's clip on open (audio) so the detail window
+        // is an "intense hover": opening it hears the rep, just like resting on the
+        // bin on the canvas. This is the only way to hear a singleton audio bin,
+        // whose member grid (and its hover-to-hear) is dropped (see previewOnly).
+        if (this.previewId != null) this.playAudio(this.previewId);
+        // A fresh bin is a fresh popup: forget any drag from the previous one so
+        // it re-anchors to the new summon point.
+        this.dragged = false;
+        this.rebuildRows();
+        // A fresh bin: scroll the list to the representative (centred) and prefetch
+        // the window around it. Deferred so the virtual viewport has the new rows
+        // (and, on first open, exists at all — it's created after this effect).
+        setTimeout(() => {
+          this.scrollToRep();
+          this.prefetchVisible();
+        });
+      });
+    });
+    // A new media type may carry a different remembered thumbnail size.
+    effect(() => {
+      this.mediaType();
+      untracked(() => this.applyViewPrefs());
+    });
+    // A genuine (re)summon — a fresh bin or a new anchor/region — re-seeds the
+    // position at the summon point (unless the user has dragged the popup),
+    // then re-clamps. A pure size change (the main-canvas thumbnail radius,
+    // the effect below) must NOT snap back to the cursor: it keeps the popup
+    // where it sits and only re-clamps it on-screen. Without this split, the
+    // first resize after opening would lurch the window from the cursor across
+    // to the clamped edge, because ``place`` was re-deriving the position from
+    // the raw summon point every time rather than from where the window had
+    // settled.
+    effect(() => {
+      const x = this.x();
+      const y = this.y();
+      this.bounds();
+      this.memberIds();
+      untracked(() => {
+        if (!this.dragged) {
+          this.left = x;
+          this.top = y;
+          // Hide the popup until it's re-clamped at the new anchor, so it doesn't
+          // flash at the raw summon point (which may be half off-screen) first.
+          this.placed = false;
+        }
+        // Measure + clamp after the new content lays out.
+        setTimeout(() => this.place());
+      });
+    });
+    // The main-canvas thumbnail radius resizes the preview pane; re-clamp the
+    // popup in place (no re-anchor — see above).
+    effect(() => {
+      this.hoverThumbRadius();
+      untracked(() => setTimeout(() => this.place()));
+    });
+    // (Re-)subscribe the member grid's scroll-driven prefetch whenever the
+    // virtual viewport instance changes — it lives behind the template's
+    // ``@if (!previewOnly)``, and the popup is reused across summons while
+    // open (right-clicking another bin only swaps inputs), so a singleton→
+    // multi transition creates a brand-new viewport. Tracking the view query
+    // re-runs this the moment that instance appears; a one-shot
+    // ``ngAfterViewInit`` wiring would strand it (mirrors media-list's
+    // viewport re-wire pattern).
+    effect(() => {
+      this.viewport();
+      untracked(() => this.ensureScrollSubscription());
     });
     // Re-read the popup's thumbnail size whenever settings change (this is how
     // the in-header size buttons take effect, and how a change on one popup
@@ -322,84 +406,26 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
     });
   }
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['memberIds'] || changes['repId']) {
-      this.ids = this.memberIds() ?? [];
-      this.stopAudio();
-      // Open on the bin's representative (the centroid whose thumbnail the user
-      // right-clicked) so the pane is never blank and the detail view starts on
-      // the same image — not the 1-D list's first item, which differs.
-      this.previewId = this.representativeId();
-      // Auto-play the representative's clip on open (audio) so the detail window
-      // is an "intense hover": opening it hears the rep, just like resting on the
-      // bin on the canvas. This is the only way to hear a singleton audio bin,
-      // whose member grid (and its hover-to-hear) is dropped (see previewOnly).
-      if (this.previewId != null) this.playAudio(this.previewId);
-      // A fresh bin is a fresh popup: forget any drag from the previous one so
-      // it re-anchors to the new summon point.
-      this.dragged = false;
-      this.rebuildRows();
-      // A fresh bin: scroll the list to the representative (centred) and prefetch
-      // the window around it. Deferred so the virtual viewport has the new rows
-      // (and, on first open, exists at all — it's created after ngOnChanges).
-      setTimeout(() => {
-        this.scrollToRep();
-        this.prefetchVisible();
-      });
-    }
-    if (changes['mediaType']) {
-      // A new media type may carry a different remembered thumbnail size.
-      this.applyViewPrefs();
-    }
-    // A genuine (re)summon — a fresh bin or a new anchor/region — re-seeds the
-    // position at the summon point (unless the user has dragged the popup). A
-    // pure size change (the main-canvas thumbnail radius) must NOT snap back to
-    // the cursor: it keeps the popup where it sits and only re-clamps it
-    // on-screen. Without this, the first resize after opening lurches the window
-    // from the cursor across to the clamped edge, because ``place`` was
-    // re-deriving the position from the raw summon point every time rather than
-    // from where the window had settled.
-    const resummoned = changes['x'] || changes['y'] || changes['bounds'] || changes['memberIds'];
-    if (resummoned || changes['hoverThumbRadius']) {
-      if (resummoned && !this.dragged) {
-        this.left = this.x();
-        this.top = this.y();
-        // Hide the popup until it's re-clamped at the new anchor, so it doesn't
-        // flash at the raw summon point (which may be half off-screen) first.
-        this.placed = false;
-      }
-      // Measure + clamp after the new content lays out.
-      setTimeout(() => this.place());
-    }
-  }
-
   ngAfterViewInit(): void {
     this.subs.push(
       // Names/thumbnails arrive asynchronously; repaint the visible rows.
       this.metadataCache.version$.subscribe(() => this.cdr.markForCheck()),
     );
     this.settingsState.load();
-    this.ensureScrollSubscription();
     this.prefetchVisible();
     setTimeout(() => this.place());
   }
 
-  ngAfterViewChecked(): void {
-    this.ensureScrollSubscription();
-  }
-
   /**
-   * (Re-)subscribe the member grid's scroll-driven thumbnail prefetch,
-   * keyed to the viewport *instance*.  The viewport lives behind the
-   * template's ``@if (!previewOnly)``, and the popup is reused across
-   * summons while open (right-clicking another bin only swaps inputs), so
-   * a singleton→multi transition creates a brand-new viewport whose stream
-   * the one-shot ``ngAfterViewInit`` wiring never subscribed — leaving
-   * everything beyond the initially-prefetched window as ``□`` placeholders
-   * with no recovery.  Mirrors media-list's viewport re-wire pattern.
+   * (Re-)subscribe the member grid's scroll-driven thumbnail prefetch, keyed
+   * to the viewport *instance*. Driven by the constructor effect tracking the
+   * ``viewport`` view query, so a singleton→multi transition (which creates a
+   * brand-new viewport behind ``@if (!previewOnly)``) re-wires immediately —
+   * a one-shot subscription would leave everything beyond the
+   * initially-prefetched window as ``□`` placeholders with no recovery.
    */
   private ensureScrollSubscription(): void {
-    const vp = this.viewport ?? null;
+    const vp = this.viewport() ?? null;
     if (!vp || this.scrollSubscribedViewport === vp) return;
     this.scrollSubscribedViewport = vp;
     this.scrollSub?.unsubscribe();
@@ -548,7 +574,7 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
       // being viewed (the representative until the user hovers/arrows elsewhere)
       // so it stays in view across the size change, then clamp.
       setTimeout(() => {
-        this.viewport?.checkViewportSize();
+        this.viewport()?.checkViewportSize();
         this.centreRowFor(this.focusIndex());
         this.place();
       });
@@ -590,7 +616,7 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
    *  didn't take, retry on the next frame (bounded) until the viewport is
    *  scrollable and the target sticks. */
   private centreRowFor(index: number, attempt = 0): void {
-    const vp = this.viewport;
+    const vp = this.viewport();
     if (!vp) return;
     const row = Math.floor(index / Math.max(1, this.columns));
     const viewportH = vp.elementRef.nativeElement.clientHeight || this.gridHeight;
@@ -847,7 +873,7 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
    * from fighting {@link scrollRowIntoView}, which already positioned the row.
    */
   private focusEntry(index: number, attempt = 0): void {
-    const panel = this.panelRef?.nativeElement;
+    const panel = this.panelRef()?.nativeElement;
     const id = this.ids[index];
     if (!panel || id == null) return;
     requestAnimationFrame(() => {
@@ -876,7 +902,7 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
   /** Scroll the grid the minimum amount so the row holding ``index`` is fully
    *  visible (no-op when it already is). */
   private scrollRowIntoView(index: number): void {
-    const vp = this.viewport;
+    const vp = this.viewport();
     if (!vp) return;
     const row = Math.floor(index / Math.max(1, this.columns));
     const rowTop = row * this.rowSize;
@@ -1034,7 +1060,7 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
     // ``playing``/``canplay`` event clears it.
     this.nowPlaying.emit({ mediaId: id, waveUrl: this.thumbnailUrl(id), loading: true });
     setTimeout(() => {
-      const el = this.audioRef?.nativeElement;
+      const el = this.audioRef()?.nativeElement;
       if (!el) return;
       this.attachBufferingListeners(el);
       el.volume = this.volume();
@@ -1079,7 +1105,7 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
 
   private stopAudio(): void {
     const wasPlaying = this.audioSrc !== '';
-    const el = this.audioRef?.nativeElement;
+    const el = this.audioRef()?.nativeElement;
     if (el) {
       clearClipWindow(el);
       el.pause();
@@ -1150,7 +1176,8 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
 
   /** Re-clamp the popup to stay fully on-screen, anchored at its *current*
    *  position. The summon point seeds {@link left}/{@link top} once, when the
-   *  popup opens (and on a genuine re-summon — see {@link ngOnChanges}); from
+   *  popup opens (and on a genuine re-summon — see the constructor's summon
+   *  effect); from
    *  then on every re-clamp (size changes, the settings-driven detail-image
    *  resize, region changes) keeps the popup where it sits rather than snapping
    *  back to the cursor. The computed clamp derives the popup size from known
@@ -1161,7 +1188,7 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
     // Before the panel exists there's nothing to measure/clamp; a later place()
     // call (e.g. from ngAfterViewInit) will run once it's in the DOM. Staying
     // unplaced keeps the popup hidden until then rather than showing it unclamped.
-    if (!this.panelRef?.nativeElement) return;
+    if (!this.panelRef()?.nativeElement) return;
     this.clampInto(this.left, this.top);
     // Flush the freshly-clamped position and the size caps clampInto just set
     // (bodyCapPx/previewCapPx/maxWidthPx) to the DOM. This runs in a bare
@@ -1198,7 +1225,7 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
    *  image's bottom with it) on-screen. Purely corrective: a no-op when the
    *  computed clamp already fits. */
   private nudgeOnScreen(): void {
-    const panel = this.panelRef?.nativeElement;
+    const panel = this.panelRef()?.nativeElement;
     if (!panel) return;
     const rect = panel.getBoundingClientRect();
     const b = this.bounds();
@@ -1267,7 +1294,7 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
    *  settled. When the region is too short to hold the full popup, the body is
    *  capped (and scrolls internally) so the popup still fits top-to-bottom. */
   private clampInto(desiredLeft: number, desiredTop: number): void {
-    const panel = this.panelRef?.nativeElement;
+    const panel = this.panelRef()?.nativeElement;
     if (!panel) return;
     const b = this.bounds();
     // Visible region = canvas rect clipped to the viewport. Clipping to the
@@ -1279,7 +1306,7 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
     const regionBottom = Math.min(b ? b.bottom : window.innerHeight, window.innerHeight);
     // The header is always rendered (not virtualized), so its height is reliable
     // immediately; fall back to a sane default before the view exists.
-    const headerH = this.headerRef?.nativeElement.getBoundingClientRect().height ?? 37;
+    const headerH = this.headerRef()?.nativeElement.getBoundingClientRect().height ?? 37;
     // Squeeze the scrolling body to whatever vertical room the region leaves, so
     // a short canvas can't make the popup taller than what's visible. The caps
     // below bound the body *content* height ({@link bodyHeight}), so the room they
@@ -1338,7 +1365,7 @@ export class BrowseBinPopupComponent implements AfterViewChecked, AfterViewInit,
   private prefetchVisible(): void {
     if (this.ids.length === 0) return;
     const cols = this.columns;
-    const vp = this.viewport;
+    const vp = this.viewport();
     if (!vp) {
       const window = Math.ceil(MAX_BODY_PX / this.rowSize) * cols + PREFETCH_BUFFER;
       this.metadataCache.ensureLoaded(this.ids.slice(0, window));

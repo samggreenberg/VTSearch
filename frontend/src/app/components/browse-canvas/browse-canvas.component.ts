@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, NgZone, OnChanges, OnDestroy, OnInit, output, SimpleChanges, ViewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, NgZone, OnDestroy, output, untracked, viewChild } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
@@ -79,7 +79,7 @@ const HOVER_RADIUS_SCALE = 1.38;
   templateUrl: './browse-canvas.component.html',
   styleUrl: './browse-canvas.component.scss',
 })
-export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
+export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   private ngZone = inject(NgZone);
   private tileCache = inject(TileCacheService);
   private activeContext = inject(ActiveContextService);
@@ -87,7 +87,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private selection = inject(BrowseSelectionService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
 
-  @ViewChild('canvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
+  private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
   readonly meta = input<ProjectionMeta | null>(null);
   /**
    * Active dataset media type. For thumbnail types (``usesThumbnails`` —
@@ -495,6 +495,71 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.requestRedraw();
   });
 
+  // The input→redraw dispatch that used to live in ngOnChanges (signal inputs
+  // don't fire it). Each effect tracks exactly the inputs its old ngOnChanges
+  // arm keyed on and runs the body untracked, so incidental signal reads inside
+  // (selection state, meta re-reads, service calls) can't widen its triggers.
+
+  /** Fresh meta re-bins (new projection, bin-shape toggle, cull). */
+  private readonly metaChanged = effect(() => {
+    const meta = this.meta();
+    if (!meta) return;
+    untracked(() => {
+      // Any zoom transition was easing the *old* data, so abandon it; the
+      // redraw below paints the new state. A boundary settle would spring
+      // toward the old bounds, so stop it too — as would a directional glide.
+      this.cancelZoomAnim();
+      this.cancelSettle();
+      this.cancelPanAnim();
+      this.tileCache.setProjectionId(meta.projection_id);
+      // A bin-shape toggle delivers fresh meta for the *same* projection id
+      // (hex and square share one UMAP layout). In that case keep the current
+      // pan/zoom and just re-bin visually; only a genuinely new projection
+      // re-frames to data and drops stale representative thumbnails.
+      if (meta.projection_id !== this.lastProjectionId) {
+        this.lastProjectionId = meta.projection_id;
+        // A brand-new projection opens auto-fit: clear the user-framed flag so a
+        // saved cell size applied right after load re-fits to keep it all in view.
+        this.framedByUser = false;
+        this.thumbCache.clear();
+        this.thumbFailed.clear();
+        this.tintedThumbCache.clear();
+        // A new projection (media-type switch / rebuild) re-lays-out every item,
+        // so the old selection no longer maps to what's on screen — drop it. A
+        // bin-shape toggle keeps the same projection id and selection, since the
+        // ids are shape-independent. A Re-project of the items already on screen
+        // arms the survive mark instead: the ids are unchanged (only positions
+        // move), so the id-based selection stays coherent and is kept.
+        if (!this.selection.consumeSurviveProjectionChange()) {
+          this.selection.clear();
+        }
+        this.fitToData();
+      } else {
+        this.updateActiveLevel();
+      }
+      this.requestRedraw();
+    });
+  });
+
+  /** Entering region-select mode: drop any hover preview/highlight that was
+   *  showing, since hover is suppressed while the mode is on. */
+  private readonly marqueeModeChanged = effect(() => {
+    if (this.marqueeMode()) untracked(() => this.clearHover());
+  });
+
+  /** Repaint-only inputs: a colormap change only affects flat (non-thumbnail)
+   *  shading; the pile-thumbnail border only changes how thumbnail cells are
+   *  stroked; labels arriving (they load async, after the tiles) or the
+   *  signpost layer toggling only changes the sign overlay. A coalesced repaint
+   *  picks any of them up without re-binning or re-fetching tiles. */
+  private readonly repaintInputsChanged = effect(() => {
+    this.colormap();
+    this.thumbnailBorder();
+    this.labels();
+    this.signposts();
+    untracked(() => this.requestRedraw());
+  });
+
   /** True when cells should be painted with the central item's thumbnail. */
   private get thumbnailMode(): boolean {
     return this.mediaTypeCaps.usesThumbnails(this.mediaType());
@@ -534,8 +599,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     return this.transform.zoom;
   }
 
-  ngOnInit(): void {
-    this.ctx = this.canvasRef.nativeElement.getContext('2d')!;
+  ngAfterViewInit(): void {
+    this.ctx = this.canvasRef().nativeElement.getContext('2d')!;
 
     this.tileLoadSub = this.tileCache.tileLoaded$.subscribe(() => {
       this.requestRedraw();
@@ -559,7 +624,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.resizeObserver = new ResizeObserver(() => {
       this.ngZone.runOutsideAngular(() => this.resize());
     });
-    this.resizeObserver.observe(this.canvasRef.nativeElement.parentElement!);
+    this.resizeObserver.observe(this.canvasRef().nativeElement.parentElement!);
 
     // A pure devicePixelRatio change (monitor-to-monitor drag, browser zoom, OS
     // scaling) doesn't touch the element box, so the ResizeObserver stays quiet;
@@ -582,7 +647,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     });
 
     this.ngZone.runOutsideAngular(() => {
-      const el = this.canvasRef.nativeElement;
+      const el = this.canvasRef().nativeElement;
       el.addEventListener('mousedown', this.boundMouseDown);
       el.addEventListener('wheel', this.boundWheel, { passive: false });
       el.addEventListener('mousemove', this.boundCanvasMouseMove);
@@ -590,68 +655,6 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       el.addEventListener('dblclick', this.boundDblClick);
       el.addEventListener('contextmenu', this.boundContextMenu);
     });
-  }
-
-  ngOnChanges(changes: SimpleChanges): void {
-    const meta = this.meta();
-    if (changes['meta'] && meta) {
-      // Fresh meta re-bins (new projection, bin-shape toggle, cull). Any zoom
-      // transition was easing the *old* data, so abandon it; the redraw below
-      // paints the new state. A boundary settle would spring toward the old
-      // bounds, so stop it too — as would a directional pan glide.
-      this.cancelZoomAnim();
-      this.cancelSettle();
-      this.cancelPanAnim();
-      this.tileCache.setProjectionId(meta.projection_id);
-      // A bin-shape toggle delivers fresh meta for the *same* projection id
-      // (hex and square share one UMAP layout). In that case keep the current
-      // pan/zoom and just re-bin visually; only a genuinely new projection
-      // re-frames to data and drops stale representative thumbnails.
-      if (meta.projection_id !== this.lastProjectionId) {
-        this.lastProjectionId = meta.projection_id;
-        // A brand-new projection opens auto-fit: clear the user-framed flag so a
-        // saved cell size applied right after load re-fits to keep it all in view.
-        this.framedByUser = false;
-        this.thumbCache.clear();
-        this.thumbFailed.clear();
-        this.tintedThumbCache.clear();
-        // A new projection (media-type switch / rebuild) re-lays-out every item,
-        // so the old selection no longer maps to what's on screen — drop it. A
-        // bin-shape toggle keeps the same projection id and selection, since the
-        // ids are shape-independent. A Re-project of the items already on screen
-        // arms the survive mark instead: the ids are unchanged (only positions
-        // move), so the id-based selection stays coherent and is kept.
-        if (!this.selection.consumeSurviveProjectionChange()) {
-          this.selection.clear();
-        }
-        this.fitToData();
-      } else {
-        this.updateActiveLevel();
-      }
-      this.requestRedraw();
-    }
-    // Entering region-select mode: drop any hover preview/highlight that was
-    // showing, since hover is suppressed while the mode is on.
-    if (changes['marqueeMode'] && this.marqueeMode()) {
-      this.clearHover();
-    }
-    // A colormap change only affects flat (non-thumbnail) shading; repaint.
-    if (changes['colormap'] && !changes['colormap'].firstChange) {
-      this.requestRedraw();
-    }
-    // The pile-thumbnail border width only changes how thumbnail cells are
-    // stroked; a repaint picks it up without re-binning or re-fetching tiles.
-    if (changes['thumbnailBorder'] && !changes['thumbnailBorder'].firstChange) {
-      this.requestRedraw();
-    }
-    // Labels arriving (they load async, after the tiles) or the signpost layer
-    // toggling only changes the sign overlay; a repaint picks either up.
-    if (
-      (changes['labels'] && !changes['labels'].firstChange) ||
-      (changes['signposts'] && !changes['signposts'].firstChange)
-    ) {
-      this.requestRedraw();
-    }
   }
 
   ngOnDestroy(): void {
@@ -674,13 +677,18 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       else if (typeof cancelIdleCallback === 'function') cancelIdleCallback(this.thumbPrefetchHandle);
     }
     if (this.firstViewTimer !== null) clearTimeout(this.firstViewTimer);
-    const el = this.canvasRef.nativeElement;
-    el.removeEventListener('mousedown', this.boundMouseDown);
-    el.removeEventListener('wheel', this.boundWheel);
-    el.removeEventListener('mousemove', this.boundCanvasMouseMove);
-    el.removeEventListener('mouseleave', this.boundCanvasMouseLeave);
-    el.removeEventListener('dblclick', this.boundDblClick);
-    el.removeEventListener('contextmenu', this.boundContextMenu);
+    // `ctx` is only assigned in ngAfterViewInit — the same place the canvas
+    // listeners are attached — so it doubles as "the view query resolved" and
+    // keeps a destroy-before-render from reading the required query.
+    if (this.ctx) {
+      const el = this.canvasRef().nativeElement;
+      el.removeEventListener('mousedown', this.boundMouseDown);
+      el.removeEventListener('wheel', this.boundWheel);
+      el.removeEventListener('mousemove', this.boundCanvasMouseMove);
+      el.removeEventListener('mouseleave', this.boundCanvasMouseLeave);
+      el.removeEventListener('dblclick', this.boundDblClick);
+      el.removeEventListener('contextmenu', this.boundContextMenu);
+    }
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
     this.thumbCache.clear();
@@ -696,12 +704,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.cancelZoomAnim();
     this.cancelSettle();
     this.cancelPanAnim();
-    const el = this.canvasRef.nativeElement.parentElement!;
+    const el = this.canvasRef().nativeElement.parentElement!;
     const rect = el.getBoundingClientRect();
     this.dpr = window.devicePixelRatio || 1;
     this.width = rect.width;
     this.height = rect.height;
-    const canvas = this.canvasRef.nativeElement;
+    const canvas = this.canvasRef().nativeElement;
     canvas.width = this.width * this.dpr;
     canvas.height = this.height * this.dpr;
     canvas.style.width = `${this.width}px`;
@@ -914,7 +922,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * tracks the live interpolated transform, so the hand-off is seamless).
    */
   private startZoomAnim(): void {
-    const canvasEl = this.canvasRef.nativeElement;
+    const canvasEl = this.canvasRef().nativeElement;
     this.animFrom = { ...this.displayedTransform };
     this.animTo = { ...this.transform };
 
@@ -2236,7 +2244,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    *  so it never fires while browsing bin popups. */
   private onContextMenu(event: MouseEvent): void {
     event.preventDefault();
-    const rect = this.canvasRef.nativeElement.getBoundingClientRect();
+    const rect = this.canvasRef().nativeElement.getBoundingClientRect();
     const mx = event.clientX - rect.left;
     const my = event.clientY - rect.top;
     // Target the bin the cursor is already hovering first, falling back to a
@@ -2297,7 +2305,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   /** Canvas-relative ``[x, y]`` for a mouse event. */
   private canvasXY(event: MouseEvent): [number, number] {
-    const rect = this.canvasRef.nativeElement.getBoundingClientRect();
+    const rect = this.canvasRef().nativeElement.getBoundingClientRect();
     return [event.clientX - rect.left, event.clientY - rect.top];
   }
 
@@ -2417,7 +2425,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       return;
     }
 
-    const canvasEl = this.canvasRef.nativeElement;
+    const canvasEl = this.canvasRef().nativeElement;
     // Freeze from the frame on screen now (mid-glide that's the interpolated
     // centre, so a burst of presses chains seamlessly) and ease to `target`.
     this.panAnimFrom = { ...this.transform };
@@ -2666,7 +2674,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // still down) keeps the in-progress gesture coherent; the wheel resumes the
     // instant the drag ends.
     if (this.isPanning || this.isMarquee) return;
-    const rect = this.canvasRef.nativeElement.getBoundingClientRect();
+    const rect = this.canvasRef().nativeElement.getBoundingClientRect();
     const mx = event.clientX - rect.left;
     const my = event.clientY - rect.top;
     const wheelFactor = this.wheelZoomFactor();
@@ -2679,7 +2687,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // region-select mode: the cursor is a crosshair for drawing a box, so a
     // hover preview/highlight popping up under it would just be noise.
     if (this.isPanning || this.isMarquee || this.marqueeMode()) return;
-    const rect = this.canvasRef.nativeElement.getBoundingClientRect();
+    const rect = this.canvasRef().nativeElement.getBoundingClientRect();
     const mx = event.clientX - rect.left;
     const my = event.clientY - rect.top;
     this.lastMouseX = mx;

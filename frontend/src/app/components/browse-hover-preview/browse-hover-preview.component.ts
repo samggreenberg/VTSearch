@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input, OnChanges, OnDestroy, output, signal, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, input, OnDestroy, output, signal, untracked } from '@angular/core';
 
 import { ActiveContextService } from '../../services/active-context.service';
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
@@ -45,7 +45,7 @@ const AUDIO_DWELL_MS = 200;
   templateUrl: './browse-hover-preview.component.html',
   styleUrl: './browse-hover-preview.component.scss',
 })
-export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
+export class BrowseHoverPreviewComponent implements OnDestroy {
   private activeContext = inject(ActiveContextService);
   private metadataCache = inject(MediaMetadataCacheService);
 
@@ -65,6 +65,14 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   private nowPlayingWaveUrl = '';
 
   constructor() {
+    // The hover input drives the whole preview: show over a cell, hide on
+    // null. (The old ngOnChanges arm — signal inputs don't fire it.) The body
+    // runs untracked so its mediaType/metadata reads don't widen the trigger
+    // beyond the hover itself.
+    effect(() => {
+      const hover = this.hover();
+      untracked(() => (hover ? this.show(hover) : this.hide()));
+    });
     // Keep the live element's volume in sync when the toolbar slider moves
     // mid-playback; starting a clip also seeds it.
     effect(() => {
@@ -93,17 +101,6 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   private dwellTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingMediaId: number | null = null;
   private playingMediaId: number | null = null;
-
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['hover']) {
-      const hover = this.hover();
-      if (hover) {
-        this.show(hover);
-      } else {
-        this.hide();
-      }
-    }
-  }
 
   ngOnDestroy(): void {
     this.cancelDwell();

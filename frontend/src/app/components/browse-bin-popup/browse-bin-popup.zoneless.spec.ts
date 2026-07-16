@@ -323,20 +323,25 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
 
 describe('BrowseBinPopupComponent (scroll-prefetch re-wiring)', () => {
   it('re-subscribes prefetch when the member-grid viewport is recreated', () => {
-    // Regression: the popup subscribed scrolledIndexChange only in
-    // ngAfterViewInit, but the viewport lives behind @if (!previewOnly) and
-    // the popup is reused across summons (right-clicking another bin only
-    // swaps inputs). A singleton→multi transition created a fresh viewport
-    // whose stream was never subscribed, so scrolling the member grid never
-    // hydrated thumbnails beyond the initially-prefetched window.
+    // Regression: the popup subscribed scrolledIndexChange only once, but the
+    // viewport lives behind @if (!previewOnly) and the popup is reused across
+    // summons (right-clicking another bin only swaps inputs). A singleton→multi
+    // transition created a fresh viewport whose stream was never subscribed, so
+    // scrolling the member grid never hydrated thumbnails beyond the
+    // initially-prefetched window. In production a constructor effect tracking
+    // the `viewport` view-query signal re-runs ensureScrollSubscription
+    // whenever the instance changes; here the query is stubbed as a plain
+    // function and the method driven directly, since the virtualized grid
+    // doesn't render reliably under jsdom.
     const component = Object.create(
       BrowseBinPopupComponent.prototype,
     ) as BrowseBinPopupComponent;
     const state = component as unknown as {
-      viewport?: unknown;
+      viewport: () => unknown;
       scrollSub: unknown;
       scrollSubscribedViewport: unknown;
       prefetchVisible(): void;
+      ensureScrollSubscription(): void;
     };
     state.scrollSub = null;
     state.scrollSubscribedViewport = null;
@@ -344,21 +349,21 @@ describe('BrowseBinPopupComponent (scroll-prefetch re-wiring)', () => {
     state.prefetchVisible = prefetchSpy;
 
     const vp1 = { scrolledIndexChange: new Subject<number>() };
-    state.viewport = vp1;
-    component.ngAfterViewChecked();
+    state.viewport = () => vp1;
+    state.ensureScrollSubscription();
     vp1.scrolledIndexChange.next(0);
     const callsAfterFirstScroll = prefetchSpy.mock.calls.length;
     expect(callsAfterFirstScroll).toBeGreaterThan(0);
 
     // Viewport destroyed (previewOnly summon) …
     vp1.scrolledIndexChange.complete();
-    state.viewport = undefined;
-    component.ngAfterViewChecked();
+    state.viewport = () => undefined;
+    state.ensureScrollSubscription();
 
     // … then a new multi-member summon creates a fresh instance.
     const vp2 = { scrolledIndexChange: new Subject<number>() };
-    state.viewport = vp2;
-    component.ngAfterViewChecked();
+    state.viewport = () => vp2;
+    state.ensureScrollSubscription();
 
     const callsBeforeSecondScroll = prefetchSpy.mock.calls.length;
     vp2.scrolledIndexChange.next(2);
@@ -387,7 +392,8 @@ describe('BrowseBinPopupComponent (keyboard focus sync)', () => {
     columns: number;
     previewId: number | null;
     cdr: { markForCheck: () => void };
-    panelRef?: { nativeElement: { querySelector: (sel: string) => HTMLElement | null } };
+    // The `panelRef` view query is a signal; stub it as a plain function.
+    panelRef?: () => { nativeElement: { querySelector: (sel: string) => HTMLElement | null } };
     mediaType: () => string;
     mediaTypeCaps: { usesThumbnails: (t: string) => boolean };
     scrollRowIntoView: (index: number) => void;
@@ -424,12 +430,12 @@ describe('BrowseBinPopupComponent (keyboard focus sync)', () => {
   it('moves DOM focus to the arrow-walked entry', () => {
     const { component, state } = makeGridComponent();
     const walked = { focus: vi.fn() } as unknown as HTMLElement;
-    state.panelRef = {
+    state.panelRef = () => ({
       nativeElement: {
         // Only the entry for id 20 (the ArrowRight target from index 0) exists.
         querySelector: (sel: string) => (sel.includes('"20"') ? walked : null),
       },
-    };
+    });
 
     state.moveFocus(1, 0);
 
@@ -443,7 +449,7 @@ describe('BrowseBinPopupComponent (keyboard focus sync)', () => {
     const { state } = makeGridComponent();
     const walked = { focus: vi.fn() } as unknown as HTMLElement;
     let calls = 0;
-    state.panelRef = {
+    state.panelRef = () => ({
       nativeElement: {
         // Absent for the first two frames (row still virtualizing in), then in.
         querySelector: (sel: string) => {
@@ -451,7 +457,7 @@ describe('BrowseBinPopupComponent (keyboard focus sync)', () => {
           return ++calls >= 3 ? walked : null;
         },
       },
-    };
+    });
 
     state.moveFocus(1, 0);
 
