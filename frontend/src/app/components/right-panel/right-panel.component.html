@@ -1,7 +1,7 @@
 <aside class="panel-right" aria-label="Labels">
   <vt-detector-context-bar
-    [visible]="!!trainMode"
-    [detectorName]="trainMode?.model?.name ?? ''"
+    [visible]="!!trainMode()"
+    [detectorName]="trainMode()?.model?.name ?? ''"
     (renamed)="onDetectorRenamed($event)"
   />
 
@@ -55,7 +55,7 @@
       [ids]="goodDisplayIds"
       [headingLabel]="mode() === 'find' ? 'Verified Good' : null"
       [foldedNote]="mode() === 'find' ? ((unverifiedGoodCount | number) + ' Unverified Good') : null"
-      [medias]="medias"
+      [medias]="medias()"
       [clickTimes]="clickTimes()"
       [learnedScores]="learnedScores()"
       [regionBoxes]="goodRegionBoxes()"
@@ -96,7 +96,7 @@
       [ids]="badDisplayIds"
       [headingLabel]="mode() === 'find' ? 'Verified Bad' : null"
       [foldedNote]="mode() === 'find' ? ((unverifiedBadCount | number) + ' Unverified Bad') : null"
-      [medias]="medias"
+      [medias]="medias()"
       [clickTimes]="clickTimes()"
       [learnedScores]="learnedScores()"
       [sortMode]="sortMode"
@@ -145,7 +145,7 @@
 
 @if (showExport) {
   <vt-export-modal
-    [detectorName]="trainMode?.model?.name ?? ''"
+    [detectorName]="trainMode()?.model?.name ?? ''"
     (closed)="showExport = false"
     (exported)="showExport = false"
   />

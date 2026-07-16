@@ -8,10 +8,10 @@
   >
     <div
       class="vote-grid-row"
-      *cdkVirtualFor="let row of rows; trackBy: trackByRow"
+      *cdkVirtualFor="let row of rows(); trackBy: trackByRow"
       [style.height.px]="rowHeight"
       [style.--grid-goal-width]="gridGoalWidth() + 'px'"
-      [style.grid-template-columns]="'repeat(' + columns + ', var(--grid-goal-width, 80px))'"
+      [style.grid-template-columns]="'repeat(' + columns() + ', var(--grid-goal-width, 80px))'"
     >
       @for (entry of row; track entry.key) {
         <ng-container [ngTemplateOutlet]="cell" [ngTemplateOutletContext]="{ $implicit: entry }" />

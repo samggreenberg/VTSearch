@@ -3,7 +3,7 @@
     {{ label() === 'good' ? 'Goods' : 'Bads' }} ({{ elements().length | number }})
   </h3>
   <vt-vote-grid
-    [entries]="sortedEntries"
+    [entries]="sortedEntries()"
     [label]="label()"
     [gridGoalWidth]="gridGoalWidth()"
     [focusMode]="focusMode()"

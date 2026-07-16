@@ -168,7 +168,7 @@ describe('RightPanelComponent', () => {
   });
 
   it('should rename detector via detectors-registry-api', async () => {
-    component.trainMode = { model: { name: 'Old', registry_id: 'r1' } };
+    fixture.componentRef.setInput('trainMode', { model: { name: 'Old', registry_id: 'r1' } });
     await flushInit();
 
     component.onDetectorRenamed('New Name');
@@ -177,12 +177,12 @@ describe('RightPanelComponent', () => {
     expect(req.request.body).toEqual({ name: 'New Name' });
     req.flush({});
 
-    expect(component.trainMode.model.name).toBe('New Name');
+    expect(component.trainMode()!.model.name).toBe('New Name');
     cleanup();
   });
 
   it('should not rename if no registry_id', async () => {
-    component.trainMode = { model: { name: 'Old' } };
+    fixture.componentRef.setInput('trainMode', { model: { name: 'Old' } });
     await flushInit();
 
     component.onDetectorRenamed('New');
@@ -190,7 +190,7 @@ describe('RightPanelComponent', () => {
   });
 
   it('should not rename if no trainMode', async () => {
-    component.trainMode = null;
+    fixture.componentRef.setInput('trainMode', null);
     await flushInit();
 
     component.onDetectorRenamed('New');
@@ -198,7 +198,7 @@ describe('RightPanelComponent', () => {
   });
 
   it('should render detector context bar when trainMode set', async () => {
-    component.trainMode = { model: { name: 'Test Detector', registry_id: 'r1' } };
+    fixture.componentRef.setInput('trainMode', { model: { name: 'Test Detector', registry_id: 'r1' } });
     await flushInit();
     TestBed.tick();
 
@@ -208,7 +208,7 @@ describe('RightPanelComponent', () => {
   });
 
   it('should not render detector context bar when trainMode is null', async () => {
-    component.trainMode = null;
+    fixture.componentRef.setInput('trainMode', null);
     await flushInit();
     TestBed.tick();
 

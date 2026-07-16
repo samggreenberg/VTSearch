@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, input, OnChanges, output, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import type { DetectorLabelView } from '../../../generated/api-client/models/detector-label-view';
 import { LabelSortMode } from '../label-sort/label-sort.component';
@@ -18,7 +18,7 @@ interface SortedElement extends DetectorLabelView, VoteGridEntry {
   templateUrl: './labelset-list.component.html',
   styleUrls: ['../label-list/label-list.component.scss'],
 })
-export class LabelsetListComponent implements OnChanges {
+export class LabelsetListComponent {
   private detectorsCrudApi = inject(DetectorsCrudApiService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
 
@@ -34,11 +34,9 @@ export class LabelsetListComponent implements OnChanges {
     vote: 'good' | 'bad';
 }>();
 
-  sortedEntries: SortedElement[] = [];
-
-  ngOnChanges(_changes: SimpleChanges): void {
-    this.sortedEntries = this.buildSorted();
-  }
+  // Recomputes when any of the inputs it reads change (elements, label,
+  // modelName, sortMode); signal inputs don't fire ngOnChanges.
+  readonly sortedEntries = computed<SortedElement[]>(() => this.buildSorted());
 
   private buildSorted(): SortedElement[] {
     const entries: SortedElement[] = this.elements().map((e) => ({

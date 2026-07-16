@@ -4,7 +4,7 @@
   <select
     id="label-sort-select"
     class="form-select form-select--compact"
-    [ngModel]="mode"
+    [ngModel]="mode()"
     (ngModelChange)="onSortChange($event)"
     title="Order labeled items by time, name, detector confidence, or ID"
   >

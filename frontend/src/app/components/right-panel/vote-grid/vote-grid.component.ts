@@ -3,14 +3,15 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  computed,
+  effect,
   inject,
   input,
   NgZone,
-  OnChanges,
   OnDestroy,
   output,
-  SimpleChanges,
-  ViewChild,
+  signal,
+  viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
@@ -72,7 +73,7 @@ const MIN_ROW_HEIGHT = 24;
   templateUrl: './vote-grid.component.html',
   styleUrl: './vote-grid.component.scss',
 })
-export class VoteGridComponent implements OnChanges, AfterViewChecked, OnDestroy {
+export class VoteGridComponent implements AfterViewChecked, OnDestroy {
   private cdr = inject(ChangeDetectorRef);
   private zone = inject(NgZone);
 
@@ -87,12 +88,20 @@ export class VoteGridComponent implements OnChanges, AfterViewChecked, OnDestroy
     vote: 'good' | 'bad';
 }>();
 
-  @ViewChild(CdkVirtualScrollViewport) virtualViewport?: CdkVirtualScrollViewport;
+  readonly virtualViewport = viewChild(CdkVirtualScrollViewport);
 
-  /** ``entries`` chunked into rows of ``columns`` cells for virtual scrolling. */
-  rows: VoteGridEntry[][] = [];
   /** Number of cells per virtualized row, derived from the viewport width. */
-  columns = 1;
+  readonly columns = signal(1);
+  /** ``entries`` chunked into rows of ``columns`` cells for virtual scrolling. */
+  readonly rows = computed<VoteGridEntry[][]>(() => {
+    const cols = Math.max(1, this.columns());
+    const entries = this.entries();
+    const rows: VoteGridEntry[][] = [];
+    for (let i = 0; i < entries.length; i += cols) {
+      rows.push(entries.slice(i, i + cols));
+    }
+    return rows;
+  });
   /** Measured stride of one virtualized row (px); fed to CDK as ``itemSize``. */
   rowHeight = ROW_HEIGHT_FALLBACK;
 
@@ -103,29 +112,33 @@ export class VoteGridComponent implements OnChanges, AfterViewChecked, OnDestroy
   private observedViewportEl?: HTMLElement;
   /** True once ``rowHeight`` has been measured from a real rendered cell. */
   private rowHeightMeasured = false;
+  /** Previous goal width, tracked so the effect only re-measures on a real change. */
+  private prevGridGoalWidth = this.gridGoalWidth();
+
+  constructor() {
+    effect(() => {
+      const gw = this.gridGoalWidth();
+      // A wider/narrower goal width changes how many cells fit per row and the
+      // height of each cell, so recompute columns and re-measure the stride.
+      // Skip the initial run (no prior layout to invalidate).
+      if (gw !== this.prevGridGoalWidth) {
+        this.prevGridGoalWidth = gw;
+        this.rowHeightMeasured = false;
+        this.recomputeColumns();
+      }
+    });
+  }
 
   /** Whether the pile is large enough to render through the CDK viewport. */
   get useVirtual(): boolean {
     return this.entries().length > PILE_VIRTUAL_THRESHOLD;
   }
 
-  ngOnChanges(changes: SimpleChanges): void {
-    // A wider/narrower goal width changes how many cells fit per row and the
-    // height of each cell, so recompute columns and re-measure the stride.
-    if (changes['gridGoalWidth'] && !changes['gridGoalWidth'].firstChange) {
-      this.rowHeightMeasured = false;
-      this.recomputeColumns();
-    }
-    if (changes['entries'] || changes['gridGoalWidth']) {
-      this.rebuildRows();
-    }
-  }
-
   ngAfterViewChecked(): void {
     // Keep the viewport measured while virtualizing: a ResizeObserver tracks
     // width (→ column count) and the first rendered cell's height (→ CDK row
     // stride). Tear it down when the pile shrinks back to plain DOM.
-    if (this.useVirtual && this.virtualViewport) {
+    if (this.useVirtual && this.virtualViewport()) {
       this.setupViewport();
     } else if (this.observedViewportEl) {
       this.resizeObserver?.disconnect();
@@ -138,34 +151,24 @@ export class VoteGridComponent implements OnChanges, AfterViewChecked, OnDestroy
     this.resizeObserver?.disconnect();
   }
 
-  private rebuildRows(): void {
-    const cols = Math.max(1, this.columns);
-    const entries = this.entries();
-    const rows: VoteGridEntry[][] = [];
-    for (let i = 0; i < entries.length; i += cols) {
-      rows.push(entries.slice(i, i + cols));
-    }
-    this.rows = rows;
-  }
-
   /**
    * Recompute how many cells fit across the viewport. Returns ``true`` when
-   * the column count changed (so callers know to rebuild the rows).
+   * the column count changed (so callers know to re-measure).
    */
   private recomputeColumns(): boolean {
-    const el = this.virtualViewport?.elementRef.nativeElement;
+    const el = this.virtualViewport()?.elementRef.nativeElement;
     if (!el) return false;
     const inner = el.clientWidth;
     if (inner <= 0) return false;
     const cols = Math.max(1, Math.floor((inner + GRID_GAP_PX) / (this.gridGoalWidth() + GRID_GAP_PX)));
-    if (cols === this.columns) return false;
-    this.columns = cols;
+    if (cols === this.columns()) return false;
+    this.columns.set(cols);
     return true;
   }
 
   /** Observe the viewport for width/height changes (runs outside Angular). */
   private setupViewport(): void {
-    const vp = this.virtualViewport?.elementRef.nativeElement;
+    const vp = this.virtualViewport()?.elementRef.nativeElement;
     if (!vp || this.observedViewportEl === vp) {
       // Already observing the right element. Re-measure only until the row
       // height has been captured from a real cell, so the steady state doesn't
@@ -189,10 +192,11 @@ export class VoteGridComponent implements OnChanges, AfterViewChecked, OnDestroy
    * converges instead of looping: it only re-renders when something moved.
    */
   private measureLayout(): void {
+    // recomputeColumns() sets the columns signal, which re-derives the rows
+    // computed on its own; no explicit rebuild needed.
     let changed = this.recomputeColumns();
-    if (changed) this.rebuildRows();
 
-    const vp = this.virtualViewport?.elementRef.nativeElement;
+    const vp = this.virtualViewport()?.elementRef.nativeElement;
     const cell = vp?.querySelector('.vote-entry') as HTMLElement | null;
     if (cell) {
       const measured = Math.round(cell.getBoundingClientRect().height + GRID_GAP_PX);
