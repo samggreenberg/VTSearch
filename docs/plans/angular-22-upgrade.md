@@ -53,14 +53,27 @@ v22 breaking change is a no-op here (see the audit below).
 
 ## Optional follow-ups (each its own opt-in effort; not required by v22)
 
-- **Signal-API modernization** — the codebase still uses decorator
-  `@Input()`/`@Output()`/`@ViewChild` (~179 sites across 51 files) and
-  constructor injection (~28 sites) rather than signal
-  `input()`/`output()`/`viewChild()`/`model()` and `inject()`. These are **not**
-  a v22 requirement (available since v17.3, work fine in 21 and 22), so this is
-  a "modernize toward signal-first authoring" project decoupled from the version
-  bump. v22 ships schematics for it. Large diff; give it its own plan if picked
-  up.
+- **Signal-API modernization (umbrella)** — the codebase still uses decorator
+  `@Input()` (127 sites), `@Output()` (12), and `@ViewChild` (40) across ~60
+  component files rather than signal `input()`/`output()`/`viewChild()`/`model()`;
+  constructor injection is already gone bar one util site. These are **not** a
+  v22 requirement (available since v17.3, work fine in 21 and 22), so this is a
+  "modernize toward signal-first authoring" project decoupled from the version
+  bump. Sliced into per-cluster, ~PR-sized issues (each folds any coupled
+  `ngOnChanges` into `computed`/`effect`, since signal inputs don't fire
+  `ngOnChanges`), tagged with a recommended Claude model by difficulty:
+
+  - [ ] #2540 — Importer pickers (Fable 5)
+  - [ ] #2541 — Progress widgets (Fable 5)
+  - [ ] #2542 — Dashboard cards + create/combine modals (Fable 5 → Sonnet 5)
+  - [ ] #2543 — Importer modal shell (Sonnet 5)
+  - [ ] #2544 — Left panel · controls (Sonnet 5)
+  - [ ] #2545 — Right panel (Sonnet 5)
+  - [ ] #2546 — Top-level modals (Sonnet 5)
+  - [ ] #2547 — Misc shared leaf components (Sonnet 5)
+  - [ ] #2548 — Left panel · lists / virtual scroll (Sonnet 5 → Opus 4.8)
+  - [ ] #2549 — Center-panel media viewers (Opus 4.8)
+  - [ ] #2550 — Browse canvas cluster (Opus 4.8)
 
 <!-- item-sep -->
 
