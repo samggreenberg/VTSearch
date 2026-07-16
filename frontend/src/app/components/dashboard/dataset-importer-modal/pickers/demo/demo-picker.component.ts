@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, HostListener, Input, Output, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, HostListener, inject, signal, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ClipperChooserComponent, ClipperSelection } from '../../../clipper-chooser/clipper-chooser.component';
@@ -33,18 +33,18 @@ export class DemoPickerComponent {
   private importDefaults = inject(ImportDefaultsService);
   private cdr = inject(ChangeDetectorRef);
 
-  @Input() guessedMediaType = '';
-  @Input() guessedMediaEmbedder = '';
+  readonly guessedMediaType = input('');
+  readonly guessedMediaEmbedder = input('');
 
-  @Input() buildProjection = false;
-  @Output() buildProjectionChange = new EventEmitter<boolean>();
-  @Input() mergeNearDuplicates = false;
-  @Output() mergeNearDuplicatesChange = new EventEmitter<boolean>();
+  readonly buildProjection = input(false);
+  readonly buildProjectionChange = output<boolean>();
+  readonly mergeNearDuplicates = input(false);
+  readonly mergeNearDuplicatesChange = output<boolean>();
 
   /** Fired when the user commits the current row selection via the
    *  Import footer button; the parent forwards the payload to its own
    *  ``demoSelected`` output and closes the modal. */
-  @Output() demoDatasetSelected = new EventEmitter<DemoDatasetEntry & Record<string, unknown>>();
+  readonly demoDatasetSelected = output<DemoDatasetEntry & Record<string, unknown>>();
 
   readonly selectedImporter = signal<ImporterInfo | null>(null);
 
@@ -212,7 +212,7 @@ export class DemoPickerComponent {
     if (this.demoTabs().length > 0) {
       const needsSelect = !this.activeTab() || (solo && this.activeTab() !== solo);
       if (needsSelect) {
-        const guessed = this.guessedMediaType;
+        const guessed = this.guessedMediaType();
         const preferred = solo && this.demoTabs().includes(solo)
           ? solo
           : (guessed && this.demoTabs().includes(guessed)
@@ -262,7 +262,7 @@ export class DemoPickerComponent {
       next: (embedders) => {
         this.demoEmbedders.set(embedders);
         this.selectedDemoEmbedder.set(
-          this.importDefaults.pickInitialEmbedder(embedders, embeddableType, this.mediaTypes(), this.guessedMediaEmbedder),
+          this.importDefaults.pickInitialEmbedder(embedders, embeddableType, this.mediaTypes(), this.guessedMediaEmbedder()),
         );
         this.updateDemoStatuses();
         if (this.selectedDemoEmbedder()) {
@@ -421,8 +421,8 @@ export class DemoPickerComponent {
       ...(effClipper ? { clipper: effClipper, clipper_params: { ...this.demoClipperParamValues() } } : {}),
       ...(converter ? { converter } : {}),
       dataset_name: userName,
-      build_projection: this.buildProjection,
-      merge_near_duplicates: this.mergeNearDuplicates,
+      build_projection: this.buildProjection(),
+      merge_near_duplicates: this.mergeNearDuplicates(),
     } as any);
   }
 }

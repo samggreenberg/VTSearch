@@ -605,13 +605,11 @@ describe('DatasetImporterModalComponent', () => {
   it('should default the demo media-type tab to the active context type when known', () => {
     flushImporters();
     // The dashboard passes the active context's single media type (e.g. an
-    // Image dataset/detector already loaded) as guessedMediaType. It is now
-    // consumed via a child @Input; a direct field write on the parent
-    // doesn't flow through an Angular input binding under OnPush unless a
-    // real change-detection pass runs, so set it on the picker directly
-    // (mirroring what the real `[guessedMediaType]` binding would deliver).
-    component.guessedMediaType = 'image';
-    component.demoPicker.guessedMediaType = 'image';
+    // Image dataset/detector already loaded) as guessedMediaType. Set it via
+    // setInput and run a change-detection pass so the `[guessedMediaType]`
+    // binding delivers it into the demo picker's signal input.
+    fixture.componentRef.setInput('guessedMediaType', 'image');
+    TestBed.tick();
 
     component.openDemoPicker();
     httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
