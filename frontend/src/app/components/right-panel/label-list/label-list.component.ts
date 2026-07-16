@@ -1,7 +1,6 @@
-import { ChangeDetectionStrategy, Component, inject, Input, input, OnChanges, OnDestroy, OnInit, output, signal, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
 import { Media } from '../../../models/api.models';
 import { LabelSortMode } from '../label-sort/label-sort.component';
 import { ActiveContextService } from '../../../services/active-context.service';
@@ -24,13 +23,13 @@ export interface LabelEntry extends VoteGridEntry {
   templateUrl: './label-list.component.html',
   styleUrl: './label-list.component.scss',
 })
-export class LabelListComponent implements OnInit, OnChanges, OnDestroy {
+export class LabelListComponent {
   private activeContext = inject(ActiveContextService);
   private metadataCache = inject(MediaMetadataCacheService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
 
-  @Input() label: 'good' | 'bad' = 'good';
-  @Input() ids: number[] = [];
+  readonly label = input<'good' | 'bad'>('good');
+  readonly ids = input<number[]>([]);
   /**
    * Overrides the bucket heading word ("Goods"/"Bads"). Find mode passes
    * "Verified Good" / "Verified Bad" so the bucket reads as the confirmed pile.
@@ -41,17 +40,17 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy {
    * counting the items still on the left work queue that the bucket's actions
    * (Browse / Export / To Dataset) act on alongside the shown verified items.
    */
-  @Input() foldedNote: string | null = null;
-  @Input() medias: Media[] = [];
-  @Input() clickTimes: Record<string, number> = {};
-  @Input() learnedScores: Record<string, number> = {};
+  readonly foldedNote = input<string | null>(null);
+  readonly medias = input<Media[]>([]);
+  readonly clickTimes = input<Record<string, number>>({});
+  readonly learnedScores = input<Record<string, number>>({});
   /**
    * Normalised [x0, y0, x1, y1] region boxes keyed by media id. When an id has
    * a box (a region vote drawn on an image), its thumbnail is cropped to that
    * region rather than showing the whole frame.
    */
   readonly regionBoxes = input<Record<string, number[]>>({});
-  @Input() sortMode: LabelSortMode = 'time-desc';
+  readonly sortMode = input<LabelSortMode>('time-desc');
   readonly gridGoalWidth = input<number>(80);
   readonly focusMode = input<'click' | 'hover'>('click');
   readonly mediaSelected = output<number>();
@@ -60,58 +59,46 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy {
     vote: 'good' | 'bad';
 }>();
 
-  // Signal: rebuilt from the metadataCache version$ subscribe (an unpatched
-  // callback, not a zoneless CD trigger) as well as from ngOnChanges, and read in
-  // the template, so it must repaint when the cache hydrates.
-  readonly sortedEntries = signal<LabelEntry[]>([]);
-  /** Pre-built Map for O(1) media stub lookups by id (rebuilt when medias input changes). */
-  private mediaMap = new Map<number, Media>();
-  private readonly destroy$ = new Subject<void>();
+  /** Pre-built Map for O(1) media stub lookups by id (tracks the medias input). */
+  private readonly mediaMap = computed(() => new Map(this.medias().map(m => [m.id, m])));
+  // Bumped by the metadataCache version$ subscribe (an unpatched callback, not a
+  // zoneless CD trigger) so the sortedEntries computed re-derives entry names as
+  // the cache hydrates voted items.
+  private readonly cacheVersion = signal(0);
+  // Recomputes whenever the inputs it reads change (ids, medias, clickTimes,
+  // learnedScores, label, regionBoxes, sortMode) or the metadata cache hydrates;
+  // signal inputs don't fire ngOnChanges.
+  readonly sortedEntries = computed<LabelEntry[]>(() => {
+    this.cacheVersion();
+    const entries = this.ids().map(id => this.buildEntry(id));
+    return this.sortEntries(entries);
+  });
 
-  ngOnInit(): void {
-    this.mediaMap = new Map(this.medias.map(m => [m.id, m]));
-    this.metadataCache.ensureLoaded(this.ids);
-    this.sortedEntries.set(this.buildSortedEntries());
+  constructor() {
+    // Prefetch metadata for the shown ids whenever they change.
+    effect(() => {
+      this.metadataCache.ensureLoaded(this.ids());
+    });
     // Re-render entry names when the cache hydrates voted items.
     this.metadataCache.version$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed())
       .subscribe(() => {
-        this.sortedEntries.set(this.buildSortedEntries());
+        this.cacheVersion.update(v => v + 1);
       });
   }
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['medias']) {
-      this.mediaMap = new Map(this.medias.map(m => [m.id, m]));
-    }
-    if (changes['ids']) {
-      this.metadataCache.ensureLoaded(this.ids);
-    }
-    this.sortedEntries.set(this.buildSortedEntries());
-  }
-
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
-  }
-
   private lookup(id: number): Media | undefined {
-    return this.metadataCache.get(id) ?? this.mediaMap.get(id);
-  }
-
-  private buildSortedEntries(): LabelEntry[] {
-    const entries = this.ids.map(id => this.buildEntry(id));
-    return this.sortEntries(entries);
+    return this.metadataCache.get(id) ?? this.mediaMap().get(id);
   }
 
   private buildEntry(id: number): LabelEntry {
     const media = this.lookup(id);
     const name = media ? (media.filename || `Clip #${id}`) : `Clip #${id}`;
-    const time = this.clickTimes[String(id)] ?? -1;
-    const score = this.learnedScores[String(id)] ?? -1;
+    const time = this.clickTimes()[String(id)] ?? -1;
+    const score = this.learnedScores()[String(id)] ?? -1;
     let confidence = -1;
     if (score >= 0) {
-      confidence = this.label === 'good' ? score : 1 - score;
+      confidence = this.label() === 'good' ? score : 1 - score;
     }
     return {
       id,
@@ -122,7 +109,7 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy {
       confidence,
       thumbnailUrl: this.buildThumbnailUrl(media, id),
       fallbackIcon: this.buildFallbackIcon(media),
-      missing: !this.mediaMap.has(id),
+      missing: !this.mediaMap().has(id),
       // Audio waveforms are theme-agnostic alpha masks (issue #2369); flag them
       // so vote-grid tints them via a CSS mask instead of a plain <img>.
       isAudio: media?.media_type === 'audio',
@@ -155,7 +142,7 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy {
 
   private sortEntries(entries: LabelEntry[]): LabelEntry[] {
     const sorted = [...entries];
-    switch (this.sortMode) {
+    switch (this.sortMode()) {
       case 'time-desc':
         sorted.sort((a, b) => b.time - a.time);
         break;
