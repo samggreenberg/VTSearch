@@ -100,17 +100,13 @@ class TestGenerateWaveformThumbnail:
         result = _render_waveform(loud)
         assert result is not None
         img = Image.open(io.BytesIO(result))
-        alpha = img.getchannel("A")
-        w, h = img.size
+        alpha = np.array(img.getchannel("A"))
         # The wave doesn't reach the frame edges: the top and bottom rows are
         # fully transparent (no opaque pixel), which a solid block would violate.
-        top_row = [alpha.getpixel((x, 0)) for x in range(w)]
-        bottom_row = [alpha.getpixel((x, h - 1)) for x in range(w)]
-        assert max(top_row) == 0
-        assert max(bottom_row) == 0
-        # And well under half the pixels are opaque — nowhere near a filled block.
-        opaque_frac = sum(1 for px in img.getchannel("A").getdata() if px > 0) / (w * h)
-        assert opaque_frac < 0.9
+        assert alpha[0, :].max() == 0
+        assert alpha[-1, :].max() == 0
+        # And well under all the pixels are opaque — nowhere near a filled block.
+        assert (alpha > 0).mean() < 0.9
 
     def test_falls_back_to_tempfile_when_buffer_decode_fails(self, monkeypatch):
         """AAC/M4A can't decode from a BytesIO (librosa only reaches ffmpeg via a
