@@ -18,10 +18,10 @@
       (keydown)="onTriggerKeydown($event)"
     >
       <span class="media-type-trigger-content">
-        @if (iconFor(mediaType)) {
-          <vt-icon [icon]="iconFor(mediaType)" [size]="16"></vt-icon>
+        @if (iconFor(mediaType())) {
+          <vt-icon [icon]="iconFor(mediaType())" [size]="16"></vt-icon>
         }
-        <span class="media-type-trigger-label">{{ optionLabel(mediaType) }}</span>
+        <span class="media-type-trigger-label">{{ optionLabel(mediaType()) }}</span>
       </span>
       <span class="media-type-chevron" aria-hidden="true">▾</span>
     </button>
@@ -37,9 +37,9 @@
             class="media-type-option"
             role="option"
             [id]="optionId(i)"
-            [class.selected]="opt === mediaType"
+            [class.selected]="opt === mediaType()"
             [class.active]="i === activeIndex"
-            [attr.aria-selected]="opt === mediaType"
+            [attr.aria-selected]="opt === mediaType()"
             (click)="select(opt)"
             (mouseenter)="activeIndex = i"
           >
@@ -52,7 +52,7 @@
       </ul>
     }
   </div>
-  @if (detectionHint) {
-    <p class="detection-hint">{{ detectionHint }}</p>
+  @if (detectionHint()) {
+    <p class="detection-hint">{{ detectionHint() }}</p>
   }
 </div>

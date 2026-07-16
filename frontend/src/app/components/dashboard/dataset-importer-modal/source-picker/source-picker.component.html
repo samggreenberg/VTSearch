@@ -14,13 +14,13 @@
   }
 
   @if (activeTab()) {
-    @if (importersForActiveTab.length === 0) {
+    @if (importersForActiveTab().length === 0) {
       <div class="importer-subtab-bar">
         <span class="empty-state empty-state--inline">{{ emptyCategoryText() }}</span>
       </div>
-    } @else if (importersForActiveTab.length > 1 || alwaysShowSubtabBar()) {
+    } @else if (importersForActiveTab().length > 1 || alwaysShowSubtabBar()) {
       <div class="importer-subtab-bar">
-        @for (imp of importersForActiveTab; track imp.name) {
+        @for (imp of importersForActiveTab(); track imp.name) {
           <button
             class="importer-subtab"
             [class.active]="selectedImporter()?.name === imp.name"
@@ -63,28 +63,28 @@
 
       <ng-content select="[demoBefore]"></ng-content>
 
-      @if (activeDemoTab() && demoCols) {
+      @if (activeDemoTab() && demoCols(); as cols) {
         <div class="demo-content-area">
-          <table class="data-table data-table--grid demo-table" [class.table-fixed]="demoCols.tableFixed">
+          <table class="data-table data-table--grid demo-table" [class.table-fixed]="cols.tableFixed">
             <thead>
               <tr>
-                @for (col of demoCols.columnOrder; track col; let first = $first) {
+                @for (col of cols.columnOrder; track col; let first = $first) {
                   <th
-                    [class.sortable]="demoCols.meta(col).sortable"
-                    [class.col-drop-target]="demoCols.isDropTarget(col)"
-                    [class.col-dragging]="demoCols.isDragging(col)"
+                    [class.sortable]="cols.meta(col).sortable"
+                    [class.col-drop-target]="cols.isDropTarget(col)"
+                    [class.col-dragging]="cols.isDragging(col)"
                     [class.col-num]="col === 'num_files'"
                     [attr.data-col]="col"
-                    [title]="demoCols.meta(col).title"
-                    [style.width.%]="demoCols.tableFixed ? demoCols.colWidths[col] : null"
+                    [title]="cols.meta(col).title"
+                    [style.width.%]="cols.tableFixed ? cols.colWidths[col] : null"
                     draggable="true"
                     (click)="onDemoHeaderClick(col)"
-                    (dragstart)="demoCols.onColDragStart($event, col)"
-                    (dragover)="demoCols.onColDragOver($event, col)"
-                    (dragleave)="demoCols.onColDragLeave($event, col)"
-                    (drop)="demoCols.onColDrop($event, col)"
-                    (dragend)="demoCols.onColDragEnd($event)"
-                  >@if (!first) {<div class="col-resize-handle" (mousedown)="demoCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>}{{ demoCols.meta(col).label }}@if (demoCols.meta(col).sortable) {<span class="sort-indicator" [class.active]="demoCols.isSortActive(col)">{{ demoCols.sortIndicator(col) }}</span>}</th>
+                    (dragstart)="cols.onColDragStart($event, col)"
+                    (dragover)="cols.onColDragOver($event, col)"
+                    (dragleave)="cols.onColDragLeave($event, col)"
+                    (drop)="cols.onColDrop($event, col)"
+                    (dragend)="cols.onColDragEnd($event)"
+                  >@if (!first) {<div class="col-resize-handle" (mousedown)="cols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>}{{ cols.meta(col).label }}@if (cols.meta(col).sortable) {<span class="sort-indicator" [class.active]="cols.isSortActive(col)">{{ cols.sortIndicator(col) }}</span>}</th>
                 }
               </tr>
             </thead>
@@ -103,7 +103,7 @@
                   (keydown.enter)="demoSelected.emit(demo)"
                   (keydown.space)="$event.preventDefault(); demoSelected.emit(demo)"
                 >
-                  @for (col of demoCols.columnOrder; track col) {
+                  @for (col of cols.columnOrder; track col) {
                     @switch (col) {
                       @case ('label') {
                         <td class="col-name">{{ demo.label }}</td>
@@ -142,7 +142,7 @@
         type="text"
         class="form-input"
         [placeholder]="sfPathPlaceholder()"
-        [(ngModel)]="sfPathInputValue"
+        [ngModel]="sfPathInputValue()"
         (ngModelChange)="sfPathInputValueChange.emit($event)"
         (keydown.enter)="sfPathApplied.emit(); $event.preventDefault()"
         (blur)="sfApplyOnBlur() && sfPathApplied.emit()"
@@ -183,13 +183,13 @@
           (filesSelected)="lfFilesDropped.emit($event)"
         ></vt-drop-zone>
       }
-      @if (lfShowFileCount() && lfFiles.length > 0) {
+      @if (lfShowFileCount() && lfFiles().length > 0) {
         <p class="info-text">
           @if (lfPickerKind() === 'folder') {
-            Selected <strong>{{ lfFiles.length | number }}</strong> file{{ lfFiles.length === 1 ? '' : 's' }}
-            @if (lfFolderName) { from <code>{{ lfFolderName }}</code> }
+            Selected <strong>{{ lfFiles().length | number }}</strong> file{{ lfFiles().length === 1 ? '' : 's' }}
+            @if (lfFolderName()) { from <code>{{ lfFolderName() }}</code> }
           } @else {
-            Using paths from <code>{{ lfFiles[0].name }}</code>
+            Using paths from <code>{{ lfFiles()[0].name }}</code>
           }
         </p>
       }

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, OnChanges, output, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 
@@ -23,7 +23,7 @@ import { ClipperInfo, ConverterInfo, SourceSpec } from '../../../../models/api.m
   templateUrl: './source-specs-picker.component.html',
   styleUrl: './source-specs-picker.component.scss',
 })
-export class SourceSpecsPickerComponent implements OnChanges {
+export class SourceSpecsPickerComponent {
   /** All converters whose ``target_type`` matches the current native
    *  type.  Comes from the importer's ``to_dict()`` payload. */
   readonly availableConverters = input<ConverterInfo[]>([]);
@@ -61,14 +61,29 @@ export class SourceSpecsPickerComponent implements OnChanges {
   private drafts = new Map<string, SourceSpec>();
   private detailsOpenSet = new Set<string>();
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['nativeType'] && !changes['nativeType'].firstChange) {
-      this.drafts.clear();
-      this.detailsOpenSet.clear();
-    }
-    for (const s of this.specs()) {
-      if (s.converter !== null) this.drafts.set(s.source_type, s);
-    }
+  /** Last native type the sync effect observed, so a genuine change can be
+   *  told apart from the initial run (which must not clear). ``undefined``
+   *  until the effect first runs. */
+  private prevNativeType: string | undefined;
+
+  constructor() {
+    // Signal inputs don't fire ngOnChanges, so this effect mirrors the old
+    // hook: when ``nativeType`` actually changes, drop the per-source drafts
+    // and open Details panels (they belonged to the previous type); then
+    // (re)seed drafts from any incoming spec that carries a converter, so
+    // the Details panels reflect the parent's current selection.
+    effect(() => {
+      const nativeType = this.nativeType();
+      const specs = this.specs();
+      if (this.prevNativeType !== undefined && nativeType !== this.prevNativeType) {
+        this.drafts.clear();
+        this.detailsOpenSet.clear();
+      }
+      this.prevNativeType = nativeType;
+      for (const s of specs) {
+        if (s.converter !== null) this.drafts.set(s.source_type, s);
+      }
+    });
   }
 
   get nonNativeSourceTypes(): string[] {
