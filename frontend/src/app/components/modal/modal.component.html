@@ -19,7 +19,7 @@
   <div class="modal-content">
     <div class="modal-header">
       <h2>{{ title() }}</h2>
-      @if (showCloseButton) {
+      @if (showCloseButton()) {
         <button class="modal-close" (click)="close()" title="Close" aria-label="Close">&times;</button>
       }
     </div>

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, HostListener, inject, input, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, HostListener, inject, input, OnDestroy, OnInit, viewChild } from '@angular/core';
 import { TitleCasePipe } from '@angular/common';
 
 import { Observable, Subject } from 'rxjs';
@@ -79,7 +79,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
 
   readonly kind = input<PulldownKind>('dataset');
 
-  @ViewChild('menuRef') menuRef?: ElementRef<HTMLDivElement>;
+  readonly menuRef = viewChild<ElementRef<HTMLDivElement>>('menuRef');
 
   open = false;
   focusedIndex = -1;
@@ -426,7 +426,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   }
 
   private scrollFocusedIntoView(): void {
-    const menu = this.menuRef?.nativeElement;
+    const menu = this.menuRef()?.nativeElement;
     if (!menu || this.focusedIndex < 0) return;
     const rowEl = menu.querySelectorAll('.pulldown-row')[this.focusedIndex] as
       | HTMLElement

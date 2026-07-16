@@ -20,8 +20,8 @@
     <line x1="12" y1="3" x2="12" y2="15" />
   </svg>
   <p class="drop-zone-label">{{ label() }}</p>
-  @if (sublabel) {
-    <p class="drop-zone-sublabel">{{ sublabel }}</p>
+  @if (sublabel()) {
+    <p class="drop-zone-sublabel">{{ sublabel() }}</p>
   }
   <input
     #fileInput

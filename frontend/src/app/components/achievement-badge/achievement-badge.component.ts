@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../icon/icon.component';
 
@@ -22,12 +22,12 @@ import { IconComponent } from '../icon/icon.component';
 })
 export class AchievementBadgeComponent {
   readonly iconType = input('trophy');
-  @Input() tierIdx = -1;
+  readonly tierIdx = input(-1);
   /** Outer badge size in pixels (the inner icon is auto-scaled). */
   readonly size = input(56);
 
   get tierClass(): string {
-    switch (this.tierIdx) {
+    switch (this.tierIdx()) {
       case 0:
         return 'tier-bronze';
       case 1:
@@ -46,18 +46,18 @@ export class AchievementBadgeComponent {
   }
 
   get showOuterRing(): boolean {
-    return this.tierIdx >= 0;
+    return this.tierIdx() >= 0;
   }
 
   get showDoubleRing(): boolean {
-    return this.tierIdx >= 1;
+    return this.tierIdx() >= 1;
   }
 
   get showLaurel(): boolean {
-    return this.tierIdx >= 2;
+    return this.tierIdx() >= 2;
   }
 
   get showSparkles(): boolean {
-    return this.tierIdx >= 3;
+    return this.tierIdx() >= 3;
   }
 }

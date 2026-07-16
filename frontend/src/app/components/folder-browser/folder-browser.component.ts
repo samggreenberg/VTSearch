@@ -3,15 +3,14 @@ import {
   AfterViewInit,
   ChangeDetectionStrategy,
   Component,
+  effect,
   ElementRef,
   HostListener,
   input,
-  OnChanges,
   OnDestroy,
-  OnInit,
   output,
-  SimpleChanges,
-  ViewChild,
+  untracked,
+  viewChild,
 } from '@angular/core';
 import { Observable, Subscription } from 'rxjs';
 
@@ -79,7 +78,7 @@ const TYPEAHEAD_RESET_MS = 800;
   templateUrl: './folder-browser.component.html',
   styleUrl: './folder-browser.component.scss',
 })
-export class FolderBrowserComponent implements OnInit, OnChanges, OnDestroy, AfterViewInit {
+export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
   /** Required: returns the listing for a given relative path. */
   readonly browse = input.required<FolderBrowserBrowseFn>();
 
@@ -144,22 +143,24 @@ export class FolderBrowserComponent implements OnInit, OnChanges, OnDestroy, Aft
   private typeaheadTimer: ReturnType<typeof setTimeout> | null = null;
   private currentSub?: Subscription;
 
-  @ViewChild('listEl') listEl?: ElementRef<HTMLDivElement>;
+  readonly listEl = viewChild<ElementRef<HTMLDivElement>>('listEl');
 
-  ngOnInit(): void {
-    this.loadDirectory(this.initialPath() || '');
+  constructor() {
+    // Signal inputs don't fire `ngOnChanges`. This effect does the initial load
+    // and re-loads whenever `initialPath` changes (replacing the old ngOnInit +
+    // ngOnChanges pair). `loadDirectory` runs `untracked` so `initialPath` is
+    // the only dependency — the `browse`/`showFiles` reads inside it must not
+    // turn an unrelated input change into a reload.
+    effect(() => {
+      const path = this.initialPath() || '';
+      untracked(() => this.loadDirectory(path));
+    });
   }
 
   ngAfterViewInit(): void {
     if (this.autoFocus()) {
       // Defer one tick so the list element is in the DOM.
-      setTimeout(() => this.listEl?.nativeElement.focus(), 0);
-    }
-  }
-
-  ngOnChanges(changes: SimpleChanges): void {
-    if ('initialPath' in changes && !changes['initialPath'].firstChange) {
-      this.loadDirectory(this.initialPath() || '');
+      setTimeout(() => this.listEl()?.nativeElement.focus(), 0);
     }
   }
 
@@ -376,7 +377,7 @@ export class FolderBrowserComponent implements OnInit, OnChanges, OnDestroy, Aft
   }
 
   private scrollSelectionIntoView(): void {
-    const list = this.listEl?.nativeElement;
+    const list = this.listEl()?.nativeElement;
     if (!list) return;
     const row = list.querySelectorAll('.vfb-row')[this.selectedIndex] as HTMLElement | undefined;
     row?.scrollIntoView({ block: 'nearest' });
