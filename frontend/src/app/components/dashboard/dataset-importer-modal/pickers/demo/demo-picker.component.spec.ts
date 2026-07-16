@@ -39,6 +39,7 @@ describe('DemoPickerComponent', () => {
     httpMock.expectOne(req => req.url === '/api/embedders' && req.params.get('media_type') === 'audio').flush({ embedders: [{ name: 'clap' }] });
     httpMock.expectOne(req => req.url === '/api/clippers' && req.params.get('media_type') === 'audio').flush({ clippers: [] });
     httpMock.expectOne(req => req.url === '/api/dataset/demo-list' && req.params.get('embedder') === 'clap').flush({ datasets: mockDemos });
+    httpMock.expectOne(req => req.url === '/api/converters' && req.params.get('source') === 'audio').flush({ converters: [] });
   }
 
   it('open() fetches media types + demos and auto-selects the audio tab', () => {
@@ -78,5 +79,35 @@ describe('DemoPickerComponent', () => {
     component.demoDatasetSelected.subscribe(() => (emitted = true));
     component.submit();
     expect(emitted).toBe(false);
+  });
+
+  it('offers an optional "Convert to" target (e.g. Face) for an embeddable tab with a registered converter', () => {
+    openAndFlush();
+
+    component.selectDemoTabWithEmbedder('image');
+    httpMock.expectOne(req => req.url === '/api/embedders' && req.params.get('media_type') === 'image').flush({ embedders: [{ name: 'siglip' }] });
+    httpMock.expectOne(req => req.url === '/api/clippers' && req.params.get('media_type') === 'image').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/dataset/demo-list' && req.params.get('embedder') === 'siglip').flush({ datasets: mockDemos });
+    httpMock.expectOne(req => req.url === '/api/converters' && req.params.get('source') === 'image')
+      .flush({ converters: [{ name: 'image2face', source_type: 'image', target_type: 'face' }] });
+
+    expect(component.activeTabConvertsToOptional()).toBe(true);
+    expect(component.activeTabConvertsTo()).toEqual(['face']);
+    expect(component.selectedConverterTarget()).toBe('');
+
+    component.onConverterTargetChange('face');
+    httpMock.expectOne(req => req.url === '/api/embedders' && req.params.get('media_type') === 'face').flush({ embedders: [{ name: 'face' }] });
+    httpMock.expectOne(req => req.url === '/api/clippers' && req.params.get('media_type') === 'face').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/dataset/demo-list' && req.params.get('embedder') === 'face').flush({ datasets: mockDemos });
+
+    expect(component.selectedConverterTarget()).toBe('face');
+
+    component.selectDemo(mockDemos[0] as any);
+    let payload: any = null;
+    component.demoDatasetSelected.subscribe((d) => (payload = d));
+    component.submit();
+
+    expect(payload.converter).toBe('image2face');
+    expect(payload.embedder).toBe('face');
   });
 });
