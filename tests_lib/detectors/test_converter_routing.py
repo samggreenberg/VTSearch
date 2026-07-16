@@ -111,3 +111,61 @@ class TestRouteAndEmbed:
 
         assert scoring == {}
         assert mapping == {}
+
+
+class TestReclip:
+    def test_reclip_splits_and_maps_sub_items_to_source(self, monkeypatch):
+        """A re-clip clipper that fans one media into N clips attributes every
+        clip back to its source media."""
+
+        def _fake_apply_clipper(clips_dict, name, params, on_progress=None, chain_steps=None, embedder=None):
+            # Split the single input media into two embedded clips.
+            clips_dict.clear()
+            for i in (1, 2):
+                clips_dict[i] = {
+                    "media_type": "audio",
+                    "embeddings": {"clap": np.ones(4, dtype=np.float32)},
+                    "embedder": "clap",
+                }
+
+        monkeypatch.setattr("vtscore.datasets.stages.clipper._apply_clipper", _fake_apply_clipper)
+
+        src = {7: {"media_type": "audio"}}
+        scoring, mapping = cr.route_and_embed(
+            src, "audio", "clap", clipper="sound_tiling", clipper_params={"duration": "2.0"}
+        )
+
+        assert len(scoring) == 2
+        # Both clips descend from source media 7.
+        assert set(mapping.values()) == {7}
+
+    def test_reclip_after_converter_route(self, monkeypatch):
+        """Video routed to image, then each frame re-clipped: sub-items still map
+        back to the source video."""
+
+        class _FakeVideo2Image:
+            source_type = "video"
+            target_type = "image"
+
+            def convert_normalized(self, media, params):
+                return [{"media_bytes": b"frame"}]
+
+        def _fake_apply_clipper(clips_dict, name, params, on_progress=None, chain_steps=None, embedder=None):
+            clips_dict.clear()
+            for i in (1, 2, 3):
+                clips_dict[i] = {
+                    "media_type": "image",
+                    "embeddings": {"clip": np.ones(4, dtype=np.float32)},
+                    "embedder": "clip",
+                }
+
+        monkeypatch.setattr(
+            cr, "converter_route_for", lambda s, t: _FakeVideo2Image() if (s, t) == ("video", "image") else None
+        )
+        monkeypatch.setattr("vtscore.datasets.stages.clipper._apply_clipper", _fake_apply_clipper)
+
+        src = {4: {"media_type": "video"}}
+        scoring, mapping = cr.route_and_embed(src, "image", "clip", clipper="image_grid")
+
+        assert len(scoring) == 3
+        assert set(mapping.values()) == {4}

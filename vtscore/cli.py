@@ -187,23 +187,30 @@ def _load_and_train_detectors(
             )
             continue
 
+        # When the detector was trained on a clipper granularity the loaded
+        # dataset doesn't already match, re-clip the dataset to that granularity
+        # at scoring time (auto-clip + re-embed) instead of skipping. The clipper
+        # spec rides on the detector's scoring info and is applied by
+        # ``route_and_embed``. A matching (or absent) clipper needs no re-clip.
         det_input_spec = det.get("input_spec") if isinstance(det.get("input_spec"), dict) else None
+        reclip_clipper = ""
+        reclip_params: dict[str, Any] = {}
         if det_input_spec and not clipper_matches(det_input_spec, dataset_spec):
-            det_clipper = det_input_spec.get("clipper") or ""
-            dataset_clipper = (dataset_spec or {}).get("clipper") or "(none)"
-            cli_progress.emit(
-                "detector_skipped",
-                text=(
-                    f"Skipping detector '{det_name}': input_spec.clipper "
-                    f"{det_clipper!r} doesn't match dataset clipper "
-                    f"{dataset_clipper!r}. Re-load the dataset with the "
-                    f"matching clipper to use this detector."
-                ),
-                detector=det_name,
-                detector_input_spec=det_input_spec,
-                dataset_input_spec=dataset_spec or {},
-            )
-            continue
+            reclip_clipper = det_input_spec.get("clipper") or ""
+            reclip_params = dict(det_input_spec.get("clipper_params") or {})
+            if reclip_clipper:
+                dataset_clipper = (dataset_spec or {}).get("clipper") or "(none)"
+                cli_progress.emit(
+                    "detector_reclip",
+                    text=(
+                        f"Re-clipping dataset for detector '{det_name}' with "
+                        f"clipper {reclip_clipper!r} to match its input_spec "
+                        f"(dataset clipper: {dataset_clipper!r})."
+                    ),
+                    detector=det_name,
+                    detector_input_spec=det_input_spec,
+                    dataset_input_spec=dataset_spec or {},
+                )
 
         labelset = LabelSet.from_dict(det.get("labelset") or {})
         if not labelset.elements:
@@ -239,6 +246,10 @@ def _load_and_train_detectors(
             "embedder_type": detector_embedder_type_from_data(det),
             "good_count": sum(1 for el in labelset.elements if el.label == "good"),
             "bad_count": sum(1 for el in labelset.elements if el.label == "bad"),
+            # Clipper to re-apply at scoring time (empty when the dataset already
+            # matches the detector's granularity, or the detector has no clipper).
+            "clipper": reclip_clipper,
+            "clipper_params": reclip_params,
         }
     return out
 
@@ -250,16 +261,18 @@ def _score_medias_with_detectors(
     """Score *medias* against pre-trained detector MLPs, routing across types.
 
     *medias* may arrive unembedded and may mix source types.  For each group of
-    detectors sharing a target ``media_type`` + embedder, the medias are routed
-    to that target (native match scored directly, other types converted via a
-    one-hop converter such as ``video2image``) and embedded in the detector's
-    space by :func:`~vtscore.detectors.converter_routing.route_and_embed`.  A
-    converter that fans one source media out into several (a video into frames)
-    produces several scores, which are aggregated back to the source media by
-    ``max`` - a source is a positive hit when *any* of its converted clips
-    clears the threshold ("find the needle").  Homogeneous single-type datasets
-    take the identity route (no conversion, one hit per media), byte-for-byte
-    the pre-routing behaviour.
+    detectors sharing a target ``media_type`` + embedder + re-clip granularity,
+    the medias are routed to that target (native match scored directly, other
+    types converted via a one-hop converter such as ``video2image``), optionally
+    re-clipped to the detector's ``input_spec.clipper``, and embedded in the
+    detector's space by
+    :func:`~vtscore.detectors.converter_routing.route_and_embed`.  A converter or
+    clipper that fans one source media out into several (a video into frames, a
+    recording into tiles) produces several scores, which are aggregated back to
+    the source media by ``max`` - a source is a positive hit when *any* of its
+    sub-items clears the threshold ("find the needle").  Homogeneous single-type
+    datasets with no re-clip take the identity route (one hit per media),
+    byte-for-byte the pre-routing behaviour.
     """
     if not medias or not detector_mlps:
         return {}
@@ -268,15 +281,22 @@ def _score_medias_with_detectors(
 
     from vtscore.detectors.converter_routing import route_and_embed  # noqa: PLC0415
 
-    # Detectors sharing a (target type, embedder) share one routed+embedded
-    # snapshot, so a dataset scored by two image/siglip detectors is routed and
-    # embedded once, not per detector.
-    groups: dict[tuple[str, str], list[str]] = defaultdict(list)
+    # Detectors sharing a (target type, embedder, re-clip spec) share one
+    # routed+clipped+embedded snapshot, so a dataset scored by two image/siglip
+    # detectors with the same granularity is prepared once, not per detector.
+    groups: dict[tuple[str, str, str, tuple], list[str]] = defaultdict(list)
     for det_name, info in detector_mlps.items():
-        groups[(info.get("media_type") or "", info.get("embedder") or "")].append(det_name)
+        clipper_params = info.get("clipper_params") or {}
+        key = (
+            info.get("media_type") or "",
+            info.get("embedder") or "",
+            info.get("clipper") or "",
+            tuple(sorted((str(k), str(v)) for k, v in clipper_params.items())),
+        )
+        groups[key].append(det_name)
 
     results: dict[str, dict[str, Any]] = {}
-    for (target_type, embedder_name), det_names in groups.items():
+    for (target_type, embedder_name, clipper, clipper_params_items), det_names in groups.items():
         if not target_type:
             # Legacy detector with no declared media_type: score every media
             # directly against its primary embedding, exactly as before
@@ -284,7 +304,13 @@ def _score_medias_with_detectors(
             # embedding). Typed detectors take the routing path below.
             results.update(_score_direct_all(det_names, detector_mlps, medias))
             continue
-        scoring_medias, scoring_to_source = route_and_embed(medias, target_type, embedder_name)
+        scoring_medias, scoring_to_source = route_and_embed(
+            medias,
+            target_type,
+            embedder_name,
+            clipper=clipper,
+            clipper_params=dict(clipper_params_items),
+        )
         if not scoring_medias:
             continue
         for det_name in det_names:
