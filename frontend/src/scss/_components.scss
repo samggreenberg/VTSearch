@@ -451,6 +451,17 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   cursor: pointer;
 }
 
+// Multi-line text entry (e.g. a custom signpost tag vocabulary, one term per
+// line).  Shares `.form-input`'s framing but allows vertical resize and reads
+// in a monospace face so long term lists line up.
+.form-textarea {
+  @extend .form-input;
+  resize: vertical;
+  min-height: 5rem;
+  font-family: var(--font-mono, monospace);
+  line-height: 1.4;
+}
+
 // Compact variant for dense toolbars (the label-sort bar, the browse
 // selection panel).  Same visual treatment as `.form-select`, but sized to
 // its content rather than stretched full-width, with tighter padding and a

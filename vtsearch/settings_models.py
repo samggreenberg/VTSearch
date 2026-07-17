@@ -158,6 +158,41 @@ def _upper(v: Any) -> Any:
     return v.upper() if isinstance(v, str) else v
 
 
+#: Cap the per-media-type custom signpost vocabulary. Each term costs one text
+#: embed at build time, so an unbounded list would let a single setting write
+#: stall every projection build; AudioSet-527 / OpenImages-600 sit well under it.
+SIGNPOST_VOCAB_MAX_TERMS = 2000
+
+
+def _normalize_signpost_vocab(v: Any) -> Any:
+    """Clean a ``{media_type: [term, ...]}`` custom-vocabulary map.
+
+    Strips whitespace, drops blank/duplicate terms (order-preserving), caps each
+    list at :data:`SIGNPOST_VOCAB_MAX_TERMS`, and drops media types left with no
+    terms so an empty list reads as "use the built-in vocabulary". Non-dict or
+    non-list input is passed through untouched for Pydantic to reject.
+    """
+    if not isinstance(v, dict):
+        return v
+    out: dict[str, list[str]] = {}
+    for media_type, terms in v.items():
+        if not isinstance(terms, list):
+            return v
+        seen: set[str] = set()
+        clean: list[str] = []
+        for term in terms:
+            if not isinstance(term, str):
+                continue
+            stripped = term.strip()
+            if not stripped or stripped in seen:
+                continue
+            seen.add(stripped)
+            clean.append(stripped)
+        if clean:
+            out[str(media_type)] = clean[:SIGNPOST_VOCAB_MAX_TERMS]
+    return out
+
+
 def _default_concurrent_downloads() -> int:
     """Lazily resolve the hardware-derived default for parallel downloads.
 
@@ -363,6 +398,15 @@ class UserSettings(BaseModel):
     #   from the generative captioner (image VLM / audio captioner) instead of
     #   the default zero-shot tags. Empty entries fall back to tags (false).
     browse_signpost_captioner: dict[str, bool] = Field(default_factory=dict)
+    # - ``browse_signpost_vocab``: per-media-type user-supplied zero-shot tag
+    #   vocabulary (one entry per media type, a list of terms) that replaces the
+    #   built-in AudioSet-527 / OpenImages-600 lists when naming map regions in
+    #   Tags mode. Normalized on write (trimmed, de-duplicated, capped); an empty
+    #   or absent list falls back to the shipped vocabulary. Takes effect on the
+    #   next projection build / Re-project, since signpost texts are cached.
+    browse_signpost_vocab: Annotated[dict[str, list[str]], BeforeValidator(_normalize_signpost_vocab)] = Field(
+        default_factory=dict
+    )
 
     grid_icon_size_left: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     grid_icon_size_right: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)

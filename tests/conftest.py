@@ -54,16 +54,32 @@ def _fake_embed_audio(arg):
     media dict (from ``MediaEmbedder.embed_media``).  Uses the first 1000
     bytes of the resolved file as a seed so that different audio files
     (even when written to the same temp path) produce distinct vectors.
+
+    In-memory medias (e.g. clipper output) carry ``media_bytes`` but no
+    ``media_path``; seed off those bytes so distinct clips still get distinct
+    vectors, falling back to the media id only when neither is present.
     """
     import hashlib
 
-    path = arg["media_path"] if isinstance(arg, dict) else arg
-    try:
-        with open(path, "rb") as f:
-            data = f.read(1000)
-        seed = int(hashlib.md5(data).hexdigest(), 16) % 2**31
-    except Exception:
-        seed = hash(str(path)) % 2**31
+    data = None
+    if isinstance(arg, dict):
+        path = arg.get("media_path")
+        if path:
+            try:
+                with open(path, "rb") as f:
+                    data = f.read(1000)
+            except Exception:
+                data = None
+        if data is None:
+            raw = arg.get("media_bytes")
+            data = bytes(raw[:1000]) if isinstance(raw, (bytes, bytearray)) else str(arg.get("id", arg)).encode()
+    else:
+        try:
+            with open(arg, "rb") as f:
+                data = f.read(1000)
+        except Exception:
+            data = str(arg).encode()
+    seed = int(hashlib.md5(data).hexdigest(), 16) % 2**31
     rng = np.random.RandomState(seed)
     vec = rng.randn(_EMBEDDING_DIM).astype(np.float32)
     # Real embedders now L2-normalize at ingest, so the fakes must too:
