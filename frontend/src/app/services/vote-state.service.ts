@@ -1,8 +1,9 @@
 import { Injectable, OnDestroy, inject, signal } from '@angular/core';
-import { EMPTY, Observable, Subject, timer } from 'rxjs';
-import { catchError, map, switchMap, takeUntil, tap } from 'rxjs/operators';
+import { Observable, Subject } from 'rxjs';
+import { map, takeUntil, tap } from 'rxjs/operators';
 import type { MediaVoteResponse } from '../generated/api-client/models/media-vote-response';
 import { VotesResponse } from '../generated/api-client/models/votes-response';
+import { adaptivePoll } from './adaptive-poll';
 import { MediasApiService } from './medias-api.service';
 import { SortingApiService } from './sorting-api.service';
 
@@ -436,25 +437,27 @@ export class VoteStateService implements OnDestroy {
   startPolling(intervalMs = 2000): void {
     if (this.polling) return;
     this.polling = true;
-    timer(0, intervalMs)
-      .pipe(
-        takeUntil(this.stopPolling$),
-        takeUntil(this.destroy$),
-        // catchError inside switchMap scopes errors to a single tick; a
-        // transient /api/votes failure (502, offline blip, stale
-        // X-Dataset-Id after a context switch) would otherwise tear the
-        // whole chain down, freeze votes indefinitely, and leave `polling`
-        // stuck at true so startPolling() can't re-arm. Emit EMPTY rather
-        // than a stub VotesResponse so applyVotes() doesn't clobber
-        // optimistic state on a failed tick.
-        switchMap(() => {
-          const seq = ++this.votesSeq;
-          return this.sortingApi.getVotes().pipe(
-            map((votes) => ({ votes, seq })),
-            catchError(() => EMPTY),
-          );
-        }),
-      )
+    // adaptivePoll never overlaps GETs (a backend slower than the interval no
+    // longer has every /api/votes read cancelled by the next tick and freezing
+    // the piles), eases to a heartbeat when the votes stop changing, and pauses
+    // while the tab is hidden. Errors are absorbed inside adaptivePoll, so a
+    // transient failure (502, offline blip, stale X-Dataset-Id after a context
+    // switch) skips a single poll without applying anything — applyVotesFresh
+    // is never called with a stub, so optimistic state survives a failed tick.
+    // The seq is excluded from the change signature so its per-poll increment
+    // doesn't defeat the back-off.
+    adaptivePoll(
+      () => {
+        const seq = ++this.votesSeq;
+        return this.sortingApi.getVotes().pipe(map((votes) => ({ votes, seq })));
+      },
+      {
+        fastMs: intervalMs,
+        slowMs: Math.max(intervalMs, 10000),
+        signature: ({ votes }) => JSON.stringify(votes),
+      },
+    )
+      .pipe(takeUntil(this.stopPolling$), takeUntil(this.destroy$))
       .subscribe(({ votes, seq }) => this.applyVotesFresh(votes, seq));
   }
 

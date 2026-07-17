@@ -1,7 +1,7 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, effect, ElementRef, inject, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
 
-import { EMPTY, Subject, timer, Subscription, pairwise } from 'rxjs';
-import { catchError, takeUntil, switchMap, filter, take } from 'rxjs/operators';
+import { Subject, timer, Subscription, pairwise } from 'rxjs';
+import { takeUntil, switchMap, filter, take } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
@@ -16,6 +16,7 @@ import {
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { ToastService } from '../../services/toast.service';
 import { SortingApiService } from '../../services/sorting-api.service';
+import { adaptivePoll } from '../../services/adaptive-poll';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { MediasApiService } from '../../services/medias-api.service';
@@ -557,15 +558,17 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private startStatusPolling(): void {
-    this.statusPolling$ = timer(0, 2000)
-      .pipe(
-        takeUntil(this.destroy$),
-        // catchError inside switchMap keeps the polling alive across
-        // transient /api/labeling-status failures; without it, one bad
-        // tick terminates the timer and the labeling-status panel
-        // freezes for the rest of the view's lifetime.
-        switchMap(() => this.sortingApi.getLabelingStatus().pipe(catchError(() => EMPTY))),
-      )
+    // adaptivePoll never overlaps GETs (a backend slower than the interval no
+    // longer has every /api/labeling-status read cancelled by the next tick,
+    // which used to freeze this panel permanently), eases to a heartbeat once
+    // the status stops changing, and pauses while the tab is hidden. Poll
+    // errors are absorbed inside adaptivePoll, so a transient failure skips a
+    // single tick instead of tearing the poll down for the view's lifetime.
+    this.statusPolling$ = adaptivePoll(() => this.sortingApi.getLabelingStatus(), {
+      fastMs: 2000,
+      slowMs: 10000,
+    })
+      .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (status) => {
           this.labelingStatus.set(status);
