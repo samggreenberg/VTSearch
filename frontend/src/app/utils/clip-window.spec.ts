@@ -144,8 +144,8 @@ describe('clipProgress', () => {
 
   it('falls back to the duration as the window end when only clip_start is set', () => {
     const el = audioWithDuration(100);
-    el.currentTime = 70; // 10s into a [50, 100] span → 0.2
-    expect(clipProgress(el, () => media({ clip_start: 50 }))).toBeCloseTo(0.2);
+    el.currentTime = 70; // 20s into a [50, 100] span → 0.4
+    expect(clipProgress(el, () => media({ clip_start: 50 }))).toBeCloseTo(0.4);
   });
 
   it('clamps to [0, 1] when currentTime strays outside the window', () => {
