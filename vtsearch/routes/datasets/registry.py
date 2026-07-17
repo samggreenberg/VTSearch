@@ -305,6 +305,14 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                 # goes green immediately; text sort waits behind its own
                 # progress bar on first use if the model isn't ready yet.
                 _warmup_embedder_async(ctx.medias)
+                # Flip the tracker to "idle" so SSE listeners (the frontend's
+                # waitForDatasetLoad) see completion immediately instead of
+                # only inferring it once list_tasks() prunes this finished
+                # entry several seconds later - the gap that let the Browse
+                # button fire its projection-build request against a dataset
+                # the frontend hadn't yet promoted to active, 409ing with
+                # "Dataset is not loaded".
+                tracker.update("idle", "", 0, 0, step=None, total_steps=None)
             except CancelledError:
                 unregister_context(dataset_id)
                 _reg_remove_loaded(dataset_id)
