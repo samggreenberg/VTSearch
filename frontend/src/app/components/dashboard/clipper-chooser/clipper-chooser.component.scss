@@ -12,6 +12,7 @@
 }
 
 .clipper-tab {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -26,6 +27,23 @@
   margin-bottom: -2px;
   white-space: nowrap;
 
+  // Active-underline wipe: the accent underline grows in (scaleX 0 → 1)
+  // rather than hard-cutting on. Sits over the 2px bottom-border region so it
+  // lands exactly on the tab bar's border line.
+  &::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -2px;
+    height: 2px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: center;
+    transition: transform var(--transition-slow);
+    pointer-events: none;
+  }
+
   &:hover {
     color: var(--text-primary);
     background: var(--bg-subtle);
@@ -33,8 +51,9 @@
 
   &.active {
     color: var(--accent);
-    border-bottom-color: var(--accent);
     font-weight: var(--weight-semibold);
+
+    &::after { transform: scaleX(1); }
   }
 }
 
