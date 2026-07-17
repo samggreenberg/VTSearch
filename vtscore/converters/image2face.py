@@ -149,6 +149,29 @@ class Image2FaceMediaConverter(MediaConverter):
         min_size = int(self.get_param(params, "min_size") or 32)
         return threshold, max(0.0, padding), max(1, min_size)
 
+    def _detect_boxes(
+        self, img: Any, w: int, h: int, threshold: float, padding: float, min_size: int
+    ) -> list[tuple[int, int, int, int, float]]:
+        """Run MTCNN on *img* and return usable pixel boxes, highest-confidence first."""
+        detector = self._make_detector()
+        if detector is None:
+            return []
+        try:
+            det_boxes, det_probs = detector.detect(img)
+        except Exception:
+            return []
+        if det_boxes is None:
+            return []
+
+        boxes: list[tuple[int, int, int, int, float]] = []
+        for box, prob in zip(det_boxes, det_probs):
+            resolved = self._box_from_detection(box, prob, w, h, threshold, padding, min_size)
+            if resolved is not None:
+                boxes.append(resolved)
+        # Highest-confidence face first so face index 0 is the "primary" face.
+        boxes.sort(key=lambda b: b[4], reverse=True)
+        return boxes
+
     # ------------------------------------------------------------------
     # Conversion
     # ------------------------------------------------------------------
@@ -174,23 +197,7 @@ class Image2FaceMediaConverter(MediaConverter):
         img_w, img_h = img.size
         fmt = img.format or "PNG"
 
-        detector = self._make_detector()
-        if detector is None:
-            return []
-        try:
-            det_boxes, det_probs = detector.detect(img)
-        except Exception:
-            return []
-        if det_boxes is None:
-            return []
-
-        boxes: list[tuple[int, int, int, int, float]] = []
-        for box, prob in zip(det_boxes, det_probs):
-            resolved = self._box_from_detection(box, prob, img_w, img_h, threshold, padding, min_size)
-            if resolved is not None:
-                boxes.append(resolved)
-        # Highest-confidence face first so face index 0 is the "primary" face.
-        boxes.sort(key=lambda b: b[4], reverse=True)
+        boxes = self._detect_boxes(img, img_w, img_h, threshold, padding, min_size)
 
         stem = (media.get("filename") or "image").rsplit(".", 1)[0]
         out_ext = "png" if fmt.upper() == "PNG" else fmt.lower()
