@@ -250,6 +250,12 @@ DEP003 = [
     # (via the scripts' --no-deps step) deptry reclassifies the import from
     # DEP001 (missing) to DEP003 (transitive/undeclared). See the DEP001 note.
     "toponymy",
+    # facenet-pytorch (FaceNet embedder + MTCNN face detector) is installed
+    # --no-deps by the install scripts because its torch<2.3 / numpy<2 pins
+    # would downgrade the app's stack. Once installed, deptry reclassifies the
+    # import from DEP001 (missing) to DEP003 (present/undeclared), so it needs
+    # ignoring under both rules. See the DEP001 note.
+    "facenet_pytorch",
 ]
 # DEP002: declared but not imported. Tools we run via their CLIs
 # (pytest, ruff, …), runtime helpers loaded by name (gunicorn), or
