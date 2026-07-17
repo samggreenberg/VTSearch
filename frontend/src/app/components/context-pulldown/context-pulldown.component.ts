@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, HostListener, inject, input, OnDestroy, OnInit, viewChild } from '@angular/core';
 import { TitleCasePipe } from '@angular/common';
+import { NavigationEnd, Router } from '@angular/router';
 
 import { Observable, Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { filter, takeUntil } from 'rxjs/operators';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { ContextSwitchService } from '../../services/context-switch.service';
@@ -67,6 +68,7 @@ interface PulldownRow {
 })
 export class ContextPulldownComponent implements OnInit, OnDestroy {
   private host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private router = inject(Router);
   private datasetState = inject(DatasetStateService);
   private activeContext = inject(ActiveContextService);
   private contextSwitch = inject(ContextSwitchService);
@@ -82,6 +84,13 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   readonly menuRef = viewChild<ElementRef<HTMLDivElement>>('menuRef');
 
   open = false;
+  /** True on the browse (VTSBrowser) and find-results views, where the
+   *  dataset/detector pair is fixed for the duration of the view. The
+   *  pulldown then renders display-only: it still shows the active label
+   *  but the trigger is disabled, so the pair can only be switched from the
+   *  Dashboard. The label/train view is intentionally *not* locked — mid-
+   *  training pair switching is the pulldown's original purpose. */
+  locked = false;
   focusedIndex = -1;
   rows: PulldownRow[] = [];
   activeName = '';
@@ -205,7 +214,31 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       this.rebuildRows();
     });
 
+    // Lock the pulldown (display-only) on the browse / find views. Seed from
+    // the current URL, then track navigations. Mirrors the router-URL view
+    // detection in `AppComponent`.
+    this.updateLocked(this.router.url);
+    this.router.events
+      .pipe(
+        filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+        takeUntil(this.destroy$),
+      )
+      .subscribe((e) => this.updateLocked(e.urlAfterRedirects));
+
     this.rebuildRows();
+  }
+
+  /** Recompute {@link locked} from a URL. The browse and find views pin the
+   *  active pair; the dashboard and label views leave the pulldown live. */
+  private updateLocked(url: string): void {
+    const locked = url.startsWith('/browse') || url.startsWith('/find');
+    if (locked === this.locked) return;
+    this.locked = locked;
+    // A menu open when we navigate into a locked view must close.
+    if (locked) this.close();
+    // Written from the router-events subscribe (async callback), so notify the
+    // scheduler to repaint the trigger's disabled state under zoneless.
+    this.cdr.markForCheck();
   }
 
   ngOnDestroy(): void {
@@ -230,6 +263,11 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   }
 
   get fieldTitle(): string {
+    if (this.locked) {
+      return this.isDataset
+        ? 'Dataset is fixed here — return to the Dashboard to switch'
+        : 'Detector is fixed here — return to the Dashboard to switch';
+    }
     return this.isDataset
       ? 'Active dataset (click to switch)'
       : 'Active detector (click to switch)';
@@ -247,6 +285,10 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
    * Idempotent; calling on an already-open menu just re-focuses.
    */
   openMenu(): void {
+    // Display-only on the browse / find views: no dropdown, no add-new. The
+    // trigger button is also `disabled`, but this guard covers the programmatic
+    // open path (`pulldownControl.openSignal$`) which bypasses the button.
+    if (this.locked) return;
     this.open = true;
     const firstCompat = this.rows.findIndex((r) => r.compatibleWithOther);
     if (firstCompat >= 0) this.focusedIndex = firstCompat;

@@ -21,10 +21,17 @@
   transition: background var(--transition-base), border-color var(--transition-base);
   white-space: nowrap;
 
-  &:hover,
+  &:hover:not(:disabled),
   &.is-open {
     background: var(--header-btn-hover-bg);
     border-color: var(--header-btn-hover-border);
+  }
+
+  // Locked (browse / find views): the pair is fixed, so the trigger is
+  // display-only. Keep the label fully legible — just drop the affordances
+  // that imply it can be opened.
+  &.is-locked {
+    cursor: default;
   }
 
   .trigger-label {

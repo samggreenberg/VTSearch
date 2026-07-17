@@ -2,15 +2,19 @@
   type="button"
   class="pulldown-trigger"
   [class.is-open]="open"
+  [class.is-locked]="locked"
   [title]="fieldTitle"
-  [attr.aria-expanded]="open"
-  aria-haspopup="listbox"
+  [disabled]="locked"
+  [attr.aria-expanded]="locked ? null : open"
+  [attr.aria-haspopup]="locked ? null : 'listbox'"
   (click)="toggle()"
   (keydown)="onKeydown($event)"
 >
   <strong class="trigger-label">{{ fieldLabel }}:</strong>
   <span class="trigger-value" [class.is-placeholder]="!activeRowExists">{{ activeRowExists ? activeName : placeholderLabel }}</span>
-  <span class="trigger-caret" aria-hidden="true">▾</span>
+  @if (!locked) {
+    <span class="trigger-caret" aria-hidden="true">▾</span>
+  }
 </button>
 
 @if (open) {
