@@ -243,6 +243,27 @@
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
                       [title]="field.description || field.label || field.key"
                     />
+                  } @else if (field.field_type === 'select' && field.allow_free_text) {
+                    <input
+                      [id]="'nmm-' + field.key"
+                      type="text"
+                      class="form-input"
+                      [attr.list]="'nmm-' + field.key + '-list'"
+                      [(ngModel)]="labelImporterValues[field.key]"
+                      [name]="'nmm-' + field.key"
+                      [disabled]="!!labelImporterDynamicLoading()[field.key]"
+                      [placeholder]="labelImporterDynamicLoading()[field.key] ? 'Loading…' : (field.placeholder || field.description || field.label || field.key)"
+                      [title]="field.description || field.label || field.key"
+                      (ngModelChange)="onLabelImporterFieldChanged(field.key)"
+                    />
+                    <datalist [id]="'nmm-' + field.key + '-list'">
+                      @for (opt of labelImporterOptionsFor(field); track opt.value) {
+                        <option [value]="opt.value">{{ opt.label }}</option>
+                      }
+                    </datalist>
+                    @if (field.dynamic_options && labelImporterDynamicError()[field.key]) {
+                      <p class="error-text">{{ labelImporterDynamicError()[field.key] }}</p>
+                    }
                   } @else if (field.field_type === 'select') {
                     <select
                       [id]="'nmm-' + field.key"
@@ -250,11 +271,21 @@
                       [(ngModel)]="labelImporterValues[field.key]"
                       [name]="'nmm-' + field.key"
                       [title]="field.description || field.label || field.key"
+                      (ngModelChange)="onLabelImporterFieldChanged(field.key)"
+                      [disabled]="!!labelImporterDynamicLoading()[field.key] || (!!field.dynamic_options && labelImporterOptionsFor(field).length === 0)"
                     >
-                      @for (opt of field.options || []; track opt) {
-                        <option [value]="opt">{{ opt }}</option>
+                      @if (field.dynamic_options && labelImporterDynamicLoading()[field.key]) {
+                        <option value="">Loading…</option>
+                      } @else if (field.dynamic_options && labelImporterOptionsFor(field).length === 0 && !labelImporterDynamicError()[field.key]) {
+                        <option value="">No options available</option>
+                      }
+                      @for (opt of labelImporterOptionsFor(field); track opt.value) {
+                        <option [value]="opt.value">{{ opt.label }}</option>
                       }
                     </select>
+                    @if (field.dynamic_options && labelImporterDynamicError()[field.key]) {
+                      <p class="error-text">{{ labelImporterDynamicError()[field.key] }}</p>
+                    }
                   } @else if (field.field_type === 'number') {
                     <input
                       [id]="'nmm-' + field.key"
