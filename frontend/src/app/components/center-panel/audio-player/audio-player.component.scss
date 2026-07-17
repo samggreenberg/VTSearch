@@ -34,11 +34,37 @@
   opacity: 0;
 }
 
+// Positioned container so the playhead can be absolutely overlaid on the
+// waveform. `cursor: pointer` advertises that the waveform is click-to-seek.
+.waveform-stage {
+  position: relative;
+  width: 100%;
+  display: flex;
+  cursor: pointer;
+  // The playhead line spills to the canvas edges; clip it to the rounded corners.
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+
 .waveform-canvas {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   background: var(--bg-surface);
+}
+
+// Thin vertical line swept left->right as playback advances. Positioned by a
+// `left: %` binding driven off currentTime/duration on a rAF loop. Never
+// intercepts the stage's seek pointer events.
+.waveform-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--waveform-playhead);
+  pointer-events: none;
+  will-change: left;
 }
 
 .audio-element {

@@ -1,12 +1,23 @@
 <div class="waveform-swipe-wrapper" [class]="swipeClass()">
-  <canvas
-    #waveformCanvas
-    class="waveform-canvas"
-    width="600"
-    height="120"
-    role="img"
-    aria-label="Audio waveform visualization"
-  ></canvas>
+  <div
+    class="waveform-stage"
+    (pointerdown)="onSeekPointerDown($event)"
+    (pointermove)="onSeekPointerMove($event)"
+    (pointerup)="onSeekPointerUp($event)"
+    (pointercancel)="onSeekPointerUp($event)"
+  >
+    <canvas
+      #waveformCanvas
+      class="waveform-canvas"
+      width="600"
+      height="120"
+      role="img"
+      aria-label="Audio waveform visualization"
+    ></canvas>
+    @if (playheadVisible()) {
+      <div class="waveform-playhead" [style.left.%]="playheadFraction() * 100"></div>
+    }
+  </div>
 </div>
 <audio
   #audioEl

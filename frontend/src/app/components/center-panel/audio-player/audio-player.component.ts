@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, linkedSignal, OnDestroy, output, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, linkedSignal, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
 import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { decodeAudioBuffer } from '../../../utils/decode-audio';
@@ -88,6 +88,21 @@ export class AudioPlayerComponent implements OnDestroy {
   // back into it so later loads restore the user's last-set volume.
   private readonly currentVolume = linkedSignal(() => this.volume());
 
+  // Playhead sweep state. `playheadFraction` is currentTime/duration in [0, 1];
+  // the template binds it to the overlay line's `left: %`. `playheadVisible`
+  // gates rendering until a finite duration is known (the line has no meaningful
+  // position before (loadedmetadata)). Both are driven imperatively: on a
+  // requestAnimationFrame loop while playing (see startSweep) -- (timeupdate)
+  // fires only ~4x/sec, too coarse for a smooth sweep -- and on demand after a
+  // seek or pause.
+  readonly playheadFraction = signal(0);
+  readonly playheadVisible = signal(false);
+  // Handle of the in-flight rAF sweep tick, or null when the loop is stopped.
+  private sweepRaf: number | null = null;
+  // True while a scrub gesture (pointerdown on the waveform) is in progress, so
+  // (pointermove) seeks continuously until pointerup.
+  private scrubbing = false;
+
   // Current object URL feeding the <audio> element (`blob:...`), or '' before
   // the first load. Set imperatively on the native element (not via a template
   // binding) because it's produced asynchronously after the fetch, and the app
@@ -154,6 +169,7 @@ export class AudioPlayerComponent implements OnDestroy {
 
   ngOnDestroy(): void {
     this.stopClipEnforcement();
+    this.stopSweep();
     this.waveformAbort?.abort();
     this.waveformAbort = null;
     const audio = this.audioRef()?.nativeElement;
@@ -172,6 +188,10 @@ export class AudioPlayerComponent implements OnDestroy {
     audio.volume = this.currentVolume();
     this.applyClipBounds();
     this.syncPlaybackState();
+    // Duration is now known: place the playhead at the current position and, if
+    // playback is already running, start the sweep loop.
+    this.updatePlayhead();
+    if (!audio.paused) this.startSweep();
   }
 
   // Seek into the clip window and (re)start boundary enforcement when the media
@@ -215,6 +235,12 @@ export class AudioPlayerComponent implements OnDestroy {
   // [start, end), loop back to the window start. Driven by the element's
   // (timeupdate) event instead of a 100ms polling interval.
   onTimeUpdate(): void {
+    // Refresh the playhead first, unconditionally: (timeupdate) is the coarse
+    // (~4x/sec) fallback that keeps the line moving when the rAF sweep isn't
+    // running (headless env, or a background tab that throttles rAF), and it
+    // must run whether or not this clip has a window to enforce.
+    this.updatePlayhead();
+
     const bounds = this.clipBounds;
     if (!bounds) return;
     const audio = this.audioRef()?.nativeElement;
@@ -232,12 +258,17 @@ export class AudioPlayerComponent implements OnDestroy {
   }
 
   onPlay(): void {
+    this.startSweep();
     if (!this.audioPlaying()) {
       this.playingChanged.emit(true);
     }
   }
 
   onPause(): void {
+    this.stopSweep();
+    // Settle the playhead on the exact paused position (the last rAF tick may
+    // have landed a frame short).
+    this.updatePlayhead();
     if (this.audioPlaying()) {
       this.playingChanged.emit(false);
     }
@@ -251,6 +282,98 @@ export class AudioPlayerComponent implements OnDestroy {
     } else {
       audio.pause();
     }
+  }
+
+  // --- Playhead sweep + click/drag-to-seek --------------------------------
+
+  // Recompute the playhead position from the element's clock. Hides the line
+  // until a finite, positive duration is known (before (loadedmetadata) the
+  // fraction is meaningless).
+  private updatePlayhead(): void {
+    const audio = this.audioRef()?.nativeElement;
+    if (!audio) return;
+    const duration = audio.duration;
+    if (!Number.isFinite(duration) || duration <= 0) {
+      this.playheadVisible.set(false);
+      return;
+    }
+    this.playheadVisible.set(true);
+    this.playheadFraction.set(Math.max(0, Math.min(1, audio.currentTime / duration)));
+  }
+
+  // Run a requestAnimationFrame loop that advances the playhead ~60x/sec while
+  // audio plays. Self-cancels when the element pauses (so a stray pause we
+  // didn't route through onPause still stops it). Idempotent: a second call
+  // while a loop is live is a no-op.
+  private startSweep(): void {
+    if (this.sweepRaf !== null) return;
+    if (typeof requestAnimationFrame !== 'function') return;
+    const tick = (): void => {
+      this.updatePlayhead();
+      const audio = this.audioRef()?.nativeElement;
+      if (audio && !audio.paused) {
+        this.sweepRaf = requestAnimationFrame(tick);
+      } else {
+        this.sweepRaf = null;
+      }
+    };
+    this.sweepRaf = requestAnimationFrame(tick);
+  }
+
+  private stopSweep(): void {
+    if (this.sweepRaf !== null) {
+      cancelAnimationFrame(this.sweepRaf);
+      this.sweepRaf = null;
+    }
+  }
+
+  // Begin a scrub gesture: seek to the pressed position and capture the pointer
+  // so drags outside the waveform keep seeking until release.
+  onSeekPointerDown(event: PointerEvent): void {
+    // Left button / primary pointer only; ignore right-clicks and secondary.
+    if (event.button !== 0) return;
+    this.scrubbing = true;
+    const stage = event.currentTarget as HTMLElement | null;
+    stage?.setPointerCapture?.(event.pointerId);
+    this.seekToPointer(event.clientX);
+    event.preventDefault();
+  }
+
+  onSeekPointerMove(event: PointerEvent): void {
+    if (!this.scrubbing) return;
+    this.seekToPointer(event.clientX);
+  }
+
+  onSeekPointerUp(event: PointerEvent): void {
+    if (!this.scrubbing) return;
+    this.scrubbing = false;
+    const stage = event.currentTarget as HTMLElement | null;
+    stage?.releasePointerCapture?.(event.pointerId);
+  }
+
+  // Map a viewport x-coordinate over the waveform to a playback time and seek
+  // there. The waveform spans the whole decoded buffer, so the fraction across
+  // the canvas maps linearly to [0, duration]; for a windowed clip the target
+  // is clamped into [clip_start, clip_end] (the seekable region).
+  private seekToPointer(clientX: number): void {
+    const audio = this.audioRef()?.nativeElement;
+    const canvas = this.canvasRef()?.nativeElement;
+    if (!audio || !canvas) return;
+    const duration = audio.duration;
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0) return;
+
+    const fraction = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    let target = fraction * duration;
+
+    const media = this.media();
+    if (media.clip_start != null) {
+      const end = media.clip_end ?? duration;
+      target = Math.max(media.clip_start, Math.min(end, target));
+    }
+    audio.currentTime = target;
+    this.updatePlayhead();
   }
 
   adjustVolume(delta: number): void {
@@ -269,8 +392,13 @@ export class AudioPlayerComponent implements OnDestroy {
     const datasetId = this.activeContext.datasetId;
 
     // Blank the old waveform immediately so a media switch doesn't leave the
-    // previous clip's render on screen during the fetch.
+    // previous clip's render on screen during the fetch. Retract the playhead
+    // too -- its old position is meaningless for the incoming clip, and the new
+    // duration is unknown until (loadedmetadata).
     this.clearCanvas();
+    this.stopSweep();
+    this.playheadVisible.set(false);
+    this.playheadFraction.set(0);
 
     this.waveformAbort?.abort();
     const abort = new AbortController();
