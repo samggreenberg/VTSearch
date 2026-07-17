@@ -225,7 +225,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-sm);
+  // Sharp corners: this pane shows a single (focused) item, and in the VTSBrowse
+  // corner symbology rounded corners are reserved for multi-item piles — a lone
+  // item reads as a crisp, square tile.
   background: var(--bg-body);
   overflow: hidden;
   // Clicking the detail image toggles selection of the item it shows — the only
@@ -357,7 +359,8 @@
   flex-direction: column;
   align-items: center;
   padding: 2px;
-  border-radius: var(--radius-sm);
+  // Sharp: one item per cell, so its hover fill and selection ring stay square
+  // (rounded is reserved for multi-item piles — see the thumbnail note below).
   width: var(--popup-cell, 80px);
   // Animate the "viewed" enlarge (below) so items grow/settle smoothly rather
   // than popping as focus walks the grid.
@@ -413,7 +416,9 @@
 .bin-popup-placeholder {
   width: var(--popup-cell, 28px);
   height: var(--popup-cell, 28px);
-  border-radius: var(--radius-sm);
+  // Sharp corners: each grid thumbnail is a single item, and in the VTSBrowse
+  // corner symbology rounded corners mean a multi-item pile, so a lone item is
+  // drawn as a crisp square. (The wrap's ``overflow: hidden`` clips the <img>.)
   flex-shrink: 0;
   background: var(--bg-body);
 }
@@ -437,14 +442,12 @@
   height: 100%;
   mask-size: cover;
   -webkit-mask-size: cover;
-  border-radius: var(--radius-sm);
 }
 
 .bin-popup-thumb {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: var(--radius-sm);
   background: var(--bg-body);
   display: block;
 }

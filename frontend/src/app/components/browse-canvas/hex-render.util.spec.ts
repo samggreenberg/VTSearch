@@ -177,7 +177,7 @@ describe('hex-render.util', () => {
   });
 
   describe('traceCellPath', () => {
-    it('draws the inscribed disc for a singleton', () => {
+    it('draws the inscribed disc for a pile (rounded)', () => {
       const ctx = stubCtx();
       traceCellPath(ctx.ctx, 10, 20, 5, true);
       expect(ctx.arc).toHaveBeenCalledOnce();
@@ -185,11 +185,11 @@ describe('hex-render.util', () => {
       expect(cx).toBe(10);
       expect(cy).toBe(20);
       expect(r).toBeCloseTo(5 * HEX_INRADIUS_RATIO);
-      // No polygon path for a singleton disc.
+      // No polygon path for a pile disc.
       expect(ctx.moveTo).not.toHaveBeenCalled();
     });
 
-    it('draws the full hexagon for a pile (non-single)', () => {
+    it('draws the full hexagon for a singleton (non-rounded)', () => {
       const ctx = stubCtx();
       traceCellPath(ctx.ctx, 10, 20, 5, false);
       expect(ctx.arc).not.toHaveBeenCalled();
