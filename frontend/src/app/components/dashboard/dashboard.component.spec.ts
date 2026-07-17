@@ -401,7 +401,7 @@ describe('DashboardComponent', () => {
     it('should hint about missing dataset', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
-      expect(component.labelHint).toBe('Select a dataset row in the table above');
+      expect(component.labelHint).toBe('Select a dataset in the table above.');
     });
 
     it('should hint about missing model', () => {
@@ -456,7 +456,7 @@ describe('DashboardComponent', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
       component.selectedDetectorIds.clear();
-      expect(component.findHint).toBe('Select a dataset and a detector row above');
+      expect(component.findHint).toBe('Select a dataset and detector above.');
     });
 
     it('should hint about missing dataset', () => {
@@ -464,7 +464,7 @@ describe('DashboardComponent', () => {
       flushInitialRequests([], models);
       // Single detector is auto-selected; no dataset selected.
       component.selectedDatasetIds.clear();
-      expect(component.findHint).toBe('Select a dataset row in the table above');
+      expect(component.findHint).toBe('Select a dataset in the table above.');
     });
 
     it('should hint about missing model', () => {
@@ -472,7 +472,7 @@ describe('DashboardComponent', () => {
       flushInitialRequests(datasets);
       // Single dataset is auto-selected; no detector selected.
       component.selectedDetectorIds.clear();
-      expect(component.findHint).toBe('Select a detector row in the table above');
+      expect(component.findHint).toBe('Select a detector in the table above.');
     });
 
     it('should hint about media type mismatch', () => {
