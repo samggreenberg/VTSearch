@@ -42,7 +42,30 @@
       <div
         class="browse-content"
         #content
-        [style.--browse-panel-width]="panelWidth() + 'px'">
+        [class.browse-content--details]="detailsDocked()"
+        [style.--browse-panel-width]="panelWidth() + 'px'"
+        [style.--browse-details-width]="detailsPanelWidth() + 'px'">
+        @if (detailsDocked()) {
+          <aside class="browse-details" aria-label="Bin details">
+            <vt-browse-bin-popup
+              [docked]="true"
+              [availableWidth]="detailsPanelWidth()"
+              [memberIds]="contextMembers"
+              [repId]="contextRepId"
+              [mediaType]="mediaType()"
+              [volume]="volume()"
+              [hoverThumbRadius]="thumbnailRadius"
+              [nowPlayingExt]="nowPlaying()"
+              (dismissed)="dismissContextMenu()"
+              (popOutRequested)="onPopOutRequested()"
+              (nowPlaying)="onNowPlaying($event)"
+            />
+          </aside>
+          <div
+            class="pane-divider"
+            (mousedown)="onDetailsDividerMouseDown($event)"
+          ></div>
+        }
         <div class="browse-main">
           <div class="browse-tools-left" vtNoFocusSteal>
             @if (subset) {
@@ -66,7 +89,9 @@
             </button>
             @if (mediaType() === 'audio') {
               <div class="browse-now-playing">
-                @if (nowPlaying(); as np) {
+                <!-- Docked bin details replace this small waveform: the panel's
+                     large detail pane is the now-playing display then. -->
+                @if (!detailsDocked() && nowPlaying(); as np) {
                   <!-- The waveform PNG is a theme-agnostic alpha mask (issue #2369):
                        the surface box mirrors the browse tile, and the inner element
                        masks the accent colour to the wave shape so it recolours with
@@ -147,7 +172,7 @@
             [volume]="volume()"
             (nowPlaying)="onNowPlaying($event)"
           />
-          @if (contextMenuOpen) {
+          @if (contextMenuOpen && !detailsDocked()) {
             <vt-browse-bin-popup
               [x]="contextMenuX"
               [y]="contextMenuY"
@@ -158,6 +183,7 @@
               [volume]="volume()"
               [hoverThumbRadius]="thumbnailRadius"
               (dismissed)="dismissContextMenu()"
+              (dockRequested)="onDockRequested()"
               (nowPlaying)="onNowPlaying($event)"
             />
           }

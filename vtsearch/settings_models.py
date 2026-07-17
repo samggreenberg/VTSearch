@@ -347,6 +347,13 @@ class UserSettings(BaseModel):
     # on-screen range.
     browse_panel_width: Annotated[int, _clamp(260, 800)] = 360
 
+    # VTSBrowse docked bin-details panel width (CSS px). When the bin-details
+    # window is docked (``bin_details_docked``), it renders as a left panel
+    # beside the canvas, separated by a draggable divider; this persists the
+    # width the user dragged it to. Not surfaced as a Settings-modal widget -
+    # the divider drives it. Clamped to a sane on-screen range.
+    browse_details_panel_width: Annotated[int, _clamp(220, 800)] = 340
+
     # VTSBrowse per-media-type display preferences. Each is a
     # ``{media_type_id: value}`` dict so a user can tune the projection
     # browser independently for, say, audio vs. image datasets. Empty
@@ -442,6 +449,13 @@ class UserSettings(BaseModel):
     # thus a focused item to attach the column to, but the flag is stored per media
     # type generically.
     popup_metadata_shown: dict[str, bool] = Field(default_factory=dict)
+    # VTSBrowse bin-details presentation, per media type. When true, the bin
+    # details open docked as a left panel beside the canvas (large item +
+    # metadata on top, the bin's member grid below) instead of the floating
+    # right-click popup window. Driven by the dock button on the floating
+    # window and the pop-out button on the docked panel; empty entries fall
+    # back to the floating window (false).
+    bin_details_docked: dict[str, bool] = Field(default_factory=dict)
     panel_pct_left: dict[str, int] = Field(default_factory=dict)
     panel_pct_right: dict[str, int] = Field(default_factory=dict)
 

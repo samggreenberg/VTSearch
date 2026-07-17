@@ -27,6 +27,7 @@ const KNOWN_TYPES = new Set([
   'checkbox-checked', 'checkbox-some', 'checkbox-blank', 'search', 'trophy',
   'zoom-in', 'zoom-out', 'zoom-fit', 'help', 'copy',
   'export', 'trash', 'combine', 'rotate-ccw', 'rotate-cw',
+  'dock-left', 'pop-out',
 ]);
 
 function emojiToType(icon: string): string {

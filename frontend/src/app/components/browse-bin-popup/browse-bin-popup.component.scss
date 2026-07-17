@@ -225,6 +225,8 @@
 .bin-popup-preview {
   flex-shrink: 0;
   height: 100%;
+  // Positioning context for the docked now-playing playhead + spinner.
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -485,6 +487,119 @@
   .bin-popup-name {
     display: none;
   }
+}
+
+// --- Docked presentation ----------------------------------------------------
+// The same component rendered as the Browse view's persistent left panel: the
+// detail pane top-left with the metadata column to its right (wrapping below
+// when the panel is narrow), and the member grid filling the rest below.
+
+// Floating: the top wrapper dissolves so the metadata column and preview pane
+// stay direct flex items of the body, exactly the historic row layout.
+.bin-popup-top {
+  display: contents;
+}
+
+.bin-popup--docked {
+  position: static;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+
+  .bin-popup-header {
+    cursor: default;
+  }
+
+  .bin-popup-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .bin-popup-top {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    flex-shrink: 0;
+  }
+
+  // Pane left, metadata to its right (DOM order is metadata-first for the
+  // floating layout, so flip with `order` rather than duplicating markup).
+  .bin-popup-preview {
+    order: -1;
+    height: auto;
+  }
+
+  .bin-popup-meta-col {
+    flex: 1 1 140px;
+    min-width: 140px;
+    width: auto;
+    height: auto;
+  }
+
+  .bin-popup-grid-col {
+    width: 100%;
+    height: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
+
+// Docked audio: sweeping playhead + buffering spinner over the detail pane,
+// mirroring the toolbar now-playing widget the pane replaces.
+.bin-popup-preview-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--waveform-playhead);
+  pointer-events: none;
+  will-change: left;
+}
+
+.bin-popup-preview-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
+  pointer-events: none;
+}
+
+.bin-popup-preview-spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-top-color: var(--accent);
+  animation: bin-popup-spin 0.8s linear infinite;
+}
+
+@keyframes bin-popup-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// Docked, non-thumbnail media (text): a large placeholder glyph in the pane.
+.bin-popup-preview-glyph {
+  font-size: 48px;
+  color: var(--text-muted);
+}
+
+// Docked empty state: no bin has been opened yet.
+.bin-popup-empty-hint {
+  margin: auto;
+  padding: var(--space-md);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  text-align: center;
 }
 
 .sr-only {

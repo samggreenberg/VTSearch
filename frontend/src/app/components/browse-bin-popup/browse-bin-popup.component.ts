@@ -110,11 +110,34 @@ const BODY_PADDING_Y = 2 * BODY_PADDING;
  * {@link MIN_PREVIEW_PX}..{@link MAX_PREVIEW_PX}.
  */
 const PREVIEW_SIZE_STEPS = [120, 160, 208, 272, 352, 448, 560, 640, 720] as const;
+/** Horizontal chrome (px) around the docked panel's member grid: the body's
+ *  side padding plus room for the scrollbar. Subtracted from the panel width
+ *  to get the content width the docked grid chunks its columns against. */
+const DOCKED_GRID_CHROME = 2 * BODY_PADDING + 12;
+/** Smallest width (px) the docked metadata column is guaranteed beside the
+ *  detail pane; a wider pane pushes the metadata to wrap below it instead. */
+const DOCKED_META_MIN = 140;
 
 /**
- * The bin popup: a floating panel showing the media items in the bin the user
- * right-clicked on the VTSBrowse canvas, plus — for thumbnail media (image /
- * video) — a large preview pane on the left.
+ * The bin details: the media items in the bin the user right-clicked on the
+ * VTSBrowse canvas, plus — for thumbnail media (image / video / audio
+ * waveforms) — a large preview pane.
+ *
+ * It renders in one of two presentations, chosen per media type by the
+ * ``bin_details_docked`` setting (the dock / pop-out header buttons flip it):
+ *
+ * - **Floating** (``docked`` false, the default): a draggable popup window
+ *   summoned at the right-click point and clamped to the visible canvas.
+ * - **Docked** (``docked`` true): a persistent left panel beside the canvas.
+ *   The detail pane sits top-left with the metadata column to its right, and
+ *   the member grid fills the rest of the panel below them. The panel is
+ *   always mounted while the option is on — before any bin is opened it shows
+ *   an empty hint — and for audio its detail pane doubles as the now-playing
+ *   display ({@link nowPlayingExt}), replacing the toolbar's small waveform
+ *   widget. A singleton bin keeps the grid area allocated but empty. In this
+ *   mode all floating machinery (summon positioning, clamping, dragging,
+ *   outside-click/Escape dismissal, document-level keyboard shortcuts) is
+ *   disabled; the canvas keeps its own shortcuts.
  *
  * The members render as a virtualized thumbnail grid (always grid; there is no
  * list mode). Hovering a grid thumbnail paints that item's *full-resolution*
@@ -187,9 +210,26 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   readonly hoverThumbRadius = input(28);
   /** Preview-audio volume (0–1), driven by the Browse toolbar's volume control. */
   readonly volume = input(1);
+  /** Docked mode: render as the Browse view's left panel instead of a floating
+   *  window. Constant per instance — the browse view mounts one element or the
+   *  other, never flips this on a live instance. */
+  readonly docked = input(false);
+  /** Width (CSS px) of the docked panel, driven by the browse view's divider;
+   *  the docked grid derives its column count from it. Unused when floating. */
+  readonly availableWidth = input(0);
+  /** The clip currently auditioning anywhere in the Browse view (canvas hover
+   *  or this panel's own grid), fed back by the browse view. In docked audio
+   *  mode the detail pane + metadata track it — the panel is the now-playing
+   *  display. Unused when floating. */
+  readonly nowPlayingExt = input<NowPlaying | null>(null);
 
-  /** Emitted when the popup should close (outside click, Escape, or the X). */
+  /** Emitted when the popup should close (outside click, Escape, or the X);
+   *  in docked mode, when the X asks to clear the shown bin. */
   readonly dismissed = output<void>();
+  /** Floating header's dock button: the user wants the docked presentation. */
+  readonly dockRequested = output<void>();
+  /** Docked header's pop-out button: the user wants the floating window. */
+  readonly popOutRequested = output<void>();
   /** The clip now auditioning from a grid-row hover (for the top-left
    *  now-playing indicator, shared with the canvas hover), or ``null`` once
    *  the hover clears. */
@@ -358,6 +398,29 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
       this.hoverThumbRadius();
       untracked(() => setTimeout(() => this.place()));
     });
+    // Docked: the panel width (divider drags) re-chunks the member grid's
+    // columns and resizes the virtual viewport.
+    effect(() => {
+      const width = this.availableWidth();
+      untracked(() => {
+        if (!this.docked() || width <= 0) return;
+        this.rebuildRows();
+        setTimeout(() => {
+          this.viewport()?.checkViewportSize();
+          this.prefetchVisible();
+        });
+        this.cdr.markForCheck();
+      });
+    });
+    // Docked audio: the detail pane + metadata column track the auditioning
+    // clip (the now-playing replacement), so keep its metadata loading.
+    effect(() => {
+      const np = this.nowPlayingExt();
+      untracked(() => {
+        if (!this.docked() || !np) return;
+        this.metadataCache.ensureLoaded([np.mediaId]);
+      });
+    });
     // (Re-)subscribe the member grid's scroll-driven prefetch whenever the
     // virtual viewport instance changes — it lives behind the template's
     // ``@if (!previewOnly)``, and the popup is reused across summons while
@@ -520,16 +583,18 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     this.settingsState.update({ popup_metadata_shown: dict } as SettingsUpdate).subscribe();
   }
 
-  /** Cached metadata for the focused (previewed) item, or ``undefined`` before
-   *  it has loaded. Everything the column shows reads through this. */
+  /** Cached metadata for the focused (displayed) item, or ``undefined`` before
+   *  it has loaded. Everything the column shows reads through this. In docked
+   *  audio mode the displayed item follows the auditioning clip. */
   private focusedMedia(): MediaBatchResponse | undefined {
-    return this.previewId == null ? undefined : this.metadataCache.get(this.previewId);
+    const id = this.displayedId;
+    return id == null ? undefined : this.metadataCache.get(id);
   }
 
   /** Display name of the focused item, matching the center panel's Name field. */
   get metadataName(): string {
     const media = this.focusedMedia();
-    if (!media) return this.previewId == null ? '' : `Media #${this.previewId}`;
+    if (!media) return this.displayedId == null ? '' : `Media #${this.displayedId}`;
     return media.filename || `Media #${media.id}`;
   }
 
@@ -640,11 +705,20 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     }
   }
 
+  /** Width (px) the member grid lays its cells out in: the historic fixed
+   *  column width when floating, or the live panel width (minus the body
+   *  padding + scrollbar chrome) when docked, so the docked grid re-chunks as
+   *  the divider drags. */
+  private gridContentWidth(): number {
+    if (!this.docked()) return GRID_CONTENT_WIDTH;
+    return Math.max(this.gridGoalWidth, this.availableWidth() - DOCKED_GRID_CHROME);
+  }
+
   /** Recompute the column count + row chunking for the current thumbnail size. */
   private rebuildRows(): void {
     this.columns = Math.max(
       1,
-      Math.floor((GRID_CONTENT_WIDTH + GRID_GAP) / (this.gridGoalWidth + GRID_GAP)),
+      Math.floor((this.gridContentWidth() + GRID_GAP) / (this.gridGoalWidth + GRID_GAP)),
     );
     const cols = this.columns;
     const rows: number[][] = [];
@@ -710,7 +784,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  effect re-clamps the popup so growing the canvas can't push it off-screen. */
   bumpPreview(delta: 1 | -1): void {
     const mediaType = this.mediaType();
-    if (!this.showPreview || !mediaType) return;
+    if (!this.hasPane || !mediaType) return;
     const current = this.previewOverride ?? Math.round(this.previewDefault());
     const next =
       delta > 0
@@ -723,14 +797,14 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   /** True when the detail canvas is already at the smallest ladder rung. */
   get atMinPreview(): boolean {
-    if (!this.showPreview) return true;
+    if (!this.hasPane) return true;
     const current = this.previewOverride ?? Math.round(this.previewDefault());
     return current <= PREVIEW_SIZE_STEPS[0];
   }
 
   /** True when the detail canvas is already at the largest ladder rung. */
   get atMaxPreview(): boolean {
-    if (!this.showPreview) return true;
+    if (!this.hasPane) return true;
     const current = this.previewOverride ?? Math.round(this.previewDefault());
     return current >= PREVIEW_SIZE_STEPS[PREVIEW_SIZE_STEPS.length - 1];
   }
@@ -779,6 +853,80 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     return this.showPreview ? this.bodyHeight : 0;
   }
 
+  // --- Docked presentation --------------------------------------------------
+
+  /** Whether a detail pane renders at all: thumbnail media (image / video /
+   *  audio waveforms / document) always have one; docked, every media type
+   *  gets the pane — non-thumbnail types show a large placeholder glyph. */
+  get hasPane(): boolean {
+    return this.docked() || this.showPreview;
+  }
+
+  /** The item the detail pane + metadata column describe. Floating (and docked
+   *  non-audio) this is the hovered/arrowed item ({@link previewId}); docked
+   *  audio it follows whatever clip is auditioning anywhere in the Browse view
+   *  (canvas hover or this panel's grid) — the now-playing replacement —
+   *  falling back to the viewed item while nothing sounds. */
+  get displayedId(): number | null {
+    if (this.docked() && this.mediaType() === 'audio') {
+      return this.nowPlayingExt()?.mediaId ?? this.previewId;
+    }
+    return this.previewId;
+  }
+
+  /** Side (px) of the square docked detail pane: the same per-media-type
+   *  remembered size ({@link previewOverride}) the floating pane uses, clamped
+   *  to the docked panel's width so growing the pane can't overflow it. */
+  get dockedPaneSize(): number {
+    const desired = this.previewOverride ?? this.previewDefault();
+    const width = this.availableWidth();
+    const room = width > 0 ? width - 2 * BODY_PADDING : MAX_PREVIEW_PX;
+    return Math.round(
+      Math.max(MIN_PREVIEW_PX, Math.min(desired, Math.min(room, MAX_PREVIEW_PX))),
+    );
+  }
+
+  /** Rows the member grid renders. Docked, a singleton bin keeps the grid
+   *  area allocated but *empty* (its lone item is already shown in the detail
+   *  pane); floating keeps the historic shape ({@link previewOnly} drops the
+   *  grid column entirely for thumbnail singletons). */
+  get displayRows(): number[][] {
+    if (this.docked() && this.ids.length === 1) return [];
+    return this.rows;
+  }
+
+  /** Wave painted in the docked audio detail pane: the auditioning clip's
+   *  waveform while something sounds, else the viewed item's. */
+  paneWaveUrl(): string {
+    const np = this.docked() ? this.nowPlayingExt() : null;
+    return np ? np.waveUrl : this.previewUrl();
+  }
+
+  /** Docked audio: playhead position (0–1) while the auditioning clip sounds,
+   *  or ``null`` (no playhead) otherwise. */
+  get paneProgress(): number | null {
+    if (!this.docked()) return null;
+    return this.nowPlayingExt()?.progress ?? null;
+  }
+
+  /** Docked audio: whether the auditioning clip is still fetching/buffering
+   *  (drives the spinner over the pane, mirroring the old toolbar widget). */
+  get paneLoading(): boolean {
+    if (!this.docked()) return false;
+    return this.nowPlayingExt()?.loading ?? false;
+  }
+
+  /** Docked, non-thumbnail media (e.g. text): the pane shows a large
+   *  placeholder glyph instead of trying to load an image that doesn't exist. */
+  get paneShowsPlaceholder(): boolean {
+    return this.docked() && !this.showPreview;
+  }
+
+  /** Large placeholder glyph for {@link paneShowsPlaceholder}. */
+  get panePlaceholderGlyph(): string {
+    return this.mediaType() === 'text' ? '¶' : '□';
+  }
+
   // --- Dismissal -----------------------------------------------------------
 
   close(): void {
@@ -787,6 +935,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent): void {
+    if (this.docked()) return;
     if (!this.host.nativeElement.contains(event.target as Node)) {
       this.dismissed.emit();
     }
@@ -794,6 +943,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
+    if (this.docked()) return;
     this.dismissed.emit();
   }
 
@@ -807,6 +957,9 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    */
   @HostListener('document:keydown', ['$event'])
   onKeydown(event: KeyboardEvent): void {
+    // Docked, the panel is persistent chrome: it must not steal the canvas's
+    // document-level shortcuts (arrows pan, +/- zoom, Ctrl-A select-in-view).
+    if (this.docked()) return;
     if (shortcutsBlocked()) return;
 
     // Ctrl/Cmd-A: select every item in this bin (always select, never toggle).
@@ -927,6 +1080,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   /** Begin a drag when the user presses the header (but not the close button or
    *  the view controls, which keep their own click behavior). */
   onHeaderPointerDown(event: PointerEvent): void {
+    if (this.docked()) return;
     if (event.button !== 0) return;
     if ((event.target as HTMLElement).closest('button, vt-view-controls')) return;
     event.preventDefault();
@@ -1011,7 +1165,8 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   /** True when the item currently shown in the preview pane is selected, so the
    *  large detail image can render the same highlight ring as a grid entry. */
   isPreviewSelected(): boolean {
-    return this.previewId != null && this.selection.has(this.previewId);
+    const id = this.displayedId;
+    return id != null && this.selection.has(id);
   }
 
   /** Toggle selection of the item shown in the preview pane (the hovered grid
@@ -1020,7 +1175,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  is dropped; it also lets the user select by clicking the big detail image in
    *  a multi-member popup. */
   onPreviewClick(): void {
-    const id = this.previewId;
+    const id = this.displayedId;
     if (id != null) this.onEntryClick(id);
   }
 
@@ -1222,6 +1377,9 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  and correct any residual overflow, so the window ends up entirely on-screen
    *  even if the computed height drifts from what actually rendered. */
   private place(): void {
+    // Docked: the panel is laid out by the browse view's grid, never
+    // positioned/clamped by us.
+    if (this.docked()) return;
     // Before the panel exists there's nothing to measure/clamp; a later place()
     // call (e.g. from ngAfterViewInit) will run once it's in the DOM. Staying
     // unplaced keeps the popup hidden until then rather than showing it unclamped.

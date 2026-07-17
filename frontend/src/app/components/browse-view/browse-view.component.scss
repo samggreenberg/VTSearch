@@ -175,6 +175,29 @@
   position: relative;
 }
 
+// Docked bin-details variant: an extra left panel + divider ahead of the
+// canvas. The panel width is driven by ``--browse-details-width`` (the left
+// divider drag, persisted as ``browse_details_panel_width``).
+.browse-content--details {
+  grid-template-columns:
+    var(--browse-details-width, 340px) 8px minmax(0, 1fr) 8px
+    var(--browse-panel-width, 300px);
+}
+
+// The docked bin-details panel (left of the canvas): hosts the bin-popup
+// component in its docked presentation, filling the column.
+.browse-details {
+  min-width: 0;
+  overflow: hidden;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+
+  vt-browse-bin-popup {
+    display: block;
+    height: 100%;
+  }
+}
+
 // Opaque cover over the canvas + panels until the opening view is ready. The
 // content underneath is fully laid out (so the canvas fits at its real size and
 // the reveal doesn't reflow); this just hides the mid-load grid and swallows
