@@ -117,4 +117,92 @@ describe('AudioPlayerComponent', () => {
     await settleZoneless(fixture);
     expect(audio.currentTime).toBe(12);
   });
+
+  // Give the real <audio> element a mutable currentTime and a fixed duration,
+  // since jsdom exposes neither a working media clock nor metadata.
+  function stubClock(audio: HTMLAudioElement, duration: number): { set: (t: number) => void } {
+    let currentTime = 0;
+    Object.defineProperty(audio, 'currentTime', {
+      configurable: true,
+      get: () => currentTime,
+      set: (v: number) => (currentTime = v),
+    });
+    Object.defineProperty(audio, 'duration', { configurable: true, get: () => duration });
+    Object.defineProperty(audio, 'paused', { configurable: true, get: () => true });
+    return { set: (t: number) => (currentTime = t) };
+  }
+
+  it('positions the playhead at currentTime/duration once metadata is known', async () => {
+    fixture.componentRef.setInput('media', mockMedia);
+    await settleZoneless(fixture);
+
+    const audio: HTMLAudioElement = fixture.nativeElement.querySelector('audio');
+    const clock = stubClock(audio, 10);
+
+    // Before metadata, the line is hidden (no meaningful position yet).
+    expect(component.playheadVisible()).toBe(false);
+
+    component.onLoadedMetadata();
+    expect(component.playheadVisible()).toBe(true);
+    expect(component.playheadFraction()).toBe(0);
+
+    // A later (timeupdate) advances the fraction.
+    clock.set(2.5);
+    component.onTimeUpdate();
+    expect(component.playheadFraction()).toBeCloseTo(0.25, 5);
+  });
+
+  it('seeks to the clicked fraction of the waveform', async () => {
+    fixture.componentRef.setInput('media', mockMedia);
+    await settleZoneless(fixture);
+
+    const audio: HTMLAudioElement = fixture.nativeElement.querySelector('audio');
+    stubClock(audio, 10);
+    component.onLoadedMetadata();
+
+    const canvas: HTMLCanvasElement = fixture.nativeElement.querySelector('canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      left: 100,
+      width: 200,
+      top: 0,
+      right: 300,
+      bottom: 120,
+      height: 120,
+      x: 100,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    // Click at x=250 -> (250-100)/200 = 0.75 of a 10s clip -> 7.5s.
+    component.onSeekPointerDown({ button: 0, clientX: 250, pointerId: 1, currentTarget: null, preventDefault: () => {} } as unknown as PointerEvent);
+    expect(audio.currentTime).toBeCloseTo(7.5, 5);
+    expect(component.playheadFraction()).toBeCloseTo(0.75, 5);
+  });
+
+  it('clamps a click-seek into the clip window for a windowed clip', async () => {
+    const clip: Media = { ...mockMedia, id: 5, clip_start: 3, clip_end: 6 };
+    fixture.componentRef.setInput('media', clip);
+    await settleZoneless(fixture);
+
+    const audio: HTMLAudioElement = fixture.nativeElement.querySelector('audio');
+    stubClock(audio, 10);
+    component.onLoadedMetadata();
+
+    const canvas: HTMLCanvasElement = fixture.nativeElement.querySelector('canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      width: 100,
+      top: 0,
+      right: 100,
+      bottom: 120,
+      height: 120,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    // Click at the far right (fraction ~0.9 -> 9s) is clamped to clip_end (6s).
+    component.onSeekPointerDown({ button: 0, clientX: 90, pointerId: 1, currentTarget: null, preventDefault: () => {} } as unknown as PointerEvent);
+    expect(audio.currentTime).toBe(6);
+  });
 });
