@@ -409,15 +409,21 @@
 
 // Thumbnail/placeholder square, sized to the chosen icon size (``--popup-cell``,
 // bound per row); falls back to a compact square if the variable is ever absent.
-.bin-popup-thumb-wrap {
-  display: block;
+// The real thumbnail's wrapper and the no-thumbnail placeholder are the same
+// fixed cell-sized box, so they share these metrics (and the themed ``--bg-body``
+// surface: hidden under a cover-fit <img>, and the backdrop the tinted audio
+// waveform (issue #2369) sits on).
+.bin-popup-thumb-wrap,
+.bin-popup-placeholder {
   width: var(--popup-cell, 28px);
   height: var(--popup-cell, 28px);
   border-radius: var(--radius-sm);
   flex-shrink: 0;
-  // Themed surface behind the thumbnail: hidden under a cover-fit <img>, and the
-  // backdrop the tinted audio waveform (issue #2369) sits on.
   background: var(--bg-body);
+}
+
+.bin-popup-thumb-wrap {
+  display: block;
   overflow: hidden;
 }
 
@@ -451,13 +457,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: var(--popup-cell, 28px);
-  height: var(--popup-cell, 28px);
-  border-radius: var(--radius-sm);
-  background: var(--bg-body);
   color: var(--text-muted);
   font-size: var(--font-lg);
-  flex-shrink: 0;
 }
 
 // The name stacks under the thumbnail, truncated to the cell width. Its
