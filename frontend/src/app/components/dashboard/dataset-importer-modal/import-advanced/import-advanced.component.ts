@@ -142,6 +142,18 @@ export class ImportAdvancedComponent {
     return this.clippers().length > 0 && this.clippers()[0].name === this.selectedClipper();
   }
 
+  /** Whether the source-specs "Include media" column has anything worth
+   *  showing: the importer participates in the source-specs flow AND at
+   *  least one non-native converter feeds the native type.  When a media
+   *  type has no converters into it (e.g. video, document), the column
+   *  would render only the forced, always-checked native row - a
+   *  question with no real answer - so it is suppressed entirely.  This
+   *  matches the Import Defaults settings, which gates the same block on
+   *  ``activeConverters.length > 0``. */
+  get hasSourceSpecsColumn(): boolean {
+    return this.showSourceSpecs() && this.availableConverters().length > 0;
+  }
+
   /** The Advanced toggle is shown either when the Include-media block
    *  is available (it lives strictly behind the toggle, so the toggle
    *  must be reachable) or when neither embedder nor clipper has been
@@ -169,7 +181,7 @@ export class ImportAdvancedComponent {
 
   /** Whether to render the standalone clipper "Details" button below
    *  the Advanced block.  When the source-specs column is visible
-   *  (Advanced open AND ``showSourceSpecs`` true), the native row in
+   *  (Advanced open AND :prop:`hasSourceSpecsColumn`), the native row in
    *  the column hosts its own Details button, so the standalone one
    *  would be redundant.  In every other case where the user should be
    *  able to reach the clipper chooser (Advanced collapsed but a
@@ -180,7 +192,7 @@ export class ImportAdvancedComponent {
   get showStandaloneClipperButton(): boolean {
     if (this.clippers().length <= 1) return false;
     if (!this.showClipperPicker) return false;
-    return !(this.advancedOpen && this.showSourceSpecs());
+    return !(this.advancedOpen && this.hasSourceSpecsColumn);
   }
 
   /** Embedders flagged ``is_default`` for the active media type; shown
