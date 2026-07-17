@@ -177,7 +177,7 @@ def _keyphrase_disambiguation(prompt: str) -> dict[str, Any]:
     return {"new_topic_name_mapping": mapping, "topic_specificities": [0.5] * len(mapping)}
 
 
-def make_keyphrase_namer() -> Any:
+def make_keyphrase_namer(on_name: Callable[[], None] | None = None) -> Any:
     """The no-LLM namer: answer every naming prompt with the top keyphrase.
 
     A trivial in-process ``LLMWrapper`` whose "LLM calls" parse the prompt
@@ -186,6 +186,10 @@ def make_keyphrase_namer() -> Any:
     contrastive clustering + keyphrase machinery and skips only the LLM's
     phrasing.  Duplicate-name disambiguation passes echo the old names back
     (a no-LLM namer cannot invent new distinctions).
+
+    ``on_name`` fires once per *topic-naming* call (not the batched
+    disambiguation passes), which is how :func:`_fit_topic_layers` drives a
+    determinate naming progress bar: one topic named ≈ one tick.
     """
     from toponymy.llm_wrappers import LLMWrapper  # noqa: PLC0415
 
@@ -197,6 +201,8 @@ def make_keyphrase_namer() -> Any:
         def _respond(self, prompt: str) -> str:
             if "new_topic_name_mapping" in prompt:
                 return json.dumps(_keyphrase_disambiguation(prompt))
+            if on_name is not None:
+                on_name()
             return json.dumps({"topic_name": _keyphrase_topic_name(prompt), "topic_specificity": 0.5})
 
         def _call_llm(self, prompt: str, temperature: float, max_tokens: int) -> str:
@@ -230,6 +236,7 @@ def _fit_topic_layers(
     *,
     object_description: str,
     corpus_description: str,
+    on_progress: ProgressFn | None = None,
 ) -> list[tuple[list[str], np.ndarray]]:
     """Run the Toponymy fit; return ``(topic_names, cluster_labels)`` per layer.
 
@@ -238,23 +245,72 @@ def _fit_topic_layers(
     (or ``-1`` for noise).  Isolated as the seam tests stub: everything above
     is our glue, everything inside (including the namer, so stubbed callers
     never import toponymy) is the library's responsibility.
+
+    Progress: naming is the long pole (one namer call per topic across every
+    layer), so we turn it into a *determinate* bar.  A clusterer subclass
+    records each layer's topic count the moment Toponymy finishes clustering
+    (finest layer first), giving us the total; the no-LLM namer then ticks the
+    bar once per topic, tagged with the 0-based layer it's naming — the
+    ``Layer 0 / Layer 1 / …`` breakdown the library used to dump to stdout,
+    now surfaced through the UI instead.
     """
     import warnings  # noqa: PLC0415
 
     from toponymy import Toponymy  # noqa: PLC0415
     from toponymy.clustering import ToponymyClusterer  # noqa: PLC0415
 
+    # ``named`` counts topic-naming calls so far; ``cumulative`` is the running
+    # topic-count boundary per layer (filled in once clustering completes), so
+    # ``searchsorted`` maps the current tick to the layer being named.
+    naming = {"named": 0, "total": 0, "cumulative": np.empty(0, dtype=np.int64)}
+
+    def _on_layers(cluster_labels: list[np.ndarray]) -> None:
+        sizes = [int(labels.max()) + 1 if labels.size else 0 for labels in cluster_labels]
+        naming["cumulative"] = np.cumsum(sizes)
+        naming["total"] = int(sum(sizes))
+
+    def _on_name() -> None:
+        naming["named"] += 1
+        if on_progress is None or not naming["total"]:
+            return
+        done = min(naming["named"], naming["total"])
+        n_layers = len(naming["cumulative"])
+        layer = min(int(np.searchsorted(naming["cumulative"], done, side="left")), n_layers - 1)
+        on_progress(done, naming["total"], f"Naming regions (layer {layer} of {n_layers - 1})…")
+
+    class _ProgressClusterer(ToponymyClusterer):  # type: ignore[misc]
+        """A ``ToponymyClusterer`` that reports its layer sizes as it finds them.
+
+        Wrapping the clusterer (rather than pre-fitting one) keeps Toponymy in
+        charge of passing the naming layer_kwargs (prompt template/format,
+        exemplar delimiters), so the naming pass is byte-for-byte what an
+        unwrapped fit would produce — we only observe the layer counts.
+        """
+
+        def fit_predict(self, *args: Any, **kwargs: Any) -> Any:
+            layers, tree = super().fit_predict(*args, **kwargs)
+            _on_layers([np.asarray(layer.cluster_labels) for layer in layers])
+            return layers, tree
+
     model = Toponymy(
-        llm_wrapper=make_keyphrase_namer(),
+        llm_wrapper=make_keyphrase_namer(_on_name),
         text_embedding_model=text_encoder,
-        clusterer=ToponymyClusterer(
+        clusterer=_ProgressClusterer(
             min_clusters=4,
             base_min_cluster_size=_base_min_cluster_size(len(texts)),
-            show_progress_bar=False,
+            verbose=False,
         ),
         object_description=object_description,
         corpus_description=corpus_description,
-        show_progress_bars=False,
+        # ``verbose=False`` (not the deprecated ``show_progress_bars=False``) is
+        # load-bearing: passing only the legacy flag leaves the library's
+        # unified ``verbose`` defaulting to True, which both prints
+        # "Layer N found M clusters" to stdout and — because a True ``verbose``
+        # overrides a False ``show_progress_bar`` downstream — flashes tqdm bars
+        # through exemplar/keyphrase selection (issue: signpost stdout noise).
+        # A single ``verbose=False`` silences both and skips the deprecation
+        # warnings the legacy flags would emit.
+        verbose=False,
     )
     # Toponymy narrates naming hiccups through ``warnings.warn`` (naming
     # fallbacks, disambiguation retries). The KeyphraseNamer above keeps those
@@ -328,6 +384,7 @@ def build_region_labels(
         encoder,
         object_description=object_description,
         corpus_description=corpus_description,
+        on_progress=on_progress,
     )
     if not layers:
         return empty
