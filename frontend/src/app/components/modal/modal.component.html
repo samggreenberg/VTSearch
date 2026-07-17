@@ -1,21 +1,14 @@
-@if (rendered()) {
+@if (open()) {
 <!--
   cdkTrapFocus + auto-capture gives the dialog full keyboard/screen-reader focus
   management app-wide: on open it saves the triggering element and moves focus to
   the first tabbable control inside the dialog; Tab/Shift+Tab then cycle within
-  the dialog instead of escaping to the page behind it; and on close (the leave
-  animation finishes and the `@if` destroys this subtree) focus is restored to
-  the trigger.
-
-  `rendered()` (not `open()`) gates the subtree so it stays mounted through the
-  close/leave animation; `(focusin)` feeds the origin-aware scale-in — see
-  ModalComponent.onFocusIn.
+  the dialog instead of escaping to the page behind it; and on close (the `@if`
+  destroys this subtree) focus is restored to the trigger.
 -->
 <div
   class="modal-backdrop"
-  [class.is-leaving]="leaving()"
   (click)="onBackdropClick($event)"
-  (focusin)="onFocusIn($event)"
   role="dialog"
   aria-modal="true"
   [attr.aria-label]="title()"

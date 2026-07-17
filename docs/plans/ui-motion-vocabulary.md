@@ -147,9 +147,9 @@ policy in `CLAUDE.md`).
 
 ## Suggested sequencing
 
-1. **Infra first:** the flight/FLIP helper (the shared easing tokens and the
-   modal enter/exit hook have shipped). It unlocks the highest-value remaining
-   items.
+1. **Infra first:** the flight/FLIP helper (the shared easing tokens have
+   shipped; modal open/close is now unanimated). It unlocks the highest-value
+   remaining items.
 2. **Best payoff-to-risk:** re-sort FLIP settle, list insertion/removal
    transitions.
 3. **Everything else** as independent issues, sized per item.
