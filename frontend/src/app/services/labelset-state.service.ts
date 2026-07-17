@@ -1,8 +1,9 @@
 import { Injectable, OnDestroy, inject } from '@angular/core';
-import { BehaviorSubject, EMPTY, Observable, Subject, timer } from 'rxjs';
-import { catchError, switchMap, takeUntil, tap } from 'rxjs/operators';
+import { BehaviorSubject, EMPTY, Observable, Subject } from 'rxjs';
+import { catchError, takeUntil, tap } from 'rxjs/operators';
 import type { DetectorLabelView } from '../generated/api-client/models/detector-label-view';
 import type { DetectorLabelsDetailResponse } from '../generated/api-client/models/detector-labels-detail-response';
+import { adaptivePoll } from './adaptive-poll';
 import { DetectorsCrudApiService } from './detectors-crud-api.service';
 
 @Injectable({ providedIn: 'root' })
@@ -50,8 +51,15 @@ export class LabelsetStateService implements OnDestroy {
   startPolling(intervalMs: number = 1500): void {
     if (this.polling) return;
     this.polling = true;
-    timer(0, intervalMs)
-      .pipe(takeUntil(this.stopPolling$), switchMap(() => this.fetch$()))
+    // adaptivePoll never overlaps GETs (a slow backend no longer has each
+    // labels-detail read cancelled by the next tick), eases to a heartbeat once
+    // the labelset stops changing, and pauses while the tab is hidden. fetch$()
+    // already absorbs its own errors, so a failed poll simply applies nothing.
+    adaptivePoll(() => this.fetch$(), {
+      fastMs: intervalMs,
+      slowMs: Math.max(intervalMs, 10000),
+    })
+      .pipe(takeUntil(this.stopPolling$))
       .subscribe();
   }
 
