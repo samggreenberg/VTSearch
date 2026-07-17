@@ -115,7 +115,7 @@ Re-ingests medias from their recorded origins and applies labels.
 
 Pregen processors are the built-in autorun processors VTSearch ships with: an
 OCR extractor (PaddleOCR), a Speech extractor (Whisper Tiny), and a Face
-localizer (MediaPipe). Adding them registers each into the autorun
+localizer (MTCNN). Adding them registers each into the autorun
 extractors / localizers stores so they run automatically after a dataset
 loads. They do **not** create detectors.
 
@@ -136,7 +136,7 @@ POST /api/pregen-processors/add
 Registers every bundled pregen processor (OCR extractor, Speech extractor,
 Face localizer) into the autorun extractor / localizer stores.
 
-→ `{"success": true, "added": ["OCR (PaddleOCR)", "Speech (Whisper Tiny)", "Face (MediaPipe)"]}`
+→ `{"success": true, "added": ["OCR (PaddleOCR)", "Speech (Whisper Tiny)", "Face (MTCNN)"]}`
 
 ---
 
