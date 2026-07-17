@@ -102,11 +102,6 @@ policy in `CLAUDE.md`).
 
 <!-- item-sep -->
 
-- **Drawer slide for side panels** — Left/right/browse-selection panels toggle
-  via `@if`; a slide-in/out over `--transition-slow` matches the physicality of
-  the drag-resizable docked browse panel. Files: `left-panel/`, `right-panel/`,
-  `browse-selection-panel/`.
-
 <!-- item-sep -->
 
 - **Tab-underline slide** — Slide the active-tab indicator between tabs instead
