@@ -49,7 +49,7 @@ function snapEta(value: number, minStep: number): number {
 /** Render a snapped magnitude with at most one decimal and no trailing ``.0``. */
 function etaUnit(value: number, unit: string): string {
   const text = Number.isInteger(value) ? String(value) : value.toFixed(1);
-  return `${text} ${unit} left`;
+  return `${text} ${unit} left?`;
 }
 
 /**
@@ -71,7 +71,7 @@ export function formatEta(seconds: number | null | undefined): string {
     const s = snapEta(seconds, 10);
     // A few seconds left snaps down to 0; claiming "~0 sec" reads as "done"
     // even though work remains. Show "< 10 sec left" instead.
-    if (s <= 0) return '< 10 sec left';
+    if (s <= 0) return '< 10 sec left?';
     if (s < 60) return etaUnit(s, 'sec');
   }
   // Minutes: round to the nice fraction of a minute (minimum half-minute).

@@ -135,16 +135,16 @@ describe('formatEta', () => {
 
   it('never claims finer than 10-second granularity sub-minute', () => {
     // A few seconds left snaps below the 10s floor → "< 10 sec", never "< 5 sec".
-    expect(formatEta(3)).toBe('< 10 sec left');
-    expect(formatEta(4)).toBe('< 10 sec left');
+    expect(formatEta(3)).toBe('< 10 sec left?');
+    expect(formatEta(4)).toBe('< 10 sec left?');
     // Just over the floor rounds to the nearest 10s, not 5s.
-    expect(formatEta(12)).toBe('10 sec left');
-    expect(formatEta(18)).toBe('20 sec left');
-    expect(formatEta(34)).toBe('30 sec left');
+    expect(formatEta(12)).toBe('10 sec left?');
+    expect(formatEta(18)).toBe('20 sec left?');
+    expect(formatEta(34)).toBe('30 sec left?');
   });
 
   it('switches to minutes and hours for larger estimates', () => {
-    expect(formatEta(330)).toBe('5.5 min left');
-    expect(formatEta(7200)).toBe('2 hr left');
+    expect(formatEta(330)).toBe('5.5 min left?');
+    expect(formatEta(7200)).toBe('2 hr left?');
   });
 });
