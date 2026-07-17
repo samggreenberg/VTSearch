@@ -483,14 +483,46 @@ class TestBatchMetadataBranches:
         assert item["description"] == "a described item"
         assert "origin_name" not in item
 
-    def test_clip_fields_propagated(self, client):
-        mid = _inject(clip_start=1.5, clip_end=3.0, clip_index=2)
+    def test_sliced_audio_suppresses_playback_window(self, client):
+        # The audio clipper serves the already-sliced clip bytes (a short WAV in
+        # its own 0-based timeline) but stamps the original absolute offsets.
+        # The top-level clip_start/clip_end are a *seek window into the whole
+        # served file*, so emitting the absolute offsets here would make the
+        # player seek past the end of the short clip and play silence. They must
+        # be suppressed for byte-sliced audio; clip_index (provenance) stays.
+        mid = _inject(clip_start=120.0, clip_end=125.0, clip_index=2)
+        resp = client.post("/api/medias/batch", json={"ids": [mid]})
+        assert resp.status_code == 200
+        (item,) = resp.get_json()
+        assert "clip_start" not in item
+        assert "clip_end" not in item
+        assert item["clip_index"] == 2
+        # The offsets still reach the UI as provenance via custom_metadata.
+        assert item["custom_metadata"]["Clip Start"] == 120.0
+        assert item["custom_metadata"]["Clip End"] == 125.0
+
+    def test_video_keeps_playback_window(self, client):
+        # Video clips share the parent's bytes and the player seeks within
+        # [clip_start, clip_end], so the window must survive for video.
+        mid = _inject(media_type="video", filename="clip.mp4", clip_start=1.5, clip_end=3.0, clip_index=2)
         resp = client.post("/api/medias/batch", json={"ids": [mid]})
         assert resp.status_code == 200
         (item,) = resp.get_json()
         assert item["clip_start"] == 1.5
         assert item["clip_end"] == 3.0
         assert item["clip_index"] == 2
+
+    def test_archive_member_audio_keeps_playback_window(self, client, tmp_path):
+        # A windowed archive-member (AAC/MP4) import serves the *whole* member,
+        # so the player must seek to clip_start and loop within the window; the
+        # window has to survive for these.
+        mid = _inject_archive_member(tmp_path, b"RIFFfake", "a.wav", "audio", "a.wav")
+        medias[mid].update({"clip_start": 4.0, "clip_end": 9.0})
+        resp = client.post("/api/medias/batch", json={"ids": [mid]})
+        assert resp.status_code == 200
+        (item,) = resp.get_json()
+        assert item["clip_start"] == 4.0
+        assert item["clip_end"] == 9.0
 
 
 # ---------------------------------------------------------------------------
