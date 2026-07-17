@@ -160,7 +160,9 @@ describe('BrowseSelectionPanelComponent (zoneless canary)', () => {
     // After the dwell: playback starts and `nowPlaying` carries the clip's
     // waveform for the top-left indicator — flagged `loading` until it sounds.
     expect(playSpy).toHaveBeenCalled();
-    expect(emitted).toEqual({ mediaId: 7, waveUrl: '/api/medias/7/thumbnail', loading: true });
+    // `progress` is null until a finite duration is known (jsdom has no media
+    // pipeline, so it never is); the sweeping playhead stays hidden meanwhile.
+    expect(emitted).toEqual({ mediaId: 7, waveUrl: '/api/medias/7/thumbnail', loading: true, progress: null });
   });
 
   it('stops the audition and emits nowPlaying(null) as soon as the cursor leaves', async () => {

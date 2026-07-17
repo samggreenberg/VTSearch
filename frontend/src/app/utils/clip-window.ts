@@ -45,3 +45,30 @@ export function clearClipWindow(el: HTMLAudioElement): void {
   el.onloadedmetadata = null;
   el.ontimeupdate = null;
 }
+
+/**
+ * Playback position of ``el`` as a fraction in ``[0, 1]`` of the clip the
+ * now-playing waveform depicts, or ``null`` when no finite duration is known
+ * yet (so the caller can hide the playhead until playback has a meaningful
+ * position).
+ *
+ * The fraction is measured across the *window* the thumbnail shows, mirroring
+ * {@link applyClipWindow} and the server's ``generate_waveform_thumbnail_window``
+ * (which slices the PNG to ``[clip_start, clip_end]``): a windowed clip's
+ * playhead sweeps ``[clip_start, clip_end]`` edge-to-edge, and a non-windowed
+ * clip's sweeps ``[0, duration]``. This keeps the sweeping line aligned with the
+ * waveform pixels the user actually sees.
+ */
+export function clipProgress(
+  el: HTMLAudioElement,
+  lookup: () => MediaBatchResponse | undefined,
+): number | null {
+  const duration = el.duration;
+  if (!Number.isFinite(duration) || duration <= 0) return null;
+  const media = lookup();
+  const start = media?.clip_start ?? 0;
+  const end = media?.clip_end ?? duration;
+  const span = end - start;
+  if (span <= 0) return null;
+  return Math.max(0, Math.min(1, (el.currentTime - start) / span));
+}

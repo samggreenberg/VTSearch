@@ -81,6 +81,17 @@
                         [style.-webkit-mask-image]="'url(' + np.waveUrl + ')'"
                         [style.mask-image]="'url(' + np.waveUrl + ')'"
                       ></div>
+                      <!-- Playhead: a thin line swept left→right as the clip
+                           sounds (issue-follow-up to #2574, which added the same
+                           sweep to the center-panel player). Positioned by a
+                           `left: %` binding off the clip-window progress fraction;
+                           hidden until a finite duration is known. -->
+                      @if (np.progress !== null) {
+                        <div
+                          class="browse-now-playing-playhead"
+                          [style.left.%]="np.progress * 100"
+                        ></div>
+                      }
                     </div>
                     @if (np.loading) {
                       <div class="browse-now-playing-loading" role="status" aria-label="Loading audio">
