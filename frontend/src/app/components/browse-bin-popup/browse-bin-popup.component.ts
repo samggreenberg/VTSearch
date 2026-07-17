@@ -17,26 +17,10 @@ import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.co
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
 import type { MediaBatchResponse } from '../../generated/api-client/models/media-batch-response';
 
-/** Height (px) of the name's line box under a grid thumbnail. Mirrors the pinned
- *  ``line-height`` on ``.bin-popup-name`` (``--font-xs`` = 12px × 1.25 = 15px);
- *  kept in sync so {@link rowSize} reserves exactly the space the name renders in.
- *  The name's line-height is pinned (rather than left at the font's ``normal``,
- *  which varies ~1.15–1.35 by platform font) precisely so this stays exact — an
- *  unpinned name renders a couple px taller than its slot, which is enough to
- *  force a stray scrollbar on even a single row. */
-const GRID_LABEL_HEIGHT = 15;
-/** Gap (px) between the thumbnail and its name inside a cell (``.bin-popup-entry``
- *  flex ``gap``); present only when the name shows. */
-const GRID_THUMB_NAME_GAP = 2;
 /** Vertical padding (px) inside every grid cell (``.bin-popup-entry`` 2px top +
  *  2px bottom), always present regardless of icon size. Reserved in {@link
  *  rowSize} so the cell's real rendered height never exceeds its virtual slot. */
 const GRID_CELL_PADDING = 4;
-/** Goal width (px) at/above which grid thumbnails still show their name. Below
- *  this (the XS/S icon sizes) the name truncates to a useless "a…", so the SCSS
- *  hides it (``@container … (max-width: 60px)``) and {@link rowSize} drops the
- *  reserved label height to match, keeping the grid gap-free. */
-const GRID_NAME_MIN_WIDTH = 65;
 /** Gap (px) between grid cells (and grid rows); matches ``--space-2xs``-ish. */
 const GRID_GAP = 4;
 /** Width (px) available to lay out cells inside the popup's scroll column (≈ its
@@ -746,18 +730,14 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     this.rows = rows;
   }
 
-  /** Pixel stride of one virtual grid row: the cell's real rendered height (the
-   *  thumbnail, its always-present vertical padding, and — when shown — the
-   *  thumb→name gap and name line box) plus an inter-row gap. Accounting for the
-   *  cell padding and pinned name line box keeps the row's rendered content from
-   *  overflowing its virtual slot by a sub-pixel, which would otherwise force a
-   *  stray scrollbar on even a single row. At the smallest icon sizes the name is
-   *  hidden (see {@link GRID_NAME_MIN_WIDTH}), so its gap + label height are
-   *  dropped to keep rows flush. */
+  /** Pixel stride of one virtual grid row: the thumbnail plus its always-present
+   *  vertical cell padding and an inter-row gap. The grid no longer prints a name
+   *  under each thumbnail, so only the thumbnail and padding contribute; accounting
+   *  for the cell padding keeps the row's rendered content from overflowing its
+   *  virtual slot by a sub-pixel, which would otherwise force a stray scrollbar on
+   *  even a single row. */
   get rowSize(): number {
-    const nameShown = this.gridGoalWidth >= GRID_NAME_MIN_WIDTH;
-    const nameHeight = nameShown ? GRID_THUMB_NAME_GAP + GRID_LABEL_HEIGHT : 0;
-    return this.gridGoalWidth + GRID_CELL_PADDING + nameHeight + GRID_GAP;
+    return this.gridGoalWidth + GRID_CELL_PADDING + GRID_GAP;
   }
 
   /** Height (px) the grid takes: just enough for its rows, capped (to the room

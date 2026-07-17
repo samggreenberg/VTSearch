@@ -10,7 +10,6 @@ import { MediaTypeCapabilityService } from '../../services/media-type-capability
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
 import { NoFocusStealDirective } from '../../directives/no-focus-steal.directive';
 import { IconComponent } from '../icon/icon.component';
-import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { applyClipWindow, clearClipWindow, clipProgress } from '../../utils/clip-window';
 import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
@@ -49,7 +48,7 @@ interface SelectionEntry {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-selection-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule, ViewControlsComponent, NoFocusStealDirective, IconComponent, CopyDetailButtonComponent],
+  imports: [CommonModule, FormsModule, ViewControlsComponent, NoFocusStealDirective, IconComponent],
   templateUrl: './browse-selection-panel.component.html',
   styleUrl: './browse-selection-panel.component.scss',
 })
