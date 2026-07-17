@@ -33,7 +33,13 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
-from vtscore.media.embedder import IMPORT_MODULE_ESTIMATES, MediaEmbedder, timed_progress, to_compute_device
+from vtscore.media.embedder import (
+    IMPORT_MODULE_ESTIMATES,
+    MediaEmbedder,
+    intercept_tqdm_progress,
+    timed_progress,
+    to_compute_device,
+)
 from vtscore.media.image._image_bulk import bulk_embed_image_files
 
 if TYPE_CHECKING:
@@ -82,8 +88,14 @@ class FaceEmbedder(MediaEmbedder):
         ):
             import torch  # noqa: F401, PLC0415
 
-        with timed_progress(self._on_progress, "loading", "Loading FaceNet weights…", 2, 2):
-            # facenet-pytorch lazy-downloads weights on first instantiation.
+        with (
+            timed_progress(self._on_progress, "loading", "Loading FaceNet weights…", 2, 2),
+            intercept_tqdm_progress(self._on_progress),
+        ):
+            # facenet-pytorch lazy-downloads weights (~107MB VGGFace2) on first
+            # instantiation via torch.hub, which prints a tqdm bar. Wrap it in
+            # intercept_tqdm_progress so the bar is forwarded to the GUI progress
+            # callback and never leaks to stdout/stderr.
             from facenet_pytorch import InceptionResnetV1  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
 
             model = InceptionResnetV1(pretrained="vggface2")
