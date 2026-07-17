@@ -282,11 +282,11 @@
 }
 
 // At the two smallest icon sizes (XS/S, ~42px content-box) the name truncates to
-// a useless "a…", so hide it and let the grid pack tighter. The copy button
-// stays (revealed on hover) as the only way to read the full name here. M and
-// up keep the name.
+// a useless "a…", so hide the whole name row — copy button included, since a
+// row that exists only to hold the copy button just wastes vertical space in a
+// dense grid. M and up keep the name (and its copy button).
 @container bsp-cell (max-width: 60px) {
-  .bsp-name-grid {
+  .bsp-name-row {
     display: none;
   }
 }
