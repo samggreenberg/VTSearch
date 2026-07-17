@@ -206,9 +206,7 @@ class TestFaceEmbedder:
 
         calls: list[tuple] = []
         emb = FaceEmbedder()
-        emb._on_progress = lambda status, message, current, total: calls.append(
-            (status, message, current, total)
-        )
+        emb._on_progress = lambda status, message, current, total: calls.append((status, message, current, total))
 
         with patch.dict(sys.modules, {"facenet_pytorch": fake_module}):
             emb._load_models_impl()
