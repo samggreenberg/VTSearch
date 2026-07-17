@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, model } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 export type LabelSortMode =
@@ -19,11 +19,12 @@ export type LabelSortMode =
   styleUrl: './label-sort.component.scss',
 })
 export class LabelSortComponent {
-  @Input() mode: LabelSortMode = 'time-desc';
-  readonly modeChange = output<LabelSortMode>();
+  // Two-way bindable: `[mode]` seeds it and the implicit `modeChange` output
+  // fires on selection, so `this.mode.set` both updates the local value and
+  // notifies the parent.
+  readonly mode = model<LabelSortMode>('time-desc');
 
   onSortChange(value: LabelSortMode): void {
-    this.mode = value;
-    this.modeChange.emit(value);
+    this.mode.set(value);
   }
 }

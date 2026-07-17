@@ -8,10 +8,10 @@
 >
   <img
     #imageEl
-    [src]="imageSrc"
-    [alt]="media.filename || 'Image media'"
+    [src]="imageSrc()"
+    [alt]="media().filename || 'Image media'"
     class="image-element"
-    [class.image-loading]="!imageReady"
+    [class.image-loading]="!imageReady()"
     [style.transform]="imageTransform"
     (load)="onImageLoad()"
     (error)="onImageError()"
@@ -39,12 +39,12 @@
       [style.width.px]="renderedW()"
       [style.height.px]="renderedH()"
       [style.transform]="'translate(-50%, -50%) ' + imageTransform"
-      [style.--region-zoom]="zoom"
+      [style.--region-zoom]="zoom()"
     >
       <div
         class="region-box"
         [class.shake]="regionBoxShake()"
-        [class.armed]="pendingBadConfirm"
+        [class.armed]="pendingBadConfirm()"
         [ngStyle]="regionBoxStyle!"
         (mousedown)="onRegionBodyMouseDown($event)"
         title="Region annotation (Shift-drag to redraw, Esc to clear)"

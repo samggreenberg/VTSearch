@@ -272,7 +272,7 @@ describe('NewDetectorModalComponent', () => {
 
   it('warns about no-text datasets only for a text-hint-only detector', () => {
     // No warning before any text is entered.
-    component.datasetEmbedder = 'dinov3';
+    fixture.componentRef.setInput('datasetEmbedder', 'dinov3');
     component.pendingText.set('');
     expect(component.showNoTextWarning).toBe(false);
 
@@ -288,13 +288,13 @@ describe('NewDetectorModalComponent', () => {
   });
 
   it('does not warn when the dataset embedder can search by text', () => {
-    component.datasetEmbedder = 'clap';
+    fixture.componentRef.setInput('datasetEmbedder', 'clap');
     component.pendingText.set('dog barking');
     expect(component.showNoTextWarning).toBe(false);
   });
 
   it('does not warn when the active dataset embedder is unknown', () => {
-    component.datasetEmbedder = '';
+    fixture.componentRef.setInput('datasetEmbedder', '');
     component.pendingText.set('dog barking');
     expect(component.showNoTextWarning).toBe(false);
   });
@@ -351,7 +351,7 @@ describe('NewDetectorModalComponent with defaultMediaType', () => {
 
     fixture = TestBed.createComponent(NewDetectorModalComponent);
     component = fixture.componentInstance;
-    component.defaultMediaType = 'image';
+    fixture.componentRef.setInput('defaultMediaType', 'image');
     httpMock = TestBed.inject(HttpTestingController);
     TestBed.tick(); // run ngOnInit under zoneless (issues the init GETs)
 

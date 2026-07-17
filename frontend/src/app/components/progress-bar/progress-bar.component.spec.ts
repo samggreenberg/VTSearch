@@ -21,20 +21,20 @@ describe('ProgressBarComponent', () => {
   });
 
   it('should calculate percentage correctly', () => {
-    component.value = 50;
-    component.max = 200;
+    fixture.componentRef.setInput('value', 50);
+    fixture.componentRef.setInput('max', 200);
     expect(component.percentage).toBe(25);
   });
 
   it('should clamp percentage to 100', () => {
-    component.value = 150;
-    component.max = 100;
+    fixture.componentRef.setInput('value', 150);
+    fixture.componentRef.setInput('max', 100);
     expect(component.percentage).toBe(100);
   });
 
   it('should handle zero max', () => {
-    component.value = 50;
-    component.max = 0;
+    fixture.componentRef.setInput('value', 50);
+    fixture.componentRef.setInput('max', 0);
     expect(component.percentage).toBe(0);
   });
 
@@ -83,37 +83,37 @@ describe('ProgressBarComponent', () => {
 
   describe('fillColor', () => {
     it('should be reddest at 0%', () => {
-      component.value = 0;
-      component.max = 100;
+      fixture.componentRef.setInput('value', 0);
+      fixture.componentRef.setInput('max', 100);
       expect(component.fillColor).toBe('color-mix(in srgb, var(--text-warning) 0%, var(--color-bad))');
     });
 
     it('should be yellowest at 50%', () => {
-      component.value = 50;
-      component.max = 100;
+      fixture.componentRef.setInput('value', 50);
+      fixture.componentRef.setInput('max', 100);
       expect(component.fillColor).toBe('color-mix(in srgb, var(--text-warning) 100%, var(--color-bad))');
     });
 
     it('should be greenest at 100%', () => {
-      component.value = 100;
-      component.max = 100;
+      fixture.componentRef.setInput('value', 100);
+      fixture.componentRef.setInput('max', 100);
       expect(component.fillColor).toBe('color-mix(in srgb, var(--color-good) 100%, var(--text-warning))');
     });
 
     it('should interpolate continuously between red and yellow below 50%', () => {
-      component.value = 25;
-      component.max = 100;
+      fixture.componentRef.setInput('value', 25);
+      fixture.componentRef.setInput('max', 100);
       expect(component.fillColor).toBe('color-mix(in srgb, var(--text-warning) 50%, var(--color-bad))');
     });
 
     it('should interpolate continuously between yellow and green above 50%', () => {
-      component.value = 75;
-      component.max = 100;
+      fixture.componentRef.setInput('value', 75);
+      fixture.componentRef.setInput('max', 100);
       expect(component.fillColor).toBe('color-mix(in srgb, var(--color-good) 50%, var(--text-warning))');
     });
 
     it('should be null while indeterminate', () => {
-      component.indeterminate = true;
+      fixture.componentRef.setInput('indeterminate', true);
       expect(component.fillColor).toBeNull();
     });
 
@@ -128,36 +128,36 @@ describe('ProgressBarComponent', () => {
 
   describe('polarity: high-bad', () => {
     beforeEach(() => {
-      component.polarity = 'high-bad';
+      fixture.componentRef.setInput('polarity', 'high-bad');
     });
 
     it('should be greenest at 0% (empty is good)', () => {
-      component.value = 0;
-      component.max = 100;
+      fixture.componentRef.setInput('value', 0);
+      fixture.componentRef.setInput('max', 100);
       expect(component.fillColor).toBe('color-mix(in srgb, var(--color-good) 100%, var(--text-warning))');
     });
 
     it('should be yellowest at 50%', () => {
-      component.value = 50;
-      component.max = 100;
+      fixture.componentRef.setInput('value', 50);
+      fixture.componentRef.setInput('max', 100);
       expect(component.fillColor).toBe('color-mix(in srgb, var(--text-warning) 100%, var(--color-bad))');
     });
 
     it('should be reddest at 100% (full is bad)', () => {
-      component.value = 100;
-      component.max = 100;
+      fixture.componentRef.setInput('value', 100);
+      fixture.componentRef.setInput('max', 100);
       expect(component.fillColor).toBe('color-mix(in srgb, var(--text-warning) 0%, var(--color-bad))');
     });
 
     it('mirrors the high-good gradient', () => {
-      component.value = 25;
-      component.max = 100;
+      fixture.componentRef.setInput('value', 25);
+      fixture.componentRef.setInput('max', 100);
       // 25% under high-bad colors as 75% would under high-good.
       expect(component.fillColor).toBe('color-mix(in srgb, var(--color-good) 50%, var(--text-warning))');
     });
 
     it('should be null while indeterminate', () => {
-      component.indeterminate = true;
+      fixture.componentRef.setInput('indeterminate', true);
       expect(component.fillColor).toBeNull();
     });
   });

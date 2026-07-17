@@ -25,7 +25,7 @@ describe('LocalFolderPickerComponent', () => {
 
     fixture = TestBed.createComponent(LocalFolderPickerComponent);
     component = fixture.componentInstance;
-    component.importers = [localFolderImporter, localFilesImporter, serverFolderImporter];
+    fixture.componentRef.setInput('importers', [localFolderImporter, localFilesImporter, serverFolderImporter]);
     httpMock = TestBed.inject(HttpTestingController);
   });
 

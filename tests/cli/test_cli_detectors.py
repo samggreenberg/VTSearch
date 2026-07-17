@@ -140,8 +140,10 @@ class TestAutofindDetectorsCLI:
         assert isinstance(det.get("hits"), list)
         assert det["detector_name"] == "ds-a-detector"
 
-    def test_detector_with_mismatched_input_spec_is_skipped(self, client, tmp_path, monkeypatch):
-        """A detector whose input_spec.clipper doesn't match the dataset is skipped, not run."""
+    def test_detector_with_mismatched_input_spec_is_reclipped(self, client, tmp_path, monkeypatch):
+        """A detector whose input_spec.clipper doesn't match the dataset is now
+        kept and re-clipped at scoring time (not skipped): its scoring info
+        carries the clipper to re-apply."""
         files = _make_audio_files(tmp_path, ["alpha.wav", "beta.wav", "gamma.wav"])
         _stub_resolve(monkeypatch, files)
 
@@ -177,31 +179,18 @@ class TestAutofindDetectorsCLI:
                 },
             },
         )
-        # Plus a detector with no input_spec; so the pipeline has
-        # *something* to score and doesn't error out empty-handed.
-        _write_trainable_model("ds-a-detector", labelset)
 
-        # The test fixture's medias have empty origin params (no clipper),
-        # so the mismatched detector should be skipped while the
-        # unconstrained one runs.
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        settings_path = _settings_file_with_detectors(tmp_path, ["spec-mismatch", "ds-a-detector"])
-        out_path = tmp_path / "hits.json"
+        # The test fixture's medias have no clipper, so the detector's
+        # sound_tiling(2.0) input_spec mismatches. It is kept (not skipped) and
+        # its scoring info records the clipper to re-apply.
+        from vtscore.cli import _load_and_train_detectors
 
-        from vtscore.cli import autodetect_main
+        snap = dict(app_module.medias)
+        trained = _load_and_train_detectors(["spec-mismatch"], "audio", snap)
 
-        autodetect_main(
-            str(dataset_path),
-            settings_path=str(settings_path),
-            exporter_name="server_json_file",
-            exporter_field_values={"filepath": str(out_path)},
-        )
-
-        body = json.loads(out_path.read_text())
-        results = body.get("results", {})
-        # Mismatched detector skipped, unconstrained one ran.
-        assert "spec-mismatch" not in results
-        assert "ds-a-detector" in results
+        assert "spec-mismatch" in trained
+        assert trained["spec-mismatch"]["clipper"] == "sound_tiling"
+        assert trained["spec-mismatch"]["clipper_params"].get("duration") == "2.0"
 
     def test_detector_with_matching_input_spec_runs(self, client, tmp_path, monkeypatch):
         """When the dataset's clipper matches the detector's input_spec, the detector runs."""

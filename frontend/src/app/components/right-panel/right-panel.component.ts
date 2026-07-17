@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, Input, input, OnChanges, OnDestroy, OnInit, output, signal, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, OnDestroy, OnInit, output, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -42,15 +42,15 @@ export interface TrainModeContext {
   templateUrl: './right-panel.component.html',
   styleUrl: './right-panel.component.scss',
 })
-export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
+export class RightPanelComponent implements OnInit, OnDestroy {
   private detectorsRegistryApi = inject(DetectorsRegistryApiService);
   voteState = inject(VoteStateService);
   labelsetState = inject(LabelsetStateService);
   private settingsState = inject(SettingsStateService);
   private dialog = inject(VtDialogService);
 
-  @Input() medias: Media[] = [];
-  @Input() trainMode: TrainModeContext | null = null;
+  readonly medias = input<Media[]>([]);
+  readonly trainMode = input<TrainModeContext | null>(null);
   readonly focusMode = input<'click' | 'hover'>('click');
   /** 'label' = Labeling mode (detector export allowed), 'find' = Finding mode (no detector export). */
   readonly mode = input<'label' | 'find'>('label');
@@ -122,6 +122,32 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
         }
       }
     });
+
+    // Track the active media type off the bound medias so the grid icon size
+    // follows the dataset. (Replaces the former `medias` ngOnChanges branch.)
+    effect(() => {
+      const medias = this.medias();
+      if (medias.length === 0) return;
+      const newType = medias[0].media_type;
+      if (newType !== untracked(this.currentMediaType)) {
+        this.currentMediaType.set(newType);
+        this.gridGoalWidth.set(iconSizeToGoalWidth(this.gridIconSizeRightDict[newType] ?? 'M'));
+      }
+    });
+
+    // Keep the labelset polling in sync with the labelset/vote source. Reads
+    // `mode` and `trainableModelName` via `useLabelset`, so it re-runs whenever
+    // either changes. (Replaces the former `trainableModelName`/`mode`
+    // ngOnChanges branch and the labelset block of ngOnInit.)
+    effect(() => {
+      if (this.useLabelset) {
+        this.labelsetState.setModel(this.trainableModelName());
+        this.labelsetState.startPolling();
+      } else {
+        this.labelsetState.stopPolling();
+        this.labelsetState.setModel(null);
+      }
+    });
   }
 
   /** True when the right pane should be sourced from the labelset (not /api/votes). */
@@ -160,30 +186,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   ngOnInit(): void {
     this.settingsState.load();
     this.voteState.startPolling();
-    if (this.useLabelset) {
-      this.labelsetState.setModel(this.trainableModelName());
-      this.labelsetState.startPolling();
-    }
     this.subscribeToLabelset();
-  }
-
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['medias'] && this.medias.length > 0) {
-      const newType = this.medias[0].media_type;
-      if (newType !== this.currentMediaType()) {
-        this.currentMediaType.set(newType);
-        this.gridGoalWidth.set(iconSizeToGoalWidth(this.gridIconSizeRightDict[newType] ?? 'M'));
-      }
-    }
-    if (changes['trainableModelName'] || changes['mode']) {
-      if (this.useLabelset) {
-        this.labelsetState.setModel(this.trainableModelName());
-        this.labelsetState.startPolling();
-      } else {
-        this.labelsetState.stopPolling();
-        this.labelsetState.setModel(null);
-      }
-    }
   }
 
   ngOnDestroy(): void {
@@ -252,12 +255,13 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   onDetectorRenamed(newName: string): void {
-    if (!this.trainMode?.model?.registry_id) return;
-    const registryId = this.trainMode.model.registry_id;
+    const trainMode = this.trainMode();
+    if (!trainMode?.model?.registry_id) return;
+    const registryId = trainMode.model.registry_id;
     this.detectorsRegistryApi.renameInRegistry(registryId, newName).subscribe({
       next: response => {
-        if (this.trainMode?.model) {
-          this.trainMode.model.name = newName;
+        if (trainMode.model) {
+          trainMode.model.name = newName;
         }
         this.detectorsRegistryApi.promptMoveOrphanedLabelsetFile(
           this.dialog,

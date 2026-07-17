@@ -146,6 +146,7 @@ def _load_and_train_detectors(
     environment.
     """
     from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.converter_routing import detector_can_score
     from vtscore.detectors.input_spec import (
         clipper_matches,
         extract_input_spec_from_medias,
@@ -155,6 +156,10 @@ def _load_and_train_detectors(
     from vtscore.state.core import DetectorContext
 
     dataset_spec = extract_input_spec_from_medias(snap)
+    # The dataset can hold mixed source types (a folder of videos + PDFs);
+    # match each detector against the whole set, not just the first media's
+    # type, so a converter-reachable detector isn't skipped on iteration order.
+    source_types = {m.get("media_type") or "" for m in snap.values()}
 
     out: dict[str, dict[str, Any]] = {}
     for det_name in detector_names:
@@ -163,12 +168,18 @@ def _load_and_train_detectors(
             raise ValueError(f"Detector '{det_name}' not found in the detectors dir.")
 
         det_media_type = det.get("media_type", "") or ""
-        if media_type and det_media_type and det_media_type != media_type:
+        # A detector matches when its target type is present directly or is
+        # reachable from some source type via a one-hop converter route (so one
+        # image detector scores native images, ``video2image``, and
+        # ``document2image`` in the same run). Legacy detectors with no
+        # media_type match anything, as before.
+        if det_media_type and not detector_can_score(det_media_type, source_types):
             cli_progress.emit(
                 "detector_skipped",
                 text=(
                     f"Skipping detector '{det_name}': media_type "
-                    f"{det_media_type!r} doesn't match dataset {media_type!r}."
+                    f"{det_media_type!r} has no direct or converter route from "
+                    f"dataset types {sorted(source_types)!r}."
                 ),
                 detector=det_name,
                 detector_media_type=det_media_type,
@@ -176,23 +187,30 @@ def _load_and_train_detectors(
             )
             continue
 
+        # When the detector was trained on a clipper granularity the loaded
+        # dataset doesn't already match, re-clip the dataset to that granularity
+        # at scoring time (auto-clip + re-embed) instead of skipping. The clipper
+        # spec rides on the detector's scoring info and is applied by
+        # ``route_and_embed``. A matching (or absent) clipper needs no re-clip.
         det_input_spec = det.get("input_spec") if isinstance(det.get("input_spec"), dict) else None
+        reclip_clipper = ""
+        reclip_params: dict[str, Any] = {}
         if det_input_spec and not clipper_matches(det_input_spec, dataset_spec):
-            det_clipper = det_input_spec.get("clipper") or ""
-            dataset_clipper = (dataset_spec or {}).get("clipper") or "(none)"
-            cli_progress.emit(
-                "detector_skipped",
-                text=(
-                    f"Skipping detector '{det_name}': input_spec.clipper "
-                    f"{det_clipper!r} doesn't match dataset clipper "
-                    f"{dataset_clipper!r}. Re-load the dataset with the "
-                    f"matching clipper to use this detector."
-                ),
-                detector=det_name,
-                detector_input_spec=det_input_spec,
-                dataset_input_spec=dataset_spec or {},
-            )
-            continue
+            reclip_clipper = det_input_spec.get("clipper") or ""
+            reclip_params = dict(det_input_spec.get("clipper_params") or {})
+            if reclip_clipper:
+                dataset_clipper = (dataset_spec or {}).get("clipper") or "(none)"
+                cli_progress.emit(
+                    "detector_reclip",
+                    text=(
+                        f"Re-clipping dataset for detector '{det_name}' with "
+                        f"clipper {reclip_clipper!r} to match its input_spec "
+                        f"(dataset clipper: {dataset_clipper!r})."
+                    ),
+                    detector=det_name,
+                    detector_input_spec=det_input_spec,
+                    dataset_input_spec=dataset_spec or {},
+                )
 
         labelset = LabelSet.from_dict(det.get("labelset") or {})
         if not labelset.elements:
@@ -228,6 +246,10 @@ def _load_and_train_detectors(
             "embedder_type": detector_embedder_type_from_data(det),
             "good_count": sum(1 for el in labelset.elements if el.label == "good"),
             "bad_count": sum(1 for el in labelset.elements if el.label == "bad"),
+            # Clipper to re-apply at scoring time (empty when the dataset already
+            # matches the detector's granularity, or the detector has no clipper).
+            "clipper": reclip_clipper,
+            "clipper_params": reclip_params,
         }
     return out
 
@@ -236,17 +258,92 @@ def _score_medias_with_detectors(
     medias: dict[int, dict[str, Any]],
     detector_mlps: dict[str, dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
-    """Score *medias* against pre-trained detector MLPs.
+    """Score *medias* against pre-trained detector MLPs, routing across types.
 
-    Every media must already carry an embedding; an unexpected ``None`` here
-    raises (the M11 guard) rather than silently scoring NaN.  Sources that
-    legitimately arrive unembedded (folder chunks) are embedded one chunk at a
-    time by :func:`_embed_and_filter_chunk` in the pipeline layer before they
-    reach this scorer.
+    *medias* may arrive unembedded and may mix source types.  For each group of
+    detectors sharing a target ``media_type`` + embedder + re-clip granularity,
+    the medias are routed to that target (native match scored directly, other
+    types converted via a one-hop converter such as ``video2image``), optionally
+    re-clipped to the detector's ``input_spec.clipper``, and embedded in the
+    detector's space by
+    :func:`~vtscore.detectors.converter_routing.route_and_embed`.  A converter or
+    clipper that fans one source media out into several (a video into frames, a
+    recording into tiles) produces several scores, which are aggregated back to
+    the source media by ``max`` - a source is a positive hit when *any* of its
+    sub-items clears the threshold ("find the needle").  Homogeneous single-type
+    datasets with no re-clip take the identity route (one hit per media),
+    byte-for-byte the pre-routing behaviour.
     """
     if not medias or not detector_mlps:
         return {}
 
+    from collections import defaultdict  # noqa: PLC0415
+
+    from vtscore.detectors.converter_routing import route_and_embed  # noqa: PLC0415
+
+    # Detectors sharing a (target type, embedder, re-clip spec) share one
+    # routed+clipped+embedded snapshot, so a dataset scored by two image/siglip
+    # detectors with the same granularity is prepared once, not per detector.
+    groups: dict[tuple[str, str, str, tuple], list[str]] = defaultdict(list)
+    for det_name, info in detector_mlps.items():
+        clipper_params = info.get("clipper_params") or {}
+        key = (
+            info.get("media_type") or "",
+            info.get("embedder") or "",
+            info.get("clipper") or "",
+            tuple(sorted((str(k), str(v)) for k, v in clipper_params.items())),
+        )
+        groups[key].append(det_name)
+
+    results: dict[str, dict[str, Any]] = {}
+    for (target_type, embedder_name, clipper, clipper_params_items), det_names in groups.items():
+        if not target_type:
+            # Legacy detector with no declared media_type: score every media
+            # directly against its primary embedding, exactly as before
+            # converter routing existed (one hit per media, raises on a None
+            # embedding). Typed detectors take the routing path below.
+            results.update(_score_direct_all(det_names, detector_mlps, medias))
+            continue
+        scoring_medias, scoring_to_source = route_and_embed(
+            medias,
+            target_type,
+            embedder_name,
+            clipper=clipper,
+            clipper_params=dict(clipper_params_items),
+        )
+        if not scoring_medias:
+            continue
+        for det_name in det_names:
+            results[det_name] = _score_one_detector(
+                det_name,
+                detector_mlps[det_name],
+                medias,
+                scoring_medias,
+                scoring_to_source,
+                embedder_name,
+            )
+
+    if results:
+        from vtsearch.achievements import record_find
+
+        record_find(len(medias) * len(results))
+
+    return results
+
+
+def _score_direct_all(
+    det_names: list[str],
+    detector_mlps: dict[str, dict[str, Any]],
+    medias: dict[int, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Score *det_names* directly against every media's primary embedding.
+
+    The legacy path for detectors that declare no ``media_type``: they score
+    whatever embeddings the dataset already holds, one hit per media.  A media
+    that lacks an embedding raises (via ``get_embedding_matrix_for_snap``)
+    rather than silently scoring NaN, and the ``strict=True`` zip guards against
+    an id/score length mismatch (audit M11).
+    """
     import torch  # noqa: PLC0415
 
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
@@ -254,8 +351,9 @@ def _score_medias_with_detectors(
     all_ids, all_embs = get_embedding_matrix_for_snap(medias)
     X_all = torch.from_numpy(all_embs)
 
-    results: dict[str, dict[str, Any]] = {}
-    for det_name, info in detector_mlps.items():
+    out: dict[str, dict[str, Any]] = {}
+    for det_name in det_names:
+        info = detector_mlps[det_name]
         mlp = info["mlp"]
         threshold = info["threshold"]
         with torch.no_grad():
@@ -264,8 +362,6 @@ def _score_medias_with_detectors(
 
         positive_hits: list[dict[str, Any]] = []
         negative_hits: list[dict[str, Any]] = []
-        # ``strict=True`` so a future partial embedding-matrix bug fails
-        # loudly instead of silently truncating scoring results.
         for cid, score in zip(all_ids, scores, strict=True):
             hit = build_media_hit(cid, medias[cid], score)
             if score >= threshold:
@@ -275,20 +371,69 @@ def _score_medias_with_detectors(
         positive_hits.sort(key=lambda x: x["score"], reverse=True)
         negative_hits.sort(key=lambda x: x["score"], reverse=True)
 
-        results[det_name] = {
+        out[det_name] = {
             "detector_name": det_name,
             "threshold": round(threshold, 4),
             "total_hits": len(positive_hits),
             "hits": positive_hits,
             "negative_hits": negative_hits,
         }
+    return out
 
-    if results:
-        from vtsearch.achievements import record_find
 
-        record_find(len(medias) * len(results))
+def _score_one_detector(
+    det_name: str,
+    info: dict[str, Any],
+    source_medias: dict[int, dict[str, Any]],
+    scoring_medias: dict[int, dict[str, Any]],
+    scoring_to_source: dict[int, int],
+    embedder_name: str,
+) -> dict[str, Any]:
+    """Score one detector over a routed snapshot and fold scores to source media.
 
-    return results
+    Runs the MLP over *scoring_medias* (already embedded in the detector's
+    space), then reduces per-clip scores to one score per source media via
+    ``max`` and builds the hit from the *source* media so a video routed through
+    ``video2image`` surfaces as a single hit on the video, not one per frame.
+    """
+    import torch  # noqa: PLC0415
+
+    from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+
+    mlp = info["mlp"]
+    threshold = info["threshold"]
+    ids, embs = get_embedding_matrix_for_snap(scoring_medias, embedder_name or None)
+    with torch.no_grad():
+        X_in = torch.from_numpy(embs).to(next(mlp.parameters()).device)
+        scores = sigmoid_to_finite_scores(mlp(X_in))
+
+    # Aggregate clip-level scores back to the source media, keeping the best
+    # (max) score per source.
+    best_by_source: dict[int, float] = {}
+    for scoring_id, score in zip(ids, scores, strict=True):
+        src_id = scoring_to_source[scoring_id]
+        prev = best_by_source.get(src_id)
+        if prev is None or score > prev:
+            best_by_source[src_id] = float(score)
+
+    positive_hits: list[dict[str, Any]] = []
+    negative_hits: list[dict[str, Any]] = []
+    for src_id, score in best_by_source.items():
+        hit = build_media_hit(src_id, source_medias[src_id], score)
+        if score >= threshold:
+            positive_hits.append(hit)
+        else:
+            negative_hits.append(hit)
+    positive_hits.sort(key=lambda x: x["score"], reverse=True)
+    negative_hits.sort(key=lambda x: x["score"], reverse=True)
+
+    return {
+        "detector_name": det_name,
+        "threshold": round(threshold, 4),
+        "total_hits": len(positive_hits),
+        "hits": positive_hits,
+        "negative_hits": negative_hits,
+    }
 
 
 def _build_multi_results_dict(
@@ -623,25 +768,6 @@ def _train_detectors_for_first_chunk(
     return detector_mlps
 
 
-def _embed_and_filter_chunk(chunk: dict[int, dict[str, Any]]) -> dict[int, dict[str, Any]]:
-    """Embed any chunk medias still missing a vector, then drop un-embeddable ones.
-
-    Importers emit media with ``embedding=None`` (folder chunks especially);
-    the framework embed stage is what fills them in.  The CLI scores chunk by
-    chunk without going through the full load pipeline, so it runs the embed
-    stage here, one chunk at a time, keeping peak memory bounded by the chunk
-    size.  :func:`embed_missing` is idempotent — a no-op for pre-embedded
-    pickle chunks — so this is safe on every source.  Items the embedder
-    couldn't embed (returned ``None``) are dropped, mirroring the load
-    pipeline's drop-none stage, so the strict scorer never sees a ``None``.
-    """
-    from vtscore.datasets.load_pipeline import embed_missing  # noqa: PLC0415
-    from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
-
-    embed_missing(chunk, "")
-    return {cid: m for cid, m in chunk.items() if media_embedding(m) is not None}
-
-
 def _score_chunk(
     chunk_medias: dict[int, dict[str, Any]],
     chunk_num: int,
@@ -657,7 +783,7 @@ def _score_chunk(
             chunk_num=chunk_num,
             chunk_size=len(chunk_medias),
         )
-    chunk_results = _score_medias_with_detectors(_embed_and_filter_chunk(chunk_medias), detector_mlps)
+    chunk_results = _score_medias_with_detectors(chunk_medias, detector_mlps)
     _merge_detector_results(merged_results, chunk_results)
 
 
@@ -747,7 +873,7 @@ def _stream_hit_records(
                 chunk_num=chunk_num,
                 chunk_size=len(chunk),
             )
-        chunk_results = _score_medias_with_detectors(_embed_and_filter_chunk(chunk), detector_mlps)
+        chunk_results = _score_medias_with_detectors(chunk, detector_mlps)
         for det_name, det_result in chunk_results.items():
             for hit in det_result.get("hits", []):
                 yield det_name, {**hit, "label": "good"}

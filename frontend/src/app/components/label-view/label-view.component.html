@@ -51,7 +51,7 @@
   <div
     class="pane-divider"
     vtPanelResize="left"
-    [layoutEl]="layoutRef.nativeElement"
+    [layoutEl]="layoutRef().nativeElement"
     [minWidth]="leftMin"
     [opposingWidth]="rightWidth()"
     [centerMin]="CENTER_MIN"
@@ -78,7 +78,7 @@
   <div
     class="pane-divider"
     vtPanelResize="right"
-    [layoutEl]="layoutRef.nativeElement"
+    [layoutEl]="layoutRef().nativeElement"
     [minWidth]="RIGHT_MIN"
     [opposingWidth]="leftWidth()"
     [centerMin]="CENTER_MIN"

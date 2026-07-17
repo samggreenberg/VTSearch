@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, ViewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { Subject, Subscription } from 'rxjs';
@@ -69,8 +69,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private browseSubset = inject(BrowseSubsetService);
   private router = inject(Router);
 
-  @ViewChild('layout', { static: true }) layoutRef!: ElementRef<HTMLElement>;
-  @ViewChild(CenterPanelComponent) centerPanel?: CenterPanelComponent;
+  readonly layoutRef = viewChild.required<ElementRef<HTMLElement>>('layout');
+  readonly centerPanel = viewChild(CenterPanelComponent);
 
   // Written from non-bound callbacks (HTTP status subscribe, the settings-mirror
   // effect, the media-type effect) and read in the template, so under zoneless
@@ -189,8 +189,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
-    this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
+    this.layoutRef().nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
+    this.layoutRef().nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
     // Find mode: an item's good/bad is the detector's presumption until a
     // human verifies it, so the big buttons read neutral and a click verifies
     // (rather than toggling the presumption off).  Cleared in ngOnDestroy.
@@ -277,7 +277,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
-    setTimeout(() => this.centerPanel?.init());
+    setTimeout(() => this.centerPanel()?.init());
   }
 
   ngOnDestroy(): void {
@@ -397,7 +397,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private onMouseMove(event: MouseEvent): void {
     if (!this.dragging) return;
-    const layoutRect = this.layoutRef.nativeElement.getBoundingClientRect();
+    const layoutRect = this.layoutRef().nativeElement.getBoundingClientRect();
     let newWidth = event.clientX - layoutRect.left;
     const leftMax = layoutRect.width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
     newWidth = Math.max(this.LEFT_MIN, Math.min(leftMax, newWidth));
@@ -405,21 +405,21 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // custom property set imperatively here — so no CD is needed and the former
     // `ngZone.run` (a zoneless no-op anyway) is dropped.
     this.leftWidth = newWidth;
-    this.layoutRef.nativeElement.style.setProperty('--left-width', `${newWidth}px`);
+    this.layoutRef().nativeElement.style.setProperty('--left-width', `${newWidth}px`);
   }
 
   private onMouseUp(): void {
     this.dragging = false;
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
-    const leftPanelEl = this.layoutRef.nativeElement.querySelector('vt-left-panel') as HTMLElement | null;
+    const leftPanelEl = this.layoutRef().nativeElement.querySelector('vt-left-panel') as HTMLElement | null;
     if (leftPanelEl) {
       const snapped = snapPanelWidthToGridColumns(leftPanelEl, this.leftWidth);
       if (snapped !== null) {
-        const leftMax = this.layoutRef.nativeElement.getBoundingClientRect().width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
+        const leftMax = this.layoutRef().nativeElement.getBoundingClientRect().width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
         const clamped = Math.max(this.LEFT_MIN, Math.min(leftMax, snapped));
         this.leftWidth = clamped;
-        this.layoutRef.nativeElement.style.setProperty('--left-width', `${clamped}px`);
+        this.layoutRef().nativeElement.style.setProperty('--left-width', `${clamped}px`);
       }
     }
     this.savePanelPx('left');
@@ -438,27 +438,27 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private onRightMouseMove(event: MouseEvent): void {
     if (!this.draggingRight) return;
-    const layoutRect = this.layoutRef.nativeElement.getBoundingClientRect();
+    const layoutRect = this.layoutRef().nativeElement.getBoundingClientRect();
     let newWidth = layoutRect.right - event.clientX;
     const rightMax = layoutRect.width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth;
     newWidth = Math.max(this.RIGHT_MIN, Math.min(rightMax, newWidth));
     this.rightWidth = newWidth;
-    this.layoutRef.nativeElement.style.setProperty('--right-width', `${newWidth}px`);
+    this.layoutRef().nativeElement.style.setProperty('--right-width', `${newWidth}px`);
   }
 
   private onRightMouseUp(): void {
     this.draggingRight = false;
     document.removeEventListener('mousemove', this.boundRightMouseMove);
     document.removeEventListener('mouseup', this.boundRightMouseUp);
-    const rightPanelEl = this.layoutRef.nativeElement.querySelector('vt-right-panel') as HTMLElement | null;
+    const rightPanelEl = this.layoutRef().nativeElement.querySelector('vt-right-panel') as HTMLElement | null;
     if (rightPanelEl) {
       const snapped = snapPanelWidthToGridColumns(rightPanelEl, this.rightWidth);
       if (snapped !== null) {
-        const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width;
+        const layoutWidth = this.layoutRef().nativeElement.getBoundingClientRect().width;
         const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth;
         const clamped = Math.max(this.RIGHT_MIN, Math.min(rightMax, snapped));
         this.rightWidth = clamped;
-        this.layoutRef.nativeElement.style.setProperty('--right-width', `${clamped}px`);
+        this.layoutRef().nativeElement.style.setProperty('--right-width', `${clamped}px`);
       }
     }
     this.savePanelPx('right');
@@ -801,18 +801,18 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private applyPanelPx(mediaType: string): void {
-    const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width || 1200;
+    const layoutWidth = this.layoutRef().nativeElement.getBoundingClientRect().width || 1200;
     const leftPx = this.panelPxLeftDict[mediaType];
     if (leftPx != null) {
       const leftMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
       this.leftWidth = Math.max(this.LEFT_MIN, Math.min(leftMax, leftPx));
-      this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
+      this.layoutRef().nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
     }
     const rightPx = this.panelPxRightDict[mediaType];
     if (rightPx != null) {
       const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth;
       this.rightWidth = Math.max(this.RIGHT_MIN, Math.min(rightMax, rightPx));
-      this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
+      this.layoutRef().nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
     }
   }
 }

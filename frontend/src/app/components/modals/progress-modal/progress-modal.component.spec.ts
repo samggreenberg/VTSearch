@@ -43,20 +43,20 @@ describe('ProgressModalComponent', () => {
   });
 
   it('should set title based on metric', () => {
-    component.metric = 'smart';
+    fixture.componentRef.setInput('metric', 'smart');
     expect(component.title).toContain('Detector Accuracy');
 
-    component.metric = 'stable';
+    fixture.componentRef.setInput('metric', 'stable');
     expect(component.title).toContain('Changes Its Mind');
 
-    component.metric = 'diverse';
+    fixture.componentRef.setInput('metric', 'diverse');
     expect(component.title).toContain('Your Votes Cover');
   });
 
   it('should start in analyzing state', async () => {
     vi.useFakeTimers();
     try {
-      component.metric = 'smart';
+      fixture.componentRef.setInput('metric', 'smart');
       // TestBed.tick() runs ngOnInit (kicks off the train POST) under zoneless.
       TestBed.tick();
       expect(component.analyzing).toBe(true);
@@ -93,7 +93,7 @@ describe('ProgressModalComponent', () => {
     // down the result poller, or `analyzing` hangs forever.
     vi.useFakeTimers();
     try {
-      component.metric = 'smart';
+      fixture.componentRef.setInput('metric', 'smart');
       TestBed.tick();
 
       // Job started, not a cache hit -> the component polls for the result.
@@ -140,7 +140,7 @@ describe('ProgressModalComponent', () => {
     // Cancel button does — not silently orphan it.
     vi.useFakeTimers();
     try {
-      component.metric = 'stable';
+      fixture.componentRef.setInput('metric', 'stable');
       TestBed.tick();
 
       httpMock.expectOne('/api/eval/train-and-score').flush({
@@ -166,7 +166,7 @@ describe('ProgressModalComponent', () => {
     // not leave a poller running against an already-completed `destroy$`.
     vi.useFakeTimers();
     try {
-      component.metric = 'diverse';
+      fixture.componentRef.setInput('metric', 'diverse');
       TestBed.tick();
 
       const trainReq = httpMock.expectOne('/api/eval/train-and-score');

@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, effect, ElementRef, inject, OnDestroy, OnInit, signal, untracked, ViewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, effect, ElementRef, inject, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
 
 import { EMPTY, Subject, timer, Subscription, pairwise } from 'rxjs';
 import { catchError, takeUntil, switchMap, filter, take } from 'rxjs/operators';
@@ -80,8 +80,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private toast = inject(ToastService);
   panelState = inject(LabelViewPanelStateService);
 
-  @ViewChild('layout', { static: true }) layoutRef!: ElementRef<HTMLElement>;
-  @ViewChild(CenterPanelComponent) centerPanel?: CenterPanelComponent;
+  readonly layoutRef = viewChild.required<ElementRef<HTMLElement>>('layout');
+  readonly centerPanel = viewChild(CenterPanelComponent);
 
   readonly datasetName = signal('');
   /** Name of the trainable model owning the labels shown on the right pane.
@@ -273,8 +273,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.autopilotStateService.clear();
     this.embedderCaps.ensureLoaded();
     this.voteState.clear();
-    this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth()}px`);
-    this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth()}px`);
+    this.layoutRef().nativeElement.style.setProperty('--left-width', `${this.leftWidth()}px`);
+    this.layoutRef().nativeElement.style.setProperty('--right-width', `${this.rightWidth()}px`);
     this.pendingSnapOnLoad = true;
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
@@ -333,7 +333,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
-    setTimeout(() => this.centerPanel?.init());
+    setTimeout(() => this.centerPanel()?.init());
   }
 
   /** Triggered by the top-bar context switcher whenever the active
@@ -394,7 +394,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.settingsState.update({ hide_autopilot: false }).subscribe();
     }
     this.leftWidth.set(width);
-    this.layoutRef.nativeElement.style.setProperty('--left-width', `${width}px`);
+    this.layoutRef().nativeElement.style.setProperty('--left-width', `${width}px`);
   }
 
   onLeftResizeEnd(width: number): void {
@@ -406,7 +406,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   onRightWidthChange(width: number): void {
     this.cancelAutoPop('right');
     this.rightWidth.set(width);
-    this.layoutRef.nativeElement.style.setProperty('--right-width', `${width}px`);
+    this.layoutRef().nativeElement.style.setProperty('--right-width', `${width}px`);
   }
 
   onRightResizeEnd(width: number): void {
@@ -425,11 +425,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  records where the user left the divider. */
   private popPanelTight(side: 'left' | 'right', animate = true): void {
     const selector = side === 'left' ? 'vt-left-panel' : 'vt-right-panel';
-    const panelEl = this.layoutRef.nativeElement.querySelector(selector) as HTMLElement | null;
+    const panelEl = this.layoutRef().nativeElement.querySelector(selector) as HTMLElement | null;
     const currentWidth = side === 'left' ? this.leftWidth() : this.rightWidth();
     const snapped = panelEl ? snapPanelWidthToGridColumns(panelEl, currentWidth) : null;
     if (snapped !== null) {
-      const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width;
+      const layoutWidth = this.layoutRef().nativeElement.getBoundingClientRect().width;
       const otherWidth = side === 'left' ? this.rightWidth() : this.leftWidth();
       const max = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - otherWidth;
       const min = side === 'left' ? this.leftMin : this.RIGHT_MIN;
@@ -438,7 +438,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         if (animate) this.animatePop();
         const widthSignal = side === 'left' ? this.leftWidth : this.rightWidth;
         widthSignal.set(clamped);
-        this.layoutRef.nativeElement.style.setProperty(`--${side}-width`, `${clamped}px`);
+        this.layoutRef().nativeElement.style.setProperty(`--${side}-width`, `${clamped}px`);
       }
     }
     this.panelState.savePanelPx(side, side === 'left' ? this.leftWidth() : this.rightWidth());
@@ -469,7 +469,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private snapWhenGridReady(side: 'left' | 'right', attempt = 0): void {
     const MAX_ATTEMPTS = 60;
     const selector = side === 'left' ? 'vt-left-panel' : 'vt-right-panel';
-    const panelEl = this.layoutRef.nativeElement.querySelector(selector) as HTMLElement | null;
+    const panelEl = this.layoutRef().nativeElement.querySelector(selector) as HTMLElement | null;
     const currentWidth = side === 'left' ? this.leftWidth() : this.rightWidth();
     const ready = panelEl != null && snapPanelWidthToGridColumns(panelEl, currentWidth) !== null;
     if (ready) {
@@ -541,7 +541,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Enable the grid-template-columns transition for one auto-pop, then strip it
    *  so live divider dragging stays instant. */
   private animatePop(): void {
-    const el = this.layoutRef.nativeElement;
+    const el = this.layoutRef().nativeElement;
     el.classList.add('layout--animate-pop');
     if (this.animatePopTimer) clearTimeout(this.animatePopTimer);
     this.animatePopTimer = setTimeout(() => {
@@ -1236,7 +1236,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     } else {
       this.leftWidth.set(this.savedLeftWidth);
     }
-    this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth()}px`);
+    this.layoutRef().nativeElement.style.setProperty('--left-width', `${this.leftWidth()}px`);
   }
 
   onAutopilotEnabledChange(enabled: boolean): void {
@@ -1284,18 +1284,18 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  the current layout bounds. Called when the media type changes or when
    *  fresh per-media-type settings come in. */
   private applyPanelPx(): void {
-    const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width || 1200;
+    const layoutWidth = this.layoutRef().nativeElement.getBoundingClientRect().width || 1200;
     const leftPx = this.panelState.getPanelPx('left');
     if (leftPx != null && !this.autopilotCollapsed()) {
       const leftMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth();
       this.leftWidth.set(Math.max(this.LEFT_MIN, Math.min(leftMax, leftPx)));
-      this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth()}px`);
+      this.layoutRef().nativeElement.style.setProperty('--left-width', `${this.leftWidth()}px`);
     }
     const rightPx = this.panelState.getPanelPx('right');
     if (rightPx != null) {
       const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth();
       this.rightWidth.set(Math.max(this.RIGHT_MIN, Math.min(rightMax, rightPx)));
-      this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth()}px`);
+      this.layoutRef().nativeElement.style.setProperty('--right-width', `${this.rightWidth()}px`);
     }
   }
 

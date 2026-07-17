@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, Input, Output, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ClipperChooserComponent, ClipperSelection } from '../../../clipper-chooser/clipper-chooser.component';
@@ -49,19 +49,19 @@ export class GenericFormPickerComponent {
 
   /** Every registered importer (used to resolve the active importer's
    *  ``available_converters_by_media_type`` for the source-specs picker). */
-  @Input() importers: ImporterInfo[] = [];
-  @Input() mediaTypes: MediaTypeInfo[] = [];
-  @Input() guessedMediaType = '';
-  @Input() guessedMediaEmbedder = '';
+  readonly importers = input<ImporterInfo[]>([]);
+  readonly mediaTypes = input<MediaTypeInfo[]>([]);
+  readonly guessedMediaType = input('');
+  readonly guessedMediaEmbedder = input('');
 
   /** "Build the 2-D Browse projection at ingest" toggle, shared across
    *  every import flow in the parent modal. */
-  @Input() buildProjection = false;
-  @Output() buildProjectionChange = new EventEmitter<boolean>();
-  @Input() mergeNearDuplicates = false;
-  @Output() mergeNearDuplicatesChange = new EventEmitter<boolean>();
+  readonly buildProjection = input(false);
+  readonly buildProjectionChange = output<boolean>();
+  readonly mergeNearDuplicates = input(false);
+  readonly mergeNearDuplicatesChange = output<boolean>();
 
-  @Output() importStarted = new EventEmitter<void>();
+  readonly importStarted = output<void>();
 
   readonly selectedImporter = signal<ImporterInfo | null>(null);
   formValues: Record<string, any> = {};
@@ -95,23 +95,23 @@ export class GenericFormPickerComponent {
   }
 
   get effectiveSoloFolderName(): string {
-    return this.importDefaults.effectiveSoloFolderName(this.mediaTypes);
+    return this.importDefaults.effectiveSoloFolderName(this.mediaTypes());
   }
 
   get mediaTypeOptionLabels(): Record<string, string> {
-    return mediaTypeOptionLabels(this.mediaTypes);
+    return mediaTypeOptionLabels(this.mediaTypes());
   }
 
   get mediaTypeLabels(): Record<string, string> {
-    return mediaTypeLabels(this.mediaTypes);
+    return mediaTypeLabels(this.mediaTypes());
   }
 
   get mediaTypeOptionIcons(): Record<string, string> {
-    return mediaTypeOptionIcons(this.mediaTypes);
+    return mediaTypeOptionIcons(this.mediaTypes());
   }
 
   lockedEmbedderFor(mediaTypeFolderOrTypeId: string, embedders: EmbedderInfo[]): string {
-    return this.importDefaults.lockedEmbedderFor(mediaTypeFolderOrTypeId, this.mediaTypes, embedders);
+    return this.importDefaults.lockedEmbedderFor(mediaTypeFolderOrTypeId, this.mediaTypes(), embedders);
   }
 
   /** Open this picker for *importer* (an importer whose ``picker_view``
@@ -145,8 +145,9 @@ export class GenericFormPickerComponent {
     }
 
     const mediaTypeField = importer.fields?.find((f) => f.key === 'media_type');
-    if (mediaTypeField && this.guessedMediaType) {
-      const folderName = toFolderName(this.mediaTypes, this.guessedMediaType);
+    const guessedMediaType = this.guessedMediaType();
+    if (mediaTypeField && guessedMediaType) {
+      const folderName = toFolderName(this.mediaTypes(), guessedMediaType);
       if (folderName && mediaTypeField.options?.includes(folderName)) {
         this.formValues['media_type'] = folderName;
       }
@@ -298,7 +299,7 @@ export class GenericFormPickerComponent {
     this.datasetsListingsApi.getClippers(mediaType).subscribe({
       next: (clippers) => {
         this.availableClippers.set(clippers);
-        const chosen = this.importDefaults.chooseClipperForType(clippers, mediaType, this.mediaTypes);
+        const chosen = this.importDefaults.chooseClipperForType(clippers, mediaType, this.mediaTypes());
         this.selectedClipper.set(chosen.name);
         if (chosen.params !== null) {
           this.clipperParamValues.set(chosen.params);
@@ -339,7 +340,7 @@ export class GenericFormPickerComponent {
       next: (embedders) => {
         this.availableEmbedders.set(embedders);
         this.selectedEmbedder.set(
-          this.importDefaults.chooseEmbedderForType(embedders, mediaType, this.mediaTypes, this.guessedMediaEmbedder),
+          this.importDefaults.chooseEmbedderForType(embedders, mediaType, this.mediaTypes(), this.guessedMediaEmbedder()),
         );
       },
     });
@@ -355,16 +356,16 @@ export class GenericFormPickerComponent {
   }
 
   get outputTypeId(): string {
-    return toTypeId(this.mediaTypes, String(this.formValues['media_type'] || ''));
+    return toTypeId(this.mediaTypes(), String(this.formValues['media_type'] || ''));
   }
 
   get availableConverters(): ConverterInfo[] {
     if (!this.selectedImporter()) return [];
-    return availableConvertersFor(this.importers, this.selectedImporter()!.name, this.outputTypeId);
+    return availableConvertersFor(this.importers(), this.selectedImporter()!.name, this.outputTypeId);
   }
 
   resetSourceSpecs(): void {
-    this.sourceSpecs = this.importDefaults.specsListWithDefaultsFor(this.mediaTypes, this.outputTypeId, this.availableConverters);
+    this.sourceSpecs = this.importDefaults.specsListWithDefaultsFor(this.mediaTypes(), this.outputTypeId, this.availableConverters);
   }
 
   onSpecsChange(specs: SourceSpec[]): void {
@@ -428,12 +429,12 @@ export class GenericFormPickerComponent {
     if (this.sourceSpecs.length > 0) {
       submitValues['source_specs'] = this.sourceSpecs;
     }
-    submitValues['build_projection'] = this.buildProjection ? 'true' : 'false';
-    submitValues['merge_near_duplicates'] = this.mergeNearDuplicates ? 'true' : 'false';
+    submitValues['build_projection'] = this.buildProjection() ? 'true' : 'false';
+    submitValues['merge_near_duplicates'] = this.mergeNearDuplicates() ? 'true' : 'false';
 
     const fileField = importer.fields?.find((f) => f.field_type === 'file');
     if (fileField && this.selectedFile) {
-      this.datasetsCrudApi.loadFile(this.selectedFile, this.buildProjection).subscribe({
+      this.datasetsCrudApi.loadFile(this.selectedFile, this.buildProjection()).subscribe({
         next: () => {
           this.submitting.set(false);
           this.offerSaveImportDefaults();
@@ -470,6 +471,6 @@ export class GenericFormPickerComponent {
       this.availableEmbedders(),
       this.availableClippers(),
     );
-    this.importDefaults.maybeOfferSaveImportDefaults(typeId, cfg, this.mediaTypes);
+    this.importDefaults.maybeOfferSaveImportDefaults(typeId, cfg, this.mediaTypes());
   }
 }

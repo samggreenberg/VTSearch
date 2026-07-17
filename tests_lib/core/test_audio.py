@@ -2,7 +2,7 @@ import io
 import wave
 
 from vtscore.media.audio.audio_generator import GENERATOR_SAMPLE_RATE, generate_wav
-from vtscore.media.audio.media_type import generate_waveform_thumbnail
+from vtscore.media.audio.media_type import _render_waveform, generate_waveform_thumbnail
 
 
 class TestGenerateWaveformThumbnail:
@@ -79,6 +79,34 @@ class TestGenerateWaveformThumbnail:
         result = generate_waveform_thumbnail(wav_bytes)
         assert result is not None
         assert result[:8] == b"\x89PNG\r\n\x1a\n"
+
+    def test_loud_audio_is_not_a_solid_block(self):
+        """Loud, dense broadband audio must still render as a waveform, not a
+        filled rectangle.
+
+        The old min/max envelope pinned every column top-to-bottom on loud
+        real-world clips (a single peak sample per column), so the alpha mask was
+        fully opaque and tinted to a solid rectangle (issue #2555).  The RMS
+        envelope leaves a transparent margin above and below the wave, so the
+        thumbnail reads as a waveform.
+        """
+        import numpy as np
+        from PIL import Image
+
+        rng = np.random.default_rng(0)
+        # Loud broadband noise — the ESC-50 "rain / fire / insects" case that
+        # saturated the peak envelope.
+        loud = np.clip(rng.standard_normal(220_500).astype(np.float32) * 0.5, -1.0, 1.0)
+        result = _render_waveform(loud)
+        assert result is not None
+        img = Image.open(io.BytesIO(result))
+        alpha = np.array(img.getchannel("A"))
+        # The wave doesn't reach the frame edges: the top and bottom rows are
+        # fully transparent (no opaque pixel), which a solid block would violate.
+        assert alpha[0, :].max() == 0
+        assert alpha[-1, :].max() == 0
+        # And well under all the pixels are opaque — nowhere near a filled block.
+        assert (alpha > 0).mean() < 0.9
 
     def test_falls_back_to_tempfile_when_buffer_decode_fails(self, monkeypatch):
         """AAC/M4A can't decode from a BytesIO (librosa only reaches ffmpeg via a

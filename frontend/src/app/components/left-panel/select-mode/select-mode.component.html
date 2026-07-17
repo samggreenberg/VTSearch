@@ -1,31 +1,31 @@
 <div class="select-mode-group" role="radiogroup" aria-labelledby="select-mode-label">
   <span class="sort-label" id="select-mode-label" title="Choose which unlabeled item to present next for labeling.">Select:</span>
-  <label class="sort-radio" [class.active]="selectMode === 'top'" title="Pick the highest-ranked unlabeled item. Best for quickly finding strong matches.">
+  <label class="sort-radio" [class.active]="selectMode() === 'top'" title="Pick the highest-ranked unlabeled item. Best for quickly finding strong matches.">
     <input
       type="radio"
       name="selectMode"
       value="top"
-      [checked]="selectMode === 'top'"
+      [checked]="selectMode() === 'top'"
       (change)="onChange('top')"
     />
     Top
   </label>
-  <label class="sort-radio" [class.active]="selectMode === 'hard'" title="Pick the item closest to the good/bad cutoff. These uncertain cases improve the detector fastest.">
+  <label class="sort-radio" [class.active]="selectMode() === 'hard'" title="Pick the item closest to the good/bad cutoff. These uncertain cases improve the detector fastest.">
     <input
       type="radio"
       name="selectMode"
       value="hard"
-      [checked]="selectMode === 'hard'"
+      [checked]="selectMode() === 'hard'"
       (change)="onChange('hard')"
     />
     Hard
   </label>
-  <label class="sort-radio" [class.active]="selectMode === 'new'" title="Pick an item unlike the ones you've seen so far, to cover a broad mix of your collection.">
+  <label class="sort-radio" [class.active]="selectMode() === 'new'" title="Pick an item unlike the ones you've seen so far, to cover a broad mix of your collection.">
     <input
       type="radio"
       name="selectMode"
       value="new"
-      [checked]="selectMode === 'new'"
+      [checked]="selectMode() === 'new'"
       (change)="onChange('new')"
     />
     New

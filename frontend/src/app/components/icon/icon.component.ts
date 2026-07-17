@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, input, OnChanges } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, inject, input } from '@angular/core';
 
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
@@ -105,7 +105,7 @@ const sanitizedCache = new Map<string, SafeHtml>();
     }
   `],
 })
-export class IconComponent implements OnChanges {
+export class IconComponent {
   private sanitizer = inject(DomSanitizer);
   private cdr = inject(ChangeDetectorRef);
 
@@ -116,8 +116,12 @@ export class IconComponent implements OnChanges {
 
   protected svgHtml: SafeHtml | null = null;
 
-  ngOnChanges(): void {
-    this.renderIcon();
+  constructor() {
+    // Signal inputs don't fire `ngOnChanges`, so re-render whenever the inputs
+    // `renderIcon` reads (`icon`/`type`, via the `iconType`/`letterChar`
+    // getters) change. `size` only drives template styling, so it isn't a
+    // dependency here.
+    effect(() => this.renderIcon());
   }
 
   get iconType(): string {

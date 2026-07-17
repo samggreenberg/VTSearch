@@ -44,9 +44,9 @@
     [selectedClipper]="selectedClipper()"
     [selectedClipperParams]="clipperParamValues()"
     (clipperChooserRequested)="openClipperChooser()"
-    [buildProjection]="buildProjection"
+    [buildProjection]="buildProjection()"
     (buildProjectionChange)="buildProjectionChange.emit($event)"
-    [mergeNearDuplicates]="mergeNearDuplicates"
+    [mergeNearDuplicates]="mergeNearDuplicates()"
     (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
   ></vt-import-advanced>
 </div>

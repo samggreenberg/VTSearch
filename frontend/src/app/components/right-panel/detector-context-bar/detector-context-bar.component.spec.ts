@@ -63,7 +63,7 @@ describe('DetectorContextBarComponent', () => {
 
   it('should emit renamed on finishRename with new name', () => {
     vi.spyOn(component.renamed, 'emit');
-    component.detectorName = 'Old Name';
+    fixture.componentRef.setInput('detectorName', 'Old Name');
     component.editing = true;
     component.editValue = 'New Name';
 
@@ -75,7 +75,7 @@ describe('DetectorContextBarComponent', () => {
 
   it('should not emit renamed if name unchanged', () => {
     vi.spyOn(component.renamed, 'emit');
-    component.detectorName = 'Same';
+    fixture.componentRef.setInput('detectorName', 'Same');
     component.editing = true;
     component.editValue = 'Same';
 
@@ -87,7 +87,7 @@ describe('DetectorContextBarComponent', () => {
 
   it('should not emit renamed if name is empty', () => {
     vi.spyOn(component.renamed, 'emit');
-    component.detectorName = 'Old';
+    fixture.componentRef.setInput('detectorName', 'Old');
     component.editing = true;
     component.editValue = '   ';
 
@@ -107,7 +107,7 @@ describe('DetectorContextBarComponent', () => {
 
   it('should finish rename on Enter', () => {
     vi.spyOn(component.renamed, 'emit');
-    component.detectorName = 'Old';
+    fixture.componentRef.setInput('detectorName', 'Old');
     component.editing = true;
     component.editValue = 'New';
 

@@ -57,8 +57,8 @@ describe('VoteGridComponent', () => {
     expect(el.querySelector('.vote-list-plain')).toBeNull();
     // jsdom reports zero viewport width, so the column count stays 1 and each
     // entry becomes its own virtualized row.
-    expect(component.rows.length).toBe(100);
-    expect(component.rows[0].length).toBe(1);
+    expect(component.rows().length).toBe(100);
+    expect(component.rows()[0].length).toBe(1);
   });
 
   it('drops back to the plain grid when the pile shrinks', async () => {
@@ -71,11 +71,10 @@ describe('VoteGridComponent', () => {
 
   it('chunks entries into rows of the current column count', async () => {
     await setInputs({ entries: makeEntries(100) });
-    component.columns = 3;
-    component['rebuildRows']();
-    expect(component.rows.length).toBe(Math.ceil(100 / 3));
-    expect(component.rows[0].map((e) => e.key)).toEqual(['1', '2', '3']);
-    expect(component.rows.at(-1)!.length).toBe(100 % 3 || 3);
+    component.columns.set(3);
+    expect(component.rows().length).toBe(Math.ceil(100 / 3));
+    expect(component.rows()[0].map((e) => e.key)).toEqual(['1', '2', '3']);
+    expect(component.rows().at(-1)!.length).toBe(100 % 3 || 3);
   });
 
   describe('event routing', () => {

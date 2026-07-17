@@ -125,7 +125,7 @@ describe('SourcePickerComponent', () => {
 
     it('sorts when the clicked column is sortable', () => {
       const cols = makeCols();
-      component.demoCols = cols;
+      fixture.componentRef.setInput('demoCols', cols);
       const spy = vi.spyOn(cols, 'sortBy');
       component.onDemoHeaderClick('label');
       expect(spy).toHaveBeenCalledWith('label');
@@ -133,14 +133,14 @@ describe('SourcePickerComponent', () => {
 
     it('does nothing when the clicked column is not sortable', () => {
       const cols = makeCols();
-      component.demoCols = cols;
+      fixture.componentRef.setInput('demoCols', cols);
       const spy = vi.spyOn(cols, 'sortBy');
       component.onDemoHeaderClick('num_files');
       expect(spy).not.toHaveBeenCalled();
     });
 
     it('is a no-op when demoCols is null', () => {
-      component.demoCols = null;
+      fixture.componentRef.setInput('demoCols', null);
       expect(() => component.onDemoHeaderClick('label')).not.toThrow();
     });
   });
@@ -178,7 +178,7 @@ describe('SourcePickerComponent', () => {
     it('renders sub-tabs for the active category and emits importerSelected on click', async () => {
       fixture.componentRef.setInput('visibleImporterTabs', tabs);
       fixture.componentRef.setInput('activeTab', 'server');
-      component.importersForActiveTab = importers;
+      fixture.componentRef.setInput('importersForActiveTab', importers);
       await settleZoneless(fixture);
 
       const subtabs = fixture.nativeElement.querySelectorAll('.importer-subtab');
@@ -194,7 +194,7 @@ describe('SourcePickerComponent', () => {
       fixture.componentRef.setInput('visibleImporterTabs', tabs);
       fixture.componentRef.setInput('activeTab', 'server');
       fixture.componentRef.setInput('emptyCategoryText', 'Nothing here.');
-      component.importersForActiveTab = [];
+      fixture.componentRef.setInput('importersForActiveTab', []);
       await settleZoneless(fixture);
       expect(fixture.nativeElement.querySelector('.importer-subtab-bar').textContent).toContain('Nothing here.');
     });
@@ -202,7 +202,7 @@ describe('SourcePickerComponent', () => {
     it('hides the lone sub-tab by default but shows it when alwaysShowSubtabBar is set', async () => {
       fixture.componentRef.setInput('visibleImporterTabs', tabs);
       fixture.componentRef.setInput('activeTab', 'server');
-      component.importersForActiveTab = [importers[0]];
+      fixture.componentRef.setInput('importersForActiveTab', [importers[0]]);
       await settleZoneless(fixture);
       expect(fixture.nativeElement.querySelector('.importer-subtab')).toBeNull();
 

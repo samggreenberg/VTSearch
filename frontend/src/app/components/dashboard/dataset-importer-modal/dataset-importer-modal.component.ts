@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, OnInit, ViewChild, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject, input, output, signal, viewChild } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -33,7 +33,7 @@ import { toTypeId } from './pickers/shared/media-type.util';
  *  whichever picker is active; keeping every picker instantiated lets
  *  template reference variables (`#demoPicker` etc.) resolve regardless
  *  of which view is showing. (2) it lets `selectImporter` reach each
- *  picker's `open()` method via `@ViewChild` synchronously, with no
+ *  picker's `open()` method via `viewChild()` queries, with no
  *  create-on-demand timing to reason about. */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -60,13 +60,13 @@ export class DatasetImporterModalComponent implements OnInit {
   private importDefaults = inject(ImportDefaultsService);
 
   /** Media type_id guessed from existing datasets/models (e.g. "image"). */
-  @Input() guessedMediaType = '';
+  readonly guessedMediaType = input('');
   /** Embedder name guessed from existing datasets/in-progress loads (e.g. "siglip"). */
   readonly guessedMediaEmbedder = input('');
   /** Picker tab id to pre-select when the modal opens (e.g. "server" from
    *  the dashboard's first-run welcome banner CTA).  Empty leaves the
    *  picker in the default "no tab selected" state. */
-  @Input() initialTab = '';
+  readonly initialTab = input('');
 
   readonly closed = output<void>();
   readonly importStarted = output<void>();
@@ -91,17 +91,18 @@ export class DatasetImporterModalComponent implements OnInit {
    *  media-type-scoped list on demand). */
   allEmbedders: EmbedderInfo[] = [];
 
-  // `{ static: true }`: every picker tag is unconditionally present in
-  // the template (visibility is toggled with `[hidden]` / the shared
+  // Every picker tag is unconditionally present in the template
+  // (visibility is toggled with `[hidden]` / the shared
   // `<vt-source-picker>`'s own mutually-exclusive `@if` branches, never
-  // `@if` on the picker tag itself), so each query resolves before the
-  // very first change-detection pass - required because `selectImporter`
-  // dispatches to these synchronously from `ngOnInit`'s importer-list
-  // callback.
-  @ViewChild(GenericFormPickerComponent, { static: true }) genericFormPicker!: GenericFormPickerComponent;
-  @ViewChild(ServerFolderPickerComponent, { static: true }) serverFolderPicker!: ServerFolderPickerComponent;
-  @ViewChild(LocalFolderPickerComponent, { static: true }) localFolderPicker!: LocalFolderPickerComponent;
-  @ViewChild(DemoPickerComponent, { static: true }) demoPicker!: DemoPickerComponent;
+  // `@if` on the picker tag itself), so each query always has a match by
+  // the first change-detection pass.  `selectImporter` only dispatches to
+  // these from the async importer-list HTTP callback and from user
+  // events - both after the view (and hence these queries) has resolved -
+  // so `.required()` never reads before a value is available.
+  readonly genericFormPicker = viewChild.required(GenericFormPickerComponent);
+  readonly serverFolderPicker = viewChild.required(ServerFolderPickerComponent);
+  readonly localFolderPicker = viewChild.required(LocalFolderPickerComponent);
+  readonly demoPicker = viewChild.required(DemoPickerComponent);
 
   get effectiveSoloMediaType(): string | null {
     return this.importDefaults.effectiveSoloMediaType;
@@ -112,8 +113,8 @@ export class DatasetImporterModalComponent implements OnInit {
       next: (res) => {
         this.importers.set((res.importers || []).filter((imp) => !imp['hidden_from_picker']));
         this.declaredTabs.set(res.tabs || []);
-        if (this.initialTab && this.visibleImporterTabs.some((t) => t.id === this.initialTab)) {
-          this.selectImporterTab(this.initialTab);
+        if (this.initialTab() && this.visibleImporterTabs.some((t) => t.id === this.initialTab())) {
+          this.selectImporterTab(this.initialTab());
         } else if (this.visibleImporterTabs.length) {
           // Land on the first category that actually has importers (falling
           // back to the first tab) instead of a blank pane. The New Detector
@@ -292,32 +293,32 @@ export class DatasetImporterModalComponent implements OnInit {
     this.selectedImporter.set(importer);
     const pickerView = importer.picker_view || 'form';
     if (pickerView === 'local_folder' || pickerView === 'local_files') {
-      this.localFolderPicker.open(importer);
+      this.localFolderPicker().open(importer);
     } else if (pickerView === 'server_folder') {
-      this.serverFolderPicker.open(importer);
+      this.serverFolderPicker().open(importer);
     } else if (pickerView === 'demo') {
-      this.demoPicker.open(importer);
+      this.demoPicker().open(importer);
     } else {
-      this.genericFormPicker.open(importer);
+      this.genericFormPicker().open(importer);
     }
   }
 
   openDemoPicker(importer?: ImporterInfo): void {
     const resolved = importer || this.importers().find((i) => i.name === 'demo') || null;
     this.selectedImporter.set(resolved);
-    this.demoPicker.open(resolved);
+    this.demoPicker().open(resolved);
   }
 
   openLocalFolderUploader(importer?: ImporterInfo): void {
     const resolved = importer || this.importers().find((i) => i.name === 'local_folder') || null;
     this.selectedImporter.set(resolved);
-    this.localFolderPicker.open(resolved);
+    this.localFolderPicker().open(resolved);
   }
 
   openServerFolderBrowser(importer?: ImporterInfo): void {
     const resolved = importer || this.importers().find((i) => i.name === 'server_folder') || null;
     this.selectedImporter.set(resolved);
-    this.serverFolderPicker.open(resolved);
+    this.serverFolderPicker().open(resolved);
   }
 
   /** Forward a demo picker's committed selection to the dashboard, then

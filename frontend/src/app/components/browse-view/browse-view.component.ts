@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, ElementRef, HostListener, inject, NgZone, OnDestroy, OnInit, signal, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, ElementRef, HostListener, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subject } from 'rxjs';
@@ -82,10 +82,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
   private ngZone = inject(NgZone);
 
-  @ViewChild(BrowseCanvasComponent) private canvas?: BrowseCanvasComponent;
+  private readonly canvas = viewChild(BrowseCanvasComponent);
   /** The 3-column grid (canvas | divider | side panel); the divider drag
    *  measures against its box. Only present in the ``ready`` state. */
-  @ViewChild('content') private content?: ElementRef<HTMLElement>;
+  private readonly content = viewChild<ElementRef<HTMLElement>>('content');
 
   readonly meta = signal<ProjectionMeta | null>(null);
   // Written from raw/async callbacks (dataset-status subscribe, projection
@@ -507,7 +507,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     );
     if (next === this.hexScaleIndex()) return;
     this.hexScaleIndex.set(next);
-    this.canvas?.setThumbnailRadius(this.thumbnailRadius, true);
+    this.canvas()?.setThumbnailRadius(this.thumbnailRadius, true);
     this.persistBrowsePref('browse_icon_size', BrowseViewComponent.ICON_SIZES[next]);
   }
 
@@ -543,8 +543,11 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.hexScaleIndex.set(sizeIdx >= 0 ? sizeIdx : 2);
     // Seed the saved size as the overview granularity (no reframe): a settings
     // change re-bins at the current framing rather than zooming the viewport,
-    // and on first load the initial fit picks the matching level.
-    this.canvas?.setThumbnailRadius(this.thumbnailRadius, false);
+    // and on first load the initial fit picks the matching level. The query is
+    // read untracked: this runs inside the constructor's settings effect, and
+    // tracking it there would re-run that effect on every canvas mount/unmount,
+    // which the decorator @ViewChild it replaces never did.
+    untracked(this.canvas)?.setThumbnailRadius(this.thumbnailRadius, false);
 
     const borderMap = s.browse_thumbnail_border as { [key: string]: number } | undefined;
     const rawBorder = mt && borderMap ? borderMap[mt] : undefined;
@@ -594,7 +597,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   /** Largest the side panel can grow to while leaving the canvas its minimum. */
   private panelMax(): number {
-    const layoutWidth = this.content?.nativeElement.getBoundingClientRect().width ?? 0;
+    const layoutWidth = this.content()?.nativeElement.getBoundingClientRect().width ?? 0;
     const fit = layoutWidth - BrowseViewComponent.DIVIDER_WIDTH - BrowseViewComponent.CANVAS_MIN;
     return Math.min(BrowseViewComponent.PANEL_MAX, Math.max(this.panelMin(), fit));
   }
@@ -611,7 +614,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * before the content has laid out.
    */
   private panelMin(): number {
-    const root = this.content?.nativeElement;
+    // Untracked: reachable from the constructor's settings effect, which must
+    // not pick up the view query as a dependency (see setThumbnailRadius above).
+    const root = untracked(this.content)?.nativeElement;
     if (!root) return BrowseViewComponent.PANEL_FLOOR;
     const current = this.panelWidth();
 
@@ -659,8 +664,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   private onPanelMouseMove(event: MouseEvent): void {
-    if (!this.dragging || !this.content) return;
-    const rect = this.content.nativeElement.getBoundingClientRect();
+    const content = this.content();
+    if (!this.dragging || !content) return;
+    const rect = content.nativeElement.getBoundingClientRect();
     // The panel is on the right, so its width grows as the cursor moves left.
     const fit = rect.width - BrowseViewComponent.DIVIDER_WIDTH - BrowseViewComponent.CANVAS_MIN;
     const max = Math.min(BrowseViewComponent.PANEL_MAX, Math.max(this.dragMin, fit));
@@ -680,7 +686,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     // The snap only ever shrinks toward the current columns — it can't pop the
     // panel back out wider — and the dynamic floor keeps at least one column and
     // the sort control on screen.
-    const side = this.content?.nativeElement.querySelector('.browse-side') as HTMLElement | null;
+    const side = this.content()?.nativeElement.querySelector('.browse-side') as HTMLElement | null;
     const snapped = side ? snapPanelWidthToGridColumns(side, this.panelWidth()) : null;
     if (snapped !== null) {
       this.panelWidth.set(this.clamp(snapped, this.panelMin(), this.panelMax()));
@@ -760,7 +766,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     // Ctrl/Cmd-A: fully select every bin whose silhouette sits entirely in view.
     if ((event.ctrlKey || event.metaKey) && !event.altKey && (event.key === 'a' || event.key === 'A')) {
       event.preventDefault();
-      this.canvas?.selectAllInView();
+      this.canvas()?.selectAllInView();
       return;
     }
     // The remaining shortcuts take no modifiers.
@@ -769,19 +775,19 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     switch (event.key) {
       case 'ArrowUp':
         event.preventDefault();
-        this.canvas?.panByKey(0, -1);
+        this.canvas()?.panByKey(0, -1);
         break;
       case 'ArrowDown':
         event.preventDefault();
-        this.canvas?.panByKey(0, 1);
+        this.canvas()?.panByKey(0, 1);
         break;
       case 'ArrowLeft':
         event.preventDefault();
-        this.canvas?.panByKey(-1, 0);
+        this.canvas()?.panByKey(-1, 0);
         break;
       case 'ArrowRight':
         event.preventDefault();
-        this.canvas?.panByKey(1, 0);
+        this.canvas()?.panByKey(1, 0);
         break;
       case '+':
       case '=':
@@ -798,17 +804,17 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   /** Zoom in one step (narrower span, cells keep their display size). */
   zoomIn(): void {
-    this.canvas?.zoomBy(this.zoomButtonFactor);
+    this.canvas()?.zoomBy(this.zoomButtonFactor);
   }
 
   /** Zoom out one step. */
   zoomOut(): void {
-    this.canvas?.zoomBy(1 / this.zoomButtonFactor);
+    this.canvas()?.zoomBy(1 / this.zoomButtonFactor);
   }
 
   /** Choose a zoom and pan so the current data just fits in view. */
   zoomToFit(): void {
-    this.canvas?.zoomToFit();
+    this.canvas()?.zoomToFit();
   }
 
   // --- Preview-audio volume (audio datasets only) -------------------------
@@ -872,7 +878,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.contextMenuOpen = false;
     // Release the canvas's pinned enlarge so live hover resumes on the bin now
     // under the cursor.
-    this.canvas?.unpinCell();
+    this.canvas()?.unpinCell();
   }
 
   /**
@@ -978,7 +984,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * this is the mouse equivalent of the ctrl-A shortcut.
    */
   onSelectAllInView(): void {
-    this.canvas?.selectAllInView();
+    this.canvas()?.selectAllInView();
   }
 
   onVerify(target: 'good' | 'bad'): void {

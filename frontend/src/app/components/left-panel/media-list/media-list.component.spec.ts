@@ -1,7 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Subject } from 'rxjs';
 import { vi } from 'vitest';
-import { SimpleChange } from '@angular/core';
 
 import { MediaListComponent } from './media-list.component';
 import { Media } from '../../../models/api.models';
@@ -19,6 +18,16 @@ describe('MediaListComponent', () => {
     { id: 3, media_type: 'audio', filename: 'c.wav', md5: 'c3', custom_metadata: {} },
   ];
 
+  /** Spy on the (test-setup-stubbed) scrollIntoView so the selection
+   *  autoscroll — queued by the effect, performed in ngAfterViewChecked — is
+   *  observable. Cleared on install because the prototype spy persists across
+   *  tests in this file. */
+  function spyOnScrollIntoView() {
+    const spy = vi.spyOn(Element.prototype, 'scrollIntoView');
+    spy.mockClear();
+    return spy;
+  }
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [MediaListComponent],
@@ -27,7 +36,7 @@ describe('MediaListComponent', () => {
 
     fixture = TestBed.createComponent(MediaListComponent);
     component = fixture.componentInstance;
-    component.medias = mockMedias;
+    fixture.componentRef.setInput('medias', mockMedias);
     TestBed.tick();
   });
 
@@ -44,16 +53,11 @@ describe('MediaListComponent', () => {
   });
 
   it('should render media items in sort order when provided', () => {
-    component.sortOrder = [
+    fixture.componentRef.setInput('sortOrder', [
       { id: 3, score: 0.9 },
       { id: 1, score: 0.5 },
       { id: 2, score: 0.2 },
-    ];
-    // Programmatic input assignment doesn't fire ngOnChanges; trigger the
-    // rebuild explicitly the way Angular would for a [sortOrder] binding.
-    component.ngOnChanges({
-      sortOrder: new SimpleChange(null, component.sortOrder, false),
-    });
+    ]);
     TestBed.tick();
     const items = component.cachedOrderedItems;
     expect(items[0].media.id).toBe(3);
@@ -62,16 +66,12 @@ describe('MediaListComponent', () => {
   });
 
   it('should insert threshold line at correct position', () => {
-    component.sortOrder = [
+    fixture.componentRef.setInput('sortOrder', [
       { id: 3, score: 0.9 },
       { id: 1, score: 0.5 },
       { id: 2, score: 0.2 },
-    ];
-    component.threshold = 0.4;
-    component.ngOnChanges({
-      sortOrder: new SimpleChange(null, component.sortOrder, false),
-      threshold: new SimpleChange(null, component.threshold, false),
-    });
+    ]);
+    fixture.componentRef.setInput('threshold', 0.4);
     TestBed.tick();
     const items = component.cachedOrderedItems;
     // Threshold is at 0.4, so item with score 0.2 should have showThreshold
@@ -81,8 +81,8 @@ describe('MediaListComponent', () => {
   });
 
   it('should return correct vote labels', () => {
-    component.goodVotes = new Set([1]);
-    component.badVotes = new Set([2]);
+    fixture.componentRef.setInput('goodVotes', new Set([1]));
+    fixture.componentRef.setInput('badVotes', new Set([2]));
     expect(component.getVoteLabel(1)).toBe('good');
     expect(component.getVoteLabel(2)).toBe('bad');
     expect(component.getVoteLabel(3)).toBeNull();
@@ -95,69 +95,70 @@ describe('MediaListComponent', () => {
   });
 
   it('should show empty message when no medias', () => {
-    // Drive the input through setInput so ngOnChanges rebuilds the ordered-items
-    // cache to empty (a direct field write leaves the cache stale, which under
-    // zoneless surfaces as an NG0100 during the verify pass) and the host view
-    // is marked dirty so the tick repaints.
     fixture.componentRef.setInput('medias', []);
     TestBed.tick();
     expect(fixture.nativeElement.querySelector('.empty-list')?.textContent).toContain('No media loaded');
   });
 
   it('should render threshold line in DOM', () => {
-    component.sortOrder = [
+    fixture.componentRef.setInput('sortOrder', [
       { id: 1, score: 0.8 },
       { id: 2, score: 0.3 },
-    ];
-    component.threshold = 0.5;
-    component.ngOnChanges({
-      sortOrder: new SimpleChange(null, component.sortOrder, false),
-      threshold: new SimpleChange(null, component.threshold, false),
-    });
+    ]);
+    fixture.componentRef.setInput('threshold', 0.5);
     TestBed.tick();
     expect(fixture.nativeElement.querySelector('.media-threshold-line')).toBeTruthy();
   });
 
-  it('queues an autoscroll when the selection changes in click mode', () => {
+  it('autoscrolls the newly-selected item into view in click mode', () => {
+    const scrollSpy = spyOnScrollIntoView();
     fixture.componentRef.setInput('focusMode', 'click');
     TestBed.tick();
-    component.ngOnChanges({ selectedId: new SimpleChange(null, 2, false) });
-    expect(component['pendingScrollToSelected']).toBe(true);
+    fixture.componentRef.setInput('selectedId', 2);
+    TestBed.tick();
+    expect(scrollSpy).toHaveBeenCalled();
   });
 
   // Regression: clicking a card in this grid selects an item that is, by
   // definition, already on screen. Autoscrolling it into view is jarring and
-  // pointless, so a selection that originated from onMediaSelect must not queue
-  // an autoscroll — even in click mode.
-  it('does not queue an autoscroll for a selection driven by clicking a card', () => {
+  // pointless, so a selection that originated from onMediaSelect must not
+  // trigger an autoscroll — even in click mode.
+  it('does not autoscroll for a selection driven by clicking a card', () => {
+    const scrollSpy = spyOnScrollIntoView();
     fixture.componentRef.setInput('focusMode', 'click');
     TestBed.tick();
     component.onMediaSelect(2);
-    component.ngOnChanges({ selectedId: new SimpleChange(null, 2, false) });
-    expect(component['pendingScrollToSelected']).toBe(false);
+    fixture.componentRef.setInput('selectedId', 2);
+    TestBed.tick();
+    expect(scrollSpy).not.toHaveBeenCalled();
   });
 
   // A click on card 2 must not suppress a *later* off-screen selection (e.g. a
-  // vote auto-advance to card 5): only the clicked id is exempt from autoscroll.
+  // vote auto-advance to card 3): only the clicked id is exempt from autoscroll.
   it('still autoscrolls a subsequent selection from elsewhere after a click', () => {
+    const scrollSpy = spyOnScrollIntoView();
     fixture.componentRef.setInput('focusMode', 'click');
     TestBed.tick();
     component.onMediaSelect(2);
-    component.ngOnChanges({ selectedId: new SimpleChange(null, 2, false) });
-    expect(component['pendingScrollToSelected']).toBe(false);
-    component.ngOnChanges({ selectedId: new SimpleChange(2, 5, false) });
-    expect(component['pendingScrollToSelected']).toBe(true);
+    fixture.componentRef.setInput('selectedId', 2);
+    TestBed.tick();
+    expect(scrollSpy).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('selectedId', 3);
+    TestBed.tick();
+    expect(scrollSpy).toHaveBeenCalled();
   });
 
   // Regression: in hover mode the selection follows the cursor. Scrolling the
   // hovered item to the top shifts what's under the mouse, which re-selects and
-  // scrolls again — an infinite autoscroll loop. Hover selection must not queue
-  // an autoscroll.
-  it('does not queue an autoscroll on hover selection', () => {
+  // scrolls again — an infinite autoscroll loop. Hover selection must not
+  // trigger an autoscroll.
+  it('does not autoscroll on hover selection', () => {
+    const scrollSpy = spyOnScrollIntoView();
     fixture.componentRef.setInput('focusMode', 'hover');
     TestBed.tick();
-    component.ngOnChanges({ selectedId: new SimpleChange(null, 2, false) });
-    expect(component['pendingScrollToSelected']).toBe(false);
+    fixture.componentRef.setInput('selectedId', 2);
+    TestBed.tick();
+    expect(scrollSpy).not.toHaveBeenCalled();
   });
 
   // Regression: small datasets used to never prefetch metadata, so the list
@@ -167,10 +168,8 @@ describe('MediaListComponent', () => {
   it('eagerly prefetches metadata for every row when virtual scroll is off', () => {
     const cache = TestBed.inject(MediaMetadataCacheService);
     const spy = vi.spyOn(cache, 'ensureLoaded').mockImplementation(() => {});
-    component.medias = mockMedias;
-    component.ngOnChanges({
-      medias: { currentValue: mockMedias, previousValue: [], firstChange: false, isFirstChange: () => false },
-    });
+    fixture.componentRef.setInput('medias', [...mockMedias]);
+    TestBed.tick();
     expect(spy).toHaveBeenCalled();
     const ids = spy.mock.lastCall![0] as number[];
     expect(ids).toEqual([1, 2, 3]);
@@ -188,7 +187,7 @@ describe('MediaListComponent scroll-prefetch re-wiring', () => {
     }).compileComponents();
     fixture = TestBed.createComponent(MediaListComponent);
     component = fixture.componentInstance;
-    component.medias = [];
+    fixture.componentRef.setInput('medias', []);
     TestBed.tick();
   });
 
@@ -197,6 +196,12 @@ describe('MediaListComponent scroll-prefetch re-wiring', () => {
       scrolledIndexChange: new Subject<number>(),
       elementRef: { nativeElement: document.createElement('div') },
     };
+  }
+
+  /** Replace the ``virtualViewport`` view-query signal with a stub returning
+   *  the given fake (the readonly field is a plain property at runtime). */
+  function setViewport(vp: unknown): void {
+    (component as never as { virtualViewport: unknown }).virtualViewport = () => vp;
   }
 
   it('re-subscribes prefetch when the viewport instance is recreated', () => {
@@ -209,7 +214,7 @@ describe('MediaListComponent scroll-prefetch re-wiring', () => {
       .mockImplementation(() => undefined);
 
     const vp1 = fakeViewport();
-    (component as never as { virtualViewport: unknown }).virtualViewport = vp1;
+    setViewport(vp1);
     component.ngAfterViewChecked();
     vp1.scrolledIndexChange.next(0);
     expect(prefetchSpy).toHaveBeenCalledTimes(1);
@@ -218,7 +223,7 @@ describe('MediaListComponent scroll-prefetch re-wiring', () => {
     // and a new instance appearing after the next dataset renders.
     vp1.scrolledIndexChange.complete();
     const vp2 = fakeViewport();
-    (component as never as { virtualViewport: unknown }).virtualViewport = vp2;
+    setViewport(vp2);
     component.ngAfterViewChecked();
 
     vp2.scrolledIndexChange.next(3);

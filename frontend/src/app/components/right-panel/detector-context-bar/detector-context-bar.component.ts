@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, Input, output, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, input, output, viewChild } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 
@@ -11,22 +11,23 @@ import { FormsModule } from '@angular/forms';
   styleUrl: './detector-context-bar.component.scss',
 })
 export class DetectorContextBarComponent {
-  @Input() detectorName = '';
-  @Input() visible = false;
+  readonly detectorName = input('');
+  readonly visible = input(false);
   readonly renamed = output<string>();
 
   editing = false;
   editValue = '';
 
-  @ViewChild('renameInput') renameInput!: ElementRef<HTMLInputElement>;
+  readonly renameInput = viewChild<ElementRef<HTMLInputElement>>('renameInput');
 
   startRename(): void {
-    if (!this.detectorName) return;
-    this.editValue = this.detectorName;
+    if (!this.detectorName()) return;
+    this.editValue = this.detectorName();
     this.editing = true;
     setTimeout(() => {
-      this.renameInput?.nativeElement.focus();
-      this.renameInput?.nativeElement.select();
+      const input = this.renameInput();
+      input?.nativeElement.focus();
+      input?.nativeElement.select();
     });
   }
 
@@ -34,7 +35,7 @@ export class DetectorContextBarComponent {
     if (!this.editing) return;
     const newName = this.editValue.trim();
     this.editing = false;
-    if (newName && newName !== this.detectorName) {
+    if (newName && newName !== this.detectorName()) {
       this.renamed.emit(newName);
     }
   }

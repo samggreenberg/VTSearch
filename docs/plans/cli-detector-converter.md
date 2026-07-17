@@ -1,104 +1,70 @@
 # Design: CLI Autodetect with Converters and Clippers
 
-**Status:** The converter-routing and re-clipping pipeline described below is not yet implemented — it is the open work.
-
 ## Background
 
-The detector `input_spec` (`clipper` + `clipper_params`) and the `LabelSet` `detector_meta` round-trip are already in place, and the CLI skips detectors whose `input_spec.clipper` mismatches the loaded dataset (with a reload hint). The remaining work below builds the converter-routing and re-clipping pipeline on top of that.
+The detector `input_spec` (`clipper` + `clipper_params`) and the `LabelSet`
+`detector_meta` round-trip are in place. **Converter routing, converter-aware
+matching, and re-clipping at scoring time have shipped:** the CLI scores a
+dataset of mixed source types by routing each media to a detector's `media_type`
+through a one-hop converter (`video2image`, `document2image`, …); when the
+detector declares an `input_spec.clipper` the loaded dataset doesn't already
+match, it re-clips (splits + re-embeds) the routed medias to that granularity
+instead of skipping. Converter fan-out (a video into frames) and re-clip
+sub-items (a recording into tiles) both aggregate back to the source media by
+**max**. See `vtscore/detectors/converter_routing.py` and
+`_score_medias_with_detectors` / `_load_and_train_detectors` in `vtscore/cli.py`,
+and the "Scoring across source types" note in `docs/CLI.md`.
 
 ## Open follow-ups
 
-Deliberately deferred to keep Phase 1 focused on the round-trip and the
-validation skip.
+<!-- item-sep -->
 
-- **Converter routing across source types in CLI.** Today the CLI scores only the
-  medias whose `media_type` already matches each detector's. The design below
-  auto-routes via `list_converters_for_target(detector.media_type)` per source
-  type (so one image detector handles native images, `video2image`, and
-  `document2image` in the same run). Needs plumbing in `_run_pipeline`: group
-  medias by source type → look up a converter route per detector → embed
-  converted medias → score.
-- **Re-clipping the loaded dataset to match a detector's `input_spec.clipper`.**
-  Today a mismatched detector is skipped with a message telling the user to
-  reload. The more ergonomic flow is "auto-clip + re-embed at scoring time."
-  Cheaper short-circuit: when first media's `origin.params.clipper` already equals
-  the detector's, skip the work. Needs media bytes or a resolvable file path, so
-  thin-loaded medias would have to go through `resolve_file_context` first.
-- **Converter-aware detector matching.** Replace direct `media_type` equality in
-  `get_autodetect_detectors_by_media` with a
-  `get_autodetect_detectors_for_dataset(source_types: set[str])` that accepts any
-  detector reachable via a one-hop converter route. Required before the
-  converter-routing item above is useful.
+- **Clip-score aggregation toggle.** Converter fan-out and re-clip sub-items both
+  aggregate to the source media by **max** today ("find the needle": positive if
+  *any* sub-item clears threshold). The design proposes an explicit
+  `input_spec.clip_aggregation` (`"max"` | `"mean"`, default `"max"`) so a
+  detector can instead score overall quality via the mean. The aggregation point
+  is the `best_by_source` reduction in `_score_one_detector` (`vtscore/cli.py`);
+  the field would select `max` vs `mean` there, and would need to travel on the
+  detector's scoring info the way `clipper` / `clipper_params` already do.
+
+<!-- item-sep -->
+
 - **`--override-clipper` CLI flag.** Power-user escape hatch to score with a
   different granularity than the detector was trained on. Not the primary
-  interface; only worth shipping after the auto-clip path lands.
-- **Clip-score aggregation toggle.** When a clipper produces N clips per media,
-  the aggregation is currently implicit (max). The design proposes an explicit
-  `input_spec.clip_aggregation` (`"max"` | `"mean"`) field, useful once
-  re-clipping is in place.
+  interface; it would force a chosen clipper into the re-clip path
+  (`route_and_embed`'s `clipper` argument) regardless of the detector's
+  `input_spec`, overriding the auto-clip decision in `_load_and_train_detectors`.
+
+<!-- item-sep -->
 
 ## Design guiding the open work
 
-### The problem the pipeline must solve
+### A detector stores its clipper, not its converter
 
-A detector expects a specific *input format* (media type + clipper granularity),
-and the current pipeline (load → match by media type → score → export) can't
-reproduce that format at inference time. It breaks when a detector was trained on
-audio-extracted-from-video, on 2s clips, or on document page images but the new
-dataset is raw video / full-length audio / PDFs.
-
-### The detector stores its clipper, not its converter
-
-The detector already stores `media_type` (the target embedding space). The only
-missing piece is the **clipper**: how to split media before embedding, captured
-automatically at training time from the active clipper. Field:
+The detector stores `media_type` (the target embedding space) and, optionally,
+`input_spec.clipper` (how to split media into sub-clips before embedding,
+captured at training time from the active clipper):
 
 | Field | Type | Meaning |
 |-------|------|---------|
 | `input_spec.clipper` | `str \| null` | Clipper used to split media into sub-clips before embedding. `null` = default (whole media). |
 
-**Converters are NOT stored on the detector.** A dataset can contain mixed source
-types, and the converter registry already knows every route
-(`list_converters_for_target(detector.media_type)`), so one image detector should
-score native images directly, videos via `video2image`, and documents via
-`document2image` without enumerating anything. Storing a single `converter` would
-break that. The detector just says "I need image embeddings"; the registry
-supplies the routes.
-
-### The pipeline step (open)
-
-`_run_pipeline` gains a step between "load dataset" and "score", per detector:
-
-```
-Group medias by source type
-  → for each source type: same as detector.media_type? use directly;
-    else look up a converter via list_converters_for_target(detector.media_type)
-    filtered to that source type — apply if found, skip these medias if not.
-  → detector.input_spec.clipper set? split converted medias into clips + embed each;
-    else use medias as-is.
-  → score clips, merge clip-level scores back to media-level results.
-```
-
-Each detector can trigger a *different* clipper (handled per-detector, not
-globally). A missing converter route is a skip, not an error.
-
-### Converter-aware matching (open)
-
-`get_autodetect_detectors_by_media("video")` currently returns only
-`media_type == "video"` detectors. It should become
-`get_autodetect_detectors_for_dataset(source_types: set[str])`: a detector
-matches if, for at least one source type, either `detector.media_type ==
-source_type` (direct) or a registered converter has that `source_type` →
-`detector.media_type` (converter route). Driven entirely by the registry.
+Converters are **not** stored on the detector — the registry supplies routes by
+target type. The clipper drives the re-clip step, which is now wired: a
+clipper-mismatched detector carries its `clipper` / `clipper_params` on its
+scoring info, and `route_and_embed` applies it (via the load-pipeline clipper
+stage) after routing to the target type and before scoring.
 
 ### Clip-score aggregation (open)
 
-A clipper yielding N clips gives N scores per media. Default **max** (positive if
-*any* clip clears threshold — "find the needle"); optional **mean** (overall
+A clipper (or converter) yielding N sub-items per media gives N scores. Default
+**max** (positive if *any* sub-item clears threshold); optional **mean** (overall
 quality) via `input_spec.clip_aggregation` (default `"max"`).
 
 ### CLI surface
 
-For the common case nothing changes — the pipeline auto-converts per detector's
-`media_type` and clips per its `input_spec`. A niche `--override-clipper
-sound_tiling_5s` escape hatch forces a different granularity.
+For the common case nothing changes — the pipeline auto-converts per the
+detector's `media_type` and re-clips per its `input_spec`. A niche
+`--override-clipper sound_tiling_5s` escape hatch would force a different
+granularity than the detector was trained on.

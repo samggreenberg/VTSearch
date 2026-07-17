@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, Input, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -38,7 +38,7 @@ export class ResortPromptModalComponent {
 
   readonly currentExampleType = input<'text' | 'media'>('text');
   readonly currentExampleDisplay = input('');
-  @Input() keepLabelsCount = 0;
+  readonly keepLabelsCount = input(0);
   readonly closed = output<void>();
   readonly keepExample = output<void>();
   readonly newExample = output<ResortResult>();

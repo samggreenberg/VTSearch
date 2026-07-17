@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 /**
  * Which direction of a progress bar reads as "good", picking the fill gradient.
@@ -15,9 +15,9 @@ export type ProgressPolarity = 'high-good' | 'high-bad';
   styleUrl: './progress-bar.component.scss',
 })
 export class ProgressBarComponent {
-  @Input() value = 0;
-  @Input() max = 100;
-  @Input() indeterminate = false;
+  readonly value = input(0);
+  readonly max = input(100);
+  readonly indeterminate = input(false);
   /**
    * Opt-in for multi-stage jobs whose `value` is a single whole-job fraction
    * stitched from several phases (the dataset-load bar). It swaps the snappy
@@ -27,7 +27,7 @@ export class ProgressBarComponent {
    * only ever eases *toward* the real reported value, so it never overstates
    * progress.
    */
-  @Input() smooth = false;
+  readonly smooth = input(false);
   /**
    * Whether a fuller bar is good or bad, which picks the direction of the
    * red -> yellow -> green fill gradient:
@@ -39,11 +39,11 @@ export class ProgressBarComponent {
    *   it fills.
    * The two are mirror images: `'high-bad'` colors by `100 - percentage`.
    */
-  @Input() polarity: ProgressPolarity = 'high-good';
+  readonly polarity = input<ProgressPolarity>('high-good');
 
   get percentage(): number {
-    if (this.max <= 0) return 0;
-    return Math.min(100, (this.value / this.max) * 100);
+    if (this.max() <= 0) return 0;
+    return Math.min(100, (this.value() / this.max()) * 100);
   }
 
   /**
@@ -59,8 +59,8 @@ export class ProgressBarComponent {
    * SCSS default (`--accent`); there is no percentage to color by.
    */
   get fillColor(): string | null {
-    if (this.indeterminate) return null;
-    const pct = this.polarity === 'high-bad' ? 100 - this.percentage : this.percentage;
+    if (this.indeterminate()) return null;
+    const pct = this.polarity() === 'high-bad' ? 100 - this.percentage : this.percentage;
     if (pct <= 50) {
       const t = (pct / 50) * 100;
       return `color-mix(in srgb, var(--text-warning) ${t}%, var(--color-bad))`;

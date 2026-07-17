@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, Input, Output, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { map } from 'rxjs/operators';
@@ -59,17 +59,17 @@ export class ServerFolderPickerComponent {
   private importDefaults = inject(ImportDefaultsService);
   private cdr = inject(ChangeDetectorRef);
 
-  @Input() importers: ImporterInfo[] = [];
-  @Input() mediaTypes: MediaTypeInfo[] = [];
-  @Input() guessedMediaType = '';
-  @Input() guessedMediaEmbedder = '';
+  readonly importers = input<ImporterInfo[]>([]);
+  readonly mediaTypes = input<MediaTypeInfo[]>([]);
+  readonly guessedMediaType = input('');
+  readonly guessedMediaEmbedder = input('');
 
-  @Input() buildProjection = false;
-  @Output() buildProjectionChange = new EventEmitter<boolean>();
-  @Input() mergeNearDuplicates = false;
-  @Output() mergeNearDuplicatesChange = new EventEmitter<boolean>();
+  readonly buildProjection = input(false);
+  readonly buildProjectionChange = output<boolean>();
+  readonly mergeNearDuplicates = input(false);
+  readonly mergeNearDuplicatesChange = output<boolean>();
 
-  @Output() importStarted = new EventEmitter<void>();
+  readonly importStarted = output<void>();
 
   readonly selectedImporter = signal<ImporterInfo | null>(null);
 
@@ -129,27 +129,27 @@ export class ServerFolderPickerComponent {
   }
 
   get effectiveSoloFolderName(): string {
-    return this.importDefaults.effectiveSoloFolderName(this.mediaTypes);
+    return this.importDefaults.effectiveSoloFolderName(this.mediaTypes());
   }
 
   get mediaTypeOptionLabels(): Record<string, string> {
-    return mediaTypeOptionLabels(this.mediaTypes);
+    return mediaTypeOptionLabels(this.mediaTypes());
   }
 
   get mediaTypeOptionIcons(): Record<string, string> {
-    return mediaTypeOptionIcons(this.mediaTypes);
+    return mediaTypeOptionIcons(this.mediaTypes());
   }
 
   get mediaTypeLabels(): Record<string, string> {
-    return mediaTypeLabels(this.mediaTypes);
+    return mediaTypeLabels(this.mediaTypes());
   }
 
   lockedEmbedderFor(mediaTypeFolderOrTypeId: string, embedders: EmbedderInfo[]): string {
-    return this.importDefaults.lockedEmbedderFor(mediaTypeFolderOrTypeId, this.mediaTypes, embedders);
+    return this.importDefaults.lockedEmbedderFor(mediaTypeFolderOrTypeId, this.mediaTypes(), embedders);
   }
 
   detectionHint(): string {
-    return detectionHint(this.mediaTypes, this.detection());
+    return detectionHint(this.mediaTypes(), this.detection());
   }
 
   open(importer: ImporterInfo | null): void {
@@ -165,11 +165,11 @@ export class ServerFolderPickerComponent {
     this.datasetName = '';
     this.datasetNameDirty = false;
 
-    const folderImporter = this.importers.find((imp) => imp.name === 'server_folder');
+    const folderImporter = this.importers().find((imp) => imp.name === 'server_folder');
     const mtField = folderImporter?.fields?.find((f) => f.key === 'media_type');
     this.mediaTypeOptions = mtField?.options || [];
 
-    const guessedFolder = toFolderName(this.mediaTypes, this.guessedMediaType);
+    const guessedFolder = toFolderName(this.mediaTypes(), this.guessedMediaType());
     if (guessedFolder && this.mediaTypeOptions.includes(guessedFolder)) {
       this.mediaType.set(guessedFolder);
     } else {
@@ -273,8 +273,8 @@ export class ServerFolderPickerComponent {
   private applyDetection(): void {
     const detection = this.detection();
     if (!detection) return;
-    const { mediaType, sourceSpecs } = autofillFromDetection(this.mediaTypes, detection, this.mediaTypeOptions, (typeId) =>
-      availableConvertersFor(this.importers, 'server_folder', typeId),
+    const { mediaType, sourceSpecs } = autofillFromDetection(this.mediaTypes(), detection, this.mediaTypeOptions, (typeId) =>
+      availableConvertersFor(this.importers(), 'server_folder', typeId),
     );
     if (mediaType && mediaType !== this.mediaType()) {
       this.mediaType.set(mediaType);
@@ -313,15 +313,15 @@ export class ServerFolderPickerComponent {
   }
 
   get outputTypeId(): string {
-    return toTypeId(this.mediaTypes, this.mediaType());
+    return toTypeId(this.mediaTypes(), this.mediaType());
   }
 
   get availableConverters(): ConverterInfo[] {
-    return availableConvertersFor(this.importers, 'server_folder', this.outputTypeId);
+    return availableConvertersFor(this.importers(), 'server_folder', this.outputTypeId);
   }
 
   private resetSourceSpecs(): void {
-    this.sourceSpecs.set(this.importDefaults.specsListWithDefaultsFor(this.mediaTypes, this.outputTypeId, this.availableConverters));
+    this.sourceSpecs.set(this.importDefaults.specsListWithDefaultsFor(this.mediaTypes(), this.outputTypeId, this.availableConverters));
   }
 
   onSpecsChange(specs: SourceSpec[]): void {
@@ -340,7 +340,7 @@ export class ServerFolderPickerComponent {
       next: (embedders) => {
         this.embedders.set(embedders);
         this.selectedEmbedder.set(
-          this.importDefaults.chooseEmbedderForType(embedders, mediaType, this.mediaTypes, this.guessedMediaEmbedder),
+          this.importDefaults.chooseEmbedderForType(embedders, mediaType, this.mediaTypes(), this.guessedMediaEmbedder()),
         );
       },
     });
@@ -355,7 +355,7 @@ export class ServerFolderPickerComponent {
     this.datasetsListingsApi.getClippers(mediaType).subscribe({
       next: (clippers) => {
         this.clippers.set(clippers);
-        const chosen = this.importDefaults.chooseClipperForType(clippers, mediaType, this.mediaTypes);
+        const chosen = this.importDefaults.chooseClipperForType(clippers, mediaType, this.mediaTypes());
         this.selectedClipper.set(chosen.name);
         if (chosen.params !== null) {
           this.clipperParams = clippers.find((c) => c.name === chosen.name)?.parameters || [];
@@ -432,8 +432,8 @@ export class ServerFolderPickerComponent {
     if (this.sourceSpecs().length > 0) {
       params['source_specs'] = this.sourceSpecs();
     }
-    params['build_projection'] = this.buildProjection ? 'true' : 'false';
-    params['merge_near_duplicates'] = this.mergeNearDuplicates ? 'true' : 'false';
+    params['build_projection'] = this.buildProjection() ? 'true' : 'false';
+    params['merge_near_duplicates'] = this.mergeNearDuplicates() ? 'true' : 'false';
 
     this.datasetsCrudApi.runImporter('server_folder', params).subscribe({
       next: () => {
@@ -459,6 +459,6 @@ export class ServerFolderPickerComponent {
       this.embedders(),
       this.clippers(),
     );
-    this.importDefaults.maybeOfferSaveImportDefaults(typeId, cfg, this.mediaTypes);
+    this.importDefaults.maybeOfferSaveImportDefaults(typeId, cfg, this.mediaTypes());
   }
 }

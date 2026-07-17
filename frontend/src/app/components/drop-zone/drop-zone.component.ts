@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, Input, input, output, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, input, output, viewChild } from '@angular/core';
 
 
 @Component({
@@ -11,21 +11,21 @@ import { ChangeDetectionStrategy, Component, ElementRef, Input, input, output, V
 })
 export class DropZoneComponent {
   readonly label = input('Drop files here, or click to browse');
-  @Input() sublabel = '';
+  readonly sublabel = input('');
   readonly accept = input('');
   readonly multiple = input(false);
   readonly directory = input(false);
   readonly disabled = input(false);
   readonly filesSelected = output<File[]>();
 
-  @ViewChild('fileInput') fileInput!: ElementRef<HTMLInputElement>;
+  readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');
 
   isDragging = false;
   private dragDepth = 0;
 
   openPicker(): void {
     if (this.disabled()) return;
-    this.fileInput?.nativeElement.click();
+    this.fileInput()?.nativeElement.click();
   }
 
   onInputChange(event: Event): void {

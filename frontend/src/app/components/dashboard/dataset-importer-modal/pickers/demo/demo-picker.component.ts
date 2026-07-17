@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, HostListener, Input, Output, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, HostListener, inject, signal, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ClipperChooserComponent, ClipperSelection } from '../../../clipper-chooser/clipper-chooser.component';
@@ -33,18 +33,18 @@ export class DemoPickerComponent {
   private importDefaults = inject(ImportDefaultsService);
   private cdr = inject(ChangeDetectorRef);
 
-  @Input() guessedMediaType = '';
-  @Input() guessedMediaEmbedder = '';
+  readonly guessedMediaType = input('');
+  readonly guessedMediaEmbedder = input('');
 
-  @Input() buildProjection = false;
-  @Output() buildProjectionChange = new EventEmitter<boolean>();
-  @Input() mergeNearDuplicates = false;
-  @Output() mergeNearDuplicatesChange = new EventEmitter<boolean>();
+  readonly buildProjection = input(false);
+  readonly buildProjectionChange = output<boolean>();
+  readonly mergeNearDuplicates = input(false);
+  readonly mergeNearDuplicatesChange = output<boolean>();
 
   /** Fired when the user commits the current row selection via the
    *  Import footer button; the parent forwards the payload to its own
    *  ``demoSelected`` output and closes the modal. */
-  @Output() demoDatasetSelected = new EventEmitter<DemoDatasetEntry & Record<string, unknown>>();
+  readonly demoDatasetSelected = output<DemoDatasetEntry & Record<string, unknown>>();
 
   readonly selectedImporter = signal<ImporterInfo | null>(null);
 
@@ -65,11 +65,19 @@ export class DemoPickerComponent {
   readonly selectedDemoClipper = signal('');
   readonly demoClipperParamValues = signal<Record<string, number | string>>({});
   /** For a *convert-out* half-type tab (e.g. ``document``), the embeddable
-   *  targets it can convert into (``converts_to``). Empty for a normal
-   *  embeddable tab. Drives the "Convert to" selector. */
+   *  targets it can convert into (``converts_to``); for a directly
+   *  embeddable tab (e.g. ``image``), the *optional* convert-in targets
+   *  reachable via a registered converter (e.g. ``face``, via
+   *  ``image2face``). Empty when there's nothing to convert into either
+   *  way. Drives the "Convert to" selector. */
   readonly activeTabConvertsTo = signal<string[]>([]);
+  /** Whether ``activeTabConvertsTo`` represents an *optional* conversion
+   *  (the tab's own type is directly embeddable and stays selectable as
+   *  "no conversion") vs. a *mandatory* one (a convert-out half type that
+   *  must pick one of the listed targets). */
+  readonly activeTabConvertsToOptional = signal(false);
   /** The chosen embeddable target type for a non-embeddable tab (e.g.
-   *  ``image``), or ``''`` for a normal tab. */
+   *  ``image``), or ``''`` for a normal tab or "no conversion" selected. */
   readonly selectedConverterTarget = signal('');
   /** The convert-on-load converter name (e.g. ``document2image``), or ``''``
    *  when the active tab is directly embeddable. Passed to demo-list status
@@ -212,7 +220,7 @@ export class DemoPickerComponent {
     if (this.demoTabs().length > 0) {
       const needsSelect = !this.activeTab() || (solo && this.activeTab() !== solo);
       if (needsSelect) {
-        const guessed = this.guessedMediaType;
+        const guessed = this.guessedMediaType();
         const preferred = solo && this.demoTabs().includes(solo)
           ? solo
           : (guessed && this.demoTabs().includes(guessed)
@@ -237,18 +245,33 @@ export class DemoPickerComponent {
       this.selectedDemoClipper.set('');
       this.demoClipperParamValues.set({});
       this.activeTabConvertsTo.set([]);
+      this.activeTabConvertsToOptional.set(false);
       this.selectedConverterTarget.set('');
       this.selectedDemoConverter.set('');
       return;
     }
     // A *convert-out* half type (document: embeddable === false) has no
     // embedder of its own — its demos load through a converter to an
-    // embeddable target (converts_to). Offer those targets and load the
-    // embedder/clipper choices for the (default) target instead.
+    // embeddable target (converts_to), and one of them must be picked.
     const info = this.mediaTypeInfo(mediaType);
-    const convertsTo = info && info.embeddable === false ? info.converts_to || [] : [];
-    this.activeTabConvertsTo.set(convertsTo);
-    this.applyConverterTarget(mediaType, convertsTo.length ? convertsTo[0] : '');
+    if (info && info.embeddable === false) {
+      const convertsTo = info.converts_to || [];
+      this.activeTabConvertsTo.set(convertsTo);
+      this.activeTabConvertsToOptional.set(false);
+      this.applyConverterTarget(mediaType, convertsTo.length ? convertsTo[0] : '');
+      return;
+    }
+    // A directly embeddable tab (e.g. image) may still have registered
+    // converters reading from it (e.g. image2face). Offer those as an
+    // *optional* "Convert to" choice, defaulting to no conversion.
+    this.activeTabConvertsToOptional.set(true);
+    this.applyConverterTarget(mediaType, '');
+    this.datasetsListingsApi.getConvertersForSource(mediaType).subscribe({
+      next: (converters) => {
+        const targets = Array.from(new Set(converters.map((c) => c.target_type))).filter((t) => t !== mediaType);
+        this.activeTabConvertsTo.set(targets);
+      },
+    });
   }
 
   /** Set the convert-on-load target for the active tab and (re)load the
@@ -262,7 +285,7 @@ export class DemoPickerComponent {
       next: (embedders) => {
         this.demoEmbedders.set(embedders);
         this.selectedDemoEmbedder.set(
-          this.importDefaults.pickInitialEmbedder(embedders, embeddableType, this.mediaTypes(), this.guessedMediaEmbedder),
+          this.importDefaults.pickInitialEmbedder(embedders, embeddableType, this.mediaTypes(), this.guessedMediaEmbedder()),
         );
         this.updateDemoStatuses();
         if (this.selectedDemoEmbedder()) {
@@ -421,8 +444,8 @@ export class DemoPickerComponent {
       ...(effClipper ? { clipper: effClipper, clipper_params: { ...this.demoClipperParamValues() } } : {}),
       ...(converter ? { converter } : {}),
       dataset_name: userName,
-      build_projection: this.buildProjection,
-      merge_near_duplicates: this.mergeNearDuplicates,
+      build_projection: this.buildProjection(),
+      merge_near_duplicates: this.mergeNearDuplicates(),
     } as any);
   }
 }

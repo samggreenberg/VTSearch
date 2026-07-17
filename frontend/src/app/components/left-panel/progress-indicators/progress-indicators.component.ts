@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import { JobProgressComponent } from '../../job-progress/job-progress.component';
 import {
@@ -17,9 +17,9 @@ import type { LabelingStatusResponse } from '../../../generated/api-client/model
   styleUrl: './progress-indicators.component.scss',
 })
 export class ProgressIndicatorsComponent {
-  @Input() labelingStatus: LabelingStatusResponse | null = null;
-  @Input() sortBusy = false;
-  @Input() sortStatus = '';
+  readonly labelingStatus = input<LabelingStatusResponse | null>(null);
+  readonly sortBusy = input(false);
+  readonly sortStatus = input('');
   readonly sortProgress = input(0);
   readonly sortProgressTotal = input(0);
   /** Whole-job fraction (0..1) for multi-step scoring; ``null`` falls back to
@@ -55,34 +55,37 @@ export class ProgressIndicatorsComponent {
   }
 
   get smartStatus(): string {
-    return this.labelingStatus?.smart.status || '';
+    return this.labelingStatus()?.smart.status || '';
   }
 
   get stableStatus(): string {
-    return this.labelingStatus?.stable.status || '';
+    return this.labelingStatus()?.stable.status || '';
   }
 
   get spanStatus(): string {
-    return this.labelingStatus?.span.status || '';
+    return this.labelingStatus()?.span.status || '';
   }
 
   get smartSubtext(): string {
-    if (!this.labelingStatus?.smart) return '';
-    const s = this.labelingStatus.smart;
+    const status = this.labelingStatus();
+    if (!status?.smart) return '';
+    const s = status.smart;
     if (s['cost'] != null) return `Cost: ${(s['cost'] as number).toFixed(3)}`;
     return '';
   }
 
   get stableSubtext(): string {
-    if (!this.labelingStatus?.stable) return '';
-    const s = this.labelingStatus.stable;
+    const status = this.labelingStatus();
+    if (!status?.stable) return '';
+    const s = status.stable;
     if (s['flips'] != null) return `Flips: ${s['flips']}`;
     return '';
   }
 
   get spanSubtext(): string {
-    if (!this.labelingStatus?.span) return '';
-    const s = this.labelingStatus.span;
+    const status = this.labelingStatus();
+    if (!status?.span) return '';
+    const s = status.span;
     if (s['diversity_level'] != null && s['max_level'] != null) {
       return `${Math.round(s['diversity_level'] as number)}/${s['max_level']}`;
     }

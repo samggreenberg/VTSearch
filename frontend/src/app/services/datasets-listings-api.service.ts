@@ -53,6 +53,12 @@ export class DatasetsListingsApiService {
     );
   }
 
+  getConvertersForSource(source: string): Observable<ConverterInfo[]> {
+    return convertersList(this.http, this.config.rootUrl, { source }).pipe(
+      map((r) => r.body.converters as unknown as ConverterInfo[]),
+    );
+  }
+
   getDemoList(embedder?: string, clipper?: string, converter?: string): Observable<DemoDatasetListResponse> {
     return demoDatasetList(this.http, this.config.rootUrl, { embedder, clipper, converter }).pipe(
       map((r) => r.body),

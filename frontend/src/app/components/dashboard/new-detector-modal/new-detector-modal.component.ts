@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, HostListener, inject, Input, input, OnInit, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, inject, input, OnInit, output, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -74,19 +74,19 @@ export class NewDetectorModalComponent implements OnInit {
   private mediaState = inject(MediaStateService);
 
   /** Media type of the currently active dataset, if any. */
-  @Input() defaultMediaType = '';
+  readonly defaultMediaType = input('');
 
   /** Embedder of the active dataset, if one is in context. When it can't
    *  search by text, a text-only detector won't be able to start in Autopilot
    *  or use Text sort on that dataset; the form surfaces a warning. Empty when
    *  unknown, which suppresses the warning. */
-  @Input() datasetEmbedder = '';
+  readonly datasetEmbedder = input('');
 
   /** When set, the modal opens with this loaded-media id materialised into
    *  example_media/ as the seed example. The picker is bypassed and the
    *  user lands directly on the form. Cleared by callers via
    *  ``NewThingFlowsService.closeNewDetector``. */
-  @Input() seedMediaId: number | null = null;
+  readonly seedMediaId = input<number | null>(null);
 
   /** Optional crop bounds applied when materialising ``seedMediaId``. */
   readonly seedCropParams = input<Record<string, unknown> | null>(null);
@@ -262,11 +262,11 @@ export class NewDetectorModalComponent implements OnInit {
     if (solo) {
       this.mediaType.set(solo);
       this.mediaTypeLocked = true;
-    } else if (this.defaultMediaType) {
+    } else if (this.defaultMediaType()) {
       // Prefer the explicit default (active dataset's type) over the all-datasets guess.
       // When the active dataset dictates the type, lock the field so the user
       // can't change it without an explicit unlock click.
-      this.mediaType.set(this.defaultMediaType);
+      this.mediaType.set(this.defaultMediaType());
       this.mediaTypeLocked = true;
     } else {
       this.datasetsRegistryApi.getRegistry().subscribe({
@@ -281,8 +281,8 @@ export class NewDetectorModalComponent implements OnInit {
       });
     }
 
-    if (this.seedMediaId != null) {
-      this.materializeSeedFromMediaId(this.seedMediaId, this.seedCropParams() ?? undefined);
+    if (this.seedMediaId() != null) {
+      this.materializeSeedFromMediaId(this.seedMediaId()!, this.seedCropParams() ?? undefined);
     }
   }
 
@@ -396,7 +396,7 @@ export class NewDetectorModalComponent implements OnInit {
    */
   get showNoTextWarning(): boolean {
     return (
-      !this.embedderCaps.supportsText(this.datasetEmbedder) &&
+      !this.embedderCaps.supportsText(this.datasetEmbedder()) &&
       this.hasPendingText &&
       !this.hasMediaExample
     );
@@ -419,7 +419,7 @@ export class NewDetectorModalComponent implements OnInit {
     const first = medias.length > 0 ? medias[0] : null;
     const names = first?.embedders ?? (first?.embedder ? [first.embedder] : []);
     if (names.length > 0) return names;
-    return this.datasetEmbedder ? [this.datasetEmbedder] : [];
+    return this.datasetEmbedder() ? [this.datasetEmbedder()] : [];
   }
 
   /** All three embedder types, in display order — the always-available options

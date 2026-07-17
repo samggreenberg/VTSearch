@@ -13,7 +13,7 @@
   controls
   controlsList="nodownload"
   loop
-  [attr.aria-label]="media.filename || 'Audio media'"
+  [attr.aria-label]="media().filename || 'Audio media'"
   (loadedmetadata)="onLoadedMetadata()"
   (timeupdate)="onTimeUpdate()"
   (volumechange)="onVolumeChange()"

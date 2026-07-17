@@ -82,6 +82,19 @@ The pointer carries the issue number (the durable link) and a short human-readab
 
 This is why closing an issue by hand didn't previously "trickle back": the item was **duplicated as a body** in the plan instead of **referenced as a pointer.** Store it once, point at it from anywhere else, and dismissal is just deleting the pointer.
 
+## Recommend a Claude model in every issue you file
+
+**Every GitHub issue you create must include a recommended Claude model** for whoever picks it up, sized to the work. This lets a task be routed to the cheapest model that will do it well — a Haiku-tier mechanical edit shouldn't burn Opus, and a regression-prone refactor shouldn't be handed to a model that will botch it.
+
+**Capability ladder (cheapest/weakest → most capable/most expensive): Haiku 4.5 → Sonnet 5 → Opus 4.8 → Fable 5.** Fable 5 is Anthropic's *most* capable model (and its most expensive), reserved for the hardest, longest-horizon work — it is **not** a cheap rote tier. Haiku 4.5 is the fast, cheap tier for mechanical edits. "Step up" always means moving toward Fable; "step down" toward Haiku.
+
+- Add a bolded line near the top of the body (right after the difficulty/summary), e.g. `**Recommended Claude model: Sonnet 5.**` — with a short clause on *why* when it isn't obvious.
+- Size to the hardest part of the issue, not the average. Rough guide: **Haiku 4.5** for rote, schematic-/find-replace-shaped edits with a clear spec and no design judgment; **Sonnet 5** for normal feature/bugfix work with bounded reasoning; **Opus 4.8** for regression-prone refactors, subtle concurrency/reactivity, cross-cutting design, or anything where a wrong-but-plausible answer is costly; **Fable 5** only for the most demanding, long-horizon, or research-grade work that genuinely exceeds Opus. Use the current model names (Haiku 4.5, Sonnet 5, Opus 4.8, Fable 5).
+- When one issue mixes tiers (a mechanical bulk plus one gnarly file), name the split: e.g. "Sonnet 5 for the bulk; Opus 4.8 for `foo.component.ts`."
+- If a plan file's umbrella lists issue pointers, it's fine (not required) to append the recommended model in parentheses after each pointer title, as a routing hint.
+
+This is a recommendation for the *implementer's* model choice; it has nothing to do with the model identifier you report when asked which model **you** are.
+
 ## Plan files (`docs/plans/`) track FUTURE work only
 
 A plan file describes **work still owed**: a proposed feature, or the open parts of one in progress. Plans are **not an archive of completed work.** Git history and merged PRs are the record of what already landed; the plan is what someone reads to pick up what's left.

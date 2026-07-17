@@ -122,6 +122,29 @@ detector name is inserted before the extension so bundles don't overwrite each
 other. Detectors whose scoring isn't the plain 2-layer MLP (patch DINOv2/v3,
 structural SIFT/VLAD) are skipped with a note rather than failing the run.
 
+**Scoring across source types (converter routing).** A detector declares the
+embedding space it needs (its `media_type`); it does not store a converter. When
+the dataset's media are a different type, the CLI routes them to the detector's
+type through a one-hop converter from the registry, so **one image detector
+scores native images, videos (via `video2image`), and documents (via
+`document2image`) in the same run** — a dataset can even mix all three. Media of
+a type with no route to the detector's type are skipped for that detector, and a
+detector whose type is unreachable from every source type in the dataset is
+skipped entirely (with a note). When a converter fans one media out into several
+(a video into frames), the per-clip scores are aggregated back to the source
+media by **max**: the video is a positive hit when *any* of its frames clears the
+threshold, and it surfaces as a single hit on the video, not one per frame.
+
+**Matching the detector's clipper granularity.** A detector trained on a
+specific clipper (its `input_spec.clipper` — e.g. 2-second audio tiles, or an
+image grid) is **re-clipped at scoring time** when the loaded dataset wasn't
+already clipped to match: each routed, target-typed media is split with the
+detector's clipper and the clips are re-embedded, so a raw dataset is scored at
+the granularity the detector expects. The per-clip scores fold back to the source
+media by the same **max** rule as converter fan-out. A dataset already loaded
+with the matching clipper is scored as-is (no redundant re-clip), and a detector
+with no `input_spec.clipper` scores whole media.
+
 **How to get the files:**
 
 - **Dataset file**: Export from the web UI via the dataset menu ("Export dataset"), or use a cached `.pkl` file from the `data/embeddings/` directory after loading a demo dataset.

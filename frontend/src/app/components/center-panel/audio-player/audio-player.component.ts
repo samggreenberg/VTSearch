@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, inject, Input, input, OnChanges, OnDestroy, output, SimpleChanges, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, linkedSignal, OnDestroy, output, untracked, viewChild } from '@angular/core';
 import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { decodeAudioBuffer } from '../../../utils/decode-audio';
@@ -68,17 +68,25 @@ function computePeaks(channelData: Float32Array, width: number): WaveformPeaks {
   templateUrl: './audio-player.component.html',
   styleUrl: './audio-player.component.scss',
 })
-export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit {
+export class AudioPlayerComponent implements OnDestroy {
   private activeContext = inject(ActiveContextService);
 
-  @Input() media!: Media;
-  @Input() volume = 1;
+  readonly media = input.required<Media>();
+  readonly volume = input(1);
   readonly audioPlaying = input(true);
   readonly swipeClass = input('');
   readonly playingChanged = output<boolean>();
 
-  @ViewChild('waveformCanvas') canvasRef!: ElementRef<HTMLCanvasElement>;
-  @ViewChild('audioEl') audioRef!: ElementRef<HTMLAudioElement>;
+  private readonly canvasRef = viewChild<ElementRef<HTMLCanvasElement>>('waveformCanvas');
+  // Public: CenterPanelComponent reaches through this to pause/resume the
+  // native element on navigation / tab-visibility changes.
+  readonly audioRef = viewChild<ElementRef<HTMLAudioElement>>('audioEl');
+
+  // The volume the <audio> element should currently have. Resets to the
+  // `volume` input whenever the parent pushes a new value; element-driven
+  // changes (the native volume slider, keyboard adjustVolume) are mirrored
+  // back into it so later loads restore the user's last-set volume.
+  private readonly currentVolume = linkedSignal(() => this.volume());
 
   // Current object URL feeding the <audio> element (`blob:...`), or '' before
   // the first load. Set imperatively on the native element (not via a template
@@ -87,7 +95,6 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   audioSrc = '';
 
   private waveformAbort: AbortController | null = null;
-  private viewReady = false;
   // See ImageViewerComponent.lastMediaId: the `media` input reference changes
   // whenever the metadata cache hydrates; without this guard, every cache
   // refresh would re-`loadAudio()` and snap playback back to t=0.
@@ -98,47 +105,58 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   private clipBounds: { start: number; end: number } | null = null;
   // Whether (loadedmetadata) has fired for the current audioSrc. Clip bounds
   // (clip_start/clip_end) often arrive via batch hydration *after* the audio
-  // has already loaded, on a later ngOnChanges with the same media id; in that
+  // has already loaded, on a later media change with the same media id; in that
   // case (loadedmetadata) does not fire again, so we (re)apply the bounds here.
   // Mirrors VideoPlayerComponent: archive-member audio windows serve the whole
   // member and seek/loop within [clip_start, clip_end] (display-only).
   private metadataLoaded = false;
 
-  ngAfterViewInit(): void {
-    this.viewReady = true;
-    if (this.media) this.lastMediaId = this.media.id;
-    this.loadAudio();
-  }
-
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['media'] && this.media) {
-      if (this.media.id !== this.lastMediaId) {
-        this.lastMediaId = this.media.id;
+  constructor() {
+    // (Re)load the clip when the media id changes. Tracks the view query so
+    // the first load runs as soon as the <audio> element exists (view queries
+    // resolve after the first render); until then the effect is a no-op and
+    // `lastMediaId` stays null, so the pending media loads on resolution.
+    effect(() => {
+      const media = this.media();
+      if (!this.audioRef()) return;
+      if (media.id !== this.lastMediaId) {
+        this.lastMediaId = media.id;
         this.metadataLoaded = false;
         this.stopClipEnforcement();
-        if (this.viewReady) {
-          this.loadAudio();
-        }
+        untracked(() => void this.loadAudio(media));
       } else if (this.metadataLoaded) {
         // Same media id, but metadata (e.g. clip_start/clip_end) may have just
         // arrived via batch hydration. The audio already loaded, so
         // (loadedmetadata) won't fire again; apply the clip window now.
-        this.applyClipBounds();
+        untracked(() => this.applyClipBounds());
       }
-    }
-    if (changes['volume'] && this.audioRef?.nativeElement) {
-      this.audioRef.nativeElement.volume = this.volume;
-    }
-    if (changes['audioPlaying'] && !changes['media'] && this.audioRef?.nativeElement) {
-      this.syncPlaybackState();
-    }
+    });
+
+    // Push volume changes onto the element. The element is read untracked so
+    // this runs only when the volume actually changes, mirroring the old
+    // `changes['volume']` guard; the initial volume is applied by
+    // (loadedmetadata) / loadAudio(), as before.
+    effect(() => {
+      const vol = this.currentVolume();
+      const audio = untracked(this.audioRef)?.nativeElement;
+      if (audio) audio.volume = vol;
+    });
+
+    // Play/pause the element when the parent toggles `audioPlaying`. Untracked
+    // element read for the same reason: a media swap must not re-trigger this
+    // (the old code's `!changes['media']` guard) — the post-load sync happens
+    // in loadAudio()/(loadedmetadata) instead.
+    effect(() => {
+      this.audioPlaying();
+      if (untracked(this.audioRef)) untracked(() => this.syncPlaybackState());
+    });
   }
 
   ngOnDestroy(): void {
     this.stopClipEnforcement();
     this.waveformAbort?.abort();
     this.waveformAbort = null;
-    const audio = this.audioRef?.nativeElement;
+    const audio = this.audioRef()?.nativeElement;
     if (audio) {
       audio.pause();
       audio.removeAttribute('src');
@@ -148,24 +166,25 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   }
 
   onLoadedMetadata(): void {
-    const audio = this.audioRef?.nativeElement;
+    const audio = this.audioRef()?.nativeElement;
     if (!audio) return;
     this.metadataLoaded = true;
-    audio.volume = this.volume;
+    audio.volume = this.currentVolume();
     this.applyClipBounds();
     this.syncPlaybackState();
   }
 
   // Seek into the clip window and (re)start boundary enforcement when the media
   // carries clip extents; otherwise tear enforcement down. Safe to call both on
-  // (loadedmetadata) and on later metadata-enrichment ngOnChanges cycles.
+  // (loadedmetadata) and on later metadata-enrichment effect cycles.
   private applyClipBounds(): void {
-    const audio = this.audioRef?.nativeElement;
+    const audio = this.audioRef()?.nativeElement;
     if (!audio) return;
 
-    if (this.media?.clip_start != null) {
-      const clipStart = this.media.clip_start;
-      const clipEnd = this.media.clip_end;
+    const media = this.media();
+    if (media.clip_start != null) {
+      const clipStart = media.clip_start;
+      const clipEnd = media.clip_end;
       // Snap into the window only when currently outside it, so we don't yank
       // audio already looping correctly within its window.
       if (audio.currentTime < clipStart || (clipEnd != null && audio.currentTime >= clipEnd)) {
@@ -178,13 +197,14 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   }
 
   private startClipEnforcement(): void {
-    if (this.media?.clip_start == null || this.media?.clip_end == null) {
+    const media = this.media();
+    if (media.clip_start == null || media.clip_end == null) {
       this.clipBounds = null;
       return;
     }
     // Arm enforcement; the actual boundary check runs in (timeupdate), which the
     // <audio> element fires as playback advances (no timer while paused).
-    this.clipBounds = { start: this.media.clip_start, end: this.media.clip_end };
+    this.clipBounds = { start: media.clip_start, end: media.clip_end };
   }
 
   private stopClipEnforcement(): void {
@@ -197,7 +217,7 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   onTimeUpdate(): void {
     const bounds = this.clipBounds;
     if (!bounds) return;
-    const audio = this.audioRef?.nativeElement;
+    const audio = this.audioRef()?.nativeElement;
     if (!audio || audio.paused) return;
     if (audio.currentTime >= bounds.end || audio.currentTime < bounds.start) {
       audio.currentTime = bounds.start;
@@ -205,8 +225,9 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   }
 
   onVolumeChange(): void {
-    if (this.audioRef?.nativeElement) {
-      this.volume = this.audioRef.nativeElement.volume;
+    const audio = this.audioRef()?.nativeElement;
+    if (audio) {
+      this.currentVolume.set(audio.volume);
     }
   }
 
@@ -223,7 +244,7 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   }
 
   togglePlayback(): void {
-    const audio = this.audioRef?.nativeElement;
+    const audio = this.audioRef()?.nativeElement;
     if (!audio) return;
     if (audio.paused) {
       audio.play().catch(() => {});
@@ -233,19 +254,18 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   }
 
   adjustVolume(delta: number): void {
-    const audio = this.audioRef?.nativeElement;
+    const audio = this.audioRef()?.nativeElement;
     if (!audio) return;
     audio.volume = Math.max(0, Math.min(1, audio.volume + delta));
-    this.volume = audio.volume;
+    this.currentVolume.set(audio.volume);
   }
 
   // Download the clip once and feed those bytes to BOTH the <audio> element
   // (via an object URL) and the waveform renderer. Previously the <audio>
   // element streamed /audio while drawWaveform() fetched the identical URL a
   // second time and decoded it -- two downloads of the same bytes per selection.
-  private async loadAudio(): Promise<void> {
-    if (!this.media) return;
-    const mediaId = this.media.id;
+  private async loadAudio(media: Media): Promise<void> {
+    const mediaId = media.id;
     const datasetId = this.activeContext.datasetId;
 
     // Blank the old waveform immediately so a media switch doesn't leave the
@@ -282,9 +302,9 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
     await this.renderWaveform(mediaId, datasetId, blob, abort);
     this.clearAbort(abort);
 
-    const audio = this.audioRef?.nativeElement;
+    const audio = this.audioRef()?.nativeElement;
     if (audio) {
-      audio.volume = this.volume;
+      audio.volume = this.currentVolume();
       this.syncPlaybackState();
     }
   }
@@ -295,7 +315,7 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
     const url = URL.createObjectURL(blob);
     this.revokeObjectUrl();
     this.audioSrc = url;
-    const audio = this.audioRef?.nativeElement;
+    const audio = this.audioRef()?.nativeElement;
     if (audio) {
       audio.src = url;
       audio.load();
@@ -310,7 +330,7 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   }
 
   private syncPlaybackState(): void {
-    const audio = this.audioRef?.nativeElement;
+    const audio = this.audioRef()?.nativeElement;
     if (!audio) return;
     const audioPlaying = this.audioPlaying();
     if (audioPlaying && audio.paused) {
@@ -324,7 +344,7 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   // background. Returns the 2D context + dimensions, or null when no canvas /
   // 2D context is available (headless test env).
   private beginCanvas(): { ctx: CanvasRenderingContext2D; width: number; height: number } | null {
-    const canvas = this.canvasRef?.nativeElement;
+    const canvas = this.canvasRef()?.nativeElement;
     if (!canvas) return null;
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;

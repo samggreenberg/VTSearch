@@ -23,14 +23,15 @@ describe('LabelSortComponent', () => {
   });
 
   it('should default to time-desc', () => {
-    expect(component.mode).toBe('time-desc');
+    expect(component.mode()).toBe('time-desc');
   });
 
   it('should emit modeChange on sort change', () => {
-    vi.spyOn(component.modeChange, 'emit');
+    let emitted: LabelSortMode | undefined;
+    component.mode.subscribe((v) => (emitted = v));
     component.onSortChange('name-asc');
-    expect(component.mode).toBe('name-asc');
-    expect(component.modeChange.emit).toHaveBeenCalledWith('name-asc');
+    expect(component.mode()).toBe('name-asc');
+    expect(emitted).toBe('name-asc');
   });
 
   it('should render all sort options', () => {
@@ -50,6 +51,6 @@ describe('LabelSortComponent', () => {
   it('should accept mode input', async () => {
     fixture.componentRef.setInput('mode', 'confidence-desc');
     await settleZoneless(fixture);
-    expect(component.mode).toBe('confidence-desc');
+    expect(component.mode()).toBe('confidence-desc');
   });
 });

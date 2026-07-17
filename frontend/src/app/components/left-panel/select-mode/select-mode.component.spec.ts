@@ -23,7 +23,7 @@ describe('SelectModeComponent', () => {
   });
 
   it('should default to top select mode', () => {
-    expect(component.selectMode).toBe('top');
+    expect(component.selectMode()).toBe('top');
   });
 
   it('should render three radio options', () => {
