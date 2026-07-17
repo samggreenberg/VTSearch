@@ -154,6 +154,7 @@ set_browse_mouse_zooms_per_level  # noqa: F821
 get_browse_signposts  # noqa: F821
 set_browse_signposts  # noqa: F821
 set_browse_signpost_captioner  # noqa: F821
+set_browse_signpost_vocab  # noqa: F821
 set_autopilot_resort_interval  # noqa: F821
 set_dataset_max_age_days  # noqa: F821
 set_projection_n_neighbors  # noqa: F821
