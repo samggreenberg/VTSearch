@@ -83,6 +83,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private ngZone = inject(NgZone);
 
   private readonly canvas = viewChild(BrowseCanvasComponent);
+  /** The active bin-details popup — the docked panel or the floating window,
+   *  whichever is mounted (they're mutually exclusive). Used to snap the details
+   *  divider tight to its grid columns on release. */
+  private readonly binPopup = viewChild(BrowseBinPopupComponent);
   /** The 3-column grid (canvas | divider | side panel); the divider drag
    *  measures against its box. Only present in the ``ready`` state. */
   private readonly content = viewChild<ElementRef<HTMLElement>>('content');
@@ -771,6 +775,17 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.draggingDetails = false;
     document.removeEventListener('mousemove', this.boundDetailsMove);
     document.removeEventListener('mouseup', this.boundDetailsUp);
+    // Pop tight to the column count the user dragged to: snap away any trailing
+    // empty strip so releasing never leaves a ragged half-column (mirrors the
+    // right panel's snap). The docked panel reports the minimum width that still
+    // shows its current columns; it only ever shrinks, so clamp just guards the
+    // floor.
+    const snapped = this.binPopup()?.snappedPanelWidth() ?? null;
+    if (snapped !== null) {
+      this.detailsPanelWidth.set(
+        this.clamp(snapped, BrowseViewComponent.DETAILS_FLOOR, this.detailsPanelWidth()),
+      );
+    }
     // The user now owns the width; block the settings round-trip from resetting it.
     this.detailsWidthInitialized = true;
     this.settingsState
@@ -953,10 +968,11 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.contextRepId = event.repId;
     if (this.detailsDocked()) {
       // Docked: the persistent left panel shows the bin — no floating window.
-      // Release the canvas's pinned enlarge right away so live hover keeps
-      // working while the bin stays open in the panel.
+      // Keep the canvas's pinned enlarge (the canvas pinned it on right-click)
+      // so the chosen bin stays enlarged while it's open in the panel, exactly
+      // like the floating window. It's released on dismiss (the panel's X or an
+      // empty-space right-click), or re-pinned when another bin is right-clicked.
       this.contextMenuOpen = false;
-      this.canvas()?.unpinCell();
       return;
     }
     this.contextMenuX = event.clientX;
@@ -983,7 +999,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    *  same ``contextMembers``). */
   onDockRequested(): void {
     this.contextMenuOpen = false;
-    this.canvas()?.unpinCell();
+    // Keep the bin pinned enlarged as it moves into the docked panel — docked
+    // bins stay enlarged too now, so there's nothing to release here.
     this.persistBinDetailsDocked(true);
   }
 

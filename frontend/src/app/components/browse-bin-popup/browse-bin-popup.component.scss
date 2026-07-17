@@ -110,8 +110,15 @@
   }
 }
 
-.bin-popup-view-controls {
+// Right-aligned cluster of header chrome (metadata toggle, dock / pop-out,
+// close). Pushed to the far right so the detail-image size buttons (and, when
+// floating, the leftmost dock button) stay on the left.
+.bin-popup-header-end {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-shrink: 0;
 }
 
 .bin-popup-close {
@@ -271,16 +278,22 @@
   min-height: 0;
 }
 
-// Top row of the grid column: the select-all control on the left and the
-// member-count label pushed to the right. With a single member there is no
-// button, so `space-between` leaves the count alone at the left as before.
+// Top row of the grid column: the select-all control + member-count label on
+// the left, and the thumbnail smaller/larger controls pushed to the right (they
+// resize this grid, so they live on its header row rather than in the window
+// header).
 .bin-popup-grid-header {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-2xs);
   padding: 0 var(--space-2xs) var(--space-2xs);
+}
+
+// Thumbnail size buttons, pushed to the right end of the grid header row.
+.bin-popup-grid-view-controls {
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 // Tri-state master checkbox, mirroring the dashboard's select-all button but
@@ -534,6 +547,19 @@
     height: auto;
     flex: 1 1 auto;
     min-height: 0;
+  }
+
+  // Resize like the right (selection) panel: fixed-width columns packed to the
+  // left with a constant gap, so widening the panel keeps the thumbnails (and
+  // the gaps between them) the same size and only reveals a new column once
+  // there's room for a whole one — instead of the floating window's ``1fr``
+  // tracks, which stretch each thumbnail's cell as the panel grows. The browse
+  // view then "pops" the divider tight to the column count on release (see
+  // ``snappedPanelWidth``), mirroring the right panel's snap.
+  .bin-popup-row {
+    grid-template-columns: repeat(var(--popup-cols, 1), var(--popup-cell, 80px));
+    justify-content: start;
+    column-gap: var(--space-xs);
   }
 }
 
