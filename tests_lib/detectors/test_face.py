@@ -172,6 +172,53 @@ class TestFaceEmbedder:
         with patch.object(emb, "load_models"):
             assert emb.embed_media({"media_path": "/nonexistent.jpg"}) is None
 
+    def test_weight_load_does_not_leak_progress_bar_to_console(self, capsys):
+        """facenet-pytorch downloads VGGFace2 weights via torch.hub, printing a
+        tqdm bar. The embedder must wrap that in intercept_tqdm_progress so the
+        bar is forwarded to the progress callback and never leaks to the console.
+
+        See the "progress-bar-stdout-leak" fix: the ~107MB download bar used to
+        print straight to stdout when starting the app.
+        """
+        import sys
+
+        import tqdm.auto
+
+        from vtscore.media.face.embedder_facenet import FaceEmbedder
+
+        class _FakeInceptionResnetV1:
+            """Stub whose construction emits a determinate tqdm bar, mimicking
+            facenet-pytorch's torch.hub weight download."""
+
+            def __init__(self, pretrained=None):
+                bar = tqdm.auto.tqdm(total=107, desc="20180402-114759-vggface2.pt")
+                bar.update(107)
+                bar.close()
+
+            def eval(self):
+                return self
+
+            def to(self, _device):
+                return self
+
+        fake_module = MagicMock()
+        fake_module.InceptionResnetV1 = _FakeInceptionResnetV1
+
+        calls: list[tuple] = []
+        emb = FaceEmbedder()
+        emb._on_progress = lambda status, message, current, total: calls.append(
+            (status, message, current, total)
+        )
+
+        with patch.dict(sys.modules, {"facenet_pytorch": fake_module}):
+            emb._load_models_impl()
+
+        captured = capsys.readouterr()
+        assert "vggface2" not in captured.out
+        assert "vggface2" not in captured.err
+        # The bar's progress should have been forwarded to the callback instead.
+        assert any(c[3] == 107 for c in calls)
+
 
 # ---------------------------------------------------------------------------
 # image2face converter
