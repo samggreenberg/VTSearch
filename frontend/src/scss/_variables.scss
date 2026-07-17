@@ -58,6 +58,14 @@
   --transition-base: 0.15s;
   --transition-slow: 0.3s;
 
+  // Shared easing curves, so new motion stays visually consistent instead of
+  // hand-writing a cubic-bezier per rule.
+  //   --ease-out    → things arriving/settling (modal scale-in, panel reveal):
+  //                   fast start, gentle deceleration into place.
+  //   --ease-in-out → symmetric moves where both ends should feel eased.
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
   // Elevation / shadow scale (resolves through --shadow-dropdown so each
   // theme tints shadows appropriately: dark/light/highviz)
   --shadow-sm: 0 1px 2px var(--shadow-dropdown);

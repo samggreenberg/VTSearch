@@ -489,6 +489,36 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 
 // --- Modal overlay ---
 
+// Modal entry/exit motion. Two paired keyframes: the backdrop fades while the
+// content scales, so the overlay and the panel don't pop in lockstep. The
+// content scales from `transform-origin`, which ModalComponent.onFocusIn points
+// at the launching button (falling back to center) — reading the scale as "this
+// panel came from that button". Enter uses `backwards` fill (not `forwards`) so
+// the content reverts to `transform: none` once settled, leaving no lingering
+// transform that would turn `.modal-content` into a containing block for any
+// `position: fixed` descendant. `--transition-slow` here is mirrored by
+// LEAVE_ANIMATION_MS in modal.component.ts; the app/OS reduce-motion rules in
+// styles.scss collapse both to ~instant.
+@keyframes modal-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-backdrop-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes modal-content-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes modal-content-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.9); }
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -498,6 +528,11 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   justify-content: center;
   padding-top: 8vh;
   z-index: var(--z-modal-backdrop);
+  animation: modal-backdrop-in var(--transition-slow) var(--ease-out) backwards;
+
+  &.is-leaving {
+    animation: modal-backdrop-out var(--transition-slow) var(--ease-out) forwards;
+  }
 }
 
 .modal-content {
@@ -515,6 +550,11 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  animation: modal-content-in var(--transition-slow) var(--ease-out) backwards;
+
+  .modal-backdrop.is-leaving & {
+    animation: modal-content-out var(--transition-slow) var(--ease-out) forwards;
+  }
 }
 
 .modal-header {
