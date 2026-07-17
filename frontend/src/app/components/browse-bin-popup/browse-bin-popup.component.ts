@@ -714,6 +714,24 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     return Math.max(this.gridGoalWidth, this.availableWidth() - DOCKED_GRID_CHROME);
   }
 
+  /**
+   * Docked only: the smallest panel width that still shows the current column
+   * count, so the browse view can "pop" the details divider tight to the columns
+   * when the user releases it — mirroring the right/selection panel's snap. Uses
+   * the same width basis as {@link rebuildRows} (panel width minus {@link
+   * DOCKED_GRID_CHROME}, chunked by ``gridGoalWidth`` + {@link GRID_GAP}), so the
+   * snapped width always re-derives exactly ``columns`` columns with no trailing
+   * empty strip and never drops a column. Returns ``null`` when floating or when
+   * there is nothing to snap to.
+   */
+  snappedPanelWidth(): number | null {
+    if (!this.docked()) return null;
+    const cols = this.columns;
+    if (cols <= 0) return null;
+    const minContent = cols * (this.gridGoalWidth + GRID_GAP) - GRID_GAP;
+    return Math.ceil(minContent + DOCKED_GRID_CHROME);
+  }
+
   /** Recompute the column count + row chunking for the current thumbnail size. */
   private rebuildRows(): void {
     this.columns = Math.max(
