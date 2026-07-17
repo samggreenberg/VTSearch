@@ -348,7 +348,7 @@
   column-gap: var(--space-2xs);
 }
 
-// A grid cell: a thumbnail above its truncated name.
+// A grid cell: a single thumbnail (the name that used to sit beneath it is gone).
 .bin-popup-entry {
   box-sizing: border-box;
   cursor: pointer;
@@ -356,13 +356,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
   padding: 2px;
   border-radius: var(--radius-sm);
   width: var(--popup-cell, 80px);
-  // Query container so the name can hide itself at small icon sizes (below).
-  container-type: inline-size;
-  container-name: bin-cell;
   // Animate the "viewed" enlarge (below) so items grow/settle smoothly rather
   // than popping as focus walks the grid.
   transition: transform var(--transition-base);
@@ -459,36 +455,6 @@
   justify-content: center;
   color: var(--text-muted);
   font-size: var(--font-lg);
-}
-
-// The name stacks under the thumbnail, truncated to the cell width. Its
-// line-height is pinned (not left at the font's ``normal``, which varies by
-// platform font) so the rendered row height is deterministic and matches the
-// space reserved for it in ``rowSize`` (GRID_LABEL_HEIGHT). Without this the name
-// renders a couple px taller than its slot, forcing a stray scrollbar even on a
-// single row. 12px (``--font-xs``) × 1.25 = 15px == GRID_LABEL_HEIGHT.
-.bin-popup-name {
-  flex: 0 0 auto;
-  width: 100%;
-  max-width: var(--popup-cell, 80px);
-  min-width: 0;
-  text-align: center;
-  font-weight: var(--weight-regular);
-  font-size: var(--font-xs);
-  line-height: 1.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-// At the two smallest icon sizes (XS/S, ~46px content-box) the name truncates to
-// a useless "a…", so hide it and let the grid pack tighter. M and up keep it.
-// The reserved row height (GRID_LABEL_HEIGHT in the .ts) is dropped in lockstep
-// so hidden names don't leave an empty gap under each thumbnail.
-@container bin-cell (max-width: 60px) {
-  .bin-popup-name {
-    display: none;
-  }
 }
 
 // --- Docked presentation ----------------------------------------------------
