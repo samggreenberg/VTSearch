@@ -68,13 +68,15 @@
       <label title="Show both good and bad predictions"><input type="radio" name="sides" value="both" [(ngModel)]="exportSides" (ngModelChange)="onSidesChange()" /> Both</label>
     </div>
 
-    <div class="export-row">
-      <select class="form-select" [ngModel]="selectedExporter()" (ngModelChange)="selectedExporter.set($event); onExporterChange()" title="Choose export destination">
-        @for (exp of exporters(); track exp.name) {
-          <option [value]="exp.name">{{ exp.display_name || exp.name }}</option>
-        }
-      </select>
-    </div>
+    @if (exporters().length > 1) {
+      <div class="export-row">
+        <select class="form-select" [ngModel]="selectedExporter()" (ngModelChange)="selectedExporter.set($event); onExporterChange()" title="Choose export destination">
+          @for (exp of exporters(); track exp.name) {
+            <option [value]="exp.name">{{ exp.display_name || exp.name }}</option>
+          }
+        </select>
+      </div>
+    }
 
     @for (field of exporterFields(); track field.key) {
       <div class="form-group">
