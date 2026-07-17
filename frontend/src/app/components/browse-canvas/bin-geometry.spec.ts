@@ -60,16 +60,16 @@ describe('bin-geometry', () => {
     });
   });
 
-  describe('singleCornerRadius', () => {
+  describe('roundedCornerRadius', () => {
     it('hex: the inscribed-disc radius (radius·√3/2)', () => {
-      expect(hex.singleCornerRadius(6)).toBeCloseTo((6 * SQRT3) / 2);
+      expect(hex.roundedCornerRadius(6)).toBeCloseTo((6 * SQRT3) / 2);
     });
 
     it('square: a fraction of the half-side', () => {
       // Rounded-corner radius is smaller than the half-side it curves within.
       const half = (6 * SQRT3) / 2;
-      expect(square.singleCornerRadius(6)).toBeGreaterThan(0);
-      expect(square.singleCornerRadius(6)).toBeLessThan(half);
+      expect(square.roundedCornerRadius(6)).toBeGreaterThan(0);
+      expect(square.roundedCornerRadius(6)).toBeLessThan(half);
     });
   });
 
@@ -111,27 +111,27 @@ describe('bin-geometry', () => {
   }
 
   describe('traceCell', () => {
-    it('hex singleton draws a disc, pile draws a polygon', () => {
-      const single = stubCtx();
-      hex.traceCell(single.ctx, 0, 0, 5, true);
-      expect(single.arc).toHaveBeenCalledOnce();
-
+    it('hex pile draws a disc, singleton draws a polygon', () => {
       const pile = stubCtx();
-      hex.traceCell(pile.ctx, 0, 0, 5, false);
-      expect(pile.arc).not.toHaveBeenCalled();
-      expect(pile.lineTo).toHaveBeenCalled();
+      hex.traceCell(pile.ctx, 0, 0, 5, true);
+      expect(pile.arc).toHaveBeenCalledOnce();
+
+      const single = stubCtx();
+      hex.traceCell(single.ctx, 0, 0, 5, false);
+      expect(single.arc).not.toHaveBeenCalled();
+      expect(single.lineTo).toHaveBeenCalled();
     });
 
-    it('square singleton uses roundRect, pile uses rect', () => {
-      const single = stubCtx();
-      square.traceCell(single.ctx, 0, 0, 5, true);
-      expect(single.roundRect).toHaveBeenCalledOnce();
-      expect(single.rect).not.toHaveBeenCalled();
-
+    it('square pile uses roundRect, singleton uses rect', () => {
       const pile = stubCtx();
-      square.traceCell(pile.ctx, 0, 0, 5, false);
-      expect(pile.rect).toHaveBeenCalledOnce();
-      expect(pile.roundRect).not.toHaveBeenCalled();
+      square.traceCell(pile.ctx, 0, 0, 5, true);
+      expect(pile.roundRect).toHaveBeenCalledOnce();
+      expect(pile.rect).not.toHaveBeenCalled();
+
+      const single = stubCtx();
+      square.traceCell(single.ctx, 0, 0, 5, false);
+      expect(single.rect).toHaveBeenCalledOnce();
+      expect(single.roundRect).not.toHaveBeenCalled();
     });
 
     it('square cell has side radius·√3 centred on (cx, cy)', () => {

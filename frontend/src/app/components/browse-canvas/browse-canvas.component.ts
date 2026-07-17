@@ -1516,18 +1516,20 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     selectionActive: boolean,
     trim: { hw: number; hh: number } | null = null,
   ): void {
-    // A cell with one item is drawn as a disc (slightly smaller than the cell);
-    // multi-item cells keep their full shape so they tile the space. The hovered
-    // cell instead passes `trim`: a rectangle of the thumbnail's native aspect
-    // ratio, so the enlarged tile breaks out of the bin silhouette and shows the
-    // whole frame (no hex/square clip, no background bars). A singleton's
-    // break-out keeps rounded corners (see `traceTrimRect`) so it still reads as
-    // a singleton; a pile's stays sharp and is marked by its colormap band.
+    // A multi-item ("pile") cell is drawn with a soft rounded shape — a disc in
+    // hex mode, a rounded-corner rectangle in square mode — while a one-item cell
+    // keeps its full sharp hexagon / square so a lone item reads as a crisp,
+    // distinct tile. The hovered cell instead passes `trim`: a rectangle of the
+    // thumbnail's native aspect ratio, so the enlarged tile breaks out of the bin
+    // silhouette and shows the whole frame (no hex/square clip, no background
+    // bars). A pile's break-out keeps rounded corners (see `traceTrimRect`) so it
+    // still reads as a pile; a singleton's stays sharp.
     const single = cell.count === 1;
+    const rounded = !single;
     if (trim) {
-      this.traceTrimRect(ctx, cx, cy, trim, single, radius);
+      this.traceTrimRect(ctx, cx, cy, trim, rounded, radius);
     } else {
-      this.geom.traceCell(ctx, cx, cy, radius, single);
+      this.geom.traceCell(ctx, cx, cy, radius, rounded);
     }
 
     // Image / video: paint the central item's thumbnail clipped to the cell.
@@ -1561,7 +1563,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
       ctx.restore();
     } else if (single) {
       // Singletons get the colormap's dedicated one-item colour, decoupled
-      // from the density ramp so a lone dot reads as "exactly one".
+      // from the density ramp so a lone item reads as "exactly one".
       ctx.fillStyle = rgbString(cmap.single);
       ctx.fill();
     } else {
@@ -1622,8 +1624,8 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // A hovered thumbnail breaks out of its bin: it's shown whole at its native
     // aspect ratio as a rectangle (no silhouette), sized to grow until its edge
     // just reaches the nearest neighbour cell's centre (`hoverThumbRect`). A
-    // singleton's rectangle keeps rounded corners so it stays distinguishable
-    // from a pile (`traceTrimRect`). A non-thumbnail (flat density) cell has no
+    // pile's rectangle keeps rounded corners so it stays distinguishable from a
+    // singleton (`traceTrimRect`). A non-thumbnail (flat density) cell has no
     // such rectangle, so it keeps its silhouette and simply lifts off with a
     // fixed size bump.
     const thumb = this.thumbnailMode ? this.getThumb(cell.rep_id) : null;
@@ -1638,9 +1640,9 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     ctx.shadowBlur = Math.max(4, radius * 0.3);
     ctx.shadowOffsetY = Math.max(1, radius * 0.1);
     if (trim) {
-      this.traceTrimRect(ctx, cx, cy, trim, cell.count === 1, radius);
+      this.traceTrimRect(ctx, cx, cy, trim, cell.count > 1, radius);
     } else {
-      this.geom.traceCell(ctx, cx, cy, bumped, cell.count === 1);
+      this.geom.traceCell(ctx, cx, cy, bumped, cell.count > 1);
     }
     ctx.fillStyle = this.themeColor('--bg-body');
     ctx.fill();
@@ -1653,13 +1655,13 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
 
   /**
    * Trace the hovered break-out thumbnail's rectangle as the current path,
-   * centred on `(cx, cy)` with half-extents `trim`. A singleton rounds its
-   * corners with the *same absolute* radius its grid disc / rounded square
-   * curved with (`geom.singleCornerRadius`, computed from the un-bumped bin
+   * centred on `(cx, cy)` with half-extents `trim`. A pile (`rounded`) rounds
+   * its corners with the *same absolute* radius its grid disc / rounded square
+   * curved with (`geom.roundedCornerRadius`, computed from the un-bumped bin
    * `radius`) — a fixed "total" round, not one proportional to the enlarged
-   * rectangle, so the blown-up tile keeps the singleton's corner curvature and
-   * only nibbles the image corners. Piles stay sharp-cornered; their colormap
-   * band is what marks them. The radius is clamped so it never exceeds half a
+   * rectangle, so the blown-up tile keeps the pile's corner curvature and only
+   * nibbles the image corners. Singletons stay sharp-cornered; their one-item
+   * colour is what marks them. The radius is clamped so it never exceeds half a
    * side of a narrow break-out rectangle.
    */
   private traceTrimRect(
@@ -1667,12 +1669,12 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     cx: number,
     cy: number,
     trim: { hw: number; hh: number },
-    single: boolean,
+    rounded: boolean,
     radius: number,
   ): void {
     ctx.beginPath();
-    if (single) {
-      const r = Math.min(this.geom.singleCornerRadius(radius), trim.hw, trim.hh);
+    if (rounded) {
+      const r = Math.min(this.geom.roundedCornerRadius(radius), trim.hw, trim.hh);
       ctx.roundRect(cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2, r);
     } else {
       ctx.rect(cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2);
