@@ -34,51 +34,15 @@ policy in `CLAUDE.md`).
 
 <!-- item-sep -->
 
-- **Modal enter/exit hook** — Today modals render via `@if` + `[open]="true"`,
-  so the node is torn out instantly on close and **leave animations are
-  impossible**. `.modal-backdrop`/`.modal-content` (`_components.scss:492-518`)
-  carry no animation at all. Add a single enter/leave hook to
-  `ModalComponent` (delay the `@if` teardown until a leave transition
-  completes, or move to a keyframed open/close state). Build once → all ~25
-  modals inherit entry/exit for free. **Prerequisite for the modal items
-  below.** Files: `components/modal/modal.component.*`, `scss/_components.scss`.
-
-<!-- item-sep -->
-
 - **Reusable flight / FLIP helper** — No measure-rect-then-tween utility exists
   (the browse-canvas zoom tween is bespoke and canvas-only). A small shared
   helper — capture `getBoundingClientRect()` before/after, tween the delta (or
-  fly a cloned ghost node between two rects) — unlocks *vote-flies-to-list*,
-  *re-sort settle*, and *origin-aware modals* as a batch. Must respect the
-  reduced-motion gate and clean up its ghost nodes. Files: new util under
-  `frontend/src/app/utils/`, consumed by center-panel / left-panel / modal.
+  fly a cloned ghost node between two rects) — unlocks *vote-flies-to-list* and
+  *re-sort settle* as a batch. Must respect the reduced-motion gate and clean
+  up its ghost nodes. Files: new util under `frontend/src/app/utils/`, consumed
+  by center-panel / left-panel / modal.
 
 <!-- item-sep -->
-
-- **Shared easing tokens** — Durations are tokenized but easing is hand-written
-  per rule (`ease-in-out`, `linear`, ad-hoc `cubic-bezier(0.4,0,1,1)` for the
-  swipe). Add `--ease-out` / `--ease-in-out` / (optionally) `--ease-spring` to
-  `_variables.scss` so new motion stays visually consistent. Cheap, low-risk,
-  and every other item benefits. Files: `scss/_variables.scss`.
-
-## Popups "from" a button (the originating request)
-
-<!-- item-sep -->
-
-- **Origin-aware modal scale-in** — On open, capture the launching button's
-  rect, set the modal's `transform-origin` to that point, and scale/fade from
-  ~0.9→1 over `--transition-slow`; reverse toward the same origin on close.
-  Reads as "this panel came from *that* button" without a literal projectile
-  crossing the screen (the restrained reading of the request). Depends on the
-  **modal enter/exit hook** and benefits from the **flight helper** for the
-  origin rect. Files: `components/modal/`, launching buttons pass their rect.
-
-<!-- item-sep -->
-
-- **Backdrop fade paired with content scale** — Fade the backdrop 0→1 while the
-  content scales, so the two don't pop in lockstep. Universally applicable,
-  hard to find annoying; the low-risk baseline even if origin-awareness is
-  deferred. Depends on the **modal enter/exit hook**. Files: `_components.scss`.
 
 ## Media & voting flow (extends the swipe language)
 
@@ -183,13 +147,14 @@ policy in `CLAUDE.md`).
 
 ## Suggested sequencing
 
-1. **Infra first:** shared easing tokens (trivial) → modal enter/exit hook →
-   flight/FLIP helper. These unlock the highest-value items.
-2. **Best payoff-to-risk:** origin-aware modal scale-in, re-sort FLIP settle,
-   list insertion/removal transitions.
+1. **Infra first:** the flight/FLIP helper (the shared easing tokens and the
+   modal enter/exit hook have shipped). It unlocks the highest-value remaining
+   items.
+2. **Best payoff-to-risk:** re-sort FLIP settle, list insertion/removal
+   transitions.
 3. **Everything else** as independent issues, sized per item.
 
 Recommended implementer models when these are promoted to issues: **Sonnet 5**
-for the self-contained CSS items (easing tokens, tab underline, count-up, fades);
-**Opus 4.8** for the flight/FLIP helper and the modal enter/exit hook (shared
-infra, reactivity-sensitive, regression-prone across ~25 modals).
+for the self-contained CSS items (tab underline, count-up, fades); **Opus 4.8**
+for the flight/FLIP helper (shared infra, reactivity-sensitive, regression-prone
+across ~25 modals).
