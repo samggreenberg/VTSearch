@@ -51,6 +51,13 @@ class _PerMediaTypeBooleanDict(fields.Dict):
         super().__init__(keys=fields.String(), values=fields.Boolean(), **kwargs)
 
 
+class _PerMediaTypeStringListDict(fields.Dict):
+    """``{media_type_id: [str, ...]}`` dict (custom signpost vocabularies)."""
+
+    def __init__(self, **kwargs):
+        super().__init__(keys=fields.String(), values=fields.List(fields.String()), **kwargs)
+
+
 class AppSettingsSchema(Schema):
     """Full settings dict returned by ``GET /api/settings`` and ``/defaults``.
 
@@ -101,6 +108,9 @@ class AppSettingsSchema(Schema):
     # Whether a media type's signpost texts come from the generative captioner
     # (image VLM / audio captioner) instead of the zero-shot tags; unset =tags.
     browse_signpost_captioner = _PerMediaTypeBooleanDict()
+    # Per-media-type custom zero-shot tag vocabulary replacing the built-in
+    # AudioSet-527 / OpenImages-600 lists; unset/empty = the shipped vocabulary.
+    browse_signpost_vocab = _PerMediaTypeStringListDict()
 
     # Per-user, per-media-type
     grid_icon_size_left = _PerMediaTypeStringDict()
@@ -265,6 +275,7 @@ class SettingsUpdateSchema(Schema):
     browse_mouse_zooms_per_level = fields.Raw()
     browse_signposts = fields.Raw()
     browse_signpost_captioner = fields.Raw()
+    browse_signpost_vocab = fields.Raw()
 
     autofind_detectors = fields.List(fields.String())
     # Auto-Find results exporter. ``autofind_exporter`` is validated against the

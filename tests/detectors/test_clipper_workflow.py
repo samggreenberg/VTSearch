@@ -584,9 +584,19 @@ class TestAPIClipMetadata:
             data = resp.get_json()
             assert len(data) > 0
             for item in data:
-                assert "clip_start" in item
-                assert "clip_end" in item
                 assert "clip_index" in item
+                # ``sound_tiling`` serves byte-sliced audio (each tile is a short
+                # WAV in its own 0-based timeline), so the absolute
+                # ``clip_start`` / ``clip_end`` offsets are deliberately
+                # suppressed from the playback contract (see
+                # ``vtsearch/routes/media/list.py``); they still reach the UI as
+                # provenance via ``custom_metadata``.
+                assert "clip_start" not in item
+                assert "clip_end" not in item
+                # The offsets survive as provenance in custom_metadata.
+                assert "Clip Start" in item["custom_metadata"]
+                assert "Clip End" in item["custom_metadata"]
+                assert item["custom_metadata"]["Clip End"] > item["custom_metadata"]["Clip Start"]
         finally:
             medias.clear()
             medias.update(saved)

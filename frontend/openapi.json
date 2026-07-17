@@ -224,6 +224,15 @@
             },
             "type": "object"
           },
+          "browse_signpost_vocab": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object"
+          },
           "browse_signposts": {
             "additionalProperties": {
               "type": "boolean"
@@ -4725,6 +4734,7 @@
             "type": "integer"
           },
           "browse_signpost_captioner": {},
+          "browse_signpost_vocab": {},
           "browse_signposts": {},
           "browse_thumbnail_border": {},
           "calibrate_count": {
