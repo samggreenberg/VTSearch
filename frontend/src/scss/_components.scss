@@ -776,6 +776,7 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 }
 
 .view-tab {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
@@ -790,6 +791,23 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   cursor: pointer;
   transition: color var(--transition-base), border-color var(--transition-base), background var(--transition-base);
 
+  // Active-underline wipe: the accent underline grows in (scaleX 0 → 1)
+  // rather than hard-cutting on. Sits over the 2px bottom-border region so it
+  // lands on the seam where the active tab flows into `.view-tab-content`.
+  &::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -2px;
+    height: 2px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: center;
+    transition: transform var(--transition-slow);
+    pointer-events: none;
+  }
+
   &:hover {
     color: var(--text-primary);
     background: var(--bg-hover);
@@ -798,7 +816,8 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   &--active {
     color: var(--text-primary);
     background: var(--bg-panel);
-    border-bottom-color: var(--accent);
+
+    &::after { transform: scaleX(1); }
   }
 }
 
