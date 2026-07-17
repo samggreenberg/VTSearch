@@ -221,11 +221,11 @@ _PREGEN_PROCESSORS = [
         "config": {"model_size": "tiny", "language": None},
     },
     {
-        "name": "Face (MediaPipe)",
+        "name": "Face (MTCNN)",
         "kind": "localizer",
         "processor_type": "face",
         "media_type": "image",
-        "config": {"threshold": 0.5, "model_selection": 1},
+        "config": {"threshold": 0.5},
     },
 ]
 

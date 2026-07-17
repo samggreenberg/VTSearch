@@ -1,4 +1,4 @@
-"""Face localizer using MediaPipe Face Detection."""
+"""Face localizer using facenet-pytorch's MTCNN detector."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from vtscore.media.processors import Localizer
 
 
 class FaceLocalizer(Localizer):
-    """Localizes faces in images using MediaPipe Face Detection.
+    """Localizes faces in images using facenet-pytorch's MTCNN detector.
 
     Running :meth:`localize` on an image clip returns a list of dicts, one per
     detected face whose confidence meets the threshold::
@@ -25,19 +25,19 @@ class FaceLocalizer(Localizer):
         ]
 
     Coordinates are in pixel space (float) matching the original image size.
+    MTCNN ships inside ``facenet-pytorch`` with bundled weights, so it needs no
+    separate model download and shares the install used by the FaceNet embedder.
     """
 
-    def __init__(self, name: str, threshold: float = 0.5, model_selection: int = 1) -> None:
+    def __init__(self, name: str, threshold: float = 0.5) -> None:
         """Create a face localizer.
 
         Args:
             name: Unique name for this localizer instance.
             threshold: Minimum confidence to count a detection (0-1).
-            model_selection: 0 for short-range (within 2m), 1 for full-range (within 5m).
         """
         self._name = name
         self._threshold = threshold
-        self._model_selection = model_selection
         self._detector: Optional[Any] = None
 
     # ------------------------------------------------------------------
@@ -56,10 +56,6 @@ class FaceLocalizer(Localizer):
     def threshold(self) -> float:
         return self._threshold
 
-    @property
-    def model_selection(self) -> int:
-        return self._model_selection
-
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
@@ -67,11 +63,15 @@ class FaceLocalizer(Localizer):
     def load_model(self) -> None:
         if self._detector is not None:
             return
-        import mediapipe as mp  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+        from facenet_pytorch import MTCNN  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
 
-        self._detector = mp.solutions.face_detection.FaceDetection(
-            min_detection_confidence=self._threshold,
-            model_selection=self._model_selection,
+        from vtscore.config import resolve_device  # noqa: PLC0415
+
+        self._detector = MTCNN(
+            keep_all=True,
+            select_largest=False,
+            post_process=False,
+            device=resolve_device(),
         )
 
     # ------------------------------------------------------------------
@@ -93,30 +93,24 @@ class FaceLocalizer(Localizer):
         if media_bytes is None:
             return []
 
-        import numpy as np  # noqa: PLC0415
-
         image = Image.open(io.BytesIO(media_bytes)).convert("RGB")
-        img_array = np.array(image)
-        h, w = img_array.shape[:2]
 
-        results = self._detector.process(img_array)
+        det_boxes, det_probs = self._detector.detect(image)
 
         hits: list[dict[str, Any]] = []
-        if not results.detections:
+        if det_boxes is None:
             return hits
 
-        for detection in results.detections:
-            conf = detection.score[0]
+        for box, prob in zip(det_boxes, det_probs):
+            if prob is None:
+                continue
+            conf = float(prob)
             if conf < self._threshold:
                 continue
-            bbox_rel = detection.location_data.relative_bounding_box
-            x1 = bbox_rel.xmin * w
-            y1 = bbox_rel.ymin * h
-            x2 = (bbox_rel.xmin + bbox_rel.width) * w
-            y2 = (bbox_rel.ymin + bbox_rel.height) * h
+            x1, y1, x2, y2 = (float(v) for v in box)
             hits.append(
                 {
-                    "confidence": round(float(conf), 4),
+                    "confidence": round(conf, 4),
                     "bbox": [round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)],
                 }
             )
@@ -133,7 +127,6 @@ class FaceLocalizer(Localizer):
         d["localizer_type"] = "face"
         d["config"] = {
             "threshold": self._threshold,
-            "model_selection": self._model_selection,
         }
         return d
 
@@ -143,5 +136,4 @@ class FaceLocalizer(Localizer):
         return cls(
             name=name,
             threshold=config.get("threshold", 0.5),
-            model_selection=config.get("model_selection", 1),
         )

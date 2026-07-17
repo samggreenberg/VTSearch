@@ -316,39 +316,35 @@ class TestFaceLocalizer:
     def test_identity(self):
         from vtscore.media.image.face_localizer import FaceLocalizer
 
-        loc = FaceLocalizer(name="test-face", threshold=0.6, model_selection=0)
+        loc = FaceLocalizer(name="test-face", threshold=0.6)
         assert loc.name == "test-face"
         assert loc.media_type == "image"
         assert loc.threshold == 0.6
-        assert loc.model_selection == 0
         assert isinstance(loc, Localizer)
 
     def test_to_dict(self):
         from vtscore.media.image.face_localizer import FaceLocalizer
 
-        loc = FaceLocalizer(name="face1", threshold=0.7, model_selection=1)
+        loc = FaceLocalizer(name="face1", threshold=0.7)
         d = loc.to_dict()
         assert d["name"] == "face1"
         assert d["media_type"] == "image"
         assert d["localizer_type"] == "face"
         assert d["config"]["threshold"] == 0.7
-        assert d["config"]["model_selection"] == 1
 
     def test_from_config(self):
         from vtscore.media.image.face_localizer import FaceLocalizer
 
-        config = {"threshold": 0.3, "model_selection": 0}
+        config = {"threshold": 0.3}
         loc = FaceLocalizer.from_config("rebuilt", config)
         assert loc.name == "rebuilt"
         assert loc.threshold == 0.3
-        assert loc.model_selection == 0
 
     def test_from_config_defaults(self):
         from vtscore.media.image.face_localizer import FaceLocalizer
 
         loc = FaceLocalizer.from_config("default", {})
         assert loc.threshold == 0.5
-        assert loc.model_selection == 1
 
     def test_localize_returns_empty_when_no_clip_bytes(self):
         from vtscore.media.image.face_localizer import FaceLocalizer
@@ -415,7 +411,7 @@ class TestPregenProcessorsRoute:
         names = [p["name"] for p in data["processors"]]
         assert "OCR (PaddleOCR)" in names
         assert "Speech (Whisper Tiny)" in names
-        assert "Face (MediaPipe)" in names
+        assert "Face (MTCNN)" in names
 
     def test_add_pregen_processors(self, client):
         res = client.post("/api/pregen-processors/add")
@@ -425,7 +421,7 @@ class TestPregenProcessorsRoute:
         assert len(data["added"]) == 3
         assert "OCR (PaddleOCR)" in data["added"]
         assert "Speech (Whisper Tiny)" in data["added"]
-        assert "Face (MediaPipe)" in data["added"]
+        assert "Face (MTCNN)" in data["added"]
 
     def test_pregen_adds_to_autorun(self, client):
         from vtsearch.autorun_processors import autorun_extractors, autorun_localizers
@@ -433,7 +429,7 @@ class TestPregenProcessorsRoute:
         client.post("/api/pregen-processors/add")
         assert "OCR (PaddleOCR)" in autorun_extractors
         assert "Speech (Whisper Tiny)" in autorun_extractors
-        assert "Face (MediaPipe)" in autorun_localizers
+        assert "Face (MTCNN)" in autorun_localizers
 
 
 # ---------------------------------------------------------------------------

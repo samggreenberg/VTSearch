@@ -4,8 +4,8 @@ the image2face converter.
 Face is the mirror of document in the half-media-type model: embeddable but
 not importable (faces only ever arise from converting an image via
 ``image2face``).  These tests exercise the type's capability flags, the moved
-FaceNet embedder, and the converter's crop logic against a stubbed MediaPipe
-detector (no model weights, no mediapipe install required).
+FaceNet embedder, and the converter's crop logic against a stubbed MTCNN
+detector (no model weights, no facenet-pytorch install required).
 """
 
 from __future__ import annotations
@@ -178,28 +178,15 @@ class TestFaceEmbedder:
 # ---------------------------------------------------------------------------
 
 
-class _FakeBBox:
-    def __init__(self, xmin, ymin, width, height):
-        self.xmin = xmin
-        self.ymin = ymin
-        self.width = width
-        self.height = height
+def _fake_mtcnn(boxes, probs):
+    """Build a stub MTCNN whose ``detect()`` returns ``(boxes, probs)``.
 
-
-class _FakeLocationData:
-    def __init__(self, bbox):
-        self.relative_bounding_box = bbox
-
-
-class _FakeDetection:
-    def __init__(self, score, bbox):
-        self.score = [score]
-        self.location_data = _FakeLocationData(bbox)
-
-
-class _FakeResults:
-    def __init__(self, detections):
-        self.detections = detections
+    ``boxes`` is a list of ``[x1, y1, x2, y2]`` pixel boxes (or ``None`` for
+    "no faces"); ``probs`` the matching per-face confidences.
+    """
+    detector = MagicMock()
+    detector.detect.return_value = (boxes, probs)
+    return detector
 
 
 def _png_bytes(w=100, h=100):
@@ -228,12 +215,10 @@ class TestImage2FaceConverter:
         from vtscore.converters.image2face import Image2FaceMediaConverter
 
         conv = Image2FaceMediaConverter()
-        detector = MagicMock()
-        detector.process.return_value = _FakeResults(
-            [
-                _FakeDetection(0.9, _FakeBBox(0.1, 0.1, 0.3, 0.3)),
-                _FakeDetection(0.8, _FakeBBox(0.5, 0.5, 0.3, 0.3)),
-            ]
+        # Two faces on a 100x100 image, in pixel [x1, y1, x2, y2] coordinates.
+        detector = _fake_mtcnn(
+            boxes=[[10, 10, 40, 40], [50, 50, 80, 80]],
+            probs=[0.9, 0.8],
         )
         media = {"filename": "group.png", "media_bytes": _png_bytes()}
         with patch.object(conv, "_make_detector", return_value=detector):
@@ -250,8 +235,8 @@ class TestImage2FaceConverter:
         from vtscore.converters.image2face import Image2FaceMediaConverter
 
         conv = Image2FaceMediaConverter()
-        detector = MagicMock()
-        detector.process.return_value = _FakeResults([])
+        # MTCNN returns ``None`` for boxes when it finds no faces.
+        detector = _fake_mtcnn(boxes=None, probs=[None])
         media = {"filename": "empty.png", "media_bytes": _png_bytes()}
         with patch.object(conv, "_make_detector", return_value=detector):
             out = conv.convert_normalized(media, {})
@@ -261,10 +246,20 @@ class TestImage2FaceConverter:
         from vtscore.converters.image2face import Image2FaceMediaConverter
 
         conv = Image2FaceMediaConverter()
-        detector = MagicMock()
         # A 2px-wide box on a 100px image is below a 32px min size.
-        detector.process.return_value = _FakeResults([_FakeDetection(0.95, _FakeBBox(0.1, 0.1, 0.02, 0.02))])
+        detector = _fake_mtcnn(boxes=[[10, 10, 12, 12]], probs=[0.95])
         media = {"filename": "tiny.png", "media_bytes": _png_bytes()}
         with patch.object(conv, "_make_detector", return_value=detector):
             out = conv.convert_normalized(media, {"padding": "0", "min_size": "32"})
         assert out == []
+
+    def test_below_threshold_detections_dropped(self):
+        from vtscore.converters.image2face import Image2FaceMediaConverter
+
+        conv = Image2FaceMediaConverter()
+        # A high-confidence face and a low-confidence one; only the first survives.
+        detector = _fake_mtcnn(boxes=[[10, 10, 60, 60], [20, 20, 70, 70]], probs=[0.95, 0.2])
+        media = {"filename": "mixed.png", "media_bytes": _png_bytes()}
+        with patch.object(conv, "_make_detector", return_value=detector):
+            out = conv.convert_normalized(media, {"threshold": "0.5", "padding": "0", "min_size": "1"})
+        assert len(out) == 1

@@ -205,7 +205,6 @@ DEP001 = [
     "paddleocr",
     "rarfile",
     "whisper",
-    "mediapipe",
     "lightglue",
     "facenet_pytorch",
     "torchvision",
