@@ -125,7 +125,9 @@ describe('BrowseHoverPreviewComponent (zoneless canary)', () => {
     // waveform for the top-left indicator — flagged `loading` until the clip is
     // actually sounding — still no panel in the canvas.
     expect(playSpy).toHaveBeenCalled();
-    expect(emitted).toEqual({ mediaId: 7, waveUrl: '/api/medias/7/thumbnail', loading: true });
+    // `progress` is null until a finite duration is known (jsdom has no media
+    // pipeline, so it never is); the sweeping playhead stays hidden meanwhile.
+    expect(emitted).toEqual({ mediaId: 7, waveUrl: '/api/medias/7/thumbnail', loading: true, progress: null });
     expect(fixture.nativeElement.querySelector('.hover-player')).toBeNull();
   });
 
@@ -139,7 +141,7 @@ describe('BrowseHoverPreviewComponent (zoneless canary)', () => {
     await settleZoneless(fixture);
 
     // Auditioning starts in the loading state (fetch/decode not done yet).
-    expect(emitted).toEqual({ mediaId: 9, waveUrl: '/api/medias/9/thumbnail', loading: true });
+    expect(emitted).toEqual({ mediaId: 9, waveUrl: '/api/medias/9/thumbnail', loading: true, progress: null });
 
     // The reused (never-mounted) audio element drives the buffering listeners.
     const audioEl = (fixture.componentInstance as unknown as { audioEl: HTMLAudioElement }).audioEl;
@@ -147,12 +149,12 @@ describe('BrowseHoverPreviewComponent (zoneless canary)', () => {
     // The element reports it's now playing → spinner clears.
     audioEl.dispatchEvent(new Event('playing'));
     await settleZoneless(fixture);
-    expect(emitted).toEqual({ mediaId: 9, waveUrl: '/api/medias/9/thumbnail', loading: false });
+    expect(emitted).toEqual({ mediaId: 9, waveUrl: '/api/medias/9/thumbnail', loading: false, progress: null });
 
     // A stall to rebuffer mid-play → spinner returns.
     audioEl.dispatchEvent(new Event('waiting'));
     await settleZoneless(fixture);
-    expect(emitted).toEqual({ mediaId: 9, waveUrl: '/api/medias/9/thumbnail', loading: true });
+    expect(emitted).toEqual({ mediaId: 9, waveUrl: '/api/medias/9/thumbnail', loading: true, progress: null });
   });
 
   it('debounces the dwell so sweeping across bins plays only the settled one', async () => {

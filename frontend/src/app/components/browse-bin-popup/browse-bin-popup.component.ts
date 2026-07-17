@@ -11,7 +11,7 @@ import { ViewControlsComponent } from '../view-controls/view-controls.component'
 import { IconComponent } from '../icon/icon.component';
 import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
-import { applyClipWindow, clearClipWindow } from '../../utils/clip-window';
+import { applyClipWindow, clearClipWindow, clipProgress } from '../../utils/clip-window';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
@@ -260,6 +260,12 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   /** Media id of the clip currently auditioning, so the buffering listeners can
    *  re-emit its now-playing state; ``null`` when silent. */
   private nowPlayingId: number | null = null;
+  /** Last ``loading`` flag emitted, so the playhead sweep re-emits with the live
+   *  buffering state rather than forcing it back to ``false``. */
+  private nowPlayingLoading = false;
+  /** Handle of the in-flight requestAnimationFrame playhead sweep, or ``null``
+   *  when the loop is stopped. */
+  private sweepRaf: number | null = null;
   /** Whether the one-shot buffering listeners are wired onto the audio element. */
   private audioListenersAttached = false;
 
@@ -1058,7 +1064,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     this.metadataCache.ensureLoaded([id]);
     // Starts loading: show the spinner on the now-playing widget until a
     // ``playing``/``canplay`` event clears it.
-    this.nowPlaying.emit({ mediaId: id, waveUrl: this.thumbnailUrl(id), loading: true });
+    this.nowPlaying.emit({ mediaId: id, waveUrl: this.thumbnailUrl(id), loading: true, progress: null });
     setTimeout(() => {
       const el = this.audioRef()?.nativeElement;
       if (!el) return;
@@ -1070,6 +1076,8 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
       applyClipWindow(el, () => this.metadataCache.get(id));
       el.load();
       el.play().catch(() => {});
+      // Advance the playhead sweep while it sounds; self-cancels on pause/stop.
+      this.startSweep();
     });
   }
 
@@ -1085,12 +1093,40 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     el.addEventListener('canplay', () => this.emitNowPlaying(false));
   }
 
-  /** Re-emit the now-playing state with a fresh ``loading`` flag. A no-op once
-   *  nothing is auditioning, so events that fire after a stop don't resurrect
-   *  the widget. */
+  /** Re-emit the now-playing state with a fresh ``loading`` flag and the current
+   *  playhead position. A no-op once nothing is auditioning, so events that fire
+   *  after a stop don't resurrect the widget. */
   private emitNowPlaying(loading: boolean): void {
-    if (this.audioSrc === '' || this.nowPlayingId == null) return;
-    this.nowPlaying.emit({ mediaId: this.nowPlayingId, waveUrl: this.thumbnailUrl(this.nowPlayingId), loading });
+    const id = this.nowPlayingId;
+    if (this.audioSrc === '' || id == null) return;
+    this.nowPlayingLoading = loading;
+    const el = this.audioRef()?.nativeElement;
+    const progress = el ? clipProgress(el, () => this.metadataCache.get(id)) : null;
+    this.nowPlaying.emit({ mediaId: id, waveUrl: this.thumbnailUrl(id), loading, progress });
+  }
+
+  // Re-emit the now-playing state ~60×/sec so the playhead sweeps smoothly:
+  // (timeupdate) fires only ~4×/sec, too coarse for a fluid line. Self-cancels
+  // when the clip pauses or stops; idempotent while a loop is already live.
+  private startSweep(): void {
+    if (this.sweepRaf !== null || typeof requestAnimationFrame !== 'function') return;
+    const tick = (): void => {
+      const el = this.audioRef()?.nativeElement;
+      if (this.nowPlayingId == null || !el || el.paused) {
+        this.sweepRaf = null;
+        return;
+      }
+      this.emitNowPlaying(this.nowPlayingLoading);
+      this.sweepRaf = requestAnimationFrame(tick);
+    };
+    this.sweepRaf = requestAnimationFrame(tick);
+  }
+
+  private stopSweep(): void {
+    if (this.sweepRaf !== null) {
+      cancelAnimationFrame(this.sweepRaf);
+      this.sweepRaf = null;
+    }
   }
 
   /** Cursor left the grid: stop any hover audio and fall the preview back to the
@@ -1105,6 +1141,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   private stopAudio(): void {
     const wasPlaying = this.audioSrc !== '';
+    this.stopSweep();
     const el = this.audioRef()?.nativeElement;
     if (el) {
       clearClipWindow(el);

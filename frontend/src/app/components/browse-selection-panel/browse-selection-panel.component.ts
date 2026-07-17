@@ -12,7 +12,7 @@ import { NoFocusStealDirective } from '../../directives/no-focus-steal.directive
 import { IconComponent } from '../icon/icon.component';
 import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
-import { applyClipWindow, clearClipWindow } from '../../utils/clip-window';
+import { applyClipWindow, clearClipWindow, clipProgress } from '../../utils/clip-window';
 import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
 
 /** Ordering for the selected-item list. No detector confidence in browse, so
@@ -116,6 +116,12 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   /** Waveform PNG of the clip currently auditioning, kept so the buffering
    *  listeners can re-emit the now-playing state without recomputing it. */
   private nowPlayingWaveUrl = '';
+  /** Last ``loading`` flag emitted, so the playhead sweep re-emits with the
+   *  live buffering state rather than forcing it back to ``false``. */
+  private nowPlayingLoading = false;
+  /** Handle of the in-flight requestAnimationFrame playhead sweep, or ``null``
+   *  when the loop is stopped. */
+  private sweepRaf: number | null = null;
   private dwellTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingMediaId: number | null = null;
   private playingMediaId: number | null = null;
@@ -165,6 +171,7 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     for (const sub of this.subs) sub.unsubscribe();
     this.cancelDwell();
+    this.stopSweep();
     this.stopAudio();
   }
 
@@ -325,21 +332,51 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
     this.audioEl.play().catch(() => {});
     // Starts loading: show the spinner until a ``playing``/``canplay`` event
     // (wired in the constructor) clears it.
-    this.nowPlaying.emit({ mediaId, waveUrl, loading: true });
+    this.emitNowPlaying(true);
+    // Advance the playhead sweep while it sounds; self-cancels on pause/stop.
+    this.startSweep();
   }
 
-  /** Re-emit the now-playing state with a fresh ``loading`` flag, from the
-   *  buffering listeners. A no-op once nothing is auditioning, so events that
-   *  fire after a stop don't resurrect the widget. */
+  /** Re-emit the now-playing state with a fresh ``loading`` flag and the current
+   *  playhead position, from the buffering listeners and the sweep loop. A no-op
+   *  once nothing is auditioning, so events that fire after a stop don't
+   *  resurrect the widget. */
   private emitNowPlaying(loading: boolean): void {
-    if (this.playingMediaId == null) return;
-    this.nowPlaying.emit({ mediaId: this.playingMediaId, waveUrl: this.nowPlayingWaveUrl, loading });
+    const mediaId = this.playingMediaId;
+    if (mediaId == null) return;
+    this.nowPlayingLoading = loading;
+    const progress = clipProgress(this.audioEl, () => this.metadataCache.get(mediaId));
+    this.nowPlaying.emit({ mediaId, waveUrl: this.nowPlayingWaveUrl, loading, progress });
+  }
+
+  // Re-emit the now-playing state ~60×/sec so the playhead sweeps smoothly:
+  // (timeupdate) fires only ~4×/sec, too coarse for a fluid line. Self-cancels
+  // when the clip pauses or stops; idempotent while a loop is already live.
+  private startSweep(): void {
+    if (this.sweepRaf !== null || typeof requestAnimationFrame !== 'function') return;
+    const tick = (): void => {
+      if (this.playingMediaId == null || this.audioEl.paused) {
+        this.sweepRaf = null;
+        return;
+      }
+      this.emitNowPlaying(this.nowPlayingLoading);
+      this.sweepRaf = requestAnimationFrame(tick);
+    };
+    this.sweepRaf = requestAnimationFrame(tick);
+  }
+
+  private stopSweep(): void {
+    if (this.sweepRaf !== null) {
+      cancelAnimationFrame(this.sweepRaf);
+      this.sweepRaf = null;
+    }
   }
 
   private stopAudio(): void {
     this.pendingMediaId = null;
     if (this.playingMediaId == null) return;
     this.playingMediaId = null;
+    this.stopSweep();
     clearClipWindow(this.audioEl);
     this.audioEl.pause();
     this.audioEl.currentTime = 0;
