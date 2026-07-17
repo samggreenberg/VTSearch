@@ -233,6 +233,31 @@ class TestConvertersAPI:
             assert "display_name" in c
             assert "description" in c
 
+    def test_hidden_from_picker_converters_excluded_from_full_list(self, client):
+        # audio2image / audio2text carry ``hidden_from_picker = True`` and
+        # must never surface in the picker-facing listing endpoint.
+        resp = client.get("/api/converters")
+        names = [c["name"] for c in resp.get_json()["converters"]]
+        assert "audio2image" not in names
+        assert "audio2text" not in names
+
+    def test_hidden_from_picker_converters_excluded_when_filtering_by_source(self, client):
+        # The demo picker's "Convert to" selector reads /api/converters?source=audio;
+        # the hidden audio converters must not leak into it.
+        resp = client.get("/api/converters?source=audio")
+        assert resp.status_code == 200
+        names = [c["name"] for c in resp.get_json()["converters"]]
+        assert "audio2image" not in names
+        assert "audio2text" not in names
+
+    def test_hidden_from_picker_converters_excluded_when_filtering_by_target(self, client):
+        # audio2image targets image; it must not appear among image converters.
+        image_names = [c["name"] for c in client.get("/api/converters?target=image").get_json()["converters"]]
+        assert "audio2image" not in image_names
+        # audio2text targets text; likewise for the text listing.
+        text_names = [c["name"] for c in client.get("/api/converters?target=text").get_json()["converters"]]
+        assert "audio2text" not in text_names
+
 
 # ===========================================================================
 # Importer build_cli_args / build_origin with converters
