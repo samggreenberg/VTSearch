@@ -30,6 +30,9 @@
 }
 
 <!-- Results Exporter ------------------------------------------------------ -->
+<!-- Hidden entirely when no exporters are available: the section would
+     otherwise degrade to a lone "None" tab (a picker with no real choice). -->
+@if (loadingExporters || exporters.length > 0) {
 <h4 class="subhead">
   Results Exporter:
   <span
@@ -106,4 +109,5 @@
       }
     }
   </div>
+}
 }

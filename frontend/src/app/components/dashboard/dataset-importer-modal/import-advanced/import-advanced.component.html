@@ -10,7 +10,7 @@
   </button>
 }
 
-@if (advancedOpen && showSourceSpecs()) {
+@if (advancedOpen && hasSourceSpecsColumn) {
   <label class="form-label" title="Pick which source media types feed the dataset. The native type is included directly; other types are pulled in and converted.">Include media</label>
   <vt-source-specs-picker
     [availableConverters]="availableConverters()"

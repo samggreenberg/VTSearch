@@ -281,8 +281,11 @@ class TestAudio2TextRegistryIntegration:
         names = [c.name for c in list_converters_for_source("audio")]
         assert "audio2text" in names
 
-    def test_api_lists_audio2text(self, client):
+    def test_api_hides_audio2text_from_picker(self, client):
+        # audio2text carries hidden_from_picker=True: registered (see the
+        # list_converters_for_* tests above) but excluded from the
+        # picker-facing /api/converters endpoint.
         resp = client.get("/api/converters")
         assert resp.status_code == 200
         names = [c["name"] for c in resp.get_json()["converters"]]
-        assert "audio2text" in names
+        assert "audio2text" not in names
