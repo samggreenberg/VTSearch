@@ -568,6 +568,20 @@ vts_maybe_convert_driver_to_dkms() {
     echo >&2
     echo "The GPU driver works, but it is NOT DKMS-managed -- it's pinned to the" >&2
     echo "running kernel ($(uname -r)), so the next kernel update will break it." >&2
+    # Explain WHY it's still non-DKMS so a repeat run doesn't look like the offer
+    # forgot a prior "yes". The usual blocker is that `dkms` itself never got
+    # installed -- a conversion can't register the module without it -- which on the
+    # RHEL family means EPEL was unreachable, so an earlier "convert" quietly bailed.
+    if ! command -v dkms >/dev/null 2>&1; then
+        echo "  Seeing this again after saying yes before? 'dkms' is not installed, so" >&2
+        echo "  no prior conversion could have registered the driver. The convert step" >&2
+        echo "  installs dkms first, but on RHEL it lives in EPEL: if that's unreachable" >&2
+        echo "  (e.g. an unregistered box) the install fails and the driver stays pinned." >&2
+        echo "  On RHEL, 'sudo dnf install -y epel-release dkms' first makes it stick." >&2
+    else
+        echo "  ('dkms' is installed but has no nvidia module registered, so the driver" >&2
+        echo "  was built outside DKMS; converting now registers it to auto-rebuild.)" >&2
+    fi
     case "$(vts_decide_dkms_conversion)" in
         convert)
             if vts_convert_driver_to_dkms; then
