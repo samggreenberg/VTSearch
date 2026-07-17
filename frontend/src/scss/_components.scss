@@ -568,6 +568,59 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   gap: var(--space-md);
 }
 
+// --- Drawer slide (side panels) ---
+//
+// The Find/Label left & right panels and the Browse selection panel mount and
+// unmount with their host view (route entry, the browse `@switch` reaching
+// `ready`). Rather than hard-cutting in/out, each panel root opts into these
+// classes via Angular's `animate.enter` / `animate.leave` bindings, so the
+// panel slides from its docked edge — the same physical read as the
+// drag-resizable docked browse-details pane. Angular applies the enter class on
+// insertion (removing it when the animation ends) and holds the leaving node
+// until the leave animation finishes before tearing it down.
+//
+// The keyframes end at the panel's natural resting state (`translateX(0)`), so
+// the enter classes need no forwards fill; `backwards` only pre-applies the
+// off-screen start so there's no first-frame flash. The leave classes use
+// `forwards` to pin the off-screen end state while the node is held. The
+// app/OS reduce-motion rules in `styles.scss` collapse the durations to
+// ~instant, so a leaving node still tears down promptly when motion is off.
+@keyframes drawer-in-left {
+  from { transform: translateX(-100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes drawer-out-left {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-100%); opacity: 0; }
+}
+
+@keyframes drawer-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes drawer-out-right {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(100%); opacity: 0; }
+}
+
+.drawer-enter-left {
+  animation: drawer-in-left var(--transition-slow) var(--ease-out) backwards;
+}
+
+.drawer-leave-left {
+  animation: drawer-out-left var(--transition-slow) var(--ease-in-out) forwards;
+}
+
+.drawer-enter-right {
+  animation: drawer-in-right var(--transition-slow) var(--ease-out) backwards;
+}
+
+.drawer-leave-right {
+  animation: drawer-out-right var(--transition-slow) var(--ease-in-out) forwards;
+}
+
 // --- Picker cards ---
 //
 // One shared selectable option card (icon + title + description) for every
