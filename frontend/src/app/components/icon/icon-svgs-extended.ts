@@ -162,6 +162,14 @@ export const EXTENDED_ICON_SVGS: Record<string, string> = {
   // buttons in the metadata panels.
   copy:
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  // Panel with an inward arrow: dock the floating bin-details window as the
+  // Browse view's left panel.
+  'dock-left':
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/><line x1="19" y1="12" x2="13" y2="12"/><polyline points="16 9 13 12 16 15"/></svg>',
+  // Window with an outward arrow: pop the docked bin-details panel back out
+  // into its floating window.
+  'pop-out':
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5"/><polyline points="14 4 20 4 20 10"/><line x1="20" y1="4" x2="12" y2="12"/></svg>',
   // Speaker with sound waves / muted speaker, used by the Browse toolbar's
   // preview-volume control (audio datasets only).
   volume:

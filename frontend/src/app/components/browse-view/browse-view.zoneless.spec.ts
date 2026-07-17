@@ -191,6 +191,75 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     expect(component.regionDrawActive).toBe(true);
   });
 
+  it('routes a right-clicked bin into the docked panel (not a floating popup) when docked', async () => {
+    await settleZoneless(fixture);
+    const component = fixture.componentInstance;
+    // Force the docked presentation for the active media type.
+    component.detailsDocked.set(true);
+
+    component.onCanvasContextMenu({
+      members: [3, 4, 5],
+      repId: 4,
+      clientX: 120,
+      clientY: 140,
+      bounds: null,
+    } as unknown as Parameters<typeof component.onCanvasContextMenu>[0]);
+
+    // The docked panel shows the bin (members carried), and NO floating popup opens.
+    expect(component.contextMembers).toEqual([3, 4, 5]);
+    expect(component.contextRepId).toBe(4);
+    expect(component.contextMenuOpen).toBe(false);
+
+    // The panel's X clears the shown bin but leaves the panel itself docked.
+    component.dismissContextMenu();
+    expect(component.contextMembers).toEqual([]);
+    expect(component.detailsDocked()).toBe(true);
+  });
+
+  it('carries the open bin across dock / pop-out toggles', async () => {
+    await settleZoneless(fixture);
+    const component = fixture.componentInstance;
+
+    // Start floating with a bin open.
+    component.onCanvasContextMenu({
+      members: [7, 8],
+      repId: 7,
+      clientX: 100,
+      clientY: 100,
+      bounds: null,
+    } as unknown as Parameters<typeof component.onCanvasContextMenu>[0]);
+    expect(component.contextMenuOpen).toBe(true);
+
+    // Dock: the floating window closes, the panel takes over the same bin.
+    component.onDockRequested();
+    expect(component.detailsDocked()).toBe(true);
+    expect(component.contextMenuOpen).toBe(false);
+    expect(component.contextMembers).toEqual([7, 8]);
+
+    // Pop out: the panel's bin re-opens as a floating window at a default anchor.
+    component.onPopOutRequested();
+    expect(component.detailsDocked()).toBe(false);
+    expect(component.contextMenuOpen).toBe(true);
+    expect(component.contextMembers).toEqual([7, 8]);
+  });
+
+  it('persists the details panel width from a divider drag, clamped', async () => {
+    await settleZoneless(fixture);
+    const component = fixture.componentInstance;
+    const updates: Record<string, unknown>[] = [];
+    const settings = TestBed.inject(SettingsStateService);
+    (settings.update as unknown) = (u: Record<string, unknown>) => {
+      updates.push(u);
+      return of({});
+    };
+
+    component.onDetailsDividerMouseDown({ preventDefault: () => {} } as MouseEvent);
+    // Release commits the settled width to settings.
+    (component as unknown as { onDetailsMouseUp(): void }).onDetailsMouseUp();
+
+    expect(updates.some((u) => 'browse_details_panel_width' in u)).toBe(true);
+  });
+
   it('drives preview-audio volume from the toolbar: slider lowers the level and mute round-trips', async () => {
     await settleZoneless(fixture);
     const component = fixture.componentInstance;

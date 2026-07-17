@@ -90,6 +90,10 @@ class AppSettingsSchema(Schema):
     # Settings-modal widget; the panel's draggable divider drives it.
     browse_panel_width = fields.Integer()
 
+    # VTSBrowse docked bin-details panel width (CSS px). Persisted but not
+    # shown as a Settings-modal widget; the panel's draggable divider drives it.
+    browse_details_panel_width = fields.Integer()
+
     # VTSBrowse per-media-type display prefs (density colormap, on-screen cell
     # size). ``{media_type_id: value}`` dicts driven by the browse-canvas
     # toolbar and the Settings → Browser tab. (Bin shape is not stored — it is
@@ -129,6 +133,10 @@ class AppSettingsSchema(Schema):
     # the popup's own metadata toggle button; when shown, a column left of the
     # detail preview carries the focused item's Train/Find metadata fields.
     popup_metadata_shown = _PerMediaTypeBooleanDict()
+    # VTSBrowse bin-details presentation, per media type: true = docked left
+    # panel, false/unset = floating right-click popup window. Driven by the
+    # dock button on the floating window and the pop-out button on the panel.
+    bin_details_docked = _PerMediaTypeBooleanDict()
 
     # Server-tier. These are fixed at server start (config file /
     # environment / CLI flags) and shared across all users; the frontend
@@ -254,6 +262,7 @@ class SettingsUpdateSchema(Schema):
     grid_icon_size_popup = fields.Raw()
     popup_preview_size = fields.Raw()
     popup_metadata_shown = fields.Raw()
+    bin_details_docked = fields.Raw()
 
     autopilot_enabled = fields.Boolean()
     hide_autopilot = fields.Boolean()
@@ -264,6 +273,7 @@ class SettingsUpdateSchema(Schema):
     enable_achievements = fields.Boolean()
 
     browse_panel_width = fields.Integer()
+    browse_details_panel_width = fields.Integer()
 
     # Per-media-type dicts; the setters in ``settings.py`` validate each
     # value against its enum (BrowseColormap / BrowseIconSize), so these are

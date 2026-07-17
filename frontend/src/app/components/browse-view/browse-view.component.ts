@@ -213,6 +213,31 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    *  the panel "pops back" to the stored width right after a drag. */
   private panelWidthInitialized = false;
   private dragging = false;
+
+  /**
+   * Docked bin-details mode for the active media type, mirrored from the
+   * per-media ``bin_details_docked`` setting. When on, the bin details render
+   * as a persistent left panel (large item + metadata on top, member grid
+   * below) instead of the floating right-click popup; the panel doubles as the
+   * audio now-playing display, replacing the toolbar's small waveform widget.
+   * Flipped by the dock button on the floating window and the pop-out button
+   * on the panel, both of which persist the choice.
+   */
+  readonly detailsDocked = signal(false);
+
+  /**
+   * Width (CSS px) of the docked bin-details panel, mirrored from the
+   * ``browse_details_panel_width`` setting and driven by the draggable divider
+   * between the panel and the canvas.
+   */
+  readonly detailsPanelWidth = signal(340);
+  /** Smallest the details panel may shrink to (matches the backend clamp). */
+  private static readonly DETAILS_FLOOR = 220;
+  /** Mirrors {@link panelWidthInitialized} for the details panel. */
+  private detailsWidthInitialized = false;
+  private draggingDetails = false;
+  private boundDetailsMove = this.onDetailsMouseMove.bind(this);
+  private boundDetailsUp = this.onDetailsMouseUp.bind(this);
   /** Dynamic minimum snapshotted at drag start, so the per-move handler reuses
    *  it instead of re-measuring the DOM (and thrashing layout) on every move —
    *  the thumbnail size and sort-control width can't change mid-drag anyway. */
@@ -317,6 +342,16 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
           );
           this.panelWidthInitialized = true;
         }
+        if (settings.browse_details_panel_width != null && !this.detailsWidthInitialized) {
+          this.detailsPanelWidth.set(
+            this.clamp(
+              settings.browse_details_panel_width,
+              BrowseViewComponent.DETAILS_FLOOR,
+              BrowseViewComponent.PANEL_MAX,
+            ),
+          );
+          this.detailsWidthInitialized = true;
+        }
         this.applyBrowsePrefsForMediaType();
       }
       if (settings || settingsErrored) this.maybeStartInitialLoad();
@@ -403,6 +438,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (this.pollTimer) clearTimeout(this.pollTimer);
     document.removeEventListener('mousemove', this.boundPanelMove);
     document.removeEventListener('mouseup', this.boundPanelUp);
+    document.removeEventListener('mousemove', this.boundDetailsMove);
+    document.removeEventListener('mouseup', this.boundDetailsUp);
     this.removeShiftListeners();
     this.tileCache.clear();
     this.releaseEphemeralPositivesContext();
@@ -566,6 +603,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     const signMap = s.browse_signposts as { [key: string]: boolean } | undefined;
     const rawSigns = mt && signMap ? signMap[mt] : undefined;
     this.signposts.set(rawSigns == null ? true : rawSigns);
+
+    const dockMap = s.bin_details_docked as { [key: string]: boolean } | undefined;
+    this.detailsDocked.set(!!(mt && dockMap && dockMap[mt]));
   }
 
   /** Read a ``{media_type: value}`` setting for *mt*, or ``''`` when unset. */
@@ -694,6 +734,48 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     // The user now owns the width; block the settings round-trip from resetting it.
     this.panelWidthInitialized = true;
     this.settingsState.update({ browse_panel_width: Math.round(this.panelWidth()) }).subscribe();
+  }
+
+  // --- Docked-details divider drag (left side; mirrors the right divider) ---
+
+  onDetailsDividerMouseDown(event: MouseEvent): void {
+    event.preventDefault();
+    this.draggingDetails = true;
+    this.ngZone.runOutsideAngular(() => {
+      document.addEventListener('mousemove', this.boundDetailsMove);
+      document.addEventListener('mouseup', this.boundDetailsUp);
+    });
+  }
+
+  private onDetailsMouseMove(event: MouseEvent): void {
+    const content = this.content();
+    if (!this.draggingDetails || !content) return;
+    const rect = content.nativeElement.getBoundingClientRect();
+    // The details panel is on the left, so its width grows as the cursor moves
+    // right. Leave the canvas its minimum after both dividers + the right panel.
+    const fit =
+      rect.width -
+      2 * BrowseViewComponent.DIVIDER_WIDTH -
+      BrowseViewComponent.CANVAS_MIN -
+      this.panelWidth();
+    const max = Math.min(
+      BrowseViewComponent.PANEL_MAX,
+      Math.max(BrowseViewComponent.DETAILS_FLOOR, fit),
+    );
+    const width = this.clamp(event.clientX - rect.left, BrowseViewComponent.DETAILS_FLOOR, max);
+    this.detailsPanelWidth.set(width);
+  }
+
+  private onDetailsMouseUp(): void {
+    if (!this.draggingDetails) return;
+    this.draggingDetails = false;
+    document.removeEventListener('mousemove', this.boundDetailsMove);
+    document.removeEventListener('mouseup', this.boundDetailsUp);
+    // The user now owns the width; block the settings round-trip from resetting it.
+    this.detailsWidthInitialized = true;
+    this.settingsState
+      .update({ browse_details_panel_width: Math.round(this.detailsPanelWidth()) })
+      .subscribe();
   }
 
   /** Toggle region-select mode (drag-to-marquee without holding Shift). */
@@ -859,8 +941,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   // --- Right-click bin popup ----------------------------------------------
 
-  /** Right-click on the canvas: pop the bin's item list at the cursor when it
-   *  landed on a bin; close any open popup when it hit empty space. */
+  /** Right-click on the canvas: pop the bin's item list at the cursor (or,
+   *  docked, show it in the left details panel) when it landed on a bin; clear
+   *  the open details when it hit empty space. */
   onCanvasContextMenu(event: BrowseContextMenuEvent): void {
     if (event.members.length === 0) {
       this.dismissContextMenu();
@@ -868,6 +951,14 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     }
     this.contextMembers = event.members;
     this.contextRepId = event.repId;
+    if (this.detailsDocked()) {
+      // Docked: the persistent left panel shows the bin — no floating window.
+      // Release the canvas's pinned enlarge right away so live hover keeps
+      // working while the bin stays open in the panel.
+      this.contextMenuOpen = false;
+      this.canvas()?.unpinCell();
+      return;
+    }
     this.contextMenuX = event.clientX;
     this.contextMenuY = event.clientY;
     this.contextBounds = event.bounds;
@@ -876,9 +967,54 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   dismissContextMenu(): void {
     this.contextMenuOpen = false;
+    if (this.detailsDocked()) {
+      // Docked: dismissal (the panel's X, or an empty-space right-click)
+      // clears the shown bin; the panel itself stays, showing its empty hint.
+      this.contextMembers = [];
+      this.contextRepId = null;
+    }
     // Release the canvas's pinned enlarge so live hover resumes on the bin now
     // under the cursor.
     this.canvas()?.unpinCell();
+  }
+
+  /** The floating window's dock button: remember the docked presentation for
+   *  this media type; the open bin carries over into the panel (it reads the
+   *  same ``contextMembers``). */
+  onDockRequested(): void {
+    this.contextMenuOpen = false;
+    this.canvas()?.unpinCell();
+    this.persistBinDetailsDocked(true);
+  }
+
+  /** The docked panel's pop-out button: remember the floating presentation and
+   *  re-open the current bin as a floating window over the canvas. */
+  onPopOutRequested(): void {
+    this.persistBinDetailsDocked(false);
+    if (this.contextMembers.length === 0) return;
+    // No summon point (the click was in the panel header) — anchor the window
+    // over the upper-left of the canvas; its own clamping keeps it on-screen.
+    const main = this.content()?.nativeElement.querySelector('.browse-main');
+    const rect = main ? main.getBoundingClientRect() : null;
+    this.contextBounds = rect;
+    this.contextMenuX = rect ? rect.left + rect.width / 4 : 100;
+    this.contextMenuY = rect ? rect.top + rect.height / 4 : 100;
+    this.contextMenuOpen = true;
+  }
+
+  /** Persist the docked/floating choice per media type (``bin_details_docked``)
+   *  and apply it locally, keeping the settings snapshot consistent. */
+  private persistBinDetailsDocked(value: boolean): void {
+    const mt = this.mediaType();
+    if (!mt) return;
+    this.detailsDocked.set(value);
+    const existing =
+      (this.lastSettings?.bin_details_docked as { [k: string]: boolean } | undefined) || {};
+    const map = { ...existing, [mt]: value };
+    if (this.lastSettings) {
+      (this.lastSettings as Record<string, unknown>)['bin_details_docked'] = map;
+    }
+    this.settingsState.update({ bin_details_docked: map } as SettingsUpdate).subscribe();
   }
 
   /**

@@ -191,6 +191,12 @@
           "autopilot_top_greens": {
             "type": "integer"
           },
+          "bin_details_docked": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object"
+          },
           "browse_colormap": {
             "additionalProperties": {
               "type": "string"
@@ -202,6 +208,9 @@
               "type": "boolean"
             },
             "type": "object"
+          },
+          "browse_details_panel_width": {
+            "type": "integer"
           },
           "browse_icon_size": {
             "additionalProperties": {
@@ -4726,8 +4735,12 @@
           "autopilot_top_greens": {
             "type": "integer"
           },
+          "bin_details_docked": {},
           "browse_colormap": {},
           "browse_compact": {},
+          "browse_details_panel_width": {
+            "type": "integer"
+          },
           "browse_icon_size": {},
           "browse_mouse_zooms_per_level": {},
           "browse_panel_width": {
