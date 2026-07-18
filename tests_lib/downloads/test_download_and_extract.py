@@ -369,6 +369,105 @@ class TestDownloadAndExtract:
         assert last_cur == last_tot, "Final progress should show completion"
 
 
+class TestSpoolOnDestinationFilesystem:
+    """Temp archive + temp extraction spool onto the destination filesystem.
+
+    When extract_to (or a parent) is a symlink onto another volume - the shared
+    demo-cache setup, or any relocated dataset dir - the multi-GB temp bytes must
+    land there, not on DATA_DIR's (possibly small) volume, and the final publish
+    must be a same-filesystem rename rather than a cross-device copy.
+
+    A single-filesystem test can't observe the cross-device copy directly, but it
+    can pin the observable proxy: the temp files are placed next to / inside the
+    *resolved* target, never under DATA_DIR's root.
+    """
+
+    def test_temp_files_spool_next_to_resolved_symlink_target(self, tmp_path):
+        from vtscore.datasets import downloader as dl_module
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        # A relocated dataset dir: DATA_DIR/gtzan is a symlink onto a populated
+        # cache dir living outside DATA_DIR (mimicking link-demo-cache.sh).
+        cache_real = tmp_path / "cache" / "gtzan_real"
+        cache_real.mkdir(parents=True)
+        link = data_dir / "gtzan"
+        link.symlink_to(cache_real, target_is_directory=True)
+
+        # Build the download source out-of-tree so it doesn't collide with spool.
+        staging = tmp_path / "staging"
+        staging.mkdir()
+        zip_path = _make_zip(staging, arcname="genres")
+
+        captured = {}
+
+        def fake_download(url, dest, size, cb):
+            captured["dest"] = Path(dest)
+            zip_path.rename(dest)
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", data_dir),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
+        ):
+            dl_module._download_and_extract(
+                url="http://example.com/genres.zip",
+                archive_name="genres.zip",
+                extract_to=link,
+                check_path=link / "genres",
+                download_size_mb=1,
+                dataset_name="GTZAN",
+                on_progress=lambda *a: None,
+            )
+
+        # The temp archive spooled inside the resolved target, not DATA_DIR.
+        assert captured["dest"].parent == cache_real
+        # No temp litter leaked onto DATA_DIR's root filesystem.
+        data_dir_entries = list(data_dir.iterdir())
+        assert data_dir_entries == [link], f"unexpected entries under DATA_DIR: {data_dir_entries}"
+        # Content published through the symlink into the relocated cache dir.
+        assert (cache_real / "genres" / "file.txt").read_text() == "hello"
+        assert (link / "genres" / "file.txt").read_text() == "hello"
+
+    def test_nonexistent_target_spools_in_resolved_parent(self, tmp_path):
+        """When extract_to doesn't exist yet, temp files spool in its parent and
+        the publish is a rename into place (the common, non-symlinked case)."""
+        from vtscore.datasets import downloader as dl_module
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        extract_to = data_dir / "gtzan"  # does not exist yet
+
+        staging = tmp_path / "staging"
+        staging.mkdir()
+        zip_path = _make_zip(staging, arcname="genres")
+
+        captured = {}
+
+        def fake_download(url, dest, size, cb):
+            captured["dest"] = Path(dest)
+            zip_path.rename(dest)
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", data_dir),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
+        ):
+            dl_module._download_and_extract(
+                url="http://example.com/genres.zip",
+                archive_name="genres.zip",
+                extract_to=extract_to,
+                check_path=extract_to / "genres",
+                download_size_mb=1,
+                dataset_name="GTZAN",
+                on_progress=lambda *a: None,
+            )
+
+        # Spooled next to the (to-be-created) target, i.e. in its parent.
+        assert captured["dest"].parent == data_dir
+        assert (extract_to / "genres" / "file.txt").read_text() == "hello"
+        # Temp files cleaned up; only the published dir remains.
+        assert [p.name for p in data_dir.iterdir()] == ["gtzan"]
+
+
 class TestZipTraversalRejection:
     """_extract_archive's zip branch must reject traversal members with the
     same strict check as archive.py.
