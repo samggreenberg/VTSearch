@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   binGeometry,
   hoverThumbHalfExtents,
+  imageTileFitDimensions,
   pickCell,
   SQRT3,
   type BinGeometry,
@@ -212,6 +213,54 @@ describe('bin-geometry', () => {
       const big = hoverThumbHalfExtents(1.5, 10, offs);
       expect(big.hh).toBeCloseTo(2 * small.hh);
       expect(big.hw).toBeCloseTo(2 * small.hw);
+    });
+  });
+
+  describe('imageTileFitDimensions', () => {
+    // Bin square side is 2·radius; use radius 50 so `size` = 100 for round numbers.
+    const radius = 50;
+    const size = radius * 2;
+
+    it('a square image fills the cell exactly under either fit', () => {
+      expect(imageTileFitDimensions(200, 200, radius, 'cover')).toEqual({ dw: size, dh: size });
+      const balanced = imageTileFitDimensions(200, 200, radius, 'balanced');
+      expect(balanced.dw).toBeCloseTo(size);
+      expect(balanced.dh).toBeCloseTo(size);
+    });
+
+    it('cover fills the square, overflowing (cropping) the long axis', () => {
+      // 2:1 wide image: scale to the short (height) axis so width overflows.
+      const { dw, dh } = imageTileFitDimensions(200, 100, radius, 'cover');
+      expect(dh).toBeCloseTo(size); // short axis exactly fills
+      expect(dw).toBeCloseTo(size * 2); // long axis overflows → cropped
+    });
+
+    it('balanced splits the difference: crop fraction equals pad fraction', () => {
+      // 2:1 wide image. cover scale = size/100, contain scale = size/200; the
+      // balanced scale is their geometric mean → dw = size·√2, dh = size/√2.
+      const { dw, dh } = imageTileFitDimensions(200, 100, radius, 'balanced');
+      expect(dw).toBeCloseTo(size * Math.SQRT2); // overflows → cropped
+      expect(dh).toBeCloseTo(size / Math.SQRT2); // underflows → padded
+      // The fraction cropped off the long axis equals the gap fraction on the
+      // short axis — the "half crop, half pad" invariant.
+      const cropFrac = (dw - size) / dw;
+      const padFrac = (size - dh) / size;
+      expect(cropFrac).toBeCloseTo(padFrac);
+    });
+
+    it('balanced is the geometric mean of the cover and contain boxes', () => {
+      // Orientation-independent: a tall image mirrors the wide case.
+      const { dw, dh } = imageTileFitDimensions(100, 400, radius, 'balanced');
+      expect(dh).toBeCloseTo(size * 2); // long (height) axis overflows → cropped
+      expect(dw).toBeCloseTo(size / 2); // short (width) axis padded
+      expect((dh - size) / dh).toBeCloseTo((size - dw) / size);
+    });
+
+    it('scales linearly with the bin radius', () => {
+      const small = imageTileFitDimensions(300, 100, 5, 'balanced');
+      const big = imageTileFitDimensions(300, 100, 10, 'balanced');
+      expect(big.dw).toBeCloseTo(2 * small.dw);
+      expect(big.dh).toBeCloseTo(2 * small.dh);
     });
   });
 
