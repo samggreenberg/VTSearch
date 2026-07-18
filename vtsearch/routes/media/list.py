@@ -476,6 +476,7 @@ def batch_medias(body: dict):
     Returns a JSON array of media metadata dicts; unknown IDs are silently
     omitted.
     """
+    from vtscore.datasets.archive_stream import archive_member_ref  # noqa: PLC0415
     from vtscore.media import get as get_media_type  # noqa: PLC0415
 
     ids = body["ids"]
@@ -507,9 +508,27 @@ def batch_medias(body: dict):
         if "description" in c:
             media_data["description"] = c["description"]
         _attach_embedder_fields(media_data, c)
+        # ``clip_start`` / ``clip_end`` are a *playback window into the whole
+        # served file*: every player (hover previews, bin popup, selection
+        # panel, and the center-panel audio/video players) seeks to
+        # ``clip_start`` and loops within ``[clip_start, clip_end]``.  That
+        # contract holds for video (clips share the parent's bytes) and for
+        # archive-member windowed audio (the whole AAC/MP4 member is served),
+        # but *not* for the audio clipper / lazy-clip resolver, which serve the
+        # already-sliced clip bytes (a short WAV in its own 0-based timeline)
+        # while stamping the original absolute offsets.  Handing those offsets
+        # to a player makes it seek past the end of the short file and play
+        # silence (e.g. a 5-second TUT clip cut from a 4-minute soundscape,
+        # ``clip_start`` ~120s).  So suppress the window for byte-sliced audio;
+        # the offsets still reach the UI as provenance via ``custom_metadata``
+        # ("Clip Start" / "Clip End") from ``display_metadata`` above.
+        audio_serves_slice = media_type_id == "audio" and archive_member_ref(c) is None
         for clip_key in ("clip_start", "clip_end", "clip_index", "clip_box"):
-            if clip_key in c:
-                media_data[clip_key] = c[clip_key]
+            if clip_key not in c:
+                continue
+            if audio_serves_slice and clip_key in ("clip_start", "clip_end"):
+                continue
+            media_data[clip_key] = c[clip_key]
         result.append(media_data)
     return result
 

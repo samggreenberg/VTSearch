@@ -336,6 +336,81 @@ describe('NewDetectorModalComponent', () => {
 
     expect(component.selectedImporter).toBeNull();
   });
+
+  // --- Trained tab: label-importer plugin field parity (issue #2597) ---
+
+  it('fetches dynamic options when a Trained-tab importer is selected', () => {
+    const field = { key: 'sheet', field_type: 'select', dynamic_options: true, required: true } as any;
+    component.selectLabelImporter({ name: 'gsheets', fields: [field] } as any);
+
+    const req = httpMock.expectOne('/api/label-importers/field-options/gsheets');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body.field_key).toBe('sheet');
+    req.flush({ options: [{ value: 's1', label: 'Sheet 1' }] });
+
+    expect(component.labelImporterOptionsFor(field)).toEqual([{ value: 's1', label: 'Sheet 1' }]);
+    // A required dynamic select auto-selects the first option.
+    expect(component.labelImporterValues['sheet']).toBe('s1');
+  });
+
+  it('coerces static string options into {value,label} pairs on the Trained tab', () => {
+    const staticSelect = { key: 's', field_type: 'select', options: ['x', 'y'] } as any;
+    expect(component.labelImporterOptionsFor(staticSelect)).toEqual([
+      { value: 'x', label: 'x' },
+      { value: 'y', label: 'y' },
+    ]);
+  });
+
+  it('re-fetches a dependent field when its dependency changes', () => {
+    const parent = { key: 'doc', field_type: 'select', dynamic_options: true } as any;
+    const child = { key: 'tab', field_type: 'select', dynamic_options: true, depends_on: ['doc'] } as any;
+    component.selectLabelImporter({ name: 'gsheets', fields: [parent, child] } as any);
+
+    // Both dynamic fields fetch on select.
+    httpMock.match('/api/label-importers/field-options/gsheets').forEach((r) => r.flush({ options: [] }));
+
+    component.labelImporterValues['doc'] = 'doc-1';
+    component.onLabelImporterFieldChanged('doc');
+
+    // Only the dependent child re-fetches; its stale value is blanked first.
+    expect(component.labelImporterValues['tab']).toBe('');
+    const req = httpMock.expectOne('/api/label-importers/field-options/gsheets');
+    expect(req.request.body.field_key).toBe('tab');
+    req.flush({ options: [{ value: 't1', label: 'Tab 1' }] });
+  });
+
+  it('keeps a typed free-text value the refreshed options omit on the Trained tab', () => {
+    const field = { key: 'q', field_type: 'select', dynamic_options: true, allow_free_text: true } as any;
+    component.selectedLabelImporter = { name: 'imp', fields: [field] } as any;
+    component.labelImporterValues['q'] = 'hand-typed';
+    (component as any).refreshLabelImporterFieldOptions(field);
+    httpMock
+      .expectOne('/api/label-importers/field-options/imp')
+      .flush({ options: [{ value: 'a', label: 'A' }] });
+    expect(component.labelImporterValues['q']).toBe('hand-typed');
+  });
+
+  it('clears a strict-select value the refreshed options omit on the Trained tab', () => {
+    const field = { key: 'q', field_type: 'select', dynamic_options: true } as any;
+    component.selectedLabelImporter = { name: 'imp', fields: [field] } as any;
+    component.labelImporterValues['q'] = 'stale';
+    (component as any).refreshLabelImporterFieldOptions(field);
+    httpMock
+      .expectOne('/api/label-importers/field-options/imp')
+      .flush({ options: [{ value: 'a', label: 'A' }] });
+    expect(component.labelImporterValues['q']).toBe('');
+  });
+
+  it('surfaces a dynamic-option fetch error on the Trained tab', () => {
+    const field = { key: 'q', field_type: 'select', dynamic_options: true } as any;
+    component.selectedLabelImporter = { name: 'imp', fields: [field] } as any;
+    (component as any).refreshLabelImporterFieldOptions(field);
+    httpMock
+      .expectOne('/api/label-importers/field-options/imp')
+      .flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+    expect(component.labelImporterDynamicError()['q']).toBe('boom');
+    expect(component.labelImporterOptionsFor(field)).toEqual([]);
+  });
 });
 
 describe('NewDetectorModalComponent with defaultMediaType', () => {

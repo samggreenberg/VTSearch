@@ -11,32 +11,16 @@ import { ViewControlsComponent } from '../view-controls/view-controls.component'
 import { IconComponent } from '../icon/icon.component';
 import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
-import { applyClipWindow, clearClipWindow } from '../../utils/clip-window';
+import { applyClipWindow, clearClipWindow, clipProgress } from '../../utils/clip-window';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
 import type { MediaBatchResponse } from '../../generated/api-client/models/media-batch-response';
 
-/** Height (px) of the name's line box under a grid thumbnail. Mirrors the pinned
- *  ``line-height`` on ``.bin-popup-name`` (``--font-xs`` = 12px × 1.25 = 15px);
- *  kept in sync so {@link rowSize} reserves exactly the space the name renders in.
- *  The name's line-height is pinned (rather than left at the font's ``normal``,
- *  which varies ~1.15–1.35 by platform font) precisely so this stays exact — an
- *  unpinned name renders a couple px taller than its slot, which is enough to
- *  force a stray scrollbar on even a single row. */
-const GRID_LABEL_HEIGHT = 15;
-/** Gap (px) between the thumbnail and its name inside a cell (``.bin-popup-entry``
- *  flex ``gap``); present only when the name shows. */
-const GRID_THUMB_NAME_GAP = 2;
 /** Vertical padding (px) inside every grid cell (``.bin-popup-entry`` 2px top +
  *  2px bottom), always present regardless of icon size. Reserved in {@link
  *  rowSize} so the cell's real rendered height never exceeds its virtual slot. */
 const GRID_CELL_PADDING = 4;
-/** Goal width (px) at/above which grid thumbnails still show their name. Below
- *  this (the XS/S icon sizes) the name truncates to a useless "a…", so the SCSS
- *  hides it (``@container … (max-width: 60px)``) and {@link rowSize} drops the
- *  reserved label height to match, keeping the grid gap-free. */
-const GRID_NAME_MIN_WIDTH = 65;
 /** Gap (px) between grid cells (and grid rows); matches ``--space-2xs``-ish. */
 const GRID_GAP = 4;
 /** Width (px) available to lay out cells inside the popup's scroll column (≈ its
@@ -110,11 +94,49 @@ const BODY_PADDING_Y = 2 * BODY_PADDING;
  * {@link MIN_PREVIEW_PX}..{@link MAX_PREVIEW_PX}.
  */
 const PREVIEW_SIZE_STEPS = [120, 160, 208, 272, 352, 448, 560, 640, 720] as const;
+/** Horizontal chrome (px) around the docked panel's member grid: the body's
+ *  side padding plus room for the scrollbar. Subtracted from the panel width
+ *  to get the content width the docked grid chunks its columns against. */
+const DOCKED_GRID_CHROME = 2 * BODY_PADDING + 12;
+/** Smallest width (px) the docked metadata column shrinks to (the divider drag
+ *  can't take it below this) — enough for an MD5 digest to wrap onto ~two rows,
+ *  matching the ``browse_details_metadata_width`` default. */
+const DOCKED_META_MIN = 140;
+/** Footprint (px) of the divider between the docked large item and its metadata
+ *  column, subtracted from the panel's content width when apportioning the two. */
+const META_DIVIDER_WIDTH = 8;
+/** Smallest the docked large item is squeezed to. The item takes whatever the
+ *  panel leaves after the metadata column, so narrowing the panel eats into the
+ *  item first; once it hits this floor the metadata column starts giving up
+ *  width instead. */
+const DOCKED_MAIN_MIN = 60;
 
 /**
- * The bin popup: a floating panel showing the media items in the bin the user
- * right-clicked on the VTSBrowse canvas, plus — for thumbnail media (image /
- * video) — a large preview pane on the left.
+ * The bin details: the media items in the bin the user right-clicked on the
+ * VTSBrowse canvas, plus — for thumbnail media (image / video / audio
+ * waveforms) — a large preview pane.
+ *
+ * It renders in one of two presentations, chosen per media type by the
+ * ``bin_details_docked`` setting (the dock / pop-out header buttons flip it):
+ *
+ * - **Floating** (``docked`` false, the default): a draggable popup window
+ *   summoned at the right-click point and clamped to the visible canvas.
+ * - **Docked** (``docked`` true): a persistent left panel beside the canvas.
+ *   The top row holds the large item with the metadata column to its right,
+ *   separated by a draggable divider ({@link onMetaDividerPointerDown}); the
+ *   member grid fills the rest of the panel below them. The metadata column
+ *   takes its dragged width ({@link dockedMetadataWidth}, persisted under
+ *   ``browse_details_metadata_width``) and the item grows to fill whatever the
+ *   row leaves ({@link dockedPaneSize}), so the docked panel has no per-item
+ *   size buttons — the panel↔canvas divider sizes the item (and re-chunks the
+ *   grid columns) instead. The panel is always mounted while the option is on —
+ *   before any bin is opened it shows an empty hint — and for audio its detail
+ *   pane doubles as the now-playing display ({@link nowPlayingExt}), replacing
+ *   the toolbar's small waveform widget. A singleton bin keeps the grid area
+ *   allocated but empty. In this mode all floating machinery (summon
+ *   positioning, clamping, dragging, outside-click/Escape dismissal,
+ *   document-level keyboard shortcuts) is disabled; the canvas keeps its own
+ *   shortcuts.
  *
  * The members render as a virtualized thumbnail grid (always grid; there is no
  * list mode). Hovering a grid thumbnail paints that item's *full-resolution*
@@ -137,7 +159,9 @@ const PREVIEW_SIZE_STEPS = [120, 160, 208, 272, 352, 448, 560, 640, 720] as cons
  * height is the preview pane's height, growing/shrinking the detail canvas
  * resizes the whole window. That size is likewise remembered per media type,
  * under ``popup_preview_size`` (px); unset, the pane falls back to a size scaled
- * from the main-canvas thumbnail radius ({@link hoverThumbRadius}).
+ * from the main-canvas thumbnail radius ({@link hoverThumbRadius}). These
+ * buttons (and the ``popup_preview_size`` setting) are **floating-only**: the
+ * docked panel sizes its item from the panel width instead (see above).
  *
  * It shares the {@link BrowseSelectionService} instance provided by the browse
  * view, so toggling an item here is the same selection the canvas rings and the
@@ -187,9 +211,26 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   readonly hoverThumbRadius = input(28);
   /** Preview-audio volume (0–1), driven by the Browse toolbar's volume control. */
   readonly volume = input(1);
+  /** Docked mode: render as the Browse view's left panel instead of a floating
+   *  window. Constant per instance — the browse view mounts one element or the
+   *  other, never flips this on a live instance. */
+  readonly docked = input(false);
+  /** Width (CSS px) of the docked panel, driven by the browse view's divider;
+   *  the docked grid derives its column count from it. Unused when floating. */
+  readonly availableWidth = input(0);
+  /** The clip currently auditioning anywhere in the Browse view (canvas hover
+   *  or this panel's own grid), fed back by the browse view. In docked audio
+   *  mode the detail pane + metadata track it — the panel is the now-playing
+   *  display. Unused when floating. */
+  readonly nowPlayingExt = input<NowPlaying | null>(null);
 
-  /** Emitted when the popup should close (outside click, Escape, or the X). */
+  /** Emitted when the popup should close (outside click, Escape, or the X);
+   *  in docked mode, when the X asks to clear the shown bin. */
   readonly dismissed = output<void>();
+  /** Floating header's dock button: the user wants the docked presentation. */
+  readonly dockRequested = output<void>();
+  /** Docked header's pop-out button: the user wants the floating window. */
+  readonly popOutRequested = output<void>();
   /** The clip now auditioning from a grid-row hover (for the top-left
    *  now-playing indicator, shared with the canvas hover), or ``null`` once
    *  the hover clears. */
@@ -260,6 +301,12 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   /** Media id of the clip currently auditioning, so the buffering listeners can
    *  re-emit its now-playing state; ``null`` when silent. */
   private nowPlayingId: number | null = null;
+  /** Last ``loading`` flag emitted, so the playhead sweep re-emits with the live
+   *  buffering state rather than forcing it back to ``false``. */
+  private nowPlayingLoading = false;
+  /** Handle of the in-flight requestAnimationFrame playhead sweep, or ``null``
+   *  when the loop is stopped. */
+  private sweepRaf: number | null = null;
   /** Whether the one-shot buffering listeners are wired onto the audio element. */
   private audioListenersAttached = false;
 
@@ -352,6 +399,29 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
       this.hoverThumbRadius();
       untracked(() => setTimeout(() => this.place()));
     });
+    // Docked: the panel width (divider drags) re-chunks the member grid's
+    // columns and resizes the virtual viewport.
+    effect(() => {
+      const width = this.availableWidth();
+      untracked(() => {
+        if (!this.docked() || width <= 0) return;
+        this.rebuildRows();
+        setTimeout(() => {
+          this.viewport()?.checkViewportSize();
+          this.prefetchVisible();
+        });
+        this.cdr.markForCheck();
+      });
+    });
+    // Docked audio: the detail pane + metadata column track the auditioning
+    // clip (the now-playing replacement), so keep its metadata loading.
+    effect(() => {
+      const np = this.nowPlayingExt();
+      untracked(() => {
+        if (!this.docked() || !np) return;
+        this.metadataCache.ensureLoaded([np.mediaId]);
+      });
+    });
     // (Re-)subscribe the member grid's scroll-driven prefetch whenever the
     // virtual viewport instance changes — it lives behind the template's
     // ``@if (!previewOnly)``, and the popup is reused across summons while
@@ -373,6 +443,11 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
       this.gridSizeDict = (settings.grid_icon_size_popup as Record<string, string>) ?? {};
       this.previewSizeDict = (settings.popup_preview_size as Record<string, number>) ?? {};
       this.metadataShownDict = (settings.popup_metadata_shown as Record<string, boolean>) ?? {};
+      // Mirror the docked metadata-column width (global). Skip mid-drag so a
+      // settings round-trip can't reset the column while the user is dragging it.
+      if (!this.draggingMeta && typeof settings.browse_details_metadata_width === 'number') {
+        this.metadataWidthPx = settings.browse_details_metadata_width;
+      }
       this.applyViewPrefs();
       // A detail-canvas size change (the top-left buttons) resizes the preview
       // pane, hence the whole popup, so re-clamp it back fully on-screen. Showing
@@ -436,6 +511,9 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     for (const sub of this.subs) sub.unsubscribe();
     this.scrollSub?.unsubscribe();
+    // Drop any in-flight metadata-divider drag listeners (destroyed mid-drag).
+    document.removeEventListener('pointermove', this.boundMetaMove);
+    document.removeEventListener('pointerup', this.boundMetaUp);
     this.stopAudio();
   }
 
@@ -453,6 +531,11 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   /** Last applied column visibility, so the settings effect only re-clamps the
    *  popup when it actually toggled. */
   private lastMetadataShown: boolean | null = null;
+  /** Docked metadata-column width (px), mirrored from the global
+   *  ``browse_details_metadata_width`` setting and driven by the divider between
+   *  the metadata column and the large item. Read through {@link
+   *  dockedMetadataWidth}, which clamps it against the live panel width. */
+  private metadataWidthPx = 150;
 
   /** True for media types that carry real visual thumbnails (image / video):
    *  the ones that magnify on the main canvas and are worth a large preview. */
@@ -514,16 +597,18 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     this.settingsState.update({ popup_metadata_shown: dict } as SettingsUpdate).subscribe();
   }
 
-  /** Cached metadata for the focused (previewed) item, or ``undefined`` before
-   *  it has loaded. Everything the column shows reads through this. */
+  /** Cached metadata for the focused (displayed) item, or ``undefined`` before
+   *  it has loaded. Everything the column shows reads through this. In docked
+   *  audio mode the displayed item follows the auditioning clip. */
   private focusedMedia(): MediaBatchResponse | undefined {
-    return this.previewId == null ? undefined : this.metadataCache.get(this.previewId);
+    const id = this.displayedId;
+    return id == null ? undefined : this.metadataCache.get(id);
   }
 
   /** Display name of the focused item, matching the center panel's Name field. */
   get metadataName(): string {
     const media = this.focusedMedia();
-    if (!media) return this.previewId == null ? '' : `Media #${this.previewId}`;
+    if (!media) return this.displayedId == null ? '' : `Media #${this.displayedId}`;
     return media.filename || `Media #${media.id}`;
   }
 
@@ -634,11 +719,38 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     }
   }
 
+  /** Width (px) the member grid lays its cells out in: the historic fixed
+   *  column width when floating, or the live panel width (minus the body
+   *  padding + scrollbar chrome) when docked, so the docked grid re-chunks as
+   *  the divider drags. */
+  private gridContentWidth(): number {
+    if (!this.docked()) return GRID_CONTENT_WIDTH;
+    return Math.max(this.gridGoalWidth, this.availableWidth() - DOCKED_GRID_CHROME);
+  }
+
+  /**
+   * Docked only: the smallest panel width that still shows the current column
+   * count, so the browse view can "pop" the details divider tight to the columns
+   * when the user releases it — mirroring the right/selection panel's snap. Uses
+   * the same width basis as {@link rebuildRows} (panel width minus {@link
+   * DOCKED_GRID_CHROME}, chunked by ``gridGoalWidth`` + {@link GRID_GAP}), so the
+   * snapped width always re-derives exactly ``columns`` columns with no trailing
+   * empty strip and never drops a column. Returns ``null`` when floating or when
+   * there is nothing to snap to.
+   */
+  snappedPanelWidth(): number | null {
+    if (!this.docked()) return null;
+    const cols = this.columns;
+    if (cols <= 0) return null;
+    const minContent = cols * (this.gridGoalWidth + GRID_GAP) - GRID_GAP;
+    return Math.ceil(minContent + DOCKED_GRID_CHROME);
+  }
+
   /** Recompute the column count + row chunking for the current thumbnail size. */
   private rebuildRows(): void {
     this.columns = Math.max(
       1,
-      Math.floor((GRID_CONTENT_WIDTH + GRID_GAP) / (this.gridGoalWidth + GRID_GAP)),
+      Math.floor((this.gridContentWidth() + GRID_GAP) / (this.gridGoalWidth + GRID_GAP)),
     );
     const cols = this.columns;
     const rows: number[][] = [];
@@ -648,18 +760,14 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     this.rows = rows;
   }
 
-  /** Pixel stride of one virtual grid row: the cell's real rendered height (the
-   *  thumbnail, its always-present vertical padding, and — when shown — the
-   *  thumb→name gap and name line box) plus an inter-row gap. Accounting for the
-   *  cell padding and pinned name line box keeps the row's rendered content from
-   *  overflowing its virtual slot by a sub-pixel, which would otherwise force a
-   *  stray scrollbar on even a single row. At the smallest icon sizes the name is
-   *  hidden (see {@link GRID_NAME_MIN_WIDTH}), so its gap + label height are
-   *  dropped to keep rows flush. */
+  /** Pixel stride of one virtual grid row: the thumbnail plus its always-present
+   *  vertical cell padding and an inter-row gap. The grid no longer prints a name
+   *  under each thumbnail, so only the thumbnail and padding contribute; accounting
+   *  for the cell padding keeps the row's rendered content from overflowing its
+   *  virtual slot by a sub-pixel, which would otherwise force a stray scrollbar on
+   *  even a single row. */
   get rowSize(): number {
-    const nameShown = this.gridGoalWidth >= GRID_NAME_MIN_WIDTH;
-    const nameHeight = nameShown ? GRID_THUMB_NAME_GAP + GRID_LABEL_HEIGHT : 0;
-    return this.gridGoalWidth + GRID_CELL_PADDING + nameHeight + GRID_GAP;
+    return this.gridGoalWidth + GRID_CELL_PADDING + GRID_GAP;
   }
 
   /** Height (px) the grid takes: just enough for its rows, capped (to the room
@@ -704,7 +812,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  effect re-clamps the popup so growing the canvas can't push it off-screen. */
   bumpPreview(delta: 1 | -1): void {
     const mediaType = this.mediaType();
-    if (!this.showPreview || !mediaType) return;
+    if (!this.hasPane || !mediaType) return;
     const current = this.previewOverride ?? Math.round(this.previewDefault());
     const next =
       delta > 0
@@ -717,14 +825,14 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   /** True when the detail canvas is already at the smallest ladder rung. */
   get atMinPreview(): boolean {
-    if (!this.showPreview) return true;
+    if (!this.hasPane) return true;
     const current = this.previewOverride ?? Math.round(this.previewDefault());
     return current <= PREVIEW_SIZE_STEPS[0];
   }
 
   /** True when the detail canvas is already at the largest ladder rung. */
   get atMaxPreview(): boolean {
-    if (!this.showPreview) return true;
+    if (!this.hasPane) return true;
     const current = this.previewOverride ?? Math.round(this.previewDefault());
     return current >= PREVIEW_SIZE_STEPS[PREVIEW_SIZE_STEPS.length - 1];
   }
@@ -773,6 +881,148 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     return this.showPreview ? this.bodyHeight : 0;
   }
 
+  // --- Docked presentation --------------------------------------------------
+
+  /** Whether a detail pane renders at all: thumbnail media (image / video /
+   *  audio waveforms / document) always have one; docked, every media type
+   *  gets the pane — non-thumbnail types show a large placeholder glyph. */
+  get hasPane(): boolean {
+    return this.docked() || this.showPreview;
+  }
+
+  /** The item the detail pane + metadata column describe. Floating (and docked
+   *  non-audio) this is the hovered/arrowed item ({@link previewId}); docked
+   *  audio it follows whatever clip is auditioning anywhere in the Browse view
+   *  (canvas hover or this panel's grid) — the now-playing replacement —
+   *  falling back to the viewed item while nothing sounds. */
+  get displayedId(): number | null {
+    if (this.docked() && this.mediaType() === 'audio') {
+      return this.nowPlayingExt()?.mediaId ?? this.previewId;
+    }
+    return this.previewId;
+  }
+
+  /** Content width (px) the docked top row apportions between the large item,
+   *  the metadata column, and the divider between them: the panel width less the
+   *  body's own horizontal padding. */
+  private dockedContentWidth(): number {
+    const width = this.availableWidth();
+    return width > 0 ? width - 2 * BODY_PADDING : MAX_PREVIEW_PX;
+  }
+
+  /** Width (px) of the docked metadata column: the user's dragged width
+   *  ({@link metadataWidthPx}), clamped to at least {@link DOCKED_META_MIN} and
+   *  to whatever still leaves the large item its {@link DOCKED_MAIN_MIN} floor.
+   *  Re-clamps live as the outer panel divider narrows the panel, so shrinking
+   *  the panel eats into the item first and only squeezes the metadata once the
+   *  item bottoms out. */
+  get dockedMetadataWidth(): number {
+    const content = this.dockedContentWidth();
+    const maxWidth = Math.max(DOCKED_META_MIN, content - META_DIVIDER_WIDTH - DOCKED_MAIN_MIN);
+    return Math.round(Math.max(DOCKED_META_MIN, Math.min(this.metadataWidthPx, maxWidth)));
+  }
+
+  /** Side (px) of the square docked detail pane. The large item takes whatever
+   *  the panel leaves after the metadata column and the divider, so it always
+   *  grows to fill the space — there is no per-item size control docked (the
+   *  panel divider sizes it). Bounded below by {@link DOCKED_MAIN_MIN} and above
+   *  by {@link MAX_PREVIEW_PX}. */
+  get dockedPaneSize(): number {
+    const content = this.dockedContentWidth();
+    const taken = this.showMetadataColumn ? this.dockedMetadataWidth + META_DIVIDER_WIDTH : 0;
+    return Math.round(Math.max(DOCKED_MAIN_MIN, Math.min(content - taken, MAX_PREVIEW_PX)));
+  }
+
+  // --- Docked metadata-column divider drag ----------------------------------
+  // A draggable divider between the large item (left) and the metadata column
+  // (right) re-apportions the top row: the metadata column takes its dragged
+  // width and the item fills the rest. Persisted globally under
+  // ``browse_details_metadata_width`` (metadata fields are media-agnostic).
+
+  /** True only mid-drag of the metadata/item divider (template drag cue). */
+  draggingMeta = false;
+  private metaDragStartX = 0;
+  private metaDragStartWidth = 0;
+  private readonly boundMetaMove = this.onMetaDividerMove.bind(this);
+  private readonly boundMetaUp = this.onMetaDividerUp.bind(this);
+
+  /** Begin dragging the metadata/item divider (docked only). */
+  onMetaDividerPointerDown(event: PointerEvent): void {
+    if (!this.docked() || event.button !== 0) return;
+    event.preventDefault();
+    this.draggingMeta = true;
+    this.metaDragStartX = event.clientX;
+    this.metaDragStartWidth = this.dockedMetadataWidth;
+    document.addEventListener('pointermove', this.boundMetaMove);
+    document.addEventListener('pointerup', this.boundMetaUp);
+  }
+
+  private onMetaDividerMove(event: PointerEvent): void {
+    if (!this.draggingMeta) return;
+    // The metadata column sits to the RIGHT of the item, so dragging the divider
+    // left (dx < 0) grows the metadata and shrinks the item, and vice versa.
+    const dx = event.clientX - this.metaDragStartX;
+    const content = this.dockedContentWidth();
+    const maxWidth = Math.max(DOCKED_META_MIN, content - META_DIVIDER_WIDTH - DOCKED_MAIN_MIN);
+    this.metadataWidthPx = Math.round(
+      Math.max(DOCKED_META_MIN, Math.min(this.metaDragStartWidth - dx, maxWidth)),
+    );
+    this.cdr.markForCheck();
+  }
+
+  private onMetaDividerUp(): void {
+    if (!this.draggingMeta) return;
+    this.draggingMeta = false;
+    document.removeEventListener('pointermove', this.boundMetaMove);
+    document.removeEventListener('pointerup', this.boundMetaUp);
+    // Persist the settled (clamped) width; the settings round-trip returns the
+    // same value, so there's no visible jump on release.
+    this.settingsState
+      .update({ browse_details_metadata_width: Math.round(this.dockedMetadataWidth) })
+      .subscribe();
+  }
+
+  /** Rows the member grid renders. Docked, a singleton bin keeps the grid
+   *  area allocated but *empty* (its lone item is already shown in the detail
+   *  pane); floating keeps the historic shape ({@link previewOnly} drops the
+   *  grid column entirely for thumbnail singletons). */
+  get displayRows(): number[][] {
+    if (this.docked() && this.ids.length === 1) return [];
+    return this.rows;
+  }
+
+  /** Wave painted in the docked audio detail pane: the auditioning clip's
+   *  waveform while something sounds, else the viewed item's. */
+  paneWaveUrl(): string {
+    const np = this.docked() ? this.nowPlayingExt() : null;
+    return np ? np.waveUrl : this.previewUrl();
+  }
+
+  /** Docked audio: playhead position (0–1) while the auditioning clip sounds,
+   *  or ``null`` (no playhead) otherwise. */
+  get paneProgress(): number | null {
+    if (!this.docked()) return null;
+    return this.nowPlayingExt()?.progress ?? null;
+  }
+
+  /** Docked audio: whether the auditioning clip is still fetching/buffering
+   *  (drives the spinner over the pane, mirroring the old toolbar widget). */
+  get paneLoading(): boolean {
+    if (!this.docked()) return false;
+    return this.nowPlayingExt()?.loading ?? false;
+  }
+
+  /** Docked, non-thumbnail media (e.g. text): the pane shows a large
+   *  placeholder glyph instead of trying to load an image that doesn't exist. */
+  get paneShowsPlaceholder(): boolean {
+    return this.docked() && !this.showPreview;
+  }
+
+  /** Large placeholder glyph for {@link paneShowsPlaceholder}. */
+  get panePlaceholderGlyph(): string {
+    return this.mediaType() === 'text' ? '¶' : '□';
+  }
+
   // --- Dismissal -----------------------------------------------------------
 
   close(): void {
@@ -781,6 +1031,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent): void {
+    if (this.docked()) return;
     if (!this.host.nativeElement.contains(event.target as Node)) {
       this.dismissed.emit();
     }
@@ -788,6 +1039,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
+    if (this.docked()) return;
     this.dismissed.emit();
   }
 
@@ -801,6 +1053,9 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    */
   @HostListener('document:keydown', ['$event'])
   onKeydown(event: KeyboardEvent): void {
+    // Docked, the panel is persistent chrome: it must not steal the canvas's
+    // document-level shortcuts (arrows pan, +/- zoom, Ctrl-A select-in-view).
+    if (this.docked()) return;
     if (shortcutsBlocked()) return;
 
     // Ctrl/Cmd-A: select every item in this bin (always select, never toggle).
@@ -921,6 +1176,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   /** Begin a drag when the user presses the header (but not the close button or
    *  the view controls, which keep their own click behavior). */
   onHeaderPointerDown(event: PointerEvent): void {
+    if (this.docked()) return;
     if (event.button !== 0) return;
     if ((event.target as HTMLElement).closest('button, vt-view-controls')) return;
     event.preventDefault();
@@ -1005,7 +1261,8 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   /** True when the item currently shown in the preview pane is selected, so the
    *  large detail image can render the same highlight ring as a grid entry. */
   isPreviewSelected(): boolean {
-    return this.previewId != null && this.selection.has(this.previewId);
+    const id = this.displayedId;
+    return id != null && this.selection.has(id);
   }
 
   /** Toggle selection of the item shown in the preview pane (the hovered grid
@@ -1014,7 +1271,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  is dropped; it also lets the user select by clicking the big detail image in
    *  a multi-member popup. */
   onPreviewClick(): void {
-    const id = this.previewId;
+    const id = this.displayedId;
     if (id != null) this.onEntryClick(id);
   }
 
@@ -1058,7 +1315,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     this.metadataCache.ensureLoaded([id]);
     // Starts loading: show the spinner on the now-playing widget until a
     // ``playing``/``canplay`` event clears it.
-    this.nowPlaying.emit({ mediaId: id, waveUrl: this.thumbnailUrl(id), loading: true });
+    this.nowPlaying.emit({ mediaId: id, waveUrl: this.thumbnailUrl(id), loading: true, progress: null });
     setTimeout(() => {
       const el = this.audioRef()?.nativeElement;
       if (!el) return;
@@ -1070,6 +1327,8 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
       applyClipWindow(el, () => this.metadataCache.get(id));
       el.load();
       el.play().catch(() => {});
+      // Advance the playhead sweep while it sounds; self-cancels on pause/stop.
+      this.startSweep();
     });
   }
 
@@ -1085,12 +1344,40 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     el.addEventListener('canplay', () => this.emitNowPlaying(false));
   }
 
-  /** Re-emit the now-playing state with a fresh ``loading`` flag. A no-op once
-   *  nothing is auditioning, so events that fire after a stop don't resurrect
-   *  the widget. */
+  /** Re-emit the now-playing state with a fresh ``loading`` flag and the current
+   *  playhead position. A no-op once nothing is auditioning, so events that fire
+   *  after a stop don't resurrect the widget. */
   private emitNowPlaying(loading: boolean): void {
-    if (this.audioSrc === '' || this.nowPlayingId == null) return;
-    this.nowPlaying.emit({ mediaId: this.nowPlayingId, waveUrl: this.thumbnailUrl(this.nowPlayingId), loading });
+    const id = this.nowPlayingId;
+    if (this.audioSrc === '' || id == null) return;
+    this.nowPlayingLoading = loading;
+    const el = this.audioRef()?.nativeElement;
+    const progress = el ? clipProgress(el, () => this.metadataCache.get(id)) : null;
+    this.nowPlaying.emit({ mediaId: id, waveUrl: this.thumbnailUrl(id), loading, progress });
+  }
+
+  // Re-emit the now-playing state ~60×/sec so the playhead sweeps smoothly:
+  // (timeupdate) fires only ~4×/sec, too coarse for a fluid line. Self-cancels
+  // when the clip pauses or stops; idempotent while a loop is already live.
+  private startSweep(): void {
+    if (this.sweepRaf !== null || typeof requestAnimationFrame !== 'function') return;
+    const tick = (): void => {
+      const el = this.audioRef()?.nativeElement;
+      if (this.nowPlayingId == null || !el || el.paused) {
+        this.sweepRaf = null;
+        return;
+      }
+      this.emitNowPlaying(this.nowPlayingLoading);
+      this.sweepRaf = requestAnimationFrame(tick);
+    };
+    this.sweepRaf = requestAnimationFrame(tick);
+  }
+
+  private stopSweep(): void {
+    if (this.sweepRaf !== null) {
+      cancelAnimationFrame(this.sweepRaf);
+      this.sweepRaf = null;
+    }
   }
 
   /** Cursor left the grid: stop any hover audio and fall the preview back to the
@@ -1105,6 +1392,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   private stopAudio(): void {
     const wasPlaying = this.audioSrc !== '';
+    this.stopSweep();
     const el = this.audioRef()?.nativeElement;
     if (el) {
       clearClipWindow(el);
@@ -1185,6 +1473,9 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  and correct any residual overflow, so the window ends up entirely on-screen
    *  even if the computed height drifts from what actually rendered. */
   private place(): void {
+    // Docked: the panel is laid out by the browse view's grid, never
+    // positioned/clamped by us.
+    if (this.docked()) return;
     // Before the panel exists there's nothing to measure/clamp; a later place()
     // call (e.g. from ngAfterViewInit) will run once it's in the DOM. Staying
     // unplaced keeps the popup hidden until then rather than showing it unclamped.

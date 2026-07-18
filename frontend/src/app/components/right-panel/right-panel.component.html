@@ -1,4 +1,4 @@
-<aside class="panel-right" aria-label="Labels">
+<aside class="panel-right" aria-label="Labels" animate.enter="drawer-enter-right" animate.leave="drawer-leave-right">
   <vt-detector-context-bar
     [visible]="!!trainMode()"
     [detectorName]="trainMode()?.model?.name ?? ''"

@@ -162,6 +162,17 @@ export const EXTENDED_ICON_SVGS: Record<string, string> = {
   // buttons in the metadata panels.
   copy:
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  // Panel with an inward arrow: dock the floating bin-details window as the
+  // Browse view's left panel.
+  'dock-left':
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/><line x1="19" y1="12" x2="13" y2="12"/><polyline points="16 9 13 12 16 15"/></svg>',
+  // Window (no docked "wall") with an outward arrow: pop the docked bin-details
+  // panel back out into its floating window. Deliberately the thematic inverse
+  // of ``dock-left`` — the same panel frame, but with the sidebar wall removed
+  // and the arrow pointing out (right) rather than in — so the dock/undock pair
+  // reads as a matched set.
+  'pop-out':
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="10" y1="12" x2="16" y2="12"/><polyline points="13 9 16 12 13 15"/></svg>',
   // Speaker with sound waves / muted speaker, used by the Browse toolbar's
   // preview-volume control (audio datasets only).
   volume:

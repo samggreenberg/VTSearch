@@ -93,13 +93,14 @@ describe('BrowseSelectionPanelComponent (zoneless canary)', () => {
     expect(fixture.nativeElement.querySelectorAll('.bsp-entry').length).toBe(3);
   });
 
-  it('repaints item names when the metadata cache version$ emits, no manual detectChanges', async () => {
+  it('repaints the entry name tooltip when the metadata cache version$ emits, no manual detectChanges', async () => {
     selection.addAll([7]);
     await settleZoneless(fixture);
 
-    // Before the name resolves, the entry falls back to the id placeholder.
-    let nameEl = fixture.nativeElement.querySelector('.bsp-name-grid, .bsp-name');
-    expect(nameEl!.textContent).toContain('Clip #7');
+    // The list shows only thumbnails (no visible name text), so the name lives
+    // in the entry's tooltip. Before it resolves, it falls back to the id.
+    let entry = fixture.nativeElement.querySelector('.bsp-entry') as HTMLElement;
+    expect(entry.getAttribute('title')).toContain('Clip #7');
 
     // Production channel: the metadata cache hydrates and pushes version$,
     // whose subscribe rebuilds `sortedEntries` (a signal) — must repaint.
@@ -107,27 +108,26 @@ describe('BrowseSelectionPanelComponent (zoneless canary)', () => {
     metaVersion.next(1);
     await settleZoneless(fixture);
 
-    nameEl = fixture.nativeElement.querySelector('.bsp-name-grid, .bsp-name');
-    expect(nameEl!.textContent).toContain('kestrel.wav');
+    entry = fixture.nativeElement.querySelector('.bsp-entry') as HTMLElement;
+    expect(entry.getAttribute('title')).toContain('kestrel.wav');
   });
 
-  it('exposes the full name via the entry tooltip and a per-entry copy button', async () => {
+  it('exposes the full name via the entry tooltip and no longer renders a visible name or copy button', async () => {
     selection.addAll([7]);
     names.set(7, 'a-very-long-filename-that-gets-truncated.wav');
     metaVersion.next(1);
     await settleZoneless(fixture);
 
-    // The entry title carries the full name (not the old hardcoded string), so
-    // hovering surfaces it even when the on-screen text is truncated/hidden.
+    // The entry title carries the full name so hovering surfaces it even though
+    // the list no longer prints names beneath the thumbnails.
     const entry = fixture.nativeElement.querySelector('.bsp-entry') as HTMLElement;
     expect(entry.getAttribute('title')).toBe(
       'a-very-long-filename-that-gets-truncated.wav — click to remove from selection',
     );
 
-    // A copy-detail button sits beside each entry, wired to copy the full name.
-    const copyBtn = entry.querySelector('.bsp-copy .copy-detail-btn') as HTMLButtonElement;
-    expect(copyBtn).not.toBeNull();
-    expect(copyBtn.getAttribute('title')).toBe('Copy name to clipboard');
+    // The visible name row and its Copy-name button are gone entirely.
+    expect(entry.querySelector('.bsp-name-row')).toBeNull();
+    expect(entry.querySelector('.bsp-copy')).toBeNull();
   });
 
   // --- Hover-to-play audio (issue #2455) -------------------------------------
@@ -160,7 +160,9 @@ describe('BrowseSelectionPanelComponent (zoneless canary)', () => {
     // After the dwell: playback starts and `nowPlaying` carries the clip's
     // waveform for the top-left indicator — flagged `loading` until it sounds.
     expect(playSpy).toHaveBeenCalled();
-    expect(emitted).toEqual({ mediaId: 7, waveUrl: '/api/medias/7/thumbnail', loading: true });
+    // `progress` is null until a finite duration is known (jsdom has no media
+    // pipeline, so it never is); the sweeping playhead stays hidden meanwhile.
+    expect(emitted).toEqual({ mediaId: 7, waveUrl: '/api/medias/7/thumbnail', loading: true, progress: null });
   });
 
   it('stops the audition and emits nowPlaying(null) as soon as the cursor leaves', async () => {

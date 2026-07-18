@@ -13,7 +13,14 @@ import {
   type CanvasTheme,
   type ResolvedColormap,
 } from './hex-render.util';
-import { binGeometry, BinGeometry, hoverThumbHalfExtents, pickCell } from './bin-geometry';
+import {
+  binGeometry,
+  BinGeometry,
+  hoverThumbHalfExtents,
+  imageTileFitDimensions,
+  pickCell,
+  type TileFit,
+} from './bin-geometry';
 import {
   clampedTransform,
   computeFitZoom,
@@ -345,6 +352,12 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   private waveformTint = false;
   private waveAccent = '#4f9dff';
   private waveSurface = '#1a1d27';
+
+  // Per-frame "this dataset is images" flag. Image grid tiles use a balanced
+  // "half crop, half pad" fit (see {@link drawImageFit}) instead of the cover
+  // crop used for video/audio, leaving a background-coloured gap inside the
+  // bin's border; hovering still breaks the whole image out unchanged.
+  private imageTiles = false;
 
   private hoveredCell: HexCellPayload | null = null;
   /**
@@ -1292,6 +1305,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
       this.waveAccent = this.themeColor('--accent') || '#4f9dff';
       this.waveSurface = this.themeColor('--bg-surface') || '#1a1d27';
     }
+    this.imageTiles = this.mediaType() === 'image';
     const selectionActive = this.selection.size > 0;
 
     // The enlarged cell is deferred and redrawn last (on top of its neighbours)
@@ -1516,26 +1530,30 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     selectionActive: boolean,
     trim: { hw: number; hh: number } | null = null,
   ): void {
-    // A cell with one item is drawn as a disc (slightly smaller than the cell);
-    // multi-item cells keep their full shape so they tile the space. The hovered
-    // cell instead passes `trim`: a rectangle of the thumbnail's native aspect
-    // ratio, so the enlarged tile breaks out of the bin silhouette and shows the
-    // whole frame (no hex/square clip, no background bars). A singleton's
-    // break-out keeps rounded corners (see `traceTrimRect`) so it still reads as
-    // a singleton; a pile's stays sharp and is marked by its colormap band.
+    // A multi-item ("pile") cell is drawn with a soft rounded shape — a disc in
+    // hex mode, a rounded-corner rectangle in square mode — while a one-item cell
+    // keeps its full sharp hexagon / square so a lone item reads as a crisp,
+    // distinct tile. The hovered cell instead passes `trim`: a rectangle of the
+    // thumbnail's native aspect ratio, so the enlarged tile breaks out of the bin
+    // silhouette and shows the whole frame (no hex/square clip, no background
+    // bars). A pile's break-out keeps rounded corners (see `traceTrimRect`) so it
+    // still reads as a pile; a singleton's stays sharp.
     const single = cell.count === 1;
+    const rounded = !single;
     if (trim) {
-      this.traceTrimRect(ctx, cx, cy, trim, single, radius);
+      this.traceTrimRect(ctx, cx, cy, trim, rounded, radius);
     } else {
-      this.geom.traceCell(ctx, cx, cy, radius, single);
+      this.geom.traceCell(ctx, cx, cy, radius, rounded);
     }
 
     // Image / video: paint the central item's thumbnail clipped to the cell.
     // Until it loads, fall back to the density shading below so the cell is
-    // never blank. Grid cells cover-fit (fill the bin, cropping the edges); the
-    // hovered cell instead draws the whole thumbnail to fill `trim`, whose
-    // rectangle already carries the image's aspect ratio, so it shows undistorted
-    // and uncropped.
+    // never blank. Video/audio grid cells cover-fit (fill the bin, cropping the
+    // edges); image cells instead use a balanced "half crop, half pad" fit
+    // (`drawImageFit(..., 'balanced')`) that leaves a background-coloured gap
+    // inside the bin's border. The hovered cell (either type) instead draws the
+    // whole thumbnail to fill `trim`, whose rectangle already carries the
+    // image's aspect ratio, so it shows undistorted and uncropped.
     const thumb = this.thumbnailMode ? this.getThumb(cell.rep_id) : null;
     if (thumb) {
       ctx.save();
@@ -1551,17 +1569,26 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
         if (trim) {
           ctx.drawImage(tinted, cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2);
         } else {
-          this.drawImageCover(ctx, tinted, cx, cy, radius);
+          this.drawImageFit(ctx, tinted, cx, cy, radius);
         }
       } else if (trim) {
         ctx.drawImage(thumb, cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2);
+      } else if (this.imageTiles) {
+        // Image grid cell: "half crop, half pad". Fill the bin with the body
+        // background first so the padded gap reads as background between the
+        // image content and the bin's border, then draw the image at the
+        // balanced (geometric-mean) scale — cropped less than cover would be and
+        // padded less than contain would be, with equal crop and pad fractions.
+        ctx.fillStyle = this.themeColor('--bg-body');
+        ctx.fill();
+        this.drawImageFit(ctx, thumb, cx, cy, radius, 'balanced');
       } else {
-        this.drawImageCover(ctx, thumb, cx, cy, radius);
+        this.drawImageFit(ctx, thumb, cx, cy, radius);
       }
       ctx.restore();
     } else if (single) {
       // Singletons get the colormap's dedicated one-item colour, decoupled
-      // from the density ramp so a lone dot reads as "exactly one".
+      // from the density ramp so a lone item reads as "exactly one".
       ctx.fillStyle = rgbString(cmap.single);
       ctx.fill();
     } else {
@@ -1622,8 +1649,8 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // A hovered thumbnail breaks out of its bin: it's shown whole at its native
     // aspect ratio as a rectangle (no silhouette), sized to grow until its edge
     // just reaches the nearest neighbour cell's centre (`hoverThumbRect`). A
-    // singleton's rectangle keeps rounded corners so it stays distinguishable
-    // from a pile (`traceTrimRect`). A non-thumbnail (flat density) cell has no
+    // pile's rectangle keeps rounded corners so it stays distinguishable from a
+    // singleton (`traceTrimRect`). A non-thumbnail (flat density) cell has no
     // such rectangle, so it keeps its silhouette and simply lifts off with a
     // fixed size bump.
     const thumb = this.thumbnailMode ? this.getThumb(cell.rep_id) : null;
@@ -1638,9 +1665,9 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     ctx.shadowBlur = Math.max(4, radius * 0.3);
     ctx.shadowOffsetY = Math.max(1, radius * 0.1);
     if (trim) {
-      this.traceTrimRect(ctx, cx, cy, trim, cell.count === 1, radius);
+      this.traceTrimRect(ctx, cx, cy, trim, cell.count > 1, radius);
     } else {
-      this.geom.traceCell(ctx, cx, cy, bumped, cell.count === 1);
+      this.geom.traceCell(ctx, cx, cy, bumped, cell.count > 1);
     }
     ctx.fillStyle = this.themeColor('--bg-body');
     ctx.fill();
@@ -1653,13 +1680,13 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
 
   /**
    * Trace the hovered break-out thumbnail's rectangle as the current path,
-   * centred on `(cx, cy)` with half-extents `trim`. A singleton rounds its
-   * corners with the *same absolute* radius its grid disc / rounded square
-   * curved with (`geom.singleCornerRadius`, computed from the un-bumped bin
+   * centred on `(cx, cy)` with half-extents `trim`. A pile (`rounded`) rounds
+   * its corners with the *same absolute* radius its grid disc / rounded square
+   * curved with (`geom.roundedCornerRadius`, computed from the un-bumped bin
    * `radius`) — a fixed "total" round, not one proportional to the enlarged
-   * rectangle, so the blown-up tile keeps the singleton's corner curvature and
-   * only nibbles the image corners. Piles stay sharp-cornered; their colormap
-   * band is what marks them. The radius is clamped so it never exceeds half a
+   * rectangle, so the blown-up tile keeps the pile's corner curvature and only
+   * nibbles the image corners. Singletons stay sharp-cornered; their one-item
+   * colour is what marks them. The radius is clamped so it never exceeds half a
    * side of a narrow break-out rectangle.
    */
   private traceTrimRect(
@@ -1667,12 +1694,12 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     cx: number,
     cy: number,
     trim: { hw: number; hh: number },
-    single: boolean,
+    rounded: boolean,
     radius: number,
   ): void {
     ctx.beginPath();
-    if (single) {
-      const r = Math.min(this.geom.singleCornerRadius(radius), trim.hw, trim.hh);
+    if (rounded) {
+      const r = Math.min(this.geom.roundedCornerRadius(radius), trim.hw, trim.hh);
       ctx.roundRect(cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2, r);
     } else {
       ctx.rect(cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2);
@@ -1680,23 +1707,30 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     ctx.closePath();
   }
 
-  /** Cover-fit an image over the hex's 2*radius square (the path must be clipped).
+  /** Draw an image centred over the hex's 2*radius square (the path must be
+   *  clipped). ``fit`` picks the scale:
+   *  - ``'cover'`` (default): fill the square, cropping whichever axis overflows
+   *    — the historical behaviour, still used for video/audio tiles.
+   *  - ``'balanced'``: the geometric mean of the cover and contain scales, so
+   *    the fraction cropped off the long axis equals the fraction of background
+   *    gap left on the short axis — the "half crop, half pad" image fit. The
+   *    caller fills the cell with the body background first so that gap reads as
+   *    background rather than the tile underneath.
+   *
    *  Accepts a tinted waveform canvas (issue #2369) as well as a raw image; a
    *  canvas exposes its intrinsic size as ``width``/``height`` rather than
    *  ``naturalWidth``/``naturalHeight``. */
-  private drawImageCover(
+  private drawImageFit(
     ctx: CanvasRenderingContext2D,
     img: HTMLImageElement | HTMLCanvasElement,
     cx: number,
     cy: number,
     radius: number,
+    fit: TileFit = 'cover',
   ): void {
     const iw = img instanceof HTMLCanvasElement ? img.width : img.naturalWidth;
     const ih = img instanceof HTMLCanvasElement ? img.height : img.naturalHeight;
-    const size = radius * 2;
-    const scale = Math.max(size / iw, size / ih);
-    const dw = iw * scale;
-    const dh = ih * scale;
+    const { dw, dh } = imageTileFitDimensions(iw, ih, radius, fit);
     ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
   }
 

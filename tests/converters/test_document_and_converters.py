@@ -700,8 +700,9 @@ class TestDemoListConverters:
         assert "video2image" in conv_names
         assert "video2audio" in conv_names
 
-    def test_demo_list_audio_demo_has_audio2image(self, client):
-        """Audio demos should list the audio2image (spectrogram) converter."""
+    def test_demo_list_audio_demo_hides_hidden_from_picker_converters(self, client):
+        """audio2image / audio2text carry ``hidden_from_picker = True`` and must
+        not appear in an audio demo's "Convert to" selector."""
         resp = client.get("/api/dataset/demo-list")
         demos = resp.get_json()["datasets"]
         audio_demos = [d for d in demos if d["media_type"] == "audio"]
@@ -709,7 +710,8 @@ class TestDemoListConverters:
             pytest.skip("No audio demo datasets registered")
         demo = audio_demos[0]
         conv_names = [c["name"] for c in demo["available_converters"]]
-        assert "audio2image" in conv_names
+        assert "audio2image" not in conv_names
+        assert "audio2text" not in conv_names
 
 
 # ===========================================================================

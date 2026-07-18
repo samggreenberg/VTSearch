@@ -15,8 +15,8 @@ export type CanvasTheme = 'dark' | 'light' | 'highviz';
 
 /**
  * A density colormap, resolved for a concrete theme. ``single`` is the colour
- * for a one-item cell (drawn as a distinct dot); ``ramp`` is the low→high
- * density gradient for multi-item cells. The "nothing here" colour is never
+ * for a one-item cell; ``ramp`` is the low→high density gradient for multi-item
+ * cells. The "nothing here" colour is never
  * part of the map — empty space is painted with the canvas background so it
  * reads as absence — so every ``single``/``ramp`` colour means "at least one".
  */
@@ -63,7 +63,7 @@ const HEAT_RAMP: RGB[] = [
 // means dark mode + lots. This is the light-mode default. The low end starts
 // at a clearly-saturated blue (not the near-white ColorBrewer "Blues" tail)
 // so even sparse cells separate from the ``#f0f2f5`` light-mode background;
-// the earlier pale start made one-item discs and low-density bins vanish.
+// the earlier pale start made one-item cells and low-density bins vanish.
 const OCEAN_RAMP: RGB[] = [
   [158, 202, 225],
   [107, 174, 214],
@@ -72,7 +72,7 @@ const OCEAN_RAMP: RGB[] = [
   [8, 81, 156],
   [8, 48, 107],
 ];
-// A mid neutral grey — distinct from the blue ramp so a lone dot reads as
+// A mid neutral grey — distinct from the blue ramp so a lone item reads as
 // "exactly one", and dark enough to stay legible on the light-mode background.
 const OCEAN_SINGLE: RGB = [150, 158, 172];
 
@@ -173,25 +173,26 @@ export function traceHexPath(
 /**
  * A hex's inscribed-circle radius as a fraction of its circumradius
  * (``radius``). A disc of this radius is the largest circle that fits inside
- * the hex, so a singleton drawn as a disc reads slightly smaller than the hex
- * it replaces.
+ * the hex, so a pile drawn as a disc reads slightly smaller than the hex it
+ * replaces.
  */
 export const HEX_INRADIUS_RATIO = SQRT3 / 2;
 
 /**
- * Trace one cell's outline as the current path. A cell holding a single media
- * item (``single``) is drawn as the hex's inscribed disc — barely smaller than
- * the hex, and visibly so since a disc has less area than the hex around it —
- * so singletons read as distinct dots. Every other cell keeps the full hex.
+ * Trace one cell's outline as the current path. A multi-item ("pile") cell
+ * (``rounded``) is drawn as the hex's inscribed disc — barely smaller than the
+ * hex, and visibly so since a disc has less area than the hex around it — so
+ * piles read as soft rounded blobs. A single-item cell instead keeps the full
+ * sharp hexagon, so a lone item reads as a crisp, distinct tile.
  */
 export function traceCellPath(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
   radius: number,
-  single: boolean,
+  rounded: boolean,
 ): void {
-  if (single) {
+  if (rounded) {
     ctx.beginPath();
     ctx.arc(cx, cy, radius * HEX_INRADIUS_RATIO, 0, Math.PI * 2);
     ctx.closePath();

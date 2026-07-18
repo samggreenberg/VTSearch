@@ -65,6 +65,13 @@ pip install --prefer-binary \
   -r "$REPO_DIR/requirements/base.txt" \
   -q
 
+# FaceNet face-identity embedder (vtscore.media.face). facenet-pytorch pins
+# torch<2.3 / numpy<2 / Pillow<10.3, which a plain install would honor by
+# downgrading the app's stack; those pins are empirically unnecessary (the
+# model runs a correct forward pass on the modern stack), so install --no-deps
+# and let the app's own torch/torchvision/numpy/Pillow satisfy it at runtime.
+pip install --no-deps facenet-pytorch -q
+
 # Install frontend (Angular) dependencies.
 # Re-run npm install whenever package-lock.json is newer than node_modules,
 # so added/removed packages are always in sync.

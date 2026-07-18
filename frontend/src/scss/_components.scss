@@ -451,6 +451,17 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   cursor: pointer;
 }
 
+// Multi-line text entry (e.g. a custom signpost tag vocabulary, one term per
+// line).  Shares `.form-input`'s framing but allows vertical resize and reads
+// in a monospace face so long term lists line up.
+.form-textarea {
+  @extend .form-input;
+  resize: vertical;
+  min-height: 5rem;
+  font-family: var(--font-mono, monospace);
+  line-height: 1.4;
+}
+
 // Compact variant for dense toolbars (the label-sort bar, the browse
 // selection panel).  Same visual treatment as `.form-select`, but sized to
 // its content rather than stretched full-width, with tighter padding and a
@@ -477,6 +488,10 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 }
 
 // --- Modal overlay ---
+
+// No entry/exit animation: modals mount and unmount instantly. An earlier
+// fade + origin-scale motion read as jittery rather than polished, so it was
+// removed rather than tuned.
 
 .modal-backdrop {
   position: fixed;
@@ -551,6 +566,59 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   display: flex;
   justify-content: flex-end;
   gap: var(--space-md);
+}
+
+// --- Drawer slide (side panels) ---
+//
+// The Find/Label left & right panels and the Browse selection panel mount and
+// unmount with their host view (route entry, the browse `@switch` reaching
+// `ready`). Rather than hard-cutting in/out, each panel root opts into these
+// classes via Angular's `animate.enter` / `animate.leave` bindings, so the
+// panel slides from its docked edge — the same physical read as the
+// drag-resizable docked browse-details pane. Angular applies the enter class on
+// insertion (removing it when the animation ends) and holds the leaving node
+// until the leave animation finishes before tearing it down.
+//
+// The keyframes end at the panel's natural resting state (`translateX(0)`), so
+// the enter classes need no forwards fill; `backwards` only pre-applies the
+// off-screen start so there's no first-frame flash. The leave classes use
+// `forwards` to pin the off-screen end state while the node is held. The
+// app/OS reduce-motion rules in `styles.scss` collapse the durations to
+// ~instant, so a leaving node still tears down promptly when motion is off.
+@keyframes drawer-in-left {
+  from { transform: translateX(-100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes drawer-out-left {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-100%); opacity: 0; }
+}
+
+@keyframes drawer-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes drawer-out-right {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(100%); opacity: 0; }
+}
+
+.drawer-enter-left {
+  animation: drawer-in-left var(--transition-slow) var(--ease-out) backwards;
+}
+
+.drawer-leave-left {
+  animation: drawer-out-left var(--transition-slow) var(--ease-in-out) forwards;
+}
+
+.drawer-enter-right {
+  animation: drawer-in-right var(--transition-slow) var(--ease-out) backwards;
+}
+
+.drawer-leave-right {
+  animation: drawer-out-right var(--transition-slow) var(--ease-in-out) forwards;
 }
 
 // --- Picker cards ---
@@ -765,6 +833,7 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 }
 
 .view-tab {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
@@ -779,6 +848,23 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   cursor: pointer;
   transition: color var(--transition-base), border-color var(--transition-base), background var(--transition-base);
 
+  // Active-underline wipe: the accent underline grows in (scaleX 0 → 1)
+  // rather than hard-cutting on. Sits over the 2px bottom-border region so it
+  // lands on the seam where the active tab flows into `.view-tab-content`.
+  &::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -2px;
+    height: 2px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: center;
+    transition: transform var(--transition-slow);
+    pointer-events: none;
+  }
+
   &:hover {
     color: var(--text-primary);
     background: var(--bg-hover);
@@ -787,7 +873,8 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   &--active {
     color: var(--text-primary);
     background: var(--bg-panel);
-    border-bottom-color: var(--accent);
+
+    &::after { transform: scaleX(1); }
   }
 }
 

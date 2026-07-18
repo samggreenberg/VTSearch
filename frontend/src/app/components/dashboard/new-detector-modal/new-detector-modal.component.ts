@@ -20,6 +20,7 @@ import {
 } from '../../../services/embedder-capability.service';
 import { MediaStateService } from '../../../services/media-state.service';
 import {
+  FieldOption,
   ImporterField,
   ImporterInfo,
   ImporterPickerTab,
@@ -217,6 +218,14 @@ export class NewDetectorModalComponent implements OnInit {
   labelImporterValues: Record<string, string> = {};
   labelImporterFile: File | null = null;
   labelImporterFileFieldKey: string | null = null;
+  // Dynamic-field-option state for the Trained tab's label-importer form,
+  // mirroring label-importer-modal so plugins with dynamic_options /
+  // depends_on / allow_free_text render with full parity here too. Keyed by
+  // field key; signalized so the unpatched HTTP callbacks schedule CD under
+  // zoneless. See docs/plans/zoneless-migration.md.
+  readonly labelImporterDynamicOptions = signal<Record<string, FieldOption[]>>({});
+  readonly labelImporterDynamicLoading = signal<Record<string, boolean>>({});
+  readonly labelImporterDynamicError = signal<Record<string, string>>({});
 
   /** Type_id of the active solo-mediaType streamlining, or ``null`` when
    *  off. When non-null, the mediaType form-group is hidden in the
@@ -946,6 +955,9 @@ export class NewDetectorModalComponent implements OnInit {
     this.labelImporterFile = null;
     this.labelImporterFileFieldKey = null;
     this.error.set('');
+    this.labelImporterDynamicOptions.set({});
+    this.labelImporterDynamicLoading.set({});
+    this.labelImporterDynamicError.set({});
     const fields = (importer.fields ?? []) as ImporterField[];
     for (const field of fields) {
       if (field.default) {
@@ -958,13 +970,80 @@ export class NewDetectorModalComponent implements OnInit {
         this.labelImporterValues[field.key] = field.options![0];
       }
     }
+    for (const field of fields) {
+      if (field.dynamic_options) {
+        this.refreshLabelImporterFieldOptions(field);
+      }
+    }
     this.trainedView = 'form';
+  }
+
+  /** Re-fetch dynamic options for any field that depends on the one the user
+   *  just changed, blanking each dependent value first so a stale selection
+   *  can't survive into the new option set. */
+  onLabelImporterFieldChanged(changedKey: string): void {
+    const importer = this.selectedLabelImporter;
+    if (!importer?.fields) return;
+    for (const field of importer.fields as ImporterField[]) {
+      if (!field.dynamic_options) continue;
+      if (!(field.depends_on || []).includes(changedKey)) continue;
+      this.labelImporterValues[field.key] = '';
+      this.refreshLabelImporterFieldOptions(field);
+    }
+  }
+
+  /** Options to render for a label-importer field: the dynamically-fetched
+   *  list for a ``dynamic_options`` field, else the static strings coerced
+   *  into ``{value,label}`` pairs. */
+  labelImporterOptionsFor(field: ImporterField): FieldOption[] {
+    if (field.dynamic_options) {
+      return this.labelImporterDynamicOptions()[field.key] || [];
+    }
+    return (field.options || []).map((o) => ({ value: o, label: o }));
+  }
+
+  private refreshLabelImporterFieldOptions(field: ImporterField): void {
+    const importer = this.selectedLabelImporter;
+    if (!importer) return;
+    const key = field.key;
+    this.labelImporterDynamicLoading.update((m) => ({ ...m, [key]: true }));
+    this.labelImporterDynamicError.update((m) => ({ ...m, [key]: '' }));
+    this.labelImportersApi
+      .getFieldOptions(importer.name, key, { ...this.labelImporterValues })
+      .subscribe({
+        next: (res) => {
+          const options: FieldOption[] = res.options || [];
+          this.labelImporterDynamicOptions.update((m) => ({ ...m, [key]: options }));
+          this.labelImporterDynamicLoading.update((m) => ({ ...m, [key]: false }));
+          const current = this.labelImporterValues[key];
+          const inList = options.some((o) => o.value === String(current));
+          // Strict selects clear a value the new list no longer offers; a
+          // free-text combobox keeps whatever the user typed.
+          if (current && !inList && !field.allow_free_text) {
+            this.labelImporterValues[key] = '';
+          }
+          if (!this.labelImporterValues[key] && field.required && options.length > 0) {
+            this.labelImporterValues[key] = options[0].value;
+          }
+        },
+        error: (err) => {
+          this.labelImporterDynamicLoading.update((m) => ({ ...m, [key]: false }));
+          this.labelImporterDynamicError.update((m) => ({
+            ...m,
+            [key]: apiErrorMessage(err, 'Could not load options'),
+          }));
+          this.labelImporterDynamicOptions.update((m) => ({ ...m, [key]: [] }));
+        },
+      });
   }
 
   backToImporterPicker(): void {
     this.trainedView = 'picker';
     this.selectedLabelImporter = null;
     this.error.set('');
+    this.labelImporterDynamicOptions.set({});
+    this.labelImporterDynamicLoading.set({});
+    this.labelImporterDynamicError.set({});
   }
 
   onLabelImporterFileSelected(event: Event, fieldName: string): void {

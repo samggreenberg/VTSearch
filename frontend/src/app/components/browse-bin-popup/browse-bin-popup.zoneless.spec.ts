@@ -282,18 +282,20 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     // The window opened auditioning the representative (id 8), not the list's
     // first member (id 7), and surfaced it on the shared now-playing indicator —
     // flagged `loading` until the clip is actually sounding.
-    expect(played.at(-1)).toEqual({ mediaId: 8, waveUrl: '/api/medias/8/thumbnail', loading: true });
+    // `progress` is null until a finite duration is known (jsdom has no media
+    // pipeline, so it never is); the sweeping playhead stays hidden meanwhile.
+    expect(played.at(-1)).toEqual({ mediaId: 8, waveUrl: '/api/medias/8/thumbnail', loading: true, progress: null });
 
     // The clip's audio element drives the buffering spinner: `playing` clears
     // the loading flag, a `waiting` stall re-sets it.
     const audioEl = fixture.nativeElement.querySelector('audio') as HTMLAudioElement;
     audioEl.dispatchEvent(new Event('playing'));
     await settlePasses(fixture);
-    expect(played.at(-1)).toEqual({ mediaId: 8, waveUrl: '/api/medias/8/thumbnail', loading: false });
+    expect(played.at(-1)).toEqual({ mediaId: 8, waveUrl: '/api/medias/8/thumbnail', loading: false, progress: null });
 
     audioEl.dispatchEvent(new Event('waiting'));
     await settlePasses(fixture);
-    expect(played.at(-1)).toEqual({ mediaId: 8, waveUrl: '/api/medias/8/thumbnail', loading: true });
+    expect(played.at(-1)).toEqual({ mediaId: 8, waveUrl: '/api/medias/8/thumbnail', loading: true, progress: null });
 
     playStub.mockRestore();
     loadStub.mockRestore();
@@ -316,6 +318,261 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     settings.set({});
     await settlePasses(fixture);
     expect(panel.style.visibility).toBe('visible');
+
+    fixture.destroy();
+  });
+});
+
+/**
+ * Docked presentation: the same component rendered as the Browse view's
+ * persistent left panel instead of a floating window. It must drop every piece
+ * of floating machinery (positioning, clamping, dragging, outside-click /
+ * Escape dismissal, document-level shortcuts) and instead render inline, show
+ * an empty hint before a bin is opened, keep the member-grid area allocated but
+ * empty for a singleton, and — for audio — track whatever clip is auditioning
+ * anywhere in the Browse view.
+ */
+describe('BrowseBinPopupComponent (docked presentation)', () => {
+  let settings: ReturnType<typeof signal<Record<string, unknown> | null>>;
+  let rafSpy: ReturnType<typeof vi.spyOn>;
+
+  function makeDockedFixture(
+    memberIds: number[],
+    mediaType = 'image',
+  ): ComponentFixture<BrowseBinPopupComponent> {
+    const selectionStub: Partial<BrowseSelectionService> = {
+      version: signal(0) as unknown as BrowseSelectionService['version'],
+      has: () => false,
+      selectedCountIn: () => 0,
+      addAll: () => {},
+      removeAll: () => {},
+      remove: () => {},
+    };
+    const metadataStub: Partial<MediaMetadataCacheService> = {
+      version$: of(0),
+      get: () => undefined,
+      ensureLoaded: () => {},
+    };
+    const activeContextStub = makeActiveContextStub();
+    const settingsStub: Partial<SettingsStateService> = {
+      settingsSignal: settings as unknown as SettingsStateService['settingsSignal'],
+      load: () => {},
+      update: () => of({}) as ReturnType<SettingsStateService['update']>,
+    };
+
+    TestBed.resetTestingModule();
+    configureZoneless({
+      imports: [BrowseBinPopupComponent],
+      providers: [
+        { provide: BrowseSelectionService, useValue: selectionStub },
+        { provide: MediaMetadataCacheService, useValue: metadataStub },
+        { provide: ActiveContextService, useValue: activeContextStub },
+        { provide: SettingsStateService, useValue: settingsStub },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(BrowseBinPopupComponent);
+    fixture.componentRef.setInput('docked', true);
+    fixture.componentRef.setInput('availableWidth', 340);
+    fixture.componentRef.setInput('memberIds', memberIds);
+    fixture.componentRef.setInput('repId', memberIds[0] ?? null);
+    fixture.componentRef.setInput('mediaType', mediaType);
+    return fixture;
+  }
+
+  beforeEach(() => {
+    settings = signal<Record<string, unknown> | null>({});
+    if (!Element.prototype.scrollTo) {
+      (Element.prototype as unknown as { scrollTo: () => void }).scrollTo = () => {};
+    }
+    rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      void Promise.resolve().then(() => cb(0));
+      return 0;
+    });
+  });
+
+  afterEach(() => {
+    rafSpy.mockRestore();
+  });
+
+  it('renders inline (no floating positioning) and is immediately visible', async () => {
+    const fixture = makeDockedFixture([1, 2, 3]);
+    await settlePasses(fixture);
+
+    const panel = fixture.nativeElement.querySelector('.bin-popup') as HTMLElement;
+    expect(panel).not.toBeNull();
+    expect(panel.classList.contains('bin-popup--docked')).toBe(true);
+    // Docked never sets the fixed-position left/top/visibility bindings.
+    expect(panel.style.left).toBe('');
+    expect(panel.style.top).toBe('');
+    expect(panel.style.visibility).toBe('');
+
+    fixture.destroy();
+  });
+
+  it('shows an empty hint when no bin has been opened', async () => {
+    const fixture = makeDockedFixture([]);
+    await settlePasses(fixture);
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('.bin-popup-empty-hint')).not.toBeNull();
+    // No grid rows and no count when empty.
+    expect(root.querySelector('.bin-popup-grid-header')).toBeNull();
+
+    fixture.destroy();
+  });
+
+  it('offers a pop-out button (not the dock button) in the header', async () => {
+    const fixture = makeDockedFixture([1, 2]);
+    await settlePasses(fixture);
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[aria-label="Pop out into a floating window"]')).not.toBeNull();
+    expect(root.querySelector('[aria-label="Dock as a side panel"]')).toBeNull();
+
+    fixture.destroy();
+  });
+
+  it('keeps the member grid empty for a docked singleton (area still allocated)', async () => {
+    const fixture = makeDockedFixture([5]);
+    await settlePasses(fixture);
+
+    const cmp = fixture.componentInstance;
+    // The grid column is present (not dropped like the floating previewOnly path)…
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('.bin-popup-grid-col')).not.toBeNull();
+    // …but renders no rows: the lone item lives in the detail pane above.
+    expect(cmp.displayRows.length).toBe(0);
+
+    fixture.destroy();
+  });
+
+  it('tracks the externally auditioning clip for docked audio (now-playing pane)', async () => {
+    const fixture = makeDockedFixture([7, 8, 9], 'audio');
+    await settlePasses(fixture);
+
+    const cmp = fixture.componentInstance;
+    // With nothing auditioning yet the pane follows the representative.
+    expect(cmp.displayedId).toBe(7);
+
+    // A canvas hover starts a clip elsewhere in the Browse view; the docked
+    // pane + metadata must follow it (the now-playing replacement).
+    fixture.componentRef.setInput('nowPlayingExt', {
+      mediaId: 42,
+      waveUrl: '/api/medias/42/thumbnail',
+      loading: true,
+      progress: 0.5,
+    } as NowPlaying);
+    await settlePasses(fixture);
+
+    expect(cmp.displayedId).toBe(42);
+    expect(cmp.paneWaveUrl()).toBe('/api/medias/42/thumbnail');
+    expect(cmp.paneProgress).toBe(0.5);
+    expect(cmp.paneLoading).toBe(true);
+
+    fixture.destroy();
+  });
+
+  it('derives the docked grid column count from the panel width', async () => {
+    const fixture = makeDockedFixture([1, 2, 3, 4, 5, 6]);
+    await settlePasses(fixture);
+
+    const cmp = fixture.componentInstance;
+    const wide = cmp.columns;
+    // Narrowing the panel (divider drag) re-chunks to fewer columns.
+    fixture.componentRef.setInput('availableWidth', 220);
+    await settlePasses(fixture);
+    expect(cmp.columns).toBeLessThanOrEqual(wide);
+
+    fixture.destroy();
+  });
+
+  it('does not dismiss on outside click or Escape when docked', async () => {
+    const fixture = makeDockedFixture([1, 2]);
+    await settlePasses(fixture);
+
+    const dismissed = vi.fn();
+    fixture.componentInstance.dismissed.subscribe(dismissed);
+
+    document.body.click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await settlePasses(fixture);
+
+    expect(dismissed).not.toHaveBeenCalled();
+
+    fixture.destroy();
+  });
+
+  it('drops the detail-size buttons when docked (the panel divider sizes the item)', async () => {
+    const fixture = makeDockedFixture([1, 2]);
+    await settlePasses(fixture);
+
+    const root = fixture.nativeElement as HTMLElement;
+    // No top-left smaller/bigger buttons docked — the item grows to fit the row.
+    expect(root.querySelector('.bin-popup-size-group')).toBeNull();
+
+    fixture.destroy();
+  });
+
+  it('fills the large item with whatever width the metadata column leaves', async () => {
+    const fixture = makeDockedFixture([1, 2, 3]);
+    await settlePasses(fixture);
+
+    const cmp = fixture.componentInstance;
+    const root = fixture.nativeElement as HTMLElement;
+    // A draggable divider sits between the item and the metadata column.
+    expect(root.querySelector('.bin-popup-meta-divider')).not.toBeNull();
+    // content = availableWidth(340) − 2·BODY_PADDING(6) = 328; the item takes the
+    // rest after the metadata column and the 8px divider.
+    expect(cmp.dockedPaneSize).toBe(328 - cmp.dockedMetadataWidth - 8);
+
+    fixture.destroy();
+  });
+
+  it('gives the whole row to the item (no divider) when the metadata column is hidden', async () => {
+    settings.set({ popup_metadata_shown: { image: false } });
+    const fixture = makeDockedFixture([1, 2, 3]);
+    await settlePasses(fixture);
+
+    const cmp = fixture.componentInstance;
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('.bin-popup-meta-divider')).toBeNull();
+    // The full content width (capped at MAX_PREVIEW_PX, which 328 is under).
+    expect(cmp.dockedPaneSize).toBe(328);
+
+    fixture.destroy();
+  });
+
+  it('re-apportions the row as the metadata divider drags, and persists the width', async () => {
+    const fixture = makeDockedFixture([1, 2, 3]);
+    await settlePasses(fixture);
+
+    const svc = TestBed.inject(SettingsStateService);
+    const updates: Record<string, unknown>[] = [];
+    (svc.update as unknown) = (u: Record<string, unknown>) => {
+      updates.push(u);
+      return of({});
+    };
+
+    const cmp = fixture.componentInstance as unknown as {
+      dockedMetadataWidth: number;
+      dockedPaneSize: number;
+      onMetaDividerPointerDown(e: PointerEvent): void;
+    };
+    const startMeta = cmp.dockedMetadataWidth;
+    const startPane = cmp.dockedPaneSize;
+
+    cmp.onMetaDividerPointerDown({ button: 0, clientX: 500, preventDefault() {} } as unknown as PointerEvent);
+    // The metadata column is on the right, so dragging the divider left grows it.
+    document.dispatchEvent(new MouseEvent('pointermove', { clientX: 460 }));
+    await settlePasses(fixture);
+
+    expect(cmp.dockedMetadataWidth).toBe(startMeta + 40);
+    // The item gives up exactly what the metadata gained.
+    expect(cmp.dockedPaneSize).toBe(startPane - 40);
+
+    document.dispatchEvent(new MouseEvent('pointerup'));
+    expect(updates.some((u) => 'browse_details_metadata_width' in u)).toBe(true);
 
     fixture.destroy();
   });

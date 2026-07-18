@@ -158,7 +158,7 @@ The knobs the sweep varies, their current values, and their source of truth.
 | Target on-screen hex radius (level picker) | `28` px (`DEFAULT_TARGET_RADIUS`), scaled by thumbnail-size buttons (XS–XL → ×0.5–×2.5) | `levelForEffZoom` / `setThumbnailRadius` |
 | Density scale | log (`log(count)/log(maxCount)`) | `drawHex` |
 | Colormap | darkred→yellow, 8-stop LUT (black left free for empty) | `HEATMAP`, `hex-render.util.ts` |
-| Singleton cell shape | inscribed disc, hex otherwise | `traceCellPath`, `hex-render.util.ts` |
+| Pile cell shape | inscribed disc (rounded); singleton keeps the sharp hex | `traceCellPath`, `hex-render.util.ts` |
 | Minimap overview level | hexes ≈ `5` px | `overviewLevel`, `browse-minimap.component.ts` |
 | Hover debounce | `30` ms | `onCanvasMouseMove` |
 | Hex hit radius | `1 × radius` | `hitTest` |

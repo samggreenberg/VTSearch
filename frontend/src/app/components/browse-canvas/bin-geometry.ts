@@ -32,28 +32,28 @@ export interface BinGeometry {
   dy(radius: number): number;
   /**
    * Trace one cell's outline as the current path at screen coords `(cx, cy)`
-   * with the given screen `radius`. A `single`-item cell is drawn with a
-   * distinct shape so singletons stand out — a disc in hex mode, a
-   * rounded-corner rectangle in square mode — while every other (pile) cell
-   * keeps its full hexagon / square so it tiles the space.
+   * with the given screen `radius`. A multi-item ("pile") cell (`rounded`) is
+   * drawn with a soft rounded shape so piles stand out — a disc in hex mode, a
+   * rounded-corner rectangle in square mode — while a single-item cell keeps
+   * its full sharp hexagon / square, so a lone item reads as a crisp tile.
    */
   traceCell(
     ctx: CanvasRenderingContext2D,
     cx: number,
     cy: number,
     radius: number,
-    single: boolean,
+    rounded: boolean,
   ): void;
   /**
-   * The absolute corner radius (screen px) a singleton cell's outline curves
+   * The absolute corner radius (screen px) a pile cell's rounded outline curves
    * with at the given bin `radius` — the inscribed disc's radius in hex mode,
    * the rounded square's corner radius in square mode. The hovered break-out
    * thumbnail reuses this fixed ("total", not proportional) value so an
-   * enlarged singleton keeps the *same* corner curvature it had in the grid:
-   * it still reads as a singleton when blown up, while only nibbling the image
-   * corners instead of cropping more as the tile grows.
+   * enlarged pile keeps the *same* corner curvature it had in the grid: it
+   * still reads as a pile when blown up, while only nibbling the image corners
+   * instead of cropping more as the tile grows.
    */
-  singleCornerRadius(radius: number): number;
+  roundedCornerRadius(radius: number): number;
   /**
    * Whether a projection-space offset `(ox, oy)` from a cell center falls
    * inside a cell of the given `radius` — the hover hit-test predicate.
@@ -97,16 +97,16 @@ const HEX_GEOMETRY: BinGeometry = {
   shape: 'hex',
   dx: (radius) => radius * SQRT3,
   dy: (radius) => radius * 1.5,
-  traceCell: (ctx, cx, cy, radius, single) => traceHexCellPath(ctx, cx, cy, radius, single),
-  singleCornerRadius: (radius) => radius * HEX_INRADIUS_RATIO,
+  traceCell: (ctx, cx, cy, radius, rounded) => traceHexCellPath(ctx, cx, cy, radius, rounded),
+  roundedCornerRadius: (radius) => radius * HEX_INRADIUS_RATIO,
   contains: (ox, oy, radius) => ox * ox + oy * oy < radius * radius,
   neighborOffsets: () => HEX_NEIGHBORS,
 };
 
-// Corner radius of a square-mode singleton, as a fraction of its half-side. A
-// singleton is drawn as a rounded-corner rectangle (vs the pile's sharp square)
-// so the two read as distinct shapes even before the colormap border lands.
-const SQUARE_SINGLE_CORNER_RATIO = 0.35;
+// Corner radius of a square-mode pile, as a fraction of its half-side. A pile
+// is drawn as a rounded-corner rectangle (vs the singleton's sharp square) so
+// the two read as distinct shapes even before the colormap border lands.
+const SQUARE_ROUNDED_CORNER_RATIO = 0.35;
 
 // Square cell of side `radius·√3` (matching the hex column spacing so the two
 // lattices have a comparable on-screen footprint and share the level picker).
@@ -118,18 +118,18 @@ const SQUARE_GEOMETRY: BinGeometry = {
   shape: 'square',
   dx: (radius) => radius * SQRT3,
   dy: (radius) => radius * SQRT3,
-  traceCell: (ctx, cx, cy, radius, single) => {
+  traceCell: (ctx, cx, cy, radius, rounded) => {
     const half = (radius * SQRT3) / 2;
     ctx.beginPath();
-    if (single) {
+    if (rounded) {
       // Rounded-corner rectangle: the rect-mode counterpart of the hex's disc.
-      ctx.roundRect(cx - half, cy - half, half * 2, half * 2, half * SQUARE_SINGLE_CORNER_RATIO);
+      ctx.roundRect(cx - half, cy - half, half * 2, half * 2, half * SQUARE_ROUNDED_CORNER_RATIO);
     } else {
       ctx.rect(cx - half, cy - half, half * 2, half * 2);
     }
     ctx.closePath();
   },
-  singleCornerRadius: (radius) => ((radius * SQRT3) / 2) * SQUARE_SINGLE_CORNER_RATIO,
+  roundedCornerRadius: (radius) => ((radius * SQRT3) / 2) * SQUARE_ROUNDED_CORNER_RATIO,
   contains: (ox, oy, radius) => {
     const half = (radius * SQRT3) / 2;
     return Math.abs(ox) < half && Math.abs(oy) < half;
@@ -200,4 +200,36 @@ export function hoverThumbHalfExtents(
     hh = Math.min(hh, Math.max((Math.abs(dx) * radius) / aspect, Math.abs(dy) * radius));
   }
   return { hw: aspect * hh, hh };
+}
+
+/** How a grid thumbnail is fitted into a bin's `2*radius` square. */
+export type TileFit = 'cover' | 'balanced';
+
+/**
+ * Draw dimensions (screen px) for a thumbnail of intrinsic size `iw × ih`
+ * painted over a bin's `2*radius` square, centred and clipped to the cell. The
+ * caller draws the image at `(cx - dw/2, cy - dh/2)` with size `dw × dh`.
+ *
+ * - `'cover'` scales to fill the square (`max` of the two axis ratios), so the
+ *   longer axis overflows and is clipped — the historical crop-to-fill fit still
+ *   used for video/audio tiles.
+ * - `'balanced'` scales by the geometric mean of the cover and contain ratios
+ *   (`size / √(iw·ih)`), so the fraction cropped off the long axis exactly
+ *   equals the fraction of background gap left on the short axis — the "half
+ *   crop, half pad" fit used for image tiles. (The returned box is the geometric
+ *   mean of the cover box, `≥ size` on both axes, and the contain box, `≤ size`
+ *   on both axes.) A square image is unaffected: both fits return `size × size`.
+ *
+ * Pulled out of the canvas component so the crop/pad split is unit-testable
+ * without a `CanvasRenderingContext2D`.
+ */
+export function imageTileFitDimensions(
+  iw: number,
+  ih: number,
+  radius: number,
+  fit: TileFit,
+): { dw: number; dh: number } {
+  const size = radius * 2;
+  const scale = fit === 'balanced' ? size / Math.sqrt(iw * ih) : Math.max(size / iw, size / ih);
+  return { dw: iw * scale, dh: ih * scale };
 }

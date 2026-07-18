@@ -98,12 +98,29 @@
 // the inner fill masks the accent colour to the wave shape, so it recolours
 // with the live theme instead of showing baked-in pixels.
 .browse-now-playing-wave {
+  position: relative;
   width: 120px;
   height: 36px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--bg-surface);
   overflow: hidden;
+}
+
+// Thin vertical line swept left->right as the clip plays, positioned by a
+// `left: %` binding off the playback progress fraction. Shares the warm
+// `--waveform-playhead` accent with the center-panel player so it reads as the
+// complement of the (accent-tinted) wave and never blends in. `overflow: hidden`
+// on the wave box clips it to the rounded corners; never intercepts pointer.
+.browse-now-playing-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--waveform-playhead);
+  pointer-events: none;
+  will-change: left;
 }
 
 // Tinted wave; the shared ``.waveform-mask`` supplies the accent fill and mask
@@ -156,6 +173,29 @@
   // Positioning context for the pre-reveal cover, which sits over the whole
   // (already laid-out) grid while the canvas paints its opening view.
   position: relative;
+}
+
+// Docked bin-details variant: an extra left panel + divider ahead of the
+// canvas. The panel width is driven by ``--browse-details-width`` (the left
+// divider drag, persisted as ``browse_details_panel_width``).
+.browse-content--details {
+  grid-template-columns:
+    var(--browse-details-width, 340px) 8px minmax(0, 1fr) 8px
+    var(--browse-panel-width, 300px);
+}
+
+// The docked bin-details panel (left of the canvas): hosts the bin-popup
+// component in its docked presentation, filling the column.
+.browse-details {
+  min-width: 0;
+  overflow: hidden;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+
+  vt-browse-bin-popup {
+    display: block;
+    height: 100%;
+  }
 }
 
 // Opaque cover over the canvas + panels until the opening view is ready. The

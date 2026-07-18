@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, HostListener, OnDestroy, effect, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, OnDestroy, effect, input, output, untracked } from '@angular/core';
 import { CdkTrapFocus } from '@angular/cdk/a11y';
 
 /**
@@ -32,12 +32,15 @@ export class ModalComponent implements OnDestroy {
     // `[open]="true"` pattern) register at creation time, which matches
     // their visual stacking order.
     effect(() => {
-      const idx = openModalStack.indexOf(this);
-      if (this.open()) {
-        if (idx === -1) openModalStack.push(this);
-      } else if (idx !== -1) {
-        openModalStack.splice(idx, 1);
-      }
+      const isOpen = this.open();
+      untracked(() => {
+        const idx = openModalStack.indexOf(this);
+        if (isOpen) {
+          if (idx === -1) openModalStack.push(this);
+        } else if (idx !== -1) {
+          openModalStack.splice(idx, 1);
+        }
+      });
     });
   }
 

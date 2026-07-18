@@ -191,6 +191,12 @@
           "autopilot_top_greens": {
             "type": "integer"
           },
+          "bin_details_docked": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object"
+          },
           "browse_colormap": {
             "additionalProperties": {
               "type": "string"
@@ -202,6 +208,12 @@
               "type": "boolean"
             },
             "type": "object"
+          },
+          "browse_details_metadata_width": {
+            "type": "integer"
+          },
+          "browse_details_panel_width": {
+            "type": "integer"
           },
           "browse_icon_size": {
             "additionalProperties": {
@@ -221,6 +233,15 @@
           "browse_signpost_captioner": {
             "additionalProperties": {
               "type": "boolean"
+            },
+            "type": "object"
+          },
+          "browse_signpost_vocab": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
             },
             "type": "object"
           },
@@ -4717,14 +4738,22 @@
           "autopilot_top_greens": {
             "type": "integer"
           },
+          "bin_details_docked": {},
           "browse_colormap": {},
           "browse_compact": {},
+          "browse_details_metadata_width": {
+            "type": "integer"
+          },
+          "browse_details_panel_width": {
+            "type": "integer"
+          },
           "browse_icon_size": {},
           "browse_mouse_zooms_per_level": {},
           "browse_panel_width": {
             "type": "integer"
           },
           "browse_signpost_captioner": {},
+          "browse_signpost_vocab": {},
           "browse_signposts": {},
           "browse_thumbnail_border": {},
           "calibrate_count": {

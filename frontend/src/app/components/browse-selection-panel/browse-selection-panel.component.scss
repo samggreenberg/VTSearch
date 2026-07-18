@@ -168,20 +168,28 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: var(--space-xs);
-  gap: var(--space-2xs);
+  // Tight cell padding (2px) matching the bin-details grid, so the thumbnails
+  // pack close together rather than floating in the roomier padding this list
+  // used when it still carried a name row.
+  padding: var(--space-2xs);
   border-radius: var(--radius-sm);
-  font-size: var(--font-sm);
   cursor: pointer;
   color: var(--text-vote);
-  line-height: 1.3;
-  // Query container so the name can hide itself at small icon sizes (below).
-  container-type: inline-size;
-  container-name: bsp-cell;
+  // Animate the hover-enlarge (below) so thumbnails grow/settle smoothly rather
+  // than popping as the cursor sweeps the grid.
+  transition: transform var(--transition-base);
 
+  // Hover cue is a SIZE/depth change (enlarge + lift), mirroring the bin-details
+  // grid's viewed-item treatment, rather than a flat background/outline: done
+  // with ``transform`` (painted, not laid out) so the scale never reflows the
+  // grid, and ``z-index`` lifts the growing thumb above its neighbours.
   &:hover {
+    position: relative;
+    z-index: 1;
     color: var(--text-primary);
     background: var(--bg-hover);
+    transform: scale(1.08);
+    filter: drop-shadow(0 3px 6px var(--shadow-dropdown));
   }
 
   &:focus-visible {
@@ -243,50 +251,3 @@
   flex-shrink: 0;
 }
 
-// Row holding the (truncated) name and its copy-to-clipboard affordance. The
-// row itself stays full-width so the name centers; the copy button sits flush
-// beside it and only appears on hover/focus so a dense grid isn't peppered with
-// icons.
-.bsp-name-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2xs);
-  width: 100%;
-  min-width: 0;
-  flex-shrink: 0;
-}
-
-.bsp-name-grid {
-  font-size: var(--font-2xs);
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-  text-align: center;
-  line-height: 1.2;
-}
-
-// The on-screen name is frequently truncated (and hidden entirely at small
-// sizes), so a copy button gives the full name a reliable retrieval path. Keep
-// it out of the way until the entry is hovered or focused.
-.bsp-copy {
-  opacity: 0;
-  transition: opacity var(--transition-base);
-}
-
-.bsp-entry:hover .bsp-copy,
-.bsp-entry:focus-within .bsp-copy {
-  opacity: 1;
-}
-
-// At the two smallest icon sizes (XS/S, ~42px content-box) the name truncates to
-// a useless "a…", so hide it and let the grid pack tighter. The copy button
-// stays (revealed on hover) as the only way to read the full name here. M and
-// up keep the name.
-@container bsp-cell (max-width: 60px) {
-  .bsp-name-grid {
-    display: none;
-  }
-}

@@ -39,9 +39,10 @@ a missing model or an undecodable item quietly degrades to tags.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib import resources
 from typing import Any, Callable, Protocol
 
@@ -92,12 +93,36 @@ class ZeroShotTagProvider:
     deciding which tags *distinguish* a cluster is Toponymy's
     ``information_weighted`` keyphrase stage, not ours; this provider only has
     to be honest per item.
+
+    ``vocab_terms`` overrides the built-in ``vocab_asset`` file with a
+    user-supplied vocabulary (see :meth:`with_terms`): empty (the default) loads
+    the shipped asset, non-empty tags against the given terms instead.  The
+    override's identity is folded into :attr:`name` so the cache and the
+    persisted text signature invalidate when the term set changes.
     """
 
     name: str
     vocab_asset: str
     template: str
     top_k: int = 5
+    #: User-supplied vocabulary; empty ⇒ load ``vocab_asset`` from the package.
+    vocab_terms: tuple[str, ...] = ()
+
+    def with_terms(self, terms: tuple[str, ...] | list[str]) -> ZeroShotTagProvider:
+        """Return a copy tagging against *terms* instead of the shipped asset.
+
+        The returned provider's :attr:`name` embeds a short digest of the term
+        set, so its :meth:`signature` — and therefore the per-media
+        ``signpost_text`` cache key and the labeler signature — differs from
+        both the built-in vocabulary and any other custom list.  Swapping the
+        list re-tags on the next build rather than serving stale texts.
+        """
+        norm = tuple(terms)
+        digest = hashlib.blake2b("\n".join(norm).encode("utf-8"), digest_size=8).hexdigest()
+        return replace(self, name=f"{self.name}:custom:{digest}", vocab_terms=norm)
+
+    def _load_terms(self) -> list[str]:
+        return list(self.vocab_terms) if self.vocab_terms else _load_vocab(self.vocab_asset)
 
     def signature(self, embedder: Any) -> str:
         return f"{self.name}:{getattr(embedder, 'name', '')}"
@@ -110,7 +135,7 @@ class ZeroShotTagProvider:
         embedder: Any,
         on_progress: ProgressFn | None = None,
     ) -> dict[int, str]:
-        vocab, vocab_vecs = _vocab_vectors(self.vocab_asset, self.template, embedder, on_progress)
+        vocab, vocab_vecs = _vocab_vectors(self.name, self._load_terms, self.template, embedder, on_progress)
         if vocab_vecs.size == 0 or matrix.size == 0:
             return {}
         sims = matrix.astype(np.float32) @ vocab_vecs.T  # (n, v)
@@ -248,6 +273,23 @@ def _captioner_enabled(media_type: str) -> bool:
         return False
 
 
+def _custom_vocab(media_type: str) -> tuple[str, ...]:
+    """User-supplied tag vocabulary for *media_type*, or ``()`` for the default.
+
+    Reads the ``signpost_vocab`` map off the library-tier
+    :class:`~vtscore.config.CoreConfig` (the app populates it from the
+    ``browse_signpost_vocab`` setting).  Any failure — no builder installed,
+    missing field — reads as "no override", so the shipped vocabulary holds.
+    """
+    try:
+        from vtscore.config import CoreConfig  # noqa: PLC0415
+
+        terms = CoreConfig.from_settings().signpost_vocab.get(media_type)
+        return tuple(terms) if terms else ()
+    except Exception:
+        return ()
+
+
 def provider_for(media_type: str) -> SignpostTextProvider | None:
     """The active provider for *media_type*, or ``None`` (no signposts).
 
@@ -255,8 +297,15 @@ def provider_for(media_type: str) -> SignpostTextProvider | None:
     generative captioner for this media type, in which case the captioner is
     returned wrapped in a :class:`FallbackTextProvider` over the base — so a
     model-load or per-item decode failure quietly degrades to tags.
+
+    A user-supplied tag vocabulary (``browse_signpost_vocab``) replaces the
+    built-in one on the tag provider, whether it serves directly (Tags mode) or
+    as the captioner's fallback.
     """
     base = _PROVIDERS.get(media_type)
+    terms = _custom_vocab(media_type)
+    if terms and isinstance(base, ZeroShotTagProvider):
+        base = base.with_terms(terms)
     if _captioner_enabled(media_type):
         captioner = _CAPTIONERS.get(media_type)
         if captioner is not None:
@@ -278,24 +327,27 @@ def _load_vocab(asset: str) -> list[str]:
 
 
 def _vocab_vectors(
-    asset: str,
+    cache_key: str,
+    load_terms: Callable[[], list[str]],
     template: str,
     embedder: Any,
     on_progress: ProgressFn | None = None,
 ) -> tuple[list[str], np.ndarray]:
     """Embed a vocabulary through *embedder*'s text branch, cached per process.
 
-    The cache key includes the embedder name so multi-embedder processes keep
-    one entry per space.  Terms whose embedding fails are dropped from both the
-    returned term list and the matrix, keeping the two aligned.
+    *cache_key* identifies the term set (an asset filename or a custom-vocab
+    provider name); *load_terms* is called only on a cache miss to fetch the
+    terms.  The cache key also includes the embedder name so multi-embedder
+    processes keep one entry per space.  Terms whose embedding fails are dropped
+    from both the returned term list and the matrix, keeping the two aligned.
     """
-    key = (asset, template, getattr(embedder, "name", ""))
+    key = (cache_key, template, getattr(embedder, "name", ""))
     with _vocab_lock:
         cached = _vocab_cache.get(key)
     if cached is not None:
         return cached
 
-    terms = _load_vocab(asset)
+    terms = load_terms()
     kept: list[str] = []
     vecs: list[np.ndarray] = []
     for i, term in enumerate(terms):

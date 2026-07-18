@@ -209,7 +209,9 @@ def demo_dataset_list(query: dict):
                 "media_type": media_type,
                 "num_categories": len(dataset_info["categories"]),
                 "available_converters": [
-                    c.to_dict() for c in filter_visible_plugins("converters", list_converters_for_source(media_type))
+                    c.to_dict()
+                    for c in filter_visible_plugins("converters", list_converters_for_source(media_type))
+                    if not c.hidden_from_picker
                 ],
                 "pkl_embedder": pkl_embedder or "",
                 "pkl_clipper": pkl_clipper or "",

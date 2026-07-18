@@ -1,30 +1,30 @@
 <div
   #panel
   class="bin-popup"
-  [style.left.px]="left"
-  [style.top.px]="top"
-  [style.maxWidth.px]="maxWidthPx"
-  [style.visibility]="placed ? 'visible' : 'hidden'"
-  role="dialog"
+  [class.bin-popup--docked]="docked()"
+  [style.left.px]="docked() ? null : left"
+  [style.top.px]="docked() ? null : top"
+  [style.maxWidth.px]="docked() ? null : maxWidthPx"
+  [style.visibility]="docked() ? null : placed ? 'visible' : 'hidden'"
+  [attr.role]="docked() ? 'complementary' : 'dialog'"
   aria-label="Bin items">
   <div
     #header
     class="bin-popup-header"
     [class.dragging]="dragging"
     (pointerdown)="onHeaderPointerDown($event)">
-    @if (canToggleMetadata) {
+    @if (!docked()) {
+      <!-- Floating: "Dock as side panel" is the leftmost control in the header. -->
       <button
         type="button"
         class="bin-popup-meta-toggle"
-        [class.active]="showMetadataColumn"
-        (click)="toggleMetadata()"
-        [attr.aria-pressed]="showMetadataColumn"
-        [title]="showMetadataColumn ? 'Hide metadata' : 'Show metadata'"
-        [attr.aria-label]="showMetadataColumn ? 'Hide metadata' : 'Show metadata'">
-        <vt-icon type="info" [size]="15" />
+        (click)="dockRequested.emit()"
+        title="Dock as a side panel"
+        aria-label="Dock as a side panel">
+        <vt-icon type="dock-left" [size]="14" />
       </button>
     }
-    @if (showPreview) {
+    @if (hasPane && !docked()) {
       <div class="bin-popup-size-group" role="group" aria-label="Detail image size">
         <button
           type="button"
@@ -46,167 +46,232 @@
         </button>
       </div>
     }
-    <vt-view-controls
-      side="popup"
-      [currentMediaType]="mediaType()"
-      [showFocus]="false"
-      class="bin-popup-view-controls" />
-    <button
-      type="button"
-      class="bin-popup-close"
-      (click)="close()"
-      title="Close"
-      aria-label="Close">
-      &times;
-    </button>
+    <!-- Right-aligned chrome cluster: metadata toggle sits next to the dock /
+         pop-out control (close on the far right). Docked, this puts the metadata
+         toggle immediately left of the pop-out button. -->
+    <div class="bin-popup-header-end">
+      @if (canToggleMetadata) {
+        <button
+          type="button"
+          class="bin-popup-meta-toggle"
+          [class.active]="showMetadataColumn"
+          (click)="toggleMetadata()"
+          [attr.aria-pressed]="showMetadataColumn"
+          [title]="showMetadataColumn ? 'Hide metadata' : 'Show metadata'"
+          [attr.aria-label]="showMetadataColumn ? 'Hide metadata' : 'Show metadata'">
+          <vt-icon type="info" [size]="15" />
+        </button>
+      }
+      @if (docked()) {
+        <button
+          type="button"
+          class="bin-popup-meta-toggle"
+          (click)="popOutRequested.emit()"
+          title="Pop out into a floating window"
+          aria-label="Pop out into a floating window">
+          <vt-icon type="pop-out" [size]="14" />
+        </button>
+      }
+      <button
+        type="button"
+        class="bin-popup-close"
+        (click)="close()"
+        [title]="docked() ? 'Clear' : 'Close'"
+        [attr.aria-label]="docked() ? 'Clear' : 'Close'">
+        &times;
+      </button>
+    </div>
   </div>
 
-  <div class="bin-popup-body" [style.height.px]="bodyOuterHeight">
-    @if (showMetadataColumn) {
-      <div class="bin-popup-meta-col" [style.width.px]="metadataColWidth">
-        <div class="bin-popup-meta-grid">
-          <div class="bin-popup-meta-item">
-            <span class="bin-popup-meta-label">Name</span>
-            <div class="bin-popup-meta-value-row">
-              <vt-copy-detail-button [value]="metadataName" label="Name" />
-              <span class="bin-popup-meta-value">{{ metadataName }}</span>
-            </div>
-          </div>
-          <div class="bin-popup-meta-item">
-            <span class="bin-popup-meta-label">Media Type</span>
-            <div class="bin-popup-meta-value-row">
-              <vt-copy-detail-button [value]="metadataMediaType | titlecase" label="Media Type" />
-              <span class="bin-popup-meta-value">{{ metadataMediaType | titlecase }}</span>
-            </div>
-          </div>
-          @for (entry of metadataCustom | keyvalue; track entry.key) {
+  <div class="bin-popup-body" [style.height.px]="docked() ? null : bodyOuterHeight">
+    <div class="bin-popup-top">
+      @if (showMetadataColumn) {
+        <div
+          class="bin-popup-meta-col"
+          [style.width.px]="docked() ? dockedMetadataWidth : metadataColWidth"
+          [style.maxHeight.px]="docked() ? dockedPaneSize : null">
+          <div class="bin-popup-meta-grid">
             <div class="bin-popup-meta-item">
-              <span class="bin-popup-meta-label">{{ entry.key }}</span>
+              <span class="bin-popup-meta-label">Name</span>
               <div class="bin-popup-meta-value-row">
-                <vt-copy-detail-button [value]="formatMetadataValue(entry.key, entry.value)" [label]="entry.key" />
-                <span class="bin-popup-meta-value">{{ formatMetadataValue(entry.key, entry.value) }}</span>
+                <vt-copy-detail-button [value]="metadataName" label="Name" />
+                <span class="bin-popup-meta-value">{{ metadataName }}</span>
               </div>
             </div>
-          }
-          @if (metadataMd5) {
             <div class="bin-popup-meta-item">
-              <span class="bin-popup-meta-label">MD5</span>
+              <span class="bin-popup-meta-label">Media Type</span>
               <div class="bin-popup-meta-value-row">
-                <vt-copy-detail-button [value]="metadataMd5" label="MD5" />
-                <span class="bin-popup-meta-value bin-popup-meta-md5">{{ metadataMd5 }}</span>
+                <vt-copy-detail-button [value]="metadataMediaType | titlecase" label="Media Type" />
+                <span class="bin-popup-meta-value">{{ metadataMediaType | titlecase }}</span>
               </div>
             </div>
-          }
+            @for (entry of metadataCustom | keyvalue; track entry.key) {
+              <div class="bin-popup-meta-item">
+                <span class="bin-popup-meta-label">{{ entry.key }}</span>
+                <div class="bin-popup-meta-value-row">
+                  <vt-copy-detail-button [value]="formatMetadataValue(entry.key, entry.value)" [label]="entry.key" />
+                  <span class="bin-popup-meta-value">{{ formatMetadataValue(entry.key, entry.value) }}</span>
+                </div>
+              </div>
+            }
+            @if (metadataMd5) {
+              <div class="bin-popup-meta-item">
+                <span class="bin-popup-meta-label">MD5</span>
+                <div class="bin-popup-meta-value-row">
+                  <vt-copy-detail-button [value]="metadataMd5" label="MD5" />
+                  <span class="bin-popup-meta-value bin-popup-meta-md5">{{ metadataMd5 }}</span>
+                </div>
+              </div>
+            }
+          </div>
         </div>
-      </div>
-    }
-    @if (showPreview) {
-      <div
-        class="bin-popup-preview"
-        [class.selected]="isPreviewSelected()"
-        [style.width.px]="previewPaneSize"
-        role="button"
-        tabindex="0"
-        [attr.aria-pressed]="isPreviewSelected()"
-        [attr.aria-label]="(previewId != null ? name(previewId) : 'item') + (isPreviewSelected() ? ' (selected; click to deselect)' : ' (click to select)')"
-        (click)="onPreviewClick()"
-        (keydown)="onPreviewKeydown($event)">
-        @if (previewUrl()) {
-          @if (isAudioWaveform) {
-            <!-- Audio waveform: tint the theme-agnostic alpha mask (issue #2369)
-                 instead of showing baked-in pixels. -->
-            <div
-              class="bin-popup-preview-wave waveform-mask"
-              role="img"
-              [attr.aria-label]="previewId != null ? name(previewId) : ''"
-              [style.-webkit-mask-image]="'url(' + previewUrl() + ')'"
-              [style.mask-image]="'url(' + previewUrl() + ')'"></div>
-          } @else {
+      }
+      @if (hasPane) {
+        <div
+          class="bin-popup-preview"
+          [class.selected]="isPreviewSelected()"
+          [style.width.px]="docked() ? dockedPaneSize : previewPaneSize"
+          [style.height.px]="docked() ? dockedPaneSize : null"
+          role="button"
+          tabindex="0"
+          [attr.aria-pressed]="isPreviewSelected()"
+          [attr.aria-label]="(displayedId != null ? name(displayedId) : 'item') + (isPreviewSelected() ? ' (selected; click to deselect)' : ' (click to select)')"
+          (click)="onPreviewClick()"
+          (keydown)="onPreviewKeydown($event)">
+          @if (paneShowsPlaceholder) {
+            <span class="bin-popup-preview-glyph">{{ panePlaceholderGlyph }}</span>
+          } @else if (isAudioWaveform) {
+            @if (paneWaveUrl()) {
+              <!-- Audio waveform: tint the theme-agnostic alpha mask (issue #2369)
+                   instead of showing baked-in pixels. Docked, the pane doubles as
+                   the now-playing display: it paints the auditioning clip's wave
+                   with a sweeping playhead and a buffering spinner. -->
+              <div
+                class="bin-popup-preview-wave waveform-mask"
+                role="img"
+                [attr.aria-label]="displayedId != null ? name(displayedId) : ''"
+                [style.-webkit-mask-image]="'url(' + paneWaveUrl() + ')'"
+                [style.mask-image]="'url(' + paneWaveUrl() + ')'"></div>
+              @if (paneProgress !== null) {
+                <div class="bin-popup-preview-playhead" [style.left.%]="paneProgress * 100"></div>
+              }
+              @if (paneLoading) {
+                <div class="bin-popup-preview-loading" role="status" aria-label="Loading audio">
+                  <span class="bin-popup-preview-spinner" aria-hidden="true"></span>
+                </div>
+              }
+            }
+          } @else if (previewUrl()) {
             <img
               class="bin-popup-preview-img"
               [src]="previewUrl()"
-              [alt]="previewId != null ? name(previewId) : ''"
+              [alt]="displayedId != null ? name(displayedId) : ''"
               (error)="onPreviewError()" />
           }
-        }
-      </div>
-    }
-
-    @if (!previewOnly) {
-      <div class="bin-popup-grid-col">
-        <div class="bin-popup-grid-header">
-          @if (ids.length > 1) {
-            <button
-              type="button"
-              class="bin-popup-select-all"
-              role="checkbox"
-              (click)="toggleAll()"
-              [title]="selectionState === 'all' ? 'Deselect all' : 'Select all'"
-              [attr.aria-label]="selectionState === 'all' ? 'Deselect all' : 'Select all'"
-              [attr.aria-checked]="selectionState === 'all' ? 'true' : selectionState === 'some' ? 'mixed' : 'false'">
-              @switch (selectionState) {
-                @case ('all') { <vt-icon type="checkbox-checked" [size]="15"></vt-icon> }
-                @case ('some') { <vt-icon type="checkbox-some" [size]="15"></vt-icon> }
-                @default { <vt-icon type="checkbox-blank" [size]="15"></vt-icon> }
-              }
-            </button>
-          }
-          <span
-            class="bin-popup-count"
-            [title]="'Items in this bin (' + ids.length + ')'">
-            {{ ids.length | number }} item{{ ids.length === 1 ? '' : 's' }}
-          </span>
         </div>
-        <cdk-virtual-scroll-viewport
-          [itemSize]="rowSize"
-          class="bin-popup-scroll"
-          (mouseleave)="onGridLeave()">
+      }
+      @if (docked() && showMetadataColumn) {
+        <!-- Draggable divider between the large item (left) and the metadata
+             column (right). Dragging it re-apportions the top row: the metadata
+             column takes its dragged width and the item fills the rest. -->
         <div
-          *cdkVirtualFor="let row of rows; trackBy: trackByRow"
-          class="bin-popup-row"
-          [style.height.px]="rowSize"
-          [style.--popup-cols]="columns"
-          [style.--popup-cell]="gridGoalWidth + 'px'">
-          @for (id of row; track trackById($index, id)) {
-            <div
-              class="bin-popup-entry"
-              [attr.data-entry-id]="id"
-              [class.selected]="isSelected(id)"
-              [class.focused]="isFocused(id)"
-              role="button"
-              tabindex="0"
-              [attr.aria-pressed]="isSelected(id)"
-              [attr.aria-label]="name(id) + (isSelected(id) ? ' (selected; click to deselect)' : ' (click to select)')"
-              [title]="name(id)"
-              (click)="onEntryClick(id)"
-              (keydown)="onEntryKeydown($event, id)"
-              (focus)="onEntryFocus(id)"
-              (mouseenter)="onEntryEnter(id)">
-              @if (hasThumbnailUrl(id)) {
-                <span class="bin-popup-thumb-wrap">
-                  @if (isAudioWaveform) {
-                    <!-- Audio waveform alpha mask tinted to the accent (issue #2369). -->
-                    <span
-                      class="bin-popup-thumb-wave waveform-mask"
-                      [style.-webkit-mask-image]="'url(' + thumbnailUrl(id) + ')'"
-                      [style.mask-image]="'url(' + thumbnailUrl(id) + ')'"></span>
-                  } @else {
-                    <img
-                      class="bin-popup-thumb"
-                      [src]="thumbnailUrl(id)"
-                      [alt]="name(id)"
-                      loading="lazy"
-                      (error)="onThumbnailError(thumbnailUrl(id))" />
-                  }
-                </span>
-              } @else {
-                <span class="bin-popup-placeholder">{{ placeholderIcon(id) }}</span>
-              }
-              <span class="bin-popup-name">{{ name(id) }}</span>
-            </div>
-          }
-        </div>
-        </cdk-virtual-scroll-viewport>
+          class="pane-divider bin-popup-meta-divider"
+          [class.dragging]="draggingMeta"
+          [style.height.px]="dockedPaneSize"
+          (pointerdown)="onMetaDividerPointerDown($event)"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize metadata column"
+          title="Drag to resize the metadata column"></div>
+      }
+    </div>
+
+    @if (docked() || !previewOnly) {
+      <div class="bin-popup-grid-col">
+        @if (ids.length > 0) {
+          <div class="bin-popup-grid-header">
+            @if (ids.length > 1) {
+              <button
+                type="button"
+                class="bin-popup-select-all"
+                role="checkbox"
+                (click)="toggleAll()"
+                [title]="selectionState === 'all' ? 'Deselect all' : 'Select all'"
+                [attr.aria-label]="selectionState === 'all' ? 'Deselect all' : 'Select all'"
+                [attr.aria-checked]="selectionState === 'all' ? 'true' : selectionState === 'some' ? 'mixed' : 'false'">
+                @switch (selectionState) {
+                  @case ('all') { <vt-icon type="checkbox-checked" [size]="15"></vt-icon> }
+                  @case ('some') { <vt-icon type="checkbox-some" [size]="15"></vt-icon> }
+                  @default { <vt-icon type="checkbox-blank" [size]="15"></vt-icon> }
+                }
+              </button>
+            }
+            <span
+              class="bin-popup-count"
+              [title]="'Items in this bin (' + ids.length + ')'">
+              {{ ids.length | number }} item{{ ids.length === 1 ? '' : 's' }}
+            </span>
+            <!-- Thumbnail smaller/larger sits on the select-all row (it controls
+                 this grid), rather than in the header beside the detail-image
+                 size buttons. -->
+            <vt-view-controls
+              side="popup"
+              [currentMediaType]="mediaType()"
+              [showFocus]="false"
+              class="bin-popup-grid-view-controls" />
+          </div>
+          <cdk-virtual-scroll-viewport
+            [itemSize]="rowSize"
+            class="bin-popup-scroll"
+            (mouseleave)="onGridLeave()">
+          <div
+            *cdkVirtualFor="let row of displayRows; trackBy: trackByRow"
+            class="bin-popup-row"
+            [style.height.px]="rowSize"
+            [style.--popup-cols]="columns"
+            [style.--popup-cell]="gridGoalWidth + 'px'">
+            @for (id of row; track trackById($index, id)) {
+              <div
+                class="bin-popup-entry"
+                [attr.data-entry-id]="id"
+                [class.selected]="isSelected(id)"
+                [class.focused]="isFocused(id)"
+                role="button"
+                tabindex="0"
+                [attr.aria-pressed]="isSelected(id)"
+                [attr.aria-label]="name(id) + (isSelected(id) ? ' (selected; click to deselect)' : ' (click to select)')"
+                [title]="name(id)"
+                (click)="onEntryClick(id)"
+                (keydown)="onEntryKeydown($event, id)"
+                (focus)="onEntryFocus(id)"
+                (mouseenter)="onEntryEnter(id)">
+                @if (hasThumbnailUrl(id)) {
+                  <span class="bin-popup-thumb-wrap">
+                    @if (isAudioWaveform) {
+                      <!-- Audio waveform alpha mask tinted to the accent (issue #2369). -->
+                      <span
+                        class="bin-popup-thumb-wave waveform-mask"
+                        [style.-webkit-mask-image]="'url(' + thumbnailUrl(id) + ')'"
+                        [style.mask-image]="'url(' + thumbnailUrl(id) + ')'"></span>
+                    } @else {
+                      <img
+                        class="bin-popup-thumb"
+                        [src]="thumbnailUrl(id)"
+                        [alt]="name(id)"
+                        loading="lazy"
+                        (error)="onThumbnailError(thumbnailUrl(id))" />
+                    }
+                  </span>
+                } @else {
+                  <span class="bin-popup-placeholder">{{ placeholderIcon(id) }}</span>
+                }
+              </div>
+            }
+          </div>
+          </cdk-virtual-scroll-viewport>
+        } @else if (docked()) {
+          <p class="bin-popup-empty-hint">Right-click a bin on the canvas to show it here.</p>
+        }
       </div>
     }
   </div>

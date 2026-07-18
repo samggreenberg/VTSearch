@@ -1,7 +1,8 @@
+import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { BehaviorSubject } from 'rxjs';
 
 import { ContextPulldownComponent } from './context-pulldown.component';
@@ -34,6 +35,11 @@ class RunningJobsStub {
   readonly busyPairs$ = this.busyPairsSubject.asObservable();
 }
 
+/** Placeholder target for the routes the lock-behavior specs navigate to;
+ *  the pulldown only reads the URL, never these components. */
+@Component({ selector: 'vt-dummy-view', standalone: true, template: '' })
+class DummyViewComponent {}
+
 describe('ContextPulldownComponent', () => {
   let fixture: ComponentFixture<ContextPulldownComponent>;
   let component: ContextPulldownComponent;
@@ -44,6 +50,7 @@ describe('ContextPulldownComponent', () => {
   let newThingFlows: NewThingFlowsService;
   let pulldownControl: PulldownControlService;
   let runningJobs: RunningJobsStub;
+  let router: Router;
 
   function makeDataset(
     id: string,
@@ -99,7 +106,12 @@ describe('ContextPulldownComponent', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-        provideRouter([]),
+        provideRouter([
+          { path: 'dashboard', component: DummyViewComponent },
+          { path: 'browse/:datasetId', component: DummyViewComponent },
+          { path: 'find/:datasetId/:detectorId', component: DummyViewComponent },
+          { path: 'label/:datasetId/:detectorId', component: DummyViewComponent },
+        ]),
         { provide: RunningJobsService, useClass: RunningJobsStub },
       ],
     }).compileComponents();
@@ -111,6 +123,7 @@ describe('ContextPulldownComponent', () => {
     newThingFlows = TestBed.inject(NewThingFlowsService);
     pulldownControl = TestBed.inject(PulldownControlService);
     runningJobs = TestBed.inject(RunningJobsService) as unknown as RunningJobsStub;
+    router = TestBed.inject(Router);
   });
 
   describe('row construction', () => {
@@ -381,6 +394,76 @@ describe('ContextPulldownComponent', () => {
       ds._error.set("Couldn't load datasets and detectors.");
       TestBed.tick();
       expect(component.registryError).toContain("Couldn't load");
+    });
+  });
+
+  describe('locked on browse / find views', () => {
+    it('is unlocked on the dashboard', async () => {
+      await createPulldown('dataset');
+      await router.navigate(['/dashboard']);
+      await settleZoneless(fixture);
+      expect(component.locked).toBe(false);
+    });
+
+    it('locks on the browse (VTSBrowser) view', async () => {
+      await createPulldown('dataset');
+      await router.navigate(['/browse', 'd1']);
+      await settleZoneless(fixture);
+      expect(component.locked).toBe(true);
+    });
+
+    it('locks on the find-results view', async () => {
+      await createPulldown('detector');
+      await router.navigate(['/find', 'd1', 'm1']);
+      await settleZoneless(fixture);
+      expect(component.locked).toBe(true);
+    });
+
+    it('stays unlocked on the label / train view', async () => {
+      await createPulldown('detector');
+      await router.navigate(['/label', 'd1', 'm1']);
+      await settleZoneless(fixture);
+      expect(component.locked).toBe(false);
+    });
+
+    it('does not open when locked, even via the pulldown-control signal', async () => {
+      await createPulldown('dataset');
+      setRegistry([makeDataset('d1', 'Alpha')]);
+      await router.navigate(['/browse', 'd1']);
+      await settleZoneless(fixture);
+
+      // Direct open attempt is a no-op.
+      component.openMenu();
+      expect(component.open).toBe(false);
+
+      // Programmatic open (keyboard shortcut path) is also swallowed.
+      pulldownControl.requestOpen('dataset');
+      TestBed.tick();
+      expect(component.open).toBe(false);
+    });
+
+    it('closes an open menu when navigating into a locked view', async () => {
+      await createPulldown('dataset');
+      setRegistry([makeDataset('d1', 'Alpha')]);
+      component.openMenu();
+      expect(component.open).toBe(true);
+
+      await router.navigate(['/browse', 'd1']);
+      await settleZoneless(fixture);
+      expect(component.open).toBe(false);
+      expect(component.locked).toBe(true);
+    });
+
+    it('still displays the active label while locked', async () => {
+      await createPulldown('detector');
+      activeContext.setIntent('d1', 'm1');
+      setRegistry([makeDataset('d1', 'DS')], [makeDetector('m1', 'My Detector')]);
+      await router.navigate(['/find', 'd1', 'm1']);
+      await settleZoneless(fixture);
+
+      expect(component.locked).toBe(true);
+      expect(component.activeName).toBe('My Detector');
+      expect(component.activeRowExists).toBe(true);
     });
   });
 });

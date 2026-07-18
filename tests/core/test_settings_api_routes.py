@@ -776,6 +776,30 @@ class TestBrowserSettings:
         # Persists across a fresh read.
         assert client.get("/api/settings").get_json()["browse_signpost_captioner"]["image"] is True
 
+    def test_update_browse_signpost_vocab_per_type(self, client):
+        res = client.put(
+            "/api/settings",
+            json={"browse_signpost_vocab": {"audio": ["dog barking", "rain"], "image": ["cat", "car"]}},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_signpost_vocab"]["audio"] == ["dog barking", "rain"]
+        assert data["browse_signpost_vocab"]["image"] == ["cat", "car"]
+        # Persists across a fresh read.
+        assert client.get("/api/settings").get_json()["browse_signpost_vocab"]["audio"] == ["dog barking", "rain"]
+
+    def test_browse_signpost_vocab_normalizes_on_write(self, client):
+        # Whitespace trimmed, blanks and duplicates dropped (order preserved),
+        # and a media type left with no usable terms is omitted entirely.
+        res = client.put(
+            "/api/settings",
+            json={"browse_signpost_vocab": {"audio": ["  dog  ", "dog", "", "  ", "rain"], "image": ["   "]}},
+        )
+        assert res.status_code == 200
+        data = res.get_json()["browse_signpost_vocab"]
+        assert data["audio"] == ["dog", "rain"]
+        assert "image" not in data
+
     def test_update_browse_mouse_zooms_per_level_per_type(self, client):
         res = client.put("/api/settings", json={"browse_mouse_zooms_per_level": {"audio": 1, "image": 3}})
         assert res.status_code == 200
@@ -802,6 +826,30 @@ class TestBrowserSettings:
         # Persists across a fresh read.
         assert client.get("/api/settings").get_json()["browse_signposts"]["audio"] is False
 
+    def test_update_bin_details_docked_per_type(self, client):
+        res = client.put("/api/settings", json={"bin_details_docked": {"audio": True, "image": False}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["bin_details_docked"]["audio"] is True
+        assert data["bin_details_docked"]["image"] is False
+        # Persists across a fresh read.
+        assert client.get("/api/settings").get_json()["bin_details_docked"]["audio"] is True
+
+    def test_update_browse_details_panel_width(self, client):
+        res = client.put("/api/settings", json={"browse_details_panel_width": 420})
+        assert res.status_code == 200
+        assert res.get_json()["browse_details_panel_width"] == 420
+        assert client.get("/api/settings").get_json()["browse_details_panel_width"] == 420
+
+    def test_browse_details_panel_width_clamps_out_of_range(self, client):
+        # Values outside the 220..800 clamp are pulled back into range.
+        res = client.put("/api/settings", json={"browse_details_panel_width": 5000})
+        assert res.status_code == 200
+        assert res.get_json()["browse_details_panel_width"] == 800
+        res2 = client.put("/api/settings", json={"browse_details_panel_width": 1})
+        assert res2.status_code == 200
+        assert res2.get_json()["browse_details_panel_width"] == 220
+
     def test_get_settings_includes_browser_prefs(self, client):
         data = client.get("/api/settings").get_json()
         # Present as (possibly empty) dicts so the frontend can index by type.
@@ -812,6 +860,7 @@ class TestBrowserSettings:
             "browse_compact",
             "browse_mouse_zooms_per_level",
             "browse_signposts",
+            "bin_details_docked",
         ):
             assert key in data
             assert isinstance(data[key], dict)
@@ -825,5 +874,6 @@ class TestBrowserSettings:
             "browse_compact",
             "browse_mouse_zooms_per_level",
             "browse_signposts",
+            "bin_details_docked",
         ):
             assert data.get(key, {}) == {}

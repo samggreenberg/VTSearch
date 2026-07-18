@@ -44,7 +44,10 @@
   flex-shrink: 0;
 }
 
-.bin-popup-size-btn {
+// Shared chrome for the small header buttons: the segmented size pair and the
+// square toggles (metadata, dock / pop-out).
+.bin-popup-size-btn,
+.bin-popup-meta-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -58,6 +61,12 @@
   transition: background var(--transition-base), color var(--transition-base),
     border-color var(--transition-base);
 
+  vt-icon {
+    line-height: 0;
+  }
+}
+
+.bin-popup-size-btn {
   &:not(:first-child) {
     margin-left: -1px;
   }
@@ -80,31 +89,14 @@
     opacity: var(--opacity-disabled);
     cursor: not-allowed;
   }
-
-  vt-icon {
-    line-height: 0;
-  }
 }
 
-// Metadata-column toggle: a single square button in the header that shows/hides
-// the metadata column (left of the preview for thumbnail media, left of the grid
-// otherwise). Active (column shown) reads as a filled accent chip; inactive is a
-// muted outline like the size buttons.
+// Square header toggles (metadata show/hide, dock / pop-out). The metadata
+// toggle's active state (column shown) reads as a filled accent chip; inactive
+// is a muted outline like the size buttons.
 .bin-popup-meta-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 26px;
-  height: 22px;
-  padding: 0 var(--space-sm);
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  cursor: pointer;
   flex-shrink: 0;
-  transition: background var(--transition-base), color var(--transition-base),
-    border-color var(--transition-base);
 
   &:hover {
     color: var(--text-primary);
@@ -116,14 +108,17 @@
     border-color: var(--accent);
     color: var(--text-primary);
   }
-
-  vt-icon {
-    line-height: 0;
-  }
 }
 
-.bin-popup-view-controls {
+// Right-aligned cluster of header chrome (metadata toggle, dock / pop-out,
+// close). Pushed to the far right so the detail-image size buttons (and, when
+// floating, the leftmost dock button) stay on the left.
+.bin-popup-header-end {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-shrink: 0;
 }
 
 .bin-popup-close {
@@ -225,10 +220,14 @@
 .bin-popup-preview {
   flex-shrink: 0;
   height: 100%;
+  // Positioning context for the docked now-playing playhead + spinner.
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-sm);
+  // Sharp corners: this pane shows a single (focused) item, and in the VTSBrowse
+  // corner symbology rounded corners are reserved for multi-item piles — a lone
+  // item reads as a crisp, square tile.
   background: var(--bg-body);
   overflow: hidden;
   // Clicking the detail image toggles selection of the item it shows — the only
@@ -281,16 +280,22 @@
   min-height: 0;
 }
 
-// Top row of the grid column: the select-all control on the left and the
-// member-count label pushed to the right. With a single member there is no
-// button, so `space-between` leaves the count alone at the left as before.
+// Top row of the grid column: the select-all control + member-count label on
+// the left, and the thumbnail smaller/larger controls pushed to the right (they
+// resize this grid, so they live on its header row rather than in the window
+// header).
 .bin-popup-grid-header {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-2xs);
   padding: 0 var(--space-2xs) var(--space-2xs);
+}
+
+// Thumbnail size buttons, pushed to the right end of the grid header row.
+.bin-popup-grid-view-controls {
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 // Tri-state master checkbox, mirroring the dashboard's select-all button but
@@ -345,7 +350,7 @@
   column-gap: var(--space-2xs);
 }
 
-// A grid cell: a thumbnail above its truncated name.
+// A grid cell: a single thumbnail (the name that used to sit beneath it is gone).
 .bin-popup-entry {
   box-sizing: border-box;
   cursor: pointer;
@@ -353,13 +358,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
   padding: 2px;
-  border-radius: var(--radius-sm);
+  // Sharp: one item per cell, so its hover fill and selection ring stay square
+  // (rounded is reserved for multi-item piles — see the thumbnail note below).
   width: var(--popup-cell, 80px);
-  // Query container so the name can hide itself at small icon sizes (below).
-  container-type: inline-size;
-  container-name: bin-cell;
   // Animate the "viewed" enlarge (below) so items grow/settle smoothly rather
   // than popping as focus walks the grid.
   transition: transform var(--transition-base);
@@ -406,15 +408,23 @@
 
 // Thumbnail/placeholder square, sized to the chosen icon size (``--popup-cell``,
 // bound per row); falls back to a compact square if the variable is ever absent.
-.bin-popup-thumb-wrap {
-  display: block;
+// The real thumbnail's wrapper and the no-thumbnail placeholder are the same
+// fixed cell-sized box, so they share these metrics (and the themed ``--bg-body``
+// surface: hidden under a cover-fit <img>, and the backdrop the tinted audio
+// waveform (issue #2369) sits on).
+.bin-popup-thumb-wrap,
+.bin-popup-placeholder {
   width: var(--popup-cell, 28px);
   height: var(--popup-cell, 28px);
-  border-radius: var(--radius-sm);
+  // Sharp corners: each grid thumbnail is a single item, and in the VTSBrowse
+  // corner symbology rounded corners mean a multi-item pile, so a lone item is
+  // drawn as a crisp square. (The wrap's ``overflow: hidden`` clips the <img>.)
   flex-shrink: 0;
-  // Themed surface behind the thumbnail: hidden under a cover-fit <img>, and the
-  // backdrop the tinted audio waveform (issue #2369) sits on.
   background: var(--bg-body);
+}
+
+.bin-popup-thumb-wrap {
+  display: block;
   overflow: hidden;
 }
 
@@ -432,14 +442,12 @@
   height: 100%;
   mask-size: cover;
   -webkit-mask-size: cover;
-  border-radius: var(--radius-sm);
 }
 
 .bin-popup-thumb {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: var(--radius-sm);
   background: var(--bg-body);
   display: block;
 }
@@ -448,53 +456,145 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: var(--popup-cell, 28px);
-  height: var(--popup-cell, 28px);
-  border-radius: var(--radius-sm);
-  background: var(--bg-body);
   color: var(--text-muted);
   font-size: var(--font-lg);
-  flex-shrink: 0;
 }
 
-// The name stacks under the thumbnail, truncated to the cell width. Its
-// line-height is pinned (not left at the font's ``normal``, which varies by
-// platform font) so the rendered row height is deterministic and matches the
-// space reserved for it in ``rowSize`` (GRID_LABEL_HEIGHT). Without this the name
-// renders a couple px taller than its slot, forcing a stray scrollbar even on a
-// single row. 12px (``--font-xs``) × 1.25 = 15px == GRID_LABEL_HEIGHT.
-.bin-popup-name {
-  flex: 0 0 auto;
+// --- Docked presentation ----------------------------------------------------
+// The same component rendered as the Browse view's persistent left panel: the
+// detail pane top-left with the metadata column to its right (wrapping below
+// when the panel is narrow), and the member grid filling the rest below.
+
+// Floating: the top wrapper dissolves so the metadata column and preview pane
+// stay direct flex items of the body, exactly the historic row layout.
+.bin-popup-top {
+  display: contents;
+}
+
+.bin-popup--docked {
+  position: static;
   width: 100%;
-  max-width: var(--popup-cell, 80px);
-  min-width: 0;
-  text-align: center;
-  font-weight: var(--weight-regular);
-  font-size: var(--font-xs);
-  line-height: 1.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+  height: 100%;
+  max-width: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 
-// At the two smallest icon sizes (XS/S, ~46px content-box) the name truncates to
-// a useless "a…", so hide it and let the grid pack tighter. M and up keep it.
-// The reserved row height (GRID_LABEL_HEIGHT in the .ts) is dropped in lockstep
-// so hidden names don't leave an empty gap under each thumbnail.
-@container bin-cell (max-width: 60px) {
-  .bin-popup-name {
-    display: none;
+  .bin-popup-header {
+    cursor: default;
+  }
+
+  .bin-popup-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  // A single row: the large item, then the draggable divider, then the metadata
+  // column. No wrap and no flex gap — the divider is the only spacer, and the
+  // item + metadata widths are bound so they always sum to the row. DOM order is
+  // metadata, preview, divider, so `order` lays them out item / divider / meta.
+  .bin-popup-top {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: 0;
+    flex-shrink: 0;
+  }
+
+  .bin-popup-preview {
+    order: 1;
+    height: auto;
+  }
+
+  .bin-popup-meta-divider {
+    order: 2;
+    flex: 0 0 auto;
+    align-self: flex-start;
+  }
+
+  // Fixed-width column (the width is bound per render from the divider drag),
+  // stacked to the right of the divider.
+  .bin-popup-meta-col {
+    order: 3;
+    flex: 0 0 auto;
+    width: auto;
+    height: auto;
+  }
+
+  .bin-popup-grid-col {
+    width: 100%;
+    height: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  // Resize like the right (selection) panel: fixed-width columns packed to the
+  // left with a constant gap, so widening the panel keeps the thumbnails (and
+  // the gaps between them) the same size and only reveals a new column once
+  // there's room for a whole one — instead of the floating window's ``1fr``
+  // tracks, which stretch each thumbnail's cell as the panel grows. The browse
+  // view then "pops" the divider tight to the column count on release (see
+  // ``snappedPanelWidth``), mirroring the right panel's snap.
+  .bin-popup-row {
+    grid-template-columns: repeat(var(--popup-cols, 1), var(--popup-cell, 80px));
+    justify-content: start;
+    column-gap: var(--space-xs);
   }
 }
 
-.sr-only {
+// Docked audio: sweeping playhead + buffering spinner over the detail pane,
+// mirroring the toolbar now-playing widget the pane replaces.
+.bin-popup-preview-playhead {
   position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--waveform-playhead);
+  pointer-events: none;
+  will-change: left;
 }
+
+.bin-popup-preview-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
+  pointer-events: none;
+}
+
+.bin-popup-preview-spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-top-color: var(--accent);
+  animation: bin-popup-spin 0.8s linear infinite;
+}
+
+@keyframes bin-popup-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// Docked, non-thumbnail media (text): a large placeholder glyph in the pane.
+.bin-popup-preview-glyph {
+  font-size: 48px;
+  color: var(--text-muted);
+}
+
+// Docked empty state: no bin has been opened yet.
+.bin-popup-empty-hint {
+  margin: auto;
+  padding: var(--space-md);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+// (The hidden audio element uses the global `.sr-only` from scss/_components.scss.)

@@ -123,6 +123,7 @@ class Audio2ImageMediaConverter(MediaConverter):
 
     display_name = "Audio → Image (spectrogram)"
     description = "Render audio as a mel-spectrogram or CQT image"
+    hidden_from_picker = True
     summary_template = (
         "Render each audio file as a {spectrogram_type} spectrogram (first {time_window_s}s, {colormap})."
     )

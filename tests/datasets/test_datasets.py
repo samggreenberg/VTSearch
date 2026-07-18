@@ -1669,6 +1669,68 @@ class TestLoadProgressRaceCondition:
 
             unregister_dataset(dataset_id)
 
+    def test_load_registered_dataset_task_reaches_idle_on_success(self, client):
+        """The per-task tracker (``_loading_tasks``, distinct from the legacy
+        thread-local progress the previous test checks) must reach ``idle``
+        on a *successful* load, not just on cancel/error.
+
+        Regression for the Browse-an-unloaded-dataset bug: the frontend's
+        ``waitForDatasetLoad`` waits for this task's status to flip to
+        ``idle`` before promoting the dataset to active and firing the
+        projection-build request. Without an explicit ``idle`` transition on
+        the success path, the task lingered at ``status="loading"`` until
+        ``list_tasks()`` happened to prune it (several seconds later, via the
+        next SSE heartbeat), during which any request tagged with the new
+        dataset id 409'd with "Dataset is not loaded".
+        """
+        import time
+        from pathlib import Path
+
+        from vtscore.concurrency.progress import loading_tasks
+        from vtscore.datasets.loader import export_dataset_to_file
+        from vtscore.datasets.registry import register_dataset, unregister_dataset
+        from vtsearch.settings import get_saved_datasets_dir
+
+        saved = dict(app_module.medias)
+        ds_dir = get_saved_datasets_dir()
+        ds_dir.mkdir(parents=True, exist_ok=True)
+        pkl_path = str(ds_dir / "test_idle_on_success.pkl")
+        dataset_id = None
+        try:
+            Path(pkl_path).write_bytes(export_dataset_to_file(app_module.medias))
+
+            entry = register_dataset(
+                name="test_idle_on_success",
+                media_type="audio",
+                num_items=len(app_module.medias),
+                pkl_path=pkl_path,
+            )
+            dataset_id = entry["id"]
+
+            resp = client.post(f"/api/datasets/registry/{dataset_id}/load")
+            assert resp.status_code == 200
+            task_id = resp.get_json()["task_id"]
+            assert task_id
+
+            status = None
+            for _ in range(120):
+                tasks = loading_tasks.list_tasks()
+                task = next((t for t in tasks if t["task_id"] == task_id), None)
+                if task is not None:
+                    status = task["status"]
+                    if status == "idle":
+                        break
+                time.sleep(0.1)
+            assert status == "idle", (
+                "load task must reach 'idle' on success instead of lingering at 'loading' until list_tasks() prunes it"
+            )
+        finally:
+            app_module.medias.clear()
+            app_module.medias.update(saved)
+            Path(pkl_path).unlink(missing_ok=True)
+            if dataset_id:
+                unregister_dataset(dataset_id)
+
     def test_origin_load_clears_stale_error(self):
         """_run_origin_load_in_background must clear old error on new load."""
         from unittest.mock import patch

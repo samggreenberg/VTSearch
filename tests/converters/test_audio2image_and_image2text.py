@@ -435,5 +435,9 @@ class TestNewConverterRegistryIntegration:
         resp = client.get("/api/converters")
         assert resp.status_code == 200
         names = [c["name"] for c in resp.get_json()["converters"]]
-        assert "audio2image" in names
+        # image2text is a normal picker-visible converter.
         assert "image2text" in names
+        # audio2image carries hidden_from_picker=True: registered (see the
+        # list_converters_for_* tests above) but excluded from the picker
+        # endpoint.
+        assert "audio2image" not in names

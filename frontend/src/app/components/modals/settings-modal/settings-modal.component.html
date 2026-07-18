@@ -117,19 +117,23 @@
 
           @if (mediaTypes().length > 0) {
             <h4 class="subhead" title="Configure how media items are displayed and selected in each panel, per media type">Scroll Style</h4>
-            <div class="view-tabs">
-              @for (mt of mediaTypes(); track mt.type_id) {
-                <button
-                  class="view-tab"
-                  [class.view-tab--active]="activeViewTab() === mt.type_id"
-                  (click)="activeViewTab.set(mt.type_id)">
-                  @if (mt.icon) {
-                    <vt-icon [type]="mt.icon" [size]="14"></vt-icon>
-                  }
-                  {{ mt.name }}
-                </button>
-              }
-            </div>
+            <!-- A lone media type needs no tab bar (nothing to switch to); the
+                 content below still renders for the single active type. -->
+            @if (mediaTypes().length > 1) {
+              <div class="view-tabs">
+                @for (mt of mediaTypes(); track mt.type_id) {
+                  <button
+                    class="view-tab"
+                    [class.view-tab--active]="activeViewTab() === mt.type_id"
+                    (click)="activeViewTab.set(mt.type_id)">
+                    @if (mt.icon) {
+                      <vt-icon [type]="mt.icon" [size]="14"></vt-icon>
+                    }
+                    {{ mt.name }}
+                  </button>
+                }
+              </div>
+            }
             <div class="view-tab-content">
               <div class="view-side-section">
                 <h4 class="subhead" title="Display settings for the left panel (unlabeled media list)">Left Side</h4>
@@ -269,20 +273,24 @@
         @if (activeSettingsTab() === 'browser') {
           <h3>Browser<vt-field-hint-icon hint="How the Browse map looks, per media type. The same controls live on the map; changes here are remembered."></vt-field-hint-icon></h3>
           @if (mediaTypes().length > 0) {
-            <div class="view-tabs">
-              @for (mt of mediaTypes(); track mt.type_id) {
-                <button
-                  class="view-tab"
-                  [class.view-tab--active]="activeBrowseTab() === mt.type_id"
-                  (click)="activeBrowseTab.set(mt.type_id)"
-                  [title]="'Browser settings for ' + mt.name + ' datasets'">
-                  @if (mt.icon) {
-                    <vt-icon [type]="mt.icon" [size]="14"></vt-icon>
-                  }
-                  {{ mt.name }}
-                </button>
-              }
-            </div>
+            <!-- A lone media type needs no tab bar (nothing to switch to); the
+                 content below still renders for the single active type. -->
+            @if (mediaTypes().length > 1) {
+              <div class="view-tabs">
+                @for (mt of mediaTypes(); track mt.type_id) {
+                  <button
+                    class="view-tab"
+                    [class.view-tab--active]="activeBrowseTab() === mt.type_id"
+                    (click)="activeBrowseTab.set(mt.type_id)"
+                    [title]="'Browser settings for ' + mt.name + ' datasets'">
+                    @if (mt.icon) {
+                      <vt-icon [type]="mt.icon" [size]="14"></vt-icon>
+                    }
+                    {{ mt.name }}
+                  </button>
+                }
+              </div>
+            }
             <div class="view-tab-content browser-tab-content">
               <div class="form-group">
                 <label class="form-label" title="Slide clusters together to close the empty space between them when the map is built">Compaction<vt-field-hint-icon hint="Slides clusters together to close the empty gaps between them. Applies next time the map is built."></vt-field-hint-icon></label>
@@ -317,6 +325,21 @@
                       Captions
                     </button>
                   </div>
+                </div>
+              }
+              @if (browseTabHasTagVocab(activeBrowseTab()) && !getBrowseSignpostCaptioner(activeBrowseTab())) {
+                <div class="form-group">
+                  <label class="form-label" [attr.for]="'setting-browse-vocab-' + activeBrowseTab()" title="Custom words used to name map regions in Tags mode">Custom tags<vt-field-hint-icon hint="One term per line. Replaces the built-in tag vocabulary (AudioSet for audio, Open Images for images) that names the map's regions. Leave empty to use the built-in list. Terms are matched against each item by the embedder, so use plain, embeddable words. Takes effect on the next map rebuild."></vt-field-hint-icon></label>
+                  <textarea
+                    [id]="'setting-browse-vocab-' + activeBrowseTab()"
+                    class="form-textarea"
+                    rows="5"
+                    spellcheck="false"
+                    placeholder="Using the built-in vocabulary. Enter one term per line to override."
+                    [value]="getBrowseSignpostVocabText(activeBrowseTab())"
+                    (change)="onBrowseSignpostVocabChange(activeBrowseTab(), $any($event.target).value)"
+                    aria-label="Custom signpost tag vocabulary, one term per line"
+                  ></textarea>
                 </div>
               }
               <div class="form-group">

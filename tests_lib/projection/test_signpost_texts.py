@@ -107,6 +107,32 @@ class TestZeroShotTagProvider:
         provider = self._provider(monkeypatch, ["dog"])
         assert provider.signature(FakeTextEmbedder([], name="a")) != provider.signature(FakeTextEmbedder([], name="b"))
 
+    def test_with_terms_tags_against_custom_vocab(self):
+        # No monkeypatch of _load_vocab: with_terms must bypass the asset file
+        # entirely and tag against the supplied terms.
+        terms = ["dog", "rain", "car"]
+        base = st.ZeroShotTagProvider(name="tags:test", vocab_asset="unused.txt", template="The sound of {}", top_k=1)
+        provider = base.with_terms(terms)
+        embedder = FakeTextEmbedder(terms)
+        texts = provider.build_texts([1], {1: {}}, _basis_matrix([1]), embedder)  # media ≈ "rain"
+        assert texts[1] == "rain"
+
+    def test_with_terms_changes_name_and_signature(self):
+        base = st.ZeroShotTagProvider(name="tags:test", vocab_asset="unused.txt", template="The sound of {}")
+        a = base.with_terms(["dog", "rain"])
+        b = base.with_terms(["cat", "car"])
+        embedder = FakeTextEmbedder([], name="clap")
+        # Custom name differs from the base and from a different term set, so the
+        # per-media cache key and labeler signature invalidate on a vocab swap.
+        assert a.name != base.name
+        assert a.name != b.name
+        assert a.signature(embedder) != base.signature(embedder)
+        assert a.signature(embedder) != b.signature(embedder)
+
+    def test_with_terms_digest_is_stable(self):
+        base = st.ZeroShotTagProvider(name="tags:test", vocab_asset="unused.txt", template="The sound of {}")
+        assert base.with_terms(["dog", "rain"]).name == base.with_terms(["dog", "rain"]).name
+
 
 class TestContentTextProvider:
     def test_returns_truncated_content(self):
@@ -314,4 +340,38 @@ class TestCaptionerSelection:
     def test_enabled_but_no_captioner_returns_base(self, monkeypatch):
         # text has no captioner registered; opting it in is a no-op.
         monkeypatch.setattr(st, "_captioner_enabled", lambda mt: True)
+        assert isinstance(st.provider_for("text"), st.ContentTextProvider)
+
+
+class TestCustomVocabSelection:
+    def test_custom_vocab_replaces_base_tags(self, monkeypatch):
+        monkeypatch.setattr(st, "_custom_vocab", lambda mt: ("cat", "car") if mt == "image" else ())
+        provider = st.provider_for("image")
+        assert isinstance(provider, st.ZeroShotTagProvider)
+        assert provider.vocab_terms == ("cat", "car")
+        assert provider.name.startswith("tags:openimages600:custom:")
+        # A type without an override keeps the shipped vocabulary.
+        audio = st.provider_for("audio")
+        assert audio is not None and audio.name == "tags:audioset527"
+
+    def test_no_override_leaves_base_untouched(self, monkeypatch):
+        monkeypatch.setattr(st, "_custom_vocab", lambda mt: ())
+        image = st.provider_for("image")
+        assert image is not None and image.name == "tags:openimages600"
+
+    def test_custom_vocab_applies_under_captioner_fallback(self, monkeypatch):
+        monkeypatch.setattr(st, "_captioner_enabled", lambda mt: mt == "image")
+        monkeypatch.setattr(st, "_custom_vocab", lambda mt: ("cat", "car") if mt == "image" else ())
+        provider = st.provider_for("image")
+        assert isinstance(provider, st.FallbackTextProvider)
+        # The captioner stays primary; the custom vocab rides the fallback.
+        assert provider.primary.name == "caption:qwen2.5-vl-3b"
+        fallback = provider.fallback
+        assert isinstance(fallback, st.ZeroShotTagProvider)
+        assert fallback.vocab_terms == ("cat", "car")
+
+    def test_content_type_ignores_custom_vocab(self, monkeypatch):
+        # text's base is a ContentTextProvider, not a tag provider: an override
+        # can't apply, so the base is returned unchanged.
+        monkeypatch.setattr(st, "_custom_vocab", lambda mt: ("whatever",))
         assert isinstance(st.provider_for("text"), st.ContentTextProvider)

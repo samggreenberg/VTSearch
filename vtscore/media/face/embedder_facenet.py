@@ -15,10 +15,13 @@ crop is embedded here. The model also works on un-cropped images (it just
 sees a 160×160 resize without explicit detection), but results are much
 better when the input is already a face-centred crop.
 
-``facenet-pytorch`` is an opt-in dependency (declared in pyproject's
-``DEP001`` ignore-list, same pattern as ``mediapipe``). If it is not
-installed, :meth:`load_models` raises an :class:`ImportError` that the
-:class:`MediaEmbedder` base class re-wraps with an install hint.
+``facenet-pytorch`` is installed ``--no-deps`` by the install scripts (its
+torch<2.3 / numpy<2 pins are empirically unnecessary and would otherwise
+downgrade the app's stack) and declared in pyproject's ``DEP001`` ignore-list.
+The same install also provides the MTCNN detector used by the ``image2face``
+converter and ``FaceLocalizer``. If it is not installed, :meth:`load_models`
+raises an :class:`ImportError` that the :class:`MediaEmbedder` base class
+re-wraps with an install hint.
 """
 
 from __future__ import annotations
@@ -30,7 +33,13 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
-from vtscore.media.embedder import IMPORT_MODULE_ESTIMATES, MediaEmbedder, timed_progress, to_compute_device
+from vtscore.media.embedder import (
+    IMPORT_MODULE_ESTIMATES,
+    MediaEmbedder,
+    intercept_tqdm_progress,
+    timed_progress,
+    to_compute_device,
+)
 from vtscore.media.image._image_bulk import bulk_embed_image_files
 
 if TYPE_CHECKING:
@@ -79,8 +88,14 @@ class FaceEmbedder(MediaEmbedder):
         ):
             import torch  # noqa: F401, PLC0415
 
-        with timed_progress(self._on_progress, "loading", "Loading FaceNet weights…", 2, 2):
-            # facenet-pytorch lazy-downloads weights on first instantiation.
+        with (
+            timed_progress(self._on_progress, "loading", "Loading FaceNet weights…", 2, 2),
+            intercept_tqdm_progress(self._on_progress),
+        ):
+            # facenet-pytorch lazy-downloads weights (~107MB VGGFace2) on first
+            # instantiation via torch.hub, which prints a tqdm bar. Wrap it in
+            # intercept_tqdm_progress so the bar is forwarded to the GUI progress
+            # callback and never leaks to stdout/stderr.
             from facenet_pytorch import InceptionResnetV1  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
 
             model = InceptionResnetV1(pretrained="vggface2")

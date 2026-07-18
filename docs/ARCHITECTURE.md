@@ -87,7 +87,7 @@ VTSearch/
 │   │   ├── audio2text.py           Whisper ASR transcription
 │   │   ├── document2image.py       PDF page rendering
 │   │   ├── document2text.py        Text extraction from documents
-│   │   ├── image2face.py           Face localisation + crop (MediaPipe) → face type
+│   │   ├── image2face.py           Face localisation + crop (MTCNN) → face type
 │   │   ├── image2text.py           OCR (PaddleOCR)
 │   │   ├── video2audio.py          Audio track extraction
 │   │   └── video2image.py          Frame sampling

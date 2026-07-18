@@ -508,6 +508,39 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
+  /** Media types whose Tags signposts draw from an editable tag vocabulary
+   *  (image / audio; text uses its own content). Same set as the captioner
+   *  toggle today, but a distinct predicate so the two stay independent. */
+  browseTabHasTagVocab(typeId: string): boolean {
+    return typeId === 'image' || typeId === 'audio';
+  }
+
+  /** The custom signpost vocabulary for *typeId* as newline-joined text for the
+   *  textarea; empty when none is set (the built-in list is in use). */
+  getBrowseSignpostVocabText(typeId: string): string {
+    const dict = this.settings().browse_signpost_vocab as Record<string, string[]> | undefined;
+    return (dict?.[typeId] ?? []).join('\n');
+  }
+
+  /** Parse the textarea (one term per line) into a custom vocabulary and
+   *  persist. Blank/whitespace input clears the override, restoring the
+   *  built-in list. The backend re-trims and de-duplicates on write; regions
+   *  re-name on the next projection build / Re-project. */
+  onBrowseSignpostVocabChange(typeId: string, text: string): void {
+    const terms = text
+      .split('\n')
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+    const dict = { ...((this.settings().browse_signpost_vocab as Record<string, string[]> | undefined) || {}) };
+    if (terms.length > 0) {
+      dict[typeId] = terms;
+    } else {
+      delete dict[typeId];
+    }
+    this.settings.update((s) => ({ ...(s as Record<string, unknown>), browse_signpost_vocab: dict }) as AppSettings);
+    this.save();
+  }
+
   // --- Browser tab: right-click bin-popup thumbnail size ---
   // The bin popup keeps its own per-media-type thumbnail size
   // (``grid_icon_size_popup``), independent of the left/right panels. The

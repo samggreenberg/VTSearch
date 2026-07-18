@@ -357,7 +357,7 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
       for (const cell of cells) {
         const [sx, sy] = this.projToMap(cell.cx, cell.cy, f);
         const single = cell.count === 1;
-        geom.traceCell(ctx, sx, sy, cellR, single);
+        geom.traceCell(ctx, sx, sy, cellR, !single);
         let baseFill: string;
         if (single) {
           baseFill = rgbString(cmap.single);

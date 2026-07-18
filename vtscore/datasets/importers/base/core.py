@@ -195,7 +195,7 @@ class ImporterBase(PluginBase):
         converters_by_target: dict[str, list[dict]] = {}
         for mt_info in all_types_dict():
             type_id = mt_info["type_id"]
-            convs = list_converters_for_target(type_id)
+            convs = [c for c in list_converters_for_target(type_id) if not c.hidden_from_picker]
             if convs:
                 converters_by_target[type_id] = [c.to_dict() for c in convs]
         d["available_converters_by_media_type"] = converters_by_target

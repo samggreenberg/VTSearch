@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ImportAdvancedComponent } from './import-advanced.component';
 import { provideZoneless } from '../../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../../testing/settle-resource';
-import { ClipperInfo, EmbedderInfo, SourceSpec } from '../../../../models/api.models';
+import { ClipperInfo, ConverterInfo, EmbedderInfo, SourceSpec } from '../../../../models/api.models';
 
 describe('ImportAdvancedComponent', () => {
   let component: ImportAdvancedComponent;
@@ -19,6 +19,10 @@ describe('ImportAdvancedComponent', () => {
   const clippers: ClipperInfo[] = [
     { name: 'clip_default', display_name: 'Default clipper' } as ClipperInfo,
     { name: 'sliding', display_name: 'Sliding window' } as ClipperInfo,
+  ];
+
+  const converters: ConverterInfo[] = [
+    { name: 'video2image', source_type: 'video', target_type: 'image', fields: [] } as ConverterInfo,
   ];
 
   async function setInputs(inputs: Record<string, unknown>): Promise<void> {
@@ -155,7 +159,7 @@ describe('ImportAdvancedComponent', () => {
     });
 
     it('is false when the source-specs column already hosts the native Details button', async () => {
-      await setInputs({ clippers, selectedClipper: 'clip_default', showSourceSpecs: true });
+      await setInputs({ clippers, selectedClipper: 'clip_default', showSourceSpecs: true, availableConverters: converters });
       component.advancedOpen = true;
       expect(component.showStandaloneClipperButton).toBe(false);
     });
@@ -164,6 +168,32 @@ describe('ImportAdvancedComponent', () => {
       await setInputs({ clippers, selectedClipper: 'clip_default', showSourceSpecs: false });
       component.advancedOpen = true;
       expect(component.showStandaloneClipperButton).toBe(true);
+    });
+
+    it('is true when the source-specs flow is on but no converters feed it (empty column suppressed)', async () => {
+      // showSourceSpecs is true but there are no non-native converters, so the
+      // Include-media column collapses to a trivial native-only row and is
+      // hidden; the clipper chooser must stay reachable via the standalone button.
+      await setInputs({ clippers, selectedClipper: 'clip_default', showSourceSpecs: true, availableConverters: [] });
+      component.advancedOpen = true;
+      expect(component.showStandaloneClipperButton).toBe(true);
+    });
+  });
+
+  describe('hasSourceSpecsColumn', () => {
+    it('is false when the source-specs flow is off', async () => {
+      await setInputs({ showSourceSpecs: false, availableConverters: converters });
+      expect(component.hasSourceSpecsColumn).toBe(false);
+    });
+
+    it('is false when there are no non-native converters', async () => {
+      await setInputs({ showSourceSpecs: true, availableConverters: [] });
+      expect(component.hasSourceSpecsColumn).toBe(false);
+    });
+
+    it('is true when the flow is on and at least one converter feeds the native type', async () => {
+      await setInputs({ showSourceSpecs: true, availableConverters: converters });
+      expect(component.hasSourceSpecsColumn).toBe(true);
     });
   });
 

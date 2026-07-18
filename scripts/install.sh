@@ -568,6 +568,20 @@ vts_maybe_convert_driver_to_dkms() {
     echo >&2
     echo "The GPU driver works, but it is NOT DKMS-managed -- it's pinned to the" >&2
     echo "running kernel ($(uname -r)), so the next kernel update will break it." >&2
+    # Explain WHY it's still non-DKMS so a repeat run doesn't look like the offer
+    # forgot a prior "yes". The usual blocker is that `dkms` itself never got
+    # installed -- a conversion can't register the module without it -- which on the
+    # RHEL family means EPEL was unreachable, so an earlier "convert" quietly bailed.
+    if ! command -v dkms >/dev/null 2>&1; then
+        echo "  Seeing this again after saying yes before? 'dkms' is not installed, so" >&2
+        echo "  no prior conversion could have registered the driver. The convert step" >&2
+        echo "  installs dkms first, but on RHEL it lives in EPEL: if that's unreachable" >&2
+        echo "  (e.g. an unregistered box) the install fails and the driver stays pinned." >&2
+        echo "  On RHEL, 'sudo dnf install -y epel-release dkms' first makes it stick." >&2
+    else
+        echo "  ('dkms' is installed but has no nvidia module registered, so the driver" >&2
+        echo "  was built outside DKMS; converting now registers it to auto-rebuild.)" >&2
+    fi
     case "$(vts_decide_dkms_conversion)" in
         convert)
             if vts_convert_driver_to_dkms; then
@@ -838,8 +852,23 @@ vts_install_toponymy() {
     pip install --no-deps "toponymy==0.5.2" --progress-bar on
 }
 
+# --- facenet-pytorch (FaceNet face-identity embedder) ------------------------
+# The `face` embedder (vtscore.media.face.embedder_facenet) loads FaceNet's
+# InceptionResnetV1 via facenet-pytorch. facenet-pytorch 2.6.0 hard-pins
+# torch<2.3, torchvision<0.18, numpy<2.0 and Pillow<10.3 -- a plain install
+# would honor those by DOWNGRADING the app's entire torch/numpy/Pillow stack.
+# Those pins are empirically unnecessary: the model builds and runs a correct
+# forward pass on the app's modern stack (verified on torch 2.13 / numpy 2.x /
+# Pillow 12). So install it --no-deps -- exactly the toponymy pattern -- and let
+# the app's own torch, torchvision, numpy, Pillow, requests and tqdm (all
+# already present) satisfy it at runtime. Pretrained weights are lazy-downloaded
+# from GitHub on first model use, not here.
+vts_install_face_deps() {
+    pip install --no-deps facenet-pytorch --progress-bar on
+}
+
 vts_install_cpu() {
-    vts_progress_init 5 "Installing VTSearch CPU dependencies"
+    vts_progress_init 6 "Installing VTSearch CPU dependencies"
     echo "Heads-up: the pip steps below show a download bar, but pip also goes quiet"
     echo "for 10-30s at a time while it resolves dependency versions. That silence is"
     echo "normal -- it is working, not frozen."
@@ -856,6 +885,9 @@ vts_install_cpu() {
 
     vts_progress_step "Installing runtime + dev dependencies (this may take several minutes)"
     pip install -r "$REPO_ROOT/requirements/base.txt" --progress-bar on
+
+    vts_progress_step "Installing FaceNet face embedder (facenet-pytorch, --no-deps)"
+    vts_install_face_deps
 
     vts_progress_step "Wiring up pre-commit git hook"
     vts_install_precommit
@@ -1025,7 +1057,7 @@ vts_install_gpu() {
     local cuda_tag="$1"
     local extra_index="https://download.pytorch.org/whl/${cuda_tag}"
 
-    vts_progress_init 9 "Installing VTSearch GPU dependencies (CUDA tag: ${cuda_tag})"
+    vts_progress_init 10 "Installing VTSearch GPU dependencies (CUDA tag: ${cuda_tag})"
     echo "Heads-up: the pip steps below show a download bar, but pip also goes quiet"
     echo "for 10-30s at a time while it resolves dependency versions. That silence is"
     echo "normal -- it is working, not frozen."
@@ -1074,6 +1106,9 @@ vts_install_gpu() {
       --prefer-binary \
       -r "$REPO_ROOT/requirements/gpu.txt" \
       --progress-bar on
+
+    vts_progress_step "Installing FaceNet face embedder (facenet-pytorch, --no-deps)"
+    vts_install_face_deps
 
     vts_progress_step "Installing optional cuML/RAPIDS accelerator (best-effort; CUDA tag: ${cuda_tag})"
     vts_install_cuml "$cuda_tag"

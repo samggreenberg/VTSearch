@@ -51,6 +51,13 @@ class _PerMediaTypeBooleanDict(fields.Dict):
         super().__init__(keys=fields.String(), values=fields.Boolean(), **kwargs)
 
 
+class _PerMediaTypeStringListDict(fields.Dict):
+    """``{media_type_id: [str, ...]}`` dict (custom signpost vocabularies)."""
+
+    def __init__(self, **kwargs):
+        super().__init__(keys=fields.String(), values=fields.List(fields.String()), **kwargs)
+
+
 class AppSettingsSchema(Schema):
     """Full settings dict returned by ``GET /api/settings`` and ``/defaults``.
 
@@ -83,6 +90,15 @@ class AppSettingsSchema(Schema):
     # Settings-modal widget; the panel's draggable divider drives it.
     browse_panel_width = fields.Integer()
 
+    # VTSBrowse docked bin-details panel width (CSS px). Persisted but not
+    # shown as a Settings-modal widget; the panel's draggable divider drives it.
+    browse_details_panel_width = fields.Integer()
+
+    # VTSBrowse docked bin-details metadata-column width (CSS px). Persisted but
+    # not shown as a Settings-modal widget; the divider between the metadata
+    # column and the large item drives it.
+    browse_details_metadata_width = fields.Integer()
+
     # VTSBrowse per-media-type display prefs (density colormap, on-screen cell
     # size). ``{media_type_id: value}`` dicts driven by the browse-canvas
     # toolbar and the Settings → Browser tab. (Bin shape is not stored — it is
@@ -101,6 +117,9 @@ class AppSettingsSchema(Schema):
     # Whether a media type's signpost texts come from the generative captioner
     # (image VLM / audio captioner) instead of the zero-shot tags; unset =tags.
     browse_signpost_captioner = _PerMediaTypeBooleanDict()
+    # Per-media-type custom zero-shot tag vocabulary replacing the built-in
+    # AudioSet-527 / OpenImages-600 lists; unset/empty = the shipped vocabulary.
+    browse_signpost_vocab = _PerMediaTypeStringListDict()
 
     # Per-user, per-media-type
     grid_icon_size_left = _PerMediaTypeStringDict()
@@ -119,6 +138,10 @@ class AppSettingsSchema(Schema):
     # the popup's own metadata toggle button; when shown, a column left of the
     # detail preview carries the focused item's Train/Find metadata fields.
     popup_metadata_shown = _PerMediaTypeBooleanDict()
+    # VTSBrowse bin-details presentation, per media type: true = docked left
+    # panel, false/unset = floating right-click popup window. Driven by the
+    # dock button on the floating window and the pop-out button on the panel.
+    bin_details_docked = _PerMediaTypeBooleanDict()
 
     # Server-tier. These are fixed at server start (config file /
     # environment / CLI flags) and shared across all users; the frontend
@@ -244,6 +267,7 @@ class SettingsUpdateSchema(Schema):
     grid_icon_size_popup = fields.Raw()
     popup_preview_size = fields.Raw()
     popup_metadata_shown = fields.Raw()
+    bin_details_docked = fields.Raw()
 
     autopilot_enabled = fields.Boolean()
     hide_autopilot = fields.Boolean()
@@ -254,6 +278,8 @@ class SettingsUpdateSchema(Schema):
     enable_achievements = fields.Boolean()
 
     browse_panel_width = fields.Integer()
+    browse_details_panel_width = fields.Integer()
+    browse_details_metadata_width = fields.Integer()
 
     # Per-media-type dicts; the setters in ``settings.py`` validate each
     # value against its enum (BrowseColormap / BrowseIconSize), so these are
@@ -265,6 +291,7 @@ class SettingsUpdateSchema(Schema):
     browse_mouse_zooms_per_level = fields.Raw()
     browse_signposts = fields.Raw()
     browse_signpost_captioner = fields.Raw()
+    browse_signpost_vocab = fields.Raw()
 
     autofind_detectors = fields.List(fields.String())
     # Auto-Find results exporter. ``autofind_exporter`` is validated against the

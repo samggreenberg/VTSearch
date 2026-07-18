@@ -113,33 +113,48 @@ describe('AutoFindSettingsComponent', () => {
   it('creates and loads the detector checklist mapped to the narrowed shape', async () => {
     await create();
     expect(component).toBeTruthy();
-    expect(component.loadingDetectors).toBe(false);
-    expect(component.detectors).toEqual([
+    expect(component.loadingDetectors()).toBe(false);
+    expect(component.detectors()).toEqual([
       { id: 'det-1', name: 'Barks', autofind: true, media_type: 'audio' },
       { id: 'det-2', name: 'Cats', autofind: false, media_type: 'image' },
     ]);
-    expect(component.detectorError).toBe('');
+    expect(component.detectorError()).toBe('');
   });
 
   it('loads exporters, filtering out picker-hidden ones', async () => {
     await create();
-    expect(component.loadingExporters).toBe(false);
-    expect(component.exporters.map((e) => e.name)).toEqual(['server_json_file', 'email']);
+    expect(component.loadingExporters()).toBe(false);
+    expect(component.exporters().map((e) => e.name)).toEqual(['server_json_file', 'email']);
+  });
+
+  it('clears the "Loading…" placeholders in the DOM once the loads settle (zoneless canary)', async () => {
+    // Regression guard: the loading flags are written from async subscribe
+    // callbacks. As plain properties those writes never schedule change
+    // detection under zoneless, so the DOM stayed stuck on "Loading…" forever.
+    // As signals they repaint. settleZoneless() flushes only *scheduled* CD (it
+    // does not force detectChanges), so a stale DOM here means a missing write.
+    await create();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).not.toContain('Loading detectors…');
+    expect(text).not.toContain('Loading exporters…');
+    // The real content rendered in place of the placeholders.
+    expect(text).toContain('Barks');
+    expect(text).toContain('JSON File');
   });
 
   it('sets detectorError and clears loading when the registry fails', async () => {
     registryResponse = () => throwError(() => new Error('nope'));
     await create();
-    expect(component.detectorError).toBe('Failed to load detectors');
-    expect(component.loadingDetectors).toBe(false);
-    expect(component.detectors).toEqual([]);
+    expect(component.detectorError()).toBe('Failed to load detectors');
+    expect(component.loadingDetectors()).toBe(false);
+    expect(component.detectors()).toEqual([]);
   });
 
   it('clears the exporter loading flag when the exporters call fails', async () => {
     exportersResponse = () => throwError(() => new Error('nope'));
     await create();
-    expect(component.loadingExporters).toBe(false);
-    expect(component.exporters).toEqual([]);
+    expect(component.loadingExporters()).toBe(false);
+    expect(component.exporters()).toEqual([]);
   });
 
   it('initialises the active exporter and cloned field values from inputs', async () => {
@@ -168,7 +183,7 @@ describe('AutoFindSettingsComponent', () => {
 
   it('toggleDetector flips the flag optimistically and persists it', async () => {
     await create();
-    const cats = component.detectors[1];
+    const cats = component.detectors()[1];
     component.toggleDetector(cats, true);
     expect(cats.autofind).toBe(true);
     expect(autofindCalls).toEqual([{ id: 'det-2', autofind: true }]);
@@ -177,10 +192,10 @@ describe('AutoFindSettingsComponent', () => {
   it('toggleDetector reverts and reports an error when the persist fails', async () => {
     autofindResponse = () => throwError(() => new Error('fail'));
     await create();
-    const cats = component.detectors[1];
+    const cats = component.detectors()[1];
     component.toggleDetector(cats, true);
     expect(cats.autofind).toBe(false); // reverted
-    expect(component.detectorError).toBe('Failed to update Auto-Find for "Cats"');
+    expect(component.detectorError()).toBe('Failed to update Auto-Find for "Cats"');
   });
 
   it('selectExporter seeds default field values on first pick and emits', async () => {

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input, OnDestroy, OnInit, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, input, OnDestroy, OnInit, output, signal } from '@angular/core';
 import { TitleCasePipe } from '@angular/common';
 
 import { FormsModule } from '@angular/forms';
@@ -75,11 +75,15 @@ export class AutoFindSettingsComponent implements OnInit, OnDestroy {
    *  persist whenever the user changes the exporter or any of its fields. */
   readonly exporterChange = output<AutoFindExporterChange>();
 
-  detectors: AutofindDetectorEntry[] = [];
-  exporters: ExporterEntry[] = [];
-  loadingDetectors = true;
-  loadingExporters = true;
-  detectorError = '';
+  // Written from the async load subscribes below (not a zoneless CD trigger)
+  // yet read in the template, so they must be signals to repaint on emit;
+  // plain-property writes inside a subscribe callback never schedule change
+  // detection under zoneless, which is what left "Loading…" stuck forever.
+  readonly detectors = signal<AutofindDetectorEntry[]>([]);
+  readonly exporters = signal<ExporterEntry[]>([]);
+  readonly loadingDetectors = signal(true);
+  readonly loadingExporters = signal(true);
+  readonly detectorError = signal('');
 
   /** Active exporter tab ('' = the "None" tab). Mirrors ``autofindExporter``
    *  but is the single source of truth for which tab body is shown. */
@@ -96,17 +100,19 @@ export class AutoFindSettingsComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (res) => {
-          this.detectors = (res.detectors || []).map((d) => ({
-            id: String((d as Record<string, unknown>)['id'] ?? ''),
-            name: String((d as Record<string, unknown>)['name'] ?? ''),
-            autofind: Boolean((d as Record<string, unknown>)['autofind']),
-            media_type: String((d as Record<string, unknown>)['media_type'] ?? ''),
-          }));
-          this.loadingDetectors = false;
+          this.detectors.set(
+            (res.detectors || []).map((d) => ({
+              id: String((d as Record<string, unknown>)['id'] ?? ''),
+              name: String((d as Record<string, unknown>)['name'] ?? ''),
+              autofind: Boolean((d as Record<string, unknown>)['autofind']),
+              media_type: String((d as Record<string, unknown>)['media_type'] ?? ''),
+            })),
+          );
+          this.loadingDetectors.set(false);
         },
         error: () => {
-          this.detectorError = 'Failed to load detectors';
-          this.loadingDetectors = false;
+          this.detectorError.set('Failed to load detectors');
+          this.loadingDetectors.set(false);
         },
       });
 
@@ -115,11 +121,11 @@ export class AutoFindSettingsComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (list) => {
-          this.exporters = (list || []).filter((exp) => !exp.hidden_from_picker);
-          this.loadingExporters = false;
+          this.exporters.set((list || []).filter((exp) => !exp.hidden_from_picker));
+          this.loadingExporters.set(false);
         },
         error: () => {
-          this.loadingExporters = false;
+          this.loadingExporters.set(false);
         },
       });
   }
@@ -143,7 +149,7 @@ export class AutoFindSettingsComponent implements OnInit, OnDestroy {
       .subscribe({
         error: () => {
           detector.autofind = prev; // revert on failure
-          this.detectorError = `Failed to update Auto-Find for "${detector.name}"`;
+          this.detectorError.set(`Failed to update Auto-Find for "${detector.name}"`);
         },
       });
   }
@@ -164,7 +170,7 @@ export class AutoFindSettingsComponent implements OnInit, OnDestroy {
   /** Fields of the active exporter, or ``[]`` for the "None" tab. */
   get activeFields(): ImporterField[] {
     if (!this.activeExporter) return [];
-    const exp = this.exporters.find((e) => e.name === this.activeExporter);
+    const exp = this.exporters().find((e) => e.name === this.activeExporter);
     return ((exp?.fields ?? []) as ImporterField[]) || [];
   }
 
@@ -192,7 +198,7 @@ export class AutoFindSettingsComponent implements OnInit, OnDestroy {
   }
 
   private defaultFieldValues(name: string): Record<string, string> {
-    const exp = this.exporters.find((e) => e.name === name);
+    const exp = this.exporters().find((e) => e.name === name);
     const out: Record<string, string> = {};
     for (const field of (exp?.fields ?? []) as ImporterField[]) {
       if (field.default) out[field.key] = field.default;

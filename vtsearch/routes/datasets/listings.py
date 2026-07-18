@@ -113,7 +113,13 @@ def converters_list(query: dict):
     else:
         converters = list_converters()
 
-    return {"converters": [c.to_dict() for c in filter_visible_plugins("converters", converters)]}
+    # Two independent hide mechanisms both apply to this picker-facing
+    # listing: the admin-level ``hidden_plugins`` setting/CLI hide
+    # (``filter_visible_plugins``) and the plugin author's own
+    # ``hidden_from_picker`` flag. Honour both so hidden converters (e.g.
+    # ``audio2image`` / ``audio2text``) never surface in a picker.
+    visible = filter_visible_plugins("converters", converters)
+    return {"converters": [c.to_dict() for c in visible if not c.hidden_from_picker]}
 
 
 @datasets_listings_bp.route("/api/dataset/importers")

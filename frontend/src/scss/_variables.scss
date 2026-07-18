@@ -58,6 +58,14 @@
   --transition-base: 0.15s;
   --transition-slow: 0.3s;
 
+  // Shared easing curves, so new motion stays visually consistent instead of
+  // hand-writing a cubic-bezier per rule.
+  //   --ease-out    → things arriving/settling (modal scale-in, panel reveal):
+  //                   fast start, gentle deceleration into place.
+  //   --ease-in-out → symmetric moves where both ends should feel eased.
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
   // Elevation / shadow scale (resolves through --shadow-dropdown so each
   // theme tints shadows appropriately: dark/light/highviz)
   --shadow-sm: 0 1px 2px var(--shadow-dropdown);
@@ -149,6 +157,9 @@
   --accent-hover: #6b79ee;
   --color-good: #4caf50;
   --color-bad: #f44336;
+  // Audio-waveform playhead: a warm line swept over the (blue --accent)
+  // waveform, so it reads as the complementary color and never blends in.
+  --waveform-playhead: #ffb300;
   --shadow-dropdown: rgba(0, 0, 0, 0.5);
   --modal-backdrop: rgba(0, 0, 0, 0.7);
   --indicator-border: #444;
@@ -253,6 +264,7 @@
   --accent-hover: #4a58c8;
   --color-good: #388e3c;
   --color-bad: #d32f2f;
+  --waveform-playhead: #e8590c;
   --shadow-dropdown: rgba(0, 0, 0, 0.15);
   --modal-backdrop: rgba(0, 0, 0, 0.4);
   --indicator-border: #bbb;
@@ -324,6 +336,8 @@
   --accent-hover: #cccc00;
   --color-good: #00ff00;
   --color-bad: #ff0000;
+  // Max-contrast red line over the yellow (--accent) waveform in highviz.
+  --waveform-playhead: #ff0000;
   --shadow-dropdown: rgba(255, 255, 255, 0.2);
   --modal-backdrop: rgba(0, 0, 0, 0.85);
   --indicator-border: #ffffff;

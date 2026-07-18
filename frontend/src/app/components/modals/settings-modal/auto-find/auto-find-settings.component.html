@@ -8,13 +8,13 @@
     <vt-icon type="help" [size]="14"></vt-icon>
   </span>
 </h4>
-@if (loadingDetectors) {
+@if (loadingDetectors()) {
   <p class="empty-state">Loading detectors…</p>
-} @else if (detectors.length === 0) {
+} @else if (detectors().length === 0) {
   <p class="empty-state">No detectors registered yet. Train or import a detector first.</p>
 } @else {
   <div class="detector-list">
-    @for (d of detectors; track d.id) {
+    @for (d of detectors(); track d.id) {
       <label class="checkbox-row" [title]="'Auto-Find ' + d.name + (d.media_type ? ' (' + d.media_type + ')' : '')">
         <input type="checkbox" [ngModel]="d.autofind" (ngModelChange)="toggleDetector(d, $event)" />
         {{ d.name }}
@@ -25,11 +25,14 @@
     }
   </div>
 }
-@if (detectorError) {
-  <p class="error-text">{{ detectorError }}</p>
+@if (detectorError()) {
+  <p class="error-text">{{ detectorError() }}</p>
 }
 
 <!-- Results Exporter ------------------------------------------------------ -->
+<!-- Hidden entirely when no exporters are available: the section would
+     otherwise degrade to a lone "None" tab (a picker with no real choice). -->
+@if (loadingExporters() || exporters().length > 0) {
 <h4 class="subhead">
   Results Exporter:
   <span
@@ -39,7 +42,7 @@
     <vt-icon type="help" [size]="14"></vt-icon>
   </span>
 </h4>
-@if (loadingExporters) {
+@if (loadingExporters()) {
   <p class="empty-state">Loading exporters…</p>
 } @else {
   <div class="view-tabs">
@@ -50,7 +53,7 @@
       title="Do not export results automatically">
       None
     </button>
-    @for (exp of exporters; track exp.name) {
+    @for (exp of exporters(); track exp.name) {
       <button
         class="view-tab"
         [class.view-tab--active]="activeExporter === exp.name"
@@ -106,4 +109,5 @@
       }
     }
   </div>
+}
 }

@@ -158,6 +158,41 @@ def _upper(v: Any) -> Any:
     return v.upper() if isinstance(v, str) else v
 
 
+#: Cap the per-media-type custom signpost vocabulary. Each term costs one text
+#: embed at build time, so an unbounded list would let a single setting write
+#: stall every projection build; AudioSet-527 / OpenImages-600 sit well under it.
+SIGNPOST_VOCAB_MAX_TERMS = 2000
+
+
+def _normalize_signpost_vocab(v: Any) -> Any:
+    """Clean a ``{media_type: [term, ...]}`` custom-vocabulary map.
+
+    Strips whitespace, drops blank/duplicate terms (order-preserving), caps each
+    list at :data:`SIGNPOST_VOCAB_MAX_TERMS`, and drops media types left with no
+    terms so an empty list reads as "use the built-in vocabulary". Non-dict or
+    non-list input is passed through untouched for Pydantic to reject.
+    """
+    if not isinstance(v, dict):
+        return v
+    out: dict[str, list[str]] = {}
+    for media_type, terms in v.items():
+        if not isinstance(terms, list):
+            return v
+        seen: set[str] = set()
+        clean: list[str] = []
+        for term in terms:
+            if not isinstance(term, str):
+                continue
+            stripped = term.strip()
+            if not stripped or stripped in seen:
+                continue
+            seen.add(stripped)
+            clean.append(stripped)
+        if clean:
+            out[str(media_type)] = clean[:SIGNPOST_VOCAB_MAX_TERMS]
+    return out
+
+
 def _default_concurrent_downloads() -> int:
     """Lazily resolve the hardware-derived default for parallel downloads.
 
@@ -312,6 +347,24 @@ class UserSettings(BaseModel):
     # on-screen range.
     browse_panel_width: Annotated[int, _clamp(260, 800)] = 360
 
+    # VTSBrowse docked bin-details panel width (CSS px). When the bin-details
+    # window is docked (``bin_details_docked``), it renders as a left panel
+    # beside the canvas, separated by a draggable divider; this persists the
+    # width the user dragged it to. Not surfaced as a Settings-modal widget -
+    # the divider drives it. Clamped to a sane on-screen range.
+    browse_details_panel_width: Annotated[int, _clamp(220, 800)] = 340
+
+    # VTSBrowse docked bin-details metadata-column width (CSS px). When the
+    # docked bin-details panel shows its metadata column, a draggable divider
+    # separates that column from the large item beside it; this persists the
+    # width the user dragged the metadata column to. The large item takes
+    # whatever the panel leaves after the metadata column, so it always grows
+    # to fill the space (there is no per-item size control in the docked panel).
+    # Defaults to just enough for an MD5 digest to wrap onto two rows. Not
+    # surfaced as a Settings-modal widget - the divider drives it. Clamped to a
+    # sane on-screen range.
+    browse_details_metadata_width: Annotated[int, _clamp(120, 600)] = 150
+
     # VTSBrowse per-media-type display preferences. Each is a
     # ``{media_type_id: value}`` dict so a user can tune the projection
     # browser independently for, say, audio vs. image datasets. Empty
@@ -363,6 +416,15 @@ class UserSettings(BaseModel):
     #   from the generative captioner (image VLM / audio captioner) instead of
     #   the default zero-shot tags. Empty entries fall back to tags (false).
     browse_signpost_captioner: dict[str, bool] = Field(default_factory=dict)
+    # - ``browse_signpost_vocab``: per-media-type user-supplied zero-shot tag
+    #   vocabulary (one entry per media type, a list of terms) that replaces the
+    #   built-in AudioSet-527 / OpenImages-600 lists when naming map regions in
+    #   Tags mode. Normalized on write (trimmed, de-duplicated, capped); an empty
+    #   or absent list falls back to the shipped vocabulary. Takes effect on the
+    #   next projection build / Re-project, since signpost texts are cached.
+    browse_signpost_vocab: Annotated[dict[str, list[str]], BeforeValidator(_normalize_signpost_vocab)] = Field(
+        default_factory=dict
+    )
 
     grid_icon_size_left: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     grid_icon_size_right: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
@@ -398,6 +460,13 @@ class UserSettings(BaseModel):
     # thus a focused item to attach the column to, but the flag is stored per media
     # type generically.
     popup_metadata_shown: dict[str, bool] = Field(default_factory=dict)
+    # VTSBrowse bin-details presentation, per media type. When true, the bin
+    # details open docked as a left panel beside the canvas (large item +
+    # metadata on top, the bin's member grid below) instead of the floating
+    # right-click popup window. Driven by the dock button on the floating
+    # window and the pop-out button on the docked panel; empty entries fall
+    # back to the floating window (false).
+    bin_details_docked: dict[str, bool] = Field(default_factory=dict)
     panel_pct_left: dict[str, int] = Field(default_factory=dict)
     panel_pct_right: dict[str, int] = Field(default_factory=dict)
 

@@ -34,20 +34,9 @@
       }
     </div>
 
-    <div class="form-group">
-      <label class="col-label" for="combine-policy" title="How to handle labels that disagree across sources">Conflict policy</label>
-      <select
-        id="combine-policy"
-        class="form-select"
-        [(ngModel)]="conflictPolicy"
-        name="conflictPolicy"
-        disabled
-        title="Only one policy is supported today"
-      >
-        <option value="drop">Drop conflicting labels</option>
-      </select>
-      <p class="info-text">Only one policy is supported today.</p>
-    </div>
+    <p class="info-text" title="How labels that disagree across sources are handled">
+      Labels that disagree across sources are dropped.
+    </p>
 
     @if (error) {
       <p class="error-text">{{ error }}</p>

@@ -42,9 +42,9 @@ class SeededEmbedder:
         return vec / np.linalg.norm(vec)
 
 
-def test_real_toponymy_fit_produces_signs():
+def _seeded_corpus(per_cluster: int = 100):
+    """A tiny 3-cluster seeded corpus + its 2-D layout, for the real fit."""
     rng = np.random.default_rng(42)
-    per_cluster = 100
     centers = rng.standard_normal((3, _DIM)).astype(np.float32) * 4
     rows, texts = [], []
     for c in range(3):
@@ -52,10 +52,14 @@ def test_real_toponymy_fit_produces_signs():
         texts.extend(_WORDS[c][i % len(_WORDS[c])] for i in range(per_cluster))
     matrix = np.vstack(rows)
     matrix /= np.linalg.norm(matrix, axis=1, keepdims=True)
-
     n = matrix.shape[0]
     coords = rng.standard_normal((n, 2)).astype(np.float32)
     proj = Projection("smoke-proj", list(range(1, n + 1)), coords, "pca")
+    return proj, matrix, texts
+
+
+def test_real_toponymy_fit_produces_signs():
+    proj, matrix, texts = _seeded_corpus()
 
     label_set = build_region_labels(
         proj,
@@ -80,3 +84,39 @@ def test_real_toponymy_fit_produces_signs():
     corpus_vocab = {w for words in _WORDS.values() for phrase in words for w in phrase.split()}
     named_words = {w for lab in label_set.labels for w in lab.text.lower().split()}
     assert named_words & corpus_vocab
+
+
+def test_real_toponymy_fit_is_quiet_and_reports_layers(capsys):
+    """The library's ``Layer N found M clusters`` prints and its per-cluster
+    tqdm bars must stay off; the layer/topic breakdown surfaces through the
+    ``on_progress`` callback as a determinate, per-layer naming bar instead."""
+    proj, matrix, texts = _seeded_corpus()
+
+    progress: list[tuple[int, int, str]] = []
+    build_region_labels(
+        proj,
+        matrix,
+        matrix,
+        texts,
+        SeededEmbedder(),
+        object_description="sounds",
+        corpus_description="a tiny synthetic corpus of animal, weather, and traffic sounds",
+        on_progress=lambda current, total, message: progress.append((current, total, message)),
+    )
+
+    captured = capsys.readouterr()
+    # The exact stdout flood the user reported ("Layer 0 found 65 clusters").
+    assert "found" not in captured.out.lower()
+    assert "Layer" not in captured.out
+    # tqdm progress bars (stderr) from exemplar selection / keyphrase mining
+    # must not flash by.
+    for bar_desc in ("exemplars", "informative keyphrases", "Building topic names by layer"):
+        assert bar_desc not in captured.err
+
+    # Naming reported a determinate bar broken down by layer (0-based, finest
+    # first), the "measuring layers 0,1,2" upgrade.
+    naming = [(c, t, m) for c, t, m in progress if "layer" in m.lower()]
+    assert naming, "naming never reported per-layer progress"
+    assert all(total > 0 for _, total, _ in naming), "naming bar was indeterminate"
+    assert all(current <= total for current, total, _ in naming), "naming count overran its total"
+    assert any("layer 0" in m.lower() for _, _, m in naming), "finest layer never reported"
