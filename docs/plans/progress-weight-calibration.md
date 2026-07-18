@@ -32,6 +32,16 @@ python scripts/profiling/fit_load_weights.py gpu.jsonl cpu.jsonl   # prints the 
 a load, not a cold HuggingFace download.) Add the fitted rows to
 `vtscore/datasets/stages/_load_cost_model.py`.
 
+The same run also records one `finalize:<slot>` row per finalize sub-stage
+(`FinalizeProgress.begin` stamps them automatically while the recorder is
+armed), and `fit_load_weights.py` emits a `FINALIZE_SLOT_SHARES` body from them —
+the measured per-`(device, media)` finalize sub-slot shares that replace the
+static `FinalizeProgress._SLOTS` ballpark (issue #2624). Paste that body into
+`_load_cost_model.py` alongside `LOAD_COST_MODEL`; uncalibrated cells keep the
+static fallback. The GPU cells are the ones worth measuring first: on a non-cuML
+GPU host the coverage k-means can outweigh the registry save, which the static
+shares don't capture.
+
 ---
 
 ## Reference: method & cost model

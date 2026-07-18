@@ -239,11 +239,15 @@ class FinalizeProgress:
     #: this ``total`` so the tracker's overall math sees a normal sub-step.
     _SCALE = 1000
 
-    #: Ordered finalize sub-stages with a rough wall-clock share each. The
-    #: registry save (serialize + zip + write) dominates, with the coverage
+    #: Static fallback finalize sub-stage shares, used when no measured
+    #: ``(device, media_type)`` row exists in the finalize sub-slot cost model.
+    #: The registry save (serialize + zip + write) dominates, with the coverage
     #: tree second; the rest are quick. Shares need only be in the right
     #: ballpark — they shape pacing within the finalize slice, and the overall
     #: ETA self-corrects from the real rate (see ProgressTracker._compute_overall).
+    #: When a calibration run populates ``_load_cost_model.FINALIZE_SLOT_SHARES``
+    #: for a cell, those measured shares replace this ballpark for that cell (see
+    #: :func:`_finalize_slots`).
     _SLOTS: tuple[tuple[str, float], ...] = (
         ("cleanup", 0.05),
         ("dedup", 0.15),
@@ -253,17 +257,18 @@ class FinalizeProgress:
         ("projection", 0.05),
     )
 
-    def __init__(self, tracker) -> None:
+    def __init__(self, tracker, media_type: str = "") -> None:
         self._tracker = tracker
-        total = sum(weight for _, weight in self._SLOTS) or 1.0
+        slots = _finalize_slots(media_type)
+        total = sum(weight for _, weight in slots) or 1.0
         self._ranges: dict[str, tuple[float, float]] = {}
         acc = 0.0
-        for name, weight in self._SLOTS:
+        for name, weight in slots:
             self._ranges[name] = (acc / total, weight / total)
             acc += weight
         # Default to the first slot so an update before any begin() still maps
         # somewhere sane rather than raising.
-        self._base, self._span = self._ranges[self._SLOTS[0][0]]
+        self._base, self._span = self._ranges[slots[0][0]]
 
     def begin(self, slot: str) -> None:
         """Activate *slot*; subsequent :meth:`update` calls map into its range."""
@@ -294,6 +299,29 @@ class FinalizeProgress:
             total_steps=_TOTAL_LOAD_STEPS,
             **kwargs,
         )
+
+
+def _finalize_slots(media_type: str = "") -> tuple[tuple[str, float], ...]:
+    """Ordered finalize sub-slot ``(name, share)`` tuples for the active device
+    and *media_type*.
+
+    Returns the measured row from the finalize sub-slot cost model when one
+    exists for ``(device, media_type)`` (so the finalize slice paces against the
+    real per-device mix — e.g. a non-cuML GPU host where the coverage k-means
+    outweighs the registry save), else the static
+    :data:`FinalizeProgress._SLOTS` ballpark. Never raises: a library-only
+    caller that can't resolve the device or the cost model falls back to static.
+    """
+    try:
+        device = _resolve_device_name()
+        from vtscore.datasets.stages._load_cost_model import finalize_slot_shares  # noqa: PLC0415
+
+        shares = finalize_slot_shares(device, media_type)
+        if shares:
+            return shares
+    except Exception:
+        pass
+    return FinalizeProgress._SLOTS
 
 
 #: Canonical phase order for a dataset load. ``download`` and ``extract`` are

@@ -511,7 +511,7 @@ def _run_origin_load_in_background(
                     # filling (and pinning at 100%) the whole slice — keeps the
                     # bar advancing and the ETA self-correcting through the
                     # serialize/disk-write window. See FinalizeProgress.
-                    fin = FinalizeProgress(pacer)
+                    fin = FinalizeProgress(pacer, media_type)
                     fin.begin("cleanup")
                     _drop_none_embeddings_stage(ctx, fin)
                     # Re-lazify clips from reference (thin) parents now that

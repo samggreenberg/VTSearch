@@ -94,6 +94,43 @@ DOWNLOAD_MB_PER_S: float = 3.836
 EXTRACT_MB_PER_S: float = 61.477
 
 
+# Per-(device, media) finalize sub-slot shares — the measured counterpart to the
+# static ``FinalizeProgress._SLOTS`` ballpark. The finalize phase (step 4) is
+# split into ordered sub-stages (cleanup, dedup, coverage-atlas, signpost-texts,
+# registry, projection); this maps each ``(device, media_type)`` to that phase's
+# measured wall-clock share per sub-stage, so the finalize slice paces against
+# the real per-device mix rather than one static guess. The shares are raw
+# weights (need not sum to 1 — :func:`finalize_slot_shares` is normalized by its
+# consumer). Slot order here is the execution order; a slot omitted from a row
+# simply isn't paced separately for that cell.
+#
+# EMPTY until a calibration run populates it. The env-gated load profiler already
+# records ``finalize:<slot>`` rows (see ``_load_profiler`` /
+# ``FinalizeProgress.begin``); ``scripts/profiling/fit_load_weights.py`` fits
+# them into this table's body. Re-run that harness to refresh — do not hand-tune.
+# Cells with no measured row fall back to the static ``FinalizeProgress._SLOTS``
+# ballpark (which is why the finalize sub-stage motivating this table — a
+# non-cuML GPU host where the coverage k-means outweighs the registry save — is
+# uncalibrated here and awaits a GPU calibration run; see issue #2624).
+FINALIZE_SLOT_SHARES: dict[tuple[str, str], tuple[tuple[str, float], ...]] = {}
+
+
+def finalize_slot_shares(
+    device: str, media_type: str
+) -> Optional[tuple[tuple[str, float], ...]]:
+    """Return the measured finalize sub-slot ``(slot, share)`` tuples for
+    ``(device, media_type)``, or ``None`` when no calibrated row exists (so the
+    caller falls back to the static ``FinalizeProgress._SLOTS`` ballpark).
+
+    ``device`` is normalized to "cuda" / "cpu"; the shares are returned verbatim
+    (raw weights) — the consumer normalizes them into ordered sub-ranges.
+    """
+    row = FINALIZE_SLOT_SHARES.get((normalize_device(device), media_type))
+    if not row:
+        return None
+    return row
+
+
 def normalize_device(device: str) -> str:
     """Collapse ``resolve_device()`` output ("cuda:0", "cuda", "cpu", "mps"…) to
     the coarse key used by :data:`LOAD_COST_MODEL` ("cuda" / "cpu")."""
