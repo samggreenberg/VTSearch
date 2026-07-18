@@ -29,7 +29,14 @@ from __future__ import annotations
 from typing import Optional
 
 # key: (device, media_type, embedder) -> affine coefficients (seconds).
-# ``device`` is normalized to "cuda" / "cpu"; ``embedder`` is the encoder name.
+# ``device`` is "cpu", "cuda", or "cuda+cuml"; ``embedder`` is the encoder
+# name (empty for convert-out media like document, which embed via a
+# converter target). The "cuda+cuml" variant covers GPU hosts where cuML
+# serves the coverage-atlas k-means / UMAP (see ``vtscore/gpu_backends.py``)
+# — that moves the dominant finalize work to the GPU, so the finalize
+# coefficients differ materially from the CPU-clustering "cuda" rows. Lookup
+# tries the variant matching the live cuML state first and falls back to the
+# other, so a host missing one variant still gets the closer measured row.
 # POPULATED FROM CALIBRATION (HLTCOE Grid rack8n06, 2026-07-18 run under
 # /exp/…/calib-2556; see plan Results). Cells with no row fall back to the
 # static per-(device, media) profiles in ``_common``.
@@ -100,6 +107,36 @@ def normalize_device(device: str) -> str:
     return "cuda" if device.startswith("cuda") else "cpu"
 
 
+def _cuml_active() -> bool:
+    """Whether cuML will serve this process's clustering (never raises)."""
+    try:
+        from vtscore.gpu_backends import cuml_enabled  # noqa: PLC0415
+
+        return cuml_enabled()
+    except Exception:
+        return False
+
+
+def _lookup_row(device: str, media_type: str, embedder: str) -> Optional[dict[str, float]]:
+    """Find the closest measured coefficient row for the cell.
+
+    CPU devices map straight to their row. CUDA devices have two measured
+    variants — "cuda+cuml" (GPU clustering) and "cuda" (CPU clustering on a
+    GPU host) — and the live cuML state picks which is tried first; the other
+    is the fallback, since a same-device row with a different finalize cost
+    beats falling back to the static profile entirely.
+    """
+    dev = normalize_device(device)
+    if dev != "cuda":
+        return LOAD_COST_MODEL.get((dev, media_type, embedder))
+    variants = ("cuda+cuml", "cuda") if _cuml_active() else ("cuda", "cuda+cuml")
+    for variant in variants:
+        row = LOAD_COST_MODEL.get((variant, media_type, embedder))
+        if row is not None:
+            return row
+    return None
+
+
 def cost_model_terms(
     device: str,
     media_type: str,
@@ -119,7 +156,7 @@ def cost_model_terms(
     terms — which is exactly right for local-folder imports and cache-backed
     re-adds, where no archive is fetched or unpacked.
     """
-    row = LOAD_COST_MODEL.get((normalize_device(device), media_type, embedder))
+    row = _lookup_row(device, media_type, embedder)
     if row is None or n <= 0:
         return None
     t_download = 0.0

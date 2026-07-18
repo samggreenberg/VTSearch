@@ -21,16 +21,27 @@ and need calibration.
 
 <!-- item-sep -->
 
-## Reproducing calibration for a remaining cell
+## Reproducing calibration for a cell
 
 ```
-CUDA_VISIBLE_DEVICES=0 python scripts/profiling/calibrate_load_weights.py --out gpu.jsonl
+CUDA_VISIBLE_DEVICES=0 python scripts/profiling/calibrate_load_weights.py --out gpu.jsonl --embedders all
+CUDA_VISIBLE_DEVICES=0 python scripts/profiling/calibrate_load_weights.py --out gpu-cumloff.jsonl --cuml off
 CUDA_VISIBLE_DEVICES=  python scripts/profiling/calibrate_load_weights.py --out cpu.jsonl --sizes s,m,l
-python scripts/profiling/fit_load_weights.py gpu.jsonl cpu.jsonl   # prints the coefficient table
+python scripts/profiling/fit_load_weights.py gpu.jsonl gpu-cumloff.jsonl cpu.jsonl   # prints the coefficient table
 ```
 (Needs `VTSEARCH_MODELS_DIR` pointed at a warm model cache so the model phase is
 a load, not a cold HuggingFace download.) Add the fitted rows to
 `vtscore/datasets/stages/_load_cost_model.py`.
+
+The driver covers all five demo-backed media types (image/audio/video/text/
+document; face has no demo datasets and is logged as skipped). `--embedders
+all` sweeps every registered embedder for the media type, one subprocess per
+(media, embedder) cell so encoder models don't accumulate in RAM/VRAM — pass
+`--data-dir` so the cells share one source-archive cache. `--cuml off` sets
+`VTSEARCH_DISABLE_CUML=1` to measure the CPU-clustering finalize variant on a
+GPU host; the profiler stamps every row with the live cuML state and the fit
+keys cuML-on CUDA rows as device `"cuda+cuml"`. Runtime lookup tries the
+variant matching the live cuML state first and falls back to the other.
 
 ---
 

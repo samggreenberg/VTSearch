@@ -50,6 +50,7 @@ libraries automatically.
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 import numpy as np
@@ -77,6 +78,13 @@ def cuml_enabled() -> bool:
     :func:`_disable_cuml_after_failure`.
     """
     if _cuml_runtime_failed:
+        return False
+    if os.environ.get("VTSEARCH_DISABLE_CUML", "") not in ("", "0"):
+        # Runtime opt-out (distinct from the install-time VTSEARCH_SKIP_CUML):
+        # forces the CPU clustering libraries even when cuML is installed and
+        # the GPU is usable. Used by the load-weight calibration harness to
+        # measure the cuML-off finalize variant, and handy when a RAPIDS
+        # install is present but misbehaving.
         return False
     from vtscore.config import resolve_device
 

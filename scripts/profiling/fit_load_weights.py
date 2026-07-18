@@ -72,12 +72,19 @@ def main() -> int:
         return 2
     rows = _load_rows(sys.argv[1:])
 
-    # Group phase-seconds by (device, media, embedder).
+    # Group phase-seconds by (device, media, embedder). ``device`` is collapsed
+    # to the coarse cost-model key: "cuda:0" → "cuda", and a CUDA row measured
+    # with cuML active becomes the "cuda+cuml" variant (cuML moves the
+    # coverage-atlas k-means / UMAP to the GPU, changing the finalize cost —
+    # the profiler stamps each row with the active cuML state).
     groups: dict[tuple[str, str, str], dict[str, list[tuple[float, float]]]] = defaultdict(lambda: defaultdict(list))
     dl_by_device: dict[str, list[tuple[float, float]]] = defaultdict(list)  # (size_mb, seconds)
     extract_pts: list[tuple[float, float]] = []  # (size_mb, seconds), device-pooled
     for r in rows:
-        key = (r["device"], r["media_type"], r["embedder"])
+        device = str(r["device"])
+        if device.startswith("cuda"):
+            device = "cuda+cuml" if r.get("cuml") else "cuda"
+        key = (device, r["media_type"], r["embedder"])
         phase = r["phase"]
         n = float(r.get("n") or 0)
         secs = float(r.get("seconds") or 0)

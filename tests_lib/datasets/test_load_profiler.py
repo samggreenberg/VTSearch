@@ -130,6 +130,7 @@ def test_records_phases_and_writes_schema(monkeypatch, tmp_path, clean_seen_embe
         "download_size_mb",
         "cold_model",
         "cold_download",
+        "cuml",
         "phase",
         "seconds",
     }
@@ -143,6 +144,23 @@ def test_records_phases_and_writes_schema(monkeypatch, tmp_path, clean_seen_embe
         assert isinstance(r["seconds"], (int, float)) and r["seconds"] >= 0.0
         # A fast in-test load never spends >1s downloading.
         assert r["cold_download"] is False
+        assert isinstance(r["cuml"], bool)
+
+
+def test_rows_stamp_active_cuml_state(monkeypatch, tmp_path, clean_seen_embedders):
+    """Each row records whether cuML serves this process's clustering, so the
+    fit can key CUDA measurements as "cuda" vs "cuda+cuml" (the finalize cost
+    differs materially between the two)."""
+    out = tmp_path / "prof.jsonl"
+    monkeypatch.setenv("VTSEARCH_PROFILE_LOAD", str(out))
+    monkeypatch.setattr("vtscore.gpu_backends.cuml_enabled", lambda: True)
+    tracker = _make_tracker()
+
+    prof = start_profiler(tracker, "image", "siglip")
+    _drive_phases(tracker)
+    prof.finish(10, "ds")
+
+    assert all(r["cuml"] is True for r in _read_rows(out))
 
 
 def test_finalize_sub_slots_recorded(monkeypatch, tmp_path, clean_seen_embedders):
