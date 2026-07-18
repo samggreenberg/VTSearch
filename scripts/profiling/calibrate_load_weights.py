@@ -190,6 +190,16 @@ def _run_cells_in_process(args: argparse.Namespace, cells: list[tuple[str, str]]
         os.environ["VTSEARCH_PROFILE_DATASET_ID"] = dataset_id
         importer = get_importer("demo")
         fv = {"name": dataset_id, "media_type": media_type, "embedder": embedder}
+        if not embedder:
+            # Convert-out half types (document) are importable but not
+            # embeddable: without the converter the load ends with every item
+            # dropped (embedding=None). Mirror the UI's default: convert to
+            # the first ``converts_to`` target (e.g. document2image).
+            from vtscore.media import get as get_media_type  # noqa: PLC0415
+
+            targets = getattr(get_media_type(media_type), "converts_to", [])
+            if targets:
+                fv["converter"] = f"{media_type}2{targets[0]}"
         t0 = time.monotonic()
         tid = _run_importer_in_background(importer, fv)
         deadline = t0 + 3600
