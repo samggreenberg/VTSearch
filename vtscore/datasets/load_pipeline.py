@@ -372,6 +372,7 @@ def _run_origin_load_in_background(
     media_type: str = "",
     build_projection: bool = False,
     merge_near_duplicates: bool = False,
+    dataset_id: str = "",
     n_hint: int | None = None,
     download_size_mb_hint: float | None = None,
 ) -> str:
@@ -549,7 +550,11 @@ def _run_origin_load_in_background(
                     controller.release()
                     clear_thread_progress()
         finally:
-            profiler.finish(len(ctx.medias))  # writes JSONL + unbinds (no-op when off)
+            # Pass the demo dataset id (empty for non-demo loads) so profiler
+            # rows carry it and can resolve the archive size via
+            # ``_download_size_mb_for`` — otherwise app-recorded rows land with
+            # ``dataset_id: ""`` and can't feed fit_load_weights.py (see #2614).
+            profiler.finish(len(ctx.medias), dataset_id)  # writes JSONL + unbinds (no-op when off)
             loading_tasks.mark_finished(task_id)
 
     threading.Thread(target=task, daemon=True).start()
@@ -666,7 +671,7 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     # For demo datasets we know the expected item count + archive size up front,
     # which lets load_step_weights pace by the measured n-aware cost model rather
     # than the static asymptote. Unknown for streaming folder imports -> None.
-    n_hint, download_size_mb_hint = _demo_load_hints(importer, field_values)
+    demo_id, n_hint, download_size_mb_hint = _demo_load_hints(importer, field_values)
 
     return _run_origin_load_in_background(
         _load,
@@ -681,31 +686,35 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
         media_type=media_type_hint,
         build_projection=build_projection,
         merge_near_duplicates=merge_near_duplicates,
+        dataset_id=demo_id,
         n_hint=n_hint,
         download_size_mb_hint=download_size_mb_hint,
     )
 
 
-def _demo_load_hints(importer, field_values: dict) -> tuple[int | None, float | None]:
-    """Expected item count and archive size for a demo load, else ``(None, None)``.
+def _demo_load_hints(importer, field_values: dict) -> tuple[str, int | None, float | None]:
+    """Demo dataset id, expected item count, and archive size for a demo load,
+    else ``("", None, None)``.
 
-    Enables the ``n``-aware cost-model weights (see
-    :func:`vtscore.datasets.stages._common.load_step_weights`). Only the demo
-    importer knows ``n`` up front; folder importers stream, so they fall back to
-    the static weight profile.
+    The ``n`` / size hints enable the ``n``-aware cost-model weights (see
+    :func:`vtscore.datasets.stages._common.load_step_weights`); the id is also
+    threaded to the load profiler so its rows carry ``dataset_id`` (and can
+    resolve the archive size) rather than landing empty (see #2614). Only the
+    demo importer knows these up front; folder importers stream, so they fall
+    back to the static weight profile.
     """
     if getattr(importer, "name", "") != "demo":
-        return None, None
+        return "", None, None
     dataset_id = field_values.get("name", "")
     if not dataset_id:
-        return None, None
+        return "", None, None
     from vtscore.datasets.config import DEMO_DATASETS  # noqa: PLC0415
     from vtscore.datasets.demo_counts import exact_demo_count  # noqa: PLC0415
 
     n = exact_demo_count(dataset_id)
     info = DEMO_DATASETS.get(dataset_id) or {}
     dl = info.get("download_size_mb")
-    return n, (float(dl) if dl is not None else None)
+    return dataset_id, n, (float(dl) if dl is not None else None)
 
 
 # ---------------------------------------------------------------------------
