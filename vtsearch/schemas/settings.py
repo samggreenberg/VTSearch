@@ -94,6 +94,11 @@ class AppSettingsSchema(Schema):
     # shown as a Settings-modal widget; the panel's draggable divider drives it.
     browse_details_panel_width = fields.Integer()
 
+    # VTSBrowse docked bin-details metadata-column width (CSS px). Persisted but
+    # not shown as a Settings-modal widget; the divider between the metadata
+    # column and the large item drives it.
+    browse_details_metadata_width = fields.Integer()
+
     # VTSBrowse per-media-type display prefs (density colormap, on-screen cell
     # size). ``{media_type_id: value}`` dicts driven by the browse-canvas
     # toolbar and the Settings → Browser tab. (Bin shape is not stored — it is
@@ -274,6 +279,7 @@ class SettingsUpdateSchema(Schema):
 
     browse_panel_width = fields.Integer()
     browse_details_panel_width = fields.Integer()
+    browse_details_metadata_width = fields.Integer()
 
     # Per-media-type dicts; the setters in ``settings.py`` validate each
     # value against its enum (BrowseColormap / BrowseIconSize), so these are

@@ -354,6 +354,17 @@ class UserSettings(BaseModel):
     # the divider drives it. Clamped to a sane on-screen range.
     browse_details_panel_width: Annotated[int, _clamp(220, 800)] = 340
 
+    # VTSBrowse docked bin-details metadata-column width (CSS px). When the
+    # docked bin-details panel shows its metadata column, a draggable divider
+    # separates that column from the large item beside it; this persists the
+    # width the user dragged the metadata column to. The large item takes
+    # whatever the panel leaves after the metadata column, so it always grows
+    # to fill the space (there is no per-item size control in the docked panel).
+    # Defaults to just enough for an MD5 digest to wrap onto two rows. Not
+    # surfaced as a Settings-modal widget - the divider drives it. Clamped to a
+    # sane on-screen range.
+    browse_details_metadata_width: Annotated[int, _clamp(120, 600)] = 150
+
     # VTSBrowse per-media-type display preferences. Each is a
     # ``{media_type_id: value}`` dict so a user can tune the projection
     # browser independently for, say, audio vs. image datasets. Empty

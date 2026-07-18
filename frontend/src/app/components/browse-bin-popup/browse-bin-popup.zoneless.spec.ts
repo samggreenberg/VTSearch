@@ -502,6 +502,80 @@ describe('BrowseBinPopupComponent (docked presentation)', () => {
 
     fixture.destroy();
   });
+
+  it('drops the detail-size buttons when docked (the panel divider sizes the item)', async () => {
+    const fixture = makeDockedFixture([1, 2]);
+    await settlePasses(fixture);
+
+    const root = fixture.nativeElement as HTMLElement;
+    // No top-left smaller/bigger buttons docked — the item grows to fit the row.
+    expect(root.querySelector('.bin-popup-size-group')).toBeNull();
+
+    fixture.destroy();
+  });
+
+  it('fills the large item with whatever width the metadata column leaves', async () => {
+    const fixture = makeDockedFixture([1, 2, 3]);
+    await settlePasses(fixture);
+
+    const cmp = fixture.componentInstance;
+    const root = fixture.nativeElement as HTMLElement;
+    // A draggable divider sits between the item and the metadata column.
+    expect(root.querySelector('.bin-popup-meta-divider')).not.toBeNull();
+    // content = availableWidth(340) − 2·BODY_PADDING(6) = 328; the item takes the
+    // rest after the metadata column and the 8px divider.
+    expect(cmp.dockedPaneSize).toBe(328 - cmp.dockedMetadataWidth - 8);
+
+    fixture.destroy();
+  });
+
+  it('gives the whole row to the item (no divider) when the metadata column is hidden', async () => {
+    settings.set({ popup_metadata_shown: { image: false } });
+    const fixture = makeDockedFixture([1, 2, 3]);
+    await settlePasses(fixture);
+
+    const cmp = fixture.componentInstance;
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('.bin-popup-meta-divider')).toBeNull();
+    // The full content width (capped at MAX_PREVIEW_PX, which 328 is under).
+    expect(cmp.dockedPaneSize).toBe(328);
+
+    fixture.destroy();
+  });
+
+  it('re-apportions the row as the metadata divider drags, and persists the width', async () => {
+    const fixture = makeDockedFixture([1, 2, 3]);
+    await settlePasses(fixture);
+
+    const svc = TestBed.inject(SettingsStateService);
+    const updates: Record<string, unknown>[] = [];
+    (svc.update as unknown) = (u: Record<string, unknown>) => {
+      updates.push(u);
+      return of({});
+    };
+
+    const cmp = fixture.componentInstance as unknown as {
+      dockedMetadataWidth: number;
+      dockedPaneSize: number;
+      onMetaDividerPointerDown(e: PointerEvent): void;
+    };
+    const startMeta = cmp.dockedMetadataWidth;
+    const startPane = cmp.dockedPaneSize;
+
+    cmp.onMetaDividerPointerDown({ button: 0, clientX: 500, preventDefault() {} } as unknown as PointerEvent);
+    // The metadata column is on the right, so dragging the divider left grows it.
+    document.dispatchEvent(new MouseEvent('pointermove', { clientX: 460 }));
+    await settlePasses(fixture);
+
+    expect(cmp.dockedMetadataWidth).toBe(startMeta + 40);
+    // The item gives up exactly what the metadata gained.
+    expect(cmp.dockedPaneSize).toBe(startPane - 40);
+
+    document.dispatchEvent(new MouseEvent('pointerup'));
+    expect(updates.some((u) => 'browse_details_metadata_width' in u)).toBe(true);
+
+    fixture.destroy();
+  });
 });
 
 describe('BrowseBinPopupComponent (scroll-prefetch re-wiring)', () => {

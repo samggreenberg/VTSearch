@@ -98,9 +98,18 @@ const PREVIEW_SIZE_STEPS = [120, 160, 208, 272, 352, 448, 560, 640, 720] as cons
  *  side padding plus room for the scrollbar. Subtracted from the panel width
  *  to get the content width the docked grid chunks its columns against. */
 const DOCKED_GRID_CHROME = 2 * BODY_PADDING + 12;
-/** Smallest width (px) the docked metadata column is guaranteed beside the
- *  detail pane; a wider pane pushes the metadata to wrap below it instead. */
+/** Smallest width (px) the docked metadata column shrinks to (the divider drag
+ *  can't take it below this) — enough for an MD5 digest to wrap onto ~two rows,
+ *  matching the ``browse_details_metadata_width`` default. */
 const DOCKED_META_MIN = 140;
+/** Footprint (px) of the divider between the docked large item and its metadata
+ *  column, subtracted from the panel's content width when apportioning the two. */
+const META_DIVIDER_WIDTH = 8;
+/** Smallest the docked large item is squeezed to. The item takes whatever the
+ *  panel leaves after the metadata column, so narrowing the panel eats into the
+ *  item first; once it hits this floor the metadata column starts giving up
+ *  width instead. */
+const DOCKED_MAIN_MIN = 60;
 
 /**
  * The bin details: the media items in the bin the user right-clicked on the
@@ -113,15 +122,21 @@ const DOCKED_META_MIN = 140;
  * - **Floating** (``docked`` false, the default): a draggable popup window
  *   summoned at the right-click point and clamped to the visible canvas.
  * - **Docked** (``docked`` true): a persistent left panel beside the canvas.
- *   The detail pane sits top-left with the metadata column to its right, and
- *   the member grid fills the rest of the panel below them. The panel is
- *   always mounted while the option is on — before any bin is opened it shows
- *   an empty hint — and for audio its detail pane doubles as the now-playing
- *   display ({@link nowPlayingExt}), replacing the toolbar's small waveform
- *   widget. A singleton bin keeps the grid area allocated but empty. In this
- *   mode all floating machinery (summon positioning, clamping, dragging,
- *   outside-click/Escape dismissal, document-level keyboard shortcuts) is
- *   disabled; the canvas keeps its own shortcuts.
+ *   The top row holds the large item with the metadata column to its right,
+ *   separated by a draggable divider ({@link onMetaDividerPointerDown}); the
+ *   member grid fills the rest of the panel below them. The metadata column
+ *   takes its dragged width ({@link dockedMetadataWidth}, persisted under
+ *   ``browse_details_metadata_width``) and the item grows to fill whatever the
+ *   row leaves ({@link dockedPaneSize}), so the docked panel has no per-item
+ *   size buttons — the panel↔canvas divider sizes the item (and re-chunks the
+ *   grid columns) instead. The panel is always mounted while the option is on —
+ *   before any bin is opened it shows an empty hint — and for audio its detail
+ *   pane doubles as the now-playing display ({@link nowPlayingExt}), replacing
+ *   the toolbar's small waveform widget. A singleton bin keeps the grid area
+ *   allocated but empty. In this mode all floating machinery (summon
+ *   positioning, clamping, dragging, outside-click/Escape dismissal,
+ *   document-level keyboard shortcuts) is disabled; the canvas keeps its own
+ *   shortcuts.
  *
  * The members render as a virtualized thumbnail grid (always grid; there is no
  * list mode). Hovering a grid thumbnail paints that item's *full-resolution*
@@ -144,7 +159,9 @@ const DOCKED_META_MIN = 140;
  * height is the preview pane's height, growing/shrinking the detail canvas
  * resizes the whole window. That size is likewise remembered per media type,
  * under ``popup_preview_size`` (px); unset, the pane falls back to a size scaled
- * from the main-canvas thumbnail radius ({@link hoverThumbRadius}).
+ * from the main-canvas thumbnail radius ({@link hoverThumbRadius}). These
+ * buttons (and the ``popup_preview_size`` setting) are **floating-only**: the
+ * docked panel sizes its item from the panel width instead (see above).
  *
  * It shares the {@link BrowseSelectionService} instance provided by the browse
  * view, so toggling an item here is the same selection the canvas rings and the
@@ -426,6 +443,11 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
       this.gridSizeDict = (settings.grid_icon_size_popup as Record<string, string>) ?? {};
       this.previewSizeDict = (settings.popup_preview_size as Record<string, number>) ?? {};
       this.metadataShownDict = (settings.popup_metadata_shown as Record<string, boolean>) ?? {};
+      // Mirror the docked metadata-column width (global). Skip mid-drag so a
+      // settings round-trip can't reset the column while the user is dragging it.
+      if (!this.draggingMeta && typeof settings.browse_details_metadata_width === 'number') {
+        this.metadataWidthPx = settings.browse_details_metadata_width;
+      }
       this.applyViewPrefs();
       // A detail-canvas size change (the top-left buttons) resizes the preview
       // pane, hence the whole popup, so re-clamp it back fully on-screen. Showing
@@ -489,6 +511,9 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     for (const sub of this.subs) sub.unsubscribe();
     this.scrollSub?.unsubscribe();
+    // Drop any in-flight metadata-divider drag listeners (destroyed mid-drag).
+    document.removeEventListener('pointermove', this.boundMetaMove);
+    document.removeEventListener('pointerup', this.boundMetaUp);
     this.stopAudio();
   }
 
@@ -506,6 +531,11 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   /** Last applied column visibility, so the settings effect only re-clamps the
    *  popup when it actually toggled. */
   private lastMetadataShown: boolean | null = null;
+  /** Docked metadata-column width (px), mirrored from the global
+   *  ``browse_details_metadata_width`` setting and driven by the divider between
+   *  the metadata column and the large item. Read through {@link
+   *  dockedMetadataWidth}, which clamps it against the live panel width. */
+  private metadataWidthPx = 150;
 
   /** True for media types that carry real visual thumbnails (image / video):
    *  the ones that magnify on the main canvas and are worth a large preview. */
@@ -872,16 +902,84 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     return this.previewId;
   }
 
-  /** Side (px) of the square docked detail pane: the same per-media-type
-   *  remembered size ({@link previewOverride}) the floating pane uses, clamped
-   *  to the docked panel's width so growing the pane can't overflow it. */
-  get dockedPaneSize(): number {
-    const desired = this.previewOverride ?? this.previewDefault();
+  /** Content width (px) the docked top row apportions between the large item,
+   *  the metadata column, and the divider between them: the panel width less the
+   *  body's own horizontal padding. */
+  private dockedContentWidth(): number {
     const width = this.availableWidth();
-    const room = width > 0 ? width - 2 * BODY_PADDING : MAX_PREVIEW_PX;
-    return Math.round(
-      Math.max(MIN_PREVIEW_PX, Math.min(desired, Math.min(room, MAX_PREVIEW_PX))),
+    return width > 0 ? width - 2 * BODY_PADDING : MAX_PREVIEW_PX;
+  }
+
+  /** Width (px) of the docked metadata column: the user's dragged width
+   *  ({@link metadataWidthPx}), clamped to at least {@link DOCKED_META_MIN} and
+   *  to whatever still leaves the large item its {@link DOCKED_MAIN_MIN} floor.
+   *  Re-clamps live as the outer panel divider narrows the panel, so shrinking
+   *  the panel eats into the item first and only squeezes the metadata once the
+   *  item bottoms out. */
+  get dockedMetadataWidth(): number {
+    const content = this.dockedContentWidth();
+    const maxWidth = Math.max(DOCKED_META_MIN, content - META_DIVIDER_WIDTH - DOCKED_MAIN_MIN);
+    return Math.round(Math.max(DOCKED_META_MIN, Math.min(this.metadataWidthPx, maxWidth)));
+  }
+
+  /** Side (px) of the square docked detail pane. The large item takes whatever
+   *  the panel leaves after the metadata column and the divider, so it always
+   *  grows to fill the space — there is no per-item size control docked (the
+   *  panel divider sizes it). Bounded below by {@link DOCKED_MAIN_MIN} and above
+   *  by {@link MAX_PREVIEW_PX}. */
+  get dockedPaneSize(): number {
+    const content = this.dockedContentWidth();
+    const taken = this.showMetadataColumn ? this.dockedMetadataWidth + META_DIVIDER_WIDTH : 0;
+    return Math.round(Math.max(DOCKED_MAIN_MIN, Math.min(content - taken, MAX_PREVIEW_PX)));
+  }
+
+  // --- Docked metadata-column divider drag ----------------------------------
+  // A draggable divider between the large item (left) and the metadata column
+  // (right) re-apportions the top row: the metadata column takes its dragged
+  // width and the item fills the rest. Persisted globally under
+  // ``browse_details_metadata_width`` (metadata fields are media-agnostic).
+
+  /** True only mid-drag of the metadata/item divider (template drag cue). */
+  draggingMeta = false;
+  private metaDragStartX = 0;
+  private metaDragStartWidth = 0;
+  private readonly boundMetaMove = this.onMetaDividerMove.bind(this);
+  private readonly boundMetaUp = this.onMetaDividerUp.bind(this);
+
+  /** Begin dragging the metadata/item divider (docked only). */
+  onMetaDividerPointerDown(event: PointerEvent): void {
+    if (!this.docked() || event.button !== 0) return;
+    event.preventDefault();
+    this.draggingMeta = true;
+    this.metaDragStartX = event.clientX;
+    this.metaDragStartWidth = this.dockedMetadataWidth;
+    document.addEventListener('pointermove', this.boundMetaMove);
+    document.addEventListener('pointerup', this.boundMetaUp);
+  }
+
+  private onMetaDividerMove(event: PointerEvent): void {
+    if (!this.draggingMeta) return;
+    // The metadata column sits to the RIGHT of the item, so dragging the divider
+    // left (dx < 0) grows the metadata and shrinks the item, and vice versa.
+    const dx = event.clientX - this.metaDragStartX;
+    const content = this.dockedContentWidth();
+    const maxWidth = Math.max(DOCKED_META_MIN, content - META_DIVIDER_WIDTH - DOCKED_MAIN_MIN);
+    this.metadataWidthPx = Math.round(
+      Math.max(DOCKED_META_MIN, Math.min(this.metaDragStartWidth - dx, maxWidth)),
     );
+    this.cdr.markForCheck();
+  }
+
+  private onMetaDividerUp(): void {
+    if (!this.draggingMeta) return;
+    this.draggingMeta = false;
+    document.removeEventListener('pointermove', this.boundMetaMove);
+    document.removeEventListener('pointerup', this.boundMetaUp);
+    // Persist the settled (clamped) width; the settings round-trip returns the
+    // same value, so there's no visible jump on release.
+    this.settingsState
+      .update({ browse_details_metadata_width: Math.round(this.dockedMetadataWidth) })
+      .subscribe();
   }
 
   /** Rows the member grid renders. Docked, a singleton bin keeps the grid
