@@ -62,12 +62,22 @@ def test_finalize_slots_falls_back_to_static_when_uncalibrated(monkeypatch):
     assert _finalize_slots("audio") == FinalizeProgress._SLOTS
 
 
-def test_finalize_slots_uses_measured_row(monkeypatch):
+def test_finalize_slots_overrides_measured_slots_keeps_ballpark_for_rest(monkeypatch):
     monkeypatch.setattr("vtscore.config.resolve_device", lambda: "cuda")
+    # Calibration measured only coverage + registry (the two big always-run
+    # slots here); the opt-in projection/signpost slots weren't observed.
     row = (("coverage", 0.7), ("registry", 0.3))
     monkeypatch.setattr(_cm, "FINALIZE_SLOT_SHARES", {("cuda", "image"): row})
-    assert _finalize_slots("image") == row
-    # A cell with no measured row still falls back to static.
+    slots = dict(_finalize_slots("image"))
+    # Every canonical pipeline slot survives, in canonical order.
+    assert [name for name, _ in _finalize_slots("image")] == [name for name, _ in FinalizeProgress._SLOTS]
+    # Measured slots take the measured share; unobserved slots keep the ballpark.
+    static = dict(FinalizeProgress._SLOTS)
+    assert slots["coverage"] == 0.7
+    assert slots["registry"] == 0.3
+    assert slots["projection"] == static["projection"]
+    assert slots["signpost_texts"] == static["signpost_texts"]
+    # A cell with no measured row still falls back to the full static ballpark.
     assert _finalize_slots("audio") == FinalizeProgress._SLOTS
 
 
@@ -99,11 +109,18 @@ def test_finalize_progress_maps_slots_from_measured_shares(monkeypatch):
     monkeypatch.setattr(_cm, "FINALIZE_SLOT_SHARES", {("cuda", "image"): row})
 
     fin = FinalizeProgress(_RecTracker(), "image")
-    assert fin._ranges == {"coverage": (0.0, 0.8), "registry": (0.8, 0.2)}
-    # A slot outside the measured row is unknown -> begin() KeyErrors, which is
-    # the correct signal that the cost model and the pipeline slots disagree.
-    with pytest.raises(KeyError):
-        fin.begin("dedup")
+    # Every canonical slot is mapped; the measured coverage/registry shares
+    # dominate while the unobserved slots keep their small ballpark slices.
+    assert set(fin._ranges) == {name for name, _ in FinalizeProgress._SLOTS}
+    cov_base, cov_span = fin._ranges["coverage"]
+    reg_base, reg_span = fin._ranges["registry"]
+    # coverage's measured 0.8 vs registry's 0.2 -> coverage gets ~4x the span,
+    # both scaled down by the ballpark filler for the opt-in slots.
+    assert cov_span > reg_span
+    assert cov_span / reg_span == pytest.approx(4.0, rel=1e-6)
+    # begin() resolves every pipeline slot without raising (no KeyError).
+    for name, _ in FinalizeProgress._SLOTS:
+        fin.begin(name)
 
 
 def test_finalize_progress_static_fallback_keeps_all_pipeline_slots(monkeypatch):

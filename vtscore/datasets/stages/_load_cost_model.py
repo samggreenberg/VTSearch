@@ -115,9 +115,7 @@ EXTRACT_MB_PER_S: float = 61.477
 FINALIZE_SLOT_SHARES: dict[tuple[str, str], tuple[tuple[str, float], ...]] = {}
 
 
-def finalize_slot_shares(
-    device: str, media_type: str
-) -> Optional[tuple[tuple[str, float], ...]]:
+def finalize_slot_shares(device: str, media_type: str) -> Optional[tuple[tuple[str, float], ...]]:
     """Return the measured finalize sub-slot ``(slot, share)`` tuples for
     ``(device, media_type)``, or ``None`` when no calibrated row exists (so the
     caller falls back to the static ``FinalizeProgress._SLOTS`` ballpark).

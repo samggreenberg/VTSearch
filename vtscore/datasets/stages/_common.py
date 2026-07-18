@@ -305,23 +305,33 @@ def _finalize_slots(media_type: str = "") -> tuple[tuple[str, float], ...]:
     """Ordered finalize sub-slot ``(name, share)`` tuples for the active device
     and *media_type*.
 
-    Returns the measured row from the finalize sub-slot cost model when one
-    exists for ``(device, media_type)`` (so the finalize slice paces against the
-    real per-device mix — e.g. a non-cuML GPU host where the coverage k-means
-    outweighs the registry save), else the static
-    :data:`FinalizeProgress._SLOTS` ballpark. Never raises: a library-only
-    caller that can't resolve the device or the cost model falls back to static.
+    Uses the measured row from the finalize sub-slot cost model when one exists
+    for ``(device, media_type)`` (so the finalize slice paces against the real
+    per-device mix — e.g. a non-cuML GPU host where the coverage k-means
+    outweighs the registry save), else the static :data:`FinalizeProgress._SLOTS`
+    ballpark.
+
+    The result always covers **every** canonical pipeline sub-stage in execution
+    order: a measured share overrides that slot's ballpark, but any slot the
+    calibration never observed (the opt-in ``signpost_texts`` / ``projection``,
+    skipped when a calibration load didn't build a projection) keeps its static
+    ballpark share — so a production load that *does* run that sub-stage still
+    has a slice to fill and ``FinalizeProgress.begin`` never ``KeyError``s.
+    Never raises: a library-only caller that can't resolve the device or the
+    cost model falls back to the full static ballpark.
     """
+    static = FinalizeProgress._SLOTS
     try:
         device = _resolve_device_name()
         from vtscore.datasets.stages._load_cost_model import finalize_slot_shares  # noqa: PLC0415
 
-        shares = finalize_slot_shares(device, media_type)
-        if shares:
-            return shares
+        measured = finalize_slot_shares(device, media_type)
     except Exception:
-        pass
-    return FinalizeProgress._SLOTS
+        measured = None
+    if not measured:
+        return static
+    overrides = dict(measured)
+    return tuple((name, overrides.get(name, ballpark)) for name, ballpark in static)
 
 
 #: Canonical phase order for a dataset load. ``download`` and ``extract`` are
