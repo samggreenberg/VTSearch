@@ -490,24 +490,35 @@
     flex-direction: column;
   }
 
+  // A single row: the large item, then the draggable divider, then the metadata
+  // column. No wrap and no flex gap — the divider is the only spacer, and the
+  // item + metadata widths are bound so they always sum to the row. DOM order is
+  // metadata, preview, divider, so `order` lays them out item / divider / meta.
   .bin-popup-top {
     display: flex;
     flex-direction: row;
-    flex-wrap: wrap;
-    gap: var(--space-sm);
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: 0;
     flex-shrink: 0;
   }
 
-  // Pane left, metadata to its right (DOM order is metadata-first for the
-  // floating layout, so flip with `order` rather than duplicating markup).
   .bin-popup-preview {
-    order: -1;
+    order: 1;
     height: auto;
   }
 
+  .bin-popup-meta-divider {
+    order: 2;
+    flex: 0 0 auto;
+    align-self: flex-start;
+  }
+
+  // Fixed-width column (the width is bound per render from the divider drag),
+  // stacked to the right of the divider.
   .bin-popup-meta-col {
-    flex: 1 1 140px;
-    min-width: 140px;
+    order: 3;
+    flex: 0 0 auto;
     width: auto;
     height: auto;
   }

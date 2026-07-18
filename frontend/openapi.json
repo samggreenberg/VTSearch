@@ -209,6 +209,9 @@
             },
             "type": "object"
           },
+          "browse_details_metadata_width": {
+            "type": "integer"
+          },
           "browse_details_panel_width": {
             "type": "integer"
           },
@@ -4738,6 +4741,9 @@
           "bin_details_docked": {},
           "browse_colormap": {},
           "browse_compact": {},
+          "browse_details_metadata_width": {
+            "type": "integer"
+          },
           "browse_details_panel_width": {
             "type": "integer"
           },

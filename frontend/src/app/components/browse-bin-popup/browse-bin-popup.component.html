@@ -24,7 +24,7 @@
         <vt-icon type="dock-left" [size]="14" />
       </button>
     }
-    @if (hasPane) {
+    @if (hasPane && !docked()) {
       <div class="bin-popup-size-group" role="group" aria-label="Detail image size">
         <button
           type="button"
@@ -88,7 +88,7 @@
       @if (showMetadataColumn) {
         <div
           class="bin-popup-meta-col"
-          [style.width.px]="docked() ? null : metadataColWidth"
+          [style.width.px]="docked() ? dockedMetadataWidth : metadataColWidth"
           [style.maxHeight.px]="docked() ? dockedPaneSize : null">
           <div class="bin-popup-meta-grid">
             <div class="bin-popup-meta-item">
@@ -169,6 +169,20 @@
               (error)="onPreviewError()" />
           }
         </div>
+      }
+      @if (docked() && showMetadataColumn) {
+        <!-- Draggable divider between the large item (left) and the metadata
+             column (right). Dragging it re-apportions the top row: the metadata
+             column takes its dragged width and the item fills the rest. -->
+        <div
+          class="pane-divider bin-popup-meta-divider"
+          [class.dragging]="draggingMeta"
+          [style.height.px]="dockedPaneSize"
+          (pointerdown)="onMetaDividerPointerDown($event)"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize metadata column"
+          title="Drag to resize the metadata column"></div>
       }
     </div>
 
