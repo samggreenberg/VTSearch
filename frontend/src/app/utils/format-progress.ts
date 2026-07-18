@@ -258,14 +258,12 @@ export function formatProgressHeader(
       phase = 'arranging';
       subtitle = 'Arranging the items so the dataset can be browsed as a map.';
     }
+  } else if (status === 'extracting' || (status === 'downloading' && /extract/i.test(message))) {
+    phase = 'unpacking archive';
+    subtitle = 'Extracting the downloaded archive into the dataset cache.';
   } else if (status === 'downloading') {
-    if (/extract/i.test(message)) {
-      phase = 'unpacking archive';
-      subtitle = 'Extracting the downloaded archive into the dataset cache.';
-    } else {
-      phase = 'downloading source';
-      subtitle = 'Fetching the dataset archive. Cached on disk for next time.';
-    }
+    phase = 'downloading source';
+    subtitle = 'Fetching the dataset archive. Cached on disk for next time.';
   } else if (status === 'embedding') {
     phase = 'analyzing files';
   } else if (status === 'loading' && /embedding model/i.test(message)) {

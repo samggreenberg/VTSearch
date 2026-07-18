@@ -630,13 +630,13 @@ def _extract_7z(archive_path: Path, dest_dir: Path, dataset_name: str, on_progre
     from vtscore.datasets.archive import _reject_traversal  # noqa: PLC0415
 
     dest_resolved = Path(dest_dir).resolve()
-    on_progress("downloading", f"Extracting {dataset_name}...", 0, 0)
+    on_progress("extracting", f"Extracting {dataset_name}...", 0, 0)
     with py7zr.SevenZipFile(archive_path, mode="r") as archive:
         for name in archive.getnames():
             _reject_traversal(dest_resolved, name)
         # Safe: every member name was traversal-checked against dest_dir above.
         archive.extractall(path=dest_dir)  # noqa: S202
-    on_progress("downloading", f"Extracting {dataset_name}...", 1, 1)
+    on_progress("extracting", f"Extracting {dataset_name}...", 1, 1)
 
 
 def _extract_archive(
@@ -665,9 +665,9 @@ def _extract_archive(
             with tarfile.open(fileobj=raw_f, mode=mode) as tar_ref:
                 for i, member in enumerate(tar_ref):
                     if i % 100 == 0:
-                        on_progress("downloading", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes)
+                        on_progress("extracting", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes)
                     safe_tar_extract(tar_ref, member, dest_dir)
-        on_progress("downloading", f"Extracting {dataset_name}...", total_bytes, total_bytes)
+        on_progress("extracting", f"Extracting {dataset_name}...", total_bytes, total_bytes)
     elif suffix.endswith(".zip"):
         from vtscore.datasets.archive import _reject_traversal
 
@@ -677,7 +677,7 @@ def _extract_archive(
             total = len(members)
             for i, member in enumerate(members):
                 if i % 100 == 0 or i == total - 1:
-                    on_progress("downloading", f"Extracting {dataset_name}...", i + 1, total)
+                    on_progress("extracting", f"Extracting {dataset_name}...", i + 1, total)
                 # Guard against path traversal in zip entries.  Shares the
                 # strict check with archive.py: the previous inline
                 # startswith() prefix test lacked a trailing separator, so
@@ -774,7 +774,7 @@ def _download_and_extract(
         # error page (e.g. 404/503) which gets saved with a .tar.gz extension.
         _validate_archive(temp_archive, archive_name, dataset_name)
 
-        on_progress("downloading", f"Extracting {dataset_name}...", 0, 0)
+        on_progress("extracting", f"Extracting {dataset_name}...", 0, 0)
         temp_extract.mkdir(parents=True, exist_ok=True)
 
         _extract_archive(temp_archive, archive_name, temp_extract, dataset_name, on_progress)

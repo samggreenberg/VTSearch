@@ -93,7 +93,7 @@ def _extract_members(members, extract_one, on_progress, message: str, *, start: 
     for offset, member in enumerate(members):
         i = offset + start
         if i % 100 == 0 or i == total - (1 - start):
-            on_progress("downloading", message, offset + 1, total)
+            on_progress("extracting", message, offset + 1, total)
         extract_one(member)
 
 
@@ -143,7 +143,7 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
         if categories_dir.exists():
             return categories_dir
 
-        on_progress("downloading", "Extracting Caltech-101 zip...", 0, 0)
+        on_progress("extracting", "Extracting Caltech-101 zip...", 0, 0)
         temp_extract.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(temp_archive, "r") as zip_ref:
             _extract_members(
@@ -158,7 +158,7 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
         # Extract it to produce the actual category directories.
         inner_tar = temp_extract / "caltech-101" / "101_ObjectCategories.tar.gz"
         if inner_tar.exists():
-            on_progress("downloading", "Extracting 101_ObjectCategories...", 0, 0)
+            on_progress("extracting", "Extracting 101_ObjectCategories...", 0, 0)
             inner_dest = temp_extract / "caltech-101"
             with tarfile.open(inner_tar, "r:gz") as tar_ref:
                 _extract_members(

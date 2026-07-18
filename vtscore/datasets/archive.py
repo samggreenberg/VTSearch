@@ -172,7 +172,7 @@ def extract_archive(
             total = len(members)
             for i, member in enumerate(members, 1):
                 on_progress(
-                    "loading",
+                    "extracting",
                     f"Extracting {member.split('/')[-1]}...",
                     i,
                     total,
@@ -186,7 +186,7 @@ def extract_archive(
             total = len(members)
             for i, member in enumerate(members, 1):
                 on_progress(
-                    "loading",
+                    "extracting",
                     f"Extracting {member.name.split('/')[-1]}...",
                     i,
                     total,
@@ -205,7 +205,7 @@ def extract_archive(
             total = len(members)
             for i, member in enumerate(members, 1):
                 on_progress(
-                    "loading",
+                    "extracting",
                     f"Extracting {member.split('/')[-1]}...",
                     i,
                     total,

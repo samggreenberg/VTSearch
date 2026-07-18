@@ -55,6 +55,22 @@ def _drive_phases(tracker: ProgressTracker) -> None:
         tracker.update("loading", "", step=step, total_steps=4)
 
 
+def test_extracting_status_records_its_own_phase(monkeypatch, tmp_path, clean_seen_embedders):
+    """Step 1's two sub-phases (download vs extract) land as separate rows, so
+    the fit can estimate an extraction rate independent of network bandwidth."""
+    out = tmp_path / "prof.jsonl"
+    monkeypatch.setenv("VTSEARCH_PROFILE_LOAD", str(out))
+    tracker = _make_tracker()
+    prof = start_profiler(tracker, "audio", "clap")
+    tracker.update("downloading", "", 0, 100, step=1, total_steps=4)
+    tracker.update("extracting", "", 0, 10, step=1, total_steps=4)
+    tracker.update("loading", "", step=2, total_steps=4)
+    tracker.update("embedding", "", step=3, total_steps=4)
+    prof.finish(n=5, dataset_id="demo_x")
+    phases = [r["phase"] for r in _read_rows(out)]
+    assert phases[:4] == ["download", "extract", "model_load", "embed"]
+
+
 def _read_rows(path) -> list[dict]:
     with open(path, encoding="utf-8") as fh:
         return [json.loads(line) for line in fh if line.strip()]
