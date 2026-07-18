@@ -22,6 +22,15 @@ The MLP architecture is fixed (``Linear -> ReLU -> Dropout -> Linear -> 1``; see
 via ``onnx.helper`` rather than going through ``torch.onnx``.  That keeps this
 module torch-free (it operates on the ``serialize_weights`` nested-list dict),
 avoids the dynamo/onnxscript export machinery, and is fully deterministic.
+
+Every detector's MLP is this same 2-layer architecture regardless of embedder
+*type* (semantic / patch_semantic / structural) - the type only changes what
+feeds the MLP, not its shape - so the weight tensors alone can't tell a plain
+detector from a patch or structural one.  Callers MUST call
+:func:`check_exportable` on the detector's locked embedder type before
+building a bundle: structural detectors are blocked outright (their stage-2
+RANSAC verification isn't ONNX-representable), and patch detectors export in
+a legitimately degraded whole-item-only mode via :func:`caveats_for_embedder_type`.
 """
 
 from __future__ import annotations
@@ -49,6 +58,61 @@ _ONNX_IR_VERSION = 8
 
 #: Where the README points consumers for context on what produced the bundle.
 _PROJECT_URL = "https://github.com/samggreenberg/vtsearch"
+
+#: Embedder types whose scoring can't be represented as a scoring-only ONNX
+#: graph at all, keyed to the reason.  Structural (SIFT/VLAD) detectors gate a
+#: stage-1 VLAD-space MLP behind a stage-2 RANSAC geometric-verification pass
+#: matched against raw SIFT-keypoint templates extracted from Good-vote
+#: training media (see ``vtscore/training/structural_similarity.py``).  That
+#: verification pass isn't an ONNX-representable forward pass, and the
+#: templates are raw feature data this bundle format is designed to never
+#: carry - so structural detectors are not exportable, not even in a degraded
+#: form.  Callers must invoke :func:`check_exportable` themselves;
+#: ``build_manifest``/``build_bundle`` stay pure builders and don't gate.
+_NOT_EXPORTABLE_REASONS = {
+    "structural": (
+        "structural (SIFT/VLAD) detectors can't be exported as a portable bundle: their "
+        "geometric-verification stage isn't representable as a scoring-only ONNX graph, and "
+        "its templates are raw feature data extracted from training media, which this bundle "
+        "format is designed to never include."
+    ),
+}
+
+#: Embedder types that export in a legitimate but degraded mode, keyed to the
+#: manifest/README caveat describing the degradation.  Patch (DINOv2/v3, EUPE)
+#: detectors train their MLP on per-region vectors and score by max-pooling
+#: over a media's region tree; the bundle has no way to ship that tree
+#: extraction, so it scores the whole item as a single vector instead - a
+#: legitimate subset of what the MLP saw during training (the untouched
+#: whole-image vector is one of the training rows), just without the
+#: best-sub-region search VTSearch itself does.
+_DEGRADED_EXPORT_CAVEATS = {
+    "patch_semantic": (
+        "This detector was trained to search sub-regions within each item (e.g. a specific "
+        "area of an image). This bundle scores the WHOLE item only, as a single vector - the "
+        "same way as any other detector. A match confined to a small part of an item may score "
+        "lower here than inside VTSearch, which can search and score the best-matching "
+        "sub-region directly."
+    ),
+}
+
+
+def check_exportable(embedder_type: str) -> None:
+    """Raise ``ValueError`` if *embedder_type* can't be exported as a portable bundle.
+
+    Callers (the CLI exporter, the GUI export route) must invoke this before
+    building a bundle; the reason string is written straight into the
+    exception, so it can be surfaced verbatim as a skip note or a 409 message.
+    """
+    reason = _NOT_EXPORTABLE_REASONS.get(embedder_type)
+    if reason:
+        raise ValueError(f"Detector not exportable: {reason}")
+
+
+def caveats_for_embedder_type(embedder_type: str) -> list[str]:
+    """Manifest/README caveats for a legitimate-but-degraded export, or ``[]``."""
+    caveat = _DEGRADED_EXPORT_CAVEATS.get(embedder_type)
+    return [caveat] if caveat else []
 
 
 def _split_linear_weights(
@@ -143,6 +207,7 @@ def build_manifest(
     bad_count: int,
     exported_by: str,
     exported_at: str,
+    caveats: list[str] | None = None,
 ) -> dict[str, Any]:
     """Assemble the machine-readable ``manifest.json`` payload.
 
@@ -154,7 +219,10 @@ def build_manifest(
     knows exactly which model to run new media through; it may be ``None`` for
     embedders with no single downloadable model id.  ``contains_media_data`` is
     always ``False`` - the manifest documents that the bundle carries the
-    classifier only, never embeddings or raw media.
+    classifier only, never embeddings or raw media.  ``caveats`` (see
+    :func:`caveats_for_embedder_type`) calls out any legitimate-but-degraded
+    scoring behaviour a recipient needs to know about; empty for a full-fidelity
+    export.
     """
     return {
         "format": BUNDLE_FORMAT,
@@ -180,6 +248,7 @@ def build_manifest(
         "exported_by": exported_by,
         "exported_at": exported_at,
         "contains_media_data": False,
+        "caveats": list(caveats or []),
         "notes": (
             "Standalone scoring model derived from labeled media. Contains the trained "
             "classifier only - no raw media and no embeddings are included."
@@ -198,6 +267,7 @@ def render_readme(manifest: dict[str, Any]) -> str:
     # Surface the exact pretrained model so the bundle is fully actionable: the
     # recipient can go straight to the source instead of guessing from the slug.
     model_id_clause = f" The exact pretrained model is **`{model_id}`** - use that checkpoint." if model_id else ""
+    caveats_md = "".join(f"\n> **Note:** {c}\n" for c in manifest.get("caveats") or [])
     return f"""# Portable detector: {manifest["detector_name"]}
 
 This is a **standalone scoring model** exported from
@@ -207,7 +277,7 @@ well they match the trained detector, without needing VTSearch itself.
 > **What's in here:** the trained classifier only. There is **no raw media and
 > there are no embeddings** in this bundle - just a small neural network and the
 > instructions to run it.
-
+{caveats_md}
 ## Files
 
 | File | Purpose |
