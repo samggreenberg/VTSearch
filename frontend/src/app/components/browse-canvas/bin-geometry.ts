@@ -201,3 +201,35 @@ export function hoverThumbHalfExtents(
   }
   return { hw: aspect * hh, hh };
 }
+
+/** How a grid thumbnail is fitted into a bin's `2*radius` square. */
+export type TileFit = 'cover' | 'balanced';
+
+/**
+ * Draw dimensions (screen px) for a thumbnail of intrinsic size `iw × ih`
+ * painted over a bin's `2*radius` square, centred and clipped to the cell. The
+ * caller draws the image at `(cx - dw/2, cy - dh/2)` with size `dw × dh`.
+ *
+ * - `'cover'` scales to fill the square (`max` of the two axis ratios), so the
+ *   longer axis overflows and is clipped — the historical crop-to-fill fit still
+ *   used for video/audio tiles.
+ * - `'balanced'` scales by the geometric mean of the cover and contain ratios
+ *   (`size / √(iw·ih)`), so the fraction cropped off the long axis exactly
+ *   equals the fraction of background gap left on the short axis — the "half
+ *   crop, half pad" fit used for image tiles. (The returned box is the geometric
+ *   mean of the cover box, `≥ size` on both axes, and the contain box, `≤ size`
+ *   on both axes.) A square image is unaffected: both fits return `size × size`.
+ *
+ * Pulled out of the canvas component so the crop/pad split is unit-testable
+ * without a `CanvasRenderingContext2D`.
+ */
+export function imageTileFitDimensions(
+  iw: number,
+  ih: number,
+  radius: number,
+  fit: TileFit,
+): { dw: number; dh: number } {
+  const size = radius * 2;
+  const scale = fit === 'balanced' ? size / Math.sqrt(iw * ih) : Math.max(size / iw, size / ih);
+  return { dw: iw * scale, dh: ih * scale };
+}

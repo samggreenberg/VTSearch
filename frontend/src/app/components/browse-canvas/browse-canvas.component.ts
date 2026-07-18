@@ -13,7 +13,14 @@ import {
   type CanvasTheme,
   type ResolvedColormap,
 } from './hex-render.util';
-import { binGeometry, BinGeometry, hoverThumbHalfExtents, pickCell } from './bin-geometry';
+import {
+  binGeometry,
+  BinGeometry,
+  hoverThumbHalfExtents,
+  imageTileFitDimensions,
+  pickCell,
+  type TileFit,
+} from './bin-geometry';
 import {
   clampedTransform,
   computeFitZoom,
@@ -345,6 +352,12 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   private waveformTint = false;
   private waveAccent = '#4f9dff';
   private waveSurface = '#1a1d27';
+
+  // Per-frame "this dataset is images" flag. Image grid tiles use a balanced
+  // "half crop, half pad" fit (see {@link drawImageFit}) instead of the cover
+  // crop used for video/audio, leaving a background-coloured gap inside the
+  // bin's border; hovering still breaks the whole image out unchanged.
+  private imageTiles = false;
 
   private hoveredCell: HexCellPayload | null = null;
   /**
@@ -1292,6 +1305,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
       this.waveAccent = this.themeColor('--accent') || '#4f9dff';
       this.waveSurface = this.themeColor('--bg-surface') || '#1a1d27';
     }
+    this.imageTiles = this.mediaType() === 'image';
     const selectionActive = this.selection.size > 0;
 
     // The enlarged cell is deferred and redrawn last (on top of its neighbours)
@@ -1534,10 +1548,12 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
 
     // Image / video: paint the central item's thumbnail clipped to the cell.
     // Until it loads, fall back to the density shading below so the cell is
-    // never blank. Grid cells cover-fit (fill the bin, cropping the edges); the
-    // hovered cell instead draws the whole thumbnail to fill `trim`, whose
-    // rectangle already carries the image's aspect ratio, so it shows undistorted
-    // and uncropped.
+    // never blank. Video/audio grid cells cover-fit (fill the bin, cropping the
+    // edges); image cells instead use a balanced "half crop, half pad" fit
+    // (`drawImageFit(..., 'balanced')`) that leaves a background-coloured gap
+    // inside the bin's border. The hovered cell (either type) instead draws the
+    // whole thumbnail to fill `trim`, whose rectangle already carries the
+    // image's aspect ratio, so it shows undistorted and uncropped.
     const thumb = this.thumbnailMode ? this.getThumb(cell.rep_id) : null;
     if (thumb) {
       ctx.save();
@@ -1553,12 +1569,21 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
         if (trim) {
           ctx.drawImage(tinted, cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2);
         } else {
-          this.drawImageCover(ctx, tinted, cx, cy, radius);
+          this.drawImageFit(ctx, tinted, cx, cy, radius);
         }
       } else if (trim) {
         ctx.drawImage(thumb, cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2);
+      } else if (this.imageTiles) {
+        // Image grid cell: "half crop, half pad". Fill the bin with the body
+        // background first so the padded gap reads as background between the
+        // image content and the bin's border, then draw the image at the
+        // balanced (geometric-mean) scale — cropped less than cover would be and
+        // padded less than contain would be, with equal crop and pad fractions.
+        ctx.fillStyle = this.themeColor('--bg-body');
+        ctx.fill();
+        this.drawImageFit(ctx, thumb, cx, cy, radius, 'balanced');
       } else {
-        this.drawImageCover(ctx, thumb, cx, cy, radius);
+        this.drawImageFit(ctx, thumb, cx, cy, radius);
       }
       ctx.restore();
     } else if (single) {
@@ -1682,23 +1707,30 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     ctx.closePath();
   }
 
-  /** Cover-fit an image over the hex's 2*radius square (the path must be clipped).
+  /** Draw an image centred over the hex's 2*radius square (the path must be
+   *  clipped). ``fit`` picks the scale:
+   *  - ``'cover'`` (default): fill the square, cropping whichever axis overflows
+   *    — the historical behaviour, still used for video/audio tiles.
+   *  - ``'balanced'``: the geometric mean of the cover and contain scales, so
+   *    the fraction cropped off the long axis equals the fraction of background
+   *    gap left on the short axis — the "half crop, half pad" image fit. The
+   *    caller fills the cell with the body background first so that gap reads as
+   *    background rather than the tile underneath.
+   *
    *  Accepts a tinted waveform canvas (issue #2369) as well as a raw image; a
    *  canvas exposes its intrinsic size as ``width``/``height`` rather than
    *  ``naturalWidth``/``naturalHeight``. */
-  private drawImageCover(
+  private drawImageFit(
     ctx: CanvasRenderingContext2D,
     img: HTMLImageElement | HTMLCanvasElement,
     cx: number,
     cy: number,
     radius: number,
+    fit: TileFit = 'cover',
   ): void {
     const iw = img instanceof HTMLCanvasElement ? img.width : img.naturalWidth;
     const ih = img instanceof HTMLCanvasElement ? img.height : img.naturalHeight;
-    const size = radius * 2;
-    const scale = Math.max(size / iw, size / ih);
-    const dw = iw * scale;
-    const dh = ih * scale;
+    const { dw, dh } = imageTileFitDimensions(iw, ih, radius, fit);
     ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
   }
 
