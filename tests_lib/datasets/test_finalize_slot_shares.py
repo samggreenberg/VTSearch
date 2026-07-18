@@ -136,6 +136,7 @@ def test_finalize_progress_static_fallback_keeps_all_pipeline_slots(monkeypatch)
 def _load_fit_module():
     path = Path(__file__).resolve().parents[2] / "scripts" / "profiling" / "fit_load_weights.py"
     spec = importlib.util.spec_from_file_location("_fit_load_weights_under_test", path)
+    assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
