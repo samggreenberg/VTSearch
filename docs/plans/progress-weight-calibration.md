@@ -7,17 +7,19 @@ and need calibration.
 
 ## Open follow-ups (remaining cells to calibrate)
 
-- **Uncalibrated cells fall back to the static per-(device, media) profile.**
-  Calibrate by re-running `scripts/profiling/calibrate_load_weights.py` for:
-  the remaining media types (`video / text / document`), the non-default
-  embedders (image: siglip2, eupe_*, face, sift_vlad; audio: whisper_encoder…),
-  and the **cuML on/off** split (cuML moves coverage-atlas k-means to GPU,
-  materially changing finalize).
-- **Finalize sub-slot shares** (`FinalizeProgress._SLOTS` ballparks) have the
-  same "static guess" problem one level down — revisit with the measured data
-  once coefficients exist.
-- **Multi-embedder (v3 trio)** embed loop may need its own `b_embed` summed
-  across bound embedders (see the trio follow-up in the consolidation doc).
+<!-- item-sep -->
+
+- [ ] #2623 — Calibrate remaining load-progress weight cells (video/text/document, non-default embedders, cuML split)
+
+<!-- item-sep -->
+
+- [ ] #2624 — Calibrate FinalizeProgress sub-slot shares from measured per-sub-stage durations
+
+<!-- item-sep -->
+
+- [ ] #2625 — Multi-embedder (v3 trio) load-progress weight model needs a per-bound-embedder `b_embed` term
+
+<!-- item-sep -->
 
 ## Reproducing calibration for a remaining cell
 
@@ -67,7 +69,9 @@ model-load; `(a_embed, b_embed)` and `(a_fin, b_fin)` = least-squares vs `n`;
 `bandwidth(device)` = fit of cold download vs `download_size_mb`. Sanity-check
 R²/residuals; fall back to the generic profile where a cell is thin.
 
-This is the concrete follow-up to the "Weights are static guesses" item in
-`docs/plans/progress-bar-consolidation.md`. Non-goals: predicting absolute load
-time (ETA self-corrects); a persistent online model (coefficients are checked-in
-constants); calibrating non-dataset bars (detector load, Find, sort).
+This is the calibration-coverage counterpart to `AdaptiveLoadPacer`
+(`vtscore/datasets/stages/_common.py`), which paces the bar at runtime from
+observed rates but doesn't replace the value of a better prior. Non-goals:
+predicting absolute load time (ETA self-corrects); a persistent online model
+(coefficients are checked-in constants); calibrating non-dataset bars
+(detector load, Find, sort).
