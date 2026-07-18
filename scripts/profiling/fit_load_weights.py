@@ -100,6 +100,11 @@ def main() -> int:
             continue
         if phase.startswith("finalize:"):
             continue  # sub-slots: deferred (see plan follow-ups)
+        if n <= 0:
+            # A failed load (unloadable embedder, import error) still emits its
+            # phase rows but finishes with n=0; its model/embed/finalize
+            # timings describe the failure path, not a fittable cost.
+            continue
         if phase == "model_load":
             # warm rows only; fall back to all if none warm
             groups[key]["model_warm" if not r.get("cold_model") else "model_cold"].append((n, secs))
