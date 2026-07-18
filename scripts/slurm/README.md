@@ -37,3 +37,15 @@ On your local machine (after adding a `cluster` host to `~/.ssh/config`):
 cp scripts/slurm/vtsearch-tunnel.sh ~/.local/bin/vtsearch-tunnel && chmod +x ~/.local/bin/vtsearch-tunnel
 vtsearch-tunnel   # forwards your local port to the GPU node; prints the URL to browse
 ```
+
+## Sharing demo datasets on a cluster
+
+Clusters usually have a communal large-dataset area on a big shared volume.
+Rather than every user downloading the multi-GB demo datasets into their own
+data dir (often on a small per-user quota), keep one shared cache there and
+symlink it into each data dir with
+[`scripts/link-demo-cache.sh`](../link-demo-cache.sh) — see
+[`docs/DEPLOYMENT.md`](../../docs/DEPLOYMENT.md#sharing-demo-downloads-between-data-dirs-multi-user-servers).
+Demo sources may also already exist elsewhere on the cluster (other groups'
+dataset folders); anything matching the extraction layout can be copied
+straight into the cache.
