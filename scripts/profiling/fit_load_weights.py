@@ -216,7 +216,13 @@ def _fit_finalize_slots(
     summary: list[str] = []
     for key in sorted(fin_slots):
         dev, media = key
-        slot_med = {slot: statistics.median(v) for slot, v in fin_slots[key].items() if v}
+        # Median seconds per slot; drop slots that never took measurable time
+        # (a ~0s sub-stage earns no slice — it keeps its static ballpark share
+        # when merged in _finalize_slots, or simply isn't paced separately).
+        slot_med = {}
+        for slot, v in fin_slots[key].items():
+            if v and (m := statistics.median(v)) > 0:
+                slot_med[slot] = m
         total = sum(slot_med.values())
         if total <= 0:
             continue
