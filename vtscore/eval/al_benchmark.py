@@ -1,9 +1,9 @@
-"""Hermetic benchmark harness for active-learning acquisition strategies.
+"""Hermetic harness for the autopilot voting-iterations eval.
 
-Wires the acquisition strategies in :mod:`vtscore.eval.al_strategies` to the
-voting-iterations evaluator (:mod:`vtscore.eval.voting_iterations`) over
-**data sources that need no model downloads**, so a strategy sweep runs in the
-plain test container:
+Wires the ``autopilot`` vote-order strategy in :mod:`vtscore.eval.al_strategies`
+to the voting-iterations evaluator (:mod:`vtscore.eval.voting_iterations`) over
+**data sources that need no model downloads**, so the autopilot simulation runs
+in the plain test container:
 
 - ``synthetic`` — Gaussian category clusters generated on the fly.  Fully
   parameterised (item count, dimensionality, class count, separation, noise) and
@@ -20,12 +20,11 @@ a real loaded dataset has, minus the pixels.
 
 Run it as a module::
 
-    python -m vtscore.eval.al_benchmark --source synthetic \\
-        --strategies random margin entropy bald coreset --seeds 0 1 2 \\
+    python -m vtscore.eval.al_benchmark --source synthetic --seeds 0 1 2 \\
         --plot-dir al_out --output al_results.csv
 
     python -m vtscore.eval.al_benchmark --source precomputed \\
-        --features-path features.npz --strategies all
+        --features-path features.npz
 """
 
 from __future__ import annotations
@@ -49,13 +48,13 @@ if TYPE_CHECKING:
 _FEATURE_KEY = "feature"
 
 # The benchmark's coverage-atlas floor is well below the production default (20)
-# because hermetic sources are small: a lower floor lets the ``density_*``
-# strategies actually resolve distinct cells over a few dozen items.
+# because hermetic sources are small: a lower floor lets the autopilot New
+# phase actually resolve distinct diversity cells over a few dozen items.
 _DEFAULT_ATLAS_MIN_NODE_SIZE = 8
 
-# A fast default sweep that skips ``eig`` (the costliest sampler, ``2 x K``
-# retrains per step).  Pass ``--strategies all`` to include it.
-_DEFAULT_STRATEGIES = ["random", "margin", "entropy", "bald", "coreset"]
+# The eval simulates only the real user flow, so ``autopilot`` is the sole
+# strategy.
+_DEFAULT_STRATEGIES = ["autopilot"]
 
 MediaDict = dict[int, dict[str, Any]]
 DatasetClips = dict[str, MediaDict]
@@ -196,11 +195,10 @@ def run_al_benchmark(
     """Run *strategies* over *dataset_clips* and return the results frame.
 
     A thin orchestration over
-    :func:`~vtscore.eval.voting_iterations.run_voting_iterations_eval`: it adds
-    the strategy axis, applies the benchmark's lower coverage-atlas floor, and
-    (when *plot_dir* is given) renders the strategy-faceted charts.  The returned
-    :class:`~pandas.DataFrame` carries the usual voting-iterations columns plus
-    ``strategy``.
+    :func:`~vtscore.eval.voting_iterations.run_voting_iterations_eval`: it applies
+    the benchmark's lower coverage-atlas floor and (when *plot_dir* is given)
+    renders the charts.  The returned :class:`~pandas.DataFrame` carries the usual
+    voting-iterations columns plus ``strategy`` (always ``autopilot``).
     """
     df = run_voting_iterations_eval(
         dataset_clips,
@@ -298,7 +296,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         nargs="+",
         default=_DEFAULT_STRATEGIES,
         metavar="NAME",
-        help="Strategies to compare, or 'all' (default: random margin entropy bald coreset).",
+        help="Vote-order strategies to run, or 'all' (default: autopilot, the only strategy).",
     )
     parser.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2], help="Simulation seeds (default: 0 1 2).")
     parser.add_argument("--inclusion", type=int, default=0, help="Inclusion setting in [-10, 10] (default: 0).")
@@ -316,7 +314,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         "--atlas-min-node-size",
         type=int,
         default=_DEFAULT_ATLAS_MIN_NODE_SIZE,
-        help=f"Coverage-atlas leaf floor for density_* strategies (default: {_DEFAULT_ATLAS_MIN_NODE_SIZE}).",
+        help=f"Coverage-atlas leaf floor for the autopilot New phase (default: {_DEFAULT_ATLAS_MIN_NODE_SIZE}).",
     )
     parser.add_argument(
         "--output", type=str, default=None, metavar="CSV", help="Write the full results frame to a CSV file."
@@ -342,7 +340,7 @@ def main(argv: Optional[list[str]] = None) -> None:
     )
 
     print(f"\n{'=' * 60}")
-    print("ACTIVE-LEARNING BENCHMARK — final cost by strategy (lower is better)")
+    print("AUTOPILOT VOTING BENCHMARK — final cost by strategy (lower is better)")
     print(f"{'=' * 60}")
     summary = _final_cost_summary(df)
     for _, row in summary.iterrows():
