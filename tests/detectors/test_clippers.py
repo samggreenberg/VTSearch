@@ -275,6 +275,45 @@ class TestWaveFormatExtensible:
         assert result[0]["duration"] == pytest.approx(2.0, abs=0.01)
 
 
+class TestUndecodableAudio:
+    """Corrupt/unsupported audio must not abort the load (GTZAN jazz.00054.wav).
+
+    Neither stdlib ``wave`` nor the ``soundfile`` fallback can decode these
+    bytes; the clipper must degrade to returning the media unchanged instead of
+    letting ``soundfile.LibsndfileError`` ("Format not recognised") propagate.
+    """
+
+    # A blob that is neither a valid WAV (bad RIFF chunk sizes) nor any format
+    # libsndfile recognises, so both decode paths fail.
+    _GARBAGE = b"RIFF\x00\x00\x00\x00WAVEjunk" + b"\x00" * 32
+
+    def test_open_wav_raises_audio_decode_error(self):
+        from vtscore.media.audio.clipper import AudioDecodeError, _open_wav
+
+        with pytest.raises(AudioDecodeError):
+            _open_wav(self._GARBAGE)
+
+    def test_wav_duration_raises_audio_decode_error(self):
+        from vtscore.media.audio.clipper import AudioDecodeError, _wav_duration
+
+        with pytest.raises(AudioDecodeError):
+            _wav_duration(self._GARBAGE)
+
+    def test_tiling_clipper_returns_media_unchanged(self):
+        from vtscore.media.audio.clipper import SoundTilingClipper
+
+        media = {"id": 1, "media_type": "audio", "media_bytes": self._GARBAGE}
+        result = SoundTilingClipper(2.0).clip(media)
+        assert result == [media]
+
+    def test_clip_clipper_returns_media_unchanged(self):
+        from vtscore.media.audio.clipper import SoundClipClipper
+
+        media = {"id": 1, "media_type": "audio", "media_bytes": self._GARBAGE}
+        result = SoundClipClipper(1.0, 3.0).clip(media)
+        assert result == [media]
+
+
 # ---------------------------------------------------------------------------
 # SoundClipClipper
 # ---------------------------------------------------------------------------
