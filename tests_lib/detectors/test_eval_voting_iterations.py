@@ -171,21 +171,22 @@ class TestSimulateVotingIterations:
         }
         for row in rows:
             assert set(row.keys()) == expected_keys
-            assert row["strategy"] == "random"
+            assert row["strategy"] == "autopilot"
 
     def test_vote_counts_reported(self):
         """Each row carries the good/bad vote counts the model was trained on.
 
-        The first scored row reflects the 1-good + 1-bad minimum, and the
-        counts never exceed the votes seen so far (t).
+        The first scored row is the earliest trainable step (≥1 good and ≥1
+        bad), and the counts never exceed the votes seen so far (t).  Autopilot
+        seeds goods before bads, so that first step carries its initial bad
+        (``n_bad == 1``) alongside however many goods have been seeded.
         """
         medias = _make_separable_clips(n_per_cat=6)
         rows = simulate_voting_iterations(medias, "alpha", seed=42, calibrate_count=1)
         assert rows  # at least one scored step
         first = rows[0]
         assert first["n_good"] >= 1
-        assert first["n_bad"] >= 1
-        assert min(first["n_good"], first["n_bad"]) == 1  # earliest trainable step
+        assert first["n_bad"] == 1  # goods are seeded first, so the first bad triggers training
         for row in rows:
             assert row["n_good"] + row["n_bad"] == row["t"]
             assert row["n_good"] >= 1
@@ -606,64 +607,59 @@ class TestRegionVotingSimulate:
 
 
 # ------------------------------------------------------------------
-# Active-learning strategy axis
+# Autopilot vote-order strategy
 # ------------------------------------------------------------------
 
-_STRATEGIES = [
-    "random",
-    "margin",
-    "entropy",
-    "bald",
-    "ensemble_std",
-    "eig",
-    "coreset",
-    "balanced",
-    "density_margin",
-    "density_entropy",
-]
 
-
-class TestStrategyAxis:
+class TestAutopilotStrategy:
     """``strategy=`` / ``strategies=`` / ``max_steps=`` axes and the result column."""
 
-    def test_default_strategy_is_random(self):
+    def test_default_strategy_is_autopilot(self):
         medias = _make_separable_clips(n_per_cat=6)
         rows = simulate_voting_iterations(medias, "alpha", seed=42, calibrate_count=1)
         assert rows
-        assert all(r["strategy"] == "random" for r in rows)
+        assert all(r["strategy"] == "autopilot" for r in rows)
 
-    @pytest.mark.parametrize("strategy", _STRATEGIES)
-    def test_every_strategy_produces_finite_rows(self, strategy):
+    def test_produces_finite_rows(self):
         medias = _make_separable_clips(n_per_cat=8, dim=12)
         rows = simulate_voting_iterations(
             medias,
             "alpha",
             seed=3,
-            strategy=strategy,
             calibrate_count=1,
-            max_steps=8,
+            max_steps=10,
             atlas_min_node_size=3,
         )
-        assert rows  # every sampler drives the loop end-to-end
+        assert rows  # the autopilot flow drives the loop end-to-end
         for row in rows:
-            assert row["strategy"] == strategy
+            assert row["strategy"] == "autopilot"
             assert np.isfinite(row["cost"])
             assert np.isfinite(row["fpr"])
             assert np.isfinite(row["fnr"])
             # One vote per step, so the counts still sum to t.
             assert row["n_good"] + row["n_bad"] == row["t"]
 
+    def test_seeds_the_initial_goods_before_bads(self):
+        # No text sort: autopilot hands the tool known-good examples first, so
+        # the first trainable step already carries the full 3-good seed and its
+        # first bad (a 3-vs-1 model), never a 1-vs-1 warm-up.
+        medias = _make_separable_clips(n_per_cat=12)
+        rows = simulate_voting_iterations(medias, "alpha", seed=0, calibrate_count=1)
+        assert rows
+        assert rows[0]["n_good"] == 3
+        assert rows[0]["n_bad"] == 1
+
     def test_max_steps_caps_votes(self):
         medias = _make_separable_clips(n_per_cat=20)
-        rows = simulate_voting_iterations(medias, "alpha", seed=1, strategy="margin", calibrate_count=1, max_steps=5)
+        rows = simulate_voting_iterations(medias, "alpha", seed=1, calibrate_count=1, max_steps=6)
         assert rows
         # No row can reflect more than max_steps votes cast.
-        assert max(r["t"] for r in rows) <= 5
+        assert max(r["t"] for r in rows) <= 6
 
-    def test_strategy_determinism(self):
+    def test_determinism(self):
         medias = _make_separable_clips(n_per_cat=10)
-        a = simulate_voting_iterations(medias, "alpha", seed=7, strategy="entropy", calibrate_count=1, max_steps=8)
-        b = simulate_voting_iterations(medias, "alpha", seed=7, strategy="entropy", calibrate_count=1, max_steps=8)
+        a = simulate_voting_iterations(medias, "alpha", seed=7, calibrate_count=1, max_steps=10)
+        b = simulate_voting_iterations(medias, "alpha", seed=7, calibrate_count=1, max_steps=10)
         assert [r["t"] for r in a] == [r["t"] for r in b]
         assert [r["cost"] for r in a] == [r["cost"] for r in b]
 
@@ -672,22 +668,22 @@ class TestStrategyAxis:
         with pytest.raises(KeyError):
             simulate_voting_iterations(medias, "alpha", seed=1, strategy="does_not_exist", calibrate_count=1)
 
-    def test_run_eval_strategies_axis(self):
-        medias = _make_separable_clips(n_per_cat=8)
-        df = run_voting_iterations_eval(
-            dataset_clips={"ds1": medias},
-            seeds=[1, 2],
-            categories={"ds1": ["alpha"]},
-            strategies=["random", "margin"],
-            calibrate_count=1,
-            max_steps=8,
+    def test_text_seed_scores_change_the_ordering(self):
+        # Supplying a text-sort ranking routes the seed through the text path;
+        # a ranking that inverts the ground-truth order produces a different
+        # vote sequence (and cost curve) than the no-text random-good seed.
+        medias = _make_separable_clips(n_per_cat=12)
+        no_text = simulate_voting_iterations(medias, "alpha", seed=5, calibrate_count=1, max_steps=10)
+        # Rank every media by a synthetic "similarity" = its id, so the text
+        # seed walks the pool in a fixed, non-random order.
+        seed_scores = {cid: float(cid) for cid in medias}
+        with_text = simulate_voting_iterations(
+            medias, "alpha", seed=5, calibrate_count=1, max_steps=10, seed_scores=seed_scores
         )
-        assert set(df["strategy"].unique()) == {"random", "margin"}
-        # seed x strategy cross-product all present.
-        combos = df.groupby(["seed", "strategy"]).ngroups
-        assert combos == 4
+        assert with_text
+        assert [r["cost"] for r in with_text] != [r["cost"] for r in no_text]
 
-    def test_run_eval_defaults_to_random(self):
+    def test_run_eval_defaults_to_autopilot(self):
         medias = _make_separable_clips(n_per_cat=6)
         df = run_voting_iterations_eval(
             dataset_clips={"ds1": medias},
@@ -695,39 +691,18 @@ class TestStrategyAxis:
             categories={"ds1": ["alpha"]},
             calibrate_count=1,
         )
-        assert set(df["strategy"].unique()) == {"random"}
+        assert set(df["strategy"].unique()) == {"autopilot"}
 
-
-class TestBalancedStrategy:
-    """The oracle ``balanced`` strategy keeps the running Good/Bad counts even."""
-
-    def test_running_counts_stay_balanced(self):
-        # Every scored step's good/bad counts never drift more than one apart,
-        # and the first trainable step is a 1-vs-1 model at t=2.
+    def test_run_eval_threads_seed_scores(self):
         medias = _make_separable_clips(n_per_cat=8)
-        rows = simulate_voting_iterations(medias, "alpha", seed=0, strategy="balanced", calibrate_count=1)
-        assert rows
-        assert rows[0]["t"] == 2
-        assert rows[0]["n_good"] == 1
-        assert rows[0]["n_bad"] == 1
-        for row in rows:
-            assert abs(row["n_good"] - row["n_bad"]) <= 1
-
-    def test_handles_single_class_pool(self):
-        # All 'alpha' → the held-out split has no negatives, so the run returns
-        # no rows; the balanced selector must reach that early-return without
-        # tripping on an all-one-class pool.
-        medias = {cid: m for cid, m in _make_separable_clips(n_per_cat=6).items() if m["category"] == "alpha"}
-        rows = simulate_voting_iterations(medias, "alpha", seed=0, strategy="balanced", calibrate_count=1)
-        assert rows == []
-
-
-class TestEnsembleStdStrategy:
-    """The ``ensemble_std`` deep-ensemble sampler is deterministic per seed."""
-
-    def test_ensemble_std_deterministic(self):
-        medias = _make_separable_clips(n_per_cat=8)
-        a = simulate_voting_iterations(medias, "alpha", seed=1, strategy="ensemble_std", max_steps=8, calibrate_count=1)
-        b = simulate_voting_iterations(medias, "alpha", seed=1, strategy="ensemble_std", max_steps=8, calibrate_count=1)
-        assert [r["t"] for r in a] == [r["t"] for r in b]
-        assert [r["cost"] for r in a] == [r["cost"] for r in b]
+        seed_scores = {"ds1": {"alpha": {cid: float(cid) for cid in medias}}}
+        df = run_voting_iterations_eval(
+            dataset_clips={"ds1": medias},
+            seeds=[1],
+            categories={"ds1": ["alpha"]},
+            calibrate_count=1,
+            max_steps=10,
+            seed_scores=seed_scores,
+        )
+        assert not df.empty
+        assert set(df["strategy"].unique()) == {"autopilot"}

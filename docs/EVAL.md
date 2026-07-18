@@ -228,6 +228,8 @@ plot_eval_results(results, output_dir="eval_seeds")
 
 The voting-iterations evaluation measures how classification quality improves as more votes are cast. This is useful for understanding how many labels a user needs to provide before the model converges.
 
+Votes are cast in the order the app's **Autopilot** would present them — the eval reproduces the real user flow rather than an academic active-learning heuristic. Autopilot seeds the first few positives from text sort when available (pass `seed_scores`, a per-media cosine-to-query ranking), else from a handful of random known-good examples, then gathers the initial negatives and cycles the standard Good / Bad / Hard / New phases. `autopilot` is the only vote-order strategy; every result row carries `strategy="autopilot"`.
+
 ```python
 #!/usr/bin/env python
 """Evaluate learned-sort cost over simulated voting iterations."""

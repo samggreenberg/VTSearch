@@ -224,21 +224,30 @@ through `json.dumps(indent=2)`.
 ## Voting iterations
 
 `vtscore/eval/voting_iterations.py` simulates an interactive labelling
-session - votes are cast one at a time in a shuffled order, and at
-each step (once both polarities have at least one vote) a fresh MLP is
-trained, a threshold is computed, the held-out test set is scored,
-and the inclusion-weighted cost is recorded. This is how the team
-answers "how does cost drop as the user labels?" without spinning up
-a UI session.
+session - votes are cast one at a time in the order the app's
+**Autopilot** would present them, and at each step (once both
+polarities have at least one vote) a fresh MLP is trained, a threshold
+is computed, the held-out test set is scored, and the inclusion-weighted
+cost is recorded. This is how the team answers "how does cost drop as
+the user labels?" without spinning up a UI session.
+
+The only vote-order strategy is `autopilot` (see
+`vtscore/eval/al_strategies.py`): the eval reproduces the real user flow
+rather than any academic active-learning heuristic. Autopilot seeds the
+first few positives from text sort when a `seed_scores` ranking is
+supplied, else from a handful of random known-good examples ("3 random
+examples pulled from the Good"), then gathers the initial negatives and
+cycles the standard Good / Bad / Hard / New phases.
 
 ### `simulate_voting_iterations(clips_dict, target_category, seed, ...)`
 
-`vtscore/eval/voting_iterations.py:122`. Run one `(dataset, category,
-seed)` simulation. Splits `clips_dict` into `D_sim` (used to draw
-votes) and `D_test` (held out for cost evaluation) by `sim_fraction`,
-shuffles the vote order, and iterates:
+Run one `(dataset, category, seed)` simulation. Splits `clips_dict` into
+`D_sim` (used to draw votes) and `D_test` (held out for cost evaluation)
+by `sim_fraction`, then iterates:
 
-1. Apply the next vote.
+1. Pick the next vote with the autopilot selector (seed → Good → Bad →
+   Hard → New) and apply it; mirror it onto the coverage atlas that
+   drives the New phase.
 2. When both polarities have at least one vote, train an MLP
    (`train_model`) and pick a threshold
    (`calculate_cross_calibration_threshold`, with optional
@@ -246,11 +255,16 @@ shuffles the vote order, and iterates:
 3. Score `D_test`, compute FPR / FNR, weight by inclusion, record the
    cost.
 
+Pass `seed_scores={media_id: similarity}` (each item's cosine to the
+typed query) to route the seed through text sort; omit it for the
+random-known-good seed.
+
 Returns a list of row dicts:
 
 ```python
 {
     "seed": 0, "dataset": "esc50_s", "category": "dog",
+    "strategy": "autopilot",
     "t": 7, "n_good": 3, "n_bad": 4,
     "cost": 0.124, "fpr": 0.05, "fnr": 0.21,
     "elapsed_seconds": 12.4,
@@ -258,9 +272,9 @@ Returns a list of row dicts:
 ```
 
 `n_good`/`n_bad` are the good/bad vote counts the row's model was trained
-on (they sum to `t`). The first scored step has only one of each, so its
-metrics are very noisy; carry these counts through so analysis can filter or
-weight rows by sample size instead of treating a 1-vs-1 model as reliable.
+on (they sum to `t`). Autopilot seeds goods before bads, so the first
+scored step carries the initial goods plus a single bad; carry these
+counts through so analysis can weight rows by sample size.
 
 Honours the same threshold knobs as the runner. When
 `safe_thresholds=True`, the GMM blend uses scores over the simulation
@@ -269,12 +283,13 @@ calibration.
 
 ### `run_voting_iterations_eval(dataset_clips, seeds, categories=None, ...)`
 
-`vtscore/eval/voting_iterations.py:250`. Sweep
-`simulate_voting_iterations` over `(seed × dataset × category)` and
-return a `pandas.DataFrame` with columns `seed, dataset, category, t,
-n_good, n_bad, cost, fpr, fnr, elapsed_seconds`. When `categories` is `None` or a
-dataset is missing from the dict, every unique category in that
-dataset is used.
+Sweep `simulate_voting_iterations` over `(seed × dataset × category)` and
+return a `pandas.DataFrame` with columns `seed, dataset, category,
+strategy, t, n_good, n_bad, cost, fpr, fnr, elapsed_seconds`. When
+`categories` is `None` or a dataset is missing from the dict, every
+unique category in that dataset is used. Pass
+`seed_scores={dataset: {category: {media_id: similarity}}}` to route the
+autopilot seed through text sort per (dataset, category).
 
 ```python
 from vtscore.eval.voting_iterations import run_voting_iterations_eval
@@ -289,7 +304,7 @@ df = run_voting_iterations_eval(
 
 ### `run_voting_iterations_eval_from_pickles(dataset_paths, seeds, ...)`
 
-`vtscore/eval/voting_iterations.py:315`. Convenience wrapper that
+`vtscore/eval/voting_iterations.py`. Convenience wrapper that
 loads each dataset from a pickle path (via
 `vtscore.datasets.loader.load_dataset_from_pickle`) and then calls
 `run_voting_iterations_eval`. The returned DataFrame has the same

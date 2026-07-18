@@ -257,7 +257,9 @@ class TestPlotVotingIterations:
 class TestPlotVotingIterationsFaceting:
     """When >1 acquisition strategy is present the charts facet by strategy."""
 
-    def _multi_strategy_df(self, strategies=("random", "margin", "entropy")):
+    def _multi_strategy_df(self, strategies=("autopilot", "baseline")):
+        # The plot facets by whatever ``strategy`` values are present; the names
+        # are opaque labels here (the eval itself only produces ``autopilot``).
         frames = [_make_voting_iterations_df(n_seeds=2, strategy=s) for s in strategies]
         return pd.concat(frames, ignore_index=True)
 
@@ -290,7 +292,7 @@ class TestPlotVotingIterationsFaceting:
             assert p.exists()
 
     def test_many_strategies_facet(self, tmp_dir):
-        df = self._multi_strategy_df(strategies=("random", "margin", "entropy", "bald", "coreset"))
+        df = self._multi_strategy_df(strategies=("s0", "s1", "s2", "s3", "s4"))
         paths = plot_voting_iterations(df, output_dir=tmp_dir)
         assert len(paths) == 2
         for p in paths:
