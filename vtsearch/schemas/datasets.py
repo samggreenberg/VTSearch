@@ -409,7 +409,7 @@ class DatasetLoadSourceRequestSchema(Schema):
 class DatasetLoadStartedResponseSchema(Schema):
     """Response for ``POST /api/dataset/load-demo`` / ``load-file`` /
     ``load-folder`` / ``load-source`` / ``import-local-folder`` and for
-    ``POST /api/dataset/combine`` in ``staging.py``.
+    ``POST /api/dataset/combine`` / ``promote`` in ``staging.py``.
 
     ``task_id`` is the background-task tracker id (string) used by the
     SSE progress stream; it may be empty when the load completes
@@ -478,15 +478,6 @@ class DatasetPromoteRequestSchema(Schema):
         validate=validate.Length(min=1),
         metadata={"description": "IDs of the media items (in the active dataset) to promote."},
     )
-
-
-class DatasetPromoteResponseSchema(Schema):
-    """Response for ``POST /api/dataset/promote``."""
-
-    ok = fields.Boolean(required=True)
-    dataset_id = fields.String(required=True)
-    name = fields.String(required=True)
-    num_items = fields.Integer(required=True)
 
 
 class DatasetStageFileResponseSchema(Schema):
