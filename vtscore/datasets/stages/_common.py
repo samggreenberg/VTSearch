@@ -338,11 +338,16 @@ class AdaptiveLoadPacer:
     and item counts stay visible in the UI; pacing is controlled purely through
     the weight vector and the override.
 
-    Known limitation: a multi-archive source that downloads several archives
-    back-to-back under one ``"downloading"`` phase still freezes within that
-    phase after the first archive (the fractions restart on a new scale); the
-    alternating download→extract→download pattern the demos actually use is
-    handled by the re-entry rebase.
+    Multi-download caller convention: the pacer cannot tell a fresh archive's
+    restarting fraction from within-phase jitter, so a source that fetches
+    several files back-to-back under one ``"downloading"`` phase must report a
+    *cumulative* fraction across the whole set (a running byte or item count
+    against the set total) rather than each file's own 0→1 fraction — otherwise
+    the first file fills the acquire slice and the monotonic clamp freezes the
+    bar for the rest. The alternating download→extract→download demos (TUT, KTH,
+    Visual Genome) get this for free from the re-entry rebase; the one demo that
+    stays in a single continuous download phase, ``download_ucsf_documents``,
+    reports on its cumulative PDF count (issue #2616).
     """
 
     #: Observe a phase at least this long / this far before trusting its
