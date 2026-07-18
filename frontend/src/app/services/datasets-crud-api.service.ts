@@ -10,7 +10,6 @@ import type { DatasetAllImportersListResponse } from '../generated/api-client/mo
 import type { DatasetAvailableFilesResponse } from '../generated/api-client/models/dataset-available-files-response';
 import type { DatasetClearResponse } from '../generated/api-client/models/dataset-clear-response';
 import type { DatasetCombineRequest } from '../generated/api-client/models/dataset-combine-request';
-import type { DatasetPromoteResponse } from '../generated/api-client/models/dataset-promote-response';
 import type { DatasetImportersListResponse } from '../generated/api-client/models/dataset-importers-list-response';
 import type { DatasetLoadDemoRequest } from '../generated/api-client/models/dataset-load-demo-request';
 import type { DatasetLoadSourceRequest } from '../generated/api-client/models/dataset-load-source-request';
@@ -179,8 +178,10 @@ export class DatasetsCrudApiService {
   }
 
   /** Promote a set of media items (the Find Goods pile) into their own
-   *  saved dataset. Resolves with the new dataset's id / name / count. */
-  promote(name: string, mediaIds: number[]): Observable<DatasetPromoteResponse> {
+   *  saved dataset in a background task. Resolves with the ``task_id``;
+   *  progress (and the finished task's ``dataset_id``) arrives on the
+   *  ``loading-tasks`` SSE channel. */
+  promote(name: string, mediaIds: number[]): Observable<DatasetLoadStartedResponse> {
     return promoteToDataset(this.http, this.config.rootUrl, {
       body: { name, media_ids: mediaIds },
     }).pipe(map((r) => r.body));
