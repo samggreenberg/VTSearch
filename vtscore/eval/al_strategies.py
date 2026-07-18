@@ -186,7 +186,8 @@ def _select_autopilot(ctx: ALContext) -> int:
         if ctx.seed_scores is not None:
             # Text sort available: vote top-down on the query ranking, where the
             # positives cluster — exactly what a user does after typing a query.
-            return max(pool, key=lambda i: ctx.seed_scores.get(i, -np.inf))
+            seed = ctx.seed_scores
+            return max(pool, key=lambda i: seed.get(i, -np.inf))
         # No text sort: seed with random known-good examples the user supplies
         # by hand ("3 random examples pulled from the Good").
         positives = [i for i in pool if ctx.pool_labels is not None and ctx.pool_labels.get(i) == 1.0]
@@ -201,7 +202,8 @@ def _select_autopilot(ctx: ALContext) -> int:
         if ctx.seed_scores is not None:
             # No detector yet, but text sort exists: the bottom of the ranking
             # (least similar to the query) is the most-likely bad.
-            return min(pool, key=lambda i: ctx.seed_scores.get(i, np.inf))
+            seed = ctx.seed_scores
+            return min(pool, key=lambda i: seed.get(i, np.inf))
         # No detector, no text: example-sort by the good centroid, vote the
         # least-similar item bad.
         return _least_similar_to_goods(ctx)
@@ -236,9 +238,7 @@ def select_next(strategy: str, ctx: ALContext) -> int:
     try:
         selector = STRATEGIES[strategy]
     except KeyError:
-        raise KeyError(
-            f"Unknown strategy {strategy!r}; available: {', '.join(available_strategies())}"
-        ) from None
+        raise KeyError(f"Unknown strategy {strategy!r}; available: {', '.join(available_strategies())}") from None
     if not ctx.pool_ids:
         raise ValueError("select_next called with an empty pool")
     return selector(ctx)
