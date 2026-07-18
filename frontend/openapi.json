@@ -10814,7 +10814,7 @@
             "description": "Detector not found."
           },
           "409": {
-            "description": "The active dataset can't supply the detector's embedder type."
+            "description": "The active dataset can't supply the detector's embedder type, or the detector's type (structural) can't be exported as a portable bundle at all."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"

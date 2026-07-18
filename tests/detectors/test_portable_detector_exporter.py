@@ -214,19 +214,19 @@ class TestExportCliDetectors:
         assert manifest["embedder"]["embedding_dim"] == 768
         assert manifest["training_labels"] == {"good": 5, "bad": 3}
 
-    def test_skips_non_two_layer_mlp(self, tmp_path):
+    def test_skips_malformed_weights(self, tmp_path):
         from vtscore.exporters import get_exporter
 
         exp = get_exporter("portable_detector")
         # A single-layer weight dict can't be modelled by the fixed ONNX graph;
         # the exporter must skip it rather than abort the whole export.
         bad_descriptor = {
-            "detector_name": "structural",
+            "detector_name": "malformed",
             "media_type": "image",
             "weights": {"0.weight": [[1.0, 2.0]], "0.bias": [0.0]},
             "threshold": 0.5,
-            "embedder": "sift_vlad",
-            "embedder_type": "structural",
+            "embedder": "siglip",
+            "embedder_type": "semantic",
             "good_count": 2,
             "bad_count": 2,
         }
@@ -235,7 +235,58 @@ class TestExportCliDetectors:
 
         assert "No portable detector bundles written" in result["message"]
         assert "skipped" in result["message"].lower()
+        assert not (tmp_path / "malformed.zip").exists()
+
+    def test_skips_structural_detector(self, tmp_path):
+        """A real (well-formed) structural detector is blocked, not silently mis-exported.
+
+        Structural detectors' stage-1 VLAD-space MLP is a normal 2-layer weight
+        dict indistinguishable in shape from any other detector's, so the
+        weight-shape check alone can't catch it - the exporter must gate on
+        ``embedder_type`` explicitly.
+        """
+        from vtscore.exporters import get_exporter
+
+        exp = get_exporter("portable_detector")
+        descriptor = {
+            "detector_name": "structural",
+            "media_type": "image",
+            "weights": _real_weights(768),
+            "threshold": 0.5,
+            "embedder": "sift_vlad",
+            "embedder_type": "structural",
+            "good_count": 2,
+            "bad_count": 2,
+        }
+        out = tmp_path / "{detector_name}.zip"
+        result = exp.export_cli_detectors([descriptor], {"filepath": str(out)})
+
+        assert "No portable detector bundles written" in result["message"]
+        assert "structural" in result["message"].lower()
         assert not (tmp_path / "structural.zip").exists()
+
+    def test_exports_patch_semantic_with_caveat(self, tmp_path):
+        """A patch detector exports in the degraded whole-item-only mode, flagged."""
+        from vtscore.exporters import get_exporter
+
+        exp = get_exporter("portable_detector")
+        descriptor = {
+            "detector_name": "patchy",
+            "media_type": "image",
+            "weights": _real_weights(768),
+            "threshold": 0.5,
+            "embedder": "dinov2",
+            "embedder_type": "patch_semantic",
+            "good_count": 4,
+            "bad_count": 4,
+        }
+        out = tmp_path / "{detector_name}.zip"
+        result = exp.export_cli_detectors([descriptor], {"filepath": str(out)})
+
+        assert "Wrote 1" in result["message"]
+        manifest = _assert_valid_bundle(tmp_path / "patchy.zip", detector_name="patchy")
+        assert len(manifest["caveats"]) == 1
+        assert "WHOLE item" in manifest["caveats"][0]
 
     def test_sanitizes_detector_name_in_path(self, tmp_path):
         """A detector name with path separators can't escape the target dir."""
