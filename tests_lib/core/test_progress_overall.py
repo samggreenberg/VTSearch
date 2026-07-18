@@ -34,6 +34,17 @@ class TestOverallFraction:
         t.update("embedding", "emb", current=5, total=10, step=3, total_steps=4)
         assert t.get()["overall"] == pytest.approx(0.625)
 
+    def test_within_override_beats_current_total(self):
+        t = _tracker()
+        # The ``within`` kwarg drives the overall math while current/total keep
+        # the caller's real counts (download bytes stay visible in the UI); the
+        # AdaptiveLoadPacer uses it to composite step-1 sub-phases.
+        t.update("downloading", "dl", current=999_999, total=4_000_000, step=1, total_steps=4, within=0.5)
+        snap = t.get()
+        assert snap["overall"] == pytest.approx(0.125)
+        assert snap["current"] == 999_999
+        assert snap["total"] == 4_000_000
+
     def test_step_floor_when_within_unknown(self):
         t = _tracker()
         # Indeterminate sub-step (total=0): the bar sits at the step floor, not

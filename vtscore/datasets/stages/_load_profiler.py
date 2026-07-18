@@ -28,6 +28,9 @@ import time
 from typing import Any, Optional
 
 # step number (see _common._STATUS_TO_STEP / _TOTAL_LOAD_STEPS) -> phase label.
+# Step 1 covers two sub-phases: the transfer itself ("downloading") and the
+# archive unpack ("extracting"); they are recorded as separate phases so the
+# fit can estimate a per-MB extraction rate independent of network bandwidth.
 _STEP_PHASE = {1: "download", 2: "model_load", 3: "embed", 4: "finalize"}
 
 # Embedders whose model has already been loaded in THIS process. First load of a
@@ -106,12 +109,17 @@ class LoadProfiler:
 
     # -- capture ------------------------------------------------------------
     def on_update(self, snapshot: dict[str, Any]) -> None:
-        """Tracker subscriber: stamp the first time each step becomes active."""
+        """Tracker subscriber: stamp the first time each phase becomes active."""
         step = snapshot.get("step")
-        if step == self._last_step:
+        status = snapshot.get("status")
+        key = (step, status == "extracting")
+        if key == self._last_step:
             return
-        self._last_step = step
-        phase = _STEP_PHASE.get(step) if isinstance(step, int) else None
+        self._last_step = key
+        if step == 1 and status == "extracting":
+            phase: Any = "extract"
+        else:
+            phase = _STEP_PHASE.get(step) if isinstance(step, int) else None
         if phase is None:
             return
         now = time.monotonic()

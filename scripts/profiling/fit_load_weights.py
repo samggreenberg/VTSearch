@@ -5,10 +5,11 @@ Reads the per-phase rows emitted by ``calibrate_load_weights.py`` (via the
 ``VTSEARCH_PROFILE_LOAD`` recorder) and, per ``(device, media_type, embedder)``,
 fits:
 
-    T_model    ≈ a_model                      (median warm model-load seconds)
+    T_load     ≈ a_model + b_load · n         (warm model load + per-item decode, least-squares vs n)
     T_embed    ≈ a_embed + b_embed · n        (least-squares vs n)
     T_finalize ≈ a_fin   + b_fin   · n        (least-squares vs n)
     bandwidth  ≈ download_size_mb / seconds   (cold-download rows, device-pooled)
+    extract    ≈ download_size_mb / seconds   (extract rows, pooled)
 
 and prints (a) a checked-in ``_load_cost_model.py`` body and (b) a human-readable
 summary table for docs/plans/progress-weight-calibration.md. See that plan.
@@ -74,6 +75,7 @@ def main() -> int:
     # Group phase-seconds by (device, media, embedder).
     groups: dict[tuple[str, str, str], dict[str, list[tuple[float, float]]]] = defaultdict(lambda: defaultdict(list))
     dl_by_device: dict[str, list[tuple[float, float]]] = defaultdict(list)  # (size_mb, seconds)
+    extract_pts: list[tuple[float, float]] = []  # (size_mb, seconds), device-pooled
     for r in rows:
         key = (r["device"], r["media_type"], r["embedder"])
         phase = r["phase"]
@@ -82,6 +84,12 @@ def main() -> int:
         if phase == "download":
             if r.get("cold_download") and r.get("download_size_mb"):
                 dl_by_device[r["device"]].append((float(r["download_size_mb"]), secs))
+            continue
+        if phase == "extract":
+            # Only a cold acquire actually unpacks; a cached extract dir skips
+            # the phase entirely, so any recorded row is a real extraction.
+            if r.get("download_size_mb") and secs > 0.1:
+                extract_pts.append((float(r["download_size_mb"]), secs))
             continue
         if phase.startswith("finalize:"):
             continue  # sub-slots: deferred (see plan follow-ups)
@@ -107,8 +115,18 @@ def main() -> int:
         # Warm loads skip the model phase, so a warm row is rare; floor when
         # absent. Never fall back to the (large) cold value for pacing.
         warm = g.get("model_warm")
-        a_model = statistics.median([s for _, s in warm]) if warm else _WARM_MODEL_FLOOR_S
         cold_rows = g.get("model_cold")
+        # The "model_load" phase is warm model load PLUS per-item source
+        # decode, so it scales with n: fit an affine a_model + b_load·n from
+        # the warm rows (cold rows fold in the one-time encoder download, so
+        # they only feed the intercept fallback / note).
+        if warm:
+            m_xs = [n for n, _ in warm]
+            m_ys = [s for _, s in warm]
+            a_model, b_load, r2_m = _affine_fit(m_xs, m_ys)
+            a_model = max(_WARM_MODEL_FLOOR_S if b_load <= 0 else 0.0, a_model)
+        else:
+            a_model, b_load, r2_m = _WARM_MODEL_FLOOR_S, 0.0, 0.0
         cold_model = statistics.median([s for _, s in cold_rows]) if cold_rows else a_model
         e_xs = [n for n, _ in g.get("embed", [])]
         e_ys = [s for _, s in g.get("embed", [])]
@@ -117,14 +135,15 @@ def main() -> int:
         f_ys = [s for _, s in g.get("finalize", [])]
         a_f, b_f, r2_f = _affine_fit(f_xs, f_ys)
         model[key] = {
-            "a_model": round(a_model, 4),
+            "a_model": round(max(0.0, a_model), 4),
+            "b_load": round(max(0.0, b_load), 6),
             "a_embed": round(max(0.0, a_e), 4),
             "b_embed": round(max(0.0, b_e), 6),
             "a_fin": round(max(0.0, a_f), 4),
             "b_fin": round(max(0.0, b_f), 6),
         }
         summary_lines.append(
-            f"| {dev} | {media} | {emb} | {a_model:.2f} (cold {cold_model:.1f}) | "
+            f"| {dev} | {media} | {emb} | {a_model:.2f}+{b_load * 1000:.2f}m·n (cold {cold_model:.1f}) | {r2_m:.2f} | "
             f"{a_e:.2f}+{b_e * 1000:.2f}m·n | {r2_e:.2f} | {a_f:.2f}+{b_f * 1000:.2f}m·n | {r2_f:.2f} | "
             f"{len(e_xs)} |"
         )
@@ -137,11 +156,14 @@ def main() -> int:
     print("}")
     bw_val = statistics.median(list(bw.values())) if bw else 0.0
     print(f"DOWNLOAD_MB_PER_S = {round(bw_val, 3)}  # per-device: {bw}")
+    ex_rates = [size / s for size, s in extract_pts if s > 0]
+    ex_val = statistics.median(ex_rates) if ex_rates else 0.0
+    print(f"EXTRACT_MB_PER_S = {round(ex_val, 3)}  # {len(extract_pts)} extractions")
     print()
     # ---- human-readable summary (paste under Results) ----
     print("# ===== summary =====")
-    print("| device | media | embedder | a_model s (cold) | embed a+b·n | R² | finalize a+b·n | R² | pts |")
-    print("|--------|-------|----------|------------------|-------------|----|----------------|----|----|")
+    print("| device | media | embedder | load a+b·n s (cold) | R² | embed a+b·n | R² | finalize a+b·n | R² | pts |")
+    print("|--------|-------|----------|---------------------|----|-------------|----|----------------|----|----|")
     for line in summary_lines:
         print(line)
     return 0

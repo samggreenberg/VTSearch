@@ -140,7 +140,7 @@ class ProgressTracker:
             self._step_weights = [float(w) for w in weights] if weights else None
 
     def _compute_overall(
-        self, current: int, total: int, step: Any, total_steps: Any
+        self, current: int, total: int, step: Any, total_steps: Any, within_override: Optional[float] = None
     ) -> tuple[Optional[float], Optional[float]]:
         """Compute the whole-job completion fraction and a true overall ETA.
 
@@ -166,7 +166,9 @@ class ProgressTracker:
 
         s = min(max(int(step), 1), int(total_steps))
         within = 0.0
-        if total and total > 0:
+        if within_override is not None:
+            within = min(max(within_override, 0.0), 1.0)
+        elif total and total > 0:
             within = min(max(current / total, 0.0), 1.0)
         raw = self._overall_raw_fraction(within, s, total_steps)
 
@@ -224,8 +226,13 @@ class ProgressTracker:
             current: Number of units completed so far.
             total: Total number of units expected (0 if unknown).
             **kwargs: Values for any extra fields declared at construction.
-                Unrecognised keys are silently ignored.
+                Unrecognised keys are silently ignored. The reserved key
+                ``within`` (float 0..1) overrides the within-step fraction
+                used for the whole-job ``overall`` math without touching the
+                displayed ``current``/``total`` — pacing layers use it to
+                composite sub-phases while byte/item counts stay visible.
         """
+        within_override = kwargs.pop("within", None)
         with self._lock:
             self._data["status"] = status
             self._data["message"] = message
@@ -242,7 +249,7 @@ class ProgressTracker:
             overall_eta = None
             if "overall" in self._extra_defaults or "eta_seconds" in self._extra_defaults:
                 overall, overall_eta = self._compute_overall(
-                    current, total, self._data.get("step"), self._data.get("total_steps")
+                    current, total, self._data.get("step"), self._data.get("total_steps"), within_override
                 )
             if "overall" in self._extra_defaults:
                 self._data["overall"] = overall

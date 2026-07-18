@@ -7,10 +7,14 @@ individual stage modules can depend on it without forming an import cycle.
 
 from __future__ import annotations
 
+import time
 from typing import Optional
 
 # Maps the status strings emitted by inner functions to step numbers.
-# "downloading" covers both download and extraction.
+# "downloading" and "extracting" are the two sub-phases of the acquire step:
+# they share step 1 (the bar shows one unified acquire slice) but report on
+# different scales (transfer bytes vs archive members), so the pacer maps each
+# into its own ordered sub-range of the slice — see AdaptiveLoadPacer.
 # "loading"/"converting" cover model loading, pickle loading, and source→media
 # conversion (document→image, video→frames): all pre-embed work that produces
 # the medias to embed, so they share the loading slice.
@@ -24,6 +28,7 @@ from typing import Optional
 # off its track. Keep the map exhaustive instead.
 _STATUS_TO_STEP = {
     "downloading": 1,
+    "extracting": 1,
     "loading": 2,
     "converting": 2,
     "embedding": 3,
@@ -143,6 +148,65 @@ def load_step_weights(
     return list(_LOAD_STEP_WEIGHTS_CPU)
 
 
+#: Share of a static profile's acquire slice assigned to the download sub-phase
+#: when the archive size is unknown (the rest is extraction). Only shapes the
+#: initial pacing; the AdaptiveLoadPacer rebases from observed durations.
+_STATIC_DOWNLOAD_SHARE = 0.75
+
+
+def load_cost_terms(
+    media_type: str = "",
+    *,
+    n: Optional[int] = None,
+    download_size_mb: Optional[float] = None,
+    embedder: Optional[str] = None,
+) -> dict[str, float]:
+    """Predicted per-phase cost terms for a dataset load, in phase order
+    ``download``, ``extract``, ``load``, ``embed``, ``finalize``.
+
+    When ``n`` is known and a measured cost-model row exists, the terms are
+    seconds from the affine model. Otherwise they are pseudo-times derived from
+    the static per-(device, media) weight profile — only their ratios matter,
+    and the acquire slice is split between download and extraction by archive
+    size when known, else by :data:`_STATIC_DOWNLOAD_SHARE`.
+
+    Always returns a usable dict (never raises), so the pacing layer can rely
+    on it for every import path, including streaming folder importers.
+    """
+    device = _resolve_device_name()
+
+    if n is not None and n > 0:
+        from vtscore.datasets.stages._load_cost_model import cost_model_terms  # noqa: PLC0415
+
+        emb = embedder or _default_embedder_name(media_type)
+        terms = cost_model_terms(device, media_type, emb, n, download_size_mb)
+        if terms is not None:
+            return terms
+
+    if device == "cuda":
+        w = _LOAD_STEP_WEIGHTS_GPU
+    elif media_type == "image":
+        w = _LOAD_STEP_WEIGHTS_CPU_IMAGE
+    else:
+        w = _LOAD_STEP_WEIGHTS_CPU
+
+    dl_share = _STATIC_DOWNLOAD_SHARE
+    if download_size_mb:
+        from vtscore.datasets.stages._load_cost_model import DOWNLOAD_MB_PER_S, EXTRACT_MB_PER_S  # noqa: PLC0415
+
+        if DOWNLOAD_MB_PER_S > 0 and EXTRACT_MB_PER_S > 0:
+            t_dl = download_size_mb / DOWNLOAD_MB_PER_S
+            t_ex = download_size_mb / EXTRACT_MB_PER_S
+            dl_share = t_dl / (t_dl + t_ex)
+    return {
+        "download": w[0] * dl_share,
+        "extract": w[0] * (1.0 - dl_share),
+        "load": w[1],
+        "embed": w[2],
+        "finalize": w[3],
+    }
+
+
 class FinalizeProgress:
     """Tracker proxy that maps each finalize sub-stage into an ordered slice
     of step 4 (the finalize phase).
@@ -230,6 +294,205 @@ class FinalizeProgress:
             total_steps=_TOTAL_LOAD_STEPS,
             **kwargs,
         )
+
+
+#: Canonical phase order for a dataset load. ``download`` and ``extract`` are
+#: the two sub-phases of step 1 (acquire); the rest map 1:1 onto steps 2–4.
+_PHASE_ORDER: tuple[str, ...] = ("download", "extract", "load", "embed", "finalize")
+_PHASE_STEP: dict[str, int] = {"download": 1, "extract": 1, "load": 2, "embed": 3, "finalize": 4}
+
+
+class AdaptiveLoadPacer:
+    """Tracker proxy that paces the unified load bar from a per-phase cost model
+    and rebases it on what actually happens.
+
+    The static/n-aware step weights fix two of the bar's failure modes but two
+    remained (issue #2556):
+
+    - **Frozen bar during extraction.** Download and extraction both reported
+      status ``"downloading"`` against step 1 on different scales (transfer
+      bytes vs archive members), so once the download filled the acquire slice
+      the monotonic clamp pinned the bar for the whole extraction while the
+      ETA climbed. Extraction now reports ``"extracting"``, and this proxy maps
+      each sub-phase into its own ordered sub-range of the step-1 slice.
+    - **Weights that predict work that never happens (or lies).** A cached
+      archive skips download+extraction entirely, a cached embedded pkl skips
+      nearly everything, and the real network can be several times faster or
+      slower than the calibrated bandwidth. Static weights then make the bar
+      leap or crawl and the ETA start absurdly low or high. This proxy
+      re-estimates the *current phase's* term from its observed pace while
+      counts flow (a 2026-07-18 GTZAN run showed why download-only observation
+      is not enough: decode ran 11× its calibrated term, the bar span stayed
+      tiny, and the tracker's rate-extrapolated ETA ballooned to ~55 min for a
+      3-min load), and at every phase boundary re-divides the *remaining* span
+      of the bar over the phases still to come (proportional to their model
+      terms). What has been consumed stays consumed — the mapping is monotonic
+      by construction — but the future is always paced against the latest
+      evidence.
+
+    The proxy exposes the tracker surface the pipeline stages use (``update`` /
+    ``check_cancelled``), accepts the same ``step``/``total_steps`` kwargs, and
+    forwards to the real tracker with re-derived step weights and, for step-1
+    sub-phases, a composite within-step fraction (via the tracker's ``within``
+    override). The caller's ``current``/``total`` always pass through, so byte
+    and item counts stay visible in the UI; pacing is controlled purely through
+    the weight vector and the override.
+
+    Known limitation: a multi-archive source that downloads several archives
+    back-to-back under one ``"downloading"`` phase still freezes within that
+    phase after the first archive (the fractions restart on a new scale); the
+    alternating download→extract→download pattern the demos actually use is
+    handled by the re-entry rebase.
+    """
+
+    #: Observe a phase at least this long / this far before trusting its
+    #: projected duration over the calibrated prior.
+    _RATE_MIN_ELAPSED = 2.0
+    _RATE_MIN_FRACTION = 0.02
+    #: Re-derive the weights from the observed rate at most this often.
+    _RATE_REWEIGHT_INTERVAL = 1.0
+
+    def __init__(self, tracker, terms: dict[str, float]) -> None:
+        self._tracker = tracker
+        self._terms = {p: max(0.0, float(terms.get(p, 0.0))) for p in _PHASE_ORDER}
+        self._phase: str | None = None
+        self._phase_t0 = 0.0
+        self._frac = 0.0  # monotone within-phase fraction
+        self._consumed = 0.0  # overall fraction consumed when this phase began
+        self._span = 0.0  # overall span assigned to the current phase
+        self._raw = 0.0  # last overall fraction targeted (monotone)
+        self._last_rate_reweight = 0.0
+        self._weights = self._weights_vector()
+        tracker.set_step_weights(self._weights)
+
+    # -- tracker surface ----------------------------------------------------
+    def check_cancelled(self) -> None:
+        self._tracker.check_cancelled()
+
+    def update(self, status: str, message: str = "", current: int = 0, total: int = 0, **kwargs) -> None:
+        step = kwargs.pop("step", None)
+        kwargs.pop("total_steps", None)
+        phase = self._resolve_phase(status, step)
+        if phase is None:
+            # Terminal/idle (or unmapped) updates pass through untouched.
+            self._tracker.update(status, message, current, total, step=step, total_steps=None, **kwargs)
+            return
+
+        now = time.monotonic()
+        if phase != self._phase:
+            self._begin_phase(phase, now)
+        if total and total > 0:
+            self._frac = min(max(self._frac, current / total), 1.0)
+        self._observe_phase_rate(now)
+        self._raw = max(self._raw, self._consumed + self._span * self._frac)
+
+        s = _PHASE_STEP[phase]
+        if s == 1:
+            # Composite within-step fraction against step 1's actual slice
+            # (consumed so far + every step-1 share still pending), so the
+            # tracker's weight mapping lands exactly on the targeted fraction.
+            # Passed via the ``within`` override so the displayed
+            # ``current``/``total`` keep the caller's real byte/member counts.
+            w1 = self._weights[0]
+            kwargs["within"] = self._raw / w1 if w1 > 0 else 1.0
+        self._tracker.update(status, message, current, total, step=s, total_steps=_TOTAL_LOAD_STEPS, **kwargs)
+
+    # -- pacing internals ---------------------------------------------------
+    @staticmethod
+    def _resolve_phase(status: str, step) -> str | None:
+        if step == 4:
+            return "finalize"  # FinalizeProgress stamps step 4 explicitly
+        if status == "extracting":
+            return "extract"
+        if step == 1:
+            return "download"
+        if step == 2:
+            return "load"
+        if step == 3:
+            return "embed"
+        return None
+
+    def _begin_phase(self, phase: str, now: float) -> None:
+        """Rebase the remaining bar span over *phase* and the phases after it.
+
+        Whatever fraction the bar has actually consumed stays consumed; the
+        remainder is divided over the current-and-later model terms. Re-entering
+        an earlier phase (multi-archive download after an extraction) is the
+        same operation — the phase gets a fresh, proportionally smaller slice
+        of what is left, keeping the bar monotone without archive-count
+        knowledge.
+        """
+        self._consumed = self._raw
+        self._phase = phase
+        self._phase_t0 = now
+        self._frac = 0.0
+        self._span = (1.0 - self._consumed) * self._phase_share(phase)
+        self._weights = self._weights_vector()
+        self._tracker.set_step_weights(self._weights)
+
+    def _phase_share(self, phase: str) -> float:
+        idx = _PHASE_ORDER.index(phase)
+        rem = [self._terms[p] for p in _PHASE_ORDER[idx:]]
+        total = sum(rem)
+        return rem[0] / total if total > 0 else 1.0 / len(rem)
+
+    def _observe_phase_rate(self, now: float) -> None:
+        """Replace the current phase's calibrated term with one projected from
+        its observed pace (``elapsed / fraction-done``), and re-derive the
+        weights.
+
+        A phase running *slower* than its term grows its span, so the bar
+        target jumps forward to where reality says it should be and the
+        rate-extrapolated overall ETA converges instead of ballooning. A phase
+        running *faster* shrinks its span, which can momentarily target a
+        smaller overall fraction than already shown; the tracker's monotonic
+        clamp holds the bar flat until the target catches up, which reads as a
+        brief pause rather than a rewind.
+        """
+        phase = self._phase
+        if phase is None or self._frac >= 1.0:
+            # A completed phase needs no re-projection — the next phase
+            # boundary rebases anyway, and shrinking a finished phase's span
+            # would only clamp the bar below the span it just earned.
+            return
+        elapsed = now - self._phase_t0
+        if elapsed < self._RATE_MIN_ELAPSED or self._frac < self._RATE_MIN_FRACTION:
+            return
+        if now - self._last_rate_reweight < self._RATE_REWEIGHT_INTERVAL:
+            return
+        self._last_rate_reweight = now
+        self._terms[phase] = elapsed / self._frac
+        self._span = (1.0 - self._consumed) * self._phase_share(phase)
+        self._weights = self._weights_vector()
+        self._tracker.set_step_weights(self._weights)
+
+    def _weights_vector(self) -> list[float]:
+        """Express the current pacing state as a 4-step weight vector.
+
+        The vector always sums to 1: everything consumed before the current
+        step, the current phase's span, then the remaining phases' shares —
+        so the tracker's ``(Σ w[:s-1] + w[s-1]·within)/Σ w`` mapping lands
+        exactly on ``consumed + span·frac``.
+        """
+        w = [0.0] * _TOTAL_LOAD_STEPS
+        phase = self._phase if self._phase is not None else "download"
+        idx = _PHASE_ORDER.index(phase)
+        rem_phases = _PHASE_ORDER[idx:]
+        rem_terms = [self._terms[p] for p in rem_phases]
+        total_rem = sum(rem_terms)
+        remaining = 1.0 - self._consumed
+        if total_rem > 0:
+            shares = {p: remaining * t / total_rem for p, t in zip(rem_phases, rem_terms)}
+        else:
+            shares = {p: remaining / len(rem_phases) for p in rem_phases}
+        for p, share in shares.items():
+            w[_PHASE_STEP[p] - 1] += share
+        # Fold the consumed share into the first step. While step 1 is active
+        # its synthetic within-step fraction is computed against this same
+        # slice (see update); for later steps the tracker only sums the
+        # weights *before* the current step, so w[0] is as good a home as any.
+        w[0] += self._consumed
+        return w
 
 
 def _origin_to_str(origin: dict | None) -> str:

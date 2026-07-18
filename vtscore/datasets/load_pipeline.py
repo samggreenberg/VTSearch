@@ -36,10 +36,12 @@ from vtscore.datasets.registry import unregister_dataset as _reg_unregister
 from vtscore.state import DatasetContext, clear_all, register_context
 
 from vtscore.datasets.stages._common import (
+    AdaptiveLoadPacer,
     FinalizeProgress,
     _STATUS_TO_STEP,
     _TOTAL_LOAD_STEPS,
     _origin_to_str,
+    load_cost_terms,
     load_step_weights,
 )
 from vtscore.datasets.stages._load_profiler import start_profiler
@@ -243,22 +245,23 @@ class _LoadGateController:
         self._held = None
 
 
-def _make_stepped_progress(controller: _LoadGateController, tracker):
+def _make_stepped_progress(controller: _LoadGateController, pacer):
     """Build the importer-side progress callback.
 
-    Routes status updates into *tracker* with the right step number, and
-    triggers the download→embed gate swap on the first ``"embedding"``
-    status so a queued download can start.
+    Routes status updates into the load's :class:`AdaptiveLoadPacer` (which
+    maps them onto the unified bar) with the right step number, and triggers
+    the download→embed gate swap on the first ``"embedding"`` status so a
+    queued download can start.
     """
 
     def stepped(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
-        tracker.check_cancelled()
+        pacer.check_cancelled()
         if status == "idle":
             return
         if status == "embedding" and controller.held != "embed":
             controller.swap_to_embed()
         step = _STATUS_TO_STEP.get(status)
-        tracker.update(status, message, current, total, step=step, total_steps=_TOTAL_LOAD_STEPS)
+        pacer.update(status, message, current, total, step=step, total_steps=_TOTAL_LOAD_STEPS)
 
     return stepped
 
@@ -455,14 +458,21 @@ def _run_origin_load_in_background(
         context_id = task_id
         registry_entry_id: str | None = None
         controller = _LoadGateController(tracker)
-        stepped = _make_stepped_progress(controller, tracker)
+        # Pace the unified bar from the per-phase cost terms, rebasing on what
+        # actually happens (cached archives, observed bandwidth, skipped
+        # phases). All stage progress below routes through the pacer.
+        pacer = AdaptiveLoadPacer(
+            tracker,
+            load_cost_terms(media_type, n=n_hint, download_size_mb=download_size_mb_hint, embedder=embedder),
+        )
+        stepped = _make_stepped_progress(controller, pacer)
         profiler.bind_thread()  # so FinalizeProgress.begin stamps land here (no-op when off)
 
         try:
             with thread_user(request_user), thread_dataset_context(ctx):
                 try:
                     controller.acquire_download()
-                    tracker.update("loading", "Preparing new dataset…", 0, 0, step=1, total_steps=_TOTAL_LOAD_STEPS)
+                    pacer.update("loading", "Preparing new dataset…", 0, 0, step=1, total_steps=_TOTAL_LOAD_STEPS)
                     register_context(ctx)
                     gc.collect()
 
@@ -492,15 +502,15 @@ def _run_origin_load_in_background(
 
                     apply_custom_metadata_md5(ctx.medias)
                     _tag_origins(ctx.medias, origin)
-                    _apply_clipper_stage(ctx, tracker, clipper, clipper_params, chain_steps)
-                    _embed_missing_stage(ctx, tracker, embedders if embedders else [embedder])
+                    _apply_clipper_stage(ctx, pacer, clipper, clipper_params, chain_steps)
+                    _embed_missing_stage(ctx, pacer, embedders if embedders else [embedder])
                     # Step 4 (finalize) bundles several sub-stages. Route them
                     # through a FinalizeProgress proxy so each maps into its own
                     # ordered slice of the step-4 bar instead of independently
                     # filling (and pinning at 100%) the whole slice — keeps the
                     # bar advancing and the ETA self-correcting through the
                     # serialize/disk-write window. See FinalizeProgress.
-                    fin = FinalizeProgress(tracker)
+                    fin = FinalizeProgress(pacer)
                     fin.begin("cleanup")
                     _drop_none_embeddings_stage(ctx, fin)
                     # Re-lazify clips from reference (thin) parents now that

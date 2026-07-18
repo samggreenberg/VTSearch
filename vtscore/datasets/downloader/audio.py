@@ -228,7 +228,7 @@ def download_tut_sound_events_2017(on_progress: Optional[ProgressCallback] = Non
             on_progress("downloading", f"Downloading TUT Sound Events 2017 ({slug})...", i, total)
             _core.download_file_with_progress(url, zip_path, 0, on_progress)
 
-            on_progress("downloading", f"Extracting TUT Sound Events 2017 ({slug})...", i + 1, total)
+            on_progress("extracting", f"Extracting TUT Sound Events 2017 ({slug})...", i + 1, total)
             dest_dir.mkdir(parents=True, exist_ok=True)
             with zipfile.ZipFile(zip_path, "r") as zf:
                 for member in zf.namelist():
