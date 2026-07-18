@@ -44,6 +44,6 @@
       [indeterminate]="bar().indeterminate"
       [smooth]="smooth()"
     />
-    <span class="jp__eta">{{ eta() }}</span>
+    <span class="jp__eta" [title]="eta() ? etaTooltip : ''">{{ eta() }}</span>
   </div>
 </div>
