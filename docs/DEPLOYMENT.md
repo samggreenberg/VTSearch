@@ -234,6 +234,39 @@ UI. They are **not** downloaded at startup.
 | IMDB Movie Reviews | Text | Stanford | ~15 MB |
 | UCF-101 subset | Video | HuggingFace Datasets | ~171 MB |
 
+### Sharing demo downloads between data dirs (multi-user servers)
+
+Each data dir normally downloads its own copy of every demo dataset. On a
+shared server — or any machine with several VTSearch checkouts — the multi-GB
+demo sources only need to exist once: the downloaders skip a download whenever
+the dataset's extraction path already exists under the data dir, so a communal
+cache directory whose entries mirror that extraction layout can be symlinked
+into each data dir. [`scripts/link-demo-cache.sh`](../scripts/link-demo-cache.sh)
+does the wiring:
+
+```bash
+scripts/link-demo-cache.sh /shared/vtsearch-demos ./data            # link cached demos in
+scripts/link-demo-cache.sh /shared/vtsearch-demos ./data --harvest  # donate demos this
+                                                                    # data dir downloaded, then link
+```
+
+- The cache's entries are the extraction dirs the downloaders create under
+  `DATA_DIR` (`ESC-50-master/`, `visual_genome/`, `UrbanSound8K/`, …); the
+  script knows the full list and links whichever entries are populated.
+- `--harvest` moves demos a data dir already downloaded into the cache and
+  replaces them with symlinks, so the cache grows as users pull new demos.
+  On multi-user hosts run with a cooperative umask (e.g. `umask 002`) so
+  harvested files stay group-writable.
+- A demo downloaded through an existing symlink writes into the cache
+  through the link — no harvest needed for those.
+- **Never hand-create an empty dataset dir in the cache.** The downloaders
+  treat an existing extraction path as "download complete", so an empty dir
+  makes that demo silently load zero items. (The script only links populated
+  entries for the same reason.)
+- Temp archives still spool onto `DATA_DIR`'s own volume during a fresh
+  download, so that volume needs headroom for the largest archive even when
+  the extraction dirs are symlinked elsewhere (#2605).
+
 ### User-triggered network operations
 
 These features require network access only when explicitly used:
@@ -284,6 +317,12 @@ local-only importers instead:
 - **Folder importer:** point at a directory of media files
 - **Pickle importer:** load a pre-built `.pkl` dataset file
 - **Combine-datasets importer:** merge multiple pickle files
+
+Demo datasets *can* still load offline if their sources were downloaded (or
+copied) beforehand — see
+[Sharing demo downloads between data dirs](#sharing-demo-downloads-between-data-dirs-multi-user-servers)
+for the shared-cache/symlink pattern that provides them without any network
+access.
 
 ### Docker offline deployment
 

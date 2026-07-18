@@ -7,7 +7,7 @@ This is the reference catalogue of every demo dataset VTSearch can download and 
   <img src="user/assets/importer-picker.light.png" alt="The Demo importer with the Synthetic Media generator and the Downloaded Media catalogue" width="720" />
 </picture>
 
-Datasets are grouped by media type below. Each demo comes in size variants — **S** / **M** / **L** (progressively larger samples) and **A** (all items in the underlying dataset). Sizes are downloaded once and cached, so reloads are instant.
+Datasets are grouped by media type below. Each demo comes in size variants — **S** / **M** / **L** (progressively larger samples) and **A** (all items in the underlying dataset). Sizes are downloaded once and cached, so reloads are instant. On multi-user servers the downloaded sources can be shared between data dirs — see [DEPLOYMENT.md](DEPLOYMENT.md#sharing-demo-downloads-between-data-dirs-multi-user-servers).
 
 ## Audio
 
