@@ -72,6 +72,21 @@ def _resolve_device() -> str:
         return "unknown"
 
 
+def _cuml_active() -> bool:
+    """Whether cuML will serve this load's clustering (finalize cost variant).
+
+    Recorded per row so the fit can key CUDA measurements as "cuda" vs
+    "cuda+cuml" — cuML moves the coverage-atlas k-means / UMAP projection to
+    the GPU, which materially changes the finalize phase's cost.
+    """
+    try:
+        from vtscore.gpu_backends import cuml_enabled  # noqa: PLC0415
+
+        return cuml_enabled()
+    except Exception:
+        return False
+
+
 def _download_size_mb_for(dataset_id: str) -> Optional[float]:
     try:
         from vtscore.datasets.config import DEMO_DATASETS  # noqa: PLC0415
@@ -184,6 +199,7 @@ class LoadProfiler:
             "download_size_mb": download_size_mb,
             "cold_model": cold_model,
             "cold_download": cold_download,
+            "cuml": _cuml_active(),
         }
         rows = [{**base, "phase": phase, "seconds": round(secs, 4)} for phase, secs in durations.items()]
 

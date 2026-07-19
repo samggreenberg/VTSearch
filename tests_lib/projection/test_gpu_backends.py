@@ -102,6 +102,24 @@ def test_kill_switch_disables_cuml_for_rest_of_process():
     assert gb.cuml_enabled() is False
 
 
+def test_env_var_disables_cuml(monkeypatch):
+    """``VTSEARCH_DISABLE_CUML`` forces the CPU clustering libraries even when a
+    CUDA device resolves and cuML imports — the runtime opt-out the load-weight
+    calibration harness uses to measure the cuML-off finalize variant."""
+    monkeypatch.setattr("vtscore.config.resolve_device", lambda: "cuda")
+    monkeypatch.setitem(sys.modules, "cuml", types.ModuleType("cuml"))
+
+    monkeypatch.delenv("VTSEARCH_DISABLE_CUML", raising=False)
+    assert gb.cuml_enabled() is True
+    monkeypatch.setenv("VTSEARCH_DISABLE_CUML", "1")
+    assert gb.cuml_enabled() is False
+    # "0" and empty mean not-disabled.
+    monkeypatch.setenv("VTSEARCH_DISABLE_CUML", "0")
+    assert gb.cuml_enabled() is True
+    monkeypatch.setenv("VTSEARCH_DISABLE_CUML", "")
+    assert gb.cuml_enabled() is True
+
+
 def test_repeated_failure_warns_only_once(monkeypatch, caplog):
     _install_fake_broken_cuml(monkeypatch)
     rng = np.random.default_rng(2)
