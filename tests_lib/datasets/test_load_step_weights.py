@@ -242,10 +242,22 @@ def test_load_cost_terms_static_fallback_splits_acquire(monkeypatch):
     monkeypatch.setattr("vtscore.config.resolve_device", lambda: "cpu")
     # No n -> static pseudo-terms; the acquire slice splits download/extract
     # and the four step sums reproduce the static profile exactly.
-    terms = load_cost_terms("audio")
+    terms, calibrated = load_cost_terms("audio")
+    assert calibrated is False
     assert set(terms) == {"download", "extract", "load", "embed", "finalize"}
     assert terms["download"] + terms["extract"] == pytest.approx(_LOAD_STEP_WEIGHTS_CPU[0])
     assert terms["load"] == pytest.approx(_LOAD_STEP_WEIGHTS_CPU[1])
     assert terms["embed"] == pytest.approx(_LOAD_STEP_WEIGHTS_CPU[2])
     assert terms["finalize"] == pytest.approx(_LOAD_STEP_WEIGHTS_CPU[3])
     assert terms["download"] > terms["extract"] > 0
+
+
+def test_load_cost_terms_reports_calibrated_when_a_cost_row_matches(monkeypatch):
+    from vtscore.datasets.stages._common import load_cost_terms
+
+    monkeypatch.setattr("vtscore.config.resolve_device", lambda: "cuda")
+    # ("cuda", "audio", "clap") is a measured row, so the terms are seconds
+    # from the affine model and flagged calibrated.
+    terms, calibrated = load_cost_terms("audio", n=1000, embedder="clap")
+    assert calibrated is True
+    assert terms["embed"] > 0

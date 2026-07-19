@@ -38,6 +38,12 @@ export class JobProgressComponent {
   readonly detail = input('');
   /** Right-justified status, e.g. "5.5 min left" or "45%". */
   readonly eta = input('');
+  /**
+   * The chip shows the backend's whole-job estimate (`eta_seconds`), never a
+   * "time left in this step" number — say so on hover, since a long remaining
+   * phase can make it read as wrong next to the current step's counts (#2615).
+   */
+  readonly etaTooltip = 'Estimated time until the whole job finishes, not just the current step';
   /** Bar fill state; defaults to an indeterminate spinner. */
   readonly bar = input<ProgressBarState>({ value: 0, max: 1, indeterminate: true });
   /** Ease the fill for multi-phase jobs (see `vt-progress-bar`'s `smooth`). */

@@ -209,6 +209,33 @@ class TestOverallEta:
         t.update("embedding", "x", current=10, total=100, step=2, total_steps=2)
         assert t.get()["eta_seconds"] is not None
 
+    def test_warm_phases_do_not_poison_the_overall_eta(self, monkeypatch):
+        # Regression for #2615: a warm re-import completes steps 1-2 almost
+        # instantly, banking ~30% of the bar in under a second. The job-global
+        # average rate then projected the whole load at that pace ("10 sec
+        # left?" at the start of a 2.5-minute embed, creeping upward the whole
+        # time). The rate window must rebase at each step boundary so the
+        # extrapolation reflects the pace the job sustains *now*.
+        t = _tracker()
+        t.set_step_weights([0.2, 0.1, 0.3, 0.4])
+        clock = {"now": 0.0}
+        monkeypatch.setattr(time, "monotonic", lambda: clock["now"])
+
+        t.update("loading", "prep", current=0, total=0, step=1, total_steps=4)
+        clock["now"] = 0.5
+        # Warm archive: straight to embedding, 30% of the bar banked instantly.
+        t.update("embedding", "x", current=0, total=1000, step=3, total_steps=4)
+        assert t.get()["eta_seconds"] is None  # an instant span is not a rate signal
+        # 10s into embedding, 70/1000 done (a ~140s phase).
+        clock["now"] = 10.5
+        t.update("embedding", "x", current=70, total=1000, step=3, total_steps=4)
+        eta = t.get()["eta_seconds"]
+        assert eta is not None
+        # Phase-local extrapolation: 10s bought 0.021 of the bar, so the
+        # remaining 0.679 reads as minutes — not the tens of seconds the
+        # banked warm spans used to suggest.
+        assert eta > 100.0
+
 
 class TestFinalizeProgress:
     """The FinalizeProgress proxy maps each finalize sub-stage into its own
