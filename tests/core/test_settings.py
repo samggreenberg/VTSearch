@@ -881,8 +881,11 @@ class TestColdBootDeadlock:
         @contextlib.contextmanager
         def spy_file_lock(path):
             # Record whether THIS thread already holds _settings_lock at the
-            # moment we reach for the cross-process file lock.
-            owned_at_acquire.append(settings_mod._settings_lock._is_owned())
+            # moment we reach for the cross-process file lock. ``_is_owned``
+            # is a real method on the C-accelerated RLock (the standard idiom
+            # for "does the current thread hold this reentrant lock?") but is
+            # absent from typeshed's stubs, hence the ignore.
+            owned_at_acquire.append(settings_mod._settings_lock._is_owned())  # type: ignore[attr-defined]
             with real_file_lock(path):
                 yield
 
