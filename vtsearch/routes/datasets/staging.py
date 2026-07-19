@@ -16,8 +16,12 @@ values raise 422.  See *Resolved questions / Plugin field endpoints*
 in the plan doc.
 """
 
+import gc
+import threading
 import time
+import traceback
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 from uuid import uuid4
 
@@ -25,6 +29,7 @@ from flask import jsonify, request
 from flask_smorest import Blueprint, abort
 
 import vtscore.security.path_validation as _paths
+from vtscore.concurrency.progress import CancelledError, loading_tasks
 from vtscore.config import EMBEDDINGS_DIR
 from vtscore.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
 from vtscore.datasets.load_pipeline import (
@@ -51,7 +56,6 @@ from vtsearch.schemas.datasets import (
     DatasetCombineRequestSchema,
     DatasetLoadStartedResponseSchema,
     DatasetPromoteRequestSchema,
-    DatasetPromoteResponseSchema,
     DatasetStageDemoRequestSchema,
     DatasetStageFileResponseSchema,
     DatasetStagingStartedResponseSchema,
@@ -112,7 +116,10 @@ def combine_datasets_route(body: dict):
     return {"ok": True, "message": "Combining datasets...", "task_id": str(task_id) if task_id else ""}
 
 
-def _coverage_atlas_pickle_keys(subset: dict[int, dict]) -> dict | None:
+def _coverage_atlas_pickle_keys(
+    subset: dict[int, dict],
+    on_progress: Callable[[int, int], None] | None = None,
+) -> dict | None:
     """Return ``{"coverage_atlas": <payload>}`` to cache in a promoted pickle.
 
     Builds the atlas over *subset* at creation, exactly like a fresh import
@@ -122,20 +129,169 @@ def _coverage_atlas_pickle_keys(subset: dict[int, dict]) -> dict | None:
     a promoted dataset rebuilt from scratch each time). Returns ``None`` past
     the auto-build threshold (matching the load pipeline's deferral) or when the
     subset carries no usable vectors.
+
+    *on_progress* is forwarded to the atlas build (called as
+    ``on_progress(current, total)`` per completed k-means fit) so the
+    background promote task can report fine-grained progress.
     """
     from vtscore.state import build_coverage_atlas_serializable, should_auto_build_coverage_atlas
 
     if not should_auto_build_coverage_atlas(len(subset)):
         return None
-    payload = build_coverage_atlas_serializable(subset)
+    payload = build_coverage_atlas_serializable(subset, on_progress=on_progress)
     return {"coverage_atlas": payload} if payload is not None else None
+
+
+#: Promote runs as a 3-step background task: coverage-atlas build,
+#: pickle serialization + disk write, registry insert.
+_PROMOTE_TOTAL_STEPS = 3
+
+#: Rough wall-clock share of each promote step, tuning how the unified
+#: ``overall`` bar paces (the ETA self-corrects regardless — see
+#: :meth:`ProgressTracker._compute_overall`). The atlas's hierarchical
+#: k-means dominates, then embedding serialization; the registry write
+#: is trivial.
+_PROMOTE_STEP_WEIGHTS = [6.0, 3.5, 0.5]
+
+
+def _promote_in_background(
+    subset: dict[int, dict],
+    *,
+    name: str,
+    media_type: str,
+    embedder: str,
+    clipper: str,
+    expires_at: float | None,
+    source: dict,
+    file_type_counts: dict[str, int],
+    created_by: str,
+) -> str:
+    """Build, write, and register the promoted dataset in a daemon thread.
+
+    Mirrors :func:`vtscore.datasets.load_pipeline._stage_importer_in_background`:
+    a dedicated per-task :class:`ProgressTracker` (via ``loading_tasks``) carries
+    progress — including the coverage-atlas build, previously a long silent hang
+    in the request thread — to the ``loading-tasks`` SSE channel, and the
+    dashboard's Cancel button works through the standard task-cancel route.
+
+    Concurrency: *subset* is a private snapshot built in the request thread
+    (shallow clones of a ``snapshot_medias()`` copy), so concurrent mutation of
+    the source dataset — items added/removed, votes, even ``clear_medias()`` —
+    cannot affect this job and no lock is held while the atlas builds.  The
+    clones share embedding arrays with the live medias, but embeddings are
+    replaced (never mutated in place) throughout the codebase, so the shared
+    references stay valid.
+
+    On success the task's ``dataset_id`` association is set to the new registry
+    entry's id so the frontend's completion callback can identify the dataset.
+    Failures (and cancellation) surface as the task's ``error`` field; a
+    partially written pkl is removed.
+
+    Returns the ``task_id`` for progress polling / cancellation.
+    """
+    from vtsearch.auth import thread_user
+
+    task_id = f"_promote_{uuid4().hex[:8]}"
+    tracker = loading_tasks.create_task(
+        task_id,
+        name,
+        media_type=media_type,
+        embedder=embedder,
+        step_weights=_PROMOTE_STEP_WEIGHTS,
+    )
+    tracker.update("loading", "Preparing promoted dataset…", 0, 0, step=1, total_steps=_PROMOTE_TOTAL_STEPS)
+
+    def task():
+        pkl_path: str | None = None
+        try:
+            with thread_user(created_by):
+
+                def atlas_progress(current: int, total: int) -> None:
+                    tracker.check_cancelled()
+                    tracker.update(
+                        "loading",
+                        "Building coverage atlas…",
+                        current,
+                        total,
+                        step=1,
+                        total_steps=_PROMOTE_TOTAL_STEPS,
+                    )
+
+                extra_pickle_keys = _coverage_atlas_pickle_keys(subset, on_progress=atlas_progress)
+                tracker.check_cancelled()
+
+                tracker.update("loading", "Writing dataset file…", 0, 0, step=2, total_steps=_PROMOTE_TOTAL_STEPS)
+                ds_dir = get_saved_datasets_dir()
+                ds_dir.mkdir(parents=True, exist_ok=True)
+                pkl_path = str(ds_dir / f"ds_{uuid4().hex}.pkl")
+                data_bytes = export_dataset_to_file(
+                    subset,
+                    embedder=embedder,
+                    clipper=clipper,
+                    media_type=media_type,
+                    name=name,
+                    created_at=time.time(),
+                    expires_at=expires_at,
+                    extra_pickle_keys=extra_pickle_keys,
+                )
+                Path(pkl_path).write_bytes(data_bytes)
+                del data_bytes
+                tracker.check_cancelled()
+
+                tracker.update("loading", "Registering dataset…", 0, 0, step=3, total_steps=_PROMOTE_TOTAL_STEPS)
+                entry = _reg_register(
+                    name=name,
+                    media_type=media_type,
+                    num_items=len(subset),
+                    pkl_path=pkl_path,
+                    origin="promote",
+                    source=source,
+                    clipper=clipper,
+                    embedder=embedder,
+                    created_by=created_by,
+                    file_type_counts=file_type_counts,
+                    expires_at=expires_at,
+                )
+                loading_tasks.set_dataset_id(task_id, entry["id"])
+                tracker.update(
+                    "idle",
+                    f'Promoted {len(subset)} items to "{name}"',
+                    100,
+                    100,
+                    step=_PROMOTE_TOTAL_STEPS,
+                    total_steps=_PROMOTE_TOTAL_STEPS,
+                )
+        except CancelledError:
+            if pkl_path:
+                Path(pkl_path).unlink(missing_ok=True)
+            tracker.update("idle", "", 0, 0, error="Cancelled")
+        except MemoryError:
+            if pkl_path:
+                Path(pkl_path).unlink(missing_ok=True)
+            tracker.update(
+                "idle",
+                "",
+                0,
+                0,
+                error="Out of memory: this selection is too large. Try promoting fewer items or free up system RAM.",
+            )
+        except Exception as exc:  # noqa: BLE001 (surface the failure on the task tracker)
+            traceback.print_exc()
+            if pkl_path:
+                Path(pkl_path).unlink(missing_ok=True)
+            tracker.update("idle", "", 0, 0, error=str(exc) or repr(exc) or "Unknown error during promote")
+        finally:
+            gc.collect()
+            loading_tasks.mark_finished(task_id)
+
+    threading.Thread(target=task, daemon=True).start()
+    return task_id
 
 
 @datasets_staging_bp.route("/api/dataset/promote", methods=["POST"])
 @datasets_staging_bp.arguments(DatasetPromoteRequestSchema)
-@datasets_staging_bp.response(200, DatasetPromoteResponseSchema)
+@datasets_staging_bp.response(200, DatasetLoadStartedResponseSchema)
 @datasets_staging_bp.alt_response(400, description="No dataset loaded or none of the items resolved.")
-@datasets_staging_bp.alt_response(500, description="Failed to write or register the new dataset.")
 def promote_to_dataset(body: dict):
     """Promote a set of media items into a brand-new saved dataset.
 
@@ -145,6 +301,13 @@ def promote_to_dataset(body: dict):
     free; the new pickle is a self-contained snapshot). The new dataset
     gets a fresh ``created_at`` but inherits the source dataset's
     ``expires_at`` (death date).
+
+    The subset snapshot and metadata derivation run synchronously (cheap:
+    shallow copies); the expensive part — coverage-atlas build, pickle
+    write, registry insert — runs in a background task.  The response
+    carries the ``task_id``; the caller polls the ``loading-tasks`` SSE
+    channel for progress and reads the finished task's ``dataset_id``
+    association for the new dataset's id.
     """
     name = body["name"].strip()
     media_ids = body["media_ids"]
@@ -154,8 +317,11 @@ def promote_to_dataset(body: dict):
         abort(400, message="No dataset loaded")
 
     # Build the subset, renumbering IDs from 1 and preserving each item's
-    # origin/embedding (a shallow copy is enough; we serialise immediately
-    # and never mutate the embedding array).
+    # origin/embedding (a shallow copy is enough; the background task
+    # serialises it and never mutates the embedding array).  Snapshotting
+    # here, in the request thread, is what isolates the background job
+    # from concurrent mutation of the source dataset — see
+    # :func:`_promote_in_background`.
     subset: dict[int, dict] = {}
     new_id = 1
     for mid in media_ids:
@@ -191,28 +357,6 @@ def promote_to_dataset(body: dict):
         else:
             ext_counter["(no extension)"] += 1
 
-    now = time.time()
-    ds_dir = get_saved_datasets_dir()
-    ds_dir.mkdir(parents=True, exist_ok=True)
-    pkl_path = str(ds_dir / f"ds_{uuid4().hex}.pkl")
-
-    try:
-        data_bytes = export_dataset_to_file(
-            subset,
-            embedder=embedder,
-            clipper=clipper,
-            media_type=media_type,
-            name=name,
-            created_at=now,
-            expires_at=expires_at,
-            extra_pickle_keys=_coverage_atlas_pickle_keys(subset),
-        )
-        Path(pkl_path).write_bytes(data_bytes)
-        del data_bytes
-    except Exception as exc:  # noqa: BLE001 (surface the failure to the caller)
-        Path(pkl_path).unlink(missing_ok=True)
-        abort(500, message=f"Failed to write dataset: {exc}")
-
     source = {
         "importer": "promote",
         "params": {
@@ -220,25 +364,18 @@ def promote_to_dataset(body: dict):
             "source_name": (src_entry or {}).get("name", "") if src_entry else "",
         },
     }
-    try:
-        entry = _reg_register(
-            name=name,
-            media_type=media_type,
-            num_items=len(subset),
-            pkl_path=pkl_path,
-            origin="promote",
-            source=source,
-            clipper=clipper,
-            embedder=embedder,
-            created_by=get_current_user(),
-            file_type_counts=dict(ext_counter.most_common()),
-            expires_at=expires_at,
-        )
-    except Exception as exc:  # noqa: BLE001
-        Path(pkl_path).unlink(missing_ok=True)
-        abort(500, message=f"Failed to register dataset: {exc}")
-
-    return {"ok": True, "dataset_id": entry["id"], "name": name, "num_items": len(subset)}
+    task_id = _promote_in_background(
+        subset,
+        name=name,
+        media_type=media_type,
+        embedder=embedder,
+        clipper=clipper,
+        expires_at=expires_at,
+        source=source,
+        file_type_counts=dict(ext_counter.most_common()),
+        created_by=get_current_user(),
+    )
+    return {"ok": True, "message": "Promoting to dataset...", "task_id": task_id}
 
 
 @datasets_staging_bp.route("/api/dataset/stage-file", methods=["POST"])

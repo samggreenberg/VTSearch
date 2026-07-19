@@ -36,10 +36,12 @@ from vtscore.datasets.registry import unregister_dataset as _reg_unregister
 from vtscore.state import DatasetContext, clear_all, register_context
 
 from vtscore.datasets.stages._common import (
+    AdaptiveLoadPacer,
     FinalizeProgress,
     _STATUS_TO_STEP,
     _TOTAL_LOAD_STEPS,
     _origin_to_str,
+    load_cost_terms,
     load_step_weights,
 )
 from vtscore.datasets.stages._load_profiler import start_profiler
@@ -243,22 +245,23 @@ class _LoadGateController:
         self._held = None
 
 
-def _make_stepped_progress(controller: _LoadGateController, tracker):
+def _make_stepped_progress(controller: _LoadGateController, pacer):
     """Build the importer-side progress callback.
 
-    Routes status updates into *tracker* with the right step number, and
-    triggers the download→embed gate swap on the first ``"embedding"``
-    status so a queued download can start.
+    Routes status updates into the load's :class:`AdaptiveLoadPacer` (which
+    maps them onto the unified bar) with the right step number, and triggers
+    the download→embed gate swap on the first ``"embedding"`` status so a
+    queued download can start.
     """
 
     def stepped(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
-        tracker.check_cancelled()
+        pacer.check_cancelled()
         if status == "idle":
             return
         if status == "embedding" and controller.held != "embed":
             controller.swap_to_embed()
         step = _STATUS_TO_STEP.get(status)
-        tracker.update(status, message, current, total, step=step, total_steps=_TOTAL_LOAD_STEPS)
+        pacer.update(status, message, current, total, step=step, total_steps=_TOTAL_LOAD_STEPS)
 
     return stepped
 
@@ -372,6 +375,7 @@ def _run_origin_load_in_background(
     media_type: str = "",
     build_projection: bool = False,
     merge_near_duplicates: bool = False,
+    dataset_id: str = "",
     n_hint: int | None = None,
     download_size_mb_hint: float | None = None,
 ) -> str:
@@ -455,14 +459,21 @@ def _run_origin_load_in_background(
         context_id = task_id
         registry_entry_id: str | None = None
         controller = _LoadGateController(tracker)
-        stepped = _make_stepped_progress(controller, tracker)
+        # Pace the unified bar from the per-phase cost terms, rebasing on what
+        # actually happens (cached archives, observed bandwidth, skipped
+        # phases). All stage progress below routes through the pacer.
+        pacer = AdaptiveLoadPacer(
+            tracker,
+            load_cost_terms(media_type, n=n_hint, download_size_mb=download_size_mb_hint, embedder=embedder),
+        )
+        stepped = _make_stepped_progress(controller, pacer)
         profiler.bind_thread()  # so FinalizeProgress.begin stamps land here (no-op when off)
 
         try:
             with thread_user(request_user), thread_dataset_context(ctx):
                 try:
                     controller.acquire_download()
-                    tracker.update("loading", "Preparing new dataset…", 0, 0, step=1, total_steps=_TOTAL_LOAD_STEPS)
+                    pacer.update("loading", "Preparing new dataset…", 0, 0, step=1, total_steps=_TOTAL_LOAD_STEPS)
                     register_context(ctx)
                     gc.collect()
 
@@ -492,15 +503,15 @@ def _run_origin_load_in_background(
 
                     apply_custom_metadata_md5(ctx.medias)
                     _tag_origins(ctx.medias, origin)
-                    _apply_clipper_stage(ctx, tracker, clipper, clipper_params, chain_steps)
-                    _embed_missing_stage(ctx, tracker, embedders if embedders else [embedder])
+                    _apply_clipper_stage(ctx, pacer, clipper, clipper_params, chain_steps)
+                    _embed_missing_stage(ctx, pacer, embedders if embedders else [embedder])
                     # Step 4 (finalize) bundles several sub-stages. Route them
                     # through a FinalizeProgress proxy so each maps into its own
                     # ordered slice of the step-4 bar instead of independently
                     # filling (and pinning at 100%) the whole slice — keeps the
                     # bar advancing and the ETA self-correcting through the
                     # serialize/disk-write window. See FinalizeProgress.
-                    fin = FinalizeProgress(tracker)
+                    fin = FinalizeProgress(pacer)
                     fin.begin("cleanup")
                     _drop_none_embeddings_stage(ctx, fin)
                     # Re-lazify clips from reference (thin) parents now that
@@ -549,7 +560,11 @@ def _run_origin_load_in_background(
                     controller.release()
                     clear_thread_progress()
         finally:
-            profiler.finish(len(ctx.medias))  # writes JSONL + unbinds (no-op when off)
+            # Pass the demo dataset id (empty for non-demo loads) so profiler
+            # rows carry it and can resolve the archive size via
+            # ``_download_size_mb_for`` — otherwise app-recorded rows land with
+            # ``dataset_id: ""`` and can't feed fit_load_weights.py (see #2614).
+            profiler.finish(len(ctx.medias), dataset_id)  # writes JSONL + unbinds (no-op when off)
             loading_tasks.mark_finished(task_id)
 
     threading.Thread(target=task, daemon=True).start()
@@ -666,7 +681,7 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     # For demo datasets we know the expected item count + archive size up front,
     # which lets load_step_weights pace by the measured n-aware cost model rather
     # than the static asymptote. Unknown for streaming folder imports -> None.
-    n_hint, download_size_mb_hint = _demo_load_hints(importer, field_values)
+    demo_id, n_hint, download_size_mb_hint = _demo_load_hints(importer, field_values)
 
     return _run_origin_load_in_background(
         _load,
@@ -681,31 +696,35 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
         media_type=media_type_hint,
         build_projection=build_projection,
         merge_near_duplicates=merge_near_duplicates,
+        dataset_id=demo_id,
         n_hint=n_hint,
         download_size_mb_hint=download_size_mb_hint,
     )
 
 
-def _demo_load_hints(importer, field_values: dict) -> tuple[int | None, float | None]:
-    """Expected item count and archive size for a demo load, else ``(None, None)``.
+def _demo_load_hints(importer, field_values: dict) -> tuple[str, int | None, float | None]:
+    """Demo dataset id, expected item count, and archive size for a demo load,
+    else ``("", None, None)``.
 
-    Enables the ``n``-aware cost-model weights (see
-    :func:`vtscore.datasets.stages._common.load_step_weights`). Only the demo
-    importer knows ``n`` up front; folder importers stream, so they fall back to
-    the static weight profile.
+    The ``n`` / size hints enable the ``n``-aware cost-model weights (see
+    :func:`vtscore.datasets.stages._common.load_step_weights`); the id is also
+    threaded to the load profiler so its rows carry ``dataset_id`` (and can
+    resolve the archive size) rather than landing empty (see #2614). Only the
+    demo importer knows these up front; folder importers stream, so they fall
+    back to the static weight profile.
     """
     if getattr(importer, "name", "") != "demo":
-        return None, None
+        return "", None, None
     dataset_id = field_values.get("name", "")
     if not dataset_id:
-        return None, None
+        return "", None, None
     from vtscore.datasets.config import DEMO_DATASETS  # noqa: PLC0415
     from vtscore.datasets.demo_counts import exact_demo_count  # noqa: PLC0415
 
     n = exact_demo_count(dataset_id)
     info = DEMO_DATASETS.get(dataset_id) or {}
     dl = info.get("download_size_mb")
-    return n, (float(dl) if dl is not None else None)
+    return dataset_id, n, (float(dl) if dl is not None else None)
 
 
 # ---------------------------------------------------------------------------

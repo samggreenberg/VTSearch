@@ -1326,30 +1326,6 @@
         ],
         "type": "object"
       },
-      "DatasetPromoteResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "dataset_id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "num_items": {
-            "type": "integer"
-          },
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "dataset_id",
-          "name",
-          "num_items",
-          "ok"
-        ],
-        "type": "object"
-      },
       "DatasetRegistryLoadResponse": {
         "additionalProperties": false,
         "properties": {
@@ -9087,7 +9063,7 @@
     },
     "/api/dataset/promote": {
       "post": {
-        "description": "Used by the Find interface's \"To Dataset\" button to turn the Goods\npile into its own dataset. The promoted items keep their original\norigins and in-memory embeddings (so preprocessing is preserved for\nfree; the new pickle is a self-contained snapshot). The new dataset\ngets a fresh ``created_at`` but inherits the source dataset's\n``expires_at`` (death date).",
+        "description": "Used by the Find interface's \"To Dataset\" button to turn the Goods\npile into its own dataset. The promoted items keep their original\norigins and in-memory embeddings (so preprocessing is preserved for\nfree; the new pickle is a self-contained snapshot). The new dataset\ngets a fresh ``created_at`` but inherits the source dataset's\n``expires_at`` (death date).\n\nThe subset snapshot and metadata derivation run synchronously (cheap:\nshallow copies); the expensive part \u2014 coverage-atlas build, pickle\nwrite, registry insert \u2014 runs in a background task.  The response\ncarries the ``task_id``; the caller polls the ``loading-tasks`` SSE\nchannel for progress and reads the finished task's ``dataset_id``\nassociation for the new dataset's id.",
         "operationId": "promote_to_dataset",
         "requestBody": {
           "content": {
@@ -9104,7 +9080,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DatasetPromoteResponse"
+                  "$ref": "#/components/schemas/DatasetLoadStartedResponse"
                 }
               }
             },
@@ -9115,9 +9091,6 @@
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "500": {
-            "description": "Failed to write or register the new dataset."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10814,7 +10787,7 @@
             "description": "Detector not found."
           },
           "409": {
-            "description": "The active dataset can't supply the detector's embedder type."
+            "description": "The active dataset can't supply the detector's embedder type, or the detector's type (structural) can't be exported as a portable bundle at all."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"

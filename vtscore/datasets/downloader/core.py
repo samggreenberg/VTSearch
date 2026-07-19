@@ -630,13 +630,13 @@ def _extract_7z(archive_path: Path, dest_dir: Path, dataset_name: str, on_progre
     from vtscore.datasets.archive import _reject_traversal  # noqa: PLC0415
 
     dest_resolved = Path(dest_dir).resolve()
-    on_progress("downloading", f"Extracting {dataset_name}...", 0, 0)
+    on_progress("extracting", f"Extracting {dataset_name}...", 0, 0)
     with py7zr.SevenZipFile(archive_path, mode="r") as archive:
         for name in archive.getnames():
             _reject_traversal(dest_resolved, name)
         # Safe: every member name was traversal-checked against dest_dir above.
         archive.extractall(path=dest_dir)  # noqa: S202
-    on_progress("downloading", f"Extracting {dataset_name}...", 1, 1)
+    on_progress("extracting", f"Extracting {dataset_name}...", 1, 1)
 
 
 def _extract_archive(
@@ -665,9 +665,9 @@ def _extract_archive(
             with tarfile.open(fileobj=raw_f, mode=mode) as tar_ref:
                 for i, member in enumerate(tar_ref):
                     if i % 100 == 0:
-                        on_progress("downloading", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes)
+                        on_progress("extracting", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes)
                     safe_tar_extract(tar_ref, member, dest_dir)
-        on_progress("downloading", f"Extracting {dataset_name}...", total_bytes, total_bytes)
+        on_progress("extracting", f"Extracting {dataset_name}...", total_bytes, total_bytes)
     elif suffix.endswith(".zip"):
         from vtscore.datasets.archive import _reject_traversal
 
@@ -677,7 +677,7 @@ def _extract_archive(
             total = len(members)
             for i, member in enumerate(members):
                 if i % 100 == 0 or i == total - 1:
-                    on_progress("downloading", f"Extracting {dataset_name}...", i + 1, total)
+                    on_progress("extracting", f"Extracting {dataset_name}...", i + 1, total)
                 # Guard against path traversal in zip entries.  Shares the
                 # strict check with archive.py: the previous inline
                 # startswith() prefix test lacked a trailing separator, so
@@ -712,10 +712,20 @@ def _download_and_extract(
     other.  After extraction the content is moved to the final location; if
     another call finished first the duplicate is simply cleaned up.
 
+    The temp archive and temp extraction are spooled onto the *destination*
+    filesystem (next to, or inside, the **resolved** *extract_to*) rather than
+    under ``DATA_DIR``.  When *extract_to* (or a parent) is a symlink onto a
+    different, bigger volume - the shared demo-cache setup, or any relocated
+    dataset dir - this keeps the multi-GB temp bytes off ``DATA_DIR``'s
+    (possibly small) volume and makes the final publish a true same-filesystem
+    rename instead of a cross-device copy.  When nothing is symlinked the
+    resolved target sits under ``DATA_DIR``, so this reduces to the previous
+    behavior.
+
     Args:
         url: Download URL for the archive.
-        archive_name: Filename to save the downloaded archive as inside
-            ``DATA_DIR`` (e.g. ``"genres.tar.gz"``).
+        archive_name: Filename to save the downloaded archive as (e.g.
+            ``"genres.tar.gz"``).
         extract_to: Directory into which the archive contents are extracted.
         check_path: Path whose existence signals that extraction is already
             complete (often the same as *extract_to* or a subdirectory of it).
@@ -737,10 +747,19 @@ def _download_and_extract(
     if _complete():
         return
 
+    # Spool both temp files onto the filesystem where the extracted content will
+    # ultimately live.  If extract_to already resolves to a directory (e.g.
+    # DATA_DIR itself, or a symlink onto a relocated cache), the publish moves
+    # children *into* it, so spool inside it; otherwise the publish renames the
+    # temp tree *to* extract_to, so spool next to it (in its resolved parent).
+    # Following symlinks here means the temp bytes and the final rename stay on
+    # one filesystem instead of crossing a device boundary.
+    resolved = extract_to.resolve()
+    spool_dir = resolved if resolved.is_dir() else resolved.parent
     unique_id = uuid.uuid4().hex[:8]
-    temp_archive = DATA_DIR / f".dl_{unique_id}_{archive_name}"
-    temp_extract = extract_to.parent / f".extract_{unique_id}_{extract_to.name}"
-    DATA_DIR.mkdir(exist_ok=True)
+    temp_archive = spool_dir / f".dl_{unique_id}_{archive_name}"
+    temp_extract = spool_dir / f".extract_{unique_id}_{extract_to.name}"
+    spool_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         on_progress("downloading", f"Starting {dataset_name} download...", 0, 0)
@@ -755,7 +774,7 @@ def _download_and_extract(
         # error page (e.g. 404/503) which gets saved with a .tar.gz extension.
         _validate_archive(temp_archive, archive_name, dataset_name)
 
-        on_progress("downloading", f"Extracting {dataset_name}...", 0, 0)
+        on_progress("extracting", f"Extracting {dataset_name}...", 0, 0)
         temp_extract.mkdir(parents=True, exist_ok=True)
 
         _extract_archive(temp_archive, archive_name, temp_extract, dataset_name, on_progress)

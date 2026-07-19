@@ -199,7 +199,7 @@ def _ensure_bbc_extracted(extract_dir: Path, on_progress: ProgressCallback) -> N
         )
 
         if not extract_dir.exists():
-            on_progress("downloading", "Extracting BBC News dataset...", 0, 0)
+            on_progress("extracting", "Extracting BBC News dataset...", 0, 0)
             raw_dir = temp_extract / "raw"
             raw_dir.mkdir(parents=True, exist_ok=True)
             with zipfile.ZipFile(temp_archive, "r") as zip_ref:
@@ -210,7 +210,7 @@ def _ensure_bbc_extracted(extract_dir: Path, on_progress: ProgressCallback) -> N
                 for i, member in enumerate(members):
                     if i % 100 == 0 or i == total - 1:
                         on_progress(
-                            "downloading",
+                            "extracting",
                             "Extracting BBC News dataset...",
                             i + 1,
                             total,

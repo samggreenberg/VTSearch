@@ -6,16 +6,18 @@ For each combination of seed *s*, dataset *d*, and target category *c*:
    **D_test** (held-out) using *s* to control the random split.
 2. Assign ground-truth labels based on *c*: medias whose ``"category"``
    matches *c* are positive (``good``), others are negative (``bad``).
-3. Vote on D_sim one item at a time, choosing *which* item to vote on next
-   with an active-learning acquisition strategy (order seeded by *s*).
+3. Vote on D_sim one item at a time, choosing *which* item to vote on next by
+   reproducing the app's **Autopilot** flow (order seeded by *s*).
 4. At each step *t* (once at least one good **and** one bad vote exist),
    train a model on votes so far, find a threshold, score D_test, and record
    the inclusion-weighted cost (``fpr_weight * FPR + fnr_weight * FNR``).
 
-Which item the simulated user votes on at each step is chosen by an
-**active-learning acquisition strategy** (see :mod:`vtscore.eval.al_strategies`);
-``random`` reproduces the uniform-order baseline, while uncertainty/diversity
-strategies query more informative items first.
+Which item the simulated user votes on at each step is chosen by the
+``autopilot`` vote-order strategy (see :mod:`vtscore.eval.al_strategies`): seed
+from text sort (or a few random known-good examples), then the standard
+Good / Bad / Hard / New phases.  This is the only strategy the eval runs — the
+point is to measure how the tool itself would function, not to compare
+acquisition heuristics.
 
 The result is a :class:`pandas.DataFrame` with columns
 ``seed, dataset, category, strategy, t, n_good, n_bad, cost, fpr, fnr``.
@@ -217,7 +219,7 @@ def _score_pool(
 
 
 def _build_eval_atlas(embeddings: dict[int, np.ndarray], min_node_size: int) -> Any:
-    """Build a coverage atlas over *embeddings* for the ``density_*`` strategies.
+    """Build a coverage atlas over *embeddings* for the autopilot New phase.
 
     Returns ``None`` when there are no vectors.  Uses the same hierarchical
     k-means partition the live dataset builds (see
@@ -319,9 +321,10 @@ def simulate_voting_iterations(  # noqa: C901
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
     region_voting: bool = False,
-    strategy: str = "random",
+    strategy: str = "autopilot",
     max_steps: Optional[int] = None,
     atlas_min_node_size: int = 20,
+    seed_scores: Optional[dict[int, float]] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -347,22 +350,21 @@ def simulate_voting_iterations(  # noqa: C901
             Scoring is unaffected by this flag - a patch dataset always scores
             region-aware (max-pool over regions), so the only thing this toggles
             is the Good-vote training vector, isolating region voting's effect.
-        strategy: Active-learning acquisition strategy naming *which* pool item
-            the simulated user labels next (see
-            :data:`vtscore.eval.al_strategies.STRATEGIES`).  ``"random"``
-            (default) picks uniformly - the baseline every other strategy is
-            measured against.  Uncertainty strategies (``margin``, ``entropy``,
-            ``bald``, ``eig``) query the item the current model is least sure
-            about; ``coreset`` maximises embedding-space coverage; ``density_*``
-            variants up-weight sparsely-populated coverage-atlas cells.  Before a
-            trainable model exists (fewer than one Good *and* one Bad vote) every
-            strategy falls back to a random pick.
+        strategy: Vote-order strategy naming *which* pool item the simulated
+            user labels next (see :data:`vtscore.eval.al_strategies.STRATEGIES`).
+            Only ``"autopilot"`` (the default) exists: it reproduces the app's
+            real user flow — seed from text sort (or random known-good examples),
+            then the standard Good / Bad / Hard / New phases.
         max_steps: Cap on the number of voting steps (pool items labelled).
             ``None`` (default) votes on the entire simulation set.
         atlas_min_node_size: Minimum leaf population for the coverage atlas the
-            ``density_*`` strategies read (default 20, the production floor).
-            Lower it for small simulation sets so density cells actually resolve.
-            Ignored for non-density strategies (no atlas is built).
+            autopilot New phase reads (default 20, the production floor).  Lower
+            it for small simulation sets so diversity cells actually resolve.
+        seed_scores: Optional ``{media_id: similarity}`` text-sort ranking (each
+            item's cosine to the typed query).  When provided the autopilot seed
+            follows the text sort (top items for the initial goods, bottom items
+            for the initial bads); ``None`` (default) means the dataset has no
+            text sort, so autopilot seeds from random known-good examples.
 
     Returns:
         List of row dicts with keys ``seed, dataset, category, strategy, t,
@@ -394,17 +396,18 @@ def simulate_voting_iterations(  # noqa: C901
 
     import torch  # noqa: PLC0415
 
-    # Whole-image embeddings of the simulation pool.  These feed the acquisition
-    # strategies (uncertainty scoring, coreset distances, the density atlas);
-    # the Good-vote *training* vector can still be region-pooled below when
+    # Whole-image embeddings of the simulation pool.  These feed the autopilot
+    # selector (the example-sort good centroid and the coverage atlas); the
+    # Good-vote *training* vector can still be region-pooled below when
     # ``region_voting`` is on.
     sim_embeddings: dict[int, np.ndarray] = {
         cid: np.asarray(media_embedding(clips_dict[cid]), dtype=np.float32) for cid in sim_ids
     }
     input_dim = int(next(iter(sim_embeddings.values())).shape[0])
 
-    # The ``density_*`` strategies read a coverage atlas built over the pool.
-    atlas = _build_eval_atlas(sim_embeddings, atlas_min_node_size) if strategy.startswith("density_") else None
+    # The autopilot New phase reads a coverage atlas built over the pool; it is
+    # labelled in lock-step with the votes below so its coverage advances.
+    atlas = _build_eval_atlas(sim_embeddings, atlas_min_node_size) if strategy == "autopilot" else None
 
     # Pre-compute embeddings for safe-threshold GMM scoring.  Restrict to the
     # simulation set so the held-out ``test_ids`` never feed into the GMM that
@@ -426,20 +429,20 @@ def simulate_voting_iterations(  # noqa: C901
     labeled: dict[int, float] = {}
     rows: list[dict[str, Any]] = []
 
-    # Acquisition proceeds one vote at a time: the strategy picks the next pool
-    # item using the *current* model (the one trained at the previous step), the
-    # item's ground-truth label is revealed, and a fresh model is trained on all
-    # votes so far.  Before a trainable model exists every strategy falls back to
-    # a random pick (``model=None`` in the context below), so a cold start is
-    # always a random warm-up until one Good and one Bad vote coexist.
+    # Voting proceeds one item at a time: the autopilot selector picks the next
+    # pool item using the *current* detector (trained at the previous step), the
+    # item's ground-truth label is revealed, a fresh model is trained on all
+    # votes so far, and the coverage atlas is labelled so its New-phase coverage
+    # advances.  Before a trainable model exists the selector runs its seed/bad
+    # phases (text sort or example sort), so a cold start still makes real picks.
     pool = sorted(sim_ids)
-    # Ground-truth pool labels for the ``balanced`` oracle strategy (ignored by
-    # every label-blind strategy); cheap to build once up front.
+    # Ground-truth pool labels: autopilot draws its random known-good seed
+    # examples from the positives here when no text sort is available.  Cheap to
+    # build once up front.
     pool_labels = {cid: (1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0) for cid in sim_ids}
     model: torch.nn.Sequential | None = None
     threshold = 0.5
     pool_scores: dict[int, float] = {}
-    prev_hidden_dim: int | None = None
     n_steps = len(pool) if max_steps is None else min(max_steps, len(pool))
 
     for t in range(1, n_steps + 1):
@@ -452,27 +455,31 @@ def simulate_voting_iterations(  # noqa: C901
             scores=pool_scores,
             model=model,
             threshold=threshold,
-            input_dim=input_dim,
-            hidden_dim=prev_hidden_dim,
             atlas=atlas,
             rng=rng,
             pool_labels=pool_labels,
+            seed_scores=seed_scores,
         )
         cid = select_next(strategy, ctx)
         pool.remove(cid)
-        if media_is_positive(clips_dict[cid], target_category):
+        is_positive = media_is_positive(clips_dict[cid], target_category)
+        if is_positive:
             good_votes[cid] = None
             labeled[cid] = 1.0
         else:
             bad_votes[cid] = None
             labeled[cid] = 0.0
+        # Mirror the vote onto the coverage atlas so the New phase's next_sample
+        # advances past covered regions (the app labels the atlas the same way).
+        if atlas is not None and cid in atlas.vector_to_leaf:
+            atlas.label(cid, good=is_positive)
 
         # Need at least 1 good and 1 bad to train
         if not good_votes or not bad_votes:
             model = None
             continue
 
-        model, threshold, hidden_dim, n_labels = _train_and_calibrate(
+        model, threshold, _hidden_dim, n_labels = _train_and_calibrate(
             good_votes,
             bad_votes,
             clips_dict,
@@ -494,10 +501,8 @@ def simulate_voting_iterations(  # noqa: C901
         )
 
         # Score the remaining pool with the fresh model so the next step's
-        # acquisition strategy ranks it; record the width for the next step's
-        # ``eig`` counterfactual retrains.
+        # autopilot Bad / Hard picks rank it.
         pool_scores = _score_pool(model, pool, clips_dict)
-        prev_hidden_dim = hidden_dim
 
         rows.append(
             {
@@ -534,6 +539,7 @@ def run_voting_iterations_eval(
     strategies: Optional[list[str]] = None,
     max_steps: Optional[int] = None,
     atlas_min_node_size: int = 20,
+    seed_scores: Optional[dict[str, dict[str, dict[int, float]]]] = None,
 ) -> pd.DataFrame:
     """Run the voting-iterations evaluation over multiple seeds/datasets/categories.
 
@@ -557,15 +563,18 @@ def run_voting_iterations_eval(
         region_voting: When ``True``, Good votes train on the ground-truth
             region-pooled vector for patch datasets (see
             :func:`simulate_voting_iterations`).
-        strategies: Active-learning acquisition strategies to compare (see
-            :data:`vtscore.eval.al_strategies.STRATEGIES`).  Each strategy is a
-            fourth cross-product axis (seed x dataset x category x strategy) and
-            its name is recorded in the ``strategy`` result column.  ``None``
-            (default) runs only ``"random"``.
+        strategies: Vote-order strategies to run (see
+            :data:`vtscore.eval.al_strategies.STRATEGIES`).  ``None`` (default)
+            runs ``["autopilot"]``, the only strategy; the name is recorded in
+            the ``strategy`` result column.
         max_steps: Cap on the number of voting steps per run (see
             :func:`simulate_voting_iterations`).
         atlas_min_node_size: Minimum coverage-atlas leaf population for the
-            ``density_*`` strategies (see :func:`simulate_voting_iterations`).
+            autopilot New phase (see :func:`simulate_voting_iterations`).
+        seed_scores: Optional text-sort rankings keyed
+            ``{dataset: {category: {media_id: similarity}}}``.  When a
+            (dataset, category) has an entry, the autopilot seed follows that
+            text ranking; otherwise it seeds from random known-good examples.
 
     Returns:
         A :class:`~pandas.DataFrame` with columns ``seed, dataset, category,
@@ -573,7 +582,7 @@ def run_voting_iterations_eval(
     """
     import pandas as pd  # noqa: PLC0415
 
-    strategy_list = strategies if strategies is not None else ["random"]
+    strategy_list = strategies if strategies is not None else ["autopilot"]
     all_rows: list[dict[str, Any]] = []
 
     for ds_name, clips_dict in dataset_clips.items():
@@ -591,6 +600,7 @@ def run_voting_iterations_eval(
 
         for seed in seeds:
             for cat in target_cats:
+                cat_seed_scores = (seed_scores or {}).get(ds_name, {}).get(cat)
                 for strategy in strategy_list:
                     rows = simulate_voting_iterations(
                         clips_dict,
@@ -606,6 +616,7 @@ def run_voting_iterations_eval(
                         strategy=strategy,
                         max_steps=max_steps,
                         atlas_min_node_size=atlas_min_node_size,
+                        seed_scores=cat_seed_scores,
                     )
                     all_rows.extend(rows)
 
@@ -642,6 +653,7 @@ def run_voting_iterations_eval_from_pickles(
     strategies: Optional[list[str]] = None,
     max_steps: Optional[int] = None,
     atlas_min_node_size: int = 20,
+    seed_scores: Optional[dict[str, dict[str, dict[int, float]]]] = None,
 ) -> pd.DataFrame:
     """Convenience wrapper that loads datasets from pickle files.
 
@@ -659,11 +671,14 @@ def run_voting_iterations_eval_from_pickles(
         region_voting: When ``True``, Good votes train on the ground-truth
             region-pooled vector for patch datasets (see
             :func:`simulate_voting_iterations`).
-        strategies: Acquisition strategies to compare (see
+        strategies: Vote-order strategies to run (see
             :func:`run_voting_iterations_eval`).
         max_steps: Cap on the number of voting steps per run.
         atlas_min_node_size: Minimum coverage-atlas leaf population for the
-            ``density_*`` strategies.
+            autopilot New phase.
+        seed_scores: Optional text-sort rankings keyed
+            ``{dataset: {category: {media_id: similarity}}}`` (see
+            :func:`run_voting_iterations_eval`).
 
     Returns:
         A :class:`~pandas.DataFrame` identical to :func:`run_voting_iterations_eval`
@@ -691,4 +706,5 @@ def run_voting_iterations_eval_from_pickles(
         strategies=strategies,
         max_steps=max_steps,
         atlas_min_node_size=atlas_min_node_size,
+        seed_scores=seed_scores,
     )

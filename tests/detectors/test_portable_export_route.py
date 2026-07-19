@@ -103,6 +103,51 @@ class TestPortableExport:
         finally:
             app_module.medias.update(saved)
 
+    def test_export_blocks_structural_detector(self, client, monkeypatch):
+        """A structural detector is rejected (409) rather than silently mis-exported.
+
+        Bypasses the (unrelated) dataset-type-compatibility gate via monkeypatch
+        so the new exportability gate itself is what's under test.
+        """
+        import vtsearch.routes.detectors.scoring as scoring_mod
+
+        monkeypatch.setattr(scoring_mod, "_dataset_supplies_detector_type", lambda *_a, **_kw: True)
+        detector_id = setup_trainable_model_in_registry(
+            "portable-structural",
+            good_ids=[1, 2, 3],
+            bad_ids=[18, 19, 20],
+            snap=snapshot_medias(),
+            embedder_type="structural",
+        )
+        resp = _export(client, detector_id)
+        assert resp.status_code == 409
+        assert "structural" in resp.get_json()["message"].lower()
+
+    def test_export_patch_semantic_gets_caveat(self, client, monkeypatch):
+        """A patch detector exports normally, flagged with the whole-item caveat."""
+        import onnx  # noqa: PLC0415
+        import vtscore.embedding.binding as binding_mod
+        import vtsearch.routes.detectors.scoring as scoring_mod
+
+        monkeypatch.setattr(scoring_mod, "_dataset_supplies_detector_type", lambda *_a, **_kw: True)
+        monkeypatch.setattr(binding_mod, "keying_embedder_for_snap", lambda *_a, **_kw: "clap")
+        detector_id = setup_trainable_model_in_registry(
+            "portable-patch",
+            good_ids=[1, 2, 3],
+            bad_ids=[18, 19, 20],
+            snap=snapshot_medias(),
+            embedder_type="patch_semantic",
+        )
+        resp = _export(client, detector_id)
+        assert resp.status_code == 200, resp.get_json()
+
+        with zipfile.ZipFile(io.BytesIO(resp.data)) as zf:
+            manifest = json.loads(zf.read("manifest.json"))
+            onnx.checker.check_model(onnx.load_from_string(zf.read("detector.onnx")))
+
+        assert len(manifest["caveats"]) == 1
+        assert "WHOLE item" in manifest["caveats"][0]
+
     def test_export_detector_without_labels(self, client):
         from vtscore.detectors.registry import register_detector  # noqa: PLC0415
         from vtscore.detectors.store import _detector_path, _write_detector  # noqa: PLC0415

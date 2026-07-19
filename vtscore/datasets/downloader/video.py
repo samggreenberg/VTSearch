@@ -217,7 +217,7 @@ def download_kth(on_progress: Optional[ProgressCallback] = None) -> Path:
             on_progress("downloading", f"Downloading KTH {action}...", i, total)
             _core.download_file_with_progress(url, zip_path, 0, on_progress)
 
-            on_progress("downloading", f"Extracting KTH {action}...", i + 1, total)
+            on_progress("extracting", f"Extracting KTH {action}...", i + 1, total)
             cat_dir.mkdir(parents=True, exist_ok=True)
             with zipfile.ZipFile(zip_path, "r") as zf:
                 for member in zf.namelist():

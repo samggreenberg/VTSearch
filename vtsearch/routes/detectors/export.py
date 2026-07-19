@@ -8,6 +8,13 @@ This is the sanctioned exception to the "No Persisted Vectors or MLPs" rule
 (``CLAUDE.md``): the bundle persists the trained MLP - never embeddings or raw
 media - so other parties can score their own media without VTSearch.
 
+Structural (SIFT/VLAD) detectors are rejected outright (409): their stage-2
+RANSAC verification isn't representable as a scoring-only ONNX graph.  Patch
+(DINOv2/v3, EUPE) detectors export normally in a degraded whole-item-only
+scoring mode, flagged in the manifest/README.  See
+:func:`vtscore.detectors.portable_bundle.check_exportable` /
+:func:`vtscore.detectors.portable_bundle.caveats_for_embedder_type`.
+
 Migrated to ``flask_smorest`` so the route is described in
 ``/api/openapi.json``.  The success body is a raw ``application/zip`` download,
 so (like the dataset-export route) it is left undescribed in the spec and only
@@ -39,7 +46,13 @@ detectors_export_bp = Blueprint(
 @detectors_export_bp.route("/api/detectors/<detector_id>/portable-bundle", methods=["POST"])
 @detectors_export_bp.alt_response(400, description="No medias loaded, or the detector has no labels for scoring.")
 @detectors_export_bp.alt_response(404, description="Detector not found.")
-@detectors_export_bp.alt_response(409, description="The active dataset can't supply the detector's embedder type.")
+@detectors_export_bp.alt_response(
+    409,
+    description=(
+        "The active dataset can't supply the detector's embedder type, or the detector's type "
+        "(structural) can't be exported as a portable bundle at all."
+    ),
+)
 @require_dataset_header
 def export_portable_bundle(detector_id: str):
     """Train the detector against the active dataset and stream its portable bundle.
@@ -81,6 +94,16 @@ def export_portable_bundle(detector_id: str):
     if not _dataset_supplies_detector_type(det_data, snap):
         abort(409, message=_type_incompatible_message(det_data))
 
+    # Exportability gate: structural detectors can't be represented as a
+    # scoring-only ONNX graph at all (see portable_bundle.check_exportable's
+    # docstring). Check before training so we don't waste the retrain on a
+    # detector this route will refuse to bundle.
+    det_type = _detector_type(det_data)
+    try:
+        pb.check_exportable(det_type)
+    except ValueError as exc:
+        abort(409, message=str(exc))
+
     mlp, threshold, diagnostic = resolve_or_train_detector(detector_id, det_data, media_type, snap)
     if mlp is None:
         if diagnostic is not None:
@@ -98,7 +121,6 @@ def export_portable_bundle(detector_id: str):
 
     # Score-space embedder: the concrete embedder of the detector's locked type
     # this dataset supplies (matches Find / resolve_or_train_detector's space).
-    det_type = _detector_type(det_data)
     score_emb = keying_embedder_for_snap(SimpleNamespace(embedder_type=det_type), snap)
     embedder_display = score_emb or ""
     embedder_model_id: str | None = None
@@ -128,6 +150,7 @@ def export_portable_bundle(detector_id: str):
         bad_count=bad_count,
         exported_by=f"vtsearch {vtsearch.__version__}",
         exported_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        caveats=pb.caveats_for_embedder_type(det_type),
     )
     bundle = pb.build_bundle(weights=weights, manifest=manifest)
 

@@ -13,6 +13,7 @@ from PIL import Image
 
 from vtscore.media.image.thumbnail import (
     DEFAULT_MAX_DIM,
+    _trim_solid_edges,
     make_image_thumbnail,
     normalize_region_crop,
 )
@@ -89,6 +90,85 @@ class TestMakeImageThumbnail:
         with Image.open(io.BytesIO(thumb_bytes)) as out:
             # Width/height swapped relative to the stored 400×200.
             assert out.size[1] > out.size[0]
+
+
+class TestTrimSolidEdges:
+    """Per-edge trimming of near-solid white/black padding (helper level)."""
+
+    def _content_box(self, w, h, box, bg, fg):
+        # A `bg`-filled frame with an `fg` rectangle `box=(x0,y0,x1,y1)` painted
+        # in — the content the trim should home in on.
+        img = Image.new("RGB", (w, h), color=bg)
+        x0, y0, x1, y1 = box
+        img.paste(Image.new("RGB", (x1 - x0, y1 - y0), color=fg), (x0, y0))
+        return img
+
+    def test_trims_black_letterbox_top_and_bottom(self):
+        # 100px black bars top & bottom, red content in the middle 200px.
+        img = self._content_box(400, 400, (0, 100, 400, 300), (0, 0, 0), (200, 30, 30))
+        out = _trim_solid_edges(img)
+        assert out.size[0] == 400  # full width kept (no side bars)
+        assert abs(out.size[1] - 200) <= 6  # ~top/bottom bars removed
+
+    def test_trims_white_pillarbox_left_and_right(self):
+        # 100px white bars left & right, content in the middle 200px column.
+        img = self._content_box(400, 400, (100, 0, 300, 400), (255, 255, 255), (40, 90, 160))
+        out = _trim_solid_edges(img)
+        assert out.size[1] == 400  # full height kept (no top/bottom bars)
+        assert abs(out.size[0] - 200) <= 6
+
+    def test_trims_a_single_padded_edge_independently(self):
+        # White margin only on the left; the other three edges are content.
+        img = self._content_box(400, 200, (120, 0, 400, 200), (255, 255, 255), (10, 120, 40))
+        out = _trim_solid_edges(img)
+        assert out.size[1] == 200  # top/bottom untouched
+        assert abs(out.size[0] - 280) <= 6  # only the ~120px left bar removed
+
+    def test_leaves_a_content_filled_frame_unchanged(self):
+        img = Image.new("RGB", (300, 200), color=(120, 60, 180))
+        out = _trim_solid_edges(img)
+        assert out.size == (300, 200)
+
+    def test_leaves_a_wholly_solid_frame_unchanged(self):
+        # Nothing but solid tone — no content to pull the box toward.
+        assert _trim_solid_edges(Image.new("RGB", (300, 200), (255, 255, 255))).size == (300, 200)
+        assert _trim_solid_edges(Image.new("RGB", (300, 200), (0, 0, 0))).size == (300, 200)
+
+    def test_caps_trim_so_a_tiny_subject_does_not_explode(self):
+        # A 10px dot centred in a 400px white field: an uncapped trim would crop
+        # to ~10px, but the per-edge cap keeps the middle 10% each way (40px).
+        img = self._content_box(400, 400, (195, 195, 205, 205), (255, 255, 255), (200, 0, 0))
+        out = _trim_solid_edges(img)
+        assert out.size == (40, 40)
+
+    def test_does_not_trim_a_solid_coloured_border(self):
+        # A saturated (non white/black) border is content, not padding.
+        img = self._content_box(400, 200, (100, 0, 300, 200), (0, 200, 0), (0, 0, 200))
+        assert _trim_solid_edges(img).size == (400, 200)
+
+
+class TestMakeImageThumbnailTrim:
+    def test_letterboxed_source_thumbnail_reflects_content_aspect(self):
+        # A square source that is really wide content between black bars should
+        # produce a landscape thumbnail, not a square one.
+        img = Image.new("RGB", (400, 400), color=(0, 0, 0))
+        img.paste(Image.new("RGB", (400, 200), color=(180, 40, 40)), (0, 100))
+        result = make_image_thumbnail(_encode(img, "JPEG"))
+        assert result is not None
+        with Image.open(io.BytesIO(result[0])) as out:
+            assert out.size[0] > out.size[1]
+
+    def test_explicit_crop_skips_solid_edge_trim(self):
+        # With a voted region the user has already chosen content, so the padded
+        # top-left quadrant is honoured verbatim rather than being trimmed away.
+        img = Image.new("RGB", (400, 400), color=(255, 255, 255))
+        img.paste(Image.new("RGB", (40, 40), color=(200, 0, 0)), (0, 0))
+        result = make_image_thumbnail(_encode(img, "PNG"), crop=(0.0, 0.0, 0.5, 0.5))
+        assert result is not None
+        with Image.open(io.BytesIO(result[0])) as out:
+            # The crop is a 200×200 square (mostly white); trimming would have
+            # collapsed it toward the 40px dot, so a square result proves skip.
+            assert out.size[0] == out.size[1]
 
 
 class TestNormalizeRegionCrop:

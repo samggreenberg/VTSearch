@@ -12,6 +12,15 @@ from typing import Any
 from vtscore.media.clipper import MediaClipper
 
 
+class AudioDecodeError(Exception):
+    """Raised when WAV bytes can't be decoded by stdlib ``wave`` or ``soundfile``.
+
+    Signals a corrupt or unsupported audio payload (e.g. GTZAN's truncated
+    ``jazz.00054.wav``, or a non-audio blob).  Clippers catch this and fall
+    back to returning the media unchanged rather than aborting the whole load.
+    """
+
+
 def _to_pcm_wav(wav_bytes: bytes) -> bytes:
     """Re-encode WAV bytes into plain PCM that stdlib ``wave`` can parse.
 
@@ -32,12 +41,18 @@ def _open_wav(wav_bytes: bytes) -> wave.Wave_read:
     """Open WAV bytes for reading, tolerating non-PCM formats.
 
     Falls back to re-encoding via :func:`_to_pcm_wav` when stdlib ``wave``
-    can't parse the container (e.g. ``WAVE_FORMAT_EXTENSIBLE``).
+    can't parse the container (e.g. ``WAVE_FORMAT_EXTENSIBLE``).  Raises
+    :class:`AudioDecodeError` when neither path can decode the bytes (corrupt
+    or unsupported payload) so callers can degrade gracefully.
     """
     try:
         return wave.open(io.BytesIO(wav_bytes), "rb")
     except (wave.Error, EOFError):
+        pass
+    try:
         return wave.open(io.BytesIO(_to_pcm_wav(wav_bytes)), "rb")
+    except Exception as exc:  # soundfile LibsndfileError, wave.Error, EOFError, ...
+        raise AudioDecodeError("could not decode audio bytes") from exc
 
 
 def _wav_duration(wav_bytes: bytes) -> float:
@@ -149,7 +164,10 @@ class SoundTilingClipper(MediaClipper):
         if wav_bytes is None:
             return [media]
 
-        total = _wav_duration(wav_bytes)
+        try:
+            total = _wav_duration(wav_bytes)
+        except AudioDecodeError:
+            return [media]
         seg = self._duration
 
         if total <= seg:
@@ -461,7 +479,10 @@ class SoundClipClipper(MediaClipper):
         if wav_bytes is None:
             return [media]
 
-        total = _wav_duration(wav_bytes)
+        try:
+            total = _wav_duration(wav_bytes)
+        except AudioDecodeError:
+            return [media]
         t0 = max(0.0, min(self._start, total))
         t1 = max(t0, min(self._end, total))
         if t1 <= t0:

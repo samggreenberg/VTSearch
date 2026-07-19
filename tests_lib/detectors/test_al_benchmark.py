@@ -106,40 +106,29 @@ class TestPrecomputedSource:
 
 
 class TestRunAlBenchmark:
-    def test_multiple_strategies_and_strategy_column(self):
+    def test_autopilot_runs_and_strategy_column(self):
         clips = synthetic_source(n_per_cat=12, dim=12, seed=0)
         df = run_al_benchmark(
             clips,
-            strategies=["random", "margin"],
+            strategies=["autopilot"],
             seeds=[0, 1],
             calibrate_count=1,
-            max_steps=8,
-        )
-        assert not df.empty
-        assert set(df["strategy"].unique()) == {"random", "margin"}
-        assert "cost" in df.columns
-
-    def test_density_strategy_runs(self):
-        clips = synthetic_source(n_per_cat=15, dim=12, seed=2)
-        df = run_al_benchmark(
-            clips,
-            strategies=["density_margin"],
-            seeds=[0],
-            calibrate_count=1,
-            max_steps=8,
+            max_steps=10,
             atlas_min_node_size=3,
         )
         assert not df.empty
-        assert (df["strategy"] == "density_margin").all()
+        assert set(df["strategy"].unique()) == {"autopilot"}
+        assert "cost" in df.columns
 
     def test_plot_dir_writes_pngs(self, tmp_path):
         clips = synthetic_source(n_per_cat=10, dim=8, seed=0)
         run_al_benchmark(
             clips,
-            strategies=["random", "margin"],
+            strategies=["autopilot"],
             seeds=[0],
             calibrate_count=1,
-            max_steps=6,
+            max_steps=8,
+            atlas_min_node_size=3,
             plot_dir=tmp_path,
         )
         pngs = list(tmp_path.glob("*.png"))
@@ -147,10 +136,12 @@ class TestRunAlBenchmark:
 
     def test_final_cost_summary_ranks_strategies(self):
         clips = synthetic_source(n_per_cat=12, dim=12, seed=0)
-        df = run_al_benchmark(clips, strategies=["random", "margin"], seeds=[0, 1], calibrate_count=1, max_steps=8)
+        df = run_al_benchmark(
+            clips, strategies=["autopilot"], seeds=[0, 1], calibrate_count=1, max_steps=10, atlas_min_node_size=3
+        )
         summary = _final_cost_summary(df)
         assert list(summary.columns) == ["strategy", "final_cost"]
-        assert set(summary["strategy"]) == {"random", "margin"}
+        assert set(summary["strategy"]) == {"autopilot"}
         # Sorted ascending by final cost.
         assert summary["final_cost"].is_monotonic_increasing
 

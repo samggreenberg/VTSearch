@@ -11,13 +11,11 @@ results (CSVs, plots, a README) under ``docs/experiments/mlp-ensemble/``:
    reported per-item uncertainty (``std_mean``) as labels accumulate.
 
 2. **Voting-strategy axis** (`vtscore.eval.voting_iterations`) - simulates
-   voting under acquisition ``strategy ∈ {random, balanced, ensemble_std}``
-   (the unified-registry successors of the old shuffle/balanced/ensemble_std
-   orders) and plots the inclusion-weighted cost against the number of votes
-   cast.  Answers "does choosing the next vote by ensemble disagreement
-   (active learning) reach a low cost in fewer votes than random or
-   class-balanced ordering?"  Per-step cost is always the single production
-   MLP; the strategy only *selects* the next vote.
+   voting under the ``autopilot`` strategy (the app's real user flow: seed from
+   text sort or random known-good examples, then Good / Bad / Hard / New) and
+   plots the inclusion-weighted cost against the number of votes cast.  Per-step
+   cost is always the single production MLP; the strategy only *selects* the
+   next vote.
 
 Usage::
 
@@ -49,10 +47,9 @@ DEFAULT_DATASETS = ("urbansound8k_s",)
 DEFAULT_LABEL_COUNTS = (5, 10, 20, 50)
 DEFAULT_SEEDS = (0, 1, 2)
 DEFAULT_ENSEMBLE_SIZES = (3, 5, 7, 10)
-# Acquisition strategies compared in the voting axis: the random baseline, the
-# class-balanced oracle order, and the deep-ensemble uncertainty sampler (the
-# unified-registry successors of the old shuffle/balanced/ensemble_std orders).
-DEFAULT_VOTING_STRATEGIES = ("random", "balanced", "ensemble_std")
+# The voting axis runs the app's real user flow; ``autopilot`` is the only
+# vote-order strategy.
+DEFAULT_VOTING_STRATEGIES = ("autopilot",)
 
 
 # ---------------------------------------------------------------------------
@@ -258,11 +255,10 @@ def write_report(
     lines.append(
         "Cost is the inclusion-weighted `fpr_weight·FPR + fnr_weight·FNR` "
         "on a held-out test split, measured with the single production MLP "
-        "at every step.  `random` votes in random order, `balanced` keeps "
-        "the running label set class-balanced (an oracle order), and "
-        "`ensemble_std` votes next on the item an N-member ensemble disagrees "
-        "about most (active learning).  A lower curve, or the same cost "
-        "reached at a smaller `t`, means the strategy is more label-efficient."
+        "at every step.  `autopilot` reproduces the app's real user flow: seed "
+        "from text sort (or random known-good examples), then the standard "
+        "Good / Bad / Hard / New phases.  A lower curve means the tool reaches "
+        "a good detector in fewer votes."
     )
     lines.append("")
     lines.append("![Cost by strategy](voting_cost_by_order.png)")
@@ -334,7 +330,7 @@ def main(argv: list[str] | None = None) -> int:
         "--max-steps",
         type=int,
         default=40,
-        help="Cap on votes cast per cell (keeps the ensemble_std strategy tractable). Pass 0 for no cap.",
+        help="Cap on votes cast per cell. Pass 0 for no cap.",
     )
     ap.add_argument("--no-voting", action="store_true", help="Skip the voting-iterations axis.")
     ap.add_argument("--no-label-curve", action="store_true", help="Skip the label-curve axis.")

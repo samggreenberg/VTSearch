@@ -118,3 +118,67 @@ class TestDemoImportSingleClip:
             clipper_stage._apply_clipper_stage(ctx, DummyTracker(), "sound_tiling", None, None)
 
         assert calls == ["sound_tiling"]
+
+
+class TestDemoDatasetIdThreading:
+    """A demo load must forward its dataset id to the load pipeline so the
+    ``VTSEARCH_PROFILE_LOAD`` recorder stamps ``dataset_id`` (and can resolve the
+    archive size) instead of writing empty rows.  Regression for #2614.
+    """
+
+    def test_demo_id_forwarded_to_origin_load(self):
+        """The demo importer's ``name`` field reaches ``_run_origin_load_in_background``."""
+        from vtscore.datasets import load_pipeline
+        from vtscore.datasets.importers.demo import IMPORTER as demo_importer
+
+        captured: dict = {}
+
+        def fake_origin_load(load_fn, origin, **kwargs):
+            captured.update(kwargs)
+            return "task-id"
+
+        with patch.object(load_pipeline, "_run_origin_load_in_background", side_effect=fake_origin_load):
+            load_pipeline._run_importer_in_background(
+                demo_importer,
+                {"name": "gtzan_a", "media_type": "audio"},
+            )
+
+        assert captured["dataset_id"] == "gtzan_a"
+
+    def test_non_demo_import_forwards_empty_id(self):
+        """A non-demo importer supplies no dataset id (empty, not the field's ``name``)."""
+        from vtscore.datasets import load_pipeline
+        from vtscore.datasets.importers.base import ImporterBase
+
+        class DummyImporter(ImporterBase):
+            name = "dummy_id_test"
+            display_name = "Dummy"
+            fields: list = []
+
+            def run(self, field_values, medias, thin=False):
+                pass
+
+        captured: dict = {}
+
+        def fake_origin_load(load_fn, origin, **kwargs):
+            captured.update(kwargs)
+            return "task-id"
+
+        with patch.object(load_pipeline, "_run_origin_load_in_background", side_effect=fake_origin_load):
+            load_pipeline._run_importer_in_background(
+                DummyImporter(),
+                {"name": "not-a-demo-id", "media_type": "audio"},
+            )
+
+        assert captured["dataset_id"] == ""
+
+    def test_demo_load_hints_returns_id_count_and_size(self):
+        """``_demo_load_hints`` reports the id alongside the n / size hints."""
+        from vtscore.datasets import load_pipeline
+        from vtscore.datasets.importers.demo import IMPORTER as demo_importer
+
+        dataset_id, n, size = load_pipeline._demo_load_hints(demo_importer, {"name": "gtzan_a"})
+
+        assert dataset_id == "gtzan_a"
+        assert n is not None and n > 0
+        assert size is not None and size > 0

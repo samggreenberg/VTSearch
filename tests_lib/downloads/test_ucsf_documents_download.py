@@ -225,6 +225,76 @@ class TestDownloadUcsfDocuments:
         published = list(result.rglob("abcd0001.pdf"))
         assert published, "the downloaded PDF must be published at its final path"
 
+    def test_progress_is_cumulative_and_monotone_across_pdfs(self, tmp_path):
+        """Per-PDF byte progress must not freeze the unified load bar.
+
+        Each PDF is a separate transfer under one continuous "downloading"
+        phase. Regression guard for #2616: the downloader must report on the
+        cumulative document count (so ``total`` stays ``total_docs`` and
+        ``current`` never rewinds), not each PDF's own restarting byte
+        fraction — otherwise the AdaptiveLoadPacer's monotonic clamp freezes
+        the bar after the first PDF. We assert both the raw reporting scale and
+        that the pacer's whole-job ``overall`` fraction stays monotone.
+        """
+        from vtscore.concurrency.progress import ProgressTracker
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets.stages._common import AdaptiveLoadPacer, _STATUS_TO_STEP, _TOTAL_LOAD_STEPS
+
+        solr_resp = _fake_solr_response([f"abcd{i:04d}" for i in range(4)])
+        mock_response = MagicMock()
+        mock_response.json.return_value = solr_resp
+        mock_response.raise_for_status = MagicMock()
+
+        def fake_download(url, dest, size, cb):
+            # Mimic download_file_with_progress: emit this PDF's own byte-scale
+            # progress (which restarts per file) so the test exercises the very
+            # reporting that used to freeze the bar.
+            cb("downloading", f"Downloading {dest.name}...", 0, 500_000)
+            cb("downloading", f"Downloading {dest.name}...", 250_000, 500_000)
+            cb("downloading", f"Downloading {dest.name}...", 500_000, 500_000)
+            dest.write_bytes(b"%PDF-1.0 stub")
+
+        events: list[tuple[str, int, int]] = []
+
+        def record(status, message="", current=0, total=0):
+            events.append((status, current, total))
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
+            patch("requests.get", return_value=mock_response),
+        ):
+            dl_module.download_ucsf_documents(
+                categories=["Tobacco"],
+                docs_per_category=4,
+                on_progress=record,
+            )
+
+        download_events = [(cur, tot) for status, cur, tot in events if status == "downloading"]
+        assert download_events, "expected downloading progress events"
+        # Every downloading event reports on the cumulative document scale, not a
+        # per-PDF byte scale (500_000 would leak through if the inner byte
+        # fraction were forwarded unchanged).
+        assert all(tot == 4 for _cur, tot in download_events)
+        currents = [cur for cur, _tot in download_events]
+        assert currents == sorted(currents), "cumulative document count must never rewind"
+        assert max(currents) == 4  # all four PDFs finished
+
+        # Drive the captured events through the pacer exactly as the load
+        # pipeline would, and confirm the unified bar never retreats.
+        tracker = ProgressTracker(
+            extra_fields={"step": None, "total_steps": None, "overall": None, "eta_seconds": None}
+        )
+        pacer = AdaptiveLoadPacer(
+            tracker, {"download": 10.0, "extract": 5.0, "load": 5.0, "embed": 20.0, "finalize": 10.0}
+        )
+        overalls = []
+        for status, cur, tot in events:
+            step = _STATUS_TO_STEP.get(status)
+            pacer.update(status, "", cur, tot, step=step, total_steps=_TOTAL_LOAD_STEPS)
+            overalls.append(tracker.get()["overall"])
+        assert all(b >= a - 1e-9 for a, b in zip(overalls, overalls[1:])), overalls
+
     def test_handles_api_failure_gracefully(self, tmp_path):
         """If the Solr API request fails, the category is skipped."""
         from vtscore.datasets import downloader as dl_module

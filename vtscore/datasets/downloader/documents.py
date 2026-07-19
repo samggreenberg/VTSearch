@@ -58,6 +58,19 @@ def download_ucsf_documents(  # noqa: C901
     total_docs = len(categories) * docs_per_category
     downloaded = 0
 
+    # Every PDF is a separate transfer, but they all run back-to-back under one
+    # continuous "downloading" phase. If each PDF reported its own byte fraction
+    # (downloaded/size), the first completed PDF would drive that fraction to
+    # 1.0 — filling the load bar's download slice — and the pacer's monotonic
+    # clamp would then freeze the bar for every remaining PDF, since each new
+    # PDF's byte fraction restarts from 0 on its own scale (issue #2616).
+    # Reporting on the cumulative document count instead keeps the reported
+    # fraction monotone across the whole set, so the bar advances one PDF at a
+    # time and never freezes or rewinds. ``downloaded`` is read at call time, so
+    # this closure always reflects how many PDFs have finished so far.
+    def _cumulative_progress(status: str, message: str, _current: int, _total: int) -> None:
+        on_progress(status, message, downloaded, total_docs)
+
     for cat in categories:
         cat_dir = extract_dir / cat
         cat_dir.mkdir(exist_ok=True)
@@ -110,8 +123,11 @@ def download_ucsf_documents(  # noqa: C901
 
             try:
                 # Atomic (temp + rename): a partial PDF left at pdf_path by a
-                # hard kill would pass the exists() cache gate forever.
-                _core.download_file_atomic(url, pdf_path, 0, on_progress)
+                # hard kill would pass the exists() cache gate forever. Progress
+                # is reported on the cumulative document count (see
+                # _cumulative_progress) so the unified load bar stays monotone
+                # across the back-to-back PDF transfers.
+                _core.download_file_atomic(url, pdf_path, 0, _cumulative_progress)
                 downloaded += 1
                 on_progress("downloading", f"Downloaded {doc_id}.pdf", downloaded, total_docs)
             except Exception:

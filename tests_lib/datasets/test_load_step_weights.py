@@ -86,9 +86,10 @@ import pytest  # noqa: E402
 from vtscore.datasets.stages import _load_cost_model as _cm  # noqa: E402
 
 
-def _inject_row(monkeypatch, key, coeffs, *, bandwidth=10.0):
+def _inject_row(monkeypatch, key, coeffs, *, bandwidth=10.0, extract_rate=50.0):
     monkeypatch.setattr(_cm, "LOAD_COST_MODEL", {key: coeffs})
     monkeypatch.setattr(_cm, "DOWNLOAD_MB_PER_S", bandwidth)
+    monkeypatch.setattr(_cm, "EXTRACT_MB_PER_S", extract_rate)
 
 
 def test_n_aware_weights_come_from_cost_model(monkeypatch):
@@ -98,11 +99,42 @@ def test_n_aware_weights_come_from_cost_model(monkeypatch):
         ("cuda", "image", "siglip"),
         {"a_model": 0.3, "a_embed": 1.0, "b_embed": 0.01, "a_fin": 1.0, "b_fin": 0.002},
         bandwidth=10.0,
+        extract_rate=50.0,
     )
     w = load_step_weights("image", n=1000, download_size_mb=100.0, embedder="siglip")
-    # T = [download 100/10=10, model 0.3, embed 1+10=11, finalize 1+2=3] -> /24.3
-    assert w == pytest.approx([10 / 24.3, 0.3 / 24.3, 11 / 24.3, 3 / 24.3])
+    # T = [acquire 100/10 + 100/50 = 12, model 0.3, embed 1+10=11, finalize 1+2=3] -> /26.3
+    assert w == pytest.approx([12 / 26.3, 0.3 / 26.3, 11 / 26.3, 3 / 26.3])
     assert sum(w) == pytest.approx(1.0)
+
+
+def test_cost_model_terms_include_extract_and_per_item_load(monkeypatch):
+    _inject_row(
+        monkeypatch,
+        ("cuda", "image", "siglip"),
+        {"a_model": 0.5, "b_load": 0.02, "a_embed": 1.0, "b_embed": 0.01, "a_fin": 1.0, "b_fin": 0.002},
+        bandwidth=10.0,
+        extract_rate=50.0,
+    )
+    terms = _cm.cost_model_terms("cuda", "image", "siglip", n=1000, download_size_mb=100.0)
+    assert terms is not None
+    assert terms["download"] == pytest.approx(10.0)
+    assert terms["extract"] == pytest.approx(2.0)
+    # load = warm model (0.5) + per-item decode (0.02 * 1000)
+    assert terms["load"] == pytest.approx(20.5)
+    assert terms["embed"] == pytest.approx(11.0)
+    assert terms["finalize"] == pytest.approx(3.0)
+
+
+def test_cost_model_terms_collapse_acquire_when_no_archive(monkeypatch):
+    _inject_row(
+        monkeypatch,
+        ("cuda", "image", "siglip"),
+        {"a_model": 0.5, "a_embed": 1.0, "b_embed": 0.01, "a_fin": 1.0, "b_fin": 0.002},
+    )
+    terms = _cm.cost_model_terms("cuda", "image", "siglip", n=1000, download_size_mb=None)
+    assert terms is not None
+    assert terms["download"] == 0.0
+    assert terms["extract"] == 0.0
 
 
 def test_small_n_weights_model_heavier_and_large_n_weights_embed_heavier(monkeypatch):
@@ -157,10 +189,27 @@ def test_shipped_cost_model_table_is_well_formed():
     # Every checked-in coefficient row has the affine keys and yields a
     # normalized weight vector; empty table (pre-calibration) trivially passes.
     for key, coeffs in _cm.LOAD_COST_MODEL.items():
-        assert set(coeffs) >= {"a_model", "a_embed", "b_embed", "a_fin", "b_fin"}
+        assert set(coeffs) >= {"a_model", "b_load", "a_embed", "b_embed", "a_fin", "b_fin"}
         device, media, embedder = key
         w = _cm.cost_model_weights(device, media, embedder, n=1000, download_size_mb=100.0)
         assert w is not None
         assert len(w) == _TOTAL_LOAD_STEPS
         assert all(x >= 0 for x in w)
         assert sum(w) == pytest.approx(1.0)
+    assert _cm.EXTRACT_MB_PER_S > 0
+    assert _cm.DOWNLOAD_MB_PER_S > 0
+
+
+def test_load_cost_terms_static_fallback_splits_acquire(monkeypatch):
+    from vtscore.datasets.stages._common import load_cost_terms
+
+    monkeypatch.setattr("vtscore.config.resolve_device", lambda: "cpu")
+    # No n -> static pseudo-terms; the acquire slice splits download/extract
+    # and the four step sums reproduce the static profile exactly.
+    terms = load_cost_terms("audio")
+    assert set(terms) == {"download", "extract", "load", "embed", "finalize"}
+    assert terms["download"] + terms["extract"] == pytest.approx(_LOAD_STEP_WEIGHTS_CPU[0])
+    assert terms["load"] == pytest.approx(_LOAD_STEP_WEIGHTS_CPU[1])
+    assert terms["embed"] == pytest.approx(_LOAD_STEP_WEIGHTS_CPU[2])
+    assert terms["finalize"] == pytest.approx(_LOAD_STEP_WEIGHTS_CPU[3])
+    assert terms["download"] > terms["extract"] > 0

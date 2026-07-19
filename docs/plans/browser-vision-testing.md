@@ -3,9 +3,9 @@
 **Status:** Active playbook. First round of all four tasks ran 2026-05-27/28;
 the task bodies below are reusable templates for future rounds. The
 point-in-time reports those runs produced were triaged into concrete findings:
-the style audit's surviving items live in [`ui-style-polish.md`](ui-style-polish.md)
-(a genuine umbrella of shared-primitive/token work), and every discrete
-papercut/bug from Tasks 2–4 was promoted to a GitHub issue.
+the style audit's items were tracked as GitHub issues in the (now-deleted,
+fully-shipped) `ui-style-polish.md` umbrella, and every discrete papercut/bug
+from Tasks 2–4 was promoted to a GitHub issue.
 
 **Deliverable model (changed).** Earlier rounds wrote a dated point-in-time
 report under `docs/reviews/`; a later convention appended findings to topic

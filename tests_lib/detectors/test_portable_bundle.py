@@ -128,6 +128,50 @@ class TestManifest:
         assert "SIFT/VLAD (instances)" in readme
         assert "exact pretrained model" not in readme
 
+    def test_manifest_caveats_default_empty(self):
+        weights = _trained_weights(input_dim=768)
+        assert _sample_manifest(weights)["caveats"] == []
+
+    def test_manifest_carries_given_caveats(self):
+        weights = _trained_weights(input_dim=768)
+        manifest = pb.build_manifest(
+            detector_name="Cats",
+            media_type="image",
+            embedder="dinov2",
+            embedder_display_name="DINOv2 (patch)",
+            embedder_model_id="facebook/dinov2-base",
+            embedder_type="patch_semantic",
+            embedding_dim=pb.embedding_dim_from_weights(weights),
+            threshold=0.5,
+            good_count=3,
+            bad_count=2,
+            exported_by="vtsearch test",
+            exported_at="2026-06-30T00:00:00Z",
+            caveats=pb.caveats_for_embedder_type("patch_semantic"),
+        )
+        assert manifest["caveats"] == pb.caveats_for_embedder_type("patch_semantic")
+        readme = pb.render_readme(manifest)
+        assert "WHOLE item" in readme
+
+
+class TestExportability:
+    def test_structural_is_blocked(self):
+        with pytest.raises(ValueError, match="structural"):
+            pb.check_exportable("structural")
+
+    def test_semantic_and_patch_and_legacy_are_exportable(self):
+        for embedder_type in ("semantic", "patch_semantic", ""):
+            pb.check_exportable(embedder_type)  # must not raise
+
+    def test_patch_semantic_has_one_caveat(self):
+        caveats = pb.caveats_for_embedder_type("patch_semantic")
+        assert len(caveats) == 1
+        assert "WHOLE item" in caveats[0]
+
+    def test_semantic_and_legacy_have_no_caveats(self):
+        assert pb.caveats_for_embedder_type("semantic") == []
+        assert pb.caveats_for_embedder_type("") == []
+
 
 class TestBundle:
     def test_bundle_members(self):

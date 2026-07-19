@@ -13,10 +13,13 @@ media - so a third party can score their own media without VTSearch.
 
 Unlike every other exporter, this one consumes the *trained classifiers*, not
 the scored results, so it sets :attr:`needs_trained_detectors` and the pipeline
-hands it the detectors via :meth:`export_cli_detectors`.  Detectors whose
-scoring isn't the fixed 2-layer MLP (patch DINOv2/v3, structural SIFT/VLAD) are
-skipped with a note rather than aborting the whole export - the ONNX graph only
-models the plain linear stack (see ``docs/plans/detector-standalone-export.md``).
+hands it the detectors via :meth:`export_cli_detectors`.  Structural (SIFT/VLAD)
+detectors are skipped with a note rather than aborting the whole export - their
+stage-2 RANSAC verification isn't representable as a scoring-only ONNX graph
+(see :func:`vtscore.detectors.portable_bundle.check_exportable`).  Patch
+(DINOv2/v3, EUPE) detectors export normally, in a degraded whole-item-only
+scoring mode (see :func:`vtscore.detectors.portable_bundle.caveats_for_embedder_type`);
+see ``docs/plans/detector-standalone-export.md``.
 """
 
 from __future__ import annotations
@@ -102,18 +105,21 @@ class PortableDetectorLabelsetExporter(LabelsetExporter):
         multi = len(detectors) > 1
 
         written: list[str] = []
-        skipped: list[str] = []
+        skipped: list[tuple[str, str]] = []
         for descriptor in detectors:
             name = descriptor.get("detector_name", "") or "detector"
             weights = descriptor.get("weights") or {}
+            embedder_type = descriptor.get("embedder_type", "") or ""
             try:
+                pb.check_exportable(embedder_type)
                 manifest = self._build_manifest(pb, descriptor)
                 bundle = pb.build_bundle(weights=weights, manifest=manifest)
             except ValueError as exc:
-                # Non-2-layer MLP (patch / structural detector): the ONNX graph
-                # can't represent it. Skip this detector, keep exporting the rest.
+                # Either the embedder type is blocked outright (structural), or
+                # the weight shape can't be modelled by the fixed ONNX graph.
+                # Skip this detector, keep exporting the rest.
                 logger.warning("portable_detector: skipping %r (%s)", name, exc)
-                skipped.append(name)
+                skipped.append((name, str(exc)))
                 continue
 
             out_path = self._resolve_path(template, name, disambiguate=multi)
@@ -128,6 +134,7 @@ class PortableDetectorLabelsetExporter(LabelsetExporter):
     def _build_manifest(pb: Any, descriptor: dict[str, Any]) -> dict[str, Any]:
         """Assemble the bundle manifest for one trained detector."""
         embedder_name = descriptor.get("embedder", "") or ""
+        embedder_type = descriptor.get("embedder_type", "") or ""
         embedder_display = embedder_name
         embedder_model_id: str | None = None
         if embedder_name:
@@ -146,13 +153,14 @@ class PortableDetectorLabelsetExporter(LabelsetExporter):
             embedder=embedder_name,
             embedder_display_name=embedder_display,
             embedder_model_id=embedder_model_id,
-            embedder_type=descriptor.get("embedder_type", "") or "",
+            embedder_type=embedder_type,
             embedding_dim=pb.embedding_dim_from_weights(descriptor.get("weights") or {}),
             threshold=float(descriptor.get("threshold", 0.5)),
             good_count=int(descriptor.get("good_count", 0)),
             bad_count=int(descriptor.get("bad_count", 0)),
             exported_by=_exported_by(),
             exported_at=_utc_now_iso(),
+            caveats=pb.caveats_for_embedder_type(embedder_type),
         )
 
     @staticmethod
@@ -185,15 +193,21 @@ class PortableDetectorLabelsetExporter(LabelsetExporter):
         return validate_server_filepath(resolved, base_dir=get_file_access_base_dir())
 
     @staticmethod
-    def _status(written: list[str], skipped: list[str]) -> dict[str, Any]:
+    def _status(written: list[str], skipped: list[tuple[str, str]]) -> dict[str, Any]:
         """Build the confirmation status dict from the write/skip tallies."""
         if not written:
-            detail = f" ({len(skipped)} skipped: not a 2-layer MLP)" if skipped else ""
-            return {"message": f"No portable detector bundles written{detail}.", "filepaths": []}
+            if not skipped:
+                return {"message": "No portable detector bundles written.", "filepaths": []}
+            reasons = "; ".join(f"{name} ({reason})" for name, reason in skipped)
+            return {
+                "message": f"No portable detector bundles written ({len(skipped)} skipped): {reasons}.",
+                "filepaths": [],
+            }
 
         parts = [f"Wrote {len(written)} portable detector bundle(s)."]
         if skipped:
-            parts.append(f"Skipped {len(skipped)} non-exportable detector(s): {', '.join(skipped)}.")
+            names = ", ".join(name for name, _reason in skipped)
+            parts.append(f"Skipped {len(skipped)} non-exportable detector(s): {names}.")
         return {"message": " ".join(parts), "filepaths": written}
 
 

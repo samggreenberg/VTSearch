@@ -14,6 +14,7 @@ import { MediasApiService } from '../../services/medias-api.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { DatasetsCrudApiService } from '../../services/datasets-crud-api.service';
+import { DashboardLoadingTasksService } from '../../services/dashboard-loading-tasks.service';
 import { ToastService } from '../../services/toast.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { ActiveContextService } from '../../services/active-context.service';
@@ -55,6 +56,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private detectorsFindApi = inject(DetectorsFindApiService);
   private datasetsRegistryApi = inject(DatasetsRegistryApiService);
   private datasetsCrudApi = inject(DatasetsCrudApiService);
+  private loadingTasksSvc = inject(DashboardLoadingTasksService);
   private toast = inject(ToastService);
   private dialog = inject(VtDialogService);
   private ngZone = inject(NgZone);
@@ -755,8 +757,11 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * Promote *ids* into their own saved dataset. The promoted items keep their
    * origins and embeddings; the new dataset gets a fresh created date but
    * inherits this dataset's death date. We prompt for a name (prefilled
-   * "<dataset> <detector> Results"), then create + register it and confirm
-   * with a toast (staying in Find).
+   * "<dataset> <detector> Results"), then kick off the background promote
+   * task; progress shows on the Datasets dashboard's loading rows, and we
+   * confirm with a toast once the task settles (staying in Find). A failed
+   * task is toasted globally by the SSE error router, so the completion
+   * callback only fires on success.
    */
   private toDatasetFromIds(ids: number[]): void {
     if (ids.length === 0) return;
@@ -773,9 +778,11 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: (res) => {
-            this.toast.success({
-              message: `Created dataset "${res.name}"`,
-              detail: `${res.num_items} item${res.num_items === 1 ? '' : 's'} promoted. Find it in the Datasets dashboard.`,
+            this.loadingTasksSvc.startProgressPolling(res.task_id, () => {
+              this.toast.success({
+                message: `Created dataset "${trimmed}"`,
+                detail: `${ids.length} item${ids.length === 1 ? '' : 's'} promoted. Find it in the Datasets dashboard.`,
+              });
             });
           },
         });
