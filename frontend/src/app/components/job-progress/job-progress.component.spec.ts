@@ -60,6 +60,13 @@ describe('JobProgressComponent', () => {
     expect(el.querySelector('.jp__cancel')).toBeNull();
   });
 
+  it('passes the bar pulsing state through to the progress bar', async () => {
+    fixture.componentRef.setInput('bar', { value: 0.35, max: 1, indeterminate: false, pulsing: true });
+    await settleZoneless(fixture);
+    const fill = (fixture.nativeElement as HTMLElement).querySelector('.progress-fill');
+    expect(fill?.classList).toContain('progress-fill--pulsing');
+  });
+
   it('emits cancel and stops the click from bubbling', async () => {
     const emit = vi.spyOn(component.cancel, 'emit');
     const btn = (fixture.nativeElement as HTMLElement).querySelector(

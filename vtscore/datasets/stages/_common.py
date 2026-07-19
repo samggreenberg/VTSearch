@@ -114,7 +114,6 @@ def load_step_weights(
     n: Optional[int] = None,
     download_size_mb: Optional[float] = None,
     embedder: Optional[str] = None,
-    embedders: Optional[list[str]] = None,
 ) -> list[float]:
     """Return the dataset-load step weights for the active device and media type.
 
@@ -125,11 +124,6 @@ def load_step_weights(
     for large ``n``. Otherwise it returns the static per-(device, media_type)
     profile below — the large-``n`` asymptote — so callers without a known ``n``
     (folder importers that stream) keep today's behaviour unchanged.
-
-    *embedders* is the optional full set of embedders bound to the dataset (v3
-    trio: text / patch / structural picks); when set, the cost model sums each
-    bound embedder's ``b_embed`` term instead of assuming *embedder* alone
-    covers the whole embed phase (see ``_load_cost_model.cost_model_weights``).
 
     Static fallback rationale: GPU hosts embed several times faster, so the
     un-accelerated finalize phase earns a larger slice; on a CPU host an image
@@ -143,7 +137,7 @@ def load_step_weights(
         from vtscore.datasets.stages._load_cost_model import cost_model_weights  # noqa: PLC0415
 
         emb = embedder or _default_embedder_name(media_type)
-        weights = cost_model_weights(device, media_type, emb, n, download_size_mb, embedders)
+        weights = cost_model_weights(device, media_type, emb, n, download_size_mb)
         if weights is not None:
             return weights
 
@@ -166,7 +160,6 @@ def load_cost_terms(
     n: Optional[int] = None,
     download_size_mb: Optional[float] = None,
     embedder: Optional[str] = None,
-    embedders: Optional[list[str]] = None,
 ) -> tuple[dict[str, float], bool]:
     """Predicted per-phase cost terms for a dataset load, in phase order
     ``download``, ``extract``, ``load``, ``embed``, ``finalize``.
@@ -182,10 +175,6 @@ def load_cost_terms(
     is unit-compatible with the other terms — mixing seconds into the
     pseudo-time vector hands the observed phase essentially the whole bar.
 
-    *embedders* is the optional full set of embedders bound to the dataset (v3
-    trio: text / patch / structural picks); when set, the embed term sums each
-    bound embedder's ``b_embed`` (see ``_load_cost_model.cost_model_terms``).
-
     Always returns a usable dict (never raises), so the pacing layer can rely
     on it for every import path, including streaming folder importers.
     """
@@ -195,7 +184,7 @@ def load_cost_terms(
         from vtscore.datasets.stages._load_cost_model import cost_model_terms  # noqa: PLC0415
 
         emb = embedder or _default_embedder_name(media_type)
-        terms = cost_model_terms(device, media_type, emb, n, download_size_mb, embedders)
+        terms = cost_model_terms(device, media_type, emb, n, download_size_mb)
         if terms is not None:
             return terms, True
 

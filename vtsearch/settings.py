@@ -643,20 +643,8 @@ def _validate_field(model: type, key: str, value: Any) -> Any:
 
 def _make_scalar_accessors(model: type, key: str):
     def getter():
-        # Do NOT hold ``_settings_lock`` across ``_read_value``. On a cold
-        # cache ``_read_value`` reaches the load path
-        # (``_ensure_server_loaded`` / ``_ensure_user_loaded``), which takes
-        # the cross-process *file* lock before ``_settings_lock`` - the
-        # canonical order. Holding ``_settings_lock`` here would invert that
-        # and deadlock against a concurrent ``get_all`` /
-        # ``_load_and_migrate_server`` that holds the file lock and wants
-        # ``_settings_lock`` (issue #2636). It is also unnecessary: the
-        # ``_ensure_*`` loaders do their own internal locking, and every
-        # published cache is *rebound* (never mutated in place) under the
-        # lock, so the snapshot ``_read_value`` reads from is stable. Mirrors
-        # ``get_all`` / ``get_user_settings`` / ``get_autofind_detectors``,
-        # which all read outside ``_settings_lock`` for the same reason.
-        raw = _read_value(key)
+        with _settings_lock:
+            raw = _read_value(key)
         try:
             return _validate_field(model, key, raw)
         except ValueError:
@@ -771,14 +759,8 @@ def _make_per_side_setting(  # noqa: C901
     def _get_dict(key: str) -> dict[str, Any]:
         side = key[len(key_base) + 1 :]
         default_val = defaults.get(side, next(iter(defaults.values())))
-        # Read outside ``_settings_lock`` - see the note in
-        # ``_make_scalar_accessors.getter``: on a cold cache ``_read_value``
-        # takes the file lock before ``_settings_lock``, so holding
-        # ``_settings_lock`` here would invert the order and deadlock
-        # (issue #2636). The ``_ensure_*`` loaders lock internally and
-        # published caches are rebound, not mutated in place, so the read is
-        # safe unlocked.
-        raw = _read_value(key)
+        with _settings_lock:
+            raw = _read_value(key)
         types = _valid_media_types()
         if not isinstance(raw, dict):
             return {tid: default_val for tid in types}

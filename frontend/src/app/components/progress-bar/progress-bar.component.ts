@@ -19,6 +19,15 @@ export class ProgressBarComponent {
   readonly max = input(100);
   readonly indeterminate = input(false);
   /**
+   * Indeterminate-phase affordance for a determinate bar: the fill stays
+   * parked at `value` but a shimmer sweeps across it, signalling that the job
+   * is alive inside a phase that reports no counts (e.g. the model load of a
+   * dataset import — issue #2621). Distinct from `indeterminate`, which
+   * replaces the fill entirely; `pulsing` keeps the earned fill visible.
+   * Ignored while `indeterminate` is set.
+   */
+  readonly pulsing = input(false);
+  /**
    * Opt-in for multi-stage jobs whose `value` is a single whole-job fraction
    * stitched from several phases (the dataset-load bar). It swaps the snappy
    * default fill transition for a longer ease so the unavoidable between-phase
