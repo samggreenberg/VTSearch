@@ -137,6 +137,68 @@ def test_cost_model_terms_collapse_acquire_when_no_archive(monkeypatch):
     assert terms["extract"] == 0.0
 
 
+def test_cost_model_terms_sums_b_embed_across_bound_embedders(monkeypatch):
+    # A v3 trio dataset runs each bound embedder's full forward pass over all n
+    # items, so the embed term's b_embed must be the sum across every bound
+    # embedder, not just the primary embedder's own coefficient.
+    monkeypatch.setattr(
+        _cm,
+        "LOAD_COST_MODEL",
+        {
+            ("cuda", "image", "siglip"): {"a_model": 0.5, "a_embed": 1.0, "b_embed": 0.01, "a_fin": 1.0, "b_fin": 0.0},
+            ("cuda", "image", "dinov2_patch"): {
+                "a_model": 0.5,
+                "a_embed": 0.0,
+                "b_embed": 0.02,
+                "a_fin": 0.0,
+                "b_fin": 0.0,
+            },
+            ("cuda", "image", "sift_vlad"): {
+                "a_model": 0.5,
+                "a_embed": 0.0,
+                "b_embed": 0.03,
+                "a_fin": 0.0,
+                "b_fin": 0.0,
+            },
+        },
+    )
+    monkeypatch.setattr(_cm, "DOWNLOAD_MB_PER_S", 10.0)
+    monkeypatch.setattr(_cm, "EXTRACT_MB_PER_S", 50.0)
+
+    single = _cm.cost_model_terms("cuda", "image", "siglip", n=1000, download_size_mb=None)
+    assert single is not None
+    assert single["embed"] == pytest.approx(1.0 + 0.01 * 1000)
+
+    trio = _cm.cost_model_terms(
+        "cuda", "image", "siglip", n=1000, download_size_mb=None, embedders=["siglip", "dinov2_patch", "sift_vlad"]
+    )
+    assert trio is not None
+    # a_embed still comes from the primary (siglip) row only; b_embed sums across
+    # all three bound embedders.
+    assert trio["embed"] == pytest.approx(1.0 + (0.01 + 0.02 + 0.03) * 1000)
+    # Every other phase is unaffected by the trio's extra embedders.
+    assert trio["load"] == single["load"]
+    assert trio["finalize"] == single["finalize"]
+
+
+def test_cost_model_terms_trio_ignores_unmeasured_embedder(monkeypatch):
+    # An embedder with no calibrated row contributes 0 rather than dropping the
+    # whole computation.
+    monkeypatch.setattr(
+        _cm,
+        "LOAD_COST_MODEL",
+        {("cuda", "image", "siglip"): {"a_model": 0.5, "a_embed": 1.0, "b_embed": 0.01, "a_fin": 1.0, "b_fin": 0.0}},
+    )
+    monkeypatch.setattr(_cm, "DOWNLOAD_MB_PER_S", 10.0)
+    monkeypatch.setattr(_cm, "EXTRACT_MB_PER_S", 50.0)
+
+    terms = _cm.cost_model_terms(
+        "cuda", "image", "siglip", n=1000, download_size_mb=None, embedders=["siglip", "no_such_embedder"]
+    )
+    assert terms is not None
+    assert terms["embed"] == pytest.approx(1.0 + 0.01 * 1000)
+
+
 def test_small_n_weights_model_heavier_and_large_n_weights_embed_heavier(monkeypatch):
     monkeypatch.setattr("vtscore.config.resolve_device", lambda: "cuda")
     _inject_row(
