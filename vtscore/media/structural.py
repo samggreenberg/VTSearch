@@ -463,7 +463,7 @@ class SiftMatcher:
         # estimateAffinePartial2D never introduces a reflection (det = a^2+b^2 >= 0),
         # but keep the determinant-sign check so a future full-affine backend that
         # reuses this code path is covered.
-        reflection = bool(np.linalg.det(model[:, :2]) < 0)
+        reflection = bool(np.linalg.det(np.asarray(model[:, :2], dtype=np.float64)) < 0)
         model_ok = inlier_count >= _MIN_MODEL_INLIERS and _MIN_SANE_SCALE <= scale <= _MAX_SANE_SCALE and not reflection
 
         # Reprojection error + spatial spread over the inlier set.

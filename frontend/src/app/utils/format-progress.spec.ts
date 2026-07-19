@@ -8,7 +8,7 @@ import {
 describe('progressBarState', () => {
   it('prefers the whole-job overall fraction', () => {
     const state = progressBarState({ overall: 0.4, current: 5, total: 10 });
-    expect(state).toEqual({ value: 0.4, max: 1, indeterminate: false });
+    expect(state).toEqual({ value: 0.4, max: 1, indeterminate: false, pulsing: false });
   });
 
   it('clamps the overall fraction to [0, 1]', () => {
@@ -37,7 +37,38 @@ describe('progressBarState', () => {
       value: 0,
       max: 1,
       indeterminate: false,
+      pulsing: true,
     });
+  });
+
+  it('pulses when the current phase of a whole-job bar reports no total', () => {
+    // Model load: parked overall fraction, 0/0 within the phase (issue #2621).
+    const state = progressBarState({
+      status: 'loading',
+      message: 'Loading embedding model…',
+      overall: 0.35,
+      current: 0,
+      total: 0,
+    });
+    expect(state.indeterminate).toBe(false);
+    expect(state.pulsing).toBe(true);
+  });
+
+  it('does not pulse while the phase reports real counts', () => {
+    expect(progressBarState({ overall: 0.5, current: 3, total: 10 }).pulsing).toBe(false);
+  });
+
+  it('does not pulse once the job is complete', () => {
+    expect(progressBarState({ overall: 1, current: 0, total: 0 }).pulsing).toBe(false);
+  });
+
+  it('does not pulse on an errored job', () => {
+    expect(progressBarState({ overall: 0.4, total: 0, error: 'boom' }).pulsing).toBe(false);
+  });
+
+  it('leaves single-phase and indeterminate bars without a pulsing flag', () => {
+    expect(progressBarState({ current: 3, total: 12 }).pulsing).toBeUndefined();
+    expect(progressBarState({}).pulsing).toBeUndefined();
   });
 });
 

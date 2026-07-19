@@ -136,6 +136,16 @@ export interface ProgressBarState {
   value: number;
   max: number;
   indeterminate: boolean;
+  /**
+   * True when a determinate whole-job bar is parked on an *indeterminate
+   * phase*: the job reports an ``overall`` fraction, but the current phase has
+   * no ``total`` to count against (e.g. the model load reports ``0/0`` for its
+   * whole duration — issue #2621). The bar should keep its parked fill but
+   * animate in place (a shimmer) so the phase reads as alive rather than
+   * frozen; the fill value itself must not move, because there is genuinely
+   * no progress signal to move it by.
+   */
+  pulsing?: boolean;
 }
 
 /**
@@ -156,7 +166,11 @@ export function progressBarState(
   const prog = progress ?? {};
   const overall = prog.overall;
   if (overall != null && isFinite(overall)) {
-    return { value: Math.min(1, Math.max(0, overall)), max: 1, indeterminate: false };
+    const value = Math.min(1, Math.max(0, overall));
+    // Mid-job with no within-phase total to count against (and no error): the
+    // current phase is indeterminate, so the parked fill should pulse in place.
+    const pulsing = value < 1 && !(prog.total != null && prog.total > 0) && !prog.error;
+    return { value, max: 1, indeterminate: false, pulsing };
   }
   const current = prog.current;
   const total = prog.total;

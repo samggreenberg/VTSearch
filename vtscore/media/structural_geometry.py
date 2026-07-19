@@ -145,7 +145,7 @@ def fit_model(
         mask = inlier_mask.ravel().astype(bool)
         a, b = float(model[0, 0]), float(model[1, 0])
         scale = float(np.hypot(a, b))
-        reflection = bool(np.linalg.det(model[:, :2]) < 0)
+        reflection = bool(np.linalg.det(np.asarray(model[:, :2], dtype=np.float64)) < 0)
     elif model_name == "scale_translation":
         model, mask = fit_scale_translation(src, dst, ransac_threshold=ransac_threshold)
         if model is None or mask is None:

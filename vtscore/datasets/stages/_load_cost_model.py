@@ -26,7 +26,7 @@ measured row fall back to the static per-device/media profiles in ``_common``.
 
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from typing import Optional
 
 # key: (device, media_type, embedder) -> affine coefficients (seconds).
 # ``device`` is "cpu", "cuda", or "cuda+cuml"; ``embedder`` is the encoder
@@ -511,37 +511,12 @@ def _lookup_row(device: str, media_type: str, embedder: str) -> Optional[dict[st
     return None
 
 
-def _bound_b_embed_total(
-    device: str, media_type: str, embedder: str, primary_row: dict[str, float], embedders: Optional[Sequence[str]]
-) -> float:
-    """Sum the ``b_embed`` coefficient across every embedder bound to the
-    dataset, not just *embedder*'s own row.
-
-    A v3 trio dataset (text / patch / structural) runs each bound embedder's
-    full forward pass over all ``n`` items in turn (see
-    ``embedding._embed_missing_stage``), so the embed phase's per-item cost is
-    the *sum* of each bound embedder's ``b_embed``, not a single embedder's
-    coefficient. Falls back to *primary_row*'s own ``b_embed`` when *embedders*
-    is empty/``None`` (the pre-trio single-embedder path, unchanged) or names
-    only *embedder* itself. Names with no measured row contribute 0 rather
-    than dropping the whole computation.
-    """
-    names = list(dict.fromkeys(n for n in (embedders or [embedder]) if n)) or [embedder]
-    total = 0.0
-    for name in names:
-        row = primary_row if name == embedder else _lookup_row(device, media_type, name)
-        if row is not None:
-            total += row.get("b_embed", 0.0)
-    return total
-
-
 def cost_model_terms(
     device: str,
     media_type: str,
     embedder: str,
     n: int,
     download_size_mb: Optional[float] = None,
-    embedders: Optional[Sequence[str]] = None,
 ) -> Optional[dict[str, float]]:
     """Return predicted per-phase seconds from the affine cost model, or
     ``None`` when no coefficient row matches (so the caller can fall back to
@@ -554,13 +529,6 @@ def cost_model_terms(
     ``download_size_mb`` of 0/``None`` collapses the download **and** extract
     terms — which is exactly right for local-folder imports and cache-backed
     re-adds, where no archive is fetched or unpacked.
-
-    ``embedders`` is the optional full set of embedders bound to the dataset
-    (v3 trio: text / patch / structural picks). When given, the embed term's
-    ``b_embed`` is summed across all of them (see :func:`_bound_b_embed_total`)
-    instead of assuming *embedder*'s row alone covers the whole embed phase;
-    ``a_embed`` still comes from *embedder*'s row only, since it is a fixed
-    per-load overhead rather than a per-item cost.
     """
     row = _lookup_row(device, media_type, embedder)
     if row is None or n <= 0:
@@ -572,12 +540,11 @@ def cost_model_terms(
             t_download = download_size_mb / DOWNLOAD_MB_PER_S
         if EXTRACT_MB_PER_S > 0:
             t_extract = download_size_mb / EXTRACT_MB_PER_S
-    b_embed_total = _bound_b_embed_total(device, media_type, embedder, row, embedders)
     terms = {
         "download": max(0.0, t_download),
         "extract": max(0.0, t_extract),
         "load": max(0.0, row.get("a_model", 0.0) + row.get("b_load", 0.0) * n),
-        "embed": max(0.0, row.get("a_embed", 0.0) + b_embed_total * n),
+        "embed": max(0.0, row.get("a_embed", 0.0) + row.get("b_embed", 0.0) * n),
         "finalize": max(0.0, row.get("a_fin", 0.0) + row.get("b_fin", 0.0) * n),
     }
     if sum(terms.values()) <= 0:
@@ -591,14 +558,12 @@ def cost_model_weights(
     embedder: str,
     n: int,
     download_size_mb: Optional[float] = None,
-    embedders: Optional[Sequence[str]] = None,
 ) -> Optional[list[float]]:
     """Return normalized ``[acquire, load, embed, finalize]`` step weights from
     the affine cost model (acquire = download + extract), or ``None`` when no
     coefficient row matches (so the caller can fall back to the static
-    profile). ``embedders``, when given, sums the embed term's ``b_embed``
-    across every bound embedder (see :func:`cost_model_terms`)."""
-    terms = cost_model_terms(device, media_type, embedder, n, download_size_mb, embedders)
+    profile)."""
+    terms = cost_model_terms(device, media_type, embedder, n, download_size_mb)
     if terms is None:
         return None
     parts = [

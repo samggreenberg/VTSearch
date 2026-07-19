@@ -68,6 +68,27 @@ describe('ProgressBarComponent', () => {
     expect(track.getAttribute('aria-valuenow')).toBeNull();
   });
 
+  it('should apply the pulsing modifier when [pulsing] is set', async () => {
+    fixture.componentRef.setInput('pulsing', true);
+    fixture.componentRef.setInput('value', 40);
+    fixture.componentRef.setInput('max', 100);
+    await settleZoneless(fixture);
+    const fill = fixture.nativeElement.querySelector('.progress-fill') as HTMLElement;
+    expect(fill.classList).toContain('progress-fill--pulsing');
+    // The fill stays parked at its real value — pulsing animates in place, it
+    // must not take over the bar the way `indeterminate` does.
+    expect(fill.style.width).toBe('40%');
+  });
+
+  it('should let indeterminate win over pulsing', async () => {
+    fixture.componentRef.setInput('pulsing', true);
+    fixture.componentRef.setInput('indeterminate', true);
+    await settleZoneless(fixture);
+    const fill = fixture.nativeElement.querySelector('.progress-fill');
+    expect(fill.classList).toContain('indeterminate');
+    expect(fill.classList).not.toContain('progress-fill--pulsing');
+  });
+
   it('should not apply the smooth modifier by default', async () => {
     await settleZoneless(fixture);
     const fill = fixture.nativeElement.querySelector('.progress-fill');

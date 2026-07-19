@@ -27,6 +27,30 @@
     width: 30% !important;
     animation: indeterminate 1.5s infinite ease-in-out;
   }
+
+  // Indeterminate phase inside a determinate whole-job bar: the fill is parked
+  // (there is no progress signal to advance it by), so sweep a highlight across
+  // it to show the job is alive. The overlay is clipped to the fill, so the
+  // unfilled track stays untouched and the earned fraction stays legible.
+  &.progress-fill--pulsing {
+    position: relative;
+    overflow: hidden;
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgb(255 255 255 / 45%), transparent);
+      transform: translateX(-100%);
+      animation: progress-shimmer 1.4s infinite ease-in-out;
+    }
+  }
+}
+
+@keyframes progress-shimmer {
+  to {
+    transform: translateX(100%);
+  }
 }
 
 @keyframes indeterminate {

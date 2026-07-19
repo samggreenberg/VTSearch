@@ -205,14 +205,14 @@ DEP001 = [
     "paddleocr",
     "rarfile",
     "whisper",
-    "lightglue",
     "facenet_pytorch",
     "torchvision",
     "safetensors",
     "huggingface_hub",
     "cuml",
-    # SuperPoint/LightGlue structural backend: lazily imported inside method
-    # bodies (guarded, GPU-oriented); users opt in by installing lightglue.
+    # SuperPoint/LightGlue backend for the structural (SPLG) image embedder,
+    # imported lazily inside ``vtscore.media.structural_splg`` methods and
+    # opt-in only (users install ``lightglue`` to enable structural matching).
     "lightglue",
     # Installed `--no-deps` by the install scripts (its transformers<5 pin is
     # empirically unnecessary; see docs/plans/vtsbrowse-toponymy.md), so it
@@ -220,10 +220,6 @@ DEP001 = [
     # resolver. Its real deps ARE declared (fast_hdbscan et al.); the smoke
     # test in tests_lib/projection guards the --no-deps bypass.
     "toponymy",
-    # SuperPoint/LightGlue backend for the structural (SPLG) image embedder,
-    # imported lazily inside ``vtscore.media.structural_splg`` methods and
-    # opt-in only (users install ``lightglue`` to enable structural matching).
-    "lightglue",
 ]
 # DEP003: imported as a transitive of another declared dependency.
 # ``safetensors`` and ``torchvision`` ship with ``transformers`` / ``torch``
@@ -256,6 +252,10 @@ DEP003 = [
     # import from DEP001 (missing) to DEP003 (present/undeclared), so it needs
     # ignoring under both rules. See the DEP001 note.
     "facenet_pytorch",
+    # Same dual classification again: on a venv where lightglue IS installed
+    # (pulled in transitively, e.g. alongside the GRID GPU stack) deptry
+    # reclassifies the guarded structural-SPLG import from DEP001 to DEP003.
+    "lightglue",
 ]
 # DEP002: declared but not imported. Tools we run via their CLIs
 # (pytest, ruff, …), runtime helpers loaded by name (gunicorn), or
