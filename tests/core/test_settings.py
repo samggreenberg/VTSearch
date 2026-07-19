@@ -847,3 +847,97 @@ class TestFileLockWithoutFcntl:
         settings_mod.set_inclusion(3)
         assert settings_mod.get_volume() == pytest.approx(0.5)
         assert settings_mod.get_inclusion() == 3
+
+
+class TestColdBootDeadlock:
+    """Regression for issue #2636: cold-boot AB-BA deadlock between a
+    scalar accessor's ``getter()`` and ``get_all``.
+
+    On a cold cache a ``get_<key>()`` read reaches the load path
+    (``_ensure_user_loaded`` -> ``ensure_server_loaded`` ->
+    ``_load_and_migrate_server``), which takes the cross-process server
+    ``file_lock``. The old ``getter()`` wrapped that whole read in
+    ``with _settings_lock:``, so it grabbed ``file_lock`` *while holding*
+    ``_settings_lock`` - inverting the canonical file->settings order and
+    deadlocking against a concurrent ``get_all`` /
+    ``_load_and_migrate_server`` that holds ``file_lock`` and waits on
+    ``_settings_lock``. The fix reads outside ``_settings_lock`` on every
+    accessor path.
+    """
+
+    def test_cold_getter_never_takes_file_lock_under_settings_lock(self, isolated_settings, monkeypatch):
+        """The lock-inversion invariant: a scalar getter's cold-cache read
+        must never reach ``file_lock`` while the calling thread already
+        holds ``_settings_lock``."""
+        import contextlib
+
+        from vtsearch import settings_store
+
+        settings_mod.reset()  # cold server + user caches
+
+        real_file_lock = settings_store.file_lock
+        owned_at_acquire: list[bool] = []
+
+        @contextlib.contextmanager
+        def spy_file_lock(path):
+            # Record whether THIS thread already holds _settings_lock at the
+            # moment we reach for the cross-process file lock.
+            owned_at_acquire.append(settings_mod._settings_lock._is_owned())
+            with real_file_lock(path):
+                yield
+
+        monkeypatch.setattr(settings_store, "file_lock", spy_file_lock)
+
+        # User-tier scalar read on a cold cache -> _ensure_user_loaded ->
+        # ensure_server_loaded -> _load_and_migrate_server -> server file_lock.
+        settings_mod.get_volume()
+
+        assert owned_at_acquire, "cold getter did not exercise the file-lock load path"
+        assert not any(owned_at_acquire), (
+            "getter reached file_lock while holding _settings_lock - the "
+            "issue #2636 AB-BA lock inversion has regressed"
+        )
+
+    def test_cold_boot_concurrent_getters_and_get_all_complete(self, isolated_settings):
+        """The exact wedge #2636 described: getter-path and get_all-path
+        threads hitting a cold cache together must all finish."""
+        import threading
+
+        settings_mod.reset()  # force the cold-cache load path for every thread
+
+        errors: list[Exception] = []
+        start = threading.Event()
+        n_ready = [0]
+        ready_lock = threading.Lock()
+        workers = [
+            settings_mod.get_volume,
+            settings_mod.get_all,
+            settings_mod.get_inclusion,
+            settings_mod.get_grid_icon_size_left,  # _get_dict path
+            settings_mod.get_all,
+            settings_mod.get_panel_pct_right,  # _get_dict path
+            settings_mod.get_volume,
+            settings_mod.get_all,
+        ]
+        n_threads = len(workers)
+
+        def run(fn):
+            try:
+                with ready_lock:
+                    n_ready[0] += 1
+                    if n_ready[0] == n_threads:
+                        start.set()
+                start.wait(timeout=5)
+                fn()
+            except Exception as exc:  # pragma: no cover - surfaced below
+                errors.append(exc)
+
+        threads = [threading.Thread(target=run, args=(fn,)) for fn in workers]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=15)
+
+        assert not errors, f"workers raised: {errors}"
+        for t in threads:
+            assert not t.is_alive(), "thread hung on cold boot (issue #2636 deadlock)"
