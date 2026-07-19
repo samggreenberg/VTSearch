@@ -1,6 +1,7 @@
 """Tests for the MediaClipper base class and all built-in clippers."""
 
 import io
+import struct
 import wave
 
 import pytest
@@ -224,8 +225,9 @@ def _generate_wavex(freq: float, duration: float, sr: int = 48000) -> bytes:
     """Generate a ``WAVE_FORMAT_EXTENSIBLE`` (tag 0xFFFE) WAV byte string.
 
     UrbanSound8K and many real-world datasets ship WAVs in this container,
-    which stdlib ``wave`` rejects with ``unknown format: 65534``.  libsndfile's
-    ``WAVEX`` major format writes exactly that, so it reproduces the crash.
+    which stdlib ``wave`` on Python < 3.12 rejects with ``unknown format:
+    65534``.  libsndfile's ``WAVEX`` major format writes exactly that, so it
+    reproduces the crash.
     """
     import numpy as np  # noqa: PLC0415
     import soundfile as sf  # noqa: PLC0415
@@ -240,12 +242,16 @@ def _generate_wavex(freq: float, duration: float, sr: int = 48000) -> bytes:
 class TestWaveFormatExtensible:
     """Clippers must tolerate WAVE_FORMAT_EXTENSIBLE input (UrbanSound8K crash)."""
 
-    def test_wavex_is_not_readable_by_stdlib_wave(self):
-        # Guards the regression test below: confirm the fixture really is the
-        # extensible format that stdlib wave chokes on.
+    def test_wavex_fixture_has_extensible_format_tag(self):
+        # Guards the regression tests below: confirm the fixture really is the
+        # WAVE_FORMAT_EXTENSIBLE container (fmt tag 0xFFFE).  Checked at the
+        # byte level because stdlib wave reads WAVEX-with-PCM fine on
+        # Python >= 3.12, so "wave.open raises" is not a portable probe.
         wavex = _generate_wavex(440, 3.0)
-        with pytest.raises(wave.Error, match="65534"):
-            wave.open(io.BytesIO(wavex), "rb")
+        fmt_offset = wavex.find(b"fmt ")
+        assert fmt_offset != -1
+        (format_tag,) = struct.unpack_from("<H", wavex, fmt_offset + 8)
+        assert format_tag == 0xFFFE
 
     def test_wav_duration_handles_extensible(self):
         from vtscore.media.audio.clipper import _wav_duration
