@@ -11,6 +11,12 @@ fits:
     bandwidth  ≈ download_size_mb / seconds   (cold-download rows, device-pooled)
     extract    ≈ download_size_mb / seconds   (extract rows, pooled)
 
+It also aggregates the ``finalize:<slot>`` sub-slot rows (recorded by
+``FinalizeProgress.begin`` via the profiler) into per-``(device, media)``
+sub-slot **shares** — the measured counterpart to the static
+``FinalizeProgress._SLOTS`` ballpark — and emits a ``FINALIZE_SLOT_SHARES``
+table body for ``_load_cost_model.py``.
+
 and prints (a) a checked-in ``_load_cost_model.py`` body and (b) a human-readable
 summary table for docs/plans/progress-weight-calibration.md. See that plan.
 
@@ -31,6 +37,11 @@ from collections import defaultdict
 # tiny — matching the "model kept deliberately small" pacing design. The cold
 # first-load model cost is recorded separately as a note, not paced against.
 _WARM_MODEL_FLOOR_S = 0.5
+
+# Canonical finalize sub-slot execution order (matches FinalizeProgress._SLOTS).
+# The emitted shares list preserves this order; any slot seen in the data but
+# not listed here (e.g. a renamed/added sub-stage) is appended after it.
+_FIN_SLOT_ORDER = ("cleanup", "dedup", "coverage", "signpost_texts", "registry", "projection")
 
 
 def _load_rows(paths: list[str]) -> list[dict]:
@@ -80,6 +91,8 @@ def main() -> int:
     groups: dict[tuple[str, str, str], dict[str, list[tuple[float, float]]]] = defaultdict(lambda: defaultdict(list))
     dl_by_device: dict[str, list[tuple[float, float]]] = defaultdict(list)  # (size_mb, seconds)
     extract_pts: list[tuple[float, float]] = []  # (size_mb, seconds), device-pooled
+    # finalize sub-slot seconds by (device, media) -> slot -> [seconds].
+    fin_slots: dict[tuple[str, str], dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     for r in rows:
         device = str(r["device"])
         if device.startswith("cuda"):
@@ -98,12 +111,19 @@ def main() -> int:
             if r.get("download_size_mb") and secs > 0.1:
                 extract_pts.append((float(r["download_size_mb"]), secs))
             continue
-        if phase.startswith("finalize:"):
-            continue  # sub-slots: deferred (see plan follow-ups)
         if n <= 0:
             # A failed load (unloadable embedder, import error) still emits its
             # phase rows but finishes with n=0; its model/embed/finalize
-            # timings describe the failure path, not a fittable cost.
+            # timings (and finalize sub-slots) describe the failure path, not a
+            # fittable cost.
+            continue
+        if phase.startswith("finalize:"):
+            # Sub-slot durations partition the finalize phase; a slot that
+            # actually ran (>0s) contributes to its (device, media) share. A
+            # skipped slot (0s) leaves no row and simply isn't paced separately.
+            slot = phase.split(":", 1)[1]
+            if secs > 0:
+                fin_slots[(r["device"], r["media_type"])][slot].append(secs)
             continue
         if phase == "model_load":
             # warm rows only; fall back to all if none warm
@@ -172,13 +192,61 @@ def main() -> int:
     ex_val = statistics.median(ex_rates) if ex_rates else 0.0
     print(f"EXTRACT_MB_PER_S = {round(ex_val, 3)}  # {len(extract_pts)} extractions")
     print()
+
+    # ---- finalize sub-slot shares (per device, media) ----
+    fin_shares, fin_summary = _fit_finalize_slots(fin_slots)
+    print("# ===== FINALIZE_SLOT_SHARES body =====")
+    print("FINALIZE_SLOT_SHARES = {")
+    for key in sorted(fin_shares):
+        print(f"    {key!r}: {fin_shares[key]!r},")
+    print("}")
+    print()
+
     # ---- human-readable summary (paste under Results) ----
     print("# ===== summary =====")
     print("| device | media | embedder | load a+b·n s (cold) | R² | embed a+b·n | R² | finalize a+b·n | R² | pts |")
     print("|--------|-------|----------|---------------------|----|-------------|----|----------------|----|----|")
     for line in summary_lines:
         print(line)
+    print()
+    print("# ===== finalize sub-slot shares =====")
+    print("| device | media | slot shares (fraction of finalize) | loads |")
+    print("|--------|-------|-------------------------------------|-------|")
+    for line in fin_summary:
+        print(line)
     return 0
+
+
+def _fit_finalize_slots(
+    fin_slots: dict[tuple[str, str], dict[str, list[float]]],
+) -> tuple[dict[tuple[str, str], tuple[tuple[str, float], ...]], list[str]]:
+    """Aggregate ``finalize:<slot>`` rows into per-(device, media) normalized
+    sub-slot shares. Per slot: median seconds across loads (robust to outliers),
+    then normalize across the cell's slots. Slots are emitted in canonical
+    execution order, with any unrecognized slot appended after.
+    """
+    shares: dict[tuple[str, str], tuple[tuple[str, float], ...]] = {}
+    summary: list[str] = []
+    for key in sorted(fin_slots):
+        dev, media = key
+        # Median seconds per slot; drop slots that never took measurable time
+        # (a ~0s sub-stage earns no slice — it keeps its static ballpark share
+        # when merged in _finalize_slots, or simply isn't paced separately).
+        slot_med = {}
+        for slot, v in fin_slots[key].items():
+            if v and (m := statistics.median(v)) > 0:
+                slot_med[slot] = m
+        total = sum(slot_med.values())
+        if total <= 0:
+            continue
+        known = [s for s in _FIN_SLOT_ORDER if s in slot_med]
+        extra = [s for s in slot_med if s not in _FIN_SLOT_ORDER]
+        ordered = tuple((s, round(slot_med[s] / total, 4)) for s in known + extra)
+        shares[key] = ordered
+        n_loads = max((len(v) for v in fin_slots[key].values()), default=0)
+        cells = ", ".join(f"{s} {frac:.2f}" for s, frac in ordered)
+        summary.append(f"| {dev} | {media} | {cells} | {n_loads} |")
+    return shares, summary
 
 
 if __name__ == "__main__":

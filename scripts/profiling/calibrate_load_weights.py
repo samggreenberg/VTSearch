@@ -5,8 +5,11 @@ Iterates the ``device × media_type × embedder × size`` matrix from
 ``docs/plans/progress-weight-calibration.md``, invoking the real demo-load path
 per cell with the env-gated per-phase recorder armed
 (``vtscore.datasets.stages._load_profiler``, ``VTSEARCH_PROFILE_LOAD``). Each run
-appends per-phase JSONL rows to ``--out``; the fitting step
-(``fit_load_weights.py``) reads them and emits the affine cost-model table.
+appends per-phase JSONL rows to ``--out`` (including one ``finalize:<slot>`` row
+per finalize sub-stage — ``FinalizeProgress.begin`` stamps them automatically
+while the recorder is armed); the fitting step (``fit_load_weights.py``) reads
+them and emits both the affine cost-model table and the finalize sub-slot
+shares.
 
 Device is fixed at process start (``CUDA_VISIBLE_DEVICES`` must be set before
 torch imports), so run this **once per device**:
