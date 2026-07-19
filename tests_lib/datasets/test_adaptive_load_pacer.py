@@ -204,3 +204,64 @@ def test_slow_phase_grows_its_span_and_the_bar_follows(clock):
     clock.advance(50.0)
     pacer.update("loading", "decode", 1000, 1000, step=2)
     assert halfway < _overall(tracker) < 1.0
+
+
+# Static-profile fallback: unitless pseudo-times (the CPU profile's ratios),
+# not seconds. Only their ratios are meaningful.
+PSEUDO_TERMS = {"download": 0.1875, "extract": 0.0625, "load": 0.10, "embed": 0.55, "finalize": 0.10}
+
+
+def _make_pseudo(terms):
+    tracker = ProgressTracker(extra_fields=dict(_OVERALL_EXTRAS))
+    pacer = AdaptiveLoadPacer(tracker, terms, calibrated=False)
+    return tracker, pacer
+
+
+def test_pseudo_terms_keep_prior_ratios_when_a_phase_is_observed(clock):
+    # Regression for #2615: with static fallback terms, a 30s observed model
+    # load was written (in seconds) over its 0.10 pseudo-term, so its share of
+    # the remaining bar became 30/(30+0.55+0.10) ~ 98% — the bar leapt to ~1.0
+    # entering embed and the whole-job ETA pinned near zero for the entire
+    # (dominant) embed phase. An observation must fix the scale, not the
+    # ratios: embed keeps its prior ratio to the observed load term.
+    tracker, pacer = _make_pseudo(PSEUDO_TERMS)
+    pacer.update("loading", "model", 0, 100, step=2)
+    clock.advance(30.0)
+    pacer.update("loading", "model", 50, 100, step=2)  # projected 60s total
+    # Load's share of the whole bar must stay near its prior ratio
+    # (0.10 / 0.75 of the post-acquire remainder), not swallow it.
+    assert pacer._terms["load"] == pytest.approx(60.0)
+    assert pacer._terms["embed"] == pytest.approx(60.0 * 0.55 / 0.10)
+    assert pacer._terms["finalize"] == pytest.approx(60.0 * 0.10 / 0.10)
+    clock.advance(30.0)
+    pacer.update("loading", "model", 100, 100, step=2)
+    pacer.update("embedding", "e", 0, 200, step=3)
+    # Entering embed, most of the bar must still be ahead of us: embed's prior
+    # dominates the profile, so consumed stays well below ~50%.
+    assert _overall(tracker) < 0.5
+
+
+def test_pseudo_terms_unbudgeted_phase_does_not_grab_the_bar(clock):
+    # A phase with a zero prior gives no seconds-per-unit scale; the pacer
+    # must keep pacing by the remaining priors rather than hand the phase the
+    # whole remaining span.
+    terms = dict(PSEUDO_TERMS, load=0.0)
+    tracker, pacer = _make_pseudo(terms)
+    pacer.update("loading", "model", 0, 100, step=2)
+    clock.advance(30.0)
+    pacer.update("loading", "model", 50, 100, step=2)
+    assert pacer._terms["embed"] == pytest.approx(0.55)
+    pacer.update("embedding", "e", 0, 200, step=3)
+    assert _overall(tracker) < 0.5
+
+
+def test_calibrated_terms_still_replace_only_the_observed_phase(clock):
+    # Seconds-mode behavior is unchanged: the observed phase's term is
+    # replaced by its projection and the others keep their measured values.
+    tracker, pacer = _make(TERMS)
+    pacer.update("loading", "decode", 0, 100, step=2)
+    clock.advance(10.0)
+    pacer.update("loading", "decode", 50, 100, step=2)  # projected 20s vs 5s term
+    assert pacer._terms["load"] == pytest.approx(20.0)
+    assert pacer._terms["embed"] == pytest.approx(TERMS["embed"])
+    assert pacer._terms["finalize"] == pytest.approx(TERMS["finalize"])

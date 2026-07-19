@@ -462,10 +462,10 @@ def _run_origin_load_in_background(
         # Pace the unified bar from the per-phase cost terms, rebasing on what
         # actually happens (cached archives, observed bandwidth, skipped
         # phases). All stage progress below routes through the pacer.
-        pacer = AdaptiveLoadPacer(
-            tracker,
-            load_cost_terms(media_type, n=n_hint, download_size_mb=download_size_mb_hint, embedder=embedder),
+        cost_terms, terms_calibrated = load_cost_terms(
+            media_type, n=n_hint, download_size_mb=download_size_mb_hint, embedder=embedder
         )
+        pacer = AdaptiveLoadPacer(tracker, cost_terms, calibrated=terms_calibrated)
         stepped = _make_stepped_progress(controller, pacer)
         profiler.bind_thread()  # so FinalizeProgress.begin stamps land here (no-op when off)
 

@@ -467,9 +467,13 @@ POST /api/dataset/promote
 dataset (both fields required, non-empty).
 
 Snapshots the selected media (preserving origins and embeddings) into a brand-
-new saved, registered dataset.
+new saved, registered dataset. The snapshot happens synchronously (a bad
+request still 400s at request time); the coverage-atlas build, pickle write,
+and registry insert run in a background task reported on the `loading-tasks`
+SSE channel. The finished task's `dataset_id` association carries the new
+dataset's id.
 
-→ `{"ok": true, "dataset_id": "abc123", "name": "My subset", "num_items": 3}`
+→ `{"ok": true, "message": "Promoting to dataset...", "task_id": "_promote_ab12cd34"}`
 
 ---
 

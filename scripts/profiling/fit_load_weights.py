@@ -83,14 +83,21 @@ def main() -> int:
         return 2
     rows = _load_rows(sys.argv[1:])
 
-    # Group phase-seconds by (device, media, embedder).
+    # Group phase-seconds by (device, media, embedder). ``device`` is collapsed
+    # to the coarse cost-model key: "cuda:0" → "cuda", and a CUDA row measured
+    # with cuML active becomes the "cuda+cuml" variant (cuML moves the
+    # coverage-atlas k-means / UMAP to the GPU, changing the finalize cost —
+    # the profiler stamps each row with the active cuML state).
     groups: dict[tuple[str, str, str], dict[str, list[tuple[float, float]]]] = defaultdict(lambda: defaultdict(list))
     dl_by_device: dict[str, list[tuple[float, float]]] = defaultdict(list)  # (size_mb, seconds)
     extract_pts: list[tuple[float, float]] = []  # (size_mb, seconds), device-pooled
     # finalize sub-slot seconds by (device, media) -> slot -> [seconds].
     fin_slots: dict[tuple[str, str], dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     for r in rows:
-        key = (r["device"], r["media_type"], r["embedder"])
+        device = str(r["device"])
+        if device.startswith("cuda"):
+            device = "cuda+cuml" if r.get("cuml") else "cuda"
+        key = (device, r["media_type"], r["embedder"])
         phase = r["phase"]
         n = float(r.get("n") or 0)
         secs = float(r.get("seconds") or 0)
@@ -103,6 +110,12 @@ def main() -> int:
             # the phase entirely, so any recorded row is a real extraction.
             if r.get("download_size_mb") and secs > 0.1:
                 extract_pts.append((float(r["download_size_mb"]), secs))
+            continue
+        if n <= 0:
+            # A failed load (unloadable embedder, import error) still emits its
+            # phase rows but finishes with n=0; its model/embed/finalize
+            # timings (and finalize sub-slots) describe the failure path, not a
+            # fittable cost.
             continue
         if phase.startswith("finalize:"):
             # Sub-slot durations partition the finalize phase; a slot that

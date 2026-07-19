@@ -15,6 +15,4 @@ follow-ups below remain.
 
 <!-- item-sep -->
 
-- [ ] #2622 — Dataset promote builds the coverage atlas synchronously; background it like the import pipeline
-
 <!-- item-sep -->

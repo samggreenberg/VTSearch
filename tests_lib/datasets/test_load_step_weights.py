@@ -185,6 +185,42 @@ def test_no_matching_cost_model_row_returns_static(monkeypatch):
     assert load_step_weights("image", n=1000, download_size_mb=100.0, embedder="siglip") == _LOAD_STEP_WEIGHTS_CPU_IMAGE
 
 
+def test_cuda_lookup_prefers_matching_cuml_variant(monkeypatch):
+    # Two measured CUDA variants with different finalize costs; the live cuML
+    # state picks which one paces the bar.
+    monkeypatch.setattr(
+        _cm,
+        "LOAD_COST_MODEL",
+        {
+            ("cuda", "image", "siglip"): {"a_model": 0.5, "a_embed": 1.0, "b_embed": 0.01, "a_fin": 9.0},
+            ("cuda+cuml", "image", "siglip"): {"a_model": 0.5, "a_embed": 1.0, "b_embed": 0.01, "a_fin": 2.0},
+        },
+    )
+    monkeypatch.setattr(_cm, "_cuml_active", lambda: True)
+    terms = _cm.cost_model_terms("cuda:0", "image", "siglip", n=100)
+    assert terms is not None and terms["finalize"] == pytest.approx(2.0)
+
+    monkeypatch.setattr(_cm, "_cuml_active", lambda: False)
+    terms = _cm.cost_model_terms("cuda:0", "image", "siglip", n=100)
+    assert terms is not None and terms["finalize"] == pytest.approx(9.0)
+
+
+def test_cuda_lookup_falls_back_to_other_cuml_variant(monkeypatch):
+    # Only one CUDA variant measured: a host in the other cuML state still gets
+    # it — a same-device row with a different finalize cost beats falling all
+    # the way back to the static profile.
+    monkeypatch.setattr(
+        _cm,
+        "LOAD_COST_MODEL",
+        {("cuda+cuml", "video", "xclip"): {"a_model": 0.5, "a_embed": 1.0, "b_embed": 0.1, "a_fin": 2.0}},
+    )
+    monkeypatch.setattr(_cm, "_cuml_active", lambda: False)
+    terms = _cm.cost_model_terms("cuda", "video", "xclip", n=100)
+    assert terms is not None and terms["embed"] == pytest.approx(11.0)
+    # CPU devices never borrow a CUDA row.
+    assert _cm.cost_model_terms("cpu", "video", "xclip", n=100) is None
+
+
 def test_shipped_cost_model_table_is_well_formed():
     # Every checked-in coefficient row has the affine keys and yields a
     # normalized weight vector; empty table (pre-calibration) trivially passes.
@@ -206,10 +242,22 @@ def test_load_cost_terms_static_fallback_splits_acquire(monkeypatch):
     monkeypatch.setattr("vtscore.config.resolve_device", lambda: "cpu")
     # No n -> static pseudo-terms; the acquire slice splits download/extract
     # and the four step sums reproduce the static profile exactly.
-    terms = load_cost_terms("audio")
+    terms, calibrated = load_cost_terms("audio")
+    assert calibrated is False
     assert set(terms) == {"download", "extract", "load", "embed", "finalize"}
     assert terms["download"] + terms["extract"] == pytest.approx(_LOAD_STEP_WEIGHTS_CPU[0])
     assert terms["load"] == pytest.approx(_LOAD_STEP_WEIGHTS_CPU[1])
     assert terms["embed"] == pytest.approx(_LOAD_STEP_WEIGHTS_CPU[2])
     assert terms["finalize"] == pytest.approx(_LOAD_STEP_WEIGHTS_CPU[3])
     assert terms["download"] > terms["extract"] > 0
+
+
+def test_load_cost_terms_reports_calibrated_when_a_cost_row_matches(monkeypatch):
+    from vtscore.datasets.stages._common import load_cost_terms
+
+    monkeypatch.setattr("vtscore.config.resolve_device", lambda: "cuda")
+    # ("cuda", "audio", "clap") is a measured row, so the terms are seconds
+    # from the affine model and flagged calibrated.
+    terms, calibrated = load_cost_terms("audio", n=1000, embedder="clap")
+    assert calibrated is True
+    assert terms["embed"] > 0
