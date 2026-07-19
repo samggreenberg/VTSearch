@@ -894,8 +894,7 @@ class TestColdBootDeadlock:
 
         assert owned_at_acquire, "cold getter did not exercise the file-lock load path"
         assert not any(owned_at_acquire), (
-            "getter reached file_lock while holding _settings_lock - the "
-            "issue #2636 AB-BA lock inversion has regressed"
+            "getter reached file_lock while holding _settings_lock - the issue #2636 AB-BA lock inversion has regressed"
         )
 
     def test_cold_boot_concurrent_getters_and_get_all_complete(self, isolated_settings):
