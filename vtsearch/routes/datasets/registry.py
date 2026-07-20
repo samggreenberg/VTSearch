@@ -125,9 +125,7 @@ def list_registered_datasets():
         # without shipping the capability taxonomy to the frontend.
         from vtscore.embedding.binding import EMBEDDER_TYPES, embedder_of_type
 
-        entry["embedders_by_type"] = {
-            t: name for t in EMBEDDER_TYPES if (name := embedder_of_type(bound, t))
-        }
+        entry["embedders_by_type"] = {t: name for t in EMBEDDER_TYPES if (name := embedder_of_type(bound, t))}
         # Resolve clipper name to display name; default clippers show as "-"
         raw_clipper = entry.get("clipper", "")
         if raw_clipper:

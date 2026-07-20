@@ -253,12 +253,9 @@ def resolve_keep_embedders(
         if action == "drop":
             continue
         if action == "reembed":
-            winner = res.get("embedder")
+            winner = str(res.get("embedder") or "")
             if winner not in st["options"]:
-                return [], (
-                    f"Invalid re-embed target {winner!r} for "
-                    f"{EMBEDDER_TYPE_LABELS.get(t, t)}."
-                )
+                return [], (f"Invalid re-embed target {winner!r} for {EMBEDDER_TYPE_LABELS.get(t, t)}.")
             keep.append(winner)
             continue
         return [], f"Invalid resolution action {action!r} for {EMBEDDER_TYPE_LABELS.get(t, t)}."

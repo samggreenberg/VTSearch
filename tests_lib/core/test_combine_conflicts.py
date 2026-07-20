@@ -118,9 +118,7 @@ class TestResolveKeepEmbedders:
 
     def test_reembed_winner_kept(self):
         state = combine_type_state([["siglip"], ["clip"]])
-        keep, err = resolve_keep_embedders(
-            state, {EMBEDDER_TYPE_SEMANTIC: {"action": "reembed", "embedder": "clip"}}
-        )
+        keep, err = resolve_keep_embedders(state, {EMBEDDER_TYPE_SEMANTIC: {"action": "reembed", "embedder": "clip"}})
         assert err is None
         assert keep == ["clip"]
 

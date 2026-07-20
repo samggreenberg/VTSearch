@@ -47,7 +47,9 @@ def _parse_keep_embedders(raw: Any) -> list[str]:
     return [n.strip() for n in str(raw).split(",") if n.strip()]
 
 
-def _apply_keep_embedders(media: dict[str, Any], keep: set[str], kept_patch: str | None, kept_structural: str | None) -> None:
+def _apply_keep_embedders(
+    media: dict[str, Any], keep: set[str], kept_patch: str | None, kept_structural: str | None
+) -> None:
     """Strip *media* down to the conflict-resolved *keep* embedder set, in place.
 
     For each media in a conflict-resolved combine:
