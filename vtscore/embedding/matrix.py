@@ -211,6 +211,24 @@ def _maybe_persist_matrix_sidecar(pkl_path: str, sorted_ids: list[int], matrix: 
         logger.warning("Failed to persist embedding-matrix sidecar for %s", pkl_path, exc_info=True)
 
 
+def _try_primary_sidecar(
+    ctx: "DatasetContext", sorted_ids: list[int], medias_snapshot: dict[int, dict[str, Any]]
+) -> tuple[str | None, np.ndarray | None]:
+    """Return ``(pkl_path, matrix)`` for the primary-path on-disk mmap sidecar.
+
+    *matrix* is ``None`` when there is no registered pkl, the sidecar-disabled
+    latch is set (see ``invalidate_embedding_matrix``), or the sidecar is
+    missing/stale - the caller always falls back to ``_stack_embeddings`` in
+    that case. *pkl_path* is returned even on a sidecar miss (``None`` matrix)
+    since the caller still needs it to persist a freshly-built matrix.
+    """
+    pkl_path = _registered_pkl_path(ctx.dataset_id)
+    if not pkl_path or ctx._emb_sidecar_disabled:
+        return pkl_path, None
+    probe_dim = int(np.asarray(_require_embedding(sorted_ids[0], medias_snapshot[sorted_ids[0]])).shape[-1])
+    return pkl_path, _try_load_matrix_sidecar(pkl_path, sorted_ids, probe_dim)
+
+
 def get_embedding_matrix(ctx: "DatasetContext", embedder_name: str | None = None) -> tuple[list[int], np.ndarray]:
     """Return ``(sorted_ids, (N, D) float32 matrix)`` for *ctx*'s medias.
 
@@ -259,18 +277,13 @@ def get_embedding_matrix(ctx: "DatasetContext", embedder_name: str | None = None
 
     # Phase 2 (unlocked): try a matching on-disk mmap sidecar first (S1,
     # docs/plans/scalability.md), else the heavy contiguous (N, D) build.
-    # ``pkl_path`` is resolved unconditionally (used again in phase 4 to
-    # persist a fresh build); the sidecar_disabled latch only gates *reading*
-    # one back - see ``invalidate_embedding_matrix``.
+    # ``pkl_path`` is resolved even on a sidecar miss (used again in phase 4
+    # to persist a fresh build).
     pkl_path: str | None = None
     matrix: np.ndarray | None = None
-    used_sidecar = False
     if embedder_name is None:
-        pkl_path = _registered_pkl_path(ctx.dataset_id)
-        if pkl_path and not ctx._emb_sidecar_disabled:
-            probe_dim = int(np.asarray(_require_embedding(sorted_ids[0], medias_snapshot[sorted_ids[0]])).shape[-1])
-            matrix = _try_load_matrix_sidecar(pkl_path, sorted_ids, probe_dim)
-            used_sidecar = matrix is not None
+        pkl_path, matrix = _try_primary_sidecar(ctx, sorted_ids, medias_snapshot)
+    used_sidecar = matrix is not None
     if matrix is None:
         matrix = _stack_embeddings(sorted_ids, medias_snapshot, embedder_name)
 
