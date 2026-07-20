@@ -299,10 +299,12 @@ def _score_medias_with_detectors(
     for (target_type, embedder_name, clipper, clipper_params_items), det_names in groups.items():
         if not target_type:
             # Legacy detector with no declared media_type: score every media
-            # directly against its primary embedding, exactly as before
-            # converter routing existed (one hit per media, raises on a None
-            # embedding). Typed detectors take the routing path below.
-            results.update(_score_direct_all(det_names, detector_mlps, medias))
+            # directly, one hit per media (raises on a missing embedding). The
+            # matrix is built in the detectors' shared score embedder
+            # (``embedder_name`` is part of this group's key, so every detector
+            # here trained in it), not each media's primary vector - on a trio
+            # dataset those differ. Typed detectors take the routing path below.
+            results.update(_score_direct_all(det_names, detector_mlps, medias, embedder_name))
             continue
         scoring_medias, scoring_to_source = route_and_embed(
             medias,
@@ -335,20 +337,25 @@ def _score_direct_all(
     det_names: list[str],
     detector_mlps: dict[str, dict[str, Any]],
     medias: dict[int, dict[str, Any]],
+    embedder_name: str = "",
 ) -> dict[str, dict[str, Any]]:
-    """Score *det_names* directly against every media's primary embedding.
+    """Score *det_names* directly against every media's *embedder_name* vector.
 
     The legacy path for detectors that declare no ``media_type``: they score
-    whatever embeddings the dataset already holds, one hit per media.  A media
-    that lacks an embedding raises (via ``get_embedding_matrix_for_snap``)
-    rather than silently scoring NaN, and the ``strict=True`` zip guards against
-    an id/score length mismatch (audit M11).
+    whatever embeddings the dataset already holds, one hit per media.  The
+    matrix is built in *embedder_name* - the concrete space these detectors
+    trained in, shared across the group - so a trio dataset whose primary vector
+    differs from that space is scored correctly rather than against each media's
+    primary vector; empty *embedder_name* falls back to the primary vector, the
+    single-embedder behaviour.  A media that lacks that vector raises (via
+    ``get_embedding_matrix_for_snap``) rather than silently scoring NaN, and the
+    ``strict=True`` zip guards against an id/score length mismatch (audit M11).
     """
     import torch  # noqa: PLC0415
 
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
 
-    all_ids, all_embs = get_embedding_matrix_for_snap(medias)
+    all_ids, all_embs = get_embedding_matrix_for_snap(medias, embedder_name or None)
     X_all = torch.from_numpy(all_embs)
 
     out: dict[str, dict[str, Any]] = {}

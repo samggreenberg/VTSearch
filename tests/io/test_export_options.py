@@ -322,7 +322,7 @@ class TestCliScoringNegativeHits:
         # 2; exactly the mismatch the strict zip guards against.
         extra_id = max(medias) + 1
 
-        def _mismatched(_snap):
+        def _mismatched(_snap, embedder_name=None):
             return [first_cid, extra_id], emb.reshape(1, -1)
 
         monkeypatch.setattr(
@@ -390,8 +390,8 @@ class TestCliScoringNegativeHits:
 
         real_get = matrix_module.get_embedding_matrix_for_snap
 
-        def _truncating_matrix(snap_arg):
-            ids, mat = real_get(snap_arg)
+        def _truncating_matrix(snap_arg, embedder_name=None):
+            ids, mat = real_get(snap_arg, embedder_name)
             # Drop the last id but keep the full matrix so scores stays
             # longer than ids; exactly the silent-truncation failure mode.
             return ids[:-1], mat

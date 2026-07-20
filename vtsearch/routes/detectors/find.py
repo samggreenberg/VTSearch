@@ -209,6 +209,7 @@ def _build_detector_config(d: dict) -> dict:
 
     Aborts with 400 when the detector has no usable labels in either form.
     """
+    from vtscore.detectors.embedder_type import detector_embedder_type_from_data  # noqa: PLC0415
     from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
     from vtscore.state.core import get_detector_context  # noqa: PLC0415
 
@@ -224,22 +225,55 @@ def _build_detector_config(d: dict) -> dict:
     if det_data and det_data.get("labelset", {}).get("labels"):
         config["detector_data"] = det_data
 
+    # The detector's locked embedder *type* drives per-(detector, dataset) score
+    # routing: for each dataset loaded by Find, the matrix (and any cold retrain)
+    # is built in the concrete embedder of this type the dataset supplies, not
+    # the dataset's primary vector.  Prefer the loaded context's type, else the
+    # on-disk record's (legacy records migration-read their primary name to a
+    # type).  Empty for a legacy/typeless detector, which routes via the dataset
+    # score precedence - byte-for-byte the pre-routing behaviour on any
+    # single-embedder dataset.
+    config["embedder_type"] = (det_ctx.embedder_type if det_ctx is not None else "") or (
+        detector_embedder_type_from_data(det_data or {})
+    )
+
     if "live_mlp" not in config and "detector_data" not in config:
         _abort_find(400, f"Detector '{d['name']}' has no labels for detection")
     return config
 
 
+def _find_score_embedder(dc: dict, temp_medias: dict[int, dict]) -> str:
+    """The concrete embedder *temp_medias* should be scored in for detector *dc*.
+
+    Routes through the detector's locked embedder type: the concrete embedder of
+    that type *temp_medias* binds, else the dataset score precedence (structural
+    ▸ patch ▸ text ▸ primary) for a legacy/typeless detector.  This is the
+    cross-dataset counterpart of the active-context ``keying_embedder_for_snap``
+    call in the find-label / auto-detect routes, so a trio dataset is scored
+    against the same role-bound vector the active-context paths use rather than
+    each media's primary vector.  Empty only when *temp_medias* is empty.
+    """
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    from vtscore.embedding.binding import keying_embedder_for_snap  # noqa: PLC0415
+
+    return keying_embedder_for_snap(SimpleNamespace(embedder_type=dc.get("embedder_type", "")), temp_medias)
+
+
 def _select_scorer(dc: dict, temp_medias: dict[int, dict]) -> str:
     """Pick ``"live"`` / ``"cold"`` / ``"na"`` for *dc* against *temp_medias*.
 
-    The cached MLP can only be reused when its embedder matches the
-    dataset about to be scored; otherwise the cross-space output is
-    silent garbage at best and a ``nn.Linear`` size-mismatch crash at
-    worst (H5).  When the embedders don't match, fall back to the cold
-    path (which retrains from the labelset using *temp_medias*'s
-    embedder), or ``"na"`` if no cold data is available.
+    The cached MLP can only be reused when its embedder matches the space the
+    dataset about to be scored resolves to; otherwise the cross-space output is
+    silent garbage at best and a ``nn.Linear`` size-mismatch crash at worst
+    (H5).  The comparison is against the dataset's *score* embedder for this
+    detector's type (:func:`_find_score_embedder`), not its primary vector, so a
+    trio dataset whose primary differs from the detector's keying embedder is
+    routed to the live MLP when (and only when) that keying embedder matches.
+    When they don't match, fall back to the cold path (which retrains from the
+    labelset in that same score embedder), or ``"na"`` if no cold data exists.
     """
-    temp_embedder = next(iter(temp_medias.values()), {}).get("embedder", "") or "" if temp_medias else ""
+    temp_embedder = _find_score_embedder(dc, temp_medias) if temp_medias else ""
     live_embedder = dc.get("live_embedder", "") or ""
     has_live = "live_mlp" in dc
     has_cold = "detector_data" in dc
@@ -359,12 +393,21 @@ def _score_with_live_mlp(dc: dict, X_all, all_ids: list[int], media_results: dic
 def _collect_cold_training_data(
     det_data: dict,
     temp_medias: dict[int, dict],
+    score_emb: str,
 ) -> tuple[list, list]:
-    """Assemble training X/y for a cold detector.
+    """Assemble training X/y for a cold detector, embedded in *score_emb*'s space.
 
     Prefers labels that resolve directly into the dataset (good_ids/bad_ids
     via origin/md5 lookup); falls back to :func:`resolve_label_embeddings`
     when the direct path doesn't yield both classes.
+
+    Both paths read/embed in *score_emb* - the concrete embedder of the
+    detector's type this dataset supplies - so the cold-trained MLP and the
+    matrix it is scored against share one vector space rather than mixing the
+    dataset's primary vector (which differs from the keying embedder on a trio
+    dataset) with the score-space matrix.  Empty *score_emb* falls back to each
+    media's primary vector / the media type's default embedder, the legacy
+    single-embedder behaviour.
     """
     from vtsearch.state import build_media_lookup, resolve_media_ids  # noqa: PLC0415
 
@@ -382,21 +425,20 @@ def _collect_cold_training_data(
                 bad_ids.append(mid)
 
     if good_ids and bad_ids:
-        good_embs = [media_embedding(temp_medias[i]) for i in good_ids if i in temp_medias]
-        bad_embs = [media_embedding(temp_medias[i]) for i in bad_ids if i in temp_medias]
+        good_embs = [media_embedding(temp_medias[i], score_emb or None) for i in good_ids if i in temp_medias]
+        bad_embs = [media_embedding(temp_medias[i], score_emb or None) for i in bad_ids if i in temp_medias]
         return good_embs + bad_embs, [1.0] * len(good_embs) + [0.0] * len(bad_embs)
 
     from vtscore.detectors.resolver import resolve_label_embeddings  # noqa: PLC0415
 
-    # Resolve+embed using the target dataset's embedder so the resulting
-    # training vectors share one space with the snap embeddings the MLP
-    # will be scored against.  Empty when the dataset is somehow embedder-
-    # less, which falls back to the media type's default embedder.
-    dataset_embedder = next(iter(temp_medias.values()), {}).get("embedder", "") or "" if temp_medias else ""
+    # Resolve+embed using the dataset's score embedder for this detector's type
+    # so the resulting training vectors share one space with the score-space
+    # matrix the MLP will be scored against.  Empty when the dataset is somehow
+    # embedder-less, which falls back to the media type's default embedder.
     resolved = resolve_label_embeddings(
         labels,
         det_data.get("media_type", "audio"),
-        embedder_name=dataset_embedder,
+        embedder_name=score_emb,
     )
     if resolved.has_good_and_bad:
         return resolved.embeddings, resolved.labels
@@ -409,12 +451,18 @@ def _score_with_cold_detector(
     X_all,
     all_ids: list[int],
     media_results: dict[int, dict],
+    score_emb: str,
 ) -> None:
-    """Train an MLP on-the-fly from the cold detector's labelset and score."""
+    """Train an MLP on-the-fly from the cold detector's labelset and score.
+
+    *X_all* must already be built in *score_emb*'s space (the same embedder the
+    cold labelset is resolved in), so the freshly-trained MLP scores the matrix
+    in the space it was trained against.
+    """
     import torch  # noqa: PLC0415
 
     try:
-        X_list, y_list = _collect_cold_training_data(dc["detector_data"], temp_medias)
+        X_list, y_list = _collect_cold_training_data(dc["detector_data"], temp_medias, score_emb)
         has_both_classes = X_list and any(v == 1.0 for v in y_list) and any(v == 0.0 for v in y_list)
         if not has_both_classes:
             _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "N/A")
@@ -466,8 +514,26 @@ def _score_dataset(
 
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
 
-    all_ids, all_embs = get_embedding_matrix_for_snap(temp_medias)
-    X_all = torch.from_numpy(all_embs)
+    # The row order is the sorted media ids and is embedder-independent; the
+    # (N, D) matrix itself is built per detector in *its* score-embedder space
+    # (see below), so a trio dataset scores each detector against the role-bound
+    # vector instead of every media's primary vector.
+    all_ids = sorted(temp_medias.keys())
+
+    # One matrix per distinct score embedder the detectors call for, built lazily
+    # and shared across detectors that resolve to the same space (the common
+    # single-embedder dataset collapses every detector to the one cached primary
+    # matrix, so this stays a single build there).
+    matrix_cache: dict[str | None, torch.Tensor] = {}
+
+    def _matrix_for(embedder_name: str | None) -> torch.Tensor:
+        key = embedder_name or None
+        tensor = matrix_cache.get(key)
+        if tensor is None:
+            _ids, embs = get_embedding_matrix_for_snap(temp_medias, key)
+            tensor = torch.from_numpy(embs)
+            matrix_cache[key] = tensor
+        return tensor
 
     added_units = len(all_ids) * len(detector_configs)
     new_total = total_scoring_units + added_units
@@ -486,12 +552,22 @@ def _score_dataset(
         )
 
         choice = _select_scorer(dc, temp_medias)
-        if choice == "live":
-            _score_with_live_mlp(dc, X_all, all_ids, media_results)
-        elif choice == "cold":
-            _score_with_cold_detector(dc, temp_medias, X_all, all_ids, media_results)
-        else:
-            _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "N/A")
+        # Building the score-space matrix can raise when this dataset lacks the
+        # detector's embedder vector (a media missing that role's vector); record
+        # an Error verdict for the detector rather than sinking the whole run,
+        # matching the scorers' own failure handling.
+        try:
+            if choice == "live":
+                X_all = _matrix_for(dc.get("live_embedder") or None)
+                _score_with_live_mlp(dc, X_all, all_ids, media_results)
+            elif choice == "cold":
+                score_emb = _find_score_embedder(dc, temp_medias)
+                X_all = _matrix_for(score_emb or None)
+                _score_with_cold_detector(dc, temp_medias, X_all, all_ids, media_results, score_emb)
+            else:
+                _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "N/A")
+        except Exception:
+            _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "Error")
 
         scored_units += len(all_ids)
         update_find_progress(
@@ -504,7 +580,11 @@ def _score_dataset(
         )
 
     positives, negatives = _partition_find_results(media_results)
-    del temp_medias, X_all
+    # Drop the score-space matrices eagerly (temp_medias is freed when this
+    # frame returns).  Both are captured by the _matrix_for closure, so they are
+    # cleared in place rather than ``del``'d (deleting a closed-over name is a
+    # SyntaxError).
+    matrix_cache.clear()
     gc.collect()
     return positives, negatives, scored_units, added_units, detected_media_type
 
