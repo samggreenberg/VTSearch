@@ -7,7 +7,6 @@ import re
 import shutil
 import time
 import uuid
-import zipfile
 from pathlib import Path
 from typing import Any, Optional, cast
 from urllib.parse import urlencode
@@ -199,23 +198,11 @@ def _ensure_bbc_extracted(extract_dir: Path, on_progress: ProgressCallback) -> N
         )
 
         if not extract_dir.exists():
-            on_progress("extracting", "Extracting BBC News dataset...", 0, 0)
             raw_dir = temp_extract / "raw"
             raw_dir.mkdir(parents=True, exist_ok=True)
-            with zipfile.ZipFile(temp_archive, "r") as zip_ref:
-                # The zip may contain a top-level folder (e.g. "bbc/"); extract
-                # all members and then locate category directories below.
-                members = zip_ref.namelist()
-                total = len(members)
-                for i, member in enumerate(members):
-                    if i % 100 == 0 or i == total - 1:
-                        on_progress(
-                            "extracting",
-                            "Extracting BBC News dataset...",
-                            i + 1,
-                            total,
-                        )
-                    zip_ref.extract(member, raw_dir)
+            # The zip may contain a top-level folder (e.g. "bbc/"); extract
+            # all members and then locate category directories below.
+            _core._extract_archive(temp_archive, "bbc-fulltext.zip", raw_dir, "BBC News dataset", on_progress)
 
             # Find the directory that contains the category subfolders.
             _bbc_root = _find_bbc_root(raw_dir)
