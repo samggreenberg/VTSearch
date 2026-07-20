@@ -54,9 +54,12 @@ def resolve_labelset_local_state(labelset, snap):
     if labelset is None:
         return None, None, None, False
 
-    from vtscore.state import build_media_lookup, resolve_media_ids
+    from vtscore.state import cached_media_lookups, resolve_media_ids
 
-    origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
+    # *snap* is the active dataset's medias snapshot (this runs inside the
+    # caller's ``thread_dataset_context(ds_ctx)``), so the revision-keyed cache
+    # is consistent with it - reused across clicks instead of rebuilt (S14).
+    origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
     local_good: set[int] = set()
     local_bad: set[int] = set()
     training_medias: dict[int, dict] = {}

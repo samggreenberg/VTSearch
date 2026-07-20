@@ -53,7 +53,7 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:
     from vtscore.state import (
         _state_lock,
         apply_label,
-        build_media_lookup,
+        cached_md5_lookup,
         get_active_context,
         next_media_id,
         snapshot_medias,
@@ -69,7 +69,7 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:
     if not snap:
         return 0
 
-    _, md5_lookup, _ = build_media_lookup(snap)
+    md5_lookup = cached_md5_lookup()
     server_media_dir = DATA_DIR / "example_media"
 
     # Determine the embedder and media type from the loaded dataset so we

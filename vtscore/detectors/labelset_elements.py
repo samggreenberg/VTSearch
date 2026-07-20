@@ -70,7 +70,7 @@ def resolve_current_dataset_cid(
     invariant is covered by ``test_collapse_duplicates_yields_unique_md5_lookup``.
     """
     from vtscore.state import (
-        build_media_lookup,
+        cached_media_lookups,
         resolve_media_ids,
         snapshot_medias,
     )
@@ -79,7 +79,7 @@ def resolve_current_dataset_cid(
         snap = snapshot_medias()
         if not snap:
             return None
-        lookups = build_media_lookup(snap)
+        lookups = cached_media_lookups()
     origin_lookup, md5_lookup, name_lookup = lookups
     cids = resolve_media_ids(elem.to_dict(), origin_lookup, md5_lookup, name_lookup)
     return cids[0] if cids else None
@@ -156,7 +156,7 @@ def build_labels_detail(detector_data: dict[str, Any]) -> dict[str, Any]:
 
     Returns ``{"good": [...], "bad": [...], "media_type": "..."}``.
     """
-    from vtscore.state import build_media_lookup, get_active_detector_context, snapshot_medias
+    from vtscore.state import cached_media_lookups, get_active_detector_context, snapshot_medias
 
     media_type = detector_data.get("media_type", "") or ""
     labelset = LabelSet.from_dict(detector_data.get("labelset") or {})
@@ -165,11 +165,12 @@ def build_labels_detail(detector_data: dict[str, Any]) -> dict[str, Any]:
     click_times = dict(det_ctx.vote_click_times)
     learned_scores = dict(det_ctx.last_learned_scores)
 
-    # Build the origin/md5/name lookup tables once and thread them through every
-    # element's view, so the labels-detail poll is O(N + labels) instead of
-    # O(labels × N) (each per-element rebuild would json.dumps every origin).
+    # Reuse the active dataset's cached origin/md5/name lookup tables (S14) and
+    # thread them through every element's view, so the labels-detail poll is
+    # O(N + labels) - or O(labels) on a cache hit - instead of O(labels × N)
+    # (each per-element rebuild would json.dumps every origin).
     snap = snapshot_medias()
-    lookups = build_media_lookup(snap) if snap else None
+    lookups = cached_media_lookups() if snap else None
 
     good: list[dict[str, Any]] = []
     bad: list[dict[str, Any]] = []

@@ -30,6 +30,8 @@ from vtscore.state import (  # noqa: F401
     build_coverage_atlas_for_context,
     build_md5_lookup,
     build_media_lookup,
+    cached_md5_lookup,
+    cached_media_lookups,
     clear_all,
     clear_all_contexts,
     clear_all_detector_contexts,

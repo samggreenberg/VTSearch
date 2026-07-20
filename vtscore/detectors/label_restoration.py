@@ -82,7 +82,7 @@ def restore_labels_from_detector(det_data: dict) -> int:
     from vtscore.datasets.labelset import LabeledElement, LabelSet
     from vtscore.state import (
         apply_label,
-        build_media_lookup,
+        cached_media_lookups,
         resolve_media_ids,
         snapshot_medias,
     )
@@ -99,7 +99,7 @@ def restore_labels_from_detector(det_data: dict) -> int:
     if not snap:
         return 0
 
-    origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
+    origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
 
     restored = 0
     unresolved: list[LabeledElement] = []  # elements needing origin resolution
