@@ -617,10 +617,16 @@ class FindBoundaryNextQuerySchema(Schema):
         validate=validate.OneOf(["above", "below"]),
         metadata={"description": "Preferred face of the cutoff to serve next; falls back to the other side."},
     )
-    exclude = fields.Integer(
+    # Named ``exclude_id`` (not ``exclude``) because ``exclude`` is a reserved
+    # attribute on ``marshmallow.Schema``; ``data_key`` keeps the query param
+    # ``?exclude=``.
+    exclude_id = fields.Integer(
+        data_key="exclude",
         load_default=None,
         allow_none=True,
-        metadata={"description": "Media id to skip (the item just voted, if its verified-state may not be observed yet)."},
+        metadata={
+            "description": "Media id to skip (the item just voted, if its verified-state may not be observed yet)."
+        },
     )
 
     class Meta:

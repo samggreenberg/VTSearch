@@ -653,4 +653,4 @@ def find_boundary_next_route(query: dict):
     """
     from vtsearch.state import find_boundary_next  # noqa: PLC0415
 
-    return find_boundary_next(query["side"], exclude=query.get("exclude"))
+    return find_boundary_next(query["side"], exclude=query.get("exclude_id"))
