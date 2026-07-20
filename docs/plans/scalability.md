@@ -108,6 +108,14 @@ sidecar invalid); Docker / read-only filesystems (fall back to in-memory). A
 `--no-emb-sidecar` flag (or settings key) disables writing where the path is
 read-only.
 
+**Sidecar cleanup on delete/expiry is already covered.** `unregister_dataset`
+(`vtscore/datasets/registry.py`) deletes every file sharing the pkl's stem, not
+just the pkl itself — a `<dataset>.emb.npy` / `<dataset>.cids.npy` sidecar named
+`ds_<uuid>.emb.npy` next to `ds_<uuid>.pkl` is swept automatically on both the
+age-off and manual-delete paths (both route through `unregister_dataset`). No
+extra registry field or bookkeeping is needed as long as the sidecar filename
+keeps the pkl's stem as a prefix.
+
 ---
 
 ### S3 / S17 / S19: sparse sort results — top-K API + lazy frontend
