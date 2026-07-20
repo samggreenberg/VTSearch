@@ -100,7 +100,8 @@ VTSearch/
 │   │
 │   ├── embedding/                  Embedder façades and torch runtime
 │   │   ├── helpers.py              embed_audio_file / embed_image_file / embed_text_query / …
-│   │   ├── matrix.py               Cached contiguous (N, D) embedding matrix on DatasetContext
+│   │   ├── matrix.py               Cached contiguous (N, D) embedding matrix on DatasetContext;
+│   │   │                           mmap-backed via a `<pkl_stem>.embids/embmat.npy` sidecar
 │   │   └── loader.py               initialize_models, smart_preload_in_background
 │   │
 │   ├── detectors/                  Detector lifecycle; resolve→embed→train pipeline

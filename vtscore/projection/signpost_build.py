@@ -337,6 +337,10 @@ def _clusterable_vectors(matrix: np.ndarray, on_progress: ProgressFn | None = No
 
     if on_progress is not None:
         on_progress(0, 0, "Clustering regions…")
+    # Force an owned, writable copy: *matrix* may be a read-only mmap view
+    # (S1's embedding-matrix sidecar, docs/plans/scalability.md), and UMAP
+    # doesn't guarantee it never writes to its input in place.
+    matrix = np.array(matrix, dtype=np.float32, copy=True, order="C")
     n_components = min(_CLUSTER_DIM, matrix.shape[1], max(2, matrix.shape[0] - 2))
     reducer = umap.UMAP(n_components=n_components, metric="cosine")
     return np.asarray(reducer.fit_transform(matrix), dtype=np.float32)

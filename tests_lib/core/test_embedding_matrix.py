@@ -13,6 +13,7 @@ import threading
 import numpy as np
 import pytest
 
+from vtscore.datasets import registry
 from vtscore.embedding import matrix as matrix_mod
 from vtscore.embedding.matrix import (
     get_embedding_matrix,
@@ -401,3 +402,131 @@ class TestMediaRevisionCounter:
         ids, mat_after = get_embedding_matrix(ctx)
         assert ids == [1, 2, 3]
         assert mat_after[0, 0] == 101.0
+
+
+class TestEmbeddingMatrixSidecar:
+    """S1 (docs/plans/scalability.md): the mmap embedding-matrix sidecar.
+
+    A dataset backed by a registry entry gets its primary matrix persisted
+    as a ``<pkl_stem>.embids.npy`` / ``<pkl_stem>.embmat.npy`` pair after the
+    first build, so a fresh ``DatasetContext`` for the same dataset can mmap
+    it instead of rebuilding from per-item embeddings.
+    """
+
+    def _register(self, tmp_path, num_items: int = 3) -> str:
+        pkl_dir = tmp_path / "saved"
+        pkl_dir.mkdir(parents=True, exist_ok=True)
+        entry = registry.register_dataset(
+            name="sidecar-test",
+            media_type="audio",
+            num_items=num_items,
+            pkl_path=str(pkl_dir / "ds_sidecar.pkl"),
+        )
+        return entry["id"]
+
+    def _medias(self, n: int = 3) -> dict:
+        return {
+            cid: {"id": cid, "embedder": "e5", "embeddings": {"e5": np.full(4, float(cid), dtype=np.float32)}}
+            for cid in range(1, n + 1)
+        }
+
+    def test_sidecar_written_after_first_build(self, tmp_path):
+        dataset_id = self._register(tmp_path)
+        ctx = DatasetContext(dataset_id)
+        ctx.medias = self._medias()
+
+        get_embedding_matrix(ctx)
+
+        entry = registry.get_dataset(dataset_id)
+        ids_path, mat_path = matrix_mod._emb_sidecar_paths(entry["pkl_path"])
+        assert ids_path.is_file()
+        assert mat_path.is_file()
+        assert np.array_equal(np.load(ids_path), np.array([1, 2, 3], dtype=np.int64))
+
+    def test_fresh_context_mmaps_the_sidecar(self, tmp_path):
+        dataset_id = self._register(tmp_path)
+        ctx1 = DatasetContext(dataset_id)
+        ctx1.medias = self._medias()
+        get_embedding_matrix(ctx1)  # writes the sidecar
+
+        # A second context for the same registered dataset stands in for a
+        # fresh process re-loading the same pkl from disk.
+        ctx2 = DatasetContext(dataset_id)
+        ctx2.medias = self._medias()
+        ids, mat = get_embedding_matrix(ctx2)
+
+        assert ids == [1, 2, 3]
+        assert mat[0, 0] == 1.0
+        assert mat[2, 0] == 3.0
+        assert isinstance(ctx2._emb_matrix, np.memmap), "expected the mmap sidecar path, not a fresh rebuild"
+
+    def test_unregistered_dataset_never_writes_a_sidecar(self, tmp_path):
+        """No registry entry -> no pkl_path -> the mmap cache stays opt-in only."""
+        ctx = DatasetContext("not_registered")
+        ctx.medias = self._medias()
+
+        get_embedding_matrix(ctx)
+
+        assert not any(tmp_path.iterdir())
+
+    def test_id_mismatch_sidecar_falls_back_to_live_rebuild(self, tmp_path):
+        """A sidecar written for a different id set must never be trusted."""
+        dataset_id = self._register(tmp_path)
+        entry = registry.get_dataset(dataset_id)
+        ids_path, mat_path = matrix_mod._emb_sidecar_paths(entry["pkl_path"])
+        matrix_mod._atomic_save_npy(ids_path, np.array([1, 2, 99], dtype=np.int64))
+        matrix_mod._atomic_save_npy(mat_path, np.zeros((3, 4), dtype=np.float32))
+
+        ctx = DatasetContext(dataset_id)
+        ctx.medias = self._medias()
+        ids, mat = get_embedding_matrix(ctx)
+
+        assert ids == [1, 2, 3]
+        assert mat[0, 0] == 1.0  # live value, not the bogus zero-filled sidecar
+
+    def test_dim_mismatch_sidecar_falls_back_to_live_rebuild(self, tmp_path):
+        """A same-id-count sidecar with the wrong dimension must never be trusted."""
+        dataset_id = self._register(tmp_path)
+        entry = registry.get_dataset(dataset_id)
+        ids_path, mat_path = matrix_mod._emb_sidecar_paths(entry["pkl_path"])
+        matrix_mod._atomic_save_npy(ids_path, np.array([1, 2, 3], dtype=np.int64))
+        matrix_mod._atomic_save_npy(mat_path, np.zeros((3, 99), dtype=np.float32))
+
+        ctx = DatasetContext(dataset_id)
+        ctx.medias = self._medias()
+        ids, mat = get_embedding_matrix(ctx)
+
+        assert ids == [1, 2, 3]
+        assert mat.shape == (3, 4)
+        assert mat[0, 0] == 1.0
+
+    def test_invalidate_disables_sidecar_for_rest_of_context_lifetime(self, tmp_path):
+        """Root-cause Pattern #4 for the sidecar: a same-id in-place vector
+        rewrite must never be served stale from the on-disk mmap cache."""
+        dataset_id = self._register(tmp_path)
+        ctx1 = DatasetContext(dataset_id)
+        ctx1.medias = self._medias()
+        get_embedding_matrix(ctx1)  # writes the sidecar with row 0 == 1.0
+
+        ctx2 = DatasetContext(dataset_id)
+        ctx2.medias = self._medias()
+        ids, mat = get_embedding_matrix(ctx2)
+        assert mat[0, 0] == 1.0
+        assert isinstance(ctx2._emb_matrix, np.memmap)
+
+        # An in-place rewrite (re-embed/clip) with the same id set - the
+        # sidecar's id-list check alone cannot see this.
+        ctx2.medias[1]["embeddings"]["e5"] = np.full(4, 42.0, dtype=np.float32)
+        invalidate_embedding_matrix(ctx2)
+        assert ctx2._emb_sidecar_disabled is True
+
+        ids, mat = get_embedding_matrix(ctx2)
+        assert mat[0, 0] == 42.0, "must reflect the in-place rewrite, not the stale mmap'd sidecar"
+        assert not isinstance(ctx2._emb_matrix, np.memmap)
+
+        # The on-disk sidecar itself must also be refreshed (not just this
+        # context's in-memory view), or a third, later-loading context would
+        # still mmap the stale pre-rewrite values.
+        entry = registry.get_dataset(dataset_id)
+        _, mat_path = matrix_mod._emb_sidecar_paths(entry["pkl_path"])
+        assert np.load(mat_path)[0, 0] == 42.0
