@@ -14,6 +14,21 @@
   cursor: pointer;
 }
 
+// Oversized sorts: the minimap can't honestly represent the full ranking, so
+// the strip stays in the layout (no panel shift) but is inert and visibly
+// disabled, with a tooltip explaining why.
+.stripe-overview--disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-dim);
+  background: repeating-linear-gradient(
+    45deg,
+    var(--bg-subtle),
+    var(--bg-subtle) 3px,
+    transparent 3px,
+    transparent 6px
+  );
+}
+
 .stripe-container {
   position: absolute;
   inset: 0;

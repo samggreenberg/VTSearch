@@ -1316,14 +1316,6 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.sortState.selectMode === 'top') {
       const next = sortOrder.find((s) => !isVoted(s.id));
       if (next) this.mediaState.selectMedia(next.id);
-    } else if (this.sortState.selectMode === 'bottom') {
-      for (let i = sortOrder.length - 1; i >= 0; i--) {
-        const s = sortOrder[i];
-        if (!isVoted(s.id)) {
-          this.mediaState.selectMedia(s.id);
-          break;
-        }
-      }
     } else if (this.sortState.selectMode === 'hard' && this.sortState.threshold !== null) {
       const threshold = this.sortState.threshold!;
       // Find the index where the threshold falls in the sorted (descending) list.

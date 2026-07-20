@@ -170,8 +170,78 @@ trigger at the end; `cachedOrderedItems` stays bounded to the loaded window
 (≤700). Grid/list virtual scroll (shipped) already handles a fixed window; this
 caps the array size at the API level.
 
-**Complexity:** 2–3 PRs (backend sort API, frontend SortStateService, frontend
-media-list).
+**This is not a faithful "same UX, just windowed" swap.** A code trace (2026-07)
+found many Label/Find surfaces that assume the client holds the *entire* ranked
+order. Each needs an explicit decision or a server-assisted redesign — the three
+items alone don't cover them:
+
+- **Bulk actions ship the full id list to the backend.** In Find,
+  `unverifiedGoodIds()` / `goodIds()` derive the whole above-cutoff id set
+  *client-side* and hand it to **Browse**, **To Dataset (promote)**, and
+  **Export**. If `above_threshold` exceeds the window's `K_ABOVE`, these
+  silently truncate — a correctness bug, not a perf one. Fix: a server-side
+  "operate on all-above-threshold" path (the ids come from the backend's full
+  list, keyed by the sort-generation token below), not from the client window.
+- **Find boundary walk** (`advanceToBoundary`) scans the whole unverified order
+  for the nearest unverified item on each side of the cutoff; a window edge
+  makes it falsely report "All items reviewed." Needs a server endpoint that
+  returns the next unverified item above/below a cutoff, or a guarantee that the
+  window always straddles the boundary with slack.
+- **Diversity "New" select mode** (`fetchDiversityNext`) POSTs the entire
+  `{id: score}` map to `/api/coverage-atlas/next`; a partial window degrades the
+  direction signal. Send only the ids the server needs, or move the score lookup
+  server-side.
+- **`best_region` must stay in the window shape.** Region-aware datasets
+  (DINOv2/v3) read it from `sortOrder` for the center-panel overlay
+  (`center-panel.ts`); the example JSON above drops it. Keep `best_region` on
+  each windowed result. The overlay still can't paint for an item outside the
+  loaded window (e.g. after a stripe jump) — acceptable, but note it.
+- **Server-side list lifetime.** The sketch says "the backend holds the full
+  list in the existing `AsyncJob.result`," but only *learned-sort* is a job.
+  **Text-sort and example-sort are synchronous** (`sort_clips`, `example_sort`
+  return inline). Paging them means new per-session cached sorted lists with an
+  eviction policy, and the ~50 MB @1 M list now stays resident *server-side*
+  (× concurrent users) instead of being handed off and GC'd.
+- **`/api/sort/page` needs a sort-generation token.** A retrain / re-sort between
+  the initial response and a page fetch shifts offsets → duplicate/missing rows.
+  Return a generation id and require it on the page URL; a stale token 409s so
+  the client refetches from the top.
+- **Inclusion slider** currently just moves the line over frozen client-side
+  scores (`onInclusionChange`) and recomputes `above_threshold` locally. Under a
+  window, moving the cutoff changes which items are "above," so the slider must
+  refetch the window (scores stay frozen server-side, so no re-sort — just a new
+  slice + count).
+
+**Decisions (2026-07, from the S3/S17/S19 evaluation):**
+
+- **"Bottom" select mode is dropped.** The picker only ever offered Top / Hard /
+  New; `'bottom'` was a dead `SelectMode` variant + one branch in
+  `autoSelectNext`. Removed, so "walk from the end of the full order" is no
+  longer a constraint the window must satisfy. (Landed as the first slice.)
+- **The stripe minimap is gated above a large-sort size, not made windowed.**
+  The stripe is a full-order minimap by definition; it can't be honestly drawn
+  from a window. Above `STRIPE_MAX_ITEMS` it renders a disabled strip with a
+  clear tooltip ("Minimap unavailable for large sorts") instead of a wrong
+  picture. This also kills its O(N) dot-build loop at scale. (Landed as the
+  first slice; the threshold is the natural home for the future window's own
+  cutoff.)
+
+**Complexity:** 4–5 PRs, not 2–3. Sequence:
+
+1. **Decisions + cleanups (shipped first):** drop dead `bottom` select mode;
+   gate the stripe above `STRIPE_MAX_ITEMS` with clear messaging. Non-breaking,
+   independent of the API change.
+2. **Backend windowed sort API:** the windowed response shape + `/api/sort/page`
+   + sort-generation token + server-side cached lists for the two synchronous
+   sort routes. Keep returning the full `results` too (additive) so the frontend
+   keeps working until PR 4.
+3. **Server-side bulk / navigation endpoints:** "all ids above cutoff (by
+   generation token)" for Browse / To Dataset / Export, and "next unverified
+   above/below cutoff" for the Find boundary walk.
+4. **Frontend `SortStateService` → windowed model + media-list "Load more"**,
+   switching the Find bulk actions and boundary walk to the PR-3 endpoints. This
+   is the PR that stops relying on the full client-side array; land it atomically
+   with the backend dropping the full `results` payload.
 
 ---
 
