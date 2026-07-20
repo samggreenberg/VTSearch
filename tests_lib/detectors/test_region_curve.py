@@ -584,6 +584,27 @@ def test_realistic_trace_contract():
         assert e["matched_region"] == int(np.argmax(e["region_scores"]))
 
 
+def test_realistic_neg_regions_bags_all_windows():
+    """--neg-regions makes a Bad vote flood ALL of that image's region vectors (per-image bag via
+    train_rv_head) instead of the single whole-image vector — a different negative set, hence a
+    different trained head, vs the box-pool (whole-image) default. Both run to finite metrics."""
+    from dataclasses import replace
+
+    base = _realistic_inputs()  # multi-region pool, leaf-mask all-True → mat[mask] == all windows
+    whole_neg = replace(base, region_voting=False, neg_regions=False)  # box-pool: whole-image negatives
+    region_neg = replace(base, region_voting=False, neg_regions=True)  # "No → all windows" bags
+    _, fin_w = evaluate_realistic_curve(whole_neg, "mlp", seeds=[0], max_labels=12, return_finals=True)
+    _, fin_r = evaluate_realistic_curve(region_neg, "mlp", seeds=[0], max_labels=12, return_finals=True)
+    assert fin_w[0]["t"] >= 1 and fin_r[0]["t"] >= 1
+    assert np.isfinite(fin_w[0]["threshold"]) and np.isfinite(fin_r[0]["threshold"])
+    # Different negatives → different learned head → different scores on the same probe regions.
+    mat = base.test_region_mats[0]
+    sw = np.asarray(fin_w[0]["predict"](mat)).reshape(-1)
+    sr = np.asarray(fin_r[0]["predict"](mat)).reshape(-1)
+    assert sw.shape == sr.shape
+    assert not np.allclose(sw, sr, atol=1e-4)
+
+
 def test_realistic_return_finals_default_is_plain_list():
     inputs = _realistic_inputs()
     out = evaluate_realistic_curve(inputs, "mlp", seeds=[0], max_labels=6)

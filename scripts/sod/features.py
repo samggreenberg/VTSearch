@@ -218,22 +218,25 @@ def build_curve_inputs(
     *,
     class_name: str,
     meta: dict,
-    neg_regions: bool = False,
+    neg_regions: bool = True,
     region_voting: bool = False,
     build_pool: bool = False,
 ) -> RegionCurveInputs:
     """Materialize (cached) vectors from a partitioned :class:`Split`.
 
-    ``neg_regions`` selects the MLP's negative training distribution: when False
-    (default), negatives are the *whole-image* vector of each training-negative
-    image; when True, negatives are that image's *proposed-region* vectors (same
-    distribution as the test regions the head is scored on), which better matches
-    train to test for crop/HAC proposals. No-op for ``whole`` (its only region is
-    the full frame). Reads region vecs from the same cached npz — no re-embedding.
+    ``neg_regions`` selects the MLP's negative training distribution in the realistic
+    loop (it is threaded onto :class:`RegionCurveInputs` and read by ``_train_pool_head``):
+    when False (default), a Bad vote contributes that image's *whole-image* vector; when
+    True, it contributes **all of that image's region/window vectors** as one per-image
+    negative **bag** (via ``train_rv_head``) — the same distribution the head is scored on,
+    "No → all windows" for crop/sliding/dino/box-pool. No-op for ``whole`` (its only region
+    is the full frame). Reads region vecs from the already-cached npz — no re-embedding, so
+    it needs no distinct cache slug.
 
     ``region_voting`` (HAC/patch only) is the faithful app-detector path: one
     snapped positive per image, and negatives as per-image **bags** of CLS+leaf
-    vectors (``leaf_mask``). It overrides ``neg_regions``. The exemplar cache must
+    vectors (``leaf_mask``). It overrides ``neg_regions`` (both route through the same
+    bag path; region-voting additionally filters to childless nodes). The exemplar cache must
     have been written by a region-voting :class:`~vtscore.eval.region_sources.RegionSource`
     (one snapped vector per image); use a distinct ``proposal_slug`` so it doesn't
     collide with the box-pool exemplars.
@@ -323,6 +326,7 @@ def build_curve_inputs(
         test_region_boxes=test_boxes,
         test_gt_boxes=test_gt,
         region_voting=region_voting,
+        neg_regions=neg_regions,
         neg_train_bags=neg_bags,
         pool_ids=pool_ids,
         pool_region_mats=pool_region_mats,
@@ -336,5 +340,6 @@ def build_curve_inputs(
             "n_train_pos": len(split.train_pos),
             "n_train_neg": len(split.train_neg),
             "n_pos_exemplars": int(pos_exemplars.shape[0]),
+            "neg_regions": bool(neg_regions),
         },
     )

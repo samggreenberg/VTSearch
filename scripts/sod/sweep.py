@@ -168,6 +168,7 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
             class_name=cell["class"],
             meta=meta,
             region_voting=region_voting,
+            neg_regions=args.neg_regions,
             build_pool=True,
         )
 
@@ -309,11 +310,20 @@ def main() -> int:
     ap.add_argument(
         "--region-voting",
         action=argparse.BooleanOptionalAction,
-        default=False,
+        default=True,
         help="faithful app-detector label construction for the hac proposal on dinov2/dinov3: "
         "good votes snap to the nearest HAC node, bad votes flood CLS+leaves as negatives, "
         "bag-aware per-image weighting + grouped cross-calibration (mirrors `vtscore.eval --region-voting`). "
         "No-op for non-hac proposals. Uses a distinct 'hac_rv' cache slug.",
+    )
+    ap.add_argument(
+        "--neg-regions",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="realistic loop: a Bad vote contributes ALL of that image's region/window vectors as "
+        "one per-image negative bag (via train_rv_head) instead of just the whole-image vector "
+        "('No → all windows'). For sliding/dino/box-pool; no-op for whole; subsumed by --region-voting "
+        "on hac. No re-embed (reuses the cached region vecs); results carry neg_regions in meta.",
     )
     ap.add_argument("--max-labels", type=int, default=60, help="realistic mode: max total annotations t per seed")
     ap.add_argument(
@@ -380,6 +390,14 @@ def main() -> int:
         choices=("minmax", "std", "none", "all"),
         default="std",
         help="seed spread on --viz plots: minmax/std band, none, or 'all' (one thin line per seed)",
+    )
+    ap.add_argument(
+        "--summary",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="with --viz and ≥2 classes, also emit summary_<dataset>_<metric>.png (per-config curves "
+        "macro-averaged across classes; band = across-class spread, or one line per class with "
+        "--viz-band all)",
     )
     args = ap.parse_args()
 
@@ -448,19 +466,31 @@ def _run_viz(args, cells: list[dict], cache_root: Path, all_rows: list[dict], ou
     """Emit plots + split galleries after the sweep. (Per-cell prediction overlays and
     labeling traces are rendered inline in ``_run_cell`` from the loop's final heads.)"""
     from features import prep_timing_summary
-    from plots import render_all, render_inference_time
+    from plots import render_all, render_inference_time, render_summary
     from viz import render_split_gallery
 
     print("=== viz ===", flush=True)
+    _metrics = ("cost", "fpr", "fnr", "f1", "mean_iou", "corloc")
     if all_rows:
         render_all(
             all_rows,
             out_dir / "plots",
-            metrics=("cost", "fpr", "fnr", "f1", "mean_iou", "corloc"),
+            metrics=_metrics,
             band=args.viz_band,
             x_label="total annotations t",
             x_tag="t",
         )
+        if args.summary:
+            # Cross-class summary: per-config curves macro-averaged over each dataset's classes
+            # (no-op unless a dataset has ≥2 classes). Same x-axis (total annotations t) as render_all.
+            render_summary(
+                all_rows,
+                out_dir / "plots",
+                metrics=_metrics,
+                band=args.viz_band,
+                x_label="total annotations t",
+                x_tag="t",
+            )
     # Total-time bar chart (per-config): embed+propose (cache misses this run) + MLP
     # train+score (always runs, so this has data even on a fully-cached run).
     total_timing = _build_total_timing(prep_timing_summary(), all_rows)
