@@ -39,8 +39,6 @@ Per-detector embedder-type follow-ups:
 
 <!-- item-sep -->
 
-- [ ] #2670 — Detector in-memory primary can drift across A→B→A dataset switches
-
 <!-- item-sep -->
 
 - **Per-detector coverage atlas** and **changing a detector's type after
