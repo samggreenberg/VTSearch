@@ -1,7 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 
 export type SortMode = 'text' | 'learned' | 'load';
-export type SelectMode = 'top' | 'bottom' | 'hard' | 'new';
+export type SelectMode = 'top' | 'hard' | 'new';
 
 export interface SortedItem {
   id: number;

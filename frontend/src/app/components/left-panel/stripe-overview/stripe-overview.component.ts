@@ -2,6 +2,18 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 
 import { SortedItem } from '../left-panel.component';
 
+/**
+ * Sort size above which the minimap is disabled rather than drawn.  The stripe
+ * is a minimap of the *entire* sort order — every dot is positioned by an item's
+ * rank across the whole ranking — so beyond a large-sort size it is both
+ * O(N)-expensive to build and, once the frontend moves to a windowed sort model
+ * (scalability.md S3/S17/S19), impossible to draw honestly from the loaded
+ * window.  Above this count we render a disabled strip with a clear tooltip
+ * instead of a misleading picture.  This is the natural home for the future
+ * window's own cutoff.
+ */
+export const STRIPE_MAX_ITEMS = 20000;
+
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-stripe-overview',
@@ -24,7 +36,15 @@ export class StripeOverviewComponent {
   /** Threshold position, recomputed automatically when inputs change. */
   readonly cachedThresholdPosition = computed(() => this.buildThresholdPosition());
 
+  /**
+   * True when the sort is too large for an honest minimap.  In this state the
+   * strip stays in the layout (so panels don't shift) but shows a disabled
+   * placeholder with an explanatory tooltip instead of dots.
+   */
+  readonly oversized = computed(() => (this.sortOrder()?.length ?? 0) > STRIPE_MAX_ITEMS);
+
   onStripeKeyboard(): void {
+    if (this.oversized()) return;
     const sortOrder = this.sortOrder();
     if (!sortOrder || sortOrder.length === 0) return;
     const midIndex = Math.floor(sortOrder.length / 2);
@@ -32,6 +52,7 @@ export class StripeOverviewComponent {
   }
 
   onStripeClick(event: MouseEvent): void {
+    if (this.oversized()) return;
     const sortOrder = this.sortOrder();
     if (!sortOrder || sortOrder.length === 0) return;
     const el = event.currentTarget as HTMLElement;
@@ -49,7 +70,7 @@ export class StripeOverviewComponent {
 
   private buildDots(): { top: number; type: 'good' | 'bad' | 'selected' }[] {
     const sortOrder = this.sortOrder();
-    if (!sortOrder || sortOrder.length === 0) return [];
+    if (!sortOrder || sortOrder.length === 0 || sortOrder.length > STRIPE_MAX_ITEMS) return [];
 
     const goodVotes = this.goodVotes();
     const badVotes = this.badVotes();
@@ -78,7 +99,7 @@ export class StripeOverviewComponent {
   private buildThresholdPosition(): number | null {
     const sortOrder = this.sortOrder();
     const threshold = this.threshold();
-    if (!sortOrder || threshold === null) return null;
+    if (!sortOrder || threshold === null || sortOrder.length > STRIPE_MAX_ITEMS) return null;
     const total = sortOrder.length;
     for (let i = 0; i < total; i++) {
       if (sortOrder[i].score < threshold) {
