@@ -33,6 +33,66 @@ def _load_clips_from_pickle(file_path: Path, thin: bool = False) -> dict[int, di
     return temp_medias
 
 
+def _parse_keep_embedders(raw: Any) -> list[str]:
+    """Parse the ``keep_embedders`` field into a list of concrete names.
+
+    Accepts a list of names or a comma-separated string; empty / missing → ``[]``
+    (no conflict resolution requested — the combined dataset keeps every source's
+    vectors untouched, the pre-conflict-UI behaviour).
+    """
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        return [str(n).strip() for n in raw if str(n).strip()]
+    return [n.strip() for n in str(raw).split(",") if n.strip()]
+
+
+def _apply_keep_embedders(media: dict[str, Any], keep: set[str], kept_patch: str | None, kept_structural: str | None) -> None:
+    """Strip *media* down to the conflict-resolved *keep* embedder set, in place.
+
+    For each media in a conflict-resolved combine:
+
+    * every per-embedder vector whose name isn't in *keep* is dropped, so a
+      "dropped" type leaves no vector behind and a "re-embed" loser is removed
+      (the pipeline's embed stage then fills the kept winner on media that lack
+      it, since ``media_embedding(m, winner)`` is now ``None``);
+    * patch side-channels (``patch_regions`` / ``patch_grid``) are cleared unless
+      the media's own patch embedder is the kept one, and ``local_features``
+      unless its structural embedder is the kept one — a mismatch means the
+      side-channel belongs to a stripped embedder and is re-derived (or left
+      absent, if the type was dropped) by the embed stage's back-fill pass;
+    * the primary ``embedder`` marker is re-pointed at the combined score
+      embedder so every media in the merged dataset agrees on its primary.
+
+    Vectors/side-channels are never persisted independently (see the
+    no-persisted-vectors rule); this only prunes the in-memory dict the embed
+    stage then repopulates from source content.
+    """
+    from vtscore.embedding.binding import derive_binding_from_names  # noqa: PLC0415
+    from vtscore.embedding.media_vectors import EMBEDDINGS_KEY, media_embedder_names  # noqa: PLC0415
+
+    orig_text, orig_patch, orig_structural = derive_binding_from_names(media_embedder_names(media))
+
+    embs = media.get(EMBEDDINGS_KEY)
+    if isinstance(embs, dict):
+        for name in list(embs.keys()):
+            if name not in keep:
+                del embs[name]
+
+    if orig_patch != kept_patch:
+        media.pop("patch_regions", None)
+        media.pop("patch_grid", None)
+    if orig_structural != kept_structural:
+        media.pop("local_features", None)
+
+    # Re-point the primary at the routed score marker (structural ▸ patch ▸
+    # text); a slot-less single-vector keep set has no role slots, so fall back
+    # to any kept name (its own primary vector drives cosine sort / the MLP).
+    kept_text = derive_binding_from_names(sorted(keep))[0]
+    score = kept_structural or kept_patch or kept_text
+    media["embedder"] = score or (next(iter(sorted(keep))) if keep else media.get("embedder", ""))
+
+
 def _parse_dataset_paths(raw: Any) -> list[Path]:
     """Parse the ``datasets`` field into a validated list of Paths.
 
@@ -161,6 +221,7 @@ class CombineDatasetsImporter(ImporterBase):
         - a Python list of path strings (when called from the API route).
         """
         paths = _parse_dataset_paths(field_values.get("datasets", ""))
+        keep_embedders = _parse_keep_embedders(field_values.get("keep_embedders"))
         progress = _get_progress()
 
         all_clips: list[dict[str, Any]] = []
@@ -188,6 +249,18 @@ class CombineDatasetsImporter(ImporterBase):
 
         if not all_clips:
             raise ValueError("No medias found in any of the selected datasets.")
+
+        # Conflict resolution: when the caller settled per-type embedder
+        # conflicts, prune every media to the kept embedder set so the pipeline's
+        # embed stage re-embeds the chosen winners and dropped types leave no
+        # vector behind.  No keep set → the combined dataset is untouched.
+        if keep_embedders:
+            keep_set = set(keep_embedders)
+            from vtscore.embedding.binding import derive_binding_from_names  # noqa: PLC0415
+
+            _, kept_patch, kept_structural = derive_binding_from_names(keep_embedders)
+            for media in all_clips:
+                _apply_keep_embedders(media, keep_set, kept_patch, kept_structural)
 
         # Assign fresh sequential IDs and populate the target medias dict
         medias.clear()
@@ -221,6 +294,13 @@ class CombineDatasetsImporter(ImporterBase):
         across yields via a running ``seen_md5s`` set.
         """
         paths = _parse_dataset_paths(field_values.get("datasets", ""))
+        keep_embedders = _parse_keep_embedders(field_values.get("keep_embedders"))
+        keep_set = set(keep_embedders)
+        kept_patch = kept_structural = None
+        if keep_embedders:
+            from vtscore.embedding.binding import derive_binding_from_names  # noqa: PLC0415
+
+            _, kept_patch, kept_structural = derive_binding_from_names(keep_embedders)
         progress = _get_progress()
         seen_md5s: set[str] = set()
         mtype_state: list[str | None] = [None]
@@ -230,6 +310,8 @@ class CombineDatasetsImporter(ImporterBase):
                 continue
             chunk_medias: dict[int, dict[str, Any]] = {}
             for new_id, media in enumerate(deduped, start=1):
+                if keep_set:
+                    _apply_keep_embedders(media, keep_set, kept_patch, kept_structural)
                 media["id"] = new_id
                 chunk_medias[new_id] = media
             yield chunk_medias

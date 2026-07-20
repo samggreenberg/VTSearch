@@ -108,14 +108,26 @@ def list_registered_datasets():
         entry.setdefault("num_dupes", 0)
         entry.setdefault("embedder", "")
         entry.setdefault("readers", [])
+        # The concrete embedders this dataset binds.  Legacy entries (registered
+        # before the field existed) fall back to their single primary embedder.
+        bound = entry.get("bound_embedders")
+        if not bound:
+            bound = [entry["embedder"]] if entry.get("embedder") else []
+            entry["bound_embedders"] = bound
         # The embedder types this dataset supplies, for the detector/dataset
-        # compatibility gate.  Fall back to classifying the single primary
-        # embedder for legacy entries registered before the field existed.
+        # compatibility gate.  Fall back to classifying the bound embedders.
         if not entry.get("embedder_types"):
-            from vtscore.embedding.binding import embedder_type
+            from vtscore.embedding.binding import dataset_supplied_types
 
-            t = embedder_type(entry.get("embedder", ""))
-            entry["embedder_types"] = [t] if t else []
+            entry["embedder_types"] = sorted(dataset_supplied_types(bound))
+        # One concrete embedder per type (semantic / patch_semantic / structural),
+        # so the Combine-Datasets modal can detect per-type conflicts client-side
+        # without shipping the capability taxonomy to the frontend.
+        from vtscore.embedding.binding import EMBEDDER_TYPES, embedder_of_type
+
+        entry["embedders_by_type"] = {
+            t: name for t in EMBEDDER_TYPES if (name := embedder_of_type(bound, t))
+        }
         # Resolve clipper name to display name; default clippers show as "-"
         raw_clipper = entry.get("clipper", "")
         if raw_clipper:
