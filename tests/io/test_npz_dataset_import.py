@@ -37,6 +37,13 @@ from vtscore.datasets.importers.server_files import (
 )
 
 
+def _read_multi(npz):
+    """Read a per-embedder archive, asserting it is recognised (narrows None)."""
+    result = read_npz_multi_vectors(npz)
+    assert result is not None
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Low-level NPZ reader helper
 # ---------------------------------------------------------------------------
@@ -173,7 +180,7 @@ class TestReadNpzMultiVectors:
             vectors_siglip=siglip,
             vectors_dinov3_patch=patch,
         )
-        mapping, primary = read_npz_multi_vectors(npz)
+        mapping, primary = _read_multi(npz)
         assert set(mapping) == {"a.jpg", "b.jpg"}
         assert set(mapping["a.jpg"]) == {"siglip", "dinov3_patch"}
         np.testing.assert_array_equal(mapping["a.jpg"]["siglip"], siglip[0])
@@ -190,7 +197,7 @@ class TestReadNpzMultiVectors:
             vectors_dinov3_patch=np.zeros((1, 4), dtype=np.float32),
             embedder_name=np.array("dinov3_patch"),
         )
-        _mapping, primary = read_npz_multi_vectors(npz)
+        _mapping, primary = _read_multi(npz)
         assert primary == "dinov3_patch"
 
     def test_primary_falls_back_when_scalar_not_a_column(self, tmp_path):
@@ -203,7 +210,7 @@ class TestReadNpzMultiVectors:
             vectors_siglip=np.zeros((1, 3), dtype=np.float32),
             embedder_name=np.array("clip"),
         )
-        _mapping, primary = read_npz_multi_vectors(npz)
+        _mapping, primary = _read_multi(npz)
         assert primary == "siglip"
 
     def test_embedder_name_with_underscores_preserved(self, tmp_path):
@@ -215,7 +222,7 @@ class TestReadNpzMultiVectors:
             filenames=np.array(["a.jpg"]),
             vectors_dinov3_patch=np.zeros((1, 4), dtype=np.float32),
         )
-        mapping, _primary = read_npz_multi_vectors(npz)
+        mapping, _primary = _read_multi(npz)
         assert set(mapping["a.jpg"]) == {"dinov3_patch"}
 
     def test_mismatched_column_length_raises(self, tmp_path):
@@ -255,7 +262,7 @@ class TestWriteNpzMultiVectors:
         npz = tmp_path / "out.npz"
         write_npz_multi_vectors(npz, mapping, primary_embedder="dinov3_patch")
 
-        read_back, primary = read_npz_multi_vectors(npz)
+        read_back, primary = _read_multi(npz)
         assert primary == "dinov3_patch"
         assert set(read_back) == set(mapping)
         for fname, cols in mapping.items():
@@ -266,7 +273,7 @@ class TestWriteNpzMultiVectors:
         mapping = {"a.jpg": {"siglip": np.ones(3, dtype=np.float32)}}
         npz = tmp_path / "out.npz"
         write_npz_multi_vectors(npz, mapping, compressed=True)
-        read_back, _primary = read_npz_multi_vectors(npz)
+        read_back, _primary = _read_multi(npz)
         np.testing.assert_array_equal(read_back["a.jpg"]["siglip"], np.ones(3, dtype=np.float32))
 
     def test_empty_mapping_raises(self, tmp_path):

@@ -346,7 +346,8 @@ def write_npz_multi_vectors(
         arrays["embedder_name"] = np.array(primary_embedder)
 
     save = np.savez_compressed if compressed else np.savez
-    save(str(npz_path), **arrays)
+    # numpy's savez stub mis-binds unpacked kwargs to allow_pickle.
+    save(str(npz_path), **arrays)  # pyright: ignore[reportArgumentType]
 
 
 def read_npz_archive_member_rows(npz_path: Path) -> list[dict]:
