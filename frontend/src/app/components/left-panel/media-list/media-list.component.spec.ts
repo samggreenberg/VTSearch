@@ -229,4 +229,43 @@ describe('MediaListComponent scroll-prefetch re-wiring', () => {
     vp2.scrolledIndexChange.next(3);
     expect(prefetchSpy).toHaveBeenCalledTimes(2);
   });
+
+  describe('windowed "Load more"', () => {
+    it('appends a trailing load-more grid row when hasMore is set', () => {
+      fixture.componentRef.setInput('sortOrder', [
+        { id: 1, score: 0.9 },
+        { id: 2, score: 0.5 },
+      ]);
+      fixture.componentRef.setInput('hasMore', true);
+      TestBed.tick();
+      const rows = component.gridRows;
+      expect(rows[rows.length - 1].kind).toBe('loadmore');
+    });
+
+    it('has no load-more row when hasMore is false', () => {
+      fixture.componentRef.setInput('sortOrder', [{ id: 1, score: 0.9 }]);
+      fixture.componentRef.setInput('hasMore', false);
+      TestBed.tick();
+      expect(component.gridRows.some((r) => r.kind === 'loadmore')).toBe(false);
+    });
+
+    it('onLoadMore emits when hasMore and not loading', () => {
+      fixture.componentRef.setInput('hasMore', true);
+      TestBed.tick();
+      const spy = vi.fn();
+      component.loadMore.subscribe(spy);
+      component.onLoadMore();
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('onLoadMore is inert while a page fetch is in flight', () => {
+      fixture.componentRef.setInput('hasMore', true);
+      fixture.componentRef.setInput('loadingMore', true);
+      TestBed.tick();
+      const spy = vi.fn();
+      component.loadMore.subscribe(spy);
+      component.onLoadMore();
+      expect(spy).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -3425,6 +3425,9 @@
           "above_threshold": {
             "type": "integer"
           },
+          "has_more_below": {
+            "type": "boolean"
+          },
           "loaded": {
             "type": "integer"
           },
@@ -3699,11 +3702,17 @@
       "LearnedSortResponse": {
         "additionalProperties": false,
         "properties": {
+          "above_threshold": {
+            "type": "integer"
+          },
           "current": {
             "type": "integer"
           },
           "error": {
             "type": "string"
+          },
+          "has_more_below": {
+            "type": "boolean"
           },
           "job_id": {
             "type": "string"
@@ -3714,6 +3723,9 @@
               "type": "object"
             },
             "type": "array"
+          },
+          "sort_token": {
+            "type": "string"
           },
           "status": {
             "enum": [
@@ -4911,6 +4923,9 @@
         "properties": {
           "above_threshold": {
             "type": "integer"
+          },
+          "has_more_below": {
+            "type": "boolean"
           },
           "results": {
             "items": {

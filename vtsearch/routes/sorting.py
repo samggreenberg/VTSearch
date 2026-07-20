@@ -29,7 +29,7 @@ from vtsearch.routes._shared import (
     get_embedder_for_medias,
     require_dataset_header,
     require_detector_header,
-    windowed_sort_extras,
+    windowed_sort_response,
 )
 
 from vtscore.config import DATA_DIR
@@ -270,7 +270,7 @@ def sort_clips(body: dict):
         update_sort_progress("sorting", "Computing similarities…", 0, 0, step=3, total_steps=_SORT_STEPS)
         results, threshold = _cosine_sort(text_vec, role="text", snap=snap)
         _sort_idle()
-        return {"results": results, "threshold": threshold, **windowed_sort_extras(results, threshold)}
+        return windowed_sort_response(results, threshold)
     except Exception as exc:
         from werkzeug.exceptions import HTTPException
 
@@ -311,13 +311,23 @@ def sort_page(query: dict):
 
 
 def _learned_sort_done_payload(job) -> dict:
-    """Build the JSON body returned when a learned-sort job is finished."""
+    """Build the JSON body returned when a learned-sort job is finished.
+
+    ``job.result`` is the windowed response body produced by
+    :func:`windowed_sort_response` in the job target, so the window metadata
+    (``sort_token`` / ``total`` / ``above_threshold`` / ``has_more_below``)
+    rides straight through to the client.
+    """
     result = job.result or {}
     return {
         "job_id": job.job_id,
         "status": "done",
         "results": result.get("results", []),
         "threshold": result.get("threshold", 0.0),
+        "sort_token": result.get("sort_token"),
+        "total": result.get("total"),
+        "above_threshold": result.get("above_threshold"),
+        "has_more_below": result.get("has_more_below", False),
     }
 
 
@@ -422,7 +432,7 @@ def learned_sort(body: dict):
             calibrate_count_value=calibrate_count_value,
             calibration_fraction_value=calibration_fraction_value,
         )
-        job.result = {"results": results, "threshold": round(threshold, 4)}
+        job.result = windowed_sort_response(results, round(threshold, 4))
 
     job = learned_sort_jobs.start(
         signature,
@@ -818,7 +828,7 @@ def example_sort():
             # Clean up temp file even if sorting raises
             temp_path.unlink(missing_ok=True)
 
-        return {"results": results, "threshold": thresh, **windowed_sort_extras(results, thresh)}
+        return windowed_sort_response(results, thresh)
 
     except Exception as exc:
         from werkzeug.exceptions import HTTPException
@@ -968,13 +978,7 @@ def label_file_sort():
 
         results, threshold = _train_and_score_dataset(X_list, y_list, score_name)
         threshold = round(threshold, 4)
-        return {
-            "results": results,
-            "threshold": threshold,
-            "loaded": loaded,
-            "skipped": skipped,
-            **windowed_sort_extras(results, threshold),
-        }
+        return {**windowed_sort_response(results, threshold), "loaded": loaded, "skipped": skipped}
 
     except Exception as exc:
         from werkzeug.exceptions import HTTPException

@@ -26,6 +26,12 @@
         <div class="media-threshold-line" title="The line between the detector's good and bad matches" aria-label="Good/Bad threshold">
           <span class="threshold-label">threshold</span>
         </div>
+      } @else if (row.kind === 'loadmore') {
+        <div class="media-load-more">
+          <button class="btn btn--secondary btn--sm" (click)="onLoadMore()" [disabled]="loadingMore()">
+            {{ loadingMore() ? 'Loading…' : 'Load more' }}
+          </button>
+        </div>
       } @else {
         @for (item of row.items; track trackByMediaId($index, item)) {
           <vt-media-item
@@ -65,6 +71,14 @@
 
     @if (medias().length === 0) {
       <div class="empty-list">No media loaded</div>
+    }
+
+    @if (hasMore()) {
+      <div class="media-load-more">
+        <button class="btn btn--secondary btn--sm" (click)="onLoadMore()" [disabled]="loadingMore()">
+          {{ loadingMore() ? 'Loading…' : 'Load more' }}
+        </button>
+      </div>
     }
   </div>
 }

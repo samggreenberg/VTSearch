@@ -54,6 +54,10 @@ export class LeftPanelComponent implements OnInit {
   readonly medias = input<Media[]>([]);
   readonly sortOrder = input<SortedItem[] | null>(null);
   readonly threshold = input<number | null>(null);
+  /** True when the ranking is windowed and more rows can be paged in. */
+  readonly sortHasMore = input(false);
+  /** True while a page fetch is in flight. */
+  readonly loadingMore = input(false);
   readonly selectedId = input<number | null>(null);
   readonly goodVotes = input<Set<number>>(new Set());
   readonly badVotes = input<Set<number>>(new Set());
@@ -108,6 +112,8 @@ export class LeftPanelComponent implements OnInit {
   readonly modelSelected = output<string>();
   readonly exampleSortStarted = output<unknown>();
   readonly mediaSelect = output<number>();
+  /** Bubbles the media-list "Load more" request up to the sort owner. */
+  readonly loadMore = output<void>();
   readonly mediaVote = output<{
     id: number;
     vote: 'good' | 'bad';

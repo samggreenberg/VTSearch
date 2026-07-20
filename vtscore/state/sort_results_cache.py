@@ -29,6 +29,33 @@ from collections import OrderedDict
 from typing import Any
 
 
+# Window shape for the *initial* sort response (scalability.md S3/S17/S19).
+#
+# Below ``SORT_WINDOW_THRESHOLD`` items the full ranking is transmitted unchanged,
+# so small / medium sorts keep every existing behaviour — including the stripe
+# minimap, which is gated off at the same size (``STRIPE_MAX_ITEMS``). At or above
+# it, only a head window rides the initial response and the client pages the rest
+# through ``/api/sort/page``. Aligning the two thresholds means a windowed sort is
+# always one whose stripe is already disabled, so no client code needs the full
+# order once windowing engages.
+SORT_WINDOW_THRESHOLD = 20000
+#: K_ABOVE — cap on above-threshold rows in the initial window.
+SORT_WINDOW_HEAD = 500
+#: K_BELOW — rows just past the boundary to include for context.
+SORT_WINDOW_TAIL = 200
+
+
+def initial_window_end(total: int, above_threshold: int) -> int:
+    """End index (exclusive) of the initial transmitted window.
+
+    Includes up to ``SORT_WINDOW_HEAD`` above-threshold rows plus
+    ``SORT_WINDOW_TAIL`` rows just past the boundary, clamped to *total*.  When
+    the above-threshold count exceeds the head cap the boundary falls outside the
+    window (the user reaches it by paging) — the strongest matches lead.
+    """
+    return min(total, min(above_threshold, SORT_WINDOW_HEAD) + SORT_WINDOW_TAIL)
+
+
 def result_score(result: dict) -> float:
     """Read a ranking row's score regardless of which sort path produced it.
 

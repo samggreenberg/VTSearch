@@ -583,6 +583,33 @@ def windowed_sort_extras(results: list[dict], threshold: float | None) -> dict[s
     }
 
 
+def windowed_sort_response(results: list[dict], threshold: float | None) -> dict[str, Any]:
+    """Build a sort-response body, windowing the transmitted ``results``.
+
+    Stores the full ranking (so ``/api/sort/page`` can serve any window) and
+    returns ``{results, threshold, sort_token, total, above_threshold,
+    has_more_below}``.  Below :data:`SORT_WINDOW_THRESHOLD` the full list is
+    transmitted unchanged and ``has_more_below`` is ``False`` — small / medium
+    sorts behave exactly as before.  At or above it, only the initial head window
+    rides the response and the client pages the rest.
+
+    The threshold is read off the cache module at call time so tests can lower it
+    via ``monkeypatch`` without generating tens of thousands of rows.
+    """
+    from vtscore.state import sort_results_cache as _cache_mod  # noqa: PLC0415
+
+    extras = windowed_sort_extras(results, threshold)
+    total = extras["total"]
+    if total < _cache_mod.SORT_WINDOW_THRESHOLD:
+        window = results
+        has_more = False
+    else:
+        end = _cache_mod.initial_window_end(total, extras["above_threshold"])
+        window = results[:end]
+        has_more = end < total
+    return {"results": window, "threshold": threshold, "has_more_below": has_more, **extras}
+
+
 def get_embedder_for_medias(media_dict: dict):
     """Return the appropriate embedder for the given medias, or ``None``.
 

@@ -9,6 +9,7 @@ still consumes the full ``results`` (windowed model lands separately).
 from __future__ import annotations
 
 import app as app_module
+import vtscore.state.sort_results_cache as sort_cache
 
 
 class TestSortResponseWindowMeta:
@@ -28,6 +29,48 @@ class TestSortResponseWindowMeta:
         t1 = client.post("/api/sort", json={"text": "beep"}).get_json()["sort_token"]
         t2 = client.post("/api/sort", json={"text": "beep"}).get_json()["sort_token"]
         assert t1 != t2
+
+    def test_below_threshold_transmits_full_list(self, client, monkeypatch):
+        # NUM_MEDIAS (20) < a high threshold → full list, no windowing.
+        monkeypatch.setattr(sort_cache, "SORT_WINDOW_THRESHOLD", 1000)
+        data = client.post("/api/sort", json={"text": "beep"}).get_json()
+        assert len(data["results"]) == app_module.NUM_MEDIAS
+        assert data["has_more_below"] is False
+
+
+class TestWindowedTransmission:
+    """At/above the (test-lowered) threshold, only a head window is transmitted."""
+
+    def _shrink_window(self, monkeypatch):
+        monkeypatch.setattr(sort_cache, "SORT_WINDOW_THRESHOLD", 3)
+        monkeypatch.setattr(sort_cache, "SORT_WINDOW_HEAD", 2)
+        monkeypatch.setattr(sort_cache, "SORT_WINDOW_TAIL", 1)
+
+    def test_windows_the_transmitted_results(self, client, monkeypatch):
+        self._shrink_window(monkeypatch)
+        data = client.post("/api/sort", json={"text": "beep"}).get_json()
+        above = data["above_threshold"]
+        expected = min(app_module.NUM_MEDIAS, min(above, 2) + 1)
+        assert data["total"] == app_module.NUM_MEDIAS
+        assert len(data["results"]) == expected
+        assert data["has_more_below"] is (expected < app_module.NUM_MEDIAS)
+
+    def test_paging_reconstructs_the_full_ranking(self, client, monkeypatch):
+        self._shrink_window(monkeypatch)
+        data = client.post("/api/sort", json={"text": "sine wave"}).get_json()
+        token = data["sort_token"]
+        collected = [r["id"] for r in data["results"]]
+        assert data["has_more_below"] is True  # 20 items, tiny window
+
+        offset = len(collected)
+        while True:
+            body = client.get(f"/api/sort/page?token={token}&offset={offset}&limit=5").get_json()
+            collected.extend(r["id"] for r in body["results"])
+            if not body["has_more"]:
+                break
+            offset += 5
+        assert len(collected) == app_module.NUM_MEDIAS
+        assert len(set(collected)) == app_module.NUM_MEDIAS
 
 
 class TestSortPage:
