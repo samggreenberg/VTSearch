@@ -80,6 +80,29 @@ class TestRegistryMultiprocessSafety:
         fixed_tmp = registry.REGISTRY_PATH.with_suffix(".tmp")
         assert not fixed_tmp.exists()
 
+    def test_unregister_deletes_sidecar_files_sharing_pkl_stem(self, tmp_path):
+        """``unregister_dataset`` must also delete any sidecar file that shares
+        the pkl's stem (e.g. a future mmap embedding-matrix cache), not just
+        the pkl itself, so such sidecars can't be orphaned on delete/expiry."""
+        registry.reset_for_tests()
+        pkl_path = tmp_path / "ds_deadbeef.pkl"
+        pkl_path.write_bytes(b"pkl-bytes")
+        sidecar = tmp_path / "ds_deadbeef.emb.npy"
+        sidecar.write_bytes(b"sidecar-bytes")
+        cids_sidecar = tmp_path / "ds_deadbeef.cids.npy"
+        cids_sidecar.write_bytes(b"cids-bytes")
+        unrelated = tmp_path / "ds_other.pkl"
+        unrelated.write_bytes(b"unrelated-bytes")
+
+        entry = registry.register_dataset(name="A", media_type="audio", num_items=1, pkl_path=str(pkl_path))
+
+        assert registry.unregister_dataset(entry["id"]) is True
+
+        assert not pkl_path.exists()
+        assert not sidecar.exists()
+        assert not cids_sidecar.exists()
+        assert unrelated.exists(), "unregister must not touch files with a different stem"
+
     def test_concurrent_registers_all_survive(self):
         # Many threads registering at once must all land on disk; the flock plus
         # fresh re-read serialises the read-modify-write so none clobber another.

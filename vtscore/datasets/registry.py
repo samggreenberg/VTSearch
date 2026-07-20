@@ -219,7 +219,13 @@ def register_dataset(
 
 
 def unregister_dataset(dataset_id: str) -> bool:
-    """Remove a dataset from the registry and delete its pkl file.
+    """Remove a dataset from the registry and delete its pkl file plus any sidecars.
+
+    Every file in the pkl's directory sharing its stem (e.g. an mmap embedding
+    sidecar) is deleted alongside it: the stem is a random uuid
+    (``ds_<uuid>``), so this can never collide with another dataset's files,
+    and any current or future sidecar convention is swept without needing a
+    separate registry field to track it.
 
     Returns ``True`` if the dataset was found and removed.
     """
@@ -229,7 +235,8 @@ def unregister_dataset(dataset_id: str) -> bool:
             if entry["id"] == dataset_id:
                 pkl = Path(entry.get("pkl_path", ""))
                 if pkl.is_file():
-                    pkl.unlink(missing_ok=True)
+                    for sibling in pkl.parent.glob(f"{pkl.stem}.*"):
+                        sibling.unlink(missing_ok=True)
                 entries.pop(i)
                 return True
         return False
