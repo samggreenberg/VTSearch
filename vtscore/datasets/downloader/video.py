@@ -205,30 +205,19 @@ def download_kth(on_progress: Optional[ProgressCallback] = None) -> Path:
         if cat_dir.exists() and any(cat_dir.glob("*.avi")):
             continue  # This action already extracted.
 
-        import uuid
-        import zipfile
-
-        unique_id = uuid.uuid4().hex[:8]
-        zip_name = f"{action}.zip"
-        zip_path = _core.DATA_DIR / f".dl_{unique_id}_{zip_name}"
-
-        try:
-            url = f"{_core.KTH_BASE_URL}{zip_name}"
-            on_progress("downloading", f"Downloading KTH {action}...", i, total)
-            _core.download_file_with_progress(url, zip_path, 0, on_progress)
-
-            on_progress("extracting", f"Extracting KTH {action}...", i + 1, total)
-            cat_dir.mkdir(parents=True, exist_ok=True)
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                for member in zf.namelist():
-                    # Extract only .avi files, into the category directory.
-                    if member.lower().endswith(".avi"):
-                        basename = Path(member).name
-                        dest = cat_dir / basename
-                        if not dest.exists():
-                            with zf.open(member) as src, open(dest, "wb") as dst:
-                                shutil.copyfileobj(src, dst)
-        finally:
-            zip_path.unlink(missing_ok=True)
+        cat_dir.mkdir(parents=True, exist_ok=True)
+        _core._download_and_extract(
+            url=f"{_core.KTH_BASE_URL}{action}.zip",
+            archive_name=f"{action}.zip",
+            extract_to=cat_dir,
+            check_path=cat_dir,
+            is_complete=lambda cat_dir=cat_dir: any(cat_dir.glob("*.avi")),
+            download_size_mb=0,
+            dataset_name=f"KTH {action}",
+            on_progress=on_progress,
+            member_filter=lambda m: m.lower().endswith(".avi"),
+            flatten=True,
+        )
+        on_progress("extracting", f"Extracted KTH {action}...", i + 1, total)
 
     return video_dir

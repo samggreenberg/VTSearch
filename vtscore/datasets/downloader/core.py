@@ -639,51 +639,113 @@ def _extract_7z(archive_path: Path, dest_dir: Path, dataset_name: str, on_progre
     on_progress("extracting", f"Extracting {dataset_name}...", 1, 1)
 
 
-def _extract_archive(
-    archive_path: Path, archive_name: str, dest_dir: Path, dataset_name: str, on_progress: ProgressCallback
+def _extract_tar(
+    archive_path: Path,
+    mode: str,
+    dest_dir: Path,
+    dataset_name: str,
+    on_progress: ProgressCallback,
+    member_filter: Optional[Callable[[str], bool]],
+    flatten: bool,
 ) -> None:
-    """Extract *archive_path* into *dest_dir*, dispatching by filename suffix.
+    # Iterate lazily instead of calling getmembers() - the latter must
+    # decompress the entire gzip stream just to read tar headers, then
+    # extraction decompresses it *again*.  Lazy iteration decompresses
+    # once and avoids a minutes-long stall on multi-GB archives.
+    total_bytes = archive_path.stat().st_size
+    with open(archive_path, "rb") as raw_f, tarfile.open(fileobj=raw_f, mode=mode) as tar_ref:
+        for i, member in enumerate(tar_ref):
+            if i % 100 == 0:
+                on_progress("extracting", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes)
+            if member_filter is not None and not member_filter(member.name):
+                continue
+            if not flatten:
+                safe_tar_extract(tar_ref, member, dest_dir)
+                continue
+            if member.isdir():
+                continue
+            src = tar_ref.extractfile(member)
+            if src is None:
+                continue
+            dest = Path(dest_dir) / Path(member.name).name
+            with src, open(dest, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+    on_progress("extracting", f"Extracting {dataset_name}...", total_bytes, total_bytes)
 
-    Supports ``.tar.gz`` / ``.tgz`` (gzip tar), ``.tar`` (uncompressed tar),
-    ``.zip``, and ``.7z`` archives.  Tar members go through
-    :func:`~vtscore.security.archive.safe_tar_extract` (which rejects unsafe
-    absolute/traversal/link paths); zip and 7z members are validated against
-    *dest_dir* to guard against path traversal (zip-slip).  Raises
-    ``ValueError`` for an unsupported archive format.
-    """
-    suffix = archive_name.lower()
-    if suffix.endswith((".tar.gz", ".tgz", ".tar")):
-        # Iterate lazily instead of calling getmembers() - the latter must
-        # decompress the entire gzip stream just to read tar headers, then
-        # extraction decompresses it *again*.  Lazy iteration decompresses
-        # once and avoids a minutes-long stall on multi-GB archives.
-        # Use "r:*" for gzip tars to auto-detect compression - some CDNs (e.g.
-        # HuggingFace Xet) transparently decompress .tar.gz files during transfer.
-        mode = "r:" if suffix.endswith(".tar") else "r:*"
-        total_bytes = archive_path.stat().st_size
-        with open(archive_path, "rb") as raw_f:
-            with tarfile.open(fileobj=raw_f, mode=mode) as tar_ref:
-                for i, member in enumerate(tar_ref):
-                    if i % 100 == 0:
-                        on_progress("extracting", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes)
-                    safe_tar_extract(tar_ref, member, dest_dir)
-        on_progress("extracting", f"Extracting {dataset_name}...", total_bytes, total_bytes)
-    elif suffix.endswith(".zip"):
-        from vtscore.datasets.archive import _reject_traversal
 
-        dest_resolved = Path(dest_dir).resolve()
-        with zipfile.ZipFile(archive_path, "r") as zip_ref:
-            members = zip_ref.namelist()
-            total = len(members)
-            for i, member in enumerate(members):
-                if i % 100 == 0 or i == total - 1:
-                    on_progress("extracting", f"Extracting {dataset_name}...", i + 1, total)
+def _extract_zip(
+    archive_path: Path,
+    dest_dir: Path,
+    dataset_name: str,
+    on_progress: ProgressCallback,
+    member_filter: Optional[Callable[[str], bool]],
+    flatten: bool,
+) -> None:
+    from vtscore.datasets.archive import _reject_traversal
+
+    dest_resolved = Path(dest_dir).resolve()
+    with zipfile.ZipFile(archive_path, "r") as zip_ref:
+        members = zip_ref.namelist()
+        total = len(members)
+        for i, member in enumerate(members):
+            if i % 100 == 0 or i == total - 1:
+                on_progress("extracting", f"Extracting {dataset_name}...", i + 1, total)
+            if member_filter is not None and not member_filter(member):
+                continue
+            if not flatten:
                 # Guard against path traversal in zip entries.  Shares the
                 # strict check with archive.py: the previous inline
                 # startswith() prefix test lacked a trailing separator, so
                 # a sibling dir with the dest as a name prefix passed.
                 _reject_traversal(dest_resolved, member)
                 zip_ref.extract(member, dest_dir)
+                continue
+            if member.endswith("/"):
+                continue
+            dest = Path(dest_dir) / Path(member).name
+            with zip_ref.open(member) as src, open(dest, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+
+
+def _extract_archive(
+    archive_path: Path,
+    archive_name: str,
+    dest_dir: Path,
+    dataset_name: str,
+    on_progress: ProgressCallback,
+    *,
+    member_filter: Optional[Callable[[str], bool]] = None,
+    flatten: bool = False,
+) -> None:
+    """Extract *archive_path* into *dest_dir*, dispatching by filename suffix.
+
+    Supports ``.tar.gz`` / ``.tgz`` (gzip tar), ``.tar`` (uncompressed tar),
+    ``.zip``, and ``.7z`` archives.  Tar members go through
+    :func:`~vtscore.security.archive.safe_tar_extract` (which rejects unsafe
+    absolute/traversal/link paths); zip members are validated against
+    *dest_dir* to guard against path traversal (zip-slip).  Raises
+    ``ValueError`` for an unsupported archive format.
+
+    Args:
+        member_filter: Optional predicate on the member's archive path (e.g.
+            ``lambda m: m.lower().endswith(".wav")``).  Members for which it
+            returns ``False`` are skipped entirely.  Ignored for ``.7z``
+            (only the common zip/tar downloaders that need filtering use it).
+        flatten: When ``True``, every extracted member is written directly
+            into *dest_dir* under its basename (``Path(member).name``),
+            discarding any directory structure inside the archive.  Because
+            only the basename is used, traversal is not a concern for
+            flattened members.  Directory entries are skipped.  Ignored for
+            ``.7z``.
+    """
+    suffix = archive_name.lower()
+    if suffix.endswith((".tar.gz", ".tgz", ".tar")):
+        # Use "r:*" for gzip tars to auto-detect compression - some CDNs (e.g.
+        # HuggingFace Xet) transparently decompress .tar.gz files during transfer.
+        mode = "r:" if suffix.endswith(".tar") else "r:*"
+        _extract_tar(archive_path, mode, dest_dir, dataset_name, on_progress, member_filter, flatten)
+    elif suffix.endswith(".zip"):
+        _extract_zip(archive_path, dest_dir, dataset_name, on_progress, member_filter, flatten)
     elif suffix.endswith(".7z"):
         _extract_7z(archive_path, dest_dir, dataset_name, on_progress)
     else:
@@ -700,6 +762,8 @@ def _download_and_extract(
     dataset_name: str,
     on_progress: ProgressCallback,
     is_complete: Optional[Callable[[], bool]] = None,
+    member_filter: Optional[Callable[[str], bool]] = None,
+    flatten: bool = False,
 ) -> None:
     """Download an archive and extract it unless it is already complete.
 
@@ -739,6 +803,9 @@ def _download_and_extract(
             otherwise be a false positive that blocks re-download: the predicate
             can require the expected content (labeled images, etc.) to be
             present rather than merely that a path exists.
+        member_filter: Optional per-member predicate forwarded to
+            :func:`_extract_archive`; see its docstring.
+        flatten: Forwarded to :func:`_extract_archive`; see its docstring.
     """
 
     def _complete() -> bool:
@@ -777,7 +844,15 @@ def _download_and_extract(
         on_progress("extracting", f"Extracting {dataset_name}...", 0, 0)
         temp_extract.mkdir(parents=True, exist_ok=True)
 
-        _extract_archive(temp_archive, archive_name, temp_extract, dataset_name, on_progress)
+        _extract_archive(
+            temp_archive,
+            archive_name,
+            temp_extract,
+            dataset_name,
+            on_progress,
+            member_filter=member_filter,
+            flatten=flatten,
+        )
 
         # Another download may have finished while we were extracting.
         if _complete():
