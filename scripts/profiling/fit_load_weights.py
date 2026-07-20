@@ -241,7 +241,11 @@ def _fit_finalize_slots(
             continue
         known = [s for s in _FIN_SLOT_ORDER if s in slot_med]
         extra = [s for s in slot_med if s not in _FIN_SLOT_ORDER]
-        ordered = tuple((s, round(slot_med[s] / total, 4)) for s in known + extra)
+        # A measured-but-tiny slot keeps a positive floor share: rounding it to
+        # 0 would ship a zero-weight row (the checked-in table requires w > 0),
+        # while dropping it would hand the slot back its static ballpark
+        # despite the measurement saying it is ~free.
+        ordered = tuple((s, max(round(slot_med[s] / total, 4), 0.0001)) for s in known + extra)
         shares[key] = ordered
         n_loads = max((len(v) for v in fin_slots[key].values()), default=0)
         cells = ", ".join(f"{s} {frac:.2f}" for s, frac in ordered)

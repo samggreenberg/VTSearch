@@ -86,6 +86,13 @@ def test_finalize_slots_never_raises_when_device_resolution_fails(monkeypatch):
         raise RuntimeError("no torch")
 
     monkeypatch.setattr("vtscore.config.resolve_device", _boom)
+    # Resolution failure degrades to the "cpu" device, so a populated shipped
+    # table still supplies the cpu row; the property under test is that nothing
+    # raises and every canonical slot keeps a slice.
+    slots = _finalize_slots("image")
+    assert [name for name, _ in slots] == [name for name, _ in FinalizeProgress._SLOTS]
+    # With no calibrated row either, the full static ballpark comes back.
+    monkeypatch.setattr(_cm, "FINALIZE_SLOT_SHARES", {})
     assert _finalize_slots("image") == FinalizeProgress._SLOTS
 
 
@@ -156,6 +163,22 @@ def test_fit_finalize_slots_medians_and_normalizes():
     # registry) is preserved for the slots that survive.
     assert shares == {("cuda", "image"): (("coverage", 0.8), ("registry", 0.2))}
     assert len(summary) == 1
+
+
+def test_fit_finalize_slots_floors_tiny_measured_slots_above_zero():
+    fit = _load_fit_module()
+    fin_slots = {
+        ("cuda", "audio"): {
+            "coverage": [100.0],
+            # Measured positive but <0.00005 of the phase: would round to 0.0,
+            # which the shipped table forbids (w > 0) — floored to 0.0001.
+            "cleanup": [0.001],
+        }
+    }
+    shares, _ = fit._fit_finalize_slots(fin_slots)
+    row = dict(shares[("cuda", "audio")])
+    assert row["cleanup"] == 0.0001
+    assert all(w > 0 for w in row.values())
 
 
 def test_fit_finalize_slots_orders_canonically_then_appends_unknown():
