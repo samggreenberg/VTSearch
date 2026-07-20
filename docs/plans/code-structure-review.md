@@ -1,63 +1,37 @@
 # Code-structure review
 
-**Status:** The remaining structural work spans Themes B/C/D and the prioritized backlog below.
+**Status:** The concrete, shippable findings have been promoted to GitHub issues (see pointers below). What remains in this file is the design narrative that doesn't fit an issue: the gated Theme A note, the items considered and declined, and the "deliberately not touching" list.
 
-This review asks: where have design decisions that were right at small scale been outgrown, and what is worth streamlining, abstracting, or reorganizing? The codebase is healthy and unusually well-documented; the findings are **accretion** problems (modules that started focused and absorbed adjacent responsibilities), not rot. Nothing here is urgent. Themes are ordered by leverage-to-effort.
+This review asked: where have design decisions that were right at small scale been outgrown, and what is worth streamlining, abstracting, or reorganizing? The codebase is healthy and unusually well-documented; the findings are **accretion** problems (modules that started focused and absorbed adjacent responsibilities), not rot. Nothing here is urgent.
 
-## Prioritized backlog (remaining)
+## Promoted to issues
 
-1. **Theme B remaining** — `DetectorContext` sub-context split (item under Theme B; ~346 call sites, do opportunistically). Plus the `app.py` hooks/errors split and the `settings.py` lazy-migration-to-script, both left as scoped open follow-ups (see Theme B).
-2. **Theme D** — converge frontend types onto the generated client.
-3. **Theme C remaining** — state-proxy registry table; image single/patch base; downloaders base.
-4. **Theme A (optional)** — convert the remaining lazy `vtsearch.auth` / `vtsearch.achievements` / `vtsearch.logging_config` / `vtsearch.routes._shared` reaches in `vtscore/` to injected registration hooks (the pattern already used for `register_setting_persister` / `register_core_config_builder`), making `vtscore/` import-clean of `vtsearch` entirely. Correct as lazy imports today; do this if/when the library tier is actually extracted.
+Concrete, independently-shippable findings now live as issues (bodies there, not here):
 
----
-
-## Theme B — Mega-files mixing unrelated concerns (remaining)
-
-Still open:
-
-- **`app.py` hooks/errors (open follow-up on the shipped CLI split).** The request-lifecycle hooks (`before_request` / `after_request` / `teardown_request`) and the global JSON error handlers are still inline in `app.py`. They *are* part of the `app` object's lifecycle (unlike the CLI/preflight code that was extracted), so the leverage of moving them to `hooks.py` + `errors.py` is lower and the risk (decorator-registration ordering) higher; left for a scoped follow-up.
-- **`settings.py` lazy migration (open follow-up on the shipped engine split).** The legacy-migration path is still lazy (runs from `UserSettingsStore.ensure_server_loaded` on first server load) rather than a one-shot admin script — left as-is deliberately because the lazy trigger is what the default-user read-through and the CLI `--settings` flat-file flow rely on; moving it to a script is a behavior change worth its own scoped task.
-- **`vtscore/state/core.py` — `DetectorContext` (31 fields).** A god-object spanning vote state, training artifacts, cached embeddings, and Find-session state. Splitting into `VoteState` / `TrainingState` / `FindSessionState` is the right shape but touches ~346 call sites — expensive; defer until already in that code.
+- [ ] #2650 — Collapse the 8 copy-paste state-proxy declarations in `state_proxies.py` to a registry table (Theme C; Sonnet 5)
+- [ ] #2651 — Extract a shared cross-modal base for the SigLIP / SigLIP2 / CLIP image embedders (Theme C; Opus 4.8)
+- [ ] #2652 — Absorb the residual per-format zip/tar filtering loops in downloaders into `_extract_archive` (Theme C; Haiku 4.5)
+- [ ] #2653 — Extract `app.py` request-lifecycle hooks and error handlers into `hooks.py` / `errors.py` (Theme B; Sonnet 5)
+- [ ] #2654 — Split the `DetectorContext` god-object into `VoteState` / `TrainingState` / `FindSessionState`, opportunistically (Theme B; Opus 4.8)
+- [ ] #2655 — Converge hand-written frontend `api.models.ts` onto generated OpenAPI types, backend-schema-first (Theme D; Sonnet 5)
 
 ---
 
-## Theme C — Repetitive boilerplate a declarative/table-driven approach collapses (remaining)
+## Open design narrative (not issue-shaped)
 
-Recurring smell: the **same fact declared in N parallel places**, kept in sync by hand. (The CLAP-embedder `_ClapBase` mixin and the settings dispatch-table generation shipped; the rest are open.)
+<!-- item-sep -->
 
-- **State proxies.** 7 copy-paste `_ProxyDict` / `_ProxyList` declarations in
-  `vtsearch/state_proxies.py` could be built from a registry table.
-- **Image embedder bases.** Image embedders have single/patch pairs that could
-  share a `_SinglePatchBase`; SigLIP/SigLIP2/CLIP have no shared base despite
-  identical cross-modal load/warm-up.
-- **Downloaders.** `downloader/{audio,image,video,text,docs}.py` each
-  re-implement check → download → extract → post-process (~500 lines of
-  duplicated zip/tar iteration); a `_DatasetDownloader` base with
-  `post_process()` hooks consolidates it.
+- **Theme A — make `vtscore/` import-clean of `vtsearch` (gated).** `vtscore/` still reaches into `vtsearch.auth` / `vtsearch.achievements` / `vtsearch.logging_config` / `vtsearch.routes._shared` via lazy in-function imports (~18 sites across `cli.py`, `labels/sync.py`, `embedding/loader.py`, `datasets/load_pipeline.py`, `concurrency/async_jobs.py`, `state/votes.py`, `plugins/normalize.py`, `security/path_validation.py`, `exporters/_template.py`). Converting them to injected registration hooks (the pattern already used for `register_setting_persister` / `register_core_config_builder`) would make the library tier fully import-clean of the app. These are **correct as lazy imports today**; this is only worth doing **if/when the library tier is actually extracted** as a separate package. Left as a gated note, not an issue, because there's no independently-shippable value until that extraction happens.
 
----
+<!-- item-sep -->
 
-## Theme D — Schema/type drift across boundaries (open)
+- **Declined — `settings.py` lazy migration → one-shot admin script.** The legacy-migration path (`UserSettingsStore.ensure_server_loaded` → `_maybe_migrate_legacy_settings`, `vtsearch/settings_store.py`) is still lazy (runs on first server-tier load, guarded by `_legacy_migrated`). Moving it to a standalone script was considered and **declined**: the lazy trigger is exactly what the default-user read-through and the CLI `--settings` flat-file flow rely on, and the migration does destructive atomic file rewrites under a cross-process lock, so relocating it is a behavior/data-migration change with upgrade-compatibility risk and little upside. Leave as-is.
 
-The same data shapes are independently redeclared in up to four type
-systems with nothing enforcing agreement:
+<!-- item-sep -->
 
-- Backend: **Pydantic** (`settings_models.py`) + **Marshmallow**
-  (`vtsearch/schemas/`, 3983 lines) for the *same* settings.
-- Frontend: **both** a generated OpenAPI client (`ng-openapi-gen` →
-  `src/app/generated/api-client`, imported by 53 files) **and** a
-  hand-written `api.models.ts` (27 interfaces, imported by 69 files). The
-  hand-written types shadow concepts the generated client could cover, and
-  several use `[key: string]: unknown` escape hatches that silence drift.
+- **Declined (soft) — backend Pydantic → Marshmallow settings generation.** The same settings fields are hand-declared in both Pydantic (`vtsearch/settings_models.py`, ~533 lines) and Marshmallow (`vtsearch/schemas/settings.py` + `settings_io.py`, ~550 lines). The drift surface is smaller than it looks: the Marshmallow layer already *imports* the enum constants and coercers from `settings_models.py`, so validators are shared — only the flat per-field re-declaration is duplicated. Codegen from Pydantic to Marshmallow would remove that, but it's heavier machinery than a ~550-line, enum-already-shared duplication justifies. Not filed; revisit only if this list of fields starts drifting in practice.
 
-**Fix:** migrate hand-written frontend types onto generated ones where the
-endpoint is covered; consider Pydantic→Marshmallow generation server-side.
-*Decline* adding `zod`/`io-ts` runtime validation — heavier than the drift
-risk warrants.
-
----
+<!-- item-sep -->
 
 ## Evaluated and deliberately **not** touching
 
@@ -68,3 +42,13 @@ contention symptoms); the frozen request-missing sentinels; the
 route `_shared.py` helpers are all sound. Also declining the proposal to
 rename every plugin family's `run()`/`export()`/`load()` to a uniform
 `execute()` — domain-meaningful names, churn dwarfs benefit.
+
+Two Theme C items shipped earlier (the CLAP-embedder `_ClapBase` mixin and
+the settings dispatch-table generation) and two more were found to be
+**already substantially done** during this refresh: the downloader
+check→download→extract pipeline is consolidated in
+`vtscore/datasets/downloader/core.py` (`_download_and_extract` /
+`_extract_archive`), leaving only the residual per-format filtering loops in
+#2652; and the image single/patch split is already de-duplicated per
+backbone (`_Dinov2Base` / `_Dinov3Base` / `_EupeBase`), leaving only the
+cross-backbone patch-boilerplate noted as a follow-up inside #2651.
