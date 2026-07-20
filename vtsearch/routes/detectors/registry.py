@@ -932,12 +932,12 @@ def _resolved_positive_count(elements) -> int:
     this is one pass rather than one rebuild per element. Returns 0 when no
     dataset is loaded.
     """
-    from vtsearch.state import build_media_lookup, resolve_media_ids, snapshot_medias
+    from vtsearch.state import cached_media_lookups, resolve_media_ids, snapshot_medias
 
     snap = snapshot_medias()
     if not snap:
         return 0
-    origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
+    origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
     count = 0
     for el in elements:
         if resolve_media_ids(el.to_dict(), origin_lookup, md5_lookup, name_lookup):

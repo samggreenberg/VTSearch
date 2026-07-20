@@ -8,9 +8,12 @@ active :class:`DatasetContext` when the caller does not pass one in.
 from __future__ import annotations
 
 import json
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from vtscore.state.core import _state_lock, get_active_context
+
+if TYPE_CHECKING:
+    from vtscore.state.core import DatasetContext
 
 
 def _origin_key(origin: dict[str, Any], origin_name: str) -> str:
@@ -75,6 +78,68 @@ def build_md5_lookup(
         if md5:
             md5_lookup.setdefault(md5, []).append(media["id"])
     return md5_lookup
+
+
+def cached_media_lookups(
+    ctx: DatasetContext | None = None,
+) -> tuple[dict[str, list[int]], dict[str, list[int]], dict[str, list[int]]]:
+    """Return the ``(origin_lookup, md5_lookup, name_lookup)`` triple for *ctx*, cached.
+
+    Revision-keyed cache mirroring the embedding-matrix cache
+    (:func:`vtscore.embedding.matrix.get_embedding_matrix`): the triple is
+    rebuilt via :func:`build_media_lookup` only when ``ctx.media_revision``
+    changes, so the many routes that resolve label entries against the active
+    dataset (label import/export, find-stats, add-to-pile, learned sort) stop
+    paying an O(N) ``json.dumps``-per-origin rebuild on every request (S14).
+    Because ``media_revision`` advances on every structural medias mutation
+    (and every in-place vector rewrite that bumps it), the cache invalidates
+    itself; no call site has to remember to clear it.
+
+    *ctx* defaults to the active :class:`DatasetContext`.  The returned dicts
+    are the *live cached* objects - treat them as read-only; a caller that needs
+    to mutate a lookup must copy it first.
+    """
+    if ctx is None:
+        ctx = get_active_context()
+
+    # Phase 1 (locked): serve a cache hit.
+    with _state_lock:
+        revision = ctx.media_revision
+        if ctx._md5_index is not None and ctx._lookup_index_revision == revision:
+            return ctx._origin_key_index, ctx._md5_index, ctx._name_index  # type: ignore[return-value]
+        # Shallow ref-copy so the build below reads a stable view even if
+        # ctx.medias is reassigned concurrently (cheap: pointers, not dicts).
+        medias_snapshot = dict(ctx.medias)
+
+    # An empty context never caches: the request-missing sentinel holds a frozen
+    # medias dict that also refuses attribute writes, so returning fresh empties
+    # here keeps us from ever storing on it.  A genuinely-empty loaded dataset
+    # just rebuilds three empty dicts, which is free.
+    if not medias_snapshot:
+        return {}, {}, {}
+
+    # Phase 2 (unlocked): build the triple.
+    origin_lookup, md5_lookup, name_lookup = build_media_lookup(medias_snapshot)
+
+    # Phase 3 (locked): store, double-checking the revision still matches so a
+    # medias mutation during the unlocked build can't cache a stale triple.
+    with _state_lock:
+        if ctx.media_revision == revision:
+            ctx._origin_key_index = origin_lookup
+            ctx._md5_index = md5_lookup
+            ctx._name_index = name_lookup
+            ctx._lookup_index_revision = revision
+    return origin_lookup, md5_lookup, name_lookup
+
+
+def cached_md5_lookup(ctx: DatasetContext | None = None) -> dict[str, list[int]]:
+    """Return only the cached MD5 → media-ID lookup for *ctx*.
+
+    The ``md5_lookup`` element of :func:`cached_media_lookups`; see it for the
+    caching semantics.  Callers that only need content-hash resolution
+    (add-to-pile dedup, example-media seeding) use this.
+    """
+    return cached_media_lookups(ctx)[1]
 
 
 def resolve_media_ids(

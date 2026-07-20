@@ -23,9 +23,9 @@ from vtsearch.routes._shared import require_dataset_header, require_detector_hea
 from vtsearch.state import (
     apply_label,
     apply_label_with_click_time,
-    build_media_lookup,
+    cached_md5_lookup,
+    cached_media_lookups,
     resolve_media_ids,
-    snapshot_medias,
 )
 from vtscore.utils.hits import build_media_hit
 
@@ -163,16 +163,19 @@ def _make_enricher(all_medias: dict):
     The returned callable mutates one label entry in place (attaching
     ``custom_metadata`` when the media has any) and returns the set of
     metadata keys it added, so a streaming caller can annotate elements one
-    at a time.  The ``md5 -> media`` map is built once here.
+    at a time.  Resolution reuses the active dataset's cached MD5 → media-ID
+    lookup (S14) instead of building a fresh ``md5 -> media`` map on every
+    export; media are then resolved by id against the caller's snapshot.
 
     Flattens origin params so fields like ``contentID`` / ``mediaID`` /
     ``media_url`` surface as selectable export columns alongside the
     importer's own ``custom_metadata``.
     """
-    md5_to_media = {m["md5"]: m for m in all_medias.values() if m.get("md5")}
+    md5_lookup = cached_md5_lookup()
 
     def enrich(entry: dict) -> set[str]:
-        media = md5_to_media.get(entry.get("md5"))
+        cids = md5_lookup.get(entry.get("md5") or "")
+        media = all_medias.get(cids[0]) if cids else None
         if not media:
             return set()
         meta = _build_entry_metadata(media)
@@ -290,7 +293,7 @@ def import_labels(body: dict):
     """Import labels from JSON, matching medias by origin+origin_name (MD5 fallback)."""
     labels = body["labels"]
 
-    origin_lookup, md5_lookup, _ = build_media_lookup(snapshot_medias())
+    origin_lookup, md5_lookup, _ = cached_media_lookups()
 
     applied = 0
     skipped = 0

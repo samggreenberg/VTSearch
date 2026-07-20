@@ -77,11 +77,10 @@ from vtsearch.schemas.labels import (
 )
 from vtsearch.state import (
     apply_label,
-    build_media_lookup,
+    cached_media_lookups,
     medias,
     find_missing_entries,
     resolve_media_ids,
-    snapshot_medias,
 )
 
 label_importers_bp = Blueprint(
@@ -223,7 +222,7 @@ def run_label_import(importer_name: str):  # noqa: C901
         return jsonify({"error": "Importer did not return a list of label dicts."}), 500
 
     # Apply labels to global vote state
-    origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
+    origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
     applied, skipped, failed = _apply_labels(label_entries, origin_lookup, md5_lookup, name_lookup)
 
     # Detect entries that could not be matched at all
@@ -247,14 +246,14 @@ def run_label_import(importer_name: str):  # noqa: C901
             # `len(missing)`, so we only need to bump `applied` here.  Any
             # per-entry mutation errors from the auto-resolve pass are
             # appended to the same `failed` list as the first pass.
-            origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
+            origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
             resolved_applied, _, resolved_failed = _apply_labels(missing, origin_lookup, md5_lookup, name_lookup)
             applied += resolved_applied
             failed.extend(resolved_failed)
 
         # Check which entries still couldn't be resolved
         if ingested < len(missing):
-            origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
+            origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
             unresolved = find_missing_entries(missing, origin_lookup, md5_lookup, name_lookup)
 
     # Sync updated votes into the loaded model so the dashboard reflects
@@ -314,7 +313,7 @@ def ingest_missing(body: dict):
     ingested = ingest_missing_medias(entries, medias)
 
     # Now apply labels to the newly ingested medias
-    origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
+    origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
     applied, _, failed = _apply_labels(entries, origin_lookup, md5_lookup, name_lookup)
 
     # Sync updated votes into the loaded model so the dashboard reflects

@@ -10,8 +10,9 @@ fix direction + implementation sketch for each item still owed.
 **Scope:** What breaks as datasets grow to 100 k / 1 M / 10 M items and as
 LabelSets grow to 1 k / 10 k / 100 k labels, GUI and CLI. Items track **future
 work only**: shipped items (S2/S8 coverage-atlas auto-defer, S9 GMM subsample,
-S16 grid virtual scroll, S18 prefetch cap, S21 CLI progress throttle) have been
-pruned per the plan-file policy — git history is their record. `S#` numbering
+S14 cached secondary lookups, S16 grid virtual scroll, S18 prefetch cap, S21 CLI
+progress throttle) have been pruned per the plan-file policy — git history is
+their record. `S#` numbering
 has gaps where those were removed; that is expected (labels are stable, never
 renumbered).
 
@@ -29,8 +30,6 @@ deferred. Items are independently shippable.
 
 ## Suggested work order (open items, max-leverage first)
 
-1. **S14** (incremental secondary indexes on `DatasetContext`); removes per-request
-   O(N) dict rebuilds; medium refactor.
 3. **S1** (mmap embedding matrix); unblocks 1 M+ datasets without OOM. Also
    decouples embeddings from the pickle, which unblocks S15.
 4. **S3 + S17 + S19** (sparse sort results, lazy ordered items); must be done
@@ -367,35 +366,6 @@ labelset. (Journal deferred until compaction semantics are defined.)
 
 ---
 
-### S14: incremental secondary lookups on `DatasetContext`
-
-**File:** `vtscore/state/core.py`, plus routes that rebuild lookup dicts
-(`vtscore/state/media_lookup.py`, `vtsearch/routes/labels/vote.py:144` does
-`{m["md5"]: m for m in all_medias.values()}` per request)
-
-Many routes rebuild `{m["md5"]: m for m in snap.values()}` (or origin-key variants)
-on every request — O(N) Python iteration + dict construction, 2–3 passes/request,
-~100 ms each at 1 M.
-
-**Fix:** Add maintained secondary indexes to `DatasetContext`:
-
-```python
-class DatasetContext:
-    __slots__ = (..., "_md5_index", "_origin_key_index")
-    # __init__: self._md5_index = {}; self._origin_key_index = {}
-```
-
-Maintain them at the same structural-mutation sites that bump `media_revision`
-(the `MediasDict` add/remove hooks are the natural home). Routes/helpers that
-rebuild lookup dicts switch to `ctx._md5_index` / `ctx._origin_key_index`
-directly.
-
-**Risk:** medium — indexes must stay in sync with `medias`. Any site that writes
-`ctx.medias` directly must go through the maintained path; the `MediasDict` hook
-already centralises structural mutations, so hang the index maintenance there.
-
----
-
 ### S15: dataset pickle loading — everything into RAM at once
 
 **Files:** `vtscore/datasets/loader_pickle.py`, `vtscore/datasets/container.py`
@@ -481,7 +451,6 @@ embedder. Shares the S11 approach.
 | **No streaming** for large JSON / pickle payloads | S3, S13, S15 |
 | **Serial I/O** where parallelism is easy | S11, S20 |
 | **No debouncing** on high-frequency write paths | S12 |
-| **Per-request rebuild** of secondary lookups | S14 |
 
 ---
 
@@ -495,8 +464,6 @@ embedder. Shares the S11 approach.
   on cache hit (no per-call `sorted()`).
 - **S7:** learned-sort job not re-fired when called twice with the same votes on
   the same `media_revision`.
-- **S14:** `_md5_index` / `_origin_key_index` stay in sync across add/remove/reload;
-  routes read them instead of rebuilding.
 
 ---
 

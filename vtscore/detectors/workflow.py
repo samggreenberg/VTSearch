@@ -46,7 +46,7 @@ def apply_and_retrain(  # noqa: C901
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
     from vtscore.state import (
         apply_label,
-        build_media_lookup,
+        cached_media_lookups,
         resolve_media_ids,
         snapshot_medias,
     )
@@ -57,7 +57,7 @@ def apply_and_retrain(  # noqa: C901
         if not snap:
             return 0, False
 
-        origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
+        origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
 
         # 1) Resolve every entry into concrete (cid, label) pairs without
         #    touching any state yet.
