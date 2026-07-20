@@ -16,15 +16,11 @@ datasets. Those cells use the static fallback.
 
 <!-- item-sep -->
 
-- [ ] #2623 — Calibrate remaining load-progress weight cells (video/text/document, non-default embedders, cuML split)
-
 <!-- item-sep -->
 
 - [ ] #2624 — Calibrate FinalizeProgress sub-slot shares from measured per-sub-stage durations
 
 <!-- item-sep -->
-
-- [ ] #2625 — Multi-embedder (v3 trio) load-progress weight model needs a per-bound-embedder `b_embed` term
 
 <!-- item-sep -->
 
