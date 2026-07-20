@@ -189,8 +189,10 @@ is the **score** embedder (structural ▸ patch ▸ text) the model was trained 
 - **`ConcurrencyGate`** (`load_pipeline.py`) gates embed work; a multi-embedder
   dataset takes proportionally longer, gated under the same `_embed_gate` limit.
 - **Dataset pickle schema version** bumps; old pickles load via the read-time re-key.
-- **NPZ paths-file** grows an optional `vectors_<embedder_name>` layout; the existing
-  single-`vectors` layout maps to the score-role slot. (Open follow-up.)
+- **NPZ paths-file** accepts an optional `vectors_<embedder_name>` layout (one array
+  per bound embedder, read by `read_npz_multi_vectors` / written by
+  `write_npz_multi_vectors`); the existing single-`vectors` layout maps to the
+  score-role slot.
 - **Combine Datasets** requires identical
   `(text_embedder, patch_embedder, structural_embedder)` triples. (Guard is an open
   follow-up.)
