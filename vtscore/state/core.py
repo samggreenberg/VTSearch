@@ -362,6 +362,14 @@ class DatasetContext:
         "_emb_matrix_ids",
         "_emb_matrix",
         "_emb_matrix_revision",
+        # One-way latch: set the first time ``invalidate_embedding_matrix``
+        # fires for this context (an in-place vector rewrite - re-embed /
+        # clip). Once set, ``get_embedding_matrix`` never again considers the
+        # on-disk mmap sidecar (see S1, docs/plans/scalability.md) for this
+        # context's lifetime, even though the id list alone can't detect a
+        # same-id in-place rewrite. A fresh load gets a fresh ``DatasetContext``
+        # (and so a fresh, unset latch), so this never needs resetting.
+        "_emb_sidecar_disabled",
         # Cached *flattened region matrix* for patch-region (e.g. DINOv3)
         # datasets, mirroring ``_emb_matrix`` but expanded to one row per
         # (media, region) pair.  ``_region_matrix`` is the ``(R, D)`` float32
@@ -466,6 +474,7 @@ class DatasetContext:
         self._emb_matrix_ids: list[int] | None = None
         self._emb_matrix: Any = None  # np.ndarray | None
         self._emb_matrix_revision: int | None = None  # media_revision the matrix was built at
+        self._emb_sidecar_disabled: bool = False  # latched True by invalidate_embedding_matrix
         self._region_matrix_ids: list[int] | None = None
         self._region_matrix: Any = None  # np.ndarray | None, shape (R, D)
         self._region_matrix_revision: int | None = None  # media_revision the region matrix was built at

@@ -213,7 +213,11 @@ def fit_projection(
     engages on the UMAP path (the PCA/trivial fallbacks are too small to pack)
     and preserves each cluster's internal shape exactly.
     """
-    mat = np.ascontiguousarray(matrix, dtype=np.float32)
+    # Force an owned, writable copy (not just contiguity/dtype): *matrix* may
+    # be a read-only mmap view (S1's embedding-matrix sidecar,
+    # docs/plans/scalability.md), and neither UMAP nor PCA guarantee they
+    # never write to their input in place.
+    mat = np.array(matrix, dtype=np.float32, copy=True, order="C")
     if mat.ndim != 2:
         raise ValueError(f"matrix must be 2-D (N, d), got shape {mat.shape}")
     n = mat.shape[0]

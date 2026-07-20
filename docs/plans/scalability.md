@@ -9,10 +9,10 @@ fix direction + implementation sketch for each item still owed.
 
 **Scope:** What breaks as datasets grow to 100 k / 1 M / 10 M items and as
 LabelSets grow to 1 k / 10 k / 100 k labels, GUI and CLI. Items track **future
-work only**: shipped items (S2/S8 coverage-atlas auto-defer, S9 GMM subsample,
-S14 cached secondary lookups, S16 grid virtual scroll, S18 prefetch cap, S21 CLI
-progress throttle) have been pruned per the plan-file policy — git history is
-their record. `S#` numbering
+work only**: shipped items (S1 mmap embedding-matrix sidecar, S2/S8
+coverage-atlas auto-defer, S9 GMM subsample, S14 cached secondary lookups, S16
+grid virtual scroll, S18 prefetch cap, S21 CLI progress throttle) have been
+pruned per the plan-file policy — git history is their record. `S#` numbering
 has gaps where those were removed; that is expected (labels are stable, never
 renumbered).
 
@@ -30,8 +30,6 @@ deferred. Items are independently shippable.
 
 ## Suggested work order (open items, max-leverage first)
 
-3. **S1** (mmap embedding matrix); unblocks 1 M+ datasets without OOM. Also
-   decouples embeddings from the pickle, which unblocks S15.
 4. **S3 + S17 + S19** (sparse sort results, lazy ordered items); must be done
    together; unblocks 1 M+ in the frontend.
 5. **S12** (debounce the detector-JSON label-sync write); makes voting with large
@@ -59,63 +57,6 @@ deferred. Items are independently shippable.
 ---
 
 ## RAM
-
-### S1: mmap embedding matrix — one giant contiguous array per loaded dataset
-
-**Files:** `vtscore/embedding/matrix.py`, `vtscore/datasets/loader_pickle.py`
-
-All embeddings for the loaded dataset are materialised into a single `(N, D)`
-`float32` array (`matrix.py:_stack_embeddings`, `np.empty((N, D))`), held on
-`DatasetContext`, and rebuilt from per-item entries on every cold start.
-
-| N | D=384 | D=768 (E5) |
-|---|-------|-----------|
-| 100 k | 150 MB | 300 MB |
-| 1 M | 1.5 GB | 3 GB |
-| 10 M | 15 GB | 30 GB |
-
-One loaded dataset already risks OOM; multi-dataset mode doubles it. The array is
-unavoidable for vectorised scoring, but it does not need to live in RAM for the
-dataset's full lifetime — at 1 M+ it should be **memory-mapped**.
-
-**Fix (two-step):**
-
-- **Step A — sidecar `.npy`.** After all embeddings are present, write the
-  sorted-by-cid matrix to `<dataset>.emb.npy` (+ companion `<dataset>.cids.npy`,
-  int64 sorted cids) if it doesn't already exist.
-- **Step B — mmap load.** On pickle load, if both sidecars exist and the cid list
-  matches the pickle's media IDs:
-
-  ```python
-  cids = np.load(cids_path)                  # int64 array
-  matrix = np.load(emb_path, mmap_mode='r')  # zero-RAM mmap
-  ctx._emb_matrix = matrix
-  ctx._emb_matrix_ids = list(cids)
-  ctx._emb_matrix_revision = ctx.media_revision
-  ```
-
-  The OS pages in only the rows scoring accesses (a 100-item sort on a 1 M dataset
-  touches ~40 kB of a 1.5 GB file). `get_embedding_matrix` must detect the
-  cached-this-way matrix and skip the rebuild.
-
-**Sidecar invalidation:** if the pickle is newer than the sidecar, or the cid list
-doesn't match, fall back to the in-memory build (optionally rewrite sidecars).
-
-**Risk:** high — introduces filesystem state alongside pickle files. Care for:
-race between sidecar write and concurrent load; embedder-dim drift (dim change →
-sidecar invalid); Docker / read-only filesystems (fall back to in-memory). A
-`--no-emb-sidecar` flag (or settings key) disables writing where the path is
-read-only.
-
-**Sidecar cleanup on delete/expiry is already covered.** `unregister_dataset`
-(`vtscore/datasets/registry.py`) deletes every file sharing the pkl's stem, not
-just the pkl itself — a `<dataset>.emb.npy` / `<dataset>.cids.npy` sidecar named
-`ds_<uuid>.emb.npy` next to `ds_<uuid>.pkl` is swept automatically on both the
-age-off and manual-delete paths (both route through `unregister_dataset`). No
-extra registry field or bookkeeping is needed as long as the sidecar filename
-keeps the pkl's stem as a prefix.
-
----
 
 ### S3 / S17 / S19: sparse sort results — top-K API + lazy frontend
 
@@ -262,10 +203,10 @@ Dict overhead is ~250 B/entry; at 1 M items the `medias` dict alone consumes
 several hundred MB before the embedding arrays.
 
 **Fix (medium-term, long horizon):** Extract embeddings from the per-item dict
-into the embedding matrix on load (S1), replacing `media["embedding"]` with a
-row-index pointer — ~60–70% smaller per-item dict at 384-dim. The full columnar
-rewrite (per-field NumPy arrays or a Polars frame) is deferred: it touches every
-media-reading call site.
+into the embedding matrix on load (mirroring the shipped mmap embedding-matrix
+sidecar), replacing `media["embedding"]` with a row-index pointer — ~60–70%
+smaller per-item dict at 384-dim. The full columnar rewrite (per-field NumPy
+arrays or a Polars frame) is deferred: it touches every media-reading call site.
 
 ---
 
@@ -381,9 +322,13 @@ deserialises the whole pickle once (its own docstring notes this is
 **Two coupled problems:**
 
 - **Streaming load.** Pickles > some threshold (e.g. 500 MB / 100 k items) should
-  load in chunks. The embedding-matrix sidecar (S1) decouples embeddings from the
-  pickle, so the pickle becomes mostly metadata (filenames, origins, md5s) and
-  loads quickly; embeddings come from the mmap'd sidecar.
+  load in chunks. Note the shipped mmap embedding-matrix sidecar does *not* by
+  itself shrink this: `medias.pkl` still carries every item's embeddings inline
+  (the sidecar is an additional, redundant mmap-able copy used only to skip
+  rebuilding the `(N, D)` matrix cache). Making the pickle itself "mostly
+  metadata" needs S4's per-item-dict rewrite first (strip `embeddings` from each
+  entry in favor of a row-index pointer) — only then does a pickle load stop
+  paying to deserialize the embedding bytes at all.
 - **Cancel responsiveness during read (found while investigating the grid
   freeze).** On a large `.pkl` two things read as "frozen, Cancel does nothing":
   (1) `read_container` is one un-cancellable, no-progress step, and the
@@ -447,7 +392,7 @@ embedder. Shares the S11 approach.
 | Root cause | Open items it affects |
 |-----------|-----------------------|
 | **O(N log N) sorted-key comparisons** used as change detection | S6, S7 |
-| **Full in-memory arrays / dicts** for every N items | S1, S3, S4, S17, S19 |
+| **Full in-memory arrays / dicts** for every N items | S3, S4, S17, S19 |
 | **No streaming** for large JSON / pickle payloads | S3, S13, S15 |
 | **Serial I/O** where parallelism is easy | S11, S20 |
 | **No debouncing** on high-frequency write paths | S12 |
@@ -456,8 +401,6 @@ embedder. Shares the S11 approach.
 
 ## Test coverage checklist (open items)
 
-- **S1:** load, unload, reload a dataset; matrix re-used from sidecar on second
-  load without rebuilding from per-item entries.
 - **S3/S17/S19:** sort response with 200 k items contains ≤700 results;
   `/api/sort/page?offset=700&limit=200` returns the next window.
 - **S6:** matrix rebuilt exactly when medias change, reused when they don't; O(1)
