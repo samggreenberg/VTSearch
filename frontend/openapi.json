@@ -1170,10 +1170,37 @@
           "name": {
             "default": "",
             "type": "string"
+          },
+          "resolutions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DatasetCombineResolution"
+            },
+            "description": "Embedder-type -> {action, embedder} conflict resolutions.",
+            "type": "object"
           }
         },
         "required": [
           "datasets"
+        ],
+        "type": "object"
+      },
+      "DatasetCombineResolution": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "reembed",
+              "drop"
+            ],
+            "type": "string"
+          },
+          "embedder": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
         ],
         "type": "object"
       },
@@ -8527,6 +8554,7 @@
     },
     "/api/dataset/combine": {
       "post": {
+        "description": "When the sources bind conflicting embedders of the same type (e.g. one\n``siglip`` dataset and one ``clip`` dataset, both semantic), the caller must\nsettle each conflict via ``resolutions`` \u2014 re-embed every source to one\nwinner, or drop that embedder type from the result.  An unresolved conflict\nis refused (400) rather than silently producing a mixed vector space; the\nCombine-Datasets modal detects the conflicts client-side and collects the\nresolutions before posting here.",
         "operationId": "combine_datasets_route",
         "requestBody": {
           "content": {
@@ -8550,7 +8578,7 @@
             "description": "OK"
           },
           "400": {
-            "description": "Invalid or missing dataset path."
+            "description": "Invalid path, or an unresolved embedder conflict."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"

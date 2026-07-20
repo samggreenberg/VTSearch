@@ -122,6 +122,65 @@
   font-style: italic;
 }
 
+// Per-embedder-type conflict resolution. Sits between the source table and the
+// info/warn line; each row pairs a description of the clash with a resolution
+// dropdown.
+.conflict-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+.conflict-title {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-secondary);
+}
+
+.conflict-intro {
+  margin: 0;
+  font-size: var(--font-md);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.conflict-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.conflict-label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  min-width: 0;
+}
+
+.conflict-type {
+  font-weight: var(--weight-semibold);
+  font-size: var(--font-lg);
+}
+
+.conflict-detail {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.conflict-select {
+  flex: 0 0 auto;
+  min-width: 220px;
+  font-size: var(--font-md);
+}
+
 // `.info-text` / `.error-text` come from `_components.scss`; only
 // `.warn-text` is local (no shared `--text-warning` utility class yet).
 .warn-text {
