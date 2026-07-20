@@ -160,3 +160,37 @@ GTZAN measurement — see the note in `_load_cost_model.py`.
 | cuda+cuml | text | bge | 0.50+0.00m·n (cold 27.0) | 0.00 | 6.09+12.07m·n | 1.00 | 0.41+2.22m·n | 1.00 | 8 |
 | cuda+cuml | text | e5 | 0.50+0.00m·n (cold 30.5) | 0.00 | 3.84+12.50m·n | 1.00 | 0.15+2.22m·n | 0.99 | 9 |
 | cuda+cuml | video | xclip | 0.50+0.00m·n (cold 28.3) | 0.00 | -0.34+146.07m·n | 0.99 | 0.25+3.05m·n | 0.83 | 9 |
+
+### Finalize sub-slot shares (issue #2624)
+
+Fitted from the same sweep's `finalize:<slot>` rows (the profiler was already
+stamping them during the #2623 run, so no separate sweep was needed) and pasted
+into `FINALIZE_SLOT_SHARES` in `_load_cost_model.py`: median seconds per slot
+across loads, normalized per `(device, media)` cell.
+
+- The static ballpark (`registry 0.45 > coverage 0.30`) has the ratio backwards
+  for most cells: measured coverage outweighs registry for audio, text, and
+  cuda video — for text it is ~99/1 (the coverage k-means over the text
+  embeddings is essentially the whole phase). Document is the opposite extreme
+  (registry ~0.95: few items, big page-image payload to serialize).
+- Each `cuda` row pools cuML-on and cuML-off loads: splitting them moved no
+  slot's share by more than ~0.11 (image coverage 0.41 with cuML vs 0.44
+  without; video 0.65 vs 0.54), so the table keeps two device keys rather than
+  growing a `cuda+cuml` variant like `LOAD_COST_MODEL`.
+- `dedup` / `cleanup` did run and measure ~0 of the phase (default fast-hash
+  dedup; floored at 0.0001 rather than rounded to an invalid 0 weight). The
+  opt-in `projection` / `signpost_texts` never ran during calibration, emit no
+  row, and keep their static ballpark share via the `_finalize_slots` merge.
+
+| device | media | slot shares (fraction of finalize) | loads |
+|--------|-------|-------------------------------------|-------|
+| cpu | audio | cleanup 0.00, dedup 0.00, coverage 0.65, registry 0.35 | 17 |
+| cpu | document | cleanup 0.00, dedup 0.00, coverage 0.05, registry 0.95 | 1 |
+| cpu | image | cleanup 0.00, dedup 0.00, coverage 0.50, registry 0.50 | 35 |
+| cpu | text | cleanup 0.00, dedup 0.00, coverage 0.99, registry 0.01 | 8 |
+| cpu | video | cleanup 0.00, dedup 0.00, coverage 0.47, registry 0.53 | 5 |
+| cuda | audio | cleanup 0.00, dedup 0.00, coverage 0.66, registry 0.34 | 48 |
+| cuda | document | cleanup 0.00, dedup 0.00, coverage 0.04, registry 0.96 | 5 |
+| cuda | image | cleanup 0.00, dedup 0.00, coverage 0.41, registry 0.59 | 96 |
+| cuda | text | cleanup 0.00, dedup 0.00, coverage 0.99, registry 0.01 | 24 |
+| cuda | video | cleanup 0.00, dedup 0.00, coverage 0.61, registry 0.39 | 16 |

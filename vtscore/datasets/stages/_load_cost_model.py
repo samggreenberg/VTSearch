@@ -450,15 +450,36 @@ EXTRACT_MB_PER_S: float = 45.66
 # consumer). Slot order here is the execution order; a slot omitted from a row
 # simply isn't paced separately for that cell.
 #
-# EMPTY until a calibration run populates it. The env-gated load profiler already
-# records ``finalize:<slot>`` rows (see ``_load_profiler`` /
-# ``FinalizeProgress.begin``); ``scripts/profiling/fit_load_weights.py`` fits
-# them into this table's body. Re-run that harness to refresh — do not hand-tune.
-# Cells with no measured row fall back to the static ``FinalizeProgress._SLOTS``
-# ballpark (which is why the finalize sub-stage motivating this table — a
-# non-cuML GPU host where the coverage k-means outweighs the registry save — is
-# uncalibrated here and awaits a GPU calibration run; see issue #2624).
-FINALIZE_SLOT_SHARES: dict[tuple[str, str], tuple[tuple[str, float], ...]] = {}
+# POPULATED FROM CALIBRATION (HLTCOE Grid rack8n06 v100 node, 2026-07-18/19
+# sweep under /exp/…/calib-2623 — the same JSONL that sourced LOAD_COST_MODEL;
+# the profiler was already stamping ``finalize:<slot>`` rows during that run,
+# so no separate sweep was needed; issues #2623/#2624, see plan Results).
+# ``scripts/profiling/fit_load_weights.py`` fits the rows into this table's
+# body (median seconds per slot across loads, normalized per cell). Re-run
+# that harness to refresh — do not hand-tune. Unlike LOAD_COST_MODEL there is
+# no "cuda+cuml" variant: each "cuda" row pools cuML-on and cuML-off loads,
+# because the measured split moved no slot's share by more than ~0.11 (e.g.
+# image coverage 0.41 cuML vs 0.44 without) — far from the registry/coverage
+# flip the static ballpark gets wrong, and not worth a third key. The
+# opt-in ``projection`` / ``signpost_texts`` slots never ran during
+# calibration, so they emit no row here and keep their static ballpark via
+# the :func:`_finalize_slots` merge; ``dedup`` / ``cleanup`` did run and
+# measure ~0 (the default fast-hash dedup — an opt-in near-dup merge would
+# be undersold by these shares until a calibrated run covers it). Cells with
+# no measured row fall back to the static ``FinalizeProgress._SLOTS``
+# ballpark entirely.
+FINALIZE_SLOT_SHARES: dict[tuple[str, str], tuple[tuple[str, float], ...]] = {
+    ("cpu", "audio"): (("cleanup", 0.0001), ("dedup", 0.0002), ("coverage", 0.6484), ("registry", 0.3512)),
+    ("cpu", "document"): (("cleanup", 0.0001), ("dedup", 0.0001), ("coverage", 0.0524), ("registry", 0.9476)),
+    ("cpu", "image"): (("cleanup", 0.0001), ("dedup", 0.0002), ("coverage", 0.5015), ("registry", 0.4983)),
+    ("cpu", "text"): (("cleanup", 0.0001), ("dedup", 0.0002), ("coverage", 0.988), ("registry", 0.0117)),
+    ("cpu", "video"): (("cleanup", 0.0003), ("dedup", 0.0006), ("coverage", 0.4725), ("registry", 0.5265)),
+    ("cuda", "audio"): (("cleanup", 0.0001), ("dedup", 0.0002), ("coverage", 0.6624), ("registry", 0.3373)),
+    ("cuda", "document"): (("cleanup", 0.0001), ("dedup", 0.0001), ("coverage", 0.0367), ("registry", 0.9633)),
+    ("cuda", "image"): (("cleanup", 0.0001), ("dedup", 0.0001), ("coverage", 0.4069), ("registry", 0.5929)),
+    ("cuda", "text"): (("cleanup", 0.0001), ("dedup", 0.0003), ("coverage", 0.9853), ("registry", 0.0143)),
+    ("cuda", "video"): (("cleanup", 0.0001), ("dedup", 0.0003), ("coverage", 0.608), ("registry", 0.3916)),
+}
 
 
 def finalize_slot_shares(device: str, media_type: str) -> Optional[tuple[tuple[str, float], ...]]:
