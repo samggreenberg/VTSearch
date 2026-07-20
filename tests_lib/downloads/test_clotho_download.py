@@ -103,7 +103,7 @@ class TestDownloadClotho:
         def fake_download(url, dest, size, cb):
             Path(dest).write_bytes(_SEVENZIP_HEADER)
 
-        def fake_extract(archive_path, archive_name, dest_dir, dataset_name, on_progress):
+        def fake_extract(archive_path, archive_name, dest_dir, dataset_name, on_progress, **kwargs):
             # Stand in for the real .7z extraction: lay down evaluation/*.wav.
             eval_dir = Path(dest_dir) / "evaluation"
             eval_dir.mkdir(parents=True, exist_ok=True)

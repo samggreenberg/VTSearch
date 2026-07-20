@@ -14,7 +14,7 @@ import time
 import uuid
 import zipfile
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Literal, Optional
 from urllib.parse import urljoin
 
 import requests
@@ -641,7 +641,7 @@ def _extract_7z(archive_path: Path, dest_dir: Path, dataset_name: str, on_progre
 
 def _extract_tar(
     archive_path: Path,
-    mode: str,
+    mode: Literal["r:", "r:*"],
     dest_dir: Path,
     dataset_name: str,
     on_progress: ProgressCallback,
