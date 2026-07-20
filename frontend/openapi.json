@@ -924,13 +924,49 @@
         ],
         "type": "object"
       },
+      "ConverterInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "fields": {
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source_type": {
+            "type": "string"
+          },
+          "summary_template": {
+            "description": "One-line preview with ``{key}`` placeholders for each field. The native row of the importer source-specs picker substitutes the current field values. Falls back to ``description`` when empty.",
+            "type": "string"
+          },
+          "target_type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "source_type",
+          "target_type"
+        ],
+        "type": "object"
+      },
       "ConvertersListResponse": {
         "additionalProperties": false,
         "properties": {
           "converters": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/ConverterInfo"
             },
             "type": "array"
           }
@@ -2535,13 +2571,58 @@
         ],
         "type": "object"
       },
+      "EmbedderInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "description": "Human-readable label shown in pickers, e.g. ``\"SigLIP (general images)\"``. Falls back to ``name`` for legacy embedders that don't supply a friendlier label.",
+            "type": "string"
+          },
+          "is_default": {
+            "description": "Whether this embedder is the recommended default for its media type (exactly one per media type). The dropdown surfaces this entry under a \"Recommended\" optgroup.",
+            "type": "boolean"
+          },
+          "license_notice": {
+            "description": "User-facing licence warning to show before the user picks this embedder. ``null`` for embedders with no special licensing constraints. Advisory only.",
+            "nullable": true,
+            "type": "string"
+          },
+          "media_type_id": {
+            "type": "string"
+          },
+          "model_id": {
+            "description": "Concrete pretrained-model identifier the embedder loads - usually a HuggingFace repo id (or a direct weights URL). ``null`` for embedders with no single downloadable model id (e.g. the classical SIFT/VLAD structural embedder).",
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "supports_geometric_verification": {
+            "description": "Whether this embedder produces local features (keypoints + descriptors) for instance matching. ``true`` for structural embedders (SIFT/VLAD); ``false`` for every semantic embedder.",
+            "type": "boolean"
+          },
+          "supports_patch_regions": {
+            "description": "Whether this embedder produces patch-level vectors and a hierarchical region tree per image. ``true`` for patch-based encoders (DINOv2, DINOv3, EUPE).",
+            "type": "boolean"
+          },
+          "supports_text": {
+            "description": "Whether this embedder can embed text queries into the same vector space as its media. ``false`` for vision-only encoders (DINOv3, Perception Encoder).",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "media_type_id",
+          "name"
+        ],
+        "type": "object"
+      },
       "EmbeddersListResponse": {
         "additionalProperties": false,
         "properties": {
           "embedders": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/EmbedderInfo"
             },
             "type": "array"
           }
@@ -4032,13 +4113,64 @@
         ],
         "type": "object"
       },
+      "MediaTypeInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "converts_to": {
+            "description": "Embeddable target type_ids a non-embeddable type can convert into (first = default). ``[\"image\", \"text\"]`` for ``document``; empty for a directly-embeddable type.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "embeddable": {
+            "description": "Whether this type can be embedded (and therefore sorted / browsed / text-queried) on its own. ``false`` for a convert-out half type like ``document`` that must be converted first.",
+            "type": "boolean"
+          },
+          "file_extensions": {
+            "description": "Glob patterns for files this media type claims, e.g. ``[\"*.jpg\", \"*.png\"]``.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "folder_import_name": {
+            "type": "string"
+          },
+          "has_thumbnail": {
+            "description": "Whether items of this type have a browsable thumbnail (image/video/document, and audio via its waveform PNG). Drives the VTSBrowse square-vs-hex bin shape and thumbnail painting.",
+            "type": "boolean"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "importable": {
+            "description": "Whether this type is a first-class ingestion category the user picks when importing (folder scan, file upload). ``false`` for a convert-in half type like ``face``.",
+            "type": "boolean"
+          },
+          "loops": {
+            "description": "Whether this media type's rendered form loops (e.g. short video/audio).",
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type_id"
+        ],
+        "type": "object"
+      },
       "MediaTypesListResponse": {
         "additionalProperties": false,
         "properties": {
           "media_types": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/MediaTypeInfo"
             },
             "type": "array"
           }
