@@ -174,22 +174,34 @@ items alone don't cover them:
   first slice; the threshold is the natural home for the future window's own
   cutoff.)
 
-**Complexity:** 4–5 PRs, not 2–3. Sequence:
+**Complexity:** 4–5 PRs, not 2–3. The backend halves have landed; only the
+frontend swap remains.
 
-1. **Decisions + cleanups (shipped first):** drop dead `bottom` select mode;
-   gate the stripe above `STRIPE_MAX_ITEMS` with clear messaging. Non-breaking,
-   independent of the API change.
-2. **Backend windowed sort API:** the windowed response shape + `/api/sort/page`
-   + sort-generation token + server-side cached lists for the two synchronous
-   sort routes. Keep returning the full `results` too (additive) so the frontend
-   keeps working until PR 4.
-3. **Server-side bulk / navigation endpoints:** "all ids above cutoff (by
-   generation token)" for Browse / To Dataset / Export, and "next unverified
-   above/below cutoff" for the Find boundary walk.
-4. **Frontend `SortStateService` → windowed model + media-list "Load more"**,
-   switching the Find bulk actions and boundary walk to the PR-3 endpoints. This
-   is the PR that stops relying on the full client-side array; land it atomically
-   with the backend dropping the full `results` payload.
+**Server-side contract the frontend will consume (already built):**
+
+- **Windowed sort API** — every sort route (`/api/sort`, `/api/example-sort`,
+  `/api/label-file-sort`) returns `sort_token` / `total` / `above_threshold`
+  alongside the (still full) `results`, and `GET /api/sort/page?token=&offset=&limit=`
+  pages a cached ranking back out. The token is the sort-generation guard.
+- **Find work-queue ids** — `GET /api/find/queue-ids?filter=unverified_good|good`
+  returns the full positive-set ids (rank order) for Browse / To Dataset /
+  Export, computed server-side from frozen `find_scores` + cutoff + verified set
+  (so it no longer truncates to a client window).
+- **Find boundary walk** — `GET /api/find/boundary-next?side=above|below[&exclude=]`
+  returns the next unverified item on the requested face of the cutoff (falling
+  back to the other side), replacing the client-side `advanceToBoundary` scan.
+
+**Remaining work — frontend windowed model (the one still-owed PR):**
+
+Replace `SortStateService`'s full `SortedItem[]` with the windowed `SortWindow`
+model above; `media-list` renders the loaded window + a "Load more" trigger
+(`cachedOrderedItems` stays ≤ window size). Switch Find's bulk actions
+(`unverifiedGoodIds`/`goodIds` → `/api/find/queue-ids`) and the boundary walk
+(`advanceToBoundary` → `/api/find/boundary-next`) onto the endpoints above, and
+keep `best_region` on each windowed row for the center-panel overlay. Land it
+atomically with the backend ceasing to send the full `results` payload (flip the
+sort routes to emit only the top-`K_ABOVE` + `K_BELOW` window). The stripe is
+already size-gated (slice 1), so no full-order client scan remains after this.
 
 ---
 

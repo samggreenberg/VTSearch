@@ -282,6 +282,12 @@ def find_label(body: dict):
     results, threshold = maybe_labelset_structural_rerank(
         get_active_detector_context(), labelset, results, threshold, snap
     )
+    # Store the final (post-rerank) cutoff on the context so server-side reads of
+    # the Find cutoff — the work-queue / boundary-walk endpoints, Inclusion
+    # re-thresholding — agree with the labels this pass just applied. A no-op for
+    # the non-structural path (threshold unchanged), authoritative for the
+    # structural one.
+    get_active_detector_context().threshold = threshold
 
     _abort_if_find_cancelled()
     update_find_progress(
