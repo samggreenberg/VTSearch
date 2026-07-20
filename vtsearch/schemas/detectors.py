@@ -909,6 +909,44 @@ class FindStatsResponseSchema(Schema):
     sweep = fields.List(fields.Nested(FindStatsSweepPointSchema), required=True)
 
 
+class FindEvidenceCoverageResponseSchema(Schema):
+    """Response for ``GET /api/find/evidence-coverage``.
+
+    The cross-user complement to the atlas domain-shift report: how much of the
+    active dataset the detector is calling *without labeled evidence behind the
+    call*, measured from the detector's own labelset (re-embedded in memory at
+    load), so it fires even when the training haystack was never handed over.
+    See docs/plans/coverage-atlas.md §6.1 (phase v0).
+    """
+
+    # False until the report could be computed (a scored Find run plus a
+    # resolvable labelset with cached embeddings); the UI hides the section
+    # when False rather than showing zeroes.
+    available = fields.Boolean(required=True)
+    # Number of scored items the report covers, and the labelset sizes it was
+    # calibrated against.
+    n_items = fields.Integer(required=True)
+    n_pos_labels = fields.Integer(required=True)
+    n_neg_labels = fields.Integer(required=True)
+    # kNN rank and significance level (mirrors the domain-shift report's scale).
+    k = fields.Integer(required=True)
+    alpha = fields.Float(required=True)
+    # Share with support p-value D < alpha — an evidence vacuum for the predicted
+    # class — its expectation under the well-supported null (= alpha), and the
+    # binomial z of the excess.
+    frac_unsupported = fields.Float(required=True)
+    expected_unsupported = fields.Float(required=True)
+    z_score = fields.Float(required=True)
+    median_support = fields.Float(required=True)
+    # Share with trust-score TS < 1 (closer to the other class's evidence) and
+    # the median TS.
+    frac_low_trust = fields.Float(required=True)
+    median_trust = fields.Float(required=True)
+    # Headline: the vacuum excess is both statistically clear and practically
+    # large (z > 3 and frac_unsupported >= 2*alpha).
+    unsupported = fields.Boolean(required=True)
+
+
 class FindCorrectionsToDetectorResponseSchema(Schema):
     """Response for ``POST /api/find/corrections-to-detector``.
 
@@ -966,6 +1004,7 @@ __all__ = [
     "FindCheckLabelsRequestSchema",
     "FindCheckLabelsResponseSchema",
     "FindCorrectionsToDetectorResponseSchema",
+    "FindEvidenceCoverageResponseSchema",
     "FindLabelRequestSchema",
     "FindLabelResponseSchema",
     "FindQueueIdsQuerySchema",

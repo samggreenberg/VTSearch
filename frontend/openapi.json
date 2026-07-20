@@ -3000,6 +3000,66 @@
         ],
         "type": "object"
       },
+      "FindEvidenceCoverageResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "alpha": {
+            "type": "number"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "expected_unsupported": {
+            "type": "number"
+          },
+          "frac_low_trust": {
+            "type": "number"
+          },
+          "frac_unsupported": {
+            "type": "number"
+          },
+          "k": {
+            "type": "integer"
+          },
+          "median_support": {
+            "type": "number"
+          },
+          "median_trust": {
+            "type": "number"
+          },
+          "n_items": {
+            "type": "integer"
+          },
+          "n_neg_labels": {
+            "type": "integer"
+          },
+          "n_pos_labels": {
+            "type": "integer"
+          },
+          "unsupported": {
+            "type": "boolean"
+          },
+          "z_score": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "alpha",
+          "available",
+          "expected_unsupported",
+          "frac_low_trust",
+          "frac_unsupported",
+          "k",
+          "median_support",
+          "median_trust",
+          "n_items",
+          "n_neg_labels",
+          "n_pos_labels",
+          "unsupported",
+          "z_score"
+        ],
+        "type": "object"
+      },
       "FindLabelRequest": {
         "additionalProperties": false,
         "properties": {
@@ -12273,6 +12333,31 @@
           }
         },
         "summary": "Fold the Find corrections into the active detector's labelset for *future*\nscoring, leaving the current Find session frozen.",
+        "tags": [
+          "detector_scoring"
+        ]
+      }
+    },
+    "/api/find/evidence-coverage": {
+      "get": {
+        "description": "The cross-user complement to the atlas domain-shift report\n(``GET /api/datasets/registry/<id>/domain-shift``): that one needs the\n*training* dataset loaded with a built atlas, which is absent in a true\ndetector handoff (userB has userA's detector JSON, not userA's haystack).\nThis asks only what the detector itself carries \u2014 its labelset, re-embedded\nin memory against the active dataset's embedder at load \u2014 so it fires even\nwhen the training haystack was never handed over.\n\nFor every scored item it measures how far the detector's *predicted* class\nsits from the labeled evidence of that class (a conformal support p-value\n``D``, calibrated against the labelset's own leave-one-out distances) and\nthe trust-score ratio ``TS``, then summarises the share of the dataset the\ndetector is calling without supervision behind it.  Returns\n``available: False`` (rather than 4xx) when there is no scored Find run or\nno resolvable labelset, so the Stats modal can simply hide the section.\nPure read; no new state.  See docs/plans/coverage-atlas.md \u00a76.1 (phase v0).",
+        "operationId": "find_evidence_coverage",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindEvidenceCoverageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Evidence-coverage report for the active detector on the active dataset.",
         "tags": [
           "detector_scoring"
         ]

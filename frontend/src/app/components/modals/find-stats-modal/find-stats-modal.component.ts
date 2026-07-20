@@ -6,6 +6,7 @@ import { DatasetsRegistryApiService } from '../../../services/datasets-registry-
 import { DatasetStateService } from '../../../services/dataset-state.service';
 import { ActiveContextService } from '../../../services/active-context.service';
 import type { FindStatsResponse } from '../../../generated/api-client/models/find-stats-response';
+import type { FindEvidenceCoverageResponse } from '../../../generated/api-client/models/find-evidence-coverage-response';
 import type { DatasetDomainShiftResponse } from '../../../generated/api-client/models/dataset-domain-shift-response';
 import type { DatasetRegistryEntry } from '../../../models/api.models';
 import { apiErrorMessage } from '../../../utils/api-error';
@@ -59,6 +60,15 @@ export class FindStatsModalComponent implements OnInit {
   readonly domainError = signal('');
   readonly domainShift = signal<DatasetDomainShiftResponse | null>(null);
 
+  // --- Evidence coverage (labelset-kNN, cross-user by construction) ---------
+  // The complement to the domain-shift report above: that one needs the
+  // *training* dataset loaded with a built atlas (absent in a real handoff);
+  // this asks only what the detector carries — its labelset — so it works
+  // whenever a Find run has been scored, with no reference dataset. Reports the
+  // share of the dataset the detector is calling without labeled evidence
+  // behind the call. See docs/plans/coverage-atlas.md §6.1 (phase v0).
+  readonly evidence = signal<FindEvidenceCoverageResponse | null>(null);
+
   // Chart geometry (SVG user units; the viewBox scales to the container width).
   readonly chartWidth = 320;
   readonly chartHeight = 150;
@@ -79,6 +89,11 @@ export class FindStatsModalComponent implements OnInit {
       },
     });
     this.initDomainOverlap();
+    // Best-effort: the section stays hidden on error or when unavailable.
+    this.findApi.getEvidenceCoverage().subscribe({
+      next: (data) => this.evidence.set(data.available ? data : null),
+      error: () => this.evidence.set(null),
+    });
   }
 
   /** Populate the reference-dataset picker from the loaded registry and, if a
@@ -140,6 +155,25 @@ export class FindStatsModalComponent implements OnInit {
   /** Headline verdict class for the overlap chip. */
   get overlapShifted(): boolean {
     return this.domainShift()?.shifted ?? false;
+  }
+
+  /** Percent of scored items in an evidence vacuum for their predicted class
+   *  (`frac_unsupported`), rounded for display. */
+  get unsupportedPct(): number {
+    const e = this.evidence();
+    return e ? Math.round(e.frac_unsupported * 100) : 0;
+  }
+
+  /** Percent of scored items closer to the *other* class's evidence than to
+   *  their own predicted class (`frac_low_trust`, trust score < 1). */
+  get lowTrustPct(): number {
+    const e = this.evidence();
+    return e ? Math.round(e.frac_low_trust * 100) : 0;
+  }
+
+  /** Headline verdict class for the evidence-coverage chip. */
+  get evidenceUnsupported(): boolean {
+    return this.evidence()?.unsupported ?? false;
   }
 
   close(): void {
