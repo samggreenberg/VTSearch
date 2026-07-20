@@ -256,7 +256,11 @@ for _name, _proxy_cls, _context_fn in _PROXY_SPECS:
     globals()[_name] = _proxy_cls(_name, _context_fn)
 
 
-__all__ = [
+# Generated from the table above (plus the two proxy classes) so the export
+# list can't drift from the instances.  pyright can't evaluate this statically,
+# hence the targeted ignore; the annotation-only declarations above already give
+# it the per-name types.
+__all__ = [  # pyright: ignore[reportUnsupportedDunderAll]
     "_ProxyDict",
     "_ProxyList",
     *sorted(name for name, _cls, _fn in _PROXY_SPECS),
