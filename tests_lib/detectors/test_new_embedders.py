@@ -579,6 +579,7 @@ class TestAudioParaSpeechClapEmbedderProperties:
 
     def test_uses_correct_model_ids(self):
         from vtscore.config import (
+            PARASPEECHCLAP_CHECKPOINT_FILE,
             PARASPEECHCLAP_CHECKPOINT_REPO,
             PARASPEECHCLAP_EMBED_DIM,
             PARASPEECHCLAP_SAMPLE_RATE,
@@ -589,6 +590,8 @@ class TestAudioParaSpeechClapEmbedderProperties:
         assert PARASPEECHCLAP_SPEECH_MODEL_ID == "microsoft/wavlm-large"
         assert PARASPEECHCLAP_TEXT_MODEL_ID == "ibm-granite/granite-embedding-278m-multilingual"
         assert PARASPEECHCLAP_CHECKPOINT_REPO == "ajd12342/paraspeechclap-combined"
+        # Upstream renamed the weights file; the old name now 404s (issue #2635).
+        assert PARASPEECHCLAP_CHECKPOINT_FILE == "slap-combined.pth.tar"
         assert PARASPEECHCLAP_EMBED_DIM == 768
         assert PARASPEECHCLAP_SAMPLE_RATE == 16000
 

@@ -155,7 +155,10 @@ class ProgressTracker:
         :meth:`_compute_eta`). The fraction is clamped to be monotonic
         non-decreasing within a job so the bar never visibly retreats; a step
         going *backwards* (or ``total_steps`` changing) is read as a brand-new
-        job and resets the overall clock.
+        job and resets the overall clock. The ETA's rate window rebases at
+        every forward step boundary so each step's extrapolation reflects the
+        pace the job is sustaining *now*, not an average polluted by phases
+        that completed instantly (cached downloads) or crawled.
         """
         if not step or not total_steps or total_steps <= 0:
             self._overall_start_time = None
@@ -187,6 +190,7 @@ class ProgressTracker:
             self._overall_total_steps = total_steps
             return raw, None
 
+        step_advanced = self._overall_last_step is not None and s > self._overall_last_step
         self._overall_last_step = s
         # Clamp to monotonic non-decreasing so within-step jitter never rewinds
         # the unified bar.
@@ -199,6 +203,21 @@ class ProgressTracker:
         assert self._overall_start_time is not None
         elapsed = now - self._overall_start_time
         progressed = raw - self._overall_start_frac
+        if step_advanced:
+            # Rebase the rate window at every forward step boundary. Phases
+            # run at wildly different fraction-rates — a cached download banks
+            # its whole bar span in milliseconds — and a job-global average
+            # lets that instantly-earned span masquerade as sustained speed,
+            # so the extrapolated ETA starts absurdly low on warm loads
+            # (issue #2615) or absurdly high after a mispaced slow phase.
+            # The boundary update itself still samples the *outgoing* step's
+            # window (a full step observed over a real elapsed span is honest
+            # signal, and the min-elapsed gate below already discards the
+            # instantly-completed case); every later update extrapolates from
+            # the rate the job sustains within the current step. The smoothed
+            # EMA carries across so the displayed value stays continuous.
+            self._overall_start_time = now
+            self._overall_start_frac = raw
         if elapsed < self._ETA_MIN_ELAPSED or progressed <= 0 or raw >= 1.0:
             # Not enough signal yet (or done): hold the last smoothed estimate.
             return raw, self._overall_smoothed_eta

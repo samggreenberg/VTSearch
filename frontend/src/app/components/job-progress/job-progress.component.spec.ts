@@ -33,6 +33,15 @@ describe('JobProgressComponent', () => {
     expect(text).toContain('5.5 min left');
   });
 
+  it('labels the eta chip as a whole-job estimate on hover', async () => {
+    const el = fixture.nativeElement as HTMLElement;
+    // No eta -> no tooltip (an empty chip should not invite hovering).
+    expect(el.querySelector('.jp__eta')?.getAttribute('title')).toBeFalsy();
+    fixture.componentRef.setInput('eta', '5.5 min left?');
+    await settleZoneless(fixture);
+    expect(el.querySelector('.jp__eta')?.getAttribute('title')).toContain('whole job');
+  });
+
   it('shows the info chip only when a description is provided', async () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.jp__info')).toBeNull();
@@ -49,6 +58,13 @@ describe('JobProgressComponent', () => {
     fixture.componentRef.setInput('cancelTitle', null);
     await settleZoneless(fixture);
     expect(el.querySelector('.jp__cancel')).toBeNull();
+  });
+
+  it('passes the bar pulsing state through to the progress bar', async () => {
+    fixture.componentRef.setInput('bar', { value: 0.35, max: 1, indeterminate: false, pulsing: true });
+    await settleZoneless(fixture);
+    const fill = (fixture.nativeElement as HTMLElement).querySelector('.progress-fill');
+    expect(fill?.classList).toContain('progress-fill--pulsing');
   });
 
   it('emits cancel and stops the click from bubbling', async () => {

@@ -160,15 +160,20 @@ def load_cost_terms(
     n: Optional[int] = None,
     download_size_mb: Optional[float] = None,
     embedder: Optional[str] = None,
-) -> dict[str, float]:
+) -> tuple[dict[str, float], bool]:
     """Predicted per-phase cost terms for a dataset load, in phase order
     ``download``, ``extract``, ``load``, ``embed``, ``finalize``.
 
-    When ``n`` is known and a measured cost-model row exists, the terms are
-    seconds from the affine model. Otherwise they are pseudo-times derived from
-    the static per-(device, media) weight profile — only their ratios matter,
-    and the acquire slice is split between download and extraction by archive
-    size when known, else by :data:`_STATIC_DOWNLOAD_SHARE`.
+    Returns ``(terms, calibrated)``. When ``n`` is known and a measured
+    cost-model row exists, the terms are seconds from the affine model and
+    ``calibrated`` is ``True``. Otherwise they are pseudo-times derived from
+    the static per-(device, media) weight profile (``calibrated=False``) —
+    only their ratios matter, and the acquire slice is split between download
+    and extraction by archive size when known, else by
+    :data:`_STATIC_DOWNLOAD_SHARE`. The flag tells the
+    :class:`AdaptiveLoadPacer` whether an observed phase duration (seconds)
+    is unit-compatible with the other terms — mixing seconds into the
+    pseudo-time vector hands the observed phase essentially the whole bar.
 
     Always returns a usable dict (never raises), so the pacing layer can rely
     on it for every import path, including streaming folder importers.
@@ -181,7 +186,7 @@ def load_cost_terms(
         emb = embedder or _default_embedder_name(media_type)
         terms = cost_model_terms(device, media_type, emb, n, download_size_mb)
         if terms is not None:
-            return terms
+            return terms, True
 
     if device == "cuda":
         w = _LOAD_STEP_WEIGHTS_GPU
@@ -204,7 +209,7 @@ def load_cost_terms(
         "load": w[1],
         "embed": w[2],
         "finalize": w[3],
-    }
+    }, False
 
 
 class FinalizeProgress:
@@ -239,11 +244,15 @@ class FinalizeProgress:
     #: this ``total`` so the tracker's overall math sees a normal sub-step.
     _SCALE = 1000
 
-    #: Ordered finalize sub-stages with a rough wall-clock share each. The
-    #: registry save (serialize + zip + write) dominates, with the coverage
+    #: Static fallback finalize sub-stage shares, used when no measured
+    #: ``(device, media_type)`` row exists in the finalize sub-slot cost model.
+    #: The registry save (serialize + zip + write) dominates, with the coverage
     #: tree second; the rest are quick. Shares need only be in the right
     #: ballpark — they shape pacing within the finalize slice, and the overall
     #: ETA self-corrects from the real rate (see ProgressTracker._compute_overall).
+    #: When a calibration run populates ``_load_cost_model.FINALIZE_SLOT_SHARES``
+    #: for a cell, those measured shares replace this ballpark for that cell (see
+    #: :func:`_finalize_slots`).
     _SLOTS: tuple[tuple[str, float], ...] = (
         ("cleanup", 0.05),
         ("dedup", 0.15),
@@ -253,17 +262,18 @@ class FinalizeProgress:
         ("projection", 0.05),
     )
 
-    def __init__(self, tracker) -> None:
+    def __init__(self, tracker, media_type: str = "") -> None:
         self._tracker = tracker
-        total = sum(weight for _, weight in self._SLOTS) or 1.0
+        slots = _finalize_slots(media_type)
+        total = sum(weight for _, weight in slots) or 1.0
         self._ranges: dict[str, tuple[float, float]] = {}
         acc = 0.0
-        for name, weight in self._SLOTS:
+        for name, weight in slots:
             self._ranges[name] = (acc / total, weight / total)
             acc += weight
         # Default to the first slot so an update before any begin() still maps
         # somewhere sane rather than raising.
-        self._base, self._span = self._ranges[self._SLOTS[0][0]]
+        self._base, self._span = self._ranges[slots[0][0]]
 
     def begin(self, slot: str) -> None:
         """Activate *slot*; subsequent :meth:`update` calls map into its range."""
@@ -294,6 +304,39 @@ class FinalizeProgress:
             total_steps=_TOTAL_LOAD_STEPS,
             **kwargs,
         )
+
+
+def _finalize_slots(media_type: str = "") -> tuple[tuple[str, float], ...]:
+    """Ordered finalize sub-slot ``(name, share)`` tuples for the active device
+    and *media_type*.
+
+    Uses the measured row from the finalize sub-slot cost model when one exists
+    for ``(device, media_type)`` (so the finalize slice paces against the real
+    per-device mix — e.g. a non-cuML GPU host where the coverage k-means
+    outweighs the registry save), else the static :data:`FinalizeProgress._SLOTS`
+    ballpark.
+
+    The result always covers **every** canonical pipeline sub-stage in execution
+    order: a measured share overrides that slot's ballpark, but any slot the
+    calibration never observed (the opt-in ``signpost_texts`` / ``projection``,
+    skipped when a calibration load didn't build a projection) keeps its static
+    ballpark share — so a production load that *does* run that sub-stage still
+    has a slice to fill and ``FinalizeProgress.begin`` never ``KeyError``s.
+    Never raises: a library-only caller that can't resolve the device or the
+    cost model falls back to the full static ballpark.
+    """
+    static = FinalizeProgress._SLOTS
+    try:
+        device = _resolve_device_name()
+        from vtscore.datasets.stages._load_cost_model import finalize_slot_shares  # noqa: PLC0415
+
+        measured = finalize_slot_shares(device, media_type)
+    except Exception:
+        measured = None
+    if not measured:
+        return static
+    overrides = dict(measured)
+    return tuple((name, overrides.get(name, ballpark)) for name, ballpark in static)
 
 
 #: Canonical phase order for a dataset load. ``download`` and ``extract`` are
@@ -357,9 +400,16 @@ class AdaptiveLoadPacer:
     #: Re-derive the weights from the observed rate at most this often.
     _RATE_REWEIGHT_INTERVAL = 1.0
 
-    def __init__(self, tracker, terms: dict[str, float]) -> None:
+    def __init__(self, tracker, terms: dict[str, float], calibrated: bool = True) -> None:
         self._tracker = tracker
         self._terms = {p: max(0.0, float(terms.get(p, 0.0))) for p in _PHASE_ORDER}
+        # Whether the terms are measured seconds (cost model) or unitless
+        # pseudo-times (static profile fallback). Observation replaces terms
+        # with real seconds, which is only meaningful against other seconds —
+        # see _observe_phase_rate.
+        self._calibrated = calibrated
+        self._prior_terms = dict(self._terms)
+        self._observed: set[str] = set()
         self._phase: str | None = None
         self._phase_t0 = 0.0
         self._frac = 0.0  # monotone within-phase fraction
@@ -453,6 +503,17 @@ class AdaptiveLoadPacer:
         smaller overall fraction than already shown; the tracker's monotonic
         clamp holds the bar flat until the target catches up, which reads as a
         brief pause rather than a rewind.
+
+        When the terms are *pseudo-times* (static profile fallback, no
+        cost-model row), an observed duration in seconds is not comparable to
+        the other phases' unitless terms — writing it in directly hands the
+        observed phase ~100% of the remaining span (a 30 s model load vs a
+        ``0.55`` embed term), which collapses every later phase to a sliver
+        and pins the ETA near zero for the rest of the load (issue #2615).
+        The observation instead fixes the seconds-per-pseudo-unit scale: the
+        not-yet-observed phases are rescaled to keep their prior ratio to the
+        observed phase, so the bar keeps pacing by the profile's ratios while
+        phases that have real measurements use them.
         """
         phase = self._phase
         if phase is None or self._frac >= 1.0:
@@ -466,7 +527,19 @@ class AdaptiveLoadPacer:
         if now - self._last_rate_reweight < self._RATE_REWEIGHT_INTERVAL:
             return
         self._last_rate_reweight = now
-        self._terms[phase] = elapsed / self._frac
+        projected = elapsed / self._frac
+        if not self._calibrated:
+            prior = self._prior_terms.get(phase, 0.0)
+            if prior <= 0.0:
+                # An unbudgeted phase gives no usable scale; pacing by the
+                # remaining priors beats handing it the whole bar.
+                return
+            scale = projected / prior
+            for p in _PHASE_ORDER:
+                if p != phase and p not in self._observed:
+                    self._terms[p] = self._prior_terms[p] * scale
+        self._observed.add(phase)
+        self._terms[phase] = projected
         self._span = (1.0 - self._consumed) * self._phase_share(phase)
         self._weights = self._weights_vector()
         self._tracker.set_step_weights(self._weights)

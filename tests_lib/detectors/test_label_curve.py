@@ -335,7 +335,7 @@ class TestEnsembleTrainers:
         )
         assert not df.empty
         assert {"std_err_auroc", "std_mean"} <= set(df.columns)
-        assert df["std_mean"].notna().all()
+        assert bool(df["std_mean"].notna().all())
 
     def test_summary_include_diagnostics_has_std_mean(self):
         clips = _synth_dataset(n_pos=20, n_neg=20)

@@ -258,7 +258,9 @@ WHISPER_SAMPLE_RATE = 16000  # Whisper expects 16 kHz mono
 PARASPEECHCLAP_SPEECH_MODEL_ID = "microsoft/wavlm-large"
 PARASPEECHCLAP_TEXT_MODEL_ID = "ibm-granite/granite-embedding-278m-multilingual"
 PARASPEECHCLAP_CHECKPOINT_REPO = "ajd12342/paraspeechclap-combined"
-PARASPEECHCLAP_CHECKPOINT_FILE = "paraspeechclap-combined.pth.tar"
+# Upstream renamed the released weights to ``slap-combined.pth.tar``; the old
+# ``paraspeechclap-combined.pth.tar`` was removed and now 404s (issue #2635).
+PARASPEECHCLAP_CHECKPOINT_FILE = "slap-combined.pth.tar"
 PARASPEECHCLAP_EMBED_DIM = 768
 PARASPEECHCLAP_SAMPLE_RATE = 16000  # WavLM expects 16 kHz mono
 PARASPEECHCLAP_MAX_SAMPLES = 16000 * 30  # cap clips at 30 s to bound CPU memory/latency
