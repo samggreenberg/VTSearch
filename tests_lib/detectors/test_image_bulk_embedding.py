@@ -276,7 +276,7 @@ class TestSiglipBulkOverride:
         _write_image(p)
 
         with mock.patch(
-            "vtscore.media.image.embedder_siglip.bulk_embed_image_files",
+            "vtscore.media.image._cross_modal_shared.bulk_embed_image_files",
             wraps=__import__(
                 "vtscore.media.image._image_bulk", fromlist=["bulk_embed_image_files"]
             ).bulk_embed_image_files,
