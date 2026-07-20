@@ -210,6 +210,54 @@ def _multi_vectors_embedder_name(key: str) -> str:
     return ""
 
 
+def _multi_vector_columns(data, p: Path) -> tuple[dict[str, np.ndarray], np.ndarray] | None:
+    """Return ``(columns, filenames_arr)`` for a per-embedder archive, or ``None``.
+
+    *columns* is ``{embedder_name: (N, D) array}`` in archive order; ``None``
+    signals no ``vectors_<name>`` key is present.  Raises ``ValueError`` for a
+    missing / malformed ``filenames`` array or a column length mismatch.
+    """
+    vec_keys: dict[str, str] = {}
+    for key in data.files:
+        name = _multi_vectors_embedder_name(key)
+        if name and name not in vec_keys:
+            vec_keys[name] = key
+    if not vec_keys:
+        return None
+
+    filenames_key = next((k for k in _FILENAMES_KEYS if k in set(data.files)), None)
+    if filenames_key is None:
+        raise ValueError(
+            f"NPZ per-embedder layout in {p} needs a filenames array "
+            f"(one of {_FILENAMES_KEYS}) alongside its vectors_<name> arrays"
+        )
+    names_arr = data[filenames_key]
+    if names_arr.ndim != 1:
+        raise ValueError(f"NPZ '{filenames_key}' array must be 1-D, got shape {names_arr.shape}")
+    n = len(names_arr)
+
+    columns: dict[str, np.ndarray] = {}
+    for emb_name, key in vec_keys.items():
+        arr = data[key]
+        if len(arr) != n:
+            raise ValueError(f"NPZ '{key}' and '{filenames_key}' have mismatched lengths ({len(arr)} vs {n})")
+        columns[emb_name] = arr
+    return columns, names_arr
+
+
+def _resolve_multi_primary(data, columns: dict[str, np.ndarray]) -> str:
+    """Pick the score-role embedder: the scalar ``embedder_name`` if it names a
+    present column, else the first column in archive order."""
+    for name_key in _EMBEDDER_NAME_KEYS:
+        if name_key in set(data.files):
+            val = data[name_key]
+            primary = (str(val) if val.ndim == 0 else str(val.flat[0])).strip()
+            if primary in columns:
+                return primary
+            break
+    return next(iter(columns))
+
+
 def read_npz_multi_vectors(npz_path: Path) -> tuple[dict[str, dict[str, np.ndarray]], str] | None:
     """Read the per-embedder ``vectors_<name>`` layout, or ``None`` if absent.
 
@@ -233,45 +281,11 @@ def read_npz_multi_vectors(npz_path: Path) -> tuple[dict[str, dict[str, np.ndarr
         raise FileNotFoundError(f"NPZ file not found: {p}")
 
     with np.load(p, allow_pickle=False) as data:
-        # Preserve archive order so the primary-fallback and role derivation are
-        # deterministic; dict keeps first-seen order.
-        vec_keys: dict[str, str] = {}
-        for key in data.files:
-            name = _multi_vectors_embedder_name(key)
-            if name and name not in vec_keys:
-                vec_keys[name] = key
-        if not vec_keys:
+        resolved = _multi_vector_columns(data, p)
+        if resolved is None:
             return None
-
-        key_set = set(data.files)
-        filenames_key = next((k for k in _FILENAMES_KEYS if k in key_set), None)
-        if filenames_key is None:
-            raise ValueError(
-                f"NPZ per-embedder layout in {p} needs a filenames array "
-                f"(one of {_FILENAMES_KEYS}) alongside its vectors_<name> arrays"
-            )
-        names_arr = data[filenames_key]
-        if names_arr.ndim != 1:
-            raise ValueError(f"NPZ '{filenames_key}' array must be 1-D, got shape {names_arr.shape}")
-        n = len(names_arr)
-
-        columns: dict[str, np.ndarray] = {}
-        for emb_name, key in vec_keys.items():
-            arr = data[key]
-            if len(arr) != n:
-                raise ValueError(
-                    f"NPZ '{key}' and '{filenames_key}' have mismatched lengths ({len(arr)} vs {n})"
-                )
-            columns[emb_name] = arr
-
-        primary = ""
-        for name_key in _EMBEDDER_NAME_KEYS:
-            if name_key in key_set:
-                val = data[name_key]
-                primary = (str(val) if val.ndim == 0 else str(val.flat[0])).strip()
-                break
-        if primary not in columns:
-            primary = next(iter(columns))
+        columns, names_arr = resolved
+        primary = _resolve_multi_primary(data, columns)
 
         mapping: dict[str, dict[str, np.ndarray]] = {}
         for i, raw_name in enumerate(names_arr):
@@ -280,7 +294,7 @@ def read_npz_multi_vectors(npz_path: Path) -> tuple[dict[str, dict[str, np.ndarr
                 continue
             mapping[fname] = {emb: np.asarray(col[i]) for emb, col in columns.items()}
         if not mapping:
-            raise ValueError(f"NPZ '{filenames_key}' array is empty")
+            raise ValueError("NPZ per-embedder filenames array is empty")
         return mapping, primary
 
 

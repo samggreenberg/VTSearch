@@ -243,10 +243,14 @@ class TestWriteNpzMultiVectors:
     def test_round_trips_through_reader(self, tmp_path):
         rng = np.random.default_rng(7)
         mapping = {
-            "a.jpg": {"siglip": rng.standard_normal(3).astype(np.float32),
-                      "dinov3_patch": rng.standard_normal(4).astype(np.float32)},
-            "b.jpg": {"siglip": rng.standard_normal(3).astype(np.float32),
-                      "dinov3_patch": rng.standard_normal(4).astype(np.float32)},
+            "a.jpg": {
+                "siglip": rng.standard_normal(3).astype(np.float32),
+                "dinov3_patch": rng.standard_normal(4).astype(np.float32),
+            },
+            "b.jpg": {
+                "siglip": rng.standard_normal(3).astype(np.float32),
+                "dinov3_patch": rng.standard_normal(4).astype(np.float32),
+            },
         }
         npz = tmp_path / "out.npz"
         write_npz_multi_vectors(npz, mapping, primary_embedder="dinov3_patch")
