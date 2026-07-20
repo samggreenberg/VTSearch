@@ -60,6 +60,74 @@
   font-size: var(--font-sm);
 }
 
+// --- Training-domain overlap (coverage-atlas domain-shift) ---------------
+
+.domain-overlap {
+  margin-bottom: var(--space-md);
+}
+
+.domain-ref {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.domain-ref-label {
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.domain-ref-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.domain-chip {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-left: 3px solid var(--color-good);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+
+  &.shifted {
+    border-left-color: var(--text-warning);
+  }
+}
+
+.domain-chip-pct {
+  font-size: var(--font-lg);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.domain-chip-text {
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+
+  strong {
+    color: var(--text-primary);
+    font-weight: var(--weight-semibold);
+  }
+}
+
+.domain-detail {
+  margin: var(--space-xs) 0 0;
+  line-height: 1.4;
+}
+
+.domain-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+}
+
 .chart-wrap {
   margin-top: var(--space-sm);
 }
