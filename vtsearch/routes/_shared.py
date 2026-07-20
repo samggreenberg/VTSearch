@@ -554,6 +554,35 @@ def run_plugin_or_error(plugin: PluginBase, method: str, *args):
     return result, None
 
 
+def windowed_sort_extras(results: list[dict], threshold: float | None) -> dict[str, Any]:
+    """Register a full sorted ``results`` list and return the windowing extras.
+
+    Stores *results* in the process-global :data:`sort_results_cache` keyed to
+    the active (dataset, detector) pair and returns the extra fields a sort
+    response carries so a client can page deeper without holding the whole list:
+
+    - ``sort_token`` — opaque handle for ``GET /api/sort/page``; also the
+      sort-generation token (a re-sort mints a new one).
+    - ``total`` — full ranking length.
+    - ``above_threshold`` — rows scoring at or above *threshold*.
+
+    Additive: the caller still returns the full ``results`` today (the frontend
+    windowed model lands in a later slice, see ``docs/plans/scalability.md``
+    S3/S17/S19), so wiring this in never changes existing behaviour.
+    """
+    from vtscore.state.core import get_active_context, get_active_detector_context  # noqa: PLC0415
+    from vtscore.state.sort_results_cache import count_above_threshold, sort_results_cache  # noqa: PLC0415
+
+    dataset_id = getattr(get_active_context(), "dataset_id", "") or ""
+    detector_id = getattr(get_active_detector_context(), "detector_id", "") or ""
+    token = sort_results_cache.store(results, threshold, dataset_id=dataset_id, detector_id=detector_id)
+    return {
+        "sort_token": token,
+        "total": len(results),
+        "above_threshold": count_above_threshold(results, threshold),
+    }
+
+
 def get_embedder_for_medias(media_dict: dict):
     """Return the appropriate embedder for the given medias, or ``None``.
 

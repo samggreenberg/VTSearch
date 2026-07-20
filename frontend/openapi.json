@@ -3380,6 +3380,9 @@
       "LabelFileSortResponse": {
         "additionalProperties": false,
         "properties": {
+          "above_threshold": {
+            "type": "integer"
+          },
           "loaded": {
             "type": "integer"
           },
@@ -3393,8 +3396,14 @@
           "skipped": {
             "type": "integer"
           },
+          "sort_token": {
+            "type": "string"
+          },
           "threshold": {
             "type": "number"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "required": [
@@ -4806,6 +4815,43 @@
         },
         "type": "object"
       },
+      "SortPageResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "has_more": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "threshold": {
+            "nullable": true,
+            "type": "number"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "has_more",
+          "limit",
+          "offset",
+          "results",
+          "threshold",
+          "total"
+        ],
+        "type": "object"
+      },
       "SortRequest": {
         "additionalProperties": false,
         "properties": {
@@ -4821,6 +4867,9 @@
       "SortResponse": {
         "additionalProperties": false,
         "properties": {
+          "above_threshold": {
+            "type": "integer"
+          },
           "results": {
             "items": {
               "additionalProperties": {},
@@ -4828,8 +4877,14 @@
             },
             "type": "array"
           },
+          "sort_token": {
+            "type": "string"
+          },
           "threshold": {
             "type": "number"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "required": [
@@ -14282,6 +14337,68 @@
           }
         },
         "summary": "Return medias sorted by cosine similarity to a text query.",
+        "tags": [
+          "sorting"
+        ]
+      }
+    },
+    "/api/sort/page": {
+      "get": {
+        "description": "A sort route (``/api/sort``, ``/api/example-sort``, ``/api/label-file-sort``)\nstores its full descending ``results`` list and hands back a ``sort_token``;\nthis endpoint slices ``[offset, offset + limit)`` out of that cached list so\nthe client can scroll deep into a large ranking without receiving the whole\nthing up front (``docs/plans/scalability.md`` S3/S17/S19).\n\nThe token doubles as a sort-generation guard: a re-sort mints a new token,\nand an evicted/unknown token 404s so the client refetches from the top.",
+        "operationId": "sort_page",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 2000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SortPageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Unknown or expired sort token; re-run the sort."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return one window of a previously-computed ranking.",
         "tags": [
           "sorting"
         ]

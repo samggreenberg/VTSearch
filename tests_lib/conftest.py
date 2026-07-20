@@ -237,6 +237,10 @@ def reset_contexts(tmp_path, monkeypatch):
 
     reset_all_async_jobs_for_tests()
 
+    from vtscore.state.sort_results_cache import sort_results_cache
+
+    sort_results_cache.reset_for_tests()
+
     clear_progress_cache()
 
     from vtscore.embedding.helpers import clear_text_query_cache as _clear_query_cache
