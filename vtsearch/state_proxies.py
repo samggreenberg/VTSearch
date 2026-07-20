@@ -214,55 +214,50 @@ class _ProxyList(list):
 # All vote/label proxies delegate to the active DetectorContext.
 # ---------------------------------------------------------------------------
 
-# Clips storage: id -> {id, type, duration, file_size, embedding, media_bytes, ...}
-medias: dict[int, dict[str, Any]] = _ProxyDict("medias")  # type: ignore[assignment]
+# Per-name container types, declared (but not assigned) here so static checkers
+# see the real dict/list shape of each proxy.  The instances themselves are
+# generated from the ``_PROXY_SPECS`` table below, so the annotations here are
+# the only place the shapes differ.
+#
+#   medias                Clips storage: id -> {id, type, duration, ...}
+#   good_votes/bad_votes  Voting storage (insertion-ordered dict)
+#   label_history         Combined label history: [(media_id, label, ts), ...]
+#   vote_click_times      Click order (1-indexed) per media_id
+#   vote_region_boxes     media_id -> (x0, y0, x1, y1) normalised box drawn on a
+#                         yes-vote (patch-embedder v2); absent otherwise
+#   last_learned_scores   media_id -> learned-sort score (float in [0, 1])
+#   textsort_suggestions  Text queries that got a Good vote, most recent last
+medias: dict[int, dict[str, Any]]
+good_votes: dict[int, None]
+bad_votes: dict[int, None]
+label_history: list[tuple[int, str, float]]
+vote_click_times: dict[int, int]
+vote_region_boxes: dict[int, tuple[float, float, float, float]]
+last_learned_scores: dict[int, float]
+textsort_suggestions: list[str]
 
-# Voting storage (OrderedDict behavior via dict in Python 3.7+)
-good_votes: dict[int, None] = _ProxyDict("good_votes", get_active_detector_context)  # type: ignore[assignment]
-bad_votes: dict[int, None] = _ProxyDict("bad_votes", get_active_detector_context)  # type: ignore[assignment]
+# (exported name, proxy class, context resolver).  Every proxy delegates to the
+# active DetectorContext except ``medias``, which is dataset-intrinsic and
+# delegates to the active DatasetContext.  Driving both the instances and
+# ``__all__`` from this single table keeps the exported-name list from ever
+# drifting out of sync with the instances.
+_PROXY_SPECS: list[tuple[str, type, Callable[[], Any]]] = [
+    ("medias", _ProxyDict, get_active_context),
+    ("good_votes", _ProxyDict, get_active_detector_context),
+    ("bad_votes", _ProxyDict, get_active_detector_context),
+    ("label_history", _ProxyList, get_active_detector_context),
+    ("vote_click_times", _ProxyDict, get_active_detector_context),
+    ("vote_region_boxes", _ProxyDict, get_active_detector_context),
+    ("last_learned_scores", _ProxyDict, get_active_detector_context),
+    ("textsort_suggestions", _ProxyList, get_active_detector_context),
+]
 
-# Combined label history: [(media_id, label, timestamp), ...]
-label_history: list[tuple[int, str, float]] = _ProxyList(  # type: ignore[assignment]
-    "label_history",
-    get_active_detector_context,
-)
-
-# Click-time tracking: media_id -> click order (1-indexed).
-vote_click_times: dict[int, int] = _ProxyDict(  # type: ignore[assignment]
-    "vote_click_times",
-    get_active_detector_context,
-)
-
-# Per-good-vote region boxes: media_id -> (x0, y0, x1, y1) in normalised image
-# coords.  Only populated when the user drew a region as part of a yes-vote;
-# absent for image-level yes-votes and for every no-vote.  Patch-embedder v2.
-vote_region_boxes: dict[int, tuple[float, float, float, float]] = _ProxyDict(  # type: ignore[assignment]
-    "vote_region_boxes",
-    get_active_detector_context,
-)
-
-# Last learned-sort scores: media_id -> score (float in [0, 1]).
-last_learned_scores: dict[int, float] = _ProxyDict(  # type: ignore[assignment]
-    "last_learned_scores",
-    get_active_detector_context,
-)
-
-# Text-sort suggestions: text queries that received a Good vote, most recent last.
-textsort_suggestions: list[str] = _ProxyList(  # type: ignore[assignment]
-    "textsort_suggestions",
-    get_active_detector_context,
-)
+for _name, _proxy_cls, _context_fn in _PROXY_SPECS:
+    globals()[_name] = _proxy_cls(_name, _context_fn)
 
 
 __all__ = [
     "_ProxyDict",
     "_ProxyList",
-    "bad_votes",
-    "good_votes",
-    "label_history",
-    "last_learned_scores",
-    "medias",
-    "textsort_suggestions",
-    "vote_click_times",
-    "vote_region_boxes",
+    *sorted(name for name, _cls, _fn in _PROXY_SPECS),
 ]
