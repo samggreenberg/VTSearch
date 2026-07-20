@@ -4,45 +4,45 @@
 
 ## Open follow-ups & open questions (remaining work)
 
+Concrete, independently-shippable follow-ups now live as GitHub issues (bodies
+there, not duplicated here); the design/non-goal items stay in prose below.
+
 Cross-cutting, still open:
 
-- **Cross-dataset Find / CLI-chunk scoring stay on the primary vector.**
-  `find._score_dataset` / `_score_with_cold_detector` (other datasets'
-  `temp_medias`) and `cli._score_medias_with_detectors` (per-chunk subsets)
-  never touch the active `DatasetContext`, so they build the matrix from each
-  media's primary vector rather than calling `routed_embedder` /
-  `keying_embedder_for_snap`. Correct for every single-embedder dataset
-  (primary == score embedder); only matters once a real multi-embedder (trio)
-  dataset is Find-scored. Wire a binding derived from those medias' own embedder
-  names then. (Tracked from 2b.4 and re-surfaced by the per-detector work.)
-- **Trio score-precedence (open question #3) not yet validated on real data.**
-  The score role resolves structural ▸ patch ▸ text everywhere, but it is
-  unproven whether (a) a detector should default to the structural two-stage
-  pipeline when both patch and structural are bound, and (b) the coverage atlas
-  should use a *different* preference (patch ▸ structural) than the detector.
-  Now that a patch+structural dataset is creatable, run the spike.
+<!-- item-sep -->
+
+- [ ] #2666 — Cross-dataset Find / CLI-chunk scoring routes through the score embedder, not the primary vector
+
+<!-- item-sep -->
+
+- [ ] #2668 — Spike: validate trio score-precedence (structural vs patch) on a real patch+structural dataset (open question #3)
+
+<!-- item-sep -->
+
 - **`patch_regions` / `patch_grid` / `local_features` stay singular.** The
   binding allows at most one patch and one structural embedder, so these are
   single-valued (owned by that role's embedder) rather than dict-keyed. Only
   revisit if ">1 patch (or structural) embedder per dataset" ever comes off the
   non-goals list.
-- **Combine Datasets triple-match guard not added.** `combine_datasets` still
-  guards only on media type, not on the `(text_embedder, patch_embedder,
-  structural_embedder)` triple (a pre-existing latitude — it never checked the
-  single `embedder` either). Harmless until multi-embedder datasets are common;
-  add the strict triple-match refusal (v3 open question #2) then.
-- **NPZ per-embedder layout (`vectors_<name>`) not added.** The `server_files`
-  NPZ importer still carries a single `vectors` array; the per-embedder layout
-  lands with the multi-embed path that would populate it.
+
+<!-- item-sep -->
+
+- [ ] #2667 — Combine Datasets triple-match guard (refuse mismatched embedder triples) (open question #2)
+
+<!-- item-sep -->
+
+- [ ] #2669 — NPZ server_files importer: per-embedder vectors_&lt;name&gt; layout (lands with the multi-embed path that populates it)
+
+<!-- item-sep -->
+
 Per-detector embedder-type follow-ups:
 
-- **In-memory primary drift across A→B→A switches.** `DetectorContext.embedder`
-  (the adaptive cache marker) is re-stamped to the dataset's space when the
-  active dataset can't supply the detector's type. The persisted
-  `embedder_type` is untouched and reloaded on next detector load, but within
-  one session a multi-embedder → other-space → back sequence can leave the
-  detector scoring via the *adapted* slot until reload. Exotic; revisit if it
-  bites.
+<!-- item-sep -->
+
+- [ ] #2670 — Detector in-memory primary can drift across A→B→A dataset switches
+
+<!-- item-sep -->
+
 - **Per-detector coverage atlas** and **changing a detector's type after
   creation** remain out of scope (see the per-detector "Out of scope" below).
 
@@ -55,7 +55,8 @@ V3 open questions (design-level, still unresolved):
 2. **Combine Datasets ergonomics.** Strict "embedder triple must match" is the
    v3 rule; if it bites, add a "combine on the text slot only" variant. Punt
    until real demand.
-3. **Coverage-atlas vs score backbone (patch vs structural).** Structural-over-
+3. **Coverage-atlas vs score backbone (patch vs structural).** (Validation
+   tracked in #2668.) Structural-over-
    patch for the shared score role is the less obvious call — a structural
    embedder is a deliberate specialist pick, but its Stage-1 VLAD vector may
    cluster *worse* than patch for the coverage atlas. Two sub-decisions to
