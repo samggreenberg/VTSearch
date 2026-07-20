@@ -37,6 +37,7 @@ from vtscore.datasets.importers._npz_vectors import (
     is_archive_member_manifest,
     read_npz_embedder_name,
     read_npz_filenames_and_vectors,
+    read_npz_multi_vectors,
     validate_manifest_embedder_name,
 )
 from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
@@ -79,16 +80,23 @@ def _read_npz_paths_file(paths_file: Path) -> tuple[list[Path], dict[str, Any], 
 
     Returns ``(paths, path_to_vector, embedder_name)`` where keys of
     *path_to_vector* are the absolute path strings of the resolved entries
-    (the same strings that appear in *paths*), and *embedder_name* is the
-    value stored under ``"embedder_name"`` or ``"embedder"`` in the archive
-    (``""`` when absent).
+    (the same strings that appear in *paths*).  Each value is either a bare
+    vector (single-``vectors`` layout) or a ``{embedder_name: vector}`` dict
+    (the per-embedder ``vectors_<name>`` layout), and *embedder_name* is the
+    **primary** (score-role) embedder: the scalar ``"embedder_name"`` /
+    ``"embedder"`` value, or the leading per-embedder column for a trio
+    archive (``""`` when absent).
     """
-    name_to_vector = read_npz_filenames_and_vectors(paths_file)
-    embedder_name = read_npz_embedder_name(paths_file)
+    multi = read_npz_multi_vectors(paths_file)
+    if multi is not None:
+        name_to_value, embedder_name = multi
+    else:
+        name_to_value = read_npz_filenames_and_vectors(paths_file)
+        embedder_name = read_npz_embedder_name(paths_file)
     base_dir = paths_file.resolve().parent
     paths: list[Path] = []
     path_to_vector: dict[str, Any] = {}
-    for raw_name, vec in name_to_vector.items():
+    for raw_name, value in name_to_value.items():
         line = raw_name.strip()
         if not line:
             continue
@@ -96,7 +104,7 @@ def _read_npz_paths_file(paths_file: Path) -> tuple[list[Path], dict[str, Any], 
         if not candidate.is_absolute():
             candidate = (base_dir / candidate).resolve()
         paths.append(candidate)
-        path_to_vector[str(candidate)] = vec
+        path_to_vector[str(candidate)] = value
     return paths, path_to_vector, embedder_name
 
 
@@ -114,6 +122,25 @@ def _read_paths_file(paths_file: Path) -> list[Path]:
         paths, _, _embedder = _read_npz_paths_file(paths_file)
         return paths
     return _read_text_paths_file(paths_file)
+
+
+def _npz_embedder_names(primary: str, path_to_vector: dict[str, Any]) -> list[str]:
+    """Return every embedder name an NPZ archive binds (primary first).
+
+    For a single-``vectors`` archive this is just the (possibly empty) primary
+    name.  For a per-embedder ``vectors_<name>`` archive it is the union of the
+    primary plus every column name across the dict-valued entries, so the
+    importer can reject an unroutable name in *any* column before staging.
+    """
+    names: list[str] = []
+    if primary:
+        names.append(primary)
+    for value in path_to_vector.values():
+        if isinstance(value, dict):
+            for name in value:
+                if name and name not in names:
+                    names.append(name)
+    return names
 
 
 def _read_paths_and_vectors(paths_file: Path) -> tuple[list[Path], dict[str, Any], str]:
@@ -201,7 +228,8 @@ class ServerFilesDatasetImporter(DatasetImporter):
     description = (
         "Read a server-side manifest and import the media it lists. Accepts a text "
         "file of media paths (one per line), a .npz of paths plus pre-computed "
-        "embedding vectors, or a .npz that references members inside tar/zip shards "
+        "embedding vectors (one shared array, or one vectors_<embedder> array per "
+        "bound embedder), or a .npz that references members inside tar/zip shards "
         "and streams them without extraction (WebDataset-style corpora)"
     )
     icon = "\U0001f5c2"  # 🗂 - falls back to a generic file icon
@@ -229,7 +257,9 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 "Accepted formats:\n"
                 " • .txt / .list - UTF-8 text, one path per line (lines starting with # are comments).\n"
                 " • .npz (paths) - NumPy archive of paths plus pre-computed embedding vectors;\n"
-                "   listed files skip re-embedding and use the supplied vectors.\n"
+                "   listed files skip re-embedding and use the supplied vectors. Supply a single\n"
+                "   'vectors' array, or one 'vectors_<embedder>' array per bound embedder to\n"
+                "   populate every role slot of a multi-embedder dataset at once.\n"
                 " • .npz (archive members) - a manifest with a 'members' + 'archives' array\n"
                 "   references media packed inside tar/zip shards; the bytes stream on demand\n"
                 "   with no extraction (built for WebDataset-style corpora too large to copy).\n"
@@ -323,8 +353,11 @@ class ServerFilesDatasetImporter(DatasetImporter):
             raise ValueError(f"No paths found in {paths_file}")
         # Reject an unroutable NPZ embedder name before staging anything, so the
         # failure is an actionable import-time error rather than a confusing
-        # "does not support text queries" 400 at search time.
-        validate_manifest_embedder_name(embedder_name, media_type_id, source_label=f"paths file {paths_file.name}")
+        # "does not support text queries" 400 at search time.  A per-embedder
+        # ``vectors_<name>`` archive binds *every* named column to a role slot,
+        # so validate all of them, not just the primary.
+        for name in _npz_embedder_names(embedder_name, path_to_vector):
+            validate_manifest_embedder_name(name, media_type_id, source_label=f"paths file {paths_file.name}")
 
         staging = Path(tempfile.mkdtemp(prefix="server_files_"))
         name_to_source = _symlink_paths(paths, staging)

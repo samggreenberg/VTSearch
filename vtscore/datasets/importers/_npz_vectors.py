@@ -4,7 +4,7 @@ The ``server_files`` and ``local_files`` importers accept an ``.npz`` archive
 of pre-computed embeddings instead of (or alongside) raw media files, so
 users who have already embedded their data don't have to re-embed it.
 
-Two NPZ layouts are supported:
+Three NPZ layouts are supported:
 
 1. **filenames + vectors** (preferred) - Two top-level arrays,
    ``filenames`` (1-D string-like) and ``vectors`` (2-D float).  The
@@ -19,10 +19,23 @@ Two NPZ layouts are supported:
    ``dict``, so it carries a noticeable memory overhead at scale (roughly
    ~450 MB resident for 100k rows of 1152-dim ``float32``).  Fine for
    ~10k-row archives; prefer layout 1 above that.
+3. **filenames + per-embedder vectors** (V3 trio) - ``filenames`` plus one
+   ``vectors_<embedder_name>`` array per bound embedder (e.g.
+   ``vectors_siglip`` + ``vectors_dinov3_patch``), each ``(N, D)`` and aligned
+   with ``filenames``.  A single pre-embedded archive can then carry every
+   bound embedder's vector at once, so importing it populates all of a trio
+   dataset's role slots (``media["embeddings"]`` becomes a per-embedder dict).
+   An optional scalar ``embedder_name`` names the **primary** (score-role)
+   embedder; absent, the first ``vectors_<name>`` key (archive order) leads.
+   Read by :func:`read_npz_multi_vectors`, written by
+   :func:`write_npz_multi_vectors` (the symmetric producer, so the layout has
+   an in-repo round-trip: export a dataset's per-embedder vectors, re-import
+   them).
 
-The standard layout is tried first; if neither expected key is present
-the per-key layout is assumed.  ``allow_pickle`` is disabled to avoid
-loading arbitrary Python objects from untrusted archives.
+Layout 3 (per-embedder) is detected first (any ``vectors_<name>`` key), then
+the standard ``filenames`` + ``vectors`` layout, and finally the per-key
+layout.  ``allow_pickle`` is disabled to avoid loading arbitrary Python
+objects from untrusted archives.
 """
 
 from __future__ import annotations
@@ -36,6 +49,12 @@ import numpy as np
 
 _FILENAMES_KEYS = ("filenames", "names", "paths", "filename")
 _VECTORS_KEYS = ("vectors", "embeddings", "vecs", "embedding")
+#: Prefixes that mark a per-embedder vector array in the V3 trio layout.  A key
+#: ``vectors_siglip`` (or ``embeddings_siglip`` / ``vecs_siglip``) contributes a
+#: vector for the embedder named by the text after the prefix.  The trailing
+#: underscore keeps these from colliding with the bare single-vector keys in
+#: ``_VECTORS_KEYS`` ("vectors" never matches "vectors_").
+_VECTORS_PREFIXES = ("vectors_", "embeddings_", "vecs_")
 _EMBEDDER_NAME_KEYS = ("embedder_name", "embedder")
 _MEMBERS_KEYS = ("members", "member")
 _ARCHIVES_KEYS = ("archives", "archive", "shards", "shard")
@@ -174,6 +193,161 @@ def read_npz_filenames_and_vectors(npz_path: Path) -> dict[str, np.ndarray]:
         for k in keys:
             mapping[k] = np.asarray(data[k])
         return mapping
+
+
+def _multi_vectors_embedder_name(key: str) -> str:
+    """Return the embedder name a ``vectors_<name>`` key encodes, or ``""``.
+
+    Strips the first matching :data:`_VECTORS_PREFIXES` prefix and returns the
+    (trimmed) remainder.  A bare single-vector key ("vectors", "embeddings", …)
+    has no trailing underscore and so yields ``""``, keeping the two layouts
+    from colliding.  Only the leading prefix is stripped, so an embedder name
+    that itself contains underscores (``dinov3_patch``) survives intact.
+    """
+    for prefix in _VECTORS_PREFIXES:
+        if key.startswith(prefix):
+            return key[len(prefix) :].strip()
+    return ""
+
+
+def _multi_vector_columns(data, p: Path) -> tuple[dict[str, np.ndarray], np.ndarray] | None:
+    """Return ``(columns, filenames_arr)`` for a per-embedder archive, or ``None``.
+
+    *columns* is ``{embedder_name: (N, D) array}`` in archive order; ``None``
+    signals no ``vectors_<name>`` key is present.  Raises ``ValueError`` for a
+    missing / malformed ``filenames`` array or a column length mismatch.
+    """
+    vec_keys: dict[str, str] = {}
+    for key in data.files:
+        name = _multi_vectors_embedder_name(key)
+        if name and name not in vec_keys:
+            vec_keys[name] = key
+    if not vec_keys:
+        return None
+
+    filenames_key = next((k for k in _FILENAMES_KEYS if k in set(data.files)), None)
+    if filenames_key is None:
+        raise ValueError(
+            f"NPZ per-embedder layout in {p} needs a filenames array "
+            f"(one of {_FILENAMES_KEYS}) alongside its vectors_<name> arrays"
+        )
+    names_arr = data[filenames_key]
+    if names_arr.ndim != 1:
+        raise ValueError(f"NPZ '{filenames_key}' array must be 1-D, got shape {names_arr.shape}")
+    n = len(names_arr)
+
+    columns: dict[str, np.ndarray] = {}
+    for emb_name, key in vec_keys.items():
+        arr = data[key]
+        if len(arr) != n:
+            raise ValueError(f"NPZ '{key}' and '{filenames_key}' have mismatched lengths ({len(arr)} vs {n})")
+        columns[emb_name] = arr
+    return columns, names_arr
+
+
+def _resolve_multi_primary(data, columns: dict[str, np.ndarray]) -> str:
+    """Pick the score-role embedder: the scalar ``embedder_name`` if it names a
+    present column, else the first column in archive order."""
+    for name_key in _EMBEDDER_NAME_KEYS:
+        if name_key in set(data.files):
+            val = data[name_key]
+            primary = (str(val) if val.ndim == 0 else str(val.flat[0])).strip()
+            if primary in columns:
+                return primary
+            break
+    return next(iter(columns))
+
+
+def read_npz_multi_vectors(npz_path: Path) -> tuple[dict[str, dict[str, np.ndarray]], str] | None:
+    """Read the per-embedder ``vectors_<name>`` layout, or ``None`` if absent.
+
+    Returns ``(mapping, primary_embedder_name)`` where *mapping* is
+    ``{filename: {embedder_name: vector}}`` (insertion order preserved) and
+    *primary_embedder_name* is the score-role embedder: the scalar
+    ``embedder_name`` value when it names one of the present arrays, else the
+    first ``vectors_<name>`` key in archive order.  Every per-media dict carries
+    the same embedder-name set, so importing the archive binds each embedder to
+    its role slot.
+
+    Returns ``None`` (not an error) when the archive holds **no**
+    ``vectors_<name>`` key, signalling the caller to fall back to the
+    single-``vectors`` reader.  Raises ``FileNotFoundError`` for a missing file
+    and ``ValueError`` for a malformed per-embedder archive (missing
+    ``filenames``, a column whose length disagrees with ``filenames``, or one
+    that yields no rows).
+    """
+    p = Path(npz_path)
+    if not p.is_file():
+        raise FileNotFoundError(f"NPZ file not found: {p}")
+
+    with np.load(p, allow_pickle=False) as data:
+        resolved = _multi_vector_columns(data, p)
+        if resolved is None:
+            return None
+        columns, names_arr = resolved
+        primary = _resolve_multi_primary(data, columns)
+
+        mapping: dict[str, dict[str, np.ndarray]] = {}
+        for i, raw_name in enumerate(names_arr):
+            fname = str(raw_name).strip()
+            if not fname:
+                continue
+            mapping[fname] = {emb: np.asarray(col[i]) for emb, col in columns.items()}
+        if not mapping:
+            raise ValueError("NPZ per-embedder filenames array is empty")
+        return mapping, primary
+
+
+def write_npz_multi_vectors(
+    npz_path: Path,
+    mapping: dict[str, dict[str, np.ndarray]],
+    primary_embedder: str = "",
+    *,
+    compressed: bool = False,
+) -> None:
+    """Write the per-embedder ``vectors_<name>`` layout read by :func:`read_npz_multi_vectors`.
+
+    *mapping* is ``{filename: {embedder_name: vector}}`` - the exact shape the
+    reader returns, so a dataset's per-embedder vectors round-trip through this
+    pair.  Every entry must carry the **same** embedder-name set (the archive's
+    columns are aligned by filename), and at least one embedder must be present.
+    *primary_embedder*, when given, is written as the scalar ``embedder_name``
+    so the archive records its score-role embedder; it must be one of the
+    embedder names present.  Set *compressed* to use ``np.savez_compressed``.
+
+    Raises ``ValueError`` for an empty mapping, an entry whose embedder set
+    diverges from the first entry's, or a *primary_embedder* not among the
+    embedder names.
+    """
+    if not mapping:
+        raise ValueError("write_npz_multi_vectors: mapping is empty")
+
+    filenames = list(mapping)
+    embedder_names = list(mapping[filenames[0]])
+    if not embedder_names:
+        raise ValueError("write_npz_multi_vectors: first entry carries no embedder vectors")
+    expected = set(embedder_names)
+    for fname in filenames:
+        if set(mapping[fname]) != expected:
+            raise ValueError(
+                f"write_npz_multi_vectors: entry {fname!r} has embedder set "
+                f"{sorted(mapping[fname])}, expected {sorted(expected)} (columns must align)"
+            )
+    if primary_embedder and primary_embedder not in expected:
+        raise ValueError(
+            f"write_npz_multi_vectors: primary_embedder {primary_embedder!r} is not among the "
+            f"archive's embedders {sorted(expected)}"
+        )
+
+    arrays: dict[str, np.ndarray] = {"filenames": np.array(filenames)}
+    for emb_name in embedder_names:
+        arrays[f"vectors_{emb_name}"] = np.stack([np.asarray(mapping[f][emb_name]) for f in filenames])
+    if primary_embedder:
+        arrays["embedder_name"] = np.array(primary_embedder)
+
+    save = np.savez_compressed if compressed else np.savez
+    # numpy's savez stub mis-binds unpacked kwargs to allow_pickle.
+    save(str(npz_path), **arrays)  # pyright: ignore[reportArgumentType]
 
 
 def read_npz_archive_member_rows(npz_path: Path) -> list[dict]:

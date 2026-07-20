@@ -22,7 +22,12 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from vtscore.datasets.importers._npz_vectors import read_npz_embedder_name, read_npz_filenames_and_vectors
+from vtscore.datasets.importers._npz_vectors import (
+    read_npz_embedder_name,
+    read_npz_filenames_and_vectors,
+    read_npz_multi_vectors,
+    write_npz_multi_vectors,
+)
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.datasets.importers.server_files import (
     ServerFilesDatasetImporter,
@@ -30,6 +35,13 @@ from vtscore.datasets.importers.server_files import (
     _read_paths_and_vectors,
     _read_paths_file,
 )
+
+
+def _read_multi(npz):
+    """Read a per-embedder archive, asserting it is recognised (narrows None)."""
+    result = read_npz_multi_vectors(npz)
+    assert result is not None
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +155,143 @@ class TestReadNpzEmbedderName:
 # ---------------------------------------------------------------------------
 # server_files paths-file plumbing
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# read_npz_multi_vectors / write_npz_multi_vectors (per-embedder trio layout)
+# ---------------------------------------------------------------------------
+
+
+class TestReadNpzMultiVectors:
+    def test_returns_none_without_per_embedder_keys(self, tmp_path):
+        # A plain single-``vectors`` archive has no vectors_<name> key, so the
+        # multi reader declines it (signalling the single-vector fallback).
+        npz = tmp_path / "single.npz"
+        np.savez(npz, filenames=np.array(["a.wav"]), vectors=np.zeros((1, 4), dtype=np.float32))
+        assert read_npz_multi_vectors(npz) is None
+
+    def test_reads_per_embedder_columns(self, tmp_path):
+        siglip = np.arange(6, dtype=np.float32).reshape(2, 3)
+        patch = (np.arange(8, dtype=np.float32) + 100).reshape(2, 4)
+        npz = tmp_path / "multi.npz"
+        np.savez(
+            npz,
+            filenames=np.array(["a.jpg", "b.jpg"]),
+            vectors_siglip=siglip,
+            vectors_dinov3_patch=patch,
+        )
+        mapping, primary = _read_multi(npz)
+        assert set(mapping) == {"a.jpg", "b.jpg"}
+        assert set(mapping["a.jpg"]) == {"siglip", "dinov3_patch"}
+        np.testing.assert_array_equal(mapping["a.jpg"]["siglip"], siglip[0])
+        np.testing.assert_array_equal(mapping["b.jpg"]["dinov3_patch"], patch[1])
+        # No scalar embedder_name → the first column (archive order) is primary.
+        assert primary == "siglip"
+
+    def test_embedder_name_scalar_designates_primary(self, tmp_path):
+        npz = tmp_path / "multi.npz"
+        np.savez(
+            npz,
+            filenames=np.array(["a.jpg"]),
+            vectors_siglip=np.zeros((1, 3), dtype=np.float32),
+            vectors_dinov3_patch=np.zeros((1, 4), dtype=np.float32),
+            embedder_name=np.array("dinov3_patch"),
+        )
+        _mapping, primary = _read_multi(npz)
+        assert primary == "dinov3_patch"
+
+    def test_primary_falls_back_when_scalar_not_a_column(self, tmp_path):
+        # A scalar naming an embedder that has no vectors_<name> column can't be
+        # the primary; the leading column wins instead.
+        npz = tmp_path / "multi.npz"
+        np.savez(
+            npz,
+            filenames=np.array(["a.jpg"]),
+            vectors_siglip=np.zeros((1, 3), dtype=np.float32),
+            embedder_name=np.array("clip"),
+        )
+        _mapping, primary = _read_multi(npz)
+        assert primary == "siglip"
+
+    def test_embedder_name_with_underscores_preserved(self, tmp_path):
+        # Only the leading ``vectors_`` prefix is stripped, so an embedder name
+        # that itself contains underscores survives intact.
+        npz = tmp_path / "multi.npz"
+        np.savez(
+            npz,
+            filenames=np.array(["a.jpg"]),
+            vectors_dinov3_patch=np.zeros((1, 4), dtype=np.float32),
+        )
+        mapping, _primary = _read_multi(npz)
+        assert set(mapping["a.jpg"]) == {"dinov3_patch"}
+
+    def test_mismatched_column_length_raises(self, tmp_path):
+        npz = tmp_path / "multi.npz"
+        np.savez(
+            npz,
+            filenames=np.array(["a.jpg", "b.jpg"]),
+            vectors_siglip=np.zeros((1, 3), dtype=np.float32),  # only 1 row for 2 files
+        )
+        with pytest.raises(ValueError, match="mismatched lengths"):
+            read_npz_multi_vectors(npz)
+
+    def test_missing_filenames_raises(self, tmp_path):
+        npz = tmp_path / "multi.npz"
+        np.savez(npz, vectors_siglip=np.zeros((2, 3), dtype=np.float32))
+        with pytest.raises(ValueError, match="filenames"):
+            read_npz_multi_vectors(npz)
+
+    def test_missing_file_raises(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            read_npz_multi_vectors(tmp_path / "nope.npz")
+
+
+class TestWriteNpzMultiVectors:
+    def test_round_trips_through_reader(self, tmp_path):
+        rng = np.random.default_rng(7)
+        mapping = {
+            "a.jpg": {
+                "siglip": rng.standard_normal(3).astype(np.float32),
+                "dinov3_patch": rng.standard_normal(4).astype(np.float32),
+            },
+            "b.jpg": {
+                "siglip": rng.standard_normal(3).astype(np.float32),
+                "dinov3_patch": rng.standard_normal(4).astype(np.float32),
+            },
+        }
+        npz = tmp_path / "out.npz"
+        write_npz_multi_vectors(npz, mapping, primary_embedder="dinov3_patch")
+
+        read_back, primary = _read_multi(npz)
+        assert primary == "dinov3_patch"
+        assert set(read_back) == set(mapping)
+        for fname, cols in mapping.items():
+            for emb, vec in cols.items():
+                np.testing.assert_array_equal(read_back[fname][emb], vec)
+
+    def test_compressed_round_trips(self, tmp_path):
+        mapping = {"a.jpg": {"siglip": np.ones(3, dtype=np.float32)}}
+        npz = tmp_path / "out.npz"
+        write_npz_multi_vectors(npz, mapping, compressed=True)
+        read_back, _primary = _read_multi(npz)
+        np.testing.assert_array_equal(read_back["a.jpg"]["siglip"], np.ones(3, dtype=np.float32))
+
+    def test_empty_mapping_raises(self, tmp_path):
+        with pytest.raises(ValueError, match="empty"):
+            write_npz_multi_vectors(tmp_path / "out.npz", {})
+
+    def test_misaligned_columns_raise(self, tmp_path):
+        mapping = {
+            "a.jpg": {"siglip": np.zeros(3, dtype=np.float32), "dinov3_patch": np.zeros(4, dtype=np.float32)},
+            "b.jpg": {"siglip": np.zeros(3, dtype=np.float32)},  # missing dinov3_patch column
+        }
+        with pytest.raises(ValueError, match="columns must align"):
+            write_npz_multi_vectors(tmp_path / "out.npz", mapping)
+
+    def test_primary_not_a_column_raises(self, tmp_path):
+        mapping = {"a.jpg": {"siglip": np.zeros(3, dtype=np.float32)}}
+        with pytest.raises(ValueError, match="not among"):
+            write_npz_multi_vectors(tmp_path / "out.npz", mapping, primary_embedder="clip")
 
 
 class TestServerFilesFieldsAdvertiseNpz:
@@ -359,6 +508,109 @@ class TestServerFilesNpzRunsEndToEnd:
         assert len(medias) == 1
         media = next(iter(medias.values()))
         assert media["origin_name"] == str(src)
+
+
+# ---------------------------------------------------------------------------
+# server_files end-to-end: per-embedder vectors_<name> archive (V3 trio, #2669)
+# ---------------------------------------------------------------------------
+
+
+class TestServerFilesMultiVectorsEndToEnd:
+    def _write_wavs(self, tmp_path):
+        from helpers import make_raw_wav_bytes
+
+        src_a = tmp_path / "src_a.wav"
+        src_b = tmp_path / "src_b.wav"
+        src_a.write_bytes(make_raw_wav_bytes())
+        src_b.write_bytes(make_raw_wav_bytes() + b"\x00\x00")
+        return src_a, src_b
+
+    def test_read_npz_paths_file_returns_per_embedder_dicts(self, tmp_path):
+        src_a, src_b = self._write_wavs(tmp_path)
+        npz = tmp_path / "multi.npz"
+        np.savez(
+            npz,
+            filenames=np.array([str(src_a), str(src_b)]),
+            vectors_clap=np.arange(8, dtype=np.float32).reshape(2, 4),
+            vectors_ast=(np.arange(8, dtype=np.float32) + 50).reshape(2, 4),
+            embedder_name=np.array("clap"),
+        )
+        paths, path_to_vector, embedder_name = _read_npz_paths_file(npz)
+        assert paths == [src_a, src_b]
+        assert embedder_name == "clap"
+        # Each resolved path maps to a per-embedder dict, not a bare vector.
+        assert set(path_to_vector[str(src_a)]) == {"clap", "ast"}
+
+    def test_both_embedders_stored_on_media(self, tmp_path):
+        """A vectors_<name> archive lands one vector per embedder under
+        media['embeddings'], with the scalar embedder_name as the primary."""
+        src_a, src_b = self._write_wavs(tmp_path)
+        rng = np.random.default_rng(3)
+        clap = rng.standard_normal((2, 512)).astype(np.float32)
+        ast = rng.standard_normal((2, 512)).astype(np.float32)
+        npz = tmp_path / "multi.npz"
+        np.savez(
+            npz,
+            filenames=np.array([str(src_a), str(src_b)]),
+            vectors_clap=clap,
+            vectors_ast=ast,
+            embedder_name=np.array("clap"),
+        )
+
+        imp = ServerFilesDatasetImporter()
+        medias: dict = {}
+        imp.run({"paths_file": str(npz), "media_type": "audio"}, medias)
+
+        assert len(medias) == 2
+        by_source = {m["origin_name"]: m for m in medias.values()}
+        for src, i in ((src_a, 0), (src_b, 1)):
+            media = by_source[str(src)]
+            # Both embedders' vectors are present and unmodified.
+            np.testing.assert_array_equal(media_embedding(media, "clap"), clap[i])
+            np.testing.assert_array_equal(media_embedding(media, "ast"), ast[i])
+            # The scalar embedder_name is recorded as the primary/score embedder.
+            assert media["embedder"] == "clap"
+            np.testing.assert_array_equal(media_embedding(media), clap[i])
+
+    def test_binding_derives_a_slot_per_capable_embedder(self, tmp_path):
+        """The dataset binding recovered from a multi-vector media's embedder
+        keys fills a distinct role slot per capable embedder (siglip→text,
+        dinov3_patch→patch)."""
+        from vtscore.embedding.binding import derive_binding_from_names
+        from vtscore.embedding.media_vectors import init_embeddings, media_embedder_names
+
+        media = {
+            "embedder": "siglip",
+            "embeddings": init_embeddings(
+                "siglip",
+                {"siglip": np.zeros(3, dtype=np.float32), "dinov3_patch": np.zeros(4, dtype=np.float32)},
+            ),
+        }
+        names = media_embedder_names(media)
+        assert set(names) == {"siglip", "dinov3_patch"}
+        text, patch, structural = derive_binding_from_names(names)
+        assert text == "siglip"
+        assert patch == "dinov3_patch"
+        assert structural is None
+
+    def test_unregistered_column_name_rejected_at_import(self, tmp_path):
+        """Every named column binds a role slot, so an unroutable name in *any*
+        column is rejected up front (not just the primary)."""
+        src_a, _src_b = self._write_wavs(tmp_path)
+        npz = tmp_path / "multi.npz"
+        np.savez(
+            npz,
+            filenames=np.array([str(src_a)]),
+            vectors_clap=np.zeros((1, 512), dtype=np.float32),
+            vectors_not_a_real_embedder=np.zeros((1, 512), dtype=np.float32),
+            embedder_name=np.array("clap"),
+        )
+        imp = ServerFilesDatasetImporter()
+        medias: dict = {}
+        with pytest.raises(ValueError) as exc:
+            imp.run({"paths_file": str(npz), "media_type": "audio"}, medias)
+        assert "not_a_real_embedder" in str(exc.value)
+        assert medias == {}
 
 
 # ---------------------------------------------------------------------------
