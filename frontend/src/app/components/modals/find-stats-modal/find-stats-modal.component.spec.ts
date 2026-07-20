@@ -35,6 +35,25 @@ describe('FindStatsModalComponent', () => {
     ],
   };
 
+  // Evidence-coverage is fetched on init too; the "nothing to measure" reply
+  // keeps the section hidden. Flushed by every test so `httpMock.verify()` sees
+  // no dangling request.
+  const mockEvidenceUnavailable = {
+    available: false,
+    n_items: 0,
+    n_pos_labels: 0,
+    n_neg_labels: 0,
+    k: 1,
+    alpha: 0.05,
+    frac_unsupported: 0,
+    expected_unsupported: 0.05,
+    z_score: 0,
+    median_support: 1,
+    frac_low_trust: 0,
+    median_trust: 1,
+    unsupported: false,
+  };
+
   beforeEach(async () => {
     await configureZoneless({
       imports: [FindStatsModalComponent],
@@ -53,6 +72,7 @@ describe('FindStatsModalComponent', () => {
   it('should create', async () => {
     await fixture.whenStable();
     httpMock.expectOne('/api/find/stats').flush(mockStats);
+    httpMock.expectOne('/api/find/evidence-coverage').flush(mockEvidenceUnavailable);
     await settleZoneless(fixture);
     expect(component).toBeTruthy();
   });
@@ -66,6 +86,7 @@ describe('FindStatsModalComponent', () => {
     expect(fixture.nativeElement.querySelector('.loading-text')).toBeTruthy();
 
     httpMock.expectOne('/api/find/stats').flush(mockStats);
+    httpMock.expectOne('/api/find/evidence-coverage').flush(mockEvidenceUnavailable);
     await settleZoneless(fixture);
 
     expect(fixture.nativeElement.querySelector('.loading-text')).toBeFalsy();
@@ -79,6 +100,7 @@ describe('FindStatsModalComponent', () => {
       { error: 'no find run' },
       { status: 404, statusText: 'Not Found' },
     );
+    httpMock.expectOne('/api/find/evidence-coverage').flush(mockEvidenceUnavailable);
     await settleZoneless(fixture);
 
     const err = fixture.nativeElement.querySelector('.error-text') as HTMLElement;
@@ -89,6 +111,7 @@ describe('FindStatsModalComponent', () => {
   it('emits closed on close', async () => {
     await fixture.whenStable();
     httpMock.expectOne('/api/find/stats').flush(mockStats);
+    httpMock.expectOne('/api/find/evidence-coverage').flush(mockEvidenceUnavailable);
     await settleZoneless(fixture);
 
     vi.spyOn(component.closed, 'emit');
@@ -101,8 +124,38 @@ describe('FindStatsModalComponent', () => {
     // section is absent and no domain-shift request is made.
     await fixture.whenStable();
     httpMock.expectOne('/api/find/stats').flush(mockStats);
+    httpMock.expectOne('/api/find/evidence-coverage').flush(mockEvidenceUnavailable);
     await settleZoneless(fixture);
     expect(fixture.nativeElement.querySelector('.domain-overlap')).toBeFalsy();
+  });
+
+  it('renders the evidence-coverage chip when the report is available', async () => {
+    await fixture.whenStable();
+    httpMock.expectOne('/api/find/stats').flush(mockStats);
+    httpMock.expectOne('/api/find/evidence-coverage').flush({
+      available: true,
+      n_items: 80,
+      n_pos_labels: 20,
+      n_neg_labels: 30,
+      k: 1,
+      alpha: 0.05,
+      frac_unsupported: 0.62,
+      expected_unsupported: 0.05,
+      z_score: 9.1,
+      median_support: 0.03,
+      frac_low_trust: 0.25,
+      median_trust: 0.8,
+      unsupported: true,
+    });
+    await settleZoneless(fixture);
+
+    // The evidence section reuses the .domain-chip shell; the second chip is it.
+    const chips = fixture.nativeElement.querySelectorAll('.domain-chip');
+    const evidenceChip = chips[chips.length - 1] as HTMLElement;
+    expect(evidenceChip).toBeTruthy();
+    expect(evidenceChip.classList.contains('shifted')).toBe(true);
+    expect(evidenceChip.textContent).toContain('62%');
+    expect(fixture.nativeElement.textContent).toContain('evidence vacuum');
   });
 });
 
@@ -170,6 +223,21 @@ describe('FindStatsModalComponent — training-domain overlap', () => {
       median_pvalue: 0.4,
       shifted: true,
     });
+    httpMock.expectOne('/api/find/evidence-coverage').flush({
+      available: false,
+      n_items: 0,
+      n_pos_labels: 0,
+      n_neg_labels: 0,
+      k: 1,
+      alpha: 0.05,
+      frac_unsupported: 0,
+      expected_unsupported: 0.05,
+      z_score: 0,
+      median_support: 1,
+      frac_low_trust: 0,
+      median_trust: 1,
+      unsupported: false,
+    });
     await settleZoneless(fixture);
 
     const chip = fixture.nativeElement.querySelector('.domain-chip') as HTMLElement;
@@ -193,6 +261,21 @@ describe('FindStatsModalComponent — training-domain overlap', () => {
       { message: 'Reference dataset has no coverage atlas; build it first' },
       { status: 400, statusText: 'Bad Request' },
     );
+    httpMock.expectOne('/api/find/evidence-coverage').flush({
+      available: false,
+      n_items: 0,
+      n_pos_labels: 0,
+      n_neg_labels: 0,
+      k: 1,
+      alpha: 0.05,
+      frac_unsupported: 0,
+      expected_unsupported: 0.05,
+      z_score: 0,
+      median_support: 1,
+      frac_low_trust: 0,
+      median_trust: 1,
+      unsupported: false,
+    });
     await settleZoneless(fixture);
 
     const note = fixture.nativeElement.querySelector('.domain-note') as HTMLElement;

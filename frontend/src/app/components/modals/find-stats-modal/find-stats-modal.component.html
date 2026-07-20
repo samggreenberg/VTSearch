@@ -61,6 +61,24 @@
       </div>
     }
 
+    @if (evidence(); as ev) {
+      <h3 class="section-title" title="How much of this dataset the detector is calling with no labeled example like it behind the call. Measured from the detector's own votes, so it works even when the training data isn't loaded. These are the calls the detector is least equipped to make — verify them by hand.">Evidence coverage</h3>
+      <div class="domain-overlap">
+        <div class="domain-chip" [class.shifted]="evidenceUnsupported" role="status">
+          <span class="domain-chip-pct">{{ unsupportedPct }}%</span>
+          <span class="domain-chip-text">
+            of this dataset sits in an evidence vacuum —
+            {{ evidenceUnsupported ? 'the detector is often calling without support' : 'mostly backed by labeled evidence' }}
+          </span>
+        </div>
+        <p class="domain-detail muted">
+          {{ ev.n_items | number }} scored items · {{ ev.n_pos_labels | number }} good / {{ ev.n_neg_labels | number }} bad labels ·
+          median support p = {{ ev.median_support | number: '1.2-2' }} · {{ lowTrustPct }}% closer to the opposite class's evidence.
+          The unsupported share is where a handed-over detector is least reliable; verify those by hand.
+        </p>
+      </div>
+    }
+
     <h3 class="section-title">Detector Accuracy</h3>
     <table class="data-table stats-table confusion">
       <thead>

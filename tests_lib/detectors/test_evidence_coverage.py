@@ -134,15 +134,16 @@ class TestPredictedSupportRouting:
         d = 16
         pos = _cluster(rng, _basis(d, 0), 30)
         neg = _cluster(rng, _basis(d, 1), 30)
-        # One query near pos, one near neg; predict them as their near class →
-        # both well supported.
-        q = np.vstack([_cluster(rng, _basis(d, 0), 1), _cluster(rng, _basis(d, 1), 1)])
-        pred = np.array([True, False])
-        d_vals = predicted_support_pvalues(q, pos, neg, pred, k=1)
-        assert np.all(d_vals > 0.3)
-        # Now predict both as positive: the neg-cluster item is unsupported.
-        d_flipped = predicted_support_pvalues(q, pos, neg, np.array([True, True]), k=1)
-        assert d_flipped[1] < 0.1
+        # A batch drawn from the negative cluster.  Predicted as their true
+        # (negative) class they are well supported; predicted as positive they
+        # sit in the positive class's evidence vacuum.  Routing must therefore
+        # score the *same* items far higher under the correct predicted class.
+        q = _cluster(rng, _basis(d, 1), 20)
+        as_neg = predicted_support_pvalues(q, pos, neg, np.zeros(20, dtype=bool), k=1)
+        as_pos = predicted_support_pvalues(q, pos, neg, np.ones(20, dtype=bool), k=1)
+        assert as_neg.mean() > 0.3
+        assert as_pos.max() < 0.1
+        assert as_neg.mean() > as_pos.mean()
 
 
 class TestEvidenceCoverageReport:

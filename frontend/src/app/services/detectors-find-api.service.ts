@@ -12,11 +12,13 @@ import type { FindLabelResponse } from '../generated/api-client/models/find-labe
 import type { FindRequest } from '../generated/api-client/models/find-request';
 import type { FindResponse } from '../generated/api-client/models/find-response';
 import type { FindStatsResponse } from '../generated/api-client/models/find-stats-response';
+import type { FindEvidenceCoverageResponse } from '../generated/api-client/models/find-evidence-coverage-response';
 import type { FindCorrectionsToDetectorResponse } from '../generated/api-client/models/find-corrections-to-detector-response';
 import { cancelFind } from '../generated/api-client/fn/detector-find/cancel-find';
 import { findCheckLabels } from '../generated/api-client/fn/detector-find/find-check-labels';
 import { findLabel } from '../generated/api-client/fn/detector-scoring/find-label';
 import { findStats } from '../generated/api-client/fn/detector-scoring/find-stats';
+import { findEvidenceCoverage } from '../generated/api-client/fn/detector-scoring/find-evidence-coverage';
 import { findCorrectionsToDetector } from '../generated/api-client/fn/detector-scoring/find-corrections-to-detector';
 import { multiFind } from '../generated/api-client/fn/detector-find/multi-find';
 
@@ -52,6 +54,16 @@ export class DetectorsFindApiService {
    *  + the FP/FN-vs-inclusion sweep). Pure read. */
   getFindStats(): Observable<FindStatsResponse> {
     return findStats(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+  }
+
+  /** Evidence-coverage report for the active detector on the active dataset:
+   *  how much of the scored dataset the detector is calling *without labeled
+   *  evidence behind the call*, measured from the detector's own labelset. The
+   *  cross-user complement to the atlas domain-shift report — it needs no
+   *  reference dataset loaded. `available` is false when there's nothing to
+   *  measure (no scored Find run / no resolvable labelset). Pure read. */
+  getEvidenceCoverage(): Observable<FindEvidenceCoverageResponse> {
+    return findEvidenceCoverage(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   /** Fold the Find corrections into the active detector's labelset and retrain

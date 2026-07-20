@@ -69,8 +69,10 @@ def _normalize(matrix: np.ndarray) -> np.ndarray:
     matrix = np.asarray(matrix, dtype=np.float32)
     if matrix.ndim == 1:
         matrix = matrix[None, :]
-    if matrix.size == 0:
-        return matrix.reshape(matrix.shape[0] if matrix.ndim == 2 else 0, -1)
+    if matrix.shape[0] == 0:
+        # An empty ``(0, d)`` set — no rows to normalize; keep its width so
+        # downstream matmuls still see the right dimensionality.
+        return matrix.astype(np.float32)
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     return np.where(norms > _EPS, matrix / np.maximum(norms, _EPS), 0.0).astype(np.float32)
 
