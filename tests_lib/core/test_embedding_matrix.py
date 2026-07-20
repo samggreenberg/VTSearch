@@ -430,6 +430,11 @@ class TestEmbeddingMatrixSidecar:
             for cid in range(1, n + 1)
         }
 
+    def _pkl_path(self, dataset_id: str) -> str:
+        entry = registry.get_dataset(dataset_id)
+        assert entry is not None
+        return entry["pkl_path"]
+
     def test_sidecar_written_after_first_build(self, tmp_path):
         dataset_id = self._register(tmp_path)
         ctx = DatasetContext(dataset_id)
@@ -437,8 +442,7 @@ class TestEmbeddingMatrixSidecar:
 
         get_embedding_matrix(ctx)
 
-        entry = registry.get_dataset(dataset_id)
-        ids_path, mat_path = matrix_mod._emb_sidecar_paths(entry["pkl_path"])
+        ids_path, mat_path = matrix_mod._emb_sidecar_paths(self._pkl_path(dataset_id))
         assert ids_path.is_file()
         assert mat_path.is_file()
         assert np.array_equal(np.load(ids_path), np.array([1, 2, 3], dtype=np.int64))
@@ -472,8 +476,7 @@ class TestEmbeddingMatrixSidecar:
     def test_id_mismatch_sidecar_falls_back_to_live_rebuild(self, tmp_path):
         """A sidecar written for a different id set must never be trusted."""
         dataset_id = self._register(tmp_path)
-        entry = registry.get_dataset(dataset_id)
-        ids_path, mat_path = matrix_mod._emb_sidecar_paths(entry["pkl_path"])
+        ids_path, mat_path = matrix_mod._emb_sidecar_paths(self._pkl_path(dataset_id))
         matrix_mod._atomic_save_npy(ids_path, np.array([1, 2, 99], dtype=np.int64))
         matrix_mod._atomic_save_npy(mat_path, np.zeros((3, 4), dtype=np.float32))
 
@@ -487,8 +490,7 @@ class TestEmbeddingMatrixSidecar:
     def test_dim_mismatch_sidecar_falls_back_to_live_rebuild(self, tmp_path):
         """A same-id-count sidecar with the wrong dimension must never be trusted."""
         dataset_id = self._register(tmp_path)
-        entry = registry.get_dataset(dataset_id)
-        ids_path, mat_path = matrix_mod._emb_sidecar_paths(entry["pkl_path"])
+        ids_path, mat_path = matrix_mod._emb_sidecar_paths(self._pkl_path(dataset_id))
         matrix_mod._atomic_save_npy(ids_path, np.array([1, 2, 3], dtype=np.int64))
         matrix_mod._atomic_save_npy(mat_path, np.zeros((3, 99), dtype=np.float32))
 
@@ -527,6 +529,5 @@ class TestEmbeddingMatrixSidecar:
         # The on-disk sidecar itself must also be refreshed (not just this
         # context's in-memory view), or a third, later-loading context would
         # still mmap the stale pre-rewrite values.
-        entry = registry.get_dataset(dataset_id)
-        _, mat_path = matrix_mod._emb_sidecar_paths(entry["pkl_path"])
+        _, mat_path = matrix_mod._emb_sidecar_paths(self._pkl_path(dataset_id))
         assert np.load(mat_path)[0, 0] == 42.0
