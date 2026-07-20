@@ -58,6 +58,11 @@ class RegionCurveInputs:
     # app detector. ``neg_train_wholes`` is unused in this mode.
     region_voting: bool = False
     neg_train_bags: list[np.ndarray] = field(default_factory=list)
+    # Realistic loop only: when True (and not region_voting), a Bad vote contributes ALL of that
+    # image's region vectors as one per-image negative bag (via ``train_rv_head``) instead of the
+    # single whole-image vector — "No → all windows" for sliding / dino / box-pool proposals. No-op
+    # for ``whole`` (one region). ``region_voting`` already does this for hac and takes precedence.
+    neg_regions: bool = False
     # Realistic labeling-loop pool (only populated for ``evaluate_realistic_curve``).
     # These describe the *training* images the simulated user can label, keyed by a
     # stable image id, so the loop can rank/select them like the app does. All lists
@@ -642,7 +647,9 @@ def _train_pool_head(
     if not good or not bad:
         return None
 
-    if inputs.region_voting and head_kind == "mlp":
+    if (inputs.region_voting or inputs.neg_regions) and head_kind == "mlp":
+        # Per-image negative bags: region-voting floods childless nodes (leaf_mask); --neg-regions
+        # floods all of a bad image's regions (leaf_mask back-fills all-True for sliding/dino/whole).
         pos_rows = np.vstack([inputs.pool_pos_exemplars[i] for i in good]).astype(np.float32)
         neg_bags: list[np.ndarray] = []
         for i in bad:
