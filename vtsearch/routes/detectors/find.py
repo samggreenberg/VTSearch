@@ -21,10 +21,15 @@ from vtscore.concurrency.progress import CancelledError, find_progress, update_f
 from vtscore.detectors.training import train_and_threshold
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.utils.scores import sigmoid_to_finite_scores
+from vtsearch.routes._shared import require_detector_header
 from vtsearch.schemas.detectors import (
+    FindBoundaryNextQuerySchema,
+    FindBoundaryNextResponseSchema,
     FindCancelResponseSchema,
     FindCheckLabelsRequestSchema,
     FindCheckLabelsResponseSchema,
+    FindQueueIdsQuerySchema,
+    FindQueueIdsResponseSchema,
     FindRequestSchema,
     FindResponseSchema,
 )
@@ -608,3 +613,44 @@ def cancel_find():
     """
     find_progress.cancel()
     return {"ok": True}
+
+
+@detector_find_bp.route("/api/find/queue-ids", methods=["GET"])
+@detector_find_bp.arguments(FindQueueIdsQuerySchema, location="query")
+@detector_find_bp.response(200, FindQueueIdsResponseSchema)
+@require_detector_header
+def find_queue_ids_route(query: dict):
+    """Return the Find work-queue media ids the bulk actions operate over.
+
+    The left work queue (Browse / To Dataset / Export) and the right-panel
+    actions scope over the *entire* positive set, which the frontend used to
+    derive by scanning the whole client-side ranking.  This endpoint computes it
+    server-side from the frozen Find scores + current cutoff + verified set, so a
+    windowed client that no longer holds the full order can still act on every
+    matching item (``docs/plans/scalability.md`` S3/S17/S19).
+
+    Empty outside Find mode or before a scoring pass has run.
+    """
+    from vtsearch.state import find_queue_ids  # noqa: PLC0415
+
+    ids = find_queue_ids(query["filter"])
+    return {"ids": ids, "count": len(ids)}
+
+
+@detector_find_bp.route("/api/find/boundary-next", methods=["GET"])
+@detector_find_bp.arguments(FindBoundaryNextQuerySchema, location="query")
+@detector_find_bp.response(200, FindBoundaryNextResponseSchema)
+@require_detector_header
+def find_boundary_next_route(query: dict):
+    """Return the next unverified item on the Find boundary walk.
+
+    Walks outward from the cutoff, alternating faces, so "just sit and vote"
+    samples the marginal positives and marginal negatives rather than only
+    marching up the positive pile.  Computed server-side from the frozen scores +
+    cutoff + verified set so it stays correct once the client holds only a
+    window of the ranking.  Returns ``{"id": null, "side": null}`` when both
+    sides are exhausted (the done state).
+    """
+    from vtsearch.state import find_boundary_next  # noqa: PLC0415
+
+    return find_boundary_next(query["side"], exclude=query.get("exclude_id"))

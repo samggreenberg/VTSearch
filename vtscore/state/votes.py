@@ -189,6 +189,100 @@ def rethreshold_unverified_find_items() -> None:
                 bad_votes[media_id] = None
 
 
+def _find_ranked_scores(ctx) -> list[tuple[int, float]]:
+    """``find_scores`` as ``(id, score)`` sorted descending by score, then id.
+
+    ``find_scores`` is an insertion-ordered dict with no ranking meaning; the
+    Find work queue and boundary walk both need the same descending-by-score
+    order the frontend's ``sortOrder`` carries, so materialise it once.  The
+    ``-score`` primary / ``id`` secondary key gives a stable order across ties.
+    Caller must hold ``_state_lock``.
+    """
+    return sorted(ctx.find_scores.items(), key=lambda kv: (-kv[1], kv[0]))
+
+
+def find_queue_ids(label_filter: str) -> list[int]:
+    """Return the Find work-queue media ids for *label_filter*, ranking order.
+
+    Replaces the frontend's client-side derivation (``find-view``'s
+    ``unverifiedGoodIds`` / ``goodIds``) so a windowed client that no longer
+    holds the whole ranking can still scope the bulk actions over the *entire*
+    positive set:
+
+    - ``"unverified_good"`` — above-cutoff items the human hasn't verified, in
+      descending-score order.  The left work queue (Browse / To Dataset /
+      Export).
+    - ``"good"`` — the full positive set: verified-good items (pinned by the
+      human, wherever their score lands) followed by the unverified positives.
+      The right-panel actions.
+
+    Derived from the frozen ``find_scores`` + current ``threshold`` +
+    ``verified_ids``, so it tracks Inclusion slides exactly like the frontend
+    derivation it replaces.  Returns ``[]`` outside Find mode, before a scoring
+    pass has frozen ``find_scores``, or for an unknown *label_filter*.
+    """
+    with _state_lock:
+        ctx = get_active_detector_context()
+        if not getattr(ctx, "find_mode", False) or not getattr(ctx, "find_scores", None):
+            return []
+        threshold = ctx.threshold
+        if threshold is None:
+            return []
+        verified = ctx.verified_ids
+        good_votes = ctx.good_votes
+        ranked = _find_ranked_scores(ctx)
+        unverified_good = [mid for mid, score in ranked if score >= threshold and mid not in verified]
+        if label_filter == "unverified_good":
+            return unverified_good
+        if label_filter == "good":
+            verified_good = [mid for mid, _ in ranked if mid in verified and mid in good_votes]
+            return verified_good + unverified_good
+        return []
+
+
+def find_boundary_next(side: str, exclude: int | None = None) -> dict:
+    """Return the next unverified item to review on the Find boundary walk.
+
+    Replaces the frontend's client-side ``advanceToBoundary``.  Walks the frozen
+    ``find_scores`` (descending) for the unverified item closest to the cutoff on
+    each side — the lowest-scored item still ``>= threshold`` (``"above"``) and
+    the highest-scored item ``< threshold`` (``"below"``) — then prefers *side*,
+    falling back to the other when the preferred side is exhausted.  "Just sit
+    and vote" then alternates faces of the decision boundary until both are
+    empty.
+
+    *exclude* drops one id from consideration (the item just voted, in case its
+    verified-state hasn't been observed yet).
+
+    Returns ``{"id": <media_id>, "side": "above"|"below"}`` for the pick, or
+    ``{"id": None, "side": None}`` when no unverified item remains on either side
+    (the done state).
+    """
+    with _state_lock:
+        ctx = get_active_detector_context()
+        if not getattr(ctx, "find_mode", False) or not getattr(ctx, "find_scores", None):
+            return {"id": None, "side": None}
+        threshold = ctx.threshold
+        if threshold is None:
+            return {"id": None, "side": None}
+        verified = ctx.verified_ids
+        closest_above: int | None = None
+        closest_below: int | None = None
+        for mid, score in _find_ranked_scores(ctx):
+            if mid in verified or mid == exclude:
+                continue
+            if score >= threshold:
+                closest_above = mid  # descending → keep overwriting → lowest above
+            elif closest_below is None:
+                closest_below = mid  # first sub-threshold hit → highest below
+        order = ("above", "below") if side == "above" else ("below", "above")
+        picks = {"above": closest_above, "below": closest_below}
+        for candidate_side in order:
+            if picks[candidate_side] is not None:
+                return {"id": picks[candidate_side], "side": candidate_side}
+        return {"id": None, "side": None}
+
+
 # ---------------------------------------------------------------------------
 # Compound operations (atomic vote toggle / label apply)
 # ---------------------------------------------------------------------------

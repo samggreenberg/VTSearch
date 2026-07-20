@@ -581,6 +581,69 @@ class FindLabelResponseSchema(Schema):
     detector_name = fields.String(required=True)
 
 
+class FindQueueIdsQuerySchema(Schema):
+    """Query for ``GET /api/find/queue-ids``."""
+
+    filter = fields.String(
+        load_default="unverified_good",
+        validate=validate.OneOf(["unverified_good", "good"]),
+        metadata={
+            "description": (
+                "Which Find positive set to return: ``unverified_good`` (the "
+                "left work queue — above-cutoff items not yet verified) or "
+                "``good`` (verified-good + unverified positives)."
+            )
+        },
+    )
+
+    class Meta:
+        # Tolerate request-context params (dataset_id / detector_id) smuggled in
+        # as query args, matching the other GET query schemas.
+        unknown = "exclude"
+
+
+class FindQueueIdsResponseSchema(Schema):
+    """Response for ``GET /api/find/queue-ids`` — the work-queue ids in rank order."""
+
+    ids = fields.List(fields.Integer(), required=True)
+    count = fields.Integer(required=True)
+
+
+class FindBoundaryNextQuerySchema(Schema):
+    """Query for ``GET /api/find/boundary-next``."""
+
+    side = fields.String(
+        load_default="above",
+        validate=validate.OneOf(["above", "below"]),
+        metadata={"description": "Preferred face of the cutoff to serve next; falls back to the other side."},
+    )
+    # Named ``exclude_id`` (not ``exclude``) because ``exclude`` is a reserved
+    # attribute on ``marshmallow.Schema``; ``data_key`` keeps the query param
+    # ``?exclude=``.
+    exclude_id = fields.Integer(
+        data_key="exclude",
+        load_default=None,
+        allow_none=True,
+        metadata={
+            "description": "Media id to skip (the item just voted, if its verified-state may not be observed yet)."
+        },
+    )
+
+    class Meta:
+        unknown = "exclude"
+
+
+class FindBoundaryNextResponseSchema(Schema):
+    """Response for ``GET /api/find/boundary-next``.
+
+    ``id``/``side`` are both ``null`` when no unverified item remains on either
+    side of the cutoff (the done state).
+    """
+
+    id = fields.Integer(required=True, allow_none=True)
+    side = fields.String(required=True, allow_none=True, validate=validate.OneOf(["above", "below"]))
+
+
 class _HitSchema(Schema):
     """One scored media entry inside an auto-detect / find ``hits`` list.
 
@@ -897,12 +960,16 @@ __all__ = [
     "DetectorRenameResponseSchema",
     "DetectorSaveLabelsResponseSchema",
     "DetectorsListResponseSchema",
+    "FindBoundaryNextQuerySchema",
+    "FindBoundaryNextResponseSchema",
     "FindCancelResponseSchema",
     "FindCheckLabelsRequestSchema",
     "FindCheckLabelsResponseSchema",
     "FindCorrectionsToDetectorResponseSchema",
     "FindLabelRequestSchema",
     "FindLabelResponseSchema",
+    "FindQueueIdsQuerySchema",
+    "FindQueueIdsResponseSchema",
     "FindRequestSchema",
     "FindResponseSchema",
     "FindStatsResponseSchema",

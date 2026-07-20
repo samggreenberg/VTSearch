@@ -66,6 +66,8 @@ from vtscore.state.votes import (  # noqa: F401
     apply_label_with_click_time,
     apply_labels_bulk_with_click_time,
     clear_votes,
+    find_boundary_next,
+    find_queue_ids,
     get_find_initial_labels,
     get_find_scores,
     get_learned_scores,
