@@ -27,7 +27,7 @@ Cross-cutting, still open:
 
 <!-- item-sep -->
 
-- [ ] #2667 — Combine Datasets triple-match guard (refuse mismatched embedder triples) (open question #2)
+- [ ] #2667 — Combine Datasets per-embedder-type conflict resolution: instead of refusing a mismatched triple, the modal detects each conflicting type (semantic / patch_semantic / structural) and lets the user re-embed every source to one winner or drop that type; the combine route bakes the choice into the load (open question #2, now addressed by resolution rather than refusal)
 
 <!-- item-sep -->
 
@@ -50,9 +50,11 @@ V3 open questions (design-level, still unresolved):
    `dataset.embedder` field probably can't just be renamed without breaking
    labelset sync. Likely: keep the legacy field as a computed read-only alias to
    the score-role slot for one release, then drop it. Confirm during impl.
-2. **Combine Datasets ergonomics.** Strict "embedder triple must match" is the
-   v3 rule; if it bites, add a "combine on the text slot only" variant. Punt
-   until real demand.
+2. **Combine Datasets ergonomics.** *(Resolved — see #2667.)* Rather than a strict
+   "embedder triple must match" refusal, combine now detects per-embedder-type
+   conflicts and offers, for each conflicting type, "re-embed every source to one
+   winner" or "drop that type". The route still refuses (400) an *unresolved*
+   conflict from a programmatic caller, so the strict guard remains the backstop.
 3. **Coverage-atlas vs score backbone (patch vs structural).** (Validation
    tracked in #2668.) Structural-over-
    patch for the shared score role is the less obvious call — a structural
@@ -191,9 +193,10 @@ is the **score** embedder (structural ▸ patch ▸ text) the model was trained 
   per bound embedder, read by `read_npz_multi_vectors` / written by
   `write_npz_multi_vectors`); the existing single-`vectors` layout maps to the
   score-role slot.
-- **Combine Datasets** requires identical
-  `(text_embedder, patch_embedder, structural_embedder)` triples. (Guard is an open
-  follow-up.)
+- **Combine Datasets** resolves per-embedder-type conflicts across the sources
+  (re-embed to one winner, or drop the type) instead of requiring identical
+  `(text_embedder, patch_embedder, structural_embedder)` triples; an unresolved
+  conflict from a non-UI caller is still refused. (See #2667.)
 
 ### Frontend
 

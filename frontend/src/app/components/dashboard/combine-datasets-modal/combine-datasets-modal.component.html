@@ -73,6 +73,49 @@
         </tfoot>
       </table>
 
+      @if (hasConflicts) {
+        <section class="conflict-panel">
+          <h3 class="conflict-title">Embedder conflicts</h3>
+          <p class="conflict-intro">
+            These datasets don't agree on one embedder per type. For each,
+            re-embed every dataset to a single embedder, or drop that embedder
+            from the combined dataset.
+          </p>
+          @for (conflict of conflicts; track conflict.type) {
+            <div class="conflict-row">
+              <div class="conflict-label">
+                <span class="conflict-type">{{ conflict.label }}</span>
+                @if (conflict.partial && conflict.options.length === 1) {
+                  <span class="conflict-detail">
+                    only some datasets have {{ embedderLabel(conflict.options[0]) }}
+                  </span>
+                } @else {
+                  <span class="conflict-detail">
+                    {{ conflict.options.length }} embedders:
+                    {{ conflictOptionsText(conflict) }}
+                  </span>
+                }
+              </div>
+              <select
+                class="conflict-select form-input"
+                [ngModel]="resolutionChoices()[conflict.type] || ''"
+                (ngModelChange)="setResolution(conflict.type, $event)"
+                [disabled]="submitting()"
+                [attr.aria-label]="'Resolve ' + conflict.label + ' embedder conflict'"
+              >
+                <option value="" disabled>Choose how to resolve…</option>
+                @for (opt of conflict.options; track opt) {
+                  <option [value]="'reembed:' + opt">
+                    Re-embed all to {{ embedderLabel(opt) }}
+                  </option>
+                }
+                <option value="drop">Drop {{ conflict.label }} embeddings</option>
+              </select>
+            </div>
+          }
+        </section>
+      }
+
       @if (disabledReason) {
         <p class="warn-text">{{ disabledReason }}</p>
       } @else {
@@ -80,6 +123,9 @@
           The combined dataset will contain up to {{ totalItems | number }}
           {{ mediaTypeLabel(sharedMediaType) || sharedMediaType }} items
           (duplicates removed automatically).
+          @if (hasConflicts) {
+            Re-embedding runs during the combine and may take a while.
+          }
         </p>
       }
 

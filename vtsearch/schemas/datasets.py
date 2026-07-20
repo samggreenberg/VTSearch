@@ -609,6 +609,19 @@ class DatasetAvailableFilesResponseSchema(Schema):
     files = fields.List(fields.Nested(_AvailableDatasetFileSchema), required=True)
 
 
+class DatasetCombineResolutionSchema(Schema):
+    """One per-embedder-type conflict resolution in a combine request.
+
+    ``action`` is ``"reembed"`` (re-embed every source dataset to *embedder* so
+    the whole combined dataset shares that concrete embedder) or ``"drop"``
+    (leave that embedder type out of the combined dataset entirely).  ``embedder``
+    is required for ``reembed`` and ignored for ``drop``.
+    """
+
+    action = fields.String(required=True, validate=validate.OneOf(["reembed", "drop"]))
+    embedder = fields.String(load_default="")
+
+
 class DatasetCombineRequestSchema(Schema):
     """Body for ``POST /api/dataset/combine``."""
 
@@ -619,6 +632,16 @@ class DatasetCombineRequestSchema(Schema):
         metadata={"description": "At least two server-side pickle file paths to merge."},
     )
     name = fields.String(load_default="")
+    #: Per-embedder-type conflict resolutions, keyed by embedder type
+    #: (``semantic`` / ``patch_semantic`` / ``structural``).  Present only when
+    #: the sources bind conflicting embedders of the same type; the combine route
+    #: refuses (400) a conflict left unresolved here.
+    resolutions = fields.Dict(
+        keys=fields.String(),
+        values=fields.Nested(DatasetCombineResolutionSchema),
+        load_default=dict,
+        metadata={"description": "Embedder-type -> {action, embedder} conflict resolutions."},
+    )
 
 
 class DatasetPromoteRequestSchema(Schema):
@@ -860,6 +883,7 @@ __all__ = [
     "DatasetAvailableFilesResponseSchema",
     "DatasetClearResponseSchema",
     "DatasetCombineRequestSchema",
+    "DatasetCombineResolutionSchema",
     "DatasetDomainShiftResponseSchema",
     "DatasetImportersListResponseSchema",
     "DatasetLoadDemoRequestSchema",

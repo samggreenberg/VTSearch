@@ -19,12 +19,26 @@ describe('CombineDatasetsModalComponent', () => {
     ],
   };
 
-  const ds = (id: string, name: string, type: string, num: number, pkl: string): DatasetRegistryEntry => ({
+  const mockEmbedders = [
+    { name: 'siglip', display_name: 'SigLIP' },
+    { name: 'clip', display_name: 'CLIP' },
+    { name: 'dinov3_patch', display_name: 'DINOv3 Patch' },
+  ];
+
+  const ds = (
+    id: string,
+    name: string,
+    type: string,
+    num: number,
+    pkl: string,
+    embeddersByType?: Record<string, string>,
+  ): DatasetRegistryEntry => ({
     id,
     name,
     media_type: type,
     num_items: num,
     pkl_path: pkl,
+    embedders_by_type: embeddersByType,
   });
 
   beforeEach(async () => {
@@ -48,6 +62,7 @@ describe('CombineDatasetsModalComponent', () => {
     fixture.componentRef.setInput('datasets', datasets);
     await settleZoneless(fixture);
     httpMock.expectOne('/api/media-types').flush(mockMediaTypes);
+    httpMock.expectOne((r) => r.url === '/api/embedders').flush({ embedders: mockEmbedders });
     await settleZoneless(fixture);
   }
 
@@ -139,5 +154,96 @@ describe('CombineDatasetsModalComponent', () => {
 
     component.submit();
     httpMock.expectNone('/api/dataset/combine');
+  });
+
+  it('detects no conflict when datasets share the same embedder per type', async () => {
+    await init([
+      ds('a', 'Alpha', 'image', 10, '/x/a.pkl', { semantic: 'siglip' }),
+      ds('b', 'Bravo', 'image', 20, '/x/b.pkl', { semantic: 'siglip' }),
+    ]);
+
+    expect(component.hasConflicts).toBe(false);
+    expect(component.canCombine).toBe(true);
+  });
+
+  it('flags a name-clash conflict and gates Combine until resolved', async () => {
+    await init([
+      ds('a', 'Alpha', 'image', 10, '/x/a.pkl', { semantic: 'siglip' }),
+      ds('b', 'Bravo', 'image', 20, '/x/b.pkl', { semantic: 'clip' }),
+    ]);
+
+    expect(component.hasConflicts).toBe(true);
+    const conflict = component.conflicts[0];
+    expect(conflict.type).toBe('semantic');
+    expect(conflict.options).toEqual(['siglip', 'clip']);
+    // Unresolved → cannot combine.
+    expect(component.canCombine).toBe(false);
+    expect(component.disabledReason).toContain('Resolve each embedder conflict');
+
+    component.setResolution('semantic', 'reembed:clip');
+    expect(component.canCombine).toBe(true);
+  });
+
+  it('flags partial coverage (some datasets lack a type) as a conflict', async () => {
+    await init([
+      ds('a', 'Alpha', 'image', 10, '/x/a.pkl', { semantic: 'siglip', patch_semantic: 'dinov3_patch' }),
+      ds('b', 'Bravo', 'image', 20, '/x/b.pkl', { semantic: 'siglip' }),
+    ]);
+
+    const patch = component.conflicts.find((c) => c.type === 'patch_semantic');
+    expect(patch).toBeTruthy();
+    expect(patch!.partial).toBe(true);
+    expect(patch!.options).toEqual(['dinov3_patch']);
+    // Semantic agrees → not a conflict.
+    expect(component.conflicts.some((c) => c.type === 'semantic')).toBe(false);
+  });
+
+  it('blocks dropping every conflicted embedder', async () => {
+    await init([
+      ds('a', 'Alpha', 'image', 10, '/x/a.pkl', { semantic: 'siglip' }),
+      ds('b', 'Bravo', 'image', 20, '/x/b.pkl', { semantic: 'clip' }),
+    ]);
+
+    component.setResolution('semantic', 'drop');
+    expect(component.canCombine).toBe(false);
+    expect(component.disabledReason).toContain('At least one embedder');
+  });
+
+  it('submits resolutions in the combine body', async () => {
+    await init([
+      ds('a', 'Alpha', 'image', 10, '/x/a.pkl', { semantic: 'siglip', patch_semantic: 'dinov3_patch' }),
+      ds('b', 'Bravo', 'image', 20, '/x/b.pkl', { semantic: 'clip' }),
+    ]);
+
+    component.setResolution('semantic', 'reembed:siglip');
+    component.setResolution('patch_semantic', 'drop');
+
+    component.submit();
+    const req = httpMock.expectOne('/api/dataset/combine');
+    expect(req.request.body).toEqual({
+      datasets: ['/x/a.pkl', '/x/b.pkl'],
+      name: 'Alpha + Bravo',
+      resolutions: {
+        semantic: { action: 'reembed', embedder: 'siglip' },
+        patch_semantic: { action: 'drop' },
+      },
+    });
+    req.flush({ ok: true, message: 'Combining datasets...', task_id: 't' });
+  });
+
+  it('prunes resolution choices for conflicts removed by removeRow', async () => {
+    await init([
+      ds('a', 'Alpha', 'image', 10, '/x/a.pkl', { semantic: 'siglip' }),
+      ds('b', 'Bravo', 'image', 20, '/x/b.pkl', { semantic: 'clip' }),
+      ds('c', 'Charlie', 'image', 30, '/x/c.pkl', { semantic: 'siglip' }),
+    ]);
+
+    expect(component.hasConflicts).toBe(true);
+    component.setResolution('semantic', 'reembed:clip');
+    // Removing the odd-one-out clears the conflict; its choice is pruned.
+    component.removeRow('b');
+    expect(component.hasConflicts).toBe(false);
+    expect(component.resolutionChoices()['semantic']).toBeUndefined();
+    expect(component.canCombine).toBe(true);
   });
 });

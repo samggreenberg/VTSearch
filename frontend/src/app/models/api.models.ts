@@ -246,6 +246,12 @@ export interface DatasetRegistryEntry {
    *  / "structural"); a v3 trio dataset can supply several. Drives the
    *  detector/dataset compatibility gate. */
   embedder_types?: string[];
+  /** Every concrete embedder this dataset binds (primary first). */
+  bound_embedders?: string[];
+  /** One concrete embedder per type it binds, e.g.
+   *  `{ semantic: "siglip", patch_semantic: "dinov3_patch" }`. Drives the
+   *  Combine-Datasets conflict detector. */
+  embedders_by_type?: Record<string, string>;
   /** Unix timestamp (seconds) at which this dataset ages off and is
    *  automatically removed; `null`/absent means it never expires. */
   expires_at?: number | null;
