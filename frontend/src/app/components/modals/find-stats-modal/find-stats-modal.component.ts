@@ -2,7 +2,12 @@ import { ChangeDetectionStrategy, Component, inject, OnInit, output, signal } fr
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsFindApiService } from '../../../services/detectors-find-api.service';
+import { DatasetsRegistryApiService } from '../../../services/datasets-registry-api.service';
+import { DatasetStateService } from '../../../services/dataset-state.service';
+import { ActiveContextService } from '../../../services/active-context.service';
 import type { FindStatsResponse } from '../../../generated/api-client/models/find-stats-response';
+import type { DatasetDomainShiftResponse } from '../../../generated/api-client/models/dataset-domain-shift-response';
+import type { DatasetRegistryEntry } from '../../../models/api.models';
 import { apiErrorMessage } from '../../../utils/api-error';
 
 /** A scaled point on the FP/FN-vs-inclusion chart. */
@@ -30,6 +35,9 @@ interface ChartPoint {
 })
 export class FindStatsModalComponent implements OnInit {
   private findApi = inject(DetectorsFindApiService);
+  private registryApi = inject(DatasetsRegistryApiService);
+  private datasetState = inject(DatasetStateService);
+  private activeCtx = inject(ActiveContextService);
 
   readonly closed = output<void>();
 
@@ -38,6 +46,18 @@ export class FindStatsModalComponent implements OnInit {
   readonly loading = signal(true);
   readonly error = signal('');
   readonly stats = signal<FindStatsResponse | null>(null);
+
+  // --- Training-domain overlap (coverage-atlas domain-shift report) --------
+  // Compares the active (Find) dataset against a reference dataset's coverage
+  // atlas — the dataset the detector was trained on. The reference can't be
+  // inferred reliably (a handed-over detector may not carry its haystack), so
+  // the user picks it from the datasets currently loaded with a matching
+  // embedder. See docs/plans/coverage-atlas.md §6.5.
+  readonly refCandidates = signal<DatasetRegistryEntry[]>([]);
+  readonly selectedRefId = signal<string>('');
+  readonly domainLoading = signal(false);
+  readonly domainError = signal('');
+  readonly domainShift = signal<DatasetDomainShiftResponse | null>(null);
 
   // Chart geometry (SVG user units; the viewBox scales to the container width).
   readonly chartWidth = 320;
@@ -58,6 +78,68 @@ export class FindStatsModalComponent implements OnInit {
         this.loading.set(false);
       },
     });
+    this.initDomainOverlap();
+  }
+
+  /** Populate the reference-dataset picker from the loaded registry and, if a
+   *  single candidate exists, run the domain-shift check right away. A
+   *  candidate is any *other* loaded dataset sharing the active dataset's
+   *  embedder (a domain check across embedding spaces is meaningless, and the
+   *  backend refuses it anyway). */
+  private initDomainOverlap(): void {
+    const activeId = this.activeCtx.datasetId;
+    const datasets = this.datasetState.datasets;
+    const activeEmbedder = datasets.find((d) => d.id === activeId)?.embedder ?? '';
+    const candidates = datasets.filter(
+      (d) => d.loaded && d.id !== activeId && (d.embedder ?? '') === activeEmbedder,
+    );
+    this.refCandidates.set(candidates);
+    if (candidates.length > 0) {
+      this.selectRef(candidates[0].id);
+    }
+  }
+
+  /** Run the domain-shift report of the active dataset against *refId*'s
+   *  coverage atlas, or clear it when the picker is set to "no reference". */
+  selectRef(refId: string): void {
+    this.selectedRefId.set(refId);
+    this.domainShift.set(null);
+    this.domainError.set('');
+    if (!refId) return;
+    this.domainLoading.set(true);
+    this.registryApi.domainShift(refId).subscribe({
+      next: (data) => {
+        this.domainShift.set(data);
+        this.domainLoading.set(false);
+      },
+      error: (err) => {
+        this.domainError.set(apiErrorMessage(err, 'Domain check unavailable'));
+        this.domainLoading.set(false);
+      },
+    });
+  }
+
+  /** `(change)` handler for the reference `<select>`. */
+  onRefChange(event: Event): void {
+    this.selectRef((event.target as HTMLSelectElement).value);
+  }
+
+  /** Display name of the currently-selected reference dataset. */
+  get selectedRefName(): string {
+    const id = this.selectedRefId();
+    return this.refCandidates().find((d) => d.id === id)?.name ?? id;
+  }
+
+  /** Percent of the active dataset that looks atypical under the reference
+   *  atlas (`frac_atypical`), rounded for display. */
+  get atypicalPct(): number {
+    const d = this.domainShift();
+    return d ? Math.round(d.frac_atypical * 100) : 0;
+  }
+
+  /** Headline verdict class for the overlap chip. */
+  get overlapShifted(): boolean {
+    return this.domainShift()?.shifted ?? false;
   }
 
   close(): void {
