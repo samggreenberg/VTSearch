@@ -80,8 +80,11 @@
           [gridGoalWidth]="gridGoalWidth()"
           [focusMode]="focusMode()"
           [showScores]="false"
+          [hasMore]="sortHasMore()"
+          [loadingMore]="loadingMore()"
           (mediaSelect)="mediaSelect.emit($event)"
           (mediaVote)="mediaVote.emit($event)"
+          (loadMore)="loadMore.emit()"
         />
         <vt-stripe-overview
           [sortOrder]="sortOrder()"
@@ -181,9 +184,12 @@
             [gridGoalWidth]="gridGoalWidth()"
             [focusMode]="focusMode()"
             [showScores]="false"
+            [hasMore]="sortHasMore()"
+            [loadingMore]="loadingMore()"
             (mediaSelect)="mediaSelect.emit($event)"
             (mediaVote)="mediaVote.emit($event)"
             (mediaContextRequest)="mediaContextRequest.emit($event)"
+            (loadMore)="loadMore.emit()"
           />
           <vt-stripe-overview
             [sortOrder]="sortOrder()"

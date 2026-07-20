@@ -35,6 +35,8 @@ import { learnedSortResult } from '../generated/api-client/fn/sorting/learned-so
 import { getSafeThresholdsRoute } from '../generated/api-client/fn/sorting/get-safe-thresholds-route';
 import { setSafeThresholdsRoute } from '../generated/api-client/fn/sorting/set-safe-thresholds-route';
 import { sortClips } from '../generated/api-client/fn/sorting/sort-clips';
+import { sortPage } from '../generated/api-client/fn/sorting/sort-page';
+import type { SortPageResponse } from '../generated/api-client/models/sort-page-response';
 import { getTextsortSuggestionsRoute } from '../generated/api-client/fn/sorting/get-textsort-suggestions-route';
 import { addTextsortSuggestionRoute } from '../generated/api-client/fn/sorting/add-textsort-suggestion-route';
 import { clearVotesRoute } from '../generated/api-client/fn/sorting/clear-votes-route';
@@ -85,6 +87,15 @@ export class SortingApiService {
 
   sort(params: { text: string }): Observable<SortResponse> {
     return sortClips(this.http, this.config.rootUrl, { body: params }).pipe(map((r) => r.body));
+  }
+
+  /**
+   * Fetch a deeper window of a windowed ranking (scalability.md S3/S17/S19).
+   * `token` is the `sort_token` the sort response returned; a 404 means the
+   * ranking was superseded or evicted and the caller should re-sort.
+   */
+  getSortPage(token: string, offset: number, limit: number): Observable<SortPageResponse> {
+    return sortPage(this.http, this.config.rootUrl, { token, offset, limit }).pipe(map((r) => r.body));
   }
 
   /** Kick off a learned-sort training job.  The response will be ``done``

@@ -9,10 +9,29 @@ gate.
 from __future__ import annotations
 
 from vtscore.state.sort_results_cache import (
+    SORT_WINDOW_HEAD,
+    SORT_WINDOW_TAIL,
     SortResultsCache,
     count_above_threshold,
+    initial_window_end,
     result_score,
 )
+
+
+class TestInitialWindowEnd:
+    def test_boundary_within_head_includes_tail(self):
+        # 300 above (< HEAD): window = 300 + TAIL, boundary visible.
+        assert initial_window_end(total=10000, above_threshold=300) == 300 + SORT_WINDOW_TAIL
+
+    def test_boundary_past_head_caps_at_head_plus_tail(self):
+        # 100k above (> HEAD): window caps at HEAD + TAIL, boundary paged to.
+        assert initial_window_end(total=1_000_000, above_threshold=100_000) == SORT_WINDOW_HEAD + SORT_WINDOW_TAIL
+
+    def test_clamped_to_total(self):
+        assert initial_window_end(total=5, above_threshold=2) == 5
+
+    def test_zero_above_is_tail_only(self):
+        assert initial_window_end(total=10000, above_threshold=0) == SORT_WINDOW_TAIL
 
 
 class TestResultScore:

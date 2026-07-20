@@ -174,34 +174,40 @@ items alone don't cover them:
   first slice; the threshold is the natural home for the future window's own
   cutoff.)
 
-**Complexity:** 4–5 PRs, not 2–3. The backend halves have landed; only the
-frontend swap remains.
+**The Train-side windowing has shipped end-to-end.** The sort routes
+(`/api/sort`, `/api/example-sort`, `/api/label-file-sort`, `/api/learned-sort`)
+window their transmitted `results` above `SORT_WINDOW_THRESHOLD` (aligned with
+`STRIPE_MAX_ITEMS`; below it the full ranking is sent unchanged), the frontend
+`SortStateService` holds a windowed model, and `media-list` renders the loaded
+window + a "Load more" trigger that pages via `GET /api/sort/page`. `best_region`
+rides each windowed row. The stripe was already size-gated (slice 1), so the
+Train (label-view) flow has no full-order client scan left.
 
-**Server-side contract the frontend will consume (already built):**
+**Server-side Find contract (built, not yet consumed):**
 
-- **Windowed sort API** — every sort route (`/api/sort`, `/api/example-sort`,
-  `/api/label-file-sort`) returns `sort_token` / `total` / `above_threshold`
-  alongside the (still full) `results`, and `GET /api/sort/page?token=&offset=&limit=`
-  pages a cached ranking back out. The token is the sort-generation guard.
 - **Find work-queue ids** — `GET /api/find/queue-ids?filter=unverified_good|good`
   returns the full positive-set ids (rank order) for Browse / To Dataset /
-  Export, computed server-side from frozen `find_scores` + cutoff + verified set
-  (so it no longer truncates to a client window).
+  Export, from frozen `find_scores` + cutoff + verified set.
 - **Find boundary walk** — `GET /api/find/boundary-next?side=above|below[&exclude=]`
-  returns the next unverified item on the requested face of the cutoff (falling
-  back to the other side), replacing the client-side `advanceToBoundary` scan.
+  returns the next unverified item on the requested face of the cutoff.
 
-**Remaining work — frontend windowed model (the one still-owed PR):**
+**Remaining work — window the Find (find-view) flow:**
 
-Replace `SortStateService`'s full `SortedItem[]` with the windowed `SortWindow`
-model above; `media-list` renders the loaded window + a "Load more" trigger
-(`cachedOrderedItems` stays ≤ window size). Switch Find's bulk actions
-(`unverifiedGoodIds`/`goodIds` → `/api/find/queue-ids`) and the boundary walk
-(`advanceToBoundary` → `/api/find/boundary-next`) onto the endpoints above, and
-keep `best_region` on each windowed row for the center-panel overlay. Land it
-atomically with the backend ceasing to send the full `results` payload (flip the
-sort routes to emit only the top-`K_ABOVE` + `K_BELOW` window). The stripe is
-already size-gated (slice 1), so no full-order client scan remains after this.
+`find-label` still returns the full `results` list, because Find's `find-view`
+derives its work queue, "just sit and vote" boundary walk, and Browse / To
+Dataset / Export id sets from the whole client-side ranking. To window it:
+
+- Window `find-label`'s response (same `windowed_sort_response` helper) and have
+  `find-view` install it via `setSortWindow` + wire the media-list "Load more"
+  (paging the *unverified* ranking, filtering verified rows out of each page).
+- Switch the bulk actions (`unverifiedGoodIds` / `goodIds`) to
+  `GET /api/find/queue-ids` and the boundary walk (`advanceToBoundary`) to
+  `GET /api/find/boundary-next` — both already built and tested. These are async
+  refactors of `find-view`'s currently-synchronous handlers, so land them with
+  the windowing atomically (a windowed `find-label` without them would truncate
+  Browse/Export and mis-terminate the boundary walk).
+- Feed the left-panel `unverifiedGoodCount` from the response's `above_threshold`
+  (minus verified) rather than a full-order scan.
 
 ---
 

@@ -342,6 +342,13 @@ def find_label(body: dict):
 
     record_find(n_total)
 
+    # Find is not yet windowed: its "just sit and vote" boundary walk and the
+    # Browse / To Dataset / Export bulk actions still read the full client-side
+    # ranking, so find-label returns the whole ``results`` list. The server-side
+    # replacements those flows will switch to already exist
+    # (``/api/find/queue-ids``, ``/api/find/boundary-next``); wiring the Find
+    # frontend onto them + windowing this response is the remaining slice (see
+    # docs/plans/scalability.md S3/S17/S19).
     return {
         "ok": True,
         "results": results,

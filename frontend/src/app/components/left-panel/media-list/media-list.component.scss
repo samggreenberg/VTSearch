@@ -90,3 +90,14 @@
   width: 100%;
   aspect-ratio: 1;
 }
+
+.media-load-more {
+  // Full-width centred trigger row appended to a windowed ranking; in the
+  // virtual grid it fills one row-stride, in the plain grid it sits below the
+  // cards. Spans every grid column so it centres across the gallery width.
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-sm);
+}

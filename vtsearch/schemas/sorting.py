@@ -69,10 +69,13 @@ class SortRequestSchema(Schema):
 _WINDOW_META_FIELDS = {
     # Opaque handle for /api/sort/page; also the sort-generation token.
     "sort_token": fields.String(required=False),
-    # Full ranking length (== len(results) while the list is returned whole).
+    # Full ranking length (>= len(results): ``results`` may be a head window).
     "total": fields.Integer(required=False),
-    # Rows scoring at or above ``threshold``.
+    # Rows scoring at or above ``threshold`` across the whole ranking.
     "above_threshold": fields.Integer(required=False),
+    # True when ``results`` is a head window and more rows follow (page them via
+    # /api/sort/page). False when the full ranking was transmitted.
+    "has_more_below": fields.Boolean(required=False),
 }
 
 
@@ -84,6 +87,7 @@ class SortResponseSchema(Schema):
     sort_token = _WINDOW_META_FIELDS["sort_token"]
     total = _WINDOW_META_FIELDS["total"]
     above_threshold = _WINDOW_META_FIELDS["above_threshold"]
+    has_more_below = _WINDOW_META_FIELDS["has_more_below"]
 
 
 class SortPageQuerySchema(Schema):
@@ -160,6 +164,10 @@ class LearnedSortResponseSchema(Schema):
     current = fields.Integer()
     total = fields.Integer()
     error = fields.String()
+    # Windowing metadata on the ``done`` payload (see scalability.md S3/S17/S19).
+    sort_token = fields.String(required=False)
+    above_threshold = fields.Integer(required=False)
+    has_more_below = fields.Boolean(required=False)
 
 
 class LearnedSortCancelResponseSchema(Schema):
@@ -313,6 +321,7 @@ class LabelFileSortResponseSchema(Schema):
     sort_token = _WINDOW_META_FIELDS["sort_token"]
     total = _WINDOW_META_FIELDS["total"]
     above_threshold = _WINDOW_META_FIELDS["above_threshold"]
+    has_more_below = _WINDOW_META_FIELDS["has_more_below"]
 
 
 # ---------------------------------------------------------------------------
