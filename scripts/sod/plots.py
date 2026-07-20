@@ -75,6 +75,40 @@ def _stats_by_k(rows: list[dict], field: str, band: str) -> dict[int, tuple[floa
     return out
 
 
+def _class_series(rows: list[dict], field: str) -> dict[str, dict[int, float]]:
+    """Per-class ``{k: mean-over-seeds}`` for one config's rows (the per-class analogue of
+    ``_series_by_seed``; used by the summary ``all`` band = one line per class)."""
+    by_class: dict[str, list[dict]] = defaultdict(list)
+    for r in rows:
+        by_class[str(r["class"])].append(r)
+    return {cls: _mean_by_k(crows, field) for cls, crows in by_class.items()}
+
+
+def _summary_stats(rows: list[dict], field: str, band: str) -> dict[int, tuple[float, float, float]]:
+    """Per-K ``(macro_mean, lo, hi)`` **across classes** for one config. Reduces each class to its
+    mean-over-seeds first (so classes weight equally), then aggregates over classes; ``lo/hi`` is the
+    across-class ``std``/``minmax`` spread (how consistent the config is across classes)."""
+    per_class = _class_series(rows, field)
+    by_k: dict[int, list[float]] = defaultdict(list)
+    for series in per_class.values():
+        for k, v in series.items():
+            by_k[k].append(v)  # one value (that class's seed-mean) per class at k
+    out: dict[int, tuple[float, float, float]] = {}
+    for k, vs in by_k.items():
+        if not vs:
+            continue
+        m = st.mean(vs)
+        if band == "std":
+            s = st.pstdev(vs)
+            lo, hi = m - s, m + s
+        elif band == "minmax":
+            lo, hi = min(vs), max(vs)
+        else:
+            lo, hi = m, m
+        out[k] = (m, lo, hi)
+    return out
+
+
 _METRICS = {
     "cost": "weighted FPR+FNR",
     "fpr": "FPR (false-positive rate)",
@@ -227,6 +261,119 @@ def render_all(
             print(f"wrote {out_path}")
 
 
+def _plot_summary_group(
+    rows: list[dict],
+    title: str,
+    out_path: Path,
+    *,
+    field: str = "cost",
+    band: str = "std",
+    x_label: str = "K (annotation count)",
+) -> None:
+    """One figure for a whole dataset: each config's curve **macro-averaged across classes**.
+    Mirrors ``_plot_group`` but aggregates over classes (band = across-class spread); ``band='all'``
+    overlays one thin line per class per config. Cosine-head rows are skipped."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    by_cfg: dict[tuple, list[dict]] = defaultdict(list)
+    for r in rows:
+        by_cfg[_config_key(r)].append(r)
+
+    fig, ax = plt.subplots(figsize=(9, 6))
+    cmap = plt.get_cmap("tab20")
+    color_i = 0
+    for (embedder, proposal, alpha, head), crows in sorted(by_cfg.items()):
+        if head == "cosine":
+            continue  # zero-shot baseline isn't a per-t curve; omit from the cross-class summary
+        ls = _PROPOSAL_STYLES.get(proposal, "-")
+        alpha_tag = f" α{alpha}" if proposal == "hac" else ""
+
+        if band == "all":
+            # One thin line per class (each its own color) so cross-class spread is visible directly.
+            for cls, series in sorted(_class_series(crows, field).items()):
+                sks = sorted(k for k in series if k > 0)
+                if not sks:
+                    continue
+                ax.plot(
+                    sks,
+                    [series[k] for k in sks],
+                    color=cmap(color_i % 20),
+                    ls=ls,
+                    lw=1.3,
+                    marker="o",
+                    ms=3,
+                    label=f"{embedder}/{proposal}{alpha_tag} — {cls}",
+                )
+                color_i += 1
+            continue
+
+        stats = _summary_stats(crows, field, band)
+        ks = sorted(k for k in stats if k > 0)
+        if not ks:
+            continue
+        color = cmap(color_i % 20)
+        color_i += 1
+        ax.plot(
+            ks,
+            [stats[k][0] for k in ks],
+            color=color,
+            ls=ls,
+            lw=1.8,
+            marker="o",
+            ms=5,
+            label=f"{embedder}/{proposal}{alpha_tag}",
+        )
+        # Across-class spread band (min-max or ±std over the per-class means).
+        if band != "none":
+            ax.fill_between(ks, [stats[k][1] for k in ks], [stats[k][2] for k in ks], color=color, alpha=0.15, lw=0)
+
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(_METRICS.get(field, field))
+    ax.set_title(title)
+    ax.grid(True, ls=":", alpha=0.4)
+    ax.legend(fontsize=8, loc="best")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=130)
+    plt.close(fig)
+
+
+def render_summary(
+    rows: list[dict],
+    out_dir: Path,
+    *,
+    metrics: list[str] | tuple[str, ...] = _DEFAULT_METRICS,
+    band: str = "std",
+    x_label: str = "K (annotation count)",
+    x_tag: str = "k",
+) -> None:
+    """Write one cross-class **summary** figure per metric per dataset: each config's curve
+    macro-averaged over that dataset's classes (band = across-class spread; ``band='all'`` = one line
+    per class). Emitted only for datasets with ≥2 classes — a single-class dataset's per-class figure
+    already is its summary, so it's skipped."""
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for r in rows:
+        groups[str(r["dataset"])].append(r)
+    for dataset, grows in sorted(groups.items()):
+        n_classes = len({str(r["class"]) for r in grows})
+        if n_classes < 2:
+            continue
+        for field in metrics:
+            out_path = out_dir / f"summary_{dataset}_{field}_vs_{x_tag}.png"
+            _plot_summary_group(
+                grows,
+                f"{dataset}: mean over {n_classes} classes — {field} vs {x_tag}",
+                out_path,
+                field=field,
+                band=band,
+                x_label=x_label,
+            )
+            print(f"wrote {out_path}")
+
+
 def render_inference_time(timing: list[dict], out_path: Path) -> None:
     """Stacked bar of total time per (embedder × proposal), in seconds.
 
@@ -284,6 +431,13 @@ def main() -> int:
         help="per-curve seed spread: minmax/std band, none, or 'all' (overlay every seed's "
         "own curve as a thin line around the mean)",
     )
+    ap.add_argument(
+        "--summary",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="also emit cross-class summary_<dataset>_<metric>.png (macro-avg over a dataset's "
+        "classes); no-op for single-class datasets",
+    )
     args = ap.parse_args()
 
     rows = _load(args.results)
@@ -299,6 +453,8 @@ def main() -> int:
         show_oracle=args.show_oracle,
         show_text_baseline=args.show_text_baseline,
     )
+    if args.summary:
+        render_summary(rows, out_dir, metrics=args.metrics, band=args.band_kind)
     return 0
 
 
