@@ -580,7 +580,11 @@ def _score_dataset(
         )
 
     positives, negatives = _partition_find_results(media_results)
-    del temp_medias, matrix_cache
+    # Drop the score-space matrices eagerly (temp_medias is freed when this
+    # frame returns).  Both are captured by the _matrix_for closure, so they are
+    # cleared in place rather than ``del``'d (deleting a closed-over name is a
+    # SyntaxError).
+    matrix_cache.clear()
     gc.collect()
     return positives, negatives, scored_units, added_units, detected_media_type
 
