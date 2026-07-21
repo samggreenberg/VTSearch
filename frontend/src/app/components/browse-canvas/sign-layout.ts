@@ -41,6 +41,11 @@ export interface PlacedSign {
   sy: number;
   /** Resolved font size (CSS px) after the appearance scale. */
   fontPx: number;
+  /** The {@link SignAppearance.scale} this sign rendered at (multiplier on
+   *  {@link SIGN_BASE_FONT_PX}). Drives the drop-shadow depth cue — see
+   *  {@link signShadow} — so a bigger (more zoomed-past) sign lifts further off
+   *  the map. */
+  scale: number;
   alpha: number;
   /** Pill box (CSS px), centred on `(sx, sy)`. */
   w: number;
@@ -83,6 +88,56 @@ const SIGN_SCALE_STOPS: readonly [number, number][] = [
   [1.5, 1.25],
   [SIGN_EXPIRE_DELTA, 1.45],
 ];
+
+/** Render scale at or below which a sign lies flat on the map and casts no
+ *  shadow — the smallest, just-appeared signs. Between here and
+ *  {@link SIGN_SHADOW_MAX_SCALE} the shadow depth ramps linearly. */
+export const SIGN_SHADOW_MIN_SCALE = 0.75;
+/** Render scale at which a sign casts its deepest shadow — the largest tier
+ *  (the top of {@link SIGN_SCALE_STOPS}), read as floating just past the
+ *  viewer's shoulder. */
+export const SIGN_SHADOW_MAX_SCALE = SIGN_SCALE_STOPS[SIGN_SCALE_STOPS.length - 1][1];
+/** Blur radius of a fully-lifted sign's shadow, as a multiple of its font px. */
+const SIGN_SHADOW_BLUR_EM = 1.2;
+/** Downward offset of a fully-lifted sign's shadow, as a multiple of its font
+ *  px — the sign's apparent height above the map plane. */
+const SIGN_SHADOW_OFFSET_EM = 0.55;
+/** Opacity of a fully-lifted sign's shadow. */
+const SIGN_SHADOW_MAX_ALPHA = 0.55;
+
+/** Drop shadow a sign casts: how far it floats off the map. */
+export interface SignShadow {
+  /** Gaussian blur radius (CSS px) for `ctx.shadowBlur`. */
+  blur: number;
+  /** Downward offset (CSS px) for `ctx.shadowOffsetY`. */
+  offsetY: number;
+  /** 0..1 shadow opacity. */
+  alpha: number;
+}
+
+/**
+ * Drop-shadow depth cue for a sign rendered at `scale` (its
+ * {@link SignAppearance.scale}) and `fontPx`. As the viewer zooms in, a sign
+ * grows past full size and reads as lifting off the map toward them, so it casts
+ * a progressively larger, softer, more-offset shadow. Below
+ * {@link SIGN_SHADOW_MIN_SCALE} the sign lies flat on the map and casts nothing
+ * (returns `null`); by {@link SIGN_SHADOW_MAX_SCALE} the shadow is deepest, as if
+ * the sign is about to float past the viewer's shoulder. Magnitudes scale with
+ * `fontPx`, so the shadow stays proportional to the sign at every size (a bigger
+ * sign both is larger and throws a larger shadow, compounding the "coming toward
+ * you" read). Pure and total — the canvas painter just applies the result.
+ */
+export function signShadow(scale: number, fontPx: number): SignShadow | null {
+  const span = SIGN_SHADOW_MAX_SCALE - SIGN_SHADOW_MIN_SCALE;
+  const lift = span > 0 ? (scale - SIGN_SHADOW_MIN_SCALE) / span : 0;
+  if (!(lift > 0)) return null;
+  const l = Math.min(1, lift);
+  return {
+    blur: fontPx * SIGN_SHADOW_BLUR_EM * l,
+    offsetY: fontPx * SIGN_SHADOW_OFFSET_EM * l,
+    alpha: SIGN_SHADOW_MAX_ALPHA * l,
+  };
+}
 
 /** Minimum gap (CSS px) enforced between sign pills by the de-clutter pass. */
 const SIGN_GAP_PX = 4;
@@ -171,7 +226,7 @@ export function layoutSigns(
     if (sx + w / 2 < 0 || sx - w / 2 > view.width) continue;
     if (sy + h / 2 < 0 || sy - h / 2 > view.height) continue;
 
-    candidates.push({ label, sx, sy, fontPx, alpha: appearance.alpha, w, h });
+    candidates.push({ label, sx, sy, fontPx, scale: appearance.scale, alpha: appearance.alpha, w, h });
   }
 
   // Priority: bigger signs first (they're the ones nearest their own zoom
