@@ -1,42 +1,24 @@
 # Plan: VTSBrowse empirical tuning pass
 
-**Status:** The remaining work is the quantitative sweep (Phase A) and the
-qualitative review (Phase B), detailed below — the deferred empirical-tuning
-work from `docs/plans/vtsbrowse.md`.
+**Status:** The UMAP-parameter quantitative sweep that used to be Phase A here
+has moved to (and been substantially expanded by)
+**`docs/plans/umap-parameter-optimization.md`** — per-embedder params, a
+taxonomy-separability metric, and a GPU-cluster run. What remains in this plan
+is the **pyramid-parameter sweep** (the non-UMAP half of the old Phase A) and
+the **qualitative review (Phase B)**, the deferred empirical-tuning work from
+`docs/plans/vtsbrowse.md`.
 
 The remaining steps need a **stronger environment** (a browser for visual
-judgment, ideally GPU + real demo datasets) because choosing good defaults
-requires *looking at the rendered canvas*, which the headless cloud container
-can't do (no Chrome/Chromium). The two most impactful UMAP knobs are exposed as
-`ServerSettings`, so both phases retune purely by changing two settings
-(`projection_n_neighbors`, `projection_min_dist`).
+judgment) because choosing good defaults requires *looking at the rendered
+canvas*, which the headless cloud container can't do (no Chrome/Chromium).
 
-| Step | Needs a browser? | Needs GPU? | Headless here? |
-|------|------------------|-----------|----------------|
-| Quantitative sweep harness (impl + run) | no | helps (faster embed) | **yes** (small N) |
-| Visual layout / hex-readability review | **yes** | no | no |
-| Hover-preview feel (debounce, audio loop) | **yes** | no | no |
-| Final default selection + write-up | partly | no | partly |
+## Phase A′ — pyramid-parameter sweep (headless, scriptable)
 
-## Phase A — quantitative sweep (headless, scriptable)
+For each `(dataset, params)` cell, take a fixed projection (the tuned UMAP
+defaults once the other plan lands), run `build_pyramid` with trial pyramid
+params, and emit metrics to CSV/JSON:
 
-A standalone script (suggested: `scripts/projection_sweep.py`, dev-only, not
-shipped) that, for each `(dataset, params)` cell:
-
-1. Loads the demo dataset's embedding matrix via `get_embedding_matrix(ctx)`
-   (reuse the real ingest path; embeddings are already L2-normalized).
-2. Runs `fit_projection(..., random_state=SEED)` — **seeded here only**, so
-   trials are comparable; production stays unseeded.
-3. Runs `build_pyramid` with the trial pyramid params.
-4. Emits a row of metrics to CSV/JSON.
-
-**Metrics to capture** (all computable without a browser):
-
-- **Build cost:** UMAP fit seconds, pyramid build seconds, peak RSS.
-- **Layout quality (neighborhood preservation):** trustworthiness &
-  continuity of the 2-D embedding vs the original space (`sklearn.manifold.
-  trustworthiness`); optionally kNN-overlap @k. Lets `n_neighbors`/`min_dist`
-  be ranked numerically before any eyeballing.
+- **Build cost:** pyramid build seconds, peak RSS.
 - **Aggregation health per level:** for each pyramid level — number of
   non-empty hexes, count distribution (min/median/p95/max items per hex),
   fraction of single-item hexes, tile fan-out (hexes per tile, tiles per
@@ -47,29 +29,19 @@ shipped) that, for each `(dataset, params)` cell:
 
 **Parameter grid (starting point, widen if flat):**
 
-- `n_neighbors ∈ {5, 15, 30, 50, 100}` (clamped to `N-1`)
-- `min_dist ∈ {0.0, 0.1, 0.25, 0.5}`
 - `base_cols ∈ {4, 6, 9}`
 - `tile_span ∈ {8, 16, 32}`
 
 **Datasets** — span media type and N (use the S/M/L/A size variants the demo
-registry provides, e.g. `esc50_s/m/l/a`, `gtzan_a`):
-
-| Media type | Demo source(s) | Why |
-|------------|----------------|-----|
-| Audio | ESC-50 (S→A), GTZAN | clipped → many points per file; tests density + sibling-scatter geometry |
-| Text | AG News, BBC, IMDB | large N, E5/BGE embeddings; stresses level count |
-| Image | image sources | SigLIP/DINO; visual-cluster sanity |
-| Document | UCSF, arXiv | longer docs, fewer items |
-| Video | video demos | X-CLIP; smallest N, fallback-boundary check |
-
-Capture at least one **small** (hundreds), one **medium** (few thousand), and
-one **large** (tens of thousands if downloadable) dataset to find the
-performance ceiling.
+registry provides, e.g. `esc50_s/m/l/a`, `gtzan_a`); at least one small
+(hundreds), one medium (few thousand), and one large (tens of thousands)
+dataset to find the performance ceiling.
 
 ## Phase B — qualitative review (browser required)
 
-For a shortlist of param sets that scored well in Phase A, load each dataset in
+For a shortlist of param sets that scored well in the quantitative sweeps
+(Phase A′ here plus the UMAP sweep in
+`docs/plans/umap-parameter-optimization.md`), load each dataset in
 the actual Browse canvas (`/browse/:datasetId`) and judge what the metrics
 can't:
 
@@ -96,13 +68,13 @@ Capture before/after screenshots for the write-up.
 
 ## Remaining deliverables
 
-2. **Sweep harness** `scripts/projection_sweep.py` + a short README block on
-   running it. (Dev tool; keep it out of the shipped package and out of
-   `deptry`'s prod-dependency surface — if it needs `sklearn.manifold` etc.,
-   confirm those are already deps.)
-3. **Chosen defaults** landed in `umap_projection.py` / `pyramid.py` / the
-   canvas component / settings, each with a one-line rationale comment or a row
-   in the write-up.
+2. **Pyramid sweep harness** (the UMAP sweep harness now lives with
+   `docs/plans/umap-parameter-optimization.md`; this one can share its
+   scaffolding under `scripts/experiments/`). Dev tool; keep it out of the
+   shipped package and out of `deptry`'s prod-dependency surface.
+3. **Chosen defaults** landed in `pyramid.py` / the canvas component /
+   settings, each with a one-line rationale comment or a row in the write-up.
+   (UMAP defaults land via the per-embedder plan.)
 4. **Write-up** appended to *§Results* (below, currently empty): the grid that
    was run, the winning values, and the metric/screenshot evidence. Update
    `docs/plans/vtsbrowse.md` *§Open problems → Empirical* to "settled — see plan
