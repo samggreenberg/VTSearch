@@ -36,6 +36,7 @@ import {
 import {
   layoutSigns,
   SIGN_FONT_FAMILY,
+  signShadow,
   viewLevelForZoom,
 } from './sign-layout';
 import { prefersReducedMotion } from '../../utils/reduced-motion';
@@ -1481,12 +1482,27 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     const textColor = this.themeColor('--text-primary') || '#e0e0e0';
     for (const sign of placed) {
       // The pill sits behind the text at a lower opacity so the sign reads as
-      // lettering over the map, not an opaque card punched through it.
+      // lettering over the map, not an opaque card punched through it. A drop
+      // shadow under the pill floats the sign off the map toward the viewer as
+      // the zoom grows past it: the smallest signs are flat (no shadow), and
+      // larger (more zoomed-past) ones cast a progressively bigger, softer,
+      // more-offset shadow — see `signShadow`.
+      const shadow = signShadow(sign.scale, sign.fontPx);
       ctx.globalAlpha = sign.alpha * 0.6;
       ctx.fillStyle = pillBg;
+      if (shadow) {
+        ctx.shadowColor = `rgba(0, 0, 0, ${shadow.alpha})`;
+        ctx.shadowBlur = shadow.blur;
+        ctx.shadowOffsetY = shadow.offsetY;
+      }
       ctx.beginPath();
       ctx.roundRect(sign.sx - sign.w / 2, sign.sy - sign.h / 2, sign.w, sign.h, sign.h / 2);
       ctx.fill();
+      // Clear the shadow before the text so the lettering isn't double-shadowed
+      // and the next sign starts clean.
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
       ctx.globalAlpha = sign.alpha;
       ctx.fillStyle = textColor;
       ctx.font = this.signFont(sign.fontPx);
