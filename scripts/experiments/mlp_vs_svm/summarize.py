@@ -73,13 +73,19 @@ def _interp_metric(traj: pd.DataFrame, metric: str, ts: np.ndarray) -> np.ndarra
 
 
 def _aulc(traj: pd.DataFrame, metric: str = "cost") -> float:
+    """Area under the metric curve over t=8..200, expressed as mean height.
+
+    With dense unit sampling this equals the trapezoidal integral divided by the
+    span, i.e. the average cost over the voting budget — one number for "how good
+    across the whole session" (lower is better).
+    """
     lo, hi = _AULC_RANGE
     ts = np.arange(lo, hi + 1)
     vals = _interp_metric(traj, metric, ts)
     vals = vals[~np.isnan(vals)]
     if len(vals) < 2:
         return float("nan")
-    return float(np.trapz(vals, dx=1.0) / (len(vals) - 1))  # mean height = AULC / span
+    return float(np.mean(vals))
 
 
 def _metric_at(traj: pd.DataFrame, metric: str, t: int) -> float:
@@ -107,14 +113,21 @@ def _trajectory_table(df: pd.DataFrame) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
-def _bootstrap_ci(values: np.ndarray, n_boot: int = 1000, seed: int = 0) -> tuple[float, float]:
-    values = values[~np.isnan(values)]
-    if len(values) < 2:
-        m = float(np.nanmean(values)) if len(values) else float("nan")
+def _bootstrap_band(stack: np.ndarray, n_boot: int = 500, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
+    """Vectorised bootstrap 95% band over trajectories.
+
+    *stack* is ``(n_trajectories, n_timepoints)``.  Resamples whole trajectories
+    (rows) ``n_boot`` times and returns the 2.5 / 97.5 percentile of the resampled
+    mean curve at each timepoint — the confidence band for the mean line.
+    """
+    n = stack.shape[0]
+    if n < 2:
+        m = np.nanmean(stack, axis=0)
         return m, m
     rng = np.random.default_rng(seed)
-    boots = [np.mean(rng.choice(values, size=len(values), replace=True)) for _ in range(n_boot)]
-    return float(np.percentile(boots, 2.5)), float(np.percentile(boots, 97.5))
+    idx = rng.integers(0, n, size=(n_boot, n))  # (B, n)
+    boot_means = np.nanmean(stack[idx], axis=1)  # (B, n_t)
+    return np.nanpercentile(boot_means, 2.5, axis=0), np.nanpercentile(boot_means, 97.5, axis=0)
 
 
 def _plot_metric_curves(df: pd.DataFrame, metric: str, title: str, out: Path) -> None:
@@ -135,8 +148,7 @@ def _plot_metric_curves(df: pd.DataFrame, metric: str, title: str, out: Path) ->
                     continue
                 stack = np.vstack([_interp_metric(t, metric, ts) for t in trajs])
                 mean = np.nanmean(stack, axis=0)
-                lo = np.array([_bootstrap_ci(stack[:, i])[0] for i in range(len(ts))])
-                hi = np.array([_bootstrap_ci(stack[:, i])[1] for i in range(len(ts))])
+                lo, hi = _bootstrap_band(stack)
                 ax.plot(ts, mean, label=trainer, color=_color(trainer), lw=1.8)
                 ax.fill_between(ts, lo, hi, color=_color(trainer), alpha=0.15)
             ax.set_title(f"{ds}  ·  {arm}", fontsize=9)
@@ -351,14 +363,11 @@ def build_report(results: Path) -> None:
     ds_list = ", ".join(f"`{d}`" for d in sorted(df_b["dataset"].unique()))
     L(f"- **Datasets** (image, SigLIP 768-d embeddings): {ds_list}.")
     L(f"- **Trainers compared:** {', '.join('`' + t + '`' for t in ['mlp'] + svm_variants)}.")
-    L(
-        f"- **Seeds:** {sorted(df_b['seed'].unique())}; **categories per dataset:** "
-        f"{df_b.groupby('dataset')['category'].nunique().to_dict()}."
-    )
-    L(
-        f"- **Prevalence arms:** {sorted(df_b['prevalence_arm'].unique())}; "
-        f"**vote budget:** up to t={int(df_b['t'].max())}."
-    )
+    seeds = sorted(int(s) for s in df_b["seed"].unique())
+    cats_per = {k: int(v) for k, v in df_b.groupby("dataset")["category"].nunique().to_dict().items()}
+    arms = sorted(str(a) for a in df_b["prevalence_arm"].unique())
+    L(f"- **Seeds:** {seeds}; **categories per dataset:** {cats_per}.")
+    L(f"- **Prevalence arms:** {arms}; **vote budget:** up to t={int(df_b['t'].max())}.")
     L(
         "- **Threshold path:** production cross-calibration (calibrate_count=2, calibration_fraction=0.5), "
         "inclusion=0 so cost = FPR + FNR; held-out split = 50%.\n"
