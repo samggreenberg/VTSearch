@@ -42,7 +42,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Sequence
+from typing import TYPE_CHECKING, Any, Sequence
 
 import numpy as np
 
@@ -55,124 +55,18 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Trainer plugin registry
 # ---------------------------------------------------------------------------
+#
+# The registry, its adapter helpers, and the trainer-agnostic cross-calibration
+# threshold now live in :mod:`vtscore.eval.trainers` so the voting-iterations
+# sweep can dispatch through the identical set without importing this whole
+# module.  They are re-exported here unchanged for backward compatibility.
 
-
-PredictFn = Callable[[np.ndarray], "np.ndarray | tuple[np.ndarray, np.ndarray]"]
-"""Callable returning per-row P(positive) - optionally with per-item std.
-
-A plain trainer returns just ``scores`` (P(positive) in ``[0, 1]``).  An
-*ensemble* trainer returns ``(scores, per_item_std)`` where ``scores`` is
-the mean sigmoid across ensemble members and ``per_item_std`` is the
-member-to-member standard deviation - a cheap epistemic-uncertainty
-signal.  Callers that only need the ranking pull ``scores`` out via
-:func:`_as_scores`; callers that want the uncertainty (the diagnostic
-``std_mean`` column) unpack the tuple explicitly.
-"""
-
-TrainerFn = Callable[[np.ndarray, np.ndarray, int], PredictFn]
-"""Trainer signature: ``(X_train, y_train, seed) -> predict_fn``."""
-
-
-def _as_scores(result: "np.ndarray | tuple[np.ndarray, np.ndarray]") -> np.ndarray:
-    """Return the score array from a ``predict()`` result.
-
-    Ensemble trainers return ``(scores, per_item_std)``; every other
-    trainer returns a bare score array.  This collapses both to the score
-    array so ranking metrics and threshold calibration don't have to care
-    which trainer produced the prediction.
-    """
-    if isinstance(result, tuple):
-        return np.asarray(result[0], dtype=np.float64)
-    return np.asarray(result, dtype=np.float64)
-
-
-def _train_mlp(X: np.ndarray, y: np.ndarray, seed: int) -> PredictFn:
-    """Adapt :func:`vtscore.training.mlp.train_model` to the sweep API."""
-    import torch  # noqa: PLC0415
-
-    from vtscore.training.mlp import train_model
-
-    X_t = torch.from_numpy(np.asarray(X, dtype=np.float32))
-    y_t = torch.from_numpy(np.asarray(y, dtype=np.float32)).unsqueeze(1)
-    model = train_model(X_t, y_t, input_dim=X.shape[1], seed=seed)
-
-    def predict(X_test: np.ndarray) -> np.ndarray:
-        X_arr = np.asarray(X_test, dtype=np.float32)
-        with torch.no_grad():
-            t = torch.from_numpy(X_arr).to(next(model.parameters()).device)
-            return torch.sigmoid(model(t)).squeeze(1).cpu().numpy()
-
-    return predict
-
-
-def _train_mlp_ensemble_factory(n_seeds: int) -> TrainerFn:
-    """Build a trainer that averages *n_seeds* seed-varied MLPs.
-
-    Each member is a full :func:`vtscore.training.mlp.train_model` run on
-    the same labels but a different weight-init/dropout seed, so the
-    ensemble captures the MLP's epistemic uncertainty (how much the
-    decision surface wobbles under reseeding) rather than aleatoric label
-    noise.  The returned ``predict`` reports the mean sigmoid as the score
-    and the member-to-member standard deviation as ``per_item_std`` - high
-    where the members disagree, low where they agree.
-    """
-
-    def trainer(X: np.ndarray, y: np.ndarray, seed: int) -> PredictFn:
-        import torch  # noqa: PLC0415
-
-        from vtscore.training.mlp import train_model
-
-        X_t = torch.from_numpy(np.asarray(X, dtype=np.float32))
-        y_t = torch.from_numpy(np.asarray(y, dtype=np.float32)).unsqueeze(1)
-        input_dim = X.shape[1]
-        # Distinct seeds per member: ``seed + k`` keeps the whole ensemble a
-        # deterministic function of the cell's ``seed`` while decorrelating
-        # the members' weight inits.
-        models = [train_model(X_t, y_t, input_dim=input_dim, seed=seed + k) for k in range(n_seeds)]
-
-        def predict(X_test: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-            X_arr = np.asarray(X_test, dtype=np.float32)
-            member_scores: list[np.ndarray] = []
-            for model in models:
-                with torch.no_grad():
-                    t = torch.from_numpy(X_arr).to(next(model.parameters()).device)
-                    member_scores.append(torch.sigmoid(model(t)).squeeze(1).cpu().numpy())
-            stacked = np.stack(member_scores, axis=0)  # (n_seeds, n_items)
-            return stacked.mean(axis=0), stacked.std(axis=0)
-
-        return predict
-
-    return trainer
-
-
-def _train_svm_factory(kernel: str) -> TrainerFn:
-    """Build a sweep-shaped trainer that fits an SVM with the given kernel."""
-
-    def trainer(X: np.ndarray, y: np.ndarray, seed: int) -> PredictFn:
-        from vtscore.training.svm import train_svm
-
-        clf = train_svm(X, y, kernel=kernel, seed=seed)  # type: ignore[arg-type]
-        return clf.predict_proba
-
-    return trainer
-
-
-# Registry of available trainers.  Keep this dict tight - adding a new
-# entry here is the only place a new candidate model needs to be plugged
-# in for the sweep.
-TRAINERS: dict[str, TrainerFn] = {
-    "mlp": _train_mlp,
-    "svm_linear": _train_svm_factory("linear"),
-    "svm_rbf": _train_svm_factory("rbf"),
-    # MLP ensembles: N seed-varied members, mean sigmoid as the score and
-    # member disagreement as per-item uncertainty.  Registered at 3/5/7/10
-    # members so the sweep can trace how ranking quality and the reported
-    # ``std_mean`` move with ensemble size.
-    "mlp_ens3": _train_mlp_ensemble_factory(3),
-    "mlp_ens5": _train_mlp_ensemble_factory(5),
-    "mlp_ens7": _train_mlp_ensemble_factory(7),
-    "mlp_ens10": _train_mlp_ensemble_factory(10),
-}
+from vtscore.eval.trainers import (  # noqa: E402
+    TRAINERS,  # noqa: F401  - re-exported: label_curve_main's CLI imports it from here
+    _as_scores,  # noqa: F401  - re-exported for tests / backward compatibility
+    _cross_calibrated_threshold,
+    resolve_trainer,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -436,67 +330,6 @@ _ROW_COLUMNS: tuple[str, ...] = (
 )
 
 
-def _cross_calibrated_threshold(
-    X_train: np.ndarray,
-    y_train: np.ndarray,
-    trainer_fn: TrainerFn,
-    seed: int,
-    *,
-    inclusion_value: int = 0,
-    calibrate_count: int = 2,
-    cal_fraction: float = 0.5,
-) -> float:
-    """Trainer-agnostic port of ``calculate_cross_calibration_threshold``.
-
-    Mirrors what production does at vote time: split the labels k ways
-    into train/cal halves, retrain on each half, find the
-    inclusion-weighted optimal threshold on the cal half, average the
-    thresholds.  This is the threshold ``f1_at_xcal`` is measured at, so
-    a trainer that ranks well but doesn't admit a stable cross-validated
-    threshold pays the price here.
-
-    Returns ``0.5`` when the label budget is too small to form valid
-    splits (mirrors the production fallback).
-    """
-    from vtscore.training.thresholds import find_optimal_threshold
-
-    n = int(y_train.size)
-    if n < 4:
-        return 0.5
-    n_cal = max(1, round(n * cal_fraction))
-    n_tr = n - n_cal
-    if n_tr < 2 or n_cal < 1:
-        return 0.5
-
-    rng = np.random.default_rng(seed)
-    thresholds: list[float] = []
-    for k in range(max(1, calibrate_count)):
-        order = rng.permutation(n)
-        tr_idx = order[:n_tr]
-        cal_idx = order[n_tr:]
-        # Single-class splits would crash the trainer or short-circuit
-        # the threshold finder; just skip this fold.
-        if len({int(v) for v in y_train[tr_idx]}) < 2:
-            continue
-        if len({int(v) for v in y_train[cal_idx]}) < 2:
-            continue
-        try:
-            predict = trainer_fn(X_train[tr_idx], y_train[tr_idx], seed + k)
-        except ValueError:
-            continue
-        cal_scores = _as_scores(predict(X_train[cal_idx])).tolist()
-        cal_labels = [float(v) for v in y_train[cal_idx]]
-        t = find_optimal_threshold(cal_scores, cal_labels, inclusion_value)
-        # ``find_optimal_threshold`` can return +/-inf on degenerate
-        # splits; only count finite thresholds toward the mean.
-        if np.isfinite(t):
-            thresholds.append(float(t))
-
-    if not thresholds:
-        return 0.5
-    return float(np.mean(thresholds))
-
-
 def evaluate_one(
     pool: _SplitPool,
     trainer_name: str,
@@ -512,14 +345,12 @@ def evaluate_one(
     ``None`` means the cell was skipped (not enough labels in the pool to
     satisfy the request with both classes present).
     """
-    if trainer_name not in TRAINERS:
-        raise KeyError(f"Unknown trainer {trainer_name!r}; choices: {sorted(TRAINERS)}")
+    trainer_fn = resolve_trainer(trainer_name)
     sample = _sample_labels(pool, n_labels, seed)
     if sample is None:
         return None
     X_train, y_train = sample
 
-    trainer_fn = TRAINERS[trainer_name]
     t0 = time.monotonic()
     try:
         predict = trainer_fn(X_train, y_train, seed)
@@ -628,8 +459,7 @@ def run_label_curve_eval(  # noqa: C901
     import pandas as pd  # noqa: PLC0415
 
     for name in trainers:
-        if name not in TRAINERS:
-            raise KeyError(f"Unknown trainer {name!r}; choices: {sorted(TRAINERS)}")
+        resolve_trainer(name)  # validate up front; raises KeyError on an unknown name
 
     rows: list[dict[str, Any]] = []
     for ds_name, clips in dataset_clips.items():

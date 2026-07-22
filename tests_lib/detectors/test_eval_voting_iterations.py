@@ -156,22 +156,13 @@ class TestSimulateVotingIterations:
             dataset_name="test_ds",
             calibrate_count=1,
         )
-        expected_keys = {
-            "seed",
-            "dataset",
-            "category",
-            "strategy",
-            "t",
-            "n_good",
-            "n_bad",
-            "cost",
-            "fpr",
-            "fnr",
-            "elapsed_seconds",
-        }
+        from vtscore.eval.voting_iterations import _VOTING_COLUMNS
+
         for row in rows:
-            assert set(row.keys()) == expected_keys
+            assert set(row.keys()) == set(_VOTING_COLUMNS)
             assert row["strategy"] == "autopilot"
+            assert row["trainer"] == "mlp"
+            assert row["prevalence_arm"] == "natural"
 
     def test_vote_counts_reported(self):
         """Each row carries the good/bad vote counts the model was trained on.
@@ -197,10 +188,11 @@ class TestSimulateVotingIterations:
         rows1 = simulate_voting_iterations(medias, "alpha", seed=42, calibrate_count=1)
         rows2 = simulate_voting_iterations(medias, "alpha", seed=42, calibrate_count=1)
         assert len(rows1) == len(rows2)
+        # Wall-clock timing columns vary between runs; compare everything else.
+        _timing = {"elapsed_seconds", "train_seconds", "xcal_seconds", "pool_score_seconds", "test_score_seconds"}
         for r1, r2 in zip(rows1, rows2):
-            # Compare all fields except elapsed_seconds (wall-clock timing varies between runs)
-            r1_cmp = {k: v for k, v in r1.items() if k != "elapsed_seconds"}
-            r2_cmp = {k: v for k, v in r2.items() if k != "elapsed_seconds"}
+            r1_cmp = {k: v for k, v in r1.items() if k not in _timing}
+            r2_cmp = {k: v for k, v in r2.items() if k not in _timing}
             assert r1_cmp == r2_cmp
 
     def test_different_seeds_differ(self):
@@ -387,20 +379,10 @@ class TestRunVotingIterationsEval:
             categories={"ds1": ["alpha"]},
             calibrate_count=1,
         )
+        from vtscore.eval.voting_iterations import _VOTING_COLUMNS
+
         assert isinstance(df, pd.DataFrame)
-        assert list(df.columns) == [
-            "seed",
-            "dataset",
-            "category",
-            "strategy",
-            "t",
-            "n_good",
-            "n_bad",
-            "cost",
-            "fpr",
-            "fnr",
-            "elapsed_seconds",
-        ]
+        assert list(df.columns) == list(_VOTING_COLUMNS)
 
     def test_multiple_seeds(self):
         medias = _make_separable_clips(n_per_cat=6)
