@@ -33,13 +33,23 @@ def main(argv: list[str] | None = None) -> int:
 
     initialize_models()
 
-    info: dict[str, object] = {"embedder": args.embedder, "datasets": {}}
+    info: dict[str, object] = {"embedder": args.embedder, "datasets": {}, "failed": []}
     for ds in args.datasets:
         timings: dict[str, float] = {}
         medias: dict[int, dict] = {}
         common.log(f"\n=== {ds} ===")
-        with common.timed(f"load:{ds}", timings):
-            load_demo_dataset(ds, medias, embedder_name=args.embedder)
+        try:
+            with common.timed(f"load:{ds}", timings):
+                load_demo_dataset(ds, medias, embedder_name=args.embedder)
+        except Exception as e:  # noqa: BLE001 - one bad dataset must not lose the others
+            import traceback
+
+            common.log(f"FAILED to load {ds}: {e}")
+            traceback.print_exc()
+            info["failed"].append(ds)  # type: ignore[attr-defined]
+            # Persist progress so a partial prepare still yields a usable info file.
+            (common.RESULTS / "prepare_info.json").write_text(json.dumps(info, indent=2))
+            continue
         n = len(medias)
         # Per-category prevalence (multi-label aware).
         cats: dict[str, int] = {}
