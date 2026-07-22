@@ -24,8 +24,16 @@ import numpy as np
 import common as C
 
 PALETTE = [
-    "#4E79A7", "#F28E2B", "#59A14F", "#E15759", "#B07AA1",
-    "#76B7B2", "#EDC948", "#FF9DA7", "#9C755F", "#BAB0AC",
+    "#4E79A7",
+    "#F28E2B",
+    "#59A14F",
+    "#E15759",
+    "#B07AA1",
+    "#76B7B2",
+    "#EDC948",
+    "#FF9DA7",
+    "#9C755F",
+    "#BAB0AC",
 ]
 
 
@@ -57,7 +65,9 @@ def coarse_labels(tag: str):
         # coarse = indoor/outdoor where encoded, else 'other'
         io = []
         for c in leaf:
-            io.append("indoor" if c.endswith(("_indoor", "_interior")) else "outdoor" if c.endswith("_outdoor") else "other")
+            io.append(
+                "indoor" if c.endswith(("_indoor", "_interior")) else "outdoor" if c.endswith("_outdoor") else "other"
+            )
         return np.array(io), "indoor/outdoor"
     return leaf, "class"
 
@@ -72,7 +82,8 @@ def _scatter(ax, coords, labels, title, top_k=8):
     if rest.any():
         ax.scatter(coords[rest, 0], coords[rest, 1], s=3, c="#DDDDDD", linewidths=0, zorder=0)
     ax.set_title(title, fontsize=9)
-    ax.set_xticks([]); ax.set_yticks([])
+    ax.set_xticks([])
+    ax.set_yticks([])
 
 
 def _freq(labels):
@@ -99,10 +110,13 @@ def visualize(dataset: str, embedder: str):
         proj = fit_projection(X, ids, n_neighbors=min(nn, len(ids) - 1), min_dist=0.1, random_state=0, compact=False)
         _scatter(ax, proj.coords, labels, f"n_neighbors = {nn}")
     axes[0].legend(markerscale=2.5, fontsize=6, loc="upper right", framealpha=0.85)
-    fig.suptitle(f"{dataset} · {embedder} — 2-D layout vs n_neighbors (colored by {level}); min_dist=0.1, raw", fontsize=10)
+    fig.suptitle(
+        f"{dataset} · {embedder} — 2-D layout vs n_neighbors (colored by {level}); min_dist=0.1, raw", fontsize=10
+    )
     fig.tight_layout()
     p1 = C.FIG_DIR / f"nn_grid_{tag}.png"
-    fig.savefig(p1, dpi=130); plt.close(fig)
+    fig.savefig(p1, dpi=130)
+    plt.close(fig)
     print("wrote", p1)
 
     # (2) compaction eyeball: raw vs compacted at nn=15
@@ -114,7 +128,8 @@ def visualize(dataset: str, embedder: str):
     fig.suptitle(f"{dataset} · {embedder} — compaction closes empty space (n_neighbors=15)", fontsize=10)
     fig.tight_layout()
     p2 = C.FIG_DIR / f"compaction_{tag}.png"
-    fig.savefig(p2, dpi=130); plt.close(fig)
+    fig.savefig(p2, dpi=130)
+    plt.close(fig)
     print("wrote", p2)
 
 

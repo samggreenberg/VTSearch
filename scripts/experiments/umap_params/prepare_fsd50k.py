@@ -75,7 +75,7 @@ def prepare_fsd50k(spec: C.DatasetSpec, limit: int | None = None):
     ids = sorted(i for i, v in vecs.items() if v is not None)
     mat = np.stack([np.asarray(vecs[i], dtype=np.float32) for i in ids])
     mat = mat / np.clip(np.linalg.norm(mat, axis=1, keepdims=True), 1e-12, None)
-    print(f"  clap: embedded {len(ids)} in {time.time()-t:.0f}s")
+    print(f"  clap: embedded {len(ids)} in {time.time() - t:.0f}s")
 
     # dense (N, K) multi-label matrix aligned to `ids`
     ml = np.zeros((len(ids), len(class_names)), dtype=np.uint8)

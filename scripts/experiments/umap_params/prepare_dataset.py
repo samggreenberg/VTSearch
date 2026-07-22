@@ -84,7 +84,7 @@ def prepare_image_reembed(spec: C.DatasetSpec):
         t = time.time()
         ids, mat = _embed_medias_matrix(ctx.medias, embedder)
         leaf = [leaf_by_id[i] for i in ids]
-        print(f"  {embedder}: embedded {len(ids)} in {time.time()-t:.0f}s")
+        print(f"  {embedder}: embedded {len(ids)} in {time.time() - t:.0f}s")
         _save(spec.name, embedder, ids, mat, leaf)
 
 
@@ -108,7 +108,7 @@ def prepare_places365(spec: C.DatasetSpec):
         t = time.time()
         ids, mat = _embed_medias_matrix(medias, embedder)
         leaf = [leaf_by_id[i] for i in ids]
-        print(f"  {embedder}: embedded {len(ids)} in {time.time()-t:.0f}s")
+        print(f"  {embedder}: embedded {len(ids)} in {time.time() - t:.0f}s")
         _save(spec.name, embedder, ids, mat, leaf)
 
 
@@ -132,7 +132,7 @@ def prepare_inat(spec: C.DatasetSpec):
         ids, mat = _embed_medias_matrix(medias, embedder)
         leaf = [leaf_by_id[i] for i in ids]
         lineage = [lineage_map.get(leaf_by_id[i], [""] * 7) for i in ids]
-        print(f"  {embedder}: embedded {len(ids)} in {time.time()-t:.0f}s")
+        print(f"  {embedder}: embedded {len(ids)} in {time.time() - t:.0f}s")
         _save(spec.name, embedder, ids, mat, leaf, lineage=lineage)
 
 

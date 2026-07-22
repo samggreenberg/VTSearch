@@ -33,12 +33,23 @@ EMB_COLORS = {"clap": "#0072B2", "clip": "#E69F00", "siglip": "#009E73", "siglip
 HELP_C, HURT_C = "#0072B2", "#D55E00"  # compaction helps / hurts
 INK, MUTED, GRID = "#222222", "#666666", "#DDDDDD"
 
-plt.rcParams.update({
-    "figure.facecolor": "white", "axes.facecolor": "white", "savefig.facecolor": "white",
-    "axes.edgecolor": MUTED, "axes.labelcolor": INK, "text.color": INK,
-    "xtick.color": MUTED, "ytick.color": MUTED, "font.size": 10, "axes.titlesize": 11,
-    "axes.grid": True, "grid.color": GRID, "grid.linewidth": 0.6,
-})
+plt.rcParams.update(
+    {
+        "figure.facecolor": "white",
+        "axes.facecolor": "white",
+        "savefig.facecolor": "white",
+        "axes.edgecolor": MUTED,
+        "axes.labelcolor": INK,
+        "text.color": INK,
+        "xtick.color": MUTED,
+        "ytick.color": MUTED,
+        "font.size": 10,
+        "axes.titlesize": 11,
+        "axes.grid": True,
+        "grid.color": GRID,
+        "grid.linewidth": 0.6,
+    }
+)
 
 
 def _cell():
@@ -62,9 +73,13 @@ def heatmaps(df):
         grid = sub.pivot_table(index="min_dist", columns="n_neighbors", values="ratio", aggfunc="mean")
         grid = grid.reindex(index=mds, columns=nns)
         im = ax.imshow(grid.values, cmap="Blues", vmin=vmin, vmax=vmax, aspect="auto", origin="lower")
-        ax.set_xticks(range(len(nns))); ax.set_xticklabels(nns, fontsize=8)
-        ax.set_yticks(range(len(mds))); ax.set_yticklabels(mds, fontsize=8)
-        ax.set_title(emb); ax.set_xlabel("n_neighbors"); ax.grid(False)
+        ax.set_xticks(range(len(nns)))
+        ax.set_xticklabels(nns, fontsize=8)
+        ax.set_yticks(range(len(mds)))
+        ax.set_yticklabels(mds, fontsize=8)
+        ax.set_title(emb)
+        ax.set_xlabel("n_neighbors")
+        ax.grid(False)
         # mark the argmax cell
         gv = np.nan_to_num(grid.values, nan=-1)
         r, c = np.unravel_index(np.argmax(gv), gv.shape)
@@ -72,8 +87,12 @@ def heatmaps(df):
     axes[0][0].set_ylabel("min_dist")
     cb = fig.colorbar(im, ax=axes[0], fraction=0.025, pad=0.02)
     cb.set_label("separability ratio (2-D / high-D)  ·  darker = better", fontsize=8)
-    fig.suptitle("Ceiling-normalized taxonomy separability over the UMAP grid (raw layouts; black box = best cell)", fontsize=11)
-    p = C.FIG_DIR / "fig_heatmaps.png"; fig.savefig(p, dpi=140, bbox_inches="tight"); plt.close(fig)
+    fig.suptitle(
+        "Ceiling-normalized taxonomy separability over the UMAP grid (raw layouts; black box = best cell)", fontsize=11
+    )
+    p = C.FIG_DIR / "fig_heatmaps.png"
+    fig.savefig(p, dpi=140, bbox_inches="tight")
+    plt.close(fig)
     print("wrote", p)
 
 
@@ -88,11 +107,15 @@ def nn_curves(df):
             curve = dsub.groupby("n_neighbors")["ratio"].mean()
             n = int(dsub["N"].iloc[0])
             ax.plot(curve.index, curve.values, "-o", ms=4, lw=2, color=OKABE[i % len(OKABE)], label=f"{ds} (N={n})")
-        ax.set_xscale("log"); ax.set_title(emb); ax.set_xlabel("n_neighbors (log)")
+        ax.set_xscale("log")
+        ax.set_title(emb)
+        ax.set_xlabel("n_neighbors (log)")
         ax.legend(fontsize=6.5, framealpha=0.9)
     axes[0][0].set_ylabel("separability ratio (up = better)")
     fig.suptitle("Where separability peaks vs n_neighbors — per embedder, per dataset size N", fontsize=11)
-    p = C.FIG_DIR / "fig_nn_curves.png"; fig.savefig(p, dpi=140, bbox_inches="tight"); plt.close(fig)
+    p = C.FIG_DIR / "fig_nn_curves.png"
+    fig.savefig(p, dpi=140, bbox_inches="tight")
+    plt.close(fig)
     print("wrote", p)
 
 
@@ -107,7 +130,9 @@ def compaction_delta(df):
     ax.set_xlabel("Δ separability ratio (compacted − raw)   ←  compaction hurts | helps  →")
     ax.set_title("Compaction verdict: does closing the empty oceans cost separability?", fontsize=11)
     ax.grid(axis="y", visible=False)
-    p = C.FIG_DIR / "fig_compaction_delta.png"; fig.savefig(p, dpi=140, bbox_inches="tight"); plt.close(fig)
+    p = C.FIG_DIR / "fig_compaction_delta.png"
+    fig.savefig(p, dpi=140, bbox_inches="tight")
+    plt.close(fig)
     print("wrote", p)
 
 
@@ -118,11 +143,14 @@ def stability(df):
     for i, emb in enumerate(_emb_present(raw)):
         sub = raw[raw["embedder"] == emb].groupby("n_neighbors")["seed_agreement"].mean()
         ax.plot(sub.index, sub.values, "-o", ms=4, lw=2, color=EMB_COLORS.get(emb, OKABE[i % len(OKABE)]), label=emb)
-    ax.set_xscale("log"); ax.set_xlabel("n_neighbors (log)")
+    ax.set_xscale("log")
+    ax.set_xlabel("n_neighbors (log)")
     ax.set_ylabel("inter-seed neighbor agreement (up = more stable)")
     ax.set_title("Run-to-run stability falls as n_neighbors grows", fontsize=11)
     ax.legend(fontsize=8)
-    p = C.FIG_DIR / "fig_stability.png"; fig.savefig(p, dpi=140, bbox_inches="tight"); plt.close(fig)
+    p = C.FIG_DIR / "fig_stability.png"
+    fig.savefig(p, dpi=140, bbox_inches="tight")
+    plt.close(fig)
     print("wrote", p)
 
 
@@ -132,19 +160,33 @@ def guard_scatter(df):
     fig, ax = plt.subplots(figsize=(5.6, 4.4))
     for i, emb in enumerate(_emb_present(raw)):
         sub = raw[raw["embedder"] == emb]
-        ax.scatter(sub["knn_recall"], sub["ratio"], s=14, color=EMB_COLORS.get(emb, OKABE[i % len(OKABE)]), label=emb, alpha=0.7, linewidths=0)
+        ax.scatter(
+            sub["knn_recall"],
+            sub["ratio"],
+            s=14,
+            color=EMB_COLORS.get(emb, OKABE[i % len(OKABE)]),
+            label=emb,
+            alpha=0.7,
+            linewidths=0,
+        )
     ax.set_xlabel("kNN-recall guard (high-D ↔ 2-D neighbor overlap)")
     ax.set_ylabel("separability ratio")
     ax.set_title("Separability tracks neighbor-recall — purity isn't gamed by shattering", fontsize=10)
     ax.legend(fontsize=8)
-    p = C.FIG_DIR / "fig_guard_scatter.png"; fig.savefig(p, dpi=140, bbox_inches="tight"); plt.close(fig)
+    p = C.FIG_DIR / "fig_guard_scatter.png"
+    fig.savefig(p, dpi=140, bbox_inches="tight")
+    plt.close(fig)
     print("wrote", p)
 
 
 def main():
     C.FIG_DIR.mkdir(parents=True, exist_ok=True)
     df = _cell()
-    heatmaps(df); nn_curves(df); compaction_delta(df); stability(df); guard_scatter(df)
+    heatmaps(df)
+    nn_curves(df)
+    compaction_delta(df)
+    stability(df)
+    guard_scatter(df)
 
 
 if __name__ == "__main__":

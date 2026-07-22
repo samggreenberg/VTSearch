@@ -298,9 +298,9 @@ def _umap_params(ctx=None) -> tuple[int, float]:
 
     s_n = settings.get_projection_n_neighbors()
     s_d = settings.get_projection_min_dist()
-    d_n, d_d = PROJECTION_DEFAULTS_BY_EMBEDDER.get(
-        _primary_embedder_for(ctx), (PROJECTION_N_NEIGHBORS, PROJECTION_MIN_DIST)
-    )
+    emb = _primary_embedder_for(ctx)
+    default = (PROJECTION_N_NEIGHBORS, PROJECTION_MIN_DIST)
+    d_n, d_d = PROJECTION_DEFAULTS_BY_EMBEDDER.get(emb, default) if emb else default
     n = s_n if s_n != PROJECTION_N_NEIGHBORS else d_n
     d = s_d if s_d != PROJECTION_MIN_DIST else d_d
     return n, d

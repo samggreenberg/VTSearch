@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import json
 
-import numpy as np
 import pandas as pd
 
 import common as C
@@ -65,7 +64,7 @@ def compaction_verdict(cell: pd.DataFrame) -> dict:
     out = {"per_embedder": {}, "overall": {}}
     deltas_all = {}
     for metric in ["ratio", "trustworthiness", "continuity", "knn_recall"]:
-        deltas_all[metric] = (piv[(metric, True)] - piv[(metric, False)])
+        deltas_all[metric] = piv[(metric, True)] - piv[(metric, False)]
     dd = pd.DataFrame(deltas_all)
     dd = dd.reset_index()
     for emb, sub in dd.groupby("embedder"):
@@ -138,9 +137,11 @@ def main():
 
     print("\n=== Per-embedder recommendation ===")
     for emb, r in summary["recommendations"].items():
-        print(f"  {emb:9s} nn={r['n_neighbors']:3d} min_dist={r['min_dist']:.2f} compact={r['compact']} "
-              f"ratio={r['ratio']:.3f} (argmax nn={r['argmax_nn']} ratio={r['argmax_ratio']:.3f}) "
-              f"stability={r['seed_agreement']:.3f}")
+        print(
+            f"  {emb:9s} nn={r['n_neighbors']:3d} min_dist={r['min_dist']:.2f} compact={r['compact']} "
+            f"ratio={r['ratio']:.3f} (argmax nn={r['argmax_nn']} ratio={r['argmax_ratio']:.3f}) "
+            f"stability={r['seed_agreement']:.3f}"
+        )
     print("\n=== Compaction verdict (compacted − raw; negative = compaction hurts) ===")
     print(f"  overall: {summary['compaction']['overall']}")
     for emb, dvals in summary["compaction"]["per_embedder"].items():
@@ -159,7 +160,7 @@ def main():
     print("\n=== Per-embedder mean ratio by min_dist ===")
     print(raw.groupby(["embedder", "min_dist"])["ratio"].mean().unstack("min_dist").round(4).to_string())
 
-    print(f"\nwrote {C.RESULTS_ROOT/'summary.json'}, master.csv, per_cell.csv")
+    print(f"\nwrote {C.RESULTS_ROOT / 'summary.json'}, master.csv, per_cell.csv")
 
 
 if __name__ == "__main__":

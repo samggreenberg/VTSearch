@@ -21,7 +21,6 @@ from __future__ import annotations
 import csv
 import sys
 import time
-from pathlib import Path
 
 import numpy as np
 
@@ -64,9 +63,23 @@ def gpu_highd_knn(X: np.ndarray, k: int) -> np.ndarray:
 
 
 FIELDS = [
-    "dataset", "embedder", "N", "dim", "n_neighbors", "min_dist", "seed", "compact",
-    "fit_seconds", "score_2d", "score_highd", "ratio", "trustworthiness", "continuity",
-    "knn_recall", "seed_agreement", "n_nodes",
+    "dataset",
+    "embedder",
+    "N",
+    "dim",
+    "n_neighbors",
+    "min_dist",
+    "seed",
+    "compact",
+    "fit_seconds",
+    "score_2d",
+    "score_highd",
+    "ratio",
+    "trustworthiness",
+    "continuity",
+    "knn_recall",
+    "seed_agreement",
+    "n_nodes",
 ]
 
 
@@ -119,9 +132,7 @@ def sweep_matrix(tag: str):
             rows_buffer = []
             for seed in C.SEEDS:
                 t0 = time.time()
-                proj = fit_projection(
-                    X, id_list, n_neighbors=nn, min_dist=md, random_state=seed, compact=False
-                )
+                proj = fit_projection(X, id_list, n_neighbors=nn, min_dist=md, random_state=seed, compact=False)
                 fit_s = time.time() - t0
                 raw = np.ascontiguousarray(proj.coords, dtype=np.float32)
                 raw_layouts.append(raw)
@@ -129,16 +140,27 @@ def sweep_matrix(tag: str):
                 for compact_flag, coords in [(False, raw), (True, compacted)]:
                     sep = M.taxonomy_separability(coords, X, taxonomy, k=k, highd_knn=highd_knn)
                     guards = M.structure_guards_subsampled(coords, X, k=k, cap=2000, seed=0)
-                    rows_buffer.append(dict(
-                        dataset=dataset, embedder=embedder, N=n, dim=dim,
-                        n_neighbors=nn, min_dist=md, seed=seed, compact=compact_flag,
-                        fit_seconds=round(fit_s, 3), score_2d=round(sep.score_2d, 5),
-                        score_highd=round(sep.score_highd, 5), ratio=round(sep.ratio, 5),
-                        trustworthiness=round(guards["trustworthiness"], 5),
-                        continuity=round(guards["continuity"], 5),
-                        knn_recall=round(guards["knn_recall"], 5),
-                        seed_agreement=None, n_nodes=sep.n_nodes_scored,
-                    ))
+                    rows_buffer.append(
+                        dict(
+                            dataset=dataset,
+                            embedder=embedder,
+                            N=n,
+                            dim=dim,
+                            n_neighbors=nn,
+                            min_dist=md,
+                            seed=seed,
+                            compact=compact_flag,
+                            fit_seconds=round(fit_s, 3),
+                            score_2d=round(sep.score_2d, 5),
+                            score_highd=round(sep.score_highd, 5),
+                            ratio=round(sep.ratio, 5),
+                            trustworthiness=round(guards["trustworthiness"], 5),
+                            continuity=round(guards["continuity"], 5),
+                            knn_recall=round(guards["knn_recall"], 5),
+                            seed_agreement=None,
+                            n_nodes=sep.n_nodes_scored,
+                        )
+                    )
             agree = M.layout_seed_agreement(raw_layouts, k=k)
             for r in rows_buffer:
                 r["seed_agreement"] = round(agree, 5)
