@@ -20,13 +20,37 @@ What is missing, and what the work items below add: a trainer-pluggable voting s
 
 ## Why compare these two at all (design rationale)
 
-The mechanical difference (hinge loss + QP vs BCE + Adam) matters less than what each model *assumes*:
+The mechanical difference — hinge loss + convex quadratic program vs cross-entropy + Adam — is not the interesting part. (Convexity does mean the SVM has one deterministic answer per dataset, no seeds or early stopping, while the MLP has a small landscape of answers.) The real divide is what each model *assumes about the data*, and those assumptions predict where each should win.
 
-- The **SVM** is a geometric, boundary-first model: only the hardest examples (support vectors) define the decision surface, and the max-margin objective assumes the classes are (nearly) separable in the given feature space, with the kernel fixing what "similarity" means once and for all. Margin-based generalization bounds are dimension-free — attractive at 768-d with 20 votes.
-- The **MLP** is a likelihood-first model: every example pulls on the surface in proportion to its confidence error, so it degrades gracefully under label noise (a mis-vote doesn't automatically become a support vector that warps the boundary), and its hidden layer can carve a positive class that is a *union of clusters* — common for real "rare event" concepts.
-- On **unseen data** they extrapolate differently: an RBF-SVM's decision function decays to its bias far from the support vectors, so it defaults to "not the thing" off-manifold (conservative); a ReLU MLP and a linear SVM are piecewise-linear/linear and extrapolate their trend with unearned confidence. For rare-event search, the off-manifold behavior interacts directly with the Coverage Atlas "New" phase, which deliberately probes unexplored regions.
+**SVM: "only the boundary matters."** The SVM's worldview is geometric. It assumes the classes are (nearly) separable in the feature space it was handed, and that the decision surface should be determined **entirely by the hardest examples** — the support vectors. The 40 easy votes a user casts contribute literally nothing; they sit inside the margin and are discarded. Two consequences:
 
-The honest prior: at VTSearch's operating point (tens of votes, unit-norm contrastive embeddings, near-linearly-separable classes, production MLP regularized down to 8–32 hidden units), MLP and linear SVM should be close, and **RBF is the philosophically distinct candidate** whose locality could genuinely win or lose. That is why kernels get their own screening stage rather than one default configuration each.
+- *Extremely label-efficient when labels are clean.* Margin-based generalization bounds depend on the margin, not the dimension — genuinely reassuring at 20 votes in 768-d SigLIP space. This small-N/high-D sweet spot is exactly VTSearch's operating regime.
+- *Brittle to label noise.* A mis-vote near the boundary doesn't get averaged away — it *becomes a support vector* and warps the surface. The slack parameter (C) softens this, but a fat-fingered vote hands the SVM disproportionate damage.
+
+The kernel is a second, stronger assumption: it fixes what "similar" means *before seeing any labels*. RBF says "the concept is a local neighborhood in this space"; linear says "the concept is a half-space."
+
+**MLP: "every example is evidence about a probability."** The MLP's worldview is statistical. It models P(good | embedding), and every example pulls on the surface in proportion to how wrong the model currently is about it. Consequences:
+
+- *Graceful under noisy votes* — one bad label is outvoted by the bulk rather than becoming load-bearing.
+- *It can carve a positive class that is a union of clusters.* Real rare-event concepts are often multi-modal ("damaged packaging" is not one blob in embedding space). A hidden layer handles that natively; a linear SVM cannot, and an RBF-SVM handles it only if the kernel bandwidth happens to match the cluster scale.
+- Its scores are (uncalibrated but smooth) probabilities — the natural input to the threshold-calibration and Hard-phase machinery.
+
+Worth remembering: VTSearch's MLP is regularized down to 8–32 hidden units with 0.5 dropout — in practice, close to a robust logistic regression with a small nonlinear twist. So "MLP vs *linear* SVM" is really "weighted cross-entropy vs hinge loss" on nearly the same model class; **RBF is the philosophically distinct candidate**. That is why kernels get their own screening stage rather than one default configuration each.
+
+**The deepest split: what they say about unseen data.** An **RBF-SVM is a local method** — its decision function decays toward its bias far from the support vectors, so on data unlike anything it trained on it defaults to "not the thing." Conservative extrapolation. A **ReLU MLP (and a linear SVM) is piecewise-linear**, extending its trend into regions it has never seen with unearned confidence in either direction. For VTSearch this is not academic: the autopilot's New phase deliberately probes unexplored regions of the embedding space. RBF's conservatism protects FPR out there — but it can also refuse to surface a genuinely novel pocket of positives that a linear model would have extrapolated toward. That interaction (model philosophy × diversity sampling) is precisely why the definitive stage runs the closed autopilot loop rather than a static train/test sweep.
+
+**Rules of thumb:**
+
+| Situation | Favors |
+|---|---|
+| Few, clean labels; well-shaped embedding space; unimodal concept | SVM (especially linear) |
+| Noisy/inconsistent votes | MLP |
+| Multi-modal positive class ("union of clusters" concepts) | MLP, or RBF if bandwidth cooperates |
+| Rare events where false alarms in unexplored regions are costly | RBF (local, conservative off-manifold) |
+| Rare events hiding in *novel* regions | Linear/MLP (willing to extrapolate) |
+| Growing label counts, large inference sets | MLP (fixed inference cost; kernel-SVM inference grows with support-vector count) |
+
+The honest prior: at VTSearch's operating point (tens of votes, unit-norm contrastive embeddings, near-linearly-separable classes), MLP ≈ linear SVM, with RBF as the genuine wildcard — its locality could win on the rare-prevalence arms (better FPR) or lose (worse FNR on novel positives). The 1%-prevalence arms and the separately-reported FPR/FNR curves are designed to expose exactly that.
 
 ## Experiment design
 
