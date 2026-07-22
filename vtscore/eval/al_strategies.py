@@ -37,13 +37,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
 if TYPE_CHECKING:
-    import torch
-
     from vtscore.state.coverage_atlas import CoverageAtlas
 
 
@@ -71,8 +69,12 @@ class ALContext:
         scores: ``{pool_id: p}`` sigmoid probabilities from the current detector,
             used by the Bad (lowest-scored) and Hard (nearest-threshold) picks.
             Empty before the first model exists.
-        model: The current trained MLP (``None`` before the first trainable
-            step, i.e. before one Good and one Bad vote coexist).
+        model: The current trained ranker (``None`` before the first trainable
+            step, i.e. before one Good and one Bad vote coexist).  Typed
+            loosely because the voting simulation is trainer-pluggable (MLP or
+            SVM); the selector only checks whether it ``is not None`` — the
+            actual per-item scores come from :attr:`scores`, never from calling
+            the model here.
         threshold: The current decision threshold ``t`` (Hard measures
             ``|p - t|`` against it).
         atlas: The dataset's coverage atlas, driving the New (diversity) pick
@@ -95,7 +97,7 @@ class ALContext:
     embeddings: dict[int, np.ndarray]
     labeled: dict[int, float]
     scores: dict[int, float]
-    model: Optional["torch.nn.Sequential"]
+    model: Optional[Any]
     threshold: float
     atlas: Optional["CoverageAtlas"]
     rng: np.random.RandomState = field(default_factory=lambda: np.random.RandomState(0))
