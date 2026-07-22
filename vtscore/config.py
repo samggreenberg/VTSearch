@@ -219,8 +219,8 @@ PROJECTION_MIN_DIST = 0.1
 # Untuned embedders fall back to the globals. Image embedders peak at a smaller
 # neighbourhood than the old global 15; large ``n_neighbors`` hurt every embedder.
 PROJECTION_DEFAULTS_BY_EMBEDDER: dict[str, tuple[int, float]] = {
-    "clap": (15, 0.10),      # audio: flat separability peak across 10-30
-    "clip": (10, 0.05),      # image: the most n_neighbors-sensitive embedder
+    "clap": (15, 0.10),  # audio: flat separability peak across 10-30
+    "clip": (10, 0.05),  # image: the most n_neighbors-sensitive embedder
     "siglip": (10, 0.05),
     "siglip_l": (10, 0.05),
 }
