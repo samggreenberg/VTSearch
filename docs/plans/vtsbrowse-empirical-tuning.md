@@ -352,7 +352,8 @@ The knobs the sweeps vary, their current values, and their source of truth.
 Grid `n_neighbors ∈ {5,10,15,30,50,100,200}` × `min_dist ∈ {0,0.05,0.1,0.25,0.5}` ×
 `compact ∈ {off,on}` × 3 seeds over 23 embedded (dataset × embedder) matrices — audio
 (ESC-50 S/M/L, GTZAN, FSD50K eval) and image (Caltech-256 S/M, Places365 S/M/L, iNaturalist
-subset), ~5,000 scored fits.
+subset), ~5,000 scored fits. Full write-up (overview, metric explanation, charts, layout
+illustrations): `docs/reports/2026-07-22-vtsbrowse-umap-tuning.html`.
 
 ### Chosen per-embedder defaults (shipped)
 
