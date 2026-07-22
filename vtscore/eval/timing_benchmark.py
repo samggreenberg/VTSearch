@@ -192,10 +192,10 @@ def _provenance() -> dict[str, str]:
         import torch  # noqa: PLC0415
 
         prov["torch"] = torch.__version__
-        prov["torch_cuda"] = str(torch.version.cuda)
+        prov["torch_cuda"] = str(torch.version.cuda)  # type: ignore[attr-defined]
         if torch.cuda.is_available():
             prov["gpu"] = torch.cuda.get_device_name(0)
-            prov["driver"] = str(getattr(torch.version, "cuda", "?"))
+            prov["driver"] = str(getattr(torch.version, "cuda", "?"))  # type: ignore[attr-defined]
         else:
             prov["gpu"] = "cpu"
     except Exception:  # noqa: BLE001
