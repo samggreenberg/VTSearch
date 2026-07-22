@@ -21,6 +21,26 @@ grid + cuML backend in `vtscore/training/svm.py`, and the runner in
 
 <!-- item-sep -->
 
+- **Hybrid ranker (SVM early → MLP later).** The image result shows a crossover:
+  the SVMs have lower cost than the MLP through roughly vote 50 but the MLP is
+  already ahead by vote 100 (cost@50 MLP 0.387 vs SVM 0.330; cost@100 MLP 0.359
+  vs SVM 0.378). A hybrid that runs an SVM for the first ~40–60 votes and then
+  switches to the MLP could in principle capture the SVM's early label-efficiency
+  and the MLP's late dominance. The harness supports testing this directly: add a
+  `svm_until@N` trainer (SVM while `n_votes < N`, MLP after) to
+  `vtscore/eval/trainers.py` and run it through the same `stage_b_autopilot.py`
+  grid. Measure, don't assume — the open risks are (a) a **calibration
+  discontinuity** at the switch (the score distribution changes families, so the
+  cross-calibrated threshold jumps and results reshuffle mid-session); (b)
+  **closed-loop divergence** — the SVM chose the early votes, so the MLP inherits
+  an SVM-shaped vote history rather than its own; and (c) **rare-event FNR** — the
+  MLP's biggest edge is missing fewer rare matches, and that matters from the
+  first votes, so an SVM-early phase could cost recall exactly where it's most
+  expensive. The prior is that the gain is small (a ~0.05 cost edge over a short
+  window) and may not survive the switch cost.
+
+<!-- item-sep -->
+
 - **Other media types.** The harness is single-embedder by construction but not
   by limitation. Audio (CLAP), video (X-CLIP), text (E5), and patch/region
   embedders could each be run through the same `stage_b_autopilot.py` grid by
