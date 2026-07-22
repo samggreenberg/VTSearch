@@ -170,9 +170,18 @@ def _plot_metric_curves(df: pd.DataFrame, metric: str, title: str, out: Path) ->
             if c == 0:
                 ax.set_ylabel(metric.upper())
     handles, labels = axes[0][0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=len(trainers), fontsize=9, frameon=False)
-    fig.suptitle(title, y=1.02, fontsize=12)
-    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    fig.suptitle(title, y=1.0, fontsize=12)
+    # Legend along the bottom so it never collides with the suptitle.
+    fig.legend(
+        handles,
+        labels,
+        loc="lower center",
+        ncol=len(trainers),
+        fontsize=9,
+        frameon=False,
+        bbox_to_anchor=(0.5, -0.02),
+    )
+    fig.tight_layout(rect=(0, 0.04, 1, 0.96))
     fig.savefig(out, dpi=130, bbox_inches="tight")
     plt.close(fig)
 
