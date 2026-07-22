@@ -121,7 +121,7 @@ def _make_base_estimator(
         return SVC(
             C=C,
             kernel=kernel,
-            gamma=gamma,
+            gamma=gamma,  # type: ignore[arg-type]  # sklearn accepts str|float; stub is str-only
             degree=degree,
             class_weight=class_weight,
             random_state=seed,
@@ -153,7 +153,7 @@ def _make_cuml_base(
     return CuSVC(
         C=C,
         kernel=kernel,
-        gamma=gamma,
+        gamma=gamma,  # type: ignore[arg-type]
         degree=degree,
         class_weight=class_weight,
         output_type="numpy",
@@ -290,13 +290,12 @@ def train_svm(
         raise ValueError("train_svm needs at least 2 training samples")
 
     scaler = None
+    X_fit: np.ndarray = X
     if standardize:
         from sklearn.preprocessing import StandardScaler  # noqa: PLC0415
 
         scaler = StandardScaler().fit(X)
-        X_fit = scaler.transform(X)
-    else:
-        X_fit = X
+        X_fit = np.asarray(scaler.transform(X), dtype=np.float32)
 
     # Translate inclusion into a class weight.  Mirrors the MLP path:
     # the "balanced" baseline divides by class frequency, then we apply

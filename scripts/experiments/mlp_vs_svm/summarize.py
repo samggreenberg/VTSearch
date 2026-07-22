@@ -260,8 +260,8 @@ def _holm(pvals: dict[str, float]) -> dict[str, float]:
 # ---------------------------------------------------------------------------
 
 
-def _fmt(x: float, nd: int = 3) -> str:
-    return "—" if x is None or (isinstance(x, float) and np.isnan(x)) else f"{x:.{nd}f}"
+def _fmt(x: float, digits: int = 3) -> str:
+    return "—" if x is None or (isinstance(x, float) and np.isnan(x)) else f"{x:.{digits}f}"
 
 
 def _decision(traj: pd.DataFrame, svm_variants: list[str]) -> tuple[str, list[str]]:
