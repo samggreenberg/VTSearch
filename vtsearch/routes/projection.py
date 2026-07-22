@@ -253,7 +253,9 @@ def _compact_for(ctx) -> bool:
     """
     from vtsearch import settings
 
-    return bool(settings.get_browse_compact().get(_media_type_for(ctx), True))
+    from vtscore.config import PROJECTION_COMPACT_DEFAULT
+
+    return bool(settings.get_browse_compact().get(_media_type_for(ctx), PROJECTION_COMPACT_DEFAULT))
 
 
 def _pkl_path_for(dataset_id: str) -> str | None:
@@ -266,14 +268,45 @@ def _pkl_path_for(dataset_id: str) -> str | None:
     return entry.get("pkl_path") or None
 
 
-def _umap_params() -> tuple[int, float]:
-    """The active UMAP knobs (``n_neighbors``, ``min_dist``) from settings."""
+def _primary_embedder_for(ctx) -> str | None:
+    """The embedder that produced this dataset's projected matrix (its primary)."""
+    if ctx is None or not getattr(ctx, "medias", None):
+        return None
+    try:
+        from vtscore.embedding.media_vectors import primary_embedder_name
+
+        return primary_embedder_name(ctx.medias)
+    except Exception:  # pragma: no cover - defensive; fall back to globals
+        return None
+
+
+def _umap_params(ctx=None) -> tuple[int, float]:
+    """The active UMAP knobs (``n_neighbors``, ``min_dist``).
+
+    Resolution: an explicit ``ServerSettings`` override wins; otherwise the
+    per-embedder default (:data:`~vtscore.config.PROJECTION_DEFAULTS_BY_EMBEDDER`)
+    keyed off the dataset's primary embedder; otherwise the global config default.
+    An "explicit override" is a setting that differs from the global default, so an
+    operator who deliberately picks the global value simply gets it.
+    """
     from vtsearch import settings
+    from vtscore.config import (
+        PROJECTION_DEFAULTS_BY_EMBEDDER,
+        PROJECTION_MIN_DIST,
+        PROJECTION_N_NEIGHBORS,
+    )
 
-    return settings.get_projection_n_neighbors(), settings.get_projection_min_dist()
+    s_n = settings.get_projection_n_neighbors()
+    s_d = settings.get_projection_min_dist()
+    emb = _primary_embedder_for(ctx)
+    default = (PROJECTION_N_NEIGHBORS, PROJECTION_MIN_DIST)
+    d_n, d_d = PROJECTION_DEFAULTS_BY_EMBEDDER.get(emb, default) if emb else default
+    n = s_n if s_n != PROJECTION_N_NEIGHBORS else d_n
+    d = s_d if s_d != PROJECTION_MIN_DIST else d_d
+    return n, d
 
 
-def _projection_params_match(proj) -> bool:
+def _projection_params_match(proj, ctx=None) -> bool:
     """Whether a persisted projection was fit under the active UMAP params.
 
     Non-UMAP layouts (the PCA / trivial fallbacks for tiny datasets) ignore
@@ -290,7 +323,7 @@ def _projection_params_match(proj) -> bool:
 
     stored_n = proj.n_neighbors if proj.n_neighbors is not None else PROJECTION_N_NEIGHBORS
     stored_d = proj.min_dist if proj.min_dist is not None else PROJECTION_MIN_DIST
-    want_n, want_d = _umap_params()
+    want_n, want_d = _umap_params(ctx)
     return stored_n == want_n and math.isclose(stored_d, want_d, abs_tol=1e-9)
 
 
@@ -312,7 +345,7 @@ def _try_load_persisted(ctx, sorted_ids: list[int], bin_shape: str) -> dict | No
     if set(proj.ids) != set(sorted_ids):
         logger.info("Persisted %s projection ids mismatch; will recompute.", bin_shape)
         return None
-    if not _projection_params_match(proj):
+    if not _projection_params_match(proj, ctx):
         logger.info("Persisted %s projection UMAP params changed; will recompute.", bin_shape)
         return None
     ctx._projection = proj
@@ -340,7 +373,7 @@ def _load_projection_coords(ctx, sorted_ids: list[int]):
         proj, pyr = loaded
         if set(proj.ids) != set(sorted_ids):
             continue
-        if not _projection_params_match(proj):
+        if not _projection_params_match(proj, ctx):
             continue
         ctx._projection = proj
         ctx._pyramids.setdefault(pyr.bin_shape, pyr)
@@ -450,7 +483,7 @@ def _start_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str, *, for
     ids_copy = list(sorted_ids)
     dataset_id = ctx.dataset_id
     compact = _compact_for(ctx)
-    n_neighbors, min_dist = _umap_params()
+    n_neighbors, min_dist = _umap_params(ctx)
 
     def _run(job):
         with thread_dataset_context(ctx):
@@ -572,7 +605,7 @@ def _start_subset_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str,
     mat_copy = matrix.copy()
     ids_copy = list(sorted_ids)
     compact = _compact_for(ctx)
-    n_neighbors, min_dist = _umap_params()
+    n_neighbors, min_dist = _umap_params(ctx)
 
     def _run(job):
         with thread_dataset_context(ctx):

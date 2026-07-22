@@ -242,38 +242,23 @@ Capture before/after screenshots for the write-up.
 
 <!-- item-sep -->
 
-- **UMAP sweep harness** — `scripts/experiments/umap_params/` per §Experiment
-  mechanics: metric implementation (taxonomy AUROC + ceiling normalization +
-  guards, scored per `compact` variant), grid runner over cached embedded
-  pickles, seeded fits, CSV/JSON emission, summarize/visualize scripts
-  (including the compaction-delta report), short README. Taxonomy definitions
-  for each dataset (node → member classes) live beside the harness as data
-  files.
+
 
 <!-- item-sep -->
 
-- **Deep-taxonomy downloaders** — add iNaturalist-mini (image) and FSD50K
-  (audio) demo sources (or the chosen fallbacks), wired through the standard
-  downloader/demo-registry path with size variants.
+- **Deep-taxonomy demo sources (optional follow-up)** — the sweep built the
+  iNaturalist (156-species) and FSD50K-eval loaders inside the harness
+  (`prepare_dataset.py` / `prepare_fsd50k.py`); wiring them through the standard
+  downloader/demo-registry path as first-class demo sources with size variants
+  is still owed if they are wanted beyond the experiment.
 
 <!-- item-sep -->
 
-- **Cluster run + write-up** — execute the sweep on GRID, run the CPU verify
-  pass, and record the winning per-embedder params, the compaction verdict
-  (keep/flip/rework, with the measured delta), heatmaps, and metric/plot
-  evidence in §Results below.
+
 
 <!-- item-sep -->
 
-- **Per-embedder defaults plumbing** — a defaults map keyed by embedder name
-  (constant or `n_neighbors(N)` rule per §Analysis), consulted where
-  `PROJECTION_N_NEIGHBORS` / `PROJECTION_MIN_DIST` are read today, keyed off
-  the embedder that produced the projected matrix (the dataset's *primary*
-  embedder — `get_embedding_matrix` semantics), falling back to the current
-  globals for untuned embedders; `ServerSettings` overrides still win. Apply
-  the compaction verdict to `fit_projection`'s `compact` default. The
-  persisted projection is already keyed on effective params, so new defaults
-  force recompute instead of serving stale layouts — no migration needed.
+
 
 <!-- item-sep -->
 
@@ -284,11 +269,12 @@ Capture before/after screenshots for the write-up.
 
 <!-- item-sep -->
 
-- **Qualitative review + final defaults** — Part 3 above; canvas/hover/
-  colormap knobs landed in the frontend components, `min_dist` confirmed or
-  chosen visually, screenshots captured for the write-up. Update
-  `docs/plans/vtsbrowse.md` *§Open problems → Empirical* to "settled — see
-  §Results".
+- **Qualitative review (partly done)** — `min_dist` was settled from the sweep
+  (weak effect; 0.05 for images). Still owed: the in-canvas eyeball of the
+  shortlist and compaction on/off (the live Browse capture was blocked by an
+  environment issue this pass), plus the density-colormap / hover-feel knobs.
+  Update `docs/plans/vtsbrowse.md` *§Open problems → Empirical* to "settled —
+  see §Results" once the canvas pass lands.
 
 <!-- item-sep -->
 
@@ -362,4 +348,42 @@ The knobs the sweeps vary, their current values, and their source of truth.
 
 ## Results
 
-_(empty — fill in when the sweeps run.)_
+**Run.** GRID (NVIDIA A100, cuML), July 2026. Harness: `scripts/experiments/umap_params/`.
+Grid `n_neighbors ∈ {5,10,15,30,50,100,200}` × `min_dist ∈ {0,0.05,0.1,0.25,0.5}` ×
+`compact ∈ {off,on}` × 3 seeds over 23 embedded (dataset × embedder) matrices — audio
+(ESC-50 S/M/L, GTZAN, FSD50K eval) and image (Caltech-256 S/M, Places365 S/M/L, iNaturalist
+subset), ~5,000 scored fits.
+
+### Chosen per-embedder defaults (shipped)
+
+| Embedder | n_neighbors | min_dist | compact |
+|----------|-------------|----------|---------|
+| `clap`     | 15 | 0.10 | off |
+| `clip`     | 10 | 0.05 | off |
+| `siglip`   | 10 | 0.05 | off |
+| `siglip_l` | 10 | 0.05 | off |
+
+Landed as `vtscore/config.py:PROJECTION_DEFAULTS_BY_EMBEDDER` (+ `PROJECTION_COMPACT_DEFAULT =
+False`), consulted in `vtsearch/routes/projection.py:_umap_params` keyed off the dataset's
+primary embedder; `ServerSettings` still override, and untuned embedders fall back to the
+globals. The persisted projection is keyed on effective params, so the new defaults force a
+clean recompute.
+
+### Findings
+
+- **`n_neighbors` is per-embedder and tracks the embedder, not N.** Separability peaks at small
+  neighbourhoods (10 for the image embedders, 10–15 for CLAP) and declines steadily past 30;
+  `n_neighbors ≥ 100` hurts every embedder. The Places365 S/M/L curves (5k → 21k images) overlap,
+  so the optimum is a per-embedder *constant*, not an `n_neighbors(N)` rule. Large `n_neighbors`
+  is also the least seed-stable — a hazard for the unseeded production fit.
+- **`min_dist` barely moves separability** (weakly lower-is-better for images). 0.05 for images,
+  0.10 for audio; safe to revisit on visual grounds.
+- **Compaction consistently costs layout quality — verdict: flip to off.** Every dataset ×
+  embedder lost separability under `compact_layout` (−2.0% mean) and 5–6% on the structure guards
+  (trustworthiness / continuity / kNN-recall); the cost grows with layout density (worst on
+  21k-image Places365). Follow-up: rework `compact_layout` with a minimum inter-island margin to
+  keep the screen-fill benefit without the boundary bleed.
+- **CPU-verify: the ranking transfers.** Re-fitting the chosen values with CPU `umap-learn`
+  reproduced the result on all 23 embedded sets — winners beat the current default by +2.6%
+  separability on average (CLIP +3.2%, SigLIP +3.0%, SigLIP-L +2.8%, CLAP +1.2%) — so one defaults
+  table is safe for both the cuML and CPU projection paths.
