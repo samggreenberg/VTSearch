@@ -36,7 +36,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Stage B: one Autopilot cell (dataset,category,arm,seed).")
     parser.add_argument("--index", type=int, default=None, help="Cell index; defaults to $SLURM_ARRAY_TASK_ID.")
     parser.add_argument("--outdir", default=str(common.RESULTS / "stage_b"))
+    parser.add_argument(
+        "--print-cells", action="store_true", help="Print the total cell count and exit (for array sizing)."
+    )
     args = parser.parse_args(argv)
+
+    import experiment_config as cfg
+
+    if args.print_cells:
+        prepare_info = json.loads((common.RESULTS / "prepare_info.json").read_text())
+        print(len(cfg.array_cells(_categories_by_dataset(prepare_info, cfg))))
+        return 0
 
     idx = args.index if args.index is not None else int(os.environ.get("SLURM_ARRAY_TASK_ID", "0"))
 
@@ -44,8 +54,6 @@ def main(argv: list[str] | None = None) -> int:
     from vtscore.embedding import initialize_models
     from vtscore.eval.seed_scores import build_seed_scores
     from vtscore.eval.voting_iterations import run_voting_iterations_eval
-
-    import experiment_config as cfg
 
     prepare_info = json.loads((common.RESULTS / "prepare_info.json").read_text())
     cats_by_ds = _categories_by_dataset(prepare_info, cfg)
