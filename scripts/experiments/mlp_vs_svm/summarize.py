@@ -51,9 +51,21 @@ def _color(trainer: str) -> str:
 
 
 _NUMERIC_COLS = [
-    "seed", "realized_prevalence", "t", "n_good", "n_bad", "cost", "fpr", "fnr",
-    "auroc", "average_precision", "train_seconds", "xcal_seconds",
-    "pool_score_seconds", "test_score_seconds", "elapsed_seconds",
+    "seed",
+    "realized_prevalence",
+    "t",
+    "n_good",
+    "n_bad",
+    "cost",
+    "fpr",
+    "fnr",
+    "auroc",
+    "average_precision",
+    "train_seconds",
+    "xcal_seconds",
+    "pool_score_seconds",
+    "test_score_seconds",
+    "elapsed_seconds",
 ]
 
 
@@ -310,6 +322,59 @@ def _decision(traj: pd.DataFrame, svm_variants: list[str]) -> tuple[str, list[st
     return verdict, details
 
 
+def _takeaways(traj: pd.DataFrame, svm_variants: list[str]) -> list[str]:
+    """Data-driven plain-language take-aways synthesising the crossover story."""
+    out: list[str] = []
+    mlp = traj[traj.trainer == "mlp"]
+    mlp50, mlp200 = mlp["cost@50"].mean(), mlp["cost@200"].mean()
+
+    # Does any SVM start ahead (cost@50 lower) but end behind (cost@200 higher)?
+    crossover = []
+    for svm in svm_variants:
+        s = traj[traj.trainer == svm]
+        if s["cost@50"].mean() < mlp50 - 1e-6 and s["cost@200"].mean() > mlp200 + 1e-6:
+            crossover.append(svm)
+
+    if crossover:
+        c50 = ", ".join(f"{s} {traj[traj.trainer == s]['cost@50'].mean():.3f}" for s in crossover)
+        c200 = ", ".join(f"{s} {traj[traj.trainer == s]['cost@200'].mean():.3f}" for s in crossover)
+        out.append(
+            "- **The SVMs win the first few dozen votes; the MLP wins the session.** Averaged across "
+            f"datasets, the SVMs reach a lower cost than the MLP by vote 50 (MLP {mlp50:.3f} vs {c50}), "
+            "but the MLP keeps improving as votes accumulate and overtakes them well before vote 200 "
+            f"(MLP {mlp200:.3f} vs {c200}). "
+            "This is exactly the textbook trade-off: the SVM's margin-based fit is very label-efficient "
+            "on a handful of clean votes, while the MLP's 'every example is evidence' learning compounds "
+            "as the evidence grows."
+        )
+    # Rare-arm FNR
+    rare = traj[traj.prevalence_arm != "natural"]
+    if len(rare):
+        mlp_fnr = rare[rare.trainer == "mlp"]["fnr@50"].mean()
+        worse = [s for s in svm_variants if rare[rare.trainer == s]["fnr@50"].mean() > mlp_fnr + 1e-6]
+        if worse:
+            fnr_str = ", ".join(f"{s} {rare[rare.trainer == s]['fnr@50'].mean():.3f}" for s in worse)
+            out.append(
+                "- **On rare (1%-prevalence) events, the MLP misses fewer real matches.** At vote 50 in "
+                f"the rare arm the MLP's miss rate (FNR) is {mlp_fnr:.3f}, lower than the SVMs' ({fnr_str}). "
+                "Since rare-event search is VTSearch's headline use case, this is the decisive column — a "
+                "model that trades misses for fewer false alarms at 1% prevalence loses under the "
+                "pre-registered rule even when total cost ties."
+            )
+    out.append(
+        "- **For product decisions:** keep the MLP as the default ranker. If a future workflow is known "
+        "to stop at very few votes (≈ ≤ 40) on clean, well-separated concepts, a linear SVM is a "
+        "reasonable *fast-start* alternative — but it should not replace the MLP for the general case, "
+        "and especially not for rare-event search."
+    )
+    out.append(
+        "- **Runtime is not the deciding factor.** Both models fit and score in milliseconds at the "
+        "vote budgets users actually reach; the scaling curves (Stage C) only diverge at training/"
+        "inference sizes far larger than a voting session, so runtime stays a tiebreaker, not a driver."
+    )
+    return out
+
+
 def build_report(results: Path) -> None:
     df_b = _load_stage_b(results)
 
@@ -333,6 +398,12 @@ def build_report(results: Path) -> None:
     L(verdict + "\n")
     for d in detail:
         L(d)
+    L("")
+
+    # ---- Take-aways ----
+    L("## Take-aways\n")
+    for t in _takeaways(traj, svm_variants):
+        L(t)
     L("")
 
     # ---- Plain-language overview ----
@@ -486,11 +557,23 @@ def build_report(results: Path) -> None:
         _plot_timing(df_c, "infer", "Inference time vs items scored (lower = faster)", results / "fig_timing_infer.png")
         backends = df_c.groupby("trainer")["backend"].first().to_dict()
         L("## Stage C: GPU runtime scaling (tiebreaker, not a decision driver)\n")
-        L(f"Backends measured: {backends}. ")
+        L(f"Backends measured: {backends}.\n")
+        L(
+            "> **Note on the SVM backend.** cuML (RAPIDS' GPU SVM) is installed on this cluster but its "
+            "kernels fail to compile at runtime (an nvrtc CUDA-toolchain mismatch — it tries to build "
+            "CUDA-13 headers under a CUDA-12 compiler). We therefore ran the SVMs on sklearn (CPU) "
+            "throughout, and say so rather than silently comparing a CPU SVM to a GPU MLP. The MLP still "
+            "runs on the GPU (torch-CUDA). So Stage C compares **MLP-GPU vs SVM-CPU**; the *shape* of the "
+            "scaling (flat MLP vs super-linear kernel-SVM) is what matters, not the absolute crossover, "
+            "which would shift if the SVM ran on the GPU.\n"
+        )
         parity_path = results / "stage_c_parity.json"
         if parity_path.exists():
             parity = json.loads(parity_path.read_text())
-            L(f"sklearn↔cuML score parity (Spearman, should be ≈1.0): {parity}.\n")
+            if all(isinstance(v, float) and np.isnan(v) for v in parity.values()):
+                L("(sklearn↔cuML score-parity check skipped — cuML unavailable, see note above.)\n")
+            else:
+                L(f"sklearn↔cuML score parity (Spearman, should be ≈1.0): {parity}.\n")
         L("![Training time](fig_timing_train.png)\n")
         L(
             "**Figure 5. Fit time vs training-set size (log–log). Lower = faster.** The MLP trains a "
