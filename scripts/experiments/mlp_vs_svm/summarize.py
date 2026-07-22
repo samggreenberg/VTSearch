@@ -50,12 +50,24 @@ def _color(trainer: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+_NUMERIC_COLS = [
+    "seed", "realized_prevalence", "t", "n_good", "n_bad", "cost", "fpr", "fnr",
+    "auroc", "average_precision", "train_seconds", "xcal_seconds",
+    "pool_score_seconds", "test_score_seconds", "elapsed_seconds",
+]
+
+
 def _load_stage_b(results: Path) -> pd.DataFrame:
     files = sorted(glob.glob(str(results / "stage_b" / "task_*.csv")))
-    if not files:
+    # Skipped arm cells write a header-only (0-row) CSV; dropping them before the
+    # concat keeps pandas from widening the numeric columns to object dtype.
+    frames = [f for f in (pd.read_csv(p) for p in files) if not f.empty]
+    if not frames:
         return pd.DataFrame()
-    frames = [pd.read_csv(f) for f in files]
     df = pd.concat(frames, ignore_index=True)
+    for col in _NUMERIC_COLS:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
     return df[df["t"] >= 1].copy()
 
 
