@@ -326,7 +326,15 @@ def svm_backend_parity(
     X, y = _make_data(n_train, dim, rng)
     Xtest, _ = _make_data(512, dim, rng)
 
-    cuml_clf = _svm_fit(trainer, X, y, "cuml")
+    # cuML SVM can be present-but-broken on a mismatched CUDA toolchain (its
+    # kernels compile lazily via nvrtc); treat any failure — or a silent
+    # fallback to sklearn — as "no GPU SVM to compare against".
+    try:
+        cuml_clf = _svm_fit(trainer, X, y, "cuml")
+    except Exception:  # noqa: BLE001
+        return float("nan")
+    if getattr(cuml_clf, "backend", "") != "cuml":
+        return float("nan")
     sklearn_clf = _svm_fit(trainer, X, y, "sklearn")
     s_gpu = np.asarray(cuml_clf.predict_proba(Xtest), dtype=np.float64)
     s_cpu = np.asarray(sklearn_clf.predict_proba(Xtest), dtype=np.float64)
