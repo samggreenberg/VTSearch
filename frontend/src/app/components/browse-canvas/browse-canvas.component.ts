@@ -129,11 +129,13 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    */
   readonly colormap = input<BrowseColormapId>('auto');
   /**
-   * Width (CSS px) of the colormap-coloured border painted around multi-item
-   * ("pile") thumbnails. The band's colour is the density colour for the cell's
-   * item count, so it reads as how tall the stack under the tile is. ``0``
-   * disables it (cells fall back to the faint dark separator). Only takes effect
-   * in {@link thumbnailMode} (image/video); singletons never get the band.
+   * Width (CSS px) of the colormap-coloured border painted around thumbnails.
+   * A multi-item ("pile") tile's band is the density colour for its item count,
+   * so it reads as how tall the stack under the tile is; a singleton's band is
+   * the colormap's dedicated one-item colour (`single`) painted as a hard-edged
+   * (sharp-cornered) rectangle, so a lone item reads as "exactly one" and stands
+   * out against the background. ``0`` disables both (cells fall back to the faint
+   * dark separator). Only takes effect in {@link thumbnailMode} (image/video).
    */
   readonly thumbnailBorder = input(0);
   /**
@@ -1638,6 +1640,21 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
       ctx.save();
       ctx.clip();
       ctx.strokeStyle = densityColor(Math.max(0, Math.min(1, t)), cmap.ramp);
+      ctx.lineWidth = this.thumbnailBorder() * 2;
+      ctx.stroke();
+      ctx.restore();
+    } else if (thumb && single && this.thumbnailBorder() > 0) {
+      // Singleton thumbnail: a border in the colormap's dedicated one-item
+      // colour (`cmap.single`, the "1" end of the bin-size scale that the pile
+      // ramp never reaches), so a lone item stands out against the background
+      // and reads as "exactly one". Because the singleton's cell was traced
+      // sharp-cornered (`rounded = false`), stroking that same path yields a
+      // hard-edged rectangle — deliberately unlike the pile band's rounded
+      // silhouette, so the sharp corners plus the single colour mark it apart.
+      // Same clip + full-inset width as the pile band.
+      ctx.save();
+      ctx.clip();
+      ctx.strokeStyle = rgbString(cmap.single);
       ctx.lineWidth = this.thumbnailBorder() * 2;
       ctx.stroke();
       ctx.restore();

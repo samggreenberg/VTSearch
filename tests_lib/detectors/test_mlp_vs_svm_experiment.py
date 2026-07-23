@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from vtscore.eval.timing_benchmark import run_timing_benchmark
-from vtscore.eval.trainers import _parse_trainer_spec, resolve_trainer
+from vtscore.eval.trainers import _as_scores, _parse_trainer_spec, resolve_trainer
 from vtscore.eval.voting_iterations import (
     _downsample_to_prevalence,
     _prevalence,
@@ -118,7 +118,7 @@ class TestTrainerResolver:
         X = np.vstack([rng.normal(1, 0.3, (20, 8)), rng.normal(-1, 0.3, (20, 8))]).astype(np.float32)
         y = np.array([1] * 20 + [0] * 20, dtype=np.int32)
         predict = resolve_trainer("svm_rbf@C=3,gamma=0.5x")(X, y, 0)
-        scores = predict(X)
+        scores = _as_scores(predict(X))
         assert scores.shape == (40,)
 
     def test_unknown_name_raises(self):
