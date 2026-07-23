@@ -53,11 +53,23 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dataset", choices=("coco", "lvis", "vg"), default="coco")
     ap.add_argument("--classes", required=True, help="comma-separated category names (order = category_id 1..N)")
-    ap.add_argument("--name", default="sodcoco", help="dataset name registered in CD-ViTO (dir + <name>_train/test/Kshot)")
+    ap.add_argument(
+        "--name", default="sodcoco", help="dataset name registered in CD-ViTO (dir + <name>_train/test/Kshot)"
+    )
     ap.add_argument("--out-root", type=Path, default=Path("/exp/mlucio/projects/cdfsod/datasets"))
     ap.add_argument("--k-values", default="1,5,10", help="comma-separated K for the k-shot support jsons")
-    ap.add_argument("--max-pos-per-class", type=int, default=200, help="cap positives sampled per class (0 = all); keeps eval fast + classes balanced")
-    ap.add_argument("--train-size", type=float, default=0.7, help="fraction of the pooled positive images used for train (rest = test)")
+    ap.add_argument(
+        "--max-pos-per-class",
+        type=int,
+        default=200,
+        help="cap positives sampled per class (0 = all); keeps eval fast + classes balanced",
+    )
+    ap.add_argument(
+        "--train-size",
+        type=float,
+        default=0.7,
+        help="fraction of the pooled positive images used for train (rest = test)",
+    )
     ap.add_argument(
         "--min-box-frac",
         type=float,
@@ -95,7 +107,9 @@ def main() -> int:
             if (x1 - x0) < frac or (y1 - y0) < frac:
                 continue
             iid = int(row["image_id"])
-            rec = per_image.setdefault(iid, {"split": str(row["split"]), "file_name": str(row["file_name"]), "boxes": []})
+            rec = per_image.setdefault(
+                iid, {"split": str(row["split"]), "file_name": str(row["file_name"]), "boxes": []}
+            )
             cid = cat_id[key]
             rec["boxes"].append((cid, x0, y0, x1, y1))
             if iid not in by_class[cid]:  # note: list-membership; fine at these counts
@@ -139,7 +153,14 @@ def main() -> int:
             for cid, x0, y0, x1, y1 in rec["boxes"]:
                 bx, by, bw, bh = x0 * w, y0 * h, (x1 - x0) * w, (y1 - y0) * h
                 annotations.append(
-                    {"image_id": iid, "bbox": [bx, by, bw, bh], "area": bw * bh, "category_id": cid, "id": ann_id, "iscrowd": 0}
+                    {
+                        "image_id": iid,
+                        "bbox": [bx, by, bw, bh],
+                        "area": bw * bh,
+                        "category_id": cid,
+                        "id": ann_id,
+                        "iscrowd": 0,
+                    }
                 )
                 ann_id += 1
         return images, annotations
@@ -150,11 +171,15 @@ def main() -> int:
     ds.close()
 
     def dump(name, imgs, anns):
-        (out / "annotations" / name).write_text(json.dumps({"images": imgs, "annotations": anns, "categories": categories}))
+        (out / "annotations" / name).write_text(
+            json.dumps({"images": imgs, "annotations": anns, "categories": categories})
+        )
 
     dump("train.json", tr_imgs, tr_anns)
     dump("test.json", te_imgs, te_anns)
-    print(f"train.json: {len(tr_imgs)} imgs / {len(tr_anns)} anns   test.json: {len(te_imgs)} imgs / {len(te_anns)} anns")
+    print(
+        f"train.json: {len(tr_imgs)} imgs / {len(tr_anns)} anns   test.json: {len(te_imgs)} imgs / {len(te_anns)} anns"
+    )
 
     # ---- k-shot jsons from train (mirror kshot_split.py: per category, K images, 1 ann each) ----
     train_img_by_id = {im["id"]: im for im in tr_imgs}
