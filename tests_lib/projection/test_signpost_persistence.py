@@ -70,7 +70,9 @@ class TestRoundTrip:
             [RegionLabel(level=3.6, x=0.0, y=0.0, text="island", has_coarser=False, has_finer=False)],
         )
         append_region_labels(container, label_set, "sig")
-        loaded, _ = read_region_labels(container)
+        result = read_region_labels(container)
+        assert result is not None
+        loaded, _ = result
         (sign,) = loaded.labels
         assert (sign.has_coarser, sign.has_finer) == (False, False)
 

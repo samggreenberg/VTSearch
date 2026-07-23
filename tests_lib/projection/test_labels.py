@@ -23,10 +23,26 @@ class TestRegionLabelSet:
         )
         payload = label_set.payload()
         assert payload == [
-            {"level": 0, "x": 1.5, "y": -2.0, "text": "speech", "score": 0.8, "source": "llm",
-             "has_coarser": True, "has_finer": True},
-            {"level": 2.5, "x": 0.0, "y": 0.0, "text": "dog barking", "score": 1.0, "source": "",
-             "has_coarser": True, "has_finer": True},
+            {
+                "level": 0,
+                "x": 1.5,
+                "y": -2.0,
+                "text": "speech",
+                "score": 0.8,
+                "source": "llm",
+                "has_coarser": True,
+                "has_finer": True,
+            },
+            {
+                "level": 2.5,
+                "x": 0.0,
+                "y": 0.0,
+                "text": "dog barking",
+                "score": 1.0,
+                "source": "",
+                "has_coarser": True,
+                "has_finer": True,
+            },
         ]
 
     def test_make_label_set_normalises_to_tuple(self):

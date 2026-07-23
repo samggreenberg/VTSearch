@@ -165,19 +165,20 @@ class TestBuildCategorySignposts:
         assert only.has_finer is False  # no child prefix
 
     def test_leaf_when_every_child_prefix_is_pruned_as_singleton(self):
-        # "B" has two members (earns a sign) but each of its child cities has a
-        # single item and is pruned below _MIN_MEMBERS. With no child sign to
-        # hand off to, "B" is a leaf even though the path goes one level deeper.
+        # "Region" has two members (earns a sign) but each of its child cities
+        # has a single item and is pruned below _MIN_MEMBERS. With no child sign
+        # to hand off to, "Region" is a leaf even though the path goes deeper.
+        # (Multi-char segments so clean_category_path keeps the first one.)
         medias = {
-            1: {"category": "A/B/Solo"},
-            2: {"category": "A/B/Other"},
+            1: {"category": "Land/Region/Solo"},
+            2: {"category": "Land/Region/Other"},
         }
         proj = _proj([1, 2], [[0, 0], [1, 1]])
         ls = build_category_signposts(proj, medias)
         by_text = {lab.text: lab for lab in ls.labels}
         assert "Solo" not in by_text and "Other" not in by_text
-        assert by_text["B"].has_finer is False  # both children pruned → leaf
-        assert by_text["B"].has_coarser is True  # sits under "A"
+        assert by_text["Region"].has_finer is False  # both children pruned → leaf
+        assert by_text["Region"].has_coarser is True  # sits under "Land"
 
 
 class TestSyntheticToponymyDemo:

@@ -118,6 +118,7 @@ class TestTrainerResolver:
         X = np.vstack([rng.normal(1, 0.3, (20, 8)), rng.normal(-1, 0.3, (20, 8))]).astype(np.float32)
         y = np.array([1] * 20 + [0] * 20, dtype=np.int32)
         predict = resolve_trainer("svm_rbf@C=3,gamma=0.5x")(X, y, 0)
+        # A PredictFn may return scores or (scores, std); coerce to the score array.
         scores = _as_scores(predict(X))
         assert scores.shape == (40,)
 
