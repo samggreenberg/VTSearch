@@ -337,6 +337,7 @@ class _PatchSource:
         *,
         k: int = 12,
         alpha: float = 0.5,
+        pca_dims: int | None = None,
         proposer: Proposer | None = None,
         region_voting: bool = False,
     ) -> None:
@@ -344,6 +345,10 @@ class _PatchSource:
         self.name = name
         self._k = k
         self._alpha = alpha
+        # Per-image PCA dims for the HAC merge order (tree topology only; stored
+        # vecs stay full-dim). None = off. Inert for the box-pool variant, which
+        # never builds a tree.
+        self._pca_dims = pca_dims
         self._proposer = proposer
         # Region-voting label construction (matches the app detector's DINO-patch
         # path): a Good vote's box snaps to the nearest tree node, and negatives
@@ -375,7 +380,7 @@ class _PatchSource:
         cell_masks: np.ndarray | None = None
         saliency: np.ndarray | None = None
         if self._proposer is None:
-            tree = build_region_tree(pe, k=self._k, alpha=self._alpha)
+            tree = build_region_tree(pe, k=self._k, alpha=self._alpha, pca_dims=self._pca_dims)
             boxes = np.asarray([r.box for r in tree], dtype=np.float32)
             vecs = np.asarray([r.vec for r in tree], dtype=np.float32)
             # Childless nodes (CLS + HAC leaves) — the set a Bad vote floods.
@@ -450,6 +455,7 @@ def build_region_source(
     min_window: int = 64,
     hac_k: int = 12,
     hac_alpha: float = 0.5,
+    hac_pca_dims: int | None = None,
     dino_model_id: str | None = None,
     dino_device: str = "cpu",
     dino_register_tokens: int = 0,
@@ -477,7 +483,15 @@ def build_region_source(
     if proposal == "hac":
         if not embedder.supports_patch_regions:
             raise ValueError(f"proposal='hac' needs a patch embedder; {embedder.name!r} has no patch grid")
-        return _PatchSource(embedder, name="hac", k=hac_k, alpha=hac_alpha, proposer=None, region_voting=region_voting)
+        return _PatchSource(
+            embedder,
+            name="hac",
+            k=hac_k,
+            alpha=hac_alpha,
+            pca_dims=hac_pca_dims,
+            proposer=None,
+            region_voting=region_voting,
+        )
     if proposal == "hac_boxpool":
         if not embedder.supports_patch_regions:
             raise ValueError(f"proposal='hac_boxpool' needs a patch embedder; {embedder.name!r} has no patch grid")

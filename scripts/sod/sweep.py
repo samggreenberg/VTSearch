@@ -56,7 +56,10 @@ def _proposal_slug(proposal: str, args, alpha: float, region_voting: bool = Fals
         # Region-voting rewrites the exemplar (snapped, one per image) and stores a
         # leaf_mask, so it must not share a cache with the box-pool hac variant.
         rv = "_rv" if region_voting else ""
-        return f"hac{rv}_k{args.hac_k}_a{alpha}"
+        # Per-image PCA changes the tree topology (and thus cached region vecs/
+        # boxes/children), so a PCA run must not reuse non-PCA cached regions.
+        pca = f"_pca{args.pca_dims}" if args.pca_dims else ""
+        return f"hac{rv}_k{args.hac_k}_a{alpha}{pca}"
     return "whole"
 
 
@@ -71,6 +74,7 @@ def _build_source(proposal: str, embedder, args, alpha: float, region_voting: bo
         min_window=args.min_window,
         hac_k=args.hac_k,
         hac_alpha=alpha,
+        hac_pca_dims=args.pca_dims,
         dino_model_id=DINOV2_MODEL_ID,
         dino_device=resolve_device(),
         dino_register_tokens=0,
@@ -369,6 +373,14 @@ def main() -> int:
     ap.add_argument("--hac-k", type=int, default=12)
     ap.add_argument("--hac-alpha", type=_floats, default=(0.5,), help="swept for the hac proposal")
     ap.add_argument("--hac-alpha-default", type=float, default=0.5, help="alpha for the dino proposer's tree")
+    ap.add_argument(
+        "--pca-dims",
+        type=int,
+        default=None,
+        help="hac proposal only: fit a per-image PCA of this many dims on the patch grid and "
+        "decide HAC merge order in that space (tree topology only; stored vecs stay full-dim). "
+        "Off by default; clamped to min(dims, n_patches, embed_dim). Gets its own cache slug.",
+    )
     ap.add_argument("--prompt-template", default="a photo of a {}")
     ap.add_argument("--out-dir", type=Path, default=Path("docs/experiments/sod-sweep"))
     ap.add_argument("--cache-dir", type=Path, default=None, help="npz cache dir (default: <out-dir>/cache)")
