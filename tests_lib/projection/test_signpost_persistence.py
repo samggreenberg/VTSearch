@@ -62,6 +62,18 @@ class TestRoundTrip:
         label_set, signature = loaded
         assert (label_set.projection_id, signature) == ("new", "sig-new")
 
+    def test_terminal_flags_round_trip(self, container):
+        # A leaf/root sign's terminal flags must survive the JSON round-trip so a
+        # reloaded layout letters its islands the same way it did when built.
+        label_set = make_label_set(
+            "proj-1",
+            [RegionLabel(level=3.6, x=0.0, y=0.0, text="island", has_coarser=False, has_finer=False)],
+        )
+        append_region_labels(container, label_set, "sig")
+        loaded, _ = read_region_labels(container)
+        (sign,) = loaded.labels
+        assert (sign.has_coarser, sign.has_finer) == (False, False)
+
     def test_read_missing_entry_returns_none(self, container):
         assert read_region_labels(container) is None
 

@@ -906,7 +906,11 @@ class TestProjectionLabels:
         assert first["level"] == 0
         assert first["score"] == 0.9
         assert first["source"] == "keyphrase"
-        assert set(first) == {"level", "x", "y", "text", "score", "source"}
+        # Terminal-neighbour flags default True (present but not pinned to a tree
+        # in this hand-built set); the canvas fades such signs as before.
+        assert first["has_coarser"] is True
+        assert first["has_finer"] is True
+        assert set(first) == {"level", "x", "y", "text", "score", "source", "has_coarser", "has_finer"}
 
         assert client.get("/api/projection/meta").get_json()["has_labels"] is True
 
