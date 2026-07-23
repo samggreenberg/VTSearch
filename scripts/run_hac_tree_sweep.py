@@ -38,6 +38,21 @@ regions - at quadratically more compute.  Forward outputs are cached per
 resolution under ``<out-dir>/cache/<backbone>/r<resolution>/``.
 
 Designed to be deleted once the sweep results are committed.
+
+Matthew usage:
+
+source .venv/bin/activate
+
+python scripts/run_hac_tree_sweep.py --backbone dinov3 --image-dir ./data/hac_test --pca-dims none 10 32 --k-values 2 3 4 5 6 7 8 9 10 11 12 --num-images 6 --out-dir ./docs/experiments/hac-tree/pca_test
+
+python scripts/run_hac_tree_sweep.py \
+  --backbone dinov3 \
+  --sod-dataset coco --sod-class "traffic light" \
+  --pca-dims none 10 32 \
+  --k-values 8 12 16 --alpha-values 0.3 0.5 0.7 \
+  --num-images 20 --min-box-frac 0.05 \
+  --out-dir /exp/mlucio/.../hac-tree-pca
+
 """
 
 from __future__ import annotations
@@ -45,6 +60,7 @@ from __future__ import annotations
 import argparse
 import random
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -59,8 +75,8 @@ from vtscore.media.patch_embed import (
     hf_vit_to_patch_output,
 )
 
-DEFAULT_K_VALUES = (8, 12, 16)
-DEFAULT_ALPHA_VALUES = (0.3, 0.5, 0.7)
+DEFAULT_K_VALUES = (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)
+DEFAULT_ALPHA_VALUES = (0.5,)
 
 
 # ---------------------------------------------------------------------------
@@ -719,6 +735,124 @@ def _box_iou(a, b) -> float:
     return inter / union if union > 1e-9 else 0.0
 
 
+def _draw_gt_boxes(rgb: np.ndarray, boxes: list[tuple[float, float, float, float]]) -> np.ndarray:
+    """Return a copy of *rgb* (H, W, 3 uint8) with normalised GT boxes drawn in red.
+
+    Used only on the SOD image path so the corner overview shows where the
+    (often tiny) object sits relative to the HAC regions.
+    """
+    img = Image.fromarray(np.ascontiguousarray(rgb, dtype=np.uint8), mode="RGB")
+    draw = ImageDraw.Draw(img)
+    h, w = rgb.shape[:2]
+    width = max(2, w // 200)
+    for x0, y0, x1, y1 in boxes:
+        draw.rectangle((x0 * w, y0 * h, x1 * w, y1 * h), outline=(255, 40, 40), width=width)
+    return np.asarray(img, dtype=np.uint8)
+
+
+def _render_pca_comparison(
+    full_rgb: np.ndarray,
+    corner_rgb: np.ndarray,
+    out: PatchEmbedOutput,
+    *,
+    k: int,
+    alpha: float,
+    pca_values: list[int | None],
+    pca_metrics: dict[tuple[int, float, int | None], list[dict[str, float]]],
+    out_dir: Path,
+    stem: str,
+    thumb: int = 84,
+    attn_full: np.ndarray | None = None,
+    attn_corner: np.ndarray | None = None,
+) -> Path | None:
+    """Build the tree at each pca value and (when >1) hstack a side-by-side composite.
+
+    The forward pass is PCA-independent, so every value reuses *out* — no
+    re-embedding. Each value's :func:`measure_config` metrics are appended to
+    *pca_metrics* under the ``(k, alpha, pca)`` key. *corner_rgb* is the overview
+    thumbnail tucked in each panel's corner (e.g. with GT boxes drawn);
+    *full_rgb* supplies the per-node cell thumbnails.
+
+    When *attn_full* / *attn_corner* (a saliency-over-pixels overlay, precomputed
+    once per image) are given, a **separate** attention composite is also written
+    as ``<stem>_k<k>_a<alpha>_pca_attn.jpg`` — the same trees drawn over the
+    attention overlay instead of the raw image.
+
+    Returns the image composite path (named ``<stem>_k<k>_a<alpha>_pca.jpg``), or
+    ``None`` when only the baseline is requested (nothing to compare).
+    """
+    panels: list[Image.Image] = []
+    attn_panels: list[Image.Image] = []
+    for pv in pca_values:
+        regions_pv = build_region_tree(out, k=k, alpha=alpha, pca_dims=pv)
+        pca_metrics.setdefault((k, alpha, pv), []).append(measure_config(regions_pv, k=k))
+        if len(pca_values) > 1:
+            title = f"pca={'none' if pv is None else pv}"
+            panels.append(_render_tree_panel(full_rgb, regions_pv, k, corner_rgb=corner_rgb, title=title, thumb=thumb))
+            if attn_full is not None and attn_corner is not None:
+                attn_panels.append(
+                    _render_tree_panel(
+                        attn_full, regions_pv, k, corner_rgb=attn_corner, title=f"{title} · attn", thumb=thumb
+                    )
+                )
+    if len(pca_values) <= 1:
+        return None
+    comp_path = out_dir / "trees" / f"{stem}_k{k}_a{alpha}_pca.jpg"
+    _hstack_panels(panels).save(comp_path, quality=88, optimize=True)
+    if attn_panels:
+        attn_path = out_dir / "trees" / f"{stem}_k{k}_a{alpha}_pca_attn.jpg"
+        _hstack_panels(attn_panels).save(attn_path, quality=88, optimize=True)
+    return comp_path
+
+
+def _write_pca_metrics(
+    path: Path,
+    pca_metrics: dict[tuple[int, float, int | None], list[dict[str, float]]],
+    *,
+    backbone: str,
+) -> None:
+    """Write a compact per-image-mean table of how ``pca_dims`` reshapes the tree.
+
+    One row per ``(k, alpha, pca)`` combination (``none`` = full-dim baseline,
+    sorted first within each (k, alpha)); columns are the coordinate-free
+    :func:`measure_config` metrics averaged over the sampled images. Only the
+    tree *topology* changes with pca, so shifts here are pure structure
+    (leaf/internal areas, merge balance, bounding-box growth), not embedding
+    changes.
+    """
+    metric_keys = [
+        "leaf_area_mean",
+        "internal_area_mean",
+        "root_area",
+        "merge_balance",
+        "area_growth",
+        "leaf_overlap_max",
+    ]
+    lines = [
+        f"# PCA effect on the HAC tree (backbone={backbone})",
+        "",
+        "Per-image means over the sample, comparing full-dim clustering "
+        "(`pca=none`) against per-image PCA-reduced merge order. PCA fits on the "
+        "whole patch grid per image and decides only the HAC merge order; every "
+        "stored region vector stays full-dim.",
+        "",
+        "| k | alpha | pca_dims | " + " | ".join(metric_keys) + " |",
+        "|" + "---|" * (len(metric_keys) + 3),
+    ]
+    # Sort by (k, alpha, pca) with the None baseline first within each (k, alpha).
+    for key in sorted(pca_metrics, key=lambda t: (t[0], t[1], -1 if t[2] is None else t[2])):
+        runs = pca_metrics[key]
+        if not runs:
+            continue
+        k, alpha, pv = key
+        means = {mk: float(np.mean([r[mk] for r in runs])) for mk in metric_keys}
+        label = "none" if pv is None else str(pv)
+        cells = " | ".join(f"{means[mk]:.4f}" for mk in metric_keys)
+        lines.append(f"| {k} | {alpha} | {label} | {cells} |")
+    lines.append("")
+    path.write_text("\n".join(lines))
+
+
 def measure_config(regions: list[RegionVector], k: int) -> dict[str, float]:
     """Quantitative summary of one (K, α) region tree.
 
@@ -832,6 +966,154 @@ def diversity_tree_clusters(
 
 
 # ---------------------------------------------------------------------------
+# SOD image source (COCO / LVIS / VG)
+# ---------------------------------------------------------------------------
+
+
+def _render_source_pca(
+    args: argparse.Namespace,
+    bb: _Backbone,
+    pca_values: list[int | None],
+    pca_metrics: dict[tuple[int, float, int | None], list[dict[str, float]]],
+    items: "Iterable[tuple[int, Image.Image, str, list[tuple[float, float, float, float]] | None]]",
+    *,
+    k_values: tuple[int, ...],
+    alpha_values: tuple[float, ...],
+) -> None:
+    """Shared per-image loop for the SOD and directory image sources.
+
+    *items* yields ``(cache_key, image, label, gt_boxes)``: *cache_key* is the
+    int that namespaces the forward cache (image id for SOD, running index for
+    a directory), *gt_boxes* is ``None``/empty when unavailable. Runs the
+    forward pass once per image (it is PCA- and K/α-independent, so every tree
+    reuses it), then emits one pca-comparison composite per ``(K, alpha)`` in
+    ``k_values × alpha_values`` and writes ``pca-metrics.md`` at the end.
+    """
+    for pos, (cache_key, image, label, gt) in enumerate(items):
+        cache_path = _cache_path(args.out_dir, bb.key, bb.resolution, cache_key, label)
+        t0 = time.perf_counter()
+        cached = cache_path.exists()
+        out = load_or_compute_patch(bb, image, cache_path)
+        if out is None:
+            print(f"  [{pos}] {label}: patch_forward returned None - skipping")
+            continue
+        raw = np.asarray(image, dtype=np.uint8)
+        corner = _draw_gt_boxes(raw, gt) if gt else raw
+        # Attention overlay (saliency over a dimmed grayscale base), once per image;
+        # K/α/pca-independent, so it's reused across every composite for this image.
+        attn = _saliency_full_rgb(image, np.asarray(out.patch_saliency))
+        attn_corner = _draw_gt_boxes(attn, gt) if gt else attn
+        n_comp = 0
+        for k in k_values:
+            for alpha in alpha_values:
+                comp_path = _render_pca_comparison(
+                    raw,
+                    corner,
+                    out,
+                    k=k,
+                    alpha=alpha,
+                    pca_values=pca_values,
+                    pca_metrics=pca_metrics,
+                    out_dir=args.out_dir,
+                    stem=f"{pos:02d}_{label}",
+                    thumb=args.thumb,
+                    attn_full=attn,
+                    attn_corner=attn_corner,
+                )
+                if comp_path is not None:
+                    n_comp += 1
+        msg = f"  [{pos}] {label}: {'cache' if cached else 'forward'} {time.perf_counter() - t0:.2f}s"
+        if n_comp:
+            msg += f", {n_comp} pca composite(s) over {len(k_values)}×{len(alpha_values)} K×α"
+        print(msg)
+
+    if len(pca_values) > 1:
+        _write_pca_metrics(args.out_dir / "pca-metrics.md", pca_metrics, backbone=args.backbone)
+        print(f"wrote pca metrics -> {args.out_dir / 'pca-metrics.md'}")
+
+
+def _run_sod_pca(
+    args: argparse.Namespace,
+    bb: _Backbone,
+    pca_values: list[int | None],
+    pca_metrics: dict[tuple[int, float, int | None], list[dict[str, float]]],
+    *,
+    k_values: tuple[int, ...],
+    alpha_values: tuple[float, ...],
+) -> None:
+    """Render the PCA tree comparison on positive images of a SOD class.
+
+    Loads ``scripts/sod/datasets.py`` by file path under a unique module name
+    (so it can't collide with the HuggingFace ``datasets`` package), samples
+    ``--num-images`` positives of ``--sod-class``, draws GT boxes on each
+    overview thumbnail. The forward-pass cache is keyed by image id, so reruns
+    hit it regardless of sampling order.
+    """
+    import importlib.util
+    import sys
+
+    ds_path = Path(__file__).resolve().parent / "sod" / "datasets.py"
+    spec = importlib.util.spec_from_file_location("sod_datasets", ds_path)
+    assert spec is not None and spec.loader is not None
+    sod = importlib.util.module_from_spec(spec)
+    # Register before exec: datasets.py uses @dataclass, whose processing looks the
+    # module up in sys.modules by name (fails with NoneType otherwise).
+    sys.modules[spec.name] = sod
+    spec.loader.exec_module(sod)
+    frac = args.min_box_frac if args.min_box_frac is not None else sod.GUI_MIN_BOX_FRAC
+    cls_slug = args.sod_class.replace(" ", "_").replace("/", "_")
+
+    def items():
+        # The dataset context stays open while the generator is consumed, so
+        # load_image() runs lazily per item inside the reader's lifetime.
+        with sod.SodDataset(args.sod_dataset) as ds:
+            split = ds.class_split(args.sod_class, neg_multiple=0, seed=args.seed, min_box_frac=frac)
+            ids = list(split.positive_ids)
+            random.Random(args.seed).shuffle(ids)
+            ids = ids[: args.num_images]
+            print(
+                f"{args.sod_dataset}/{args.sod_class}: {len(split.positive_ids)} positives "
+                f"(min_box_frac={frac}); rendering {len(ids)}"
+            )
+            for iid in ids:
+                image = ds.load_image(iid).convert("RGB")
+                label = f"{args.sod_dataset}_{cls_slug}_{iid}"
+                yield iid, image, label, (split.gt_boxes.get(iid) or [])
+
+    _render_source_pca(args, bb, pca_values, pca_metrics, items(), k_values=k_values, alpha_values=alpha_values)
+
+
+def _run_dir_pca(
+    args: argparse.Namespace,
+    bb: _Backbone,
+    pca_values: list[int | None],
+    pca_metrics: dict[tuple[int, float, int | None], list[dict[str, float]]],
+    *,
+    k_values: tuple[int, ...],
+    alpha_values: tuple[float, ...],
+) -> None:
+    """Render the PCA tree comparison on images sampled from a plain directory.
+
+    Recursively globs common image extensions, shuffles with ``--seed``, and
+    takes ``--num-images``. No GT boxes (the corner overview is the raw image);
+    otherwise identical to the SOD/Places365 comparison output.
+    """
+    exts = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+    files = sorted(p for p in args.image_dir.rglob("*") if p.suffix.lower() in exts)
+    if not files:
+        raise SystemExit(f"no images ({', '.join(sorted(exts))}) found under {args.image_dir}")
+    random.Random(args.seed).shuffle(files)
+    files = files[: args.num_images]
+    print(f"{args.image_dir}: {len(files)} images")
+
+    def items():
+        for i, path in enumerate(files):
+            yield i, Image.open(path).convert("RGB"), path.stem, None
+
+    _render_source_pca(args, bb, pca_values, pca_metrics, items(), k_values=k_values, alpha_values=alpha_values)
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -857,6 +1139,20 @@ def main() -> None:
         help="α used for the single per-image tree render.",
     )
     ap.add_argument(
+        "--pca-dims",
+        nargs="+",
+        default=["none"],
+        help=(
+            "HAC merge-order PCA dims to compare, e.g. --pca-dims none 10 32 "
+            "('none' or 0 = full-dim baseline). When more than one value is "
+            "given, each sample gets a side-by-side tree render across them at "
+            "the default (K, α) — baseline 'none' always shown first — plus a "
+            "pca-metrics.md table. PCA changes only the tree topology; stored "
+            "region vectors stay full-dim. Off by default (single baseline tree, "
+            "identical to before)."
+        ),
+    )
+    ap.add_argument(
         "--backbone",
         choices=("dinov2", "dinov3"),
         default="dinov2",
@@ -875,6 +1171,50 @@ def main() -> None:
             "resolution under cache/<backbone>/r<resolution>/."
         ),
     )
+    ap.add_argument(
+        "--thumb",
+        type=int,
+        default=84,
+        help=(
+            "Node thumbnail size in px for the rendered trees (default 84). Larger = bigger, "
+            "sharper output composites (the whole tree + corner image scale with it); purely "
+            "visual, does not change the tree. Applies to the pca comparisons and the headline render."
+        ),
+    )
+    ap.add_argument(
+        "--image-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Source images from a plain directory (recursive; jpg/jpeg/png/bmp/webp) instead of "
+            "Places365 — samples --num-images files and renders ONLY the PCA tree comparison (no "
+            "GT boxes, no K×α report). Mutually exclusive with --sod-dataset."
+        ),
+    )
+    ap.add_argument(
+        "--sod-dataset",
+        choices=("coco", "lvis", "vg"),
+        default=None,
+        help=(
+            "Source images from a staged SOD dataset (scripts/sod/datasets.py) instead of "
+            "Places365: samples --num-images positive images of --sod-class and renders ONLY "
+            "the PCA tree comparison (no K×α report). Requires --sod-class."
+        ),
+    )
+    ap.add_argument(
+        "--sod-class",
+        default=None,
+        help="Class name for --sod-dataset, e.g. 'traffic light' (spaces/underscores normalised).",
+    )
+    ap.add_argument(
+        "--min-box-frac",
+        type=float,
+        default=None,
+        help=(
+            "For --sod-dataset: drop GT boxes below this fraction of the image on either axis "
+            "(the annotation GUI's floor). Defaults to sod datasets.py GUI_MIN_BOX_FRAC (0.01)."
+        ),
+    )
     args = ap.parse_args()
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -882,6 +1222,36 @@ def main() -> None:
 
     k_values = tuple(args.k_values)
     alpha_values = tuple(args.alpha_values)
+
+    # PCA dims to compare at the default (K, α). Baseline None is always first;
+    # 'none'/'0' tokens map to None (full-dim clustering), everything else to int.
+    pca_values: list[int | None] = [None]
+    for tok in args.pca_dims:
+        s = str(tok).strip().lower()
+        pv = None if s in ("none", "0", "") else int(s)
+        if pv not in pca_values:
+            pca_values.append(pv)
+    # Keyed by (k, alpha, pca): the alternate paths sweep k_values × alpha_values,
+    # the Places365 path uses (default_k, default_alpha). Filled lazily.
+    pca_metrics: dict[tuple[int, float, int | None], list[dict[str, float]]] = {}
+
+    # Alternate image sources: render ONLY the PCA tree comparison (swept over
+    # k_values × alpha_values), skipping the Places365 sampling + K×α report. A
+    # plain directory (--image-dir) or a SOD class's positive images
+    # (--sod-dataset); the two are mutually exclusive.
+    if args.image_dir and args.sod_dataset:
+        ap.error("--image-dir and --sod-dataset are mutually exclusive")
+    if args.image_dir or args.sod_dataset:
+        if args.sod_dataset and not args.sod_class:
+            ap.error("--sod-dataset requires --sod-class")
+        print(f"loading backbone {args.backbone}…")
+        bb = load_backbone(args.backbone, args.resolution)
+        print(f"  input {bb.resolution}² → {bb.grid_side}×{bb.grid_side} patch grid (patch size {bb.patch_size}px)")
+        if args.image_dir:
+            _run_dir_pca(args, bb, pca_values, pca_metrics, k_values=k_values, alpha_values=alpha_values)
+        else:
+            _run_sod_pca(args, bb, pca_values, pca_metrics, k_values=k_values, alpha_values=alpha_values)
+        return
 
     # Download Places365 val_256 (501 MB) + label file on first run.
     if not (args.places_dir / "val_256").is_dir() or not (args.places_dir / "places365_val.txt").is_file():
@@ -937,12 +1307,34 @@ def main() -> None:
             k=args.default_k,
             saliency=out.patch_saliency,
             title=f"K={args.default_k} alpha={args.default_alpha}",
+            thumb=args.thumb,
         )
         tree_path = args.out_dir / "trees" / f"{idx:02d}_{category}_{path.stem}.jpg"
         tree.save(tree_path, quality=88, optimize=True)
         print(
             f"  [{idx}] {image_label}: {'cache' if cached else 'forward'} {timings[-1]:.2f}s, tree -> {tree_path.name}"
         )
+
+        # ----- PCA comparison at the default (K, α), on the raw image --------
+        img_rgb = np.asarray(image, dtype=np.uint8)
+        comp_path = _render_pca_comparison(
+            img_rgb,
+            img_rgb,
+            out,
+            k=args.default_k,
+            alpha=args.default_alpha,
+            pca_values=pca_values,
+            pca_metrics=pca_metrics,
+            out_dir=args.out_dir,
+            stem=f"{idx:02d}_{category}_{path.stem}",
+            thumb=args.thumb,
+        )
+        if comp_path is not None:
+            print(f"       pca comparison ({len(pca_values)} dims) -> {comp_path.name}")
+
+    if len(pca_values) > 1:
+        _write_pca_metrics(args.out_dir / "pca-metrics.md", pca_metrics, backbone=args.backbone)
+        print(f"wrote pca metrics -> {args.out_dir / 'pca-metrics.md'}")
 
     # ----- aggregate metrics ------------------------------------------------
     print("\naggregating metrics…")

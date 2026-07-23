@@ -168,8 +168,8 @@ def _plot_group(
         alpha_tag = f" α{alpha}" if proposal == "hac" else ""
 
         if band == "all":
-            # One line PER SEED, each its own color + dot markers + a legend entry
-            # naming the config and seed, so every individual iteration is distinct.
+            # One line PER SEED, each its own color + a legend entry naming the
+            # config and seed, so every individual iteration is distinct.
             for seed, series in sorted(_series_by_seed(crows, field).items()):
                 sks = sorted(k for k in series if k > 0)
                 if not sks:
@@ -180,8 +180,6 @@ def _plot_group(
                     color=cmap(color_i % 20),
                     ls=ls,
                     lw=1.4,
-                    marker="o",
-                    ms=4,
                     label=f"{embedder}/{proposal}{alpha_tag} — seed {seed}",
                 )
                 color_i += 1
@@ -199,8 +197,6 @@ def _plot_group(
             color=color,
             ls=ls,
             lw=1.8,
-            marker="o",
-            ms=5,
             label=f"{embedder}/{proposal}{alpha_tag}",
         )
         # Seed-variance band (min-max or ±std across seeds).
@@ -303,8 +299,6 @@ def _plot_summary_group(
                     color=cmap(color_i % 20),
                     ls=ls,
                     lw=1.3,
-                    marker="o",
-                    ms=3,
                     label=f"{embedder}/{proposal}{alpha_tag} — {cls}",
                 )
                 color_i += 1
@@ -322,8 +316,6 @@ def _plot_summary_group(
             color=color,
             ls=ls,
             lw=1.8,
-            marker="o",
-            ms=5,
             label=f"{embedder}/{proposal}{alpha_tag}",
         )
         # Across-class spread band (min-max or ±std over the per-class means).
