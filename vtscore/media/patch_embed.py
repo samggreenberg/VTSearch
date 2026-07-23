@@ -479,6 +479,28 @@ def _merge_boxes(
     return (min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3]))
 
 
+def _affinity_vec(
+    vec_a: np.ndarray,
+    box_a: tuple[float, float, float, float],
+    vec_b: np.ndarray,
+    box_b: tuple[float, float, float, float],
+    alpha: float,
+) -> float:
+    """Higher is closer.  Tunable blend of cosine + spatial proximity.
+
+    Operates on explicit vectors so the cosine half can be computed in a
+    reduced (per-image PCA) space while the spatial half still uses the
+    node boxes.  ``vec_a``/``vec_b`` are assumed L2-normalised.
+    """
+    cosine = float(vec_a.astype(np.float32) @ vec_b.astype(np.float32))
+    ax, ay = _box_centroid(box_a)
+    bx, by = _box_centroid(box_b)
+    # Centroid distance is bounded by sqrt(2) for boxes in [0,1]²; turn it
+    # into a similarity in [0, 1].
+    spatial = 1.0 - min(((ax - bx) ** 2 + (ay - by) ** 2) ** 0.5 / (2.0**0.5), 1.0)
+    return alpha * cosine + (1.0 - alpha) * spatial
+
+
 def _affinity(
     a: RegionVector,
     b: RegionVector,
@@ -492,13 +514,39 @@ def _affinity(
     pure-adjacency (merges anything that touches).  ``alpha = 0.5`` is the
     default starting point; final value pinned by the caltech101_s sweep.
     """
-    cosine = float(a.vec.astype(np.float32) @ b.vec.astype(np.float32))
-    ax, ay = _box_centroid(a.box)
-    bx, by = _box_centroid(b.box)
-    # Centroid distance is bounded by sqrt(2) for boxes in [0,1]²; turn it
-    # into a similarity in [0, 1].
-    spatial = 1.0 - min(((ax - bx) ** 2 + (ay - by) ** 2) ** 0.5 / (2.0**0.5), 1.0)
-    return alpha * cosine + (1.0 - alpha) * spatial
+    return _affinity_vec(a.vec, a.box, b.vec, b.box, alpha)
+
+
+def _fit_pca_projector(
+    patch_grid: np.ndarray,
+    n_components: int,
+) -> Optional[Callable[[np.ndarray], np.ndarray]]:
+    """Fit a per-image PCA on the patch grid and return a vec→reduced-vec projector.
+
+    Fits :class:`sklearn.decomposition.PCA` on *this image's* flattened patch
+    vectors ``(H*W, D)`` (all of them, not just the leaves).  The returned
+    callable projects any original-space ``(D,)`` vector into the fitted
+    ``k``-dim space and L2-normalises it, so it can be dropped into the cosine
+    half of :func:`_affinity_vec`.  ``n_components`` is clamped to
+    ``min(n_components, H*W, D)``; returns ``None`` (caller falls back to the
+    full-dim cosine) when a PCA cannot be fit (``k < 1``).
+    """
+    height, width, dim = patch_grid.shape
+    n_samples = height * width
+    k = min(int(n_components), n_samples, dim)
+    if k < 1:
+        return None
+    from sklearn.decomposition import PCA  # noqa: PLC0415
+
+    matrix = patch_grid.reshape(n_samples, dim).astype(np.float32, copy=False)
+    pca = PCA(n_components=k)
+    pca.fit(matrix)
+
+    def project(vec: np.ndarray) -> np.ndarray:
+        reduced = pca.transform(np.asarray(vec, dtype=np.float32)[None, :])[0]
+        return _l2_normalize(reduced)
+
+    return project
 
 
 def build_hac_tree(
@@ -507,6 +555,7 @@ def build_hac_tree(
     *,
     patch_grid: np.ndarray,
     patch_saliency: np.ndarray,
+    pca_dims: Optional[int] = None,
 ) -> list[RegionVector]:
     """Build a strict binary HAC tree on top of *leaves*.
 
@@ -529,6 +578,13 @@ def build_hac_tree(
     The merged node's box is the union of the two child boxes (loose
     bounding rectangle - still kept for cheap UI hints, even though the
     true footprint is the union of cell masks).
+
+    ``pca_dims`` (default ``None`` = off): when set, the *merge order* is
+    decided on cosines computed in a per-image PCA space fit on the whole
+    patch grid (see :func:`_fit_pca_projector`).  This changes only the tree
+    **topology** - every stored ``.vec`` (leaves and internals alike) remains
+    the full-dim saliency-weighted pool, so downstream scoring is unaffected
+    by the reduction.  The spatial half of the affinity is unchanged.
 
     Complexity: ``O(K³)`` from the brute-force argmax inner loop.  For
     ``K ≤ 16`` this is negligible (<5 ms / image).
@@ -554,6 +610,18 @@ def build_hac_tree(
         vec_slice = patch_grid[mask].astype(np.float32, copy=False)
         weighted_sums.append((vec_slice * sal_slice[:, None]).sum(axis=0))
 
+    # Optional per-image PCA: the merge *order* is decided on PCA-reduced
+    # cosines, but every stored ``.vec`` stays full-dim.  ``sim_vecs[i]`` is
+    # the (L2-normalised) vector used for the cosine half of the affinity for
+    # node ``i`` - the projected leaf/merge vec when PCA is on, else the
+    # node's own full-dim vec (so the ``None`` path is byte-identical to
+    # before).
+    project = _fit_pca_projector(patch_grid, pca_dims) if pca_dims else None
+    if project is not None:
+        sim_vecs: list[np.ndarray] = [project(leaf.vec) for leaf in leaves]
+    else:
+        sim_vecs = [leaf.vec for leaf in leaves]
+
     live: list[int] = list(range(len(leaves)))
 
     while len(live) > 1:
@@ -561,7 +629,7 @@ def build_hac_tree(
         best_score = -np.inf
         for i_idx, i in enumerate(live):
             for j in live[i_idx + 1 :]:
-                score = _affinity(nodes[i], nodes[j], alpha)
+                score = _affinity_vec(sim_vecs[i], nodes[i].box, sim_vecs[j], nodes[j].box, alpha)
                 if score > best_score:
                     best_score = score
                     best_pair = (i, j)
@@ -583,6 +651,7 @@ def build_hac_tree(
             )
         )
         weighted_sums.append(merged_sum)
+        sim_vecs.append(project(merged_vec) if project is not None else merged_vec)
         new_idx = len(nodes) - 1
         live = [x for x in live if x not in (a_idx, b_idx)]
         live.append(new_idx)
@@ -889,6 +958,7 @@ def build_region_tree(
     seeding: str = "spread",
     leaf_assign: str = "feature",
     leaf_beta: Optional[float] = None,
+    pca_dims: Optional[int] = None,
 ) -> list[RegionVector]:
     """Build the full ``media["patch_regions"]`` list from one embedder output.
 
@@ -897,7 +967,9 @@ def build_region_tree(
     **assignment**; ``None`` (default) reuses ``alpha``, any float decouples
     it.  ``leaf_beta = 0`` == spatial assignment.  ``seeding``/``leaf_assign``
     are threaded to :func:`propose_leaves`; the defaults (``spread`` +
-    ``feature``) are the production behaviour.
+    ``feature``) are the production behaviour.  ``pca_dims`` (``None`` = off)
+    is threaded to :func:`build_hac_tree` to reorder the HAC merges in a
+    per-image PCA subspace; it changes only tree *topology*, not stored vecs.
 
     Layout of the returned list:
 
@@ -929,6 +1001,7 @@ def build_region_tree(
         alpha=alpha,
         patch_grid=output.patch_grid,
         patch_saliency=output.patch_saliency,
+        pca_dims=pca_dims,
     )
     # The first K entries of `hac` are the leaves verbatim; entries K..2K-2
     # are the internal merge nodes (children indices are local to `hac`,

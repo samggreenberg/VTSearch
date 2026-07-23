@@ -439,6 +439,57 @@ class TestLeafSeedingAndAssignment:
         assert differs, "leaf_beta=0 vs reuse-alpha(=1.0) produced identical leaves"
 
 
+class TestPcaMergeOrder:
+    """Per-image ``pca_dims``: PCA-space cosine reorders the HAC merges, but
+    only the tree *topology* changes — every stored vec (root, leaves,
+    internals) stays full-dim, and root+leaves are byte-identical to the
+    non-PCA build."""
+
+    def test_root_and_leaves_identical_to_baseline(self):
+        out = _make_output(h=6, w=6, d=16, seed=3)
+        k = 8
+        base = build_region_tree(out, k=k, alpha=0.5)
+        pca = build_region_tree(out, k=k, alpha=0.5, pca_dims=4)
+        # index 0 = CLS root; indices 1..K = HAC leaves (propose_leaves output,
+        # PCA-independent). All must match the baseline exactly.
+        for i in range(k + 1):
+            np.testing.assert_array_equal(base[i].vec, pca[i].vec)
+            assert base[i].children == pca[i].children
+
+    def test_all_stored_vecs_stay_full_dim(self):
+        out = _make_output(h=6, w=6, d=16, seed=1)
+        pca = build_region_tree(out, k=8, alpha=0.5, pca_dims=3)
+        assert len(pca) == 2 * 8
+        for node in pca:
+            assert node.vec.shape == (16,)
+            np.testing.assert_allclose(np.linalg.norm(node.vec), 1.0, atol=1e-5)
+
+    def test_pca_can_change_topology(self):
+        """A small pca_dims must actually reorder some merges vs the full-dim
+        build, for at least one seed (seeded → deterministic, not flaky)."""
+
+        def children(tree):
+            return [n.children for n in tree]
+
+        differs = False
+        for seed in range(5):
+            out = _make_output(h=6, w=6, d=16, seed=seed)
+            base = build_region_tree(out, k=8, alpha=1.0)  # pure-cosine → PCA bites hardest
+            pca = build_region_tree(out, k=8, alpha=1.0, pca_dims=2)
+            if children(base) != children(pca):
+                differs = True
+                break
+        assert differs, "pca_dims=2 never changed the merge topology across 5 seeds"
+
+    def test_pca_dims_clamped_to_available(self):
+        # pca_dims far larger than min(n_patches, dim) must clamp, not crash.
+        out = _make_output(h=4, w=4, d=8, seed=0)  # 16 patches, dim 8
+        pca = build_region_tree(out, k=4, alpha=0.5, pca_dims=100)
+        assert len(pca) == 2 * 4
+        for node in pca:
+            assert node.vec.shape == (8,)
+
+
 # ---------------------------------------------------------------------------
 # to_fp16
 # ---------------------------------------------------------------------------

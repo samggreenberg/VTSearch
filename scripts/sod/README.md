@@ -189,6 +189,6 @@ python scripts/sod/sweep.py --datasets lvis --classes "traffic light" --cache-di
 # 5 iterations with band=all + labeling trace + min-box-frac 0.05
 python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --hac-alpha 0.5 --max-labels 50 --out-dir docs/experiments/sod-sweep/coco-stopsign-dinov3-hac-alphas-5-region-voting-5-viz-bands --viz --viz-band all --iterations 5 --labeling-trace --min-box-frac 0.05
 
-# multiple classes
-python scripts/sod/sweep.py --datasets coco --classes "stop sign, traffic light" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --hac-alpha 0.5 --max-labels 50 --out-dir docs/experiments/sod-sweep/coco-stopsign-dinov3-hac-alphas-5-region-voting-5-viz-bands --viz --viz-band all --iterations 5 --labeling-trace --min-box-frac 0.05
+# multiple classes (summary), pca-dim=10
+python scripts/sod/sweep.py --datasets coco --classes "stop sign, traffic light" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --hac-alpha 0.5 --max-labels 50 --out-dir docs/experiments/sod-sweep/coco-stopsign-trafficlight-dinov3-hac-alphas-5-summary-10-pca-dims --viz --iterations 5 --labeling-trace --min-box-frac 0.05 --summary --pca-dims 10
 ```
