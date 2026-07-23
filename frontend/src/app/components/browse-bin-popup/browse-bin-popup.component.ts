@@ -223,10 +223,19 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  mode the detail pane + metadata track it — the panel is the now-playing
    *  display. Unused when floating. */
   readonly nowPlayingExt = input<NowPlaying | null>(null);
+  /** Docked only: whether the browse view is currently dragging the in-panel row
+   *  divider (see {@link rowDividerMouseDown}). Reflected as the divider's drag
+   *  cue so it stays lit while the cursor is off it mid-drag. */
+  readonly rowDividerDragging = input(false);
 
   /** Emitted when the popup should close (outside click, Escape, or the X);
    *  in docked mode, when the X asks to clear the shown bin. */
   readonly dismissed = output<void>();
+  /** Docked only: the user grabbed the horizontal divider between the
+   *  focused-item/metadata row and the member grid. The browse view runs the
+   *  drag — the focused item is square, so a taller item is a wider panel, so
+   *  the vertical drag resizes the whole panel via the panel↔canvas width. */
+  readonly rowDividerMouseDown = output<MouseEvent>();
   /** Floating header's dock button: the user wants the docked presentation. */
   readonly dockRequested = output<void>();
   /** Docked header's pop-out button: the user wants the floating window. */
