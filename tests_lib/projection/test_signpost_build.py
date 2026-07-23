@@ -138,6 +138,65 @@ class TestBuildRegionLabels:
         assert label_set.labels == ()
 
 
+class TestTerminalFlags:
+    """`has_coarser` / `has_finer`: the tree-neighbour flags the canvas fades on.
+
+    Derived from adjacent-layer cluster membership — a topic whose members are
+    *noise* in the layer one step coarser (or finer) has no sign to hand off to
+    on that side, so it's terminal and the canvas keeps it visible there.
+    """
+
+    def test_region_is_covered_majority_rule(self):
+        members = np.array([0, 1, 2, 3])
+        # 3/4 named → covered; 2/4 named → covered (ties count); 1/4 → not.
+        assert sb._region_is_covered(members, np.array([0, 5, 1, -1])) is True
+        assert sb._region_is_covered(members, np.array([0, -1, 2, -1])) is True
+        assert sb._region_is_covered(members, np.array([0, -1, -1, -1])) is False
+
+    def test_region_is_covered_edge_cases(self):
+        # No adjacent layer (pyramid edge) or no members → nothing to hand off to.
+        assert sb._region_is_covered(np.array([0, 1]), None) is False
+        assert sb._region_is_covered(np.array([], dtype=int), np.array([0, 0])) is False
+
+    def test_finest_layer_is_leaf_coarsest_is_root(self, stub_fit):
+        n = 60
+        fine = (["fine-a", "fine-b"], np.array([0, 1] * (n // 2)))
+        coarse = (["coarse"], np.zeros(n, dtype=int))
+        _, label_set = _build(n=n, layers=[fine, coarse], captured=stub_fit)
+        by_text = {lab.text: lab for lab in label_set.labels}
+
+        # Coarsest layer: no parent above (root); its whole span is named finer.
+        assert by_text["coarse"].has_coarser is False
+        assert by_text["coarse"].has_finer is True
+        # Finest layer: no child below (leaf); both fine topics sit inside "coarse".
+        assert by_text["fine-a"].has_finer is False
+        assert by_text["fine-a"].has_coarser is True
+        assert by_text["fine-b"].has_finer is False
+
+    def test_region_unnamed_in_coarser_layer_is_a_root_island(self, stub_fit):
+        # The reported bug: an island named only at a fine level, with no coarser
+        # name covering it. Coarse layer leaves rows 30–59 as noise; the fine
+        # topic there (fine-b) is both a root (no parent) and a leaf (finest) —
+        # so the canvas must keep it visible at every zoom.
+        n = 60
+        fine = (["fine-a", "fine-b"], np.array([0] * 30 + [1] * 30))
+        coarse = (["coarse"], np.array([0] * 30 + [-1] * 30))
+        _, label_set = _build(n=n, layers=[fine, coarse], captured=stub_fit)
+        by_text = {lab.text: lab for lab in label_set.labels}
+
+        assert by_text["fine-a"].has_coarser is True  # sits under "coarse"
+        assert by_text["fine-b"].has_coarser is False  # coarse layer noise → root
+        assert by_text["fine-b"].has_finer is False  # finest layer → leaf
+
+    def test_single_layer_signs_are_fully_terminal(self, stub_fit):
+        # With one layer every name is the only name for its region: no parent,
+        # no child, so it should show at every zoom (both edges terminal).
+        _, label_set = _build(n=60, layers=[(["only"], np.zeros(60, dtype=int))], captured=stub_fit)
+        (only,) = label_set.labels
+        assert only.has_coarser is False
+        assert only.has_finer is False
+
+
 class TestEmbedderTextEncoder:
     def test_encodes_into_media_space(self):
         encoder = sb.EmbedderTextEncoder(FakeEmbedder(), dim=8)

@@ -38,6 +38,19 @@ class RegionLabel:
     score: float = 1.0
     #: Which namer produced the sign (e.g. ``"keyphrase"``, ``"llm"``).
     source: str = ""
+    #: Whether a *coarser* sign names this region one zoom band out (a parent in
+    #: the topic tree).  The canvas fades a sign in at its coarse edge only to
+    #: hand a coarser name off to it; a **root** region (``has_coarser=False``)
+    #: has no such parent, so the canvas keeps it visible when zoomed out
+    #: instead of leaving the region nameless.  Defaults ``True`` so any sign not
+    #: explicitly marked terminal fades exactly as before.
+    has_coarser: bool = True
+    #: Whether a *finer* sign names this region one zoom band in (a child in the
+    #: topic tree).  The canvas fades a sign out at its fine edge only to hand
+    #: off to a finer name; a **leaf** region (``has_finer=False``) has no such
+    #: child, so the canvas keeps it visible when zoomed in rather than
+    #: expiring an on-screen island's only name.  Defaults ``True``.
+    has_finer: bool = True
 
 
 @dataclass(frozen=True)
