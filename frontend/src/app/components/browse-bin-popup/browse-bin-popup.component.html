@@ -186,6 +186,21 @@
       }
     </div>
 
+    @if (docked()) {
+      <!-- Horizontal divider between the focused-item / metadata row and the
+           member grid. Dragging it vertically resizes the whole panel: the
+           focused item is square, so a taller item is a wider panel, so the
+           browse view maps this drag onto the panel↔canvas divider. -->
+      <div
+        class="pane-divider bin-popup-row-divider"
+        [class.dragging]="rowDividerDragging()"
+        (mousedown)="rowDividerMouseDown.emit($event)"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize the panel"
+        title="Drag to resize the panel"></div>
+    }
+
     @if (docked() || !previewOnly) {
       <div class="bin-popup-grid-col">
         @if (ids.length > 0) {

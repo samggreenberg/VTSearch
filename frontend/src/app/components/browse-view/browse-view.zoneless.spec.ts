@@ -260,6 +260,47 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     expect(updates.some((u) => 'browse_details_panel_width' in u)).toBe(true);
   });
 
+  it('resizes the details panel from the in-panel row divider: a vertical drag maps 1:1 to panel width', async () => {
+    await settleZoneless(fixture);
+    const component = fixture.componentInstance;
+    const updates: Record<string, unknown>[] = [];
+    const settings = TestBed.inject(SettingsStateService);
+    (settings.update as unknown) = (u: Record<string, unknown>) => {
+      updates.push(u);
+      return of({});
+    };
+
+    // A wide layout so neither the floor nor the max clamps this drag.
+    (component as unknown as { content: () => unknown }).content = () => ({
+      nativeElement: { getBoundingClientRect: () => ({ width: 2000, left: 0, right: 2000 }) },
+    });
+
+    const startWidth = component.detailsPanelWidth();
+    component.onDetailsRowDividerMouseDown({
+      preventDefault: () => {},
+      clientY: 100,
+    } as unknown as MouseEvent);
+    expect(component.draggingDetailsRow()).toBe(true);
+
+    // Dragging the divider DOWN 60px grows the panel by 60 — the focused item is
+    // square, so a taller item is a wider panel (the whole point of this divider).
+    (component as unknown as { onDetailsRowMouseMove(e: MouseEvent): void }).onDetailsRowMouseMove({
+      clientY: 160,
+    } as unknown as MouseEvent);
+    expect(component.detailsPanelWidth()).toBeCloseTo(startWidth + 60);
+
+    // Dragging back UP past the start shrinks it below the start width.
+    (component as unknown as { onDetailsRowMouseMove(e: MouseEvent): void }).onDetailsRowMouseMove({
+      clientY: 60,
+    } as unknown as MouseEvent);
+    expect(component.detailsPanelWidth()).toBeLessThan(startWidth);
+
+    // Release ends the drag and commits the settled width to settings.
+    (component as unknown as { onDetailsRowMouseUp(): void }).onDetailsRowMouseUp();
+    expect(component.draggingDetailsRow()).toBe(false);
+    expect(updates.some((u) => 'browse_details_panel_width' in u)).toBe(true);
+  });
+
   it('drives preview-audio volume from the toolbar: slider lowers the level and mute round-trips', async () => {
     await settleZoneless(fixture);
     const component = fixture.componentInstance;

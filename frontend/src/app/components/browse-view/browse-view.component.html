@@ -56,8 +56,10 @@
               [volume]="volume()"
               [hoverThumbRadius]="thumbnailRadius"
               [nowPlayingExt]="nowPlaying()"
+              [rowDividerDragging]="draggingDetailsRow()"
               (dismissed)="dismissContextMenu()"
               (popOutRequested)="onPopOutRequested()"
+              (rowDividerMouseDown)="onDetailsRowDividerMouseDown($event)"
               (nowPlaying)="onNowPlaying($event)"
             />
           </aside>

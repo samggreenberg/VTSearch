@@ -242,6 +242,20 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private draggingDetails = false;
   private boundDetailsMove = this.onDetailsMouseMove.bind(this);
   private boundDetailsUp = this.onDetailsMouseUp.bind(this);
+
+  /**
+   * True while the docked details panel's *horizontal* row divider (between the
+   * focused-item/metadata row and the member grid, inside the panel) is being
+   * dragged. That divider resizes the whole panel — the focused item is square,
+   * so a taller item means a wider panel — by mapping the vertical drag onto the
+   * same {@link detailsPanelWidth} the panel↔canvas divider drives. A signal so
+   * the drag-cue class round-trips to the panel under zoneless.
+   */
+  readonly draggingDetailsRow = signal(false);
+  private detailsRowStartY = 0;
+  private detailsRowStartWidth = 0;
+  private boundDetailsRowMove = this.onDetailsRowMouseMove.bind(this);
+  private boundDetailsRowUp = this.onDetailsRowMouseUp.bind(this);
   /** Dynamic minimum snapshotted at drag start, so the per-move handler reuses
    *  it instead of re-measuring the DOM (and thrashing layout) on every move —
    *  the thumbnail size and sort-control width can't change mid-drag anyway. */
@@ -444,6 +458,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     document.removeEventListener('mouseup', this.boundPanelUp);
     document.removeEventListener('mousemove', this.boundDetailsMove);
     document.removeEventListener('mouseup', this.boundDetailsUp);
+    document.removeEventListener('mousemove', this.boundDetailsRowMove);
+    document.removeEventListener('mouseup', this.boundDetailsRowUp);
     this.removeShiftListeners();
     this.tileCache.clear();
     this.releaseEphemeralPositivesContext();
@@ -751,22 +767,32 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     });
   }
 
-  private onDetailsMouseMove(event: MouseEvent): void {
-    const content = this.content();
-    if (!this.draggingDetails || !content) return;
-    const rect = content.nativeElement.getBoundingClientRect();
-    // The details panel is on the left, so its width grows as the cursor moves
-    // right. Leave the canvas its minimum after both dividers + the right panel.
+  /** Largest the details panel can grow to while leaving the canvas its minimum
+   *  after both dividers and the right (selection) panel. Shared by both the
+   *  panel↔canvas divider drag and the in-panel row divider drag. */
+  private detailsMax(rect: DOMRect): number {
     const fit =
       rect.width -
       2 * BrowseViewComponent.DIVIDER_WIDTH -
       BrowseViewComponent.CANVAS_MIN -
       this.panelWidth();
-    const max = Math.min(
+    return Math.min(
       BrowseViewComponent.PANEL_MAX,
       Math.max(BrowseViewComponent.DETAILS_FLOOR, fit),
     );
-    const width = this.clamp(event.clientX - rect.left, BrowseViewComponent.DETAILS_FLOOR, max);
+  }
+
+  private onDetailsMouseMove(event: MouseEvent): void {
+    const content = this.content();
+    if (!this.draggingDetails || !content) return;
+    const rect = content.nativeElement.getBoundingClientRect();
+    // The details panel is on the left, so its width grows as the cursor moves
+    // right.
+    const width = this.clamp(
+      event.clientX - rect.left,
+      BrowseViewComponent.DETAILS_FLOOR,
+      this.detailsMax(rect),
+    );
     this.detailsPanelWidth.set(width);
   }
 
@@ -775,6 +801,12 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.draggingDetails = false;
     document.removeEventListener('mousemove', this.boundDetailsMove);
     document.removeEventListener('mouseup', this.boundDetailsUp);
+    this.finishDetailsDrag();
+  }
+
+  /** Snap + persist the settled details-panel width. Shared by both details
+   *  dividers on release. */
+  private finishDetailsDrag(): void {
     // Pop tight to the column count the user dragged to: snap away any trailing
     // empty strip so releasing never leaves a ragged half-column (mirrors the
     // right panel's snap). The docked panel reports the minimum width that still
@@ -791,6 +823,48 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.settingsState
       .update({ browse_details_panel_width: Math.round(this.detailsPanelWidth()) })
       .subscribe();
+  }
+
+  // --- Docked-details in-panel row divider drag ----------------------------
+  // A horizontal divider inside the docked panel, between the focused-item /
+  // metadata row and the member grid. It resizes the *panel width*, not a row
+  // height: the focused item is square, so dragging the divider down (a taller
+  // item) is the same as widening the panel. Mapping the vertical delta 1:1 onto
+  // the panel↔canvas width lets the user grow the item's vertical space directly
+  // instead of reaching for the side divider and reasoning about width→height.
+
+  onDetailsRowDividerMouseDown(event: MouseEvent): void {
+    event.preventDefault();
+    this.draggingDetailsRow.set(true);
+    this.detailsRowStartY = event.clientY;
+    this.detailsRowStartWidth = this.detailsPanelWidth();
+    this.ngZone.runOutsideAngular(() => {
+      document.addEventListener('mousemove', this.boundDetailsRowMove);
+      document.addEventListener('mouseup', this.boundDetailsRowUp);
+    });
+  }
+
+  private onDetailsRowMouseMove(event: MouseEvent): void {
+    const content = this.content();
+    if (!this.draggingDetailsRow() || !content) return;
+    const rect = content.nativeElement.getBoundingClientRect();
+    // Down (positive dy) grows the square item's height, hence the panel width;
+    // up shrinks it. 1:1 because the item's height tracks the panel width.
+    const dy = event.clientY - this.detailsRowStartY;
+    const width = this.clamp(
+      this.detailsRowStartWidth + dy,
+      BrowseViewComponent.DETAILS_FLOOR,
+      this.detailsMax(rect),
+    );
+    this.detailsPanelWidth.set(width);
+  }
+
+  private onDetailsRowMouseUp(): void {
+    if (!this.draggingDetailsRow()) return;
+    this.draggingDetailsRow.set(false);
+    document.removeEventListener('mousemove', this.boundDetailsRowMove);
+    document.removeEventListener('mouseup', this.boundDetailsRowUp);
+    this.finishDetailsDrag();
   }
 
   /** Toggle region-select mode (drag-to-marquee without holding Shift). */
