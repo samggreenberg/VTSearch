@@ -129,7 +129,11 @@ const DOCKED_MAIN_MIN = 60;
  *   ``browse_details_metadata_width``) and the item grows to fill whatever the
  *   row leaves ({@link dockedPaneSize}), so the docked panel has no per-item
  *   size buttons — the panel↔canvas divider sizes the item (and re-chunks the
- *   grid columns) instead. The panel is always mounted while the option is on —
+ *   grid columns) instead. A second, horizontal divider between that top row and
+ *   the member grid ({@link rowDividerMouseDown}) is a friendlier handle onto the
+ *   same size: the item is square, so dragging it down (a taller item) is just a
+ *   wider panel, which the browse view applies by moving the panel↔canvas
+ *   divider. The panel is always mounted while the option is on —
  *   before any bin is opened it shows an empty hint — and for audio its detail
  *   pane doubles as the now-playing display ({@link nowPlayingExt}), replacing
  *   the toolbar's small waveform widget. A singleton bin keeps the grid area
