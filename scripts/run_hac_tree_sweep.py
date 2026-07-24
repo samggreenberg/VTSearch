@@ -764,6 +764,8 @@ def _render_pca_comparison(
     thumb: int = 84,
     attn_full: np.ndarray | None = None,
     attn_corner: np.ndarray | None = None,
+    seeding: str = "topk",
+    leaf_assign: str = "spatial",
 ) -> Path | None:
     """Build the tree at each pca value and (when >1) hstack a side-by-side composite.
 
@@ -784,7 +786,7 @@ def _render_pca_comparison(
     panels: list[Image.Image] = []
     attn_panels: list[Image.Image] = []
     for pv in pca_values:
-        regions_pv = build_region_tree(out, k=k, alpha=alpha, pca_dims=pv)
+        regions_pv = build_region_tree(out, k=k, alpha=alpha, pca_dims=pv, seeding=seeding, leaf_assign=leaf_assign)
         pca_metrics.setdefault((k, alpha, pv), []).append(measure_config(regions_pv, k=k))
         if len(pca_values) > 1:
             title = f"pca={'none' if pv is None else pv}"
@@ -1019,6 +1021,8 @@ def _render_source_pca(
                     thumb=args.thumb,
                     attn_full=attn,
                     attn_corner=attn_corner,
+                    seeding=args.leaf_seeding,
+                    leaf_assign=args.leaf_assign,
                 )
                 if comp_path is not None:
                     n_comp += 1
@@ -1150,6 +1154,28 @@ def main() -> None:
             "pca-metrics.md table. PCA changes only the tree topology; stored "
             "region vectors stay full-dim. Off by default (single baseline tree, "
             "identical to before)."
+        ),
+    )
+    ap.add_argument(
+        "--leaf-seeding",
+        choices=("topk", "spread"),
+        default="topk",
+        help=(
+            "Leaf seed placement for every tree in this run. 'topk' (default) = "
+            "the K highest-saliency patches; 'spread' = greedy peaks with spatial "
+            "non-max suppression so seeds spread across objects (small objects can "
+            "win a seed). Compare approaches by running into separate --out-dir's."
+        ),
+    )
+    ap.add_argument(
+        "--leaf-assign",
+        choices=("spatial", "feature"),
+        default="spatial",
+        help=(
+            "Patch-cell binding for every tree in this run. 'spatial' (default) = "
+            "nearest seed by grid distance (Voronoi); 'feature' = argmax of "
+            "α·cosine + (1-α)·spatial (same α as the merge), so leaves follow "
+            "content. Compare approaches by running into separate --out-dir's."
         ),
     )
     ap.add_argument(
@@ -1295,7 +1321,9 @@ def main() -> None:
         config_regions: dict[tuple[int, float], list[RegionVector]] = {}
         for k in k_values:
             for alpha in alpha_values:
-                regions = build_region_tree(out, k=k, alpha=alpha)
+                regions = build_region_tree(
+                    out, k=k, alpha=alpha, seeding=args.leaf_seeding, leaf_assign=args.leaf_assign
+                )
                 config_metrics[(k, alpha)].append(measure_config(regions, k=k))
                 config_regions[(k, alpha)] = regions
 
