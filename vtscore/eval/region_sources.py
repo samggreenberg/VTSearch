@@ -338,6 +338,8 @@ class _PatchSource:
         k: int = 12,
         alpha: float = 0.5,
         pca_dims: int | None = None,
+        seeding: str = "topk",
+        leaf_assign: str = "spatial",
         proposer: Proposer | None = None,
         region_voting: bool = False,
     ) -> None:
@@ -349,6 +351,10 @@ class _PatchSource:
         # vecs stay full-dim). None = off. Inert for the box-pool variant, which
         # never builds a tree.
         self._pca_dims = pca_dims
+        # Leaf-proposal knobs (HAC-tree variant only): seed placement and
+        # cell-to-seed binding. Defaults reproduce the original baseline.
+        self._seeding = seeding
+        self._leaf_assign = leaf_assign
         self._proposer = proposer
         # Region-voting label construction (matches the app detector's DINO-patch
         # path): a Good vote's box snaps to the nearest tree node, and negatives
@@ -380,7 +386,14 @@ class _PatchSource:
         cell_masks: np.ndarray | None = None
         saliency: np.ndarray | None = None
         if self._proposer is None:
-            tree = build_region_tree(pe, k=self._k, alpha=self._alpha, pca_dims=self._pca_dims)
+            tree = build_region_tree(
+                pe,
+                k=self._k,
+                alpha=self._alpha,
+                pca_dims=self._pca_dims,
+                seeding=self._seeding,
+                leaf_assign=self._leaf_assign,
+            )
             boxes = np.asarray([r.box for r in tree], dtype=np.float32)
             vecs = np.asarray([r.vec for r in tree], dtype=np.float32)
             # Childless nodes (CLS + HAC leaves) — the set a Bad vote floods.
@@ -456,6 +469,8 @@ def build_region_source(
     hac_k: int = 12,
     hac_alpha: float = 0.5,
     hac_pca_dims: int | None = None,
+    hac_seeding: str = "topk",
+    hac_leaf_assign: str = "spatial",
     dino_model_id: str | None = None,
     dino_device: str = "cpu",
     dino_register_tokens: int = 0,
@@ -489,6 +504,8 @@ def build_region_source(
             k=hac_k,
             alpha=hac_alpha,
             pca_dims=hac_pca_dims,
+            seeding=hac_seeding,
+            leaf_assign=hac_leaf_assign,
             proposer=None,
             region_voting=region_voting,
         )
