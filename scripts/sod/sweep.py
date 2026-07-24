@@ -59,7 +59,11 @@ def _proposal_slug(proposal: str, args, alpha: float, region_voting: bool = Fals
         # Per-image PCA changes the tree topology (and thus cached region vecs/
         # boxes/children), so a PCA run must not reuse non-PCA cached regions.
         pca = f"_pca{args.pca_dims}" if args.pca_dims else ""
-        return f"hac{rv}_k{args.hac_k}_a{alpha}{pca}"
+        # Leaf seeding/assignment also change the tree; tag only when non-default
+        # so existing default-run caches keep their slug.
+        seed_tag = "" if args.leaf_seeding == "topk" else f"_seed-{args.leaf_seeding}"
+        asg_tag = "" if args.leaf_assign == "spatial" else f"_asg-{args.leaf_assign}"
+        return f"hac{rv}_k{args.hac_k}_a{alpha}{pca}{seed_tag}{asg_tag}"
     return "whole"
 
 
@@ -75,6 +79,8 @@ def _build_source(proposal: str, embedder, args, alpha: float, region_voting: bo
         hac_k=args.hac_k,
         hac_alpha=alpha,
         hac_pca_dims=args.pca_dims,
+        hac_seeding=args.leaf_seeding,
+        hac_leaf_assign=args.leaf_assign,
         dino_model_id=DINOV2_MODEL_ID,
         dino_device=resolve_device(),
         dino_register_tokens=0,
@@ -380,6 +386,22 @@ def main() -> int:
         help="hac proposal only: fit a per-image PCA of this many dims on the patch grid and "
         "decide HAC merge order in that space (tree topology only; stored vecs stay full-dim). "
         "Off by default; clamped to min(dims, n_patches, embed_dim). Gets its own cache slug.",
+    )
+    ap.add_argument(
+        "--leaf-seeding",
+        choices=("topk", "spread"),
+        default="topk",
+        help="hac proposal only: how leaf seeds are placed. 'topk' (default) = the K highest-"
+        "saliency patches; 'spread' = greedy peaks with spatial non-max suppression so seeds "
+        "spread across objects (small objects can win a seed). Non-default gets its own cache slug.",
+    )
+    ap.add_argument(
+        "--leaf-assign",
+        choices=("spatial", "feature"),
+        default="spatial",
+        help="hac proposal only: how patch cells bind to seeds. 'spatial' (default) = nearest seed "
+        "by grid distance (Voronoi); 'feature' = argmax of alpha*cosine + (1-alpha)*spatial (same "
+        "alpha as the HAC merge), so leaves follow content. Non-default gets its own cache slug.",
     )
     ap.add_argument("--prompt-template", default="a photo of a {}")
     ap.add_argument("--out-dir", type=Path, default=Path("docs/experiments/sod-sweep"))

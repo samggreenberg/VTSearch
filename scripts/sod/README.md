@@ -35,6 +35,14 @@ rationale: `docs/plans/` (small-object sweep).
   A no-op for other proposals (so `--proposals whole,hac --region-voting` runs `whole`
   normally). Uses a distinct `hac_rv_*` cache slug (don't reuse a plain-`hac` cache). Only
   alpha=0.5 / k=12 reproduce production's tree (its fixed build params).
+- **`--leaf-seeding {topk,spread}`** / **`--leaf-assign {spatial,feature}`** (optional,
+  default `topk`/`spatial` = production baseline; **hac only**): how the HAC *leaves* are
+  proposed. `topk` seeds = the K highest-saliency patches (which pile onto the brightest
+  object); `spread` = greedy peaks with spatial non-max suppression, so seeds spread across
+  objects and a small object can win its own seed. `spatial` assignment = nearest seed by
+  grid distance (Voronoi); `feature` = `α·cosine + (1-α)·spatial` (same α as the merge), so
+  leaf boundaries follow content. Non-default values get their own cache slug
+  (`…_seed-spread`, `…_asg-feature`), so they never reuse baseline caches.
 
 ## Labeling loop (realistic Autopilot)
 Each cell simulates the app's **Autopilot active-learning loop**, so the x-axis is
