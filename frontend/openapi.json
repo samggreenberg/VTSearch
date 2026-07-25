@@ -4654,6 +4654,16 @@
       "RegionLabel": {
         "additionalProperties": false,
         "properties": {
+          "has_coarser": {
+            "default": true,
+            "description": "Whether a coarser sign names this region one zoom band out (a parent). False for a root region, which the canvas keeps visible when zoomed out instead of fading in under a parent.",
+            "type": "boolean"
+          },
+          "has_finer": {
+            "default": true,
+            "description": "Whether a finer sign names this region one zoom band in (a child). False for a leaf region, which the canvas keeps visible when zoomed in instead of expiring with nothing to hand off to.",
+            "type": "boolean"
+          },
           "level": {
             "description": "Pyramid zoom level the sign belongs to (0 = coarsest). May be fractional; the canvas interpolates visibility on a continuous axis.",
             "type": "number"

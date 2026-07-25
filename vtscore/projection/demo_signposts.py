@@ -144,6 +144,14 @@ def build_category_signposts(
     if not members:
         return empty
 
+    # A prefix earns a sign only with enough members; a sign is terminal on its
+    # fine edge (a **leaf**) when no one-segment-longer prefix also earns one,
+    # and terminal on its coarse edge (a **root**) at depth 0.  Its parent
+    # prefix has at least as many members, so a kept child always has a kept
+    # parent — ``has_coarser`` reduces to ``depth > 0``.
+    earned = {prefix for prefix, rows in members.items() if len(rows) >= _MIN_MEMBERS}
+    parents_with_children = {prefix[:-1] for prefix in earned if len(prefix) >= 2}
+
     labels: list[RegionLabel] = []
     for prefix, rows in members.items():
         if len(rows) < _MIN_MEMBERS:
@@ -161,6 +169,8 @@ def build_category_signposts(
                 # member count as the score makes that ordering explicit.
                 score=float(len(rows)),
                 source="ground-truth",
+                has_coarser=depth > 0,
+                has_finer=prefix in parents_with_children,
             )
         )
 

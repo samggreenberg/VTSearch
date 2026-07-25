@@ -95,6 +95,26 @@ class RegionLabelSchema(Schema):
         load_default="",
         metadata={"description": 'Which namer produced the sign (e.g. "keyphrase", "llm").'},
     )
+    has_coarser = fields.Boolean(
+        load_default=True,
+        metadata={
+            "description": (
+                "Whether a coarser sign names this region one zoom band out (a "
+                "parent). False for a root region, which the canvas keeps "
+                "visible when zoomed out instead of fading in under a parent."
+            ),
+        },
+    )
+    has_finer = fields.Boolean(
+        load_default=True,
+        metadata={
+            "description": (
+                "Whether a finer sign names this region one zoom band in (a "
+                "child). False for a leaf region, which the canvas keeps visible "
+                "when zoomed in instead of expiring with nothing to hand off to."
+            ),
+        },
+    )
 
 
 class ProjectionLabelsResponseSchema(Schema):

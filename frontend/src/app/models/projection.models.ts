@@ -50,6 +50,22 @@ export interface RegionLabelPayload {
   score?: number;
   /** Which namer produced the sign (e.g. "keyphrase", "llm"). */
   source?: string;
+  /**
+   * Whether a coarser sign names this region one zoom band out (a parent in the
+   * topic tree). `false` marks a **root** region: the canvas skips the coarse-
+   * edge fade-in and keeps the sign visible when zoomed out, so the region
+   * isn't left nameless with nothing coarser covering it. Absent ⇒ `true`
+   * (treated as having a parent — the pre-flag fading behaviour).
+   */
+  has_coarser?: boolean;
+  /**
+   * Whether a finer sign names this region one zoom band in (a child in the
+   * topic tree). `false` marks a **leaf** region: the canvas skips the fine-
+   * edge fade-out and keeps the sign visible as you zoom in, so an on-screen
+   * island's only name doesn't expire with nothing finer to hand off to.
+   * Absent ⇒ `true`.
+   */
+  has_finer?: boolean;
 }
 
 /** Response of ``GET /api/projection/labels``. */
