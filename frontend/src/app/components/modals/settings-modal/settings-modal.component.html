@@ -445,6 +445,10 @@
             <div class="server-value">{{ settings().max_concurrent_dataset_embeddings ?? '—' }}</div>
           </div>
           <div class="form-group">
+            <label class="form-label" title="When on, this server offers Semantic embedders only: the prototype Patch Semantic and Structural types are hidden from every picker and rejected by the API. Set with --semantic-only, VTSEARCH_SEMANTIC_ONLY, or the semantic_only setting.">Semantic embedders only</label>
+            <div class="server-value">{{ settings().semantic_only ? 'On' : 'Off' }}</div>
+          </div>
+          <div class="form-group">
             <label class="form-label" title="Plugins hidden from pickers and listings for this deployment (still callable by name). Combines the persisted setting with any --hide-plugin CLI flags.">Hidden plugins</label>
             @if (hiddenPluginsDisplay.length > 0) {
               <ul class="server-list">

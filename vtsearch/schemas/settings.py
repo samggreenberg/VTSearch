@@ -170,6 +170,13 @@ class AppSettingsSchema(Schema):
     # can build a pre-addressed ``mailto:`` link. Not in
     # ``SettingsUpdateSchema`` - not editable via PUT.
     support_email = fields.String(dump_only=True)
+    # Server-tier "Semantic embedders only" lock. Set via the
+    # ``--semantic-only`` CLI flag / ``VTSEARCH_SEMANTIC_ONLY`` env var
+    # (process-wide, all users) or the persisted settings file; surfaced
+    # read-only here so the New-detector modal can hide its embedder-type
+    # picker and the Server settings tab can report the restriction. Not in
+    # ``SettingsUpdateSchema`` - not editable via PUT.
+    semantic_only = fields.Boolean(dump_only=True)
 
     # Auto-Find (per-user, editable from the Auto-Find settings tab).
     # ``autofind_detectors`` is each user's own list of detectors that auto-run

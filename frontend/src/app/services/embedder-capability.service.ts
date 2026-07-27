@@ -1,6 +1,7 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 
 import { DatasetsListingsApiService } from './datasets-listings-api.service';
+import { SettingsStateService } from './settings-state.service';
 import type { EmbedderInfo } from '../models/api.models';
 
 /**
@@ -36,10 +37,33 @@ export const EMBEDDER_TYPE_ORDER: EmbedderType[] = ['semantic', 'patch_semantic'
 @Injectable({ providedIn: 'root' })
 export class EmbedderCapabilityService {
   private readonly api = inject(DatasetsListingsApiService);
+  private readonly settingsState = inject(SettingsStateService);
 
   /** Loaded embedder metadata, or `null` until the registry resolves. */
   readonly infos = signal<EmbedderInfo[] | null>(null);
   private loading = false;
+
+  /**
+   * Whether this deployment is locked to Semantic embedders (the server-tier
+   * `semantic_only` setting, set with `--semantic-only` /
+   * `VTSEARCH_SEMANTIC_ONLY`). The prototype Patch Semantic and Structural
+   * types are then withheld from `GET /api/embedders` as well, so the concrete
+   * embedder pickers empty out on their own; this flag is what the *type*-level
+   * UI (the New-detector modal's Detector Embedder Type picker) reads, since a
+   * type is declared intent and has no registry entry to filter.
+   *
+   * Defaults to `false` until settings load, so nothing is hidden on missing
+   * metadata.
+   */
+  readonly semanticOnly = computed(() => this.settingsState.settingsSignal()?.semantic_only === true);
+
+  /**
+   * The embedder types this deployment offers as a *choice*: all three
+   * normally, Semantic alone under the lock.
+   */
+  get offeredTypes(): EmbedderType[] {
+    return this.semanticOnly() ? ['semantic'] : EMBEDDER_TYPE_ORDER;
+  }
 
   /** Kick off a one-time load of the embedder registry. Idempotent. */
   ensureLoaded(): void {

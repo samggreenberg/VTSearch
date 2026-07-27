@@ -396,6 +396,10 @@
             "readOnly": true,
             "type": "string"
           },
+          "semantic_only": {
+            "readOnly": true,
+            "type": "boolean"
+          },
           "show_animations": {
             "enum": [
               "show",
@@ -11936,7 +11940,7 @@
     },
     "/api/embedders": {
       "get": {
-        "description": "Query parameters:\nmedia_type: A ``type_id`` (e.g. ``\"image\"``) or ``folder_import_name``\n    (e.g. ``\"images\"``).  When provided, only embedders whose\n    ``media_type_id`` matches are returned.",
+        "description": "Two deployment-level hides apply on top of that filter: the admin's\n``hidden_plugins`` / ``--hide-plugin`` list, and the ``semantic_only``\nlock (``--semantic-only``), which withholds every patch / structural\nembedder so the prototype types never reach a picker.\n\nQuery parameters:\n    media_type: A ``type_id`` (e.g. ``\"image\"``) or ``folder_import_name``\n        (e.g. ``\"images\"``).  When provided, only embedders whose\n        ``media_type_id`` matches are returned.",
         "operationId": "embedders_list",
         "parameters": [
           {

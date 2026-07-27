@@ -569,7 +569,7 @@ suggestions) and resolve via the active `DatasetContext` /
 
 Persistent settings live in `vtsearch/settings.py`, split across two
 tiers.  **Server tier** (shared, `data/settings.json`): `saved_datasets_dir`,
-`detectors_dir`, `max_concurrent_*`, `hidden_plugins`.
+`detectors_dir`, `max_concurrent_*`, `hidden_plugins`, `semantic_only`.
 **Per-user tier** (`<user_data_dir>/user_settings.json`): everything else;
 `volume`, `theme`, `inclusion`, `enrich_descriptions`, `safe_thresholds`,
 `calibrate_count`, `calibration_fraction`, `audio_playing`, `show_animations`,

@@ -470,6 +470,41 @@ same override is also available as the `VTSEARCH_SUPPORT_EMAIL`
 environment variable for the gunicorn-launched Docker images; an
 explicit `--support-email` flag wins over it.
 
+**Semantic embedders only** (`--semantic-only`): lock the instance to the
+**Semantic** embedder type, hiding the still-prototype **Patch Semantic**
+and **Structural** types from every surface:
+
+```bash
+python app.py --semantic-only
+```
+
+With the lock on:
+
+- `GET /api/embedders` withholds every patch / structural embedder, so
+  Add Dataset ▸ Advanced shows no "Region embedder" / "Instance embedder"
+  picker and the primary Embedder picker lists Semantic embedders only.
+- The New-detector modal drops its "Detector Embedder Type" picker (one
+  option is not a choice) and creates Semantic detectors.
+- `POST /api/detectors` and the dataset-import routes reject a
+  patch/structural type with **400**, so a stale client or a hand-rolled
+  request can't bind one behind the UI's back.
+
+This is a coarser tool than `--hide-plugin embedders:<name>`, which hides
+one named embedder: use `--semantic-only` when you want the whole
+prototype tier gone and don't want to track which embedders belong to it.
+
+Like `--dataset-max-age-days` and `--support-email`, this is a
+**server-wide override**: it applies to every user, overrides the
+persisted `semantic_only` in the settings file for the lifetime of the
+process, and is **not** editable via the Settings dialog or the settings
+API (it is exposed read-only, and the Settings ▸ Server tab reports it).
+The flag can only *enable* the lock — there is no `--no-semantic-only` —
+so a deployment that sets `semantic_only: true` in its settings file
+can't have the restriction loosened by a stray flag. The same override is
+available as the `VTSEARCH_SEMANTIC_ONLY` environment variable (`1` /
+`true` / `yes` / `on`) for the gunicorn-launched Docker images; an
+explicit `--semantic-only` flag wins over it.
+
 ## Inspecting plugins and the API schema
 
 `python app.py --list-plugins` enumerates every auto-discovered plugin;
