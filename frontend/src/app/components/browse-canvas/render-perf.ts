@@ -25,6 +25,26 @@
  *   low-effects mode after sustained slow frames.
  */
 
+/**
+ * The user-facing "Graphics" choice (the ``browse_graphics`` setting).
+ * ``auto`` runs the detection described above; ``full`` and ``reduced`` pin
+ * the pipeline, so an admin can force the cheap path on a deployment whose
+ * clients the probe can't recognize, or force the rich one if detection ever
+ * misfires. Mirrors ``BrowseGraphics`` in ``vtsearch/settings_models.py``.
+ */
+export type BrowseGraphicsMode = 'auto' | 'full' | 'reduced';
+
+/**
+ * Resolve whether to paint cheaply, given the user's setting and what the
+ * automatic detection currently believes. Pure, so the three-way precedence
+ * is testable without a canvas.
+ */
+export function resolveLowEffects(mode: BrowseGraphicsMode, detectedSlow: boolean): boolean {
+  if (mode === 'full') return false;
+  if (mode === 'reduced') return true;
+  return detectedSlow;
+}
+
 /** EMA threshold (ms) above which frame painting is considered too slow to
  * sustain the full-effects animation pipeline: past this the canvas cannot
  * hold even ~40 fps, so the eased zoom/pan reads as a stutter. */

@@ -8,6 +8,7 @@ import {
   BrowseContextMenuEvent,
   HexHoverEvent,
 } from '../browse-canvas/browse-canvas.component';
+import type { BrowseGraphicsMode } from '../browse-canvas/render-perf';
 import { BrowseHoverPreviewComponent, NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
 import { BrowseBinPopupComponent } from '../browse-bin-popup/browse-bin-popup.component';
 import { BrowseLegendComponent } from '../browse-legend/browse-legend.component';
@@ -277,6 +278,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * signpost button in the canvas toolbar, which persists the choice back.
    */
   readonly signposts = signal(true);
+
+  /**
+   * Canvas rendering effort — the ``browse_graphics`` setting, mirrored here
+   * and passed to the canvas. Unlike the other browse prefs this is a single
+   * scalar rather than a per-media-type map: it describes the client's
+   * rendering capability, not anything about the data. ``auto`` (the default)
+   * lets the canvas detect a software-rendering browser for itself.
+   */
+  readonly graphics = signal<BrowseGraphicsMode>('auto');
 
   /** The ``projection_id`` the current {@link labels} were fetched for (or
    *  requested for — set before the request so a poll can't double-fetch). */
@@ -623,6 +633,12 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     const signMap = s.browse_signposts as { [key: string]: boolean } | undefined;
     const rawSigns = mt && signMap ? signMap[mt] : undefined;
     this.signposts.set(rawSigns == null ? true : rawSigns);
+
+    // Global (not per-media): the client's rendering capability.
+    const rawGraphics = s.browse_graphics;
+    this.graphics.set(
+      rawGraphics === 'full' || rawGraphics === 'reduced' ? rawGraphics : 'auto',
+    );
 
     const dockMap = s.bin_details_docked as { [key: string]: boolean } | undefined;
     this.detailsDocked.set(!!(mt && dockMap && dockMap[mt]));

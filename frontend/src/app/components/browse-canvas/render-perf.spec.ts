@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   detectSoftwareRenderer,
   FramePerfMonitor,
+  resolveLowEffects,
   SLOW_FRAME_ENTER_MS,
   SLOW_FRAME_MIN_SAMPLES,
   SLOW_FRAME_SAMPLE_CAP_MS,
@@ -62,6 +63,23 @@ describe('FramePerfMonitor', () => {
     const m = new FramePerfMonitor();
     for (let i = 0; i < 200; i++) m.record(6);
     expect(m.slow).toBe(false);
+  });
+});
+
+describe('resolveLowEffects', () => {
+  it('defers to the detection in auto mode', () => {
+    expect(resolveLowEffects('auto', false)).toBe(false);
+    expect(resolveLowEffects('auto', true)).toBe(true);
+  });
+
+  it('forces the rich pipeline in full mode, even on a detected-slow client', () => {
+    expect(resolveLowEffects('full', true)).toBe(false);
+    expect(resolveLowEffects('full', false)).toBe(false);
+  });
+
+  it('forces the cheap pipeline in reduced mode, even on a fast client', () => {
+    expect(resolveLowEffects('reduced', false)).toBe(true);
+    expect(resolveLowEffects('reduced', true)).toBe(true);
   });
 });
 

@@ -151,6 +151,27 @@ describe('SettingsModalComponent', () => {
     httpMock.expectOne('/api/settings').flush(mockSettings);
   });
 
+  it('should default the Graphics pulldown to auto when the setting is unset', async () => {
+    await flushInit();
+    expect(component.browseGraphics).toBe('auto');
+  });
+
+  it('should update the Graphics pulldown and save', async () => {
+    await flushInit();
+    component.onBrowseGraphicsChange('reduced');
+    expect(component.settings().browse_graphics).toBe('reduced');
+    expect(component.browseGraphics).toBe('reduced');
+    httpMock.expectOne('/api/settings').flush(mockSettings);
+  });
+
+  it('should fall back to auto for an unrecognized stored Graphics value', async () => {
+    await flushInit();
+    component.settings.update(
+      (s) => ({ ...s, browse_graphics: 'turbo' }) as typeof s,
+    );
+    expect(component.browseGraphics).toBe('auto');
+  });
+
   it('should update number setting and save', async () => {
     await flushInit();
     component.onNumberChange('calibrate_count', 100);

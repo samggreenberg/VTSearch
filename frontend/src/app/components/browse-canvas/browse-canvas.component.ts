@@ -40,7 +40,12 @@ import {
   viewLevelForZoom,
 } from './sign-layout';
 import { prefersReducedMotion } from '../../utils/reduced-motion';
-import { detectSoftwareRenderer, FramePerfMonitor } from './render-perf';
+import {
+  detectSoftwareRenderer,
+  FramePerfMonitor,
+  resolveLowEffects,
+  type BrowseGraphicsMode,
+} from './render-perf';
 import { onDevicePixelRatioChange } from '../../utils/device-pixel-ratio';
 import type {
   HexCellPayload,
@@ -178,6 +183,13 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    * so the two gestures stay in lock-step.
    */
   readonly zoomsPerLevel = input(2);
+  /**
+   * Canvas rendering effort — the ``browse_graphics`` setting, surfaced as the
+   * "Graphics" pulldown at the top of Settings → Browser. ``auto`` (the
+   * default) lets {@link perf} decide per client; ``full`` and ``reduced`` pin
+   * the pipeline. See {@link lowFx} and `render-perf.ts`.
+   */
+  readonly graphics = input<BrowseGraphicsMode>('auto');
   readonly hexHover = output<HexHoverEvent | null>();
   /** A right-click on the canvas; the view opens the bin popup in response. */
   readonly contextMenu = output<BrowseContextMenuEvent>();
@@ -256,12 +268,13 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   // per-frame cost: viewport-sized snapshots only (no overscan ring),
   // nearest-neighbour blits, no shadow blurs, and a dpr capped at 1. Seeded
   // upfront by the WebGL renderer probe (SwiftShader et al.) and latched at
-  // runtime by measured frame costs — see `render-perf.ts` for both.
+  // runtime by measured frame costs — see `render-perf.ts` for both. The
+  // {@link graphics} setting overrides the detection in either direction.
   private readonly perf = new FramePerfMonitor(detectSoftwareRenderer());
 
   /** Whether to paint frames in the cheap, software-rasterizer-friendly way. */
   private get lowFx(): boolean {
-    return this.perf.slow;
+    return resolveLowEffects(this.graphics(), this.perf.slow);
   }
 
   /**
@@ -274,13 +287,27 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    * in-flight animation, which is an acceptable one-time snap.
    */
   private recordFrameCost(startTs: number): void {
-    const wasSlow = this.perf.slow;
+    const wasLow = this.lowFx;
     this.perf.record(performance.now() - startTs);
-    if (!wasSlow && this.perf.slow && this.dpr > 1) {
-      setTimeout(() => {
-        if (!this.destroyed) this.resize();
-      });
-    }
+    // Only an *effective* flip matters: with the setting pinned to full or
+    // reduced the latch changes nothing on screen, so there is nothing to
+    // re-measure the backing store for.
+    if (!wasLow && this.lowFx) this.syncBackingStoreToEffects();
+  }
+
+  /**
+   * Re-run {@link resize} when the effective effects level changes, so the
+   * backing store picks up (or drops) the low-effects dpr cap — the single
+   * biggest per-frame saving on a hiDPI display. Deferred rather than run
+   * inline because callers are mid-paint, and the resize cancels any in-flight
+   * animation; that one-time snap is the cost of switching pipelines. A no-op
+   * where the cap can't bite (the device is already at dpr 1).
+   */
+  private syncBackingStoreToEffects(): void {
+    if (window.devicePixelRatio <= 1) return;
+    setTimeout(() => {
+      if (!this.destroyed) this.resize();
+    });
   }
 
   private transform: ViewTransform = { centerX: 0, centerY: 0, zoom: 1 };
@@ -599,6 +626,20 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    *  showing, since hover is suppressed while the mode is on. */
   private readonly marqueeModeChanged = effect(() => {
     if (this.marqueeMode()) untracked(() => this.clearHover());
+  });
+
+  /** Switching the "Graphics" setting changes what a frame costs to paint, so
+   *  the backing store's dpr cap may need to come or go; the resize repaints.
+   *  When the cap can't bite (dpr 1) a plain repaint picks up the new effects.
+   *  Skips the first run: `ngAfterViewInit`'s initial `resize` already sizes
+   *  the backing store against the starting mode. */
+  private readonly graphicsChanged = effect(() => {
+    this.graphics();
+    untracked(() => {
+      if (!this.hasDrawn) return;
+      this.syncBackingStoreToEffects();
+      this.requestRedraw();
+    });
   });
 
   /** Repaint-only inputs: a colormap change only affects flat (non-thumbnail)

@@ -215,6 +215,14 @@
           "browse_details_panel_width": {
             "type": "integer"
           },
+          "browse_graphics": {
+            "enum": [
+              "auto",
+              "full",
+              "reduced"
+            ],
+            "type": "string"
+          },
           "browse_icon_size": {
             "additionalProperties": {
               "type": "string"
@@ -5014,6 +5022,14 @@
           },
           "browse_details_panel_width": {
             "type": "integer"
+          },
+          "browse_graphics": {
+            "enum": [
+              "auto",
+              "full",
+              "reduced"
+            ],
+            "type": "string"
           },
           "browse_icon_size": {},
           "browse_mouse_zooms_per_level": {},

@@ -34,6 +34,7 @@ __all__ = [
     "POPUP_PREVIEW_SIZE_PX",
     "AnimationMode",
     "BrowseColormap",
+    "BrowseGraphics",
     "BrowseIconSize",
     "FocusMode",
     "GridIconSize",
@@ -43,6 +44,7 @@ __all__ = [
     "VALID_ANIMATION_MODES",
     "coerce_animation_mode",
     "VALID_BROWSE_COLORMAPS",
+    "VALID_BROWSE_GRAPHICS",
     "VALID_BROWSE_ICON_SIZES",
     "VALID_FOCUS_MODES",
     "VALID_GRID_ICON_SIZES",
@@ -93,12 +95,22 @@ BrowseColormap = Literal["auto", "heat", "ocean", "gray"]
 # steps render a cell close to the full media, so the canvas serves the original
 # image rather than a low-res thumbnail at those sizes.
 BrowseIconSize = Literal["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"]
+# VTSBrowse canvas rendering effort. The browse canvas's pan/zoom animations
+# lean on operations a GPU does for free but a software rasterizer does not
+# (smoothed full-canvas blits, overscanned snapshot buffers, shadow blurs), so
+# a browser running without hardware acceleration pans and zooms badly.
+# ``full`` always runs the rich pipeline, ``reduced`` always runs the cheap one
+# (same animations, minus the effects a CPU rasterizer can't afford), and
+# ``auto`` (the default) picks per client — probing the WebGL renderer for a
+# software rasterizer and, failing that, latching on measured frame costs.
+BrowseGraphics = Literal["auto", "full", "reduced"]
 
 VALID_THEMES: tuple[str, ...] = ("dark", "light", "highviz", "system")
 VALID_ANIMATION_MODES: tuple[str, ...] = ("show", "hide", "os")
 VALID_GRID_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
 VALID_FOCUS_MODES: tuple[str, ...] = ("click", "hover")
 VALID_BROWSE_COLORMAPS: tuple[str, ...] = ("auto", "heat", "ocean", "gray")
+VALID_BROWSE_GRAPHICS: tuple[str, ...] = ("auto", "full", "reduced")
 VALID_BROWSE_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL")
 # Allowed range (CSS px) for the saved left/right panel widths. The floor keeps
 # a panel usable; the ceiling is a sanity bound only. The frontend resize logic
@@ -364,6 +376,17 @@ class UserSettings(BaseModel):
     # surfaced as a Settings-modal widget - the divider drives it. Clamped to a
     # sane on-screen range.
     browse_details_metadata_width: Annotated[int, _clamp(120, 600)] = 150
+
+    # VTSBrowse canvas rendering effort. Unlike the per-media-type prefs below
+    # this is a single scalar, because it describes the *client's* rendering
+    # capability rather than anything about the data: a browser without
+    # hardware acceleration rasterizes every canvas paint on the CPU, where the
+    # animation pipeline's smoothed full-canvas blits, overscanned snapshots and
+    # shadow blurs cost tens of ms per frame and make pan/zoom lag. ``reduced``
+    # keeps every animation but strips those effects; ``full`` always runs the
+    # rich pipeline; ``auto`` (the default) detects per client. Surfaced as the
+    # "Graphics" pulldown at the top of the Settings -> Browser tab.
+    browse_graphics: BrowseGraphics = "auto"
 
     # VTSBrowse per-media-type display preferences. Each is a
     # ``{media_type_id: value}`` dict so a user can tune the projection
