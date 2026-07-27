@@ -29,7 +29,6 @@ folds in the window so dedup / voting stay per-window unique.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 from pathlib import Path
 from typing import Any
@@ -47,6 +46,7 @@ from vtscore.datasets.importers._npz_vectors import (
 )
 from vtscore.datasets.importers.base import ImporterBase, PluginField
 from vtscore.embedding.media_vectors import init_embeddings
+from vtscore.utils.hashing import content_md5
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ def _synthetic_md5(archive: str, member: str, suffix: str = "") -> str:
     is *content*-based label transfer across unrelated datasets, which these
     precomputed-embedding corpora don't use.
     """
-    return hashlib.md5(f"{archive}::{member}{suffix}".encode()).hexdigest()
+    return content_md5(f"{archive}::{member}{suffix}".encode())
 
 
 class LocalArchiveMemberImporter(ImporterBase):

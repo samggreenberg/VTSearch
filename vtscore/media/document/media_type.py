@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 from typing import Optional
 
@@ -17,6 +16,7 @@ from vtscore.media.base import (
     _noop_progress,
     demo_slice,
 )
+from vtscore.utils.hashing import content_md5
 
 #: Industries queried against the UCSF Industry Documents Library for the
 #: ``ucsf_documents`` demo.  Owned here (not shared with the old image entry)
@@ -175,7 +175,7 @@ class DocumentMediaType(MediaType):
                 "embedder": "",
                 "duration": 0,
                 "file_size": len(pdf_bytes),
-                "md5": hashlib.md5(pdf_bytes).hexdigest(),
+                "md5": content_md5(pdf_bytes),
                 "embeddings": {},
                 "media_bytes": pdf_bytes,
                 "media_string": None,

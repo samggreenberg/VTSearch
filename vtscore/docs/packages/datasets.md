@@ -43,7 +43,7 @@ subset that `export_dataset_to_file` preserves (see
 `vtscore/datasets/loader.py:142`).
 
 **MD5 gotcha:** `md5` is the hash of the **raw source file bytes**,
-computed via `_streaming_md5` (`vtscore/datasets/loader.py:102`). It is
+computed via `file_md5` (`vtscore/utils/hashing.py`). It is
 *not* the hash of the embedding, of `media_bytes` after any in-memory
 transformation, or of a clipped sub-region. Folder-importer subclasses
 can short-circuit this calculation by populating `content_md5s` on the

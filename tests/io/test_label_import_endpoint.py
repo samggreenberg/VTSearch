@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 
 import app as app_module
+from vtscore.utils.hashing import content_md5
 
 
 # ---------------------------------------------------------------------------
@@ -528,7 +529,6 @@ class TestLabelImportMissingElements:
 
     def test_auto_resolve_ingests_and_applies(self, client, tmp_path):
         """Missing elements are auto-resolved from their origin during import."""
-        import hashlib
 
         # Save/restore medias since auto-resolve adds new entries
         saved = dict(app_module.medias)
@@ -538,7 +538,7 @@ class TestLabelImportMissingElements:
             text_dir.mkdir()
             content = "Hello world, this is a test paragraph for auto-resolve embedding."
             (text_dir / "hello.txt").write_text(content)
-            md5 = hashlib.md5(content.encode()).hexdigest()
+            md5 = content_md5(content.encode())
 
             origin = {"importer": "server_folder", "params": {"path": str(text_dir), "media_type": "text"}}
 

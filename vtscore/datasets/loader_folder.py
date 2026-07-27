@@ -13,7 +13,6 @@ Split out from :mod:`vtscore.datasets.loader` for navigability.
 from __future__ import annotations
 
 import gc
-import hashlib
 import logging
 import os
 from collections import defaultdict
@@ -27,7 +26,6 @@ from vtscore.datasets.loader import (
     _get_embedding_value,
     _get_md5_value,
     _pop_md5_key,
-    _streaming_md5,
 )
 from vtscore.embedding.media_vectors import init_embeddings
 from vtscore.security.path_validation import (
@@ -36,6 +34,7 @@ from vtscore.security.path_validation import (
     iter_rglob_follow_symlinks,
     rglob_follow_symlinks,
 )
+from vtscore.utils.hashing import content_md5, file_md5
 
 logger = logging.getLogger(__name__)
 
@@ -336,8 +335,9 @@ def _resolve_file_md5(
     """Resolve a file's MD5 with the standard precedence.
 
     custom_metadata MD5 → content_md5s[rel_path] → content_md5s[basename]
-    → streaming hash (thin mode, ``file_bytes`` is None) → ``hashlib.md5``
-    over ``file_bytes`` (full mode).
+    → :func:`~vtscore.utils.hashing.file_md5` (thin mode, ``file_bytes`` is
+    None) → :func:`~vtscore.utils.hashing.content_md5` over ``file_bytes``
+    (full mode).
     """
     if cm_md5:
         return cm_md5
@@ -346,8 +346,8 @@ def _resolve_file_md5(
     if content_md5s and file_path.name in content_md5s:
         return content_md5s[file_path.name]
     if file_bytes is None:
-        return _streaming_md5(file_path)
-    return hashlib.md5(file_bytes).hexdigest()
+        return file_md5(file_path)
+    return content_md5(file_bytes)
 
 
 def _build_folder_media_data(

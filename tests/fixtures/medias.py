@@ -1,6 +1,5 @@
 """Test media generation."""
 
-import hashlib
 import io
 import os
 
@@ -10,6 +9,7 @@ from vtscore.config import DATA_DIR
 NUM_MEDIAS = 20
 from vtscore.embedding import embed_audio_file
 from vtsearch.state import medias
+from vtscore.utils.hashing import content_md5
 
 
 def _worker_suffix():
@@ -66,7 +66,7 @@ def init_medias():
             "frequency": freq,
             "duration": duration,
             "file_size": len(wav_bytes),
-            "md5": hashlib.md5(wav_bytes).hexdigest(),
+            "md5": content_md5(wav_bytes),
             "embeddings": {"clap": embedding},
             "media_bytes": wav_bytes,
             "thumbnail_bytes": thumbnail,

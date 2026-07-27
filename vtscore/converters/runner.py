@@ -11,11 +11,11 @@ in after the importer returns.
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 from typing import Any, Callable, Optional
 
 from vtscore.security.path_validation import glob_top_level, rglob_follow_symlinks
+from vtscore.utils.hashing import content_md5
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
@@ -362,11 +362,11 @@ def _compute_md5(output: dict[str, Any]) -> str:
     """Compute MD5 from converter output bytes or string."""
     data = output.get("media_bytes")
     if data:
-        return hashlib.md5(data).hexdigest()
+        return content_md5(data)
     text = output.get("media_string", "")
     if text:
-        return hashlib.md5(text.encode("utf-8")).hexdigest()
-    return hashlib.md5(b"").hexdigest()
+        return content_md5(text.encode("utf-8"))
+    return content_md5(b"")
 
 
 def apply_converter_to_demo(

@@ -17,6 +17,7 @@ from vtscore.projection import signpost_prep as sp
 from vtscore.projection import signpost_texts as st
 from vtscore.projection.umap_projection import Projection
 from vtscore.state import DatasetContext
+from vtscore.utils.hashing import content_md5
 
 _N = 60
 _DIM = 8
@@ -28,9 +29,8 @@ class FakeEmbedder:
     supports_text = True
 
     def embed_text(self, text: str):
-        import hashlib
 
-        seed = int(hashlib.md5(text.encode()).hexdigest(), 16) % 2**32
+        seed = int(content_md5(text.encode()), 16) % 2**32
         rng = np.random.default_rng(seed)
         vec = rng.standard_normal(_DIM).astype(np.float32)
         return vec / np.linalg.norm(vec)

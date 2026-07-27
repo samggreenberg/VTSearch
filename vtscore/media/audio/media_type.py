@@ -22,6 +22,7 @@ from vtscore.media.base import (
     _noop_progress,
     demo_slice,
 )
+from vtscore.utils.hashing import content_md5
 
 # Thumbnail dimensions (square)
 _THUMB_SIZE = 128
@@ -822,7 +823,6 @@ class AudioMediaType(MediaType):
         signpost layer straight from those paths — the friction-free way to eval
         the VTSBrowse sign display.  See :mod:`vtscore.media._toponymy_demo`.
         """
-        import hashlib  # noqa: PLC0415
 
         from vtscore.media._toponymy_demo import generate_items, total_cities  # noqa: PLC0415
 
@@ -845,7 +845,7 @@ class AudioMediaType(MediaType):
                 "embedder": emb_name,
                 "duration": _SYNTH_TONE_SECONDS,
                 "file_size": len(wav_bytes),
-                "md5": hashlib.md5(wav_bytes).hexdigest(),
+                "md5": content_md5(wav_bytes),
                 "embeddings": {emb_name: item.embedding},
                 "media_bytes": wav_bytes,
                 "thumbnail_bytes": thumb,
@@ -981,7 +981,6 @@ class AudioMediaType(MediaType):
         skip_embedding=False,
         **kwargs,
     ):
-        import hashlib  # noqa: PLC0415
 
         if on_progress is None:
             from vtscore.concurrency.progress import update_progress
@@ -1051,7 +1050,7 @@ class AudioMediaType(MediaType):
                 "embedder": embedder.name,
                 "duration": media_fields["duration"],
                 "file_size": len(wav_bytes),
-                "md5": hashlib.md5(wav_bytes).hexdigest(),
+                "md5": content_md5(wav_bytes),
                 "embeddings": {} if skip_embedding else {embedder.name: embedding},
                 "media_bytes": wav_bytes,
                 "thumbnail_bytes": media_fields.get("thumbnail_bytes"),

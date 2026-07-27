@@ -8,7 +8,6 @@ out from :mod:`vtscore.datasets.loader` for navigability.
 from __future__ import annotations
 
 import gc
-import hashlib
 import logging
 from pathlib import Path
 from typing import Any, Iterator
@@ -17,6 +16,7 @@ from vtscore.datasets.loader import (
     ProgressCallback,
 )
 from vtscore.embedding.normalize import l2_normalize
+from vtscore.utils.hashing import content_md5
 
 logger = logging.getLogger(__name__)
 
@@ -183,7 +183,7 @@ def _build_pickle_full_media(
         "embedder": media_info.get("embedder", ""),
         "duration": media_info.get("duration", 0),
         "file_size": media_info.get("file_size", len(media_bytes)),
-        "md5": media_info.get("md5") or hashlib.md5(media_bytes).hexdigest(),
+        "md5": media_info.get("md5") or content_md5(media_bytes),
         "embeddings": _load_embeddings_dict(media_info),
         "media_bytes": media_bytes,
         "media_string": media_string,

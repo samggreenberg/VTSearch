@@ -15,6 +15,7 @@ import pytest
 from vtscore.projection import signpost_build as sb
 from vtscore.projection.labels import medoid
 from vtscore.projection.umap_projection import Projection
+from vtscore.utils.hashing import content_md5
 
 
 def _proj(n: int, projection_id: str = "proj-1") -> Projection:
@@ -28,9 +29,8 @@ class FakeEmbedder:
     supports_text = True
 
     def embed_text(self, text: str):
-        import hashlib
 
-        seed = int(hashlib.md5(text.encode()).hexdigest(), 16) % 2**32
+        seed = int(content_md5(text.encode()), 16) % 2**32
         rng = np.random.default_rng(seed)
         vec = rng.standard_normal(8).astype(np.float32)
         return vec / np.linalg.norm(vec)

@@ -17,11 +17,11 @@ Covers:
 
 from __future__ import annotations
 
-import hashlib
 import pickle
 
 import numpy as np
 import pytest
+from vtscore.utils.hashing import content_md5
 
 
 def _unique_bytes(media_id: int) -> bytes:
@@ -35,7 +35,7 @@ def _make_audio_clip(media_id: int, md5: str = "", filename: str = "") -> dict:
         filename = f"clip_{media_id}.wav"
     raw = _unique_bytes(media_id)
     if not md5:
-        md5 = hashlib.md5(raw).hexdigest()
+        md5 = content_md5(raw)
     return {
         "id": media_id,
         "media_type": "audio",
@@ -58,7 +58,7 @@ def _make_image_clip(media_id: int, md5: str = "") -> dict:
     """Return a minimal image media dict for testing."""
     raw = b"\x89PNG" + _unique_bytes(media_id)
     if not md5:
-        md5 = hashlib.md5(raw).hexdigest()
+        md5 = content_md5(raw)
     return {
         "id": media_id,
         "media_type": "image",
@@ -92,7 +92,7 @@ def _make_image_clip_embedded(media_id: int, embedder: str, extra: dict | None =
         "media_type": "image",
         "duration": 0,
         "file_size": 2000,
-        "md5": hashlib.md5(raw).hexdigest(),
+        "md5": content_md5(raw),
         "embeddings": {embedder: np.array([float(media_id)], dtype=np.float32)},
         "embedder": embedder,
         "media_bytes": raw,

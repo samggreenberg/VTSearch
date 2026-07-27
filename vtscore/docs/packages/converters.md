@@ -307,7 +307,7 @@ The runner builds each output media dict via
     "media_type": <converter.target_type>,
     "embedder": <name of target media type's default embedder>,
     "file_size": <len of media_bytes or media_string.encode()>,
-    "md5": <hashlib.md5 of bytes/string>,
+    "md5": <content_md5 of bytes/string>,
     "embedding": <vector from target_emb.embed_media(...)>,
     "filename": <converter output's filename>,
     "category": "custom",

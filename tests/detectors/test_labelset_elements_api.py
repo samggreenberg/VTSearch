@@ -17,6 +17,7 @@ import shutil
 import pytest
 
 from vtsearch.settings import get_detectors_dir
+from vtscore.utils.hashing import content_md5
 
 
 @pytest.fixture(autouse=True)
@@ -355,7 +356,6 @@ class TestLabelElementThumbnail:
         to origin resolution that 404s, so the right pane showed no thumbnails
         even though clicking an entry rendered the full image fine.
         """
-        import hashlib
 
         from helpers import make_png_bytes
 
@@ -367,7 +367,7 @@ class TestLabelElementThumbnail:
         png = make_png_bytes(color=(10, 20, 30))
         img_file = tmp_path / "folder_img.png"
         img_file.write_bytes(png)
-        md5 = hashlib.md5(png).hexdigest()  # noqa: S324 - identity key, not security
+        md5 = content_md5(png)
 
         origin = {"importer": "folder", "params": {"path": str(tmp_path)}}
         cid = 987654

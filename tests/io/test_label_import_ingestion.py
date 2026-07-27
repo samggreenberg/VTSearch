@@ -10,6 +10,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from vtscore.embedding.media_vectors import media_embedding
+from vtscore.utils.hashing import content_md5
 
 
 # ---------------------------------------------------------------------------
@@ -254,7 +255,6 @@ class TestIngestMissingClips:
 
     def test_ingest_with_folder_importer(self, tmp_path):
         """Ingest missing medias from a real folder origin."""
-        import hashlib
 
         import numpy as np
 
@@ -289,7 +289,7 @@ class TestIngestMissingClips:
 
         missing_entries = [
             {
-                "md5": hashlib.md5(b"Hello world, this is a test paragraph for embedding.").hexdigest(),
+                "md5": content_md5(b"Hello world, this is a test paragraph for embedding."),
                 "label": "good",
                 "origin": origin,
                 "origin_name": "hello.txt",
@@ -317,7 +317,6 @@ class TestIngestMissingClips:
 class TestClippedReingest:
     def test_audio_clip_md5_is_clip_not_parent(self, tmp_path):
         """A re-ingested audio clip's MD5 hashes the *clip* bytes, not the parent file."""
-        import hashlib
 
         import numpy as np
 
@@ -333,8 +332,8 @@ class TestClippedReingest:
 
         clip_start, clip_end = 0.0, 2.0
         clip_bytes = _wav_slice(wav, clip_start, clip_end)
-        expected_clip_md5 = hashlib.md5(clip_bytes).hexdigest()
-        parent_md5 = hashlib.md5(wav).hexdigest()
+        expected_clip_md5 = content_md5(clip_bytes)
+        parent_md5 = content_md5(wav)
         assert expected_clip_md5 != parent_md5, "clip and parent MD5s must differ"
 
         origin = {
