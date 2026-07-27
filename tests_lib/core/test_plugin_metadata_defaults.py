@@ -94,6 +94,50 @@ class TestDefaultDescription:
         assert FooDatasetImporter.description == ""
 
 
+class TestDefaultIcon:
+    def test_derives_letter_from_display_name(self):
+        class GoogleDatasetImporter(_FakeDatasetImporter):
+            """Doc."""
+
+        assert GoogleDatasetImporter.icon == "G"
+
+    def test_explicit_icon_wins(self):
+        class GoogleDatasetImporter(_FakeDatasetImporter):
+            """Doc."""
+
+            icon = "☁️"  # cloud
+
+        assert GoogleDatasetImporter.icon == "☁️"
+
+    def test_overrides_family_stock_icon(self):
+        # ``ImporterBase.icon`` is the generic "\U0001f50c" plug emoji
+        # shared by every dataset importer that doesn't customise it;
+        # a concrete subclass should get its own letter instead.
+        from vtscore.datasets.importers.base import DatasetImporter
+
+        class FreshDatasetImporter(DatasetImporter):
+            """Doc."""
+
+            fields: list[PluginField] = []
+
+            def run(self, field_values):  # noqa: D102
+                raise NotImplementedError
+
+        assert FreshDatasetImporter.icon == "F"
+
+    def test_no_alpha_display_name_keeps_family_stock_icon(self):
+        class _123DatasetImporter(_FakeDatasetImporter):
+            """Doc."""
+
+            name = "123"
+            display_name = "123"
+
+        # No alphabetic character to derive a letter from, so the
+        # inherited family-stock icon (empty on the fake base) is left
+        # untouched rather than being blanked out.
+        assert _123DatasetImporter.icon == ""
+
+
 class TestAbstractIntermediateNotPolluted:
     def test_family_base_name_skipped(self):
         # The literal abstract base name ``DatasetImporter`` would
