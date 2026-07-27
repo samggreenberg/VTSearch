@@ -12,8 +12,14 @@ describe('DatasetStatsModalComponent', () => {
   let httpMock: HttpTestingController;
 
   const mockStats = {
+    name: 'My Dataset',
+    media_type: 'audio',
     num_items: 100,
     num_dupes: 3,
+    created_at: 1700000075,
+    expires_at: null,
+    created_by: 'alice',
+    readers: ['bob', 'carol'],
     ingest_started_at: 1700000000,
     ingest_finished_at: 1700000075,
     clipper: 'whole',
@@ -84,6 +90,63 @@ describe('DatasetStatsModalComponent', () => {
     httpMock.expectOne('/api/datasets/registry/ds1/stats').flush({ ...mockStats, num_dupes: 0 });
     await settleZoneless(fixture);
     expect(fixture.nativeElement.querySelector('.view-dupes-btn')).toBeFalsy();
+  });
+
+  // Issue #2698: the Stats window covers the Dashboard grid, so it has to
+  // carry the grid's own columns (Type / # Items / Created / Age-Off /
+  // Creator / Readers) rather than force the user to dismiss it to look.
+  it('renders every Dashboard grid column', async () => {
+    fixture.componentRef.setInput('isDefaultLogin', false);
+    fixture.componentRef.setInput('serverSetsAgeOff', true);
+    await fixture.whenStable();
+    httpMock.expectOne('/api/datasets/registry/ds1/stats').flush(mockStats);
+    await settleZoneless(fixture);
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Type');
+    expect(text).toContain('Audio'); // capitalized media_type
+    expect(text).toContain('Created');
+    expect(text).toContain('Age-Off');
+    expect(text).toContain('Never'); // expires_at === null
+    expect(text).toContain('Creator');
+    expect(text).toContain('alice');
+    expect(text).toContain('Readers');
+    expect(text).toContain('bob, carol');
+  });
+
+  it('hides Creator/Readers under the default login, as the grid does', async () => {
+    fixture.componentRef.setInput('isDefaultLogin', true);
+    await fixture.whenStable();
+    httpMock.expectOne('/api/datasets/registry/ds1/stats').flush(mockStats);
+    await settleZoneless(fixture);
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).not.toContain('Creator');
+    expect(text).not.toContain('Readers');
+  });
+
+  it('hides Age-Off when the server stamps no expiry and the dataset has none', async () => {
+    fixture.componentRef.setInput('serverSetsAgeOff', false);
+    await fixture.whenStable();
+    httpMock.expectOne('/api/datasets/registry/ds1/stats').flush(mockStats);
+    await settleZoneless(fixture);
+
+    expect(fixture.nativeElement.textContent as string).not.toContain('Age-Off');
+  });
+
+  // A stamped expiry outlives the server setting being turned back off;
+  // hiding a real death date would be a lie, so the row survives.
+  it('shows Age-Off for a stamped dataset even with the setting off', async () => {
+    fixture.componentRef.setInput('serverSetsAgeOff', false);
+    await fixture.whenStable();
+    httpMock
+      .expectOne('/api/datasets/registry/ds1/stats')
+      .flush({ ...mockStats, expires_at: 1800000000 });
+    await settleZoneless(fixture);
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Age-Off');
+    expect(text).not.toContain('Never');
   });
 
   it('repaints the error text on a failed load (zoneless canary)', async () => {

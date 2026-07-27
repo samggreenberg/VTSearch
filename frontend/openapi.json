@@ -1531,8 +1531,17 @@
           "clipper": {
             "type": "string"
           },
+          "created_at": {
+            "nullable": true
+          },
+          "created_by": {
+            "type": "string"
+          },
           "embedder": {
             "type": "string"
+          },
+          "expires_at": {
+            "nullable": true
           },
           "file_type_counts": {
             "additionalProperties": {
@@ -1546,6 +1555,12 @@
           "ingest_started_at": {
             "nullable": true
           },
+          "media_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
           "num_dupes": {
             "type": "integer"
           },
@@ -1555,6 +1570,12 @@
           "origin": {
             "type": "string"
           },
+          "readers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "source": {
             "additionalProperties": {},
             "type": "object"
@@ -1562,11 +1583,15 @@
         },
         "required": [
           "clipper",
+          "created_by",
           "embedder",
           "file_type_counts",
+          "media_type",
+          "name",
           "num_dupes",
           "num_items",
           "origin",
+          "readers",
           "source"
         ],
         "type": "object"

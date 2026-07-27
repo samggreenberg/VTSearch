@@ -348,6 +348,8 @@
   <vt-dataset-stats-modal
     [datasetId]="modals.stats.datasetId"
     [datasetName]="modals.stats.datasetName"
+    [isDefaultLogin]="isDefaultLogin()"
+    [serverSetsAgeOff]="serverSetsAgeOff()"
     (closed)="modals.closeStats()"
   />
 }

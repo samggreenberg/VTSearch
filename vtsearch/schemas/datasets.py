@@ -850,11 +850,23 @@ class DatasetDomainShiftResponseSchema(Schema):
 
 
 class DatasetRegistryStatsResponseSchema(Schema):
-    """Response for ``GET /api/datasets/registry/<id>/stats``."""
+    """Response for ``GET /api/datasets/registry/<id>/stats``.
 
+    A superset of the Dashboard grid row: ``name``, ``media_type``,
+    ``num_items``, ``created_at``, ``expires_at``, ``created_by`` and
+    ``readers`` are the grid's own columns, so the Stats window can show
+    everything the grid does while it covers the grid up.
+    """
+
+    name = fields.String(required=True)
+    media_type = fields.String(required=True)
     num_items = fields.Integer(required=True)
     num_dupes = fields.Integer(required=True)
     file_type_counts = fields.Dict(keys=fields.String(), values=fields.Integer(), required=True)
+    created_at = fields.Raw(allow_none=True)
+    expires_at = fields.Raw(allow_none=True)
+    created_by = fields.String(required=True)
+    readers = fields.List(fields.String(), required=True)
     ingest_started_at = fields.Raw(allow_none=True)
     ingest_finished_at = fields.Raw(allow_none=True)
     origin = fields.String(required=True)
