@@ -119,9 +119,10 @@ const DOCKED_MAIN_MIN = 60;
  * It renders in one of two presentations, chosen per media type by the
  * ``bin_details_docked`` setting (the dock / pop-out header buttons flip it):
  *
- * - **Floating** (``docked`` false, the default): a draggable popup window
- *   summoned at the right-click point and clamped to the visible canvas.
- * - **Docked** (``docked`` true): a persistent left panel beside the canvas.
+ * - **Floating** (``docked`` false): a draggable popup window summoned at the
+ *   right-click point and clamped to the visible canvas.
+ * - **Docked** (``docked`` true, the default): a persistent left panel beside
+ *   the canvas.
  *   The top row holds the large item with the metadata column to its right,
  *   separated by a draggable divider ({@link onMetaDividerPointerDown}); the
  *   member grid fills the rest of the panel below them. The metadata column
