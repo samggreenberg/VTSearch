@@ -213,6 +213,51 @@ def register_detector_route(body: dict):
 # ---------------------------------------------------------------------------
 
 
+def _ingest_imported_labelset_media(label_dicts: list[dict]) -> int:
+    """Pull an imported labelset's media into the active dataset.
+
+    A labelset is origin-keyed and dataset-agnostic, but everything
+    downstream of it - vote state, the labeling grid, and above all
+    ``GET /api/labels/export``, which composes its payload from
+    ``LabelSet.from_clips_and_votes(active_medias, goods, bads)`` - can only
+    see labels whose media resolve to the *active* dataset's medias.  Without
+    this step, importing a detector whose labels came from somewhere else
+    leaves the right pane showing the imported labels (it reads the labelset)
+    while export returns nothing (it reads votes), and the user has to Browse
+    Positives / Find / Train first to materialise the media before the labels
+    become exportable at all (issue #2690).
+
+    Mirrors what :func:`~vtsearch.routes.labels.importers.run_label_import`
+    already does for the in-session label importer, so the two import paths
+    land the same media in the same place.  The subsequent detector load then
+    restores those labels into votes normally.
+
+    Best-effort: the detector is created either way, so an unreachable origin
+    costs the caller nothing beyond an un-ingested media.  Returns the number
+    of medias ingested.
+    """
+    from vtscore.state.core import get_active_context, is_request_missing_dataset_context
+
+    try:
+        ds_ctx = get_active_context()
+        if not ds_ctx.dataset_id or is_request_missing_dataset_context(ds_ctx):
+            # No dataset to ingest into; the labels stay origin-only until a
+            # dataset is loaded and the detector is (re)loaded against it.
+            return 0
+
+        from vtscore.datasets.ingest import ingest_missing_medias
+        from vtsearch.state import cached_media_lookups, find_missing_entries, medias
+
+        origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
+        missing = find_missing_entries(label_dicts, origin_lookup, md5_lookup, name_lookup)
+        if not missing:
+            return 0
+        return ingest_missing_medias(missing, medias)
+    except Exception:
+        logger.exception("Ingesting imported labelset media failed")
+        return 0
+
+
 @detectors_registry_bp.route(
     "/api/detectors/registry/from-labelset/<importer_name>",
     methods=["POST"],
@@ -327,6 +372,11 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
     entry["num_training"] = len(labelset)
     entry["last_trained_at"] = time.time()
 
+    # Materialise any imported label whose media isn't in the active dataset,
+    # so the labels are exportable / visible immediately instead of only after
+    # a Browse Positives / Find / Train pass (issue #2690).
+    ingested = _ingest_imported_labelset_media([el.to_dict() for el in elements])
+
     return jsonify(
         {
             "ok": True,
@@ -334,6 +384,7 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
             "applied": applied,
             "skipped": skipped,
             "num_labels": len(labelset),
+            "ingested": ingested,
         }
     ), 201
 

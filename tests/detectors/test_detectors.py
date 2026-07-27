@@ -2487,3 +2487,94 @@ class TestRegisterModelFromLabelset:
         # Labels resolved into the loaded detector's votes (matched by md5).
         assert 1 in good_votes
         assert 2 in bad_votes
+
+    def test_foreign_media_is_ingested_so_labels_export(self, client, tmp_path):
+        """Import whose media isn't in the active dataset is still exportable (#2690).
+
+        The ordinary "import someone else's detector" case: the labelset's
+        elements resolve to files on disk but to no loaded media.  The import
+        must pull them in, so ``GET /api/labels/export`` - which composes from
+        vote state intersected with the active dataset's medias - returns the
+        imported labels straight away.  Before the fix, export returned an
+        empty labelset until the user ran Browse Positives / Find / Train,
+        even though the right pane (labelset-sourced) showed the labels.
+        """
+        import hashlib
+
+        from helpers import make_wav_file
+
+        clips_dir = tmp_path / "foreign_clips"
+        clips_dir.mkdir()
+        origin = {
+            "importer": "server_folder",
+            "params": {"path": str(clips_dir), "media_type": "audio"},
+        }
+        entries = []
+        for i, (freq, label) in enumerate(((330.0, "good"), (550.0, "bad")), start=1):
+            path = make_wav_file(clips_dir, f"foreign_{i}.wav", frequency=freq)
+            entries.append(
+                {
+                    "md5": hashlib.md5(path.read_bytes()).hexdigest(),
+                    "label": label,
+                    "origin": origin,
+                    "origin_name": path.name,
+                    "filename": path.name,
+                }
+            )
+        labels_path = tmp_path / "foreign_labels.json"
+        labels_path.write_text(json.dumps({"labels": entries}))
+
+        res = client.post(
+            "/api/detectors/registry/from-labelset/server_json_file",
+            json={"name": "Foreign", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 201, res.get_json()
+        assert res.get_json()["ingested"] == 2, "imported media must be pulled into the active dataset"
+        detector_id = res.get_json()["detector"]["id"]
+
+        _load_detector_and_wait(client, detector_id)
+
+        exported = client.get(
+            "/api/labels/export?label_filter=both",
+            headers={"X-Detector-Id": detector_id},
+        ).get_json()["labels"]
+        by_name = {e["origin_name"]: e["label"] for e in exported}
+        assert by_name == {"foreign_1.wav": "good", "foreign_2.wav": "bad"}
+
+    def test_ingest_is_skipped_without_an_active_dataset(self, client, tmp_path):
+        """No dataset loaded → nothing to ingest into, and the import still succeeds."""
+        import hashlib
+
+        from helpers import make_wav_file
+        from vtsearch.state import clear_all_contexts
+
+        clips_dir = tmp_path / "no_dataset_clips"
+        clips_dir.mkdir()
+        path = make_wav_file(clips_dir, "orphan.wav", frequency=440.0)
+        labels_path = tmp_path / "orphan_labels.json"
+        labels_path.write_text(
+            json.dumps(
+                {
+                    "labels": [
+                        {
+                            "md5": hashlib.md5(path.read_bytes()).hexdigest(),
+                            "label": "good",
+                            "origin": {
+                                "importer": "server_folder",
+                                "params": {"path": str(clips_dir), "media_type": "audio"},
+                            },
+                            "origin_name": path.name,
+                        }
+                    ]
+                }
+            )
+        )
+
+        clear_all_contexts()
+        res = client.post(
+            "/api/detectors/registry/from-labelset/server_json_file",
+            json={"name": "NoDataset", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 201, res.get_json()
+        assert res.get_json()["ingested"] == 0
+        assert res.get_json()["num_labels"] == 1
