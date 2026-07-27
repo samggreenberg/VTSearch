@@ -110,7 +110,12 @@ class TestDetectorCreateRejection:
         settings_mod.set_cli_semantic_only(True)
         resp = client.post(
             "/api/detectors",
-            json={"name": "locked-structural", "media_type": "image", "text_query": "a dog", "embedder_type": "structural"},
+            json={
+                "name": "locked-structural",
+                "media_type": "image",
+                "text_query": "a dog",
+                "embedder_type": "structural",
+            },
         )
         assert resp.status_code == 400
         assert "Semantic" in resp.get_json()["message"]
@@ -119,7 +124,12 @@ class TestDetectorCreateRejection:
         settings_mod.set_cli_semantic_only(True)
         resp = client.post(
             "/api/detectors",
-            json={"name": "locked-patch", "media_type": "image", "text_query": "a dog", "embedder_type": "patch_semantic"},
+            json={
+                "name": "locked-patch",
+                "media_type": "image",
+                "text_query": "a dog",
+                "embedder_type": "patch_semantic",
+            },
         )
         assert resp.status_code == 400
 
@@ -134,7 +144,12 @@ class TestDetectorCreateRejection:
     def test_structural_detector_allowed_when_unlocked(self, client):
         resp = client.post(
             "/api/detectors",
-            json={"name": "unlocked-structural", "media_type": "image", "text_query": "a dog", "embedder_type": "structural"},
+            json={
+                "name": "unlocked-structural",
+                "media_type": "image",
+                "text_query": "a dog",
+                "embedder_type": "structural",
+            },
         )
         assert resp.status_code == 201
 
