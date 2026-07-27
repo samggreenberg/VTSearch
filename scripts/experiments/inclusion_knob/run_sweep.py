@@ -52,7 +52,6 @@ def _load_arms() -> dict[str, tuple[np.ndarray, np.ndarray] | str]:
     for level in ("easy", "medium", "hard"):
         arms[f"synth:{level}"] = level  # generated per-seed in the loop
     return arms
-    return arms
 
 
 def _sample_votes(y: np.ndarray, n_votes: int, seed: int) -> tuple[np.ndarray, np.ndarray]:
@@ -62,10 +61,12 @@ def _sample_votes(y: np.ndarray, n_votes: int, seed: int) -> tuple[np.ndarray, n
     n_neg = n_votes - n_pos
     pos_idx = np.flatnonzero(y == 1)
     neg_idx = np.flatnonzero(y == 0)
-    votes = np.concatenate([
-        rng.choice(pos_idx, size=n_pos, replace=False),
-        rng.choice(neg_idx, size=n_neg, replace=False),
-    ])
+    votes = np.concatenate(
+        [
+            rng.choice(pos_idx, size=n_pos, replace=False),
+            rng.choice(neg_idx, size=n_neg, replace=False),
+        ]
+    )
     pool = np.setdiff1d(np.arange(len(y)), votes)
     return votes, pool
 
