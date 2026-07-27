@@ -220,7 +220,8 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     await settleZoneless(fixture);
     const component = fixture.componentInstance;
 
-    // Start floating with a bin open.
+    // Force the floating presentation (docked is the default) before opening a bin.
+    component.detailsDocked.set(false);
     component.onCanvasContextMenu({
       members: [7, 8],
       repId: 7,

@@ -221,14 +221,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   /**
    * Docked bin-details mode for the active media type, mirrored from the
-   * per-media ``bin_details_docked`` setting. When on, the bin details render
-   * as a persistent left panel (large item + metadata on top, member grid
-   * below) instead of the floating right-click popup; the panel doubles as the
-   * audio now-playing display, replacing the toolbar's small waveform widget.
+   * per-media ``bin_details_docked`` setting. When on (the default for a
+   * media type with no saved choice), the bin details render as a persistent
+   * left panel (large item + metadata on top, member grid below) instead of
+   * the floating right-click popup; the panel doubles as the audio
+   * now-playing display, replacing the toolbar's small waveform widget.
    * Flipped by the dock button on the floating window and the pop-out button
    * on the panel, both of which persist the choice.
    */
-  readonly detailsDocked = signal(false);
+  readonly detailsDocked = signal(true);
 
   /**
    * Width (CSS px) of the docked bin-details panel, mirrored from the
@@ -641,7 +642,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     );
 
     const dockMap = s.bin_details_docked as { [key: string]: boolean } | undefined;
-    this.detailsDocked.set(!!(mt && dockMap && dockMap[mt]));
+    const dockedValue = mt && dockMap ? dockMap[mt] : undefined;
+    this.detailsDocked.set(dockedValue === undefined ? true : dockedValue);
   }
 
   /** Read a ``{media_type: value}`` setting for *mt*, or ``''`` when unset. */

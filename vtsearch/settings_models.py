@@ -488,7 +488,8 @@ class UserSettings(BaseModel):
     # metadata on top, the bin's member grid below) instead of the floating
     # right-click popup window. Driven by the dock button on the floating
     # window and the pop-out button on the docked panel; empty entries fall
-    # back to the floating window (false).
+    # back to the docked left panel (true) — the pop-out button persists an
+    # explicit ``false`` for a media type the user chose to float instead.
     bin_details_docked: dict[str, bool] = Field(default_factory=dict)
     panel_pct_left: dict[str, int] = Field(default_factory=dict)
     panel_pct_right: dict[str, int] = Field(default_factory=dict)
