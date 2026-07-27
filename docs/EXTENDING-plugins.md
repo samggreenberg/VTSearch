@@ -67,8 +67,28 @@ serialisation. All plugin base classes inherit from it.
 | `name`         | `str`               | Yes      | Snake_case identifier, used in API URL path   |
 | `display_name` | `str`               | Yes      | Human-readable label for the UI               |
 | `description`  | `str`               | Yes      | One-sentence subtitle                         |
-| `icon`         | `str`               | No       | Emoji/icon string (each family has a default) |
+| `icon`         | `str`               | No       | Emoji/icon string (auto-derived if unset — see below) |
 | `fields`       | `list[PluginField]` | Yes      | Ordered list of user-facing input fields      |
+
+**Auto-derived defaults.** `name`, `display_name`, `description`, and `icon`
+don't actually have to be set — a subclass that omits any of them gets a
+default filled in automatically:
+
+- `name`: the class name with its family suffix (`DatasetImporter`,
+  `LabelsetExporter`, `MediaConverter`, ...) stripped and the remainder
+  snake-cased, e.g. `MyShinyExporter` → `"my_shiny"`.
+- `display_name`: title-cased `name`, e.g. `"My Shiny"`.
+- `description`: the first line of the class docstring.
+- `icon`: the first letter of `display_name`, upper-cased, e.g. `"M"`. The
+  frontend renders any single capital letter A–Z as a boxed letter-glyph
+  icon, so a plugin author doesn't have to design (or even pick) an icon
+  to get something better than every plugin in the family sharing the
+  same generic emoji. Write `class GoogleDatasetImporter(DatasetImporter):
+  ...` with no `icon` and it shows a "G" outline by default; give it a
+  proper `icon = "🔍"` (or an SVG-type string) whenever you want something
+  fancier.
+
+An explicit value always wins over the derived default.
 
 **Optional class attributes:**
 
