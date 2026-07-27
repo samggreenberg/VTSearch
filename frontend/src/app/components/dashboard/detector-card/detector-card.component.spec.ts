@@ -152,6 +152,59 @@ describe('DetectorCardComponent', () => {
     expect(component.export.emit).toHaveBeenCalled();
   });
 
+  it('should offer "Move to AutoRun" on a draft detector and emit setAutorun(true)', async () => {
+    vi.spyOn(component.setAutorun, 'emit');
+    const el = fixture.nativeElement as HTMLElement;
+    (el.querySelector('.overflow-btn') as HTMLElement).click();
+    await settleZoneless(fixture);
+    const items = Array.from(el.querySelectorAll('.menu-item')) as HTMLElement[];
+    const move = items.find((b) => b.textContent?.includes('Move to AutoRun'));
+    expect(move).toBeTruthy();
+    expect(items.some((b) => b.textContent?.includes('Move to Drafts'))).toBe(false);
+    move!.click();
+    expect(component.setAutorun.emit).toHaveBeenCalledWith(true);
+  });
+
+  describe('frozen (AutoRun) detector', () => {
+    beforeEach(async () => {
+      fixture.componentRef.setInput('detector', { ...mockDetector, autofind: true });
+      await settleZoneless(fixture);
+    });
+
+    it('hides the rename pencil and inline delete button', () => {
+      const el = fixture.nativeElement as HTMLElement;
+      expect(component.frozen).toBe(true);
+      expect(el.querySelector('.edit-btn')).toBeNull();
+      expect(el.querySelector('.delete-btn')).toBeNull();
+    });
+
+    it('omits the editing verbs from the right-click menu but keeps read/use verbs', async () => {
+      const el = fixture.nativeElement as HTMLElement;
+      el.dispatchEvent(new MouseEvent('contextmenu', { clientX: 10, clientY: 10, bubbles: true }));
+      await settleZoneless(fixture);
+      const full = Array.from(el.querySelectorAll('.menu-item')).map((b) => b.textContent?.trim());
+      expect(full).not.toContain('Rename');
+      expect(full).not.toContain('Import Labels');
+      expect(full).not.toContain('Delete');
+      expect(full).toContain('Browse positives');
+      expect(full).toContain('Stats');
+      expect(full).toContain('Export');
+    });
+
+    it('offers "Move to Drafts" and emits setAutorun(false)', async () => {
+      vi.spyOn(component.setAutorun, 'emit');
+      const el = fixture.nativeElement as HTMLElement;
+      (el.querySelector('.overflow-btn') as HTMLElement).click();
+      await settleZoneless(fixture);
+      const items = Array.from(el.querySelectorAll('.menu-item')) as HTMLElement[];
+      const move = items.find((b) => b.textContent?.includes('Move to Drafts'));
+      expect(move).toBeTruthy();
+      expect(items.some((b) => b.textContent?.includes('Move to AutoRun'))).toBe(false);
+      move!.click();
+      expect(component.setAutorun.emit).toHaveBeenCalledWith(false);
+    });
+  });
+
   it('should format dates', () => {
     expect(component.formatDate(1700000000)).toMatch(/\d/);
     expect(component.formatDate(null)).toBe('-');

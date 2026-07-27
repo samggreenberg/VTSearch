@@ -105,6 +105,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
   selectedDatasetIds: Set<string> = new Set();
   selectedDetectorIds: Set<string> = new Set();
 
+  /** Which detector-grid tab is showing: Drafts (editable, `!autofind`) or
+   *  AutoRun (frozen, `autofind` — auto-run against each dataset on import).
+   *  A detector lives in exactly one tab; the ⋯ menu moves it between them. */
+  readonly detectorTab = signal<'drafts' | 'autorun'>('drafts');
+
   // Confirm flags hold the trash icon at 90° while the confirm dialog is up,
   // and play a reverse animation back to 0° once the dialog resolves. Written
   // from the post-`await dialog.confirmDestructive()` continuation (an unpatched
@@ -281,11 +286,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
         }
         const newIds = [...currentIds].filter((id) => !this.knownDetectorIds.has(id));
         if (newIds.length > 0 && this.knownDetectorIds.size > 0) {
-          // Items were added after initial load; select only the new ones
+          // Items were added after initial load; select only the new ones.
+          // New detectors are always drafts, so surface the tab they land on.
           this.selectedDetectorIds.clear();
           for (const id of newIds) {
             this.selectedDetectorIds.add(id);
           }
+          this.detectorTab.set('drafts');
         } else if (models.length === 1 && this.selectedDetectorIds.size === 0) {
           // First load with exactly one item; auto-select it
           this.selectedDetectorIds.add(models[0].id);
@@ -435,6 +442,32 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   get detectors(): DetectorRegistryEntry[] {
     return this.datasetState.detectors;
+  }
+
+  /** Draft (editable) detectors: everything not on the user's AutoRun list. */
+  get draftDetectors(): DetectorRegistryEntry[] {
+    return this.detectors.filter((d) => !d.autofind);
+  }
+
+  /** AutoRun (frozen) detectors: auto-run on every dataset as it's imported. */
+  get autorunDetectors(): DetectorRegistryEntry[] {
+    return this.detectors.filter((d) => !!d.autofind);
+  }
+
+  /** The detectors shown by the active grid tab. Selection, the header
+   *  master-checkbox, and the section actions all operate on this subset. */
+  get visibleDetectors(): DetectorRegistryEntry[] {
+    return this.detectorTab() === 'autorun' ? this.autorunDetectors : this.draftDetectors;
+  }
+
+  /** Switch detector-grid tabs. Selection is per-tab: a hidden selection
+   *  would silently feed the section actions and the Train/Find buttons, so
+   *  it's cleared on every switch. */
+  setDetectorTab(tab: 'drafts' | 'autorun'): void {
+    if (this.detectorTab() === tab) return;
+    this.detectorTab.set(tab);
+    this.selectedDetectorIds.clear();
+    this.pushTopBarLabels();
   }
 
   get loading(): boolean {
@@ -710,7 +743,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   get detectorSelectionState(): 'none' | 'some' | 'all' {
     const sel = this.selectedDetectorIds.size;
     if (sel === 0) return 'none';
-    if (sel >= this.detectors.length) return 'all';
+    if (sel >= this.visibleDetectors.length) return 'all';
     return 'some';
   }
 
@@ -718,7 +751,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (this.detectorSelectionState === 'all') {
       this.selectedDetectorIds.clear();
     } else {
-      for (const m of this.detectors) {
+      for (const m of this.visibleDetectors) {
         this.selectedDetectorIds.add(m.id);
       }
     }
@@ -890,14 +923,29 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Move a detector between the Drafts and AutoRun tabs by toggling its
+   *  per-user Auto-Find membership. The row disappears from the current tab
+   *  (and from the selection) and reappears on the other one. */
+  setDetectorAutorun(model: DetectorRegistryEntry, autorun: boolean): void {
+    this.detectorsRegistryApi.setAutofind(model.id, autorun).subscribe({
+      next: () => {
+        this.selectedDetectorIds.delete(model.id);
+        this.pushTopBarLabels();
+        this.datasetState.refresh();
+      },
+      error: () => {
+        // Global error interceptor surfaces the failure in the banner.
+      },
+    });
+  }
+
   async deleteDetector(model: DetectorRegistryEntry): Promise<void> {
     this.deletingDetectorId.set(model.id);
-    const autofindWarning = model.autofind
-      ? ' This detector is on your Auto-Find list; deleting it removes it from that list too.'
-      : '';
+    // No AutoRun caveat needed here: AutoRun rows are frozen (no Delete
+    // affordance), so only draft detectors can reach this dialog.
     const ok = await this.dialog.confirmDestructive(
       `Delete detector "${model.name}"?`,
-      `(This deletes your labels. The underlying media is unaffected.${autofindWarning})`,
+      '(This deletes your labels. The underlying media is unaffected.)',
     );
     this.deletingDetectorId.set('');
     if (!ok) return;
@@ -1223,7 +1271,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   get sortedDetectors(): DetectorRegistryEntry[] {
     const col = this.detectorCols.sortColumn;
     const asc = this.detectorCols.sortAsc ? 1 : -1;
-    return [...this.detectors].sort((a, b) => {
+    return [...this.visibleDetectors].sort((a, b) => {
       const va = a[col] ?? '';
       const vb = b[col] ?? '';
       if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * asc;
@@ -1239,9 +1287,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   /** Detector counterpart of {@link anyDatasetUnloaded}; unloaded detectors
-   *  show a Load button so the Actions column widens to fit it. */
+   *  show a Load button so the Actions column widens to fit it. Scoped to the
+   *  active tab — only visible rows decide the column width. */
   get anyDetectorUnloaded(): boolean {
-    return this.detectors.some((d) => !d.detector_loaded);
+    return this.visibleDetectors.some((d) => !d.detector_loaded);
   }
 
   // --- Button state ---
@@ -1285,6 +1334,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (selectedModels.length !== 1) return false;
     const model = selectedModels[0];
     if (model.media_type !== selectedDatasets[0].media_type) return false;
+    // AutoRun detectors are frozen: move back to Drafts before retraining.
+    if (model.autofind) return false;
     return true;
   }
 
@@ -1340,6 +1391,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const dataset = this.resolvedSelectedDatasets[0];
     if (model && dataset && model.media_type !== dataset.media_type) {
       return 'Media type mismatch';
+    }
+    if (model?.autofind) {
+      return 'AutoRun detectors are frozen — move to Drafts to retrain';
     }
     return 'Open Train Mode with the selected dataset and detector';
   }

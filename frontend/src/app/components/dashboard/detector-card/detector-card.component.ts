@@ -91,6 +91,16 @@ export class DetectorCardComponent {
   readonly dismissTask = output<string>();
   readonly checkboxToggle = output<void>();
   readonly security = output<void>();
+  /** Emits the new AutoRun membership: true for "Move to AutoRun", false for
+   *  "Move to Drafts". */
+  readonly setAutorun = output<boolean>();
+
+  /** True for an AutoRun detector (``autofind``): the row is frozen, so the
+   *  editing affordances (rename pencil, inline Delete) are hidden and the
+   *  menu omits the editing verbs — Move to Drafts first to edit. */
+  get frozen(): boolean {
+    return !!this.detector()?.autofind;
+  }
 
   /** True for a just-created detector that has never been trained (no labels
    *  yet). Drives the "Empty" hint so a fresh detector reads as new rather than
@@ -179,6 +189,12 @@ export class DetectorCardComponent {
         break;
       case 'stats':
         this.stats.emit();
+        break;
+      case 'move-to-autorun':
+        this.setAutorun.emit(true);
+        break;
+      case 'move-to-drafts':
+        this.setAutorun.emit(false);
         break;
       case 'delete':
         this.delete.emit();

@@ -57,6 +57,14 @@ const ICON = {
       '<path d="M10 11v6"/><path d="M14 11v6"/>' +
       '<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
   ),
+  lock: svg(
+    '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>' +
+      '<path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  ),
+  unlock: svg(
+    '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>' +
+      '<path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
+  ),
 };
 
 /**
@@ -117,10 +125,18 @@ export function buildDatasetCardMenuItems(
   return items;
 }
 
+/**
+ * Detector menu. An AutoRun detector (``autofind``) is frozen: the editing
+ * verbs (Rename, Import Labels, Delete) are omitted entirely — the only way
+ * to change it is "Move to Drafts" first — while the read/use verbs (Load,
+ * Browse, Export, Stats) stay. A draft detector instead offers
+ * "Move to AutoRun" to finalize it.
+ */
 export function buildDetectorCardMenuItems(
-  detector: { detector_loaded?: boolean } | undefined,
+  detector: { detector_loaded?: boolean; autofind?: boolean } | undefined,
   access: CardMenuAccess,
 ): ContextMenuItem[] {
+  const frozen = !!detector?.autofind;
   const items: ContextMenuItem[] = [];
   if (!detector?.detector_loaded) {
     items.push({ id: 'load', label: 'Load detector', title: 'Load detector', iconSvg: ICON.load });
@@ -129,8 +145,10 @@ export function buildDetectorCardMenuItems(
   if (!access.isDefaultLogin) {
     items.push(securityItem(access));
   }
-  items.push({ id: 'rename', label: 'Rename', title: 'Rename', iconSvg: ICON.rename });
-  items.push({ id: 'add-labels', label: 'Import Labels', title: 'Import Labels', iconSvg: ICON.addLabels });
+  if (!frozen) {
+    items.push({ id: 'rename', label: 'Rename', title: 'Rename', iconSvg: ICON.rename });
+    items.push({ id: 'add-labels', label: 'Import Labels', title: 'Import Labels', iconSvg: ICON.addLabels });
+  }
   items.push({ id: 'export', label: 'Export', title: 'Export', iconSvg: ICON.export });
   items.push({
     id: 'export-model',
@@ -139,6 +157,21 @@ export function buildDetectorCardMenuItems(
     iconSvg: ICON.export,
   });
   items.push({ id: 'stats', label: 'Stats', title: 'Stats', iconSvg: ICON.stats });
-  items.push({ id: 'delete', label: 'Delete', title: 'Delete', iconSvg: ICON.delete });
+  if (frozen) {
+    items.push({
+      id: 'move-to-drafts',
+      label: 'Move to Drafts',
+      title: 'Unfreeze this detector: stop auto-running it and allow editing again',
+      iconSvg: ICON.unlock,
+    });
+  } else {
+    items.push({
+      id: 'move-to-autorun',
+      label: 'Move to AutoRun',
+      title: 'Finalize this detector: freeze it against edits and auto-run it on every dataset as it is imported',
+      iconSvg: ICON.lock,
+    });
+    items.push({ id: 'delete', label: 'Delete', title: 'Delete', iconSvg: ICON.delete });
+  }
   return items;
 }
