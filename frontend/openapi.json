@@ -3777,6 +3777,10 @@
           "origin_name": {
             "type": "string"
           },
+          "origin_only": {
+            "description": "True when the entry was rendered straight from the detector's persisted labelset because its media doesn't resolve into the active dataset; absent for vote-derived entries.",
+            "type": "boolean"
+          },
           "region_box": {
             "items": {
               "type": "number"
@@ -13188,7 +13192,7 @@
     },
     "/api/labels/export": {
       "get": {
-        "description": "Each label entry includes the element's ``origin`` and ``origin_name``\nso consumers know exactly where each labeled element came from. The\nformat is a superset of the legacy export format; old consumers\nthat only read ``md5`` and ``label`` keys continue to work unchanged.",
+        "description": "Each label entry includes the element's ``origin`` and ``origin_name``\nso consumers know exactly where each labeled element came from. The\nformat is a superset of the legacy export format; old consumers\nthat only read ``md5`` and ``label`` keys continue to work unchanged.\n\nThe payload is composed from the session's votes intersected with the\nactive dataset, then topped up with persisted labelset elements that\ndon't resolve into the active dataset (marked ``origin_only: true``) so\nthe export is always a faithful rendering of the detector's labelset -\nsee :func:`_origin_only_fallback_entries`.",
         "operationId": "export_labels",
         "parameters": [
           {
@@ -13202,7 +13206,7 @@
             }
           },
           {
-            "description": "Filter mode: ``good``, ``bad``, ``both`` (default), ``corrections`` (entries where the user changed the detector's original label), ``unverified`` (Find work-queue items the human hasn't acted on), or ``verified`` (items the human has confirmed). Overrides ``goods_only``.",
+            "description": "Filter mode: ``good``, ``bad``, ``both`` (default), ``corrections`` (entries where the user changed the detector's original label), ``unverified`` (Find work-queue items the human hasn't acted on), or ``verified`` (items the human has confirmed). Overrides ``goods_only``. The session-scoped filters (``corrections`` / ``unverified`` / ``verified``) never include ``origin_only`` fallback entries.",
             "in": "query",
             "name": "label_filter",
             "required": false,
