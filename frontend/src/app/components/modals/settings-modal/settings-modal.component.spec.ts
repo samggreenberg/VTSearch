@@ -166,8 +166,11 @@ describe('SettingsModalComponent', () => {
 
   it('should fall back to auto for an unrecognized stored Graphics value', async () => {
     await flushInit();
+    // The typed union rules this out at compile time, so cast through unknown:
+    // the guard exists for a settings file hand-edited (or written by a newer
+    // build) with a mode this client doesn't know.
     component.settings.update(
-      (s) => ({ ...s, browse_graphics: 'turbo' }) as typeof s,
+      (s) => ({ ...s, browse_graphics: 'turbo' }) as unknown as typeof s,
     );
     expect(component.browseGraphics).toBe('auto');
   });
