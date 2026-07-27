@@ -6,6 +6,7 @@ import shutil
 import pytest
 
 from tests import load_detector_and_wait as _load_detector_and_wait
+from tests import wait_for_detector_task as _wait_for_detector_task
 from vtscore.embedding.media_vectors import media_embedding
 from vtsearch.settings import get_detectors_dir
 from vtscore.utils.hashing import content_md5
@@ -2600,8 +2601,13 @@ class TestRegisterModelFromLabelset:
             json={"name": "Foreign", "filepath": str(labels_path)},
         )
         assert res.status_code == 201, res.get_json()
-        assert res.get_json()["ingested"] == 2, "imported media must be pulled into the active dataset"
-        detector_id = res.get_json()["detector"]["id"]
+        body = res.get_json()
+        # The ingest runs on a background task (#2703); the detector must not be
+        # loaded until it lands, or label restore runs against absent media.
+        snapshot = _wait_for_detector_task(body["ingest_task_id"])
+        assert snapshot.get("error") in (None, ""), snapshot
+        assert snapshot["ingest_result"] == {"ingested": 2}, "imported media must be pulled into the active dataset"
+        detector_id = body["detector"]["id"]
 
         _load_detector_and_wait(client, detector_id)
 
@@ -2647,5 +2653,5 @@ class TestRegisterModelFromLabelset:
             json={"name": "NoDataset", "filepath": str(labels_path)},
         )
         assert res.status_code == 201, res.get_json()
-        assert res.get_json()["ingested"] == 0
+        assert res.get_json()["ingest_task_id"] == ""
         assert res.get_json()["num_labels"] == 1

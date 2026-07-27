@@ -77,6 +77,12 @@ export interface ProgressEvent {
   overall?: number | null;
   /** Dataset-only: payload returned by combine-datasets staging. */
   staging_result?: unknown;
+  /**
+   * Detector-only: terminal counts published by a labelset-media ingest task
+   * (`{ingested, applied, unresolved, failed}`); see
+   * `vtscore/datasets/ingest_task.py`. `null`/absent until the task finishes.
+   */
+  ingest_result?: unknown;
   [key: string]: unknown;
 }
 

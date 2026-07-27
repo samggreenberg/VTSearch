@@ -215,8 +215,8 @@ def register_detector_route(body: dict):
 # ---------------------------------------------------------------------------
 
 
-def _ingest_imported_labelset_media(label_dicts: list[dict]) -> int:
-    """Pull an imported labelset's media into the active dataset.
+def _start_imported_labelset_ingest(label_dicts: list[dict], entry: dict) -> str:
+    """Start the background pull of an imported labelset's media into the active dataset.
 
     A labelset is origin-keyed and dataset-agnostic, but everything
     downstream of it - vote state, the labeling grid, and above all
@@ -232,11 +232,14 @@ def _ingest_imported_labelset_media(label_dicts: list[dict]) -> int:
     Mirrors what :func:`~vtsearch.routes.labels.importers.run_label_import`
     already does for the in-session label importer, so the two import paths
     land the same media in the same place.  The subsequent detector load then
-    restores those labels into votes normally.
+    restores those labels into votes normally - which is why the caller must
+    let this task *finish* before loading the detector, or label restore runs
+    against medias that aren't there yet.
 
-    Best-effort: the detector is created either way, so an unreachable origin
-    costs the caller nothing beyond an un-ingested media.  Returns the number
-    of medias ingested.
+    The fetch+embed itself is far too slow to run inline (issue #2703), so it
+    goes onto the detector task tracker and reports through the SSE feed.
+    Returns the task id, or ``""`` when there is nothing to ingest (no active
+    dataset, or every label already resolves).
     """
     from vtscore.state.core import get_active_context, is_request_missing_dataset_context
 
@@ -245,19 +248,29 @@ def _ingest_imported_labelset_media(label_dicts: list[dict]) -> int:
         if not ds_ctx.dataset_id or is_request_missing_dataset_context(ds_ctx):
             # No dataset to ingest into; the labels stay origin-only until a
             # dataset is loaded and the detector is (re)loaded against it.
-            return 0
+            return ""
 
-        from vtscore.datasets.ingest import ingest_missing_medias
+        from vtscore.datasets.ingest_task import start_ingest_task
         from vtsearch.state import cached_media_lookups, find_missing_entries, medias
+        from vtsearch.threading import spawn
 
         origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
         missing = find_missing_entries(label_dicts, origin_lookup, md5_lookup, name_lookup)
         if not missing:
-            return 0
-        return ingest_missing_medias(missing, medias)
+            return ""
+        detector_id = entry.get("id", "")
+        return start_ingest_task(
+            missing,
+            medias,
+            task_id=f"_detingest_{detector_id}",
+            name=entry.get("name", detector_id),
+            spawn=spawn,
+            detector_id=detector_id,
+            media_type=entry.get("media_type", "") or "",
+        )
     except Exception:
         logger.exception("Ingesting imported labelset media failed")
-        return 0
+        return ""
 
 
 @detectors_registry_bp.route(
@@ -378,8 +391,11 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
 
     # Materialise any imported label whose media isn't in the active dataset,
     # so the labels are exportable / visible immediately instead of only after
-    # a Browse Positives / Find / Train pass (issue #2690).
-    ingested = _ingest_imported_labelset_media([el.to_dict() for el in elements])
+    # a Browse Positives / Find / Train pass (issue #2690).  Runs in the
+    # background (issue #2703): the caller polls ``ingest_task_id`` on the
+    # detector-task SSE channel and must wait for it before loading the
+    # detector, since label restore resolves against the ingested medias.
+    ingest_task_id = _start_imported_labelset_ingest([el.to_dict() for el in elements], entry)
 
     return jsonify(
         {
@@ -388,7 +404,7 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
             "applied": applied,
             "skipped": skipped,
             "num_labels": len(labelset),
-            "ingested": ingested,
+            "ingest_task_id": ingest_task_id,
         }
     ), 201
 

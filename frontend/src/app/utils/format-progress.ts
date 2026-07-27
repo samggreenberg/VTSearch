@@ -313,6 +313,9 @@ export function formatProgressHeader(
   } else if (/converting/i.test(message)) {
     phase = 'converting media';
     subtitle = 'Running the converter on each input file.';
+  } else if (kind === 'detector' && /missing media|re-?ingesting/i.test(message)) {
+    phase = 'fetching media';
+    subtitle = "Pulling the imported labels' media in from their original sources.";
   } else if (kind === 'detector' && /restoring labels/i.test(message)) {
     phase = 'restoring labels';
     subtitle = 'Reading the saved labelset for this detector.';

@@ -184,6 +184,18 @@
         <p class="info-text">This importer requires no additional configuration.</p>
       }
 
+      @if (ingestTask()) {
+        <div class="ingest-progress">
+          <vt-progress-bar
+            [value]="ingestBar.value"
+            [max]="ingestBar.max"
+            [indeterminate]="ingestBar.indeterminate"
+            [pulsing]="!!ingestBar.pulsing"
+          ></vt-progress-bar>
+          <p class="info-text">{{ ingestMessage }}</p>
+        </div>
+      }
+
       @if (error()) {
         <p class="error-text">{{ error() }}</p>
       }
