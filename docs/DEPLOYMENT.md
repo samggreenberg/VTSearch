@@ -443,8 +443,9 @@ Notable fields:
 
 - `autofind_detectors`: list of registered detector names
   to run during `/api/auto-detect` and the CLI `--autodetect` flow.
-  This is a **per-user** setting (each user curates their own list in
-  Settings → Auto-Find or via `PUT /api/detectors/registry/<id>/autofind`).
+  This is a **per-user** setting (each user curates their own list on the
+  Dashboard's AutoRun detector tab, backed by
+  `PUT /api/detectors/registry/<id>/autofind`).
   A list placed here in `data/settings.json` applies to the built-in
   `default` user — i.e. single-user deployments and the CLI's default
   `--autodetect` run, which read through to this file.

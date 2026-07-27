@@ -1,33 +1,10 @@
-<!-- Auto-Find detectors --------------------------------------------------- -->
-<h4 class="subhead">
-  Auto-Find detectors
-  <span
-    class="help-icon"
-    tabindex="0"
-    title="Detectors flagged here run automatically against each dataset as it is imported (an “Auto-Find”). These are your own settings; every user curates their own Auto-Find list.">
-    <vt-icon type="help" [size]="14"></vt-icon>
-  </span>
-</h4>
-@if (loadingDetectors()) {
-  <p class="empty-state">Loading detectors…</p>
-} @else if (detectors().length === 0) {
-  <p class="empty-state">No detectors registered yet. Train or import a detector first.</p>
-} @else {
-  <div class="detector-list">
-    @for (d of detectors(); track d.id) {
-      <label class="checkbox-row" [title]="'Auto-Find ' + d.name + (d.media_type ? ' (' + d.media_type + ')' : '')">
-        <input type="checkbox" [ngModel]="d.autofind" (ngModelChange)="toggleDetector(d, $event)" />
-        {{ d.name }}
-        @if (d.media_type) {
-          <span class="detector-type">{{ d.media_type | titlecase }}</span>
-        }
-      </label>
-    }
-  </div>
-}
-@if (detectorError()) {
-  <p class="error-text">{{ detectorError() }}</p>
-}
+<!-- Which detectors auto-run is chosen on the Dashboard (AutoRun tab), not
+     here; this tab only configures what happens with the results. -->
+<p class="form-hint">
+  Detectors on the Dashboard's <strong>AutoRun</strong> tab run automatically
+  against each dataset as it is imported. Move a detector between Drafts and
+  AutoRun with its ⋯ menu; every user curates their own AutoRun list.
+</p>
 
 <!-- Results Exporter ------------------------------------------------------ -->
 <!-- Hidden entirely when no exporters are available: the section would

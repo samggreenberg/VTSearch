@@ -611,8 +611,8 @@ The Settings modal (gear icon) is organised into eight tabs:
 - **Appearance** - theme, animations, the metadata panel, the
   **Enable achievements** toggle, and per-media-type Scroll Style
   (focus mode and thumbnail size).
-- **Auto-Find** - detectors that auto-run on import, and what exporter
-  to send their results to.
+- **Auto-Find** - what exporter to send auto-run results to. (Which
+  detectors auto-run is chosen on the Dashboard's **AutoRun** tab.)
 - **Autopilot** - the guided-workflow knobs described under
   [Configuring Autopilot](#configuring-autopilot).
 - **Browser** - per-media-type look of the spatial Browse view (tile
@@ -644,10 +644,24 @@ with bulk-action and per-card controls.
   pencil for **Rename**, **Delete** is an inline button, and the
   remaining actions (**Browse**, **Stats**, and - on multi-user
   deployments - access controls) live behind a **⋯** overflow menu.
-- **Detectors** - every saved detector. Like datasets, the name carries
-  a **Rename** pencil and **Delete** is inline; the **⋯** overflow menu
-  holds the rest, including **Import Labels** (import labels into this
-  detector) and **Export**.
+- **Detectors** - every saved detector, split across two tabs:
+  - **Drafts** holds detectors you're still building or evaluating.
+    Like datasets, the name carries a **Rename** pencil and **Delete**
+    is inline; the **⋯** overflow menu holds the rest, including
+    **Import Labels** (import labels into this detector), **Export**,
+    and **Move to AutoRun**.
+  - **AutoRun** holds finalized detectors. They run automatically
+    against every dataset as it is imported (and during CLI
+    autodetect), and they are *frozen*: no rename, delete, retrain, or
+    label import until you pick **Move to Drafts** from the **⋯** menu
+    to unfreeze them. Read-only actions (**Load**, **Browse
+    positives**, **Stats**, **Export**) stay available, and **Find**
+    works as usual.
+
+  A detector lives on exactly one tab at a time, and every user
+  curates their own AutoRun list. The typical loop: build and test a
+  detector in **Drafts**, move it to **AutoRun** once you trust it,
+  and move it back to Drafts later if it needs more tuning.
 
 The **+** button on each card creates a new dataset (the Add Dataset
 dialog) or a new detector (the [New Detector](#creating-a-detector)

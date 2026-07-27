@@ -147,6 +147,9 @@
     <div class="dashboard-section-header">
       <h2 class="dashboard-section-title" title="Trained detectors for scoring and finding media"><vt-icon type="robot" [size]="18"></vt-icon> Detectors</h2>
       <div class="dashboard-section-actions">
+        <!-- Editing actions only exist on the Drafts tab: AutoRun detectors
+             are frozen (move one back to Drafts to combine or delete it). -->
+        @if (detectorTab() === 'drafts') {
         <button class="side-action-btn" (click)="openCombineDetectorsModal()" [disabled]="isContextSwitching || !combineSelectedDetectorsEnabled" [title]="combineSelectedDetectorsHint" aria-label="Combine selected detectors">
           <vt-icon type="combine" [size]="18"></vt-icon>
         </button>
@@ -154,6 +157,7 @@
           <vt-icon type="trash" [size]="16" [class.side-action-delete-active]="deletingSelectedDetectorsConfirm()" [class.side-action-delete-inactive]="!deletingSelectedDetectorsConfirm() && wasDeletingSelectedDetectorsConfirm()" (animationend)="onDeleteSelectedDetectorsAnimationEnd()"></vt-icon>
         </button>
         <span class="section-actions-sep" aria-hidden="true"></span>
+        }
         <button class="btn btn--primary btn--sm"
           [disabled]="isContextSwitching"
           (click)="openNewDetectorModal()" title="Create a new detector" aria-label="Create a new detector"><span class="plus-icon" aria-hidden="true"
@@ -163,6 +167,26 @@
       </div>
     </div>
 
+    <div class="tab-bar detector-tab-bar" role="tablist" aria-label="Detector groups">
+      <button
+        class="tab"
+        role="tab"
+        [class.active]="detectorTab() === 'drafts'"
+        [attr.aria-selected]="detectorTab() === 'drafts'"
+        (click)="setDetectorTab('drafts')"
+        title="Detectors you're building or evaluating — fully editable">
+        Drafts ({{ draftDetectors.length }})
+      </button>
+      <button
+        class="tab"
+        role="tab"
+        [class.active]="detectorTab() === 'autorun'"
+        [attr.aria-selected]="detectorTab() === 'autorun'"
+        (click)="setDetectorTab('autorun')"
+        title="Finalized detectors, frozen against edits, that run automatically on every dataset you import">
+        AutoRun ({{ autorunDetectors.length }})
+      </button>
+    </div>
     @if (!registryLoaded && detectors.length === 0) {
       <ul class="dashboard-skeleton-list" aria-busy="true" aria-label="Loading detectors">
         @for (_ of skeletonRows; track $index) {
@@ -174,15 +198,19 @@
           </li>
         }
       </ul>
-    } @else if (detectors.length === 0) {
-      <p class="empty-state empty-state--fill">No detectors yet. Click + to add one.</p>
+    } @else if (visibleDetectors.length === 0) {
+      @if (detectorTab() === 'drafts') {
+        <p class="empty-state empty-state--fill">No draft detectors. Click + to add one.</p>
+      } @else {
+        <p class="empty-state empty-state--fill">No AutoRun detectors yet. Open a draft detector's ⋯ menu and pick "Move to AutoRun" to run it automatically on every dataset you import.</p>
+      }
     } @else {
       <div class="dashboard-grid">
         <table class="data-table data-table--grid dash-table" [class.table-fixed]="detectorCols.tableFixed" [class.actions-has-load]="anyDetectorUnloaded">
           <thead>
             <tr>
               <th scope="col" class="select-col" data-col="select" [style.width.%]="detectorCols.tableFixed ? detectorCols.colWidths['select'] : null">
-                <button class="card-icon-btn header-checkbox" (click)="toggleAllDetectors()" [disabled]="isContextSwitching || detectors.length === 0" [title]="detectorSelectionState === 'all' ? 'Deselect all' : 'Select all detectors'" [attr.aria-label]="detectorSelectionState === 'all' ? 'Deselect all' : 'Select all'" [attr.aria-checked]="detectorSelectionState === 'all' ? 'true' : detectorSelectionState === 'some' ? 'mixed' : 'false'" role="checkbox">
+                <button class="card-icon-btn header-checkbox" (click)="toggleAllDetectors()" [disabled]="isContextSwitching || visibleDetectors.length === 0" [title]="detectorSelectionState === 'all' ? 'Deselect all' : 'Select all detectors'" [attr.aria-label]="detectorSelectionState === 'all' ? 'Deselect all' : 'Select all'" [attr.aria-checked]="detectorSelectionState === 'all' ? 'true' : detectorSelectionState === 'some' ? 'mixed' : 'false'" role="checkbox">
                   @switch (detectorSelectionState) {
                     @case ('all') { <vt-icon type="checkbox-checked" [size]="16"></vt-icon> }
                     @case ('some') { <vt-icon type="checkbox-some" [size]="16"></vt-icon> }
@@ -239,6 +267,7 @@
                 (export)="openExportModal(detector)"
                 (exportModel)="openPortableExportModal(detector)"
                 (addLabels)="openAddLabelsModal(detector)"
+                (setAutorun)="setDetectorAutorun(detector, $event)"
                 (security)="editDetectorSecurity(detector)"
                 (cancelTask)="loadingTasksSvc.cancelDetectorLoadingTask($event)"
                 (dismissTask)="loadingTasksSvc.dismissDetectorLoadingTask($event)"

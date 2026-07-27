@@ -16,7 +16,8 @@ MLP, and applies it to the dataset.  See below for the exact format.
 ### Which user's Auto-Find list runs
 
 `autofind_detectors` (and the Auto-Find results exporter) are **per-user**:
-each user curates their own list in **Settings → Auto-Find**. By default the
+each user curates their own list on the Dashboard's **AutoRun** detector tab
+(move a detector between **Drafts** and **AutoRun** with its ⋯ menu). By default the
 CLI runs as the built-in **`default`** user, which reads its list from the
 `--settings` file (so the flat-file workflow above is unchanged).
 

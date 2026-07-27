@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, OnDestroy, OnInit, output, signal } from '@angular/core';
-import { TitleCasePipe } from '@angular/common';
 
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
@@ -7,17 +6,8 @@ import { takeUntil } from 'rxjs/operators';
 
 import { IconComponent } from '../../../icon/icon.component';
 import { ImporterField } from '../../../../models/api.models';
-import { DetectorsRegistryApiService } from '../../../../services/detectors-registry-api.service';
 import { ExportersApiService } from '../../../../services/exporters-api.service';
 import type { ExporterEntry } from '../../../../generated/api-client/models/exporter-entry';
-
-/** One registered detector, narrowed to what the Auto-Find checklist needs. */
-interface AutofindDetectorEntry {
-  id: string;
-  name: string;
-  autofind: boolean;
-  media_type: string;
-}
 
 /** The selected exporter + its per-exporter field-value map, emitted to the
  *  parent so it can persist both onto the settings object. */
@@ -29,29 +19,27 @@ export interface AutoFindExporterChange {
 /**
  * Settings tab body for "Auto-Find".
  *
- * Two sections:
- *  1. **Auto-Find detectors** - an editable checklist of every registered
- *     detector. Each checkbox drives the per-detector Auto-Find toggle
- *     (`PUT /api/detectors/registry/<id>/autofind`), which persists into the
- *     caller's per-user `autofind_detectors` list. (Moved here from the
- *     read-only Server tab.)
- *  2. **Results Exporter** - a tab strip with one tab per pickable exporter
- *     (plus "None"). The active tab is the exporter that runs automatically
- *     after an Auto-Find; its tab body renders that exporter's own fields.
- *     Field values are kept per-exporter so switching tabs keeps each
- *     exporter's config. Edits are emitted to the parent, which saves them as
- *     `autofind_exporter` / `autofind_exporter_field_values`.
+ * Configures the **Results Exporter** - a tab strip with one tab per pickable
+ * exporter (plus "None"). The active tab is the exporter that runs
+ * automatically after an Auto-Find; its tab body renders that exporter's own
+ * fields. Field values are kept per-exporter so switching tabs keeps each
+ * exporter's config. Edits are emitted to the parent, which saves them as
+ * `autofind_exporter` / `autofind_exporter_field_values`.
+ *
+ * *Which* detectors auto-run is not chosen here: that's the Dashboard's
+ * Drafts/AutoRun detector tabs (each detector's ⋯ menu moves it between
+ * them, driving `PUT /api/detectors/registry/<id>/autofind` and the caller's
+ * per-user `autofind_detectors` list).
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-auto-find-settings',
   standalone: true,
-  imports: [FormsModule, IconComponent, TitleCasePipe],
+  imports: [FormsModule, IconComponent],
   templateUrl: './auto-find-settings.component.html',
   styleUrl: './auto-find-settings.component.scss',
 })
 export class AutoFindSettingsComponent implements OnInit, OnDestroy {
-  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
   private exportersApi = inject(ExportersApiService);
 
   constructor() {
@@ -75,15 +63,12 @@ export class AutoFindSettingsComponent implements OnInit, OnDestroy {
    *  persist whenever the user changes the exporter or any of its fields. */
   readonly exporterChange = output<AutoFindExporterChange>();
 
-  // Written from the async load subscribes below (not a zoneless CD trigger)
+  // Written from the async load subscribe below (not a zoneless CD trigger)
   // yet read in the template, so they must be signals to repaint on emit;
   // plain-property writes inside a subscribe callback never schedule change
   // detection under zoneless, which is what left "Loading…" stuck forever.
-  readonly detectors = signal<AutofindDetectorEntry[]>([]);
   readonly exporters = signal<ExporterEntry[]>([]);
-  readonly loadingDetectors = signal(true);
   readonly loadingExporters = signal(true);
-  readonly detectorError = signal('');
 
   /** Active exporter tab ('' = the "None" tab). Mirrors ``autofindExporter``
    *  but is the single source of truth for which tab body is shown. */
@@ -95,27 +80,6 @@ export class AutoFindSettingsComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
 
   ngOnInit(): void {
-    this.detectorsRegistryApi
-      .getRegistry()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (res) => {
-          this.detectors.set(
-            (res.detectors || []).map((d) => ({
-              id: String((d as Record<string, unknown>)['id'] ?? ''),
-              name: String((d as Record<string, unknown>)['name'] ?? ''),
-              autofind: Boolean((d as Record<string, unknown>)['autofind']),
-              media_type: String((d as Record<string, unknown>)['media_type'] ?? ''),
-            })),
-          );
-          this.loadingDetectors.set(false);
-        },
-        error: () => {
-          this.detectorError.set('Failed to load detectors');
-          this.loadingDetectors.set(false);
-        },
-      });
-
     this.exportersApi
       .getExporters()
       .pipe(takeUntil(this.destroy$))
@@ -133,25 +97,6 @@ export class AutoFindSettingsComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
-  }
-
-  // --- Auto-Find detectors -------------------------------------------------
-
-  /** Toggle a detector's Auto-Find flag. Persists immediately via the
-   *  registry endpoint into the calling user's own ``autofind_detectors``
-   *  list (each user curates their own Auto-Find list). */
-  toggleDetector(detector: AutofindDetectorEntry, checked: boolean): void {
-    const prev = detector.autofind;
-    detector.autofind = checked;
-    this.detectorsRegistryApi
-      .setAutofind(detector.id, checked)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        error: () => {
-          detector.autofind = prev; // revert on failure
-          this.detectorError.set(`Failed to update Auto-Find for "${detector.name}"`);
-        },
-      });
   }
 
   // --- Results Exporter ----------------------------------------------------

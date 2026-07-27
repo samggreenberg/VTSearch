@@ -265,7 +265,9 @@ PUT /api/detectors/registry/{detector_id}/autofind
 
 → `{"ok": true, "autofind": true}` (writes the detector's name into
 `autofind_detectors` so `/api/auto-detect` and the CLI
-`--autodetect` flow pick it up).
+`--autodetect` flow pick it up). In the GUI this is the Dashboard's
+Drafts ↔ AutoRun detector-tab move: `autofind: true` detectors sit on
+the frozen AutoRun tab, everything else on Drafts.
 
 ### Load / unload detector
 
