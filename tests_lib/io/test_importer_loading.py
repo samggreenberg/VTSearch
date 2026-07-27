@@ -18,6 +18,7 @@ import pytest
 
 from helpers import make_raw_wav_bytes as _make_wav_bytes
 from vtscore.embedding.media_vectors import media_embedding
+from vtscore.utils.hashing import content_md5
 
 
 class TestLoadDatasetContentVectors:
@@ -267,7 +268,6 @@ class TestLoadDatasetContentMD5s:
 
     def test_computes_md5_when_not_in_content_md5s(self, tmp_path):
         """A file NOT in content_md5s falls back to computing the hash."""
-        import hashlib
         import unittest.mock as mock
 
         import numpy as np
@@ -276,7 +276,7 @@ class TestLoadDatasetContentMD5s:
 
         wav = tmp_path / "b.wav"
         self._write_wav(wav)
-        expected_md5 = hashlib.md5(wav.read_bytes()).hexdigest()
+        expected_md5 = content_md5(wav.read_bytes())
 
         mt = self._make_fake_media_type(embed_return=np.zeros(3))
 
@@ -293,7 +293,6 @@ class TestLoadDatasetContentMD5s:
 
     def test_mixed_content_md5s_and_computed(self, tmp_path):
         """Only files in content_md5s skip MD5 computation; others are hashed."""
-        import hashlib
         import unittest.mock as mock
 
         import numpy as np
@@ -306,7 +305,7 @@ class TestLoadDatasetContentMD5s:
         self._write_wav(wav_b)
 
         pre_md5 = "f" * 32
-        computed_md5 = hashlib.md5(wav_b.read_bytes()).hexdigest()
+        computed_md5 = content_md5(wav_b.read_bytes())
         mt = self._make_fake_media_type(embed_return=np.zeros(3))
 
         medias: dict = {}
@@ -324,7 +323,6 @@ class TestLoadDatasetContentMD5s:
 
     def test_no_content_md5s_param_computes_all(self, tmp_path):
         """When content_md5s is None (default), all files are hashed."""
-        import hashlib
         import unittest.mock as mock
 
         import numpy as np
@@ -333,7 +331,7 @@ class TestLoadDatasetContentMD5s:
 
         wav = tmp_path / "c.wav"
         self._write_wav(wav)
-        expected_md5 = hashlib.md5(wav.read_bytes()).hexdigest()
+        expected_md5 = content_md5(wav.read_bytes())
 
         mt = self._make_fake_media_type(embed_return=np.zeros(3))
 

@@ -8,6 +8,7 @@ import pytest
 from tests import load_detector_and_wait as _load_detector_and_wait
 from vtscore.embedding.media_vectors import media_embedding
 from vtsearch.settings import get_detectors_dir
+from vtscore.utils.hashing import content_md5
 
 
 @pytest.fixture(autouse=True)
@@ -1105,7 +1106,6 @@ class TestLoadModelEndpoint:
         id-space and unrelated B-medias whose ids happen to coincide with
         A's voted ids appear as voted in B's labeling UI.
         """
-        import hashlib
 
         import numpy as np
 
@@ -1156,7 +1156,7 @@ class TestLoadModelEndpoint:
                 "id": cid,
                 "media_type": "audio",
                 "embedder": "clap",
-                "md5": hashlib.md5(f"ds_b_{cid}".encode()).hexdigest(),
+                "md5": content_md5(f"ds_b_{cid}".encode()),
                 "embeddings": {"clap": np.zeros(512, dtype=np.float32)},
                 "media_bytes": b"fake-b",
                 "filename": f"ds_b_{cid}.wav",
@@ -1255,7 +1255,6 @@ class TestEmbedderMismatchInvalidatesStaleModel:
         embedder triggers invalidation of the active detector's MLP via
         ``ensure_detector_model_matches_active_embedder``.
         """
-        import hashlib
         from unittest.mock import MagicMock
 
         import numpy as np
@@ -1305,7 +1304,7 @@ class TestEmbedderMismatchInvalidatesStaleModel:
                 "id": cid,
                 "media_type": "audio",
                 "embedder": "shiny-new-embedder",
-                "md5": hashlib.md5(f"h5_b_{cid}".encode()).hexdigest(),
+                "md5": content_md5(f"h5_b_{cid}".encode()),
                 "embeddings": {"shiny-new-embedder": np.zeros(512, dtype=np.float32)},
                 "media_bytes": b"fake-b",
                 "filename": f"h5_b_{cid}.wav",
@@ -2093,7 +2092,6 @@ class TestLoadModelCrossDatasetResolution:
         mode.  The label restore should follow origin trails, compute MD5s,
         and match against loaded medias.
         """
-        import hashlib
 
         import numpy as np
 
@@ -2116,8 +2114,8 @@ class TestLoadModelCrossDatasetResolution:
         good_file.write_bytes(b"shared_good_content")
         bad_file.write_bytes(b"shared_bad_content")
 
-        good_md5 = hashlib.md5(b"shared_good_content").hexdigest()
-        bad_md5 = hashlib.md5(b"shared_bad_content").hexdigest()
+        good_md5 = content_md5(b"shared_good_content")
+        bad_md5 = content_md5(b"shared_bad_content")
 
         label_origin = {
             "importer": "server_folder",

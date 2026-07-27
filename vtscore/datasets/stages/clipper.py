@@ -15,6 +15,7 @@ from vtscore.embedding.matrix import invalidate_embedding_matrix
 from vtscore.embedding.media_vectors import media_embedding
 
 from vtscore.datasets.stages._common import _STATUS_TO_STEP, _TOTAL_LOAD_STEPS
+from vtscore.utils.hashing import content_md5
 
 if TYPE_CHECKING:
     from vtscore.state import DatasetContext
@@ -325,7 +326,6 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
     per invocation so GPU-backed embedders can fuse the forward pass.
     Failures fall back to keeping the clip's existing embedding.
     """
-    import hashlib
 
     total_clips = len(clips)
     embed_indices: list[int] = []
@@ -348,7 +348,7 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
         # ImageBboxClipper) would otherwise inherit the parent's MD5 via
         # ``dict(media)`` and cause dedup to merge distinct crops.
         if content_bytes is not None:
-            clip["md5"] = hashlib.md5(content_bytes).hexdigest()
+            clip["md5"] = content_md5(content_bytes)
         elif recompute:
             # Metadata-only clips (e.g. video): bytes unchanged but
             # boundaries differ; create a unique MD5 by hashing the
@@ -356,8 +356,8 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
             # distinct clips.
             parent_bytes = clip.get("media_bytes", b"")
             boundary_tag = f"|clip_start={clip.get('clip_start')}|clip_end={clip.get('clip_end')}"
-            combined = hashlib.md5(parent_bytes).hexdigest() + boundary_tag
-            clip["md5"] = hashlib.md5(combined.encode()).hexdigest()
+            combined = content_md5(parent_bytes) + boundary_tag
+            clip["md5"] = content_md5(combined.encode())
         embed_indices.append(clip_idx)
         embed_inputs.append(_build_clip_embed_input(clip, media_type))
 

@@ -10,7 +10,6 @@ Validates:
 7. The /api/medias endpoint exposes clip metadata to the frontend.
 """
 
-import hashlib
 import io
 
 import numpy as np
@@ -21,6 +20,7 @@ from vtsearch.state import (
     good_votes,
     bad_votes,
 )
+from vtscore.utils.hashing import content_md5
 
 
 # ---------------------------------------------------------------------------
@@ -40,7 +40,7 @@ def _make_audio_media(media_id: int, duration: float = 5.1, *, origin_path: str 
         "filename": f"clip_{media_id}.wav",
         "media_bytes": wav,
         "duration": duration,
-        "md5": hashlib.md5(wav).hexdigest(),
+        "md5": content_md5(wav),
         "embedding": rng.standard_normal(512).astype(np.float32),
         "origin": {"importer": "server_folder", "params": {"path": origin_path, "media_type": "audio"}},
         "origin_name": f"clip_{media_id}.wav",
@@ -63,7 +63,7 @@ def _make_image_media(media_id: int, width: int = 300, height: int = 100) -> dic
         "media_bytes": img_bytes,
         "width": width,
         "height": height,
-        "md5": hashlib.md5(img_bytes).hexdigest(),
+        "md5": content_md5(img_bytes),
         "embedding": rng.standard_normal(512).astype(np.float32),
         "origin": {"importer": "server_folder", "params": {"path": "/data/images", "media_type": "image"}},
         "origin_name": f"img_{media_id}.png",
@@ -80,7 +80,7 @@ def _make_text_media(media_id: int, text: str = "First sentence. Second sentence
         "filename": f"text_{media_id}.txt",
         "media_string": text,
         "media_bytes": text_bytes,
-        "md5": hashlib.md5(text_bytes).hexdigest(),
+        "md5": content_md5(text_bytes),
         "embedding": rng.standard_normal(512).astype(np.float32),
         "origin": {"importer": "server_folder", "params": {"path": "/data/texts", "media_type": "text"}},
         "origin_name": f"text_{media_id}.txt",
@@ -97,7 +97,7 @@ def _make_video_media(media_id: int, duration: float = 10.0) -> dict:
         "filename": f"video_{media_id}.mp4",
         "media_bytes": fake_bytes,
         "duration": duration,
-        "md5": hashlib.md5(fake_bytes).hexdigest(),
+        "md5": content_md5(fake_bytes),
         "embedding": rng.standard_normal(512).astype(np.float32),
         "origin": {"importer": "server_folder", "params": {"path": "/data/videos", "media_type": "video"}},
         "origin_name": f"video_{media_id}.mp4",
@@ -166,7 +166,7 @@ class TestApplyClipperMD5:
         # All clip MD5s are recomputed from actual clip bytes, not the parent
         for clip in clips_dict.values():
             assert clip["md5"] != parent_md5, "clip MD5 should differ from parent"
-            assert clip["md5"] == hashlib.md5(clip["media_bytes"]).hexdigest()
+            assert clip["md5"] == content_md5(clip["media_bytes"])
 
     def test_image_clips_get_recomputed_md5s(self):
         from vtscore.datasets.stages.clipper import _apply_clipper
@@ -178,7 +178,7 @@ class TestApplyClipperMD5:
         assert len(clips_dict) == 3  # 300/100 = 3 tiles
         for clip in clips_dict.values():
             assert clip["md5"] != parent_md5
-            assert clip["md5"] == hashlib.md5(clip["media_bytes"]).hexdigest()
+            assert clip["md5"] == content_md5(clip["media_bytes"])
 
     def test_text_clips_get_unique_md5s(self):
         from vtscore.datasets.stages.clipper import _apply_clipper
@@ -238,7 +238,7 @@ class TestApplyClipperMD5:
                 "importer-provided MD5 must be replaced for clips"
             )
             # The new MD5 should be computed from the actual clip bytes
-            assert clip["md5"] == hashlib.md5(clip["media_bytes"]).hexdigest()
+            assert clip["md5"] == content_md5(clip["media_bytes"])
 
     def test_importer_provided_embedding_replaced_for_clips(self):
         """An importer may pre-compute embeddings for full media items.
@@ -698,7 +698,7 @@ class TestMultipleMediasClipped:
         assert len(clips_dict) == 6
         # Each clip's MD5 should be computed from its actual bytes
         for clip in clips_dict.values():
-            assert clip["md5"] == hashlib.md5(clip["media_bytes"]).hexdigest()
+            assert clip["md5"] == content_md5(clip["media_bytes"])
 
     def test_multiple_text_medias_clipped(self):
         from vtscore.datasets.stages.clipper import _apply_clipper

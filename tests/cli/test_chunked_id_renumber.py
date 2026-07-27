@@ -11,7 +11,6 @@ by running the actual CLI through to a JSON export and asserting the
 
 from __future__ import annotations
 
-import hashlib
 import json
 import pickle
 import shutil
@@ -20,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from vtsearch.settings import get_detectors_dir
+from vtscore.utils.hashing import content_md5
 
 
 def _unique_bytes(media_id: int) -> bytes:
@@ -30,7 +30,7 @@ def _unique_bytes(media_id: int) -> bytes:
 def _make_audio_media(media_id: int) -> dict:
     """Build a minimal audio media dict suitable for a thin pickle."""
     raw = _unique_bytes(media_id)
-    md5 = hashlib.md5(raw).hexdigest()
+    md5 = content_md5(raw)
     return {
         "id": media_id,
         "media_type": "audio",

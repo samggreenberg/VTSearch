@@ -20,6 +20,7 @@ import os
 import pytest
 
 import vtscore.config as config
+from vtscore.utils.hashing import content_md5
 
 
 _NON_GROUP_DIRS = {"tests_lib", "fixtures", "__pycache__"}
@@ -79,13 +80,12 @@ _EMBEDDING_DIM = 512
 
 
 def _fake_embed_audio(arg):
-    import hashlib
 
     path = arg["media_path"] if isinstance(arg, dict) else arg
     try:
         with open(path, "rb") as f:
             data = f.read(1000)
-        seed = int(hashlib.md5(data).hexdigest(), 16) % 2**31
+        seed = int(content_md5(data), 16) % 2**31
     except Exception:
         seed = hash(str(path)) % 2**31
     rng = np.random.RandomState(seed)

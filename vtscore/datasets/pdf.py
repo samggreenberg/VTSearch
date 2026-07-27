@@ -10,10 +10,10 @@ expands every PDF in a directory into per-page image medias (used by the
 
 from __future__ import annotations
 
-import hashlib
 import io
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from vtscore.utils.hashing import content_md5
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -134,7 +134,7 @@ def load_pdf_images_into(
                 "media_type": mt.type_id,
                 "embedder": "",
                 "file_size": len(image_bytes),
-                "md5": hashlib.md5(image_bytes).hexdigest(),
+                "md5": content_md5(image_bytes),
                 "embeddings": {},
                 "filename": full_page_name,
                 "category": "custom",

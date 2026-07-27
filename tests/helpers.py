@@ -6,6 +6,7 @@ import io
 import struct
 import wave
 from pathlib import Path
+from vtscore.utils.hashing import content_md5
 
 
 # ---------------------------------------------------------------------------
@@ -101,7 +102,6 @@ def make_minimal_mp4_bytes() -> bytes:
 
 def make_image_media(media_id: int, embedding_dim: int = 512) -> dict:
     """Build a test image media dict with a solid-color PNG and fake embedding."""
-    import hashlib  # noqa: PLC0415
 
     import numpy as np  # noqa: PLC0415
 
@@ -115,7 +115,7 @@ def make_image_media(media_id: int, embedding_dim: int = 512) -> dict:
         "width": 16,
         "height": 16,
         "file_size": len(img),
-        "md5": hashlib.md5(img).hexdigest(),
+        "md5": content_md5(img),
         "embeddings": {"siglip": rng.randn(embedding_dim).astype("float32")},
         "media_bytes": img,
         "filename": f"image_{media_id}.png",
@@ -127,7 +127,6 @@ def make_image_media(media_id: int, embedding_dim: int = 512) -> dict:
 
 def make_text_media(media_id: int, embedding_dim: int = 512) -> dict:
     """Build a test text media dict with a short string and fake embedding."""
-    import hashlib  # noqa: PLC0415
 
     import numpy as np  # noqa: PLC0415
 
@@ -140,7 +139,7 @@ def make_text_media(media_id: int, embedding_dim: int = 512) -> dict:
         "word_count": len(content.split()),
         "character_count": len(content),
         "file_size": len(content.encode()),
-        "md5": hashlib.md5(content.encode()).hexdigest(),
+        "md5": content_md5(content.encode()),
         "embeddings": {"e5": rng.randn(embedding_dim).astype("float32")},
         "media_string": content,
         "filename": f"text_{media_id}.txt",
@@ -152,7 +151,6 @@ def make_text_media(media_id: int, embedding_dim: int = 512) -> dict:
 
 def make_video_media(media_id: int, embedding_dim: int = 512) -> dict:
     """Build a test video media dict with a minimal MP4 header and fake embedding."""
-    import hashlib  # noqa: PLC0415
 
     import numpy as np  # noqa: PLC0415
 
@@ -164,7 +162,7 @@ def make_video_media(media_id: int, embedding_dim: int = 512) -> dict:
         "embedder": "xclip",
         "duration": 1.0,
         "file_size": len(mp4),
-        "md5": hashlib.md5(mp4).hexdigest(),
+        "md5": content_md5(mp4),
         "embeddings": {"xclip": rng.randn(embedding_dim).astype("float32")},
         "media_bytes": mp4,
         "filename": f"video_{media_id}.mp4",

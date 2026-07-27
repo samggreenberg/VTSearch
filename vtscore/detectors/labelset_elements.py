@@ -10,13 +10,13 @@ helpers used by the preview and vote routes.
 
 from __future__ import annotations
 
-import hashlib
 import json as _json
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Mapping
 
 from vtscore.datasets.labelset import LabeledElement, LabelSet, element_key
+from vtscore.utils.hashing import content_sha1
 
 
 def stable_element_id(elem: LabeledElement) -> str:
@@ -32,7 +32,7 @@ def stable_element_id(elem: LabeledElement) -> str:
         payload = _json.dumps(elem.to_dict(), sort_keys=True)
     else:
         payload = _json.dumps(key, default=str, sort_keys=True)
-    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
+    return content_sha1(payload.encode("utf-8"))[:16]
 
 
 def find_element_by_id(elements: list[LabeledElement], target_id: str) -> tuple[int, LabeledElement] | None:

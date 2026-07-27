@@ -7,6 +7,7 @@ import os
 import pytest
 
 import vtscore.config as config
+from vtscore.utils.hashing import content_md5
 
 # ---------------------------------------------------------------------------
 # Auto-assign test group markers based on the test file's parent directory,
@@ -59,7 +60,6 @@ def _fake_embed_audio(arg):
     ``media_path``; seed off those bytes so distinct clips still get distinct
     vectors, falling back to the media id only when neither is present.
     """
-    import hashlib
 
     data = None
     if isinstance(arg, dict):
@@ -79,7 +79,7 @@ def _fake_embed_audio(arg):
                 data = f.read(1000)
         except Exception:
             data = str(arg).encode()
-    seed = int(hashlib.md5(data).hexdigest(), 16) % 2**31
+    seed = int(content_md5(data), 16) % 2**31
     rng = np.random.RandomState(seed)
     vec = rng.randn(_EMBEDDING_DIM).astype(np.float32)
     # Real embedders now L2-normalize at ingest, so the fakes must too:

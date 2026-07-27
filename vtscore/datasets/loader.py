@@ -19,10 +19,8 @@ to use these functions outside the Flask app.
 
 from __future__ import annotations
 
-import hashlib
 import io
 import pickle
-from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
@@ -97,15 +95,6 @@ def _get_embedding_value(d: dict[str, Any]) -> Any:
     Returns ``None`` when the key is absent.
     """
     return d.get("embedding")
-
-
-def _streaming_md5(file_path: Path) -> str:
-    """Compute MD5 hash of a file using constant memory."""
-    h = hashlib.md5()
-    with open(file_path, "rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 # ---------------------------------------------------------------------------

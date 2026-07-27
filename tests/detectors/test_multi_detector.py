@@ -1,7 +1,6 @@
 """Tests for multiple loaded detectors: DetectorContext lifecycle, vote isolation,
 model registry multi-loaded support, activate/unload endpoints, and MLP caching."""
 
-import hashlib
 import shutil
 
 import numpy as np
@@ -9,6 +8,7 @@ import pytest
 
 from tests import load_detector_and_wait as _load_detector_and_wait
 from vtsearch.settings import get_detectors_dir
+from vtscore.utils.hashing import content_md5
 
 
 @pytest.fixture(autouse=True)
@@ -31,7 +31,7 @@ def _make_test_media(media_id: int, media_type: str = "audio") -> dict:
         "embedder": "clap",
         "duration": 1.0,
         "file_size": 100,
-        "md5": hashlib.md5(f"media_{media_id}".encode()).hexdigest(),
+        "md5": content_md5(f"media_{media_id}".encode()),
         "embedding": rng.standard_normal(512).astype(np.float32),
         "media_bytes": b"fake",
         "filename": f"media_{media_id}.wav",

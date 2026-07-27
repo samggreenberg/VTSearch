@@ -1,8 +1,6 @@
 """Tests for multi-dataset support: loading, activating, switching, and unloading
 multiple datasets without re-resolving media or re-embedding vectors."""
 
-import hashlib
-
 import numpy as np
 
 from tests import load_detector_and_wait as _load_detector_and_wait
@@ -20,6 +18,7 @@ from vtscore.state.core import (
     set_thread_detector_context,
     unregister_context,
 )
+from vtscore.utils.hashing import content_md5
 
 
 # ---------------------------------------------------------------------------
@@ -232,7 +231,7 @@ class TestMultiDatasetSwitching:
             "embedder": "clap",
             "duration": 1.0,
             "file_size": 100,
-            "md5": hashlib.md5(f"media_{media_id}".encode()).hexdigest(),
+            "md5": content_md5(f"media_{media_id}".encode()),
             "embedding": rng.standard_normal(512).astype(np.float32),
             "media_bytes": b"fake",
             "filename": f"media_{media_id}.wav",
@@ -388,7 +387,7 @@ class TestMultiDatasetAPI:
             "embedder": "clap",
             "duration": 1.0,
             "file_size": 100,
-            "md5": hashlib.md5(f"api_media_{media_id}".encode()).hexdigest(),
+            "md5": content_md5(f"api_media_{media_id}".encode()),
             "embedding": rng.standard_normal(512).astype(np.float32),
             "media_bytes": b"fake",
             "filename": f"api_media_{media_id}.wav",

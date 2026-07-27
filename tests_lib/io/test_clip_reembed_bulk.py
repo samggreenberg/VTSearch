@@ -11,7 +11,6 @@ established in Phase A, handing the embedder ``media_bytes`` /
 
 from __future__ import annotations
 
-import hashlib
 import io
 import unittest.mock as mock
 
@@ -20,6 +19,7 @@ import pytest
 
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.media.audio.audio_generator import generate_wav
+from vtscore.utils.hashing import content_md5
 
 
 def _make_audio_media(media_id: int, duration: float = 5.1) -> dict:
@@ -31,7 +31,7 @@ def _make_audio_media(media_id: int, duration: float = 5.1) -> dict:
         "filename": f"clip_{media_id}.wav",
         "media_bytes": wav,
         "duration": duration,
-        "md5": hashlib.md5(wav).hexdigest(),
+        "md5": content_md5(wav),
         "embedder": "clap",
         "embeddings": {"clap": rng.standard_normal(512).astype(np.float32)},
         "origin": {"importer": "server_folder", "params": {"path": "/data/audio", "media_type": "audio"}},
@@ -54,7 +54,7 @@ def _make_image_media(media_id: int, width: int = 300, height: int = 100) -> dic
         "media_bytes": img_bytes,
         "width": width,
         "height": height,
-        "md5": hashlib.md5(img_bytes).hexdigest(),
+        "md5": content_md5(img_bytes),
         "embedder": "siglip",
         "embeddings": {"siglip": rng.standard_normal(512).astype(np.float32)},
         "origin": {"importer": "server_folder", "params": {"path": "/data/images", "media_type": "image"}},
@@ -71,7 +71,7 @@ def _make_text_media(media_id: int, text: str = "First sentence. Second sentence
         "filename": f"text_{media_id}.txt",
         "media_string": text,
         "media_bytes": text_bytes,
-        "md5": hashlib.md5(text_bytes).hexdigest(),
+        "md5": content_md5(text_bytes),
         "embedder": "e5",
         "embeddings": {"e5": rng.standard_normal(512).astype(np.float32)},
         "origin": {"importer": "server_folder", "params": {"path": "/data/texts", "media_type": "text"}},
@@ -274,7 +274,7 @@ class TestBulkClipReembedMD5UnchangedByRefactor:
 
         for clip in clips_dict.values():
             assert clip["md5"] != parent_md5
-            assert clip["md5"] == hashlib.md5(clip["media_bytes"]).hexdigest()
+            assert clip["md5"] == content_md5(clip["media_bytes"])
 
 
 class TestSingleOutputClipperMD5Recompute:
@@ -293,8 +293,8 @@ class TestSingleOutputClipperMD5Recompute:
 
         parent_bytes = b"parent-image-bytes"
         crop_bytes = b"crop-from-parent-bytes"
-        parent_md5 = hashlib.md5(parent_bytes).hexdigest()
-        expected_crop_md5 = hashlib.md5(crop_bytes).hexdigest()
+        parent_md5 = content_md5(parent_bytes)
+        expected_crop_md5 = content_md5(crop_bytes)
 
         # Simulates the state a single-output crop clipper leaves behind:
         # media_bytes replaced with the crop, but md5 still carries the
@@ -324,8 +324,8 @@ class TestSingleOutputClipperMD5Recompute:
 
         parent_text = "the full document text"
         clip_text = "first sentence only"
-        parent_md5 = hashlib.md5(parent_text.encode("utf-8")).hexdigest()
-        expected_clip_md5 = hashlib.md5(clip_text.encode("utf-8")).hexdigest()
+        parent_md5 = content_md5(parent_text.encode("utf-8"))
+        expected_clip_md5 = content_md5(clip_text.encode("utf-8"))
 
         clip = {
             "id": 1,

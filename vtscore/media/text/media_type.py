@@ -15,6 +15,7 @@ from vtscore.media.base import (
     _noop_progress,
     demo_slice,
 )
+from vtscore.utils.hashing import content_md5
 
 
 class TextMediaType(MediaType):
@@ -542,7 +543,6 @@ class TextMediaType(MediaType):
         skip_embedding=False,
         **kwargs,
     ):
-        import hashlib  # noqa: PLC0415
 
         if on_progress is None:
             from vtscore.concurrency.progress import update_progress
@@ -610,7 +610,7 @@ class TextMediaType(MediaType):
                 "embedder": embedder.name,
                 "duration": 0,
                 "file_size": len(text_bytes),
-                "md5": hashlib.md5(text_bytes).hexdigest(),
+                "md5": content_md5(text_bytes),
                 "embeddings": {} if skip_embedding else {embedder.name: embedding},
                 "media_bytes": None,
                 "media_string": text_content,

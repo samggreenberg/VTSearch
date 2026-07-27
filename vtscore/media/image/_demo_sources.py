@@ -35,6 +35,7 @@ from vtscore.media.image._demo_categories import (
     VGGFACE2_IDENTITIES,
     VISUAL_GENOME_CATEGORIES,
 )
+from vtscore.utils.hashing import content_md5
 
 
 _MEDIA_TYPE_ID = "image"
@@ -1049,7 +1050,6 @@ def _load_synthetic_toponymy(clips, embedder, on_progress, demo_origin) -> None:
     hierarchical embedding, so browsing lights up the ground-truth signpost
     layer straight from those paths.  See :mod:`vtscore.media._toponymy_demo`.
     """
-    import hashlib  # noqa: PLC0415
 
     from vtscore.media._toponymy_demo import generate_items  # noqa: PLC0415
     from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
@@ -1072,7 +1072,7 @@ def _load_synthetic_toponymy(clips, embedder, on_progress, demo_origin) -> None:
             "embedder": emb_name,
             "duration": 0,
             "file_size": len(png_bytes),
-            "md5": hashlib.md5(png_bytes).hexdigest(),
+            "md5": content_md5(png_bytes),
             "embeddings": {emb_name: item.embedding},
             "media_bytes": png_bytes,
             "media_string": None,
@@ -1091,7 +1091,6 @@ def _load_synthetic_toponymy(clips, embedder, on_progress, demo_origin) -> None:
 
 def _embed_file_images(selected, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
     """Embed a list of (img_path, category) tuples into ``clips``."""
-    import hashlib  # noqa: PLC0415
 
     from PIL import Image  # noqa: PLC0415
 
@@ -1128,7 +1127,7 @@ def _embed_file_images(selected, clips, embedder, on_progress, demo_origin, skip
             "embedder": embedder.name,
             "duration": 0,
             "file_size": len(image_bytes),
-            "md5": hashlib.md5(image_bytes).hexdigest(),
+            "md5": content_md5(image_bytes),
             "embeddings": {} if skip_embedding else {embedder.name: embedding},
             "media_bytes": image_bytes,
             "media_string": None,
@@ -1144,7 +1143,6 @@ def _embed_file_images(selected, clips, embedder, on_progress, demo_origin, skip
 
 def _embed_pil_pages(selected_pages, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
     """Embed a list of (page_name, PIL.Image, category) tuples into ``clips``."""
-    import hashlib  # noqa: PLC0415
     import io as _io  # noqa: PLC0415
 
     if not skip_embedding:
@@ -1175,7 +1173,7 @@ def _embed_pil_pages(selected_pages, clips, embedder, on_progress, demo_origin, 
             "embedder": embedder.name,
             "duration": 0,
             "file_size": len(image_bytes),
-            "md5": hashlib.md5(image_bytes).hexdigest(),
+            "md5": content_md5(image_bytes),
             "embeddings": {} if skip_embedding else {embedder.name: embedding},
             "media_bytes": image_bytes,
             "media_string": None,
@@ -1191,7 +1189,6 @@ def _embed_pil_pages(selected_pages, clips, embedder, on_progress, demo_origin, 
 
 def _embed_cifar_arrays(selected, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
     """Embed a list of (image_array, category) tuples into ``clips``."""
-    import hashlib  # noqa: PLC0415
     import io as _io  # noqa: PLC0415
 
     from PIL import Image  # noqa: PLC0415
@@ -1224,7 +1221,7 @@ def _embed_cifar_arrays(selected, clips, embedder, on_progress, demo_origin, ski
             "embedder": embedder.name,
             "duration": 0,
             "file_size": len(image_bytes),
-            "md5": hashlib.md5(image_bytes).hexdigest(),
+            "md5": content_md5(image_bytes),
             "embeddings": {} if skip_embedding else {embedder.name: embedding},
             "media_bytes": image_bytes,
             "media_string": None,
@@ -1266,7 +1263,6 @@ def _embed_vg_images(selected, clips, embedder, on_progress, demo_origin, skip_e
     ``category`` primary (first positive, for legacy single-label readers), and
     a store-only ``regions`` list of normalized ground-truth boxes.
     """
-    import hashlib  # noqa: PLC0415
 
     from PIL import Image  # noqa: PLC0415
 
@@ -1304,7 +1300,7 @@ def _embed_vg_images(selected, clips, embedder, on_progress, demo_origin, skip_e
             "embedder": embedder.name,
             "duration": 0,
             "file_size": len(image_bytes),
-            "md5": hashlib.md5(image_bytes).hexdigest(),
+            "md5": content_md5(image_bytes),
             "embeddings": {} if skip_embedding else {embedder.name: embedding},
             "media_bytes": image_bytes,
             "media_string": None,
@@ -1330,7 +1326,6 @@ def _embed_openlogo_images(selected, clips, embedder, on_progress, demo_origin, 
     template seed for a structural detector, and the boxes let the Calibration &
     Evaluation flow score against ground truth).
     """
-    import hashlib  # noqa: PLC0415
 
     from PIL import Image  # noqa: PLC0415
 
@@ -1368,7 +1363,7 @@ def _embed_openlogo_images(selected, clips, embedder, on_progress, demo_origin, 
             "embedder": embedder.name,
             "duration": 0,
             "file_size": len(image_bytes),
-            "md5": hashlib.md5(image_bytes).hexdigest(),
+            "md5": content_md5(image_bytes),
             "embeddings": {} if skip_embedding else {embedder.name: embedding},
             "media_bytes": image_bytes,
             "media_string": None,

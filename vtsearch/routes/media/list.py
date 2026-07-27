@@ -14,7 +14,6 @@ because the request shape isn't a single marshmallow schema.
 
 from __future__ import annotations
 
-import hashlib
 import io
 import subprocess
 import tempfile
@@ -27,6 +26,7 @@ from flask_smorest import Blueprint, abort
 from vtscore.embedding.media_vectors import init_embeddings, media_embedder_names
 from vtscore.media.audio.ffmpeg import get_ffmpeg_exe
 from vtscore.media.base import MediaResponse
+from vtscore.utils.hashing import content_md5
 from vtsearch.schemas.media import (
     MediaAddToPileResponseSchema,
     MediaBatchRequestSchema,
@@ -559,7 +559,7 @@ def media_audio(media_id: int):
     # audio player still issues a cold GET per selection, and other surfaces
     # (label view, hover preview) re-request the same clip on replay; the ETag
     # turns those into 304s.  Mirrors the thumbnail route's conditional logic.
-    etag = c.get("md5") or hashlib.md5(media_bytes).hexdigest()
+    etag = c.get("md5") or content_md5(media_bytes)
     if etag in request.if_none_match:
         resp = make_response("", 304)
         resp.set_etag(etag)
@@ -1095,7 +1095,7 @@ def add_media_to_pile():
     ``label`` (``"good"`` or ``"bad"``).
     """
     file, file_bytes, label = _read_pile_upload()
-    file_md5 = hashlib.md5(file_bytes).hexdigest()
+    file_md5 = content_md5(file_bytes)
 
     # First-pass MD5 lookup (outside _state_lock). When this hits we can
     # skip the expensive embedding step and vote the existing media right

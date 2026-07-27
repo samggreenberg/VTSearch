@@ -18,6 +18,7 @@ import numpy as np
 
 from helpers import make_raw_wav_bytes as _make_wav_bytes
 from vtscore.embedding.media_vectors import media_embedding
+from vtscore.utils.hashing import content_md5
 
 
 def _write_wav(path: Path) -> None:
@@ -247,12 +248,11 @@ class TestImporterProvidedMD5s:
         assert medias[1]["md5"] == pre_md5
 
     def test_mixed_importer_and_computed_md5s(self, tmp_path):
-        import hashlib
 
         pre_md5 = "c" * 32
         _write_wav(tmp_path / "pre.wav")
         _write_wav(tmp_path / "computed.wav")
-        computed_md5 = hashlib.md5((tmp_path / "computed.wav").read_bytes()).hexdigest()
+        computed_md5 = content_md5((tmp_path / "computed.wav").read_bytes())
 
         mt, emb = _make_mock_media_type()
         imp = _VectorAndMD5Importer.create(

@@ -36,7 +36,6 @@ exception to the no-persist rule.
 
 from __future__ import annotations
 
-import hashlib
 import os
 import shutil
 import tarfile
@@ -49,6 +48,7 @@ from uuid import uuid4
 from vtscore.config import DATA_DIR
 from vtscore.security.archive import safe_tar_extract
 from vtscore.security.path_validation import glob_top_level, rglob_follow_symlinks
+from vtscore.utils.hashing import content_md5
 
 if TYPE_CHECKING:
     from vtscore.datasets.importers.base import SourceSpec
@@ -244,7 +244,7 @@ def extract_archive_cached(
     resolved = archive_path.resolve()
     st = resolved.stat()
     signature = f"{resolved}|{st.st_size}|{st.st_mtime_ns}".encode()
-    digest = hashlib.md5(signature).hexdigest()[:16]
+    digest = content_md5(signature)[:16]
     cached_dir = DATA_DIR / f"local_archive_{digest}"
 
     if cached_dir.is_dir():

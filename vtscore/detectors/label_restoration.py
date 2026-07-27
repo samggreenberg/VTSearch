@@ -7,6 +7,8 @@ resolving origin files for cross-dataset scenarios.
 
 from __future__ import annotations
 
+from vtscore.utils.hashing import file_md5
+
 
 def _resolve_unmatched(unresolved: list, md5_lookup: dict[str, list[int]]) -> int:
     """Resolve unmatched labelset entries from their origin files.
@@ -19,7 +21,6 @@ def _resolve_unmatched(unresolved: list, md5_lookup: dict[str, list[int]]) -> in
 
     Returns the number of labels restored via this fallback path.
     """
-    import hashlib
     import logging
 
     from vtscore.detectors.resolver import resolve_file_context
@@ -39,11 +40,7 @@ def _resolve_unmatched(unresolved: list, md5_lookup: dict[str, list[int]]) -> in
 
             # Compute MD5 of the resolved file and check against loaded medias
             try:
-                h = hashlib.md5()
-                with open(resolved_path, "rb") as f:
-                    for chunk in iter(lambda: f.read(8192), b""):
-                        h.update(chunk)
-                resolved_md5 = h.hexdigest()
+                resolved_md5 = file_md5(resolved_path)
             except OSError:
                 _log.debug("restore-labels: could not read resolved file %s", resolved_path)
                 continue

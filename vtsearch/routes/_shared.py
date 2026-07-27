@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import io
 import logging
 from functools import wraps
@@ -11,6 +10,8 @@ from typing import TYPE_CHECKING, Any, Callable
 from flask import g, jsonify, make_response, request, send_file
 from flask_smorest import abort
 from marshmallow import ValidationError
+
+from vtscore.utils.hashing import content_md5, new_md5
 
 if TYPE_CHECKING:
     from vtscore.plugins import PluginBase
@@ -39,7 +40,7 @@ def cached_thumbnail_response(thumb_bytes: bytes, download_name: str):
     fingerprints the thumbnail bytes so the browser reuses one tile per item
     across scrolls and zoom levels, short-circuiting to a 304.
     """
-    etag = hashlib.md5(thumb_bytes).hexdigest()
+    etag = content_md5(thumb_bytes)
     if etag in request.if_none_match:
         resp = make_response("", 304)
         resp.set_etag(etag)
@@ -84,7 +85,8 @@ def image_thumbnail_response(
 
     crop_box = normalize_region_crop(crop) if crop is not None else None
 
-    hasher = hashlib.md5(image_bytes)
+    hasher = new_md5()
+    hasher.update(image_bytes)
     if crop_box is not None:
         hasher.update(repr(crop_box).encode("ascii"))
     etag = hasher.hexdigest()
