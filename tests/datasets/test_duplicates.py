@@ -4,6 +4,7 @@ Covers:
 - ``collapse_duplicates`` function (pure state manipulation)
 - ``get_dupe_count`` helper
 - ``/api/dataset/status`` reporting ``num_dupes``
+- ``/api/datasets/registry/<id>/duplicates`` browsing the collapsed sets
 - Label export expanding dupe sets to all members
 - Label import collapsing by MD5 back to the representative
 """
@@ -231,6 +232,69 @@ class TestDatasetStatusDupes:
         finally:
             app_module.medias.clear()
             app_module.medias.update(saved)
+
+
+class TestDatasetDuplicatesEndpoint:
+    """Tests for GET /api/datasets/registry/<id>/duplicates."""
+
+    def _register_loaded_dataset(self, media_dict):
+        """Register a dataset and publish *media_dict* as its loaded context."""
+        from vtscore.datasets.registry import register_dataset
+        from vtsearch.state import DatasetContext, register_context
+
+        entry = register_dataset(
+            name="dupes-ep", media_type="audio", num_items=len(media_dict), pkl_path="/tmp/dupes-ep.pkl"
+        )
+        ctx = DatasetContext(entry["id"])
+        ctx.medias.update(media_dict)
+        register_context(ctx)
+        return entry["id"]
+
+    def test_returns_collapsed_sets_with_members(self, client):
+        media_dict = {
+            1: _make_media(1, md5="same", filename="a.wav", origin_importer="server_folder"),
+            2: _make_media(2, md5="same", filename="b.wav", origin_importer="http_archive"),
+            3: _make_media(3, md5="uniq", filename="c.wav"),
+        }
+        collapse_duplicates(media_dict)
+        dataset_id = self._register_loaded_dataset(media_dict)
+
+        resp = client.get(f"/api/datasets/registry/{dataset_id}/duplicates")
+        assert resp.status_code == 200
+        sets = resp.get_json()["duplicate_sets"]
+        assert len(sets) == 1
+        assert sets[0]["name"] == "a.wav"
+        members = sets[0]["members"]
+        assert [m["filename"] for m in members] == ["a.wav", "b.wav"]
+        assert [m["importer"] for m in members] == ["server_folder", "http_archive"]
+        # Exact-dupe members share the representative's MD5
+        assert all(m["md5"] == "same" for m in members)
+        assert all(m["category"] == "cat" for m in members)
+        assert members[0]["origin_name"] == "a.wav"
+
+    def test_no_dupes_returns_empty_list(self, client):
+        media_dict = {
+            1: _make_media(1, md5="aaa"),
+            2: _make_media(2, md5="bbb"),
+        }
+        collapse_duplicates(media_dict)
+        dataset_id = self._register_loaded_dataset(media_dict)
+
+        resp = client.get(f"/api/datasets/registry/{dataset_id}/duplicates")
+        assert resp.status_code == 200
+        assert resp.get_json()["duplicate_sets"] == []
+
+    def test_400_when_not_loaded(self, client):
+        from vtscore.datasets.registry import register_dataset
+
+        entry = register_dataset(name="not-loaded", media_type="audio", num_items=5, pkl_path="/tmp/nl.pkl")
+        resp = client.get(f"/api/datasets/registry/{entry['id']}/duplicates")
+        assert resp.status_code == 400
+        assert "Load the dataset" in resp.get_json()["message"]
+
+    def test_404_when_unknown_dataset(self, client):
+        resp = client.get("/api/datasets/registry/nonexistent-id/duplicates")
+        assert resp.status_code == 404
 
 
 class TestLabelExportExpandsDupes:

@@ -1,0 +1,70 @@
+<vt-modal [title]="'Duplicates: ' + datasetName()" [open]="true" (closed)="close()">
+  <button class="btn btn--secondary btn--sm back-btn" (click)="close()" title="Return to dataset stats">&larr; Back</button>
+
+  @if (loading()) {
+    <p class="loading-text">Loading duplicates…</p>
+  } @else if (error()) {
+    <p class="error-text">{{ error() }}</p>
+  } @else if (rows().length === 0) {
+    <p class="empty-state">No duplicate sets in this dataset.</p>
+  } @else {
+    <!-- Column Selection -->
+    <div class="dupes-section">
+      <h3 title="Choose which fields to show in the table and include in the copied output">Columns</h3>
+      <div class="column-checkboxes">
+        @for (col of columns; track col.key) {
+          <label class="column-toggle">
+            <input type="checkbox" [(ngModel)]="col.enabled" />
+            {{ col.label }}
+          </label>
+        }
+      </div>
+    </div>
+
+    <!-- Duplicate members table -->
+    <div class="dupes-section">
+      <h3>
+        Duplicates
+        <span class="preview-count">({{ rows().length | number }} items in {{ numSets | number }} sets)</span>
+      </h3>
+      <div class="table-scroll">
+        <table class="data-table dupes-table">
+          <thead>
+            <tr>
+              @for (col of enabledColumns; track col.key) {
+                <th [title]="col.label">{{ col.label }}</th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of previewRows; track $index) {
+              <tr [class.set-start]="isSetStart($index)">
+                @for (col of enabledColumns; track col.key) {
+                  <td>{{ getCellValue(row, col) }}</td>
+                }
+              </tr>
+            }
+            @if (truncatedCount > 0) {
+              <tr class="truncated-row">
+                <td [attr.colspan]="enabledColumns.length">
+                  … {{ truncatedCount | number }} more rows (Copy includes all)
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Clipboard copy -->
+    <div class="dupes-section">
+      <vt-clipboard-copy
+        mode="table"
+        [rows]="clipboardRows"
+        [columns]="clipboardColumns"
+        [disabled]="enabledColumns.length === 0"
+        copyLabel="Copy"
+      ></vt-clipboard-copy>
+    </div>
+  }
+</vt-modal>

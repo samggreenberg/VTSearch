@@ -863,6 +863,29 @@ class DatasetRegistryStatsResponseSchema(Schema):
     embedder = fields.String(required=True)
 
 
+class DuplicateSetMemberSchema(Schema):
+    """One member of a collapsed duplicate set (its pre-collapse provenance)."""
+
+    md5 = fields.String(required=True)
+    filename = fields.String(required=True)
+    category = fields.String(required=True)
+    origin_name = fields.String(required=True)
+    importer = fields.String(required=True)
+
+
+class DuplicateSetSchema(Schema):
+    """One collapsed duplicate set: its display name and every member."""
+
+    name = fields.String(required=True)
+    members = fields.List(fields.Nested(DuplicateSetMemberSchema), required=True)
+
+
+class DatasetRegistryDuplicatesResponseSchema(Schema):
+    """Response for ``GET /api/datasets/registry/<id>/duplicates``."""
+
+    duplicate_sets = fields.List(fields.Nested(DuplicateSetSchema), required=True)
+
+
 __all__ = [
     "BrowseMediaFilesQuerySchema",
     "BrowseMediaFilesResponseSchema",
@@ -890,6 +913,7 @@ __all__ = [
     "DatasetLoadFolderRequestSchema",
     "DatasetLoadSourceRequestSchema",
     "DatasetLoadStartedResponseSchema",
+    "DatasetRegistryDuplicatesResponseSchema",
     "DatasetRegistryLoadResponseSchema",
     "DatasetRegistryReadersRequestSchema",
     "DatasetRegistryReadersResponseSchema",

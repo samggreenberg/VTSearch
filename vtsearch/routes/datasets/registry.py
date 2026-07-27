@@ -23,6 +23,7 @@ DELETE /api/datasets/registry/<id>                  Remove a dataset from the re
 PUT    /api/datasets/registry/<id>/rename           Rename a registered dataset.
 PUT    /api/datasets/registry/<id>/readers          Update the readers ACL.
 GET    /api/datasets/registry/<id>/stats            Return ingest statistics.
+GET    /api/datasets/registry/<id>/duplicates       Return the collapsed duplicate sets.
 """
 
 from __future__ import annotations
@@ -52,6 +53,7 @@ from vtscore.datasets.registry import (
 )
 from vtsearch.schemas.datasets import (
     DatasetDomainShiftResponseSchema,
+    DatasetRegistryDuplicatesResponseSchema,
     DatasetRegistryLoadResponseSchema,
     DatasetRegistryPreloadEmbedderResponseSchema,
     DatasetRegistryReadersRequestSchema,
@@ -654,3 +656,50 @@ def get_dataset_stats(dataset_id: str):
         "clipper": clipper_display,
         "embedder": entry.get("embedder", ""),
     }
+
+
+@datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/duplicates")
+@datasets_registry_bp.response(200, DatasetRegistryDuplicatesResponseSchema)
+@datasets_registry_bp.alt_response(400, description="Dataset is not currently loaded.")
+@datasets_registry_bp.alt_response(403, description="Access denied for the current user.")
+@datasets_registry_bp.alt_response(404, description="Dataset not found.")
+def get_dataset_duplicates(dataset_id: str):
+    """Return the collapsed duplicate sets of a loaded dataset.
+
+    Each set is one ``dupe_set`` representative in the dataset's in-memory
+    context, expanded to its full membership so the user can see which items
+    were collapsed together and where each one came from.  Duplicate origins
+    live only in memory (they are part of each representative's origin dict),
+    so the dataset must be loaded.
+    """
+    from vtsearch.auth import get_current_user
+    from vtsearch.state import get_context
+
+    entry = _reg_get(dataset_id)
+    if entry is None:
+        abort(404, message="Dataset not found in registry")
+    if not _reg_can_access(dataset_id, get_current_user()):
+        abort(403, message="Access denied")
+    ctx = get_context(dataset_id)
+    if ctx is None:
+        abort(400, message="Load the dataset to browse its duplicates")
+
+    duplicate_sets = []
+    for cid in sorted(ctx.medias):
+        media = ctx.medias[cid]
+        origin = media.get("origin")
+        if not (isinstance(origin, dict) and origin.get("importer") == "dupe_set"):
+            continue
+        members = [
+            {
+                "md5": member.get("md5", "") or media.get("md5", ""),
+                "filename": member.get("filename", ""),
+                "category": member.get("category", ""),
+                "origin_name": member.get("origin_name", ""),
+                "importer": (member.get("origin") or {}).get("importer", ""),
+            }
+            for member in origin.get("members", [])
+        ]
+        name = (origin.get("params") or {}).get("name") or media.get("origin_name", "")
+        duplicate_sets.append({"name": name, "members": members})
+    return {"duplicate_sets": duplicate_sets}
