@@ -826,6 +826,26 @@ class TestBrowserSettings:
         # Persists across a fresh read.
         assert client.get("/api/settings").get_json()["browse_signposts"]["audio"] is False
 
+    def test_browse_graphics_defaults_to_auto(self, client):
+        # A global scalar (not a per-media dict): it describes the client's
+        # rendering capability, not anything about the data.
+        assert client.get("/api/settings").get_json()["browse_graphics"] == "auto"
+        assert client.get("/api/settings/defaults").get_json()["browse_graphics"] == "auto"
+
+    @pytest.mark.parametrize("mode", ["auto", "full", "reduced"])
+    def test_update_browse_graphics(self, client, mode):
+        res = client.put("/api/settings", json={"browse_graphics": mode})
+        assert res.status_code == 200
+        assert res.get_json()["browse_graphics"] == mode
+        # Persists across a fresh read.
+        assert client.get("/api/settings").get_json()["browse_graphics"] == mode
+
+    def test_update_browse_graphics_rejects_unknown_mode(self, client):
+        res = client.put("/api/settings", json={"browse_graphics": "turbo"})
+        assert res.status_code == 422
+        # The rejected write leaves the stored value untouched.
+        assert client.get("/api/settings").get_json()["browse_graphics"] == "auto"
+
     def test_update_bin_details_docked_per_type(self, client):
         res = client.put("/api/settings", json={"bin_details_docked": {"audio": True, "image": False}})
         assert res.status_code == 200

@@ -421,6 +421,29 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
+  /**
+   * Canvas rendering effort for the Browse map. Unlike the rest of the Browser
+   * tab this is one global scalar, not a per-media-type map: it describes the
+   * client's rendering capability, not anything about the data. Falls back to
+   * ``auto`` (detect per client) for unset or unrecognized values.
+   */
+  get browseGraphics(): 'auto' | 'full' | 'reduced' {
+    const value = this.settings().browse_graphics;
+    return value === 'full' || value === 'reduced' ? value : 'auto';
+  }
+
+  /**
+   * Persist the Graphics pulldown. ``reduced`` keeps every browse animation but
+   * drops the effects a CPU rasterizer can't afford (smoothed blits, overscan
+   * buffers, shadow blurs); ``full`` always runs the rich pipeline; ``auto``
+   * probes the client. The canvas picks the change up live.
+   */
+  onBrowseGraphicsChange(mode: string): void {
+    const m = mode as AppSettings['browse_graphics'];
+    this.settings.update((s) => ({ ...s, browse_graphics: m }));
+    this.save();
+  }
+
   /** Mouse-zooms per pyramid level for *typeId* (1..3), defaulting to 2 when
    *  the user hasn't set one for this media type. This is how many wheel notches
    *  / +/- clicks it takes to cross one pyramid level. */

@@ -616,7 +616,13 @@ The Settings modal (gear icon) is organised into eight tabs:
 - **Autopilot** - the guided-workflow knobs described under
   [Configuring Autopilot](#configuring-autopilot).
 - **Browser** - per-media-type look of the spatial Browse view (tile
-  shape, colour scheme, cell size).
+  shape, colour scheme, cell size), plus a **Graphics** control that
+  applies to every media type. Leave Graphics on **Auto** and VTSearch
+  picks for you: browsers without hardware acceleration get the cheaper
+  animations automatically. Choose **Reduced** if panning or zooming the
+  map still feels laggy - every animation keeps playing, but the costly
+  effects (image smoothing during motion, drop shadows) are dropped.
+  **Full** always uses the richest animations.
 - **HuggingFace** - sign in with HuggingFace to download gated demo
   datasets and gated AI models.
 - **Import Defaults** - default embedder, clipper, and converters per

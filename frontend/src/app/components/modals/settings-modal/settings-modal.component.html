@@ -272,6 +272,16 @@
         <!-- Browser (VTSBrowse projection browser) -->
         @if (activeSettingsTab() === 'browser') {
           <h3>Browser<vt-field-hint-icon hint="How the Browse map looks, per media type. The same controls live on the map; changes here are remembered."></vt-field-hint-icon></h3>
+          <!-- Applies to every media type: this describes your browser's
+               rendering capability, not the data. -->
+          <div class="form-group">
+            <label class="form-label" for="setting-browse-graphics" title="How much visual polish the Browse map's animations use">Graphics<vt-field-hint-icon hint="“Auto” checks whether your browser has hardware acceleration and picks for you. “Full” always uses the richest animations. “Reduced” keeps every animation but drops the costly effects (image smoothing while panning/zooming, shadows) — pick it if the map feels laggy. Applies to all media types."></vt-field-hint-icon></label>
+            <select id="setting-browse-graphics" class="form-select" [ngModel]="browseGraphics" (ngModelChange)="onBrowseGraphicsChange($event)" title="How much visual polish the Browse map's animations use">
+              <option value="auto">Auto</option>
+              <option value="full">Full</option>
+              <option value="reduced">Reduced</option>
+            </select>
+          </div>
           @if (mediaTypes().length > 0) {
             <!-- A lone media type needs no tab bar (nothing to switch to); the
                  content below still renders for the single active type. -->

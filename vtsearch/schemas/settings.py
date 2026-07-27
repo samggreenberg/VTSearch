@@ -17,6 +17,7 @@ from marshmallow import Schema, fields, pre_load, validate
 from vtsearch.settings_models import (
     VALID_ANIMATION_MODES,
     coerce_animation_mode,
+    VALID_BROWSE_GRAPHICS,
     VALID_FOCUS_MODES,
     VALID_GRID_ICON_SIZES,
     VALID_THEMES,
@@ -98,6 +99,11 @@ class AppSettingsSchema(Schema):
     # not shown as a Settings-modal widget; the divider between the metadata
     # column and the large item drives it.
     browse_details_metadata_width = fields.Integer()
+
+    # VTSBrowse canvas rendering effort ("auto" detects a software-rendering
+    # client; "full"/"reduced" pin the pipeline). A single scalar, not a
+    # per-media dict: it describes the client's rendering capability.
+    browse_graphics = fields.String(validate=validate.OneOf(VALID_BROWSE_GRAPHICS))
 
     # VTSBrowse per-media-type display prefs (density colormap, on-screen cell
     # size). ``{media_type_id: value}`` dicts driven by the browse-canvas
@@ -280,6 +286,7 @@ class SettingsUpdateSchema(Schema):
     browse_panel_width = fields.Integer()
     browse_details_panel_width = fields.Integer()
     browse_details_metadata_width = fields.Integer()
+    browse_graphics = fields.String(validate=validate.OneOf(VALID_BROWSE_GRAPHICS))
 
     # Per-media-type dicts; the setters in ``settings.py`` validate each
     # value against its enum (BrowseColormap / BrowseIconSize), so these are

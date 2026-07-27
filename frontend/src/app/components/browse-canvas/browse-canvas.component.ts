@@ -40,6 +40,12 @@ import {
   viewLevelForZoom,
 } from './sign-layout';
 import { prefersReducedMotion } from '../../utils/reduced-motion';
+import {
+  detectSoftwareRenderer,
+  FramePerfMonitor,
+  resolveLowEffects,
+  type BrowseGraphicsMode,
+} from './render-perf';
 import { onDevicePixelRatioChange } from '../../utils/device-pixel-ratio';
 import type {
   HexCellPayload,
@@ -177,6 +183,13 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    * so the two gestures stay in lock-step.
    */
   readonly zoomsPerLevel = input(2);
+  /**
+   * Canvas rendering effort — the ``browse_graphics`` setting, surfaced as the
+   * "Graphics" pulldown at the top of Settings → Browser. ``auto`` (the
+   * default) lets {@link perf} decide per client; ``full`` and ``reduced`` pin
+   * the pipeline. See {@link lowFx} and `render-perf.ts`.
+   */
+  readonly graphics = input<BrowseGraphicsMode>('auto');
   readonly hexHover = output<HexHoverEvent | null>();
   /** A right-click on the canvas; the view opens the bin popup in response. */
   readonly contextMenu = output<BrowseContextMenuEvent>();
@@ -244,6 +257,58 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   private width = 0;
   private height = 0;
   private dpr = 1;
+
+  // --- Low-effects mode for software-rendered environments (issue #2695) ----
+  // Some deployments run the browser with hardware acceleration permanently
+  // off, so every canvas paint rasterizes on the CPU. The animation pipeline's
+  // GPU-cheap staples — full-canvas smoothed blits, overscanned snapshots up
+  // to 4× the viewport, shadow blurs — each cost tens of ms per frame there,
+  // making zooming near-unusable. Rather than forcing those users to switch
+  // animations off, `lowFx` keeps every animation running but strips the
+  // per-frame cost: viewport-sized snapshots only (no overscan ring),
+  // nearest-neighbour blits, no shadow blurs, and a dpr capped at 1. Seeded
+  // upfront by the WebGL renderer probe (SwiftShader et al.) and latched at
+  // runtime by measured frame costs — see `render-perf.ts` for both. The
+  // {@link graphics} setting overrides the detection in either direction.
+  private readonly perf = new FramePerfMonitor(detectSoftwareRenderer());
+
+  /** Whether to paint frames in the cheap, software-rasterizer-friendly way. */
+  private get lowFx(): boolean {
+    return resolveLowEffects(this.graphics(), this.perf.slow);
+  }
+
+  /**
+   * Feed the monitor one frame's paint duration (from `startTs`, a
+   * `performance.now()` stamp taken before painting). When this very sample
+   * latches low-effects mode on a hiDPI display, schedule a one-time
+   * {@link resize} so the backing store shrinks to the capped dpr — the single
+   * biggest per-frame saving on such displays. Scheduled (not run inline)
+   * because this is called from inside paint paths; the resize cancels any
+   * in-flight animation, which is an acceptable one-time snap.
+   */
+  private recordFrameCost(startTs: number): void {
+    const wasLow = this.lowFx;
+    this.perf.record(performance.now() - startTs);
+    // Only an *effective* flip matters: with the setting pinned to full or
+    // reduced the latch changes nothing on screen, so there is nothing to
+    // re-measure the backing store for.
+    if (!wasLow && this.lowFx) this.syncBackingStoreToEffects();
+  }
+
+  /**
+   * Re-run {@link resize} when the effective effects level changes, so the
+   * backing store picks up (or drops) the low-effects dpr cap — the single
+   * biggest per-frame saving on a hiDPI display. Deferred rather than run
+   * inline because callers are mid-paint, and the resize cancels any in-flight
+   * animation; that one-time snap is the cost of switching pipelines. A no-op
+   * where the cap can't bite (the device is already at dpr 1).
+   */
+  private syncBackingStoreToEffects(): void {
+    if (window.devicePixelRatio <= 1) return;
+    setTimeout(() => {
+      if (!this.destroyed) this.resize();
+    });
+  }
 
   private transform: ViewTransform = { centerX: 0, centerY: 0, zoom: 1 };
   // The transform the pixels currently on the canvas were painted at. After a
@@ -563,6 +628,20 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     if (this.marqueeMode()) untracked(() => this.clearHover());
   });
 
+  /** Switching the "Graphics" setting changes what a frame costs to paint, so
+   *  the backing store's dpr cap may need to come or go; the resize repaints.
+   *  When the cap can't bite (dpr 1) a plain repaint picks up the new effects.
+   *  Skips the first run: `ngAfterViewInit`'s initial `resize` already sizes
+   *  the backing store against the starting mode. */
+  private readonly graphicsChanged = effect(() => {
+    this.graphics();
+    untracked(() => {
+      if (!this.hasDrawn) return;
+      this.syncBackingStoreToEffects();
+      this.requestRedraw();
+    });
+  });
+
   /** Repaint-only inputs: a colormap change only affects flat (non-thumbnail)
    *  shading; the pile-thumbnail border only changes how thumbnail cells are
    *  stroked; labels arriving (they load async, after the tiles) or the
@@ -723,6 +802,11 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     const el = this.canvasRef().nativeElement.parentElement!;
     const rect = el.getBoundingClientRect();
     this.dpr = window.devicePixelRatio || 1;
+    // Software rasterization pays per backing-store pixel, so on a hiDPI
+    // display low-effects mode renders at CSS resolution (dpr 1): a quarter
+    // of the pixels for a slight softness — the standard degraded-mode trade
+    // (issue #2695). Hardware-accelerated environments keep the native dpr.
+    if (this.lowFx && this.dpr > 1) this.dpr = 1;
     this.width = rect.width;
     this.height = rect.height;
     const canvas = this.canvasRef().nativeElement;
@@ -953,10 +1037,14 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // margin for every media type rather than only thumbnail ones. The shrunk
     // blit then covers the canvas with real content. Zoom-in needs no overscan
     // (the frame grows past the viewport), so it stays the cheap copy.
-    const overscan = Math.min(
-      BrowseCanvasComponent.SNAP_OVERSCAN_MAX,
-      this.animFrom.zoom / this.animTo.zoom,
-    );
+    // Low-effects mode skips the overscan entirely: the buffer is up to 4× the
+    // viewport's pixels, and both filling it (renderSnapshotBorder walks every
+    // ring bin) and blitting it each frame are what software rasterization
+    // chokes on. The margin falls back to bare background during the shrink,
+    // which is far preferable to a stuttering ease.
+    const overscan = this.lowFx
+      ? 1
+      : Math.min(BrowseCanvasComponent.SNAP_OVERSCAN_MAX, this.animFrom.zoom / this.animTo.zoom);
     const doOverscan = overscan > 1.01;
     this.snapW = doOverscan ? Math.ceil(this.width * overscan) : this.width;
     this.snapH = doOverscan ? Math.ceil(this.height * overscan) : this.height;
@@ -1106,6 +1194,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     const snap = this.animSnapshot;
     if (!this.animActive || !snap || !ctx) return;
 
+    const frameStart = performance.now();
     const t = Math.min(1, Math.max(0, (now - this.animStartTs) / BrowseCanvasComponent.ZOOM_ANIM_MS));
     const e = 1 - Math.pow(1 - t, 3); // easeOutCubic: quick out, settle into the rebin
     const rect = this.zoomBlitRect(e);
@@ -1113,8 +1202,13 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     ctx.clearRect(0, 0, this.width, this.height);
     ctx.fillStyle = this.animBg;
     ctx.fillRect(0, 0, this.width, this.height);
-    ctx.imageSmoothingEnabled = true;
+    // Bilinear filtering of a full-canvas scaled blit is the single most
+    // expensive part of a software-rasterized frame; low-effects mode drops to
+    // nearest-neighbour, whose brief shimmer is invisible mid-motion. draw()
+    // restores smoothing for the crisp landed frame.
+    ctx.imageSmoothingEnabled = !this.lowFx;
     ctx.drawImage(snap, 0, 0, snap.width, snap.height, rect.x, rect.y, rect.w, rect.h);
+    this.recordFrameCost(frameStart);
 
     // Track what the canvas shows so a re-trigger chains from this exact frame.
     this.displayedTransform = {
@@ -1272,6 +1366,14 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
+    // Time the real frame paints (post-guard, so trivial empty frames don't
+    // drag the average down) to latch low-effects mode on machines the WebGL
+    // probe couldn't identify — see `render-perf.ts` (issue #2695).
+    const frameStart = performance.now();
+    // The low-effects animation blits switch smoothing off; landed frames are
+    // always painted crisp, so restore it here.
+    ctx.imageSmoothingEnabled = true;
+
     const level = this.activeLevel;
     const radius = meta.base_radius / Math.pow(2, level);
     const screenRadius = radius * this.effZoom;
@@ -1362,6 +1464,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     this.displayedLevel = level;
     this.hasDrawn = true;
 
+    this.recordFrameCost(frameStart);
     this.maybeReportFirstView();
   }
 
@@ -1488,8 +1591,10 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
       // shadow under the pill floats the sign off the map toward the viewer as
       // the zoom grows past it: the smallest signs are flat (no shadow), and
       // larger (more zoomed-past) ones cast a progressively bigger, softer,
-      // more-offset shadow — see `signShadow`.
-      const shadow = signShadow(sign.scale, sign.fontPx);
+      // more-offset shadow — see `signShadow`. Shadow blurs are among the most
+      // expensive canvas ops under software rasterization, and the signs repaint
+      // on every pan frame — low-effects mode paints them flat (issue #2695).
+      const shadow = this.lowFx ? null : signShadow(sign.scale, sign.fontPx);
       ctx.globalAlpha = sign.alpha * 0.6;
       ctx.fillStyle = pillBg;
       if (shadow) {
@@ -1694,9 +1799,13 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // paint the real (shadow-free) cell on top so the fill/border don't each
     // stack their own shadow.
     ctx.save();
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-    ctx.shadowBlur = Math.max(4, radius * 0.3);
-    ctx.shadowOffsetY = Math.max(1, radius * 0.1);
+    // Shadow blurs rasterize dearly without a GPU; low-effects mode keeps the
+    // enlarge (the actual hover signal) and skips the cosmetic lift shadow.
+    if (!this.lowFx) {
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+      ctx.shadowBlur = Math.max(4, radius * 0.3);
+      ctx.shadowOffsetY = Math.max(1, radius * 0.1);
+    }
     if (trim) {
       this.traceTrimRect(ctx, cx, cy, trim, cell.count > 1, radius);
     } else {
@@ -2501,8 +2610,13 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // Overscan toward the move so the revealed edge is real content, capped at
     // SNAP_OVERSCAN_MAX× the viewport (shared with the zoom-out buffer). Symmetric
     // margins keep the maths simple; the trailing side just slides off unused.
-    const maxMarginX = (this.width * (BrowseCanvasComponent.SNAP_OVERSCAN_MAX - 1)) / 2;
-    const maxMarginY = (this.height * (BrowseCanvasComponent.SNAP_OVERSCAN_MAX - 1)) / 2;
+    // Low-effects mode glides with a plain viewport snapshot: the overscan
+    // ring costs a bigger buffer to fill (renderSnapshotBorder walks every ring
+    // bin) and to blit each frame — the exact work software rasterization can't
+    // afford (issue #2695). The revealed edge shows bare background until the
+    // glide lands, which the closing full draw immediately fills.
+    const maxMarginX = this.lowFx ? 0 : (this.width * (BrowseCanvasComponent.SNAP_OVERSCAN_MAX - 1)) / 2;
+    const maxMarginY = this.lowFx ? 0 : (this.height * (BrowseCanvasComponent.SNAP_OVERSCAN_MAX - 1)) / 2;
     const marginX = Math.min(maxMarginX, Math.abs(target.centerX - this.panAnimFrom.centerX) * z);
     const marginY = Math.min(maxMarginY, Math.abs(target.centerY - this.panAnimFrom.centerY) * z);
     // Render the overscan ring for every media type: without it the revealed
@@ -2567,6 +2681,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // negative, and easeOutCubic turns a negative `t` into a negative `e`, kicking
     // the view *backwards* (opposite the pan) for one frame. Mirror the same guard
     // the zoom transition uses.
+    const frameStart = performance.now();
     const t = Math.min(1, Math.max(0, (now - this.panAnimStartTs) / BrowseCanvasComponent.PAN_ANIM_MS));
     const e = 1 - Math.pow(1 - t, 3);
     const from = this.panAnimFrom;
@@ -2588,11 +2703,15 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     ctx.clearRect(0, 0, this.width, this.height);
     ctx.fillStyle = this.panAnimBg;
     ctx.fillRect(0, 0, this.width, this.height);
-    ctx.imageSmoothingEnabled = true;
+    // The blit is a pure translation but its offsets are fractional, so
+    // smoothing still resamples every pixel; low-effects mode snaps to
+    // nearest-neighbour, which mid-glide is indistinguishable (issue #2695).
+    ctx.imageSmoothingEnabled = !this.lowFx;
     ctx.drawImage(
       snap, 0, 0, snap.width, snap.height,
       cxScreen - this.panSnapW / 2, cyScreen - this.panSnapH / 2, this.panSnapW, this.panSnapH,
     );
+    this.recordFrameCost(frameStart);
 
     if (t < 1) {
       this.panAnimRafId = requestAnimationFrame(this.stepPanAnim);
