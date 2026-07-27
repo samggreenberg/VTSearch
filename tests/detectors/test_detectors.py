@@ -1174,6 +1174,79 @@ class TestLoadModelEndpoint:
         assert a_good not in good_votes, "good cid from dataset A leaked into dataset B's id-space"
         assert a_bad not in bad_votes, "bad cid from dataset A leaked into dataset B's id-space"
 
+    def test_dataset_switch_clears_find_eval_stale(self, client):
+        """The dataset-switch rehydrate clears the whole frozen Find session
+        (``find_initial_labels`` / ``find_scores`` / ``find_mode``), so the
+        ``find_eval_stale`` "out of date" marker that qualifies that session
+        must be reset with it.  Previously only the detector-file-missing
+        branch reset the flag, so a stale marker from dataset A survived a
+        switch to dataset B and ``GET /api/find/stats`` reported the fresh
+        (empty) evaluation as out of date.
+        """
+        import hashlib
+
+        import numpy as np
+
+        from vtscore.detectors.dataset_sync import ensure_votes_match_active_dataset
+        from vtscore.state.core import get_active_detector_context
+        from vtsearch.state import (
+            DatasetContext,
+            medias,
+            register_context,
+            set_thread_dataset_context,
+        )
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        a_ids = list(medias.keys())
+        a_good = a_ids[0]
+
+        client.post(
+            "/api/detectors",
+            json={"name": "StaleFlagDS", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "StaleFlagDS", "media_type": "audio", "text_query": "test"},
+        )
+        mid = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, mid)
+        client.post(f"/api/medias/{a_good}/vote", json={"target": "good"})
+
+        # Simulate a completed Find pass whose labelset changed afterwards
+        # (corrections folded in + retrain), which flips find_eval_stale.
+        det_ctx = get_active_detector_context()
+        det_ctx.find_mode = True
+        det_ctx.find_scores[a_good] = 0.9
+        det_ctx.find_initial_labels[a_good] = "good"
+        det_ctx.find_eval_stale = True
+
+        ctx_b = DatasetContext("ds_b_for_stale_flag_test")
+        ctx_b.medias[a_good] = {
+            "id": a_good,
+            "media_type": "audio",
+            "embedder": "clap",
+            "md5": hashlib.md5(f"ds_b_stale_{a_good}".encode()).hexdigest(),
+            "embeddings": {"clap": np.zeros(512, dtype=np.float32)},
+            "media_bytes": b"fake-b",
+            "filename": f"ds_b_stale_{a_good}.wav",
+            "category": "test",
+            "origin": {"importer": "test_b", "params": {"id": a_good}},
+            "origin_name": f"ds_b_stale_{a_good}.wav",
+        }
+        register_context(ctx_b)
+        set_thread_dataset_context(ctx_b)
+
+        ensure_votes_match_active_dataset()
+
+        assert not det_ctx.find_scores, "frozen find scores must be cleared on dataset switch"
+        assert det_ctx.find_mode is False
+        assert det_ctx.find_eval_stale is False, (
+            "find_eval_stale outlived the Find session it qualifies: the rehydrate "
+            "cleared find_scores/find_initial_labels but left the stale marker set"
+        )
+
 
 class TestEmbedderMismatchInvalidatesStaleModel:
     """H5: a detector's cached MLP is trained against a specific embedder
