@@ -79,14 +79,18 @@ def _cpu_param():
     return torch.zeros(1)
 
 
-def _fake_librosa_load(monkeypatch, samples=1000):
-    """Patch ``librosa.load`` to return a fixed-length silent mono clip."""
-    import librosa
+def _fake_decode_audio(monkeypatch, samples=1000):
+    """Patch ``decode_audio`` to return a fixed-length silent mono clip.
 
-    def _load(source, sr=None, mono=True):
+    The wrappers import it lazily inside ``_embed_media_impl``, so patching the
+    attribute on its defining module is enough to intercept every call.
+    """
+    from vtscore.media.audio import decode as decode_mod
+
+    def _decode(source, *, sr=None, mono=True, offset=0.0, duration=None):
         return np.zeros(samples, dtype=np.float32), sr
 
-    monkeypatch.setattr(librosa, "load", _load)
+    monkeypatch.setattr(decode_mod, "decode_audio", _decode)
 
 
 def _png_bytes(size=(8, 8), color=(120, 30, 200)) -> bytes:
@@ -138,7 +142,7 @@ def _make_clap(dim=512):
 
 class TestClapWrapper:
     def test_embed_media_from_path(self, monkeypatch):
-        _fake_librosa_load(monkeypatch, samples=1000)
+        _fake_decode_audio(monkeypatch, samples=1000)
         emb = _make_clap(dim=512)
         vec = emb.embed_media({"media_path": "/fake.wav"})
         assert vec is not None
@@ -147,7 +151,7 @@ class TestClapWrapper:
         np.testing.assert_allclose(np.linalg.norm(vec), 1.0, atol=1e-5)
 
     def test_embed_media_forwards_audio_kwarg(self, monkeypatch):
-        _fake_librosa_load(monkeypatch, samples=1000)
+        _fake_decode_audio(monkeypatch, samples=1000)
         emb = _make_clap()
         emb.embed_media({"media_path": "/fake.wav"})
         # The processor gets the deterministic-truncation settings.
@@ -160,7 +164,7 @@ class TestClapWrapper:
     def test_embed_media_truncates_long_audio(self, monkeypatch):
         from vtscore.media.audio._clap_shared import CLAP_MAX_SAMPLES
 
-        _fake_librosa_load(monkeypatch, samples=CLAP_MAX_SAMPLES + 5000)
+        _fake_decode_audio(monkeypatch, samples=CLAP_MAX_SAMPLES + 5000)
         emb = _make_clap()
         vec = emb.embed_media({"media_path": "/long.wav"})
         assert vec is not None
@@ -169,7 +173,7 @@ class TestClapWrapper:
         assert kwargs["audio"].shape[0] == CLAP_MAX_SAMPLES
 
     def test_embed_media_from_bytes(self, monkeypatch):
-        _fake_librosa_load(monkeypatch, samples=500)
+        _fake_decode_audio(monkeypatch, samples=500)
         emb = _make_clap()
         vec = emb.embed_media({"media_bytes": b"RIFFfake"})
         assert vec is not None
@@ -180,12 +184,12 @@ class TestClapWrapper:
         assert emb.embed_media({}) is None
 
     def test_embed_media_swallows_errors(self, monkeypatch):
-        import librosa
+        from vtscore.media.audio import decode as decode_mod
 
         def _boom(*a, **k):
             raise RuntimeError("decode failed")
 
-        monkeypatch.setattr(librosa, "load", _boom)
+        monkeypatch.setattr(decode_mod, "decode_audio", _boom)
         emb = _make_clap()
         assert emb.embed_media({"media_path": "/fake.wav"}) is None
 
@@ -230,7 +234,7 @@ class TestASTWrapper:
         return emb
 
     def test_embed_media(self, monkeypatch):
-        _fake_librosa_load(monkeypatch, samples=2000)
+        _fake_decode_audio(monkeypatch, samples=2000)
         emb = self._make(dim=768)
         vec = emb.embed_media({"media_path": "/fake.wav"})
         assert vec is not None
@@ -238,7 +242,7 @@ class TestASTWrapper:
         np.testing.assert_allclose(np.linalg.norm(vec), 1.0, atol=1e-5)
 
     def test_embed_media_from_bytes(self, monkeypatch):
-        _fake_librosa_load(monkeypatch, samples=2000)
+        _fake_decode_audio(monkeypatch, samples=2000)
         emb = self._make()
         vec = emb.embed_media({"media_bytes": b"RIFFfake"})
         assert vec is not None
@@ -247,9 +251,9 @@ class TestASTWrapper:
         assert self._make().embed_media({}) is None
 
     def test_embed_media_swallows_errors(self, monkeypatch):
-        import librosa
+        from vtscore.media.audio import decode as decode_mod
 
-        monkeypatch.setattr(librosa, "load", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+        monkeypatch.setattr(decode_mod, "decode_audio", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
         assert self._make().embed_media({"media_path": "/fake.wav"}) is None
 
     def test_text_unsupported(self):
@@ -287,7 +291,7 @@ class TestWhisperWrapper:
         return emb
 
     def test_embed_media_mean_pools_time_axis(self, monkeypatch):
-        _fake_librosa_load(monkeypatch, samples=1600)
+        _fake_decode_audio(monkeypatch, samples=1600)
         emb = self._make(dim=512, seq=5)
         vec = emb.embed_media({"media_path": "/fake.wav"})
         assert vec is not None
@@ -298,7 +302,7 @@ class TestWhisperWrapper:
         np.testing.assert_allclose(np.linalg.norm(vec), 1.0, atol=1e-5)
 
     def test_embed_media_from_bytes(self, monkeypatch):
-        _fake_librosa_load(monkeypatch, samples=1600)
+        _fake_decode_audio(monkeypatch, samples=1600)
         vec = self._make().embed_media({"media_bytes": b"RIFF"})
         assert vec is not None
 
@@ -306,9 +310,9 @@ class TestWhisperWrapper:
         assert self._make().embed_media({}) is None
 
     def test_embed_media_swallows_errors(self, monkeypatch):
-        import librosa
+        from vtscore.media.audio import decode as decode_mod
 
-        monkeypatch.setattr(librosa, "load", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+        monkeypatch.setattr(decode_mod, "decode_audio", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
         assert self._make().embed_media({"media_path": "/fake.wav"}) is None
 
     def test_text_unsupported(self):
@@ -819,7 +823,7 @@ class TestParaSpeechClapWrapper:
         return emb
 
     def test_embed_media(self, monkeypatch):
-        _fake_librosa_load(monkeypatch, samples=1600)
+        _fake_decode_audio(monkeypatch, samples=1600)
         emb = self._make(dim=768)
         vec = emb.embed_media({"media_path": "/fake.wav"})
         assert vec is not None
@@ -829,7 +833,7 @@ class TestParaSpeechClapWrapper:
     def test_embed_media_truncates(self, monkeypatch):
         from vtscore.config import PARASPEECHCLAP_MAX_SAMPLES
 
-        _fake_librosa_load(monkeypatch, samples=PARASPEECHCLAP_MAX_SAMPLES + 1000)
+        _fake_decode_audio(monkeypatch, samples=PARASPEECHCLAP_MAX_SAMPLES + 1000)
         emb = self._make()
         vec = emb.embed_media({"media_path": "/long.wav"})
         assert vec is not None

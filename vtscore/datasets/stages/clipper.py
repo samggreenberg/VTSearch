@@ -249,7 +249,7 @@ def _thumb_for(clip: dict, media_type: str) -> bytes | None:
 
         wav = clip.get("media_bytes")
         if wav is not None:
-            return generate_waveform_thumbnail(wav, filename=clip.get("filename", ""))
+            return generate_waveform_thumbnail(wav)
         path = clip.get("media_path")
         if path:
             return generate_waveform_thumbnail_from_file(Path(path))

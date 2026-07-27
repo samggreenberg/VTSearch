@@ -56,7 +56,6 @@ IMPORT_MODULE_ESTIMATES: dict[str, int] = {
     "transformers_logging": 190,
     "sentence_transformers": 3300,
     "sklearn": 1700,
-    "librosa": 30,
     "soundfile": 160,
 }
 

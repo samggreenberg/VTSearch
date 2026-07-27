@@ -80,18 +80,20 @@ def clap_tags(meta, emb, vocab, topk, embedder_name, template) -> list[str]:
 
 
 def whisper_transcripts(meta, model_size="small") -> list[str]:
-    import librosa
     import numpy as np
     import torch
     import whisper
+
+    from vtscore.media.audio.decode import decode_audio
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = whisper.load_model(model_size, device=device)
     texts = []
     for i, m in enumerate(meta):
-        # Decode with librosa: whisper's own loader shells out to ffmpeg,
-        # which grid compute nodes don't have.
-        audio, _ = librosa.load(m["wav_path"], sr=16000, mono=True)
+        # Decode via vtscore's helper: it prefers libsndfile and only shells
+        # out to ffmpeg for codecs libsndfile can't parse, whereas whisper's own
+        # loader always needs an ffmpeg grid compute nodes don't have.
+        audio, _ = decode_audio(m["wav_path"], sr=16000, mono=True)
         result = model.transcribe(
             audio.astype(np.float32),
             temperature=0.0,
@@ -107,9 +109,10 @@ def whisper_transcripts(meta, model_size="small") -> list[str]:
 
 def captions(meta, batch_size=16) -> list[str]:
     """MU-NLPC/whisper-small-audio-captioning — a real audio captioner."""
-    import librosa
     import torch
     from transformers import WhisperForConditionalGeneration, WhisperTokenizer, WhisperFeatureExtractor
+
+    from vtscore.media.audio.decode import decode_audio
 
     model_id = "MU-NLPC/whisper-small-audio-captioning"
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -124,7 +127,7 @@ def captions(meta, batch_size=16) -> list[str]:
         chunk = meta[i : i + batch_size]
         feats = []
         for m in chunk:
-            audio, sr = librosa.load(m["wav_path"], sr=fe.sampling_rate, mono=True)
+            audio, sr = decode_audio(m["wav_path"], sr=fe.sampling_rate, mono=True)
             feats.append(fe(audio, sampling_rate=fe.sampling_rate, return_tensors="pt").input_features[0])
         batch = torch.stack(feats).to(device)
         with torch.no_grad():

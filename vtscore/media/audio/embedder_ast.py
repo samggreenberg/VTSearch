@@ -82,9 +82,9 @@ class AudioASTEmbedder(MediaEmbedder):
             from transformers import ASTFeatureExtractor, ASTModel  # noqa: PLC0415
 
         with timed_progress(
-            self._on_progress, "loading", "Importing librosa…", est_modules=IMPORT_MODULE_ESTIMATES["librosa"]
+            self._on_progress, "loading", "Importing soundfile…", est_modules=IMPORT_MODULE_ESTIMATES["soundfile"]
         ):
-            import librosa  # noqa: F401, PLC0415
+            import soundfile  # noqa: F401, PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading AST model weights…")
         with intercept_tqdm_progress(self._on_progress):
@@ -134,16 +134,16 @@ class AudioASTEmbedder(MediaEmbedder):
             file_path = Path(path_str)
         source_repr = file_path if file_path is not None else "<bytes>"
         try:
-            import io  # noqa: PLC0415
-            import librosa  # noqa: PLC0415
             import torch  # noqa: PLC0415
 
+            from vtscore.media.audio.decode import decode_audio  # noqa: PLC0415
+
             if audio_bytes is not None:
-                source: io.BytesIO | Path = io.BytesIO(bytes(audio_bytes))
+                source: bytes | Path = bytes(audio_bytes)
             else:
                 assert file_path is not None  # narrowed by the path_str check above
                 source = file_path
-            audio_data, _sr = librosa.load(source, sr=AST_SAMPLE_RATE, mono=True)
+            audio_data, _sr = decode_audio(source, sr=AST_SAMPLE_RATE, mono=True)
             inputs = self._processor(audio_data, sampling_rate=AST_SAMPLE_RATE, return_tensors="pt")
             device = next(self._model.parameters()).device
             inputs = {k: v.to(device) for k, v in inputs.items()}

@@ -316,11 +316,13 @@ class SoundSilenceClipper(MediaClipper):
         """
         try:
             import librosa  # noqa: PLC0415
+
+            from vtscore.media.audio.decode import decode_audio  # noqa: PLC0415
         except ImportError:
             return None
 
         try:
-            audio_data, sr = librosa.load(io.BytesIO(media_bytes), sr=None, mono=True)
+            audio_data, sr = decode_audio(media_bytes, sr=None, mono=True)
         except Exception:
             return None
 
@@ -652,16 +654,13 @@ class SoundSpeechActivityClipper(MediaClipper):
         unavailable.  Returns an empty list if no intervals survive the
         ``min_clip_duration`` filter.
         """
-        try:
-            import librosa  # noqa: PLC0415
-        except ImportError:
-            return None
+        from vtscore.media.audio.decode import decode_audio  # noqa: PLC0415
 
         if not self._load_model():
             return None
 
         try:
-            audio_data, _ = librosa.load(io.BytesIO(media_bytes), sr=self._SILERO_SR, mono=True)
+            audio_data, _ = decode_audio(media_bytes, sr=self._SILERO_SR, mono=True)
         except Exception:
             return None
         if audio_data.size == 0:

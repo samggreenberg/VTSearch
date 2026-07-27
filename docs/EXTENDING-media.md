@@ -387,6 +387,32 @@ class CodeBertEmbedder(MediaEmbedder):
             return None
 ```
 
+### Decoding audio: use `decode_audio`, never `librosa.load`
+
+Any plugin that turns audio into samples — an embedder, a clipper, a
+converter, a captioner — must go through
+`vtscore.media.audio.decode.decode_audio`:
+
+```python
+from vtscore.media.audio.decode import decode_audio
+
+samples, sr = decode_audio(source, sr=MY_SAMPLE_RATE, mono=True)
+```
+
+*source* may be a path, raw `bytes`, or a file-like object; the return is a
+C-contiguous `float32` array in [-1, 1], mono-downmixed by channel mean, at
+`sr` (or the native rate when `sr=None`). `offset` / `duration` (seconds)
+select a window before any resampling. Failure raises `AudioDecodeError`.
+
+Do **not** call `librosa.load`. It falls back to `audioread` for every
+container `libsndfile` can't parse — which is all of AAC/M4A/MP4 — and that
+fallback is removed in librosa 1.0, so those codecs would break silently.
+`decode_audio` uses `soundfile` for the native formats and pipes everything
+else through the bundled ffmpeg over `stdin`, with no temp-file spill.
+librosa is still the right tool for *analysis* (`librosa.effects.split`,
+`librosa.feature.melspectrogram`, `librosa.cqt`); it is only `load` that is
+off-limits.
+
 ### Service-based embedders
 
 Embedders are not required to read a local file.  Because `_embed_media_impl`

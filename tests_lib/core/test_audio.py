@@ -108,30 +108,16 @@ class TestGenerateWaveformThumbnail:
         # And well under all the pixels are opaque — nowhere near a filled block.
         assert (alpha > 0).mean() < 0.9
 
-    def test_falls_back_to_tempfile_when_buffer_decode_fails(self, monkeypatch):
-        """AAC/M4A can't decode from a BytesIO (librosa only reaches ffmpeg via a
-        real path), so a buffer-decode failure must retry through a temp file
-        rather than silently returning None."""
-        import librosa
-        import numpy as np
+    def test_decodes_ffmpeg_only_codec_from_memory(self, aac_bytes):
+        """AAC/M4A - which libsndfile can't parse at all - still thumbnails.
 
-        calls = {"buffer": 0, "path": 0}
-
-        def fake_load(path, **kwargs):
-            if isinstance(path, io.BytesIO):
-                calls["buffer"] += 1
-                raise RuntimeError("libsndfile cannot parse AAC-in-MP4 from a buffer")
-            calls["path"] += 1
-            rng = np.random.default_rng(0)
-            return rng.standard_normal(4000).astype(np.float32), 44100
-
-        monkeypatch.setattr(librosa, "load", fake_load)
-
-        result = generate_waveform_thumbnail(b"fake aac bytes", filename="clip.m4a")
+        ffmpeg reads the buffer off ``stdin``, so the codec that used to force
+        librosa's (now-removed) audioread fallback plus a temp-file spill now
+        renders straight from memory.
+        """
+        result = generate_waveform_thumbnail(aac_bytes)
         assert result is not None
         assert result[:8] == b"\x89PNG\r\n\x1a\n"
-        assert calls["buffer"] == 1  # tried the buffer first
-        assert calls["path"] == 1  # then fell back to the temp file
 
 
 class TestGenerateWav:

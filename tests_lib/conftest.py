@@ -172,6 +172,48 @@ def _allow_test_tmp_paths(monkeypatch):
     monkeypatch.setattr(paths_mod, "validate_server_filepath", _permissive)
 
 
+@pytest.fixture(scope="session")
+def aac_bytes():
+    """A short AAC-in-MP4 (``.m4a``) clip, encoded once per session by ffmpeg.
+
+    AAC is the codec ``libsndfile`` cannot parse at all, so anything decoding
+    these bytes is exercising the ffmpeg arm of
+    :func:`vtscore.media.audio.decode.decode_audio` — the one that replaced
+    librosa's removed ``audioread`` fallback.
+    """
+    import subprocess
+
+    from vtscore.media.audio.ffmpeg import get_ffmpeg_exe
+
+    try:
+        ffmpeg = get_ffmpeg_exe()
+    except FileNotFoundError:
+        pytest.skip("ffmpeg not available")
+    result = subprocess.run(  # noqa: S603
+        [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            "pipe:0",
+            "-c:a",
+            "aac",
+            "-f",
+            "mp4",
+            "-movflags",
+            "frag_keyframe+empty_moov",
+            "pipe:1",
+        ],
+        input=generate_wav(440.0, 1.0),
+        capture_output=True,
+        timeout=60,
+    )
+    if result.returncode != 0 or not result.stdout:
+        pytest.skip(f"ffmpeg has no AAC encoder: {result.stderr[:200].decode(errors='replace')}")
+    return result.stdout
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _stub_embedding_models():
     """Prevent any embedder from loading real model weights during tests."""

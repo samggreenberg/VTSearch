@@ -402,8 +402,9 @@ threshold = find_optimal_threshold(scores, labels, inclusion_value=0)
 
 **Files:** `vtscore/media/{audio,image,text,video}/embedder_*.py`
 
-**Dependencies:** `torch`, `transformers`, `librosa` (audio), `PIL`
-(image/video), `sentence-transformers` (text)
+**Dependencies:** `torch`, `transformers`, `soundfile`/`soxr`/ffmpeg (audio,
+via `vtscore.media.audio.decode`), `PIL` (image/video),
+`sentence-transformers` (text)
 
 Each embedder is a self-contained class (separate from the `MediaType`).
 Instantiate it, call `load_models()`, then use `embed_media()` /

@@ -996,7 +996,7 @@ def _embed_upload(embedder, file_bytes: bytes, original_filename: str):
     return embedding
 
 
-def _make_pile_thumbnail(media_type: str, file_bytes: bytes, filename: str = "") -> bytes | None:
+def _make_pile_thumbnail(media_type: str, file_bytes: bytes) -> bytes | None:
     """Precompute the grid/list thumbnail for an add-to-pile upload.
 
     Dispatches per media type (audio waveform, video frame, image downscale) so
@@ -1006,7 +1006,7 @@ def _make_pile_thumbnail(media_type: str, file_bytes: bytes, filename: str = "")
     if media_type == "audio":
         from vtscore.media.audio.media_type import generate_waveform_thumbnail  # noqa: PLC0415
 
-        return generate_waveform_thumbnail(file_bytes, filename=filename)
+        return generate_waveform_thumbnail(file_bytes)
     if media_type == "video":
         from vtscore.media.video.media_type import generate_video_thumbnail  # noqa: PLC0415
 
@@ -1129,7 +1129,7 @@ def add_media_to_pile():
 
     # Precompute the grid/list thumbnail so the request path never decodes the
     # full-resolution upload on a cold tile fetch (matches the ingest path).
-    thumb = _make_pile_thumbnail(dataset_media_type, file_bytes, original_filename)
+    thumb = _make_pile_thumbnail(dataset_media_type, file_bytes)
 
     new_media: dict[str, Any] = {
         "media_type": dataset_media_type,

@@ -637,7 +637,9 @@ bash scripts/install.sh gpu
 | `opencv-python-headless` | `<4.10` | Video frame extraction |
 | `ultralytics` | latest | YOLO-based image processing |
 | `laion_clap` | latest | Audio embedding preprocessing |
-| `librosa` | latest | Audio file loading and processing |
+| `librosa` | latest | Audio analysis (spectrograms, silence splitting) |
+| `soundfile` / `soxr` | latest | Audio decoding and resampling (`vtscore.media.audio.decode`) |
+| `imageio-ffmpeg` | latest | Bundled ffmpeg binary; decodes codecs libsndfile can't (AAC/M4A/MP4) |
 | `PyMuPDF` | latest | Document (PDF/DOC/PPT) rendering and text extraction |
 
 ---
