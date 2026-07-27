@@ -1,0 +1,90 @@
+:host ::ng-deep .modal-content {
+  width: var(--modal-w-md);
+}
+
+// `.back-btn`, `.empty-state`, `.error-text` come from `_components.scss`;
+// `.column-checkboxes` / `.column-toggle` mirror the Export window's column
+// picker; the table builds on the shared `.data-table` primitive.
+
+.dupes-section {
+  margin-bottom: var(--space-2xl);
+
+  h3 { margin: 0 0 var(--space-md); }
+}
+
+.loading-text {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.preview-count {
+  font-weight: var(--weight-regular);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.column-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-lg);
+}
+
+.column-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-md);
+  cursor: pointer;
+  user-select: none;
+
+  input[type='checkbox'] {
+    cursor: pointer;
+  }
+}
+
+.table-scroll {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.dupes-table {
+  --dt-cell-pad-y: var(--space-xs);
+  --dt-border-color: var(--border);
+  font-size: var(--font-sm);
+
+  th,
+  td {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+  }
+
+  th {
+    position: sticky;
+    top: 0;
+    background: var(--bg-subtle);
+    font-weight: var(--weight-semibold);
+    font-size: var(--font-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+  }
+
+  tbody tr:hover {
+    background: var(--bg-hover);
+  }
+
+  // Heavier rule between consecutive dupe sets so each set reads as a block.
+  tbody tr.set-start td {
+    border-top: 2px solid var(--border);
+  }
+}
+
+.truncated-row td {
+  text-align: center;
+  color: var(--text-muted);
+  font-style: italic;
+  border-bottom: none;
+}

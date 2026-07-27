@@ -576,6 +576,37 @@ Returns ingest statistics for a registered dataset.
 
 404 if the dataset does not exist.
 
+### Dataset duplicates
+
+```
+GET /api/datasets/registry/{dataset_id}/duplicates
+```
+
+Returns the collapsed duplicate sets of a **loaded** dataset, expanded to
+their full membership so the caller can see which items were collapsed
+together and where each one came from. Each set corresponds to one
+`dupe_set` representative in the dataset's in-memory context; exact-dupe
+members share the representative's MD5, near-dupe members keep their own.
+
+→ ```json
+{
+  "duplicate_sets": [
+    {
+      "name": "a.wav",
+      "members": [
+        {"md5": "abc123", "filename": "a.wav", "category": "dogs",
+         "origin_name": "a.wav", "importer": "server_folder"},
+        {"md5": "abc123", "filename": "b.wav", "category": "pets",
+         "origin_name": "b.wav", "importer": "http_archive"}
+      ]
+    }
+  ]
+}
+```
+
+400 if the dataset isn't loaded (duplicate provenance lives only in memory);
+403 if access is denied; 404 if the dataset does not exist.
+
 ### Set dataset readers
 
 ```

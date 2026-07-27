@@ -1389,6 +1389,21 @@
         ],
         "type": "object"
       },
+      "DatasetRegistryDuplicatesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "duplicate_sets": {
+            "items": {
+              "$ref": "#/components/schemas/DuplicateSet"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "duplicate_sets"
+        ],
+        "type": "object"
+      },
       "DatasetRegistryLoadResponse": {
         "additionalProperties": false,
         "properties": {
@@ -2595,6 +2610,53 @@
         },
         "required": [
           "detectors"
+        ],
+        "type": "object"
+      },
+      "DuplicateSet": {
+        "additionalProperties": false,
+        "properties": {
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/DuplicateSetMember"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "members",
+          "name"
+        ],
+        "type": "object"
+      },
+      "DuplicateSetMember": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "importer": {
+            "type": "string"
+          },
+          "md5": {
+            "type": "string"
+          },
+          "origin_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "filename",
+          "importer",
+          "md5",
+          "origin_name"
         ],
         "type": "object"
       },
@@ -10019,6 +10081,51 @@
           }
         },
         "summary": "Report domain shift of the active dataset against *dataset_id*'s atlas.",
+        "tags": [
+          "datasets_registry"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "dataset_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/api/datasets/registry/{dataset_id}/duplicates": {
+      "get": {
+        "description": "Each set is one ``dupe_set`` representative in the dataset's in-memory\ncontext, expanded to its full membership so the user can see which items\nwere collapsed together and where each one came from.  Duplicate origins\nlive only in memory (they are part of each representative's origin dict),\nso the dataset must be loaded.",
+        "operationId": "get_dataset_duplicates",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetRegistryDuplicatesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Dataset is not currently loaded."
+          },
+          "403": {
+            "description": "Access denied for the current user."
+          },
+          "404": {
+            "description": "Dataset not found."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return the collapsed duplicate sets of a loaded dataset.",
         "tags": [
           "datasets_registry"
         ]

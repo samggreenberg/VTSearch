@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, input, OnInit, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
+import { DuplicatesModalComponent } from '../duplicates-modal/duplicates-modal.component';
 import { DatasetsRegistryApiService } from '../../../services/datasets-registry-api.service';
 import type { DatasetRegistryStatsResponse } from '../../../generated/api-client/models/dataset-registry-stats-response';
 import { formatTimestamp as formatTs } from '../../../utils/format-date';
@@ -10,7 +11,7 @@ import { apiErrorMessage } from '../../../utils/api-error';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-dataset-stats-modal',
   standalone: true,
-  imports: [CommonModule, ModalComponent],
+  imports: [CommonModule, ModalComponent, DuplicatesModalComponent],
   templateUrl: './dataset-stats-modal.component.html',
   styleUrl: './dataset-stats-modal.component.scss',
 })
@@ -26,6 +27,9 @@ export class DatasetStatsModalComponent implements OnInit {
   readonly loading = signal(true);
   readonly error = signal('');
   readonly stats = signal<DatasetRegistryStatsResponse | null>(null);
+
+  /** Child Duplicates modal (issue #2697), opened from the Duplicate-groups row. */
+  readonly showDuplicates = signal(false);
 
   ngOnInit(): void {
     this.datasetsRegistryApi.getDatasetStats(this.datasetId()).subscribe({

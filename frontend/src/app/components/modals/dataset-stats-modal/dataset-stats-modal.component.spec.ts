@@ -63,6 +63,29 @@ describe('DatasetStatsModalComponent', () => {
     expect(text).toContain('1m 15s'); // duration getter
   });
 
+  it('opens the Duplicates child modal from the Duplicate-groups View button', async () => {
+    await fixture.whenStable();
+    httpMock.expectOne('/api/datasets/registry/ds1/stats').flush(mockStats);
+    await settleZoneless(fixture);
+
+    const viewBtn = fixture.nativeElement.querySelector('.view-dupes-btn') as HTMLButtonElement;
+    expect(viewBtn).toBeTruthy();
+    viewBtn.click();
+    await settleZoneless(fixture);
+
+    expect(fixture.nativeElement.querySelector('vt-duplicates-modal')).toBeTruthy();
+    // The child modal fetches the duplicate sets for the same dataset.
+    httpMock.expectOne('/api/datasets/registry/ds1/duplicates').flush({ duplicate_sets: [] });
+    await settleZoneless(fixture);
+  });
+
+  it('hides the View button when the dataset has no duplicates', async () => {
+    await fixture.whenStable();
+    httpMock.expectOne('/api/datasets/registry/ds1/stats').flush({ ...mockStats, num_dupes: 0 });
+    await settleZoneless(fixture);
+    expect(fixture.nativeElement.querySelector('.view-dupes-btn')).toBeFalsy();
+  });
+
   it('repaints the error text on a failed load (zoneless canary)', async () => {
     await fixture.whenStable();
     httpMock.expectOne('/api/datasets/registry/ds1/stats').flush(
