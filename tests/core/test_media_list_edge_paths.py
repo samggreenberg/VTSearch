@@ -718,7 +718,7 @@ class TestAddToPileEdgePaths:
 
 class TestMakePileThumbnail:
     def test_image_branch(self):
-        thumb = media_list._make_pile_thumbnail("image", _png_bytes(), "pic.png")
+        thumb = media_list._make_pile_thumbnail("image", _png_bytes())
         # make_image_thumbnail re-encodes to JPEG; assert a decodable image.
         assert isinstance(thumb, bytes) and thumb
         with Image.open(io.BytesIO(thumb)) as img:

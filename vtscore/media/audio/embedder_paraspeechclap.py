@@ -24,7 +24,6 @@ style is a global property, so the leading window is representative.
 
 from __future__ import annotations
 
-import io
 import logging
 from pathlib import Path
 from typing import Any, Optional
@@ -105,11 +104,6 @@ class AudioParaSpeechClapEmbedder(MediaEmbedder):
             self._on_progress, "loading", "Importing transformers…", est_modules=IMPORT_MODULE_ESTIMATES["transformers"]
         ):
             from transformers import AutoTokenizer, Wav2Vec2FeatureExtractor  # noqa: PLC0415
-
-        with timed_progress(
-            self._on_progress, "loading", "Importing librosa…", est_modules=IMPORT_MODULE_ESTIMATES["librosa"]
-        ):
-            import librosa  # noqa: F401, PLC0415
 
         with timed_progress(
             self._on_progress, "loading", "Importing soundfile…", est_modules=IMPORT_MODULE_ESTIMATES["soundfile"]
@@ -209,15 +203,16 @@ class AudioParaSpeechClapEmbedder(MediaEmbedder):
             file_path = Path(path_str)
         source_repr = file_path if file_path is not None else "<bytes>"
         try:
-            import librosa  # noqa: PLC0415
             import torch  # noqa: PLC0415
 
+            from vtscore.media.audio.decode import decode_audio  # noqa: PLC0415
+
             if audio_bytes is not None:
-                source: io.BytesIO | Path = io.BytesIO(bytes(audio_bytes))
+                source: bytes | Path = bytes(audio_bytes)
             else:
                 assert file_path is not None  # narrowed by the path_str check above
                 source = file_path
-            audio_data, _sr = librosa.load(source, sr=PARASPEECHCLAP_SAMPLE_RATE, mono=True)
+            audio_data, _sr = decode_audio(source, sr=PARASPEECHCLAP_SAMPLE_RATE, mono=True)
             if len(audio_data) > PARASPEECHCLAP_MAX_SAMPLES:
                 audio_data = audio_data[:PARASPEECHCLAP_MAX_SAMPLES]
             inputs = self._feature_extractor(

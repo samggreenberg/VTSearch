@@ -118,12 +118,12 @@ class Video2AudioMediaConverter(MediaConverter):
 
             wav_bytes = wav_file.read_bytes()
 
-            # Compute duration from WAV header or via librosa
+            # Compute duration by decoding the WAV we just wrote
             duration = 0.0
             try:
-                import librosa  # noqa: PLC0415
+                from vtscore.media.audio.decode import decode_audio  # noqa: PLC0415
 
-                audio_data, sr = librosa.load(wav_path, sr=None, mono=True)
+                audio_data, sr = decode_audio(wav_path, sr=None, mono=True)
                 duration = len(audio_data) / sr
             except Exception:
                 pass
