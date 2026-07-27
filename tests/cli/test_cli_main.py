@@ -37,6 +37,7 @@ def _restore_cli_overrides():
         dict(settings_mod._cli_solo_embedders),
         settings_mod._cli_dataset_max_age_days,
         settings_mod._cli_support_email,
+        settings_mod._cli_semantic_only,
     )
     yield
     (
@@ -45,6 +46,7 @@ def _restore_cli_overrides():
         solo_emb,
         settings_mod._cli_dataset_max_age_days,
         settings_mod._cli_support_email,
+        settings_mod._cli_semantic_only,
     ) = saved
     settings_mod._cli_hidden_plugins.clear()
     settings_mod._cli_hidden_plugins.update(hidden)
@@ -616,6 +618,19 @@ class TestApplyOverrides:
         monkeypatch.setattr(cli_main, "_run_server", lambda *a: None)
         _run_main(monkeypatch, ["--support-email", "help@example.com"])
         assert settings_mod.get_cli_support_email() == "help@example.com"
+
+    def test_semantic_only_flag_is_stashed(self, monkeypatch):
+        monkeypatch.setattr(cli_main, "_run_server", lambda *a: None)
+        _run_main(monkeypatch, ["--semantic-only"])
+        assert settings_mod.get_cli_semantic_only() is True
+        assert settings_mod.get_effective_semantic_only() is True
+
+    def test_semantic_only_omitted_leaves_the_setting_in_charge(self, monkeypatch):
+        """No flag means no override: the persisted server setting decides, so
+        a deployment can turn the lock on from settings.json alone."""
+        monkeypatch.setattr(cli_main, "_run_server", lambda *a: None)
+        _run_main(monkeypatch, [])
+        assert settings_mod.get_cli_semantic_only() is None
 
 
 class TestApplyVerbosity:

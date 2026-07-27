@@ -452,3 +452,57 @@ describe('NewDetectorModalComponent with defaultMediaType', () => {
     expect(component.mediaTypeLocked).toBe(true);
   });
 });
+
+describe('NewDetectorModalComponent (semantic_only server)', () => {
+  let component: NewDetectorModalComponent;
+  let fixture: ComponentFixture<NewDetectorModalComponent>;
+  let httpMock: HttpTestingController;
+
+  async function setup(semanticOnly: boolean) {
+    await TestBed.configureTestingModule({
+      imports: [NewDetectorModalComponent],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(NewDetectorModalComponent);
+    component = fixture.componentInstance;
+    fixture.componentRef.setInput('defaultMediaType', 'image');
+    httpMock = TestBed.inject(HttpTestingController);
+    TestBed.tick();
+
+    httpMock.expectOne('/api/media-types').flush({
+      media_types: [{ type_id: 'image', name: 'Image', icon: 'image' }],
+    });
+    httpMock.expectOne('/api/embedders').flush({ embedders: [{ name: 'siglip', supports_text: true }] });
+    TestBed.tick();
+    httpMock.expectOne('/api/settings').flush({ semantic_only: semanticOnly });
+    TestBed.tick();
+  }
+
+  afterEach(() => {
+    httpMock.verify();
+  });
+
+  it('offers all three types and shows the Advanced toggle when unlocked', async () => {
+    await setup(false);
+    expect(component.embedderTypeOptions).toEqual(['semantic', 'patch_semantic', 'structural']);
+    expect(component.showEmbedderTypePicker).toBe(true);
+    expect(component.showAdvancedToggle).toBe(true);
+  });
+
+  it('drops the one-option type picker (and the Advanced toggle) when locked', async () => {
+    await setup(true);
+    expect(component.embedderTypeOptions).toEqual(['semantic']);
+    expect(component.showEmbedderTypePicker).toBe(false);
+    // Nothing else lives under Advanced for this dataset, so the toggle goes too.
+    expect(component.primaryLicenseNotice).toBeNull();
+    expect(component.showAdvancedToggle).toBe(false);
+  });
+
+  it('pins the created detector to semantic when locked', async () => {
+    await setup(true);
+    // Even a stale explicit pick can't escape the lock.
+    component.onEmbedderTypeChange('structural');
+    expect(component.effectiveEmbedderType).toBe('semantic');
+  });
+});
