@@ -223,6 +223,10 @@ class TestImporterBaseIcon:
         assert d["icon"] == "🧪"
 
     def test_to_dict_uses_default_icon_when_not_overridden(self):
+        # An importer that doesn't set its own ``icon`` no longer falls
+        # back to the generic family emoji shared by every importer;
+        # instead it gets a distinguishing boxed-letter icon derived from
+        # its display name (see ``_default_plugin_letter_icon``).
         from vtscore.datasets.importers.base import DatasetImporter
 
         class MinimalImporter(DatasetImporter):
@@ -235,7 +239,7 @@ class TestImporterBaseIcon:
                 pass
 
         d = MinimalImporter().to_dict()
-        assert d["icon"] == "🔌"
+        assert d["icon"] == "M"
 
 
 # ---------------------------------------------------------------------------
