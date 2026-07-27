@@ -407,7 +407,9 @@ class TestExportOriginOnlyFallback:
             },
         )
         det_ctx = get_active_detector_context()
-        path = _detector_path(get_detector(detector_id)["name"])
+        entry = get_detector(detector_id)
+        assert entry is not None
+        path = _detector_path(entry["name"])
         det_ctx.cached_labelset_mtime = path.stat().st_mtime
 
         data = client.get("/api/labels/export").get_json()
