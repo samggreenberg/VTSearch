@@ -7,6 +7,10 @@
     <table class="data-table stats-table">
       <tbody>
         <tr>
+          <td class="stat-label" title="Media type: audio, image, text, video, or document">Type</td>
+          <td class="stat-value">{{ mediaType }}</td>
+        </tr>
+        <tr>
           <td class="stat-label" title="Total number of unique media items in this dataset">Media items</td>
           <td class="stat-value">{{ stats.num_items | number }}</td>
         </tr>
@@ -22,18 +26,6 @@
               >View</button>
             }
           </td>
-        </tr>
-        <tr>
-          <td class="stat-label" title="Timestamp when the dataset import process began">Ingest started</td>
-          <td class="stat-value">{{ formatTimestamp(stats.ingest_started_at) }}</td>
-        </tr>
-        <tr>
-          <td class="stat-label" title="Timestamp when the dataset import process completed">Ingest finished</td>
-          <td class="stat-value">{{ formatTimestamp(stats.ingest_finished_at) }}</td>
-        </tr>
-        <tr>
-          <td class="stat-label" title="Total time taken to import the dataset">Duration</td>
-          <td class="stat-value">{{ duration }}</td>
         </tr>
       </tbody>
     </table>
@@ -63,6 +55,50 @@
         </tr>
       </tbody>
     </table>
+
+    <h3 class="section-title">Timeline</h3>
+    <table class="data-table stats-table">
+      <tbody>
+        <tr>
+          <td class="stat-label" title="When the dataset was first imported">Created</td>
+          <td class="stat-value">{{ formatTimestamp(stats.created_at) }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="Timestamp when the dataset import process began">Ingest started</td>
+          <td class="stat-value">{{ formatTimestamp(stats.ingest_started_at) }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="Timestamp when the dataset import process completed">Ingest finished</td>
+          <td class="stat-value">{{ formatTimestamp(stats.ingest_finished_at) }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="Total time taken to import the dataset">Duration</td>
+          <td class="stat-value">{{ duration }}</td>
+        </tr>
+        @if (showAgeOff) {
+          <tr>
+            <td class="stat-label" title="When this dataset ages off and is automatically removed">Age-Off</td>
+            <td class="stat-value">{{ ageOff }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    @if (showAccess) {
+      <h3 class="section-title">Access</h3>
+      <table class="data-table stats-table">
+        <tbody>
+          <tr>
+            <td class="stat-label" title="User who created this dataset">Creator</td>
+            <td class="stat-value">{{ stats.created_by || '-' }}</td>
+          </tr>
+          <tr>
+            <td class="stat-label" title="Users with access to this dataset">Readers</td>
+            <td class="stat-value">{{ readers }}</td>
+          </tr>
+        </tbody>
+      </table>
+    }
 
     @if (fileTypes.length > 0) {
       <h3 class="section-title">File Types</h3>

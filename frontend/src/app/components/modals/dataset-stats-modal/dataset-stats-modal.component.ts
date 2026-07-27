@@ -20,6 +20,14 @@ export class DatasetStatsModalComponent implements OnInit {
 
   readonly datasetId = input('');
   readonly datasetName = input('');
+  /** Mirrors the Dashboard grid's own column gating so the Stats window
+   *  hides exactly what the grid hides: Creator/Readers are noise on a
+   *  single-user (default-login) install. */
+  readonly isDefaultLogin = input(true);
+  /** True when the server stamps datasets with an age-off. Gates the
+   *  Age-Off row the same way the grid gates its Age-Off column — except
+   *  a dataset that already carries an expiry always shows it. */
+  readonly serverSetsAgeOff = input(false);
   readonly closed = output<void>();
 
   // Signalized so the `ngOnInit` subscribe (an unpatched callback under zoneless)
@@ -54,6 +62,37 @@ export class DatasetStatsModalComponent implements OnInit {
     return Object.entries(counts)
       .sort(([, a], [, b]) => b - a)
       .map(([ext, count]) => ({ ext, count }));
+  }
+
+  /** Media type as the grid renders it: capitalized, `-` when unset. */
+  get mediaType(): string {
+    const t = this.stats()?.media_type;
+    if (!t) return '-';
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+
+  /** Age-off date, or the grid's "Never" when the dataset has no expiry. */
+  get ageOff(): string {
+    const expires = this.stats()?.expires_at;
+    return expires != null ? formatTs(expires) : 'Never';
+  }
+
+  /** Show the Age-Off row when the server stamps age-offs, or whenever this
+   *  particular dataset already carries one (a stamp survives the setting
+   *  being turned back off, and hiding a real death date would be a lie). */
+  get showAgeOff(): boolean {
+    return this.serverSetsAgeOff() || this.stats()?.expires_at != null;
+  }
+
+  /** Creator/Readers are meaningless on a single-user install, exactly as
+   *  in the grid, which drops both columns under the default login. */
+  get showAccess(): boolean {
+    return !this.isDefaultLogin();
+  }
+
+  get readers(): string {
+    const list = this.stats()?.readers ?? [];
+    return list.length ? list.join(', ') : '-';
   }
 
   get importerName(): string {

@@ -646,7 +646,15 @@ def get_dataset_stats(dataset_id: str):
             clipper_display = raw_clipper
 
     return {
+        # The Dashboard grid's own columns, so the Stats window can show
+        # everything the grid does (it covers the grid up while open).
+        "name": entry.get("name", ""),
+        "media_type": entry.get("media_type", ""),
         "num_items": entry.get("num_items", 0),
+        "created_at": entry.get("created_at"),
+        "expires_at": entry.get("expires_at"),
+        "created_by": entry.get("created_by", ""),
+        "readers": entry.get("readers") or [],
         "num_dupes": entry.get("num_dupes", 0),
         "file_type_counts": entry.get("file_type_counts", {}),
         "ingest_started_at": entry.get("ingest_started_at"),
