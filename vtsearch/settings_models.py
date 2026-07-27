@@ -251,6 +251,20 @@ class ServerSettings(BaseModel):
     # :func:`vtsearch.settings.get_effective_support_email`.
     support_email: str = DEFAULT_SUPPORT_EMAIL
 
+    # Lock this deployment to **Semantic** embedders only.  The Patch Semantic
+    # and Structural embedder types are still prototypes; an operator running a
+    # production instance can hide them wholesale rather than naming each
+    # prototype embedder in ``hidden_plugins``.  When true, ``GET
+    # /api/embedders`` drops every patch/structural embedder (so the Add Dataset
+    # "Advanced" block shows no Region / Instance embedder pickers), the
+    # New-detector modal offers no embedder-type choice, and the dataset-load /
+    # detector-create routes reject a non-semantic type outright.  Set with the
+    # ``--semantic-only`` CLI flag / ``VTSEARCH_SEMANTIC_ONLY`` env var
+    # (process-wide, wins for the process lifetime) or by editing this key in
+    # the settings file.  See
+    # :func:`vtsearch.settings.get_effective_semantic_only`.
+    semantic_only: bool = False
+
     # Browse UMAP projection knobs (Stage 1).  They change the map layout, so
     # a per-deployment operator may want to tune them.  The persisted
     # projection is keyed on these values (see

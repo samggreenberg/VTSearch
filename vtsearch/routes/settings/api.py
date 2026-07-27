@@ -209,6 +209,10 @@ def _with_effective(data: dict) -> dict:
     # Surface the CLI/env-overridable "Email us" recipient as the value
     # actually in force, so the Help modal's mailto link is pre-addressed.
     data["support_email"] = settings.get_effective_support_email()
+    # Surface the CLI/env-overridable Semantic-only lock as the value actually
+    # in force, so the New-detector modal can drop its embedder-type picker and
+    # the Server settings tab can report the restriction.
+    data["semantic_only"] = settings.get_effective_semantic_only()
     return data
 
 

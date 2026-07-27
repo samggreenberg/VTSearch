@@ -107,6 +107,8 @@ if TYPE_CHECKING:
     def set_dataset_max_age_days(value: int | None) -> None: ...
     def get_support_email() -> str: ...
     def set_support_email(value: str) -> None: ...
+    def get_semantic_only() -> bool: ...
+    def set_semantic_only(value: bool) -> None: ...
     def get_projection_n_neighbors() -> int: ...
     def set_projection_n_neighbors(value: int) -> None: ...
     def get_projection_min_dist() -> float: ...
@@ -196,6 +198,15 @@ _cli_dataset_max_age_days: int | None = None
 #: of the process; the setting is not user-editable via the API (see
 #: :func:`get_effective_support_email`).
 _cli_support_email: str | None = None
+
+#: Process-level override for the server-tier ``semantic_only`` setting, set by
+#: :func:`set_cli_semantic_only` from the ``--semantic-only`` flag (or the
+#: ``VTSEARCH_SEMANTIC_ONLY`` env var) in :mod:`app`. ``None`` means "no CLI
+#: override" - reads fall through to the persisted server setting. ``True``
+#: locks the instance to Semantic embedders for the lifetime of the process;
+#: the setting is not user-editable via the API (see
+#: :func:`get_effective_semantic_only`).
+_cli_semantic_only: bool | None = None
 
 #: Filename used for the per-user settings file inside
 #: ``get_user_data_dir(user)``.
@@ -1008,6 +1019,45 @@ def get_effective_support_email() -> str:
     return get_support_email()  # type: ignore[name-defined]  # autogen'd accessor
 
 
+def set_cli_semantic_only(value: bool | None) -> None:
+    """Set the process-level override for the ``semantic_only`` setting.
+
+    Called once from ``app.py`` startup when ``--semantic-only`` is passed (or
+    ``VTSEARCH_SEMANTIC_ONLY`` is set). The value applies server-wide (every
+    user) and is fixed for the process lifetime;
+    :func:`get_effective_semantic_only` returns it in preference to the
+    persisted server setting. Pass ``None`` to clear the override so reads fall
+    back to the persisted file value.
+    """
+    global _cli_semantic_only
+    _cli_semantic_only = None if value is None else bool(value)
+
+
+def get_cli_semantic_only() -> bool | None:
+    """Return the process-level CLI override (``None`` if unset)."""
+    return _cli_semantic_only
+
+
+def get_effective_semantic_only() -> bool:
+    """Return whether this instance is locked to Semantic embedders.
+
+    Resolution order:
+
+    1. The process-level CLI override set by :func:`set_cli_semantic_only`
+       (``--semantic-only`` / ``VTSEARCH_SEMANTIC_ONLY``), which applies to
+       every user for the lifetime of the process.
+    2. The persisted server-tier setting (``data/settings.json``), which
+       defaults to ``False``.
+
+    When true, the prototype Patch Semantic / Structural embedder types are
+    hidden from every picker (``GET /api/embedders`` filters them out) and
+    rejected by the dataset-load and detector-create routes.
+    """
+    if _cli_semantic_only is not None:
+        return _cli_semantic_only
+    return bool(get_semantic_only())  # type: ignore[name-defined]  # autogen'd accessor
+
+
 def set_cli_solo_embedder(media_type: str, embedder: str | None) -> None:
     """Set or clear a process-level solo-embedder fallback for *media_type*.
 
@@ -1277,6 +1327,24 @@ def filter_visible_plugin_dicts(
     if not hidden:
         return list(plugin_dicts)
     return [d for d in plugin_dicts if d.get(id_key) not in hidden]
+
+
+def filter_semantic_only_embedder_dicts(embedder_dicts: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop patch / structural embedders when the instance is Semantic-locked.
+
+    The single chokepoint for ``GET /api/embedders``: with
+    :func:`get_effective_semantic_only` true, an embedder that advertises
+    ``supports_patch_regions`` or ``supports_geometric_verification`` is
+    withheld from the listing, so every picker fed by that endpoint (the Add
+    Dataset "Advanced" block's Embedder / Region embedder / Instance embedder
+    selects, the Import Defaults tab) offers Semantic embedders only.
+
+    A no-op when the lock is off, so the ordinary deployment pays one boolean.
+    """
+    dicts = list(embedder_dicts)
+    if not get_effective_semantic_only():
+        return dicts
+    return [d for d in dicts if not d.get("supports_patch_regions") and not d.get("supports_geometric_verification")]
 
 
 # -------------------------------------------------------------------

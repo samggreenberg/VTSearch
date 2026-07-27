@@ -332,44 +332,48 @@
         />
       </div>
 
-      <div class="form-group advanced-group">
-        <button
-          type="button"
-          class="advanced-toggle"
-          (click)="toggleAdvanced()"
-          [attr.aria-expanded]="advancedOpen()"
-          title="Advanced options: the kind of embedder this detector works with."
-        >
-          Advanced {{ advancedOpen() ? '▴' : '▾' }}
-        </button>
-
-        @if (advancedOpen()) {
-          <label class="col-label" for="detector-embedder-type"
-            title="The kind of embedder this detector works with. An embedder is the tool that analyzes your items so they can be searched. The detector stays compatible with any dataset that uses this kind of embedder. Pick the kind you expect to use — you can create a detector before adding any dataset.">
-            Detector Embedder Type
-          </label>
-          <select
-            id="detector-embedder-type"
-            class="form-select"
-            name="detectorEmbedderType"
-            [ngModel]="effectiveEmbedderType"
-            (ngModelChange)="onEmbedderTypeChange($event)"
+      @if (showAdvancedToggle) {
+        <div class="form-group advanced-group">
+          <button
+            type="button"
+            class="advanced-toggle"
+            (click)="toggleAdvanced()"
+            [attr.aria-expanded]="advancedOpen()"
+            title="Advanced options: the kind of embedder this detector works with."
           >
-            @for (type of embedderTypeOptions; track type) {
-              <option [value]="type">{{ embedderTypeLabel(type) }}</option>
+            Advanced {{ advancedOpen() ? '▴' : '▾' }}
+          </button>
+
+          @if (advancedOpen()) {
+            @if (showEmbedderTypePicker) {
+              <label class="col-label" for="detector-embedder-type"
+                title="The kind of embedder this detector works with. An embedder is the tool that analyzes your items so they can be searched. The detector stays compatible with any dataset that uses this kind of embedder. Pick the kind you expect to use — you can create a detector before adding any dataset.">
+                Detector Embedder Type
+              </label>
+              <select
+                id="detector-embedder-type"
+                class="form-select"
+                name="detectorEmbedderType"
+                [ngModel]="effectiveEmbedderType"
+                (ngModelChange)="onEmbedderTypeChange($event)"
+              >
+                @for (type of embedderTypeOptions; track type) {
+                  <option [value]="type">{{ embedderTypeLabel(type) }}</option>
+                }
+              </select>
+              @if (embedderTypeUnavailable) {
+                <p class="info-text">
+                  The current dataset has no {{ embedderTypeLabel(effectiveEmbedderType) }} embedder, so
+                  this detector won't run here — it'll be available on datasets that bind one.
+                </p>
+              }
             }
-          </select>
-          @if (embedderTypeUnavailable) {
-            <p class="info-text">
-              The current dataset has no {{ embedderTypeLabel(effectiveEmbedderType) }} embedder, so
-              this detector won't run here — it'll be available on datasets that bind one.
-            </p>
+            @if (primaryLicenseNotice; as notice) {
+              <div class="license-warning" role="note">⚠ {{ notice }}</div>
+            }
           }
-          @if (primaryLicenseNotice; as notice) {
-            <div class="license-warning" role="note">⚠ {{ notice }}</div>
-          }
-        }
-      </div>
+        </div>
+      }
 
       @if (error()) {
         <p class="error-text">{{ error() }}</p>

@@ -46,6 +46,7 @@ from vtscore.datasets.registry import (
 from vtsearch.auth import get_current_user
 from vtsearch.routes._shared import (
     _normalise_option,
+    abort_if_semantic_only_embedders,
     get_plugin_or_404,
     register_plugin_typed_routes,
     validate_plugin_args,
@@ -106,6 +107,20 @@ def _bound_embedders_for_path(path: str) -> list[str]:
         return [str(n) for n in bound if n]
     emb = entry.get("embedder")
     return [emb] if emb else []
+
+
+def _abort_if_semantic_only(field_values: dict) -> None:
+    """400 when *field_values* names a patch/structural embedder under the lock.
+
+    Covers both slots the importer body can carry: the scalar ``embedder``
+    (primary) and the ``embedders`` trio, which arrives as a JSON array string
+    on multipart bodies and a real list on JSON ones.
+    """
+    from vtscore.datasets.load_pipeline import _parse_embedder_list  # noqa: PLC0415
+
+    names = [str(field_values.get("embedder") or "")]
+    names.extend(_parse_embedder_list(field_values.get("embedders")) or [])
+    abort_if_semantic_only_embedders(names)
 
 
 @datasets_staging_bp.route("/api/dataset/combine", methods=["POST"])
@@ -650,6 +665,11 @@ def import_dataset(importer_name: str):
             "merge_near_duplicates",
         ),
     )
+
+    # A Semantic-locked instance never offers a patch/structural embedder in a
+    # picker, so an import that names one is stale or hand-rolled: reject it
+    # here rather than binding a type the rest of the UI hides.
+    _abort_if_semantic_only(field_values)
 
     # ``clipper_params`` is multipart-encoded as a JSON string when the
     # importer has file fields; the per-plugin schema treats it as an

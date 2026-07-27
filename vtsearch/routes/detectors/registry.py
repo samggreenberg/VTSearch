@@ -160,10 +160,12 @@ def register_detector_route(body: dict):
         abort(400, message="media_type is required (must be a specific type, not 'any')")
 
     from vtscore.detectors.embedder_type import resolve_detector_embedder_type
+    from vtsearch.routes._shared import abort_if_semantic_only_type
 
     embedder_type, type_err = resolve_detector_embedder_type(body.get("embedder_type", ""))
     if type_err:
         abort(400, message=type_err)
+    abort_if_semantic_only_type(embedder_type)
 
     examples = body.get("examples") or []
     if not examples and text_query:
@@ -227,6 +229,7 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
     from vtscore.labels.importers import get_label_importer, list_label_importers
     from vtscore.detectors.registry import register_detector, update_detector
     from vtsearch.routes._shared import (
+        abort_if_semantic_only_type,
         get_plugin_or_404,
         run_plugin_or_error,
         validate_plugin_args,
@@ -252,6 +255,7 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
     embedder_type_val, type_err = resolve_detector_embedder_type(requested_type)
     if type_err:
         abort(400, message=type_err)
+    abort_if_semantic_only_type(embedder_type_val)
 
     det_path = _detector_path(name)
     if det_path.exists():

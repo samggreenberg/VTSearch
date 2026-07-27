@@ -15,7 +15,6 @@ import { SettingsStateService } from '../../../services/settings-state.service';
 import {
   EmbedderCapabilityService,
   EMBEDDER_TYPE_LABELS,
-  EMBEDDER_TYPE_ORDER,
   type EmbedderType,
 } from '../../../services/embedder-capability.service';
 import { MediaStateService } from '../../../services/media-state.service';
@@ -431,11 +430,26 @@ export class NewDetectorModalComponent implements OnInit {
     return this.datasetEmbedder() ? [this.datasetEmbedder()] : [];
   }
 
-  /** All three embedder types, in display order — the always-available options
-   *  in the Advanced picker. A detector locks a type as *declared intent*, so
-   *  the choice isn't constrained to what the active dataset (if any) binds. */
+  /** The embedder types offered in the Advanced picker — all three in display
+   *  order normally, Semantic alone on a `semantic_only` server. A detector
+   *  locks a type as *declared intent*, so the choice isn't constrained to what
+   *  the active dataset (if any) binds. */
   get embedderTypeOptions(): EmbedderType[] {
-    return EMBEDDER_TYPE_ORDER;
+    return this.embedderCaps.offeredTypes;
+  }
+
+  /** Whether to render the type picker at all. A one-option picker is a
+   *  question with no answer, so a `semantic_only` server drops it (and the
+   *  "not on this dataset" hint under it) rather than showing a dead select. */
+  get showEmbedderTypePicker(): boolean {
+    return this.embedderTypeOptions.length > 1;
+  }
+
+  /** Whether the Advanced toggle is worth showing. Normally yes (it hosts the
+   *  type picker); on a `semantic_only` server only when there is a license
+   *  notice left to surface, so the block never opens onto nothing. */
+  get showAdvancedToggle(): boolean {
+    return this.showEmbedderTypePicker || !!this.primaryLicenseNotice;
   }
 
   /** The embedder *types* the active dataset supplies, or `[]` when no dataset
@@ -446,8 +460,11 @@ export class NewDetectorModalComponent implements OnInit {
 
   /** The type shown in the picker: the user's explicit pick, else the active
    *  dataset's primary supplied type, else `semantic`. Computed lazily so it
-   *  reflects the dataset/registry as they load (no pre-load race). */
+   *  reflects the dataset/registry as they load (no pre-load race). A
+   *  `semantic_only` server pins it to `semantic`, so a dataset that still
+   *  binds a prototype type can't seed a detector the server would reject. */
   get effectiveEmbedderType(): EmbedderType {
+    if (this.embedderCaps.semanticOnly()) return 'semantic';
     return this.embedderType() || this.datasetSuppliedTypes[0] || 'semantic';
   }
 
