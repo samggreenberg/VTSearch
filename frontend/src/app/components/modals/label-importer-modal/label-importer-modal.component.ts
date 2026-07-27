@@ -120,6 +120,7 @@ export class LabelImporterModalComponent implements OnDestroy {
       } else if (
         field.field_type === 'select' &&
         !field.dynamic_options &&
+        !field.allow_free_text &&
         (field.options?.length ?? 0) > 0
       ) {
         this.formValues[field.key] = field.options![0];
@@ -172,7 +173,7 @@ export class LabelImporterModalComponent implements OnDestroy {
           if (current && !inList && !field.allow_free_text) {
             this.formValues[key] = '';
           }
-          if (!this.formValues[key] && field.required && options.length > 0) {
+          if (!this.formValues[key] && field.required && !field.allow_free_text && options.length > 0) {
             this.formValues[key] = options[0].value;
           }
         },

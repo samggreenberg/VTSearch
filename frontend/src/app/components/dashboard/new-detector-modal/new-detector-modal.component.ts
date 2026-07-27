@@ -965,6 +965,7 @@ export class NewDetectorModalComponent implements OnInit {
       } else if (
         field.field_type === 'select' &&
         !field.dynamic_options &&
+        !field.allow_free_text &&
         (field.options?.length ?? 0) > 0
       ) {
         this.labelImporterValues[field.key] = field.options![0];
@@ -1022,7 +1023,7 @@ export class NewDetectorModalComponent implements OnInit {
           if (current && !inList && !field.allow_free_text) {
             this.labelImporterValues[key] = '';
           }
-          if (!this.labelImporterValues[key] && field.required && options.length > 0) {
+          if (!this.labelImporterValues[key] && field.required && !field.allow_free_text && options.length > 0) {
             this.labelImporterValues[key] = options[0].value;
           }
         },

@@ -80,6 +80,7 @@ export class SettingsExporterModalComponent implements OnDestroy {
       } else if (
         field.field_type === 'select' &&
         !field.dynamic_options &&
+        !field.allow_free_text &&
         (field.options?.length ?? 0) > 0
       ) {
         this.formValues[field.key] = field.options![0];

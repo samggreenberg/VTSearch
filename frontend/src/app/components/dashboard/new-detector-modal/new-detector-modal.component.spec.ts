@@ -353,6 +353,30 @@ describe('NewDetectorModalComponent', () => {
     expect(component.labelImporterValues['sheet']).toBe('s1');
   });
 
+  it('does not auto-select the first option for a required free-text combobox', () => {
+    const field = {
+      key: 'sheet',
+      field_type: 'select',
+      dynamic_options: true,
+      required: true,
+      allow_free_text: true,
+    } as any;
+    component.selectLabelImporter({ name: 'gsheets', fields: [field] } as any);
+
+    httpMock
+      .expectOne('/api/label-importers/field-options/gsheets')
+      .flush({ options: [{ value: 's1', label: 'Sheet 1' }] });
+
+    expect(component.labelImporterValues['sheet']).toBeUndefined();
+  });
+
+  it('does not auto-select the first static option for a free-text combobox', () => {
+    const field = { key: 's', field_type: 'select', options: ['x', 'y'], allow_free_text: true } as any;
+    component.selectLabelImporter({ name: 'imp', fields: [field] } as any);
+
+    expect(component.labelImporterValues['s']).toBeUndefined();
+  });
+
   it('coerces static string options into {value,label} pairs on the Trained tab', () => {
     const staticSelect = { key: 's', field_type: 'select', options: ['x', 'y'] } as any;
     expect(component.labelImporterOptionsFor(staticSelect)).toEqual([

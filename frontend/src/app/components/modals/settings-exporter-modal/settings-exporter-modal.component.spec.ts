@@ -54,6 +54,16 @@ describe('SettingsExporterModalComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('.picker-card').length).toBe(1);
   });
 
+  it('does not auto-select the first option for a free-text combobox', async () => {
+    await flushInit();
+    const freeTextExporter = {
+      name: 'free_text_exporter',
+      fields: [{ key: 'q', field_type: 'select', options: ['a', 'b'], allow_free_text: true }],
+    } as any;
+    component.selectExporter(freeTextExporter);
+    expect(component.formValues['q']).toBeUndefined();
+  });
+
   // Zoneless staleness canary: the success message lands in an HTTP subscribe (an
   // unpatched callback) and repaints only because `successMessage` is a signal
   // read in the template. Drive a successful export and assert it renders with no
