@@ -52,6 +52,16 @@ describe('SettingsImporterModalComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('.picker-card').length).toBe(1);
   });
 
+  it('does not auto-select the first option for a free-text combobox', async () => {
+    await flushInit();
+    const freeTextImporter = {
+      name: 'free_text_importer',
+      fields: [{ key: 'q', field_type: 'select', options: ['a', 'b'], allow_free_text: true }],
+    } as any;
+    component.selectImporter(freeTextImporter);
+    expect(component.formValues['q']).toBeUndefined();
+  });
+
   // Zoneless staleness canary: the success message lands in an HTTP subscribe (an
   // unpatched callback) and repaints only because `successMessage` is a signal
   // read in the template. Drive a successful import and assert it renders with no

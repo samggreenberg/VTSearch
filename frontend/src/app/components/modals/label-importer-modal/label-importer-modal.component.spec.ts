@@ -128,6 +128,33 @@ describe('LabelImporterModalComponent', () => {
     ]);
   });
 
+  it('does not auto-select the first static option for a free-text combobox', async () => {
+    await flushInit();
+    const freeTextImporter = {
+      name: 'free_text_importer',
+      fields: [{ key: 'q', field_type: 'select', options: ['a', 'b'], allow_free_text: true }],
+    } as any;
+    component.selectImporter(freeTextImporter);
+    expect(component.formValues['q']).toBeUndefined();
+  });
+
+  it('does not auto-select the first option for a required free-text combobox once options load', async () => {
+    await flushInit();
+    const field = {
+      key: 'q',
+      field_type: 'select',
+      dynamic_options: true,
+      required: true,
+      allow_free_text: true,
+    } as any;
+    component.selectedImporter = { name: 'imp', fields: [field] } as any;
+    (component as any).refreshDynamicFieldOptions(field);
+    httpMock
+      .expectOne((req) => req.url.endsWith('/api/label-importers/field-options/imp'))
+      .flush({ options: [{ value: 'a', label: 'A' }] });
+    expect(component.formValues['q']).toBeUndefined();
+  });
+
   it('keeps a typed free-text value the refreshed options omit', async () => {
     await flushInit();
     const field = { key: 'q', field_type: 'select', dynamic_options: true, allow_free_text: true } as any;
