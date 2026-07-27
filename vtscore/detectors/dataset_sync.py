@@ -89,7 +89,9 @@ def ensure_votes_match_active_dataset() -> None:
 
     When triggered, clears the per-dataset detector state (good_votes,
     bad_votes, label_history, vote_click_times, click_counter,
-    last_learned_scores, find_initial_labels, training_medias) and replays
+    last_learned_scores, training_medias, and the Find session:
+    find_initial_labels, verified_ids, find_scores, find_mode,
+    find_eval_stale) and replays
     ``restore_labels_from_detector`` against the active dataset's medias,
     then stamps ``votes_dataset_id`` and caches the parsed labelset +
     file mtime on the detector context so subsequent requests within the
@@ -189,6 +191,10 @@ def ensure_votes_match_active_dataset() -> None:
         # Votes are about to be re-derived from the on-disk labelset (the
         # canonical training labels), so any prior find/scoring state is stale.
         det_ctx.find_mode = False
+        # The frozen Find evaluation this flag qualifies was just cleared with
+        # the rest of the session (find_initial_labels / find_scores), so the
+        # "out of date" marker must not outlive it.
+        det_ctx.find_eval_stale = False
         restore_labels_from_detector(data)
         det_ctx.votes_dataset_id = ds_ctx.dataset_id
         det_ctx.cached_labelset = LabelSet.from_dict(data.get("labelset") or {})
