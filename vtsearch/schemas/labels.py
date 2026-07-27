@@ -37,9 +37,10 @@ class LabeledElementSchema(Schema):
 
     Mirrors :meth:`vtscore.datasets.labelset.LabeledElement.to_dict`. Only
     ``md5`` and ``label`` are guaranteed; the other keys appear when the
-    underlying element has them set. ``is_correction`` and
-    ``custom_metadata`` are added by the export route (under
-    ``find_initial_labels`` and ``enrich=true`` respectively).
+    underlying element has them set. ``is_correction``, ``custom_metadata``,
+    and ``origin_only`` are added by the export route (under
+    ``find_initial_labels``, ``enrich=true``, and the persisted-labelset
+    fallback respectively).
     """
 
     md5 = fields.String(required=True)
@@ -52,6 +53,15 @@ class LabeledElementSchema(Schema):
     region_box = fields.List(fields.Float())
     is_correction = fields.Boolean()
     custom_metadata = fields.Dict()
+    origin_only = fields.Boolean(
+        metadata={
+            "description": (
+                "True when the entry was rendered straight from the detector's "
+                "persisted labelset because its media doesn't resolve into the "
+                "active dataset; absent for vote-derived entries."
+            ),
+        },
+    )
 
     class Meta:
         # Element-level extension keys (e.g. enrichment-added columns)
@@ -72,7 +82,9 @@ class LabelsExportQuerySchema(Schema):
                 "``corrections`` (entries where the user changed the "
                 "detector's original label), ``unverified`` (Find work-queue "
                 "items the human hasn't acted on), or ``verified`` (items the "
-                "human has confirmed). Overrides ``goods_only``."
+                "human has confirmed). Overrides ``goods_only``. The "
+                "session-scoped filters (``corrections`` / ``unverified`` / "
+                "``verified``) never include ``origin_only`` fallback entries."
             ),
         },
     )
