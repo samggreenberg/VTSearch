@@ -251,6 +251,7 @@
               },
               "type": "array"
             },
+            "readOnly": true,
             "type": "object"
           },
           "browse_signposts": {
@@ -5125,7 +5126,6 @@
             "type": "integer"
           },
           "browse_signpost_captioner": {},
-          "browse_signpost_vocab": {},
           "browse_signposts": {},
           "browse_thumbnail_border": {},
           "calibrate_count": {

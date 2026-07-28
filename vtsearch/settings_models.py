@@ -298,6 +298,22 @@ class ServerSettings(BaseModel):
     projection_n_neighbors: Annotated[int, _clamp(2, 200)] = PROJECTION_N_NEIGHBORS
     projection_min_dist: Annotated[float, _clamp(0.0, 0.99)] = PROJECTION_MIN_DIST
 
+    # Per-media-type zero-shot tag vocabulary used to name map regions in Tags
+    # mode, replacing the built-in AudioSet-527 / OpenImages-600 lists (one
+    # entry per media type, a list of terms). Server-tier and read-only over
+    # the API: a term list is a deployment-level choice an operator makes for
+    # the whole instance (a domain-specific taxonomy — bird species, machine
+    # faults, product categories), not a preference an individual arrives
+    # with, and every user of an instance should read the same region names.
+    # Set it by editing this key in the settings file. Normalized on write
+    # (trimmed, de-duplicated, capped at
+    # :data:`SIGNPOST_VOCAB_MAX_TERMS`); a media type with an empty or absent
+    # list falls back to the shipped vocabulary. Takes effect on the next
+    # projection build / Re-project, since signpost texts are cached.
+    browse_signpost_vocab: Annotated[dict[str, list[str]], BeforeValidator(_normalize_signpost_vocab)] = Field(
+        default_factory=dict
+    )
+
     # Deployment-wide default settings sync source. Same
     # ``{"source_name": ..., "field_values": ...}`` shape as the per-user
     # ``settings_source`` key, but shared across the whole instance. A user
@@ -466,15 +482,6 @@ class UserSettings(BaseModel):
     #   from the generative captioner (image VLM / audio captioner) instead of
     #   the default zero-shot tags. Empty entries fall back to tags (false).
     browse_signpost_captioner: dict[str, bool] = Field(default_factory=dict)
-    # - ``browse_signpost_vocab``: per-media-type user-supplied zero-shot tag
-    #   vocabulary (one entry per media type, a list of terms) that replaces the
-    #   built-in AudioSet-527 / OpenImages-600 lists when naming map regions in
-    #   Tags mode. Normalized on write (trimmed, de-duplicated, capped); an empty
-    #   or absent list falls back to the shipped vocabulary. Takes effect on the
-    #   next projection build / Re-project, since signpost texts are cached.
-    browse_signpost_vocab: Annotated[dict[str, list[str]], BeforeValidator(_normalize_signpost_vocab)] = Field(
-        default_factory=dict
-    )
 
     grid_icon_size_left: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     grid_icon_size_right: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)

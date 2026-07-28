@@ -309,21 +309,6 @@
                   </div>
                 </div>
               }
-              @if (browseTabHasTagVocab(activeBrowseTab()) && !getBrowseSignpostCaptioner(activeBrowseTab())) {
-                <div class="form-group">
-                  <label class="form-label" [attr.for]="'setting-browse-vocab-' + activeBrowseTab()" title="Custom words used to name map regions in Tags mode">Custom tags<vt-field-hint-icon hint="One term per line. Replaces the built-in tag vocabulary (AudioSet for audio, Open Images for images) that names the map's regions. Leave empty to use the built-in list. Terms are matched against each item by the embedder, so use plain, embeddable words. Takes effect on the next map rebuild."></vt-field-hint-icon></label>
-                  <textarea
-                    [id]="'setting-browse-vocab-' + activeBrowseTab()"
-                    class="form-textarea"
-                    rows="5"
-                    spellcheck="false"
-                    placeholder="Using the built-in vocabulary. Enter one term per line to override."
-                    [value]="getBrowseSignpostVocabText(activeBrowseTab())"
-                    (change)="onBrowseSignpostVocabChange(activeBrowseTab(), $any($event.target).value)"
-                    aria-label="Custom signpost tag vocabulary, one term per line"
-                  ></textarea>
-                </div>
-              }
               <div class="form-group">
                 <label class="form-label" for="setting-browse-colormap" title="Colors the density heatmap. Auto follows your theme: blue (Ocean) in light mode, red→yellow (Heat) in dark mode.">Colormap<vt-field-hint-icon [hint]="browseTabUsesThumbnails(activeBrowseTab()) ? 'Thumbnail datasets (image, video) always use grayscale.' : 'Darker bins mean more items in light mode; brighter bins mean more in dark mode.'"></vt-field-hint-icon></label>
                 @if (browseTabUsesThumbnails(activeBrowseTab())) {
@@ -434,6 +419,18 @@
               </ul>
             } @else {
               <div class="server-value server-value--empty">None</div>
+            }
+          </div>
+          <div class="form-group">
+            <label class="form-label" title="Words this server uses to name the map's regions in Tags mode, replacing the built-in tag vocabulary (AudioSet for audio, Open Images for images). Set in the server's settings file; media types not listed use the built-in vocabulary.">Custom signpost tags<vt-field-hint-icon hint="An instance-wide term list for naming map regions, set by whoever runs this server. Media types not listed here use the built-in vocabulary. Takes effect on the next map rebuild."></vt-field-hint-icon></label>
+            @if (signpostVocabDisplay.length > 0) {
+              <ul class="server-list">
+                @for (row of signpostVocabDisplay; track row.mediaType) {
+                  <li><span class="server-list__key">{{ row.mediaType }}:</span> {{ row.terms }}</li>
+                }
+              </ul>
+            } @else {
+              <div class="server-value server-value--empty">None (using the built-in vocabulary)</div>
             }
           </div>
         }
