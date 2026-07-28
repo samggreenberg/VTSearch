@@ -208,9 +208,18 @@
 // The Drafts/AutoRun strip reuses the shared `.tab-bar`/`.tab` primitive
 // (see `_picker-shared.scss`) at a more compact scale than the modal pickers
 // so it reads as a sub-control of the section, not a page-level switcher.
+//
+// It sits inline in `.dashboard-section-header`, in the empty run between the
+// "Detectors" title and the combine/delete/+ actions, rather than on its own
+// row above the grid: that gap was dead space, and a row of its own cost the
+// grid ~38px of height. Two overrides make it behave as a header item:
+// `width: auto` (the shared `.tab-bar` is `width: 100%`, which would squash
+// the actions) and no bottom margin (the header supplies its own).
+// The compact tab padding keeps the strip the same height as the action
+// buttons, so the header itself doesn't grow.
 .detector-tab-bar {
-  flex-shrink: 0;
-  margin-bottom: var(--space-md);
+  flex: 0 0 auto;
+  width: auto;
 
   .tab {
     padding: var(--space-sm) var(--space-lg);
