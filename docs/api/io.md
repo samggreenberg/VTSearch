@@ -87,15 +87,34 @@ POST /api/label-importers/import/{importer_name}
 {
   "applied": 8,
   "skipped": 2,
-  "missing_count": 3,
-  "missing": [...],
-  "ingested": 1,
-  "message": "Applied 8 label(s), skipped 2. Auto-resolved 1 missing element(s) from their sources. 3 element(s) could not be resolved."
+  "missing_count": 0,
+  "missing": [],
+  "ingest_task_id": "_labelingest_<detector_id>",
+  "ingest_pending_count": 3,
+  "failed_count": 0,
+  "failed": [],
+  "message": "Applied 8 label(s), skipped 2. Resolving 3 missing element(s) from their sources in the background…"
 }
 ```
 
-When `missing_count > 0`, the frontend can call `ingest-missing` to pull those
-medias from their origins.
+`applied` / `skipped` describe only the entries that matched media already in
+the active dataset. Entries that matched nothing are auto-resolved from their
+origins on a **background task** — one fetch + embed per entry is far too slow
+to run inside the request. `ingest_pending_count` is how many were handed off
+and `ingest_task_id` names the task on the `detector-loading-tasks` SSE
+channel; `missing_count` / `missing` stay empty because nothing is known to be
+unresolvable until that task finishes. Both are `""` / `0` when every entry
+matched.
+
+Watch the task on `/api/events`; its terminal frame carries
+
+```json
+"ingest_result": {"ingested": 3, "applied": 3, "unresolved": 0, "failed": 0}
+```
+
+The task re-applies the labels of whatever it ingested and re-syncs the loaded
+detector, so no follow-up call is needed. Cancel it with
+`POST /api/detectors/cancel/{task_id}`.
 
 ### Ingest missing medias
 

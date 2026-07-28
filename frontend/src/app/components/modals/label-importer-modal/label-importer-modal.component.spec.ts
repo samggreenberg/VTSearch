@@ -1,7 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { HttpTestingController } from '@angular/common/http/testing';
+import { Subject } from 'rxjs';
 import { LabelImporterModalComponent } from './label-importer-modal.component';
+import { ProgressEventsService } from '../../../services/progress-events.service';
+import type { LoadingTask } from '../../../models/api.models';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../../testing/settle-resource';
 import { provideHttpTesting } from '../../../testing/test-providers';
@@ -223,5 +226,83 @@ describe('LabelImporterModalComponent', () => {
     const err = fixture.nativeElement.querySelector('.error-text') as HTMLElement;
     expect(err).toBeTruthy();
     expect(err.textContent).toContain('Import blew up');
+  });
+
+  // --- Background auto-resolve of unmatched entries (#2703) ---
+
+  /** Start an import that hands its unmatched entries to a background task. */
+  async function submitWithPendingIngest(taskId = '_labelingest_d1') {
+    await flushInit();
+    const feed = new Subject<LoadingTask>();
+    vi.spyOn(TestBed.inject(ProgressEventsService), 'detectorTaskUntilDone$').mockReturnValue(
+      feed.asObservable(),
+    );
+    component.selectImporter(mockImporters[0] as any);
+    component.submit();
+    httpMock.expectOne('/api/label-importers/import/server_json_file').flush({
+      applied: 3,
+      skipped: 0,
+      missing_count: 0,
+      missing: [],
+      ingest_task_id: taskId,
+      ingest_pending_count: 2,
+      failed_count: 0,
+      failed: [],
+      message: 'Applied 3 label(s), skipped 0. Resolving 2 missing element(s)…',
+    });
+    return feed;
+  }
+
+  it('stays busy while the auto-resolve task runs, then reports the totals', async () => {
+    const feed = await submitWithPendingIngest();
+    // The response landed, but the import isn't done: the missing entries are
+    // still being fetched, so the dialog keeps its progress affordance.
+    expect(component.submitting()).toBe(true);
+
+    feed.next({ task_id: '_labelingest_d1', status: 'loading', current: 1, total: 2 } as LoadingTask);
+    expect(component.ingestTask()?.current).toBe(1);
+    expect(component.ingestBar).toEqual({ value: 1, max: 2, indeterminate: false });
+
+    feed.next({
+      task_id: '_labelingest_d1',
+      status: 'idle',
+      ingest_result: { ingested: 2, applied: 2, unresolved: 0, failed: 0 },
+    } as LoadingTask);
+    feed.complete();
+
+    expect(component.submitting()).toBe(false);
+    expect(component.ingestTask()).toBeNull();
+    // 3 applied in the request + 2 the background pass resolved.
+    expect(component.successMessage()).toBe(
+      'Applied 5 label(s). Auto-resolved 2 missing element(s) from their sources.',
+    );
+    expect(component.error()).toBe('');
+    component.close();
+  });
+
+  it('surfaces entries the auto-resolve pass could not reach', async () => {
+    const feed = await submitWithPendingIngest();
+    feed.next({
+      task_id: '_labelingest_d1',
+      status: 'idle',
+      ingest_result: { ingested: 0, applied: 0, unresolved: 2, failed: 0 },
+    } as LoadingTask);
+    feed.complete();
+
+    expect(component.successMessage()).toBe('Applied 3 label(s).');
+    expect(component.error()).toBe(
+      '2 element(s) could not be resolved from their original sources.',
+    );
+    component.close();
+  });
+
+  it('reports a failed auto-resolve task as an error', async () => {
+    const feed = await submitWithPendingIngest();
+    feed.next({ task_id: '_labelingest_d1', status: 'idle', error: 'origin unreachable' } as LoadingTask);
+    feed.complete();
+
+    expect(component.submitting()).toBe(false);
+    expect(component.error()).toBe('Could not resolve the missing elements: origin unreachable');
+    component.close();
   });
 });
