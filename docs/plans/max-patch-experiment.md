@@ -59,19 +59,50 @@ Implemented; kept here as the running spec.
 - **Runner**: `scripts/experiments/max_patch/` (prepare → SLURM array →
   REPORT.md); grid sizing via `MAXPATCH_*` env vars.
 
+## Measured object scales (annotation ground truth)
+
+Reference scales, as fractions of the (224²-resized) image: one **DINOv2
+patch** = 1/256 of area (6.25% of side), one **DINOv3 patch** = 1/196 (7.1%
+of side); the smallest pooled candidate MaxHAC can propose is a **HAC leaf**,
+mean area 1/12 ≈ 8.3% (~29% of side).  Measured from the datasets' own
+annotations (VG `objects.json` + `image_data.json`; OpenLogo `samples.json`;
+Caltech-101 `Annotations.tar`), restricted to each demo's category vocabulary:
+
+| dataset | boxes | median instance area | median linear | % < 1 patch (0.51%) | % < 1 leaf (8.3%) |
+|---|---|---|---|---|---|
+| `openlogo_a` (32 brands) | 19,154 | 1.2% | 11% of side | 31% | **85%** |
+| `visual_genome_m` (100 cats) | 1,141,447 | 2.1% | 14% of side | 27% | **72%** |
+| `caltech101_m` (25 cats) | 2,953 | 54% | 73% of side | 0% | **0.1%** |
+
+Two nuances: (a) the eval's Good vote trains on the **union box** over all of
+a category's instances in the image (`region_box_for_category`), whose median
+is larger — 5.4% (OpenLogo) / 5.8% (VG) — so votes are often at leaf scale
+even when instances are patch scale; (b) VG spreads enormously per category
+(median instance: `eye` 0.10%, `light` 0.19%, `window` 0.43% ↔ `building`
+11%, `wall` 17%, `sky` 33%), so the per-category break-down is where the
+scale story will actually show.
+
 ## Hypotheses (pre-registered, honest priors)
 
 - MaxPatch should have the *better trained-threshold behaviour on Bad-heavy
   datasets*: flooding 196–256 raw negatives per Bad vote gives the MLP a much
   denser picture of the negative manifold than 13 pooled leaves.
-- MaxHAC should hold an edge where the target is a *multi-patch object at
-  mid scale* (Visual Genome furniture/vehicles): a pooled region vector is a
-  cleaner positive prototype than any single 16-px patch, and the tree's
-  internals give inference candidates at the object's actual scale.  A single
-  DINO patch (~16 px receptive cell, though contextualised by attention) may
-  under-describe such objects, and max-over-196-noisy-scores has a higher
-  false-positive ceiling than max-over-24-pooled-scores.
-- On `openlogo` (small, patch-scale targets) MaxPatch is the natural fit and
+- **The crossover scale is the HAC leaf, not the patch.**  For objects
+  between ~1 patch and ~1 leaf (0.5%–8% area, 7%–29% linear), MaxPatch has a
+  near-pure object patch while MaxHAC's smallest candidate dilutes the object
+  up to ~16-20x inside a leaf pool; this band covers **the majority of
+  instances in both boxed datasets** (85% OpenLogo, 72% VG below leaf scale).
+  Above leaf scale the tree has well-matched pooled candidates and its
+  variance advantage (max over ~24 smoothed scores vs ~196 raw ones) should
+  dominate; below ~1 patch (31% of OpenLogo, 27% of VG instances - an
+  eye/logo at p10 is ~8 px after resize) both styles run out of signal and
+  mostly share a ceiling.
+- MaxHAC should hold an edge on the *above-leaf-scale* VG categories
+  (`building`, `wall`, `table`, `grass`, `sky`-adjacent scenes): a pooled
+  region vector is a cleaner positive prototype than any single patch, and
+  the tree's internals give inference candidates at the object's actual
+  scale.
+- On `openlogo` (median instance ~2 patches) MaxPatch is the natural fit and
   may win outright.
 - On `caltech101_m` all patch styles should roughly tie the whole-image
   controls; if they don't, the patch pipelines are paying a tax on easy data.
