@@ -255,6 +255,44 @@ all of them.
 
 → `{"ok": true, "detector": {...}}` (201)
 
+### Register detector from a label importer
+
+```
+POST /api/detectors/registry/from-labelset/{importer_name}
+```
+
+**Form or Body:** `name`, optional `embedder_type`, plus the importer's own
+fields (plugin-dependent, so not described in `/api/openapi.json`).
+
+Runs the label importer and creates a detector seeded with the labels it
+returns. The media type is inferred from the labels' origins; labels spanning
+more than one media type are rejected (400).
+
+→ ```json
+{
+  "ok": true,
+  "detector": {...},
+  "applied": 12,
+  "skipped": 0,
+  "num_labels": 12,
+  "ingest_task_id": "_detingest_<detector_id>"
+}
+```
+
+An imported labelset usually references media the active dataset doesn't have,
+which must be pulled in from their origins for the labels to be visible and
+exportable. That fetch + embed runs on a **background task** streamed on the
+`detector-loading-tasks` channel of [`/api/events`](events.md), so the request
+returns immediately; `ingest_task_id` names it, and is `""` when there is
+nothing to ingest (no active dataset, or every label already resolves).
+
+**Wait for that task before loading the detector.** Loading restores the
+labelset into votes by resolving each label against the active dataset's
+media, so a load that starts mid-ingest silently drops the labels whose media
+haven't landed yet. The task's terminal frame carries
+`"ingest_result": {"ingested": 12}`; cancel it with
+`POST /api/detectors/cancel/{task_id}`.
+
 ### Toggle Auto-Find flag
 
 ```

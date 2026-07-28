@@ -1,6 +1,7 @@
 import { Injectable, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { toObservable } from '@angular/core/rxjs-interop';
-import { Subject } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
+import { filter, map, takeWhile } from 'rxjs/operators';
 import {
   LoadingTask,
   ProgressEvent,
@@ -110,6 +111,34 @@ export class ProgressEventsService implements OnDestroy {
   });
 
   readonly votingIterations$ = toObservable(this.votingIterations);
+
+  /**
+   * Snapshots of one detector-loading task, completing once it finishes.
+   *
+   * Emits every snapshot of `taskId` seen on the `detector-loading-tasks`
+   * channel and completes on the terminal one (`status === 'idle'`, which
+   * carries the task's `error` / `ingest_result`), so a caller can render a
+   * live bar in `next` and take the follow-up step in `complete`. A task that
+   * vanishes from the feed after being seen — the tracker prunes finished
+   * entries — also completes the stream.
+   *
+   * Snapshots *before* the task appears are ignored rather than treated as
+   * completion: the backend registers the task before answering the request
+   * that returned its id, so the row is either already in the current
+   * snapshot or one frame away.
+   */
+  detectorTaskUntilDone$(taskId: string): Observable<LoadingTask> {
+    let seen = false;
+    return this.detectorLoadingTasks$.pipe(
+      map((tasks) => tasks.find((t) => t.task_id === taskId) ?? null),
+      filter((task) => {
+        if (task) seen = true;
+        return seen;
+      }),
+      map((task) => task ?? ({ task_id: taskId, status: 'idle' } as LoadingTask)),
+      takeWhile((task) => task.status !== 'idle', true),
+    );
+  }
 
   // -------------------------------------------------------------------------
   // EventSource lifecycle.

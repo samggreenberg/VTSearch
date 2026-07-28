@@ -1,7 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { HttpTestingController } from '@angular/common/http/testing';
+import { Subject } from 'rxjs';
 import { NewDetectorModalComponent } from './new-detector-modal.component';
+import { ProgressEventsService } from '../../../services/progress-events.service';
+import type { LoadingTask } from '../../../models/api.models';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../../testing/test-providers';
 
@@ -434,6 +437,64 @@ describe('NewDetectorModalComponent', () => {
       .flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
     expect(component.labelImporterDynamicError()['q']).toBe('boom');
     expect(component.labelImporterOptionsFor(field)).toEqual([]);
+  });
+
+  // --- Create & Import: the background labelset-media ingest (#2703) ---
+
+  /** Fill in the Trained tab's form and submit it. */
+  function submitTrained(): void {
+    component.tab = 'trained';
+    component.trainedView = 'form';
+    component.selectedLabelImporter = { name: 'server_json_file' } as any;
+    component.name.set('Imported');
+    component.submit();
+  }
+
+  it('waits for the labelset-media ingest before loading the new detector', () => {
+    const feed = new Subject<LoadingTask>();
+    const spy = vi
+      .spyOn(TestBed.inject(ProgressEventsService), 'detectorTaskUntilDone$')
+      .mockReturnValue(feed.asObservable());
+    vi.spyOn(component.created, 'emit');
+
+    submitTrained();
+    httpMock
+      .expectOne('/api/detectors/registry/from-labelset/server_json_file')
+      .flush({ ok: true, detector: { id: 'd9' }, ingest_task_id: '_detingest_d9' });
+
+    expect(spy).toHaveBeenCalledWith('_detingest_d9');
+    // Loading now would restore the labels against media that aren't in the
+    // dataset yet (#2690), so the load must not have gone out.
+    httpMock.expectNone('/api/detectors/registry/load');
+    expect(component.submitting()).toBe(true);
+
+    feed.next({ task_id: '_detingest_d9', status: 'loading', current: 1, total: 2 } as LoadingTask);
+    expect(component.ingestTask()?.current).toBe(1);
+    expect(component.ingestBar).toEqual({ value: 1, max: 2, indeterminate: false });
+    httpMock.expectNone('/api/detectors/registry/load');
+
+    feed.complete();
+    const load = httpMock.expectOne('/api/detectors/registry/load');
+    expect(load.request.body.detector_id).toBe('d9');
+    load.flush({ ok: true });
+
+    expect(component.ingestTask()).toBeNull();
+    expect(component.submitting()).toBe(false);
+    expect(component.created.emit).toHaveBeenCalledWith('d9');
+  });
+
+  it('loads straight away when the import had nothing to ingest', () => {
+    const spy = vi.spyOn(TestBed.inject(ProgressEventsService), 'detectorTaskUntilDone$');
+    vi.spyOn(component.created, 'emit');
+
+    submitTrained();
+    httpMock
+      .expectOne('/api/detectors/registry/from-labelset/server_json_file')
+      .flush({ ok: true, detector: { id: 'd0' }, ingest_task_id: '' });
+
+    expect(spy).not.toHaveBeenCalled();
+    httpMock.expectOne('/api/detectors/registry/load').flush({ ok: true });
+    expect(component.created.emit).toHaveBeenCalledWith('d0');
   });
 });
 

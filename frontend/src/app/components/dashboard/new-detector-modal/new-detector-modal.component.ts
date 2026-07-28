@@ -11,6 +11,7 @@ import { DatasetsRegistryApiService } from '../../../services/datasets-registry-
 import { DatasetsUiApiService } from '../../../services/datasets-ui-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { LabelImportersApiService } from '../../../services/label-importers-api.service';
+import { ProgressEventsService } from '../../../services/progress-events.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import {
   EmbedderCapabilityService,
@@ -23,9 +24,12 @@ import {
   ImporterField,
   ImporterInfo,
   ImporterPickerTab,
+  LoadingTask,
   Media,
   MediaTypeInfo,
 } from '../../../models/api.models';
+import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
+import { formatProgressMessage, progressBarState, type ProgressBarState } from '../../../utils/format-progress';
 import type { LabelImporterEntry } from '../../../generated/api-client/models/label-importer-entry';
 import { DemoDatasetEntry } from '../../../generated/api-client/models/demo-dataset-entry';
 import {
@@ -57,7 +61,7 @@ interface MediaExampleItem {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, FieldHintIconComponent],
+  imports: [FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, FieldHintIconComponent, ProgressBarComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })
@@ -69,6 +73,7 @@ export class NewDetectorModalComponent implements OnInit {
   private datasetsUiApi = inject(DatasetsUiApiService);
   private sortingApi = inject(SortingApiService);
   private labelImportersApi = inject(LabelImportersApiService);
+  private progressEvents = inject(ProgressEventsService);
   private settingsState = inject(SettingsStateService);
   private embedderCaps = inject(EmbedderCapabilityService);
   private mediaState = inject(MediaStateService);
@@ -111,6 +116,11 @@ export class NewDetectorModalComponent implements OnInit {
   readonly mediaTypeInfos = signal<MediaTypeInfo[]>([]);
   readonly submitting = signal(false);
   readonly error = signal('');
+
+  /** Live snapshot of the background task that pulls the imported labels'
+   *  media into the active dataset, while Create & Import waits it out.
+   *  ``null`` when no ingest is running. */
+  readonly ingestTask = signal<LoadingTask | null>(null);
 
   /** The user's *explicit* embedder-type pick (the detector's locked scoring
    *  space *kind*). Empty means "not chosen": the displayed value falls back to
@@ -1108,15 +1118,22 @@ export class NewDetectorModalComponent implements OnInit {
             this.error.set('Server did not return a detector id');
             return;
           }
-          this.detectorsRegistryApi.loadDetector(newId).subscribe({
-            next: () => {
-              this.submitting.set(false);
-              this.created.emit(newId);
-            },
-            error: () => {
-              // Model exists in registry even if load failed; still emit.
-              this.submitting.set(false);
-              this.created.emit(newId);
+          const ingestTaskId = String(resp?.ingest_task_id || '');
+          if (!ingestTaskId) {
+            this.loadAndFinish(newId);
+            return;
+          }
+          // The imported labels' media are still being fetched and embedded in
+          // the background (#2703). Loading the detector now would restore its
+          // labels against media that aren't in the dataset yet, so wait the
+          // ingest out — showing its bar instead of an opaque spinner. A failed
+          // ingest still completes the stream: the detector exists either way,
+          // and the failure surfaces as a toast from the SSE error router.
+          this.progressEvents.detectorTaskUntilDone$(ingestTaskId).subscribe({
+            next: (task) => this.ingestTask.set(task),
+            complete: () => {
+              this.ingestTask.set(null);
+              this.loadAndFinish(newId);
             },
           });
         },
@@ -1125,6 +1142,31 @@ export class NewDetectorModalComponent implements OnInit {
           this.error.set(apiErrorMessage(err, 'Failed to create detector from labelset'));
         },
       });
+  }
+
+  /** Load the freshly-created detector, then hand its id back to the caller.
+   *  A failed load still emits: the detector is in the registry regardless. */
+  private loadAndFinish(detectorId: string): void {
+    this.detectorsRegistryApi.loadDetector(detectorId).subscribe({
+      next: () => {
+        this.submitting.set(false);
+        this.created.emit(detectorId);
+      },
+      error: () => {
+        this.submitting.set(false);
+        this.created.emit(detectorId);
+      },
+    });
+  }
+
+  /** Bar geometry for the running media ingest. */
+  get ingestBar(): ProgressBarState {
+    return progressBarState(this.ingestTask());
+  }
+
+  /** One-line status for the running media ingest. */
+  get ingestMessage(): string {
+    return formatProgressMessage(this.ingestTask(), 'Fetching the imported labels’ media…');
   }
 
   // --- Submit ---
