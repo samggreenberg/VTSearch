@@ -340,6 +340,7 @@ class _PatchSource:
         pca_dims: int | None = None,
         seeding: str = "topk",
         leaf_assign: str = "spatial",
+        leaf_beta: float | None = None,
         proposer: Proposer | None = None,
         region_voting: bool = False,
     ) -> None:
@@ -351,10 +352,12 @@ class _PatchSource:
         # vecs stay full-dim). None = off. Inert for the box-pool variant, which
         # never builds a tree.
         self._pca_dims = pca_dims
-        # Leaf-proposal knobs (HAC-tree variant only): seed placement and
-        # cell-to-seed binding. Defaults reproduce the original baseline.
+        # Leaf-proposal knobs (HAC-tree variant only): seed placement, cell-to-seed
+        # binding, and (for feature binding) the assignment blend weight. ``leaf_beta``
+        # None reuses ``alpha``; a float decouples it. Defaults reproduce the baseline.
         self._seeding = seeding
         self._leaf_assign = leaf_assign
+        self._leaf_beta = leaf_beta
         self._proposer = proposer
         # Region-voting label construction (matches the app detector's DINO-patch
         # path): a Good vote's box snaps to the nearest tree node, and negatives
@@ -393,6 +396,7 @@ class _PatchSource:
                 pca_dims=self._pca_dims,
                 seeding=self._seeding,
                 leaf_assign=self._leaf_assign,
+                leaf_beta=self._leaf_beta,
             )
             boxes = np.asarray([r.box for r in tree], dtype=np.float32)
             vecs = np.asarray([r.vec for r in tree], dtype=np.float32)
@@ -471,6 +475,7 @@ def build_region_source(
     hac_pca_dims: int | None = None,
     hac_seeding: str = "topk",
     hac_leaf_assign: str = "spatial",
+    hac_leaf_beta: float | None = None,
     dino_model_id: str | None = None,
     dino_device: str = "cpu",
     dino_register_tokens: int = 0,
@@ -506,6 +511,7 @@ def build_region_source(
             pca_dims=hac_pca_dims,
             seeding=hac_seeding,
             leaf_assign=hac_leaf_assign,
+            leaf_beta=hac_leaf_beta,
             proposer=None,
             region_voting=region_voting,
         )

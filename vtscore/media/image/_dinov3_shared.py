@@ -41,13 +41,12 @@ if TYPE_CHECKING:
     from PIL import Image
 
 
-# DINOv3 ViT-B uses 4 register tokens ("storage tokens" in the paper)
-# inserted between the CLS token and the patch tokens.  The exact count
-# lives in the model config (``num_register_tokens``); we hard-code 4
-# here because the ViT-B/16 LVD-1689M weight has been published with
-# this setting and is what ``DINOV3_MODEL_ID`` points at.  If we ever
-# add a second DINOv3 variant we should read it off ``self._model.config``
-# at load time instead.
+# DINOv3 ViTs use 4 register tokens ("storage tokens" in the paper) inserted
+# between the CLS token and the patch tokens.  The authoritative count lives in
+# the model config (``num_register_tokens``) and is read off there at load time
+# (see ``_load_models_impl``) so any variant (S/B/L/H+/7B) slices its grid
+# correctly; this constant is the fallback used before a model is loaded / when
+# the config omits the field.
 _DINOV3_NUM_REGISTER_TOKENS = 4
 
 
@@ -63,10 +62,41 @@ class _Dinov3Base(MediaEmbedder):
         # pass at runtime; runtime ``None`` checks guard the calls.
         self._model: Any = None
         self._processor: Any = None
+        # Optional per-instance checkpoint override (e.g. a larger DINOv3 ViT).
+        # ``None`` keeps the app default (``DINOV3_MODEL_ID``); the SOD sweep sets
+        # this to compare model sizes on the same plot.  Register-token count is
+        # read off the loaded config (all DINOv3 ViTs use 4, but read it rather
+        # than assume so a future variant with a different count stays correct).
+        self._model_id_override: Optional[str] = None
+        self._num_register_tokens: int = _DINOV3_NUM_REGISTER_TOKENS
 
     @property
     def model_id(self) -> str:
-        return DINOV3_MODEL_ID
+        return self._model_id_override or DINOV3_MODEL_ID
+
+    def set_model_id(self, model_id: Optional[str]) -> None:
+        """Re-point this embedder at a different DINOv3 checkpoint.
+
+        ``None`` restores the app default.  If the resolved id differs from the
+        currently-loaded weights, the cached model/processor are dropped so the
+        next :meth:`load_models` reloads the new checkpoint — this lets the
+        shared singleton be swept across model sizes in one process.  A no-op
+        when the id is unchanged (keeps the loaded weights).
+        """
+        new_id = model_id or DINOV3_MODEL_ID
+        if new_id == self.model_id and self._model is not None:
+            return
+        self._model_id_override = None if model_id is None else model_id
+        if self._model is not None:
+            self._model = None
+            self._processor = None
+            try:  # free GPU memory before loading the next (possibly larger) checkpoint
+                import torch  # noqa: PLC0415
+
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:  # noqa: BLE001 — best-effort cleanup, never fatal
+                pass
 
     @property
     def media_type_id(self) -> str:
@@ -107,7 +137,7 @@ class _Dinov3Base(MediaEmbedder):
         ):
             self._model = load_pretrained_local_first(
                 AutoModel.from_pretrained,
-                DINOV3_MODEL_ID,
+                self.model_id,
                 low_cpu_mem_usage=True,
                 cache_dir=cache_dir,
                 token=hf_token(),
@@ -116,10 +146,14 @@ class _Dinov3Base(MediaEmbedder):
             )
         self._model = to_compute_device(self._model)
         self._model.eval()
+        # Read the register-token count off the loaded config so any DINOv3 ViT
+        # variant (S/B/L/H+/7B) slices its patch grid correctly, rather than
+        # assuming the ViT-B default.
+        self._num_register_tokens = int(getattr(self._model.config, "num_register_tokens", _DINOV3_NUM_REGISTER_TOKENS))
         self._on_progress("loading", "Loading DINOv3 image processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = load_pretrained_local_first(
-                AutoImageProcessor.from_pretrained, DINOV3_MODEL_ID, cache_dir=cache_dir, token=hf_token()
+                AutoImageProcessor.from_pretrained, self.model_id, cache_dir=cache_dir, token=hf_token()
             )
 
     def _embed_media_impl(self, media: dict) -> Optional[np.ndarray]:
@@ -197,11 +231,11 @@ class _Dinov3Base(MediaEmbedder):
         device = next(self._model.parameters()).device
         inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.no_grad():
-            outputs = self._model(**inputs, output_attentions=True)
+            outputs = self._model(**inputs, output_attentions=True, interpolate_pos_encoding=True)
         return [
             hf_vit_to_patch_output(
                 outputs,
-                num_register_tokens=_DINOV3_NUM_REGISTER_TOKENS,
+                num_register_tokens=self._num_register_tokens,
                 batch_index=i,
             )
             for i in range(len(images))
@@ -233,8 +267,8 @@ class _Dinov3Base(MediaEmbedder):
             device = next(self._model.parameters()).device
             inputs = {k: v.to(device) for k, v in inputs.items()}
             with torch.no_grad():
-                outputs = self._model(**inputs, output_attentions=True)
-            return hf_vit_to_patch_output(outputs, num_register_tokens=_DINOV3_NUM_REGISTER_TOKENS)
+                outputs = self._model(**inputs, output_attentions=True, interpolate_pos_encoding=True)
+            return hf_vit_to_patch_output(outputs, num_register_tokens=self._num_register_tokens)
         except Exception:
             logging.getLogger(__name__).exception("Error patch-embedding %s (DINOv3)", source)
             return None

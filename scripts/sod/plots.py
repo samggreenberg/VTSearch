@@ -29,7 +29,45 @@ def _load(path: Path) -> list[dict]:
 
 
 def _config_key(r: dict) -> tuple:
-    return (r["embedder"], r["proposal"], r.get("alpha", 0.5), r["head"])
+    # Include the hac sweep axes (leaf seeding/assignment + merge-order PCA) so each
+    # variant is its own curve instead of collapsing into one averaged line. Old
+    # results without these keys fall back to the production baseline values.
+    return (
+        r["embedder"],
+        r["proposal"],
+        r.get("alpha", 0.5),
+        r["head"],
+        r.get("leaf_seeding", "topk"),
+        r.get("leaf_assign", "spatial"),
+        r.get("pca_dims"),  # None = full-dim baseline
+        r.get("resolution"),  # None = checkpoint default (224)
+        r.get("hac_k"),  # HAC leaf count (distinct from the `k`=annotation-count column)
+        r.get("leaf_beta"),  # feature-assignment blend; None = reused alpha
+        r.get("dinov3_model"),  # DINOv3 checkpoint size; None = app default (vitb16)
+    )
+
+
+def _config_label(key: tuple) -> str:
+    """Legend label for a config key. For ``hac`` it appends the leaf/PCA variant
+    (``… α0.5 · spread/feature · pca10``) so the ablation renders as distinct,
+    self-labelling curves; the input resolution is appended when non-default.
+    Non-hac proposals stay ``embedder/proposal`` (+ resolution tag)."""
+    embedder, proposal, alpha, _head = key[0], key[1], key[2], key[3]
+    seeding, leaf_assign, pca_dims = key[4], key[5], key[6]
+    resolution = key[7] if len(key) > 7 else None
+    hac_k = key[8] if len(key) > 8 else None
+    leaf_beta = key[9] if len(key) > 9 else None
+    dinov3_model = key[10] if len(key) > 10 else None
+    res_tag = "" if resolution in (None, 0) else f" · r{resolution}"
+    # Model tag only when a non-default DINOv3 checkpoint was used (vitb16 is the default).
+    model_tag = "" if dinov3_model in (None, "vitb16") else f" · {dinov3_model}"
+    if proposal != "hac":
+        return f"{embedder}/{proposal}{res_tag}{model_tag}"
+    k_tag = "" if hac_k is None else f" k{hac_k}"
+    # β shown only when it decouples from α (feature + explicit value).
+    beta_tag = f" β{leaf_beta}" if (leaf_assign == "feature" and leaf_beta is not None) else ""
+    pca_s = "none" if pca_dims in (None, 0) else str(pca_dims)
+    return f"{embedder}/{proposal}{k_tag} α{alpha} · {seeding}/{leaf_assign}{beta_tag} · pca{pca_s}{res_tag}{model_tag}"
 
 
 def _mean_by_k(rows: list[dict], field: str) -> dict[int, float]:
@@ -145,7 +183,9 @@ def _plot_group(
     # so adjacent curves change color frequently).
     cmap = plt.get_cmap("tab20")
     color_i = 0
-    for (embedder, proposal, alpha, head), crows in sorted(by_cfg.items()):
+    oracle_drawn = False
+    for key, crows in sorted(by_cfg.items(), key=lambda kv: tuple(str(x) for x in kv[0])):
+        embedder, proposal, head = key[0], key[1], key[3]
         ls = _PROPOSAL_STYLES.get(proposal, "-")
 
         if head == "cosine":
@@ -165,7 +205,7 @@ def _plot_group(
                 color_i += 1
             continue
 
-        alpha_tag = f" α{alpha}" if proposal == "hac" else ""
+        cfg_label = _config_label(key)
 
         if band == "all":
             # One line PER SEED, each its own color + a legend entry naming the
@@ -180,7 +220,7 @@ def _plot_group(
                     color=cmap(color_i % 20),
                     ls=ls,
                     lw=1.4,
-                    label=f"{embedder}/{proposal}{alpha_tag} — seed {seed}",
+                    label=f"{cfg_label} — seed {seed}",
                 )
                 color_i += 1
             continue
@@ -197,27 +237,47 @@ def _plot_group(
             color=color,
             ls=ls,
             lw=1.8,
-            label=f"{embedder}/{proposal}{alpha_tag}",
+            label=cfg_label,
         )
         # Seed-variance band (min-max or ±std across seeds).
         if band != "none":
             ax.fill_between(ks, [stats[k][1] for k in ks], [stats[k][2] for k in ks], color=color, alpha=0.15, lw=0)
-        # Oracle companion only makes sense for the combined cost.
+        # Oracle companion (best achievable τ on the SAME MLP scores): a faint
+        # DASHED line in the curve's colour. The gap between it and the solid
+        # calibrated-cost curve is threshold-placement noise, not detector quality —
+        # under extreme imbalance the calibrated cost can swing 0→1 while oracle
+        # stays flat and low. Only meaningful for the combined cost.
         if show_oracle and field == "cost":
             oracle_k = _mean_by_k(crows, "oracle_cost")
             oks = sorted(k for k in oracle_k if k > 0)
             if oks:
-                ax.plot(oks, [oracle_k[k] for k in oks], color=color, ls=ls, lw=1.0, alpha=0.35)
+                ax.plot(oks, [oracle_k[k] for k in oks], color=color, ls="--", lw=1.2, alpha=0.55)
+                oracle_drawn = True
 
     ax.set_xlabel(x_label)
     ax.set_ylabel(_METRICS.get(field, field))
     ax.set_title(title)
     ax.grid(True, ls=":", alpha=0.4)
-    ax.legend(fontsize=8, loc="best")
+    _legend_with_oracle(ax, oracle_drawn)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
     fig.savefig(out_path, dpi=130)
     plt.close(fig)
+
+
+def _legend_with_oracle(ax, oracle_drawn: bool) -> None:
+    """Draw the legend, appending a single grey dashed proxy labelling the oracle
+    companion so "dashed = oracle (best τ)" is self-documenting without one entry
+    per curve. Falls back to a plain legend when no oracle line was drawn."""
+    if not oracle_drawn:
+        ax.legend(fontsize=8, loc="best")
+        return
+    from matplotlib.lines import Line2D
+
+    handles, labels = ax.get_legend_handles_labels()
+    handles.append(Line2D([0], [0], color="grey", ls="--", lw=1.2, alpha=0.8))
+    labels.append("oracle (best τ)")
+    ax.legend(handles, labels, fontsize=8, loc="best")
 
 
 def render_all(
@@ -264,6 +324,7 @@ def _plot_summary_group(
     *,
     field: str = "cost",
     band: str = "std",
+    show_oracle: bool = False,
     x_label: str = "K (annotation count)",
 ) -> None:
     """One figure for a whole dataset: each config's curve **macro-averaged across classes**.
@@ -281,11 +342,13 @@ def _plot_summary_group(
     fig, ax = plt.subplots(figsize=(9, 6))
     cmap = plt.get_cmap("tab20")
     color_i = 0
-    for (embedder, proposal, alpha, head), crows in sorted(by_cfg.items()):
+    oracle_drawn = False
+    for key, crows in sorted(by_cfg.items(), key=lambda kv: tuple(str(x) for x in kv[0])):
+        proposal, head = key[1], key[3]
         if head == "cosine":
             continue  # zero-shot baseline isn't a per-t curve; omit from the cross-class summary
         ls = _PROPOSAL_STYLES.get(proposal, "-")
-        alpha_tag = f" α{alpha}" if proposal == "hac" else ""
+        cfg_label = _config_label(key)
 
         if band == "all":
             # One thin line per class (each its own color) so cross-class spread is visible directly.
@@ -299,7 +362,7 @@ def _plot_summary_group(
                     color=cmap(color_i % 20),
                     ls=ls,
                     lw=1.3,
-                    label=f"{embedder}/{proposal}{alpha_tag} — {cls}",
+                    label=f"{cfg_label} — {cls}",
                 )
                 color_i += 1
             continue
@@ -316,17 +379,24 @@ def _plot_summary_group(
             color=color,
             ls=ls,
             lw=1.8,
-            label=f"{embedder}/{proposal}{alpha_tag}",
+            label=cfg_label,
         )
         # Across-class spread band (min-max or ±std over the per-class means).
         if band != "none":
             ax.fill_between(ks, [stats[k][1] for k in ks], [stats[k][2] for k in ks], color=color, alpha=0.15, lw=0)
+        # Oracle companion (best-τ), macro-averaged across classes like the main curve.
+        if show_oracle and field == "cost":
+            ostats = _summary_stats(crows, "oracle_cost", band)
+            oks = sorted(k for k in ostats if k > 0)
+            if oks:
+                ax.plot(oks, [ostats[k][0] for k in oks], color=color, ls="--", lw=1.2, alpha=0.55)
+                oracle_drawn = True
 
     ax.set_xlabel(x_label)
     ax.set_ylabel(_METRICS.get(field, field))
     ax.set_title(title)
     ax.grid(True, ls=":", alpha=0.4)
-    ax.legend(fontsize=8, loc="best")
+    _legend_with_oracle(ax, oracle_drawn)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
     fig.savefig(out_path, dpi=130)
@@ -339,6 +409,7 @@ def render_summary(
     *,
     metrics: list[str] | tuple[str, ...] = _DEFAULT_METRICS,
     band: str = "std",
+    show_oracle: bool = False,
     x_label: str = "K (annotation count)",
     x_tag: str = "k",
 ) -> None:
@@ -361,6 +432,7 @@ def render_summary(
                 out_path,
                 field=field,
                 band=band,
+                show_oracle=show_oracle,
                 x_label=x_label,
             )
             print(f"wrote {out_path}")
@@ -446,7 +518,7 @@ def main() -> int:
         show_text_baseline=args.show_text_baseline,
     )
     if args.summary:
-        render_summary(rows, out_dir, metrics=args.metrics, band=args.band_kind)
+        render_summary(rows, out_dir, metrics=args.metrics, band=args.band_kind, show_oracle=args.show_oracle)
     return 0
 
 

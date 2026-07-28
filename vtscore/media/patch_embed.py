@@ -959,8 +959,6 @@ def build_region_tree(
     leaf_assign: str = "feature",
     leaf_beta: Optional[float] = None,
     pca_dims: Optional[int] = None,
-    seeding: str = "topk",
-    leaf_assign: str = "spatial",
 ) -> list[RegionVector]:
     """Build the full ``media["patch_regions"]`` list from one embedder output.
 
