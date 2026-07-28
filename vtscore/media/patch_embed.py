@@ -580,6 +580,66 @@ def box_to_vote_vector(
     return _l2_normalize(pooled)
 
 
+def nearest_patch_to_box(
+    patch_grid: np.ndarray,
+    box: tuple[float, float, float, float],
+) -> np.ndarray:
+    """Return the single patch vector spatially closest to a voted *box*.
+
+    The Max-Patch detection style (``vtscore.eval.patch_styles``) trains a Good
+    region-vote on **one raw patch vector** - the patch whose cell best stands
+    in for the voted region - rather than a pooled or HAC-snapped vector.  The
+    pick is purely spatial:
+
+    * among patches whose centers fall inside the (clamped) box, the one whose
+      center is nearest the box center wins;
+    * when no patch center falls inside (a box thinner than one cell), the
+      patch whose center is nearest the box center wins outright.
+
+    Both rules collapse to "the patch nearest the box center, preferring
+    in-box patches", so a whole-image box picks the central patch and a tight
+    box picks the patch under it.
+
+    Parameters
+    ----------
+    patch_grid : ndarray, shape (H, W, D)
+        Per-patch vectors as stored in ``media["patch_grid"]`` (float16 pickle
+        dtype or float32; already L2-normalised).
+    box : (x0, y0, x1, y1)
+        Normalised image coordinates in ``[0, 1]``; swapped corners tolerated,
+        out-of-range coordinates clamped (same conventions as
+        :func:`box_to_vote_vector`).
+
+    Returns
+    -------
+    ndarray, shape (D,), float32, L2-normalised.
+    """
+    if patch_grid.ndim != 3:
+        raise ValueError(f"patch_grid must be (H, W, D); got shape {patch_grid.shape}")
+    if len(box) != 4:
+        raise ValueError(f"box must be a 4-tuple; got {box!r}")
+
+    height, width, _ = patch_grid.shape
+    x0, y0, x1, y1 = (float(v) for v in box)
+    x_lo, x_hi = max(0.0, min(x0, x1)), min(1.0, max(x0, x1))
+    y_lo, y_hi = max(0.0, min(y0, y1)), min(1.0, max(y0, y1))
+    cx = 0.5 * (x_lo + x_hi)
+    cy = 0.5 * (y_lo + y_hi)
+
+    col_centers = (np.arange(width, dtype=np.float32) + 0.5) / float(width)
+    row_centers = (np.arange(height, dtype=np.float32) + 0.5) / float(height)
+    inside_x = (col_centers >= x_lo) & (col_centers <= x_hi)
+    inside_y = (row_centers >= y_lo) & (row_centers <= y_hi)
+    inside = inside_y[:, None] & inside_x[None, :]
+
+    dist2 = (col_centers[None, :] - cx) ** 2 + (row_centers[:, None] - cy) ** 2
+    if inside.any():
+        dist2 = np.where(inside, dist2, np.inf)
+    flat_idx = int(np.argmin(dist2))
+    row, col = divmod(flat_idx, width)
+    return _l2_normalize(patch_grid[row, col].astype(np.float32, copy=False))
+
+
 def snap_box_to_region(
     regions: list[RegionVector],
     box: tuple[float, float, float, float],
