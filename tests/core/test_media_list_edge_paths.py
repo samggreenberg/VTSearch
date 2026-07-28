@@ -483,6 +483,24 @@ class TestBatchMetadataBranches:
         assert item["description"] == "a described item"
         assert "origin_name" not in item
 
+    def test_signpost_text_reaches_the_client_as_an_ai_row(self, client):
+        # A Browse-prepped dataset carries a model-generated text per media.
+        # It rides to the UI through display_metadata, titled by kind so the
+        # user reads it as a model's guess rather than curated truth.
+        from vtscore.projection import signpost_texts as st  # noqa: PLC0415
+
+        mid = _inject(**{st.TEXT_FIELD: "Rain, Thunderstorm, Wind", st.KIND_FIELD: st.KIND_TAGS})
+        resp = client.post("/api/medias/batch", json={"ids": [mid]})
+        assert resp.status_code == 200
+        (item,) = resp.get_json()
+        assert item["custom_metadata"]["AI Tags"] == "Rain, Thunderstorm, Wind"
+
+    def test_media_without_a_signpost_text_gets_no_ai_row(self, client):
+        resp = client.post("/api/medias/batch", json={"ids": [_inject()]})
+        assert resp.status_code == 200
+        (item,) = resp.get_json()
+        assert not [key for key in item["custom_metadata"] if key.startswith("AI ")]
+
     def test_sliced_audio_suppresses_playback_window(self, client):
         # The audio clipper serves the already-sliced clip bytes (a short WAV in
         # its own 0-based timeline) but stamps the original absolute offsets.

@@ -222,6 +222,16 @@ changes to `vtscore/media/__init__.py` are needed.
 | `embed_text(text)`            | `(str) -> Optional[np.ndarray]`    | Inline text embedding (legacy)     |
 | `load_demo_source(...)`       | See docstring                      | Download and embed a demo dataset  |
 
+> **Always merge the base `display_metadata`.** Override it to *prepend* your
+> type-specific fields, then fold in whatever the base produced that you did
+> not already set — the shipped types all end with
+> `result.update({k: v for k, v in super().display_metadata(media).items() if k not in result})`.
+> The base contributes the shared fields (Category, File Size, the `Clip *`
+> provenance) plus the **"AI Caption" / "AI Tags"** row, which surfaces the
+> per-media signpost text a Browse-prepped dataset already carries (see
+> `vtscore/projection/signpost_texts.py`). A type that returns its own dict
+> without merging silently drops all of them.
+
 ### What happens automatically after registration
 
 | Subsystem              | What happens                                                  |

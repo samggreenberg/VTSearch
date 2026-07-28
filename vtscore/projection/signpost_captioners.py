@@ -239,6 +239,12 @@ class ImageCaptionProvider:
     max_new_tokens: int = 48
     batch_size: int = 8
 
+    @property
+    def text_kind(self) -> str:
+        from vtscore.projection.signpost_texts import KIND_CAPTION  # noqa: PLC0415
+
+        return KIND_CAPTION
+
     def signature(self, embedder: Any) -> str:
         # Captions are generated from pixels + prompt, independent of the media
         # embedder — so the cache key is the model, not the embedder.
@@ -276,6 +282,12 @@ class AudioCaptionProvider:
     name: str = "caption:whisper-audio"
     model_id: str = "MU-NLPC/whisper-small-audio-captioning"
     batch_size: int = 16
+
+    @property
+    def text_kind(self) -> str:
+        from vtscore.projection.signpost_texts import KIND_CAPTION  # noqa: PLC0415
+
+        return KIND_CAPTION
 
     def signature(self, embedder: Any) -> str:
         return self.name

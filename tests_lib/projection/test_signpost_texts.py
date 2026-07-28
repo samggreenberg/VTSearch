@@ -164,6 +164,8 @@ class CountingProvider:
     """Registry-pluggable provider that counts build calls."""
 
     name = "counting"
+    #: Declares no kind — the runtime tolerance path (see ``_infer_kind``).
+    text_kind = ""
 
     def __init__(self, signature="counting:v1"):
         self._signature = signature
@@ -191,6 +193,24 @@ class TestEnsureSignpostTexts:
         assert texts == {i: f"text-{i}" for i in ids}
         assert medias[1][st.TEXT_FIELD] == "text-1"
         assert medias[1][st.SOURCE_FIELD] == "counting:v1"
+
+    def test_kind_is_stamped_from_the_provider(self):
+        provider = CountingProvider()
+        provider.text_kind = st.KIND_TAGS
+        st.register_signpost_text_provider("fake", provider)
+        medias = self._medias()
+
+        st.ensure_signpost_texts(medias, sorted(medias), np.zeros((4, 2), dtype=np.float32), None)
+        assert medias[1][st.KIND_FIELD] == st.KIND_TAGS
+
+    def test_provider_without_a_kind_leaves_the_field_off(self):
+        # CountingProvider declares no ``text_kind``; rather than stamping a
+        # blank we leave the field absent so display-time inference can try.
+        st.register_signpost_text_provider("fake", CountingProvider())
+        medias = self._medias()
+
+        st.ensure_signpost_texts(medias, sorted(medias), np.zeros((4, 2), dtype=np.float32), None)
+        assert st.KIND_FIELD not in medias[1]
 
     def test_cached_texts_are_reused(self):
         provider = CountingProvider()
@@ -247,6 +267,8 @@ class TestEnsureSignpostTexts:
 class _DictProvider:
     """Primary-like provider that returns a fixed subset of texts, ignores matrix."""
 
+    text_kind = ""
+
     def __init__(self, texts: dict[int, str], name: str = "caption:test"):
         self._texts = texts
         self.name = name
@@ -260,6 +282,7 @@ class _DictProvider:
 
 class _RaisingProvider:
     name = "caption:broken"
+    text_kind = ""
 
     def signature(self, embedder):
         return self.name
@@ -270,6 +293,7 @@ class _RaisingProvider:
 
 class _RecordingFallback:
     name = "tags:rec"
+    text_kind = ""
 
     def __init__(self):
         self.seen_ids: list[int] | None = None
@@ -318,6 +342,102 @@ class TestFallbackTextProvider:
     def test_signature_composes_both_sides(self):
         fp = st.FallbackTextProvider(_DictProvider({}, name="cap:x"), _RecordingFallback())
         assert fp.signature(None) == "cap:x|fallback=tags:rec"
+
+
+class _KindedProvider(_DictProvider):
+    """A ``_DictProvider`` that also declares which kind of text it makes."""
+
+    def __init__(self, texts, name="caption:test", kind=st.KIND_CAPTION):
+        super().__init__(texts, name=name)
+        self.text_kind = kind
+
+
+class _KindedFallback(_RecordingFallback):
+    """The recording fallback, declaring the tag kind like a real one does."""
+
+    text_kind = st.KIND_TAGS
+
+
+class TestBuildKindedTexts:
+    def test_plain_provider_stamps_its_own_kind(self):
+        provider = _KindedProvider({1: "cap1", 2: "cap2"})
+        built = st.build_kinded_texts(provider, [1, 2], {1: {}, 2: {}}, np.zeros((2, 3), dtype=np.float32), None)
+        assert built == {1: ("cap1", st.KIND_CAPTION), 2: ("cap2", st.KIND_CAPTION)}
+
+    def test_provider_without_a_kind_yields_blank(self):
+        built = st.build_kinded_texts(_DictProvider({1: "x"}), [1], {1: {}}, np.zeros((1, 3), dtype=np.float32), None)
+        assert built == {1: ("x", "")}
+
+    def test_empty_texts_are_dropped(self):
+        provider = _KindedProvider({1: "cap1", 2: ""})
+        built = st.build_kinded_texts(provider, [1, 2], {1: {}, 2: {}}, np.zeros((2, 3), dtype=np.float32), None)
+        assert built == {1: ("cap1", st.KIND_CAPTION)}
+
+    def test_fallback_reports_the_kind_that_produced_each_item(self):
+        # The whole point of a per-item kind: with the captioner enabled, an
+        # item it couldn't decode is honestly labeled tags, not a caption.
+        fp = st.FallbackTextProvider(_KindedProvider({1: "cap1"}), _KindedFallback())
+
+        built = st.build_kinded_texts(fp, [1, 2], {1: {}, 2: {}}, np.zeros((2, 3), dtype=np.float32), None)
+        assert built == {1: ("cap1", st.KIND_CAPTION), 2: ("tag-2", st.KIND_TAGS)}
+
+    def test_ensure_stamps_the_per_item_kind_through_a_fallback(self):
+        provider = st.FallbackTextProvider(_KindedProvider({1: "cap1"}), _KindedFallback())
+        st.register_signpost_text_provider("fake", provider)
+        medias = {i: {"id": i, "media_type": "fake"} for i in (1, 2)}
+
+        st.ensure_signpost_texts(medias, [1, 2], np.zeros((2, 3), dtype=np.float32), None)
+        assert medias[1][st.KIND_FIELD] == st.KIND_CAPTION
+        assert medias[2][st.KIND_FIELD] == st.KIND_TAGS
+        # Both halves stamp the *composite* signature, so neither recomputes.
+        assert medias[1][st.SOURCE_FIELD] == medias[2][st.SOURCE_FIELD]
+
+
+class TestSignpostMetadataEntry:
+    def test_caption_is_titled_ai_caption(self):
+        media = {st.TEXT_FIELD: "a dog on a beach", st.KIND_FIELD: st.KIND_CAPTION}
+        assert st.signpost_metadata_entry(media) == ("AI Caption", "a dog on a beach")
+
+    def test_tags_are_titled_ai_tags(self):
+        media = {st.TEXT_FIELD: "rain, thunder", st.KIND_FIELD: st.KIND_TAGS}
+        assert st.signpost_metadata_entry(media) == ("AI Tags", "rain, thunder")
+
+    def test_labels_never_overclaim(self):
+        # The hedge is the point: every surfaced label says where it came from.
+        assert all(label.startswith("AI ") for label in st.TEXT_KIND_LABELS.values())
+
+    def test_content_kind_is_not_surfaced(self):
+        # The item's own text is already shown by the viewer, and nothing
+        # generated it — so it gets no row.
+        media = {st.TEXT_FIELD: "the full paragraph", st.KIND_FIELD: st.KIND_CONTENT}
+        assert st.signpost_metadata_entry(media) is None
+
+    def test_missing_or_blank_text_yields_nothing(self):
+        assert st.signpost_metadata_entry({}) is None
+        assert st.signpost_metadata_entry({st.TEXT_FIELD: "   ", st.KIND_FIELD: st.KIND_TAGS}) is None
+
+    def test_text_is_stripped(self):
+        media = {st.TEXT_FIELD: "  a cat  ", st.KIND_FIELD: st.KIND_CAPTION}
+        assert st.signpost_metadata_entry(media) == ("AI Caption", "a cat")
+
+    def test_legacy_media_infers_kind_from_the_signature(self):
+        # Datasets prepped before the kind field existed carry only a
+        # single-provider signature, which names its kind in the first segment.
+        assert st.signpost_metadata_entry(
+            {st.TEXT_FIELD: "rain, thunder", st.SOURCE_FIELD: "tags:audioset527:clap"}
+        ) == ("AI Tags", "rain, thunder")
+        assert st.signpost_metadata_entry({st.TEXT_FIELD: "a dog", st.SOURCE_FIELD: "caption:whisper-audio"}) == (
+            "AI Caption",
+            "a dog",
+        )
+
+    def test_legacy_composite_signature_is_not_guessed(self):
+        # "caption enabled" is not "this item got a caption" — refuse to guess.
+        media = {st.TEXT_FIELD: "rain, thunder", st.SOURCE_FIELD: "caption:x|fallback=tags:audioset527:clap"}
+        assert st.signpost_metadata_entry(media) is None
+
+    def test_unrecognized_signature_yields_nothing(self):
+        assert st.signpost_metadata_entry({st.TEXT_FIELD: "x", st.SOURCE_FIELD: "mystery:v1"}) is None
 
 
 class TestCaptionerSelection:
