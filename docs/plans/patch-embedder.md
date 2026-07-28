@@ -11,8 +11,6 @@ Cross-cutting, still open:
 
 <!-- item-sep -->
 
-- [ ] #2666 — Cross-dataset Find / CLI-chunk scoring routes through the score embedder, not the primary vector
-
 <!-- item-sep -->
 
 - [ ] #2668 — Spike: validate trio score-precedence (structural vs patch) on a real patch+structural dataset (open question #3)
@@ -30,8 +28,6 @@ Cross-cutting, still open:
 - [ ] #2667 — Combine Datasets per-embedder-type conflict resolution: instead of refusing a mismatched triple, the modal detects each conflicting type (semantic / patch_semantic / structural) and lets the user re-embed every source to one winner or drop that type; the combine route bakes the choice into the load (open question #2, now addressed by resolution rather than refusal)
 
 <!-- item-sep -->
-
-- [ ] #2669 — NPZ server_files importer: per-embedder vectors_&lt;name&gt; layout (lands with the multi-embed path that populates it)
 
 <!-- item-sep -->
 

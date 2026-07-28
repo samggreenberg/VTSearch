@@ -8,10 +8,6 @@ This review asked: where have design decisions that were right at small scale be
 
 Concrete, independently-shippable findings now live as issues (bodies there, not here):
 
-- [ ] #2650 — Collapse the 8 copy-paste state-proxy declarations in `state_proxies.py` to a registry table (Theme C; Sonnet 5)
-- [ ] #2651 — Extract a shared cross-modal base for the SigLIP / SigLIP2 / CLIP image embedders (Theme C; Opus 4.8)
-- [ ] #2652 — Absorb the residual per-format zip/tar filtering loops in downloaders into `_extract_archive` (Theme C; Haiku 4.5)
-- [ ] #2653 — Extract `app.py` request-lifecycle hooks and error handlers into `hooks.py` / `errors.py` (Theme B; Sonnet 5)
 - [ ] #2654 — Split the `DetectorContext` god-object into `VoteState` / `TrainingState` / `FindSessionState`, opportunistically (Theme B; Opus 4.8)
 - [ ] #2655 — Converge hand-written frontend `api.models.ts` onto generated OpenAPI types, backend-schema-first (Theme D; Sonnet 5)
 
