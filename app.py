@@ -365,16 +365,17 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
 
     print("\U0001f4da Loading ML libraries...", flush=True)
     initialize_models(on_progress=lambda *a, **k: None)
-    # ``--solo-media-type`` (process-level CLI fallback) tells us which
-    # mediaType's default embedder to warm even if no datasets or detectors
-    # are registered yet. Per-user explicit values are not consulted here
-    # because there is no current user at startup.
-    from vtsearch.settings import get_cli_solo_embedders, get_cli_solo_media_type
+    # The solo-mediaType restriction (``--solo-media-type`` or the persisted
+    # server setting) tells us which mediaType's default embedder to warm even
+    # if no datasets or detectors are registered yet. It is server-tier, so it
+    # resolves without a current user at startup.
+    from vtsearch.settings import get_cli_solo_embedders, get_cli_solo_media_type, get_effective_solo_media_type
 
-    cli_solo = get_cli_solo_media_type()
-    extra_types = [cli_solo] if cli_solo else None
-    if cli_solo:
-        print(f"\U0001f3af Solo mediaType: {cli_solo} (from --solo-media-type)", flush=True)
+    solo = get_effective_solo_media_type()
+    extra_types = [solo] if solo else None
+    if solo:
+        origin = "--solo-media-type" if get_cli_solo_media_type() else "the solo_media_type setting"
+        print(f"\U0001f3af Solo mediaType: {solo} (from {origin})", flush=True)
     cli_solo_embedders = get_cli_solo_embedders()
     extra_embedders = list(cli_solo_embedders.values()) if cli_solo_embedders else None
     if cli_solo_embedders:

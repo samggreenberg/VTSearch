@@ -176,61 +176,14 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  /** Value shown in the "Solo media type" select. Empty string means
-   *  "Show everything"; otherwise it's the type_id. We display the
-   *  user's explicit choice when set, falling back to the CLI's
-   *  effective value so a fresh user sees what the streamlined mode is
-   *  currently locking them to (rather than a misleading empty state). */
-  get soloMediaTypeSelectValue(): string {
-    const settings = this.settings();
-    const explicit = settings.solo_media_type_explicit;
-    if (explicit) {
-      return settings.solo_media_type || '';
-    }
-    return settings.effective_solo_media_type || '';
-  }
-
-  /** Hint text under the solo-mediaType select. Surfaces "from
-   *  ``--solo-media-type``" when the value comes from the CLI fallback
-   *  so the user understands why the picker is non-empty without ever
-   *  having touched it. */
-  get soloMediaTypeNote(): string {
-    const settings = this.settings();
-    const explicit = settings.solo_media_type_explicit;
-    const effective = settings.effective_solo_media_type || '';
-    if (!explicit && effective) {
-      return `Currently set to ${effective} by the --solo-media-type CLI flag. ` +
-        'Choose any value here to override it.';
-    }
-    return '';
-  }
-
-  /** Always-present help for the solo-mediaType select, spelling out
-   *  exactly what the lock constrains (so it isn't a mystery toggle), plus
-   *  the CLI-fallback note when one applies. */
-  get soloMediaTypeHint(): string {
-    const base =
-      'Streamlines the whole app to one media type. The Add Dataset picker ' +
-      'hides importers and tabs that can’t produce it and preselects it ' +
-      'on the ones that can; the New Detector media picker and the Import ' +
-      'Defaults tab collapse to just this type; and converters that output ' +
-      'other types are filtered out. Pick "Show everything" to turn it off.';
-    const note = this.soloMediaTypeNote;
-    return note ? `${base} ${note}` : base;
-  }
-
-  onSoloMediaTypeChange(value: string): void {
-    // Empty string = "Show everything"; the backend stores it as null
-    // and still flips the explicit flag so the choice survives a CLI
-    // fallback on the next launch.
-    const next = value || null;
-    this.settings.update((s) => ({
-      ...(s as Record<string, unknown>),
-      solo_media_type: next,
-      solo_media_type_explicit: true,
-      effective_solo_media_type: next,
-    }) as AppSettings);
-    this.save();
+  /** Display name of the admin-set solo media type for the read-only
+   *  Server settings row. Falls back to the raw type_id when the registry
+   *  hasn't loaded (or no longer carries the type), and to "Show
+   *  everything" when no restriction is in force. */
+  get soloMediaTypeDisplay(): string {
+    const value = this.effectiveSoloMediaType;
+    if (!value) return 'Show everything';
+    return this.mediaTypes().find((mt) => mt.type_id === value)?.name || value;
   }
 
   /** Embedder options for a given media type, used by the per-type
@@ -281,8 +234,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     const userMap = { ...(settings.solo_embedder_per_media_type || {}) };
     // Empty value = "Ask each time". Persist it as the opt-out sentinel
     // (an empty-string entry) so it overrides any ``--solo-embedder``
-    // CLI fallback for this type; same pattern as solo_media_type's
-    // explicit-null override of --solo-media-type.
+    // CLI fallback for this type.
     userMap[typeId] = value || '';
     // Optimistically update the effective map so the dropdown reflects
     // the new choice immediately; the PUT response will replace it with
@@ -571,16 +523,12 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  /** Effective solo-mediaType for the import-defaults tab: collapses
-   *  the per-mediaType picker to a single tab when the user is in solo
-   *  mode (so they only configure what they'll actually import). */
+  /** The admin-set solo mediaType in force, or ``null`` when the server
+   *  isn't restricting one. The import-defaults tab uses it to collapse
+   *  the per-mediaType picker to a single tab (so the user only configures
+   *  what they can actually import). */
   get effectiveSoloMediaType(): string | null {
-    const settings = this.settings();
-    const explicit = settings.solo_media_type_explicit;
-    if (explicit) {
-      return settings.solo_media_type || null;
-    }
-    return settings.effective_solo_media_type || null;
+    return this.settings().solo_media_type || null;
   }
 
   /** Configured Auto-Find results-exporter name (''=none), read from the

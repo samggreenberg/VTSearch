@@ -288,11 +288,6 @@
             "readOnly": true,
             "type": "object"
           },
-          "effective_solo_media_type": {
-            "nullable": true,
-            "readOnly": true,
-            "type": "string"
-          },
           "enable_achievements": {
             "type": "boolean"
           },
@@ -420,10 +415,8 @@
           },
           "solo_media_type": {
             "nullable": true,
+            "readOnly": true,
             "type": "string"
-          },
-          "solo_media_type_explicit": {
-            "type": "boolean"
           },
           "support_email": {
             "readOnly": true,
@@ -5189,10 +5182,6 @@
           },
           "solo_embedder_per_media_type": {
             "nullable": true
-          },
-          "solo_media_type": {
-            "nullable": true,
-            "type": "string"
           },
           "theme": {
             "enum": [
@@ -14511,7 +14500,7 @@
     },
     "/api/settings": {
       "get": {
-        "description": "Augments the persisted dict with the resolver-computed read-only views\n(effective solo mediaType / embedder, effective hidden plugins) via\n:func:`_with_effective`. The frontend reads the ``effective_*`` keys\nwhen deciding whether to hide pickers; the raw ``solo_media_type`` /\n``solo_media_type_explicit`` pair is still exposed for the settings UI\nto render the current state.",
+        "description": "Augments the persisted dict with the resolver-computed read-only views\n(the effective solo mediaType / embedder locks, effective hidden\nplugins) via :func:`_with_effective`. The frontend reads those keys\nwhen deciding whether to hide pickers.",
         "operationId": "get_settings",
         "responses": {
           "200": {

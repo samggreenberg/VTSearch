@@ -277,6 +277,19 @@ class ServerSettings(BaseModel):
     # :func:`vtsearch.settings.get_effective_semantic_only`.
     semantic_only: bool = False
 
+    # Solo-mediaType streamlining. An admin-set restriction: when set, the
+    # importer and new-detector flows hide their mediaType pickers and lock to
+    # this type, the converter picker filters to converters whose output is
+    # this type, and the mediaType-picking step in tabbed UIs is skipped.
+    # ``None`` (the default) means "show everything" (the non-streamlined
+    # experience). Users cannot change it - it exists so an operator can
+    # narrow the app down to the one media type their deployment is for,
+    # both to show less and to ask fewer questions. Set with the
+    # ``--solo-media-type`` CLI flag (process-wide, wins for the process
+    # lifetime) or by editing this key in the settings file. See
+    # :func:`vtsearch.settings.get_effective_solo_media_type`.
+    solo_media_type: str | None = None
+
     # Browse UMAP projection knobs (Stage 1).  They change the map layout, so
     # a per-deployment operator may want to tune them.  The persisted
     # projection is keyed on these values (see
@@ -537,21 +550,6 @@ class UserSettings(BaseModel):
     #     }
     # Any missing sub-key falls back to the importer's existing default.
     import_defaults_by_media_type: dict[str, dict[str, Any]] = Field(default_factory=dict)
-
-    # Solo-mediaType streamlining. When set, the importer and new-detector
-    # flows hide their mediaType pickers and lock to this type, the converter
-    # picker filters to converters whose output is this type, and the
-    # mediaType-picking step in tabbed UIs is skipped. ``None`` means "show
-    # everything" (the default, non-streamlined experience).
-    #
-    # Resolution at read time is ``solo_media_type`` if
-    # ``solo_media_type_explicit`` is True, else the process-level CLI
-    # fallback (``settings.set_cli_solo_media_type``), else None. The
-    # ``explicit`` flag is set to True whenever the user changes the value
-    # through the settings UI - so once a user opts out (sets it to None),
-    # the CLI flag no longer reapplies on future launches for that user.
-    solo_media_type: str | None = None
-    solo_media_type_explicit: bool = False
 
     # Solo mediaEmbedder streamlining (per mediaType). When a media-type id
     # appears as a key here, the dataset-importer modal hides its embedder

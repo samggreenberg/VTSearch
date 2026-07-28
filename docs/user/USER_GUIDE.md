@@ -579,10 +579,12 @@ controls, remembered per media type:
 
 ### Solo media type - streamline for one media type
 
-If you only ever work with one kind of media (e.g. you exclusively
-search images, optionally pulled in from videos and documents via
-the built-in converters), pick that type under the **Import Defaults**
-tab in the Settings modal (**Solo media type**). Once set:
+If everyone on a server only ever works with one kind of media (e.g.
+they exclusively search images, optionally pulled in from videos and
+documents via the built-in converters), an operator can restrict the
+whole instance to that type. This is an **admin setting, not a user
+preference**: it's set when the server starts and shown read-only on the
+Settings modal's **Server** tab. Once set:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/settings-appearance.dark.png" />
@@ -594,13 +596,13 @@ tab in the Settings modal (**Solo media type**). Once set:
 - Converter offerings filter to those that produce your type
   (so picking "image" still lets you import videos-as-frames and
   documents-as-pages, just not raw audio).
-- Your chosen type's default embedder is warmed at startup so the
+- The chosen type's default embedder is warmed at startup so the
   first detector run is fast.
 
-Pick **Show everything** to opt back out. Operators can also pass
-`--solo-media-type image` (or any type id) on the command line as a
-fallback for new users - anyone who explicitly changes the setting
-overrides the CLI value for themselves.
+Operators set it by passing `--solo-media-type image` (or any type id)
+on the command line, or by writing `"solo_media_type": "image"` into
+`data/settings.json`. It applies to every user, and there is no
+per-user override.
 
 ---
 
@@ -626,9 +628,9 @@ The Settings modal (gear icon) is organised into eight tabs:
 - **HuggingFace** - sign in with HuggingFace to download gated demo
   datasets and gated AI models.
 - **Import Defaults** - default embedder, clipper, and converters per
-  media type, plus the **Solo media type** picker.
+  media type.
 - **Server** - read-only settings fixed when the server started and
-  shared by everyone.
+  shared by everyone, including the **Solo media type** restriction.
 - **Sorting** - options that control how the trained ranking behaves.
 
 ---

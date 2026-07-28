@@ -174,6 +174,13 @@ class AppSettingsSchema(Schema):
     # picker and the Server settings tab can report the restriction. Not in
     # ``SettingsUpdateSchema`` - not editable via PUT.
     semantic_only = fields.Boolean(dump_only=True)
+    # Server-tier solo-mediaType restriction. Set via the
+    # ``--solo-media-type`` CLI flag (process-wide, all users) or the
+    # persisted settings file; surfaced read-only here as the value actually
+    # in force, so the importer / new-detector / import-defaults surfaces can
+    # lock their mediaType pickers and the Server settings tab can report the
+    # restriction. Not in ``SettingsUpdateSchema`` - not editable via PUT.
+    solo_media_type = fields.String(dump_only=True, allow_none=True)
     # Server-tier per-media-type tag vocabulary used to name map regions in
     # Tags mode, replacing the built-in AudioSet-527 / OpenImages-600 lists.
     # An operator's term list for the whole instance, set by editing the
@@ -212,16 +219,6 @@ class AppSettingsSchema(Schema):
     # shape; the field is declared as a free-form dict here because the
     # nested values are heterogeneous (string, dict, list).
     import_defaults_by_media_type = fields.Dict(keys=fields.String(), values=fields.Raw())
-
-    # Solo mediaType streamlining. ``solo_media_type`` is the user's raw
-    # value (None or a media-type id); ``solo_media_type_explicit`` is True
-    # once the user has changed it from settings (so the CLI fallback no
-    # longer applies). ``effective_solo_media_type`` is the resolver's
-    # output the frontend should read to decide whether to hide mediaType
-    # pickers; it accounts for the CLI fallback and the explicit flag.
-    solo_media_type = fields.String(allow_none=True)
-    solo_media_type_explicit = fields.Boolean()
-    effective_solo_media_type = fields.String(allow_none=True, dump_only=True)
 
     # Solo mediaEmbedder per mediaType. ``solo_embedder_per_media_type`` is
     # the user's raw map (``{media_type_id: embedder_name}``);
@@ -330,11 +327,10 @@ class SettingsUpdateSchema(Schema):
     last_embedder_per_media_type = fields.Raw()
     import_defaults_by_media_type = fields.Raw()
 
-    # The route layer validates ``solo_media_type`` against the media-type
-    # registry and applies it via ``apply_user_solo_media_type`` so the
-    # ``solo_media_type_explicit`` flag flips automatically. Accept either
-    # a string id or ``null`` for "show everything".
-    solo_media_type = fields.String(allow_none=True)
+    # NB: solo_media_type is intentionally absent - it is a server-tier
+    # restriction set by the admin via --solo-media-type (or the settings
+    # file), not editable via PUT /api/settings. It is dump_only in
+    # AppSettingsSchema.
 
     # ``{media_type_id: embedder_name}`` map. The route layer validates
     # each entry against the embedder registry and rejects unknown

@@ -570,12 +570,13 @@ suggestions) and resolve via the active `DatasetContext` /
 
 Persistent settings live in `vtsearch/settings.py`, split across two
 tiers.  **Server tier** (shared, `data/settings.json`): `saved_datasets_dir`,
-`detectors_dir`, `max_concurrent_*`, `hidden_plugins`, `semantic_only`.
+`detectors_dir`, `max_concurrent_*`, `hidden_plugins`, `semantic_only`,
+`solo_media_type`, `browse_signpost_vocab`.
 **Per-user tier** (`<user_data_dir>/user_settings.json`): everything else;
 `volume`, `theme`, `inclusion`, `enrich_descriptions`, `safe_thresholds`,
 `calibrate_count`, `calibration_fraction`, `audio_playing`, `show_animations`,
 `show_metadata`, `grid_icon_size_*`, `focus_mode_*`,
-`panel_pct_*`, `autopilot_*`, `solo_media_type`, `settings_source`,
+`panel_pct_*`, `autopilot_*`, `settings_source`,
 `achievement_state`, and the **Auto-Find** keys `autofind_detectors`,
 `autofind_exporter`, `autofind_exporter_field_values`.  The Auto-Find keys read
 through to the server file for the built-in `default` user (CLI / single-user

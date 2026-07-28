@@ -383,11 +383,14 @@ python app.py --solo-media-type image
 ```
 
 Valid values are the registered media-type ids (`audio`, `image`,
-`video`, `text`, `document`). The flag is a per-process **fallback**:
-any user who explicitly sets their own solo mediaType (or explicitly
-opts back into "show everything") via the Settings dialog overrides
-the CLI value for themselves, and the choice persists across restarts.
-A user who has never touched the setting sees the CLI value.
+`video`, `text`, `document`). This is an **admin-set server
+restriction**, not a user preference: it applies to every user, users
+cannot change or opt out of it from the Settings dialog (the Server tab
+shows it read-only), and `PUT /api/settings` refuses to touch it. The
+flag is a process-level override of the server-tier `solo_media_type`
+key, so an operator can also set it persistently by writing
+`"solo_media_type": "image"` into `data/settings.json`; the flag wins
+for the lifetime of the process.
 
 **Solo mediaEmbedder** (`--solo-embedder`): lock the embedding model
 for one or more mediaTypes so the dataset-importer modal hides its
@@ -401,9 +404,10 @@ python app.py --solo-embedder image=siglip --solo-embedder audio=clap
 
 Other mediaTypes still show the normal embedder picker. The flag warms
 each locked embedder at startup even when no datasets or detectors are
-registered yet. Same fallback semantics as `--solo-media-type`: any
-user can override per-mediaType via the Settings dialog ("Ask each
-time" is the opt-out), and their choice persists across restarts.
+registered yet. Unlike `--solo-media-type`, this one is a per-process
+**fallback** over a per-user setting: any user can override it
+per-mediaType via the Settings dialog ("Ask each time" is the opt-out),
+and their choice persists across restarts.
 
 **Hidden plugins** (`--hide-plugin family:name`, repeatable): drop a
 plugin from picker / listing API responses for this deployment without
