@@ -123,9 +123,6 @@ class AppSettingsSchema(Schema):
     # Whether a media type's signpost texts come from the generative captioner
     # (image VLM / audio captioner) instead of the zero-shot tags; unset =tags.
     browse_signpost_captioner = _PerMediaTypeBooleanDict()
-    # Per-media-type custom zero-shot tag vocabulary replacing the built-in
-    # AudioSet-527 / OpenImages-600 lists; unset/empty = the shipped vocabulary.
-    browse_signpost_vocab = _PerMediaTypeStringListDict()
 
     # Per-user, per-media-type
     grid_icon_size_left = _PerMediaTypeStringDict()
@@ -177,6 +174,13 @@ class AppSettingsSchema(Schema):
     # picker and the Server settings tab can report the restriction. Not in
     # ``SettingsUpdateSchema`` - not editable via PUT.
     semantic_only = fields.Boolean(dump_only=True)
+    # Server-tier per-media-type tag vocabulary used to name map regions in
+    # Tags mode, replacing the built-in AudioSet-527 / OpenImages-600 lists.
+    # An operator's term list for the whole instance, set by editing the
+    # persisted settings file; surfaced read-only here so the Server settings
+    # tab can report which types carry a custom vocabulary. Not in
+    # ``SettingsUpdateSchema`` - not editable via PUT.
+    browse_signpost_vocab = _PerMediaTypeStringListDict(dump_only=True)
 
     # Auto-Find (per-user, editable from the Auto-Find settings tab).
     # ``autofind_detectors`` is each user's own list of detectors that auto-run
@@ -305,7 +309,9 @@ class SettingsUpdateSchema(Schema):
     browse_mouse_zooms_per_level = fields.Raw()
     browse_signposts = fields.Raw()
     browse_signpost_captioner = fields.Raw()
-    browse_signpost_vocab = fields.Raw()
+    # NB: browse_signpost_vocab is intentionally absent - it is a server-tier
+    # tag vocabulary set by the operator in the settings file, not editable via
+    # PUT /api/settings. It is dump_only in AppSettingsSchema.
 
     autofind_detectors = fields.List(fields.String())
     # Auto-Find results exporter. ``autofind_exporter`` is validated against the

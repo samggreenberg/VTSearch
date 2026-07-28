@@ -378,12 +378,13 @@ def _captioner_enabled(media_type: str) -> bool:
 
 
 def _custom_vocab(media_type: str) -> tuple[str, ...]:
-    """User-supplied tag vocabulary for *media_type*, or ``()`` for the default.
+    """Operator's tag vocabulary for *media_type*, or ``()`` for the default.
 
     Reads the ``signpost_vocab`` map off the library-tier
     :class:`~vtscore.config.CoreConfig` (the app populates it from the
-    ``browse_signpost_vocab`` setting).  Any failure — no builder installed,
-    missing field — reads as "no override", so the shipped vocabulary holds.
+    server-tier ``browse_signpost_vocab`` setting, so one vocabulary serves
+    every user of a deployment).  Any failure — no builder installed, missing
+    field — reads as "no override", so the shipped vocabulary holds.
     """
     try:
         from vtscore.config import CoreConfig  # noqa: PLC0415
@@ -402,9 +403,9 @@ def provider_for(media_type: str) -> SignpostTextProvider | None:
     returned wrapped in a :class:`FallbackTextProvider` over the base — so a
     model-load or per-item decode failure quietly degrades to tags.
 
-    A user-supplied tag vocabulary (``browse_signpost_vocab``) replaces the
-    built-in one on the tag provider, whether it serves directly (Tags mode) or
-    as the captioner's fallback.
+    An operator-configured tag vocabulary (``browse_signpost_vocab``) replaces
+    the built-in one on the tag provider, whether it serves directly (Tags mode)
+    or as the captioner's fallback.
     """
     base = _PROVIDERS.get(media_type)
     terms = _custom_vocab(media_type)

@@ -386,8 +386,10 @@ class CoreConfig:
     # working unchanged.
     signpost_captioner: dict[str, bool] = field(default_factory=dict)
 
-    # Per-media-type user-supplied zero-shot tag vocabulary for signpost region
-    # names, replacing the built-in AudioSet-527 / OpenImages-600 lists.  ``{}``
+    # Per-media-type operator-supplied zero-shot tag vocabulary for signpost
+    # region names, replacing the built-in AudioSet-527 / OpenImages-600 lists
+    # for the whole deployment (the app populates it from the server-tier
+    # ``browse_signpost_vocab`` setting, not from a per-user one).  ``{}``
     # (the default) means the shipped vocabulary for every type.  Read by
     # :func:`vtscore.projection.signpost_texts.provider_for`.  Defaulted here so
     # library-only ``CoreConfig(...)`` constructions without the app shim keep

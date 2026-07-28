@@ -531,39 +531,6 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  /** Media types whose Tags signposts draw from an editable tag vocabulary
-   *  (image / audio; text uses its own content). Same set as the captioner
-   *  toggle today, but a distinct predicate so the two stay independent. */
-  browseTabHasTagVocab(typeId: string): boolean {
-    return typeId === 'image' || typeId === 'audio';
-  }
-
-  /** The custom signpost vocabulary for *typeId* as newline-joined text for the
-   *  textarea; empty when none is set (the built-in list is in use). */
-  getBrowseSignpostVocabText(typeId: string): string {
-    const dict = this.settings().browse_signpost_vocab as Record<string, string[]> | undefined;
-    return (dict?.[typeId] ?? []).join('\n');
-  }
-
-  /** Parse the textarea (one term per line) into a custom vocabulary and
-   *  persist. Blank/whitespace input clears the override, restoring the
-   *  built-in list. The backend re-trims and de-duplicates on write; regions
-   *  re-name on the next projection build / Re-project. */
-  onBrowseSignpostVocabChange(typeId: string, text: string): void {
-    const terms = text
-      .split('\n')
-      .map((t) => t.trim())
-      .filter((t) => t.length > 0);
-    const dict = { ...((this.settings().browse_signpost_vocab as Record<string, string[]> | undefined) || {}) };
-    if (terms.length > 0) {
-      dict[typeId] = terms;
-    } else {
-      delete dict[typeId];
-    }
-    this.settings.update((s) => ({ ...(s as Record<string, unknown>), browse_signpost_vocab: dict }) as AppSettings);
-    this.save();
-  }
-
   // --- Browser tab: right-click bin-popup thumbnail size ---
   // The bin popup keeps its own per-media-type thumbnail size
   // (``grid_icon_size_popup``), independent of the left/right panels. The
@@ -654,6 +621,34 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
       .filter((family) => (raw[family] || []).length > 0)
       .sort()
       .map((family) => ({ family, names: (raw[family] || []).join(', ') }));
+  }
+
+  /** How many signpost terms the Server tab lists inline before eliding the
+   *  rest. An operator vocabulary can run to hundreds of terms (the backend
+   *  caps it at 2000), which would otherwise bury the rest of the tab. */
+  private static readonly SIGNPOST_VOCAB_PREVIEW_TERMS = 12;
+
+  /** The server's custom signpost vocabulary flattened to
+   *  ``[{mediaType, terms}]`` rows (sorted by media type, empty entries
+   *  dropped) for the read-only Server tab. Long lists are elided to the first
+   *  {@link SIGNPOST_VOCAB_PREVIEW_TERMS} terms plus a total count. */
+  get signpostVocabDisplay(): { mediaType: string; terms: string }[] {
+    const raw = (this.settings() as Record<string, unknown>)['browse_signpost_vocab'] as
+      | Record<string, string[]>
+      | undefined;
+    if (!raw) return [];
+    const limit = SettingsModalComponent.SIGNPOST_VOCAB_PREVIEW_TERMS;
+    return Object.keys(raw)
+      .filter((mediaType) => (raw[mediaType] || []).length > 0)
+      .sort()
+      .map((mediaType) => {
+        const all = raw[mediaType] || [];
+        const shown = all.slice(0, limit).join(', ');
+        return {
+          mediaType,
+          terms: all.length > limit ? `${shown} … (${all.length} terms)` : shown,
+        };
+      });
   }
 
   async resetDefaults(): Promise<void> {
