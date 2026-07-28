@@ -22,6 +22,7 @@ import json
 
 import numpy as np
 import pytest
+from vtscore.utils.hashing import content_md5
 
 
 # ---------------------------------------------------------------------------
@@ -40,7 +41,7 @@ def _make_text_media(media_id: int, text: str, *, origin_path: str = "/data/text
         "duration": 0,
         "word_count": len(text.split()),
         "character_count": len(text),
-        "md5": hashlib.md5(text.encode("utf-8")).hexdigest(),
+        "md5": content_md5(text.encode("utf-8")),
         "embedding": rng.standard_normal(384).astype(np.float32),
         "origin": {
             "importer": "server_folder",
@@ -356,7 +357,7 @@ class TestReplayChainOnFile:
         source = tmp_path / "doc.txt"
         source.write_text("Alpha. Bravo. Charlie.", encoding="utf-8")
 
-        target_hash = hashlib.md5(b"Charlie.").hexdigest()[:12]
+        target_hash = content_md5(b"Charlie.")[:12]
         steps = [
             {
                 "kind": "clipper",

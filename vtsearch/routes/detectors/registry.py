@@ -160,10 +160,12 @@ def register_detector_route(body: dict):
         abort(400, message="media_type is required (must be a specific type, not 'any')")
 
     from vtscore.detectors.embedder_type import resolve_detector_embedder_type
+    from vtsearch.routes._shared import abort_if_semantic_only_type
 
     embedder_type, type_err = resolve_detector_embedder_type(body.get("embedder_type", ""))
     if type_err:
         abort(400, message=type_err)
+    abort_if_semantic_only_type(embedder_type)
 
     examples = body.get("examples") or []
     if not examples and text_query:
@@ -213,6 +215,64 @@ def register_detector_route(body: dict):
 # ---------------------------------------------------------------------------
 
 
+def _start_imported_labelset_ingest(label_dicts: list[dict], entry: dict) -> str:
+    """Start the background pull of an imported labelset's media into the active dataset.
+
+    A labelset is origin-keyed and dataset-agnostic, but everything
+    downstream of it - vote state, the labeling grid, and above all
+    ``GET /api/labels/export``, which composes its payload from
+    ``LabelSet.from_clips_and_votes(active_medias, goods, bads)`` - can only
+    see labels whose media resolve to the *active* dataset's medias.  Without
+    this step, importing a detector whose labels came from somewhere else
+    leaves the right pane showing the imported labels (it reads the labelset)
+    while export returns nothing (it reads votes), and the user has to Browse
+    Positives / Find / Train first to materialise the media before the labels
+    become exportable at all (issue #2690).
+
+    Mirrors what :func:`~vtsearch.routes.labels.importers.run_label_import`
+    already does for the in-session label importer, so the two import paths
+    land the same media in the same place.  The subsequent detector load then
+    restores those labels into votes normally - which is why the caller must
+    let this task *finish* before loading the detector, or label restore runs
+    against medias that aren't there yet.
+
+    The fetch+embed itself is far too slow to run inline (issue #2703), so it
+    goes onto the detector task tracker and reports through the SSE feed.
+    Returns the task id, or ``""`` when there is nothing to ingest (no active
+    dataset, or every label already resolves).
+    """
+    from vtscore.state.core import get_active_context, is_request_missing_dataset_context
+
+    try:
+        ds_ctx = get_active_context()
+        if not ds_ctx.dataset_id or is_request_missing_dataset_context(ds_ctx):
+            # No dataset to ingest into; the labels stay origin-only until a
+            # dataset is loaded and the detector is (re)loaded against it.
+            return ""
+
+        from vtscore.datasets.ingest_task import start_ingest_task
+        from vtsearch.state import cached_media_lookups, find_missing_entries, medias
+        from vtsearch.threading import spawn
+
+        origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
+        missing = find_missing_entries(label_dicts, origin_lookup, md5_lookup, name_lookup)
+        if not missing:
+            return ""
+        detector_id = entry.get("id", "")
+        return start_ingest_task(
+            missing,
+            medias,
+            task_id=f"_detingest_{detector_id}",
+            name=entry.get("name", detector_id),
+            spawn=spawn,
+            detector_id=detector_id,
+            media_type=entry.get("media_type", "") or "",
+        )
+    except Exception:
+        logger.exception("Ingesting imported labelset media failed")
+        return ""
+
+
 @detectors_registry_bp.route(
     "/api/detectors/registry/from-labelset/<importer_name>",
     methods=["POST"],
@@ -227,6 +287,7 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
     from vtscore.labels.importers import get_label_importer, list_label_importers
     from vtscore.detectors.registry import register_detector, update_detector
     from vtsearch.routes._shared import (
+        abort_if_semantic_only_type,
         get_plugin_or_404,
         run_plugin_or_error,
         validate_plugin_args,
@@ -252,6 +313,7 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
     embedder_type_val, type_err = resolve_detector_embedder_type(requested_type)
     if type_err:
         abort(400, message=type_err)
+    abort_if_semantic_only_type(embedder_type_val)
 
     det_path = _detector_path(name)
     if det_path.exists():
@@ -327,6 +389,14 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
     entry["num_training"] = len(labelset)
     entry["last_trained_at"] = time.time()
 
+    # Materialise any imported label whose media isn't in the active dataset,
+    # so the labels are exportable / visible immediately instead of only after
+    # a Browse Positives / Find / Train pass (issue #2690).  Runs in the
+    # background (issue #2703): the caller polls ``ingest_task_id`` on the
+    # detector-task SSE channel and must wait for it before loading the
+    # detector, since label restore resolves against the ingested medias.
+    ingest_task_id = _start_imported_labelset_ingest([el.to_dict() for el in elements], entry)
+
     return jsonify(
         {
             "ok": True,
@@ -334,6 +404,7 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
             "applied": applied,
             "skipped": skipped,
             "num_labels": len(labelset),
+            "ingest_task_id": ingest_task_id,
         }
     ), 201
 
@@ -932,12 +1003,12 @@ def _resolved_positive_count(elements) -> int:
     this is one pass rather than one rebuild per element. Returns 0 when no
     dataset is loaded.
     """
-    from vtsearch.state import build_media_lookup, resolve_media_ids, snapshot_medias
+    from vtsearch.state import cached_media_lookups, resolve_media_ids, snapshot_medias
 
     snap = snapshot_medias()
     if not snap:
         return 0
-    origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
+    origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
     count = 0
     for el in elements:
         if resolve_media_ids(el.to_dict(), origin_lookup, md5_lookup, name_lookup):

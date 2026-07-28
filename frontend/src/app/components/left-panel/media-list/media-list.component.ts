@@ -42,8 +42,11 @@ interface OrderedItem {
   showThreshold: boolean;
 }
 
-/** One virtualized grid row: a run of cards, or the full-width threshold marker. */
-type GridRow = { kind: 'items'; items: OrderedItem[] } | { kind: 'threshold' };
+/**
+ * One virtualized grid row: a run of cards, the full-width threshold marker, or
+ * the full-width "Load more" trigger appended when the ranking is windowed.
+ */
+type GridRow = { kind: 'items'; items: OrderedItem[] } | { kind: 'threshold' } | { kind: 'loadmore' };
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -68,8 +71,14 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
   readonly gridGoalWidth = input<number>(80);
   readonly focusMode = input<'click' | 'hover'>('click');
   readonly showScores = input(true);
+  /** True when the ranking is windowed and more rows can be paged in. */
+  readonly hasMore = input(false);
+  /** True while a page fetch is in flight (disables the Load-more trigger). */
+  readonly loadingMore = input(false);
 
   readonly mediaSelect = output<number>();
+  /** Emitted when the user (or reaching the list end) asks to page in more rows. */
+  readonly loadMore = output<void>();
   readonly mediaVote = output<{
     id: number;
     vote: 'good' | 'bad';
@@ -168,6 +177,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
       this.sortOrder();
       this.threshold();
       this.showScores();
+      this.hasMore();
       untracked(() => {
         if (this.prevGridGoalWidth !== null && goalWidth !== this.prevGridGoalWidth) {
           this.gridHeightMeasured = false;
@@ -283,7 +293,25 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
       if (current.length === cols) flush();
     }
     flush();
+    // A windowed ranking gets a trailing full-width "Load more" row.
+    if (this.hasMore()) rows.push({ kind: 'loadmore' });
     this.gridRows = rows;
+  }
+
+  /** Ask the parent to page in the next window of rows. */
+  onLoadMore(): void {
+    if (this.hasMore() && !this.loadingMore()) this.loadMore.emit();
+  }
+
+  /**
+   * Auto-page when the virtual viewport scrolls to (or near) the trailing
+   * "Load more" row, giving infinite-scroll UX. Guarded by ``loadingMore`` so a
+   * burst of scroll events during a fetch doesn't fire duplicate requests.
+   */
+  private maybeAutoLoadMore(): void {
+    const vp = this.virtualViewport();
+    if (!vp || !this.hasMore() || this.loadingMore()) return;
+    if (vp.getRenderedRange().end >= this.gridRows.length - 1) this.onLoadMore();
   }
 
   /**
@@ -368,7 +396,10 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
       this.scrollSub?.unsubscribe();
       this.scrollSub = virtualViewport.scrolledIndexChange
         .pipe(takeUntil(this.destroy$))
-        .subscribe(() => this.prefetchVisibleMetadata());
+        .subscribe(() => {
+          this.prefetchVisibleMetadata();
+          this.maybeAutoLoadMore();
+        });
     }
   }
 

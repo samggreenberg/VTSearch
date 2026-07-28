@@ -17,11 +17,11 @@ Covers:
 
 from __future__ import annotations
 
-import hashlib
 import pickle
 
 import numpy as np
 import pytest
+from vtscore.utils.hashing import content_md5
 
 
 def _unique_bytes(media_id: int) -> bytes:
@@ -35,7 +35,7 @@ def _make_audio_clip(media_id: int, md5: str = "", filename: str = "") -> dict:
         filename = f"clip_{media_id}.wav"
     raw = _unique_bytes(media_id)
     if not md5:
-        md5 = hashlib.md5(raw).hexdigest()
+        md5 = content_md5(raw)
     return {
         "id": media_id,
         "media_type": "audio",
@@ -58,7 +58,7 @@ def _make_image_clip(media_id: int, md5: str = "") -> dict:
     """Return a minimal image media dict for testing."""
     raw = b"\x89PNG" + _unique_bytes(media_id)
     if not md5:
-        md5 = hashlib.md5(raw).hexdigest()
+        md5 = content_md5(raw)
     return {
         "id": media_id,
         "media_type": "image",
@@ -79,16 +79,53 @@ def _make_image_clip(media_id: int, md5: str = "") -> dict:
     }
 
 
+def _make_image_clip_embedded(media_id: int, embedder: str, extra: dict | None = None) -> dict:
+    """An image clip carrying a per-embedder ``embeddings`` dict for *embedder*.
+
+    Used by the conflict-resolution tests: two sources embedded with different
+    concrete embedders (e.g. ``siglip`` vs ``clip``) exercise the strip-to-keep
+    path.  *extra* merges in side-channels (``patch_regions`` etc.).
+    """
+    raw = b"\x89PNG" + _unique_bytes(media_id)
+    clip = {
+        "id": media_id,
+        "media_type": "image",
+        "duration": 0,
+        "file_size": 2000,
+        "md5": content_md5(raw),
+        "embeddings": {embedder: np.array([float(media_id)], dtype=np.float32)},
+        "embedder": embedder,
+        "media_bytes": raw,
+        "media_string": None,
+        "media_path": None,
+        "filename": f"img_{media_id}.png",
+        "category": "test",
+        "origin": None,
+        "origin_name": f"img_{media_id}.png",
+        "width": 32,
+        "height": 32,
+    }
+    if extra:
+        clip.update(extra)
+    return clip
+
+
 def _write_pickle_dataset(path, clips_dict):
     """Write a dataset container file in the standard ZIP format."""
     from vtscore.datasets.container import write_container
 
-    data = {
-        "medias": {
-            cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in media.items()}
-            for cid, media in clips_dict.items()
-        }
-    }
+    def _convert(media):
+        out = {}
+        for k, v in media.items():
+            if isinstance(v, np.ndarray):
+                out[k] = v.tolist()
+            elif isinstance(v, dict):
+                out[k] = {kk: (vv.tolist() if isinstance(vv, np.ndarray) else vv) for kk, vv in v.items()}
+            else:
+                out[k] = v
+        return out
+
+    data = {"medias": {cid: _convert(media) for cid, media in clips_dict.items()}}
     pkl_bytes = pickle.dumps(data)
     write_container(path, pkl_bytes, {"format_version": 1})
 
@@ -365,6 +402,85 @@ class TestCombineDatasetsRun:
 
 
 # ---------------------------------------------------------------------------
+# Conflict resolution: strip-to-keep on the importer
+# ---------------------------------------------------------------------------
+
+
+class TestCombineKeepEmbedders:
+    def test_strips_loser_vectors_and_repoints_primary(self, tmp_path):
+        """With keep=[siglip], a clip's clip-only vector is stripped and its
+        primary re-pointed; the embed stage (not run() itself) later fills siglip."""
+        from vtscore.datasets.importers.combine_datasets import IMPORTER
+        from vtscore.embedding.media_vectors import media_embedder_names
+
+        ds1 = {1: _make_image_clip_embedded(1, "siglip")}
+        ds2 = {1: _make_image_clip_embedded(2, "clip")}
+        p1, p2 = tmp_path / "siglip.pkl", tmp_path / "clip.pkl"
+        _write_pickle_dataset(p1, ds1)
+        _write_pickle_dataset(p2, ds2)
+
+        medias: dict = {}
+        IMPORTER.run({"datasets": [str(p1), str(p2)], "keep_embedders": ["siglip"]}, medias)
+
+        assert len(medias) == 2
+        for m in medias.values():
+            # No media retains a "clip" vector; the siglip source keeps its own.
+            assert "clip" not in (m.get("embeddings") or {})
+            # Primary re-pointed to the kept score embedder for every media.
+            assert m["embedder"] == "siglip"
+            # media_embedder_names never surfaces the dropped embedder.
+            assert "clip" not in media_embedder_names(m)
+
+    def test_drop_role_strips_side_channels(self, tmp_path):
+        """Dropping the patch type strips patch_regions/patch_grid from media."""
+        from vtscore.datasets.importers.combine_datasets import IMPORTER
+
+        # A "patchy" image dataset carrying patch side-channels alongside a patch
+        # embedder, combined with a plain siglip dataset, keeping only siglip.
+        patchy = _make_image_clip_embedded(
+            1,
+            "siglip",
+            extra={
+                "embeddings": {
+                    "siglip": np.array([1.0], dtype=np.float32),
+                    "dinov3_patch": np.array([2.0], dtype=np.float32),
+                },
+                "patch_regions": [[0.0, 1.0]],
+                "patch_grid": [[3.0]],
+            },
+        )
+        plain = _make_image_clip_embedded(2, "siglip")
+        p1, p2 = tmp_path / "patchy.pkl", tmp_path / "plain.pkl"
+        _write_pickle_dataset(p1, {1: patchy})
+        _write_pickle_dataset(p2, {1: plain})
+
+        medias: dict = {}
+        IMPORTER.run({"datasets": [str(p1), str(p2)], "keep_embedders": ["siglip"]}, medias)
+
+        for m in medias.values():
+            assert "dinov3_patch" not in (m.get("embeddings") or {})
+            # The patch type was dropped, so its side-channels are gone.
+            assert "patch_regions" not in m
+            assert "patch_grid" not in m
+
+    def test_no_keep_embedders_leaves_vectors_untouched(self, tmp_path):
+        """Absent keep_embedders → the pre-conflict-UI behaviour (no stripping)."""
+        from vtscore.datasets.importers.combine_datasets import IMPORTER
+
+        ds1 = {1: _make_image_clip_embedded(1, "siglip")}
+        ds2 = {1: _make_image_clip_embedded(2, "clip")}
+        p1, p2 = tmp_path / "a.pkl", tmp_path / "b.pkl"
+        _write_pickle_dataset(p1, ds1)
+        _write_pickle_dataset(p2, ds2)
+
+        medias: dict = {}
+        IMPORTER.run({"datasets": [str(p1), str(p2)]}, medias)
+
+        embedders = {m["embedder"] for m in medias.values()}
+        assert embedders == {"siglip", "clip"}
+
+
+# ---------------------------------------------------------------------------
 # CLI support
 # ---------------------------------------------------------------------------
 
@@ -477,6 +593,96 @@ class TestCombineEndpoint:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["ok"] is True
+
+    def test_refuses_unresolved_embedder_conflict(self, client, tmp_path):
+        """Two registry datasets binding different semantic embedders → 400 until
+        the caller resolves the conflict."""
+        from vtscore.datasets import registry
+
+        ds1 = {1: _make_image_clip_embedded(1, "siglip")}
+        ds2 = {1: _make_image_clip_embedded(2, "clip")}
+        p1, p2 = tmp_path / "siglip.pkl", tmp_path / "clip.pkl"
+        _write_pickle_dataset(p1, ds1)
+        _write_pickle_dataset(p2, ds2)
+        e1 = registry.register_dataset(
+            name="sig", media_type="image", num_items=1, pkl_path=str(p1), bound_embedders=["siglip"]
+        )
+        e2 = registry.register_dataset(
+            name="cli", media_type="image", num_items=1, pkl_path=str(p2), bound_embedders=["clip"]
+        )
+        try:
+            resp = client.post("/api/dataset/combine", json={"datasets": [str(p1), str(p2)]})
+            assert resp.status_code == 400
+            assert "Semantic" in resp.get_json()["message"]
+        finally:
+            registry.unregister_dataset(e1["id"])
+            registry.unregister_dataset(e2["id"])
+
+    def test_accepts_resolved_embedder_conflict(self, client, tmp_path):
+        """A conflict resolved via resolutions passes and forwards keep_embedders."""
+        from unittest.mock import patch
+
+        from vtscore.datasets import registry
+
+        ds1 = {1: _make_image_clip_embedded(1, "siglip")}
+        ds2 = {1: _make_image_clip_embedded(2, "clip")}
+        p1, p2 = tmp_path / "siglip.pkl", tmp_path / "clip.pkl"
+        _write_pickle_dataset(p1, ds1)
+        _write_pickle_dataset(p2, ds2)
+        e1 = registry.register_dataset(
+            name="sig", media_type="image", num_items=1, pkl_path=str(p1), bound_embedders=["siglip"]
+        )
+        e2 = registry.register_dataset(
+            name="cli", media_type="image", num_items=1, pkl_path=str(p2), bound_embedders=["clip"]
+        )
+        try:
+            with patch("vtsearch.routes.datasets.staging._run_importer_in_background") as mock_run:
+                mock_run.return_value = "task-1"
+                resp = client.post(
+                    "/api/dataset/combine",
+                    json={
+                        "datasets": [str(p1), str(p2)],
+                        "resolutions": {"semantic": {"action": "reembed", "embedder": "siglip"}},
+                    },
+                )
+            assert resp.status_code == 200
+            assert resp.get_json()["ok"] is True
+            # The route bakes the kept embedder set into the background load.
+            _importer, forwarded = mock_run.call_args[0]
+            assert forwarded["keep_embedders"] == ["siglip"]
+            assert forwarded["embedders"] == ["siglip"]
+            assert forwarded["embedder"] == "siglip"
+        finally:
+            registry.unregister_dataset(e1["id"])
+            registry.unregister_dataset(e2["id"])
+
+    def test_no_conflict_omits_keep_embedders(self, client, tmp_path):
+        """Matching embedders → no conflict → the fast path (no keep_embedders)."""
+        from unittest.mock import patch
+
+        from vtscore.datasets import registry
+
+        ds1 = {1: _make_image_clip_embedded(1, "siglip")}
+        ds2 = {1: _make_image_clip_embedded(2, "siglip")}
+        p1, p2 = tmp_path / "a.pkl", tmp_path / "b.pkl"
+        _write_pickle_dataset(p1, ds1)
+        _write_pickle_dataset(p2, ds2)
+        e1 = registry.register_dataset(
+            name="a", media_type="image", num_items=1, pkl_path=str(p1), bound_embedders=["siglip"]
+        )
+        e2 = registry.register_dataset(
+            name="b", media_type="image", num_items=1, pkl_path=str(p2), bound_embedders=["siglip"]
+        )
+        try:
+            with patch("vtsearch.routes.datasets.staging._run_importer_in_background") as mock_run:
+                mock_run.return_value = "task-1"
+                resp = client.post("/api/dataset/combine", json={"datasets": [str(p1), str(p2)]})
+            assert resp.status_code == 200
+            _importer, forwarded = mock_run.call_args[0]
+            assert "keep_embedders" not in forwarded
+        finally:
+            registry.unregister_dataset(e1["id"])
+            registry.unregister_dataset(e2["id"])
 
     def test_path_traversal_rejected(self, client, tmp_path):
         """In multi-user mode, paths outside the user dir must be rejected.

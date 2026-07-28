@@ -12,7 +12,6 @@ These tests verify:
 
 from __future__ import annotations
 
-import hashlib
 import io
 from unittest.mock import MagicMock, patch
 
@@ -20,6 +19,7 @@ import pytest
 
 from vtscore.datasets.importers.base import SourceSpec
 from vtscore.embedding.media_vectors import media_embedding
+from vtscore.utils.hashing import content_md5
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -709,20 +709,20 @@ class TestEmbedAndMd5Helpers:
         from vtscore.converters.runner import _compute_md5
 
         data = b"hello world"
-        expected = hashlib.md5(data).hexdigest()
+        expected = content_md5(data)
         assert _compute_md5({"media_bytes": data}) == expected
 
     def test_compute_md5_string(self):
         from vtscore.converters.runner import _compute_md5
 
         text = "hello world"
-        expected = hashlib.md5(text.encode("utf-8")).hexdigest()
+        expected = content_md5(text.encode("utf-8"))
         assert _compute_md5({"media_string": text}) == expected
 
     def test_compute_md5_empty(self):
         from vtscore.converters.runner import _compute_md5
 
-        assert _compute_md5({}) == hashlib.md5(b"").hexdigest()
+        assert _compute_md5({}) == content_md5(b"")
 
 
 # ===========================================================================

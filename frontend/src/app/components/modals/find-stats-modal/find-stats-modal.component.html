@@ -28,6 +28,57 @@
       </tbody>
     </table>
 
+    @if (refCandidates().length > 0) {
+      <h3 class="section-title" title="How much of this dataset looks unlike the dataset the detector was trained on. Items outside the training domain are the ones the detector is least qualified to judge — verify them by hand.">Training-domain overlap</h3>
+      <div class="domain-overlap">
+        <label class="domain-ref">
+          <span class="domain-ref-label">Compare against</span>
+          <select class="domain-ref-select" [value]="selectedRefId()" (change)="onRefChange($event)">
+            <option value="">Select a training dataset…</option>
+            @for (d of refCandidates(); track d.id) {
+              <option [value]="d.id">{{ d.name }}</option>
+            }
+          </select>
+        </label>
+
+        @if (domainLoading()) {
+          <p class="loading-text">Checking domain overlap…</p>
+        } @else if (domainError()) {
+          <p class="domain-note" role="note">{{ domainError() }}</p>
+        } @else if (domainShift(); as ds) {
+          <div class="domain-chip" [class.shifted]="overlapShifted" role="status">
+            <span class="domain-chip-pct">{{ atypicalPct }}%</span>
+            <span class="domain-chip-text">
+              of this dataset looks atypical vs <strong>{{ selectedRefName }}</strong> —
+              {{ overlapShifted ? 'likely domain shift' : 'largely in-domain' }}
+            </span>
+          </div>
+          <p class="domain-detail muted">
+            {{ ds.n_items | number }} items compared · median typicality p = {{ ds.median_pvalue | number: '1.2-2' }} · z = {{ ds.z_score | number: '1.1-1' }}.
+            A detector trained on {{ selectedRefName }} is least reliable on the atypical share; verify those by hand.
+          </p>
+        }
+      </div>
+    }
+
+    @if (evidence(); as ev) {
+      <h3 class="section-title" title="How much of this dataset the detector is calling with no labeled example like it behind the call. Measured from the detector's own votes, so it works even when the training data isn't loaded. These are the calls the detector is least equipped to make — verify them by hand.">Evidence coverage</h3>
+      <div class="domain-overlap">
+        <div class="domain-chip" [class.shifted]="evidenceUnsupported" role="status">
+          <span class="domain-chip-pct">{{ unsupportedPct }}%</span>
+          <span class="domain-chip-text">
+            of this dataset sits in an evidence vacuum —
+            {{ evidenceUnsupported ? 'the detector is often calling without support' : 'mostly backed by labeled evidence' }}
+          </span>
+        </div>
+        <p class="domain-detail muted">
+          {{ ev.n_items | number }} scored items · {{ ev.n_pos_labels | number }} good / {{ ev.n_neg_labels | number }} bad labels ·
+          median support p = {{ ev.median_support | number: '1.2-2' }} · {{ lowTrustPct }}% closer to the opposite class's evidence.
+          The unsupported share is where a handed-over detector is least reliable; verify those by hand.
+        </p>
+      </div>
+    }
+
     <h3 class="section-title">Detector Accuracy</h3>
     <table class="data-table stats-table confusion">
       <thead>

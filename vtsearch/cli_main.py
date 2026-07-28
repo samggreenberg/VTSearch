@@ -253,9 +253,10 @@ def _build_parser() -> argparse.ArgumentParser:
             "in the dataset-importer and new-detector flows, locks them to the "
             "given type, filters converter offerings to converters whose output "
             "is this type, and preloads that type's default embedder at startup. "
-            "Acts as a per-process fallback only. Any user who explicitly sets "
-            "their own solo mediaType (including 'show everything') via the "
-            "settings UI overrides this flag for themselves. Valid values are "
+            "This is an admin-set restriction: it applies to every user, and "
+            "users cannot change or opt out of it from the settings UI. "
+            "Overrides the persisted ``solo_media_type`` key in the server "
+            "settings file for the lifetime of the process. Valid values are "
             "the registered media-type ids (e.g. audio, image, video, text, "
             "document)."
         ),
@@ -306,6 +307,23 @@ def _build_parser() -> argparse.ArgumentParser:
             "the settings file for the lifetime of the process; the value is "
             "not editable via the settings API. Omit to use the persisted value "
             "(defaults to the built-in project address)."
+        ),
+    )
+    parser.add_argument(
+        "--semantic-only",
+        action="store_true",
+        default=False,
+        dest="semantic_only",
+        help=(
+            "Lock this instance to Semantic embedders. The prototype Patch "
+            "Semantic and Structural embedder types are dropped from "
+            "/api/embedders (so no Region / Instance embedder picker appears "
+            "under Add Dataset > Advanced), the New-detector modal offers no "
+            "embedder-type choice, and any request that asks for a "
+            "patch/structural embedder is rejected with 400. Applies to all "
+            "users and overrides any persisted semantic_only in the settings "
+            "file for the lifetime of the process; the value is not editable "
+            "via the settings API."
         ),
     )
     parser.add_argument(
@@ -437,7 +455,7 @@ def _apply_verbosity(args) -> None:
 
 
 def _apply_solo_media_type(args, parser) -> None:
-    """Validate and stash ``--solo-media-type`` as a process-level fallback."""
+    """Validate and stash ``--solo-media-type`` as a process-level override."""
     # --solo-media-type applies to both the autodetect CLI path and the
     # server path: validate and stash before any code reads the resolver.
     if getattr(args, "solo_media_type", None) is not None:
@@ -543,6 +561,20 @@ def _apply_support_email(args, parser) -> None:
         from vtsearch.settings import set_cli_support_email
 
         set_cli_support_email(email)
+
+
+def _apply_semantic_only(args, parser) -> None:
+    """Stash the process-level ``--semantic-only`` lock."""
+    # --semantic-only is a one-way switch: passing it locks the process to
+    # Semantic embedders, omitting it leaves the persisted server setting in
+    # charge (so a deployment can enable the lock from settings.json without
+    # the flag). There is no --no-semantic-only counterpart for the same
+    # reason --hide-plugin can only add hides: a flag should not silently
+    # loosen a restriction the settings file asked for.
+    if getattr(args, "semantic_only", False):
+        from vtsearch.settings import set_cli_semantic_only
+
+        set_cli_semantic_only(True)
 
 
 def _authenticate_cli_user(args, parser) -> None:
@@ -813,6 +845,7 @@ def main(app, initialize_server) -> None:
     _apply_solo_embedders(args, parser)
     _apply_dataset_max_age(args, parser)
     _apply_support_email(args, parser)
+    _apply_semantic_only(args, parser)
 
     if args.autodetect:
         _run_autodetect(args, parser, importer, exporter)

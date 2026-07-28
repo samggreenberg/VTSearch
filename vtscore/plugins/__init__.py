@@ -278,6 +278,7 @@ _PLUGIN_NAME_SUFFIXES: tuple[str, ...] = (
 #: ``_is_plugin_family_base = True`` in their own ``__dict__``.
 _PLUGIN_FAMILY_BASE_NAMES: frozenset[str] = frozenset(
     {
+        "ImporterBase",
         "DatasetImporter",
         "LabelsetExporter",
         "LabelImporter",
@@ -288,6 +289,22 @@ _PLUGIN_FAMILY_BASE_NAMES: frozenset[str] = frozenset(
         "MediaConverter",
         "MediaSource",
         "SyncSource",
+    }
+)
+
+
+#: Generic emoji stamped directly onto each plugin-family's abstract base
+#: (e.g. :attr:`ImporterBase.icon`).  A concrete subclass that hasn't set
+#: its own ``icon`` inherits one of these through the MRO; treated as "no
+#: icon chosen" so :func:`_autoderive_plugin_metadata` can replace it with
+#: a distinguishing letter glyph instead (see :func:`_default_plugin_letter_icon`).
+_FAMILY_STOCK_ICONS: frozenset[str] = frozenset(
+    {
+        "\U0001f50c",  # dataset importer (plug)
+        "\U0001f4e4",  # labelset / settings exporter (outbox tray)
+        "\U0001f3f7️",  # label importer (label)
+        "\U0001f504",  # sync source (counterclockwise arrows)
+        "⚙️",  # settings importer (gear)
     }
 )
 
@@ -322,6 +339,27 @@ def _default_plugin_description(cls: type) -> str:
     return doc.splitlines()[0].strip()
 
 
+def _default_plugin_letter_icon(cls: type) -> str:
+    """Return the first alphabetic character of *cls*'s display name (or
+    its snake_case ``name`` as a fallback), upper-cased.
+
+    Gives every plugin a distinguishing default icon (a boxed capital
+    letter, rendered by the frontend's ``vt-icon`` component) without its
+    author having to design or pick one.  Returns ``""`` when neither
+    resolves to a usable string, e.g. a
+    :class:`~vtscore.converters.base.MediaConverter` subclass, whose
+    ``name`` / ``display_name`` are computed properties rather than plain
+    class attributes at ``__init_subclass__`` time.
+    """
+    for attr in ("display_name", "name"):
+        value = getattr(cls, attr, None)
+        if isinstance(value, str):
+            for ch in value:
+                if ch.isalpha():
+                    return ch.upper()
+    return ""
+
+
 def _mro_provides(cls: type, attr: str) -> bool:
     """Return True if any ancestor (above *cls*) already provides *attr*
     as a non-empty string or a descriptor (e.g. a ``property``).
@@ -343,8 +381,8 @@ def _mro_provides(cls: type, attr: str) -> bool:
 
 def _autoderive_plugin_metadata(cls: type) -> None:
     """Fill in default :attr:`name` / :attr:`display_name` /
-    :attr:`description` on *cls* when neither *cls* itself nor any
-    ancestor already provides them.
+    :attr:`description` / :attr:`icon` on *cls* when neither *cls* itself
+    nor any ancestor already provides them.
 
     Called from :meth:`PluginBase.__init_subclass__`.  Framework-level
     abstract bases (named in :data:`_PLUGIN_FAMILY_BASE_NAMES`) and
@@ -363,6 +401,12 @@ def _autoderive_plugin_metadata(cls: type) -> None:
         cls.display_name = _default_plugin_display_name(derived_name) if isinstance(derived_name, str) else ""
     if "description" not in cls.__dict__ and not _mro_provides(cls, "description"):
         cls.description = _default_plugin_description(cls)
+    if "icon" not in cls.__dict__:
+        current_icon = getattr(cls, "icon", "")
+        if not current_icon or current_icon in _FAMILY_STOCK_ICONS:
+            letter = _default_plugin_letter_icon(cls)
+            if letter:
+                cls.icon = letter
 
 
 class PluginBase:
@@ -371,8 +415,8 @@ class PluginBase:
 
     Default metadata
     ----------------
-    Subclasses that don't declare :attr:`name`, :attr:`display_name`, or
-    :attr:`description` get auto-derived defaults via
+    Subclasses that don't declare :attr:`name`, :attr:`display_name`,
+    :attr:`description`, or :attr:`icon` get auto-derived defaults via
     :meth:`__init_subclass__`:
 
     - :attr:`name`: class name with the trailing family suffix
@@ -381,6 +425,16 @@ class PluginBase:
       ``MyShinyExporter`` → ``"my_shiny"``.
     - :attr:`display_name`: title-cased :attr:`name`.
     - :attr:`description`: first line of the class docstring.
+    - :attr:`icon`: the first letter of :attr:`display_name`, upper-cased
+      (e.g. ``MyShinyExporter`` → ``"M"``).  The frontend renders any
+      single capital letter as a boxed letter-glyph icon, so a plugin
+      author who hasn't designed a custom icon still gets a
+      distinguishing default instead of every plugin in the family
+      sharing the same generic emoji.  This only fires when *cls* hasn't
+      set its own ``icon`` and would otherwise inherit either nothing
+      (``""``) or one of the generic family defaults (e.g.
+      :attr:`~vtscore.datasets.importers.base.core.ImporterBase.icon`);
+      an author is always free to set a fancier emoji or SVG-type string.
 
     Explicit declarations always win.  The defaults only fire when
     nothing further up the MRO already provides a string value or a
@@ -395,7 +449,9 @@ class PluginBase:
     display_name: str
     #: One-sentence description shown as a subtitle in the UI.
     description: str
-    #: Emoji or icon string shown next to the display name.
+    #: Emoji or icon string shown next to the display name.  Left unset,
+    #: this defaults to a boxed capital-letter glyph derived from
+    #: :attr:`display_name` (see "Default metadata" above).
     icon: str = ""
     #: Ordered list of fields the user must fill.
     fields: list[PluginField]

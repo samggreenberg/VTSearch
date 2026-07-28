@@ -19,7 +19,7 @@ captioner and wraps the tag provider as a fallback (model-load failure or a
 per-item decode failure degrades to tags, so a missing model download never
 leaves the map blank).
 
-Heavy model deps (torch / transformers / PIL / librosa) are imported **lazily
+Heavy model deps (torch / transformers / PIL) are imported **lazily
 inside the model seams** (:func:`_load_image_model` etc.), never at module load,
 so importing this module is cheap and the library tier stays import-clean.  The
 seams are module-level functions precisely so tests can stub the model without a
@@ -30,7 +30,6 @@ generated *text* is cached on the media dict.
 
 from __future__ import annotations
 
-import io
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -200,21 +199,21 @@ def _load_image(media: dict[str, Any]) -> Any | None:
 def _load_audio(media: dict[str, Any]) -> np.ndarray | None:
     """Decode an audio media dict to a mono 16 kHz waveform, or ``None``.
 
-    Mirrors the audio embedders' ``media_bytes`` | ``media_path`` → ``librosa``
+    Mirrors the audio embedders' ``media_bytes`` | ``media_path`` → ``decode_audio``
     branch; a missing/undecodable clip yields ``None`` and gets no caption.
     """
     blob = media.get("media_bytes")
     if isinstance(blob, (bytes, bytearray)) and blob:
-        source: Any = io.BytesIO(bytes(blob))
+        source: Any = bytes(blob)
     else:
         path = media.get("media_path")
         if not path:
             return None
         source = Path(path)
     try:
-        import librosa  # noqa: PLC0415
+        from vtscore.media.audio.decode import decode_audio  # noqa: PLC0415
 
-        wav, _sr = librosa.load(source, sr=_AUDIO_CAPTION_SR, mono=True)
+        wav, _sr = decode_audio(source, sr=_AUDIO_CAPTION_SR, mono=True)
         return np.asarray(wav, dtype=np.float32)
     except Exception:
         return None
@@ -239,6 +238,12 @@ class ImageCaptionProvider:
     prompt: str = QWEN_PROMPT
     max_new_tokens: int = 48
     batch_size: int = 8
+
+    @property
+    def text_kind(self) -> str:
+        from vtscore.projection.signpost_texts import KIND_CAPTION  # noqa: PLC0415
+
+        return KIND_CAPTION
 
     def signature(self, embedder: Any) -> str:
         # Captions are generated from pixels + prompt, independent of the media
@@ -277,6 +282,12 @@ class AudioCaptionProvider:
     name: str = "caption:whisper-audio"
     model_id: str = "MU-NLPC/whisper-small-audio-captioning"
     batch_size: int = 16
+
+    @property
+    def text_kind(self) -> str:
+        from vtscore.projection.signpost_texts import KIND_CAPTION  # noqa: PLC0415
+
+        return KIND_CAPTION
 
     def signature(self, embedder: Any) -> str:
         return self.name

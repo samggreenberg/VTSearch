@@ -15,6 +15,7 @@ from vtscore.media.base import (
     _noop_progress,
     demo_slice,
 )
+from vtscore.utils.hashing import content_md5
 
 if TYPE_CHECKING:
     import numpy as np
@@ -701,7 +702,6 @@ class VideoMediaType(MediaType):
         skip_embedding=False,
         **kwargs,
     ):
-        import hashlib  # noqa: PLC0415
 
         if on_progress is None:
             from vtscore.concurrency.progress import update_progress
@@ -783,7 +783,7 @@ class VideoMediaType(MediaType):
                 "embedder": embedder.name,
                 "duration": media_fields["duration"],
                 "file_size": len(video_bytes),
-                "md5": hashlib.md5(video_bytes).hexdigest(),
+                "md5": content_md5(video_bytes),
                 "embeddings": {} if skip_embedding else {embedder.name: embedding},
                 "media_bytes": video_bytes,
                 "thumbnail_bytes": media_fields.get("thumbnail_bytes"),

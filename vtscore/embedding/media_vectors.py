@@ -75,6 +75,10 @@ def init_embeddings(embedder_name: str | None, vec: Any) -> dict[str, Any]:
     * ``vec is None`` → ``{}`` (the deferred-embed placeholder a creation site
       uses when the vector is filled later by the embed stage via
       :func:`set_media_embedding`).
+    * ``vec`` is already a ``{embedder_name: vector}`` dict → a shallow copy of
+      it: a per-embedder ``vectors_<name>`` NPZ import supplies one vector per
+      bound embedder as a ready-made dict, and ``embedder_name`` (the primary)
+      is recorded separately on ``media["embedder"]`` by the caller.
     * vector present, ``embedder_name`` set → ``{embedder_name: vec}``.
     * vector present, ``embedder_name`` empty/``None`` → ``{UNKNOWN_EMBEDDER_KEY:
       vec}``: a pre-computed externally-supplied vector (``content_vectors`` /
@@ -86,6 +90,8 @@ def init_embeddings(embedder_name: str | None, vec: Any) -> dict[str, Any]:
     """
     if vec is None:
         return {}
+    if isinstance(vec, dict):
+        return dict(vec)
     return {embedder_name or UNKNOWN_EMBEDDER_KEY: vec}
 
 

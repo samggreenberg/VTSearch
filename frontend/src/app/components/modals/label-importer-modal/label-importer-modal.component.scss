@@ -112,3 +112,12 @@
     cursor: not-allowed;
   }
 }
+
+// Progress readout for the background auto-resolve of entries whose media
+// weren't in the dataset, so a long fetch reads as work in flight.
+.ingest-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  margin-top: var(--space-sm);
+}

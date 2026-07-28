@@ -34,6 +34,7 @@ __all__ = [
     "POPUP_PREVIEW_SIZE_PX",
     "AnimationMode",
     "BrowseColormap",
+    "BrowseGraphics",
     "BrowseIconSize",
     "FocusMode",
     "GridIconSize",
@@ -43,6 +44,7 @@ __all__ = [
     "VALID_ANIMATION_MODES",
     "coerce_animation_mode",
     "VALID_BROWSE_COLORMAPS",
+    "VALID_BROWSE_GRAPHICS",
     "VALID_BROWSE_ICON_SIZES",
     "VALID_FOCUS_MODES",
     "VALID_GRID_ICON_SIZES",
@@ -93,12 +95,22 @@ BrowseColormap = Literal["auto", "heat", "ocean", "gray"]
 # steps render a cell close to the full media, so the canvas serves the original
 # image rather than a low-res thumbnail at those sizes.
 BrowseIconSize = Literal["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"]
+# VTSBrowse canvas rendering effort. The browse canvas's pan/zoom animations
+# lean on operations a GPU does for free but a software rasterizer does not
+# (smoothed full-canvas blits, overscanned snapshot buffers, shadow blurs), so
+# a browser running without hardware acceleration pans and zooms badly.
+# ``full`` always runs the rich pipeline, ``reduced`` always runs the cheap one
+# (same animations, minus the effects a CPU rasterizer can't afford), and
+# ``auto`` (the default) picks per client — probing the WebGL renderer for a
+# software rasterizer and, failing that, latching on measured frame costs.
+BrowseGraphics = Literal["auto", "full", "reduced"]
 
 VALID_THEMES: tuple[str, ...] = ("dark", "light", "highviz", "system")
 VALID_ANIMATION_MODES: tuple[str, ...] = ("show", "hide", "os")
 VALID_GRID_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
 VALID_FOCUS_MODES: tuple[str, ...] = ("click", "hover")
 VALID_BROWSE_COLORMAPS: tuple[str, ...] = ("auto", "heat", "ocean", "gray")
+VALID_BROWSE_GRAPHICS: tuple[str, ...] = ("auto", "full", "reduced")
 VALID_BROWSE_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL")
 # Allowed range (CSS px) for the saved left/right panel widths. The floor keeps
 # a panel usable; the ceiling is a sanity bound only. The frontend resize logic
@@ -251,6 +263,33 @@ class ServerSettings(BaseModel):
     # :func:`vtsearch.settings.get_effective_support_email`.
     support_email: str = DEFAULT_SUPPORT_EMAIL
 
+    # Lock this deployment to **Semantic** embedders only.  The Patch Semantic
+    # and Structural embedder types are still prototypes; an operator running a
+    # production instance can hide them wholesale rather than naming each
+    # prototype embedder in ``hidden_plugins``.  When true, ``GET
+    # /api/embedders`` drops every patch/structural embedder (so the Add Dataset
+    # "Advanced" block shows no Region / Instance embedder pickers), the
+    # New-detector modal offers no embedder-type choice, and the dataset-load /
+    # detector-create routes reject a non-semantic type outright.  Set with the
+    # ``--semantic-only`` CLI flag / ``VTSEARCH_SEMANTIC_ONLY`` env var
+    # (process-wide, wins for the process lifetime) or by editing this key in
+    # the settings file.  See
+    # :func:`vtsearch.settings.get_effective_semantic_only`.
+    semantic_only: bool = False
+
+    # Solo-mediaType streamlining. An admin-set restriction: when set, the
+    # importer and new-detector flows hide their mediaType pickers and lock to
+    # this type, the converter picker filters to converters whose output is
+    # this type, and the mediaType-picking step in tabbed UIs is skipped.
+    # ``None`` (the default) means "show everything" (the non-streamlined
+    # experience). Users cannot change it - it exists so an operator can
+    # narrow the app down to the one media type their deployment is for,
+    # both to show less and to ask fewer questions. Set with the
+    # ``--solo-media-type`` CLI flag (process-wide, wins for the process
+    # lifetime) or by editing this key in the settings file. See
+    # :func:`vtsearch.settings.get_effective_solo_media_type`.
+    solo_media_type: str | None = None
+
     # Browse UMAP projection knobs (Stage 1).  They change the map layout, so
     # a per-deployment operator may want to tune them.  The persisted
     # projection is keyed on these values (see
@@ -258,6 +297,22 @@ class ServerSettings(BaseModel):
     # forces a recompute instead of serving a layout fit under the old params.
     projection_n_neighbors: Annotated[int, _clamp(2, 200)] = PROJECTION_N_NEIGHBORS
     projection_min_dist: Annotated[float, _clamp(0.0, 0.99)] = PROJECTION_MIN_DIST
+
+    # Per-media-type zero-shot tag vocabulary used to name map regions in Tags
+    # mode, replacing the built-in AudioSet-527 / OpenImages-600 lists (one
+    # entry per media type, a list of terms). Server-tier and read-only over
+    # the API: a term list is a deployment-level choice an operator makes for
+    # the whole instance (a domain-specific taxonomy — bird species, machine
+    # faults, product categories), not a preference an individual arrives
+    # with, and every user of an instance should read the same region names.
+    # Set it by editing this key in the settings file. Normalized on write
+    # (trimmed, de-duplicated, capped at
+    # :data:`SIGNPOST_VOCAB_MAX_TERMS`); a media type with an empty or absent
+    # list falls back to the shipped vocabulary. Takes effect on the next
+    # projection build / Re-project, since signpost texts are cached.
+    browse_signpost_vocab: Annotated[dict[str, list[str]], BeforeValidator(_normalize_signpost_vocab)] = Field(
+        default_factory=dict
+    )
 
     # Deployment-wide default settings sync source. Same
     # ``{"source_name": ..., "field_values": ...}`` shape as the per-user
@@ -365,6 +420,17 @@ class UserSettings(BaseModel):
     # sane on-screen range.
     browse_details_metadata_width: Annotated[int, _clamp(120, 600)] = 150
 
+    # VTSBrowse canvas rendering effort. Unlike the per-media-type prefs below
+    # this is a single scalar, because it describes the *client's* rendering
+    # capability rather than anything about the data: a browser without
+    # hardware acceleration rasterizes every canvas paint on the CPU, where the
+    # animation pipeline's smoothed full-canvas blits, overscanned snapshots and
+    # shadow blurs cost tens of ms per frame and make pan/zoom lag. ``reduced``
+    # keeps every animation but strips those effects; ``full`` always runs the
+    # rich pipeline; ``auto`` (the default) detects per client. Surfaced as the
+    # "Graphics" pulldown at the top of the Settings -> Browser tab.
+    browse_graphics: BrowseGraphics = "auto"
+
     # VTSBrowse per-media-type display preferences. Each is a
     # ``{media_type_id: value}`` dict so a user can tune the projection
     # browser independently for, say, audio vs. image datasets. Empty
@@ -416,15 +482,6 @@ class UserSettings(BaseModel):
     #   from the generative captioner (image VLM / audio captioner) instead of
     #   the default zero-shot tags. Empty entries fall back to tags (false).
     browse_signpost_captioner: dict[str, bool] = Field(default_factory=dict)
-    # - ``browse_signpost_vocab``: per-media-type user-supplied zero-shot tag
-    #   vocabulary (one entry per media type, a list of terms) that replaces the
-    #   built-in AudioSet-527 / OpenImages-600 lists when naming map regions in
-    #   Tags mode. Normalized on write (trimmed, de-duplicated, capped); an empty
-    #   or absent list falls back to the shipped vocabulary. Takes effect on the
-    #   next projection build / Re-project, since signpost texts are cached.
-    browse_signpost_vocab: Annotated[dict[str, list[str]], BeforeValidator(_normalize_signpost_vocab)] = Field(
-        default_factory=dict
-    )
 
     grid_icon_size_left: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     grid_icon_size_right: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
@@ -465,7 +522,8 @@ class UserSettings(BaseModel):
     # metadata on top, the bin's member grid below) instead of the floating
     # right-click popup window. Driven by the dock button on the floating
     # window and the pop-out button on the docked panel; empty entries fall
-    # back to the floating window (false).
+    # back to the docked left panel (true) — the pop-out button persists an
+    # explicit ``false`` for a media type the user chose to float instead.
     bin_details_docked: dict[str, bool] = Field(default_factory=dict)
     panel_pct_left: dict[str, int] = Field(default_factory=dict)
     panel_pct_right: dict[str, int] = Field(default_factory=dict)
@@ -492,21 +550,6 @@ class UserSettings(BaseModel):
     #     }
     # Any missing sub-key falls back to the importer's existing default.
     import_defaults_by_media_type: dict[str, dict[str, Any]] = Field(default_factory=dict)
-
-    # Solo-mediaType streamlining. When set, the importer and new-detector
-    # flows hide their mediaType pickers and lock to this type, the converter
-    # picker filters to converters whose output is this type, and the
-    # mediaType-picking step in tabbed UIs is skipped. ``None`` means "show
-    # everything" (the default, non-streamlined experience).
-    #
-    # Resolution at read time is ``solo_media_type`` if
-    # ``solo_media_type_explicit`` is True, else the process-level CLI
-    # fallback (``settings.set_cli_solo_media_type``), else None. The
-    # ``explicit`` flag is set to True whenever the user changes the value
-    # through the settings UI - so once a user opts out (sets it to None),
-    # the CLI flag no longer reapplies on future launches for that user.
-    solo_media_type: str | None = None
-    solo_media_type_explicit: bool = False
 
     # Solo mediaEmbedder streamlining (per mediaType). When a media-type id
     # appears as a key here, the dataset-importer modal hides its embedder

@@ -562,19 +562,65 @@ PUT /api/datasets/registry/{dataset_id}/rename
 GET /api/datasets/registry/{dataset_id}/stats
 ```
 
-Returns ingest statistics for a registered dataset.
+Returns registry and ingest statistics for a registered dataset. The
+response is a superset of the Dashboard grid's row (`name`, `media_type`,
+`num_items`, `created_at`, `expires_at`, `created_by`, `readers`), so the
+Stats window can show everything the grid does while it covers the grid up.
 
 → ```json
 {
+  "name": "Field recordings",
+  "media_type": "audio",
   "num_items": 1250,
   "num_dupes": 45,
-  "file_type_counts": {"audio/wav": 800, "audio/mp3": 450},
-  "ingest_started_at": "2025-03-31T10:15:00",
-  "ingest_finished_at": "2025-03-31T10:45:00"
+  "file_type_counts": {"wav": 800, "mp3": 450},
+  "created_at": 1743415500.0,
+  "expires_at": null,
+  "created_by": "alice",
+  "readers": ["bob"],
+  "ingest_started_at": 1743413700.0,
+  "ingest_finished_at": 1743415500.0,
+  "origin": "server_folder",
+  "source": {"importer": "server_folder", "params": {"path": "/data/sounds"}},
+  "clipper": "5 seconds",
+  "embedder": "clap"
 }
 ```
 
+`expires_at` is `null` when the dataset never ages off.
+
 404 if the dataset does not exist.
+
+### Dataset duplicates
+
+```
+GET /api/datasets/registry/{dataset_id}/duplicates
+```
+
+Returns the collapsed duplicate sets of a **loaded** dataset, expanded to
+their full membership so the caller can see which items were collapsed
+together and where each one came from. Each set corresponds to one
+`dupe_set` representative in the dataset's in-memory context; exact-dupe
+members share the representative's MD5, near-dupe members keep their own.
+
+→ ```json
+{
+  "duplicate_sets": [
+    {
+      "name": "a.wav",
+      "members": [
+        {"md5": "abc123", "filename": "a.wav", "category": "dogs",
+         "origin_name": "a.wav", "importer": "server_folder"},
+        {"md5": "abc123", "filename": "b.wav", "category": "pets",
+         "origin_name": "b.wav", "importer": "http_archive"}
+      ]
+    }
+  ]
+}
+```
+
+400 if the dataset isn't loaded (duplicate provenance lives only in memory);
+403 if access is denied; 404 if the dataset does not exist.
 
 ### Set dataset readers
 

@@ -12,7 +12,6 @@ active dataset without hands-on verification.
 
 from __future__ import annotations
 
-import hashlib
 import time
 
 import numpy as np
@@ -23,6 +22,7 @@ from vtscore.state.core import (
     register_context,
     set_thread_dataset_context,
 )
+from vtscore.utils.hashing import content_md5
 
 
 def _make_media(media_id: int, *, seed_offset: int = 0, shifted: bool = False) -> dict:
@@ -45,7 +45,7 @@ def _make_media(media_id: int, *, seed_offset: int = 0, shifted: bool = False) -
         "embedder": "clap",
         "duration": 1.0,
         "file_size": 100,
-        "md5": hashlib.md5(f"atlas_{seed_offset}_{media_id}".encode()).hexdigest(),
+        "md5": content_md5(f"atlas_{seed_offset}_{media_id}".encode()),
         "embeddings": {"clap": emb},
         "media_bytes": b"fake",
         "filename": f"atlas_{media_id}.wav",

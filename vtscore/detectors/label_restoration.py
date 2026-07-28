@@ -7,6 +7,8 @@ resolving origin files for cross-dataset scenarios.
 
 from __future__ import annotations
 
+from vtscore.utils.hashing import file_md5
+
 
 def _resolve_unmatched(unresolved: list, md5_lookup: dict[str, list[int]]) -> int:
     """Resolve unmatched labelset entries from their origin files.
@@ -19,7 +21,6 @@ def _resolve_unmatched(unresolved: list, md5_lookup: dict[str, list[int]]) -> in
 
     Returns the number of labels restored via this fallback path.
     """
-    import hashlib
     import logging
 
     from vtscore.detectors.resolver import resolve_file_context
@@ -39,11 +40,7 @@ def _resolve_unmatched(unresolved: list, md5_lookup: dict[str, list[int]]) -> in
 
             # Compute MD5 of the resolved file and check against loaded medias
             try:
-                h = hashlib.md5()
-                with open(resolved_path, "rb") as f:
-                    for chunk in iter(lambda: f.read(8192), b""):
-                        h.update(chunk)
-                resolved_md5 = h.hexdigest()
+                resolved_md5 = file_md5(resolved_path)
             except OSError:
                 _log.debug("restore-labels: could not read resolved file %s", resolved_path)
                 continue
@@ -82,7 +79,7 @@ def restore_labels_from_detector(det_data: dict) -> int:
     from vtscore.datasets.labelset import LabeledElement, LabelSet
     from vtscore.state import (
         apply_label,
-        build_media_lookup,
+        cached_media_lookups,
         resolve_media_ids,
         snapshot_medias,
     )
@@ -99,7 +96,7 @@ def restore_labels_from_detector(det_data: dict) -> int:
     if not snap:
         return 0
 
-    origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
+    origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
 
     restored = 0
     unresolved: list[LabeledElement] = []  # elements needing origin resolution

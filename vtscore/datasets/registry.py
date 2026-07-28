@@ -151,6 +151,7 @@ def register_dataset(
     clipper: str = "",
     embedder: str = "",
     embedder_types: list[str] | None = None,
+    bound_embedders: list[str] | None = None,
     created_by: str = "default",
     readers: list[str] | None = None,
     file_type_counts: dict[str, int] | None = None,
@@ -173,14 +174,20 @@ def register_dataset(
     """
     import uuid
 
+    # The concrete embedder *names* this dataset binds (a v3 trio dataset carries
+    # several; a legacy dataset just its single primary).  Stored — names only,
+    # never vectors — so the combine flow can detect per-type embedder conflicts
+    # without loading each dataset.  Falls back to the single primary embedder.
+    if bound_embedders is None:
+        bound_embedders = [embedder] if embedder else []
+
     # The embedder *types* this dataset supplies (drives detector/dataset
     # compatibility gating without loading the dataset).  Callers that know the
-    # full bound set pass it; otherwise classify the single primary embedder.
+    # full bound set pass it; otherwise classify the bound embedder names.
     if embedder_types is None:
-        from vtscore.embedding.binding import embedder_type
+        from vtscore.embedding.binding import dataset_supplied_types
 
-        t = embedder_type(embedder)
-        embedder_types = [t] if t else []
+        embedder_types = sorted(dataset_supplied_types(bound_embedders))
 
     now = time.time()
     entry: dict[str, Any] = {
@@ -195,6 +202,7 @@ def register_dataset(
         "clipper": clipper,
         "embedder": embedder,
         "embedder_types": embedder_types,
+        "bound_embedders": bound_embedders,
         "created_by": created_by,
         "created_at": now,
         "readers": readers or [],
@@ -219,7 +227,13 @@ def register_dataset(
 
 
 def unregister_dataset(dataset_id: str) -> bool:
-    """Remove a dataset from the registry and delete its pkl file.
+    """Remove a dataset from the registry and delete its pkl file plus any sidecars.
+
+    Every file in the pkl's directory sharing its stem (e.g. an mmap embedding
+    sidecar) is deleted alongside it: the stem is a random uuid
+    (``ds_<uuid>``), so this can never collide with another dataset's files,
+    and any current or future sidecar convention is swept without needing a
+    separate registry field to track it.
 
     Returns ``True`` if the dataset was found and removed.
     """
@@ -229,7 +243,8 @@ def unregister_dataset(dataset_id: str) -> bool:
             if entry["id"] == dataset_id:
                 pkl = Path(entry.get("pkl_path", ""))
                 if pkl.is_file():
-                    pkl.unlink(missing_ok=True)
+                    for sibling in pkl.parent.glob(f"{pkl.stem}.*"):
+                        sibling.unlink(missing_ok=True)
                 entries.pop(i)
                 return True
         return False

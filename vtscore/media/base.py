@@ -363,6 +363,12 @@ class MediaType(ABC):
         Importers can additionally set ``media["custom_metadata"]`` to
         supply per-item fields (e.g. ``{"Uploaded By": "alice"}``).  The
         API route merges both sources before sending the response.
+
+        A dataset prepped for Browse already carries a model-generated
+        signpost text per media (the caption / tag list that letters the
+        map); the base implementation surfaces it here under an explicitly
+        hedged label so the work is visible in the labeling UI too.  See
+        :func:`vtscore.projection.signpost_texts.signpost_metadata_entry`.
         """
         result: dict[str, Any] = {}
         cat = media.get("category")
@@ -384,6 +390,14 @@ class MediaType(ABC):
         ci = media.get("clip_index")
         if ci is not None:
             result["Clip Index"] = ci
+        # Imported here rather than at module scope: the signpost text layer
+        # reaches back into the media types to decode items, so an eager
+        # import would close a cycle.
+        from vtscore.projection.signpost_texts import signpost_metadata_entry  # noqa: PLC0415
+
+        entry = signpost_metadata_entry(media)
+        if entry is not None:
+            result[entry[0]] = entry[1]
         return result
 
     # ------------------------------------------------------------------

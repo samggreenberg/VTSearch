@@ -8,7 +8,6 @@ out from :mod:`vtscore.datasets.loader` for navigability.
 from __future__ import annotations
 
 import gc
-import hashlib
 import logging
 from pathlib import Path
 from typing import Any, Iterator
@@ -17,6 +16,7 @@ from vtscore.datasets.loader import (
     ProgressCallback,
 )
 from vtscore.embedding.normalize import l2_normalize
+from vtscore.utils.hashing import content_md5
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +133,23 @@ def _load_pickle_media_payload(
         return f.read(), None, str(ext_path.resolve()), False
 
 
+def _restore_signpost_text(media_data: dict[str, Any], media_info: dict[str, Any]) -> None:
+    """Carry a pickled signpost text (+ its signature and kind) onto the media.
+
+    Written at ingest by the signpost-texts stage; restoring it is what makes
+    a later browse (or Find→Browse re-fit) skip the caption/tag models, and
+    what keeps the item's "AI Caption" / "AI Tags" metadata row across a
+    reload.  Absent fields are left off entirely rather than set to ``None``,
+    so an unprepped dataset's medias keep the shape they had before.
+    """
+    from vtscore.projection.signpost_texts import PERSISTED_FIELDS  # noqa: PLC0415
+
+    for field in PERSISTED_FIELDS:
+        value = media_info.get(field)
+        if value:
+            media_data[field] = value
+
+
 def _build_pickle_thin_media(
     new_id: int,
     media_info: dict[str, Any],
@@ -163,6 +180,7 @@ def _build_pickle_thin_media(
     cm = media_info.get("custom_metadata")
     if cm:
         media_data["custom_metadata"] = cm
+    _restore_signpost_text(media_data, media_info)
     return media_data
 
 
@@ -183,7 +201,7 @@ def _build_pickle_full_media(
         "embedder": media_info.get("embedder", ""),
         "duration": media_info.get("duration", 0),
         "file_size": media_info.get("file_size", len(media_bytes)),
-        "md5": media_info.get("md5") or hashlib.md5(media_bytes).hexdigest(),
+        "md5": media_info.get("md5") or content_md5(media_bytes),
         "embeddings": _load_embeddings_dict(media_info),
         "media_bytes": media_bytes,
         "media_string": media_string,
@@ -198,6 +216,7 @@ def _build_pickle_full_media(
     cm = media_info.get("custom_metadata")
     if cm:
         media_data["custom_metadata"] = cm
+    _restore_signpost_text(media_data, media_info)
     return media_data
 
 

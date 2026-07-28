@@ -331,12 +331,33 @@ def _fit_topic_layers(
     ]
 
 
+def _region_is_covered(members: np.ndarray, adjacent: np.ndarray | None) -> bool:
+    """Whether a topic's *members* fall mostly inside a named cluster of *adjacent*.
+
+    *adjacent* is a coarser- or finer-layer per-row topic assignment (``-1`` =
+    noise), or ``None`` when there is no such layer (this topic sits at the
+    pyramid's edge — the coarsest or finest layer).  Returns ``True`` when a
+    majority of *members* are named (topic index ``>= 0``) there, i.e. some
+    coarser/finer sign covers this region and the canvas has a name to hand off
+    to.  ``None`` or an all-noise adjacent layer means nothing covers the region
+    → the sign is terminal on that side and must not fade there.
+    """
+    if adjacent is None or members.size == 0:
+        return False
+    named = int(np.count_nonzero(adjacent[members] >= 0))
+    return named * 2 >= members.size
+
+
 def _clusterable_vectors(matrix: np.ndarray, on_progress: ProgressFn | None = None) -> np.ndarray:
     """The dedicated ~5-D cosine UMAP Toponymy clusters on (not the 2-D layout)."""
     import umap  # noqa: PLC0415
 
     if on_progress is not None:
         on_progress(0, 0, "Clustering regions…")
+    # Force an owned, writable copy: *matrix* may be a read-only mmap view
+    # (S1's embedding-matrix sidecar, docs/plans/scalability.md), and UMAP
+    # doesn't guarantee it never writes to its input in place.
+    matrix = np.array(matrix, dtype=np.float32, copy=True, order="C")
     n_components = min(_CLUSTER_DIM, matrix.shape[1], max(2, matrix.shape[0] - 2))
     reducer = umap.UMAP(n_components=n_components, metric="cosine")
     return np.asarray(reducer.fit_transform(matrix), dtype=np.float32)
@@ -394,6 +415,12 @@ def build_region_labels(
     labels: list[RegionLabel] = []
     for i, (names, cluster_labels) in enumerate(layers):
         level = (n_layers - 1 - i) * _LEVEL_STEP
+        # Layers come back finest-first (index 0), so a *finer* sign lives at
+        # ``i-1`` and a *coarser* one at ``i+1``.  A topic whose members are
+        # noise (unnamed) in an adjacent layer has no sign to hand off to on
+        # that side, and the canvas keeps such terminal signs visible there.
+        finer = layers[i - 1][1] if i > 0 else None
+        coarser = layers[i + 1][1] if i + 1 < n_layers else None
         for topic_idx, name in enumerate(names):
             text = str(name).strip()
             if not text:
@@ -410,6 +437,8 @@ def build_region_labels(
                     text=text,
                     score=float(members.size),
                     source=source,
+                    has_coarser=_region_is_covered(members, coarser),
+                    has_finer=_region_is_covered(members, finer),
                 )
             )
 

@@ -176,61 +176,14 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  /** Value shown in the "Solo media type" select. Empty string means
-   *  "Show everything"; otherwise it's the type_id. We display the
-   *  user's explicit choice when set, falling back to the CLI's
-   *  effective value so a fresh user sees what the streamlined mode is
-   *  currently locking them to (rather than a misleading empty state). */
-  get soloMediaTypeSelectValue(): string {
-    const settings = this.settings();
-    const explicit = settings.solo_media_type_explicit;
-    if (explicit) {
-      return settings.solo_media_type || '';
-    }
-    return settings.effective_solo_media_type || '';
-  }
-
-  /** Hint text under the solo-mediaType select. Surfaces "from
-   *  ``--solo-media-type``" when the value comes from the CLI fallback
-   *  so the user understands why the picker is non-empty without ever
-   *  having touched it. */
-  get soloMediaTypeNote(): string {
-    const settings = this.settings();
-    const explicit = settings.solo_media_type_explicit;
-    const effective = settings.effective_solo_media_type || '';
-    if (!explicit && effective) {
-      return `Currently set to ${effective} by the --solo-media-type CLI flag. ` +
-        'Choose any value here to override it.';
-    }
-    return '';
-  }
-
-  /** Always-present help for the solo-mediaType select, spelling out
-   *  exactly what the lock constrains (so it isn't a mystery toggle), plus
-   *  the CLI-fallback note when one applies. */
-  get soloMediaTypeHint(): string {
-    const base =
-      'Streamlines the whole app to one media type. The Add Dataset picker ' +
-      'hides importers and tabs that can’t produce it and preselects it ' +
-      'on the ones that can; the New Detector media picker and the Import ' +
-      'Defaults tab collapse to just this type; and converters that output ' +
-      'other types are filtered out. Pick "Show everything" to turn it off.';
-    const note = this.soloMediaTypeNote;
-    return note ? `${base} ${note}` : base;
-  }
-
-  onSoloMediaTypeChange(value: string): void {
-    // Empty string = "Show everything"; the backend stores it as null
-    // and still flips the explicit flag so the choice survives a CLI
-    // fallback on the next launch.
-    const next = value || null;
-    this.settings.update((s) => ({
-      ...(s as Record<string, unknown>),
-      solo_media_type: next,
-      solo_media_type_explicit: true,
-      effective_solo_media_type: next,
-    }) as AppSettings);
-    this.save();
+  /** Display name of the admin-set solo media type for the read-only
+   *  Server settings row. Falls back to the raw type_id when the registry
+   *  hasn't loaded (or no longer carries the type), and to "Show
+   *  everything" when no restriction is in force. */
+  get soloMediaTypeDisplay(): string {
+    const value = this.effectiveSoloMediaType;
+    if (!value) return 'Show everything';
+    return this.mediaTypes().find((mt) => mt.type_id === value)?.name || value;
   }
 
   /** Embedder options for a given media type, used by the per-type
@@ -281,8 +234,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     const userMap = { ...(settings.solo_embedder_per_media_type || {}) };
     // Empty value = "Ask each time". Persist it as the opt-out sentinel
     // (an empty-string entry) so it overrides any ``--solo-embedder``
-    // CLI fallback for this type; same pattern as solo_media_type's
-    // explicit-null override of --solo-media-type.
+    // CLI fallback for this type.
     userMap[typeId] = value || '';
     // Optimistically update the effective map so the dropdown reflects
     // the new choice immediately; the PUT response will replace it with
@@ -421,6 +373,29 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
+  /**
+   * Canvas rendering effort for the Browse map. Unlike the rest of the Browser
+   * tab this is one global scalar, not a per-media-type map: it describes the
+   * client's rendering capability, not anything about the data. Falls back to
+   * ``auto`` (detect per client) for unset or unrecognized values.
+   */
+  get browseGraphics(): 'auto' | 'full' | 'reduced' {
+    const value = this.settings().browse_graphics;
+    return value === 'full' || value === 'reduced' ? value : 'auto';
+  }
+
+  /**
+   * Persist the Graphics pulldown. ``reduced`` keeps every browse animation but
+   * drops the effects a CPU rasterizer can't afford (smoothed blits, overscan
+   * buffers, shadow blurs); ``full`` always runs the rich pipeline; ``auto``
+   * probes the client. The canvas picks the change up live.
+   */
+  onBrowseGraphicsChange(mode: string): void {
+    const m = mode as AppSettings['browse_graphics'];
+    this.settings.update((s) => ({ ...s, browse_graphics: m }));
+    this.save();
+  }
+
   /** Mouse-zooms per pyramid level for *typeId* (1..3), defaulting to 2 when
    *  the user hasn't set one for this media type. This is how many wheel notches
    *  / +/- clicks it takes to cross one pyramid level. */
@@ -508,39 +483,6 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  /** Media types whose Tags signposts draw from an editable tag vocabulary
-   *  (image / audio; text uses its own content). Same set as the captioner
-   *  toggle today, but a distinct predicate so the two stay independent. */
-  browseTabHasTagVocab(typeId: string): boolean {
-    return typeId === 'image' || typeId === 'audio';
-  }
-
-  /** The custom signpost vocabulary for *typeId* as newline-joined text for the
-   *  textarea; empty when none is set (the built-in list is in use). */
-  getBrowseSignpostVocabText(typeId: string): string {
-    const dict = this.settings().browse_signpost_vocab as Record<string, string[]> | undefined;
-    return (dict?.[typeId] ?? []).join('\n');
-  }
-
-  /** Parse the textarea (one term per line) into a custom vocabulary and
-   *  persist. Blank/whitespace input clears the override, restoring the
-   *  built-in list. The backend re-trims and de-duplicates on write; regions
-   *  re-name on the next projection build / Re-project. */
-  onBrowseSignpostVocabChange(typeId: string, text: string): void {
-    const terms = text
-      .split('\n')
-      .map((t) => t.trim())
-      .filter((t) => t.length > 0);
-    const dict = { ...((this.settings().browse_signpost_vocab as Record<string, string[]> | undefined) || {}) };
-    if (terms.length > 0) {
-      dict[typeId] = terms;
-    } else {
-      delete dict[typeId];
-    }
-    this.settings.update((s) => ({ ...(s as Record<string, unknown>), browse_signpost_vocab: dict }) as AppSettings);
-    this.save();
-  }
-
   // --- Browser tab: right-click bin-popup thumbnail size ---
   // The bin popup keeps its own per-media-type thumbnail size
   // (``grid_icon_size_popup``), independent of the left/right panels. The
@@ -581,16 +523,12 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  /** Effective solo-mediaType for the import-defaults tab: collapses
-   *  the per-mediaType picker to a single tab when the user is in solo
-   *  mode (so they only configure what they'll actually import). */
+  /** The admin-set solo mediaType in force, or ``null`` when the server
+   *  isn't restricting one. The import-defaults tab uses it to collapse
+   *  the per-mediaType picker to a single tab (so the user only configures
+   *  what they can actually import). */
   get effectiveSoloMediaType(): string | null {
-    const settings = this.settings();
-    const explicit = settings.solo_media_type_explicit;
-    if (explicit) {
-      return settings.solo_media_type || null;
-    }
-    return settings.effective_solo_media_type || null;
+    return this.settings().solo_media_type || null;
   }
 
   /** Configured Auto-Find results-exporter name (''=none), read from the
@@ -631,6 +569,34 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
       .filter((family) => (raw[family] || []).length > 0)
       .sort()
       .map((family) => ({ family, names: (raw[family] || []).join(', ') }));
+  }
+
+  /** How many signpost terms the Server tab lists inline before eliding the
+   *  rest. An operator vocabulary can run to hundreds of terms (the backend
+   *  caps it at 2000), which would otherwise bury the rest of the tab. */
+  private static readonly SIGNPOST_VOCAB_PREVIEW_TERMS = 12;
+
+  /** The server's custom signpost vocabulary flattened to
+   *  ``[{mediaType, terms}]`` rows (sorted by media type, empty entries
+   *  dropped) for the read-only Server tab. Long lists are elided to the first
+   *  {@link SIGNPOST_VOCAB_PREVIEW_TERMS} terms plus a total count. */
+  get signpostVocabDisplay(): { mediaType: string; terms: string }[] {
+    const raw = (this.settings() as Record<string, unknown>)['browse_signpost_vocab'] as
+      | Record<string, string[]>
+      | undefined;
+    if (!raw) return [];
+    const limit = SettingsModalComponent.SIGNPOST_VOCAB_PREVIEW_TERMS;
+    return Object.keys(raw)
+      .filter((mediaType) => (raw[mediaType] || []).length > 0)
+      .sort()
+      .map((mediaType) => {
+        const all = raw[mediaType] || [];
+        const shown = all.slice(0, limit).join(', ');
+        return {
+          mediaType,
+          terms: all.length > limit ? `${shown} … (${all.length} terms)` : shown,
+        };
+      });
   }
 
   async resetDefaults(): Promise<void> {

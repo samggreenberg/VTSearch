@@ -77,6 +77,12 @@ phase, so consumers should prefer it for the progress bar and fall back to
 `dataset_id`, `detector_id`, `media_type`, `embedder` are only present
 when the task carries that information.
 
+Some tasks add a terminal result payload, `null` until they finish:
+combine-datasets staging publishes `staging_result`, and a labelset-media
+ingest (see [detectors.md](detectors.md) and [io.md](io.md)) publishes
+`ingest_result` — `{"ingested", "applied", "unresolved", "failed"}`, with only
+`ingested` present on the detector-import path.
+
 ## Frame format
 
 ```

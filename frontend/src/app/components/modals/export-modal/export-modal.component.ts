@@ -418,6 +418,7 @@ export class ExportModalComponent implements OnInit {
     if (
       field.field_type === 'select' &&
       !field.dynamic_options &&
+      !field.allow_free_text &&
       (field.options?.length ?? 0) > 0
     ) {
       return field.options![0];

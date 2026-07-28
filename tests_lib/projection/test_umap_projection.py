@@ -70,6 +70,17 @@ def test_ids_length_mismatch_raises():
         fit_projection(_matrix(5, 8), [1, 2, 3])
 
 
+def test_accepts_read_only_matrix():
+    """S1's embedding-matrix sidecar (docs/plans/scalability.md) hands
+    ``fit_projection`` a read-only mmap array; it must be copied internally
+    rather than crashing or silently trying to write through it."""
+    matrix = _matrix(6, 8, seed=3)
+    matrix.setflags(write=False)
+    proj = fit_projection(matrix, [10, 11, 12, 13, 14, 15], min_n_for_umap=10)
+    assert proj.method == "pca"
+    assert np.isfinite(proj.coords).all()
+
+
 def test_umap_fit_shape_and_metadata():
     # A real (seeded, reproducible) UMAP fit on a small synthetic set.
     n, d = 60, 12

@@ -143,6 +143,43 @@ class TestBuildCategorySignposts:
         assert {round(lab.level, 2) for lab in ls.labels} == {0.0}
         assert {lab.text for lab in ls.labels} == {"dog"}
 
+    def test_terminal_flags_track_the_prefix_tree(self):
+        medias, proj = self._hierarchical_medias()
+        ls = build_category_signposts(proj, medias)
+        by_text = {lab.text: lab for lab in ls.labels}
+        # Continents are roots (no parent) but have countries below them.
+        assert by_text["Europe"].has_coarser is False
+        assert by_text["Europe"].has_finer is True
+        # Countries have both a continent above and cities below.
+        assert by_text["EuropeCo1"].has_coarser is True
+        assert by_text["EuropeCo1"].has_finer is True
+        # Cities are leaves (no finer prefix) sitting under a country.
+        assert by_text["EuropeCo1City1"].has_coarser is True
+        assert by_text["EuropeCo1City1"].has_finer is False
+
+    def test_flat_category_sign_is_fully_terminal(self):
+        medias = {i + 1: {"category": "dog"} for i in range(4)}
+        proj = _proj(list(medias.keys()), np.zeros((4, 2)))
+        (only,) = build_category_signposts(proj, medias).labels
+        assert only.has_coarser is False  # depth 0
+        assert only.has_finer is False  # no child prefix
+
+    def test_leaf_when_every_child_prefix_is_pruned_as_singleton(self):
+        # "Region" has two members (earns a sign) but each of its child cities
+        # has a single item and is pruned below _MIN_MEMBERS. With no child sign
+        # to hand off to, "Region" is a leaf even though the path goes deeper.
+        # (Multi-char segments so clean_category_path keeps the first one.)
+        medias = {
+            1: {"category": "Land/Region/Solo"},
+            2: {"category": "Land/Region/Other"},
+        }
+        proj = _proj([1, 2], [[0, 0], [1, 1]])
+        ls = build_category_signposts(proj, medias)
+        by_text = {lab.text: lab for lab in ls.labels}
+        assert "Solo" not in by_text and "Other" not in by_text
+        assert by_text["Region"].has_finer is False  # both children pruned → leaf
+        assert by_text["Region"].has_coarser is True  # sits under "Land"
+
 
 class TestSyntheticToponymyDemo:
     def test_generator_is_deterministic(self):

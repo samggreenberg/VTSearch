@@ -38,6 +38,7 @@ from vtscore.datasets.load_pipeline import (
     _stage_importer_in_background,
 )
 from vtscore.datasets.registry import (
+    find_by_pkl_path as _reg_find_by_pkl,
     get_dataset as _reg_get,
     get_saved_datasets_dir,
     register_dataset as _reg_register,
@@ -45,6 +46,7 @@ from vtscore.datasets.registry import (
 from vtsearch.auth import get_current_user
 from vtsearch.routes._shared import (
     _normalise_option,
+    abort_if_semantic_only_embedders,
     get_plugin_or_404,
     register_plugin_typed_routes,
     validate_plugin_args,
@@ -89,15 +91,57 @@ def available_dataset_files():
     return {"files": files}
 
 
+def _bound_embedders_for_path(path: str) -> list[str]:
+    """The concrete embedders a to-be-combined dataset binds, for conflict checks.
+
+    Reads the persisted ``bound_embedders`` off the registry entry whose pkl this
+    path names (falling back to its single legacy ``embedder``).  A path with no
+    registry entry (a raw staged / demo pkl) returns ``[]`` — its embedders are
+    unknown without loading it, so it contributes nothing to conflict detection.
+    """
+    entry = _reg_find_by_pkl(path)
+    if entry is None:
+        return []
+    bound = entry.get("bound_embedders")
+    if bound:
+        return [str(n) for n in bound if n]
+    emb = entry.get("embedder")
+    return [emb] if emb else []
+
+
+def _abort_if_semantic_only(field_values: dict) -> None:
+    """400 when *field_values* names a patch/structural embedder under the lock.
+
+    Covers both slots the importer body can carry: the scalar ``embedder``
+    (primary) and the ``embedders`` trio, which arrives as a JSON array string
+    on multipart bodies and a real list on JSON ones.
+    """
+    from vtscore.datasets.load_pipeline import _parse_embedder_list  # noqa: PLC0415
+
+    names = [str(field_values.get("embedder") or "")]
+    names.extend(_parse_embedder_list(field_values.get("embedders")) or [])
+    abort_if_semantic_only_embedders(names)
+
+
 @datasets_staging_bp.route("/api/dataset/combine", methods=["POST"])
 @datasets_staging_bp.arguments(DatasetCombineRequestSchema)
 @datasets_staging_bp.response(200, DatasetLoadStartedResponseSchema)
-@datasets_staging_bp.alt_response(400, description="Invalid or missing dataset path.")
+@datasets_staging_bp.alt_response(400, description="Invalid path, or an unresolved embedder conflict.")
 @datasets_staging_bp.alt_response(500, description="The combine_datasets importer is unavailable.")
 def combine_datasets_route(body: dict):
-    """Combine multiple pickle datasets in a background thread."""
+    """Combine multiple pickle datasets in a background thread.
+
+    When the sources bind conflicting embedders of the same type (e.g. one
+    ``siglip`` dataset and one ``clip`` dataset, both semantic), the caller must
+    settle each conflict via ``resolutions`` — re-embed every source to one
+    winner, or drop that embedder type from the result.  An unresolved conflict
+    is refused (400) rather than silently producing a mixed vector space; the
+    Combine-Datasets modal detects the conflicts client-side and collects the
+    resolutions before posting here.
+    """
     dataset_paths = body["datasets"]
     name = str(body.get("name", "") or "").strip()
+    resolutions = body.get("resolutions") or {}
 
     _base = _paths.get_file_access_base_dir()
     for p in dataset_paths:
@@ -112,7 +156,33 @@ def combine_datasets_route(body: dict):
     if importer is None:
         abort(500, message="combine_datasets importer not available")
 
-    task_id = _run_importer_in_background(importer, {"datasets": dataset_paths, "name": name})
+    field_values: dict = {"datasets": dataset_paths, "name": name}
+
+    # Detect per-embedder-type conflicts across the sources and, when present,
+    # bake the caller's resolution into the load: pass the kept embedder set so
+    # the combine importer prunes to it and the pipeline's embed stage re-embeds
+    # the winners.  No conflict → the pre-conflict-UI fast path (no re-embed).
+    from vtscore.embedding.binding import (
+        combine_type_state,
+        derive_binding_from_names,
+        resolve_keep_embedders,
+    )
+
+    # Only datasets whose embedders are *known* (registry-backed) inform conflict
+    # detection; a raw staged pkl with unknown embedders is skipped rather than
+    # counted as "missing" (which would flag a spurious partial-coverage conflict).
+    per_dataset = [be for p in dataset_paths if (be := _bound_embedders_for_path(str(p)))]
+    type_state = combine_type_state(per_dataset)
+    if any(st["conflict"] for st in type_state.values()):
+        keep, err = resolve_keep_embedders(type_state, resolutions)
+        if err:
+            abort(400, message=err)
+        text, patch, structural = derive_binding_from_names(keep)
+        field_values["keep_embedders"] = keep
+        field_values["embedders"] = keep
+        field_values["embedder"] = structural or patch or text or (keep[0] if keep else "")
+
+    task_id = _run_importer_in_background(importer, field_values)
     return {"ok": True, "message": "Combining datasets...", "task_id": str(task_id) if task_id else ""}
 
 
@@ -595,6 +665,11 @@ def import_dataset(importer_name: str):
             "merge_near_duplicates",
         ),
     )
+
+    # A Semantic-locked instance never offers a patch/structural embedder in a
+    # picker, so an import that names one is stale or hand-rolled: reject it
+    # here rather than binding a type the rest of the UI hides.
+    _abort_if_semantic_only(field_values)
 
     # ``clipper_params`` is multipart-encoded as a JSON string when the
     # importer has file fields; the per-plugin schema treats it as an

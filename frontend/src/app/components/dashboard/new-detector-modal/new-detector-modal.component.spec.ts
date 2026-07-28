@@ -1,7 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { HttpTestingController } from '@angular/common/http/testing';
+import { Subject } from 'rxjs';
 import { NewDetectorModalComponent } from './new-detector-modal.component';
+import { ProgressEventsService } from '../../../services/progress-events.service';
+import type { LoadingTask } from '../../../models/api.models';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../../testing/test-providers';
 
@@ -353,6 +356,30 @@ describe('NewDetectorModalComponent', () => {
     expect(component.labelImporterValues['sheet']).toBe('s1');
   });
 
+  it('does not auto-select the first option for a required free-text combobox', () => {
+    const field = {
+      key: 'sheet',
+      field_type: 'select',
+      dynamic_options: true,
+      required: true,
+      allow_free_text: true,
+    } as any;
+    component.selectLabelImporter({ name: 'gsheets', fields: [field] } as any);
+
+    httpMock
+      .expectOne('/api/label-importers/field-options/gsheets')
+      .flush({ options: [{ value: 's1', label: 'Sheet 1' }] });
+
+    expect(component.labelImporterValues['sheet']).toBeUndefined();
+  });
+
+  it('does not auto-select the first static option for a free-text combobox', () => {
+    const field = { key: 's', field_type: 'select', options: ['x', 'y'], allow_free_text: true } as any;
+    component.selectLabelImporter({ name: 'imp', fields: [field] } as any);
+
+    expect(component.labelImporterValues['s']).toBeUndefined();
+  });
+
   it('coerces static string options into {value,label} pairs on the Trained tab', () => {
     const staticSelect = { key: 's', field_type: 'select', options: ['x', 'y'] } as any;
     expect(component.labelImporterOptionsFor(staticSelect)).toEqual([
@@ -411,6 +438,64 @@ describe('NewDetectorModalComponent', () => {
     expect(component.labelImporterDynamicError()['q']).toBe('boom');
     expect(component.labelImporterOptionsFor(field)).toEqual([]);
   });
+
+  // --- Create & Import: the background labelset-media ingest (#2703) ---
+
+  /** Fill in the Trained tab's form and submit it. */
+  function submitTrained(): void {
+    component.tab = 'trained';
+    component.trainedView = 'form';
+    component.selectedLabelImporter = { name: 'server_json_file' } as any;
+    component.name.set('Imported');
+    component.submit();
+  }
+
+  it('waits for the labelset-media ingest before loading the new detector', () => {
+    const feed = new Subject<LoadingTask>();
+    const spy = vi
+      .spyOn(TestBed.inject(ProgressEventsService), 'detectorTaskUntilDone$')
+      .mockReturnValue(feed.asObservable());
+    vi.spyOn(component.created, 'emit');
+
+    submitTrained();
+    httpMock
+      .expectOne('/api/detectors/registry/from-labelset/server_json_file')
+      .flush({ ok: true, detector: { id: 'd9' }, ingest_task_id: '_detingest_d9' });
+
+    expect(spy).toHaveBeenCalledWith('_detingest_d9');
+    // Loading now would restore the labels against media that aren't in the
+    // dataset yet (#2690), so the load must not have gone out.
+    httpMock.expectNone('/api/detectors/registry/load');
+    expect(component.submitting()).toBe(true);
+
+    feed.next({ task_id: '_detingest_d9', status: 'loading', current: 1, total: 2 } as LoadingTask);
+    expect(component.ingestTask()?.current).toBe(1);
+    expect(component.ingestBar).toEqual({ value: 1, max: 2, indeterminate: false });
+    httpMock.expectNone('/api/detectors/registry/load');
+
+    feed.complete();
+    const load = httpMock.expectOne('/api/detectors/registry/load');
+    expect(load.request.body.detector_id).toBe('d9');
+    load.flush({ ok: true });
+
+    expect(component.ingestTask()).toBeNull();
+    expect(component.submitting()).toBe(false);
+    expect(component.created.emit).toHaveBeenCalledWith('d9');
+  });
+
+  it('loads straight away when the import had nothing to ingest', () => {
+    const spy = vi.spyOn(TestBed.inject(ProgressEventsService), 'detectorTaskUntilDone$');
+    vi.spyOn(component.created, 'emit');
+
+    submitTrained();
+    httpMock
+      .expectOne('/api/detectors/registry/from-labelset/server_json_file')
+      .flush({ ok: true, detector: { id: 'd0' }, ingest_task_id: '' });
+
+    expect(spy).not.toHaveBeenCalled();
+    httpMock.expectOne('/api/detectors/registry/load').flush({ ok: true });
+    expect(component.created.emit).toHaveBeenCalledWith('d0');
+  });
 });
 
 describe('NewDetectorModalComponent with defaultMediaType', () => {
@@ -450,5 +535,59 @@ describe('NewDetectorModalComponent with defaultMediaType', () => {
   it('should lock media type to the active dataset type', () => {
     expect(component.mediaType()).toBe('image');
     expect(component.mediaTypeLocked).toBe(true);
+  });
+});
+
+describe('NewDetectorModalComponent (semantic_only server)', () => {
+  let component: NewDetectorModalComponent;
+  let fixture: ComponentFixture<NewDetectorModalComponent>;
+  let httpMock: HttpTestingController;
+
+  async function setup(semanticOnly: boolean) {
+    await TestBed.configureTestingModule({
+      imports: [NewDetectorModalComponent],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(NewDetectorModalComponent);
+    component = fixture.componentInstance;
+    fixture.componentRef.setInput('defaultMediaType', 'image');
+    httpMock = TestBed.inject(HttpTestingController);
+    TestBed.tick();
+
+    httpMock.expectOne('/api/media-types').flush({
+      media_types: [{ type_id: 'image', name: 'Image', icon: 'image' }],
+    });
+    httpMock.expectOne('/api/embedders').flush({ embedders: [{ name: 'siglip', supports_text: true }] });
+    TestBed.tick();
+    httpMock.expectOne('/api/settings').flush({ semantic_only: semanticOnly });
+    TestBed.tick();
+  }
+
+  afterEach(() => {
+    httpMock.verify();
+  });
+
+  it('offers all three types and shows the Advanced toggle when unlocked', async () => {
+    await setup(false);
+    expect(component.embedderTypeOptions).toEqual(['semantic', 'patch_semantic', 'structural']);
+    expect(component.showEmbedderTypePicker).toBe(true);
+    expect(component.showAdvancedToggle).toBe(true);
+  });
+
+  it('drops the one-option type picker (and the Advanced toggle) when locked', async () => {
+    await setup(true);
+    expect(component.embedderTypeOptions).toEqual(['semantic']);
+    expect(component.showEmbedderTypePicker).toBe(false);
+    // Nothing else lives under Advanced for this dataset, so the toggle goes too.
+    expect(component.primaryLicenseNotice).toBeNull();
+    expect(component.showAdvancedToggle).toBe(false);
+  });
+
+  it('pins the created detector to semantic when locked', async () => {
+    await setup(true);
+    // Even a stale explicit pick can't escape the lock.
+    component.onEmbedderTypeChange('structural');
+    expect(component.effectiveEmbedderType).toBe('semantic');
   });
 });

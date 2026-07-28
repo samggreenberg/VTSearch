@@ -6,7 +6,6 @@ functions, the ``DatasetImporter.run_chunked`` / ``run_chunked_cli``
 interface, and the CLI ``_merge_detector_results`` helper.
 """
 
-import hashlib
 import pickle
 from pathlib import Path
 from typing import Any
@@ -22,6 +21,7 @@ from vtscore.embedding.media_vectors import media_embedding
 
 
 from helpers import make_wav_bytes as _make_wav_bytes, make_wav_file as _make_wav_file
+from vtscore.utils.hashing import content_md5
 
 
 def _make_pickle_with_base_freq(tmp_path: Path, num_clips: int, base_freq: float = 440.0) -> Path:
@@ -34,7 +34,7 @@ def _make_pickle_with_base_freq(tmp_path: Path, num_clips: int, base_freq: float
             "media_type": "audio",
             "duration": 0.1,
             "file_size": len(wav_bytes),
-            "md5": hashlib.md5(wav_bytes).hexdigest(),
+            "md5": content_md5(wav_bytes),
             "embedder": "clap",
             "embedding": np.random.RandomState(42).randn(512).tolist(),
             "filename": f"clip_{i}.wav",
@@ -60,7 +60,7 @@ def _make_pickle(tmp_path: Path, num_clips: int, inline_bytes: bool = True) -> P
             "media_type": "audio",
             "duration": 0.1,
             "file_size": len(wav_bytes),
-            "md5": hashlib.md5(wav_bytes).hexdigest(),
+            "md5": content_md5(wav_bytes),
             "embedder": "clap",
             "embedding": np.random.RandomState(42).randn(512).tolist(),
             "filename": f"clip_{i}.wav",

@@ -49,6 +49,10 @@ dependencies = [
     "PyMuPDF",
     "librosa",
     "soundfile",
+    # Resampler behind ``vtscore.media.audio.decode``. It arrives with librosa
+    # anyway (librosa's own default ``res_type="soxr_hq"`` backend), but we call
+    # it directly now that audio decoding no longer routes through librosa.load.
+    "soxr",
     "sentencepiece",
     "protobuf",
     "Pillow",
@@ -164,6 +168,7 @@ max-complexity = 10
 # project-controlled paths, no shell expansion.
 "vtsearch/__init__.py" = ["S603", "S607"]
 "vtscore/converters/video2audio.py" = ["S603"]
+"vtscore/media/audio/decode.py" = ["S603"]
 "vtsearch/routes/media/list.py" = ["S603"]
 # Atom feed parsing for the arXiv text-dataset downloader.
 "vtscore/datasets/downloader/text.py" = ["S314"]

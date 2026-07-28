@@ -11,7 +11,6 @@ a ~1 minute test → ``slow`` marker; run with ``-m slow``.
 
 from __future__ import annotations
 
-import hashlib
 
 import numpy as np
 import pytest
@@ -20,6 +19,7 @@ pytest.importorskip("toponymy")
 
 from vtscore.projection.signpost_build import build_region_labels  # noqa: E402
 from vtscore.projection.umap_projection import Projection  # noqa: E402
+from vtscore.utils.hashing import content_md5
 
 pytestmark = pytest.mark.slow
 
@@ -36,7 +36,7 @@ class SeededEmbedder:
     supports_text = True
 
     def embed_text(self, text: str):
-        seed = int(hashlib.md5(text.encode()).hexdigest(), 16) % 2**32
+        seed = int(content_md5(text.encode()), 16) % 2**32
         rng = np.random.default_rng(seed)
         vec = rng.standard_normal(_DIM).astype(np.float32)
         return vec / np.linalg.norm(vec)

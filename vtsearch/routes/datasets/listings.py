@@ -14,7 +14,11 @@ from flask_smorest import Blueprint
 from vtscore.datasets import list_importers
 from vtscore.datasets.registry import list_datasets as _reg_list_all
 from vtsearch.routes.datasets._helpers import _normalize_media_type_param
-from vtsearch.settings import filter_visible_plugin_dicts, filter_visible_plugins
+from vtsearch.settings import (
+    filter_semantic_only_embedder_dicts,
+    filter_visible_plugin_dicts,
+    filter_visible_plugins,
+)
 from vtsearch.schemas.datasets import (
     ClippersListQuerySchema,
     ClippersListResponseSchema,
@@ -49,6 +53,11 @@ def media_types_list():
 def embedders_list(query: dict):
     """Return all registered embedders, optionally filtered by media type.
 
+    Two deployment-level hides apply on top of that filter: the admin's
+    ``hidden_plugins`` / ``--hide-plugin`` list, and the ``semantic_only``
+    lock (``--semantic-only``), which withholds every patch / structural
+    embedder so the prototype types never reach a picker.
+
     Query parameters:
         media_type: A ``type_id`` (e.g. ``"image"``) or ``folder_import_name``
             (e.g. ``"images"``).  When provided, only embedders whose
@@ -62,7 +71,7 @@ def embedders_list(query: dict):
     else:
         embedders = filter_visible_plugin_dicts("embedders", all_embedders_dict())
 
-    return {"embedders": embedders}
+    return {"embedders": filter_semantic_only_embedder_dicts(embedders)}
 
 
 @datasets_listings_bp.route("/api/clippers")

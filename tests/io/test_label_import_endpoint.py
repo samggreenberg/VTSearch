@@ -15,6 +15,8 @@ from unittest.mock import patch
 
 
 import app as app_module
+from tests import wait_for_detector_task
+from vtscore.utils.hashing import content_md5
 
 
 # ---------------------------------------------------------------------------
@@ -67,8 +69,10 @@ class TestLabelImportEndpoint:
         assert res.status_code == 200
         result = res.get_json()
         assert result["applied"] == 0
-        assert result["missing_count"] == 1
-        assert len(result["missing"]) == 1
+        # Unmatched rows go to the background auto-resolve pass (#2703).
+        assert result["ingest_pending_count"] == 1
+        snapshot = wait_for_detector_task(result["ingest_task_id"])
+        assert snapshot["ingest_result"]["unresolved"] == 1
 
     def test_json_importer_skips_invalid_label_value(self, client, tmp_path):
         md5 = app_module.medias[1]["md5"]
@@ -111,7 +115,9 @@ class TestLabelImportEndpoint:
         assert res.status_code == 200
         result = res.get_json()
         assert result["applied"] == 0
-        assert result["missing_count"] == 1
+        assert result["ingest_pending_count"] == 1
+        snapshot = wait_for_detector_task(result["ingest_task_id"])
+        assert snapshot["ingest_result"]["unresolved"] == 1
 
     def test_import_overrides_existing_label(self, client, tmp_path):
         app_module.good_votes[1] = None
@@ -509,9 +515,14 @@ class TestLabelImportMissingElements:
         assert res.status_code == 200
         result = res.get_json()
         assert result["applied"] == 1
-        assert result["missing_count"] == 1
-        assert result["missing"][0]["md5"] == "unknown_abc123"
-        assert result["missing"][0]["origin"]["importer"] == "server_folder"
+        # Unmatched entries are handed to a background auto-resolve task
+        # (#2703), so the response reports how many are pending, not how many
+        # turned out to be unresolvable.
+        assert result["ingest_pending_count"] == 1
+        assert result["missing_count"] == 0
+        assert result["missing"] == []
+        snapshot = wait_for_detector_task(result["ingest_task_id"])
+        assert snapshot["ingest_result"]["unresolved"] == 1
 
     def test_no_missing_when_all_match(self, client, tmp_path):
         md5 = app_module.medias[1]["md5"]
@@ -528,7 +539,6 @@ class TestLabelImportMissingElements:
 
     def test_auto_resolve_ingests_and_applies(self, client, tmp_path):
         """Missing elements are auto-resolved from their origin during import."""
-        import hashlib
 
         # Save/restore medias since auto-resolve adds new entries
         saved = dict(app_module.medias)
@@ -538,7 +548,7 @@ class TestLabelImportMissingElements:
             text_dir.mkdir()
             content = "Hello world, this is a test paragraph for auto-resolve embedding."
             (text_dir / "hello.txt").write_text(content)
-            md5 = hashlib.md5(content.encode()).hexdigest()
+            md5 = content_md5(content.encode())
 
             origin = {"importer": "server_folder", "params": {"path": str(text_dir), "media_type": "text"}}
 
@@ -565,13 +575,15 @@ class TestLabelImportMissingElements:
             )
             assert res.status_code == 200
             result = res.get_json()
-            # Both labels should be applied (1 existing + 1 auto-resolved)
-            assert result["applied"] == 2
-            assert result["ingested"] == 1
-            assert result["missing_count"] == 0
-            assert result["missing"] == []
+            # The in-request pass applies only what already resolved; the
+            # auto-resolve of the rest runs on a background task (#2703).
+            assert result["applied"] == 1
+            assert result["ingest_pending_count"] == 1
             # Auto-resolved entries must not double-decrement skipped (regression).
             assert result["skipped"] == 0
+
+            snapshot = wait_for_detector_task(result["ingest_task_id"])
+            assert snapshot["ingest_result"] == {"ingested": 1, "applied": 1, "unresolved": 0, "failed": 0}
             # The new media should be in the dataset and labeled
             new_ids = [cid for cid, m in app_module.medias.items() if m.get("md5") == md5]
             assert len(new_ids) == 1
@@ -605,9 +617,11 @@ class TestLabelImportMissingElements:
         assert res.status_code == 200
         result = res.get_json()
         assert result["applied"] == 1
-        assert result["missing_count"] == 1
-        assert result["missing"][0]["md5"] == "totally_unknown_md5"
-        assert "could not be resolved" in result["message"]
+        assert result["ingest_pending_count"] == 1
+        assert "in the background" in result["message"]
+        # The origin path doesn't exist, so the background pass resolves none.
+        snapshot = wait_for_detector_task(result["ingest_task_id"])
+        assert snapshot["ingest_result"] == {"ingested": 0, "applied": 0, "unresolved": 1, "failed": 0}
 
 
 # ---------------------------------------------------------------------------

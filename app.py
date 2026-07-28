@@ -1,4 +1,3 @@
-import logging
 import os
 import warnings
 
@@ -16,7 +15,7 @@ os.environ["MKL_NUM_THREADS"] = _torch_threads
 # request_id / dataset_id / detector_id / user fields. Override via:
 #   VTSEARCH_LOG_LEVEL=INFO   (default WARNING)
 #   VTSEARCH_LOG_FORMAT=text  (default json; switch to text for local dev)
-from vtsearch.logging_config import new_request_id, setup_logging  # noqa: E402
+from vtsearch.logging_config import setup_logging  # noqa: E402
 
 setup_logging()
 
@@ -36,12 +35,9 @@ warnings.filterwarnings("ignore", message=".*HF_TOKEN.*")
 # Visual feedback for startup
 print(f"⏳ Initializing VTSearch... (PID {os.getpid()})", flush=True)
 
-from flask import Flask, g
-from werkzeug.exceptions import MethodNotAllowed, NotFound
+from flask import Flask
 
 # Import refactored modules
-from vtscore.state.core import DatasetNotLoadedError, DetectorNotLoadedError  # noqa: E402
-from vtsearch.auth import get_login_provider  # noqa: E402
 from vtscore.embedding import initialize_models, preload_predicted_embedders  # noqa: E402
 
 # Install Flask-aware request-context resolvers on the (library-candidate)
@@ -204,315 +200,18 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
-# Per-request user context
+# Request-lifecycle hooks and global JSON error handlers
 # ---------------------------------------------------------------------------
+# Both live in their own modules (``vtsearch.hooks`` / ``vtsearch.errors``);
+# registration is decorator-based on this module-level ``app``, so each
+# module exposes a ``register_*`` function that wires its handlers on in the
+# original order.
 
+from vtsearch.errors import register_error_handlers  # noqa: E402
+from vtsearch.hooks import register_hooks  # noqa: E402
 
-@app.before_request
-def _set_request_id():
-    """Assign a unique request id to every request.
-
-    The id is exposed on ``g.request_id`` so log records produced during
-    the request automatically carry it (via the structured-logging
-    ContextFilter), and echoed back in the ``X-Request-Id`` response
-    header so clients can quote it in bug reports. If the caller supplied
-    their own ``X-Request-Id`` header we trust it (truncated to 64 chars
-    to bound log line size), which lets gateways/load balancers propagate
-    end-to-end trace ids.
-    """
-    from flask import request
-
-    inbound = request.headers.get("X-Request-Id")
-    g.request_id = inbound[:64] if inbound else new_request_id()
-
-
-@app.before_request
-def _set_user_context():
-    """Populate ``g.user`` from the active LoginProvider on every request.
-
-    A misbehaving provider must not be able to take down the server by
-    raising from ``get_user``; swallow exceptions and fall back to
-    ``"default"``.
-    """
-    from flask import request
-
-    try:
-        provider = get_login_provider()
-        g.user = provider.get_user(request)
-    except Exception:
-        logging.getLogger(__name__).exception("Login provider get_user failed")
-        g.user = "default"
-
-
-# Endpoints whose handlers never read the dataset/detector proxies do not
-# need the lock-taking state-sync in `_set_request_context` below. Keeping
-# them off `_state_lock` stops a high-frequency poll (e.g. the jobs/active
-# spinner feed) from piling up behind a long lock-holder and exhausting
-# the worker's threads (2026-06-19: one stuck job parked 23 threads on
-# the futex and froze the whole UI).
-#
-# `/api/events` is the SSE progress stream: a long-lived, read-only request
-# that only subscribes to the *global* progress trackers and yields their
-# snapshots. It needs no per-request vote rehydration, and gating it on
-# `_state_lock` is self-defeating — while a long Find/load holds the worker
-# busy, the EventSource's reconnect would block in this hook on the very
-# lock the long job contends, so progress events never reach the client and
-# the bar sits indeterminate. Exempting it keeps progress flowing during
-# exactly the long operations the bar exists to report.
-_STATE_SYNC_EXEMPT_PREFIXES = ("/api/jobs/active", "/api/events")
-
-
-@app.before_request
-def _set_request_context():
-    """Resolve per-request dataset/detector context from HTTP headers.
-
-    If the frontend sends ``X-Dataset-Id`` or ``X-Detector-Id``, the
-    corresponding context is stashed on ``g`` so that proxy objects
-    (``medias``, ``good_votes``, etc.) resolve to it for the duration of
-    this request, without mutating global "active" state.
-
-    When a header is absent the proxies fall back to the thread-local /
-    empty context. When a header is **present but names an unloaded id**,
-    the unloaded id is stashed on ``g`` so the resolver raises
-    ``DatasetNotLoadedError`` / ``DetectorNotLoadedError`` on proxy
-    access (mapped to 409). Routes that never touch the proxies still
-    respond normally (see logical-bug-audit H16).
-
-    Any failure here must not 500 every subsequent request; fall back to
-    the default (empty) context.
-    """
-    from flask import request
-    from vtscore.state.core import (
-        get_context,
-        get_detector_context,
-    )
-
-    # Pin a marker so the request-missing-context predicate can distinguish
-    # "actively inside a route handler" from "Flask test client is still
-    # preserving the popped request context for inspection". Cleared in
-    # teardown_request below.
-    g._vts_in_request_handler = True
-
-    try:
-        # Headers (Angular HttpClient interceptor) take priority, with query
-        # params as fallback for browser-native requests (<img src>,
-        # <audio src>, <video src>) that bypass Angular's interceptor.
-        ds_id = request.headers.get("X-Dataset-Id") or request.args.get("dataset_id")
-        if ds_id:
-            ctx = get_context(ds_id)
-            if ctx is not None:
-                g._dataset_context = ctx
-            else:
-                # Header refers to a dataset that isn't loaded.  Stash the id
-                # so the resolver raises DatasetNotLoadedError at proxy
-                # access; silent fallback to the empty context hid stale
-                # results from the client (logical-bug-audit H16).  Routes
-                # that never touch the dataset proxies (registry listings,
-                # auth, file browser, etc.) still respond normally.
-                g._unloaded_dataset_id = ds_id
-
-        detector_id = request.headers.get("X-Detector-Id") or request.args.get("detector_id")
-        if detector_id:
-            det_ctx = get_detector_context(detector_id)
-            if det_ctx is not None:
-                g._detector_context = det_ctx
-            else:
-                g._unloaded_detector_id = detector_id
-    except Exception:
-        logging.getLogger(__name__).exception("Request context resolution failed")
-
-    # If the active (dataset, detector) pair has changed since the detector's
-    # cid-keyed vote dicts were last derived, rehydrate them from the on-disk
-    # labelset against the active dataset's medias.  Media ids are dataset-
-    # specific, so without this the left-pane shows stale cids from the
-    # previous dataset as if they were votes in the current one.
-    #
-    # Also drop the detector's cached MLP / per-label embedding cache when
-    # the active dataset's embedder differs from the one the MLP was
-    # trained on; scoring with a cross-space MLP either crashes (different
-    # dim) or silently produces garbage labels (same dim).  See
-    # logical-bug-audit H5.
-    # Skip the lock-taking state-sync for endpoints whose handlers never
-    # read the proxies (e.g. the jobs/active spinner poll), so a frequent
-    # poll cannot queue on `_state_lock` behind a long-running job.
-    if not request.path.startswith(_STATE_SYNC_EXEMPT_PREFIXES):
-        try:
-            from vtscore.detectors.dataset_sync import (
-                ensure_detector_model_matches_active_embedder,
-                ensure_votes_match_active_dataset,
-            )
-
-            ensure_votes_match_active_dataset()
-            ensure_detector_model_matches_active_embedder()
-        except (DatasetNotLoadedError, DetectorNotLoadedError):
-            # The route handler will hit the same error when it touches
-            # the proxies; the global error handler turns it into a 409.
-            pass
-        except Exception:
-            logging.getLogger(__name__).exception("Vote rehydrate failed")
-
-
-# ---------------------------------------------------------------------------
-# Prevent browser caching of API responses
-# ---------------------------------------------------------------------------
-
-
-@app.teardown_request
-def _clear_in_request_handler_marker(exc):  # noqa: ARG001
-    """Clear the in-handler marker so the request-missing predicate
-    doesn't fire while Flask's test client is preserving a popped
-    request context after the response."""
-    from flask import g, has_request_context
-
-    if has_request_context():
-        g._vts_in_request_handler = False
-
-
-@app.after_request
-def _no_cache_api(response):
-    """Prevent browsers from caching mutable API responses.
-
-    Without this, concurrent or rapid-fire fetches to the same endpoint
-    (e.g. ``/api/datasets/registry``) can receive stale cached data,
-    causing the frontend to miss newly loaded datasets.
-
-    Endpoints serving genuinely immutable data (e.g. frozen projection
-    tiles) opt out by setting their own ``Cache-Control`` in the view; we
-    defer to that rather than clobbering it with ``no-store``.
-    """
-    from flask import request
-
-    if request.path.startswith("/api/") and "Cache-Control" not in response.headers:
-        response.headers["Cache-Control"] = "no-store"
-    return response
-
-
-@app.after_request
-def _echo_request_id(response):
-    """Surface the per-request id on every response so clients can quote it."""
-    rid = getattr(g, "request_id", None)
-    if rid:
-        response.headers["X-Request-Id"] = rid
-    return response
-
-
-# ---------------------------------------------------------------------------
-# Global JSON error handlers
-# ---------------------------------------------------------------------------
-
-
-@app.errorhandler(NotFound)
-def _handle_404(exc):
-    """JSON 404 for unknown ``/api/`` paths.
-
-    Werkzeug's default 404 renders as HTML, which is awful for an SPA. The
-    frontend ``ErrorService`` needs JSON to show a useful banner with the
-    request_id. Non-API paths fall through to the SPA's catch-all route
-    (which serves index.html for client-side routing).
-
-    Scoped to ``NotFound`` specifically so flask-smorest's own
-    ``HTTPException`` handler (which renders ``{message, errors}`` for
-    marshmallow validation failures and custom ``abort()`` calls) keeps
-    handling 400/422/etc.; Flask resolves the most specific exception
-    class first.
-    """
-    from flask import request as _req
-    from vtsearch.routes._shared import error_response
-
-    if not _req.path.startswith("/api/"):
-        return exc
-    return error_response(exc.name, 404)
-
-
-@app.errorhandler(MethodNotAllowed)
-def _handle_405(exc):
-    """JSON 405 for wrong-method requests on ``/api/`` paths. See _handle_404."""
-    from flask import request as _req
-    from vtsearch.routes._shared import error_response
-
-    if not _req.path.startswith("/api/"):
-        return exc
-    return error_response(exc.name, 405)
-
-
-@app.errorhandler(DatasetNotLoadedError)
-def _handle_dataset_not_loaded(exc):
-    """Return a JSON 409 when ``X-Dataset-Id`` names an unloaded dataset.
-
-    Raised by the Flask resolver when a route handler touches the
-    dataset proxies and the header doesn't resolve to a loaded context.
-    Replaces the silent fallback to the empty context that returned 200
-    with stale data (logical-bug-audit H16). The frontend can
-    distinguish 409 + ``code="dataset_not_loaded"`` from a generic 500
-    and offer a load action.
-    """
-    from vtsearch.routes._shared import error_response
-
-    return error_response(
-        "Dataset is not loaded",
-        409,
-        dataset_id=exc.dataset_id,
-        code="dataset_not_loaded",
-    )
-
-
-@app.errorhandler(DetectorNotLoadedError)
-def _handle_detector_not_loaded(exc):
-    """Detector counterpart of :func:`_handle_dataset_not_loaded` (H16/H34)."""
-    from vtsearch.routes._shared import error_response
-
-    return error_response(
-        "Detector is not loaded",
-        409,
-        detector_id=exc.detector_id,
-        code="detector_not_loaded",
-    )
-
-
-from vtscore.state.core import RequestMissingContextError as _RequestMissingContextError
-
-
-@app.errorhandler(_RequestMissingContextError)
-def _handle_request_missing_context(exc):
-    """Convert ``RequestMissingContextError`` into a clean 400.
-
-    Raised by the frozen ``_RequestMissingDatasetContext`` /
-    ``_RequestMissingDetectorContext`` sentinels when a mutation endpoint
-    was hit without an ``X-Dataset-Id`` / ``X-Detector-Id`` header and no
-    thread-local pinned context exists. The unloaded-id case is handled
-    separately by :func:`_handle_dataset_not_loaded` /
-    :func:`_handle_detector_not_loaded` (409 with a specific code). See
-    logical-bug-audit H13.
-    """
-    from flask import request as _req
-    from vtsearch.routes._shared import error_response
-
-    if not _req.path.startswith("/api/"):
-        raise exc
-    return error_response(str(exc), 400)
-
-
-@app.errorhandler(Exception)
-def _handle_uncaught_exception(exc):
-    """Return a standardized JSON 500 for any uncaught exception on /api/.
-
-    Without this, an unhandled exception in a route renders Flask's HTML
-    debug page (in dev) or a plain 500 (in prod), neither of which carries the
-    request_id the user needs to file a bug. ``HTTPException`` is
-    excluded so flask-smorest's own handler (and the 404/405 handlers
-    above) keep their semantics.
-    """
-    from werkzeug.exceptions import HTTPException as _HTTPException
-
-    if isinstance(exc, _HTTPException):
-        return exc
-    from flask import request as _req
-    from vtsearch.routes._shared import error_response, format_exception_detail
-
-    logging.getLogger(__name__).exception("Unhandled exception on %s %s", _req.method, _req.path)
-    if not _req.path.startswith("/api/"):
-        raise exc
-    return error_response("Internal server error", 500, detail=format_exception_detail(exc))
+register_hooks(app)
+register_error_handlers(app)
 
 
 # ---------------------------------------------------------------------------
@@ -571,6 +270,78 @@ app.register_blueprint(hf_auth_bp)
 # ---------------------------------------------------------------------------
 
 
+def _apply_env_dataset_max_age() -> None:
+    """Honour ``VTSEARCH_DATASET_MAX_AGE_DAYS`` when no CLI flag was passed.
+
+    The gunicorn-launched images never parse ``--dataset-max-age-days`` (the
+    argparse path only runs under ``python app.py``), so the same override is
+    reachable from the environment. An explicit CLI flag always wins. Like the
+    flag, this applies to every user for the lifetime of the process and is not
+    editable via the settings API.
+    """
+    from vtsearch.settings import get_cli_dataset_max_age_days, set_cli_dataset_max_age_days
+
+    if get_cli_dataset_max_age_days() is not None:
+        return
+    raw = os.environ.get("VTSEARCH_DATASET_MAX_AGE_DAYS")
+    if not raw:
+        return
+    try:
+        days = int(raw)
+    except ValueError:
+        days = 0
+    if days >= 1:
+        set_cli_dataset_max_age_days(days)
+        print(f"\U0001f5d3️  Dataset max age: {days}d (from VTSEARCH_DATASET_MAX_AGE_DAYS)", flush=True)
+    else:
+        print(
+            f"⚠️  Ignoring VTSEARCH_DATASET_MAX_AGE_DAYS={raw!r} (want a positive integer number of days)",
+            flush=True,
+        )
+
+
+def _apply_env_support_email() -> None:
+    """Honour ``VTSEARCH_SUPPORT_EMAIL`` when no CLI flag was passed.
+
+    Same rationale as :func:`_apply_env_dataset_max_age`: the gunicorn images
+    never parse ``--support-email``. An explicit CLI flag always wins.
+    """
+    from vtsearch.settings import get_cli_support_email, set_cli_support_email
+
+    if get_cli_support_email() is not None:
+        return
+    email = (os.environ.get("VTSEARCH_SUPPORT_EMAIL") or "").strip()
+    if email:
+        set_cli_support_email(email)
+        print(f"\U0001f4e7 Support email: {email} (from VTSEARCH_SUPPORT_EMAIL)", flush=True)
+
+
+def _apply_env_semantic_only() -> None:
+    """Honour ``VTSEARCH_SEMANTIC_ONLY`` when no CLI flag was passed.
+
+    Same rationale as the two helpers above (gunicorn never parses
+    ``--semantic-only``); any of ``1``/``true``/``yes``/``on`` enables the
+    lock. Reports the lock however it arrived - flag, env var, or the persisted
+    ``semantic_only`` setting - so an operator can confirm from the startup log
+    that the prototype embedder types are off.
+    """
+    from vtsearch.settings import (
+        get_cli_semantic_only,
+        get_effective_semantic_only,
+        set_cli_semantic_only,
+    )
+
+    source = "--semantic-only"
+    if get_cli_semantic_only() is None:
+        if (os.environ.get("VTSEARCH_SEMANTIC_ONLY") or "").strip().lower() in ("1", "true", "yes", "on"):
+            set_cli_semantic_only(True)
+            source = "VTSEARCH_SEMANTIC_ONLY"
+        else:
+            source = "the semantic_only server setting"
+    if get_effective_semantic_only():
+        print(f"\U0001f512 Semantic embedders only (from {source})", flush=True)
+
+
 def initialize_server(mode_label: str = "PRODUCTION") -> None:
     """Load models and preload media types.
 
@@ -586,54 +357,25 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     """
     print(f"\U0001f680 Running in {mode_label} mode", flush=True)
 
-    # Deployment-level dataset retention override from the environment, for
-    # the gunicorn-launched images that never parse ``--dataset-max-age-days``
-    # (the argparse path below only runs under ``python app.py``). An explicit
-    # CLI flag, if one was passed, always wins. Like the flag, this applies to
-    # every user for the lifetime of the process and is not editable via the
-    # settings API.
-    from vtsearch.settings import get_cli_dataset_max_age_days, set_cli_dataset_max_age_days
-
-    if get_cli_dataset_max_age_days() is None:
-        _env_max_age = os.environ.get("VTSEARCH_DATASET_MAX_AGE_DAYS")
-        if _env_max_age:
-            try:
-                _days = int(_env_max_age)
-            except ValueError:
-                _days = 0
-            if _days >= 1:
-                set_cli_dataset_max_age_days(_days)
-                print(f"\U0001f5d3️  Dataset max age: {_days}d (from VTSEARCH_DATASET_MAX_AGE_DAYS)", flush=True)
-            else:
-                print(
-                    f"⚠️  Ignoring VTSEARCH_DATASET_MAX_AGE_DAYS={_env_max_age!r} "
-                    "(want a positive integer number of days)",
-                    flush=True,
-                )
-
-    # Deployment-level "Email us" recipient override from the environment,
-    # same rationale as the dataset-retention block above: the gunicorn images
-    # never parse ``--support-email``. An explicit CLI flag always wins.
-    from vtsearch.settings import get_cli_support_email, set_cli_support_email
-
-    if get_cli_support_email() is None:
-        _env_support_email = (os.environ.get("VTSEARCH_SUPPORT_EMAIL") or "").strip()
-        if _env_support_email:
-            set_cli_support_email(_env_support_email)
-            print(f"\U0001f4e7 Support email: {_env_support_email} (from VTSEARCH_SUPPORT_EMAIL)", flush=True)
+    # Deployment-level overrides that the gunicorn-launched images can only
+    # reach through the environment (they never parse argv).
+    _apply_env_dataset_max_age()
+    _apply_env_support_email()
+    _apply_env_semantic_only()
 
     print("\U0001f4da Loading ML libraries...", flush=True)
     initialize_models(on_progress=lambda *a, **k: None)
-    # ``--solo-media-type`` (process-level CLI fallback) tells us which
-    # mediaType's default embedder to warm even if no datasets or detectors
-    # are registered yet. Per-user explicit values are not consulted here
-    # because there is no current user at startup.
-    from vtsearch.settings import get_cli_solo_embedders, get_cli_solo_media_type
+    # The solo-mediaType restriction (``--solo-media-type`` or the persisted
+    # server setting) tells us which mediaType's default embedder to warm even
+    # if no datasets or detectors are registered yet. It is server-tier, so it
+    # resolves without a current user at startup.
+    from vtsearch.settings import get_cli_solo_embedders, get_cli_solo_media_type, get_effective_solo_media_type
 
-    cli_solo = get_cli_solo_media_type()
-    extra_types = [cli_solo] if cli_solo else None
-    if cli_solo:
-        print(f"\U0001f3af Solo mediaType: {cli_solo} (from --solo-media-type)", flush=True)
+    solo = get_effective_solo_media_type()
+    extra_types = [solo] if solo else None
+    if solo:
+        origin = "--solo-media-type" if get_cli_solo_media_type() else "the solo_media_type setting"
+        print(f"\U0001f3af Solo mediaType: {solo} (from {origin})", flush=True)
     cli_solo_embedders = get_cli_solo_embedders()
     extra_embedders = list(cli_solo_embedders.values()) if cli_solo_embedders else None
     if cli_solo_embedders:

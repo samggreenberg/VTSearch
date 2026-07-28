@@ -776,12 +776,15 @@ class TestBrowseCompactSetting:
         first = next(iter(ctx.medias.values()))
         return first.get("media_type", "audio")
 
-    def test_compact_on_by_default(self, client):
+    def test_compact_off_by_default(self, client):
+        # Compaction defaults OFF: the empirical sweep found it costs ~2% taxonomy
+        # separability and ~5-6% neighbourhood structure on every dataset/embedder
+        # (see PROJECTION_COMPACT_DEFAULT / docs/plans/vtsbrowse-empirical-tuning.md).
         captured: dict = {}
         with patch("vtscore.projection.fit_projection", side_effect=self._capturing_fake(captured)):
             client.post("/api/projection/build")
             _wait_projection()
-        assert captured["compact"] is True
+        assert captured["compact"] is False
 
     def test_compact_setting_disables_packing(self, client):
         ctx = get_active_context()
@@ -823,7 +826,7 @@ def test_projection_params_match(monkeypatch):
     legacy = Projection("p", ids, coords, "umap", None, None)
 
     # Active settings at the config defaults.
-    monkeypatch.setattr(proj_route, "_umap_params", lambda: (15, 0.1))
+    monkeypatch.setattr(proj_route, "_umap_params", lambda ctx=None: (15, 0.1))
     assert proj_route._projection_params_match(umap_default) is True
     assert proj_route._projection_params_match(umap_changed) is False
     assert proj_route._projection_params_match(pca) is True
@@ -831,7 +834,7 @@ def test_projection_params_match(monkeypatch):
     assert proj_route._projection_params_match(legacy) is True
 
     # Operator tuned the setting away from the default -> stale layouts recompute.
-    monkeypatch.setattr(proj_route, "_umap_params", lambda: (30, 0.1))
+    monkeypatch.setattr(proj_route, "_umap_params", lambda ctx=None: (30, 0.1))
     assert proj_route._projection_params_match(legacy) is False
     assert proj_route._projection_params_match(umap_changed) is True
     assert proj_route._projection_params_match(pca) is True
@@ -903,7 +906,11 @@ class TestProjectionLabels:
         assert first["level"] == 0
         assert first["score"] == 0.9
         assert first["source"] == "keyphrase"
-        assert set(first) == {"level", "x", "y", "text", "score", "source"}
+        # Terminal-neighbour flags default True (present but not pinned to a tree
+        # in this hand-built set); the canvas fades such signs as before.
+        assert first["has_coarser"] is True
+        assert first["has_finer"] is True
+        assert set(first) == {"level", "x", "y", "text", "score", "source", "has_coarser", "has_finer"}
 
         assert client.get("/api/projection/meta").get_json()["has_labels"] is True
 

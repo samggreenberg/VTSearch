@@ -33,21 +33,71 @@ one.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
-    import torch
 
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.al_strategies import ALContext, select_next
 from vtscore.eval.labels import media_is_positive, region_box_for_category
+from vtscore.eval.trainers import _cross_calibrated_threshold, _parse_trainer_spec
 from vtscore.training.mlp import _auto_hidden_dim, train_model
 from vtscore.training.thresholds import (
     calculate_cross_calibration_threshold,
     calculate_safe_threshold,
+)
+
+
+@dataclass
+class _StepModel:
+    """A trained per-step ranker plus the metadata the eval loop records.
+
+    ``predict`` maps an ``(N, D)`` numpy embedding matrix to per-row
+    ``P(positive)`` scores in ``[0, 1]`` — the trainer-agnostic scoring contract
+    (identical to :data:`vtscore.eval.trainers.PredictFn`).  ``torch_model`` is
+    set only for the MLP path, where region-aware datasets need the raw module
+    to max-pool over patch regions; it is ``None`` for the SVM path (which the
+    experiment only ever runs on single-vector, region-free datasets).
+    ``backend``/``device`` are recorded on every result row so the report can
+    say which engine produced each number.
+    """
+
+    predict: Callable[[Any], "np.ndarray"]
+    torch_model: Optional[Any]
+    backend: str
+    device: str
+
+
+#: Canonical column order for the voting-iterations result frame.  Kept in one
+#: place so :func:`run_voting_iterations_eval` and downstream tooling agree.
+_VOTING_COLUMNS: tuple[str, ...] = (
+    "seed",
+    "dataset",
+    "category",
+    "strategy",
+    "trainer",
+    "prevalence_arm",
+    "realized_prevalence",
+    "t",
+    "n_good",
+    "n_bad",
+    "cost",
+    "fpr",
+    "fnr",
+    "auroc",
+    "average_precision",
+    "train_seconds",
+    "xcal_seconds",
+    "pool_score_seconds",
+    "test_score_seconds",
+    "backend",
+    "device",
+    "elapsed_seconds",
 )
 
 
@@ -56,11 +106,55 @@ from vtscore.training.thresholds import (
 # ------------------------------------------------------------------
 
 
+#: Minimum positives an arm must retain after prevalence downsampling.  Below
+#: this the held-out test set has too few positives for a stable FNR estimate,
+#: so the arm is skipped rather than reported with a noisy denominator.
+_MIN_PREVALENCE_POSITIVES = 15
+
+
 def _inclusion_weights(inclusion: int) -> tuple[float, float]:
     """Return ``(fpr_weight, fnr_weight)`` for a given inclusion value."""
     if inclusion >= 0:
         return 1.0, 2.0**inclusion
     return 2.0 ** (-inclusion), 1.0
+
+
+def _prevalence(clips_dict: dict[int, dict[str, Any]], target_category: str) -> float:
+    """Fraction of *clips_dict* that is positive for *target_category*."""
+    if not clips_dict:
+        return 0.0
+    n_pos = sum(1 for m in clips_dict.values() if media_is_positive(m, target_category))
+    return n_pos / len(clips_dict)
+
+
+def _downsample_to_prevalence(
+    clips_dict: dict[int, dict[str, Any]],
+    target_category: str,
+    target_prevalence: float,
+    rng: np.random.RandomState,
+) -> Optional[dict[int, dict[str, Any]]]:
+    """Return a copy of *clips_dict* with positives thinned to ~*target_prevalence*.
+
+    All negatives are kept; positives are randomly downsampled (via *rng*, so the
+    arm is deterministic in the eval seed) to the largest count ``k`` with
+    ``k / (k + n_neg) <= target_prevalence``.  Returns ``None`` when that leaves
+    fewer than :data:`_MIN_PREVALENCE_POSITIVES` positives (the arm is then
+    skipped).  Multi-label datasets are handled through ``media_is_positive``.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    pos_ids = [cid for cid in clips_dict if media_is_positive(clips_dict[cid], target_category)]
+    neg_ids = [cid for cid in clips_dict if not media_is_positive(clips_dict[cid], target_category)]
+    n_neg = len(neg_ids)
+    if n_neg == 0:
+        return None
+    keep_k = int(target_prevalence * n_neg / (1.0 - target_prevalence))
+    keep_k = min(keep_k, len(pos_ids))
+    if keep_k < _MIN_PREVALENCE_POSITIVES:
+        return None
+    chosen = rng.choice(np.array(pos_ids, dtype=np.int64), size=keep_k, replace=False)
+    keep = set(int(c) for c in chosen) | set(neg_ids)
+    return {cid: clips_dict[cid] for cid in clips_dict if cid in keep}
 
 
 def _split_media_ids(
@@ -102,7 +196,7 @@ def _good_training_vec(
 
 def _blend_safe_threshold(
     threshold: float,
-    model: torch.nn.Sequential,
+    step: _StepModel,
     region_aware: bool,
     sim_clips: dict[int, dict[str, Any]] | None,
     X_all_clips: Any,
@@ -110,26 +204,25 @@ def _blend_safe_threshold(
 ) -> float:
     """Blend *threshold* with a GMM threshold over the simulation set's scores.
 
-    Region-aware datasets score the sim set via region max-pool (matching the
-    test-set scoring); single-vector datasets use the pre-computed whole-image
-    matrix *X_all_clips*.  Kept separate so the per-step loop stays flat.
+    Region-aware datasets (MLP + patch embedder only) score the sim set via
+    region max-pool (matching the test-set scoring); single-vector datasets use
+    the pre-computed whole-image matrix *X_all_clips* through the step's
+    trainer-agnostic ``predict``.  Kept separate so the per-step loop stays flat.
     """
-    import torch  # noqa: PLC0415
+    import numpy as np  # noqa: PLC0415
 
     if region_aware:
         from vtscore.detectors.training import score_media_with_model  # noqa: PLC0415
 
-        assert sim_clips is not None
-        all_scores = [r["score"] for r in score_media_with_model(model, sim_clips)]
+        assert sim_clips is not None and step.torch_model is not None
+        all_scores = [r["score"] for r in score_media_with_model(step.torch_model, sim_clips)]
     else:
-        with torch.no_grad():
-            X_eval = X_all_clips.to(next(model.parameters()).device)
-            all_scores = torch.sigmoid(model(X_eval)).squeeze(1).cpu().tolist()
+        all_scores = np.asarray(step.predict(np.asarray(X_all_clips))).ravel().tolist()
     return calculate_safe_threshold(threshold, all_scores, n_labels)
 
 
 def _evaluate_on_test(
-    model: torch.nn.Sequential,
+    step: _StepModel,
     threshold: float,
     clips_dict: dict[int, dict[str, Any]],
     test_ids: list[int],
@@ -137,33 +230,37 @@ def _evaluate_on_test(
     inclusion: int,
     region_aware: bool = False,
 ) -> dict[str, float]:
-    """Score *test_ids* with *model* and return inclusion-weighted cost, FPR, FNR.
+    """Score *test_ids* with *step* and return the per-step metrics.
+
+    Returns the operating-point metrics the user cares about — inclusion-weighted
+    ``cost``, ``fpr``, ``fnr`` (all computed at *threshold*) — plus the
+    threshold-independent ranking metrics ``auroc`` and ``average_precision``,
+    which isolate "how good is the ranking" from "how good is the threshold".
 
     When *region_aware* the test media carry ``patch_regions`` (a patch
     embedder), so scoring max-pools the MLP over every region of each image -
     exactly the live detector's inference for patch datasets (an image scores
     by its best-matching region).  Otherwise each media is scored by its single
-    whole-image vector, the fast path used for every single-vector dataset.
+    whole-image vector through the step's trainer-agnostic ``predict``.
     """
     import numpy as np  # noqa: PLC0415
-    import torch  # noqa: PLC0415
 
+    from vtscore.eval.label_curve import _auroc, _average_precision  # noqa: PLC0415
+
+    nan = float("nan")
     if not test_ids:
-        return {"cost": float("nan"), "fpr": float("nan"), "fnr": float("nan")}
+        return {"cost": nan, "fpr": nan, "fnr": nan, "auroc": nan, "average_precision": nan}
 
     if region_aware:
         from vtscore.detectors.training import score_media_with_model  # noqa: PLC0415
 
+        assert step.torch_model is not None
         test_clips = {cid: clips_dict[cid] for cid in test_ids}
-        score_map = {r["id"]: r["score"] for r in score_media_with_model(model, test_clips)}
+        score_map = {r["id"]: r["score"] for r in score_media_with_model(step.torch_model, test_clips)}
         scores = [score_map[cid] for cid in test_ids]
     else:
         embs = np.array([media_embedding(clips_dict[cid]) for cid in test_ids])
-        X = torch.tensor(embs, dtype=torch.float32)
-
-        with torch.no_grad():
-            X = X.to(next(model.parameters()).device)
-            scores = torch.sigmoid(model(X)).squeeze(1).cpu().tolist()
+        scores = np.asarray(step.predict(embs)).ravel().tolist()
 
     true_labels = [1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0 for cid in test_ids]
 
@@ -184,7 +281,15 @@ def _evaluate_on_test(
     fpr_weight, fnr_weight = _inclusion_weights(inclusion)
     cost = fpr_weight * fpr + fnr_weight * fnr
 
-    return {"cost": round(cost, 6), "fpr": round(fpr, 6), "fnr": round(fnr, 6)}
+    scores_arr = np.asarray(scores, dtype=np.float64)
+    labels_arr = np.asarray(true_labels, dtype=np.float64)
+    return {
+        "cost": round(cost, 6),
+        "fpr": round(fpr, 6),
+        "fnr": round(fnr, 6),
+        "auroc": round(_auroc(scores_arr, labels_arr), 6),
+        "average_precision": round(_average_precision(scores_arr, labels_arr), 6),
+    }
 
 
 # ------------------------------------------------------------------
@@ -193,11 +298,11 @@ def _evaluate_on_test(
 
 
 def _score_pool(
-    model: torch.nn.Sequential,
+    step: _StepModel,
     pool_ids: list[int],
     clips_dict: dict[int, dict[str, Any]],
 ) -> dict[int, float]:
-    """Return ``{pool_id: sigmoid score}`` for the current model over the pool.
+    """Return ``{pool_id: score}`` for the current model over the pool.
 
     Scores each pool item by its single whole-image vector - the fast path the
     acquisition strategies rank uncertainty over.  This intentionally uses the
@@ -207,14 +312,11 @@ def _score_pool(
     proxy for that ordering.
     """
     import numpy as np  # noqa: PLC0415
-    import torch  # noqa: PLC0415
 
     if not pool_ids:
         return {}
     embs = np.array([media_embedding(clips_dict[cid]) for cid in pool_ids])
-    X = torch.tensor(embs, dtype=torch.float32).to(next(model.parameters()).device)
-    with torch.no_grad():
-        scores = torch.sigmoid(model(X)).squeeze(1).cpu().tolist()
+    scores = np.asarray(step.predict(embs)).ravel().tolist()
     return dict(zip(pool_ids, scores, strict=True))
 
 
@@ -240,6 +342,7 @@ def _build_eval_atlas(embeddings: dict[int, np.ndarray], min_node_size: int) -> 
 
 
 def _train_and_calibrate(
+    trainer: str,
     good_votes: dict[int, None],
     bad_votes: dict[int, None],
     clips_dict: dict[int, dict[str, Any]],
@@ -250,13 +353,56 @@ def _train_and_calibrate(
     inclusion: int,
     calibrate_count: int,
     calibration_fraction: float,
-) -> tuple[torch.nn.Sequential, float, int, int]:
-    """Train the step's model and calibrate its threshold from the current votes.
+) -> tuple[_StepModel, float, int, dict[str, float]]:
+    """Train the step's ranker and calibrate its threshold from the current votes.
 
-    Returns ``(model, threshold, hidden_dim, n_labels)``.  Good votes region-pool
-    their ground-truth box when *region_voting* is on (and the media supports
-    it); Bad votes always train on the whole-image vector - matching the live
-    detector, where only Yes-votes carry a region.
+    Dispatches on *trainer*: ``"mlp"`` runs the production MLP path unchanged
+    (see :func:`_mlp_train_and_calibrate`); any ``svm_*`` name runs the SVM path
+    (see :func:`_svm_train_and_calibrate`).  Returns ``(step, threshold,
+    n_labels, timings)`` where *timings* has ``train_seconds`` and
+    ``xcal_seconds`` for the fit and threshold-calibration wall clocks.
+    """
+    if trainer == "mlp":
+        return _mlp_train_and_calibrate(
+            good_votes,
+            bad_votes,
+            clips_dict,
+            target_category,
+            region_voting=region_voting,
+            input_dim=input_dim,
+            inclusion=inclusion,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+        )
+    return _svm_train_and_calibrate(
+        trainer,
+        good_votes,
+        bad_votes,
+        clips_dict,
+        target_category,
+        inclusion=inclusion,
+        calibrate_count=calibrate_count,
+        calibration_fraction=calibration_fraction,
+    )
+
+
+def _mlp_train_and_calibrate(
+    good_votes: dict[int, None],
+    bad_votes: dict[int, None],
+    clips_dict: dict[int, dict[str, Any]],
+    target_category: str,
+    *,
+    region_voting: bool,
+    input_dim: int,
+    inclusion: int,
+    calibrate_count: int,
+    calibration_fraction: float,
+) -> tuple[_StepModel, float, int, dict[str, float]]:
+    """Production MLP path — numerically identical to the pre-trainer harness.
+
+    Good votes region-pool their ground-truth box when *region_voting* is on
+    (and the media supports it); Bad votes always train on the whole-image
+    vector - matching the live detector, where only Yes-votes carry a region.
 
     The threshold matches the production ``_train_and_score_xy`` /
     ``train_and_threshold`` pipeline exactly so the reported cost measures what
@@ -291,6 +437,7 @@ def _train_and_calibrate(
     n_labels = len(good_votes) + len(bad_votes)
 
     hidden_dim = _auto_hidden_dim(n_labels)
+    t_xcal = time.monotonic()
     threshold = calculate_cross_calibration_threshold(
         X_list,
         y_list,
@@ -301,8 +448,90 @@ def _train_and_calibrate(
         calibration_fraction=calibration_fraction,
         hidden_dim=hidden_dim,
     )
+    xcal_seconds = time.monotonic() - t_xcal
+    t_train = time.monotonic()
     model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
-    return model, threshold, hidden_dim, n_labels
+    train_seconds = time.monotonic() - t_train
+
+    device = str(next(model.parameters()).device)
+
+    def predict(X_test: Any) -> np.ndarray:
+        with torch.no_grad():
+            t = torch.tensor(np.asarray(X_test), dtype=torch.float32).to(next(model.parameters()).device)
+            return torch.sigmoid(model(t)).squeeze(1).cpu().numpy()
+
+    step = _StepModel(
+        predict=predict,
+        torch_model=model,
+        backend="torch-cuda" if device.startswith("cuda") else "torch-cpu",
+        device=device,
+    )
+    return step, threshold, n_labels, {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds}
+
+
+def _svm_train_and_calibrate(
+    trainer: str,
+    good_votes: dict[int, None],
+    bad_votes: dict[int, None],
+    clips_dict: dict[int, dict[str, Any]],
+    target_category: str,
+    *,
+    inclusion: int,
+    calibrate_count: int,
+    calibration_fraction: float,
+) -> tuple[_StepModel, float, int, dict[str, float]]:
+    """SVM path — single-vector only (the experiment never region-votes an SVM).
+
+    Threshold uses the trainer-agnostic cross-calibration port
+    (:func:`vtscore.eval.trainers._cross_calibrated_threshold`) — the natural
+    analogue of the MLP's production calibration — with the fold models pinned
+    to the sklearn CPU backend (they are tiny and only feed the threshold, so
+    paying GPU launch overhead per fold would be wasteful).  The *final* fit
+    honours the ambient backend (cuML on a GPU unless ``VTSEARCH_DISABLE_CUML``
+    forces sklearn), and that backend is what the row records and what produces
+    the scores.  The SVM fit seed is pinned to 42, mirroring the MLP's fixed
+    calibration seed; the eval seed still varies which items are voted.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.eval.trainers import _train_svm_factory  # noqa: PLC0415
+    from vtscore.training.svm import train_svm  # noqa: PLC0415
+
+    X = np.array(
+        [media_embedding(clips_dict[vid]) for vid in good_votes]
+        + [media_embedding(clips_dict[vid]) for vid in bad_votes],
+        dtype=np.float32,
+    )
+    y = np.array([1] * len(good_votes) + [0] * len(bad_votes), dtype=np.int32)
+    n_labels = len(good_votes) + len(bad_votes)
+
+    kernel, kwargs = _parse_trainer_spec(trainer)
+
+    # Fold models for the threshold are pinned to sklearn CPU (tiny fits).
+    fold_trainer = _train_svm_factory(kernel, backend="sklearn", **kwargs)
+    t_xcal = time.monotonic()
+    threshold = _cross_calibrated_threshold(
+        X,
+        y,
+        fold_trainer,
+        42,
+        inclusion_value=inclusion,
+        calibrate_count=calibrate_count,
+        cal_fraction=calibration_fraction,
+    )
+    xcal_seconds = time.monotonic() - t_xcal
+
+    t_train = time.monotonic()
+    clf = train_svm(X, y, kernel=kernel, inclusion_value=inclusion, seed=42, **kwargs)  # type: ignore[arg-type]
+    train_seconds = time.monotonic() - t_train
+
+    step = _StepModel(
+        predict=clf.predict_proba,
+        torch_model=None,
+        backend=clf.backend,
+        device="cuda" if clf.backend == "cuml" else "cpu",
+    )
+    return step, threshold, n_labels, {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds}
 
 
 # ------------------------------------------------------------------
@@ -325,6 +554,8 @@ def simulate_voting_iterations(  # noqa: C901
     max_steps: Optional[int] = None,
     atlas_min_node_size: int = 20,
     seed_scores: Optional[dict[int, float]] = None,
+    trainer: str = "mlp",
+    target_prevalence: Optional[float] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -334,6 +565,23 @@ def simulate_voting_iterations(  # noqa: C901
         seed: Random seed for splitting and vote ordering.
         dataset_name: Label included in result rows.
         inclusion: Inclusion setting in ``[-10, 10]``.
+        trainer: Which ranker to train at each step — ``"mlp"`` (default, the
+            production path, numerically unchanged) or an SVM name
+            (``"svm_linear"``, ``"svm_rbf"``, or a parameterised spec such as
+            ``"svm_rbf@C=3,gamma=scale"``).  The autopilot vote order adapts to
+            the chosen model, so MLP and SVM trajectories diverge after the
+            first retrain even at the same seed — by design (the question is
+            which model makes *VTSearch* better, and VTSearch's vote order
+            depends on the model).
+        target_prevalence: When set (e.g. ``0.01`` for the 1%-prevalence rare
+            arm), positives across the whole dataset are deterministically
+            downsampled — using ``seed`` — to that fraction *before* the
+            sim/test split, so every FPR/FNR is measured at the target
+            prevalence.  ``None`` (default) uses the category's natural
+            prevalence and is numerically identical to the pre-prevalence
+            harness.  The arm is skipped (returns ``[]``) if it would leave
+            fewer than :data:`_MIN_PREVALENCE_POSITIVES` positives, to keep the
+            test-set FNR estimable.
         sim_fraction: Fraction of medias used for simulated voting.
         safe_thresholds: When ``True``, blend the cross-calibration threshold
             with a GMM-based threshold for robustness with small label counts.
@@ -367,10 +615,13 @@ def simulate_voting_iterations(  # noqa: C901
             text sort, so autopilot seeds from random known-good examples.
 
     Returns:
-        List of row dicts with keys ``seed, dataset, category, strategy, t,
-        n_good, n_bad, cost, fpr, fnr, elapsed_seconds``. ``n_good``/``n_bad``
-        report the vote counts behind each row so callers can tell apart metrics
-        learned from a 1-vs-1 model and a many-vs-many one.
+        List of row dicts.  Keys: ``seed, dataset, category, strategy, trainer,
+        prevalence_arm, realized_prevalence, t, n_good, n_bad, cost, fpr, fnr,
+        auroc, average_precision, train_seconds, xcal_seconds,
+        pool_score_seconds, test_score_seconds, backend, device,
+        elapsed_seconds``.  ``n_good``/``n_bad`` report the vote counts behind
+        each row so callers can tell apart metrics learned from a 1-vs-1 model
+        and a many-vs-many one.
     """
     import numpy as np  # noqa: PLC0415
 
@@ -378,6 +629,16 @@ def simulate_voting_iterations(  # noqa: C901
     # Note: no torch.manual_seed() here - train_model handles its own
     # RNG seeding via fork_rng, keeping it thread-safe.
     start_time = time.monotonic()
+
+    prevalence_arm = "natural" if target_prevalence is None else f"rare_{target_prevalence:g}"
+    if target_prevalence is not None:
+        # Thin positives to the target prevalence *before* splitting, so both the
+        # votable sim pool and the held-out test pool sit at that prevalence.
+        downsampled = _downsample_to_prevalence(clips_dict, target_category, target_prevalence, rng)
+        if downsampled is None:
+            return []  # too few positives survive - skip this arm
+        clips_dict = downsampled
+    realized_prevalence = round(_prevalence(clips_dict, target_category), 6)
 
     sim_ids, test_ids = _split_media_ids(clips_dict, sim_fraction, rng)
 
@@ -440,7 +701,7 @@ def simulate_voting_iterations(  # noqa: C901
     # examples from the positives here when no text sort is available.  Cheap to
     # build once up front.
     pool_labels = {cid: (1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0) for cid in sim_ids}
-    model: torch.nn.Sequential | None = None
+    step: _StepModel | None = None
     threshold = 0.5
     pool_scores: dict[int, float] = {}
     n_steps = len(pool) if max_steps is None else min(max_steps, len(pool))
@@ -453,7 +714,7 @@ def simulate_voting_iterations(  # noqa: C901
             embeddings=sim_embeddings,
             labeled=labeled,
             scores=pool_scores,
-            model=model,
+            model=step,
             threshold=threshold,
             atlas=atlas,
             rng=rng,
@@ -476,10 +737,11 @@ def simulate_voting_iterations(  # noqa: C901
 
         # Need at least 1 good and 1 bad to train
         if not good_votes or not bad_votes:
-            model = None
+            step = None
             continue
 
-        model, threshold, _hidden_dim, n_labels = _train_and_calibrate(
+        step, threshold, n_labels, timings = _train_and_calibrate(
+            trainer,
             good_votes,
             bad_votes,
             clips_dict,
@@ -493,16 +755,20 @@ def simulate_voting_iterations(  # noqa: C901
 
         # Apply safe threshold blending if enabled
         if safe_thresholds:
-            threshold = _blend_safe_threshold(threshold, model, region_aware, sim_clips, X_all_clips, n_labels)
+            threshold = _blend_safe_threshold(threshold, step, region_aware, sim_clips, X_all_clips, n_labels)
 
         # Evaluate on held-out test set
+        t_test = time.monotonic()
         metrics = _evaluate_on_test(
-            model, threshold, clips_dict, test_ids, target_category, inclusion, region_aware=region_aware
+            step, threshold, clips_dict, test_ids, target_category, inclusion, region_aware=region_aware
         )
+        test_score_seconds = time.monotonic() - t_test
 
         # Score the remaining pool with the fresh model so the next step's
         # autopilot Bad / Hard picks rank it.
-        pool_scores = _score_pool(model, pool, clips_dict)
+        t_pool = time.monotonic()
+        pool_scores = _score_pool(step, pool, clips_dict)
+        pool_score_seconds = time.monotonic() - t_pool
 
         rows.append(
             {
@@ -510,10 +776,19 @@ def simulate_voting_iterations(  # noqa: C901
                 "dataset": dataset_name,
                 "category": target_category,
                 "strategy": strategy,
+                "trainer": trainer,
+                "prevalence_arm": prevalence_arm,
+                "realized_prevalence": realized_prevalence,
                 "t": t,
                 "n_good": len(good_votes),
                 "n_bad": len(bad_votes),
                 **metrics,
+                "train_seconds": round(timings["train_seconds"], 6),
+                "xcal_seconds": round(timings["xcal_seconds"], 6),
+                "pool_score_seconds": round(pool_score_seconds, 6),
+                "test_score_seconds": round(test_score_seconds, 6),
+                "backend": step.backend,
+                "device": step.device,
                 "elapsed_seconds": round(time.monotonic() - start_time, 3),
             }
         )
@@ -540,6 +815,8 @@ def run_voting_iterations_eval(
     max_steps: Optional[int] = None,
     atlas_min_node_size: int = 20,
     seed_scores: Optional[dict[str, dict[str, dict[int, float]]]] = None,
+    trainers: Optional[list[str]] = None,
+    prevalence_arms: Optional[list[Optional[float]]] = None,
 ) -> pd.DataFrame:
     """Run the voting-iterations evaluation over multiple seeds/datasets/categories.
 
@@ -575,14 +852,24 @@ def run_voting_iterations_eval(
             ``{dataset: {category: {media_id: similarity}}}``.  When a
             (dataset, category) has an entry, the autopilot seed follows that
             text ranking; otherwise it seeds from random known-good examples.
+        trainers: Which rankers to run at each cell (see
+            :func:`simulate_voting_iterations`).  ``None`` (default) runs
+            ``["mlp"]``; pass e.g. ``["mlp", "svm_linear", "svm_rbf"]`` for the
+            head-to-head comparison.  Recorded in the ``trainer`` column.
+        prevalence_arms: Which prevalence arms to run per (dataset, category).
+            ``None`` (default) runs ``[None]`` (natural prevalence only); pass
+            e.g. ``[None, 0.01]`` to add the 1%-prevalence rare arm.  Recorded
+            in the ``prevalence_arm`` / ``realized_prevalence`` columns.
 
     Returns:
-        A :class:`~pandas.DataFrame` with columns ``seed, dataset, category,
-        strategy, t, n_good, n_bad, cost, fpr, fnr, elapsed_seconds``.
+        A :class:`~pandas.DataFrame` with the columns listed in
+        :data:`_VOTING_COLUMNS`.
     """
     import pandas as pd  # noqa: PLC0415
 
     strategy_list = strategies if strategies is not None else ["autopilot"]
+    trainer_list = trainers if trainers is not None else ["mlp"]
+    arm_list = prevalence_arms if prevalence_arms is not None else [None]
     all_rows: list[dict[str, Any]] = []
 
     for ds_name, clips_dict in dataset_clips.items():
@@ -601,43 +888,30 @@ def run_voting_iterations_eval(
         for seed in seeds:
             for cat in target_cats:
                 cat_seed_scores = (seed_scores or {}).get(ds_name, {}).get(cat)
-                for strategy in strategy_list:
-                    rows = simulate_voting_iterations(
-                        clips_dict,
-                        target_category=cat,
-                        seed=seed,
-                        dataset_name=ds_name,
-                        inclusion=inclusion,
-                        sim_fraction=sim_fraction,
-                        safe_thresholds=safe_thresholds,
-                        calibrate_count=calibrate_count,
-                        calibration_fraction=calibration_fraction,
-                        region_voting=region_voting,
-                        strategy=strategy,
-                        max_steps=max_steps,
-                        atlas_min_node_size=atlas_min_node_size,
-                        seed_scores=cat_seed_scores,
-                    )
-                    all_rows.extend(rows)
+                for arm in arm_list:
+                    for strategy in strategy_list:
+                        for trainer in trainer_list:
+                            rows = simulate_voting_iterations(
+                                clips_dict,
+                                target_category=cat,
+                                seed=seed,
+                                dataset_name=ds_name,
+                                inclusion=inclusion,
+                                sim_fraction=sim_fraction,
+                                safe_thresholds=safe_thresholds,
+                                calibrate_count=calibrate_count,
+                                calibration_fraction=calibration_fraction,
+                                region_voting=region_voting,
+                                strategy=strategy,
+                                max_steps=max_steps,
+                                atlas_min_node_size=atlas_min_node_size,
+                                seed_scores=cat_seed_scores,
+                                trainer=trainer,
+                                target_prevalence=arm,
+                            )
+                            all_rows.extend(rows)
 
-    return pd.DataFrame(
-        all_rows,
-        columns=pd.Index(
-            [
-                "seed",
-                "dataset",
-                "category",
-                "strategy",
-                "t",
-                "n_good",
-                "n_bad",
-                "cost",
-                "fpr",
-                "fnr",
-                "elapsed_seconds",
-            ]
-        ),
-    )
+    return pd.DataFrame(all_rows, columns=pd.Index(list(_VOTING_COLUMNS)))
 
 
 def run_voting_iterations_eval_from_pickles(
@@ -654,6 +928,8 @@ def run_voting_iterations_eval_from_pickles(
     max_steps: Optional[int] = None,
     atlas_min_node_size: int = 20,
     seed_scores: Optional[dict[str, dict[str, dict[int, float]]]] = None,
+    trainers: Optional[list[str]] = None,
+    prevalence_arms: Optional[list[Optional[float]]] = None,
 ) -> pd.DataFrame:
     """Convenience wrapper that loads datasets from pickle files.
 
@@ -707,4 +983,6 @@ def run_voting_iterations_eval_from_pickles(
         max_steps=max_steps,
         atlas_min_node_size=atlas_min_node_size,
         seed_scores=seed_scores,
+        trainers=trainers,
+        prevalence_arms=prevalence_arms,
     )

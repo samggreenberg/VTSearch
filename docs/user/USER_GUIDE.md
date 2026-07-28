@@ -579,10 +579,12 @@ controls, remembered per media type:
 
 ### Solo media type - streamline for one media type
 
-If you only ever work with one kind of media (e.g. you exclusively
-search images, optionally pulled in from videos and documents via
-the built-in converters), pick that type under the **Import Defaults**
-tab in the Settings modal (**Solo media type**). Once set:
+If everyone on a server only ever works with one kind of media (e.g.
+they exclusively search images, optionally pulled in from videos and
+documents via the built-in converters), an operator can restrict the
+whole instance to that type. This is an **admin setting, not a user
+preference**: it's set when the server starts and shown read-only on the
+Settings modal's **Server** tab. Once set:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/settings-appearance.dark.png" />
@@ -594,13 +596,13 @@ tab in the Settings modal (**Solo media type**). Once set:
 - Converter offerings filter to those that produce your type
   (so picking "image" still lets you import videos-as-frames and
   documents-as-pages, just not raw audio).
-- Your chosen type's default embedder is warmed at startup so the
+- The chosen type's default embedder is warmed at startup so the
   first detector run is fast.
 
-Pick **Show everything** to opt back out. Operators can also pass
-`--solo-media-type image` (or any type id) on the command line as a
-fallback for new users - anyone who explicitly changes the setting
-overrides the CLI value for themselves.
+Operators set it by passing `--solo-media-type image` (or any type id)
+on the command line, or by writing `"solo_media_type": "image"` into
+`data/settings.json`. It applies to every user, and there is no
+per-user override.
 
 ---
 
@@ -611,18 +613,24 @@ The Settings modal (gear icon) is organised into eight tabs:
 - **Appearance** - theme, animations, the metadata panel, the
   **Enable achievements** toggle, and per-media-type Scroll Style
   (focus mode and thumbnail size).
-- **Auto-Find** - detectors that auto-run on import, and what exporter
-  to send their results to.
+- **Auto-Find** - what exporter to send auto-run results to. (Which
+  detectors auto-run is chosen on the Dashboard's **AutoRun** tab.)
 - **Autopilot** - the guided-workflow knobs described under
   [Configuring Autopilot](#configuring-autopilot).
 - **Browser** - per-media-type look of the spatial Browse view (tile
-  shape, colour scheme, cell size).
+  shape, colour scheme, cell size), plus a **Graphics** control that
+  applies to every media type. Leave Graphics on **Auto** and VTSearch
+  picks for you: browsers without hardware acceleration get the cheaper
+  animations automatically. Choose **Reduced** if panning or zooming the
+  map still feels laggy - every animation keeps playing, but the costly
+  effects (image smoothing during motion, drop shadows) are dropped.
+  **Full** always uses the richest animations.
 - **HuggingFace** - sign in with HuggingFace to download gated demo
   datasets and gated AI models.
 - **Import Defaults** - default embedder, clipper, and converters per
-  media type, plus the **Solo media type** picker.
+  media type.
 - **Server** - read-only settings fixed when the server started and
-  shared by everyone.
+  shared by everyone, including the **Solo media type** restriction.
 - **Sorting** - options that control how the trained ranking behaves.
 
 ---
@@ -644,10 +652,24 @@ with bulk-action and per-card controls.
   pencil for **Rename**, **Delete** is an inline button, and the
   remaining actions (**Browse**, **Stats**, and - on multi-user
   deployments - access controls) live behind a **⋯** overflow menu.
-- **Detectors** - every saved detector. Like datasets, the name carries
-  a **Rename** pencil and **Delete** is inline; the **⋯** overflow menu
-  holds the rest, including **Import Labels** (import labels into this
-  detector) and **Export**.
+- **Detectors** - every saved detector, split across two tabs:
+  - **Drafts** holds detectors you're still building or evaluating.
+    Like datasets, the name carries a **Rename** pencil and **Delete**
+    is inline; the **⋯** overflow menu holds the rest, including
+    **Import Labels** (import labels into this detector), **Export**,
+    and **Move to AutoRun**.
+  - **AutoRun** holds finalized detectors. They run automatically
+    against every dataset as it is imported (and during CLI
+    autodetect), and they are *frozen*: no rename, delete, retrain, or
+    label import until you pick **Move to Drafts** from the **⋯** menu
+    to unfreeze them. Read-only actions (**Load**, **Browse
+    positives**, **Stats**, **Export**) stay available, and **Find**
+    works as usual.
+
+  A detector lives on exactly one tab at a time, and every user
+  curates their own AutoRun list. The typical loop: build and test a
+  detector in **Drafts**, move it to **AutoRun** once you trust it,
+  and move it back to Drafts later if it needs more tuning.
 
 The **+** button on each card creates a new dataset (the Add Dataset
 dialog) or a new detector (the [New Detector](#creating-a-detector)

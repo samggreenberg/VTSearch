@@ -741,13 +741,20 @@ def download_places365(on_progress: Optional[ProgressCallback] = None) -> Path:
                 _core.PLACES365_LABELS_FILELIST_SIZE_MB * 1024 * 1024,
                 on_progress,
             )
-            with tarfile.open(filelist_archive, "r") as tar:
-                member = tar.getmember("places365_val.txt")
-                src = tar.extractfile(member)
-                if src is None:
-                    raise RuntimeError("places365_val.txt not extractable from filelist tar")
-                with open(labels_path, "wb") as dst:
-                    shutil.copyfileobj(src, dst)
+            # The filelist tarball bundles the whole train/val/test/category
+            # set; extract only the val label file we need, flattened directly
+            # to labels_path.
+            _core._extract_archive(
+                filelist_archive,
+                "places365_filelist.tar",
+                extract_dir,
+                "Places365 labels",
+                on_progress,
+                member_filter=lambda m: m.endswith("places365_val.txt"),
+                flatten=True,
+            )
+            if not labels_path.exists():
+                raise RuntimeError("places365_val.txt not extractable from filelist tar")
         finally:
             if filelist_archive.exists():
                 filelist_archive.unlink()

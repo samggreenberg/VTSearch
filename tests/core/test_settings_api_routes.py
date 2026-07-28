@@ -776,30 +776,6 @@ class TestBrowserSettings:
         # Persists across a fresh read.
         assert client.get("/api/settings").get_json()["browse_signpost_captioner"]["image"] is True
 
-    def test_update_browse_signpost_vocab_per_type(self, client):
-        res = client.put(
-            "/api/settings",
-            json={"browse_signpost_vocab": {"audio": ["dog barking", "rain"], "image": ["cat", "car"]}},
-        )
-        assert res.status_code == 200
-        data = res.get_json()
-        assert data["browse_signpost_vocab"]["audio"] == ["dog barking", "rain"]
-        assert data["browse_signpost_vocab"]["image"] == ["cat", "car"]
-        # Persists across a fresh read.
-        assert client.get("/api/settings").get_json()["browse_signpost_vocab"]["audio"] == ["dog barking", "rain"]
-
-    def test_browse_signpost_vocab_normalizes_on_write(self, client):
-        # Whitespace trimmed, blanks and duplicates dropped (order preserved),
-        # and a media type left with no usable terms is omitted entirely.
-        res = client.put(
-            "/api/settings",
-            json={"browse_signpost_vocab": {"audio": ["  dog  ", "dog", "", "  ", "rain"], "image": ["   "]}},
-        )
-        assert res.status_code == 200
-        data = res.get_json()["browse_signpost_vocab"]
-        assert data["audio"] == ["dog", "rain"]
-        assert "image" not in data
-
     def test_update_browse_mouse_zooms_per_level_per_type(self, client):
         res = client.put("/api/settings", json={"browse_mouse_zooms_per_level": {"audio": 1, "image": 3}})
         assert res.status_code == 200
@@ -825,6 +801,26 @@ class TestBrowserSettings:
         assert data["browse_signposts"]["image"] is True
         # Persists across a fresh read.
         assert client.get("/api/settings").get_json()["browse_signposts"]["audio"] is False
+
+    def test_browse_graphics_defaults_to_auto(self, client):
+        # A global scalar (not a per-media dict): it describes the client's
+        # rendering capability, not anything about the data.
+        assert client.get("/api/settings").get_json()["browse_graphics"] == "auto"
+        assert client.get("/api/settings/defaults").get_json()["browse_graphics"] == "auto"
+
+    @pytest.mark.parametrize("mode", ["auto", "full", "reduced"])
+    def test_update_browse_graphics(self, client, mode):
+        res = client.put("/api/settings", json={"browse_graphics": mode})
+        assert res.status_code == 200
+        assert res.get_json()["browse_graphics"] == mode
+        # Persists across a fresh read.
+        assert client.get("/api/settings").get_json()["browse_graphics"] == mode
+
+    def test_update_browse_graphics_rejects_unknown_mode(self, client):
+        res = client.put("/api/settings", json={"browse_graphics": "turbo"})
+        assert res.status_code == 422
+        # The rejected write leaves the stored value untouched.
+        assert client.get("/api/settings").get_json()["browse_graphics"] == "auto"
 
     def test_update_bin_details_docked_per_type(self, client):
         res = client.put("/api/settings", json={"bin_details_docked": {"audio": True, "image": False}})

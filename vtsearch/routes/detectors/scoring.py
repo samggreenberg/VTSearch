@@ -24,6 +24,7 @@ from vtsearch.schemas.detectors import (
     AutoDetectRequestSchema,
     AutoDetectResponseSchema,
     FindCorrectionsToDetectorResponseSchema,
+    FindEvidenceCoverageResponseSchema,
     FindLabelRequestSchema,
     FindLabelResponseSchema,
     FindStatsResponseSchema,
@@ -282,6 +283,12 @@ def find_label(body: dict):
     results, threshold = maybe_labelset_structural_rerank(
         get_active_detector_context(), labelset, results, threshold, snap
     )
+    # Store the final (post-rerank) cutoff on the context so server-side reads of
+    # the Find cutoff — the work-queue / boundary-walk endpoints, Inclusion
+    # re-thresholding — agree with the labels this pass just applied. A no-op for
+    # the non-structural path (threshold unchanged), authoritative for the
+    # structural one.
+    get_active_detector_context().threshold = threshold
 
     _abort_if_find_cancelled()
     update_find_progress(
@@ -336,6 +343,13 @@ def find_label(body: dict):
 
     record_find(n_total)
 
+    # Find is not yet windowed: its "just sit and vote" boundary walk and the
+    # Browse / To Dataset / Export bulk actions still read the full client-side
+    # ranking, so find-label returns the whole ``results`` list. The server-side
+    # replacements those flows will switch to already exist
+    # (``/api/find/queue-ids``, ``/api/find/boundary-next``); wiring the Find
+    # frontend onto them + windowing this response is the remaining slice (see
+    # docs/plans/scalability.md S3/S17/S19).
     return {
         "ok": True,
         "results": results,
@@ -557,6 +571,104 @@ def find_stats():
         "stale": getattr(det_ctx, "find_eval_stale", False),
         "sweep": sweep,
     }
+
+
+def _empty_evidence_coverage() -> dict:
+    """The ``available: False`` report the evidence-coverage endpoint returns
+    when there is nothing to measure (no scored Find run, no resolvable
+    labelset, or no cached label embeddings)."""
+    from vtscore.detectors.evidence_coverage import DEFAULT_ALPHA, DEFAULT_K
+
+    return {
+        "available": False,
+        "n_items": 0,
+        "n_pos_labels": 0,
+        "n_neg_labels": 0,
+        "k": DEFAULT_K,
+        "alpha": DEFAULT_ALPHA,
+        "frac_unsupported": 0.0,
+        "expected_unsupported": DEFAULT_ALPHA,
+        "z_score": 0.0,
+        "median_support": 1.0,
+        "frac_low_trust": 0.0,
+        "median_trust": 1.0,
+        "unsupported": False,
+    }
+
+
+@detector_scoring_bp.route("/api/find/evidence-coverage", methods=["GET"])
+@detector_scoring_bp.response(200, FindEvidenceCoverageResponseSchema)
+def find_evidence_coverage():
+    """Evidence-coverage report for the active detector on the active dataset.
+
+    The cross-user complement to the atlas domain-shift report
+    (``GET /api/datasets/registry/<id>/domain-shift``): that one needs the
+    *training* dataset loaded with a built atlas, which is absent in a true
+    detector handoff (userB has userA's detector JSON, not userA's haystack).
+    This asks only what the detector itself carries — its labelset, re-embedded
+    in memory against the active dataset's embedder at load — so it fires even
+    when the training haystack was never handed over.
+
+    For every scored item it measures how far the detector's *predicted* class
+    sits from the labeled evidence of that class (a conformal support p-value
+    ``D``, calibrated against the labelset's own leave-one-out distances) and
+    the trust-score ratio ``TS``, then summarises the share of the dataset the
+    detector is calling without supervision behind it.  Returns
+    ``available: False`` (rather than 4xx) when there is no scored Find run or
+    no resolvable labelset, so the Stats modal can simply hide the section.
+    Pure read; no new state.  See docs/plans/coverage-atlas.md §6.1 (phase v0).
+    """
+    import numpy as np
+
+    from vtscore.detectors.evidence_coverage import evidence_coverage_report
+    from vtscore.detectors.labelset_training import build_xy_from_labelset
+    from vtscore.detectors.learned_sort import resolve_active_labelset
+    from vtscore.embedding.media_vectors import media_embedding
+    from vtscore.state.core import get_active_detector_context
+
+    det_ctx = get_active_detector_context()
+    scores = det_ctx.find_scores
+    if not scores:
+        return _empty_evidence_coverage()
+
+    labelset, _ = resolve_active_labelset(det_ctx)
+    if labelset is None:
+        return _empty_evidence_coverage()
+
+    # (X, y) re-derived from the in-memory label embeddings the detector load
+    # already populated from its saved labelset — cross-user by construction,
+    # nothing persisted.  Good rows are y == 1, Bad (incl. patch-flood
+    # negatives) are y == 0.
+    x_list, y_list, _groups = build_xy_from_labelset(det_ctx, labelset)
+    if not x_list:
+        return _empty_evidence_coverage()
+    x = np.asarray(x_list, dtype=np.float32)
+    y = np.asarray(y_list, dtype=np.float32)
+    pos = x[y == 1.0]
+    neg = x[y == 0.0]
+
+    # Query side: every scored item's embedding in the *same* space the labelset
+    # was resolved in (``det_ctx.embedder``), with its current predicted class
+    # from the frozen score vs the live threshold.
+    embedder = det_ctx.embedder or None
+    threshold = det_ctx.threshold
+    snap = snapshot_medias()
+    q_vecs: list[Any] = []
+    q_pred: list[bool] = []
+    for cid, score in scores.items():
+        media = snap.get(cid)
+        if media is None:
+            continue
+        emb = media_embedding(media, embedder_name=embedder)
+        if emb is None:
+            continue
+        q_vecs.append(np.asarray(emb, dtype=np.float32))
+        q_pred.append(score >= threshold)
+    if not q_vecs:
+        return _empty_evidence_coverage()
+
+    report = evidence_coverage_report(pos, neg, np.stack(q_vecs), np.asarray(q_pred, dtype=bool))
+    return {"available": True, **report}
 
 
 @detector_scoring_bp.route("/api/find/corrections-to-detector", methods=["POST"])

@@ -13,10 +13,10 @@ converter loop) without pulling in the full importer base.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass, field as dc_field
 from typing import Any
+from vtscore.utils.hashing import content_md5
 
 __all__ = ["SourceSpec", "PickerView", "MissingMediaTypeError"]
 
@@ -173,11 +173,11 @@ def _fill_converter_output_fields(media: dict[str, Any]) -> None:
     if "md5" not in media:
         mb = media.get("media_bytes")
         if mb:
-            media["md5"] = hashlib.md5(mb).hexdigest()
+            media["md5"] = content_md5(mb)
         elif media.get("media_string"):
-            media["md5"] = hashlib.md5((media["media_string"] or "").encode("utf-8")).hexdigest()
+            media["md5"] = content_md5((media["media_string"] or "").encode("utf-8"))
         else:
-            media["md5"] = hashlib.md5(b"").hexdigest()
+            media["md5"] = content_md5(b"")
     media.setdefault("embeddings", {})
     media.setdefault("embedder", "")
     media.setdefault("category", "custom")

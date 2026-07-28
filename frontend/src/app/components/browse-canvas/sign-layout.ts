@@ -20,6 +20,18 @@
 //
 // so panning down through the zoom stack dissolves coarse names into the finer
 // names that refine them, the way a paper map hands "EUROPE" off to "France".
+//
+// Those two fade edges only make sense as a *hand-off*: a sign fades in at its
+// coarse edge because a coarser parent is already naming the area, and fades
+// out at its fine edge because a finer child is taking over. A **terminal**
+// sign has no such neighbour on one side (`has_coarser` / `has_finer` on the
+// payload), and fading there would leave the region nameless — the reported
+// bug of an on-screen island whose only name appears then vanishes as you zoom
+// past it. So a root sign (no coarser parent) skips the coarse-edge fade and
+// stays visible when zoomed out; a leaf sign (no finer child) skips the fine-
+// edge fade and stays visible when zoomed in. The size curve is unchanged —
+// `interpolateScale` clamps outside the band — so a terminal sign simply holds
+// its smallest/largest size at full opacity past the edge instead of vanishing.
 
 import type { RegionLabelPayload, ViewTransform } from '../../models/projection.models';
 import { projToScreen } from './view-transform';
@@ -41,6 +53,11 @@ export interface PlacedSign {
   sy: number;
   /** Resolved font size (CSS px) after the appearance scale. */
   fontPx: number;
+  /** The {@link SignAppearance.scale} this sign rendered at (multiplier on
+   *  {@link SIGN_BASE_FONT_PX}). Drives the drop-shadow depth cue — see
+   *  {@link signShadow} — so a bigger (more zoomed-past) sign lifts further off
+   *  the map. */
+  scale: number;
   alpha: number;
   /** Pill box (CSS px), centred on `(sx, sy)`. */
   w: number;
@@ -84,6 +101,56 @@ const SIGN_SCALE_STOPS: readonly [number, number][] = [
   [SIGN_EXPIRE_DELTA, 1.45],
 ];
 
+/** Render scale at or below which a sign lies flat on the map and casts no
+ *  shadow — the smallest, just-appeared signs. Between here and
+ *  {@link SIGN_SHADOW_MAX_SCALE} the shadow depth ramps linearly. */
+export const SIGN_SHADOW_MIN_SCALE = 0.75;
+/** Render scale at which a sign casts its deepest shadow — the largest tier
+ *  (the top of {@link SIGN_SCALE_STOPS}), read as floating just past the
+ *  viewer's shoulder. */
+export const SIGN_SHADOW_MAX_SCALE = SIGN_SCALE_STOPS[SIGN_SCALE_STOPS.length - 1][1];
+/** Blur radius of a fully-lifted sign's shadow, as a multiple of its font px. */
+const SIGN_SHADOW_BLUR_EM = 1.2;
+/** Downward offset of a fully-lifted sign's shadow, as a multiple of its font
+ *  px — the sign's apparent height above the map plane. */
+const SIGN_SHADOW_OFFSET_EM = 0.55;
+/** Opacity of a fully-lifted sign's shadow. */
+const SIGN_SHADOW_MAX_ALPHA = 0.55;
+
+/** Drop shadow a sign casts: how far it floats off the map. */
+export interface SignShadow {
+  /** Gaussian blur radius (CSS px) for `ctx.shadowBlur`. */
+  blur: number;
+  /** Downward offset (CSS px) for `ctx.shadowOffsetY`. */
+  offsetY: number;
+  /** 0..1 shadow opacity. */
+  alpha: number;
+}
+
+/**
+ * Drop-shadow depth cue for a sign rendered at `scale` (its
+ * {@link SignAppearance.scale}) and `fontPx`. As the viewer zooms in, a sign
+ * grows past full size and reads as lifting off the map toward them, so it casts
+ * a progressively larger, softer, more-offset shadow. Below
+ * {@link SIGN_SHADOW_MIN_SCALE} the sign lies flat on the map and casts nothing
+ * (returns `null`); by {@link SIGN_SHADOW_MAX_SCALE} the shadow is deepest, as if
+ * the sign is about to float past the viewer's shoulder. Magnitudes scale with
+ * `fontPx`, so the shadow stays proportional to the sign at every size (a bigger
+ * sign both is larger and throws a larger shadow, compounding the "coming toward
+ * you" read). Pure and total — the canvas painter just applies the result.
+ */
+export function signShadow(scale: number, fontPx: number): SignShadow | null {
+  const span = SIGN_SHADOW_MAX_SCALE - SIGN_SHADOW_MIN_SCALE;
+  const lift = span > 0 ? (scale - SIGN_SHADOW_MIN_SCALE) / span : 0;
+  if (!(lift > 0)) return null;
+  const l = Math.min(1, lift);
+  return {
+    blur: fontPx * SIGN_SHADOW_BLUR_EM * l,
+    offsetY: fontPx * SIGN_SHADOW_OFFSET_EM * l,
+    alpha: SIGN_SHADOW_MAX_ALPHA * l,
+  };
+}
+
 /** Minimum gap (CSS px) enforced between sign pills by the de-clutter pass. */
 const SIGN_GAP_PX = 4;
 /** Pill horizontal padding, as a fraction of the font size (per side). */
@@ -108,17 +175,30 @@ export function viewLevelForZoom(baseRadius: number, effZoom: number, targetRadi
  * (`delta = viewLevel - sign.level`), or `null` when the sign is outside its
  * visibility band entirely. Pure and total — see the module comment for the
  * band-by-band behaviour.
+ *
+ * `hasCoarser` / `hasFiner` are the sign's tree neighbours (default `true`, the
+ * pre-flag fading). A **root** (`hasCoarser=false`) keeps full opacity below its
+ * coarse edge instead of fading in and disappearing — nothing coarser names the
+ * area when zoomed out. A **leaf** (`hasFiner=false`) keeps full opacity above
+ * its fine edge instead of expiring — nothing finer takes over when zoomed in.
  */
-export function signAppearance(delta: number): SignAppearance | null {
+export function signAppearance(
+  delta: number,
+  hasCoarser = true,
+  hasFiner = true,
+): SignAppearance | null {
   if (!Number.isFinite(delta)) return null;
-  if (delta <= SIGN_APPEAR_DELTA || delta >= SIGN_EXPIRE_DELTA) return null;
+  // Only cull past an edge that hands off to a neighbour; a terminal edge stays
+  // visible (its size clamps via `interpolateScale`).
+  if (delta <= SIGN_APPEAR_DELTA && hasCoarser) return null;
+  if (delta >= SIGN_EXPIRE_DELTA && hasFiner) return null;
 
   let alpha = 1;
   const fadeInEnd = SIGN_APPEAR_DELTA + SIGN_FADE_IN_SPAN;
   const fadeOutStart = SIGN_EXPIRE_DELTA - SIGN_FADE_OUT_SPAN;
-  if (delta < fadeInEnd) {
+  if (delta < fadeInEnd && hasCoarser) {
     alpha = (delta - SIGN_APPEAR_DELTA) / SIGN_FADE_IN_SPAN;
-  } else if (delta > fadeOutStart) {
+  } else if (delta > fadeOutStart && hasFiner) {
     alpha = (SIGN_EXPIRE_DELTA - delta) / SIGN_FADE_OUT_SPAN;
   }
 
@@ -160,7 +240,11 @@ export function layoutSigns(
   const candidates: PlacedSign[] = [];
   for (const label of labels) {
     if (!label.text) continue;
-    const appearance = signAppearance(view.viewLevel - label.level);
+    const appearance = signAppearance(
+      view.viewLevel - label.level,
+      label.has_coarser ?? true,
+      label.has_finer ?? true,
+    );
     if (!appearance || appearance.alpha <= 0.02) continue;
 
     const [sx, sy] = projToScreen(label.x, label.y, view.transform, view.width, view.height);
@@ -171,7 +255,7 @@ export function layoutSigns(
     if (sx + w / 2 < 0 || sx - w / 2 > view.width) continue;
     if (sy + h / 2 < 0 || sy - h / 2 > view.height) continue;
 
-    candidates.push({ label, sx, sy, fontPx, alpha: appearance.alpha, w, h });
+    candidates.push({ label, sx, sy, fontPx, scale: appearance.scale, alpha: appearance.alpha, w, h });
   }
 
   // Priority: bigger signs first (they're the ones nearest their own zoom

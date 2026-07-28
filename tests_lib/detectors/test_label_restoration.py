@@ -18,12 +18,12 @@ gates without contaminating the per-session Smart/Stable trends.
 
 from __future__ import annotations
 
-import hashlib
 from contextlib import contextmanager
 
 from vtscore.datasets.labelset import LabelSet, LabeledElement
 from vtscore.detectors.label_restoration import restore_labels_from_detector
 from vtscore.state import get_active_context, get_active_detector_context
+from vtscore.utils.hashing import content_md5
 
 
 def _det_data(elements: list[LabeledElement]) -> dict:
@@ -161,7 +161,7 @@ class TestUnmatchedFallbackPass:
         m1 = get_active_context().medias[1]
         resolved = tmp_path / "resolved.wav"
         resolved.write_bytes(m1["media_bytes"])
-        assert hashlib.md5(resolved.read_bytes()).hexdigest() == m1["md5"]
+        assert content_md5(resolved.read_bytes()) == m1["md5"]
 
         monkeypatch.setattr(
             "vtscore.detectors.resolver.resolve_file_context",

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import io
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -24,16 +23,12 @@ def _resolve_media_bytes(media: dict[str, Any]) -> bytes | None:
     return None
 
 
-def _load_audio_array(media_bytes: bytes, filename: str, duration: float | None, librosa) -> tuple[Any, int] | None:
-    """Decode WAV bytes through librosa, optionally truncated to *duration* seconds."""
+def _load_audio_array(media_bytes: bytes, filename: str, duration: float | None) -> tuple[Any, int] | None:
+    """Decode audio bytes in memory, optionally truncated to *duration* seconds."""
+    from vtscore.media.audio.decode import decode_audio  # noqa: PLC0415
+
     try:
-        with tempfile.NamedTemporaryFile(suffix=Path(filename).suffix or ".wav", delete=False) as tmp:
-            tmp.write(media_bytes)
-            tmp_path = tmp.name
-        try:
-            audio_data, sr = librosa.load(tmp_path, sr=None, mono=True, duration=duration)
-        finally:
-            Path(tmp_path).unlink(missing_ok=True)
+        audio_data, sr = decode_audio(media_bytes, sr=None, mono=True, duration=duration)
     except Exception as e:
         print(f"Audio2ImageMediaConverter: failed to load {filename}: {e}")
         return None
@@ -238,7 +233,7 @@ class Audio2ImageMediaConverter(MediaConverter):
             return []
 
         duration = time_window_s if time_window_s > 0 else None
-        audio = _load_audio_array(media_bytes, filename, duration, librosa)
+        audio = _load_audio_array(media_bytes, filename, duration)
         if audio is None:
             return []
         audio_data, sr = audio

@@ -18,7 +18,6 @@ one code path.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
@@ -27,6 +26,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from marshmallow import ValidationError
+from vtscore.utils.hashing import content_md5
 
 log = logging.getLogger(__name__)
 
@@ -42,10 +42,10 @@ def _content_hash(clip: dict[str, Any]) -> str | None:
     """
     s = clip.get("media_string")
     if isinstance(s, str) and s:
-        return hashlib.md5(s.encode("utf-8")).hexdigest()[:12]
+        return content_md5(s.encode("utf-8"))[:12]
     b = clip.get("media_bytes")
     if isinstance(b, (bytes, bytearray)) and b:
-        return hashlib.md5(bytes(b)).hexdigest()[:12]
+        return content_md5(bytes(b))[:12]
     return None
 
 

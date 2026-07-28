@@ -14,6 +14,7 @@ import json
 import pytest
 
 import app as app_module
+from tests import wait_for_detector_task
 
 
 # ---------------------------------------------------------------------------
@@ -482,5 +483,8 @@ class TestServerCsvLabelImporter:
         assert result["applied"] == 0, "no labels should be applied via basename collision"
         assert 1 not in app_module.good_votes
         assert 2 not in app_module.bad_votes
-        # The rows are reported as missing (subject to ingest-missing recovery).
-        assert result["missing_count"] >= 0
+        # The rows are handed to the background auto-resolve pass (#2703),
+        # which can't reach them either (no origin), so they stay unresolved.
+        assert result["ingest_pending_count"] == 2
+        snapshot = wait_for_detector_task(result["ingest_task_id"])
+        assert snapshot["ingest_result"]["unresolved"] == 2

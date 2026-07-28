@@ -5,17 +5,21 @@ import { map } from 'rxjs/operators';
 
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
 import type { CancelDatasetLoadResponse } from '../generated/api-client/models/cancel-dataset-load-response';
+import type { DatasetDomainShiftResponse } from '../generated/api-client/models/dataset-domain-shift-response';
 import type { DatasetRegistryLoadResponse } from '../generated/api-client/models/dataset-registry-load-response';
 import type { DatasetRegistryOkResponse } from '../generated/api-client/models/dataset-registry-ok-response';
 import type { DatasetRegistryReadersResponse } from '../generated/api-client/models/dataset-registry-readers-response';
 import type { DatasetRegistryRenameResponse } from '../generated/api-client/models/dataset-registry-rename-response';
+import type { DatasetRegistryDuplicatesResponse } from '../generated/api-client/models/dataset-registry-duplicates-response';
 import type { DatasetRegistryStatsResponse } from '../generated/api-client/models/dataset-registry-stats-response';
 import type { DatasetsRegistryListResponse } from '../generated/api-client/models/datasets-registry-list-response';
 import type { DatasetStatusResponse } from '../generated/api-client/models/dataset-status-response';
 import { cancelDatasetLoad } from '../generated/api-client/fn/datasets-status/cancel-dataset-load';
 import { cancelDatasetLoadTask } from '../generated/api-client/fn/datasets-status/cancel-dataset-load-task';
 import { datasetStatus } from '../generated/api-client/fn/datasets-status/dataset-status';
+import { datasetDomainShift } from '../generated/api-client/fn/datasets-registry/dataset-domain-shift';
 import { deleteRegisteredDataset } from '../generated/api-client/fn/datasets-registry/delete-registered-dataset';
+import { getDatasetDuplicates } from '../generated/api-client/fn/datasets-registry/get-dataset-duplicates';
 import { getDatasetStats } from '../generated/api-client/fn/datasets-registry/get-dataset-stats';
 import { listRegisteredDatasets } from '../generated/api-client/fn/datasets-registry/list-registered-datasets';
 import { loadRegisteredDataset } from '../generated/api-client/fn/datasets-registry/load-registered-dataset';
@@ -100,6 +104,27 @@ export class DatasetsRegistryApiService {
   getDatasetStats(datasetId: string): Observable<DatasetRegistryStatsResponse> {
     return getDatasetStats(this.http, this.config.rootUrl, {
       dataset_id: datasetId,
+    }).pipe(map((r) => r.body));
+  }
+
+  /** The collapsed duplicate sets of a *loaded* dataset, expanded to their
+   *  full membership. The backend refuses (400) when the dataset isn't
+   *  loaded — duplicate provenance lives only in memory. */
+  getDatasetDuplicates(datasetId: string): Observable<DatasetRegistryDuplicatesResponse> {
+    return getDatasetDuplicates(this.http, this.config.rootUrl, {
+      dataset_id: datasetId,
+    }).pipe(map((r) => r.body));
+  }
+
+  /** Typicality of the *active* dataset (the ``X-Dataset-Id`` header, set by
+   *  the active-context interceptor) under *referenceDatasetId*'s coverage
+   *  atlas. ``frac_atypical`` is roughly the share of the active dataset that
+   *  lies outside the reference (training) domain. The backend refuses (400)
+   *  when the reference isn't loaded, has no atlas, or uses a different
+   *  embedder. */
+  domainShift(referenceDatasetId: string): Observable<DatasetDomainShiftResponse> {
+    return datasetDomainShift(this.http, this.config.rootUrl, {
+      dataset_id: referenceDatasetId,
     }).pipe(map((r) => r.body));
   }
 }

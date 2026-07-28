@@ -5,7 +5,6 @@ import {
   AutoFindExporterChange,
   AutoFindSettingsComponent,
 } from './auto-find-settings.component';
-import { DetectorsRegistryApiService } from '../../../../services/detectors-registry-api.service';
 import { ExportersApiService } from '../../../../services/exporters-api.service';
 import type { ExporterEntry } from '../../../../generated/api-client/models/exporter-entry';
 import { ImporterField } from '../../../../models/api.models';
@@ -13,20 +12,16 @@ import { provideZoneless } from '../../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../../testing/settle-resource';
 
 /**
- * Unit spec for the Auto-Find settings sub-panel. The panel loads the detector
- * registry (an editable Auto-Find checklist) and the pickable exporters (a tab
- * strip whose active tab is the auto-export target), keeping per-exporter field
- * values that it emits to the parent. Both API services are stubbed so the init
- * subscriptions resolve synchronously.
+ * Unit spec for the Auto-Find settings sub-panel. The panel loads the pickable
+ * exporters (a tab strip whose active tab is the auto-export target), keeping
+ * per-exporter field values that it emits to the parent. (Which detectors
+ * auto-run is chosen on the Dashboard's Drafts/AutoRun tabs, not here.) The
+ * exporters API service is stubbed so the init subscription resolves
+ * synchronously.
  */
 describe('AutoFindSettingsComponent', () => {
   let fixture: ComponentFixture<AutoFindSettingsComponent>;
   let component: AutoFindSettingsComponent;
-
-  const registryDetectors = [
-    { id: 'det-1', name: 'Barks', autofind: true, media_type: 'audio' },
-    { id: 'det-2', name: 'Cats', autofind: false, media_type: 'image' },
-  ];
 
   const exporters = [
     {
@@ -61,24 +56,11 @@ describe('AutoFindSettingsComponent', () => {
     },
   ] as unknown as ExporterEntry[];
 
-  let registryResponse: () => Observable<unknown>;
   let exportersResponse: () => Observable<unknown>;
-  let autofindResponse: () => Observable<unknown>;
-  let autofindCalls: Array<{ id: string; autofind: boolean }>;
 
   beforeEach(() => {
-    autofindCalls = [];
-    registryResponse = () => of({ detectors: registryDetectors });
     exportersResponse = () => of(exporters);
-    autofindResponse = () => of({});
 
-    const detectorsStub: Partial<DetectorsRegistryApiService> = {
-      getRegistry: () => registryResponse() as Observable<never>,
-      setAutofind: (id: string, autofind: boolean) => {
-        autofindCalls.push({ id, autofind });
-        return autofindResponse() as Observable<never>;
-      },
-    };
     const exportersStub: Partial<ExportersApiService> = {
       getExporters: () => exportersResponse() as Observable<never>,
     };
@@ -87,7 +69,6 @@ describe('AutoFindSettingsComponent', () => {
       imports: [AutoFindSettingsComponent],
       providers: [
         ...provideZoneless(),
-        { provide: DetectorsRegistryApiService, useValue: detectorsStub },
         { provide: ExportersApiService, useValue: exportersStub },
       ],
     });
@@ -110,44 +91,31 @@ describe('AutoFindSettingsComponent', () => {
     return out;
   }
 
-  it('creates and loads the detector checklist mapped to the narrowed shape', async () => {
-    await create();
-    expect(component).toBeTruthy();
-    expect(component.loadingDetectors()).toBe(false);
-    expect(component.detectors()).toEqual([
-      { id: 'det-1', name: 'Barks', autofind: true, media_type: 'audio' },
-      { id: 'det-2', name: 'Cats', autofind: false, media_type: 'image' },
-    ]);
-    expect(component.detectorError()).toBe('');
-  });
-
   it('loads exporters, filtering out picker-hidden ones', async () => {
     await create();
+    expect(component).toBeTruthy();
     expect(component.loadingExporters()).toBe(false);
     expect(component.exporters().map((e) => e.name)).toEqual(['server_json_file', 'email']);
   });
 
-  it('clears the "Loading…" placeholders in the DOM once the loads settle (zoneless canary)', async () => {
-    // Regression guard: the loading flags are written from async subscribe
-    // callbacks. As plain properties those writes never schedule change
+  it('points at the Dashboard AutoRun tab instead of hosting a detector checklist', async () => {
+    await create();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('AutoRun');
+    expect(text).not.toContain('Loading detectors…');
+  });
+
+  it('clears the "Loading…" placeholder in the DOM once the load settles (zoneless canary)', async () => {
+    // Regression guard: the loading flag is written from an async subscribe
+    // callback. As a plain property that write never schedules change
     // detection under zoneless, so the DOM stayed stuck on "Loading…" forever.
-    // As signals they repaint. settleZoneless() flushes only *scheduled* CD (it
+    // As a signal it repaints. settleZoneless() flushes only *scheduled* CD (it
     // does not force detectChanges), so a stale DOM here means a missing write.
     await create();
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
-    expect(text).not.toContain('Loading detectors…');
     expect(text).not.toContain('Loading exporters…');
-    // The real content rendered in place of the placeholders.
-    expect(text).toContain('Barks');
+    // The real content rendered in place of the placeholder.
     expect(text).toContain('JSON File');
-  });
-
-  it('sets detectorError and clears loading when the registry fails', async () => {
-    registryResponse = () => throwError(() => new Error('nope'));
-    await create();
-    expect(component.detectorError()).toBe('Failed to load detectors');
-    expect(component.loadingDetectors()).toBe(false);
-    expect(component.detectors()).toEqual([]);
   });
 
   it('clears the exporter loading flag when the exporters call fails', async () => {
@@ -179,23 +147,6 @@ describe('AutoFindSettingsComponent', () => {
 
     expect(component.activeExporter).toBe('email');
     expect(component.fieldValues).toEqual({ email: { to: 'a@b.com' } });
-  });
-
-  it('toggleDetector flips the flag optimistically and persists it', async () => {
-    await create();
-    const cats = component.detectors()[1];
-    component.toggleDetector(cats, true);
-    expect(cats.autofind).toBe(true);
-    expect(autofindCalls).toEqual([{ id: 'det-2', autofind: true }]);
-  });
-
-  it('toggleDetector reverts and reports an error when the persist fails', async () => {
-    autofindResponse = () => throwError(() => new Error('fail'));
-    await create();
-    const cats = component.detectors()[1];
-    component.toggleDetector(cats, true);
-    expect(cats.autofind).toBe(false); // reverted
-    expect(component.detectorError()).toBe('Failed to update Auto-Find for "Cats"');
   });
 
   it('selectExporter seeds default field values on first pick and emits', async () => {

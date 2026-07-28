@@ -45,6 +45,56 @@ describe('SortStateService', () => {
     expect(service.threshold).toBe(0.7);
   });
 
+  it('setSortResults treats the list as complete (no windowing)', () => {
+    const items: SortedItem[] = [
+      { id: 1, score: 0.9 },
+      { id: 2, score: 0.5 },
+      { id: 3, score: 0.1 },
+    ];
+    service.setSortResults(items, 0.4);
+    expect(service.sortTotal).toBe(3);
+    expect(service.sortHasMore).toBe(false);
+    expect(service.sortToken).toBeNull();
+    expect(service.aboveThreshold).toBe(2); // 0.9, 0.5 >= 0.4
+  });
+
+  it('setSortWindow installs a windowed first page', () => {
+    service.setSortWindow({
+      items: [
+        { id: 1, score: 0.9 },
+        { id: 2, score: 0.8 },
+      ],
+      threshold: 0.5,
+      total: 1000,
+      hasMore: true,
+      token: 'tok-1',
+      aboveThreshold: 640,
+    });
+    expect(service.sortOrder?.map((i) => i.id)).toEqual([1, 2]);
+    expect(service.threshold).toBe(0.5);
+    expect(service.sortTotal).toBe(1000);
+    expect(service.sortHasMore).toBe(true);
+    expect(service.sortToken).toBe('tok-1');
+    expect(service.aboveThreshold).toBe(640);
+  });
+
+  it('appendSortItems grows the loaded window and updates hasMore', () => {
+    service.setSortWindow({
+      items: [{ id: 1, score: 0.9 }],
+      threshold: 0.5,
+      total: 5,
+      hasMore: true,
+      token: 'tok-1',
+      aboveThreshold: 3,
+    });
+    service.appendSortItems([{ id: 2, score: 0.8 }, { id: 3, score: 0.7 }], true);
+    expect(service.sortOrder?.map((i) => i.id)).toEqual([1, 2, 3]);
+    expect(service.sortHasMore).toBe(true);
+    service.appendSortItems([{ id: 4, score: 0.4 }], false);
+    expect(service.sortOrder?.map((i) => i.id)).toEqual([1, 2, 3, 4]);
+    expect(service.sortHasMore).toBe(false);
+  });
+
   it('setSortBusy and setSortStatus should update', () => {
     service.setSortBusy(true);
     service.setSortStatus('Sorting...');
@@ -81,6 +131,10 @@ describe('SortStateService', () => {
     expect(service.sortStatus).toBe('');
     expect(service.inclusion).toBe(0);
     expect(service.loadSortLabel).toBe('');
+    expect(service.sortTotal).toBe(0);
+    expect(service.sortHasMore).toBe(false);
+    expect(service.sortToken).toBeNull();
+    expect(service.aboveThreshold).toBe(0);
   });
 
   it('sortMode getter is reactive (drives a computed that reads it)', () => {

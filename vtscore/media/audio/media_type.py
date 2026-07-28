@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import io
 import math
-import os
-import tempfile
 import threading
 from collections import OrderedDict
 from pathlib import Path
@@ -22,6 +20,7 @@ from vtscore.media.base import (
     _noop_progress,
     demo_slice,
 )
+from vtscore.utils.hashing import content_md5
 
 # Thumbnail dimensions (square)
 _THUMB_SIZE = 128
@@ -156,63 +155,35 @@ def _render_waveform(audio_data, *, size: int = _THUMB_SIZE) -> bytes | None:
     return buf.getvalue()
 
 
-def generate_waveform_thumbnail(audio_bytes: bytes, *, filename: str = "", size: int = _THUMB_SIZE) -> bytes | None:
+def generate_waveform_thumbnail(audio_bytes: bytes, *, size: int = _THUMB_SIZE) -> bytes | None:
     """Render a waveform thumbnail as a PNG image from raw audio bytes.
 
-    Decodes the audio with librosa, computes the RMS amplitude envelope, and
-    draws it onto a square PIL image.  Returns PNG bytes, or ``None`` if the
-    audio cannot be decoded.
+    Decodes the audio with :func:`~vtscore.media.audio.decode.decode_audio`,
+    computes the RMS amplitude envelope, and draws it onto a square PIL image.
+    Returns PNG bytes, or ``None`` if the audio cannot be decoded.
 
-    ``soundfile``-backed containers (WAV/FLAC/OGG/MP3) decode straight from the
-    in-memory buffer.  Codecs that fall back to ``audioread`` + ffmpeg
-    (AAC/M4A/MP4) can't be decoded from a ``BytesIO`` at all - librosa only
-    reaches the ffmpeg backend for a real filesystem path - so on a buffer-decode
-    failure this spills to a temp file via :func:`_decode_audio_file_bytes` and
-    retries.  *filename* (when known) lends its extension to that temp file so
-    ``audioread`` picks the right backend.
+    Every container decodes straight from the in-memory buffer - libsndfile for
+    WAV/FLAC/OGG/MP3, ffmpeg over ``stdin`` for AAC/M4A/MP4 - so no filename
+    hint is needed to pick a decoder and nothing spills to disk.
     """
-    try:
-        import librosa  # noqa: PLC0415
-    except Exception:
-        return None
-    try:
-        audio_data, _sr = librosa.load(io.BytesIO(audio_bytes), sr=None, mono=True)
-    except Exception:
-        audio_data, _sr = _decode_audio_file_bytes(audio_bytes, filename)
+    audio_data, _sr = _decode_audio_bytes(audio_bytes)
     if audio_data is None:
         return None
     return _render_waveform(audio_data, size=size)
 
 
-def _decode_audio_file_bytes(audio_bytes: bytes, filename: str = "") -> tuple:
-    """Decode *audio_bytes* to ``(mono_samples, sr)`` via a temp file.
+def _decode_audio_bytes(audio_bytes: bytes) -> tuple:
+    """Decode *audio_bytes* to ``(mono_samples, sr)``, or ``(None, None)``.
 
-    Spilling to a temp file (preserving *filename*'s extension so ``audioread``
-    can pick the right backend) is what lets AAC/M4A/MP4 members decode at all:
-    ``librosa.load`` over an in-memory ``BytesIO`` never reaches ffmpeg, which
-    needs a filesystem path.  Returns ``(None, None)`` on any decode error.
+    ffmpeg reads AAC/M4A/MP4 buffers straight off ``stdin``, so no container
+    needs a filesystem path and there is no temp-file spill on any code path.
     """
     try:
-        import librosa  # noqa: PLC0415
-    except Exception:
-        return None, None
+        from vtscore.media.audio.decode import decode_audio  # noqa: PLC0415
 
-    suffix = Path(filename).suffix or ".bin"
-    tmp_path: str | None = None
-    try:
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-            tmp.write(audio_bytes)
-            tmp_path = tmp.name
-        audio_data, sr = librosa.load(tmp_path, sr=None, mono=True)
-        return audio_data, sr
+        return decode_audio(audio_bytes, sr=None, mono=True)
     except Exception:
         return None, None
-    finally:
-        if tmp_path:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
 
 
 def _slice_window(audio_data, sr, clip_start: float | None, clip_end: float | None):
@@ -244,7 +215,7 @@ def _slice_window(audio_data, sr, clip_start: float | None, clip_end: float | No
     return audio_data[start:end]
 
 
-def _decode_member_cached(cache_key, loader, filename: str) -> tuple:
+def _decode_member_cached(cache_key, loader) -> tuple:
     """Return decoded ``(samples, sr)`` for a member, using the LRU decode cache.
 
     *loader* is a zero-arg callable returning the member's raw bytes; it is only
@@ -261,7 +232,7 @@ def _decode_member_cached(cache_key, loader, filename: str) -> tuple:
     audio_bytes = loader()
     if audio_bytes is None:
         return None, None
-    audio_data, sr = _decode_audio_file_bytes(audio_bytes, filename)
+    audio_data, sr = _decode_audio_bytes(audio_bytes)
     if audio_data is None:
         return None, None
 
@@ -277,21 +248,21 @@ def _decode_member_cached(cache_key, loader, filename: str) -> tuple:
 def generate_waveform_thumbnail_window(
     loader,
     *,
-    filename: str = "",
     clip_start: float | None = None,
     clip_end: float | None = None,
     size: int = _THUMB_SIZE,
     cache_key=None,
 ) -> bytes | None:
-    """Render a waveform for one clip window, decoding via a temp file.
+    """Render a waveform for one clip window.
 
     Built for archive-member audio (whose bytes stream from a tar/zip shard and
     whose codec is often AAC/M4A/MP4): decodes the whole member once via
-    :func:`_decode_member_cached` (temp-file path so ffmpeg-only codecs work),
-    slices to ``[clip_start, clip_end]`` so each window shows its own waveform,
-    and renders.  Returns ``None`` when the member can't be decoded.
+    :func:`_decode_member_cached` (straight from the streamed bytes, ffmpeg-only
+    codecs included), slices to ``[clip_start, clip_end]`` so each window shows
+    its own waveform, and renders.  Returns ``None`` when the member can't be
+    decoded.
     """
-    audio_data, sr = _decode_member_cached(cache_key, loader, filename)
+    audio_data, sr = _decode_member_cached(cache_key, loader)
     if audio_data is None:
         return None
     windowed = _slice_window(audio_data, sr, clip_start, clip_end)
@@ -311,11 +282,9 @@ def generate_waveform_thumbnail_from_file(file_path: Path, *, size: int = _THUMB
     not just ``soundfile`` containers.
     """
     try:
-        import librosa  # noqa: PLC0415
-    except Exception:
-        return None
-    try:
-        audio_data, _sr = librosa.load(str(file_path), sr=None, mono=True)
+        from vtscore.media.audio.decode import decode_audio  # noqa: PLC0415
+
+        audio_data, _sr = decode_audio(str(file_path), sr=None, mono=True)
     except Exception:
         return None
     return _render_waveform(audio_data, size=size)
@@ -822,7 +791,6 @@ class AudioMediaType(MediaType):
         signpost layer straight from those paths — the friction-free way to eval
         the VTSBrowse sign display.  See :mod:`vtscore.media._toponymy_demo`.
         """
-        import hashlib  # noqa: PLC0415
 
         from vtscore.media._toponymy_demo import generate_items, total_cities  # noqa: PLC0415
 
@@ -837,7 +805,7 @@ class AudioMediaType(MediaType):
         clip_id = 1
         for i, item in enumerate(items):
             wav_bytes = _synthetic_tone_wav(item.city_index, n_cities)
-            thumb = generate_waveform_thumbnail(wav_bytes, filename=f"{item.category}.wav")
+            thumb = generate_waveform_thumbnail(wav_bytes)
             filename = f"{item.category}/clip{i:04d}.wav"
             clips[clip_id] = {
                 "id": clip_id,
@@ -845,7 +813,7 @@ class AudioMediaType(MediaType):
                 "embedder": emb_name,
                 "duration": _SYNTH_TONE_SECONDS,
                 "file_size": len(wav_bytes),
-                "md5": hashlib.md5(wav_bytes).hexdigest(),
+                "md5": content_md5(wav_bytes),
                 "embeddings": {emb_name: item.embedding},
                 "media_bytes": wav_bytes,
                 "thumbnail_bytes": thumb,
@@ -981,7 +949,6 @@ class AudioMediaType(MediaType):
         skip_embedding=False,
         **kwargs,
     ):
-        import hashlib  # noqa: PLC0415
 
         if on_progress is None:
             from vtscore.concurrency.progress import update_progress
@@ -1051,7 +1018,7 @@ class AudioMediaType(MediaType):
                 "embedder": embedder.name,
                 "duration": media_fields["duration"],
                 "file_size": len(wav_bytes),
-                "md5": hashlib.md5(wav_bytes).hexdigest(),
+                "md5": content_md5(wav_bytes),
                 "embeddings": {} if skip_embedding else {embedder.name: embedding},
                 "media_bytes": wav_bytes,
                 "thumbnail_bytes": media_fields.get("thumbnail_bytes"),
@@ -1073,17 +1040,17 @@ class AudioMediaType(MediaType):
         return ["thumbnail_bytes"]
 
     def load_media_data(self, file_path: Path, media_bytes: bytes | None = None) -> dict:
-        import librosa  # noqa: PLC0415
+        from vtscore.media.audio.decode import decode_audio  # noqa: PLC0415
 
         if media_bytes is None:
             with open(file_path, "rb") as f:
                 media_bytes = f.read()
         try:
-            audio_data, sr = librosa.load(file_path, sr=None, mono=True)
+            audio_data, sr = decode_audio(str(file_path), sr=None, mono=True)
             duration = len(audio_data) / sr
         except Exception:
             duration = 0.0
-        thumbnail = generate_waveform_thumbnail(media_bytes, filename=Path(file_path).name)
+        thumbnail = generate_waveform_thumbnail(media_bytes)
         return {"media_bytes": media_bytes, "duration": duration, "thumbnail_bytes": thumbnail}
 
     # ------------------------------------------------------------------
@@ -1113,18 +1080,16 @@ class AudioMediaType(MediaType):
 
         Archive-member audio carries no ``thumbnail_bytes`` at import (the
         importer never reads member bytes), and its bytes stream from a tar/zip
-        shard.  Decode via a temp file so ffmpeg-only codecs (AAC/M4A/MP4)
-        render, slice to the clip window so each of a member's windows shows its
-        own waveform, and cache the decoded member so its windows don't each
-        re-stream and re-decode it.
+        shard.  Decode the streamed bytes directly (ffmpeg-only codecs
+        (AAC/M4A/MP4) included), slice to the clip window so each of a member's
+        windows shows its own waveform, and cache the decoded member so its
+        windows don't each re-stream and re-decode it.
         """
         ref = media.get("archive_member")
         member = ref.get("member", "") if isinstance(ref, dict) else ""
-        filename = media.get("filename") or (Path(member).name if member else "")
         cache_key = (ref["path"], member) if isinstance(ref, dict) and ref.get("path") else None
         return generate_waveform_thumbnail_window(
             lambda: self._resolve_media_bytes(media),
-            filename=filename,
             clip_start=media.get("clip_start"),
             clip_end=media.get("clip_end"),
             cache_key=cache_key,

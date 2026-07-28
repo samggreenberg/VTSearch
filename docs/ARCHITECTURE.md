@@ -100,7 +100,8 @@ VTSearch/
 │   │
 │   ├── embedding/                  Embedder façades and torch runtime
 │   │   ├── helpers.py              embed_audio_file / embed_image_file / embed_text_query / …
-│   │   ├── matrix.py               Cached contiguous (N, D) embedding matrix on DatasetContext
+│   │   ├── matrix.py               Cached contiguous (N, D) embedding matrix on DatasetContext;
+│   │   │                           mmap-backed via a `<pkl_stem>.embids/embmat.npy` sidecar
 │   │   └── loader.py               initialize_models, smart_preload_in_background
 │   │
 │   ├── detectors/                  Detector lifecycle; resolve→embed→train pipeline
@@ -401,8 +402,9 @@ threshold = find_optimal_threshold(scores, labels, inclusion_value=0)
 
 **Files:** `vtscore/media/{audio,image,text,video}/embedder_*.py`
 
-**Dependencies:** `torch`, `transformers`, `librosa` (audio), `PIL`
-(image/video), `sentence-transformers` (text)
+**Dependencies:** `torch`, `transformers`, `soundfile`/`soxr`/ffmpeg (audio,
+via `vtscore.media.audio.decode`), `PIL` (image/video),
+`sentence-transformers` (text)
 
 Each embedder is a self-contained class (separate from the `MediaType`).
 Instantiate it, call `load_models()`, then use `embed_media()` /
@@ -568,12 +570,13 @@ suggestions) and resolve via the active `DatasetContext` /
 
 Persistent settings live in `vtsearch/settings.py`, split across two
 tiers.  **Server tier** (shared, `data/settings.json`): `saved_datasets_dir`,
-`detectors_dir`, `max_concurrent_*`, `hidden_plugins`.
+`detectors_dir`, `max_concurrent_*`, `hidden_plugins`, `semantic_only`,
+`solo_media_type`, `browse_signpost_vocab`.
 **Per-user tier** (`<user_data_dir>/user_settings.json`): everything else;
 `volume`, `theme`, `inclusion`, `enrich_descriptions`, `safe_thresholds`,
 `calibrate_count`, `calibration_fraction`, `audio_playing`, `show_animations`,
 `show_metadata`, `grid_icon_size_*`, `focus_mode_*`,
-`panel_pct_*`, `autopilot_*`, `solo_media_type`, `settings_source`,
+`panel_pct_*`, `autopilot_*`, `settings_source`,
 `achievement_state`, and the **Auto-Find** keys `autofind_detectors`,
 `autofind_exporter`, `autofind_exporter_field_values`.  The Auto-Find keys read
 through to the server file for the built-in `default` user (CLI / single-user

@@ -43,6 +43,18 @@ sync block (``sync_labels_to_loaded_detector``,
 ``sync_to_labelset_source``, ``record_detector_import``) whenever
 ``applied > 0`` so the in-memory detector, the labelset source, and the
 achievement counters all reflect what actually landed.
+
+Background auto-resolve
+-----------------------
+Entries whose media aren't in the active dataset are pulled in from their
+origins, which means one fetch + embed per entry - far too slow to run
+inside the request (issue #2703).  :func:`_start_auto_resolve` moves that
+onto the ``detector_loading_tasks`` tracker and the import response carries
+``ingest_task_id`` / ``ingest_pending_count`` instead of the final numbers.
+The task re-applies those labels, re-syncs, and publishes
+``{"ingested", "applied", "unresolved", "failed"}`` as its terminal
+``ingest_result``, which the client reads off the ``detector-loading-tasks``
+SSE channel to report the outcome.
 """
 
 from __future__ import annotations
@@ -77,11 +89,10 @@ from vtsearch.schemas.labels import (
 )
 from vtsearch.state import (
     apply_label,
-    build_media_lookup,
+    cached_media_lookups,
     medias,
     find_missing_entries,
     resolve_media_ids,
-    snapshot_medias,
 )
 
 label_importers_bp = Blueprint(
@@ -130,6 +141,77 @@ def _apply_labels(
         applied += 1
 
     return applied, skipped, failed
+
+
+def _sync_after_import() -> None:
+    """Publish freshly-applied labels: detector, labelset source, achievements.
+
+    Shared by the in-request pass and the background auto-resolve task so the
+    dashboard's ``num_training``, the labelset file, and the import
+    achievement all reflect whatever actually landed, whichever pass landed
+    it.  ``record_detector_import`` dedupes by detector id, so running this
+    from both passes counts the import once.
+    """
+    from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
+    from vtscore.labels.sync import sync_to_labelset_source
+    from vtsearch.achievements import record_detector_import
+    from vtscore.state.core import get_active_detector_context
+
+    sync_labels_to_loaded_detector()
+    sync_to_labelset_source()
+    record_detector_import(get_active_detector_context().detector_id)
+
+
+def _apply_ingested_labels(missing: list[dict], ingested: int) -> dict:
+    """Apply *missing*'s labels once their media have been ingested.
+
+    Runs on the ingest task's worker thread (see
+    :func:`~vtscore.datasets.ingest_task.start_ingest_task`), which replays
+    the request's dataset / detector context, so the lookups and vote writes
+    land where the request's first pass did.  The returned dict is published
+    as the task's terminal ``ingest_result`` so the client can report the
+    same numbers the synchronous response used to carry.
+    """
+    applied = 0
+    failed: list[dict] = []
+    if ingested > 0:
+        origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
+        applied, _, failed = _apply_labels(missing, origin_lookup, md5_lookup, name_lookup)
+
+    unresolved: list[dict] = []
+    if ingested < len(missing):
+        origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
+        unresolved = find_missing_entries(missing, origin_lookup, md5_lookup, name_lookup)
+
+    if applied > 0:
+        _sync_after_import()
+
+    return {"applied": applied, "unresolved": len(unresolved), "failed": len(failed)}
+
+
+def _start_auto_resolve(missing: list[dict]) -> str:
+    """Start the background fetch+embed of *missing*, then re-apply their labels.
+
+    Fetching and embedding one file per missing label is far too slow to run
+    inside the request (issue #2703), so it goes onto the detector task
+    tracker: the caller gets a task id back immediately and watches the
+    existing SSE feed for progress and for the terminal ``ingest_result``.
+    """
+    from vtscore.datasets.ingest_task import start_ingest_task
+    from vtscore.state.core import get_active_detector_context
+    from vtsearch.threading import spawn
+
+    det_ctx = get_active_detector_context()
+    detector_id = det_ctx.detector_id or ""
+    return start_ingest_task(
+        missing,
+        medias,
+        task_id=f"_labelingest_{detector_id}",
+        name=det_ctx.name or "Label import",
+        spawn=spawn,
+        detector_id=detector_id,
+        after_ingest=lambda ingested: _apply_ingested_labels(missing, ingested),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +305,7 @@ def run_label_import(importer_name: str):  # noqa: C901
         return jsonify({"error": "Importer did not return a list of label dicts."}), 500
 
     # Apply labels to global vote state
-    origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
+    origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
     applied, skipped, failed = _apply_labels(label_entries, origin_lookup, md5_lookup, name_lookup)
 
     # Detect entries that could not be matched at all
@@ -232,52 +314,20 @@ def run_label_import(importer_name: str):  # noqa: C901
     # by _apply_labels, but we report them separately now.
     skipped -= len(missing)
 
-    # Auto-resolve: try to ingest missing medias from their origins
-    ingested = 0
-    resolved_applied = 0
-    unresolved: list[dict] = []
-    if missing:
-        from vtscore.datasets.ingest import ingest_missing_medias
-
-        ingested = ingest_missing_medias(missing, medias)
-
-        if ingested > 0:
-            # Re-apply labels now that new medias are available.  These entries
-            # were already removed from `skipped` above when we subtracted
-            # `len(missing)`, so we only need to bump `applied` here.  Any
-            # per-entry mutation errors from the auto-resolve pass are
-            # appended to the same `failed` list as the first pass.
-            origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
-            resolved_applied, _, resolved_failed = _apply_labels(missing, origin_lookup, md5_lookup, name_lookup)
-            applied += resolved_applied
-            failed.extend(resolved_failed)
-
-        # Check which entries still couldn't be resolved
-        if ingested < len(missing):
-            origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
-            unresolved = find_missing_entries(missing, origin_lookup, md5_lookup, name_lookup)
+    # Auto-resolve: pull the missing medias in from their origins.  The fetch
+    # + embed runs on a background task (issue #2703) and re-applies those
+    # labels when it lands, so the counts below describe only the in-request
+    # pass; the task publishes its own numbers as ``ingest_result``.
+    ingest_task_id = _start_auto_resolve(missing) if missing else ""
 
     # Sync updated votes into the loaded model so the dashboard reflects
     # the new label count (num_training) immediately.
     if applied > 0:
-        from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
-
-        sync_labels_to_loaded_detector()
-
-        from vtscore.labels.sync import sync_to_labelset_source
-
-        sync_to_labelset_source()
-
-        from vtsearch.achievements import record_detector_import
-        from vtscore.state.core import get_active_detector_context
-
-        record_detector_import(get_active_detector_context().detector_id)
+        _sync_after_import()
 
     msg = f"Applied {applied} label(s), skipped {skipped}."
-    if ingested > 0:
-        msg += f" Auto-resolved {ingested} missing element(s) from their sources."
-    if unresolved:
-        msg += f" {len(unresolved)} element(s) could not be resolved."
+    if ingest_task_id:
+        msg += f" Resolving {len(missing)} missing element(s) from their sources in the background…"
     if failed:
         msg += f" {len(failed)} element(s) failed to apply (see 'failed' for details)."
 
@@ -285,9 +335,13 @@ def run_label_import(importer_name: str):  # noqa: C901
         {
             "applied": applied,
             "skipped": skipped,
-            "missing_count": len(unresolved),
-            "missing": unresolved,
-            "ingested": ingested,
+            # Resolution of the missing entries is still in flight, so nothing
+            # is known to be unresolvable yet; the ingest task's terminal
+            # ``ingest_result`` reports what it couldn't reach.
+            "missing_count": 0,
+            "missing": [],
+            "ingest_task_id": ingest_task_id,
+            "ingest_pending_count": len(missing),
             "failed_count": len(failed),
             "failed": failed,
             "message": msg,
@@ -314,7 +368,7 @@ def ingest_missing(body: dict):
     ingested = ingest_missing_medias(entries, medias)
 
     # Now apply labels to the newly ingested medias
-    origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
+    origin_lookup, md5_lookup, name_lookup = cached_media_lookups()
     applied, _, failed = _apply_labels(entries, origin_lookup, md5_lookup, name_lookup)
 
     # Sync updated votes into the loaded model so the dashboard reflects

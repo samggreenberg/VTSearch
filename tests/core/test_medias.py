@@ -1,4 +1,3 @@
-import hashlib
 import io
 import wave
 
@@ -6,6 +5,7 @@ import numpy as np
 
 import app as app_module
 from vtscore.embedding.media_vectors import media_embedding
+from vtscore.utils.hashing import content_md5
 
 
 class TestInitMedias:
@@ -64,7 +64,7 @@ class TestMediaMD5:
 
     def test_md5_matches_media_bytes(self):
         for media in app_module.medias.values():
-            expected_md5 = hashlib.md5(media["media_bytes"]).hexdigest()
+            expected_md5 = content_md5(media["media_bytes"])
             assert media["md5"] == expected_md5
 
     def test_md5_deterministic(self):
@@ -72,7 +72,7 @@ class TestMediaMD5:
         media = app_module.medias[1]
         # Regenerate the WAV with the same parameters and verify MD5
         wav_bytes = app_module.generate_wav(media["frequency"], media["duration"])
-        assert hashlib.md5(wav_bytes).hexdigest() == media["md5"]
+        assert content_md5(wav_bytes) == media["md5"]
 
 
 class TestApplyCustomMetadataMD5:
@@ -227,7 +227,7 @@ class TestCustomMetadataMapInLoader:
         )
 
         media = next(iter(medias_dict.values()))
-        expected_md5 = hashlib.md5(wav_bytes).hexdigest()
+        expected_md5 = content_md5(wav_bytes)
         assert media["md5"] == expected_md5
         # custom_metadata should still be attached
         assert media["custom_metadata"]["source"] == "external_db"
@@ -245,7 +245,7 @@ class TestCustomMetadataMapInLoader:
         load_dataset_from_folder(tmp_path, "audio", medias_dict)
 
         media = next(iter(medias_dict.values()))
-        expected_md5 = hashlib.md5(wav_bytes).hexdigest()
+        expected_md5 = content_md5(wav_bytes)
         assert media["md5"] == expected_md5
         assert "custom_metadata" not in media
 
@@ -678,7 +678,7 @@ class TestAddToPile:
         assert new_id in app_module.good_votes
         # Verify the new media has proper fields
         new_media = app_module.medias[new_id]
-        assert new_media["md5"] == hashlib.md5(wav_bytes).hexdigest()
+        assert new_media["md5"] == content_md5(wav_bytes)
         assert new_media["filename"] == "new_sound.wav"
         assert new_media["origin"]["importer"] == "add_to_pile"
         assert isinstance(media_embedding(new_media), np.ndarray)
@@ -859,7 +859,7 @@ class TestAddToPile:
 
         # The single inserted media carries the uploaded bytes' md5.
         inserted_id = next(iter(media_ids))
-        assert app_module.medias[inserted_id]["md5"] == hashlib.md5(wav_bytes).hexdigest()
+        assert app_module.medias[inserted_id]["md5"] == content_md5(wav_bytes)
         assert inserted_id in app_module.good_votes
 
     def _setup_loaded_detector(self, client, name="H33Detector"):

@@ -581,6 +581,69 @@ class FindLabelResponseSchema(Schema):
     detector_name = fields.String(required=True)
 
 
+class FindQueueIdsQuerySchema(Schema):
+    """Query for ``GET /api/find/queue-ids``."""
+
+    filter = fields.String(
+        load_default="unverified_good",
+        validate=validate.OneOf(["unverified_good", "good"]),
+        metadata={
+            "description": (
+                "Which Find positive set to return: ``unverified_good`` (the "
+                "left work queue — above-cutoff items not yet verified) or "
+                "``good`` (verified-good + unverified positives)."
+            )
+        },
+    )
+
+    class Meta:
+        # Tolerate request-context params (dataset_id / detector_id) smuggled in
+        # as query args, matching the other GET query schemas.
+        unknown = "exclude"
+
+
+class FindQueueIdsResponseSchema(Schema):
+    """Response for ``GET /api/find/queue-ids`` — the work-queue ids in rank order."""
+
+    ids = fields.List(fields.Integer(), required=True)
+    count = fields.Integer(required=True)
+
+
+class FindBoundaryNextQuerySchema(Schema):
+    """Query for ``GET /api/find/boundary-next``."""
+
+    side = fields.String(
+        load_default="above",
+        validate=validate.OneOf(["above", "below"]),
+        metadata={"description": "Preferred face of the cutoff to serve next; falls back to the other side."},
+    )
+    # Named ``exclude_id`` (not ``exclude``) because ``exclude`` is a reserved
+    # attribute on ``marshmallow.Schema``; ``data_key`` keeps the query param
+    # ``?exclude=``.
+    exclude_id = fields.Integer(
+        data_key="exclude",
+        load_default=None,
+        allow_none=True,
+        metadata={
+            "description": "Media id to skip (the item just voted, if its verified-state may not be observed yet)."
+        },
+    )
+
+    class Meta:
+        unknown = "exclude"
+
+
+class FindBoundaryNextResponseSchema(Schema):
+    """Response for ``GET /api/find/boundary-next``.
+
+    ``id``/``side`` are both ``null`` when no unverified item remains on either
+    side of the cutoff (the done state).
+    """
+
+    id = fields.Integer(required=True, allow_none=True)
+    side = fields.String(required=True, allow_none=True, validate=validate.OneOf(["above", "below"]))
+
+
 class _HitSchema(Schema):
     """One scored media entry inside an auto-detect / find ``hits`` list.
 
@@ -846,6 +909,44 @@ class FindStatsResponseSchema(Schema):
     sweep = fields.List(fields.Nested(FindStatsSweepPointSchema), required=True)
 
 
+class FindEvidenceCoverageResponseSchema(Schema):
+    """Response for ``GET /api/find/evidence-coverage``.
+
+    The cross-user complement to the atlas domain-shift report: how much of the
+    active dataset the detector is calling *without labeled evidence behind the
+    call*, measured from the detector's own labelset (re-embedded in memory at
+    load), so it fires even when the training haystack was never handed over.
+    See docs/plans/coverage-atlas.md §6.1 (phase v0).
+    """
+
+    # False until the report could be computed (a scored Find run plus a
+    # resolvable labelset with cached embeddings); the UI hides the section
+    # when False rather than showing zeroes.
+    available = fields.Boolean(required=True)
+    # Number of scored items the report covers, and the labelset sizes it was
+    # calibrated against.
+    n_items = fields.Integer(required=True)
+    n_pos_labels = fields.Integer(required=True)
+    n_neg_labels = fields.Integer(required=True)
+    # kNN rank and significance level (mirrors the domain-shift report's scale).
+    k = fields.Integer(required=True)
+    alpha = fields.Float(required=True)
+    # Share with support p-value D < alpha — an evidence vacuum for the predicted
+    # class — its expectation under the well-supported null (= alpha), and the
+    # binomial z of the excess.
+    frac_unsupported = fields.Float(required=True)
+    expected_unsupported = fields.Float(required=True)
+    z_score = fields.Float(required=True)
+    median_support = fields.Float(required=True)
+    # Share with trust-score TS < 1 (closer to the other class's evidence) and
+    # the median TS.
+    frac_low_trust = fields.Float(required=True)
+    median_trust = fields.Float(required=True)
+    # Headline: the vacuum excess is both statistically clear and practically
+    # large (z > 3 and frac_unsupported >= 2*alpha).
+    unsupported = fields.Boolean(required=True)
+
+
 class FindCorrectionsToDetectorResponseSchema(Schema):
     """Response for ``POST /api/find/corrections-to-detector``.
 
@@ -897,12 +998,17 @@ __all__ = [
     "DetectorRenameResponseSchema",
     "DetectorSaveLabelsResponseSchema",
     "DetectorsListResponseSchema",
+    "FindBoundaryNextQuerySchema",
+    "FindBoundaryNextResponseSchema",
     "FindCancelResponseSchema",
     "FindCheckLabelsRequestSchema",
     "FindCheckLabelsResponseSchema",
     "FindCorrectionsToDetectorResponseSchema",
+    "FindEvidenceCoverageResponseSchema",
     "FindLabelRequestSchema",
     "FindLabelResponseSchema",
+    "FindQueueIdsQuerySchema",
+    "FindQueueIdsResponseSchema",
     "FindRequestSchema",
     "FindResponseSchema",
     "FindStatsResponseSchema",

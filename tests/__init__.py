@@ -1,6 +1,32 @@
 """Test package for VTSearch."""
 
 
+def wait_for_detector_task(task_id, timeout=30.0):
+    """Block until the detector task *task_id* finishes; return its snapshot.
+
+    Used by tests of the label-import paths, whose media ingest now runs on a
+    background task (issue #2703) rather than inside the request. The returned
+    snapshot carries the task's terminal ``error`` / ``ingest_result``.
+
+    Fails loudly via ``pytest.fail`` on timeout rather than letting the caller
+    assert against a half-finished ingest.
+    """
+    import time
+
+    import pytest
+
+    from vtscore.concurrency.progress import detector_loading_tasks
+
+    assert task_id, "wait_for_detector_task needs a task id"
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if detector_loading_tasks.is_finished(task_id):
+            tracker = detector_loading_tasks.get_tracker(task_id)
+            return tracker.get() if tracker is not None else {}
+        time.sleep(0.02)
+    pytest.fail(f"wait_for_detector_task timed out after {timeout}s waiting for {task_id!r}")
+
+
 def load_detector_and_wait(client, detector_id, timeout=30.0):
     """Load a detector via POST and poll until the background task finishes.
 

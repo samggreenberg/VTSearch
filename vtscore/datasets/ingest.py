@@ -16,7 +16,6 @@ full importer - this is much faster when only a few medias are missing.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from typing import Any, Callable, Optional
 
@@ -24,6 +23,7 @@ from vtscore.state import next_media_id
 from vtscore.embedding.media_vectors import init_embeddings
 from vtscore.embedding.normalize import l2_normalize
 from vtscore.state.core import _state_lock
+from vtscore.utils.hashing import content_md5
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
@@ -200,7 +200,7 @@ def _resolve_clip_content_and_embedding(
             return None
         embedding, clip_bytes = result
         if clip_bytes is not None:
-            return embedding, clip_bytes, hashlib.md5(clip_bytes).hexdigest()
+            return embedding, clip_bytes, content_md5(clip_bytes)
 
         # Metadata-only clip (video) or fall-through: use parent bytes,
         # but disambiguate the MD5 via a boundary tag so distinct clips of
@@ -208,17 +208,17 @@ def _resolve_clip_content_and_embedding(
         parent_bytes = file_path.read_bytes()
         tag = _boundary_tag(origin_dict.get("params", {}))
         if tag:
-            combined = hashlib.md5(parent_bytes).hexdigest() + tag
-            md5 = hashlib.md5(combined.encode()).hexdigest()
+            combined = content_md5(parent_bytes) + tag
+            md5 = content_md5(combined.encode())
         else:
-            md5 = hashlib.md5(parent_bytes).hexdigest()
+            md5 = content_md5(parent_bytes)
         return embedding, parent_bytes, md5
 
     embedding = embed_file(file_path, media_type_id, embedder_name) if media_type_id else None
     if embedding is None:
         return None
     parent_bytes = file_path.read_bytes()
-    return embedding, parent_bytes, hashlib.md5(parent_bytes).hexdigest()
+    return embedding, parent_bytes, content_md5(parent_bytes)
 
 
 def _ingest_via_source(
@@ -280,7 +280,7 @@ def _ingest_via_source(
                 file_bytes = item.path.read_bytes()
                 embedding = item.embedding
                 effective_embedder = item.embedder_name or embedder_name
-                md5 = hashlib.md5(file_bytes).hexdigest()
+                md5 = content_md5(file_bytes)
             else:
                 # Resolve embedding + clip-aware bytes/md5 - if any step fails,
                 # fall back to the legacy full-import path so we don't produce

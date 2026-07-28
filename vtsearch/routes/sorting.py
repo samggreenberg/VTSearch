@@ -29,6 +29,7 @@ from vtsearch.routes._shared import (
     get_embedder_for_medias,
     require_dataset_header,
     require_detector_header,
+    windowed_sort_response,
 )
 
 from vtscore.config import DATA_DIR
@@ -48,6 +49,8 @@ from vtsearch.schemas.sorting import (
     SafeThresholdsResponseSchema,
     SeedFromExamplesRequestSchema,
     SeedFromExamplesResponseSchema,
+    SortPageQuerySchema,
+    SortPageResponseSchema,
     SortRequestSchema,
     SortResponseSchema,
     TextsortSuggestionRequestSchema,
@@ -267,7 +270,7 @@ def sort_clips(body: dict):
         update_sort_progress("sorting", "Computing similarities…", 0, 0, step=3, total_steps=_SORT_STEPS)
         results, threshold = _cosine_sort(text_vec, role="text", snap=snap)
         _sort_idle()
-        return {"results": results, "threshold": threshold}
+        return windowed_sort_response(results, threshold)
     except Exception as exc:
         from werkzeug.exceptions import HTTPException
 
@@ -281,14 +284,50 @@ def sort_clips(body: dict):
         abort(500, message=f"Text sort failed: {format_exception_detail(exc)}")
 
 
+@sorting_bp.route("/api/sort/page", methods=["GET"])
+@sorting_bp.arguments(SortPageQuerySchema, location="query")
+@sorting_bp.response(200, SortPageResponseSchema)
+@sorting_bp.alt_response(404, description="Unknown or expired sort token; re-run the sort.")
+def sort_page(query: dict):
+    """Return one window of a previously-computed ranking.
+
+    A sort route (``/api/sort``, ``/api/example-sort``, ``/api/label-file-sort``)
+    stores its full descending ``results`` list and hands back a ``sort_token``;
+    this endpoint slices ``[offset, offset + limit)`` out of that cached list so
+    the client can scroll deep into a large ranking without receiving the whole
+    thing up front (``docs/plans/scalability.md`` S3/S17/S19).
+
+    The token doubles as a sort-generation guard: a re-sort mints a new token,
+    and an evicted/unknown token 404s so the client refetches from the top.
+    """
+    from vtscore.state.core import get_active_context  # noqa: PLC0415
+    from vtscore.state.sort_results_cache import sort_results_cache  # noqa: PLC0415
+
+    dataset_id = getattr(get_active_context(), "dataset_id", "") or None
+    page = sort_results_cache.page(query["token"], query["offset"], query["limit"], dataset_id=dataset_id)
+    if page is None:
+        abort(404, message="Unknown or expired sort token; re-run the sort.")
+    return page
+
+
 def _learned_sort_done_payload(job) -> dict:
-    """Build the JSON body returned when a learned-sort job is finished."""
+    """Build the JSON body returned when a learned-sort job is finished.
+
+    ``job.result`` is the windowed response body produced by
+    :func:`windowed_sort_response` in the job target, so the window metadata
+    (``sort_token`` / ``total`` / ``above_threshold`` / ``has_more_below``)
+    rides straight through to the client.
+    """
     result = job.result or {}
     return {
         "job_id": job.job_id,
         "status": "done",
         "results": result.get("results", []),
         "threshold": result.get("threshold", 0.0),
+        "sort_token": result.get("sort_token"),
+        "total": result.get("total"),
+        "above_threshold": result.get("above_threshold"),
+        "has_more_below": result.get("has_more_below", False),
     }
 
 
@@ -393,7 +432,7 @@ def learned_sort(body: dict):
             calibrate_count_value=calibrate_count_value,
             calibration_fraction_value=calibration_fraction_value,
         )
-        job.result = {"results": results, "threshold": round(threshold, 4)}
+        job.result = windowed_sort_response(results, round(threshold, 4))
 
     job = learned_sort_jobs.start(
         signature,
@@ -789,7 +828,7 @@ def example_sort():
             # Clean up temp file even if sorting raises
             temp_path.unlink(missing_ok=True)
 
-        return {"results": results, "threshold": thresh}
+        return windowed_sort_response(results, thresh)
 
     except Exception as exc:
         from werkzeug.exceptions import HTTPException
@@ -938,12 +977,8 @@ def label_file_sort():
             abort(400, message="Need at least one good and one bad labeled example")
 
         results, threshold = _train_and_score_dataset(X_list, y_list, score_name)
-        return {
-            "results": results,
-            "threshold": round(threshold, 4),
-            "loaded": loaded,
-            "skipped": skipped,
-        }
+        threshold = round(threshold, 4)
+        return {**windowed_sort_response(results, threshold), "loaded": loaded, "skipped": skipped}
 
     except Exception as exc:
         from werkzeug.exceptions import HTTPException

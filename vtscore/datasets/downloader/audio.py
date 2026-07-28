@@ -1,9 +1,6 @@
 """Audio dataset downloaders: ESC-50, GTZAN, Speech Commands v2, UrbanSound8K,
 TUT Sound Events 2017, Clotho."""
 
-import shutil
-import uuid
-import zipfile
 from pathlib import Path
 from typing import Optional
 
@@ -221,24 +218,19 @@ def download_tut_sound_events_2017(on_progress: Optional[ProgressCallback] = Non
         if dest_dir.exists() and any(dest_dir.glob("*.wav")):
             continue  # This archive already extracted.
 
-        unique_id = uuid.uuid4().hex[:8]
-        zip_path = _core.DATA_DIR / f".dl_{unique_id}_tut_{slug}.zip"
-
-        try:
-            on_progress("downloading", f"Downloading TUT Sound Events 2017 ({slug})...", i, total)
-            _core.download_file_with_progress(url, zip_path, 0, on_progress)
-
-            on_progress("extracting", f"Extracting TUT Sound Events 2017 ({slug})...", i + 1, total)
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                for member in zf.namelist():
-                    # Extract only the audio, flattened into the archive's dir.
-                    if member.lower().endswith(".wav"):
-                        dest = dest_dir / Path(member).name
-                        if not dest.exists():
-                            with zf.open(member) as src, open(dest, "wb") as dst:
-                                shutil.copyfileobj(src, dst)
-        finally:
-            zip_path.unlink(missing_ok=True)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        _core._download_and_extract(
+            url=url,
+            archive_name=f"tut_{slug}.zip",
+            extract_to=dest_dir,
+            check_path=dest_dir,
+            is_complete=lambda dest_dir=dest_dir: any(dest_dir.glob("*.wav")),
+            download_size_mb=0,
+            dataset_name=f"TUT Sound Events 2017 ({slug})",
+            on_progress=on_progress,
+            member_filter=lambda m: m.lower().endswith(".wav"),
+            flatten=True,
+        )
+        on_progress("extracting", f"Extracted TUT Sound Events 2017 ({slug})...", i + 1, total)
 
     return base

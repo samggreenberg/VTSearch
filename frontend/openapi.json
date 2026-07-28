@@ -215,6 +215,14 @@
           "browse_details_panel_width": {
             "type": "integer"
           },
+          "browse_graphics": {
+            "enum": [
+              "auto",
+              "full",
+              "reduced"
+            ],
+            "type": "string"
+          },
           "browse_icon_size": {
             "additionalProperties": {
               "type": "string"
@@ -243,6 +251,7 @@
               },
               "type": "array"
             },
+            "readOnly": true,
             "type": "object"
           },
           "browse_signposts": {
@@ -278,11 +287,6 @@
             },
             "readOnly": true,
             "type": "object"
-          },
-          "effective_solo_media_type": {
-            "nullable": true,
-            "readOnly": true,
-            "type": "string"
           },
           "enable_achievements": {
             "type": "boolean"
@@ -388,6 +392,10 @@
             "readOnly": true,
             "type": "string"
           },
+          "semantic_only": {
+            "readOnly": true,
+            "type": "boolean"
+          },
           "show_animations": {
             "enum": [
               "show",
@@ -407,10 +415,8 @@
           },
           "solo_media_type": {
             "nullable": true,
+            "readOnly": true,
             "type": "string"
-          },
-          "solo_media_type_explicit": {
-            "type": "boolean"
           },
           "support_email": {
             "readOnly": true,
@@ -924,13 +930,49 @@
         ],
         "type": "object"
       },
+      "ConverterInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "fields": {
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source_type": {
+            "type": "string"
+          },
+          "summary_template": {
+            "description": "One-line preview with ``{key}`` placeholders for each field. The native row of the importer source-specs picker substitutes the current field values. Falls back to ``description`` when empty.",
+            "type": "string"
+          },
+          "target_type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "source_type",
+          "target_type"
+        ],
+        "type": "object"
+      },
       "ConvertersListResponse": {
         "additionalProperties": false,
         "properties": {
           "converters": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/ConverterInfo"
             },
             "type": "array"
           }
@@ -1134,10 +1176,37 @@
           "name": {
             "default": "",
             "type": "string"
+          },
+          "resolutions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DatasetCombineResolution"
+            },
+            "description": "Embedder-type -> {action, embedder} conflict resolutions.",
+            "type": "object"
           }
         },
         "required": [
           "datasets"
+        ],
+        "type": "object"
+      },
+      "DatasetCombineResolution": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "reembed",
+              "drop"
+            ],
+            "type": "string"
+          },
+          "embedder": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
         ],
         "type": "object"
       },
@@ -1326,6 +1395,21 @@
         ],
         "type": "object"
       },
+      "DatasetRegistryDuplicatesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "duplicate_sets": {
+            "items": {
+              "$ref": "#/components/schemas/DuplicateSet"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "duplicate_sets"
+        ],
+        "type": "object"
+      },
       "DatasetRegistryLoadResponse": {
         "additionalProperties": false,
         "properties": {
@@ -1445,8 +1529,17 @@
           "clipper": {
             "type": "string"
           },
+          "created_at": {
+            "nullable": true
+          },
+          "created_by": {
+            "type": "string"
+          },
           "embedder": {
             "type": "string"
+          },
+          "expires_at": {
+            "nullable": true
           },
           "file_type_counts": {
             "additionalProperties": {
@@ -1460,6 +1553,12 @@
           "ingest_started_at": {
             "nullable": true
           },
+          "media_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
           "num_dupes": {
             "type": "integer"
           },
@@ -1469,6 +1568,12 @@
           "origin": {
             "type": "string"
           },
+          "readers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "source": {
             "additionalProperties": {},
             "type": "object"
@@ -1476,11 +1581,15 @@
         },
         "required": [
           "clipper",
+          "created_by",
           "embedder",
           "file_type_counts",
+          "media_type",
+          "name",
           "num_dupes",
           "num_items",
           "origin",
+          "readers",
           "source"
         ],
         "type": "object"
@@ -2535,13 +2644,105 @@
         ],
         "type": "object"
       },
+      "DuplicateSet": {
+        "additionalProperties": false,
+        "properties": {
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/DuplicateSetMember"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "members",
+          "name"
+        ],
+        "type": "object"
+      },
+      "DuplicateSetMember": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "importer": {
+            "type": "string"
+          },
+          "md5": {
+            "type": "string"
+          },
+          "origin_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "filename",
+          "importer",
+          "md5",
+          "origin_name"
+        ],
+        "type": "object"
+      },
+      "EmbedderInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "description": "Human-readable label shown in pickers, e.g. ``\"SigLIP (general images)\"``. Falls back to ``name`` for legacy embedders that don't supply a friendlier label.",
+            "type": "string"
+          },
+          "is_default": {
+            "description": "Whether this embedder is the recommended default for its media type (exactly one per media type). The dropdown surfaces this entry under a \"Recommended\" optgroup.",
+            "type": "boolean"
+          },
+          "license_notice": {
+            "description": "User-facing licence warning to show before the user picks this embedder. ``null`` for embedders with no special licensing constraints. Advisory only.",
+            "nullable": true,
+            "type": "string"
+          },
+          "media_type_id": {
+            "type": "string"
+          },
+          "model_id": {
+            "description": "Concrete pretrained-model identifier the embedder loads - usually a HuggingFace repo id (or a direct weights URL). ``null`` for embedders with no single downloadable model id (e.g. the classical SIFT/VLAD structural embedder).",
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "supports_geometric_verification": {
+            "description": "Whether this embedder produces local features (keypoints + descriptors) for instance matching. ``true`` for structural embedders (SIFT/VLAD); ``false`` for every semantic embedder.",
+            "type": "boolean"
+          },
+          "supports_patch_regions": {
+            "description": "Whether this embedder produces patch-level vectors and a hierarchical region tree per image. ``true`` for patch-based encoders (DINOv2, DINOv3, EUPE).",
+            "type": "boolean"
+          },
+          "supports_text": {
+            "description": "Whether this embedder can embed text queries into the same vector space as its media. ``false`` for vision-only encoders (DINOv3, Perception Encoder).",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "media_type_id",
+          "name"
+        ],
+        "type": "object"
+      },
       "EmbeddersListResponse": {
         "additionalProperties": false,
         "properties": {
           "embedders": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/EmbedderInfo"
             },
             "type": "array"
           }
@@ -2908,6 +3109,29 @@
         },
         "type": "object"
       },
+      "FindBoundaryNextResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "nullable": true,
+            "type": "integer"
+          },
+          "side": {
+            "enum": [
+              "above",
+              "below",
+              null
+            ],
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "side"
+        ],
+        "type": "object"
+      },
       "FindCancelResponse": {
         "additionalProperties": false,
         "properties": {
@@ -2977,6 +3201,66 @@
         ],
         "type": "object"
       },
+      "FindEvidenceCoverageResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "alpha": {
+            "type": "number"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "expected_unsupported": {
+            "type": "number"
+          },
+          "frac_low_trust": {
+            "type": "number"
+          },
+          "frac_unsupported": {
+            "type": "number"
+          },
+          "k": {
+            "type": "integer"
+          },
+          "median_support": {
+            "type": "number"
+          },
+          "median_trust": {
+            "type": "number"
+          },
+          "n_items": {
+            "type": "integer"
+          },
+          "n_neg_labels": {
+            "type": "integer"
+          },
+          "n_pos_labels": {
+            "type": "integer"
+          },
+          "unsupported": {
+            "type": "boolean"
+          },
+          "z_score": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "alpha",
+          "available",
+          "expected_unsupported",
+          "frac_low_trust",
+          "frac_unsupported",
+          "k",
+          "median_support",
+          "median_trust",
+          "n_items",
+          "n_neg_labels",
+          "n_pos_labels",
+          "unsupported",
+          "z_score"
+        ],
+        "type": "object"
+      },
       "FindLabelRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3022,6 +3306,25 @@
           "ok",
           "results",
           "threshold"
+        ],
+        "type": "object"
+      },
+      "FindQueueIdsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "ids"
         ],
         "type": "object"
       },
@@ -3380,6 +3683,12 @@
       "LabelFileSortResponse": {
         "additionalProperties": false,
         "properties": {
+          "above_threshold": {
+            "type": "integer"
+          },
+          "has_more_below": {
+            "type": "boolean"
+          },
           "loaded": {
             "type": "integer"
           },
@@ -3393,8 +3702,14 @@
           "skipped": {
             "type": "integer"
           },
+          "sort_token": {
+            "type": "string"
+          },
           "threshold": {
             "type": "number"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "required": [
@@ -3480,6 +3795,10 @@
           },
           "origin_name": {
             "type": "string"
+          },
+          "origin_only": {
+            "description": "True when the entry was rendered straight from the detector's persisted labelset because its media doesn't resolve into the active dataset; absent for vote-derived entries.",
+            "type": "boolean"
           },
           "region_box": {
             "items": {
@@ -3648,11 +3967,17 @@
       "LearnedSortResponse": {
         "additionalProperties": false,
         "properties": {
+          "above_threshold": {
+            "type": "integer"
+          },
           "current": {
             "type": "integer"
           },
           "error": {
             "type": "string"
+          },
+          "has_more_below": {
+            "type": "boolean"
           },
           "job_id": {
             "type": "string"
@@ -3663,6 +3988,9 @@
               "type": "object"
             },
             "type": "array"
+          },
+          "sort_token": {
+            "type": "string"
           },
           "status": {
             "enum": [
@@ -3909,13 +4237,64 @@
         ],
         "type": "object"
       },
+      "MediaTypeInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "converts_to": {
+            "description": "Embeddable target type_ids a non-embeddable type can convert into (first = default). ``[\"image\", \"text\"]`` for ``document``; empty for a directly-embeddable type.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "embeddable": {
+            "description": "Whether this type can be embedded (and therefore sorted / browsed / text-queried) on its own. ``false`` for a convert-out half type like ``document`` that must be converted first.",
+            "type": "boolean"
+          },
+          "file_extensions": {
+            "description": "Glob patterns for files this media type claims, e.g. ``[\"*.jpg\", \"*.png\"]``.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "folder_import_name": {
+            "type": "string"
+          },
+          "has_thumbnail": {
+            "description": "Whether items of this type have a browsable thumbnail (image/video/document, and audio via its waveform PNG). Drives the VTSBrowse square-vs-hex bin shape and thumbnail painting.",
+            "type": "boolean"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "importable": {
+            "description": "Whether this type is a first-class ingestion category the user picks when importing (folder scan, file upload). ``false`` for a convert-in half type like ``face``.",
+            "type": "boolean"
+          },
+          "loops": {
+            "description": "Whether this media type's rendered form loops (e.g. short video/audio).",
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type_id"
+        ],
+        "type": "object"
+      },
       "MediaTypesListResponse": {
         "additionalProperties": false,
         "properties": {
           "media_types": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/MediaTypeInfo"
             },
             "type": "array"
           }
@@ -4372,6 +4751,16 @@
       "RegionLabel": {
         "additionalProperties": false,
         "properties": {
+          "has_coarser": {
+            "default": true,
+            "description": "Whether a coarser sign names this region one zoom band out (a parent). False for a root region, which the canvas keeps visible when zoomed out instead of fading in under a parent.",
+            "type": "boolean"
+          },
+          "has_finer": {
+            "default": true,
+            "description": "Whether a finer sign names this region one zoom band in (a child). False for a leaf region, which the canvas keeps visible when zoomed in instead of expiring with nothing to hand off to.",
+            "type": "boolean"
+          },
           "level": {
             "description": "Pyramid zoom level the sign belongs to (0 = coarsest). May be fractional; the canvas interpolates visibility on a continuous axis.",
             "type": "number"
@@ -4723,13 +5112,20 @@
           "browse_details_panel_width": {
             "type": "integer"
           },
+          "browse_graphics": {
+            "enum": [
+              "auto",
+              "full",
+              "reduced"
+            ],
+            "type": "string"
+          },
           "browse_icon_size": {},
           "browse_mouse_zooms_per_level": {},
           "browse_panel_width": {
             "type": "integer"
           },
           "browse_signpost_captioner": {},
-          "browse_signpost_vocab": {},
           "browse_signposts": {},
           "browse_thumbnail_border": {},
           "calibrate_count": {
@@ -4787,10 +5183,6 @@
           "solo_embedder_per_media_type": {
             "nullable": true
           },
-          "solo_media_type": {
-            "nullable": true,
-            "type": "string"
-          },
           "theme": {
             "enum": [
               "dark",
@@ -4804,6 +5196,43 @@
             "type": "number"
           }
         },
+        "type": "object"
+      },
+      "SortPageResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "has_more": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "threshold": {
+            "nullable": true,
+            "type": "number"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "has_more",
+          "limit",
+          "offset",
+          "results",
+          "threshold",
+          "total"
+        ],
         "type": "object"
       },
       "SortRequest": {
@@ -4821,6 +5250,12 @@
       "SortResponse": {
         "additionalProperties": false,
         "properties": {
+          "above_threshold": {
+            "type": "integer"
+          },
+          "has_more_below": {
+            "type": "boolean"
+          },
           "results": {
             "items": {
               "additionalProperties": {},
@@ -4828,8 +5263,14 @@
             },
             "type": "array"
           },
+          "sort_token": {
+            "type": "string"
+          },
           "threshold": {
             "type": "number"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "required": [
@@ -8223,6 +8664,7 @@
     },
     "/api/dataset/combine": {
       "post": {
+        "description": "When the sources bind conflicting embedders of the same type (e.g. one\n``siglip`` dataset and one ``clip`` dataset, both semantic), the caller must\nsettle each conflict via ``resolutions`` \u2014 re-embed every source to one\nwinner, or drop that embedder type from the result.  An unresolved conflict\nis refused (400) rather than silently producing a mixed vector space; the\nCombine-Datasets modal detects the conflicts client-side and collects the\nresolutions before posting here.",
         "operationId": "combine_datasets_route",
         "requestBody": {
           "content": {
@@ -8246,7 +8688,7 @@
             "description": "OK"
           },
           "400": {
-            "description": "Invalid or missing dataset path."
+            "description": "Invalid path, or an unresolved embedder conflict."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -9677,6 +10119,51 @@
           }
         },
         "summary": "Report domain shift of the active dataset against *dataset_id*'s atlas.",
+        "tags": [
+          "datasets_registry"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "dataset_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/api/datasets/registry/{dataset_id}/duplicates": {
+      "get": {
+        "description": "Each set is one ``dupe_set`` representative in the dataset's in-memory\ncontext, expanded to its full membership so the user can see which items\nwere collapsed together and where each one came from.  Duplicate origins\nlive only in memory (they are part of each representative's origin dict),\nso the dataset must be loaded.",
+        "operationId": "get_dataset_duplicates",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetRegistryDuplicatesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Dataset is not currently loaded."
+          },
+          "403": {
+            "description": "Access denied for the current user."
+          },
+          "404": {
+            "description": "Dataset not found."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return the collapsed duplicate sets of a loaded dataset.",
         "tags": [
           "datasets_registry"
         ]
@@ -11471,7 +11958,7 @@
     },
     "/api/embedders": {
       "get": {
-        "description": "Query parameters:\nmedia_type: A ``type_id`` (e.g. ``\"image\"``) or ``folder_import_name``\n    (e.g. ``\"images\"``).  When provided, only embedders whose\n    ``media_type_id`` matches are returned.",
+        "description": "Two deployment-level hides apply on top of that filter: the admin's\n``hidden_plugins`` / ``--hide-plugin`` list, and the ``semantic_only``\nlock (``--semantic-only``), which withholds every patch / structural\nembedder so the prototype types never reach a picker.\n\nQuery parameters:\n    media_type: A ``type_id`` (e.g. ``\"image\"``) or ``folder_import_name``\n        (e.g. ``\"images\"``).  When provided, only embedders whose\n        ``media_type_id`` matches are returned.",
         "operationId": "embedders_list",
         "parameters": [
           {
@@ -12014,6 +12501,61 @@
         ]
       }
     },
+    "/api/find/boundary-next": {
+      "get": {
+        "description": "Walks outward from the cutoff, alternating faces, so \"just sit and vote\"\nsamples the marginal positives and marginal negatives rather than only\nmarching up the positive pile.  Computed server-side from the frozen scores +\ncutoff + verified set so it stays correct once the client holds only a\nwindow of the ranking.  Returns ``{\"id\": null, \"side\": null}`` when both\nsides are exhausted (the done state).",
+        "operationId": "find_boundary_next_route",
+        "parameters": [
+          {
+            "description": "Preferred face of the cutoff to serve next; falls back to the other side.",
+            "in": "query",
+            "name": "side",
+            "required": false,
+            "schema": {
+              "default": "above",
+              "enum": [
+                "above",
+                "below"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Media id to skip (the item just voted, if its verified-state may not be observed yet).",
+            "in": "query",
+            "name": "exclude",
+            "required": false,
+            "schema": {
+              "default": null,
+              "nullable": true,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindBoundaryNextResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return the next unverified item on the Find boundary walk.",
+        "tags": [
+          "detector_find"
+        ]
+      }
+    },
     "/api/find/cancel": {
       "post": {
         "description": "Sets the cancel flag on the shared ``find_progress`` tracker, which\nevery scoring path (``/api/find``, ``/api/find-label``, and\n``/api/auto-detect``) reports progress through. Long-running loops\npoll the flag between iterations and bail out by raising\n:class:`CancelledError`. Always returns 200; calling cancel when\nnothing is running is a no-op.",
@@ -12108,6 +12650,75 @@
         "summary": "Fold the Find corrections into the active detector's labelset for *future*\nscoring, leaving the current Find session frozen.",
         "tags": [
           "detector_scoring"
+        ]
+      }
+    },
+    "/api/find/evidence-coverage": {
+      "get": {
+        "description": "The cross-user complement to the atlas domain-shift report\n(``GET /api/datasets/registry/<id>/domain-shift``): that one needs the\n*training* dataset loaded with a built atlas, which is absent in a true\ndetector handoff (userB has userA's detector JSON, not userA's haystack).\nThis asks only what the detector itself carries \u2014 its labelset, re-embedded\nin memory against the active dataset's embedder at load \u2014 so it fires even\nwhen the training haystack was never handed over.\n\nFor every scored item it measures how far the detector's *predicted* class\nsits from the labeled evidence of that class (a conformal support p-value\n``D``, calibrated against the labelset's own leave-one-out distances) and\nthe trust-score ratio ``TS``, then summarises the share of the dataset the\ndetector is calling without supervision behind it.  Returns\n``available: False`` (rather than 4xx) when there is no scored Find run or\nno resolvable labelset, so the Stats modal can simply hide the section.\nPure read; no new state.  See docs/plans/coverage-atlas.md \u00a76.1 (phase v0).",
+        "operationId": "find_evidence_coverage",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindEvidenceCoverageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Evidence-coverage report for the active detector on the active dataset.",
+        "tags": [
+          "detector_scoring"
+        ]
+      }
+    },
+    "/api/find/queue-ids": {
+      "get": {
+        "description": "The left work queue (Browse / To Dataset / Export) and the right-panel\nactions scope over the *entire* positive set, which the frontend used to\nderive by scanning the whole client-side ranking.  This endpoint computes it\nserver-side from the frozen Find scores + current cutoff + verified set, so a\nwindowed client that no longer holds the full order can still act on every\nmatching item (``docs/plans/scalability.md`` S3/S17/S19).\n\nEmpty outside Find mode or before a scoring pass has run.",
+        "operationId": "find_queue_ids_route",
+        "parameters": [
+          {
+            "description": "Which Find positive set to return: ``unverified_good`` (the left work queue \u2014 above-cutoff items not yet verified) or ``good`` (verified-good + unverified positives).",
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "default": "unverified_good",
+              "enum": [
+                "unverified_good",
+                "good"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindQueueIdsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return the Find work-queue media ids the bulk actions operate over.",
+        "tags": [
+          "detector_find"
         ]
       }
     },
@@ -12595,7 +13206,7 @@
     },
     "/api/labels/export": {
       "get": {
-        "description": "Each label entry includes the element's ``origin`` and ``origin_name``\nso consumers know exactly where each labeled element came from. The\nformat is a superset of the legacy export format; old consumers\nthat only read ``md5`` and ``label`` keys continue to work unchanged.",
+        "description": "Each label entry includes the element's ``origin`` and ``origin_name``\nso consumers know exactly where each labeled element came from. The\nformat is a superset of the legacy export format; old consumers\nthat only read ``md5`` and ``label`` keys continue to work unchanged.\n\nThe payload is composed from the session's votes intersected with the\nactive dataset, then topped up with persisted labelset elements that\ndon't resolve into the active dataset (marked ``origin_only: true``) so\nthe export is always a faithful rendering of the detector's labelset -\nsee :func:`_origin_only_fallback_entries`.",
         "operationId": "export_labels",
         "parameters": [
           {
@@ -12609,7 +13220,7 @@
             }
           },
           {
-            "description": "Filter mode: ``good``, ``bad``, ``both`` (default), ``corrections`` (entries where the user changed the detector's original label), ``unverified`` (Find work-queue items the human hasn't acted on), or ``verified`` (items the human has confirmed). Overrides ``goods_only``.",
+            "description": "Filter mode: ``good``, ``bad``, ``both`` (default), ``corrections`` (entries where the user changed the detector's original label), ``unverified`` (Find work-queue items the human hasn't acted on), or ``verified`` (items the human has confirmed). Overrides ``goods_only``. The session-scoped filters (``corrections`` / ``unverified`` / ``verified``) never include ``origin_only`` fallback entries.",
             "in": "query",
             "name": "label_filter",
             "required": false,
@@ -13889,7 +14500,7 @@
     },
     "/api/settings": {
       "get": {
-        "description": "Augments the persisted dict with the resolver-computed read-only views\n(effective solo mediaType / embedder, effective hidden plugins) via\n:func:`_with_effective`. The frontend reads the ``effective_*`` keys\nwhen deciding whether to hide pickers; the raw ``solo_media_type`` /\n``solo_media_type_explicit`` pair is still exposed for the settings UI\nto render the current state.",
+        "description": "Augments the persisted dict with the resolver-computed read-only views\n(the effective solo mediaType / embedder locks, effective hidden\nplugins) via :func:`_with_effective`. The frontend reads those keys\nwhen deciding whether to hide pickers.",
         "operationId": "get_settings",
         "responses": {
           "200": {
@@ -14282,6 +14893,68 @@
           }
         },
         "summary": "Return medias sorted by cosine similarity to a text query.",
+        "tags": [
+          "sorting"
+        ]
+      }
+    },
+    "/api/sort/page": {
+      "get": {
+        "description": "A sort route (``/api/sort``, ``/api/example-sort``, ``/api/label-file-sort``)\nstores its full descending ``results`` list and hands back a ``sort_token``;\nthis endpoint slices ``[offset, offset + limit)`` out of that cached list so\nthe client can scroll deep into a large ranking without receiving the whole\nthing up front (``docs/plans/scalability.md`` S3/S17/S19).\n\nThe token doubles as a sort-generation guard: a re-sort mints a new token,\nand an evicted/unknown token 404s so the client refetches from the top.",
+        "operationId": "sort_page",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 2000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SortPageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Unknown or expired sort token; re-run the sort."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return one window of a previously-computed ranking.",
         "tags": [
           "sorting"
         ]

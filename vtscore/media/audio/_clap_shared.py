@@ -99,11 +99,6 @@ class _ClapBase(MediaEmbedder):
             from transformers import ClapModel, ClapProcessor  # noqa: PLC0415
 
         with timed_progress(
-            self._on_progress, "loading", "Importing librosa…", est_modules=IMPORT_MODULE_ESTIMATES["librosa"]
-        ):
-            import librosa  # noqa: PLC0415
-
-        with timed_progress(
             self._on_progress, "loading", "Importing soundfile…", est_modules=IMPORT_MODULE_ESTIMATES["soundfile"]
         ):
             import soundfile  # noqa: F401, PLC0415
@@ -130,20 +125,22 @@ class _ClapBase(MediaEmbedder):
         # single dummy forward pass so that the first real embed_media call
         # runs at the same speed as every subsequent one.
         #
-        # Trigger librosa/soxr resampling JIT by loading a tiny WAV at a
-        # different sample rate.  Without this, the first embed_media()
-        # call stalls for 10-30 s while numba compiles resampling kernels,
-        # making the embedding progress bar appear frozen.
+        # Trigger the soxr resampler by decoding a tiny WAV at a different
+        # sample rate.  Without this, the first embed_media() call stalls for
+        # 10-30 s while the resampling kernels warm up, making the embedding
+        # progress bar appear frozen.
         self._on_progress("loading", f"Warming up {self.label}: resampling JIT…", 1, 3)
         import io  # noqa: PLC0415
 
         import soundfile as sf  # noqa: PLC0415
 
+        from vtscore.media.audio.decode import decode_audio  # noqa: PLC0415
+
         _warmup_sr = 16000  # intentionally different from CLAP_SAMPLE_RATE
         _warmup_buf = io.BytesIO()
         sf.write(_warmup_buf, np.zeros(_warmup_sr, dtype=np.float32), _warmup_sr, format="WAV")
         _warmup_buf.seek(0)
-        librosa.load(_warmup_buf, sr=CLAP_SAMPLE_RATE, mono=True)
+        decode_audio(_warmup_buf, sr=CLAP_SAMPLE_RATE, mono=True)
 
         self._on_progress("loading", f"Warming up {self.label}: preprocessing…", 2, 3)
         dummy_audio = np.zeros(CLAP_SAMPLE_RATE, dtype=np.float32)
@@ -193,16 +190,16 @@ class _ClapBase(MediaEmbedder):
             file_path = Path(path_str)
         source_repr = file_path if file_path is not None else "<bytes>"
         try:
-            import io  # noqa: PLC0415
-            import librosa  # noqa: PLC0415
             import torch  # noqa: PLC0415
 
+            from vtscore.media.audio.decode import decode_audio  # noqa: PLC0415
+
             if audio_bytes is not None:
-                source: io.BytesIO | Path = io.BytesIO(bytes(audio_bytes))
+                source: bytes | Path = bytes(audio_bytes)
             else:
                 assert file_path is not None  # narrowed by the path_str check above
                 source = file_path
-            audio_data, _sr = librosa.load(source, sr=CLAP_SAMPLE_RATE, mono=True)
+            audio_data, _sr = decode_audio(source, sr=CLAP_SAMPLE_RATE, mono=True)
             # Deterministic truncation to a single 10 s window: drop everything
             # past CLAP_MAX_SAMPLES so the feature extractor never reaches its
             # random-crop ("rand_trunc") path. The explicit truncation string is

@@ -4,45 +4,39 @@
 
 ## Open follow-ups & open questions (remaining work)
 
+Concrete, independently-shippable follow-ups now live as GitHub issues (bodies
+there, not duplicated here); the design/non-goal items stay in prose below.
+
 Cross-cutting, still open:
 
-- **Cross-dataset Find / CLI-chunk scoring stay on the primary vector.**
-  `find._score_dataset` / `_score_with_cold_detector` (other datasets'
-  `temp_medias`) and `cli._score_medias_with_detectors` (per-chunk subsets)
-  never touch the active `DatasetContext`, so they build the matrix from each
-  media's primary vector rather than calling `routed_embedder` /
-  `keying_embedder_for_snap`. Correct for every single-embedder dataset
-  (primary == score embedder); only matters once a real multi-embedder (trio)
-  dataset is Find-scored. Wire a binding derived from those medias' own embedder
-  names then. (Tracked from 2b.4 and re-surfaced by the per-detector work.)
-- **Trio score-precedence (open question #3) not yet validated on real data.**
-  The score role resolves structural ▸ patch ▸ text everywhere, but it is
-  unproven whether (a) a detector should default to the structural two-stage
-  pipeline when both patch and structural are bound, and (b) the coverage atlas
-  should use a *different* preference (patch ▸ structural) than the detector.
-  Now that a patch+structural dataset is creatable, run the spike.
+<!-- item-sep -->
+
+<!-- item-sep -->
+
+- [ ] #2668 — Spike: validate trio score-precedence (structural vs patch) on a real patch+structural dataset (open question #3)
+
+<!-- item-sep -->
+
 - **`patch_regions` / `patch_grid` / `local_features` stay singular.** The
   binding allows at most one patch and one structural embedder, so these are
   single-valued (owned by that role's embedder) rather than dict-keyed. Only
   revisit if ">1 patch (or structural) embedder per dataset" ever comes off the
   non-goals list.
-- **Combine Datasets triple-match guard not added.** `combine_datasets` still
-  guards only on media type, not on the `(text_embedder, patch_embedder,
-  structural_embedder)` triple (a pre-existing latitude — it never checked the
-  single `embedder` either). Harmless until multi-embedder datasets are common;
-  add the strict triple-match refusal (v3 open question #2) then.
-- **NPZ per-embedder layout (`vectors_<name>`) not added.** The `server_files`
-  NPZ importer still carries a single `vectors` array; the per-embedder layout
-  lands with the multi-embed path that would populate it.
+
+<!-- item-sep -->
+
+- [ ] #2667 — Combine Datasets per-embedder-type conflict resolution: instead of refusing a mismatched triple, the modal detects each conflicting type (semantic / patch_semantic / structural) and lets the user re-embed every source to one winner or drop that type; the combine route bakes the choice into the load (open question #2, now addressed by resolution rather than refusal)
+
+<!-- item-sep -->
+
+<!-- item-sep -->
+
 Per-detector embedder-type follow-ups:
 
-- **In-memory primary drift across A→B→A switches.** `DetectorContext.embedder`
-  (the adaptive cache marker) is re-stamped to the dataset's space when the
-  active dataset can't supply the detector's type. The persisted
-  `embedder_type` is untouched and reloaded on next detector load, but within
-  one session a multi-embedder → other-space → back sequence can leave the
-  detector scoring via the *adapted* slot until reload. Exotic; revisit if it
-  bites.
+<!-- item-sep -->
+
+<!-- item-sep -->
+
 - **Per-detector coverage atlas** and **changing a detector's type after
   creation** remain out of scope (see the per-detector "Out of scope" below).
 
@@ -52,10 +46,13 @@ V3 open questions (design-level, still unresolved):
    `dataset.embedder` field probably can't just be renamed without breaking
    labelset sync. Likely: keep the legacy field as a computed read-only alias to
    the score-role slot for one release, then drop it. Confirm during impl.
-2. **Combine Datasets ergonomics.** Strict "embedder triple must match" is the
-   v3 rule; if it bites, add a "combine on the text slot only" variant. Punt
-   until real demand.
-3. **Coverage-atlas vs score backbone (patch vs structural).** Structural-over-
+2. **Combine Datasets ergonomics.** *(Resolved — see #2667.)* Rather than a strict
+   "embedder triple must match" refusal, combine now detects per-embedder-type
+   conflicts and offers, for each conflicting type, "re-embed every source to one
+   winner" or "drop that type". The route still refuses (400) an *unresolved*
+   conflict from a programmatic caller, so the strict guard remains the backstop.
+3. **Coverage-atlas vs score backbone (patch vs structural).** (Validation
+   tracked in #2668.) Structural-over-
    patch for the shared score role is the less obvious call — a structural
    embedder is a deliberate specialist pick, but its Stage-1 VLAD vector may
    cluster *worse* than patch for the coverage atlas. Two sub-decisions to
@@ -188,11 +185,14 @@ is the **score** embedder (structural ▸ patch ▸ text) the model was trained 
 - **`ConcurrencyGate`** (`load_pipeline.py`) gates embed work; a multi-embedder
   dataset takes proportionally longer, gated under the same `_embed_gate` limit.
 - **Dataset pickle schema version** bumps; old pickles load via the read-time re-key.
-- **NPZ paths-file** grows an optional `vectors_<embedder_name>` layout; the existing
-  single-`vectors` layout maps to the score-role slot. (Open follow-up.)
-- **Combine Datasets** requires identical
-  `(text_embedder, patch_embedder, structural_embedder)` triples. (Guard is an open
-  follow-up.)
+- **NPZ paths-file** accepts an optional `vectors_<embedder_name>` layout (one array
+  per bound embedder, read by `read_npz_multi_vectors` / written by
+  `write_npz_multi_vectors`); the existing single-`vectors` layout maps to the
+  score-role slot.
+- **Combine Datasets** resolves per-embedder-type conflicts across the sources
+  (re-embed to one winner, or drop the type) instead of requiring identical
+  `(text_embedder, patch_embedder, structural_embedder)` triples; an unresolved
+  conflict from a non-UI caller is still refused. (See #2667.)
 
 ### Frontend
 

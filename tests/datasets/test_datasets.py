@@ -2092,3 +2092,55 @@ class TestClearDatasetHeaderGuard:
             assert len(app_module.medias) == len(saved)
         finally:
             app_module.medias.update(saved)
+
+
+class TestDatasetRegistryStats:
+    """``GET /api/datasets/registry/<id>/stats`` is a superset of the
+    Dashboard grid row, so the Stats window (which covers the grid) can
+    show every field the grid does."""
+
+    def _register(self, **overrides):
+        from vtscore.datasets.registry import register_dataset
+
+        kwargs = {
+            "name": "stats-ds",
+            "media_type": "audio",
+            "num_items": 42,
+            "pkl_path": "/tmp/stats.pkl",
+            "num_dupes": 7,
+            "embedder": "clap",
+            "created_by": "alice",
+            "readers": ["bob", "carol"],
+            "file_type_counts": {"wav": 30, "mp3": 12},
+            "ingest_started_at": 1700000000.0,
+        }
+        kwargs.update(overrides)
+        return register_dataset(**kwargs)
+
+    def test_stats_include_every_grid_column(self, client):
+        entry = self._register(expires_at=1800000000.0)
+        resp = client.get(f"/api/datasets/registry/{entry['id']}/stats")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        # The grid's own columns.
+        assert data["name"] == "stats-ds"
+        assert data["media_type"] == "audio"
+        assert data["num_items"] == 42
+        assert data["created_at"] == entry["created_at"]
+        assert data["expires_at"] == 1800000000.0
+        assert data["created_by"] == "alice"
+        assert data["readers"] == ["bob", "carol"]
+        # ...alongside the stats the window already showed.
+        assert data["num_dupes"] == 7
+        assert data["file_type_counts"] == {"wav": 30, "mp3": 12}
+        assert data["ingest_started_at"] == 1700000000.0
+        assert data["embedder"] == "clap"
+
+    def test_never_expiring_dataset_reports_null_expiry(self, client):
+        entry = self._register()
+        resp = client.get(f"/api/datasets/registry/{entry['id']}/stats")
+        assert resp.status_code == 200
+        assert resp.get_json()["expires_at"] is None
+
+    def test_missing_dataset_is_404(self, client):
+        assert client.get("/api/datasets/registry/nope/stats").status_code == 404

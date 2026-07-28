@@ -362,6 +362,14 @@ class DatasetContext:
         "_emb_matrix_ids",
         "_emb_matrix",
         "_emb_matrix_revision",
+        # One-way latch: set the first time ``invalidate_embedding_matrix``
+        # fires for this context (an in-place vector rewrite - re-embed /
+        # clip). Once set, ``get_embedding_matrix`` never again considers the
+        # on-disk mmap sidecar (see S1, docs/plans/scalability.md) for this
+        # context's lifetime, even though the id list alone can't detect a
+        # same-id in-place rewrite. A fresh load gets a fresh ``DatasetContext``
+        # (and so a fresh, unset latch), so this never needs resetting.
+        "_emb_sidecar_disabled",
         # Cached *flattened region matrix* for patch-region (e.g. DINOv3)
         # datasets, mirroring ``_emb_matrix`` but expanded to one row per
         # (media, region) pair.  ``_region_matrix`` is the ``(R, D)`` float32
@@ -378,6 +386,20 @@ class DatasetContext:
         "_region_matrix_revision",
         "_region_media_index",
         "_region_index_per_row",
+        # Cached secondary media lookups (S14): the ``(origin_key, md5, name)``
+        # triple ``build_media_lookup`` produces, keyed - like the embedding
+        # matrix above - on the ``media_revision`` it was built at
+        # (``_lookup_index_revision``).  Many routes resolve label entries
+        # against the active dataset (label import/export, find-stats,
+        # add-to-pile, learned sort); rebuilding these O(N) tables (a
+        # ``json.dumps`` per origin) on every request is what S14 removes.
+        # Built + reused by ``vtscore.state.media_lookup.cached_media_lookups``;
+        # ``None`` until first access, invalidated automatically because the
+        # revision advances on every structural medias mutation.
+        "_origin_key_index",
+        "_md5_index",
+        "_name_index",
+        "_lookup_index_revision",
         # VTSBrowse: cached projection (frozen at ingest) + per-bin-shape
         # pyramids derived from it. The projection (UMAP coords) is shared
         # across bin shapes; ``_pyramids`` maps "hex"/"square" -> Pyramid so the
@@ -452,11 +474,17 @@ class DatasetContext:
         self._emb_matrix_ids: list[int] | None = None
         self._emb_matrix: Any = None  # np.ndarray | None
         self._emb_matrix_revision: int | None = None  # media_revision the matrix was built at
+        self._emb_sidecar_disabled: bool = False  # latched True by invalidate_embedding_matrix
         self._region_matrix_ids: list[int] | None = None
         self._region_matrix: Any = None  # np.ndarray | None, shape (R, D)
         self._region_matrix_revision: int | None = None  # media_revision the region matrix was built at
         self._region_media_index: Any = None  # np.ndarray | None, int64 (R,)
         self._region_index_per_row: Any = None  # np.ndarray | None, int64 (R,)
+        # Cached secondary media lookups (S14); see the __slots__ comment.
+        self._origin_key_index: dict[str, list[int]] | None = None
+        self._md5_index: dict[str, list[int]] | None = None
+        self._name_index: dict[str, list[int]] | None = None
+        self._lookup_index_revision: int | None = None  # media_revision the lookups were built at
         self._projection: Any = None  # Projection | None
         self._pyramids: dict[str, Any] = {}  # bin_shape -> Pyramid
         self._full_job_id: str | None = None  # in-flight full-dataset build job id
@@ -886,6 +914,10 @@ class _RequestMissingDatasetContext(DatasetContext):
         object.__setattr__(self, "_region_matrix_revision", None)
         object.__setattr__(self, "_region_media_index", None)
         object.__setattr__(self, "_region_index_per_row", None)
+        object.__setattr__(self, "_origin_key_index", None)
+        object.__setattr__(self, "_md5_index", None)
+        object.__setattr__(self, "_name_index", None)
+        object.__setattr__(self, "_lookup_index_revision", None)
         object.__setattr__(self, "_text_embedder", None)
         object.__setattr__(self, "_patch_embedder", None)
         object.__setattr__(self, "_structural_embedder", None)

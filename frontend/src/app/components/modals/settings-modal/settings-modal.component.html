@@ -211,20 +211,6 @@
         <!-- Import Defaults -->
         @if (activeSettingsTab() === 'imports') {
           <h3>Import Defaults<vt-field-hint-icon hint="Per-media-type defaults that auto-fill the Add Dataset modal when you start a matching import."></vt-field-hint-icon></h3>
-          <div class="form-group" title="Streamline the app to a single media type: the Add Dataset picker hides importers and tabs that can't produce it (and preselects it on the rest), the New Detector media picker and Import Defaults collapse to this type, and converters that output other types are filtered out.">
-            <label class="form-label" for="setting-solo-media-type">Solo media type<vt-field-hint-icon [hint]="soloMediaTypeHint"></vt-field-hint-icon></label>
-            <select
-              id="setting-solo-media-type"
-              class="form-select"
-              [ngModel]="soloMediaTypeSelectValue"
-              (ngModelChange)="onSoloMediaTypeChange($event)"
-              aria-label="Solo media type">
-              <option value="">Show everything</option>
-              @for (mt of mediaTypes(); track mt.type_id) {
-                <option [value]="mt.type_id">{{ mt.name }}</option>
-              }
-            </select>
-          </div>
           <vt-import-defaults-settings
             [mediaTypes]="mediaTypes()"
             [defaults]="importDefaults"
@@ -272,6 +258,16 @@
         <!-- Browser (VTSBrowse projection browser) -->
         @if (activeSettingsTab() === 'browser') {
           <h3>Browser<vt-field-hint-icon hint="How the Browse map looks, per media type. The same controls live on the map; changes here are remembered."></vt-field-hint-icon></h3>
+          <!-- Applies to every media type: this describes your browser's
+               rendering capability, not the data. -->
+          <div class="form-group">
+            <label class="form-label" for="setting-browse-graphics" title="How much visual polish the Browse map's animations use">Graphics<vt-field-hint-icon hint="“Auto” checks whether your browser has hardware acceleration and picks for you. “Full” always uses the richest animations. “Reduced” keeps every animation but drops the costly effects (image smoothing while panning/zooming, shadows) — pick it if the map feels laggy. Applies to all media types."></vt-field-hint-icon></label>
+            <select id="setting-browse-graphics" class="form-select" [ngModel]="browseGraphics" (ngModelChange)="onBrowseGraphicsChange($event)" title="How much visual polish the Browse map's animations use">
+              <option value="auto">Auto</option>
+              <option value="full">Full</option>
+              <option value="reduced">Reduced</option>
+            </select>
+          </div>
           @if (mediaTypes().length > 0) {
             <!-- A lone media type needs no tab bar (nothing to switch to); the
                  content below still renders for the single active type. -->
@@ -292,28 +288,14 @@
               </div>
             }
             <div class="view-tab-content browser-tab-content">
-              <div class="form-group">
-                <label class="form-label" title="Slide clusters together to close the empty space between them when the map is built">Compaction<vt-field-hint-icon hint="Slides clusters together to close the empty gaps between them. Applies next time the map is built."></vt-field-hint-icon></label>
-                <div class="segmented-toggle segmented-toggle--stretch">
-                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), true)" title="Close the empty space between clusters">
-                    On
-                  </button>
-                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="!getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), false)" title="Keep the map's original spacing">
-                    Off
-                  </button>
-                </div>
-              </div>
-              <div class="form-group">
-                <label class="form-label" title="Letter named region signposts over the map when the dataset has them">Signposts<vt-field-hint-icon hint="Names the map's regions like street signs: broad names when zoomed out, finer names as you zoom in. Only shows when the dataset's map has computed labels."></vt-field-hint-icon></label>
-                <div class="segmented-toggle segmented-toggle--stretch">
-                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getBrowseSignposts(activeBrowseTab())" (click)="onBrowseSignpostsChange(activeBrowseTab(), true)" title="Show region signposts on the map">
-                    On
-                  </button>
-                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="!getBrowseSignposts(activeBrowseTab())" (click)="onBrowseSignpostsChange(activeBrowseTab(), false)" title="Hide region signposts">
-                    Off
-                  </button>
-                </div>
-              </div>
+              <label class="checkbox-row" title="Slide clusters together to close the empty space between them when the map is built">
+                <input type="checkbox" [ngModel]="getBrowseCompact(activeBrowseTab())" (ngModelChange)="onBrowseCompactChange(activeBrowseTab(), $event)" aria-label="Compaction" />
+                <span>Compaction<vt-field-hint-icon hint="Slides clusters together to close the empty gaps between them. Applies next time the map is built."></vt-field-hint-icon></span>
+              </label>
+              <label class="checkbox-row" title="Letter named region signposts over the map when the dataset has them">
+                <input type="checkbox" [ngModel]="getBrowseSignposts(activeBrowseTab())" (ngModelChange)="onBrowseSignpostsChange(activeBrowseTab(), $event)" aria-label="Signposts" />
+                <span>Signposts<vt-field-hint-icon hint="Names the map's regions like street signs: broad names when zoomed out, finer names as you zoom in. Only shows when the dataset's map has computed labels."></vt-field-hint-icon></span>
+              </label>
               @if (browseTabHasCaptioner(activeBrowseTab())) {
                 <div class="form-group">
                   <label class="form-label" title="How signpost region names are generated for this media type">Signpost text<vt-field-hint-icon hint="Tags names regions from a fixed vocabulary (fast, no download). Captions runs a generative model to describe each item (sharper on fine-grained sets, but downloads a multi-GB model and runs at build time)."></vt-field-hint-icon></label>
@@ -325,21 +307,6 @@
                       Captions
                     </button>
                   </div>
-                </div>
-              }
-              @if (browseTabHasTagVocab(activeBrowseTab()) && !getBrowseSignpostCaptioner(activeBrowseTab())) {
-                <div class="form-group">
-                  <label class="form-label" [attr.for]="'setting-browse-vocab-' + activeBrowseTab()" title="Custom words used to name map regions in Tags mode">Custom tags<vt-field-hint-icon hint="One term per line. Replaces the built-in tag vocabulary (AudioSet for audio, Open Images for images) that names the map's regions. Leave empty to use the built-in list. Terms are matched against each item by the embedder, so use plain, embeddable words. Takes effect on the next map rebuild."></vt-field-hint-icon></label>
-                  <textarea
-                    [id]="'setting-browse-vocab-' + activeBrowseTab()"
-                    class="form-textarea"
-                    rows="5"
-                    spellcheck="false"
-                    placeholder="Using the built-in vocabulary. Enter one term per line to override."
-                    [value]="getBrowseSignpostVocabText(activeBrowseTab())"
-                    (change)="onBrowseSignpostVocabChange(activeBrowseTab(), $any($event.target).value)"
-                    aria-label="Custom signpost tag vocabulary, one term per line"
-                  ></textarea>
                 </div>
               }
               <div class="form-group">
@@ -435,6 +402,14 @@
             <div class="server-value">{{ settings().max_concurrent_dataset_embeddings ?? '—' }}</div>
           </div>
           <div class="form-group">
+            <label class="form-label" title="When on, this server offers Semantic embedders only: the prototype Patch Semantic and Structural types are hidden from every picker and rejected by the API. Set with --semantic-only, VTSEARCH_SEMANTIC_ONLY, or the semantic_only setting.">Semantic embedders only</label>
+            <div class="server-value">{{ settings().semantic_only ? 'On' : 'Off' }}</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" title="When set, this server is streamlined to a single media type: the Add Dataset picker hides importers and tabs that can't produce it (and preselects it on the rest), the New Detector media picker and Import Defaults collapse to this type, and converters that output other types are filtered out. Set with --solo-media-type or the solo_media_type setting.">Solo media type</label>
+            <div class="server-value" [class.server-value--empty]="!effectiveSoloMediaType">{{ soloMediaTypeDisplay }}</div>
+          </div>
+          <div class="form-group">
             <label class="form-label" title="Plugins hidden from pickers and listings for this deployment (still callable by name). Combines the persisted setting with any --hide-plugin CLI flags.">Hidden plugins</label>
             @if (hiddenPluginsDisplay.length > 0) {
               <ul class="server-list">
@@ -444,6 +419,18 @@
               </ul>
             } @else {
               <div class="server-value server-value--empty">None</div>
+            }
+          </div>
+          <div class="form-group">
+            <label class="form-label" title="Words this server uses to name the map's regions in Tags mode, replacing the built-in tag vocabulary (AudioSet for audio, Open Images for images). Set in the server's settings file; media types not listed use the built-in vocabulary.">Custom signpost tags<vt-field-hint-icon hint="An instance-wide term list for naming map regions, set by whoever runs this server. Media types not listed here use the built-in vocabulary. Takes effect on the next map rebuild."></vt-field-hint-icon></label>
+            @if (signpostVocabDisplay.length > 0) {
+              <ul class="server-list">
+                @for (row of signpostVocabDisplay; track row.mediaType) {
+                  <li><span class="server-list__key">{{ row.mediaType }}:</span> {{ row.terms }}</li>
+                }
+              </ul>
+            } @else {
+              <div class="server-value server-value--empty">None (using the built-in vocabulary)</div>
             }
           </div>
         }

@@ -2,6 +2,7 @@ import { Component, WritableSignal, inject, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ProgressEventsService } from './progress-events.service';
 import { ConnectionStateService, ConnectionStatus } from './connection-state.service';
+import type { LoadingTask } from '../models/api.models';
 import { configureZoneless } from '../testing/zoneless-testbed';
 import { settleZoneless } from '../testing/settle-resource';
 
@@ -97,6 +98,75 @@ describe('ProgressEventsService liveness wiring', () => {
     recordSuccess.mockClear();
     es.emit('dataset', { status: 'loading', current: 5, total: 10 });
     expect(recordSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  // --- detectorTaskUntilDone$: awaiting one task's terminal frame (#2703) ---
+
+  /** Subscribe to `detectorTaskUntilDone$` and record what it emits. */
+  function watchTask(taskId: string) {
+    const seen: LoadingTask[] = [];
+    const state = { completed: false };
+    TestBed.inject(ProgressEventsService)
+      .detectorTaskUntilDone$(taskId)
+      .subscribe({
+        next: (task) => seen.push(task),
+        complete: () => {
+          state.completed = true;
+        },
+      });
+    return { seen, state };
+  }
+
+  it('emits only the named task and completes on its terminal frame', () => {
+    const es = connectedSource();
+    const { seen, state } = watchTask('_detingest_d9');
+    TestBed.tick();
+
+    es.emit('detector-loading-tasks', [{ task_id: '_detload_other', status: 'loading' }]);
+    TestBed.tick();
+    expect(seen).toEqual([]);
+
+    es.emit('detector-loading-tasks', [
+      { task_id: '_detingest_d9', status: 'loading', current: 2, total: 5 },
+    ]);
+    TestBed.tick();
+    expect(seen.map((t) => t.current)).toEqual([2]);
+    expect(state.completed).toBe(false);
+
+    es.emit('detector-loading-tasks', [
+      { task_id: '_detingest_d9', status: 'idle', ingest_result: { ingested: 5 } },
+    ]);
+    TestBed.tick();
+    expect(seen.at(-1)?.ingest_result).toEqual({ ingested: 5 });
+    expect(state.completed).toBe(true);
+  });
+
+  it('completes when a task it has seen is pruned from the feed', () => {
+    const es = connectedSource();
+    const { state } = watchTask('_detingest_d9');
+    TestBed.tick();
+
+    es.emit('detector-loading-tasks', [{ task_id: '_detingest_d9', status: 'loading' }]);
+    TestBed.tick();
+    expect(state.completed).toBe(false);
+
+    // The tracker drops finished tasks after their stale-prune window.
+    es.emit('detector-loading-tasks', []);
+    TestBed.tick();
+    expect(state.completed).toBe(true);
+  });
+
+  it('keeps waiting while the task has not appeared yet', () => {
+    const es = connectedSource();
+    const { seen, state } = watchTask('_detingest_d9');
+    TestBed.tick();
+
+    // The backend registers the task before answering the request that hands
+    // back its id, so an empty feed here just means the frame is in flight.
+    es.emit('detector-loading-tasks', []);
+    TestBed.tick();
+    expect(seen).toEqual([]);
+    expect(state.completed).toBe(false);
   });
 });
 

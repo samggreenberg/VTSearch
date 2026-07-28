@@ -39,7 +39,11 @@ from vtscore.datasets.load_pipeline import (
     _run_origin_load_in_background,
 )
 from vtscore.datasets.registry import remove_loaded_id as _reg_remove_loaded
-from vtsearch.routes._shared import format_exception_detail, require_dataset_header
+from vtsearch.routes._shared import (
+    abort_if_semantic_only_embedders,
+    format_exception_detail,
+    require_dataset_header,
+)
 from vtsearch.routes.datasets._helpers import _safe_relative_upload_path
 from vtsearch.schemas.datasets import (
     DatasetClearResponseSchema,
@@ -71,10 +75,15 @@ def _parse_form_embedders(form, primary: str) -> list[str] | None:
     array string under ``embedders``.  Returns ``None`` when absent (the caller
     falls back to the single ``embedder`` field).  The *primary* embedder leads
     the list even if the client omitted it from the array.
+
+    Doubles as the Semantic-lock gate for the two local-upload routes: a
+    ``semantic_only`` instance rejects (400) a request naming a patch or
+    structural embedder, which its own pickers never offer.
     """
     embedders = _parse_embedder_list(form.get("embedders"))
     if embedders and primary and primary not in embedders:
         embedders = [primary, *embedders]
+    abort_if_semantic_only_embedders(embedders or [primary])
     return embedders
 
 
@@ -395,6 +404,7 @@ def load_demo_dataset_route(body: dict):
     demo_embedders = body.get("embedders")
     if demo_embedders:
         field_values["embedders"] = demo_embedders
+    abort_if_semantic_only_embedders([embedder_name, *(_parse_embedder_list(demo_embedders) or [])])
 
     task_id = _run_importer_in_background(importer, field_values)
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}

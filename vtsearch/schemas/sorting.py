@@ -62,11 +62,57 @@ class SortRequestSchema(Schema):
     text = fields.String(required=True)
 
 
+#: Windowing metadata carried alongside a full ``results`` list so a client can
+#: page deeper via ``GET /api/sort/page`` without holding the whole ranking.
+#: Additive and optional — every sort route still returns the full ``results``
+#: today (frontend windowing lands separately; see scalability.md S3/S17/S19).
+_WINDOW_META_FIELDS = {
+    # Opaque handle for /api/sort/page; also the sort-generation token.
+    "sort_token": fields.String(required=False),
+    # Full ranking length (>= len(results): ``results`` may be a head window).
+    "total": fields.Integer(required=False),
+    # Rows scoring at or above ``threshold`` across the whole ranking.
+    "above_threshold": fields.Integer(required=False),
+    # True when ``results`` is a head window and more rows follow (page them via
+    # /api/sort/page). False when the full ranking was transmitted.
+    "has_more_below": fields.Boolean(required=False),
+}
+
+
 class SortResponseSchema(Schema):
     """Response for ``POST /api/sort`` and ``POST /api/example-sort``."""
 
     results = fields.List(fields.Dict(), required=True)
     threshold = fields.Float(required=True)
+    sort_token = _WINDOW_META_FIELDS["sort_token"]
+    total = _WINDOW_META_FIELDS["total"]
+    above_threshold = _WINDOW_META_FIELDS["above_threshold"]
+    has_more_below = _WINDOW_META_FIELDS["has_more_below"]
+
+
+class SortPageQuerySchema(Schema):
+    """Query for ``GET /api/sort/page``."""
+
+    token = fields.String(required=True)
+    offset = fields.Integer(load_default=0, validate=validate.Range(min=0))
+    limit = fields.Integer(load_default=200, validate=validate.Range(min=1, max=2000))
+
+    class Meta:
+        # Tolerate request-context params (dataset_id / detector_id) smuggled in
+        # as query args by browser-native requests, matching the learned-sort
+        # result query schema.
+        unknown = "exclude"
+
+
+class SortPageResponseSchema(Schema):
+    """Response for ``GET /api/sort/page`` — one window of a cached ranking."""
+
+    results = fields.List(fields.Dict(), required=True)
+    offset = fields.Integer(required=True)
+    limit = fields.Integer(required=True)
+    total = fields.Integer(required=True)
+    threshold = fields.Float(required=True, allow_none=True)
+    has_more = fields.Boolean(required=True)
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +164,10 @@ class LearnedSortResponseSchema(Schema):
     current = fields.Integer()
     total = fields.Integer()
     error = fields.String()
+    # Windowing metadata on the ``done`` payload (see scalability.md S3/S17/S19).
+    sort_token = fields.String(required=False)
+    above_threshold = fields.Integer(required=False)
+    has_more_below = fields.Boolean(required=False)
 
 
 class LearnedSortCancelResponseSchema(Schema):
@@ -268,6 +318,10 @@ class LabelFileSortResponseSchema(Schema):
     threshold = fields.Float(required=True)
     loaded = fields.Integer(required=True)
     skipped = fields.Integer(required=True)
+    sort_token = _WINDOW_META_FIELDS["sort_token"]
+    total = _WINDOW_META_FIELDS["total"]
+    above_threshold = _WINDOW_META_FIELDS["above_threshold"]
+    has_more_below = _WINDOW_META_FIELDS["has_more_below"]
 
 
 # ---------------------------------------------------------------------------
@@ -311,6 +365,8 @@ __all__ = [
     "SafeThresholdsResponseSchema",
     "SeedFromExamplesRequestSchema",
     "SeedFromExamplesResponseSchema",
+    "SortPageQuerySchema",
+    "SortPageResponseSchema",
     "SortRequestSchema",
     "SortResponseSchema",
     "TextsortSuggestionRequestSchema",

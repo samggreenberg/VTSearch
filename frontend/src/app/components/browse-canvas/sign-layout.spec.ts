@@ -6,7 +6,10 @@ import {
   SIGN_EXPIRE_DELTA,
   SIGN_FADE_IN_SPAN,
   SIGN_FADE_OUT_SPAN,
+  SIGN_SHADOW_MAX_SCALE,
+  SIGN_SHADOW_MIN_SCALE,
   signAppearance,
+  signShadow,
   viewLevelForZoom,
   type SignViewContext,
 } from './sign-layout';
@@ -100,6 +103,92 @@ describe('signAppearance', () => {
   });
 });
 
+describe('signAppearance — terminal signs (no hand-off neighbour)', () => {
+  it('a root (no coarser parent) stays opaque below its coarse edge instead of fading/culling', () => {
+    // A normal sign is culled far below its coarse edge...
+    expect(signAppearance(-5)).toBeNull();
+    // ...but a root persists at full opacity (nothing coarser names the area).
+    const root = signAppearance(-5, false, true)!;
+    expect(root).not.toBeNull();
+    expect(root.alpha).toBe(1);
+    // And inside the fade-in band it's opaque where a normal sign is half-faded.
+    const d = SIGN_APPEAR_DELTA + SIGN_FADE_IN_SPAN / 2;
+    expect(signAppearance(d)!.alpha).toBeCloseTo(0.5, 10);
+    expect(signAppearance(d, false, true)!.alpha).toBe(1);
+  });
+
+  it('still expires a root at its fine edge — only the coarse-edge fade is skipped', () => {
+    expect(signAppearance(10, false, true)).toBeNull();
+  });
+
+  it('a leaf (no finer child) stays opaque above its fine edge instead of expiring', () => {
+    // A normal sign is gone far above its fine edge...
+    expect(signAppearance(10)).toBeNull();
+    // ...but a leaf persists at full opacity (nothing finer takes over).
+    const leaf = signAppearance(10, true, false)!;
+    expect(leaf).not.toBeNull();
+    expect(leaf.alpha).toBe(1);
+    // And inside the fade-out band it's opaque where a normal sign is half-faded.
+    const d = SIGN_EXPIRE_DELTA - SIGN_FADE_OUT_SPAN / 2;
+    expect(signAppearance(d)!.alpha).toBeCloseTo(0.5, 10);
+    expect(signAppearance(d, true, false)!.alpha).toBe(1);
+  });
+
+  it('still hides a leaf below its coarse edge — only the fine-edge fade is skipped', () => {
+    expect(signAppearance(-5, true, false)).toBeNull();
+  });
+
+  it('an isolated sign (both edges terminal) is visible on both sides of the band', () => {
+    expect(signAppearance(-5, false, false)!.alpha).toBe(1);
+    expect(signAppearance(10, false, false)!.alpha).toBe(1);
+  });
+});
+
+describe('signShadow', () => {
+  it('is flat (no shadow) at and below the minimum scale — the smallest signs', () => {
+    expect(signShadow(SIGN_SHADOW_MIN_SCALE, 13)).toBeNull();
+    expect(signShadow(SIGN_SHADOW_MIN_SCALE - 0.05, 13)).toBeNull();
+    expect(signShadow(0.65, 13)).toBeNull();
+  });
+
+  it('casts a shadow for medium signs, deeper for larger ones', () => {
+    const medium = signShadow(1.0, SIGN_BASE_FONT_PX)!;
+    const large = signShadow(1.25, SIGN_BASE_FONT_PX * 1.25)!;
+    expect(medium).not.toBeNull();
+    // Every dimension of the depth cue grows as the sign gets bigger.
+    expect(large.blur).toBeGreaterThan(medium.blur);
+    expect(large.offsetY).toBeGreaterThan(medium.offsetY);
+    expect(large.alpha).toBeGreaterThan(medium.alpha);
+  });
+
+  it('is deepest at the maximum scale — about to float past the viewer', () => {
+    const fontPx = SIGN_BASE_FONT_PX * SIGN_SHADOW_MAX_SCALE;
+    const biggest = signShadow(SIGN_SHADOW_MAX_SCALE, fontPx)!;
+    // lift saturates at 1, so blur/offset are the full per-em fraction of fontPx
+    // and the shadow is at its configured peak opacity.
+    expect(biggest.blur).toBeCloseTo(fontPx * 1.2, 5);
+    expect(biggest.offsetY).toBeCloseTo(fontPx * 0.55, 5);
+    expect(biggest.alpha).toBeCloseTo(0.55, 5);
+  });
+
+  it('clamps beyond the maximum scale rather than over-lifting', () => {
+    const fontPx = SIGN_BASE_FONT_PX * SIGN_SHADOW_MAX_SCALE;
+    const atMax = signShadow(SIGN_SHADOW_MAX_SCALE, fontPx)!;
+    const beyond = signShadow(SIGN_SHADOW_MAX_SCALE + 1, fontPx)!;
+    expect(beyond.blur).toBeCloseTo(atMax.blur, 10);
+    expect(beyond.alpha).toBeCloseTo(atMax.alpha, 10);
+  });
+
+  it('scales the shadow with font size so it stays proportional', () => {
+    const small = signShadow(1.2, 10)!;
+    const big = signShadow(1.2, 20)!;
+    // Same lift, double the font → double the blur/offset.
+    expect(big.blur).toBeCloseTo(small.blur * 2, 10);
+    expect(big.offsetY).toBeCloseTo(small.offsetY * 2, 10);
+    expect(big.alpha).toBeCloseTo(small.alpha, 10);
+  });
+});
+
 describe('layoutSigns', () => {
   it('places a visible sign at its projected screen position', () => {
     const placed = layoutSigns([label({ x: 0, y: 0 })], centeredView(0), measure);
@@ -107,6 +196,7 @@ describe('layoutSigns', () => {
     expect(placed[0].sx).toBe(400);
     expect(placed[0].sy).toBe(300);
     expect(placed[0].fontPx).toBeCloseTo(SIGN_BASE_FONT_PX * 0.9, 5);
+    expect(placed[0].scale).toBeCloseTo(0.9, 5);
     expect(placed[0].alpha).toBe(1);
   });
 
@@ -167,5 +257,21 @@ describe('layoutSigns', () => {
 
   it('skips empty-text labels', () => {
     expect(layoutSigns([label({ text: '' })], centeredView(0), measure)).toHaveLength(0);
+  });
+
+  it('keeps a leaf island lettered when zoomed far past it', () => {
+    // A normal level-0 sign has expired by view level 3...
+    expect(layoutSigns([label({ level: 0 })], centeredView(3), measure)).toHaveLength(0);
+    // ...but a leaf (no finer child to hand off to) stays on the map.
+    const placed = layoutSigns([label({ level: 0, has_finer: false })], centeredView(3), measure);
+    expect(placed).toHaveLength(1);
+  });
+
+  it('keeps a root island lettered when zoomed out past it', () => {
+    // A normal level-3 sign is invisible at view level 0...
+    expect(layoutSigns([label({ level: 3 })], centeredView(0), measure)).toHaveLength(0);
+    // ...but a root (no coarser parent naming the area) stays on the map.
+    const placed = layoutSigns([label({ level: 3, has_coarser: false })], centeredView(0), measure);
+    expect(placed).toHaveLength(1);
   });
 });

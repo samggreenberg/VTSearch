@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, ElementRef, HostListener, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, HostListener, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subject } from 'rxjs';
@@ -8,6 +8,7 @@ import {
   BrowseContextMenuEvent,
   HexHoverEvent,
 } from '../browse-canvas/browse-canvas.component';
+import type { BrowseGraphicsMode } from '../browse-canvas/render-perf';
 import { BrowseHoverPreviewComponent, NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
 import { BrowseBinPopupComponent } from '../browse-bin-popup/browse-bin-popup.component';
 import { BrowseLegendComponent } from '../browse-legend/browse-legend.component';
@@ -220,14 +221,32 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   /**
    * Docked bin-details mode for the active media type, mirrored from the
-   * per-media ``bin_details_docked`` setting. When on, the bin details render
-   * as a persistent left panel (large item + metadata on top, member grid
-   * below) instead of the floating right-click popup; the panel doubles as the
-   * audio now-playing display, replacing the toolbar's small waveform widget.
+   * per-media ``bin_details_docked`` setting. When on (the default for a
+   * media type with no saved choice), the bin details render as a persistent
+   * left panel (large item + metadata on top, member grid below) instead of
+   * the floating right-click popup; the panel doubles as the audio
+   * now-playing display, replacing the toolbar's small waveform widget.
    * Flipped by the dock button on the floating window and the pop-out button
    * on the panel, both of which persist the choice.
    */
-  readonly detailsDocked = signal(false);
+  readonly detailsDocked = signal(true);
+
+  /**
+   * Whether the user has dismissed the (docked) details panel for now. The
+   * panel's X clears the bin it's showing; pressed again on an already-empty
+   * panel it hides the panel altogether, handing its width back to the canvas.
+   * Right-clicking a bin brings the panel straight back with that bin in it
+   * (see {@link onCanvasContextMenu}), so this is a transient, per-visit
+   * dismissal rather than a remembered presentation choice — the docked /
+   * floating choice stays with {@link detailsDocked}.
+   */
+  readonly detailsPanelHidden = signal(false);
+
+  /** Whether the docked details panel actually renders: docked *and* not
+   *  dismissed. Everything that keys off the panel's presence (the grid
+   *  template, the panel element, the toolbar's now-playing waveform the panel
+   *  otherwise replaces) reads this rather than {@link detailsDocked}. */
+  readonly detailsPanelShown = computed(() => this.detailsDocked() && !this.detailsPanelHidden());
 
   /**
    * Width (CSS px) of the docked bin-details panel, mirrored from the
@@ -242,6 +261,20 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private draggingDetails = false;
   private boundDetailsMove = this.onDetailsMouseMove.bind(this);
   private boundDetailsUp = this.onDetailsMouseUp.bind(this);
+
+  /**
+   * True while the docked details panel's *horizontal* row divider (between the
+   * focused-item/metadata row and the member grid, inside the panel) is being
+   * dragged. That divider resizes the whole panel — the focused item is square,
+   * so a taller item means a wider panel — by mapping the vertical drag onto the
+   * same {@link detailsPanelWidth} the panel↔canvas divider drives. A signal so
+   * the drag-cue class round-trips to the panel under zoneless.
+   */
+  readonly draggingDetailsRow = signal(false);
+  private detailsRowStartY = 0;
+  private detailsRowStartWidth = 0;
+  private boundDetailsRowMove = this.onDetailsRowMouseMove.bind(this);
+  private boundDetailsRowUp = this.onDetailsRowMouseUp.bind(this);
   /** Dynamic minimum snapshotted at drag start, so the per-move handler reuses
    *  it instead of re-measuring the DOM (and thrashing layout) on every move —
    *  the thumbnail size and sort-control width can't change mid-drag anyway. */
@@ -263,6 +296,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * signpost button in the canvas toolbar, which persists the choice back.
    */
   readonly signposts = signal(true);
+
+  /**
+   * Canvas rendering effort — the ``browse_graphics`` setting, mirrored here
+   * and passed to the canvas. Unlike the other browse prefs this is a single
+   * scalar rather than a per-media-type map: it describes the client's
+   * rendering capability, not anything about the data. ``auto`` (the default)
+   * lets the canvas detect a software-rendering browser for itself.
+   */
+  readonly graphics = signal<BrowseGraphicsMode>('auto');
 
   /** The ``projection_id`` the current {@link labels} were fetched for (or
    *  requested for — set before the request so a poll can't double-fetch). */
@@ -444,6 +486,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     document.removeEventListener('mouseup', this.boundPanelUp);
     document.removeEventListener('mousemove', this.boundDetailsMove);
     document.removeEventListener('mouseup', this.boundDetailsUp);
+    document.removeEventListener('mousemove', this.boundDetailsRowMove);
+    document.removeEventListener('mouseup', this.boundDetailsRowUp);
     this.removeShiftListeners();
     this.tileCache.clear();
     this.releaseEphemeralPositivesContext();
@@ -608,8 +652,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     const rawSigns = mt && signMap ? signMap[mt] : undefined;
     this.signposts.set(rawSigns == null ? true : rawSigns);
 
+    // Global (not per-media): the client's rendering capability.
+    const rawGraphics = s.browse_graphics;
+    this.graphics.set(
+      rawGraphics === 'full' || rawGraphics === 'reduced' ? rawGraphics : 'auto',
+    );
+
     const dockMap = s.bin_details_docked as { [key: string]: boolean } | undefined;
-    this.detailsDocked.set(!!(mt && dockMap && dockMap[mt]));
+    const dockedValue = mt && dockMap ? dockMap[mt] : undefined;
+    this.detailsDocked.set(dockedValue === undefined ? true : dockedValue);
   }
 
   /** Read a ``{media_type: value}`` setting for *mt*, or ``''`` when unset. */
@@ -751,22 +802,32 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     });
   }
 
-  private onDetailsMouseMove(event: MouseEvent): void {
-    const content = this.content();
-    if (!this.draggingDetails || !content) return;
-    const rect = content.nativeElement.getBoundingClientRect();
-    // The details panel is on the left, so its width grows as the cursor moves
-    // right. Leave the canvas its minimum after both dividers + the right panel.
+  /** Largest the details panel can grow to while leaving the canvas its minimum
+   *  after both dividers and the right (selection) panel. Shared by both the
+   *  panel↔canvas divider drag and the in-panel row divider drag. */
+  private detailsMax(rect: DOMRect): number {
     const fit =
       rect.width -
       2 * BrowseViewComponent.DIVIDER_WIDTH -
       BrowseViewComponent.CANVAS_MIN -
       this.panelWidth();
-    const max = Math.min(
+    return Math.min(
       BrowseViewComponent.PANEL_MAX,
       Math.max(BrowseViewComponent.DETAILS_FLOOR, fit),
     );
-    const width = this.clamp(event.clientX - rect.left, BrowseViewComponent.DETAILS_FLOOR, max);
+  }
+
+  private onDetailsMouseMove(event: MouseEvent): void {
+    const content = this.content();
+    if (!this.draggingDetails || !content) return;
+    const rect = content.nativeElement.getBoundingClientRect();
+    // The details panel is on the left, so its width grows as the cursor moves
+    // right.
+    const width = this.clamp(
+      event.clientX - rect.left,
+      BrowseViewComponent.DETAILS_FLOOR,
+      this.detailsMax(rect),
+    );
     this.detailsPanelWidth.set(width);
   }
 
@@ -775,6 +836,12 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.draggingDetails = false;
     document.removeEventListener('mousemove', this.boundDetailsMove);
     document.removeEventListener('mouseup', this.boundDetailsUp);
+    this.finishDetailsDrag();
+  }
+
+  /** Snap + persist the settled details-panel width. Shared by both details
+   *  dividers on release. */
+  private finishDetailsDrag(): void {
     // Pop tight to the column count the user dragged to: snap away any trailing
     // empty strip so releasing never leaves a ragged half-column (mirrors the
     // right panel's snap). The docked panel reports the minimum width that still
@@ -791,6 +858,48 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.settingsState
       .update({ browse_details_panel_width: Math.round(this.detailsPanelWidth()) })
       .subscribe();
+  }
+
+  // --- Docked-details in-panel row divider drag ----------------------------
+  // A horizontal divider inside the docked panel, between the focused-item /
+  // metadata row and the member grid. It resizes the *panel width*, not a row
+  // height: the focused item is square, so dragging the divider down (a taller
+  // item) is the same as widening the panel. Mapping the vertical delta 1:1 onto
+  // the panel↔canvas width lets the user grow the item's vertical space directly
+  // instead of reaching for the side divider and reasoning about width→height.
+
+  onDetailsRowDividerMouseDown(event: MouseEvent): void {
+    event.preventDefault();
+    this.draggingDetailsRow.set(true);
+    this.detailsRowStartY = event.clientY;
+    this.detailsRowStartWidth = this.detailsPanelWidth();
+    this.ngZone.runOutsideAngular(() => {
+      document.addEventListener('mousemove', this.boundDetailsRowMove);
+      document.addEventListener('mouseup', this.boundDetailsRowUp);
+    });
+  }
+
+  private onDetailsRowMouseMove(event: MouseEvent): void {
+    const content = this.content();
+    if (!this.draggingDetailsRow() || !content) return;
+    const rect = content.nativeElement.getBoundingClientRect();
+    // Down (positive dy) grows the square item's height, hence the panel width;
+    // up shrinks it. 1:1 because the item's height tracks the panel width.
+    const dy = event.clientY - this.detailsRowStartY;
+    const width = this.clamp(
+      this.detailsRowStartWidth + dy,
+      BrowseViewComponent.DETAILS_FLOOR,
+      this.detailsMax(rect),
+    );
+    this.detailsPanelWidth.set(width);
+  }
+
+  private onDetailsRowMouseUp(): void {
+    if (!this.draggingDetailsRow()) return;
+    this.draggingDetailsRow.set(false);
+    document.removeEventListener('mousemove', this.boundDetailsRowMove);
+    document.removeEventListener('mouseup', this.boundDetailsRowUp);
+    this.finishDetailsDrag();
   }
 
   /** Toggle region-select mode (drag-to-marquee without holding Shift). */
@@ -967,6 +1076,11 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.contextMembers = event.members;
     this.contextRepId = event.repId;
     if (this.detailsDocked()) {
+      // A right-click on a bin always wants the details visible, so it undoes a
+      // previous dismissal (the panel's X on an empty panel) — the panel comes
+      // back, showing this bin. It comes back *docked*: dismissing it never
+      // changed the docked/floating choice.
+      this.detailsPanelHidden.set(false);
       // Docked: the persistent left panel shows the bin — no floating window.
       // Keep the canvas's pinned enlarge (the canvas pinned it on right-click)
       // so the chosen bin stays enlarged while it's open in the panel, exactly
@@ -979,6 +1093,21 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.contextMenuY = event.clientY;
     this.contextBounds = event.bounds;
     this.contextMenuOpen = true;
+  }
+
+  /**
+   * The docked panel's X. With a bin showing it clears the bin (leaving the
+   * empty panel and its hint); pressed on an already-empty panel there is
+   * nothing left to clear, so it hides the panel itself and gives the width
+   * back to the canvas. Right-clicking any bin brings it back
+   * ({@link onCanvasContextMenu}).
+   */
+  onDetailsDismiss(): void {
+    if (this.contextMembers.length === 0) {
+      this.detailsPanelHidden.set(true);
+      return;
+    }
+    this.dismissContextMenu();
   }
 
   dismissContextMenu(): void {
@@ -999,6 +1128,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    *  same ``contextMembers``). */
   onDockRequested(): void {
     this.contextMenuOpen = false;
+    // Docking is an explicit ask for the panel, so it clears any earlier
+    // dismissal — otherwise the window would vanish into a hidden panel.
+    this.detailsPanelHidden.set(false);
     // Keep the bin pinned enlarged as it moves into the docked panel — docked
     // bins stay enlarged too now, so there's nothing to release here.
     this.persistBinDetailsDocked(true);

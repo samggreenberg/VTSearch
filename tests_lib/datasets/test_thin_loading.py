@@ -5,7 +5,6 @@ instead of media_bytes) and that lazy loading correctly resolves media
 content when needed.
 """
 
-import hashlib
 import pickle
 from pathlib import Path
 from typing import Any
@@ -13,29 +12,29 @@ from typing import Any
 import numpy as np
 
 from vtscore.datasets.loader import (
-    _streaming_md5,
     load_dataset_from_folder,
     load_dataset_from_pickle,
 )
 from vtscore.embedding.media_vectors import media_embedding
+from vtscore.utils.hashing import content_md5, file_md5
 
 
 from helpers import make_wav_bytes as _make_wav_bytes, make_wav_file as _make_wav_file  # noqa: F401
 
 
-class TestStreamingMD5:
+class TestFileMD5:
     def test_matches_regular_md5(self, tmp_path):
         content = b"hello world test data"
         p = tmp_path / "test.bin"
         p.write_bytes(content)
-        assert _streaming_md5(p) == hashlib.md5(content).hexdigest()
+        assert file_md5(p) == content_md5(content)
 
     def test_large_file(self, tmp_path):
         # File larger than the 8192 chunk size
         content = b"x" * 20000
         p = tmp_path / "large.bin"
         p.write_bytes(content)
-        assert _streaming_md5(p) == hashlib.md5(content).hexdigest()
+        assert file_md5(p) == content_md5(content)
 
 
 class TestThinLoadFromFolder:
@@ -76,7 +75,7 @@ class TestThinLoadFromFolder:
 
     def test_thin_clips_have_correct_md5(self, tmp_path):
         wav_path = _make_wav_file(tmp_path, "test.wav")
-        expected_md5 = hashlib.md5(wav_path.read_bytes()).hexdigest()
+        expected_md5 = content_md5(wav_path.read_bytes())
         medias: dict[int, dict[str, Any]] = {}
         load_dataset_from_folder(tmp_path, "audio", medias, thin=True)
         assert medias[1]["md5"] == expected_md5
@@ -115,7 +114,7 @@ class TestThinLoadFromPickle:
             "media_type": "audio",
             "duration": 0.1,
             "file_size": len(wav_bytes),
-            "md5": hashlib.md5(wav_bytes).hexdigest(),
+            "md5": content_md5(wav_bytes),
             "embedding": np.zeros(512).tolist(),
             "embedder": "clap",
             "filename": "test.wav",
@@ -192,7 +191,7 @@ class TestFullModeMediaPathReference:
             "media_type": "audio",
             "duration": 0.1,
             "file_size": len(wav_bytes),
-            "md5": hashlib.md5(wav_bytes).hexdigest(),
+            "md5": content_md5(wav_bytes),
             "embedding": np.zeros(512).tolist(),
             "embedder": "clap",
             "filename": "test.wav",
@@ -256,7 +255,7 @@ class TestPickleNullEmbedding:
             "media_type": "audio",
             "duration": 0.1,
             "file_size": len(wav_bytes),
-            "md5": hashlib.md5(wav_bytes).hexdigest(),
+            "md5": content_md5(wav_bytes),
             "filename": "test.wav",
             "category": "test",
         }
@@ -310,7 +309,7 @@ class TestPickleNullEmbedding:
             "media_type": "audio",
             "duration": 0.1,
             "file_size": len(wav_bytes),
-            "md5": hashlib.md5(wav_bytes).hexdigest(),
+            "md5": content_md5(wav_bytes),
             "embedding": np.zeros(512).tolist(),
             "embedder": "clap",
             "filename": "good.wav",
@@ -322,7 +321,7 @@ class TestPickleNullEmbedding:
             "media_type": "audio",
             "duration": 0.1,
             "file_size": len(wav_bytes),
-            "md5": hashlib.md5(wav_bytes + b"x").hexdigest(),
+            "md5": content_md5(wav_bytes + b"x"),
             "embedding": None,
             "filename": "bad.wav",
             "category": "test",
@@ -351,7 +350,7 @@ class TestPickleNullEmbedding:
                     "media_type": "audio",
                     "duration": 0.1,
                     "file_size": len(wav_bytes),
-                    "md5": hashlib.md5(wav_bytes).hexdigest(),
+                    "md5": content_md5(wav_bytes),
                     "embedding": np.zeros(512).tolist(),
                     "embedder": "clap",
                     "filename": "a.wav",
@@ -363,7 +362,7 @@ class TestPickleNullEmbedding:
                     "media_type": "audio",
                     "duration": 0.1,
                     "file_size": len(wav_bytes),
-                    "md5": hashlib.md5(wav_bytes + b"x").hexdigest(),
+                    "md5": content_md5(wav_bytes + b"x"),
                     "embedding": None,
                     "filename": "b.wav",
                     "category": "test",
@@ -441,7 +440,7 @@ class TestPickleMD5Preservation:
 
         medias: dict[int, dict[str, Any]] = {}
         load_dataset_from_pickle(pkl_path, medias, thin=False)
-        assert medias[1]["md5"] == hashlib.md5(wav_bytes).hexdigest()
+        assert medias[1]["md5"] == content_md5(wav_bytes)
 
     def test_thin_mode_uses_md5_from_pickle(self, tmp_path):
         """Thin mode should also preserve the MD5 from the pickle."""
@@ -507,7 +506,7 @@ class TestThinImporters:
                     "media_type": "audio",
                     "duration": 0.1,
                     "file_size": len(wav_bytes),
-                    "md5": hashlib.md5(wav_bytes).hexdigest(),
+                    "md5": content_md5(wav_bytes),
                     "embedding": np.zeros(512).tolist(),
                     "embedder": "clap",
                     "filename": "test.wav",

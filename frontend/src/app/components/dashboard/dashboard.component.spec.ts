@@ -151,6 +151,109 @@ describe('DashboardComponent', () => {
     expect(component.selectedDetectorIds.has('m2')).toBe(true);
   });
 
+  describe('detector Drafts/AutoRun tabs', () => {
+    const mixed = [
+      { id: 'm1', name: 'Draft A', media_type: 'audio' },
+      { id: 'm2', name: 'Frozen B', media_type: 'audio', autofind: true },
+      { id: 'm3', name: 'Draft C', media_type: 'audio' },
+    ];
+
+    it('partitions detectors by autofind and defaults to the Drafts tab', () => {
+      flushInitialRequests([], mixed);
+      expect(component.detectorTab()).toBe('drafts');
+      expect(component.draftDetectors.map((d) => d.id)).toEqual(['m1', 'm3']);
+      expect(component.autorunDetectors.map((d) => d.id)).toEqual(['m2']);
+      expect(component.sortedDetectors.map((d) => d.id).sort()).toEqual(['m1', 'm3']);
+
+      component.setDetectorTab('autorun');
+      expect(component.sortedDetectors.map((d) => d.id)).toEqual(['m2']);
+    });
+
+    it('clears the detector selection when switching tabs', () => {
+      flushInitialRequests([], mixed);
+      component.toggleDetectorCheckbox('m1');
+      expect(component.selectedDetectorIds.size).toBe(1);
+      component.setDetectorTab('autorun');
+      expect(component.selectedDetectorIds.size).toBe(0);
+    });
+
+    it('scopes select-all to the visible tab', () => {
+      flushInitialRequests([], mixed);
+      component.toggleAllDetectors();
+      expect([...component.selectedDetectorIds].sort()).toEqual(['m1', 'm3']);
+      expect(component.detectorSelectionState).toBe('all');
+
+      component.setDetectorTab('autorun');
+      component.toggleAllDetectors();
+      expect([...component.selectedDetectorIds]).toEqual(['m2']);
+    });
+
+    it('moves a detector between tabs via the autofind endpoint and refreshes', () => {
+      flushInitialRequests([], mixed);
+      component.setDetectorAutorun(component.detectors[0], true);
+      const put = httpMock.expectOne('/api/detectors/registry/m1/autofind');
+      expect(put.request.method).toBe('PUT');
+      expect(put.request.body).toEqual({ autofind: true });
+      put.flush({ id: 'm1', autofind: true });
+      // The move triggers a registry refresh so the row hops tabs.
+      httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+      httpMock.expectOne('/api/detectors/registry').flush({
+        detectors: [
+          { id: 'm1', name: 'Draft A', media_type: 'audio', autofind: true },
+          { id: 'm2', name: 'Frozen B', media_type: 'audio', autofind: true },
+          { id: 'm3', name: 'Draft C', media_type: 'audio' },
+        ],
+      });
+      TestBed.tick();
+      expect(component.autorunDetectors.map((d) => d.id).sort()).toEqual(['m1', 'm2']);
+      expect(component.selectedDetectorIds.has('m1')).toBe(false);
+    });
+
+    it('switches back to the Drafts tab when a new detector is registered', () => {
+      flushInitialRequests([], mixed);
+      component.setDetectorTab('autorun');
+
+      component.refresh();
+      httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+      httpMock.expectOne('/api/detectors/registry').flush({
+        detectors: [...mixed, { id: 'm4', name: 'Fresh Draft', media_type: 'audio' }],
+      });
+      TestBed.tick();
+
+      expect(component.detectorTab()).toBe('drafts');
+      expect(component.selectedDetectorIds.has('m4')).toBe(true);
+    });
+
+    it('disables Train for a frozen detector with an explanatory hint', () => {
+      flushInitialRequests(
+        [{ id: 'd1', name: 'Data', media_type: 'audio' }],
+        [{ id: 'm2', name: 'Frozen B', media_type: 'audio', num_training: 5, autofind: true }],
+      );
+      // Auto-selected single dataset + single detector.
+      expect(component.selectedDetectorIds.has('m2')).toBe(true);
+      expect(component.labelEnabled).toBe(false);
+      expect(component.labelHint).toBe('AutoRun detectors are frozen — move to Drafts to retrain');
+      // Find (read-only scoring) stays available.
+      expect(component.findEnabled).toBe(true);
+    });
+
+    it('hides the Combine and Delete-selected section actions on the AutoRun tab', async () => {
+      flushInitialRequests([], mixed);
+      await fixture.whenStable();
+      fixture.detectChanges();
+      const el = fixture.nativeElement as HTMLElement;
+      const detectorSection = el.querySelectorAll('.dashboard-section')[1] as HTMLElement;
+      expect(detectorSection.querySelector('[aria-label="Combine selected detectors"]')).toBeTruthy();
+      expect(detectorSection.querySelector('[aria-label="Delete selected"]')).toBeTruthy();
+
+      component.setDetectorTab('autorun');
+      fixture.detectChanges();
+      expect(detectorSection.querySelector('[aria-label="Combine selected detectors"]')).toBeNull();
+      expect(detectorSection.querySelector('[aria-label="Delete selected"]')).toBeNull();
+      drainBackgroundRequests();
+    });
+  });
+
   it('mirrors an implicitly selected dataset into the active-context intent', () => {
     // Off the Dashboard the top-bar pulldowns read the active-context intent
     // (not the mirrored table selection), so an auto-selected import must land

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import io
 import logging
 from functools import wraps
@@ -11,6 +10,8 @@ from typing import TYPE_CHECKING, Any, Callable
 from flask import g, jsonify, make_response, request, send_file
 from flask_smorest import abort
 from marshmallow import ValidationError
+
+from vtscore.utils.hashing import content_md5, new_md5
 
 if TYPE_CHECKING:
     from vtscore.plugins import PluginBase
@@ -39,7 +40,7 @@ def cached_thumbnail_response(thumb_bytes: bytes, download_name: str):
     fingerprints the thumbnail bytes so the browser reuses one tile per item
     across scrolls and zoom levels, short-circuiting to a 304.
     """
-    etag = hashlib.md5(thumb_bytes).hexdigest()
+    etag = content_md5(thumb_bytes)
     if etag in request.if_none_match:
         resp = make_response("", 304)
         resp.set_etag(etag)
@@ -84,7 +85,8 @@ def image_thumbnail_response(
 
     crop_box = normalize_region_crop(crop) if crop is not None else None
 
-    hasher = hashlib.md5(image_bytes)
+    hasher = new_md5()
+    hasher.update(image_bytes)
     if crop_box is not None:
         hasher.update(repr(crop_box).encode("ascii"))
     etag = hasher.hexdigest()
@@ -554,6 +556,62 @@ def run_plugin_or_error(plugin: PluginBase, method: str, *args):
     return result, None
 
 
+def windowed_sort_extras(results: list[dict], threshold: float | None) -> dict[str, Any]:
+    """Register a full sorted ``results`` list and return the windowing extras.
+
+    Stores *results* in the process-global :data:`sort_results_cache` keyed to
+    the active (dataset, detector) pair and returns the extra fields a sort
+    response carries so a client can page deeper without holding the whole list:
+
+    - ``sort_token`` — opaque handle for ``GET /api/sort/page``; also the
+      sort-generation token (a re-sort mints a new one).
+    - ``total`` — full ranking length.
+    - ``above_threshold`` — rows scoring at or above *threshold*.
+
+    Additive: the caller still returns the full ``results`` today (the frontend
+    windowed model lands in a later slice, see ``docs/plans/scalability.md``
+    S3/S17/S19), so wiring this in never changes existing behaviour.
+    """
+    from vtscore.state.core import get_active_context, get_active_detector_context  # noqa: PLC0415
+    from vtscore.state.sort_results_cache import count_above_threshold, sort_results_cache  # noqa: PLC0415
+
+    dataset_id = getattr(get_active_context(), "dataset_id", "") or ""
+    detector_id = getattr(get_active_detector_context(), "detector_id", "") or ""
+    token = sort_results_cache.store(results, threshold, dataset_id=dataset_id, detector_id=detector_id)
+    return {
+        "sort_token": token,
+        "total": len(results),
+        "above_threshold": count_above_threshold(results, threshold),
+    }
+
+
+def windowed_sort_response(results: list[dict], threshold: float | None) -> dict[str, Any]:
+    """Build a sort-response body, windowing the transmitted ``results``.
+
+    Stores the full ranking (so ``/api/sort/page`` can serve any window) and
+    returns ``{results, threshold, sort_token, total, above_threshold,
+    has_more_below}``.  Below :data:`SORT_WINDOW_THRESHOLD` the full list is
+    transmitted unchanged and ``has_more_below`` is ``False`` — small / medium
+    sorts behave exactly as before.  At or above it, only the initial head window
+    rides the response and the client pages the rest.
+
+    The threshold is read off the cache module at call time so tests can lower it
+    via ``monkeypatch`` without generating tens of thousands of rows.
+    """
+    from vtscore.state import sort_results_cache as _cache_mod  # noqa: PLC0415
+
+    extras = windowed_sort_extras(results, threshold)
+    total = extras["total"]
+    if total < _cache_mod.SORT_WINDOW_THRESHOLD:
+        window = results
+        has_more = False
+    else:
+        end = _cache_mod.initial_window_end(total, extras["above_threshold"])
+        window = results[:end]
+        has_more = end < total
+    return {"results": window, "threshold": threshold, "has_more_below": has_more, **extras}
+
+
 def get_embedder_for_medias(media_dict: dict):
     """Return the appropriate embedder for the given medias, or ``None``.
 
@@ -576,6 +634,56 @@ def get_embedder_for_medias(media_dict: dict):
 
     avail = embedders_for_type(media_type)
     return avail[0] if avail else None
+
+
+#: Message used by both Semantic-lock guards below, so the API surfaces one
+#: consistent explanation whichever route the request hit.
+SEMANTIC_ONLY_MESSAGE = (
+    "This server is locked to Semantic embedders (semantic_only). "
+    "Patch Semantic and Structural embedders are unavailable here."
+)
+
+
+def abort_if_semantic_only_type(embedder_type: str) -> None:
+    """Reject a non-Semantic detector *embedder_type* on a Semantic-locked server.
+
+    The type is the detector's declared intent, so this is the one gate that
+    keeps a hand-rolled ``POST /api/detectors`` (or a portable bundle carrying a
+    Structural detector) from creating a detector this deployment can never
+    run. Empty / ``"semantic"`` pass through untouched, as does every request
+    when the lock is off.
+    """
+    if not embedder_type or embedder_type == "semantic":
+        return
+    from vtsearch.settings import get_effective_semantic_only  # noqa: PLC0415 - avoid import cycle
+
+    if get_effective_semantic_only():
+        abort(400, message=SEMANTIC_ONLY_MESSAGE)
+
+
+def abort_if_semantic_only_embedders(embedder_names) -> None:
+    """Reject patch / structural *embedder_names* on a Semantic-locked server.
+
+    Guards the dataset-load routes, whose ``embedders`` trio arrives straight
+    from the client: the pickers never offer a prototype embedder under the
+    lock (``GET /api/embedders`` filters them out), so a request that names one
+    is either stale or hand-rolled and should fail loudly rather than quietly
+    binding a type the rest of the UI hides. Unknown names are left alone --
+    they fail their own validation downstream.
+    """
+    names = [n for n in (embedder_names or ()) if n]
+    if not names:
+        return
+    from vtsearch.settings import get_effective_semantic_only  # noqa: PLC0415 - avoid import cycle
+
+    if not get_effective_semantic_only():
+        return
+
+    from vtscore.embedding.binding import embedder_type as _classify  # noqa: PLC0415
+
+    offenders = sorted({n for n in names if _classify(n) in ("patch_semantic", "structural")})
+    if offenders:
+        abort(400, message=f"{SEMANTIC_ONLY_MESSAGE} Rejected: {', '.join(offenders)}.")
 
 
 def _scrub_server_paths(text: str) -> str:

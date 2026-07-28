@@ -212,6 +212,25 @@ MLP_DROPOUT = 0.5
 PROJECTION_N_NEIGHBORS = 15
 PROJECTION_MIN_DIST = 0.1
 
+# Per-embedder UMAP projection defaults, from the empirical sweep in
+# ``docs/plans/vtsbrowse-empirical-tuning.md`` (§Results). Keyed off the dataset's
+# *primary* embedder and consulted when the corresponding ``ServerSettings`` knob
+# is left at the global default above (an explicit operator override still wins).
+# Untuned embedders fall back to the globals. Image embedders peak at a smaller
+# neighbourhood than the old global 15; large ``n_neighbors`` hurt every embedder.
+PROJECTION_DEFAULTS_BY_EMBEDDER: dict[str, tuple[int, float]] = {
+    "clap": (15, 0.10),  # audio: flat separability peak across 10-30
+    "clip": (10, 0.05),  # image: the most n_neighbors-sensitive embedder
+    "siglip": (10, 0.05),
+    "siglip_l": (10, 0.05),
+}
+
+# Compaction (``compact_layout``) default. The sweep found compaction consistently
+# costs ~2% taxonomy separability and ~5-6% neighbourhood structure (trustworthiness
+# / continuity / recall) on every dataset and embedder, so it is off by default;
+# ``browse_compact`` (per media type) can re-enable it where screen-fill is worth it.
+PROJECTION_COMPACT_DEFAULT = False
+
 # Model IDs
 CLAP_MODEL_ID = "laion/clap-htsat-unfused"
 CLAP_SAMPLE_RATE = 48000  # CLAP model expected input sample rate
@@ -367,8 +386,10 @@ class CoreConfig:
     # working unchanged.
     signpost_captioner: dict[str, bool] = field(default_factory=dict)
 
-    # Per-media-type user-supplied zero-shot tag vocabulary for signpost region
-    # names, replacing the built-in AudioSet-527 / OpenImages-600 lists.  ``{}``
+    # Per-media-type operator-supplied zero-shot tag vocabulary for signpost
+    # region names, replacing the built-in AudioSet-527 / OpenImages-600 lists
+    # for the whole deployment (the app populates it from the server-tier
+    # ``browse_signpost_vocab`` setting, not from a per-user one).  ``{}``
     # (the default) means the shipped vocabulary for every type.  Read by
     # :func:`vtscore.projection.signpost_texts.provider_for`.  Defaulted here so
     # library-only ``CoreConfig(...)`` constructions without the app shim keep

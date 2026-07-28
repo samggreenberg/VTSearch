@@ -17,6 +17,7 @@ from marshmallow import Schema, fields, pre_load, validate
 from vtsearch.settings_models import (
     VALID_ANIMATION_MODES,
     coerce_animation_mode,
+    VALID_BROWSE_GRAPHICS,
     VALID_FOCUS_MODES,
     VALID_GRID_ICON_SIZES,
     VALID_THEMES,
@@ -99,6 +100,11 @@ class AppSettingsSchema(Schema):
     # column and the large item drives it.
     browse_details_metadata_width = fields.Integer()
 
+    # VTSBrowse canvas rendering effort ("auto" detects a software-rendering
+    # client; "full"/"reduced" pin the pipeline). A single scalar, not a
+    # per-media dict: it describes the client's rendering capability.
+    browse_graphics = fields.String(validate=validate.OneOf(VALID_BROWSE_GRAPHICS))
+
     # VTSBrowse per-media-type display prefs (density colormap, on-screen cell
     # size). ``{media_type_id: value}`` dicts driven by the browse-canvas
     # toolbar and the Settings → Browser tab. (Bin shape is not stored — it is
@@ -117,9 +123,6 @@ class AppSettingsSchema(Schema):
     # Whether a media type's signpost texts come from the generative captioner
     # (image VLM / audio captioner) instead of the zero-shot tags; unset =tags.
     browse_signpost_captioner = _PerMediaTypeBooleanDict()
-    # Per-media-type custom zero-shot tag vocabulary replacing the built-in
-    # AudioSet-527 / OpenImages-600 lists; unset/empty = the shipped vocabulary.
-    browse_signpost_vocab = _PerMediaTypeStringListDict()
 
     # Per-user, per-media-type
     grid_icon_size_left = _PerMediaTypeStringDict()
@@ -164,6 +167,27 @@ class AppSettingsSchema(Schema):
     # can build a pre-addressed ``mailto:`` link. Not in
     # ``SettingsUpdateSchema`` - not editable via PUT.
     support_email = fields.String(dump_only=True)
+    # Server-tier "Semantic embedders only" lock. Set via the
+    # ``--semantic-only`` CLI flag / ``VTSEARCH_SEMANTIC_ONLY`` env var
+    # (process-wide, all users) or the persisted settings file; surfaced
+    # read-only here so the New-detector modal can hide its embedder-type
+    # picker and the Server settings tab can report the restriction. Not in
+    # ``SettingsUpdateSchema`` - not editable via PUT.
+    semantic_only = fields.Boolean(dump_only=True)
+    # Server-tier solo-mediaType restriction. Set via the
+    # ``--solo-media-type`` CLI flag (process-wide, all users) or the
+    # persisted settings file; surfaced read-only here as the value actually
+    # in force, so the importer / new-detector / import-defaults surfaces can
+    # lock their mediaType pickers and the Server settings tab can report the
+    # restriction. Not in ``SettingsUpdateSchema`` - not editable via PUT.
+    solo_media_type = fields.String(dump_only=True, allow_none=True)
+    # Server-tier per-media-type tag vocabulary used to name map regions in
+    # Tags mode, replacing the built-in AudioSet-527 / OpenImages-600 lists.
+    # An operator's term list for the whole instance, set by editing the
+    # persisted settings file; surfaced read-only here so the Server settings
+    # tab can report which types carry a custom vocabulary. Not in
+    # ``SettingsUpdateSchema`` - not editable via PUT.
+    browse_signpost_vocab = _PerMediaTypeStringListDict(dump_only=True)
 
     # Auto-Find (per-user, editable from the Auto-Find settings tab).
     # ``autofind_detectors`` is each user's own list of detectors that auto-run
@@ -195,16 +219,6 @@ class AppSettingsSchema(Schema):
     # shape; the field is declared as a free-form dict here because the
     # nested values are heterogeneous (string, dict, list).
     import_defaults_by_media_type = fields.Dict(keys=fields.String(), values=fields.Raw())
-
-    # Solo mediaType streamlining. ``solo_media_type`` is the user's raw
-    # value (None or a media-type id); ``solo_media_type_explicit`` is True
-    # once the user has changed it from settings (so the CLI fallback no
-    # longer applies). ``effective_solo_media_type`` is the resolver's
-    # output the frontend should read to decide whether to hide mediaType
-    # pickers; it accounts for the CLI fallback and the explicit flag.
-    solo_media_type = fields.String(allow_none=True)
-    solo_media_type_explicit = fields.Boolean()
-    effective_solo_media_type = fields.String(allow_none=True, dump_only=True)
 
     # Solo mediaEmbedder per mediaType. ``solo_embedder_per_media_type`` is
     # the user's raw map (``{media_type_id: embedder_name}``);
@@ -280,6 +294,7 @@ class SettingsUpdateSchema(Schema):
     browse_panel_width = fields.Integer()
     browse_details_panel_width = fields.Integer()
     browse_details_metadata_width = fields.Integer()
+    browse_graphics = fields.String(validate=validate.OneOf(VALID_BROWSE_GRAPHICS))
 
     # Per-media-type dicts; the setters in ``settings.py`` validate each
     # value against its enum (BrowseColormap / BrowseIconSize), so these are
@@ -291,7 +306,9 @@ class SettingsUpdateSchema(Schema):
     browse_mouse_zooms_per_level = fields.Raw()
     browse_signposts = fields.Raw()
     browse_signpost_captioner = fields.Raw()
-    browse_signpost_vocab = fields.Raw()
+    # NB: browse_signpost_vocab is intentionally absent - it is a server-tier
+    # tag vocabulary set by the operator in the settings file, not editable via
+    # PUT /api/settings. It is dump_only in AppSettingsSchema.
 
     autofind_detectors = fields.List(fields.String())
     # Auto-Find results exporter. ``autofind_exporter`` is validated against the
@@ -310,11 +327,10 @@ class SettingsUpdateSchema(Schema):
     last_embedder_per_media_type = fields.Raw()
     import_defaults_by_media_type = fields.Raw()
 
-    # The route layer validates ``solo_media_type`` against the media-type
-    # registry and applies it via ``apply_user_solo_media_type`` so the
-    # ``solo_media_type_explicit`` flag flips automatically. Accept either
-    # a string id or ``null`` for "show everything".
-    solo_media_type = fields.String(allow_none=True)
+    # NB: solo_media_type is intentionally absent - it is a server-tier
+    # restriction set by the admin via --solo-media-type (or the settings
+    # file), not editable via PUT /api/settings. It is dump_only in
+    # AppSettingsSchema.
 
     # ``{media_type_id: embedder_name}`` map. The route layer validates
     # each entry against the embedder registry and rejects unknown

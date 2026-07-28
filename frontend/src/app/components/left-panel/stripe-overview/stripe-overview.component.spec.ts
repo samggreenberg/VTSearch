@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { StripeOverviewComponent } from './stripe-overview.component';
+import { StripeOverviewComponent, STRIPE_MAX_ITEMS } from './stripe-overview.component';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 
@@ -83,5 +83,46 @@ describe('StripeOverviewComponent', () => {
     fixture.componentRef.setInput('sortOrder', [{ id: 1, score: 0.9 }]);
     fixture.componentRef.setInput('threshold', null);
     expect(component.cachedThresholdPosition()).toBeNull();
+  });
+
+  it('is not oversized at or below the size cap', () => {
+    fixture.componentRef.setInput(
+      'sortOrder',
+      Array.from({ length: 3 }, (_v, i) => ({ id: i, score: 1 - i * 0.1 })),
+    );
+    expect(component.oversized()).toBe(false);
+  });
+
+  it('goes oversized above the size cap and stops building dots/threshold', () => {
+    const order = Array.from({ length: STRIPE_MAX_ITEMS + 1 }, (_v, i) => ({
+      id: i,
+      score: 1 - i / (STRIPE_MAX_ITEMS + 1),
+    }));
+    fixture.componentRef.setInput('sortOrder', order);
+    fixture.componentRef.setInput('threshold', 0.5);
+    fixture.componentRef.setInput('goodVotes', new Set([0]));
+    fixture.componentRef.setInput('selectedId', 1);
+    expect(component.oversized()).toBe(true);
+    // Still "visible" (the strip stays in the layout) but inert: no dots and
+    // no threshold marker are built, so the O(N) loop is skipped.
+    expect(component.visible).toBe(true);
+    expect(component.cachedDots()).toEqual([]);
+    expect(component.cachedThresholdPosition()).toBeNull();
+  });
+
+  it('ignores clicks/keyboard when oversized', () => {
+    const order = Array.from({ length: STRIPE_MAX_ITEMS + 1 }, (_v, i) => ({
+      id: i,
+      score: 1 - i / (STRIPE_MAX_ITEMS + 1),
+    }));
+    fixture.componentRef.setInput('sortOrder', order);
+    let emitted = false;
+    component.stripeClick.subscribe(() => (emitted = true));
+    component.onStripeClick({
+      currentTarget: { getBoundingClientRect: () => ({ top: 0, height: 100 }) },
+      clientY: 50,
+    } as unknown as MouseEvent);
+    component.onStripeKeyboard();
+    expect(emitted).toBe(false);
   });
 });

@@ -52,6 +52,15 @@ EMBEDDER_TYPE_LABELS: dict[str, str] = {
     EMBEDDER_TYPE_STRUCTURAL: "Structural",
 }
 
+#: The three types in classification precedence order (structural ▸ patch ▸
+#: semantic).  Iterating this rather than ``EMBEDDER_TYPE_LABELS.keys()`` keeps
+#: conflict/keep resolution deterministic regardless of dict insertion order.
+EMBEDDER_TYPES: tuple[str, str, str] = (
+    EMBEDDER_TYPE_STRUCTURAL,
+    EMBEDDER_TYPE_PATCH_SEMANTIC,
+    EMBEDDER_TYPE_SEMANTIC,
+)
+
 
 def _capabilities(embedder_name: str) -> tuple[bool, bool, bool]:
     """Return ``(supports_text, supports_patch_regions, supports_geometric_verification)``.
@@ -153,6 +162,111 @@ def detector_dataset_compatible(det_type: str, embedder_names: Iterable[str | No
     if not det_type:
         return True
     return embedder_of_type(embedder_names, det_type) is not None
+
+
+def combine_type_state(
+    per_dataset_embedders: list[list[str]],
+) -> dict[str, dict[str, Any]]:
+    """Per-embedder-type combine state across the datasets being merged.
+
+    *per_dataset_embedders* is one bound-embedder-name list per source dataset
+    (the keys of each dataset's ``media["embeddings"]``, or its single legacy
+    embedder name).  For each of the three types (:data:`EMBEDDER_TYPES`) that at
+    least one dataset supplies, returns::
+
+        {type: {
+            "reps": [concrete-name-or-None, ... one per dataset],
+            "options": [distinct concrete names, in first-seen order],
+            "conflict": bool,
+            "n_present": int,   # datasets that supply the type
+            "n_total": int,     # total datasets
+        }}
+
+    A type is **conflicted** when the datasets don't all bind the *same* concrete
+    embedder for it — either two datasets bind different concrete embedders of
+    that type (a name clash), or some datasets supply it and others don't (partial
+    coverage).  Combining a conflicted type without resolution would leave the
+    merged dataset with an incompatible or half-populated vector space for that
+    type, which is exactly what the combine conflict UI settles.
+
+    Types no dataset supplies are omitted (nothing to combine).  Per-dataset
+    representatives come from :func:`embedder_of_type`, so the semantic bucket's
+    text-capable embedder wins over a co-bound single-vector one, matching the
+    score-routing precedence.
+    """
+    n_total = len(per_dataset_embedders)
+    result: dict[str, dict[str, Any]] = {}
+    for t in EMBEDDER_TYPES:
+        reps = [embedder_of_type(names, t) for names in per_dataset_embedders]
+        present = [r for r in reps if r]
+        if not present:
+            continue
+        options: list[str] = []
+        for r in present:
+            if r not in options:
+                options.append(r)
+        conflict = len(options) > 1 or len(present) < n_total
+        result[t] = {
+            "reps": reps,
+            "options": options,
+            "conflict": conflict,
+            "n_present": len(present),
+            "n_total": n_total,
+        }
+    return result
+
+
+def resolve_keep_embedders(
+    type_state: dict[str, dict[str, Any]],
+    resolutions: dict[str, dict[str, Any]] | None,
+) -> tuple[list[str], str | None]:
+    """Turn per-type combine state + user resolutions into the kept embedder set.
+
+    *type_state* is :func:`combine_type_state`'s output; *resolutions* maps a
+    **conflicted** type to a choice of ``{"action": "reembed", "embedder": name}``
+    (re-embed every source to *name*) or ``{"action": "drop"}`` (leave that type
+    out of the combined dataset).
+
+    Returns ``(keep_embedders, error)``.  ``keep_embedders`` is the deduped set of
+    concrete embedders the combined dataset should bind:
+
+    * a **non-conflicted** type keeps its single agreed embedder automatically
+      (no resolution required);
+    * a **conflicted** type kept via ``reembed`` contributes its winner;
+    * a **conflicted** type ``drop``-ped contributes nothing.
+
+    ``error`` is a human-readable string (and ``keep_embedders`` is ``[]``) when a
+    conflicted type has no/invalid resolution, when a ``reembed`` winner isn't one
+    of that type's options, or when every type ends up dropped (an empty binding
+    has nothing to sort or search).  On success ``error`` is ``None``.
+    """
+    resolutions = resolutions or {}
+    keep: list[str] = []
+    for t, st in type_state.items():
+        if not st["conflict"]:
+            keep.append(st["options"][0])
+            continue
+        res = resolutions.get(t)
+        if not isinstance(res, dict):
+            return [], f"Unresolved embedder conflict for {EMBEDDER_TYPE_LABELS.get(t, t)}."
+        action = res.get("action")
+        if action == "drop":
+            continue
+        if action == "reembed":
+            winner = str(res.get("embedder") or "")
+            if winner not in st["options"]:
+                return [], (f"Invalid re-embed target {winner!r} for {EMBEDDER_TYPE_LABELS.get(t, t)}.")
+            keep.append(winner)
+            continue
+        return [], f"Invalid resolution action {action!r} for {EMBEDDER_TYPE_LABELS.get(t, t)}."
+
+    deduped: list[str] = []
+    for name in keep:
+        if name not in deduped:
+            deduped.append(name)
+    if not deduped:
+        return [], "At least one embedder must be kept in the combined dataset."
+    return deduped, None
 
 
 def derive_binding(embedder_name: str | None) -> tuple[str | None, str | None, str | None]:

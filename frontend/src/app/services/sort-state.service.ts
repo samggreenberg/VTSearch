@@ -1,7 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 
 export type SortMode = 'text' | 'learned' | 'load';
-export type SelectMode = 'top' | 'bottom' | 'hard' | 'new';
+export type SelectMode = 'top' | 'hard' | 'new';
 
 export interface SortedItem {
   id: number;
@@ -44,6 +44,16 @@ export class SortStateService {
   private readonly _inclusion = signal(0);
   private readonly _loadSortLabel = signal('');
   private readonly _textQuery = signal('');
+  // Windowed-sort model (scalability.md S3/S17/S19). At scale the backend sends
+  // only a head window of the ranking; `_sortOrder` holds the *loaded* window,
+  // `_sortTotal` the full ranking length, `_sortHasMore` whether more rows can be
+  // paged in via `_sortToken` (GET /api/sort/page). Below the backend's window
+  // threshold the whole ranking arrives at once: total == sortOrder.length,
+  // hasMore false, token null — identical to the pre-windowing behaviour.
+  private readonly _sortTotal = signal(0);
+  private readonly _sortHasMore = signal(false);
+  private readonly _sortToken = signal<string | null>(null);
+  private readonly _aboveThreshold = signal(0);
 
   get sortMode(): SortMode {
     return this._sortMode();
@@ -97,6 +107,26 @@ export class SortStateService {
     return this._textQuery();
   }
 
+  /** Full ranking length (>= sortOrder.length once windowed). */
+  get sortTotal(): number {
+    return this._sortTotal();
+  }
+
+  /** True when more rows can be paged in beyond the loaded window. */
+  get sortHasMore(): boolean {
+    return this._sortHasMore();
+  }
+
+  /** Paging handle for GET /api/sort/page (the sort-generation token). */
+  get sortToken(): string | null {
+    return this._sortToken();
+  }
+
+  /** Count of rows scoring at or above the threshold across the whole ranking. */
+  get aboveThreshold(): number {
+    return this._aboveThreshold();
+  }
+
   setSortMode(mode: SortMode): void {
     this._sortMode.set(mode);
   }
@@ -108,6 +138,46 @@ export class SortStateService {
   setSortResults(order: SortedItem[], threshold: number): void {
     this._sortOrder.set(order);
     this._threshold.set(threshold);
+    // A plain (non-windowed) result set: the whole ranking is present, so there
+    // is nothing more to page. Keeps callers that don't carry window metadata
+    // (load-sort, tests) behaving exactly as before.
+    this._sortTotal.set(order.length);
+    this._sortHasMore.set(false);
+    this._sortToken.set(null);
+    this._aboveThreshold.set(order.filter((i) => i.score >= threshold).length);
+  }
+
+  /**
+   * Install the first window of a (possibly windowed) sort response. When the
+   * backend windowed the ranking, `items` is the head window, `total` the full
+   * length, and `hasMore` true with a `token` for paging the rest; otherwise
+   * `items` is the whole ranking (`hasMore` false).
+   */
+  setSortWindow(win: {
+    items: SortedItem[];
+    threshold: number;
+    total: number;
+    hasMore: boolean;
+    token: string | null;
+    aboveThreshold: number;
+  }): void {
+    this._sortOrder.set(win.items);
+    this._threshold.set(win.threshold);
+    this._sortTotal.set(win.total);
+    this._sortHasMore.set(win.hasMore);
+    this._sortToken.set(win.token);
+    this._aboveThreshold.set(win.aboveThreshold);
+  }
+
+  /**
+   * Append a further page of rows to the loaded window (from GET
+   * /api/sort/page). Updates `hasMore` from the page response; the threshold and
+   * total are unchanged by paging.
+   */
+  appendSortItems(items: SortedItem[], hasMore: boolean): void {
+    const current = this._sortOrder() ?? [];
+    this._sortOrder.set([...current, ...items]);
+    this._sortHasMore.set(hasMore);
   }
 
   setSortBusy(busy: boolean): void {
@@ -156,5 +226,9 @@ export class SortStateService {
     this._inclusion.set(0);
     this._loadSortLabel.set('');
     this._textQuery.set('');
+    this._sortTotal.set(0);
+    this._sortHasMore.set(false);
+    this._sortToken.set(null);
+    this._aboveThreshold.set(0);
   }
 }

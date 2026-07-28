@@ -9,8 +9,9 @@ fix direction + implementation sketch for each item still owed.
 
 **Scope:** What breaks as datasets grow to 100 k / 1 M / 10 M items and as
 LabelSets grow to 1 k / 10 k / 100 k labels, GUI and CLI. Items track **future
-work only**: shipped items (S2/S8 coverage-atlas auto-defer, S9 GMM subsample,
-S16 grid virtual scroll, S18 prefetch cap, S21 CLI progress throttle) have been
+work only**: shipped items (S1 mmap embedding-matrix sidecar, S2/S8
+coverage-atlas auto-defer, S9 GMM subsample, S14 cached secondary lookups, S16
+grid virtual scroll, S18 prefetch cap, S21 CLI progress throttle) have been
 pruned per the plan-file policy — git history is their record. `S#` numbering
 has gaps where those were removed; that is expected (labels are stable, never
 renumbered).
@@ -29,10 +30,6 @@ deferred. Items are independently shippable.
 
 ## Suggested work order (open items, max-leverage first)
 
-1. **S14** (incremental secondary indexes on `DatasetContext`); removes per-request
-   O(N) dict rebuilds; medium refactor.
-3. **S1** (mmap embedding matrix); unblocks 1 M+ datasets without OOM. Also
-   decouples embeddings from the pickle, which unblocks S15.
 4. **S3 + S17 + S19** (sparse sort results, lazy ordered items); must be done
    together; unblocks 1 M+ in the frontend.
 5. **S12** (debounce the detector-JSON label-sync write); makes voting with large
@@ -60,55 +57,6 @@ deferred. Items are independently shippable.
 ---
 
 ## RAM
-
-### S1: mmap embedding matrix — one giant contiguous array per loaded dataset
-
-**Files:** `vtscore/embedding/matrix.py`, `vtscore/datasets/loader_pickle.py`
-
-All embeddings for the loaded dataset are materialised into a single `(N, D)`
-`float32` array (`matrix.py:_stack_embeddings`, `np.empty((N, D))`), held on
-`DatasetContext`, and rebuilt from per-item entries on every cold start.
-
-| N | D=384 | D=768 (E5) |
-|---|-------|-----------|
-| 100 k | 150 MB | 300 MB |
-| 1 M | 1.5 GB | 3 GB |
-| 10 M | 15 GB | 30 GB |
-
-One loaded dataset already risks OOM; multi-dataset mode doubles it. The array is
-unavoidable for vectorised scoring, but it does not need to live in RAM for the
-dataset's full lifetime — at 1 M+ it should be **memory-mapped**.
-
-**Fix (two-step):**
-
-- **Step A — sidecar `.npy`.** After all embeddings are present, write the
-  sorted-by-cid matrix to `<dataset>.emb.npy` (+ companion `<dataset>.cids.npy`,
-  int64 sorted cids) if it doesn't already exist.
-- **Step B — mmap load.** On pickle load, if both sidecars exist and the cid list
-  matches the pickle's media IDs:
-
-  ```python
-  cids = np.load(cids_path)                  # int64 array
-  matrix = np.load(emb_path, mmap_mode='r')  # zero-RAM mmap
-  ctx._emb_matrix = matrix
-  ctx._emb_matrix_ids = list(cids)
-  ctx._emb_matrix_revision = ctx.media_revision
-  ```
-
-  The OS pages in only the rows scoring accesses (a 100-item sort on a 1 M dataset
-  touches ~40 kB of a 1.5 GB file). `get_embedding_matrix` must detect the
-  cached-this-way matrix and skip the rebuild.
-
-**Sidecar invalidation:** if the pickle is newer than the sidecar, or the cid list
-doesn't match, fall back to the in-memory build (optionally rewrite sidecars).
-
-**Risk:** high — introduces filesystem state alongside pickle files. Care for:
-race between sidecar write and concurrent load; embedder-dim drift (dim change →
-sidecar invalid); Docker / read-only filesystems (fall back to in-memory). A
-`--no-emb-sidecar` flag (or settings key) disables writing where the path is
-read-only.
-
----
 
 ### S3 / S17 / S19: sparse sort results — top-K API + lazy frontend
 
@@ -170,8 +118,96 @@ trigger at the end; `cachedOrderedItems` stays bounded to the loaded window
 (≤700). Grid/list virtual scroll (shipped) already handles a fixed window; this
 caps the array size at the API level.
 
-**Complexity:** 2–3 PRs (backend sort API, frontend SortStateService, frontend
-media-list).
+**This is not a faithful "same UX, just windowed" swap.** A code trace (2026-07)
+found many Label/Find surfaces that assume the client holds the *entire* ranked
+order. Each needs an explicit decision or a server-assisted redesign — the three
+items alone don't cover them:
+
+- **Bulk actions ship the full id list to the backend.** In Find,
+  `unverifiedGoodIds()` / `goodIds()` derive the whole above-cutoff id set
+  *client-side* and hand it to **Browse**, **To Dataset (promote)**, and
+  **Export**. If `above_threshold` exceeds the window's `K_ABOVE`, these
+  silently truncate — a correctness bug, not a perf one. Fix: a server-side
+  "operate on all-above-threshold" path (the ids come from the backend's full
+  list, keyed by the sort-generation token below), not from the client window.
+- **Find boundary walk** (`advanceToBoundary`) scans the whole unverified order
+  for the nearest unverified item on each side of the cutoff; a window edge
+  makes it falsely report "All items reviewed." Needs a server endpoint that
+  returns the next unverified item above/below a cutoff, or a guarantee that the
+  window always straddles the boundary with slack.
+- **Diversity "New" select mode** (`fetchDiversityNext`) POSTs the entire
+  `{id: score}` map to `/api/coverage-atlas/next`; a partial window degrades the
+  direction signal. Send only the ids the server needs, or move the score lookup
+  server-side.
+- **`best_region` must stay in the window shape.** Region-aware datasets
+  (DINOv2/v3) read it from `sortOrder` for the center-panel overlay
+  (`center-panel.ts`); the example JSON above drops it. Keep `best_region` on
+  each windowed result. The overlay still can't paint for an item outside the
+  loaded window (e.g. after a stripe jump) — acceptable, but note it.
+- **Server-side list lifetime.** The sketch says "the backend holds the full
+  list in the existing `AsyncJob.result`," but only *learned-sort* is a job.
+  **Text-sort and example-sort are synchronous** (`sort_clips`, `example_sort`
+  return inline). Paging them means new per-session cached sorted lists with an
+  eviction policy, and the ~50 MB @1 M list now stays resident *server-side*
+  (× concurrent users) instead of being handed off and GC'd.
+- **`/api/sort/page` needs a sort-generation token.** A retrain / re-sort between
+  the initial response and a page fetch shifts offsets → duplicate/missing rows.
+  Return a generation id and require it on the page URL; a stale token 409s so
+  the client refetches from the top.
+- **Inclusion slider** currently just moves the line over frozen client-side
+  scores (`onInclusionChange`) and recomputes `above_threshold` locally. Under a
+  window, moving the cutoff changes which items are "above," so the slider must
+  refetch the window (scores stay frozen server-side, so no re-sort — just a new
+  slice + count).
+
+**Decisions (2026-07, from the S3/S17/S19 evaluation):**
+
+- **"Bottom" select mode is dropped.** The picker only ever offered Top / Hard /
+  New; `'bottom'` was a dead `SelectMode` variant + one branch in
+  `autoSelectNext`. Removed, so "walk from the end of the full order" is no
+  longer a constraint the window must satisfy. (Landed as the first slice.)
+- **The stripe minimap is gated above a large-sort size, not made windowed.**
+  The stripe is a full-order minimap by definition; it can't be honestly drawn
+  from a window. Above `STRIPE_MAX_ITEMS` it renders a disabled strip with a
+  clear tooltip ("Minimap unavailable for large sorts") instead of a wrong
+  picture. This also kills its O(N) dot-build loop at scale. (Landed as the
+  first slice; the threshold is the natural home for the future window's own
+  cutoff.)
+
+**The Train-side windowing has shipped end-to-end.** The sort routes
+(`/api/sort`, `/api/example-sort`, `/api/label-file-sort`, `/api/learned-sort`)
+window their transmitted `results` above `SORT_WINDOW_THRESHOLD` (aligned with
+`STRIPE_MAX_ITEMS`; below it the full ranking is sent unchanged), the frontend
+`SortStateService` holds a windowed model, and `media-list` renders the loaded
+window + a "Load more" trigger that pages via `GET /api/sort/page`. `best_region`
+rides each windowed row. The stripe was already size-gated (slice 1), so the
+Train (label-view) flow has no full-order client scan left.
+
+**Server-side Find contract (built, not yet consumed):**
+
+- **Find work-queue ids** — `GET /api/find/queue-ids?filter=unverified_good|good`
+  returns the full positive-set ids (rank order) for Browse / To Dataset /
+  Export, from frozen `find_scores` + cutoff + verified set.
+- **Find boundary walk** — `GET /api/find/boundary-next?side=above|below[&exclude=]`
+  returns the next unverified item on the requested face of the cutoff.
+
+**Remaining work — window the Find (find-view) flow:**
+
+`find-label` still returns the full `results` list, because Find's `find-view`
+derives its work queue, "just sit and vote" boundary walk, and Browse / To
+Dataset / Export id sets from the whole client-side ranking. To window it:
+
+- Window `find-label`'s response (same `windowed_sort_response` helper) and have
+  `find-view` install it via `setSortWindow` + wire the media-list "Load more"
+  (paging the *unverified* ranking, filtering verified rows out of each page).
+- Switch the bulk actions (`unverifiedGoodIds` / `goodIds`) to
+  `GET /api/find/queue-ids` and the boundary walk (`advanceToBoundary`) to
+  `GET /api/find/boundary-next` — both already built and tested. These are async
+  refactors of `find-view`'s currently-synchronous handlers, so land them with
+  the windowing atomically (a windowed `find-label` without them would truncate
+  Browse/Export and mis-terminate the boundary walk).
+- Feed the left-panel `unverifiedGoodCount` from the response's `above_threshold`
+  (minus verified) rather than a full-order scan.
 
 ---
 
@@ -185,10 +221,10 @@ Dict overhead is ~250 B/entry; at 1 M items the `medias` dict alone consumes
 several hundred MB before the embedding arrays.
 
 **Fix (medium-term, long horizon):** Extract embeddings from the per-item dict
-into the embedding matrix on load (S1), replacing `media["embedding"]` with a
-row-index pointer — ~60–70% smaller per-item dict at 384-dim. The full columnar
-rewrite (per-field NumPy arrays or a Polars frame) is deferred: it touches every
-media-reading call site.
+into the embedding matrix on load (mirroring the shipped mmap embedding-matrix
+sidecar), replacing `media["embedding"]` with a row-index pointer — ~60–70%
+smaller per-item dict at 384-dim. The full columnar rewrite (per-field NumPy
+arrays or a Polars frame) is deferred: it touches every media-reading call site.
 
 ---
 
@@ -289,35 +325,6 @@ labelset. (Journal deferred until compaction semantics are defined.)
 
 ---
 
-### S14: incremental secondary lookups on `DatasetContext`
-
-**File:** `vtscore/state/core.py`, plus routes that rebuild lookup dicts
-(`vtscore/state/media_lookup.py`, `vtsearch/routes/labels/vote.py:144` does
-`{m["md5"]: m for m in all_medias.values()}` per request)
-
-Many routes rebuild `{m["md5"]: m for m in snap.values()}` (or origin-key variants)
-on every request — O(N) Python iteration + dict construction, 2–3 passes/request,
-~100 ms each at 1 M.
-
-**Fix:** Add maintained secondary indexes to `DatasetContext`:
-
-```python
-class DatasetContext:
-    __slots__ = (..., "_md5_index", "_origin_key_index")
-    # __init__: self._md5_index = {}; self._origin_key_index = {}
-```
-
-Maintain them at the same structural-mutation sites that bump `media_revision`
-(the `MediasDict` add/remove hooks are the natural home). Routes/helpers that
-rebuild lookup dicts switch to `ctx._md5_index` / `ctx._origin_key_index`
-directly.
-
-**Risk:** medium — indexes must stay in sync with `medias`. Any site that writes
-`ctx.medias` directly must go through the maintained path; the `MediasDict` hook
-already centralises structural mutations, so hang the index maintenance there.
-
----
-
 ### S15: dataset pickle loading — everything into RAM at once
 
 **Files:** `vtscore/datasets/loader_pickle.py`, `vtscore/datasets/container.py`
@@ -333,9 +340,13 @@ deserialises the whole pickle once (its own docstring notes this is
 **Two coupled problems:**
 
 - **Streaming load.** Pickles > some threshold (e.g. 500 MB / 100 k items) should
-  load in chunks. The embedding-matrix sidecar (S1) decouples embeddings from the
-  pickle, so the pickle becomes mostly metadata (filenames, origins, md5s) and
-  loads quickly; embeddings come from the mmap'd sidecar.
+  load in chunks. Note the shipped mmap embedding-matrix sidecar does *not* by
+  itself shrink this: `medias.pkl` still carries every item's embeddings inline
+  (the sidecar is an additional, redundant mmap-able copy used only to skip
+  rebuilding the `(N, D)` matrix cache). Making the pickle itself "mostly
+  metadata" needs S4's per-item-dict rewrite first (strip `embeddings` from each
+  entry in favor of a row-index pointer) — only then does a pickle load stop
+  paying to deserialize the embedding bytes at all.
 - **Cancel responsiveness during read (found while investigating the grid
   freeze).** On a large `.pkl` two things read as "frozen, Cancel does nothing":
   (1) `read_container` is one un-cancellable, no-progress step, and the
@@ -399,26 +410,21 @@ embedder. Shares the S11 approach.
 | Root cause | Open items it affects |
 |-----------|-----------------------|
 | **O(N log N) sorted-key comparisons** used as change detection | S6, S7 |
-| **Full in-memory arrays / dicts** for every N items | S1, S3, S4, S17, S19 |
+| **Full in-memory arrays / dicts** for every N items | S3, S4, S17, S19 |
 | **No streaming** for large JSON / pickle payloads | S3, S13, S15 |
 | **Serial I/O** where parallelism is easy | S11, S20 |
 | **No debouncing** on high-frequency write paths | S12 |
-| **Per-request rebuild** of secondary lookups | S14 |
 
 ---
 
 ## Test coverage checklist (open items)
 
-- **S1:** load, unload, reload a dataset; matrix re-used from sidecar on second
-  load without rebuilding from per-item entries.
 - **S3/S17/S19:** sort response with 200 k items contains ≤700 results;
   `/api/sort/page?offset=700&limit=200` returns the next window.
 - **S6:** matrix rebuilt exactly when medias change, reused when they don't; O(1)
   on cache hit (no per-call `sorted()`).
 - **S7:** learned-sort job not re-fired when called twice with the same votes on
   the same `media_revision`.
-- **S14:** `_md5_index` / `_origin_key_index` stay in sync across add/remove/reload;
-  routes read them instead of rebuilding.
 
 ---
 

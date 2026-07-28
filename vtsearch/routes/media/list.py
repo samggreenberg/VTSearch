@@ -14,7 +14,6 @@ because the request shape isn't a single marshmallow schema.
 
 from __future__ import annotations
 
-import hashlib
 import io
 import subprocess
 import tempfile
@@ -27,6 +26,7 @@ from flask_smorest import Blueprint, abort
 from vtscore.embedding.media_vectors import init_embeddings, media_embedder_names
 from vtscore.media.audio.ffmpeg import get_ffmpeg_exe
 from vtscore.media.base import MediaResponse
+from vtscore.utils.hashing import content_md5
 from vtsearch.schemas.media import (
     MediaAddToPileResponseSchema,
     MediaBatchRequestSchema,
@@ -47,7 +47,7 @@ from vtsearch.routes._shared import (
 from vtsearch.state import (
     _state_lock,
     apply_label,
-    build_md5_lookup,
+    cached_md5_lookup,
     get_media,
     medias,
     next_media_id,
@@ -559,7 +559,7 @@ def media_audio(media_id: int):
     # audio player still issues a cold GET per selection, and other surfaces
     # (label view, hover preview) re-request the same clip on replay; the ETag
     # turns those into 304s.  Mirrors the thumbnail route's conditional logic.
-    etag = c.get("md5") or hashlib.md5(media_bytes).hexdigest()
+    etag = c.get("md5") or content_md5(media_bytes)
     if etag in request.if_none_match:
         resp = make_response("", 304)
         resp.set_etag(etag)
@@ -996,7 +996,7 @@ def _embed_upload(embedder, file_bytes: bytes, original_filename: str):
     return embedding
 
 
-def _make_pile_thumbnail(media_type: str, file_bytes: bytes, filename: str = "") -> bytes | None:
+def _make_pile_thumbnail(media_type: str, file_bytes: bytes) -> bytes | None:
     """Precompute the grid/list thumbnail for an add-to-pile upload.
 
     Dispatches per media type (audio waveform, video frame, image downscale) so
@@ -1006,7 +1006,7 @@ def _make_pile_thumbnail(media_type: str, file_bytes: bytes, filename: str = "")
     if media_type == "audio":
         from vtscore.media.audio.media_type import generate_waveform_thumbnail  # noqa: PLC0415
 
-        return generate_waveform_thumbnail(file_bytes, filename=filename)
+        return generate_waveform_thumbnail(file_bytes)
     if media_type == "video":
         from vtscore.media.video.media_type import generate_video_thumbnail  # noqa: PLC0415
 
@@ -1059,7 +1059,7 @@ def _insert_or_collide(new_media: dict[str, Any], file_md5: str) -> tuple[list[i
     is returned with ``is_new=True``.
     """
     with _state_lock:
-        md5_lookup_now = build_md5_lookup(medias)
+        md5_lookup_now = cached_md5_lookup()
         collided_cids = md5_lookup_now.get(file_md5, [])
         if collided_cids:
             return list(collided_cids), collided_cids[0], False
@@ -1095,7 +1095,7 @@ def add_media_to_pile():
     ``label`` (``"good"`` or ``"bad"``).
     """
     file, file_bytes, label = _read_pile_upload()
-    file_md5 = hashlib.md5(file_bytes).hexdigest()
+    file_md5 = content_md5(file_bytes)
 
     # First-pass MD5 lookup (outside _state_lock). When this hits we can
     # skip the expensive embedding step and vote the existing media right
@@ -1103,7 +1103,7 @@ def add_media_to_pile():
     # before insertion (see below) because embedding holds no lock and a
     # concurrent upload of the same bytes could land between the two.
     snap = snapshot_medias()
-    md5_lookup = build_md5_lookup(snap)
+    md5_lookup = cached_md5_lookup()
     existing_cids = md5_lookup.get(file_md5, [])
 
     if existing_cids:
@@ -1129,7 +1129,7 @@ def add_media_to_pile():
 
     # Precompute the grid/list thumbnail so the request path never decodes the
     # full-resolution upload on a cold tile fetch (matches the ingest path).
-    thumb = _make_pile_thumbnail(dataset_media_type, file_bytes, original_filename)
+    thumb = _make_pile_thumbnail(dataset_media_type, file_bytes)
 
     new_media: dict[str, Any] = {
         "media_type": dataset_media_type,

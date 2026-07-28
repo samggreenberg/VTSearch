@@ -5,6 +5,7 @@ files, matches them to loaded dataset medias by MD5, and votes them good.
 """
 
 from __future__ import annotations
+from vtscore.utils.hashing import content_md5
 
 
 def _ensure_embedder(embedder, dataset_embedder_name: str, dataset_media_type: str):
@@ -47,13 +48,12 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:
 
     Returns the number of example entries successfully seeded.
     """
-    import hashlib
 
     from vtscore.config import DATA_DIR
     from vtscore.state import (
         _state_lock,
         apply_label,
-        build_media_lookup,
+        cached_md5_lookup,
         get_active_context,
         next_media_id,
         snapshot_medias,
@@ -69,7 +69,7 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:
     if not snap:
         return 0
 
-    _, md5_lookup, _ = build_media_lookup(snap)
+    md5_lookup = cached_md5_lookup()
     server_media_dir = DATA_DIR / "example_media"
 
     # Determine the embedder and media type from the loaded dataset so we
@@ -92,7 +92,7 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:
             continue
 
         file_bytes = file_path.read_bytes()
-        file_md5 = hashlib.md5(file_bytes).hexdigest()
+        file_md5 = content_md5(file_bytes)
         cids = md5_lookup.get(file_md5, [])
 
         if cids:

@@ -22,6 +22,7 @@ import pytest
 
 from helpers import make_raw_wav_bytes as _make_wav_bytes
 from vtscore.embedding.media_vectors import media_embedding, set_media_embedding
+from vtscore.utils.hashing import content_md5
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +224,10 @@ class TestImporterBaseIcon:
         assert d["icon"] == "🧪"
 
     def test_to_dict_uses_default_icon_when_not_overridden(self):
+        # An importer that doesn't set its own ``icon`` no longer falls
+        # back to the generic family emoji shared by every importer;
+        # instead it gets a distinguishing boxed-letter icon derived from
+        # its display name (see ``_default_plugin_letter_icon``).
         from vtscore.datasets.importers.base import DatasetImporter
 
         class MinimalImporter(DatasetImporter):
@@ -235,7 +240,7 @@ class TestImporterBaseIcon:
                 pass
 
         d = MinimalImporter().to_dict()
-        assert d["icon"] == "🔌"
+        assert d["icon"] == "M"
 
 
 # ---------------------------------------------------------------------------
@@ -1394,7 +1399,6 @@ class TestIngestSpecStreamRequiredFields:
 
     def test_file_size_and_md5_computed_from_bytes(self, monkeypatch):
         """file_size and md5 are derived from media_bytes when the converter omits them."""
-        import hashlib
         import json
 
         from vtscore.converters import get_converter
@@ -1417,7 +1421,7 @@ class TestIngestSpecStreamRequiredFields:
         assert len(medias) == 1
         m = medias[1]
         assert m["file_size"] == len(png)
-        assert m["md5"] == hashlib.md5(png).hexdigest()
+        assert m["md5"] == content_md5(png)
 
     def test_embedding_embedder_category_defaulted(self, monkeypatch):
         """embedding=None, embedder='', category='custom' are set on converter outputs."""
@@ -1466,7 +1470,6 @@ class TestIngestSpecStreamRequiredFields:
 
     def test_no_bytes_yields_empty_md5(self, monkeypatch):
         """A converter that produces no bytes gets md5=md5(b'')."""
-        import hashlib
         import json
 
         from vtscore.converters import get_converter
@@ -1484,7 +1487,7 @@ class TestIngestSpecStreamRequiredFields:
         source_specs = json.dumps([{"source_type": "video", "converter": "video2image", "params": {}}])
         imp.run({"media_type": "image", "source_specs": source_specs}, medias)
 
-        assert medias[1]["md5"] == hashlib.md5(b"").hexdigest()
+        assert medias[1]["md5"] == content_md5(b"")
         assert medias[1]["file_size"] == 0
 
     def test_direct_spec_not_affected(self):
@@ -1613,7 +1616,6 @@ class TestConverterOutputEndToEnd:
 
     def test_pickle_round_trip_preserves_all_fields(self, monkeypatch, tmp_path):
         """Fields set by _fill_converter_output_fields survive export → reload intact."""
-        import hashlib
 
         import numpy as np
 
@@ -1639,7 +1641,7 @@ class TestConverterOutputEndToEnd:
         m = reloaded[1]
         assert m["media_type"] == "image"
         assert m["file_size"] == len(png)
-        assert m["md5"] == hashlib.md5(png).hexdigest()
+        assert m["md5"] == content_md5(png)
         assert m["duration"] == 0
         assert m["category"] == "custom"
         # set_media_embedding stamped the embedder name when storing the vector.
@@ -1703,7 +1705,6 @@ class TestConverterOutputEndToEnd:
 
     def test_text_converter_file_size_and_md5_from_string(self, monkeypatch):
         """Text converters (returning media_string) get file_size and md5 from the string."""
-        import hashlib
         import json
 
         from vtscore.converters import get_converter
@@ -1739,7 +1740,7 @@ class TestConverterOutputEndToEnd:
         m = medias[1]
         encoded = caption.encode("utf-8")
         assert m["file_size"] == len(encoded)
-        assert m["md5"] == hashlib.md5(encoded).hexdigest()
+        assert m["md5"] == content_md5(encoded)
 
     def test_text_converter_export_does_not_raise(self, monkeypatch, tmp_path):
         """export_dataset_to_file must not raise on text-converter outputs."""
@@ -1803,7 +1804,6 @@ class TestConverterOutputEndToEnd:
 
     def test_labelset_clip_to_elements_md5_is_correct(self, monkeypatch):
         """md5 seen by _clip_to_elements matches the computed hash of the frame bytes."""
-        import hashlib
 
         from vtscore.datasets.labelset import _clip_to_elements
 
@@ -1815,7 +1815,7 @@ class TestConverterOutputEndToEnd:
         )
 
         elements = _clip_to_elements(medias[1], "bad")
-        assert elements[0].md5 == hashlib.md5(frame_data).hexdigest()
+        assert elements[0].md5 == content_md5(frame_data)
 
 
 # ---------------------------------------------------------------------------

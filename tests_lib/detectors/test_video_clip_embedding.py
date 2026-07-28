@@ -14,7 +14,6 @@ These tests cover all three layers.
 
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -22,6 +21,7 @@ import numpy as np
 import pytest
 
 from vtscore.embedding.media_vectors import media_embedding
+from vtscore.utils.hashing import content_md5
 
 
 # ---------------------------------------------------------------------------
@@ -290,7 +290,7 @@ class TestBuildClipEmbedInput:
 def _make_tiled_video_clips() -> list[dict]:
     """Build three tiles of one parent video; same bytes, distinct boundaries."""
     parent_bytes = b"parent-video-bytes"
-    parent_md5 = hashlib.md5(parent_bytes).hexdigest()
+    parent_md5 = content_md5(parent_bytes)
     tiles = []
     for idx, (t0, t1) in enumerate([(0.0, 2.0), (2.0, 4.0), (4.0, 6.0)]):
         tiles.append(

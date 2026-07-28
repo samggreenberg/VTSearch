@@ -75,6 +75,8 @@ if TYPE_CHECKING:
     def set_enable_achievements(value: bool) -> None: ...
     def get_browse_panel_width() -> int: ...
     def set_browse_panel_width(value: int) -> None: ...
+    def get_browse_graphics() -> str: ...
+    def set_browse_graphics(value: str) -> None: ...
     def get_browse_colormap() -> dict[str, str]: ...
     def set_browse_colormap(value: dict[str, str]) -> None: ...
     def get_browse_icon_size() -> dict[str, str]: ...
@@ -89,8 +91,6 @@ if TYPE_CHECKING:
     def set_browse_signposts(value: dict[str, bool]) -> None: ...
     def get_browse_signpost_captioner() -> dict[str, bool]: ...
     def set_browse_signpost_captioner(value: dict[str, bool]) -> None: ...
-    def get_browse_signpost_vocab() -> dict[str, list[str]]: ...
-    def set_browse_signpost_vocab(value: dict[str, list[str]]) -> None: ...
     def get_autopilot_top_greens() -> int: ...
     def set_autopilot_top_greens(value: int) -> None: ...
     def get_autopilot_hard_reds() -> int: ...
@@ -107,6 +107,10 @@ if TYPE_CHECKING:
     def set_dataset_max_age_days(value: int | None) -> None: ...
     def get_support_email() -> str: ...
     def set_support_email(value: str) -> None: ...
+    def get_semantic_only() -> bool: ...
+    def set_semantic_only(value: bool) -> None: ...
+    def get_browse_signpost_vocab() -> dict[str, list[str]]: ...
+    def set_browse_signpost_vocab(value: dict[str, list[str]]) -> None: ...
     def get_projection_n_neighbors() -> int: ...
     def set_projection_n_neighbors(value: int) -> None: ...
     def get_projection_min_dist() -> float: ...
@@ -136,8 +140,6 @@ if TYPE_CHECKING:
 
     def get_solo_media_type() -> str | None: ...
     def set_solo_media_type(value: str | None) -> None: ...
-    def get_solo_media_type_explicit() -> bool: ...
-    def set_solo_media_type_explicit(value: bool) -> None: ...
 
     def get_solo_embedder_per_media_type() -> dict[str, str]: ...
     def set_solo_embedder_per_media_type(value: dict[str, str]) -> None: ...
@@ -153,13 +155,13 @@ if TYPE_CHECKING:
 #: ``set_settings_path()`` helper also points it at a different file.
 SETTINGS_PATH: Path = DATA_DIR / "settings.json"
 
-#: Process-level fallback for the per-user ``solo_media_type`` setting, set
-#: by :func:`set_cli_solo_media_type` from the ``--solo-media-type`` flag
-#: in :mod:`app`. ``None`` means "no CLI default"; a user with
-#: ``solo_media_type_explicit=False`` will see this value (or ``None``) as
-#: their effective solo mediaType. A user who has explicitly set their own
-#: value (including explicitly ``None`` for "show everything") overrides
-#: this fallback - see :func:`get_effective_solo_media_type`.
+#: Process-level override for the server-tier ``solo_media_type`` setting,
+#: set by :func:`set_cli_solo_media_type` from the ``--solo-media-type``
+#: flag in :mod:`app`. ``None`` means "no CLI override" - reads fall
+#: through to the persisted server setting. When a value is set it applies
+#: to every user and wins over the persisted file for the lifetime of the
+#: process; the setting is not user-editable via the API (see
+#: :func:`get_effective_solo_media_type`).
 _cli_solo_media_type: str | None = None
 
 #: Process-level fallback for the ``hidden_plugins`` server setting, set
@@ -196,6 +198,15 @@ _cli_dataset_max_age_days: int | None = None
 #: of the process; the setting is not user-editable via the API (see
 #: :func:`get_effective_support_email`).
 _cli_support_email: str | None = None
+
+#: Process-level override for the server-tier ``semantic_only`` setting, set by
+#: :func:`set_cli_semantic_only` from the ``--semantic-only`` flag (or the
+#: ``VTSEARCH_SEMANTIC_ONLY`` env var) in :mod:`app`. ``None`` means "no CLI
+#: override" - reads fall through to the persisted server setting. ``True``
+#: locks the instance to Semantic embedders for the lifetime of the process;
+#: the setting is not user-editable via the API (see
+#: :func:`get_effective_semantic_only`).
+_cli_semantic_only: bool | None = None
 
 #: Filename used for the per-user settings file inside
 #: ``get_user_data_dir(user)``.
@@ -567,6 +578,13 @@ def get_all() -> dict[str, Any]:
     # migrated on read - the raw merge above would leak the legacy value to
     # GET, and the frontend would echo it into a PUT that 422s.
     result["show_animations"] = get_show_animations()  # type: ignore[name-defined]  # noqa: F821
+    # ``browse_signpost_vocab`` was a per-user key until it became a server-tier
+    # operator setting, so user files written before the move still carry a copy
+    # that the ``result.update(user_copy)`` above would layer over the server
+    # value - GET would report a stale vocabulary while projection builds
+    # (which read the accessor) used the operator's. The accessor is the tier
+    # router, so going through it drops the shadowing copy.
+    result["browse_signpost_vocab"] = get_browse_signpost_vocab()  # type: ignore[name-defined]  # noqa: F821
     result["autofind_detectors"] = get_autofind_detectors()
     result["autofind_exporter"] = get_autofind_exporter()  # type: ignore[name-defined]  # noqa: F821
     result["autofind_exporter_field_values"] = get_autofind_exporter_field_values()  # type: ignore[name-defined]  # noqa: F821
@@ -870,14 +888,15 @@ def set_last_embedder_for_media_type(media_type: str, embedder: str) -> None:
 
 
 def set_cli_solo_media_type(value: str | None) -> None:
-    """Set the process-level fallback for the per-user ``solo_media_type`` setting.
+    """Set the process-level override for the ``solo_media_type`` setting.
 
     Called once from ``app.py`` startup when ``--solo-media-type`` is
-    passed on the command line. The value is consulted by
-    :func:`get_effective_solo_media_type` for any user who has not
-    explicitly set their own ``solo_media_type`` via the settings UI.
-    Pass ``None`` (or call from a process where ``--solo-media-type`` was
-    not passed) to disable the fallback.
+    passed on the command line. The value applies server-wide (every user)
+    and is fixed for the process lifetime;
+    :func:`get_effective_solo_media_type` returns it in preference to the
+    persisted server setting. Pass ``None`` (or an empty / whitespace-only
+    string) to clear the override so reads fall back to the persisted file
+    value.
     """
     global _cli_solo_media_type
     if value is not None:
@@ -886,47 +905,33 @@ def set_cli_solo_media_type(value: str | None) -> None:
 
 
 def get_cli_solo_media_type() -> str | None:
-    """Return the process-level CLI fallback (``None`` if unset)."""
+    """Return the process-level CLI override (``None`` if unset)."""
     return _cli_solo_media_type
 
 
 def get_effective_solo_media_type() -> str | None:
-    """Return the effective solo mediaType for the current user.
+    """Return the solo mediaType restriction in force.
 
     Resolution order:
 
-    1. The user's explicit choice (``solo_media_type`` when
-       ``solo_media_type_explicit`` is True), including an explicit
-       ``None`` for "show everything".
-    2. The process-level CLI fallback set by
-       :func:`set_cli_solo_media_type`.
-    3. ``None`` (no streamlining - show every mediaType).
+    1. The process-level CLI override set by
+       :func:`set_cli_solo_media_type` (``--solo-media-type``), which
+       applies to every user for the lifetime of the process.
+    2. The persisted server-tier setting (``data/settings.json``), which
+       defaults to ``None``.
 
     Returns ``None`` to mean "no solo mode active"; any other return
-    value is a mediaType id (e.g. ``"image"``) that the UI should lock
-    its pickers to.
+    value is a mediaType id (e.g. ``"image"``) that the UI locks its
+    pickers to. This is an admin-set restriction: there is no per-user
+    override, and ``PUT /api/settings`` cannot change it.
     """
-    if get_solo_media_type_explicit():  # type: ignore[name-defined]  # autogen'd accessor
-        explicit = get_solo_media_type()  # type: ignore[name-defined]  # autogen'd accessor
-        # Empty string from JSON drift normalises to None.
-        if isinstance(explicit, str) and not explicit.strip():
-            return None
-        return explicit
-    return _cli_solo_media_type
-
-
-def apply_user_solo_media_type(value: str | None) -> None:
-    """Persist *value* as the user's solo mediaType choice and flip ``explicit``.
-
-    Used by the settings PUT route so a single UI change updates both
-    fields atomically. ``value=None`` (or an empty string) means "show
-    everything"; any other string is validated against the media-type
-    registry by the route layer before this is called.
-    """
-    if isinstance(value, str) and not value.strip():
-        value = None
-    set_solo_media_type(value)  # type: ignore[name-defined]  # autogen'd accessor
-    set_solo_media_type_explicit(True)  # type: ignore[name-defined]  # autogen'd accessor
+    if _cli_solo_media_type is not None:
+        return _cli_solo_media_type
+    persisted = get_solo_media_type()  # type: ignore[name-defined]  # autogen'd accessor
+    # Empty string from JSON drift normalises to None.
+    if isinstance(persisted, str) and not persisted.strip():
+        return None
+    return persisted
 
 
 def set_cli_dataset_max_age_days(value: int | None) -> None:
@@ -1008,6 +1013,45 @@ def get_effective_support_email() -> str:
     return get_support_email()  # type: ignore[name-defined]  # autogen'd accessor
 
 
+def set_cli_semantic_only(value: bool | None) -> None:
+    """Set the process-level override for the ``semantic_only`` setting.
+
+    Called once from ``app.py`` startup when ``--semantic-only`` is passed (or
+    ``VTSEARCH_SEMANTIC_ONLY`` is set). The value applies server-wide (every
+    user) and is fixed for the process lifetime;
+    :func:`get_effective_semantic_only` returns it in preference to the
+    persisted server setting. Pass ``None`` to clear the override so reads fall
+    back to the persisted file value.
+    """
+    global _cli_semantic_only
+    _cli_semantic_only = None if value is None else bool(value)
+
+
+def get_cli_semantic_only() -> bool | None:
+    """Return the process-level CLI override (``None`` if unset)."""
+    return _cli_semantic_only
+
+
+def get_effective_semantic_only() -> bool:
+    """Return whether this instance is locked to Semantic embedders.
+
+    Resolution order:
+
+    1. The process-level CLI override set by :func:`set_cli_semantic_only`
+       (``--semantic-only`` / ``VTSEARCH_SEMANTIC_ONLY``), which applies to
+       every user for the lifetime of the process.
+    2. The persisted server-tier setting (``data/settings.json``), which
+       defaults to ``False``.
+
+    When true, the prototype Patch Semantic / Structural embedder types are
+    hidden from every picker (``GET /api/embedders`` filters them out) and
+    rejected by the dataset-load and detector-create routes.
+    """
+    if _cli_semantic_only is not None:
+        return _cli_semantic_only
+    return bool(get_semantic_only())  # type: ignore[name-defined]  # autogen'd accessor
+
+
 def set_cli_solo_embedder(media_type: str, embedder: str | None) -> None:
     """Set or clear a process-level solo-embedder fallback for *media_type*.
 
@@ -1040,9 +1084,8 @@ def get_effective_solo_embedders() -> dict[str, str]:
     missing user keys fall through to the CLI value. An **empty-string
     value** in the user map is a per-type opt-out sentinel - it removes
     that type from the merged map even if the CLI fallback has a
-    value for it. This is the analog of setting ``solo_media_type=null``
-    with ``solo_media_type_explicit=True`` to override
-    ``--solo-media-type``.
+    value for it. (``solo_media_type`` has no such per-user opt-out: it is
+    an admin-set server restriction.)
 
     Validity (does the embedder still exist for this type?) is *not*
     checked here - the frontend resolves it against the live embedder
@@ -1277,6 +1320,24 @@ def filter_visible_plugin_dicts(
     if not hidden:
         return list(plugin_dicts)
     return [d for d in plugin_dicts if d.get(id_key) not in hidden]
+
+
+def filter_semantic_only_embedder_dicts(embedder_dicts: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop patch / structural embedders when the instance is Semantic-locked.
+
+    The single chokepoint for ``GET /api/embedders``: with
+    :func:`get_effective_semantic_only` true, an embedder that advertises
+    ``supports_patch_regions`` or ``supports_geometric_verification`` is
+    withheld from the listing, so every picker fed by that endpoint (the Add
+    Dataset "Advanced" block's Embedder / Region embedder / Instance embedder
+    selects, the Import Defaults tab) offers Semantic embedders only.
+
+    A no-op when the lock is off, so the ordinary deployment pays one boolean.
+    """
+    dicts = list(embedder_dicts)
+    if not get_effective_semantic_only():
+        return dicts
+    return [d for d in dicts if not d.get("supports_patch_regions") and not d.get("supports_geometric_verification")]
 
 
 # -------------------------------------------------------------------

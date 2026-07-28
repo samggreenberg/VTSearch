@@ -99,6 +99,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  Drives the center-pane "nothing left to label" message so the pane is
    *  never left blank with a stale item stuck in the metadata strip. */
   readonly autopilotExhausted = signal(false);
+  /** True while a windowed-sort "Load more" page fetch is in flight. */
+  readonly loadingMoreSort = signal(false);
   progressModalMetric: ProgressMetric | null = null;
 
   // SortStateService / VoteStateService are now signal-backed (their value
@@ -583,20 +585,72 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.autoSelectNext();
   }
 
+  /**
+   * Install a (possibly windowed) sort response into the sort state. Handles
+   * both `similarity` (text/example sort) and `score` (learned/detector sort)
+   * result rows, and carries the window metadata (`total` / `has_more_below` /
+   * `sort_token`) so the media-list can page deeper. Below the backend's window
+   * threshold the whole ranking arrives and `has_more_below` is false —
+   * behaviour is identical to the pre-windowing full-list path.
+   */
+  private applySortWindow(response: {
+    results?: Array<Record<string, unknown>>;
+    threshold?: number;
+    total?: number;
+    above_threshold?: number;
+    has_more_below?: boolean;
+    sort_token?: string;
+  }): void {
+    const threshold = response.threshold ?? 0;
+    const items = (response.results ?? []).map((r) => ({
+      id: r['id'] as number,
+      score: (r['score'] ?? r['similarity'] ?? 0) as number,
+      bestRegion: r['best_region'] as number[] | undefined,
+    }));
+    this.sortState.setSortWindow({
+      items,
+      threshold,
+      total: response.total ?? items.length,
+      hasMore: response.has_more_below ?? false,
+      token: response.sort_token ?? null,
+      aboveThreshold: response.above_threshold ?? items.filter((i) => i.score >= threshold).length,
+    });
+  }
+
+  /**
+   * Page in the next window of a windowed ranking (the media-list "Load more"
+   * trigger). Fetches from the sort token at the current loaded offset and
+   * appends. A failed/expired token just stops paging (the user can re-sort).
+   */
+  onLoadMore(): void {
+    const token = this.sortState.sortToken;
+    if (!token || !this.sortState.sortHasMore || this.loadingMoreSort()) return;
+    this.loadingMoreSort.set(true);
+    const offset = this.sortState.sortOrder?.length ?? 0;
+    this.sortingApi
+      .getSortPage(token, offset, 200)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (page) => {
+          const items = (page.results ?? []).map((r) => ({
+            id: r['id'] as number,
+            score: (r['score'] ?? r['similarity'] ?? 0) as number,
+            bestRegion: r['best_region'] as number[] | undefined,
+          }));
+          this.sortState.appendSortItems(items, page.has_more);
+          this.loadingMoreSort.set(false);
+        },
+        error: () => this.loadingMoreSort.set(false),
+      });
+  }
+
   onTextSort(text: string): void {
     this.sortState.setTextQuery(text);
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Sorting…');
     this.sortingApi.sort({ text }).pipe(takeUntil(this.destroy$)).subscribe({
       next: (response) => {
-        this.sortState.setSortResults(
-          response.results.map((r) => ({
-            id: r['id'],
-            score: r['similarity'],
-            bestRegion: r['best_region'],
-          })),
-          response.threshold,
-        );
+        this.applySortWindow(response);
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('');
         this.autoSelectNext();
@@ -662,12 +716,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private applyLearnedSortResult(response: LearnedSortResponse, autoSelect: boolean): void {
-    const results = response.results ?? [];
-    const threshold = response.threshold ?? 0;
-    this.sortState.setSortResults(
-      results.map((r) => ({ id: r['id'], score: r['score'], bestRegion: r['best_region'] })),
-      threshold,
-    );
+    this.applySortWindow(response);
     this.currentLearnedSortJobId = null;
     this.sortState.setSortBusy(false);
     this.sortState.setSortStatus('');
@@ -741,10 +790,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           detector_name?: string;
         };
         this.stopScoringProgressPoll();
-        this.sortState.setSortResults(
-          response.results.map((r) => ({ id: r.id, score: r.score, bestRegion: r.best_region })),
-          response.threshold,
-        );
+        this.applySortWindow(response);
         this.sortState.setLoadSortLabel(response.detector_name || 'Detector');
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('');
@@ -766,10 +812,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       threshold: number;
     };
     this.sortState.setSortMode('load');
-    this.sortState.setSortResults(
-      response.results.map((r) => ({ id: r.id, score: r.similarity, bestRegion: r.best_region })),
-      response.threshold,
-    );
+    this.applySortWindow(response);
     this.sortState.setLoadSortLabel('Example media');
     this.sortState.setSortBusy(false);
     this.sortState.setSortStatus('');
@@ -897,10 +940,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe({
         next: (response) => {
           this.sortState.setSortMode('load');
-          this.sortState.setSortResults(
-            response.results.map((r) => ({ id: r.id, score: r.similarity, bestRegion: r.best_region })),
-            response.threshold,
-          );
+          this.applySortWindow(response);
           this.sortState.setLoadSortLabel(this.mediaDisplayName(mediaId));
           this.sortState.setSortBusy(false);
           this.sortState.setSortStatus('');
@@ -1136,10 +1176,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.sortState.setSortStatus(filenames.length > 1 ? 'Sorting by examples…' : 'Sorting by example…');
       this.sortingApi.exampleSortServer({ filenames }).pipe(takeUntil(this.destroy$)).subscribe({
         next: (response) => {
-          this.sortState.setSortResults(
-            response.results.map((r) => ({ id: r.id, score: r.similarity, bestRegion: r.best_region })),
-            response.threshold,
-          );
+          this.applySortWindow(response);
           this.sortState.setSortBusy(false);
           this.sortState.setSortStatus('');
           this.sortState.setSortMode('load');
@@ -1316,14 +1353,6 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.sortState.selectMode === 'top') {
       const next = sortOrder.find((s) => !isVoted(s.id));
       if (next) this.mediaState.selectMedia(next.id);
-    } else if (this.sortState.selectMode === 'bottom') {
-      for (let i = sortOrder.length - 1; i >= 0; i--) {
-        const s = sortOrder[i];
-        if (!isVoted(s.id)) {
-          this.mediaState.selectMedia(s.id);
-          break;
-        }
-      }
     } else if (this.sortState.selectMode === 'hard' && this.sortState.threshold !== null) {
       const threshold = this.sortState.threshold!;
       // Find the index where the threshold falls in the sorted (descending) list.

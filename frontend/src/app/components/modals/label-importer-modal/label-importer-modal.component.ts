@@ -16,26 +16,40 @@ import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
+import { Subscription } from 'rxjs';
 import { LabelImportersApiService } from '../../../services/label-importers-api.service';
 import { MediasApiService } from '../../../services/medias-api.service';
+import { ProgressEventsService } from '../../../services/progress-events.service';
 import { VoteStateService } from '../../../services/vote-state.service';
-import { FieldOption, ImporterField } from '../../../models/api.models';
+import { FieldOption, ImporterField, LoadingTask } from '../../../models/api.models';
 import type { LabelImporterEntry } from '../../../generated/api-client/models/label-importer-entry';
 import { apiErrorMessage } from '../../../utils/api-error';
+import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
+import { formatProgressMessage, progressBarState, type ProgressBarState } from '../../../utils/format-progress';
 
 type ModalView = 'picker' | 'form';
+
+/** Terminal counts an auto-resolve ingest task publishes as `ingest_result`
+ *  (see `vtsearch/routes/labels/importers.py::_apply_ingested_labels`). */
+interface IngestResult {
+  ingested?: number;
+  applied?: number;
+  unresolved?: number;
+  failed?: number;
+}
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-label-importer-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, IconComponent, FieldHintIconComponent],
+  imports: [FormsModule, ModalComponent, IconComponent, FieldHintIconComponent, ProgressBarComponent],
   templateUrl: './label-importer-modal.component.html',
   styleUrl: './label-importer-modal.component.scss',
 })
 export class LabelImporterModalComponent implements OnDestroy {
   private labelImportersApi = inject(LabelImportersApiService);
   private mediasApi = inject(MediasApiService);
+  private progressEvents = inject(ProgressEventsService);
   private voteState = inject(VoteStateService);
 
   /** When set, labels are imported directly into this trainable model
@@ -86,6 +100,11 @@ export class LabelImporterModalComponent implements OnDestroy {
   readonly dynamicFieldError = signal<Record<string, string>>({});
   readonly addingGood = signal(false);
   readonly addingBad = signal(false);
+
+  /** Live snapshot of the background task that pulls in the media of labels
+   *  the active dataset didn't have. ``null`` when no ingest is running. */
+  readonly ingestTask = signal<LoadingTask | null>(null);
+  private ingestSub: Subscription | null = null;
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   get modalTitle(): string {
@@ -120,6 +139,7 @@ export class LabelImporterModalComponent implements OnDestroy {
       } else if (
         field.field_type === 'select' &&
         !field.dynamic_options &&
+        !field.allow_free_text &&
         (field.options?.length ?? 0) > 0
       ) {
         this.formValues[field.key] = field.options![0];
@@ -172,7 +192,7 @@ export class LabelImporterModalComponent implements OnDestroy {
           if (current && !inList && !field.allow_free_text) {
             this.formValues[key] = '';
           }
-          if (!this.formValues[key] && field.required && options.length > 0) {
+          if (!this.formValues[key] && field.required && !field.allow_free_text && options.length > 0) {
             this.formValues[key] = options[0].value;
           }
         },
@@ -227,32 +247,96 @@ export class LabelImporterModalComponent implements OnDestroy {
 
     request$.subscribe({
       next: (res: any) => {
-        this.submitting.set(false);
         this.successMessage.set(res.message || `Applied ${res.applied ?? 0} labels`);
+        // The labels that already resolved are live now, so refresh the grid
+        // even while the auto-resolve pass is still fetching the rest.
         this.imported.emit();
 
-        if (res.missing_count > 0 && res.missing?.length) {
-          // Show unresolved elements as a warning but don't prompt; the
-          // backend already tried to auto-resolve them.
-          this.importError.set(
-            `${res.missing_count} element(s) could not be resolved from their original sources.`,
-          );
-        } else if (res.failed_count > 0) {
-          // Per-entry application failures (logical-bug-audit H31); the
-          // import partially landed and the user should know which entries
-          // need to be retried.
-          this.importError.set(
-            `${res.failed_count} element(s) failed to apply. The remaining labels were applied successfully.`,
-          );
+        const ingestTaskId = String(res?.ingest_task_id || '');
+        if (ingestTaskId) {
+          this.awaitAutoResolve(ingestTaskId, Number(res.applied ?? 0));
+          return;
         }
-        const hasIssue = res.missing_count > 0 || res.failed_count > 0;
-        this.closeTimer = setTimeout(() => this.close(), hasIssue ? 3000 : 1500);
+        this.submitting.set(false);
+        this.finishImport(
+          res.message || `Applied ${res.applied ?? 0} labels`,
+          res.missing_count ?? 0,
+          res.failed_count ?? 0,
+        );
       },
       error: (err) => {
         this.submitting.set(false);
         this.importError.set(apiErrorMessage(err, 'Import failed'));
       },
     });
+  }
+
+  /**
+   * Track the background auto-resolve of entries whose media weren't in the
+   * dataset (#2703) and report its outcome once it lands.
+   *
+   * The import response only describes the in-request pass; fetching and
+   * embedding the missing media happens on a detector task, which publishes
+   * the rest of the numbers as `ingest_result`. `appliedInRequest` is what the
+   * first pass already applied, so the final line can report the total.
+   */
+  private awaitAutoResolve(taskId: string, appliedInRequest: number): void {
+    this.ingestSub?.unsubscribe();
+    this.ingestSub = this.progressEvents.detectorTaskUntilDone$(taskId).subscribe({
+      next: (task) => this.ingestTask.set(task),
+      complete: () => {
+        const task = this.ingestTask();
+        this.ingestTask.set(null);
+        this.ingestSub = null;
+        this.submitting.set(false);
+
+        if (task?.error) {
+          this.importError.set(`Could not resolve the missing elements: ${task.error}`);
+          this.finishImport(`Applied ${appliedInRequest} label(s).`, 0, 0);
+          return;
+        }
+        const result = (task?.ingest_result ?? {}) as IngestResult;
+        const resolved = result.ingested ?? 0;
+        let message = `Applied ${appliedInRequest + (result.applied ?? 0)} label(s).`;
+        if (resolved > 0) {
+          message += ` Auto-resolved ${resolved} missing element(s) from their sources.`;
+          // The re-applied labels are new votes; refresh so they show up.
+          this.imported.emit();
+        }
+        this.finishImport(message, result.unresolved ?? 0, result.failed ?? 0);
+      },
+    });
+  }
+
+  /** Render the terminal outcome and schedule the auto-close. */
+  private finishImport(message: string, missingCount: number, failedCount: number): void {
+    this.successMessage.set(message);
+    if (missingCount > 0) {
+      // Show unresolved elements as a warning but don't prompt; the
+      // backend already tried to auto-resolve them.
+      this.importError.set(
+        `${missingCount} element(s) could not be resolved from their original sources.`,
+      );
+    } else if (failedCount > 0) {
+      // Per-entry application failures (logical-bug-audit H31); the
+      // import partially landed and the user should know which entries
+      // need to be retried.
+      this.importError.set(
+        `${failedCount} element(s) failed to apply. The remaining labels were applied successfully.`,
+      );
+    }
+    const hasIssue = missingCount > 0 || failedCount > 0;
+    this.closeTimer = setTimeout(() => this.close(), hasIssue ? 3000 : 1500);
+  }
+
+  /** Bar geometry for the running auto-resolve ingest. */
+  get ingestBar(): ProgressBarState {
+    return progressBarState(this.ingestTask());
+  }
+
+  /** One-line status for the running auto-resolve ingest. */
+  get ingestMessage(): string {
+    return formatProgressMessage(this.ingestTask(), 'Resolving missing elements…');
   }
 
 
@@ -314,5 +398,9 @@ export class LabelImporterModalComponent implements OnDestroy {
       clearTimeout(this.closeTimer);
       this.closeTimer = null;
     }
+    // The ingest itself keeps running on the server (and reports on the
+    // dashboard); we just stop rendering it.
+    this.ingestSub?.unsubscribe();
+    this.ingestSub = null;
   }
 }

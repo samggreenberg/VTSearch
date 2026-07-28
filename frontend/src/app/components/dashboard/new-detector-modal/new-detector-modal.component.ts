@@ -11,11 +11,11 @@ import { DatasetsRegistryApiService } from '../../../services/datasets-registry-
 import { DatasetsUiApiService } from '../../../services/datasets-ui-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { LabelImportersApiService } from '../../../services/label-importers-api.service';
+import { ProgressEventsService } from '../../../services/progress-events.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import {
   EmbedderCapabilityService,
   EMBEDDER_TYPE_LABELS,
-  EMBEDDER_TYPE_ORDER,
   type EmbedderType,
 } from '../../../services/embedder-capability.service';
 import { MediaStateService } from '../../../services/media-state.service';
@@ -24,9 +24,12 @@ import {
   ImporterField,
   ImporterInfo,
   ImporterPickerTab,
+  LoadingTask,
   Media,
   MediaTypeInfo,
 } from '../../../models/api.models';
+import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
+import { formatProgressMessage, progressBarState, type ProgressBarState } from '../../../utils/format-progress';
 import type { LabelImporterEntry } from '../../../generated/api-client/models/label-importer-entry';
 import { DemoDatasetEntry } from '../../../generated/api-client/models/demo-dataset-entry';
 import {
@@ -58,7 +61,7 @@ interface MediaExampleItem {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, FieldHintIconComponent],
+  imports: [FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, FieldHintIconComponent, ProgressBarComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })
@@ -70,6 +73,7 @@ export class NewDetectorModalComponent implements OnInit {
   private datasetsUiApi = inject(DatasetsUiApiService);
   private sortingApi = inject(SortingApiService);
   private labelImportersApi = inject(LabelImportersApiService);
+  private progressEvents = inject(ProgressEventsService);
   private settingsState = inject(SettingsStateService);
   private embedderCaps = inject(EmbedderCapabilityService);
   private mediaState = inject(MediaStateService);
@@ -112,6 +116,11 @@ export class NewDetectorModalComponent implements OnInit {
   readonly mediaTypeInfos = signal<MediaTypeInfo[]>([]);
   readonly submitting = signal(false);
   readonly error = signal('');
+
+  /** Live snapshot of the background task that pulls the imported labels'
+   *  media into the active dataset, while Create & Import waits it out.
+   *  ``null`` when no ingest is running. */
+  readonly ingestTask = signal<LoadingTask | null>(null);
 
   /** The user's *explicit* embedder-type pick (the detector's locked scoring
    *  space *kind*). Empty means "not chosen": the displayed value falls back to
@@ -227,11 +236,11 @@ export class NewDetectorModalComponent implements OnInit {
   readonly labelImporterDynamicLoading = signal<Record<string, boolean>>({});
   readonly labelImporterDynamicError = signal<Record<string, string>>({});
 
-  /** Type_id of the active solo-mediaType streamlining, or ``null`` when
+  /** Type_id of the server's solo-mediaType restriction, or ``null`` when
    *  off. When non-null, the mediaType form-group is hidden in the
    *  template and ``mediaType`` is locked to this value on init. */
   get effectiveSoloMediaType(): string | null {
-    const v = this.settingsState.settingsSignal()?.effective_solo_media_type;
+    const v = this.settingsState.settingsSignal()?.solo_media_type;
     return v ? v : null;
   }
 
@@ -431,11 +440,26 @@ export class NewDetectorModalComponent implements OnInit {
     return this.datasetEmbedder() ? [this.datasetEmbedder()] : [];
   }
 
-  /** All three embedder types, in display order — the always-available options
-   *  in the Advanced picker. A detector locks a type as *declared intent*, so
-   *  the choice isn't constrained to what the active dataset (if any) binds. */
+  /** The embedder types offered in the Advanced picker — all three in display
+   *  order normally, Semantic alone on a `semantic_only` server. A detector
+   *  locks a type as *declared intent*, so the choice isn't constrained to what
+   *  the active dataset (if any) binds. */
   get embedderTypeOptions(): EmbedderType[] {
-    return EMBEDDER_TYPE_ORDER;
+    return this.embedderCaps.offeredTypes;
+  }
+
+  /** Whether to render the type picker at all. A one-option picker is a
+   *  question with no answer, so a `semantic_only` server drops it (and the
+   *  "not on this dataset" hint under it) rather than showing a dead select. */
+  get showEmbedderTypePicker(): boolean {
+    return this.embedderTypeOptions.length > 1;
+  }
+
+  /** Whether the Advanced toggle is worth showing. Normally yes (it hosts the
+   *  type picker); on a `semantic_only` server only when there is a license
+   *  notice left to surface, so the block never opens onto nothing. */
+  get showAdvancedToggle(): boolean {
+    return this.showEmbedderTypePicker || !!this.primaryLicenseNotice;
   }
 
   /** The embedder *types* the active dataset supplies, or `[]` when no dataset
@@ -446,8 +470,11 @@ export class NewDetectorModalComponent implements OnInit {
 
   /** The type shown in the picker: the user's explicit pick, else the active
    *  dataset's primary supplied type, else `semantic`. Computed lazily so it
-   *  reflects the dataset/registry as they load (no pre-load race). */
+   *  reflects the dataset/registry as they load (no pre-load race). A
+   *  `semantic_only` server pins it to `semantic`, so a dataset that still
+   *  binds a prototype type can't seed a detector the server would reject. */
   get effectiveEmbedderType(): EmbedderType {
+    if (this.embedderCaps.semanticOnly()) return 'semantic';
     return this.embedderType() || this.datasetSuppliedTypes[0] || 'semantic';
   }
 
@@ -965,6 +992,7 @@ export class NewDetectorModalComponent implements OnInit {
       } else if (
         field.field_type === 'select' &&
         !field.dynamic_options &&
+        !field.allow_free_text &&
         (field.options?.length ?? 0) > 0
       ) {
         this.labelImporterValues[field.key] = field.options![0];
@@ -1022,7 +1050,7 @@ export class NewDetectorModalComponent implements OnInit {
           if (current && !inList && !field.allow_free_text) {
             this.labelImporterValues[key] = '';
           }
-          if (!this.labelImporterValues[key] && field.required && options.length > 0) {
+          if (!this.labelImporterValues[key] && field.required && !field.allow_free_text && options.length > 0) {
             this.labelImporterValues[key] = options[0].value;
           }
         },
@@ -1090,15 +1118,22 @@ export class NewDetectorModalComponent implements OnInit {
             this.error.set('Server did not return a detector id');
             return;
           }
-          this.detectorsRegistryApi.loadDetector(newId).subscribe({
-            next: () => {
-              this.submitting.set(false);
-              this.created.emit(newId);
-            },
-            error: () => {
-              // Model exists in registry even if load failed; still emit.
-              this.submitting.set(false);
-              this.created.emit(newId);
+          const ingestTaskId = String(resp?.ingest_task_id || '');
+          if (!ingestTaskId) {
+            this.loadAndFinish(newId);
+            return;
+          }
+          // The imported labels' media are still being fetched and embedded in
+          // the background (#2703). Loading the detector now would restore its
+          // labels against media that aren't in the dataset yet, so wait the
+          // ingest out — showing its bar instead of an opaque spinner. A failed
+          // ingest still completes the stream: the detector exists either way,
+          // and the failure surfaces as a toast from the SSE error router.
+          this.progressEvents.detectorTaskUntilDone$(ingestTaskId).subscribe({
+            next: (task) => this.ingestTask.set(task),
+            complete: () => {
+              this.ingestTask.set(null);
+              this.loadAndFinish(newId);
             },
           });
         },
@@ -1107,6 +1142,31 @@ export class NewDetectorModalComponent implements OnInit {
           this.error.set(apiErrorMessage(err, 'Failed to create detector from labelset'));
         },
       });
+  }
+
+  /** Load the freshly-created detector, then hand its id back to the caller.
+   *  A failed load still emits: the detector is in the registry regardless. */
+  private loadAndFinish(detectorId: string): void {
+    this.detectorsRegistryApi.loadDetector(detectorId).subscribe({
+      next: () => {
+        this.submitting.set(false);
+        this.created.emit(detectorId);
+      },
+      error: () => {
+        this.submitting.set(false);
+        this.created.emit(detectorId);
+      },
+    });
+  }
+
+  /** Bar geometry for the running media ingest. */
+  get ingestBar(): ProgressBarState {
+    return progressBarState(this.ingestTask());
+  }
+
+  /** One-line status for the running media ingest. */
+  get ingestMessage(): string {
+    return formatProgressMessage(this.ingestTask(), 'Fetching the imported labels’ media…');
   }
 
   // --- Submit ---

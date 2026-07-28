@@ -151,6 +151,24 @@ describe('ExportModalComponent', () => {
     req.flush({ success: true });
   });
 
+  it('does not auto-select the first option for a free-text combobox field', async () => {
+    await flushInit();
+    const exporter = {
+      name: 'free_text_exporter',
+      display_name: 'Free Text Exporter',
+      fields: [
+        {
+          key: 'q',
+          field_type: 'select',
+          options: ['a', 'b'],
+          allow_free_text: true,
+        },
+      ],
+    };
+    component.startExporter(exporter as never);
+    expect(component.formValues['q']).toBe('');
+  });
+
   it('emits closed on close', async () => {
     await flushInit();
     vi.spyOn(component.closed, 'emit');

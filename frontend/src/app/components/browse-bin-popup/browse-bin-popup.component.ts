@@ -119,9 +119,10 @@ const DOCKED_MAIN_MIN = 60;
  * It renders in one of two presentations, chosen per media type by the
  * ``bin_details_docked`` setting (the dock / pop-out header buttons flip it):
  *
- * - **Floating** (``docked`` false, the default): a draggable popup window
- *   summoned at the right-click point and clamped to the visible canvas.
- * - **Docked** (``docked`` true): a persistent left panel beside the canvas.
+ * - **Floating** (``docked`` false): a draggable popup window summoned at the
+ *   right-click point and clamped to the visible canvas.
+ * - **Docked** (``docked`` true, the default): a persistent left panel beside
+ *   the canvas.
  *   The top row holds the large item with the metadata column to its right,
  *   separated by a draggable divider ({@link onMetaDividerPointerDown}); the
  *   member grid fills the rest of the panel below them. The metadata column
@@ -129,7 +130,11 @@ const DOCKED_MAIN_MIN = 60;
  *   ``browse_details_metadata_width``) and the item grows to fill whatever the
  *   row leaves ({@link dockedPaneSize}), so the docked panel has no per-item
  *   size buttons — the panel↔canvas divider sizes the item (and re-chunks the
- *   grid columns) instead. The panel is always mounted while the option is on —
+ *   grid columns) instead. A second, horizontal divider between that top row and
+ *   the member grid ({@link rowDividerMouseDown}) is a friendlier handle onto the
+ *   same size: the item is square, so dragging it down (a taller item) is just a
+ *   wider panel, which the browse view applies by moving the panel↔canvas
+ *   divider. The panel is always mounted while the option is on —
  *   before any bin is opened it shows an empty hint — and for audio its detail
  *   pane doubles as the now-playing display ({@link nowPlayingExt}), replacing
  *   the toolbar's small waveform widget. A singleton bin keeps the grid area
@@ -223,10 +228,19 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  mode the detail pane + metadata track it — the panel is the now-playing
    *  display. Unused when floating. */
   readonly nowPlayingExt = input<NowPlaying | null>(null);
+  /** Docked only: whether the browse view is currently dragging the in-panel row
+   *  divider (see {@link rowDividerMouseDown}). Reflected as the divider's drag
+   *  cue so it stays lit while the cursor is off it mid-drag. */
+  readonly rowDividerDragging = input(false);
 
   /** Emitted when the popup should close (outside click, Escape, or the X);
    *  in docked mode, when the X asks to clear the shown bin. */
   readonly dismissed = output<void>();
+  /** Docked only: the user grabbed the horizontal divider between the
+   *  focused-item/metadata row and the member grid. The browse view runs the
+   *  drag — the focused item is square, so a taller item is a wider panel, so
+   *  the vertical drag resizes the whole panel via the panel↔canvas width. */
+  readonly rowDividerMouseDown = output<MouseEvent>();
   /** Floating header's dock button: the user wants the docked presentation. */
   readonly dockRequested = output<void>();
   /** Docked header's pop-out button: the user wants the floating window. */
@@ -1024,6 +1038,17 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   }
 
   // --- Dismissal -----------------------------------------------------------
+
+  /**
+   * What the header's X does right now. Floating it closes the window. Docked
+   * it clears the bin on show; on an already-empty panel there is nothing left
+   * to clear, so the browse view hides the panel instead — say so, since that's
+   * a bigger step than "Clear" implies.
+   */
+  get closeLabel(): string {
+    if (!this.docked()) return 'Close';
+    return this.ids.length === 0 ? 'Hide this panel' : 'Clear';
+  }
 
   close(): void {
     this.dismissed.emit();

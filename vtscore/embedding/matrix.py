@@ -30,6 +30,10 @@ turns that into a loud, locatable failure naming the offending cid.
 
 from __future__ import annotations
 
+import logging
+import os
+import tempfile
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -39,6 +43,8 @@ from vtscore.state.core import _state_lock
 
 if TYPE_CHECKING:
     from vtscore.state.core import DatasetContext
+
+logger = logging.getLogger(__name__)
 
 
 def _collapse_to_primary(medias: dict[int, dict[str, Any]], embedder_name: str | None) -> str | None:
@@ -95,6 +101,134 @@ def _stack_embeddings(
     return matrix
 
 
+def _registered_pkl_path(dataset_id: str) -> str | None:
+    """Return the on-disk pkl path registered for *dataset_id*, or ``None``.
+
+    Datasets built purely in memory (tests, ephemeral browse contexts,
+    positives-map previews) have no registry entry and get no sidecar - the
+    mmap cache (S1, ``docs/plans/scalability.md``) is opportunistic only for
+    datasets actually backed by a saved pickle file.
+    """
+    from vtscore.datasets.registry import get_dataset  # noqa: PLC0415
+
+    try:
+        entry = get_dataset(dataset_id)
+    except Exception:
+        return None
+    return (entry or {}).get("pkl_path") or None
+
+
+def _emb_sidecar_paths(pkl_path: str) -> tuple[Path, Path]:
+    """Return ``(ids_path, matrix_path)`` sidecar paths for *pkl_path*.
+
+    Both share the pkl's stem (``ds_<uuid>``) followed by a dot, so
+    ``registry.unregister_dataset``'s stem-glob sweep deletes them alongside
+    the pkl on both age-off expiry and manual delete - no separate cleanup
+    bookkeeping needed.
+    """
+    p = Path(pkl_path)
+    return p.parent / f"{p.stem}.embids.npy", p.parent / f"{p.stem}.embmat.npy"
+
+
+def _try_load_matrix_sidecar(pkl_path: str, sorted_ids: list[int], probe_dim: int) -> np.ndarray | None:
+    """Return the mmap'd primary embedding matrix for *pkl_path* if valid, else ``None``.
+
+    Valid means: both sidecar files exist, the persisted id list matches
+    *sorted_ids* exactly (order and content), and the persisted matrix's
+    column count matches *probe_dim* (a live vector's dimension, guarding
+    against a same-id-set re-embed to a different dimension - the drift the
+    id-list check alone can't see). Any mismatch, missing file, or read error
+    returns ``None``; the caller always has a safe, correct fallback: rebuild
+    from live ``ctx.medias``.
+    """
+    ids_path, mat_path = _emb_sidecar_paths(pkl_path)
+    if not (ids_path.is_file() and mat_path.is_file()):
+        return None
+    try:
+        sidecar_ids = np.load(ids_path)
+        if sidecar_ids.shape != (len(sorted_ids),) or not np.array_equal(
+            sidecar_ids, np.asarray(sorted_ids, dtype=np.int64)
+        ):
+            return None
+        matrix = np.load(mat_path, mmap_mode="r")
+        if matrix.ndim != 2 or matrix.shape[0] != len(sorted_ids) or matrix.shape[1] != probe_dim:
+            return None
+        return matrix
+    except Exception:
+        logger.warning("Failed to load embedding-matrix sidecar for %s", pkl_path, exc_info=True)
+        return None
+
+
+def _atomic_save_npy(path: Path, arr: np.ndarray) -> None:
+    """Write *arr* to *path* as ``.npy`` bytes via write-to-temp + atomic rename.
+
+    Mirrors the tmp-file idiom used by ``vtscore.datasets.container.write_container``:
+    a crash mid-write leaves an orphan ``.tmp`` file, never a truncated file at
+    the real name, so a concurrent reader never observes a partial array.
+    """
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            np.save(f, arr)
+        os.replace(tmp_name, str(path))
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+
+
+def _maybe_persist_matrix_sidecar(pkl_path: str, sorted_ids: list[int], matrix: np.ndarray) -> None:
+    """Best-effort write of the primary embedding matrix as a mmap-able sidecar.
+
+    Lets a future cold load of the same pkl (a fresh process / DatasetContext)
+    skip rebuilding the matrix from per-item embeddings - see S1,
+    ``docs/plans/scalability.md``. A pure derived cache of data already
+    durably persisted in the dataset pickle: always regenerable from
+    ``ctx.medias``, deterministic, and swept alongside the pkl by
+    ``registry.unregister_dataset``. Any failure (read-only filesystem, full
+    disk, concurrent writer) is logged and swallowed - the sidecar is an
+    optimization, never a dependency.
+
+    Always writes (no "ids already match, skip" shortcut): the caller only
+    reaches here on a genuine cache-miss rebuild, which happens either on the
+    first-ever build for this context or after an explicit invalidation - and
+    an in-place vector rewrite (re-embed/clip) leaves the id set unchanged
+    while the *content* legitimately changed, so an ids-only check would skip
+    a write that must happen and silently entrench a stale sidecar.
+    """
+    ids_path, mat_path = _emb_sidecar_paths(pkl_path)
+    try:
+        # Matrix first: if a crash lands between the two atomic renames, a
+        # mismatched pair is caught by the shape/dim checks in
+        # ``_try_load_matrix_sidecar`` on the next read, never served as-is.
+        _atomic_save_npy(mat_path, matrix)
+        _atomic_save_npy(ids_path, np.asarray(sorted_ids, dtype=np.int64))
+    except OSError:
+        logger.info("Could not persist embedding-matrix sidecar for %s (read-only filesystem?)", pkl_path)
+    except Exception:
+        logger.warning("Failed to persist embedding-matrix sidecar for %s", pkl_path, exc_info=True)
+
+
+def _try_primary_sidecar(
+    ctx: "DatasetContext", sorted_ids: list[int], medias_snapshot: dict[int, dict[str, Any]]
+) -> tuple[str | None, np.ndarray | None]:
+    """Return ``(pkl_path, matrix)`` for the primary-path on-disk mmap sidecar.
+
+    *matrix* is ``None`` when there is no registered pkl, the sidecar-disabled
+    latch is set (see ``invalidate_embedding_matrix``), or the sidecar is
+    missing/stale - the caller always falls back to ``_stack_embeddings`` in
+    that case. *pkl_path* is returned even on a sidecar miss (``None`` matrix)
+    since the caller still needs it to persist a freshly-built matrix.
+    """
+    pkl_path = _registered_pkl_path(ctx.dataset_id)
+    if not pkl_path or ctx._emb_sidecar_disabled:
+        return pkl_path, None
+    probe_dim = int(np.asarray(_require_embedding(sorted_ids[0], medias_snapshot[sorted_ids[0]])).shape[-1])
+    return pkl_path, _try_load_matrix_sidecar(pkl_path, sorted_ids, probe_dim)
+
+
 def get_embedding_matrix(ctx: "DatasetContext", embedder_name: str | None = None) -> tuple[list[int], np.ndarray]:
     """Return ``(sorted_ids, (N, D) float32 matrix)`` for *ctx*'s medias.
 
@@ -141,18 +275,39 @@ def get_embedding_matrix(ctx: "DatasetContext", embedder_name: str | None = None
         # ctx.medias is reassigned concurrently (cheap: pointers, not vectors).
         medias_snapshot = dict(ctx.medias)
 
-    # Phase 2 (unlocked): the heavy contiguous (N, D) build.
-    matrix = _stack_embeddings(sorted_ids, medias_snapshot, embedder_name)
+    # Phase 2 (unlocked): try a matching on-disk mmap sidecar first (S1,
+    # docs/plans/scalability.md), else the heavy contiguous (N, D) build.
+    # ``pkl_path`` is resolved even on a sidecar miss (used again in phase 4
+    # to persist a fresh build).
+    pkl_path: str | None = None
+    matrix: np.ndarray | None = None
+    if embedder_name is None:
+        pkl_path, matrix = _try_primary_sidecar(ctx, sorted_ids, medias_snapshot)
+    used_sidecar = matrix is not None
+    if matrix is None:
+        matrix = _stack_embeddings(sorted_ids, medias_snapshot, embedder_name)
 
     # Phase 3 (locked): repopulate the primary cache, double-checking the
     # revision still matches so a media mutation during the unlocked build
     # cannot cache a stale matrix. The named path never touches the cache.
+    cache_populated = False
     if embedder_name is None:
         with _state_lock:
             if ctx.media_revision == revision:
                 ctx._emb_matrix_ids = sorted_ids
                 ctx._emb_matrix = matrix
                 ctx._emb_matrix_revision = revision
+                cache_populated = True
+
+    # Phase 4 (unlocked, best-effort): persist a freshly-built primary matrix
+    # as a sidecar so a future cold load of this pkl can mmap it instead of
+    # rebuilding. Skipped when we just read a valid sidecar (already on disk,
+    # nothing to refresh) or when phase 3 lost the race (that matrix no
+    # longer matches the live id set and must not be written as this pkl's
+    # cache).
+    if cache_populated and not used_sidecar and pkl_path:
+        _maybe_persist_matrix_sidecar(pkl_path, sorted_ids, matrix)
+
     return list(sorted_ids), matrix
 
 
@@ -200,6 +355,11 @@ def invalidate_embedding_matrix(ctx: "DatasetContext") -> None:
         ctx._emb_matrix_ids = None
         ctx._emb_matrix = None
         ctx._emb_matrix_revision = None
+        # An in-place rewrite can leave the id set (and dimension) unchanged,
+        # which the sidecar's validity check alone cannot detect - permanently
+        # stop trusting the on-disk mmap sidecar for this context so every
+        # later rebuild reads live ``ctx.medias``, never a stale cached file.
+        ctx._emb_sidecar_disabled = True
         ctx._region_matrix_ids = None
         ctx._region_matrix = None
         ctx._region_matrix_revision = None

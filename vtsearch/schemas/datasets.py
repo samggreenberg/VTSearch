@@ -7,12 +7,18 @@ modules (``load``, ``staging``, ``registry``) involve multipart upload,
 binary streaming, and plugin-field-shaped bodies and are migrated
 separately. See ``docs/plans/openapi-schema.md``.
 
-The ``to_dict()`` payloads for media types, embedders, clippers,
-converters, and importers are intentionally declared as ``fields.Dict()``
-rather than nested schemas: the inner shapes are plugin-dependent and
-already round-trip cleanly via ``to_dict()``. Re-declaring every field
-would buy nothing; drift between schema and plugin metadata would be
-caught at the *plugin* layer, not the route.
+The ``to_dict()`` payloads split by whether the shape is fixed or
+plugin-variable:
+
+* **Media types, embedders, converters** have a *fixed* key set across every
+  plugin (no subclass overrides ``to_dict``), so they are enumerated as
+  nested schemas (``MediaTypeInfoSchema``, ``EmbedderInfoSchema``,
+  ``ConverterInfoSchema``).  This gives the generated OpenAPI client a real
+  typed model, letting the frontend drop its hand-written mirror.
+* **Clippers and importers** stay opaque ``fields.Dict()``: concrete clippers
+  add their own keys (``duration``, ``top_db``, …) and the importer payload
+  nests plugin-field lists, so a nested schema would either lose keys or need
+  an escape hatch anyway.  Drift there is caught at the *plugin* layer.
 """
 
 from __future__ import annotations
@@ -80,20 +86,177 @@ class ConvertersListQuerySchema(Schema):
     source = fields.String(load_default="")
 
 
+class MediaTypeInfoSchema(Schema):
+    """One ``MediaType.to_dict()`` payload (see ``vtscore/media/base.py``).
+
+    Fixed shape: every media type emits the same keys, so this is a real
+    nested schema rather than an opaque ``fields.Dict()``.  Only ``type_id``
+    and ``name`` are guaranteed present enough to mark ``required``; the rest
+    mirror the frontend's optional fields.
+    """
+
+    type_id = fields.String(required=True)
+    name = fields.String(required=True)
+    icon = fields.String()
+    folder_import_name = fields.String()
+    loops = fields.Boolean(
+        metadata={"description": "Whether this media type's rendered form loops (e.g. short video/audio)."}
+    )
+    file_extensions = fields.List(
+        fields.String(),
+        metadata={"description": 'Glob patterns for files this media type claims, e.g. ``["*.jpg", "*.png"]``.'},
+    )
+    has_thumbnail = fields.Boolean(
+        metadata={
+            "description": (
+                "Whether items of this type have a browsable thumbnail (image/video/document, and audio via "
+                "its waveform PNG). Drives the VTSBrowse square-vs-hex bin shape and thumbnail painting."
+            )
+        }
+    )
+    importable = fields.Boolean(
+        metadata={
+            "description": (
+                "Whether this type is a first-class ingestion category the user picks when importing (folder "
+                "scan, file upload). ``false`` for a convert-in half type like ``face``."
+            )
+        }
+    )
+    embeddable = fields.Boolean(
+        metadata={
+            "description": (
+                "Whether this type can be embedded (and therefore sorted / browsed / text-queried) on its own. "
+                "``false`` for a convert-out half type like ``document`` that must be converted first."
+            )
+        }
+    )
+    converts_to = fields.List(
+        fields.String(),
+        metadata={
+            "description": (
+                "Embeddable target type_ids a non-embeddable type can convert into (first = default). "
+                '``["image", "text"]`` for ``document``; empty for a directly-embeddable type.'
+            )
+        },
+    )
+
+
+class EmbedderInfoSchema(Schema):
+    """One ``MediaEmbedder.to_dict()`` payload (see ``vtscore/media/embedder.py``).
+
+    Fixed shape across all embedders (no subclass overrides ``to_dict``), so
+    the payload is fully enumerated here instead of ``fields.Dict()``.
+    """
+
+    name = fields.String(required=True)
+    display_name = fields.String(
+        metadata={
+            "description": (
+                'Human-readable label shown in pickers, e.g. ``"SigLIP (general images)"``. Falls back to '
+                "``name`` for legacy embedders that don't supply a friendlier label."
+            )
+        }
+    )
+    model_id = fields.String(
+        allow_none=True,
+        metadata={
+            "description": (
+                "Concrete pretrained-model identifier the embedder loads - usually a HuggingFace repo id "
+                "(or a direct weights URL). ``null`` for embedders with no single downloadable model id "
+                "(e.g. the classical SIFT/VLAD structural embedder)."
+            )
+        },
+    )
+    media_type_id = fields.String(required=True)
+    is_default = fields.Boolean(
+        metadata={
+            "description": (
+                "Whether this embedder is the recommended default for its media type (exactly one per media "
+                'type). The dropdown surfaces this entry under a "Recommended" optgroup.'
+            )
+        }
+    )
+    supports_text = fields.Boolean(
+        metadata={
+            "description": (
+                "Whether this embedder can embed text queries into the same vector space as its media. "
+                "``false`` for vision-only encoders (DINOv3, Perception Encoder)."
+            )
+        }
+    )
+    supports_patch_regions = fields.Boolean(
+        metadata={
+            "description": (
+                "Whether this embedder produces patch-level vectors and a hierarchical region tree per image. "
+                "``true`` for patch-based encoders (DINOv2, DINOv3, EUPE)."
+            )
+        }
+    )
+    supports_geometric_verification = fields.Boolean(
+        metadata={
+            "description": (
+                "Whether this embedder produces local features (keypoints + descriptors) for instance "
+                "matching. ``true`` for structural embedders (SIFT/VLAD); ``false`` for every semantic embedder."
+            )
+        }
+    )
+    license_notice = fields.String(
+        allow_none=True,
+        metadata={
+            "description": (
+                "User-facing licence warning to show before the user picks this embedder. ``null`` for "
+                "embedders with no special licensing constraints. Advisory only."
+            )
+        },
+    )
+
+
+class ConverterInfoSchema(Schema):
+    """One ``MediaConverter.to_dict()`` payload (see ``vtscore/converters/base.py``).
+
+    Fixed shape across all converters.  The plugin ``fields`` list (importer
+    fields) is kept opaque here: the ``ImporterField`` shape is out of this
+    slice's scope, and the frontend re-types it via ``ImporterField[]``.
+    """
+
+    name = fields.String(required=True)
+    source_type = fields.String(required=True)
+    target_type = fields.String(required=True)
+    display_name = fields.String()
+    description = fields.String()
+    summary_template = fields.String(
+        metadata={
+            "description": (
+                "One-line preview with ``{key}`` placeholders for each field. The native row of the importer "
+                "source-specs picker substitutes the current field values. Falls back to ``description`` when empty."
+            )
+        }
+    )
+    #: Python attribute renamed to avoid shadowing ``marshmallow.fields``;
+    #: mapped back to the ``fields`` wire key.
+    field_list = fields.List(fields.Dict(), attribute="fields", data_key="fields")
+
+
 class MediaTypesListResponseSchema(Schema):
     """Response for ``GET /api/media-types``."""
 
-    media_types = fields.List(fields.Dict(), required=True)
+    media_types = fields.List(fields.Nested(MediaTypeInfoSchema), required=True)
 
 
 class EmbeddersListResponseSchema(Schema):
     """Response for ``GET /api/embedders``."""
 
-    embedders = fields.List(fields.Dict(), required=True)
+    embedders = fields.List(fields.Nested(EmbedderInfoSchema), required=True)
 
 
 class ClippersListResponseSchema(Schema):
-    """Response for ``GET /api/clippers``."""
+    """Response for ``GET /api/clippers``.
+
+    The clipper ``to_dict()`` payload is genuinely plugin-variable (concrete
+    clippers add their own keys, e.g. ``duration``/``top_db``), so this stays
+    an opaque ``fields.Dict()`` rather than a nested schema.  See the module
+    docstring.
+    """
 
     clippers = fields.List(fields.Dict(), required=True)
 
@@ -101,7 +264,7 @@ class ClippersListResponseSchema(Schema):
 class ConvertersListResponseSchema(Schema):
     """Response for ``GET /api/converters``."""
 
-    converters = fields.List(fields.Dict(), required=True)
+    converters = fields.List(fields.Nested(ConverterInfoSchema), required=True)
 
 
 class DatasetImportersListResponseSchema(Schema):
@@ -446,6 +609,19 @@ class DatasetAvailableFilesResponseSchema(Schema):
     files = fields.List(fields.Nested(_AvailableDatasetFileSchema), required=True)
 
 
+class DatasetCombineResolutionSchema(Schema):
+    """One per-embedder-type conflict resolution in a combine request.
+
+    ``action`` is ``"reembed"`` (re-embed every source dataset to *embedder* so
+    the whole combined dataset shares that concrete embedder) or ``"drop"``
+    (leave that embedder type out of the combined dataset entirely).  ``embedder``
+    is required for ``reembed`` and ignored for ``drop``.
+    """
+
+    action = fields.String(required=True, validate=validate.OneOf(["reembed", "drop"]))
+    embedder = fields.String(load_default="")
+
+
 class DatasetCombineRequestSchema(Schema):
     """Body for ``POST /api/dataset/combine``."""
 
@@ -456,6 +632,16 @@ class DatasetCombineRequestSchema(Schema):
         metadata={"description": "At least two server-side pickle file paths to merge."},
     )
     name = fields.String(load_default="")
+    #: Per-embedder-type conflict resolutions, keyed by embedder type
+    #: (``semantic`` / ``patch_semantic`` / ``structural``).  Present only when
+    #: the sources bind conflicting embedders of the same type; the combine route
+    #: refuses (400) a conflict left unresolved here.
+    resolutions = fields.Dict(
+        keys=fields.String(),
+        values=fields.Nested(DatasetCombineResolutionSchema),
+        load_default=dict,
+        metadata={"description": "Embedder-type -> {action, embedder} conflict resolutions."},
+    )
 
 
 class DatasetPromoteRequestSchema(Schema):
@@ -664,17 +850,52 @@ class DatasetDomainShiftResponseSchema(Schema):
 
 
 class DatasetRegistryStatsResponseSchema(Schema):
-    """Response for ``GET /api/datasets/registry/<id>/stats``."""
+    """Response for ``GET /api/datasets/registry/<id>/stats``.
 
+    A superset of the Dashboard grid row: ``name``, ``media_type``,
+    ``num_items``, ``created_at``, ``expires_at``, ``created_by`` and
+    ``readers`` are the grid's own columns, so the Stats window can show
+    everything the grid does while it covers the grid up.
+    """
+
+    name = fields.String(required=True)
+    media_type = fields.String(required=True)
     num_items = fields.Integer(required=True)
     num_dupes = fields.Integer(required=True)
     file_type_counts = fields.Dict(keys=fields.String(), values=fields.Integer(), required=True)
+    created_at = fields.Raw(allow_none=True)
+    expires_at = fields.Raw(allow_none=True)
+    created_by = fields.String(required=True)
+    readers = fields.List(fields.String(), required=True)
     ingest_started_at = fields.Raw(allow_none=True)
     ingest_finished_at = fields.Raw(allow_none=True)
     origin = fields.String(required=True)
     source = fields.Dict(required=True)
     clipper = fields.String(required=True)
     embedder = fields.String(required=True)
+
+
+class DuplicateSetMemberSchema(Schema):
+    """One member of a collapsed duplicate set (its pre-collapse provenance)."""
+
+    md5 = fields.String(required=True)
+    filename = fields.String(required=True)
+    category = fields.String(required=True)
+    origin_name = fields.String(required=True)
+    importer = fields.String(required=True)
+
+
+class DuplicateSetSchema(Schema):
+    """One collapsed duplicate set: its display name and every member."""
+
+    name = fields.String(required=True)
+    members = fields.List(fields.Nested(DuplicateSetMemberSchema), required=True)
+
+
+class DatasetRegistryDuplicatesResponseSchema(Schema):
+    """Response for ``GET /api/datasets/registry/<id>/duplicates``."""
+
+    duplicate_sets = fields.List(fields.Nested(DuplicateSetSchema), required=True)
 
 
 __all__ = [
@@ -697,12 +918,14 @@ __all__ = [
     "DatasetAvailableFilesResponseSchema",
     "DatasetClearResponseSchema",
     "DatasetCombineRequestSchema",
+    "DatasetCombineResolutionSchema",
     "DatasetDomainShiftResponseSchema",
     "DatasetImportersListResponseSchema",
     "DatasetLoadDemoRequestSchema",
     "DatasetLoadFolderRequestSchema",
     "DatasetLoadSourceRequestSchema",
     "DatasetLoadStartedResponseSchema",
+    "DatasetRegistryDuplicatesResponseSchema",
     "DatasetRegistryLoadResponseSchema",
     "DatasetRegistryReadersRequestSchema",
     "DatasetRegistryReadersResponseSchema",

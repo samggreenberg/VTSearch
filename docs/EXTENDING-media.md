@@ -222,6 +222,16 @@ changes to `vtscore/media/__init__.py` are needed.
 | `embed_text(text)`            | `(str) -> Optional[np.ndarray]`    | Inline text embedding (legacy)     |
 | `load_demo_source(...)`       | See docstring                      | Download and embed a demo dataset  |
 
+> **Always merge the base `display_metadata`.** Override it to *prepend* your
+> type-specific fields, then fold in whatever the base produced that you did
+> not already set — the shipped types all end with
+> `result.update({k: v for k, v in super().display_metadata(media).items() if k not in result})`.
+> The base contributes the shared fields (Category, File Size, the `Clip *`
+> provenance) plus the **"AI Caption" / "AI Tags"** row, which surfaces the
+> per-media signpost text a Browse-prepped dataset already carries (see
+> `vtscore/projection/signpost_texts.py`). A type that returns its own dict
+> without merging silently drops all of them.
+
 ### What happens automatically after registration
 
 | Subsystem              | What happens                                                  |
@@ -386,6 +396,32 @@ class CodeBertEmbedder(MediaEmbedder):
         except Exception:
             return None
 ```
+
+### Decoding audio: use `decode_audio`, never `librosa.load`
+
+Any plugin that turns audio into samples — an embedder, a clipper, a
+converter, a captioner — must go through
+`vtscore.media.audio.decode.decode_audio`:
+
+```python
+from vtscore.media.audio.decode import decode_audio
+
+samples, sr = decode_audio(source, sr=MY_SAMPLE_RATE, mono=True)
+```
+
+*source* may be a path, raw `bytes`, or a file-like object; the return is a
+C-contiguous `float32` array in [-1, 1], mono-downmixed by channel mean, at
+`sr` (or the native rate when `sr=None`). `offset` / `duration` (seconds)
+select a window before any resampling. Failure raises `AudioDecodeError`.
+
+Do **not** call `librosa.load`. It falls back to `audioread` for every
+container `libsndfile` can't parse — which is all of AAC/M4A/MP4 — and that
+fallback is removed in librosa 1.0, so those codecs would break silently.
+`decode_audio` uses `soundfile` for the native formats and pipes everything
+else through the bundled ffmpeg over `stdin`, with no temp-file spill.
+librosa is still the right tool for *analysis* (`librosa.effects.split`,
+`librosa.feature.melspectrogram`, `librosa.cqt`); it is only `load` that is
+off-limits.
 
 ### Service-based embedders
 

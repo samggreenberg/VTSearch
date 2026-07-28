@@ -19,8 +19,9 @@ from typing import Any, Literal
 import numpy as np
 
 
-SVMKernel = Literal["linear", "rbf"]
+SVMKernel = Literal["linear", "rbf", "poly", "sigmoid"]
 CalibrationMode = Literal["sigmoid", "isotonic", "decision_sigmoid", "auto"]
+SVMBackend = Literal["auto", "sklearn", "cuml"]
 
 
 @dataclass
@@ -33,7 +34,7 @@ class SVMClassifier:
     """
 
     base: Any
-    """Underlying sklearn estimator (``LinearSVC`` or ``SVC``)."""
+    """Underlying estimator (sklearn ``LinearSVC``/``SVC`` or the cuML equivalent)."""
 
     calibrator: Any | None
     """``CalibratedClassifierCV`` fit on the same data, or ``None``."""
@@ -43,6 +44,13 @@ class SVMClassifier:
 
     kernel: SVMKernel = "linear"
     calibration: CalibrationMode = "auto"
+    backend: str = "sklearn-cpu"
+    """Which backend actually fit ``base`` — ``"sklearn-cpu"`` or ``"cuml"``.
+
+    Recorded so the eval harness can label result rows with the backend that
+    produced the timing/score, and shout loudly (rather than silently comparing
+    CPU to GPU) when a requested cuML fit fell back to sklearn.
+    """
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
         """Return P(positive) for each row of *X* as a 1-D float array in [0, 1]."""
@@ -50,13 +58,33 @@ class SVMClassifier:
         if self.scaler is not None:
             X = self.scaler.transform(X)
         if self.calibrator is not None:
-            return self.calibrator.predict_proba(X)[:, 1].astype(np.float32)
+            return np.asarray(self.calibrator.predict_proba(X))[:, 1].astype(np.float32)
         # Fallback: sigmoid over decision function.  Not a true probability
         # but monotone in the SVM score, which is what the ranker cares
         # about; thresholding on 0.5 corresponds to decision_function >= 0.
-        d = self.base.decision_function(X)
+        # ``np.asarray`` coerces cuML's cupy/host output back to a numpy array.
+        d = np.asarray(self.base.decision_function(X), dtype=np.float64).ravel()
         d = np.clip(d, -30.0, 30.0)  # avoid overflow in exp
         return (1.0 / (1.0 + np.exp(-d))).astype(np.float32)
+
+
+def _resolve_gamma(gamma: str | float, gamma_mult: float, X_fit: np.ndarray) -> str | float:
+    """Return the effective ``gamma`` passed to the kernel estimator.
+
+    ``gamma_mult`` rescales sklearn's data-driven ``"scale"`` heuristic
+    (``1 / (n_features * X.var())``) — e.g. ``gamma_mult=4`` gives 4×scale — so
+    the kernel bandwidth can be swept relative to the default without the caller
+    knowing the feature statistics.  With ``gamma_mult == 1`` the string
+    ``"scale"`` / ``"auto"`` is passed through untouched, keeping the default
+    ``svm_rbf`` byte-identical.
+    """
+    if gamma_mult == 1.0:
+        return gamma
+    if gamma in ("scale", "auto"):
+        var = float(np.asarray(X_fit, dtype=np.float64).var())
+        scale = 1.0 / (X_fit.shape[1] * var) if var > 0 else 1.0
+        return float(scale * gamma_mult)
+    return float(gamma) * gamma_mult
 
 
 def _make_base_estimator(
@@ -64,8 +92,11 @@ def _make_base_estimator(
     C: float,
     seed: int,
     class_weight: str | dict[int, float] | None,
+    *,
+    gamma: str | float = "scale",
+    degree: int = 3,
 ) -> Any:
-    """Construct the underlying SVM (no calibration yet)."""
+    """Construct the underlying sklearn SVM (no calibration yet)."""
     if kernel == "linear":
         from sklearn.svm import LinearSVC  # noqa: PLC0415
 
@@ -79,21 +110,54 @@ def _make_base_estimator(
             max_iter=5000,
             random_state=seed,
         )
-    if kernel == "rbf":
+    if kernel in ("rbf", "poly", "sigmoid"):
         from sklearn.svm import SVC  # noqa: PLC0415
 
         # No built-in Platt scaling: we attach our own calibrator outside so
         # the calibration mode is uniform across kernels. sklearn>=1.9 removed
         # the ``probability`` argument (deprecated), and disabled is the
-        # default, so there is nothing to pass.
+        # default, so there is nothing to pass.  ``degree`` is only consulted
+        # for the polynomial kernel; sklearn ignores it otherwise.
         return SVC(
             C=C,
-            kernel="rbf",
-            gamma="scale",
+            kernel=kernel,
+            gamma=gamma,  # type: ignore[arg-type]  # sklearn accepts str|float; stub is str-only
+            degree=degree,
             class_weight=class_weight,
             random_state=seed,
         )
     raise ValueError(f"Unsupported SVM kernel: {kernel!r}")
+
+
+def _make_cuml_base(
+    kernel: SVMKernel,
+    C: float,
+    class_weight: str | dict[int, float] | None,
+    *,
+    gamma: str | float = "scale",
+    degree: int = 3,
+) -> Any:
+    """Construct a cuML (GPU) SVM estimator API-compatible with the sklearn one.
+
+    Raises ``ImportError`` if cuML is missing (the caller catches it and falls
+    back to sklearn).  cuML's ``LinearSVC``/``SVC`` expose ``decision_function``,
+    which is all ``decision_sigmoid`` scoring needs; ``output_type="numpy"``
+    keeps downstream code on plain numpy arrays.
+    """
+    if kernel == "linear":
+        from cuml.svm import LinearSVC as CuLinearSVC  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+
+        return CuLinearSVC(C=C, class_weight=class_weight, output_type="numpy")
+    from cuml.svm import SVC as CuSVC  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+
+    return CuSVC(
+        C=C,
+        kernel=kernel,
+        gamma=gamma,  # type: ignore[arg-type]
+        degree=degree,
+        class_weight=class_weight,
+        output_type="numpy",
+    )
 
 
 def _effective_calibration(
@@ -134,10 +198,14 @@ def train_svm(
     *,
     kernel: SVMKernel = "linear",
     C: float = 1.0,
+    gamma: str | float = "scale",
+    gamma_mult: float = 1.0,
+    degree: int = 3,
     calibration: CalibrationMode = "decision_sigmoid",
     inclusion_value: int = 0,
     seed: int = 42,
     standardize: bool = False,
+    backend: SVMBackend = "auto",
 ) -> SVMClassifier:
     """Fit an SVM classifier and return a score-emitting wrapper.
 
@@ -164,9 +232,23 @@ def train_svm(
     Args:
         X: ``(N, D)`` float array of training embeddings.
         y: ``(N,)`` array of 0/1 labels (1 = good, 0 = bad).
-        kernel: ``"linear"`` (LinearSVC, fast) or ``"rbf"`` (SVC).
+        kernel: ``"linear"`` (LinearSVC, fast), or ``"rbf"`` / ``"poly"`` /
+            ``"sigmoid"`` (SVC).
         C: Inverse regularisation strength.  Defaults to 1.0; bump up for
             noisy embeddings, down for very small N.
+        gamma: Kernel coefficient for ``rbf``/``poly``/``sigmoid`` — sklearn's
+            ``"scale"`` (default), ``"auto"``, or a float.  Ignored for
+            ``linear``.
+        gamma_mult: Multiplier applied to the ``"scale"`` heuristic (e.g. ``4``
+            → 4×scale, ``0.25`` → ¼×scale), letting the kernel bandwidth be
+            swept relative to the default.  ``1.0`` (default) passes ``gamma``
+            through unchanged.
+        degree: Polynomial degree for the ``poly`` kernel (default 3); ignored
+            otherwise.
+        backend: ``"auto"`` (default; cuML on a usable GPU, else sklearn),
+            ``"sklearn"`` (force CPU), or ``"cuml"`` (force GPU, raising if the
+            cuML fit can't be honoured).  Only the ``decision_sigmoid`` path can
+            use cuML; CV calibration is always sklearn.
         calibration: How to map the SVM decision function to scores.
             Default ``"decision_sigmoid"`` (no CV calibration, just a
             sigmoid over ``decision_function``).  ``"auto"`` picks based
@@ -208,13 +290,12 @@ def train_svm(
         raise ValueError("train_svm needs at least 2 training samples")
 
     scaler = None
+    X_fit: np.ndarray = X
     if standardize:
         from sklearn.preprocessing import StandardScaler  # noqa: PLC0415
 
         scaler = StandardScaler().fit(X)
-        X_fit = scaler.transform(X)
-    else:
-        X_fit = X
+        X_fit = np.asarray(scaler.transform(X), dtype=np.float32)
 
     # Translate inclusion into a class weight.  Mirrors the MLP path:
     # the "balanced" baseline divides by class frequency, then we apply
@@ -228,18 +309,29 @@ def train_svm(
         base_neg = n_pos / max(n_neg, 1)
         class_weight = {0: float(base_neg * (2.0 ** (-inclusion_value))), 1: 1.0}
 
-    base = _make_base_estimator(kernel, C, seed, class_weight)
-
+    gamma_eff = _resolve_gamma(gamma, gamma_mult, X_fit)
     mode = _effective_calibration(calibration, n_pos, n_neg)
 
     calibrator: Any | None
+    used_backend = "sklearn-cpu"
     if mode == "decision_sigmoid":
-        base.fit(X_fit, y)
+        # Only the raw ``decision_function`` is needed here, which cuML's SVMs
+        # provide — so this is the branch that can run on the GPU.  cuML is
+        # tried when a usable GPU + cuML resolve; any hiccup (missing install,
+        # unsupported param, fit-time kernel-compile error) degrades to sklearn
+        # and flips the process-global kill switch, mirroring
+        # :mod:`vtscore.gpu_backends`.
+        base, used_backend = _fit_decision_sigmoid(
+            kernel, C, seed, class_weight, X_fit, y, gamma=gamma_eff, degree=degree, backend=backend
+        )
         calibrator = None
     else:
+        # CV calibration (Platt/isotonic) is sklearn-only — cuML has no
+        # CalibratedClassifierCV — so this path always runs on the CPU.
         from sklearn.calibration import CalibratedClassifierCV  # noqa: PLC0415
         from sklearn.model_selection import StratifiedKFold  # noqa: PLC0415
 
+        base = _make_base_estimator(kernel, C, seed, class_weight, gamma=gamma_eff, degree=degree)
         # cv must be <= min(n_pos, n_neg).  We already guaranteed >= 2 above.
         cv_n = min(5, min(n_pos, n_neg))
         cv_splitter = StratifiedKFold(n_splits=cv_n, shuffle=True, random_state=seed)
@@ -260,4 +352,64 @@ def train_svm(
         scaler=scaler,
         kernel=kernel,
         calibration=mode,
+        backend=used_backend,
     )
+
+
+# Process-global kill switch: once a cuML SVM fit fails at runtime (typically a
+# lazy nvrtc kernel-compile error from a mismatched CUDA toolchain), stop paying
+# the failure on every subsequent fit and go straight to sklearn — mirroring the
+# pattern in :mod:`vtscore.gpu_backends`.
+_cuml_svm_failed = False
+
+
+def _fit_decision_sigmoid(
+    kernel: SVMKernel,
+    C: float,
+    seed: int,
+    class_weight: str | dict[int, float] | None,
+    X_fit: np.ndarray,
+    y: np.ndarray,
+    *,
+    gamma: str | float,
+    degree: int,
+    backend: SVMBackend,
+) -> tuple[Any, str]:
+    """Fit the base SVM for ``decision_sigmoid`` scoring, preferring cuML on a GPU.
+
+    Returns ``(fitted_base, backend_label)`` where ``backend_label`` is
+    ``"cuml"`` or ``"sklearn-cpu"``.  A cuML failure (import, construction, or
+    the lazy fit-time kernel compile) degrades to sklearn and disables cuML for
+    the rest of the process.
+    """
+    global _cuml_svm_failed
+
+    want_cuml = backend in ("auto", "cuml") and not _cuml_svm_failed
+    if want_cuml and backend == "auto":
+        from vtscore.gpu_backends import cuml_enabled  # noqa: PLC0415
+
+        want_cuml = cuml_enabled()
+
+    if want_cuml:
+        try:
+            import logging  # noqa: PLC0415
+
+            base = _make_cuml_base(kernel, C, class_weight, gamma=gamma, degree=degree)
+            base.fit(X_fit, y)
+            return base, "cuml"
+        except Exception as exc:  # noqa: BLE001 — any cuML hiccup degrades to CPU
+            _cuml_svm_failed = True
+            logging.getLogger(__name__).warning(
+                "cuML SVM fit failed (%s: %s); falling back to sklearn and disabling "
+                "cuML SVMs for the rest of this process.",
+                type(exc).__name__,
+                exc,
+            )
+            if backend == "cuml":
+                # An explicit cuML request that can't be honoured is worth
+                # surfacing to the caller rather than silently swapping backends.
+                raise
+
+    base = _make_base_estimator(kernel, C, seed, class_weight, gamma=gamma, degree=degree)
+    base.fit(X_fit, y)
+    return base, "sklearn-cpu"

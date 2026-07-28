@@ -22,6 +22,7 @@
   } @else {
     <span class="name-cell">
       {{ detector().name }}
+      @if (!frozen) {
       <button class="card-icon-btn edit-btn name-edit-btn" (click)="startRename($event)" aria-label="Rename detector" title="Rename">
         <svg aria-hidden="true" [class.pencil-active]="editing" [class.pencil-inactive]="!editing && wasEditing" (animationend)="onPencilAnimationEnd()" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M16.5 2.5a2.828 2.828 0 0 1 4 4L7.5 19.5L3 20L3.5 15.5L16.5 2.5z"></path>
@@ -29,6 +30,7 @@
           <line x1="14.5" y1="4.5" x2="18.5" y2="8.5"></line>
         </svg>
       </button>
+      }
     </span>
   }
 </td>
@@ -111,9 +113,11 @@
         <vt-icon type="import" [size]="14"></vt-icon>
       </button>
     }
+    @if (!frozen) {
     <button class="card-icon-btn card-icon-btn--danger delete-btn" (click)="onDelete($event)" aria-label="Delete detector" title="Delete detector">
       <vt-icon type="trash" [size]="14" [class.trash-active]="deleting()" [class.trash-inactive]="!deleting() && wasDeleting" (animationend)="onDeleteAnimationEnd()"></vt-icon>
     </button>
+    }
     <button class="card-icon-btn overflow-btn" (click)="onOverflow($event)" aria-label="More actions" title="More actions">
       <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
         <circle cx="5" cy="12" r="1.6"></circle>

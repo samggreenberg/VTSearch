@@ -16,7 +16,8 @@ MLP, and applies it to the dataset.  See below for the exact format.
 ### Which user's Auto-Find list runs
 
 `autofind_detectors` (and the Auto-Find results exporter) are **per-user**:
-each user curates their own list in **Settings → Auto-Find**. By default the
+each user curates their own list on the Dashboard's **AutoRun** detector tab
+(move a detector between **Drafts** and **AutoRun** with its ⋯ menu). By default the
 CLI runs as the built-in **`default`** user, which reads its list from the
 `--settings` file (so the flat-file workflow above is unchanged).
 
@@ -382,11 +383,14 @@ python app.py --solo-media-type image
 ```
 
 Valid values are the registered media-type ids (`audio`, `image`,
-`video`, `text`, `document`). The flag is a per-process **fallback**:
-any user who explicitly sets their own solo mediaType (or explicitly
-opts back into "show everything") via the Settings dialog overrides
-the CLI value for themselves, and the choice persists across restarts.
-A user who has never touched the setting sees the CLI value.
+`video`, `text`, `document`). This is an **admin-set server
+restriction**, not a user preference: it applies to every user, users
+cannot change or opt out of it from the Settings dialog (the Server tab
+shows it read-only), and `PUT /api/settings` refuses to touch it. The
+flag is a process-level override of the server-tier `solo_media_type`
+key, so an operator can also set it persistently by writing
+`"solo_media_type": "image"` into `data/settings.json`; the flag wins
+for the lifetime of the process.
 
 **Solo mediaEmbedder** (`--solo-embedder`): lock the embedding model
 for one or more mediaTypes so the dataset-importer modal hides its
@@ -400,9 +404,10 @@ python app.py --solo-embedder image=siglip --solo-embedder audio=clap
 
 Other mediaTypes still show the normal embedder picker. The flag warms
 each locked embedder at startup even when no datasets or detectors are
-registered yet. Same fallback semantics as `--solo-media-type`: any
-user can override per-mediaType via the Settings dialog ("Ask each
-time" is the opt-out), and their choice persists across restarts.
+registered yet. Unlike `--solo-media-type`, this one is a per-process
+**fallback** over a per-user setting: any user can override it
+per-mediaType via the Settings dialog ("Ask each time" is the opt-out),
+and their choice persists across restarts.
 
 **Hidden plugins** (`--hide-plugin family:name`, repeatable): drop a
 plugin from picker / listing API responses for this deployment without
@@ -468,6 +473,41 @@ persisted value, which defaults to the built-in project address. The
 same override is also available as the `VTSEARCH_SUPPORT_EMAIL`
 environment variable for the gunicorn-launched Docker images; an
 explicit `--support-email` flag wins over it.
+
+**Semantic embedders only** (`--semantic-only`): lock the instance to the
+**Semantic** embedder type, hiding the still-prototype **Patch Semantic**
+and **Structural** types from every surface:
+
+```bash
+python app.py --semantic-only
+```
+
+With the lock on:
+
+- `GET /api/embedders` withholds every patch / structural embedder, so
+  Add Dataset ▸ Advanced shows no "Region embedder" / "Instance embedder"
+  picker and the primary Embedder picker lists Semantic embedders only.
+- The New-detector modal drops its "Detector Embedder Type" picker (one
+  option is not a choice) and creates Semantic detectors.
+- `POST /api/detectors` and the dataset-import routes reject a
+  patch/structural type with **400**, so a stale client or a hand-rolled
+  request can't bind one behind the UI's back.
+
+This is a coarser tool than `--hide-plugin embedders:<name>`, which hides
+one named embedder: use `--semantic-only` when you want the whole
+prototype tier gone and don't want to track which embedders belong to it.
+
+Like `--dataset-max-age-days` and `--support-email`, this is a
+**server-wide override**: it applies to every user, overrides the
+persisted `semantic_only` in the settings file for the lifetime of the
+process, and is **not** editable via the Settings dialog or the settings
+API (it is exposed read-only, and the Settings ▸ Server tab reports it).
+The flag can only *enable* the lock — there is no `--no-semantic-only` —
+so a deployment that sets `semantic_only: true` in its settings file
+can't have the restriction loosened by a stray flag. The same override is
+available as the `VTSEARCH_SEMANTIC_ONLY` environment variable (`1` /
+`true` / `yes` / `on`) for the gunicorn-launched Docker images; an
+explicit `--semantic-only` flag wins over it.
 
 ## Inspecting plugins and the API schema
 

@@ -6,8 +6,10 @@ import shutil
 import pytest
 
 from tests import load_detector_and_wait as _load_detector_and_wait
+from tests import wait_for_detector_task as _wait_for_detector_task
 from vtscore.embedding.media_vectors import media_embedding
 from vtsearch.settings import get_detectors_dir
+from vtscore.utils.hashing import content_md5
 
 
 @pytest.fixture(autouse=True)
@@ -1105,7 +1107,6 @@ class TestLoadModelEndpoint:
         id-space and unrelated B-medias whose ids happen to coincide with
         A's voted ids appear as voted in B's labeling UI.
         """
-        import hashlib
 
         import numpy as np
 
@@ -1156,7 +1157,7 @@ class TestLoadModelEndpoint:
                 "id": cid,
                 "media_type": "audio",
                 "embedder": "clap",
-                "md5": hashlib.md5(f"ds_b_{cid}".encode()).hexdigest(),
+                "md5": content_md5(f"ds_b_{cid}".encode()),
                 "embeddings": {"clap": np.zeros(512, dtype=np.float32)},
                 "media_bytes": b"fake-b",
                 "filename": f"ds_b_{cid}.wav",
@@ -1173,6 +1174,79 @@ class TestLoadModelEndpoint:
 
         assert a_good not in good_votes, "good cid from dataset A leaked into dataset B's id-space"
         assert a_bad not in bad_votes, "bad cid from dataset A leaked into dataset B's id-space"
+
+    def test_dataset_switch_clears_find_eval_stale(self, client):
+        """The dataset-switch rehydrate clears the whole frozen Find session
+        (``find_initial_labels`` / ``find_scores`` / ``find_mode``), so the
+        ``find_eval_stale`` "out of date" marker that qualifies that session
+        must be reset with it.  Previously only the detector-file-missing
+        branch reset the flag, so a stale marker from dataset A survived a
+        switch to dataset B and ``GET /api/find/stats`` reported the fresh
+        (empty) evaluation as out of date.
+        """
+        import hashlib
+
+        import numpy as np
+
+        from vtscore.detectors.dataset_sync import ensure_votes_match_active_dataset
+        from vtscore.state.core import get_active_detector_context
+        from vtsearch.state import (
+            DatasetContext,
+            medias,
+            register_context,
+            set_thread_dataset_context,
+        )
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        a_ids = list(medias.keys())
+        a_good = a_ids[0]
+
+        client.post(
+            "/api/detectors",
+            json={"name": "StaleFlagDS", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "StaleFlagDS", "media_type": "audio", "text_query": "test"},
+        )
+        mid = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, mid)
+        client.post(f"/api/medias/{a_good}/vote", json={"target": "good"})
+
+        # Simulate a completed Find pass whose labelset changed afterwards
+        # (corrections folded in + retrain), which flips find_eval_stale.
+        det_ctx = get_active_detector_context()
+        det_ctx.find_mode = True
+        det_ctx.find_scores[a_good] = 0.9
+        det_ctx.find_initial_labels[a_good] = "good"
+        det_ctx.find_eval_stale = True
+
+        ctx_b = DatasetContext("ds_b_for_stale_flag_test")
+        ctx_b.medias[a_good] = {
+            "id": a_good,
+            "media_type": "audio",
+            "embedder": "clap",
+            "md5": hashlib.md5(f"ds_b_stale_{a_good}".encode()).hexdigest(),
+            "embeddings": {"clap": np.zeros(512, dtype=np.float32)},
+            "media_bytes": b"fake-b",
+            "filename": f"ds_b_stale_{a_good}.wav",
+            "category": "test",
+            "origin": {"importer": "test_b", "params": {"id": a_good}},
+            "origin_name": f"ds_b_stale_{a_good}.wav",
+        }
+        register_context(ctx_b)
+        set_thread_dataset_context(ctx_b)
+
+        ensure_votes_match_active_dataset()
+
+        assert not det_ctx.find_scores, "frozen find scores must be cleared on dataset switch"
+        assert det_ctx.find_mode is False
+        assert det_ctx.find_eval_stale is False, (
+            "find_eval_stale outlived the Find session it qualifies: the rehydrate "
+            "cleared find_scores/find_initial_labels but left the stale marker set"
+        )
 
 
 class TestEmbedderMismatchInvalidatesStaleModel:
@@ -1255,7 +1329,6 @@ class TestEmbedderMismatchInvalidatesStaleModel:
         embedder triggers invalidation of the active detector's MLP via
         ``ensure_detector_model_matches_active_embedder``.
         """
-        import hashlib
         from unittest.mock import MagicMock
 
         import numpy as np
@@ -1305,7 +1378,7 @@ class TestEmbedderMismatchInvalidatesStaleModel:
                 "id": cid,
                 "media_type": "audio",
                 "embedder": "shiny-new-embedder",
-                "md5": hashlib.md5(f"h5_b_{cid}".encode()).hexdigest(),
+                "md5": content_md5(f"h5_b_{cid}".encode()),
                 "embeddings": {"shiny-new-embedder": np.zeros(512, dtype=np.float32)},
                 "media_bytes": b"fake-b",
                 "filename": f"h5_b_{cid}.wav",
@@ -2093,7 +2166,6 @@ class TestLoadModelCrossDatasetResolution:
         mode.  The label restore should follow origin trails, compute MD5s,
         and match against loaded medias.
         """
-        import hashlib
 
         import numpy as np
 
@@ -2116,8 +2188,8 @@ class TestLoadModelCrossDatasetResolution:
         good_file.write_bytes(b"shared_good_content")
         bad_file.write_bytes(b"shared_bad_content")
 
-        good_md5 = hashlib.md5(b"shared_good_content").hexdigest()
-        bad_md5 = hashlib.md5(b"shared_bad_content").hexdigest()
+        good_md5 = content_md5(b"shared_good_content")
+        bad_md5 = content_md5(b"shared_bad_content")
 
         label_origin = {
             "importer": "server_folder",
@@ -2487,3 +2559,99 @@ class TestRegisterModelFromLabelset:
         # Labels resolved into the loaded detector's votes (matched by md5).
         assert 1 in good_votes
         assert 2 in bad_votes
+
+    def test_foreign_media_is_ingested_so_labels_export(self, client, tmp_path):
+        """Import whose media isn't in the active dataset is still exportable (#2690).
+
+        The ordinary "import someone else's detector" case: the labelset's
+        elements resolve to files on disk but to no loaded media.  The import
+        must pull them in, so ``GET /api/labels/export`` - which composes from
+        vote state intersected with the active dataset's medias - returns the
+        imported labels straight away.  Before the fix, export returned an
+        empty labelset until the user ran Browse Positives / Find / Train,
+        even though the right pane (labelset-sourced) showed the labels.
+        """
+        import hashlib
+
+        from helpers import make_wav_file
+
+        clips_dir = tmp_path / "foreign_clips"
+        clips_dir.mkdir()
+        origin = {
+            "importer": "server_folder",
+            "params": {"path": str(clips_dir), "media_type": "audio"},
+        }
+        entries = []
+        for i, (freq, label) in enumerate(((330.0, "good"), (550.0, "bad")), start=1):
+            path = make_wav_file(clips_dir, f"foreign_{i}.wav", frequency=freq)
+            entries.append(
+                {
+                    "md5": hashlib.md5(path.read_bytes()).hexdigest(),
+                    "label": label,
+                    "origin": origin,
+                    "origin_name": path.name,
+                    "filename": path.name,
+                }
+            )
+        labels_path = tmp_path / "foreign_labels.json"
+        labels_path.write_text(json.dumps({"labels": entries}))
+
+        res = client.post(
+            "/api/detectors/registry/from-labelset/server_json_file",
+            json={"name": "Foreign", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 201, res.get_json()
+        body = res.get_json()
+        # The ingest runs on a background task (#2703); the detector must not be
+        # loaded until it lands, or label restore runs against absent media.
+        snapshot = _wait_for_detector_task(body["ingest_task_id"])
+        assert snapshot.get("error") in (None, ""), snapshot
+        assert snapshot["ingest_result"] == {"ingested": 2}, "imported media must be pulled into the active dataset"
+        detector_id = body["detector"]["id"]
+
+        _load_detector_and_wait(client, detector_id)
+
+        exported = client.get(
+            "/api/labels/export?label_filter=both",
+            headers={"X-Detector-Id": detector_id},
+        ).get_json()["labels"]
+        by_name = {e["origin_name"]: e["label"] for e in exported}
+        assert by_name == {"foreign_1.wav": "good", "foreign_2.wav": "bad"}
+
+    def test_ingest_is_skipped_without_an_active_dataset(self, client, tmp_path):
+        """No dataset loaded → nothing to ingest into, and the import still succeeds."""
+        import hashlib
+
+        from helpers import make_wav_file
+        from vtsearch.state import clear_all_contexts
+
+        clips_dir = tmp_path / "no_dataset_clips"
+        clips_dir.mkdir()
+        path = make_wav_file(clips_dir, "orphan.wav", frequency=440.0)
+        labels_path = tmp_path / "orphan_labels.json"
+        labels_path.write_text(
+            json.dumps(
+                {
+                    "labels": [
+                        {
+                            "md5": hashlib.md5(path.read_bytes()).hexdigest(),
+                            "label": "good",
+                            "origin": {
+                                "importer": "server_folder",
+                                "params": {"path": str(clips_dir), "media_type": "audio"},
+                            },
+                            "origin_name": path.name,
+                        }
+                    ]
+                }
+            )
+        )
+
+        clear_all_contexts()
+        res = client.post(
+            "/api/detectors/registry/from-labelset/server_json_file",
+            json={"name": "NoDataset", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 201, res.get_json()
+        assert res.get_json()["ingest_task_id"] == ""
+        assert res.get_json()["num_labels"] == 1

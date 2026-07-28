@@ -211,16 +211,70 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     expect(component.contextMenuOpen).toBe(false);
 
     // The panel's X clears the shown bin but leaves the panel itself docked.
-    component.dismissContextMenu();
+    component.onDetailsDismiss();
     expect(component.contextMembers).toEqual([]);
     expect(component.detailsDocked()).toBe(true);
+    expect(component.detailsPanelShown()).toBe(true);
+  });
+
+  it("hides the empty details panel on a second X, and a right-clicked bin brings it back docked", async () => {
+    await settleZoneless(fixture);
+    const component = fixture.componentInstance;
+    component.detailsDocked.set(true);
+    expect(component.detailsPanelShown()).toBe(true);
+
+    // X with nothing showing: there is no bin left to clear, so the panel itself
+    // goes away and the canvas takes back its width.
+    component.onDetailsDismiss();
+    expect(component.detailsPanelHidden()).toBe(true);
+    expect(component.detailsPanelShown()).toBe(false);
+    // Dismissing is not a presentation change: the docked choice is untouched.
+    expect(component.detailsDocked()).toBe(true);
+
+    // Right-clicking a bin brings the panel back — docked, showing that bin,
+    // with no floating window.
+    component.onCanvasContextMenu({
+      members: [11, 12],
+      repId: 11,
+      clientX: 60,
+      clientY: 70,
+      bounds: null,
+    } as unknown as Parameters<typeof component.onCanvasContextMenu>[0]);
+    expect(component.detailsPanelHidden()).toBe(false);
+    expect(component.detailsPanelShown()).toBe(true);
+    expect(component.contextMenuOpen).toBe(false);
+    expect(component.contextMembers).toEqual([11, 12]);
+  });
+
+  it('un-hides the details panel when a floating window is docked into it', async () => {
+    await settleZoneless(fixture);
+    const component = fixture.componentInstance;
+
+    // Hide the docked panel, then work in the floating presentation instead.
+    component.onDetailsDismiss();
+    expect(component.detailsPanelHidden()).toBe(true);
+    component.detailsDocked.set(false);
+    component.onCanvasContextMenu({
+      members: [21],
+      repId: 21,
+      clientX: 10,
+      clientY: 10,
+      bounds: null,
+    } as unknown as Parameters<typeof component.onCanvasContextMenu>[0]);
+    expect(component.contextMenuOpen).toBe(true);
+
+    // Docking that window must not drop it into a hidden panel.
+    component.onDockRequested();
+    expect(component.detailsPanelHidden()).toBe(false);
+    expect(component.detailsPanelShown()).toBe(true);
   });
 
   it('carries the open bin across dock / pop-out toggles', async () => {
     await settleZoneless(fixture);
     const component = fixture.componentInstance;
 
-    // Start floating with a bin open.
+    // Force the floating presentation (docked is the default) before opening a bin.
+    component.detailsDocked.set(false);
     component.onCanvasContextMenu({
       members: [7, 8],
       repId: 7,
@@ -257,6 +311,47 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     // Release commits the settled width to settings.
     (component as unknown as { onDetailsMouseUp(): void }).onDetailsMouseUp();
 
+    expect(updates.some((u) => 'browse_details_panel_width' in u)).toBe(true);
+  });
+
+  it('resizes the details panel from the in-panel row divider: a vertical drag maps 1:1 to panel width', async () => {
+    await settleZoneless(fixture);
+    const component = fixture.componentInstance;
+    const updates: Record<string, unknown>[] = [];
+    const settings = TestBed.inject(SettingsStateService);
+    (settings.update as unknown) = (u: Record<string, unknown>) => {
+      updates.push(u);
+      return of({});
+    };
+
+    // A wide layout so neither the floor nor the max clamps this drag.
+    (component as unknown as { content: () => unknown }).content = () => ({
+      nativeElement: { getBoundingClientRect: () => ({ width: 2000, left: 0, right: 2000 }) },
+    });
+
+    const startWidth = component.detailsPanelWidth();
+    component.onDetailsRowDividerMouseDown({
+      preventDefault: () => {},
+      clientY: 100,
+    } as unknown as MouseEvent);
+    expect(component.draggingDetailsRow()).toBe(true);
+
+    // Dragging the divider DOWN 60px grows the panel by 60 — the focused item is
+    // square, so a taller item is a wider panel (the whole point of this divider).
+    (component as unknown as { onDetailsRowMouseMove(e: MouseEvent): void }).onDetailsRowMouseMove({
+      clientY: 160,
+    } as unknown as MouseEvent);
+    expect(component.detailsPanelWidth()).toBeCloseTo(startWidth + 60);
+
+    // Dragging back UP past the start shrinks it below the start width.
+    (component as unknown as { onDetailsRowMouseMove(e: MouseEvent): void }).onDetailsRowMouseMove({
+      clientY: 60,
+    } as unknown as MouseEvent);
+    expect(component.detailsPanelWidth()).toBeLessThan(startWidth);
+
+    // Release ends the drag and commits the settled width to settings.
+    (component as unknown as { onDetailsRowMouseUp(): void }).onDetailsRowMouseUp();
+    expect(component.draggingDetailsRow()).toBe(false);
     expect(updates.some((u) => 'browse_details_panel_width' in u)).toBe(true);
   });
 

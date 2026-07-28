@@ -2,6 +2,14 @@
 
 import type { MediaIdsListResponse } from '../generated/api-client/models/media-ids-list-response';
 import type { MediaBatchResponse } from '../generated/api-client/models/media-batch-response';
+import type { ConverterInfo as GeneratedConverterInfo } from '../generated/api-client/models/converter-info';
+
+// These three plugin-metadata shapes now have generated OpenAPI models
+// (their `to_dict()` payloads are fixed across plugins), so re-export the
+// generated types instead of hand-maintaining a mirror. See
+// `vtsearch/schemas/datasets.py`.
+export type { EmbedderInfo } from '../generated/api-client/models/embedder-info';
+export type { MediaTypeInfo } from '../generated/api-client/models/media-type-info';
 
 // --- Medias ---
 
@@ -69,6 +77,12 @@ export interface ProgressEvent {
   overall?: number | null;
   /** Dataset-only: payload returned by combine-datasets staging. */
   staging_result?: unknown;
+  /**
+   * Detector-only: terminal counts published by a labelset-media ingest task
+   * (`{ingested, applied, unresolved, failed}`); see
+   * `vtscore/datasets/ingest_task.py`. `null`/absent until the task finishes.
+   */
+  ingest_result?: unknown;
   [key: string]: unknown;
 }
 
@@ -117,19 +131,21 @@ export interface ImporterInfo {
   [key: string]: unknown;
 }
 
-export interface ConverterInfo {
-  name: string;
-  source_type: string;
-  target_type: string;
-  display_name?: string;
-  description?: string;
-  /** One-line preview with ``{key}`` placeholders for each field.  The
-   *  importer modal renders it next to the source-spec row, substituting
-   *  the current field values, so the user sees a live summary of what
-   *  the converter will do.  Falls back to ``description`` when empty. */
-  summary_template?: string;
+/**
+ * A converter's ``to_dict()`` payload. Derived from the generated OpenAPI
+ * model, overriding only ``fields`` to carry the richer ``ImporterField[]``
+ * type (the backend schema keeps that list opaque; the ``ImporterField``
+ * shape is out of the generated model's scope).
+ *
+ * The generated model's ``summary_template`` is a one-line preview with
+ * ``{key}`` placeholders for each field: the importer modal renders it next
+ * to the source-spec row, substituting the current field values, so the user
+ * sees a live summary of what the converter will do. Falls back to
+ * ``description`` when empty.
+ */
+export type ConverterInfo = Omit<GeneratedConverterInfo, 'fields'> & {
   fields?: ImporterField[];
-}
+};
 
 /** One row of a multi-media import specification.  See
  *  ``docs/EXTENDING-media.md``. */
@@ -212,32 +228,6 @@ export interface ImporterPickerTab {
   order?: number;
 }
 
-export interface MediaTypeInfo {
-  type_id: string;
-  name: string;
-  icon?: string;
-  folder_import_name?: string;
-  /** Glob patterns for files this media type claims, e.g. ``["*.jpg", "*.png"]``. */
-  file_extensions?: string[];
-  /** Whether items of this type have a browsable thumbnail (image/video/document,
-   *  and audio via its waveform PNG). Drives the VTSBrowse square-vs-hex bin shape
-   *  and thumbnail painting; the single source of truth the frontend reads via
-   *  ``MediaTypeCapabilityService.usesThumbnails``. */
-  has_thumbnail?: boolean;
-  /** Whether this type is a first-class *ingestion* category the user picks when
-   *  importing (folder scan, file upload). ``false`` for a *convert-in* half type
-   *  like ``face`` that only ever arises from converting another type. */
-  importable?: boolean;
-  /** Whether this type can be embedded (and therefore sorted / browsed / text-
-   *  queried) on its own. ``false`` for a *convert-out* half type like
-   *  ``document`` that must be converted first. */
-  embeddable?: boolean;
-  /** Embeddable target type_ids a non-embeddable type can convert into (first =
-   *  default). ``["image", "text"]`` for ``document``; empty for a directly-
-   *  embeddable type. */
-  converts_to?: string[];
-}
-
 export interface MediaTypeDetectionResponse {
   sample_size: number;
   counts_by_type: Record<string, number>;
@@ -262,6 +252,12 @@ export interface DatasetRegistryEntry {
    *  / "structural"); a v3 trio dataset can supply several. Drives the
    *  detector/dataset compatibility gate. */
   embedder_types?: string[];
+  /** Every concrete embedder this dataset binds (primary first). */
+  bound_embedders?: string[];
+  /** One concrete embedder per type it binds, e.g.
+   *  `{ semantic: "siglip", patch_semantic: "dinov3_patch" }`. Drives the
+   *  Combine-Datasets conflict detector. */
+  embedders_by_type?: Record<string, string>;
   /** Unix timestamp (seconds) at which this dataset ages off and is
    *  automatically removed; `null`/absent means it never expires. */
   expires_at?: number | null;
@@ -368,62 +364,4 @@ export interface AutoDetectResultsData {
   [key: string]: unknown;
 }
 
-// --- Embedders ---
-
-export interface EmbedderInfo {
-  name: string;
-  /**
-   * Human-readable label shown in pickers, e.g. ``"SigLIP (general images)"``.
-   * Falls back to ``name`` for legacy embedders that don't supply a friendlier
-   * label; the raw ``name`` is also rendered as a secondary line so power
-   * users can still see the registry key.
-   */
-  display_name?: string;
-  /**
-   * Concrete pretrained-model identifier the embedder loads — usually a
-   * HuggingFace repo id (e.g. ``"google/siglip-base-patch16-224"``), or a
-   * direct weights URL. ``null`` for embedders with no single downloadable
-   * model id (e.g. the classical SIFT/VLAD structural embedder). Surfaced in
-   * the portable-detector export bundle so a recipient knows exactly which
-   * model to run new media through.
-   */
-  model_id?: string | null;
-  media_type_id: string;
-  /**
-   * Whether this embedder is the recommended default for its media type
-   * (exactly one per media type). The dropdown surfaces this entry under a
-   * "Recommended" optgroup and tucks the rest under "Advanced".
-   */
-  is_default?: boolean;
-  /**
-   * Whether this embedder can embed text queries into the same vector space as
-   * its media. ``false`` for vision-only encoders (DINOv3, Perception Encoder)
-   * so the UI hides text-search affordances for datasets using them.
-   */
-  supports_text?: boolean;
-  /**
-   * Whether this embedder produces patch-level vectors and a hierarchical
-   * region tree per image. ``true`` for patch-based encoders (DINOv2,
-   * DINOv3, EUPE) once their patch pipeline lands; the gallery card draws
-   * a faint outline over the matched region for datasets using them.
-   */
-  supports_patch_regions?: boolean;
-  /**
-   * Whether this embedder produces local features (keypoints + descriptors)
-   * for instance matching. ``true`` for structural embedders (SIFT/VLAD and
-   * learned-local-feature variants later); the loader then stores per-image
-   * local features and the geometric re-rank + match-stat verification paths
-   * activate. ``false`` (the default) for every semantic embedder.
-   */
-  supports_geometric_verification?: boolean;
-  /**
-   * User-facing licence warning to show before the user picks this embedder.
-   * ``null`` for embedders with no special licensing constraints; a short
-   * human-readable string for embedders with restrictive licences (e.g.
-   * facebookresearch/EUPE under the FAIR Noncommercial Research Licence).
-   * Advisory only; the picker shows a warning chip, it does not gate
-   * selection behind an acceptance click.
-   */
-  license_notice?: string | null;
-}
 
