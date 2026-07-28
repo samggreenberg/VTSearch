@@ -43,8 +43,8 @@ def _final_steps(df: pd.DataFrame) -> pd.DataFrame:
     return df.sort_values("t").groupby(TRAJ_KEYS, as_index=False).tail(1)
 
 
-def _fmt(x: float, nd: int = 3) -> str:
-    return "-" if pd.isna(x) else f"{x:.{nd}f}"
+def _fmt(x: float, digits: int = 3) -> str:
+    return "-" if pd.isna(x) else f"{x:.{digits}f}"
 
 
 def _arm_table(final: pd.DataFrame, by: list[str]) -> pd.DataFrame:

@@ -90,10 +90,11 @@ def _planted_dataset(n_per_cat=30, seed=0):
 
 def _linear_scorer(direction):
     """A hand-built ``nn.Sequential`` whose score is monotone in ``x @ direction``."""
-    model = nn.Sequential(nn.Linear(DIM, 1))
+    linear = nn.Linear(DIM, 1)
     with torch.no_grad():
-        model[0].weight.copy_(torch.tensor(np.asarray(direction, dtype=np.float32)[None, :] * 10.0))
-        model[0].bias.zero_()
+        linear.weight.copy_(torch.tensor(np.asarray(direction, dtype=np.float32)[None, :] * 10.0))
+        linear.bias.zero_()
+    model = nn.Sequential(linear)
     model.eval()
     return model
 
@@ -144,10 +145,13 @@ class TestNearestPatchToBox:
         assert abs(float(np.linalg.norm(got)) - 1.0) < 1e-3
 
     def test_bad_shapes_raise(self):
+        from typing import Any
+
         with pytest.raises(ValueError):
             nearest_patch_to_box(np.zeros((4, 4)), (0, 0, 1, 1))
+        three_tuple: Any = (0, 0, 1)
         with pytest.raises(ValueError):
-            nearest_patch_to_box(np.zeros((4, 4, 8)), (0, 0, 1))
+            nearest_patch_to_box(np.zeros((4, 4, 8)), three_tuple)
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +226,7 @@ class TestMaxHacStyle:
         box = _cell_box(1, 1)
         got = MaxHacStyle().good_vec(media, box)
         expected = snap_box_to_region(media["patch_regions"], box)
+        assert expected is not None
         np.testing.assert_allclose(got, expected)
 
     def test_bad_vecs_are_cls_plus_leaves(self):
@@ -311,8 +316,10 @@ class TestStyleVotingSimulation:
             assert 0.0 <= r["average_precision"] <= 1.0
 
     def test_style_runs_are_deterministic(self):
+        from typing import Any
+
         medias, _ = _planted_dataset(n_per_cat=20, seed=8)
-        kwargs = dict(
+        kwargs: dict[str, Any] = dict(
             target_category="cat0",
             seed=3,
             dataset_name="synthetic",
