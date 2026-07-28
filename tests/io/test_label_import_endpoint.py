@@ -69,8 +69,10 @@ class TestLabelImportEndpoint:
         assert res.status_code == 200
         result = res.get_json()
         assert result["applied"] == 0
-        assert result["missing_count"] == 1
-        assert len(result["missing"]) == 1
+        # Unmatched rows go to the background auto-resolve pass (#2703).
+        assert result["ingest_pending_count"] == 1
+        snapshot = wait_for_detector_task(result["ingest_task_id"])
+        assert snapshot["ingest_result"]["unresolved"] == 1
 
     def test_json_importer_skips_invalid_label_value(self, client, tmp_path):
         md5 = app_module.medias[1]["md5"]
@@ -113,7 +115,9 @@ class TestLabelImportEndpoint:
         assert res.status_code == 200
         result = res.get_json()
         assert result["applied"] == 0
-        assert result["missing_count"] == 1
+        assert result["ingest_pending_count"] == 1
+        snapshot = wait_for_detector_task(result["ingest_task_id"])
+        assert snapshot["ingest_result"]["unresolved"] == 1
 
     def test_import_overrides_existing_label(self, client, tmp_path):
         app_module.good_votes[1] = None
