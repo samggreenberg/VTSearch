@@ -24,14 +24,19 @@ def _sync_spawn(target, name=None):
 ENTRIES = [{"md5": "a", "origin": {"importer": "server_folder", "params": {}}}]
 
 
+def _snapshot(task_id: str) -> dict:
+    """The tracker snapshot for *task_id*, asserted to exist."""
+    tracker = detector_loading_tasks.get_tracker(task_id)
+    assert tracker is not None, f"task {task_id!r} was never registered"
+    return tracker.get()
+
+
 class TestStartIngestTask:
     def test_publishes_ingested_count_as_ingest_result(self):
         with patch.object(ingest_module, "ingest_missing_medias", lambda *a, **k: 3):
-            task_id = start_ingest_task(
-                ENTRIES, {}, task_id="_t_ok", name="Det", spawn=_sync_spawn, detector_id="d1"
-            )
+            task_id = start_ingest_task(ENTRIES, {}, task_id="_t_ok", name="Det", spawn=_sync_spawn, detector_id="d1")
         assert task_id == "_t_ok"
-        snapshot = detector_loading_tasks.get_tracker(task_id).get()
+        snapshot = _snapshot(task_id)
         assert snapshot["status"] == "idle"
         assert snapshot["error"] in (None, "")
         assert snapshot["ingest_result"] == {"ingested": 3}
@@ -49,7 +54,7 @@ class TestStartIngestTask:
                 ENTRIES, {}, task_id="_t_after", name="Det", spawn=_sync_spawn, after_ingest=after
             )
         assert seen == {"ingested": 3}
-        snapshot = detector_loading_tasks.get_tracker(task_id).get()
+        snapshot = _snapshot(task_id)
         assert snapshot["ingest_result"] == {"ingested": 3, "applied": 2, "unresolved": 0}
 
     def test_task_row_carries_its_association_fields(self):
@@ -73,10 +78,8 @@ class TestStartIngestTask:
             raise RuntimeError("origin unreachable")
 
         with patch.object(ingest_module, "ingest_missing_medias", boom):
-            task_id = start_ingest_task(
-                ENTRIES, {}, task_id="_t_err", name="Det", spawn=_sync_spawn
-            )
-        snapshot = detector_loading_tasks.get_tracker(task_id).get()
+            task_id = start_ingest_task(ENTRIES, {}, task_id="_t_err", name="Det", spawn=_sync_spawn)
+        snapshot = _snapshot(task_id)
         assert snapshot["error"] == "origin unreachable"
         assert snapshot["ingest_result"] is None
         assert detector_loading_tasks.is_finished(task_id)
@@ -84,14 +87,13 @@ class TestStartIngestTask:
     def test_cancel_surfaces_as_cancelled(self):
         def cancel_then_report(entries, medias, on_progress=None):
             detector_loading_tasks.cancel_task("_t_cancel")
+            assert on_progress is not None
             on_progress("ingesting", "fetching", 0, 1)
             raise AssertionError("progress callback must raise after a cancel")
 
         with patch.object(ingest_module, "ingest_missing_medias", cancel_then_report):
-            task_id = start_ingest_task(
-                ENTRIES, {}, task_id="_t_cancel", name="Det", spawn=_sync_spawn
-            )
-        snapshot = detector_loading_tasks.get_tracker(task_id).get()
+            task_id = start_ingest_task(ENTRIES, {}, task_id="_t_cancel", name="Det", spawn=_sync_spawn)
+        snapshot = _snapshot(task_id)
         assert snapshot["error"] == "Cancelled"
         assert detector_loading_tasks.is_finished(task_id)
 
@@ -110,11 +112,9 @@ class TestStartIngestTask:
             return 1
 
         with patch.object(ingest_module, "ingest_missing_medias", report_via_thread_hook):
-            task_id = start_ingest_task(
-                ENTRIES, {}, task_id="_t_hook", name="Det", spawn=_sync_spawn
-            )
+            task_id = start_ingest_task(ENTRIES, {}, task_id="_t_hook", name="Det", spawn=_sync_spawn)
         # Terminal update resets the counters, so assert the hook was bound and
         # the run completed cleanly rather than the mid-flight numbers.
-        snapshot = detector_loading_tasks.get_tracker(task_id).get()
+        snapshot = _snapshot(task_id)
         assert snapshot["ingest_result"] == {"ingested": 1}
         assert get_thread_progress() is None, "the hook must be cleared afterwards"

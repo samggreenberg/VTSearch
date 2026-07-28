@@ -195,9 +195,7 @@ class TestLabelImportIngestIsBackgrounded:
             assert {"task_1.wav", "task_2.wav"} <= names
             voted = set(app_module.good_votes) | set(app_module.bad_votes)
             ingested_ids = {
-                cid
-                for cid, m in app_module.medias.items()
-                if m.get("origin_name") in ("task_1.wav", "task_2.wav")
+                cid for cid, m in app_module.medias.items() if m.get("origin_name") in ("task_1.wav", "task_2.wav")
             }
             assert ingested_ids <= voted, "auto-resolved media must carry their labels"
         finally:
