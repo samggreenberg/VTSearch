@@ -146,6 +146,31 @@
   <div class="dashboard-section">
     <div class="dashboard-section-header">
       <h2 class="dashboard-section-title" title="Trained detectors for scoring and finding media"><vt-icon type="robot" [size]="18"></vt-icon> Detectors</h2>
+      <!-- The Drafts/AutoRun strip lives INSIDE the header, in the gap between
+           the title and the action buttons, so it costs the section no vertical
+           space at all — every pixel it would have taken as its own row goes to
+           the detector grid instead. Its height matches the action buttons', so
+           the header doesn't grow. -->
+      <div class="tab-bar detector-tab-bar" role="tablist" aria-label="Detector groups">
+        <button
+          class="tab"
+          role="tab"
+          [class.active]="detectorTab() === 'drafts'"
+          [attr.aria-selected]="detectorTab() === 'drafts'"
+          (click)="setDetectorTab('drafts')"
+          title="Detectors you're building or evaluating — fully editable">
+          Drafts ({{ draftDetectors.length }})
+        </button>
+        <button
+          class="tab"
+          role="tab"
+          [class.active]="detectorTab() === 'autorun'"
+          [attr.aria-selected]="detectorTab() === 'autorun'"
+          (click)="setDetectorTab('autorun')"
+          title="Finalized detectors, frozen against edits, that run automatically on every dataset you import">
+          AutoRun ({{ autorunDetectors.length }})
+        </button>
+      </div>
       <div class="dashboard-section-actions">
         <!-- Editing actions only exist on the Drafts tab: AutoRun detectors
              are frozen (move one back to Drafts to combine or delete it). -->
@@ -167,26 +192,6 @@
       </div>
     </div>
 
-    <div class="tab-bar detector-tab-bar" role="tablist" aria-label="Detector groups">
-      <button
-        class="tab"
-        role="tab"
-        [class.active]="detectorTab() === 'drafts'"
-        [attr.aria-selected]="detectorTab() === 'drafts'"
-        (click)="setDetectorTab('drafts')"
-        title="Detectors you're building or evaluating — fully editable">
-        Drafts ({{ draftDetectors.length }})
-      </button>
-      <button
-        class="tab"
-        role="tab"
-        [class.active]="detectorTab() === 'autorun'"
-        [attr.aria-selected]="detectorTab() === 'autorun'"
-        (click)="setDetectorTab('autorun')"
-        title="Finalized detectors, frozen against edits, that run automatically on every dataset you import">
-        AutoRun ({{ autorunDetectors.length }})
-      </button>
-    </div>
     @if (!registryLoaded && detectors.length === 0) {
       <ul class="dashboard-skeleton-list" aria-busy="true" aria-label="Loading detectors">
         @for (_ of skeletonRows; track $index) {
