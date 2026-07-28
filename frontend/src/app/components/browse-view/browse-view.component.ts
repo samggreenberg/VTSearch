@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, ElementRef, HostListener, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, HostListener, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subject } from 'rxjs';
@@ -230,6 +230,23 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * on the panel, both of which persist the choice.
    */
   readonly detailsDocked = signal(true);
+
+  /**
+   * Whether the user has dismissed the (docked) details panel for now. The
+   * panel's X clears the bin it's showing; pressed again on an already-empty
+   * panel it hides the panel altogether, handing its width back to the canvas.
+   * Right-clicking a bin brings the panel straight back with that bin in it
+   * (see {@link onCanvasContextMenu}), so this is a transient, per-visit
+   * dismissal rather than a remembered presentation choice — the docked /
+   * floating choice stays with {@link detailsDocked}.
+   */
+  readonly detailsPanelHidden = signal(false);
+
+  /** Whether the docked details panel actually renders: docked *and* not
+   *  dismissed. Everything that keys off the panel's presence (the grid
+   *  template, the panel element, the toolbar's now-playing waveform the panel
+   *  otherwise replaces) reads this rather than {@link detailsDocked}. */
+  readonly detailsPanelShown = computed(() => this.detailsDocked() && !this.detailsPanelHidden());
 
   /**
    * Width (CSS px) of the docked bin-details panel, mirrored from the
@@ -1059,6 +1076,11 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.contextMembers = event.members;
     this.contextRepId = event.repId;
     if (this.detailsDocked()) {
+      // A right-click on a bin always wants the details visible, so it undoes a
+      // previous dismissal (the panel's X on an empty panel) — the panel comes
+      // back, showing this bin. It comes back *docked*: dismissing it never
+      // changed the docked/floating choice.
+      this.detailsPanelHidden.set(false);
       // Docked: the persistent left panel shows the bin — no floating window.
       // Keep the canvas's pinned enlarge (the canvas pinned it on right-click)
       // so the chosen bin stays enlarged while it's open in the panel, exactly
@@ -1071,6 +1093,21 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.contextMenuY = event.clientY;
     this.contextBounds = event.bounds;
     this.contextMenuOpen = true;
+  }
+
+  /**
+   * The docked panel's X. With a bin showing it clears the bin (leaving the
+   * empty panel and its hint); pressed on an already-empty panel there is
+   * nothing left to clear, so it hides the panel itself and gives the width
+   * back to the canvas. Right-clicking any bin brings it back
+   * ({@link onCanvasContextMenu}).
+   */
+  onDetailsDismiss(): void {
+    if (this.contextMembers.length === 0) {
+      this.detailsPanelHidden.set(true);
+      return;
+    }
+    this.dismissContextMenu();
   }
 
   dismissContextMenu(): void {
@@ -1091,6 +1128,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    *  same ``contextMembers``). */
   onDockRequested(): void {
     this.contextMenuOpen = false;
+    // Docking is an explicit ask for the panel, so it clears any earlier
+    // dismissal — otherwise the window would vanish into a hidden panel.
+    this.detailsPanelHidden.set(false);
     // Keep the bin pinned enlarged as it moves into the docked panel — docked
     // bins stay enlarged too now, so there's nothing to release here.
     this.persistBinDetailsDocked(true);

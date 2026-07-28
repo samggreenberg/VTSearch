@@ -211,9 +211,62 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     expect(component.contextMenuOpen).toBe(false);
 
     // The panel's X clears the shown bin but leaves the panel itself docked.
-    component.dismissContextMenu();
+    component.onDetailsDismiss();
     expect(component.contextMembers).toEqual([]);
     expect(component.detailsDocked()).toBe(true);
+    expect(component.detailsPanelShown()).toBe(true);
+  });
+
+  it("hides the empty details panel on a second X, and a right-clicked bin brings it back docked", async () => {
+    await settleZoneless(fixture);
+    const component = fixture.componentInstance;
+    component.detailsDocked.set(true);
+    expect(component.detailsPanelShown()).toBe(true);
+
+    // X with nothing showing: there is no bin left to clear, so the panel itself
+    // goes away and the canvas takes back its width.
+    component.onDetailsDismiss();
+    expect(component.detailsPanelHidden()).toBe(true);
+    expect(component.detailsPanelShown()).toBe(false);
+    // Dismissing is not a presentation change: the docked choice is untouched.
+    expect(component.detailsDocked()).toBe(true);
+
+    // Right-clicking a bin brings the panel back — docked, showing that bin,
+    // with no floating window.
+    component.onCanvasContextMenu({
+      members: [11, 12],
+      repId: 11,
+      clientX: 60,
+      clientY: 70,
+      bounds: null,
+    } as unknown as Parameters<typeof component.onCanvasContextMenu>[0]);
+    expect(component.detailsPanelHidden()).toBe(false);
+    expect(component.detailsPanelShown()).toBe(true);
+    expect(component.contextMenuOpen).toBe(false);
+    expect(component.contextMembers).toEqual([11, 12]);
+  });
+
+  it('un-hides the details panel when a floating window is docked into it', async () => {
+    await settleZoneless(fixture);
+    const component = fixture.componentInstance;
+
+    // Hide the docked panel, then work in the floating presentation instead.
+    component.onDetailsDismiss();
+    expect(component.detailsPanelHidden()).toBe(true);
+    component.detailsDocked.set(false);
+    component.onCanvasContextMenu({
+      members: [21],
+      repId: 21,
+      clientX: 10,
+      clientY: 10,
+      bounds: null,
+    } as unknown as Parameters<typeof component.onCanvasContextMenu>[0]);
+    expect(component.contextMenuOpen).toBe(true);
+
+    // Docking that window must not drop it into a hidden panel.
+    component.onDockRequested();
+    expect(component.detailsPanelHidden()).toBe(false);
+    expect(component.detailsPanelShown()).toBe(true);
   });
 
   it('carries the open bin across dock / pop-out toggles', async () => {

@@ -1039,6 +1039,17 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   // --- Dismissal -----------------------------------------------------------
 
+  /**
+   * What the header's X does right now. Floating it closes the window. Docked
+   * it clears the bin on show; on an already-empty panel there is nothing left
+   * to clear, so the browse view hides the panel instead — say so, since that's
+   * a bigger step than "Clear" implies.
+   */
+  get closeLabel(): string {
+    if (!this.docked()) return 'Close';
+    return this.ids.length === 0 ? 'Hide this panel' : 'Clear';
+  }
+
   close(): void {
     this.dismissed.emit();
   }

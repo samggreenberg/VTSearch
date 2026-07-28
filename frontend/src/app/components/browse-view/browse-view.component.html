@@ -42,10 +42,10 @@
       <div
         class="browse-content"
         #content
-        [class.browse-content--details]="detailsDocked()"
+        [class.browse-content--details]="detailsPanelShown()"
         [style.--browse-panel-width]="panelWidth() + 'px'"
         [style.--browse-details-width]="detailsPanelWidth() + 'px'">
-        @if (detailsDocked()) {
+        @if (detailsPanelShown()) {
           <aside class="browse-details" aria-label="Bin details">
             <vt-browse-bin-popup
               [docked]="true"
@@ -57,7 +57,7 @@
               [hoverThumbRadius]="thumbnailRadius"
               [nowPlayingExt]="nowPlaying()"
               [rowDividerDragging]="draggingDetailsRow()"
-              (dismissed)="dismissContextMenu()"
+              (dismissed)="onDetailsDismiss()"
               (popOutRequested)="onPopOutRequested()"
               (rowDividerMouseDown)="onDetailsRowDividerMouseDown($event)"
               (nowPlaying)="onNowPlaying($event)"
@@ -91,9 +91,10 @@
             </button>
             @if (mediaType() === 'audio') {
               <div class="browse-now-playing">
-                <!-- Docked bin details replace this small waveform: the panel's
-                     large detail pane is the now-playing display then. -->
-                @if (!detailsDocked() && nowPlaying(); as np) {
+                <!-- A shown docked bin-details panel replaces this small
+                     waveform: the panel's large detail pane is the now-playing
+                     display then. Dismissing the panel hands the job back here. -->
+                @if (!detailsPanelShown() && nowPlaying(); as np) {
                   <!-- The waveform PNG is a theme-agnostic alpha mask (issue #2369):
                        the surface box mirrors the browse tile, and the inner element
                        masks the accent colour to the wave shape so it recolours with
