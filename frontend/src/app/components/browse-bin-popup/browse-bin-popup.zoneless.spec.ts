@@ -422,6 +422,22 @@ describe('BrowseBinPopupComponent (docked presentation)', () => {
     fixture.destroy();
   });
 
+  it('labels the X for what it does: Clear with a bin showing, Hide once empty', async () => {
+    const withBin = makeDockedFixture([1, 2]);
+    await settlePasses(withBin);
+    let close = (withBin.nativeElement as HTMLElement).querySelector('.bin-popup-close')!;
+    expect(close.getAttribute('title')).toBe('Clear');
+    withBin.destroy();
+
+    // Empty: there is nothing left to clear, so the X hides the panel — say so.
+    const empty = makeDockedFixture([]);
+    await settlePasses(empty);
+    close = (empty.nativeElement as HTMLElement).querySelector('.bin-popup-close')!;
+    expect(close.getAttribute('title')).toBe('Hide this panel');
+    expect(close.getAttribute('aria-label')).toBe('Hide this panel');
+    empty.destroy();
+  });
+
   it('offers a pop-out button (not the dock button) in the header', async () => {
     const fixture = makeDockedFixture([1, 2]);
     await settlePasses(fixture);
