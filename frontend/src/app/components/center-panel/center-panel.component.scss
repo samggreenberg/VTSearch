@@ -214,10 +214,15 @@
   letter-spacing: var(--tracking-wide);
 }
 
+// Break between words, not inside them: values are now prose as often as they
+// are identifiers (an "AI Caption" row carries a full sentence), and break-all
+// chops those mid-word in a narrow grid cell. The genuinely unbreakable value
+// is the MD5, which opts back into break-all below -- the same split the browse
+// bin popup's metadata already uses.
 .metadata-value {
   font-size: var(--font-md);
   color: var(--text-primary);
-  word-break: break-all;
+  word-break: break-word;
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -225,6 +230,7 @@
 .metadata-md5 {
   font-family: monospace;
   font-size: var(--font-xs);
+  word-break: break-all;
 }
 
 // Sticky-armed-state hint banner for the bad-vote-with-box discard flow

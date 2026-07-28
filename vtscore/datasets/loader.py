@@ -212,6 +212,7 @@ def export_dataset_to_file(
     # the round-trip.  Build the type→fields map once and merge each media's
     # extra fields into its serialized entry below.
     from vtscore.media import all_types  # noqa: PLC0415
+    from vtscore.projection.signpost_texts import PERSISTED_FIELDS as SIGNPOST_FIELDS  # noqa: PLC0415
 
     extra_fields_by_type: dict[str, list[str]] = {mt.type_id: mt.pickle_extra_fields for mt in all_types()}
 
@@ -243,6 +244,14 @@ def export_dataset_to_file(
         }
         for field in extra_fields_by_type.get(media.get("media_type", ""), ()):
             entry[field] = media.get(field)
+        # The signpost text (the caption / tag list that letters the Browse map
+        # and titles the item's "AI …" metadata row) is the sign pipeline's only
+        # full-corpus model cost, computed at ingest *before* this save precisely
+        # so it rides along.  Write it only when present, so datasets that never
+        # ran the stage keep the same entry shape.
+        for field in SIGNPOST_FIELDS:
+            if media.get(field):
+                entry[field] = media[field]
         # Persist a precomputed grid/list thumbnail so reloads stream the bytes
         # instead of decoding the full-resolution original on every cold tile
         # fetch (the browse first-paint delay).  Image *demos* never generate
