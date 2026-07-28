@@ -314,6 +314,131 @@ class TestBuildRegionTree:
                 assert ci < i and cj < i
 
 
+def _recovered_seed(leaf, sal):
+    """Approximate a leaf's seed = its highest-saliency cell (seeds are peaks)."""
+    ys, xs = np.where(leaf.cell_mask)
+    j = int(np.argmax(sal[ys, xs]))
+    return (int(ys[j]), int(xs[j]))
+
+
+def _mask(region: RegionVector) -> np.ndarray:
+    """A leaf's cell_mask, type-narrowed (propose_leaves always sets it)."""
+    assert region.cell_mask is not None
+    return region.cell_mask
+
+
+class TestLeafSeedingAndAssignment:
+    """The `seeding` / `assignment` knobs on propose_leaves.  Production
+    defaults are `spread` / `feature`; the `topk` / `spatial` alternatives are
+    the v1 baseline kept for ablation and must still work."""
+
+    def test_defaults_are_spread_feature(self):
+        out = _make_output(h=6, w=6, d=16, seed=2)
+        default = propose_leaves(out.patch_grid, out.patch_saliency, k=6)
+        explicit = propose_leaves(
+            out.patch_grid, out.patch_saliency, k=6, seeding="spread", assignment="feature", beta=0.5
+        )
+        for a, b in zip(default, explicit, strict=True):
+            assert a.box == b.box
+            np.testing.assert_array_equal(a.vec, b.vec)
+            np.testing.assert_array_equal(a.cell_mask, b.cell_mask)
+
+    def test_spread_spreads_seeds_further_than_topk(self):
+        # Two separated saliency bumps: a very bright 2x2 cluster (top-left) and
+        # one moderate isolated peak (bottom-right). top-K grabs both seeds from
+        # the bright cluster; spread's NMS forces the 2nd seed onto the far peak.
+        rng = np.random.default_rng(0)
+        grid = _normed(rng, (8, 8, 8))
+        sal = np.full((8, 8), 0.01, np.float32)
+        sal[0, 0], sal[0, 1], sal[1, 0], sal[1, 1] = 1.0, 0.95, 0.9, 0.85
+        sal[7, 7] = 0.5
+
+        topk = propose_leaves(grid, sal, k=2, seeding="topk")
+        spread = propose_leaves(grid, sal, k=2, seeding="spread")
+
+        def min_seed_dist(leaves):
+            s = [_recovered_seed(le, sal) for le in leaves]
+            return min(
+                ((s[i][0] - s[j][0]) ** 2 + (s[i][1] - s[j][1]) ** 2) ** 0.5
+                for i in range(len(s))
+                for j in range(i + 1, len(s))
+            )
+
+        assert min_seed_dist(spread) > min_seed_dist(topk)
+        # And the far peak (7,7) becomes its own seed only under spread.
+        assert any(_recovered_seed(le, sal) == (7, 7) for le in spread)
+        assert not any(_recovered_seed(le, sal) == (7, 7) for le in topk)
+
+    def test_feature_assignment_changes_membership(self):
+        # Pure-cosine assignment (beta=1) binds cells by feature, not geometry,
+        # so the partition must differ from the spatial Voronoi for some seed.
+        differs = False
+        for seed in range(5):
+            out = _make_output(h=6, w=6, d=16, seed=seed)
+            spatial = propose_leaves(out.patch_grid, out.patch_saliency, k=6, assignment="spatial")
+            feature = propose_leaves(out.patch_grid, out.patch_saliency, k=6, assignment="feature", beta=1.0)
+            if any(not np.array_equal(_mask(a), _mask(b)) for a, b in zip(spatial, feature, strict=True)):
+                differs = True
+                break
+        assert differs, "feature assignment never changed leaf membership across 5 seeds"
+
+    def test_still_returns_exactly_k_leaves(self):
+        out = _make_output(h=6, w=6, d=16, seed=4)
+        for seeding in ("topk", "spread"):
+            for assignment in ("spatial", "feature"):
+                leaves = propose_leaves(out.patch_grid, out.patch_saliency, k=7, seeding=seeding, assignment=assignment)
+                assert len(leaves) == 7
+                for le in leaves:
+                    np.testing.assert_allclose(np.linalg.norm(le.vec), 1.0, atol=1e-5)
+
+    def test_invalid_knobs_raise(self):
+        out = _make_output()
+        with pytest_raises(ValueError):
+            propose_leaves(out.patch_grid, out.patch_saliency, k=4, seeding="bogus")
+        with pytest_raises(ValueError):
+            propose_leaves(out.patch_grid, out.patch_saliency, k=4, assignment="bogus")
+
+    def test_feature_beta0_equals_spatial(self):
+        # beta=0 makes the feature blend purely spatial, so it must reproduce the
+        # spatial Voronoi assignment exactly (same leaf masks + boxes).
+        for seed in range(4):
+            out = _make_output(h=6, w=6, d=16, seed=seed)
+            spatial = propose_leaves(out.patch_grid, out.patch_saliency, k=6, assignment="spatial")
+            feat0 = propose_leaves(out.patch_grid, out.patch_saliency, k=6, assignment="feature", beta=0.0)
+            for a, b in zip(spatial, feat0, strict=True):
+                assert a.box == b.box
+                np.testing.assert_array_equal(a.cell_mask, b.cell_mask)
+
+    def test_build_region_tree_threads_knobs(self):
+        # The baseline knobs must still be reachable through the top-level entry
+        # point (the defaults are spread/feature).
+        out = _make_output(h=6, w=6, d=16, seed=1)
+        tree = build_region_tree(out, k=6, alpha=0.5, seeding="topk", leaf_assign="spatial")
+        assert len(tree) == 2 * 6
+        for node in tree:
+            assert node.vec.shape == (16,)
+
+    def test_build_region_tree_defaults_match_explicit_knobs(self):
+        # No-knob call == explicit spread/feature with beta reusing alpha.
+        out = _make_output(h=6, w=6, d=16, seed=3)
+        default = build_region_tree(out, k=6, alpha=0.5)
+        explicit = build_region_tree(out, k=6, alpha=0.5, seeding="spread", leaf_assign="feature", leaf_beta=0.5)
+        for a, b in zip(default, explicit, strict=True):
+            assert a.box == b.box
+            assert a.children == b.children
+            np.testing.assert_array_equal(a.vec, b.vec)
+
+    def test_leaf_beta_decouples_from_alpha(self):
+        # leaf_beta overrides the assignment blend independently of the merge alpha;
+        # None reuses alpha (the default), a value can differ.
+        out = _make_output(h=6, w=6, d=16, seed=2)
+        reuse = build_region_tree(out, k=6, alpha=1.0, leaf_beta=None)  # beta:=alpha=1.0
+        beta0 = build_region_tree(out, k=6, alpha=1.0, leaf_beta=0.0)  # spatial assign
+        # Leaf cell masks (indices 1..K) must differ: beta=1 (cosine) vs beta=0 (spatial).
+        differs = any(not np.array_equal(_mask(reuse[i]), _mask(beta0[i])) for i in range(1, 7))
+        assert differs, "leaf_beta=0 vs reuse-alpha(=1.0) produced identical leaves"
+
+
 # ---------------------------------------------------------------------------
 # to_fp16
 # ---------------------------------------------------------------------------
