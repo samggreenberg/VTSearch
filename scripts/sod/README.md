@@ -21,9 +21,10 @@ rationale: `docs/plans/` (small-object sweep).
   the seed exemplar (DINO/patch) or to the class text prompt (text-capable embedders).
 - DINOv2/v3 (`dinov2`/`dinov3` → patch embedders) are the only embedders valid for the
   `hac` proposal.
-- **`--region-voting`** (optional, default off; **hac + dinov2/dinov3 only**): the faithful
-  app-detector label construction, so a sweep cell reproduces what a user swiping in VTSearch
-  produces (`python -m vtscore.eval --region-voting`). It changes the whole `hac` train path:
+- **`--region-voting` / `--no-region-voting`** (default **ON**; **hac + dinov2/dinov3 only**): the
+  faithful app-detector label construction, so a sweep cell reproduces what a user swiping in VTSearch
+  produces (`python -m vtscore.eval --region-voting`). On by default; pass `--no-region-voting` to
+  disable. It changes the whole `hac` train path:
   - **Good vote** → the covering GT box (union of all instances) is **snapped to its best-IoU
     HAC node** (`snap_box_to_region`) — one positive per image (K = good swipes), an actual
     candidate the detector max-pools over, not a uniform grid pool.
@@ -35,14 +36,64 @@ rationale: `docs/plans/` (small-object sweep).
   A no-op for other proposals (so `--proposals whole,hac --region-voting` runs `whole`
   normally). Uses a distinct `hac_rv_*` cache slug (don't reuse a plain-`hac` cache). Only
   alpha=0.5 / k=12 reproduce production's tree (its fixed build params).
-- **`--leaf-seeding {topk,spread}`** / **`--leaf-assign {spatial,feature}`** (optional,
+- **`--leaf-seeding {topk,spread}…`** / **`--leaf-assign {spatial,feature}…`** (optional, **sweep axes** —
+  pass multiple values and every combination becomes its own cell/result row in a single run; e.g.
+  `--leaf-seeding topk spread --leaf-assign spatial feature` runs all four in one command,
   default `topk`/`spatial` = production baseline; **hac only**): how the HAC *leaves* are
   proposed. `topk` seeds = the K highest-saliency patches (which pile onto the brightest
   object); `spread` = greedy peaks with spatial non-max suppression, so seeds spread across
   objects and a small object can win its own seed. `spatial` assignment = nearest seed by
-  grid distance (Voronoi); `feature` = `α·cosine + (1-α)·spatial` (same α as the merge), so
-  leaf boundaries follow content. Non-default values get their own cache slug
-  (`…_seed-spread`, `…_asg-feature`), so they never reuse baseline caches.
+  grid distance (Voronoi); `feature` = `β·cosine + (1-β)·spatial`, so leaf boundaries follow
+  content. Non-default values get their own cache slug (`…_seed-spread`, `…_asg-feature`), so
+  they never reuse baseline caches.
+- **`--leaf-beta none 0 0.5 0.9 …`** (optional, default `none`; **sweep axis, hac + `feature` only**):
+  the **assignment** blend `β` in `β·cosine + (1-β)·spatial`, *independent of the HAC-merge `α`* (they
+  control different stages — patch→seed binding vs node clustering). `none` (default) reuses `α`
+  (backward-compatible); **`β=0` is exactly `spatial`**; `β=1` is pure-cosine. Inert for `spatial`
+  assignment. An explicit value gets its own slug tag (`…_b0.9`).
+- **`--resolution none 448 …`** (optional, default `none` = checkpoint's 224; **sweep axis, DINO
+  embedders only**): square input edge fed to the embedder. The patch grid is
+  `resolution // patch_size` per side (16 for dinov3, 14 for dinov2), so higher resolution = finer
+  patches and a small object spans more of them — the cleanest lever against the small-object floor.
+  Pass multiple values (`--resolution none 448`) and each becomes its own cell/result row. Use a
+  multiple of the patch size. A no-op for text embedders (collapses to the default there). Folds into
+  the cache slug (`…_r448`), so a resolution run never reuses default-res cached vectors; cost scales
+  ~resolution² (the HAC step is unaffected — K leaves is fixed).
+- **`--pca-dims none 10 32 …`** (optional, default `none`; **sweep axis, hac only**): fit a per-image
+  PCA of this many dims on the patch grid and decide the HAC **merge order** in that reduced space
+  (tree topology only — stored region vectors stay full-dim). `none`/`0` = full-dim baseline. Pass
+  multiple values (`--pca-dims none 10 32`, stray commas tolerated) and each becomes its own
+  cell/result row; each value gets its own cache slug (`…_pca10`). Note this reshapes *internal*
+  merges, not the leaves, so it's largely orthogonal to the small-object leaf question.
+- **`--dinov3-model vitb16 vitl16 …`** (optional, default `vitb16`; **sweep axis, `dinov3` only**):
+  which DINOv3 checkpoint the `dinov3` embedder loads. Short aliases `vits16`/`vits16plus`/`vitb16`/
+  `vitl16`/`vith16plus`/`vit7b16` (or a full HF repo id). All are **patch-size 16**, so a larger model
+  gives richer per-patch features but the **same grid density** — use `--resolution` for finer
+  localization, not a bigger model. Pass multiple (`--dinov3-model vitb16 vitl16`) and each becomes its
+  own curve. `vitb16` is the app default (no cache tag, reuses existing caches); other sizes get their
+  own cache slug (`…_mvitl16`) and are downloaded on first use (gated — needs `HF_TOKEN`). A no-op for
+  non-`dinov3` embedders. Bigger models are markedly slower/heavier (7B ≈ 27 GB weights), so validate a
+  single cell before launching a full cartesian sweep.
+
+## Sweep axes (one command, many rows)
+`--hac-alpha`, `--hac-k`, `--leaf-seeding`, `--leaf-assign`, `--leaf-beta`, `--pca-dims`,
+`--resolution`, and `--dinov3-model` are all **multi-value sweep axes** (all space-separated `nargs`,
+e.g. `--hac-k 8 12 16`): pass several values to any of them and the run takes the cartesian product,
+one result row (and cache slug) per combination — all in a single `results.jsonl`/`results.csv`,
+distinguished by the
+`alpha`/`hac_k`/`leaf_seeding`/`leaf_assign`/`leaf_beta`/`pca_dims`/`resolution`/`dinov3_model` columns.
+The leaf/pca/alpha/k/β axes only affect the `hac` tree (collapse to one value for other proposals; `β`
+further collapses unless `--leaf-assign feature`); `--resolution` and `--dinov3-model` affect the
+embedder forward (collapse to the default for text embedders, and `--dinov3-model` only expands for the
+`dinov3` embedder). Example — the full 2×2 leaf ablation ×
+two PCA settings on five classes in one command:
+```bash
+.venv/bin/python scripts/sod/sweep.py --datasets coco \
+  --classes "traffic light,stop sign,car,person,bus" --embedders dinov3 \
+  --proposals hac --region-voting --iterations 3 --max-labels 60 \
+  --leaf-seeding topk spread --leaf-assign spatial feature --pca-dims none 10 \
+  --out-dir docs/experiments/sod-sweep-leaf --viz
+```
 
 ## Labeling loop (realistic Autopilot)
 Each cell simulates the app's **Autopilot active-learning loop**, so the x-axis is
@@ -107,9 +158,10 @@ Outputs (under `--out-dir`, gitignored):
   (each config **macro-averaged over the dataset's classes**; band = across-class spread, or one line
   per class with `--viz-band all`; toggle with `--summary/--no-summary`) — and a `time.png`
   total-time stacked bar; `time.json`, `splits_gallery/` (bucket montages with GT boxes),
-  `predictions/` (per-config MLP TP/FP/FN/TN overlays)
+  `predictions/<slug>/` (per-config MLP TP/FP/FN/TN overlays — **one subdir per sweep-axis variant**,
+  keyed by the cache slug, so leaf-seeding/leaf-assign/pca/alpha combos never overwrite each other)
 - with `--labeling-trace` in **realistic** mode (off by default; independent of `--viz`),
-  `labeling_trace/<config>/seed{N}/` (one dir **per iteration**): the images the loop labeled **in order**,
+  `labeling_trace/<slug>/<config>/seed{N}/` (one dir **per iteration**): the images the loop labeled **in order**,
   two PNGs per step (both prefixed `{t:03d}_{iid}_{good|bad}` so they sort in labeling order):
   - `…_pred.png` — GT green + the detector's surfacing box/score red (captioned with
     step/label/select-mode→phase/head/calib_mode/threshold),
@@ -199,4 +251,16 @@ python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir do
 
 # multiple classes (summary), pca-dim=10
 python scripts/sod/sweep.py --datasets coco --classes "stop sign, traffic light" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --hac-alpha 0.5 --max-labels 50 --out-dir docs/experiments/sod-sweep/coco-stopsign-trafficlight-dinov3-hac-alphas-5-summary-10-pca-dims --viz --iterations 5 --labeling-trace --min-box-frac 0.05 --summary --pca-dims 10
+
+# different leaf node approaches ablation test, pca-dim = None, 10
+python scripts/sod/sweep.py --datasets coco --classes "traffic light,stop sign,car,person,bus" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --iterations 3 --max-labels 50 --leaf-seeding topk spread --leaf-assign spatial feature --out-dir docs/experiments/sod-sweep/coco-5-classes-dinov3-hac--None-10-pca-leaf-ablation --viz --summary --pca-dims none 10 # should add --min-box-frac 0.05
+
+# seeding: spread, assign: feature, sweep k and beta, resolution
+python scripts/sod/sweep.py --datasets coco --classes "traffic light,stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --iterations 3 --max-labels 50 --leaf-seeding spread --leaf-assign feature --out-dir docs/experiments/sod-sweep/coco-stopsign-trafficlight-dinov3-hac-3-5-beta-8-16-32-k-value-224-448-resolution --hac-k 8 16 32 --leaf-beta 0.3 0.5 --resolution none 448 --viz --min-box-frac 0.05 --labeling-trace --summary
+
+# DINOv3 ViT-B vs ViT-L, seeding: spread, assign: feature, sweep k and reslution
+python scripts/sod/sweep.py --datasets coco --classes "traffic light,stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --leaf-seeding spread --leaf-assign feature --hac-k 8 16 32 --iterations 3 --resolution none 448 --max-labels 50 --dinov3-model vitb16 vitl16 --out-dir docs/experiments/sod-sweep/coco-stopsign-trafficlight-dinov3-vitb16-vs-vitl16 --viz --summary --min-box-frac 0.05 --labeling-trace
+
+# DINOv3 ViT-B vs ViT-L, seeding: spread, assign: feature, k=32, reslution=448, vitl16, 5 iterations with band=all
+python scripts/sod/sweep.py --datasets coco --classes "traffic light,stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --leaf-seeding spread --leaf-assign feature --hac-k 32 --iterations 5 --resolution 448 --max-labels 50 --dinov3-model vitl16 --out-dir docs/experiments/sod-sweep/coco-stopsign-trafficlight-dinov3-vitl16-5-iterations --viz --viz-band all --summary --min-box-frac 0.05 --labeling-trace --pca-dims none 10 
 ```

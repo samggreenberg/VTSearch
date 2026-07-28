@@ -544,7 +544,7 @@ class TestLeafSeedingAndAssignment:
         for seed in range(5):
             out = _make_output(h=6, w=6, d=16, seed=seed)
             spatial = propose_leaves(out.patch_grid, out.patch_saliency, k=6, assignment="spatial")
-            feature = propose_leaves(out.patch_grid, out.patch_saliency, k=6, assignment="feature", alpha=1.0)
+            feature = propose_leaves(out.patch_grid, out.patch_saliency, k=6, assignment="feature", beta=1.0)
             if any(not np.array_equal(a.cell_mask, b.cell_mask) for a, b in zip(spatial, feature, strict=True)):
                 differs = True
                 break
@@ -566,12 +566,37 @@ class TestLeafSeedingAndAssignment:
         with pytest_raises(ValueError):
             propose_leaves(out.patch_grid, out.patch_saliency, k=4, assignment="bogus")
 
+    def test_feature_beta0_equals_spatial(self):
+        # beta=0 makes the feature blend purely spatial, so it must reproduce the
+        # spatial Voronoi assignment exactly (same leaf masks + boxes).
+        for seed in range(4):
+            out = _make_output(h=6, w=6, d=16, seed=seed)
+            spatial = propose_leaves(out.patch_grid, out.patch_saliency, k=6, assignment="spatial")
+            feat0 = propose_leaves(out.patch_grid, out.patch_saliency, k=6, assignment="feature", beta=0.0)
+            for a, b in zip(spatial, feat0, strict=True):
+                assert a.box == b.box
+                np.testing.assert_array_equal(a.cell_mask, b.cell_mask)
+
     def test_build_region_tree_threads_knobs(self):
         out = _make_output(h=6, w=6, d=16, seed=1)
         tree = build_region_tree(out, k=6, alpha=0.5, seeding="spread", leaf_assign="feature")
         assert len(tree) == 2 * 6
         for node in tree:
             assert node.vec.shape == (16,)
+
+    def test_leaf_beta_decouples_from_alpha(self):
+        # leaf_beta overrides the assignment blend independently of the merge alpha;
+        # None reuses alpha (backward-compatible), a value can differ.
+        out = _make_output(h=6, w=6, d=16, seed=2)
+        reuse = build_region_tree(out, k=6, alpha=1.0, leaf_assign="feature", leaf_beta=None)  # beta:=alpha=1.0
+        beta0 = build_region_tree(out, k=6, alpha=1.0, leaf_assign="feature", leaf_beta=0.0)  # spatial assign
+        # Leaf cell masks (indices 1..K) must differ: beta=1 (cosine) vs beta=0 (spatial).
+        differs = any(
+            not np.array_equal(reuse[i].cell_mask, beta0[i].cell_mask)
+            for i in range(1, 7)
+            if reuse[i].cell_mask is not None and beta0[i].cell_mask is not None
+        )
+        assert differs, "leaf_beta=0 vs reuse-alpha(=1.0) produced identical leaves"
 
 
 # ---------------------------------------------------------------------------

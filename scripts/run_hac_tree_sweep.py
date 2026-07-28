@@ -52,6 +52,22 @@ python scripts/run_hac_tree_sweep.py \
   --k-values 8 12 16 --alpha-values 0.3 0.5 0.7 \
   --num-images 20 --min-box-frac 0.05 \
   --out-dir /exp/mlucio/.../hac-tree-pca
+  
+# for testing leaf approaches
+
+python scripts/run_hac_tree_sweep.py --backbone dinov3 --image-dir ./data/hac_test --seed 0 --k-values 6 8 12 --alpha-values 0.5 --thumb 96 --leaf-seeding topk --leaf-assign spatial --out-dir docs/experiments/hac-leaf-ablation/baseline-topk-spatial
+
+python scripts/run_hac_tree_sweep.py --backbone dinov3 --image-dir ./data/hac_test --seed 0 --k-values 6 8 12 --alpha-values 0.5 --thumb 96 --leaf-seeding spread --leaf-assign spatial --out-dir docs/experiments/hac-leaf-ablation/spread-spatial
+
+python scripts/run_hac_tree_sweep.py --backbone dinov3 --image-dir ./data/hac_test --seed 0 --k-values 6 8 12 --alpha-values 0.5 --thumb 96 --leaf-seeding topk --leaf-assign feature --out-dir docs/experiments/hac-leaf-ablation/topk-feature
+  
+python scripts/run_hac_tree_sweep.py --backbone dinov3 --image-dir ./data/hac_test --seed 0 --k-values 6 8 12 --alpha-values 0.5 --thumb 96 --leaf-seeding spread --leaf-assign feature --out-dir docs/experiments/hac-leaf-ablation/spread-feature
+
+# spread + feature, sweep k, alpha, pca-dims, resolution
+python scripts/run_hac_tree_sweep.py --backbone dinov3 --image-dir ./data/hac_test --seed 0 --k-values 8 16 32 --leaf-beta 0.3 0.5 0.7 --thumb 96 --leaf-seeding spread --leaf-assign feature --resolution 448 --pca-dims none 10 --out-dir docs/experiments/hac-tree/spread-feature-k-alpha-pca-resolution-sweep 
+
+# spread + feature, sweep k, alpha, pca-dims, dinov3-b vs l
+python scripts/run_hac_tree_sweep.py --backbone dinov3 --image-dir ./data/hac_test --seed 0 --k-values 8 16 32 --leaf-beta 0.3 0.5 0.7 --thumb 96 --leaf-seeding spread --leaf-assign feature --resolution 448 --pca-dims none 10 --out-dir docs/experiments/hac-tree/spread-feature-k-alpha-pca-resolution-sweep --dinov3-model vitb16 vitl16
 
 """
 
@@ -168,28 +184,88 @@ def _set_processor_resolution(processor: object, resolution: int) -> None:
 
     HF image processors differ in their size schema: DINOv2's
     ``BitImageProcessor`` resizes the shortest edge then center-crops to
-    ``crop_size``, while DINOv3's processor resizes directly to a
-    ``height``/``width``.  We mirror whichever keys the processor already uses
-    so resize (+ crop, when enabled) bottoms out at ``R×R``.  ``patch_forward``
+    ``crop_size``, while DINOv3's fast processor exposes a ``SizeDict`` with
+    ``height``/``width``.  ``SizeDict`` is **not** a ``dict`` subclass, so an
+    ``isinstance(size, dict)`` gate silently skips DINOv3 (leaving it at 224);
+    we read the schema via attribute-or-dict access instead.  ``patch_forward``
     asserts the resulting ``pixel_values`` shape, so a processor whose schema
     we guessed wrong fails loudly rather than embedding at the wrong size.
     """
     size = getattr(processor, "size", None)
-    if isinstance(size, dict):
-        if "shortest_edge" in size:
-            processor.size = {"shortest_edge": resolution}
-        else:
-            processor.size = {"height": resolution, "width": resolution}
-    if getattr(processor, "do_center_crop", False) and hasattr(processor, "crop_size"):
+    if size is None:
+        return
+
+    def _has(k):
+        v = getattr(size, k, None)
+        if v is None and isinstance(size, dict):
+            v = size.get(k)
+        return v is not None
+
+    if _has("shortest_edge"):
+        processor.size = {"shortest_edge": resolution}
+    else:
+        processor.size = {"height": resolution, "width": resolution}
+    if getattr(processor, "do_center_crop", False) and getattr(processor, "crop_size", None) is not None:
         processor.crop_size = {"height": resolution, "width": resolution}
 
 
-def load_backbone(name: str, resolution: int) -> _Backbone:
+# Short aliases for the gated DINOv3 ViT checkpoints (all patch-size 16, so the
+# grid density is identical across sizes — a bigger model gives richer per-patch
+# features, NOT finer localization; use --resolution for that). ``vitb16`` is the
+# app default; the others are downloaded on first use.
+DINOV3_VARIANTS = {
+    "vits16": "facebook/dinov3-vits16-pretrain-lvd1689m",
+    "vits16plus": "facebook/dinov3-vits16plus-pretrain-lvd1689m",
+    "vitb16": "facebook/dinov3-vitb16-pretrain-lvd1689m",
+    "vitl16": "facebook/dinov3-vitl16-pretrain-lvd1689m",
+    "vith16plus": "facebook/dinov3-vith16plus-pretrain-lvd1689m",
+    "vit7b16": "facebook/dinov3-vit7b16-pretrain-lvd1689m",
+}
+
+
+def _resolve_dinov3_model(token: str) -> str:
+    """Map a ``--dinov3-model`` token to a full HF repo id.
+
+    A short alias (``vitl16``) expands via :data:`DINOV3_VARIANTS`; a token
+    containing ``/`` is treated as a full HF id and passed through verbatim.
+    """
+    t = str(token).strip()
+    if "/" in t:
+        return t
+    try:
+        return DINOV3_VARIANTS[t.lower()]
+    except KeyError:
+        raise SystemExit(
+            f"unknown --dinov3-model {token!r}; choose from {sorted(DINOV3_VARIANTS)} or pass a full HF id"
+        ) from None
+
+
+def _model_cache_suffix(token: str) -> str:
+    """Filesystem-safe backbone-key suffix for a DINOv3 checkpoint token.
+
+    Returns ``""`` for the app default (``vitb16``) so its cache/output layout is
+    byte-identical to a pre-``--dinov3-model`` run; a short tag otherwise.
+    """
+    from vtscore.config import DINOV3_MODEL_ID
+
+    full = _resolve_dinov3_model(token)
+    if full == DINOV3_MODEL_ID:
+        return ""
+    t = str(token).strip()
+    return t if "/" not in t else t.split("/")[-1]
+
+
+def load_backbone(name: str, resolution: int, *, dinov3_model_id: str | None = None, key_suffix: str = "") -> _Backbone:
     """Load DINOv2 or DINOv3 as a patch-capable backbone.
 
     *resolution* is the square input edge in pixels the processor is
     reconfigured to emit; it must be a positive multiple of the backbone's
     patch size (14 for DINOv2, 16 for DINOv3) so the patch grid stays square.
+
+    *dinov3_model_id* selects a specific DINOv3 checkpoint (default: the app's
+    ``DINOV3_MODEL_ID``, ViT-B/16); ignored for DINOv2. *key_suffix* namespaces
+    the backbone ``key`` (and thus the per-forward cache dir) so different model
+    sizes don't share cached tensors.
 
     DINOv3 weights are gated on Hugging Face: ``HF_TOKEN`` must be set to
     a token that has accepted the licence, or the download 401s.
@@ -215,12 +291,8 @@ def load_backbone(name: str, resolution: int) -> _Backbone:
                 "that has accepted the DINOv3 licence at "
                 "https://huggingface.co/facebook/dinov3-vitb16-pretrain-lvd1689m"
             )
-        model_id, registers, patch_size, label = (
-            DINOV3_MODEL_ID,
-            4,
-            16,
-            f"DINOv3 ViT-B/16 (`{DINOV3_MODEL_ID}`)",
-        )
+        model_id = dinov3_model_id or DINOV3_MODEL_ID
+        registers, patch_size, label = (4, 16, f"DINOv3 (`{model_id}`)")
     else:
         raise SystemExit(f"unknown --backbone {name!r} (expected dinov2 or dinov3)")
 
@@ -231,7 +303,7 @@ def load_backbone(name: str, resolution: int) -> _Backbone:
             f"{patch_size * 16} ({patch_size}×16) or {patch_size * 32}."
         )
 
-    print(f"  loading {model_id} (this may download ~350MB on first run)…", flush=True)
+    print(f"  loading {model_id} (this may download on first run)…", flush=True)
     # Force eager attention so output_attentions=True actually returns
     # weights - recent transformers default to SDPA which drops them.
     model = AutoModel.from_pretrained(
@@ -241,13 +313,17 @@ def load_backbone(name: str, resolution: int) -> _Backbone:
         attn_implementation="eager",
     )
     model.eval()
+    # Read the register-token count off the loaded config so any DINOv3 ViT
+    # variant (S/B/L/H+/7B) slices its patch grid correctly.
+    if name == "dinov3":
+        registers = int(getattr(model.config, "num_register_tokens", registers))
     processor = AutoImageProcessor.from_pretrained(model_id, token=token)
     _set_processor_resolution(processor, resolution)
     return _Backbone(
         model=model,
         processor=processor,
         num_register_tokens=registers,
-        key=name,
+        key=name if not key_suffix else f"{name}-{key_suffix}",
         label=label,
         patch_size=patch_size,
         resolution=resolution,
@@ -267,7 +343,9 @@ def patch_forward(bb: _Backbone, image: Image.Image) -> PatchEmbedOutput | None:
             "_set_processor_resolution did not match this processor's size schema."
         )
     with torch.no_grad():
-        outputs = bb.model(**inputs, output_attentions=True)
+        # interpolate_pos_encoding lets a non-native resolution (grid ≠ the checkpoint's
+        # 14×14) reuse the model's position embeddings; a no-op at the native size.
+        outputs = bb.model(**inputs, output_attentions=True, interpolate_pos_encoding=True)
     return hf_vit_to_patch_output(outputs, num_register_tokens=bb.num_register_tokens)
 
 
@@ -750,6 +828,22 @@ def _draw_gt_boxes(rgb: np.ndarray, boxes: list[tuple[float, float, float, float
     return np.asarray(img, dtype=np.uint8)
 
 
+def _parse_beta_values(tokens: list[str]) -> list[float | None]:
+    """Parse ``--leaf-beta`` tokens into (float | None), order-preserving + deduped.
+
+    ``'none'`` → ``None`` (reuse the merge alpha); ``'0'`` stays ``0.0`` (pure spatial).
+    """
+    out: list[float | None] = []
+    for tok in tokens:
+        t = str(tok).strip().strip(",").lower()
+        if not t:
+            continue
+        bv = None if t == "none" else float(t)
+        if bv not in out:
+            out.append(bv)
+    return out
+
+
 def _render_pca_comparison(
     full_rgb: np.ndarray,
     corner_rgb: np.ndarray,
@@ -766,6 +860,7 @@ def _render_pca_comparison(
     attn_corner: np.ndarray | None = None,
     seeding: str = "topk",
     leaf_assign: str = "spatial",
+    leaf_beta: float | None = None,
 ) -> Path | None:
     """Build the tree at each pca value and (when >1) hstack a side-by-side composite.
 
@@ -777,32 +872,42 @@ def _render_pca_comparison(
 
     When *attn_full* / *attn_corner* (a saliency-over-pixels overlay, precomputed
     once per image) are given, a **separate** attention composite is also written
-    as ``<stem>_k<k>_a<alpha>_pca_attn.jpg`` — the same trees drawn over the
-    attention overlay instead of the raw image.
+    (``…_attn.jpg``) — the same trees drawn over the attention overlay.
 
-    Returns the image composite path (named ``<stem>_k<k>_a<alpha>_pca.jpg``), or
-    ``None`` when only the baseline is requested (nothing to compare).
+    Always writes an image. With multiple PCA values it is a side-by-side
+    ``<stem>_k<k>_a<alpha>_pca.jpg`` comparison across them; with a single config
+    it is a one-panel ``<stem>_k<k>_a<alpha>_tree.jpg`` render titled with the
+    leaf ``seeding/assignment`` (so leaf approaches are compared by running into
+    separate ``--out-dir``s). Returns the composite path.
     """
     panels: list[Image.Image] = []
     attn_panels: list[Image.Image] = []
+    multi = len(pca_values) > 1
     for pv in pca_values:
-        regions_pv = build_region_tree(out, k=k, alpha=alpha, pca_dims=pv, seeding=seeding, leaf_assign=leaf_assign)
-        pca_metrics.setdefault((k, alpha, pv), []).append(measure_config(regions_pv, k=k))
-        if len(pca_values) > 1:
-            title = f"pca={'none' if pv is None else pv}"
-            panels.append(_render_tree_panel(full_rgb, regions_pv, k, corner_rgb=corner_rgb, title=title, thumb=thumb))
-            if attn_full is not None and attn_corner is not None:
-                attn_panels.append(
-                    _render_tree_panel(
-                        attn_full, regions_pv, k, corner_rgb=attn_corner, title=f"{title} · attn", thumb=thumb
-                    )
+        regions_pv = build_region_tree(
+            out, k=k, alpha=alpha, pca_dims=pv, seeding=seeding, leaf_assign=leaf_assign, leaf_beta=leaf_beta
+        )
+        pca_metrics.setdefault((k, alpha, pv, leaf_beta), []).append(measure_config(regions_pv, k=k))
+        # Column title: the PCA value when comparing PCA, else the (whole-run,
+        # fixed) leaf combo — so a single-config render is self-labelling and
+        # runs into different --out-dir's are directly comparable by eye.
+        beta_lbl = f" β{leaf_beta}" if (leaf_assign == "feature" and leaf_beta is not None) else ""
+        title = f"pca={'none' if pv is None else pv}" if multi else f"{seeding}/{leaf_assign}{beta_lbl}"
+        panels.append(_render_tree_panel(full_rgb, regions_pv, k, corner_rgb=corner_rgb, title=title, thumb=thumb))
+        if attn_full is not None and attn_corner is not None:
+            attn_panels.append(
+                _render_tree_panel(
+                    attn_full, regions_pv, k, corner_rgb=attn_corner, title=f"{title} · attn", thumb=thumb
                 )
-    if len(pca_values) <= 1:
-        return None
-    comp_path = out_dir / "trees" / f"{stem}_k{k}_a{alpha}_pca.jpg"
+            )
+    suffix = "pca" if multi else "tree"
+    # Tag the filename with beta when it's a swept feature-assignment value, so betas
+    # don't overwrite each other (they're separate files, like the K/alpha axes).
+    beta_fn = f"_b{leaf_beta}" if (leaf_assign == "feature" and leaf_beta is not None) else ""
+    comp_path = out_dir / "trees" / f"{stem}_k{k}_a{alpha}{beta_fn}_{suffix}.jpg"
     _hstack_panels(panels).save(comp_path, quality=88, optimize=True)
     if attn_panels:
-        attn_path = out_dir / "trees" / f"{stem}_k{k}_a{alpha}_pca_attn.jpg"
+        attn_path = out_dir / "trees" / f"{stem}_k{k}_a{alpha}{beta_fn}_{suffix}_attn.jpg"
         _hstack_panels(attn_panels).save(attn_path, quality=88, optimize=True)
     return comp_path
 
@@ -838,19 +943,24 @@ def _write_pca_metrics(
         "whole patch grid per image and decides only the HAC merge order; every "
         "stored region vector stays full-dim.",
         "",
-        "| k | alpha | pca_dims | " + " | ".join(metric_keys) + " |",
-        "|" + "---|" * (len(metric_keys) + 3),
+        "| k | alpha | pca_dims | beta | " + " | ".join(metric_keys) + " |",
+        "|" + "---|" * (len(metric_keys) + 4),
     ]
-    # Sort by (k, alpha, pca) with the None baseline first within each (k, alpha).
-    for key in sorted(pca_metrics, key=lambda t: (t[0], t[1], -1 if t[2] is None else t[2])):
+
+    # Sort by (k, alpha, pca, beta) with the None baselines first within each group.
+    def _sort_key(t):
+        return (t[0], t[1], -1 if t[2] is None else t[2], -1.0 if t[3] is None else t[3])
+
+    for key in sorted(pca_metrics, key=_sort_key):
         runs = pca_metrics[key]
         if not runs:
             continue
-        k, alpha, pv = key
+        k, alpha, pv, bv = key
         means = {mk: float(np.mean([r[mk] for r in runs])) for mk in metric_keys}
-        label = "none" if pv is None else str(pv)
+        pca_label = "none" if pv is None else str(pv)
+        beta_label = "none" if bv is None else str(bv)
         cells = " | ".join(f"{means[mk]:.4f}" for mk in metric_keys)
-        lines.append(f"| {k} | {alpha} | {label} | {cells} |")
+        lines.append(f"| {k} | {alpha} | {pca_label} | {beta_label} | {cells} |")
     lines.append("")
     path.write_text("\n".join(lines))
 
@@ -976,11 +1086,12 @@ def _render_source_pca(
     args: argparse.Namespace,
     bb: _Backbone,
     pca_values: list[int | None],
-    pca_metrics: dict[tuple[int, float, int | None], list[dict[str, float]]],
+    pca_metrics: dict[tuple[int, float, int | None, float | None], list[dict[str, float]]],
     items: "Iterable[tuple[int, Image.Image, str, list[tuple[float, float, float, float]] | None]]",
     *,
     k_values: tuple[int, ...],
     alpha_values: tuple[float, ...],
+    beta_values: list[float | None],
 ) -> None:
     """Shared per-image loop for the SOD and directory image sources.
 
@@ -991,6 +1102,10 @@ def _render_source_pca(
     reuses it), then emits one pca-comparison composite per ``(K, alpha)`` in
     ``k_values × alpha_values`` and writes ``pca-metrics.md`` at the end.
     """
+    # beta only bites on feature assignment; collapse to one value for spatial so we
+    # don't render (and overwrite) identical spatial trees under each beta. Hoisted
+    # out of the image loop so it's in scope for the metrics-write guard below.
+    betas = beta_values if args.leaf_assign == "feature" else [beta_values[0]]
     for pos, (cache_key, image, label, gt) in enumerate(items):
         cache_path = _cache_path(args.out_dir, bb.key, bb.resolution, cache_key, label)
         t0 = time.perf_counter()
@@ -1008,42 +1123,46 @@ def _render_source_pca(
         n_comp = 0
         for k in k_values:
             for alpha in alpha_values:
-                comp_path = _render_pca_comparison(
-                    raw,
-                    corner,
-                    out,
-                    k=k,
-                    alpha=alpha,
-                    pca_values=pca_values,
-                    pca_metrics=pca_metrics,
-                    out_dir=args.out_dir,
-                    stem=f"{pos:02d}_{label}",
-                    thumb=args.thumb,
-                    attn_full=attn,
-                    attn_corner=attn_corner,
-                    seeding=args.leaf_seeding,
-                    leaf_assign=args.leaf_assign,
-                )
-                if comp_path is not None:
-                    n_comp += 1
+                for beta in betas:
+                    comp_path = _render_pca_comparison(
+                        raw,
+                        corner,
+                        out,
+                        k=k,
+                        alpha=alpha,
+                        pca_values=pca_values,
+                        pca_metrics=pca_metrics,
+                        out_dir=args.out_dir,
+                        stem=f"{pos:02d}_{label}",
+                        thumb=args.thumb,
+                        attn_full=attn,
+                        attn_corner=attn_corner,
+                        seeding=args.leaf_seeding,
+                        leaf_assign=args.leaf_assign,
+                        leaf_beta=beta,
+                    )
+                    if comp_path is not None:
+                        n_comp += 1
         msg = f"  [{pos}] {label}: {'cache' if cached else 'forward'} {time.perf_counter() - t0:.2f}s"
         if n_comp:
-            msg += f", {n_comp} pca composite(s) over {len(k_values)}×{len(alpha_values)} K×α"
+            kind = "pca composite(s)" if len(pca_values) > 1 else "tree render(s)"
+            msg += f", {n_comp} {kind} over {len(k_values)}×{len(alpha_values)}×{len(betas)} K×α×β"
         print(msg)
 
-    if len(pca_values) > 1:
+    if len(pca_values) > 1 or len(betas) > 1:
         _write_pca_metrics(args.out_dir / "pca-metrics.md", pca_metrics, backbone=args.backbone)
-        print(f"wrote pca metrics -> {args.out_dir / 'pca-metrics.md'}")
+        print(f"wrote tree metrics -> {args.out_dir / 'pca-metrics.md'}")
 
 
 def _run_sod_pca(
     args: argparse.Namespace,
     bb: _Backbone,
     pca_values: list[int | None],
-    pca_metrics: dict[tuple[int, float, int | None], list[dict[str, float]]],
+    pca_metrics: dict[tuple[int, float, int | None, float | None], list[dict[str, float]]],
     *,
     k_values: tuple[int, ...],
     alpha_values: tuple[float, ...],
+    beta_values: list[float | None],
 ) -> None:
     """Render the PCA tree comparison on positive images of a SOD class.
 
@@ -1084,17 +1203,27 @@ def _run_sod_pca(
                 label = f"{args.sod_dataset}_{cls_slug}_{iid}"
                 yield iid, image, label, (split.gt_boxes.get(iid) or [])
 
-    _render_source_pca(args, bb, pca_values, pca_metrics, items(), k_values=k_values, alpha_values=alpha_values)
+    _render_source_pca(
+        args,
+        bb,
+        pca_values,
+        pca_metrics,
+        items(),
+        k_values=k_values,
+        alpha_values=alpha_values,
+        beta_values=beta_values,
+    )
 
 
 def _run_dir_pca(
     args: argparse.Namespace,
     bb: _Backbone,
     pca_values: list[int | None],
-    pca_metrics: dict[tuple[int, float, int | None], list[dict[str, float]]],
+    pca_metrics: dict[tuple[int, float, int | None, float | None], list[dict[str, float]]],
     *,
     k_values: tuple[int, ...],
     alpha_values: tuple[float, ...],
+    beta_values: list[float | None],
 ) -> None:
     """Render the PCA tree comparison on images sampled from a plain directory.
 
@@ -1114,7 +1243,16 @@ def _run_dir_pca(
         for i, path in enumerate(files):
             yield i, Image.open(path).convert("RGB"), path.stem, None
 
-    _render_source_pca(args, bb, pca_values, pca_metrics, items(), k_values=k_values, alpha_values=alpha_values)
+    _render_source_pca(
+        args,
+        bb,
+        pca_values,
+        pca_metrics,
+        items(),
+        k_values=k_values,
+        alpha_values=alpha_values,
+        beta_values=beta_values,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1174,8 +1312,19 @@ def main() -> None:
         help=(
             "Patch-cell binding for every tree in this run. 'spatial' (default) = "
             "nearest seed by grid distance (Voronoi); 'feature' = argmax of "
-            "α·cosine + (1-α)·spatial (same α as the merge), so leaves follow "
-            "content. Compare approaches by running into separate --out-dir's."
+            "β·cosine + (1-β)·spatial (see --leaf-beta), so leaves follow content. "
+            "Compare approaches by running into separate --out-dir's."
+        ),
+    )
+    ap.add_argument(
+        "--leaf-beta",
+        nargs="+",
+        default=["none"],
+        help=(
+            "Feature-assignment blend β (β·cosine + (1-β)·spatial), INDEPENDENT of the "
+            "merge --alpha-values. SWEEP AXIS: pass multiple (e.g. --leaf-beta none 0 0.5 0.9) "
+            "→ one tree render per β (filename tagged _b<β>). 'none' reuses alpha; β=0 == spatial; "
+            "β=1 = pure cosine. Only affects --leaf-assign feature."
         ),
     )
     ap.add_argument(
@@ -1183,6 +1332,20 @@ def main() -> None:
         choices=("dinov2", "dinov3"),
         default="dinov2",
         help="Patch embedder to run. 'dinov3' is gated and needs HF_TOKEN set.",
+    )
+    ap.add_argument(
+        "--dinov3-model",
+        nargs="+",
+        default=["vitb16"],
+        help=(
+            "DINOv3 checkpoint(s) when --backbone dinov3; SWEEP AXIS (pass multiple → a full render "
+            "per model under out-dir/model-<alias>/). Short aliases: "
+            + ", ".join(sorted(DINOV3_VARIANTS))
+            + " (or a full HF repo id). All are patch-size 16, so a bigger model gives richer features "
+            "but the SAME grid density — use --resolution for finer localization. 'vitb16' is the app "
+            "default (unchanged cache/output layout); other sizes get their own cache dir and are "
+            "downloaded on first use (gated). Ignored for --backbone dinov2."
+        ),
     )
     ap.add_argument(
         "--resolution",
@@ -1243,8 +1406,10 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    args.out_dir.mkdir(parents=True, exist_ok=True)
-    (args.out_dir / "trees").mkdir(parents=True, exist_ok=True)
+    if args.image_dir and args.sod_dataset:
+        ap.error("--image-dir and --sod-dataset are mutually exclusive")
+    if args.sod_dataset and not args.sod_class:
+        ap.error("--sod-dataset requires --sod-class")
 
     k_values = tuple(args.k_values)
     alpha_values = tuple(args.alpha_values)
@@ -1257,26 +1422,74 @@ def main() -> None:
         pv = None if s in ("none", "0", "") else int(s)
         if pv not in pca_values:
             pca_values.append(pv)
-    # Keyed by (k, alpha, pca): the alternate paths sweep k_values × alpha_values,
-    # the Places365 path uses (default_k, default_alpha). Filled lazily.
-    pca_metrics: dict[tuple[int, float, int | None], list[dict[str, float]]] = {}
+    # Feature-assignment beta values to sweep (file axis, like k/alpha). 'none' = reuse
+    # alpha; 0 stays 0.0 (== spatial). Only affects --leaf-assign feature.
+    beta_values = _parse_beta_values(args.leaf_beta)
+
+    # DINOv3 checkpoint size is a multi-value axis (only for --backbone dinov3): run the
+    # whole render once per model. Each token → (dir tag, full HF id, cache-key suffix);
+    # the default 'vitb16' keeps the pre-axis cache/output layout (empty suffix, no subdir).
+    if args.backbone == "dinov3":
+        model_specs = [(str(tok), _resolve_dinov3_model(tok), _model_cache_suffix(tok)) for tok in args.dinov3_model]
+    else:
+        model_specs = [(None, None, "")]
+    multi = len(model_specs) > 1
+    base_out: Path = args.out_dir
+    for token, full_id, key_suffix in model_specs:
+        args.out_dir = (base_out / f"model-{token}") if multi else base_out
+        args.out_dir.mkdir(parents=True, exist_ok=True)
+        (args.out_dir / "trees").mkdir(parents=True, exist_ok=True)
+        if multi:
+            print(f"\n=== DINOv3 model {token} ({full_id}) → {args.out_dir} ===")
+        _run_backbone_pass(
+            args,
+            ap,
+            dinov3_model_id=full_id,
+            key_suffix=key_suffix,
+            k_values=k_values,
+            alpha_values=alpha_values,
+            pca_values=list(pca_values),
+            beta_values=beta_values,
+        )
+    args.out_dir = base_out
+
+
+def _run_backbone_pass(
+    args,
+    ap,
+    *,
+    dinov3_model_id: str | None,
+    key_suffix: str,
+    k_values: tuple[int, ...],
+    alpha_values: tuple[float, ...],
+    pca_values: list[int | None],
+    beta_values: list[float | None],
+) -> None:
+    """One full render+report for a single backbone checkpoint.
+
+    ``args.out_dir`` is already set/created by the caller (namespaced per model
+    when sweeping ``--dinov3-model``). Renders either the alternate-source PCA
+    comparison (``--image-dir`` / ``--sod-dataset``) or the Places365 headline
+    report, exactly as before — the only change is which checkpoint is loaded.
+    """
+    # Keyed by (k, alpha, pca, beta); fresh per model so tables don't cross-contaminate.
+    pca_metrics: dict[tuple[int, float, int | None, float | None], list[dict[str, float]]] = {}
 
     # Alternate image sources: render ONLY the PCA tree comparison (swept over
     # k_values × alpha_values), skipping the Places365 sampling + K×α report. A
-    # plain directory (--image-dir) or a SOD class's positive images
-    # (--sod-dataset); the two are mutually exclusive.
-    if args.image_dir and args.sod_dataset:
-        ap.error("--image-dir and --sod-dataset are mutually exclusive")
+    # plain directory (--image-dir) or a SOD class's positive images (--sod-dataset).
     if args.image_dir or args.sod_dataset:
-        if args.sod_dataset and not args.sod_class:
-            ap.error("--sod-dataset requires --sod-class")
         print(f"loading backbone {args.backbone}…")
-        bb = load_backbone(args.backbone, args.resolution)
+        bb = load_backbone(args.backbone, args.resolution, dinov3_model_id=dinov3_model_id, key_suffix=key_suffix)
         print(f"  input {bb.resolution}² → {bb.grid_side}×{bb.grid_side} patch grid (patch size {bb.patch_size}px)")
         if args.image_dir:
-            _run_dir_pca(args, bb, pca_values, pca_metrics, k_values=k_values, alpha_values=alpha_values)
+            _run_dir_pca(
+                args, bb, pca_values, pca_metrics, k_values=k_values, alpha_values=alpha_values, beta_values=beta_values
+            )
         else:
-            _run_sod_pca(args, bb, pca_values, pca_metrics, k_values=k_values, alpha_values=alpha_values)
+            _run_sod_pca(
+                args, bb, pca_values, pca_metrics, k_values=k_values, alpha_values=alpha_values, beta_values=beta_values
+            )
         return
 
     # Download Places365 val_256 (501 MB) + label file on first run.
@@ -1292,7 +1505,7 @@ def main() -> None:
         print(f"  {cat}/{path.name}")
 
     print(f"loading backbone {args.backbone}…")
-    bb = load_backbone(args.backbone, args.resolution)
+    bb = load_backbone(args.backbone, args.resolution, dinov3_model_id=dinov3_model_id, key_suffix=key_suffix)
     print(f"  input {bb.resolution}² → {bb.grid_side}×{bb.grid_side} patch grid (patch size {bb.patch_size}px)")
 
     cls_vectors: list[np.ndarray] = []
@@ -1322,7 +1535,12 @@ def main() -> None:
         for k in k_values:
             for alpha in alpha_values:
                 regions = build_region_tree(
-                    out, k=k, alpha=alpha, seeding=args.leaf_seeding, leaf_assign=args.leaf_assign
+                    out,
+                    k=k,
+                    alpha=alpha,
+                    seeding=args.leaf_seeding,
+                    leaf_assign=args.leaf_assign,
+                    leaf_beta=beta_values[0],  # Places path doesn't sweep beta; use the first value
                 )
                 config_metrics[(k, alpha)].append(measure_config(regions, k=k))
                 config_regions[(k, alpha)] = regions
