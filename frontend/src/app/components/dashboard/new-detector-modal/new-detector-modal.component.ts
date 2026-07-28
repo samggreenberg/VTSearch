@@ -236,11 +236,11 @@ export class NewDetectorModalComponent implements OnInit {
   readonly labelImporterDynamicLoading = signal<Record<string, boolean>>({});
   readonly labelImporterDynamicError = signal<Record<string, string>>({});
 
-  /** Type_id of the active solo-mediaType streamlining, or ``null`` when
+  /** Type_id of the server's solo-mediaType restriction, or ``null`` when
    *  off. When non-null, the mediaType form-group is hidden in the
    *  template and ``mediaType`` is locked to this value on init. */
   get effectiveSoloMediaType(): string | null {
-    const v = this.settingsState.settingsSignal()?.effective_solo_media_type;
+    const v = this.settingsState.settingsSignal()?.solo_media_type;
     return v ? v : null;
   }
 

@@ -437,7 +437,7 @@ def predict_embedders_to_preload(
     - For every media type in *extra_media_types*: the default embedder
       for that type. Used by the solo-mediaType streamlined mode (see
       :func:`vtsearch.settings.get_effective_solo_media_type`) so the
-      user's chosen type has its default embedder warm at startup even
+      admin-chosen type has its default embedder warm at startup even
       when no datasets or detectors are registered yet.
     - For every embedder name in *extra_embedders*: the embedder itself
       (if it exists in the registry). Used by the solo-mediaEmbedder

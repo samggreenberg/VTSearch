@@ -73,26 +73,6 @@ def _apply_inclusion(value) -> None:
     set_inclusion(clamped)
 
 
-def _apply_solo_media_type(value) -> None:
-    """Validate *value* against the registry and apply via the combined setter.
-
-    ``None`` / ``""`` clears solo mode (still marks the choice explicit so
-    the user's "show everything" opt-out is preserved against the CLI
-    fallback). Any other string must match a registered media-type id.
-    """
-    if value is None or (isinstance(value, str) and not value.strip()):
-        settings.apply_user_solo_media_type(None)
-        return
-    if not isinstance(value, str):
-        abort(400, message="solo_media_type must be a string or null")
-    from vtscore.media import all_type_ids
-
-    valid = set(all_type_ids())
-    if value not in valid:
-        abort(400, message=f"Unknown media type: {value!r}. Valid: {sorted(valid)}")
-    settings.apply_user_solo_media_type(value)
-
-
 def _apply_solo_embedder_per_media_type(value) -> None:
     """Validate the ``{media_type: embedder}`` map and persist it.
 
@@ -100,9 +80,8 @@ def _apply_solo_embedder_per_media_type(value) -> None:
     mapping registered media-type ids to embedder names that exist for
     that type (per :func:`vtscore.media.embedders_for_type`). An empty
     string value is preserved as a **per-type opt-out sentinel**; it
-    overrides the ``--solo-embedder`` CLI fallback for that type
-    (analog of setting ``solo_media_type=null`` to override
-    ``--solo-media-type``). Any other invalid pairing raises 400.
+    overrides the ``--solo-embedder`` CLI fallback for that type. Any
+    other invalid pairing raises 400.
     """
     if value is None:
         settings.apply_user_solo_embedder_per_media_type(None)
@@ -186,9 +165,9 @@ def _with_effective(data: dict) -> dict:
 
     Centralises the augmentation shared by the GET and PUT responses:
 
-    * ``effective_solo_media_type`` / ``effective_solo_embedder_per_media_type``
-      - the per-user values layered over their CLI fallbacks; the frontend
-      reads these to decide whether to hide mediaType / embedder pickers.
+    * ``effective_solo_embedder_per_media_type`` - the per-user embedder
+      locks layered over their CLI fallbacks; the frontend reads this to
+      decide whether to hide the embedder picker for a given mediaType.
     * ``hidden_plugins`` - the persisted server setting unioned with any
       ``--hide-plugin`` CLI flags, normalised to sorted lists so the
       "Server" settings tab can render what's actually in force.
@@ -197,7 +176,6 @@ def _with_effective(data: dict) -> dict:
     value can't 500 the endpoint (see :func:`_coerce_dict_fields`).
     """
     _coerce_dict_fields(data)
-    data["effective_solo_media_type"] = settings.get_effective_solo_media_type()
     data["effective_solo_embedder_per_media_type"] = settings.get_effective_solo_embedders()
     data["hidden_plugins"] = {
         family: sorted(names) for family, names in settings.get_effective_hidden_plugins().items()
@@ -213,6 +191,10 @@ def _with_effective(data: dict) -> dict:
     # in force, so the New-detector modal can drop its embedder-type picker and
     # the Server settings tab can report the restriction.
     data["semantic_only"] = settings.get_effective_semantic_only()
+    # Surface the CLI-overridable solo-mediaType restriction as the value
+    # actually in force, so the importer / new-detector / import-defaults
+    # surfaces lock their mediaType pickers to what the admin allowed.
+    data["solo_media_type"] = settings.get_effective_solo_media_type()
     return data
 
 
@@ -222,11 +204,9 @@ def get_settings():
     """Return the merged server + per-user settings dict.
 
     Augments the persisted dict with the resolver-computed read-only views
-    (effective solo mediaType / embedder, effective hidden plugins) via
-    :func:`_with_effective`. The frontend reads the ``effective_*`` keys
-    when deciding whether to hide pickers; the raw ``solo_media_type`` /
-    ``solo_media_type_explicit`` pair is still exposed for the settings UI
-    to render the current state.
+    (the effective solo mediaType / embedder locks, effective hidden
+    plugins) via :func:`_with_effective`. The frontend reads those keys
+    when deciding whether to hide pickers.
     """
     return _with_effective(settings.get_all())
 
@@ -236,7 +216,6 @@ def get_settings():
 #: entry below).
 _READ_ONLY_KEYS = frozenset(
     {
-        "effective_solo_media_type",
         "effective_solo_embedder_per_media_type",
     }
 )
@@ -315,7 +294,6 @@ _CUSTOM_SETTERS: dict[str, Callable[[Any], None]] = {
     "saved_datasets_dir": _apply_saved_datasets_dir,
     "detectors_dir": _apply_detectors_dir,
     "enable_achievements": _apply_enable_achievements_guarded,
-    "solo_media_type": _apply_solo_media_type,
     "solo_embedder_per_media_type": _apply_solo_embedder_per_media_type,
     "autofind_exporter": _apply_autofind_exporter,
     "autofind_exporter_field_values": _apply_autofind_exporter_field_values,
@@ -345,9 +323,10 @@ _STATE_TIER_SETTERS: dict[str, Callable[[Any], Any]] = {
 #:   not by the settings form.
 #:
 #: (``dataset_max_age_days`` is a server-tier retention policy set via the
-#: ``--dataset-max-age-days`` CLI flag / settings file, not via PUT; it is
-#: ``dump_only`` in the schema, so it is not "loadable" and needs no entry
-#: here.)
+#: ``--dataset-max-age-days`` CLI flag / settings file, not via PUT, and
+#: ``solo_media_type`` is a server-tier restriction set via
+#: ``--solo-media-type`` / the settings file. Both are ``dump_only`` in the
+#: schema, so neither is "loadable" and neither needs an entry here.)
 #:
 #: They are listed here so the drift-guard test
 #: (``tests/api/test_settings_dispatch.py``) treats their absence from the
