@@ -81,7 +81,6 @@ class TestSchemaBackedByModels:
         # stored Pydantic field; everything else must be model-backed.
         extras = set(AppSettingsSchema().fields) - _pydantic_fields()
         assert extras == {
-            "effective_solo_media_type",
             "effective_solo_embedder_per_media_type",
         }, f"Unexpected non-model AppSettingsSchema fields: {sorted(extras)}"
 

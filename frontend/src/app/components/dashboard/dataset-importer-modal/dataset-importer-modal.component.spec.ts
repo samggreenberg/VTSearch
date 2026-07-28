@@ -308,7 +308,7 @@ describe('DatasetImporterModalComponent', () => {
     async function initSolo(solo: string | null): Promise<void> {
       TestBed.tick();
       httpMock.expectOne('/api/dataset/all-importers').flush({ importers: soloImporters, tabs: soloTabs });
-      flushInitRequests(solo ? { effective_solo_media_type: solo } : {});
+      flushInitRequests(solo ? { solo_media_type: solo } : {});
       // The settings rxResource commits its value on a microtask, so let it
       // land before reading the solo-dependent getters.
       await settleResource();

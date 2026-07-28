@@ -8,13 +8,14 @@
 #
 # Streamlining knobs (all baked into this image; no flags required):
 #
-#   * Seeded ``data/default/user_settings.json`` locks the UI to
-#     ``solo_media_type = "image"`` and
+#   * Seeded ``data/settings.json`` sets ``solo_media_type = "image"``
+#     (an admin-set server restriction users cannot change) and seeded
+#     ``data/default/user_settings.json`` sets
 #     ``solo_embedder_per_media_type = {"image": "siglip"}``, so the
 #     dataset-importer modal hides both its mediaType picker and the
-#     embedder dropdown. Users can override either in
-#     Settings → Appearance.
-#   * Seeded ``data/settings.json`` sets ``hidden_plugins`` so the
+#     embedder dropdown. Users can override the embedder in
+#     Settings → Import Defaults; the mediaType lock is fixed.
+#   * Seeded ``data/settings.json`` also sets ``hidden_plugins`` so the
 #     Aud2Img (spectrogram) converter and the Downloaded Demo Media
 #     importer are dropped from every picker / listing API response.
 #     See ``vtsearch.settings.get_effective_hidden_plugins`` for the
@@ -120,15 +121,17 @@ RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_ver
 #   above is only written into a fresh volume). The value is not editable
 #   via the settings API.
 #
+# * ``solo_media_type=image`` locks the dataset-importer and
+#   new-detector flows to image mediaType; the mediaType picker
+#   disappears entirely. It is an admin-set server restriction, so it
+#   applies to every user and is not editable via the settings API (the
+#   Server settings tab shows it read-only). The ``--solo-media-type``
+#   CLI flag would do the same, but there is no argv in the
+#   gunicorn-launched server path, so the setting is seeded into the file
+#   instead.
+#
 # Per-user tier (``data/default/user_settings.json``; the
 # ``DefaultLoginProvider`` resolves to the ``default`` user):
-#
-# * ``solo_media_type=image`` + ``solo_media_type_explicit=true`` locks
-#   the dataset-importer and new-detector flows to image mediaType; the
-#   mediaType picker disappears entirely. ``_explicit=true`` is required
-#   because there's no ``--solo-media-type`` CLI flag in the
-#   gunicorn-launched server path; without it the resolver would
-#   treat the value as unset and fall back to "show everything".
 #
 # * ``solo_embedder_per_media_type={"image": "siglip"}`` hides the
 #   embedder dropdown for image flows and silently uses SigLIP; the
@@ -137,6 +140,7 @@ RUN mkdir -p /app/data /app/data/default && \
     printf '%s\n' \
       '{' \
       '  "dataset_max_age_days": 14,' \
+      '  "solo_media_type": "image",' \
       '  "hidden_plugins": {' \
       '    "converters": ["audio2image"],' \
       '    "importers": ["demo"]' \
@@ -145,8 +149,6 @@ RUN mkdir -p /app/data /app/data/default && \
       > /app/data/settings.json && \
     printf '%s\n' \
       '{' \
-      '  "solo_media_type": "image",' \
-      '  "solo_media_type_explicit": true,' \
       '  "solo_embedder_per_media_type": {"image": "siglip"}' \
       '}' \
       > /app/data/default/user_settings.json

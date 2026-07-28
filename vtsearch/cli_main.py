@@ -253,9 +253,10 @@ def _build_parser() -> argparse.ArgumentParser:
             "in the dataset-importer and new-detector flows, locks them to the "
             "given type, filters converter offerings to converters whose output "
             "is this type, and preloads that type's default embedder at startup. "
-            "Acts as a per-process fallback only. Any user who explicitly sets "
-            "their own solo mediaType (including 'show everything') via the "
-            "settings UI overrides this flag for themselves. Valid values are "
+            "This is an admin-set restriction: it applies to every user, and "
+            "users cannot change or opt out of it from the settings UI. "
+            "Overrides the persisted ``solo_media_type`` key in the server "
+            "settings file for the lifetime of the process. Valid values are "
             "the registered media-type ids (e.g. audio, image, video, text, "
             "document)."
         ),
@@ -454,7 +455,7 @@ def _apply_verbosity(args) -> None:
 
 
 def _apply_solo_media_type(args, parser) -> None:
-    """Validate and stash ``--solo-media-type`` as a process-level fallback."""
+    """Validate and stash ``--solo-media-type`` as a process-level override."""
     # --solo-media-type applies to both the autodetect CLI path and the
     # server path: validate and stash before any code reads the resolver.
     if getattr(args, "solo_media_type", None) is not None:

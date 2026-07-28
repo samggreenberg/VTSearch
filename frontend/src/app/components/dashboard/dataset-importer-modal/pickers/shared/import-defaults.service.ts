@@ -67,10 +67,10 @@ export class ImportDefaultsService {
   private settingsState = inject(SettingsStateService);
   private toastService = inject(ToastService);
 
-  /** Type_id (e.g. ``"image"``) of the solo-mediaType streamlining, or
-   *  ``null`` when not active. */
+  /** Type_id (e.g. ``"image"``) of the server's solo-mediaType
+   *  restriction, or ``null`` when not active. */
   get effectiveSoloMediaType(): string | null {
-    const v = this.settingsState.settingsSignal()?.effective_solo_media_type;
+    const v = this.settingsState.settingsSignal()?.solo_media_type;
     return v ? v : null;
   }
 

@@ -40,7 +40,7 @@ describe('ImportDefaultsService', () => {
   });
 
   it('effectiveSoloMediaType/effectiveSoloFolderName resolve the solo lock', () => {
-    settings.set({ effective_solo_media_type: 'image' });
+    settings.set({ solo_media_type: 'image' });
     expect(service.effectiveSoloMediaType).toBe('image');
     expect(service.effectiveSoloFolderName(mediaTypes)).toBe('images');
   });
