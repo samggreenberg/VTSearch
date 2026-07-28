@@ -302,28 +302,14 @@
               </div>
             }
             <div class="view-tab-content browser-tab-content">
-              <div class="form-group">
-                <label class="form-label" title="Slide clusters together to close the empty space between them when the map is built">Compaction<vt-field-hint-icon hint="Slides clusters together to close the empty gaps between them. Applies next time the map is built."></vt-field-hint-icon></label>
-                <div class="segmented-toggle segmented-toggle--stretch">
-                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), true)" title="Close the empty space between clusters">
-                    On
-                  </button>
-                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="!getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), false)" title="Keep the map's original spacing">
-                    Off
-                  </button>
-                </div>
-              </div>
-              <div class="form-group">
-                <label class="form-label" title="Letter named region signposts over the map when the dataset has them">Signposts<vt-field-hint-icon hint="Names the map's regions like street signs: broad names when zoomed out, finer names as you zoom in. Only shows when the dataset's map has computed labels."></vt-field-hint-icon></label>
-                <div class="segmented-toggle segmented-toggle--stretch">
-                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="getBrowseSignposts(activeBrowseTab())" (click)="onBrowseSignpostsChange(activeBrowseTab(), true)" title="Show region signposts on the map">
-                    On
-                  </button>
-                  <button class="segmented-toggle__btn" [class.segmented-toggle__btn--active]="!getBrowseSignposts(activeBrowseTab())" (click)="onBrowseSignpostsChange(activeBrowseTab(), false)" title="Hide region signposts">
-                    Off
-                  </button>
-                </div>
-              </div>
+              <label class="checkbox-row" title="Slide clusters together to close the empty space between them when the map is built">
+                <input type="checkbox" [ngModel]="getBrowseCompact(activeBrowseTab())" (ngModelChange)="onBrowseCompactChange(activeBrowseTab(), $event)" aria-label="Compaction" />
+                <span>Compaction<vt-field-hint-icon hint="Slides clusters together to close the empty gaps between them. Applies next time the map is built."></vt-field-hint-icon></span>
+              </label>
+              <label class="checkbox-row" title="Letter named region signposts over the map when the dataset has them">
+                <input type="checkbox" [ngModel]="getBrowseSignposts(activeBrowseTab())" (ngModelChange)="onBrowseSignpostsChange(activeBrowseTab(), $event)" aria-label="Signposts" />
+                <span>Signposts<vt-field-hint-icon hint="Names the map's regions like street signs: broad names when zoomed out, finer names as you zoom in. Only shows when the dataset's map has computed labels."></vt-field-hint-icon></span>
+              </label>
               @if (browseTabHasCaptioner(activeBrowseTab())) {
                 <div class="form-group">
                   <label class="form-label" title="How signpost region names are generated for this media type">Signpost text<vt-field-hint-icon hint="Tags names regions from a fixed vocabulary (fast, no download). Captions runs a generative model to describe each item (sharper on fine-grained sets, but downloads a multi-GB model and runs at build time)."></vt-field-hint-icon></label>
