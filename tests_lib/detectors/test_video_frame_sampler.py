@@ -13,11 +13,10 @@ fix did not address:
   test locks in the contract so a future contributor can't accidentally
   "fix" M20 by rejecting short videos.
 
-* The **partial-read warning**: when ``cap.read()`` returns ``ret=False``
-  for some of the requested indices (corrupted middle frames, VFR videos
-  where ``CAP_PROP_POS_FRAMES`` seek doesn't actually move, codec
-  quirks), the helper silently dropped them and the pad step biased the
-  embedding toward the last readable frame. The fix logs a warning so
+* The **partial-read warning**: when some of the requested timestamps fail
+  to decode (corrupted middle frames, VFR videos whose seeks land oddly,
+  codec quirks), the helper silently dropped them and the pad step biased
+  the embedding toward the last readable frame. The fix logs a warning so
   the failure is visible. We must also verify the M20 single-frame case
   does NOT trigger this warning (it's the legitimate-short-video path,
   not a partial-read failure).
@@ -26,83 +25,52 @@ fix did not address:
 from __future__ import annotations
 
 import logging
-import tempfile
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pytest
 
+from vtscore.media.video import decode
 
-class _FakeCapture:
-    """``cv2.VideoCapture`` stand-in with configurable per-read success.
 
-    ``read_results`` is consumed one entry per ``read()`` call. ``True`` →
-    return a (True, frame) pair; ``False`` → return (False, None). Lets us
-    simulate codec quirks where some seeks succeed and others don't.
+class _FakeDecoder:
+    """Decode-layer stand-in with configurable per-timestamp success.
+
+    ``read_results`` is consumed one entry per ``frame_at()`` call: ``True``
+    yields a frame, ``False`` yields ``None``. Lets us simulate codec quirks
+    where some seeks succeed and others don't.
     """
 
-    def __init__(self, *, frame_count: int, fps: float, read_results: list[bool]) -> None:
-        self._frame_count = frame_count
+    def __init__(self, *, frame_count: int, fps: float, read_results: list[bool] | None) -> None:
         self._fps = fps
-        self._read_results = iter(read_results)
-        self._next_pos = 0
+        self._duration = frame_count / fps if fps > 0 else 0.0
+        self._read_results = iter(read_results if read_results is not None else [True] * frame_count)
 
-    def isOpened(self) -> bool:  # noqa: N802 (cv2 API)
-        return True
+    def probe(self, _path):
+        return decode.VideoInfo(duration=self._duration, fps=self._fps, width=1, height=1)
 
-    def get(self, prop: int) -> float:
-        import cv2  # noqa: PLC0415
-
-        if prop == cv2.CAP_PROP_FRAME_COUNT:
-            return float(self._frame_count)
-        if prop == cv2.CAP_PROP_FPS:
-            return self._fps
-        return 0.0
-
-    def set(self, prop: int, value: float) -> bool:
-        import cv2  # noqa: PLC0415
-
-        if prop == cv2.CAP_PROP_POS_FRAMES:
-            self._next_pos = int(value)
-        return True
-
-    def read(self) -> tuple[bool, Any]:
+    def frame_at(self, _path, time_seconds: float):
         try:
             ok = next(self._read_results)
         except StopIteration:
             ok = False
         if not ok:
-            return False, None
-        # Encode position into the pixel value so different seeks yield
-        # distinguishable frames; useful for the all-identical assertions.
-        b = max(0, min(255, self._next_pos))
-        frame = np.full((1, 1, 3), b, dtype=np.uint8)
-        return True, frame
-
-    def release(self) -> None:
-        pass
+            return None
+        # Encode the seek position into the pixel value so different seeks
+        # yield distinguishable frames; useful for all-identical assertions.
+        value = max(0, min(255, int(round(time_seconds * self._fps))))
+        return np.full((1, 1, 3), value, dtype=np.uint8)
 
 
 @pytest.fixture
 def fake_video(monkeypatch):
-    """Build and install a ``_FakeCapture`` factory; return the captures list."""
+    """Return an installer that swaps the decode layer for a configured fake."""
 
-    def _factory(*, frame_count: int, fps: float, read_results: list[bool] | None = None):
-        import cv2
-
-        captures: list[_FakeCapture] = []
-
-        def _ctor(_path):
-            # Default: every read succeeds; fast path for tests that don't
-            # care about partial-read behaviour.
-            results = read_results if read_results is not None else [True] * frame_count
-            cap = _FakeCapture(frame_count=frame_count, fps=fps, read_results=list(results))
-            captures.append(cap)
-            return cap
-
-        monkeypatch.setattr(cv2, "VideoCapture", _ctor)
-        return captures
+    def _factory(*, frame_count: int, fps: float, read_results: list[bool] | None = None) -> _FakeDecoder:
+        fake = _FakeDecoder(frame_count=frame_count, fps=fps, read_results=read_results)
+        monkeypatch.setattr(decode, "probe", fake.probe)
+        monkeypatch.setattr(decode, "frame_at", fake.frame_at)
+        return fake
 
     return _factory
 
@@ -152,12 +120,12 @@ class TestSingleFrameVideoContract:
 
 
 class TestPartialReadWarning:
-    """``cap.read()`` returning False for some indices must log a warning."""
+    """A timestamp that fails to decode must log a warning."""
 
     def test_partial_read_logs_warning(self, fake_video, tmp_path, caplog):
         from vtscore.media.video._frame_sampling import sample_video_frames
 
-        # 8 indices requested, only the first 5 succeed → 3 silent drops.
+        # 8 timestamps requested, only the first 5 succeed → 3 silent drops.
         fake_video(frame_count=100, fps=10.0, read_results=[True] * 5 + [False] * 3)
 
         with caplog.at_level(logging.WARNING, logger="vtscore.media.video._frame_sampling"):
@@ -165,7 +133,7 @@ class TestPartialReadWarning:
 
         assert len(frames) == 8  # still padded out
         warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
-        assert warnings, "expected a warning when some cap.read() calls fail"
+        assert warnings, "expected a warning when some frame reads fail"
         assert "Partial frame-read failure" in warnings[0].getMessage()
 
     def test_complete_read_does_not_warn(self, fake_video, tmp_path, caplog):
@@ -188,7 +156,7 @@ class TestPartialReadWarning:
         assert frames == []
 
     def test_partial_read_with_short_video_warns(self, fake_video, tmp_path, caplog):
-        """A 4-frame video where only 2 reads succeed: 4 indices requested,
+        """A 4-frame video where only 2 reads succeed: 4 timestamps requested,
         2 returned → still a partial-read failure (distinct from the
         legitimately-short single-frame case)."""
         from vtscore.media.video._frame_sampling import sample_video_frames
@@ -203,25 +171,34 @@ class TestPartialReadWarning:
         assert warnings, "partial read on a short video should still warn"
 
 
+class TestUndecodableSource:
+    """Guards on the real decode layer, no fake installed."""
+
+    def test_missing_path_returns_empty(self, tmp_path):
+        from vtscore.media.video._frame_sampling import sample_video_frames
+
+        frames = sample_video_frames({"media_path": str(tmp_path / "nope.mp4")}, num_frames=8)
+        assert frames == []
+
+    def test_undecodable_bytes_return_empty(self):
+        from vtscore.media.video._frame_sampling import sample_video_frames
+
+        frames = sample_video_frames({"media_bytes": b"not a video at all"}, num_frames=8)
+        assert frames == []
+
+
 class TestRealSingleFrameVideo:
-    """End-to-end check with a real (cv2-encoded) 1-frame MP4."""
+    """End-to-end check with a real (ffmpeg-encoded) 1-frame MP4."""
 
     def _make_video(self, frames: int, tmp_path: Path) -> Path:
-        try:
-            import cv2
-        except ImportError:
-            pytest.skip("OpenCV not installed")
+        from vtscore.utils.synthetic.video import _encode_frames
+
         path = tmp_path / f"v_{frames}f.mp4"
-        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
-            tmp = Path(f.name)
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # pyright: ignore[reportAttributeAccessIssue]
-        writer = cv2.VideoWriter(str(tmp), fourcc, 10.0, (64, 64))
-        for i in range(frames):
-            frame = np.full((64, 64, 3), fill_value=(i * 23) % 256, dtype=np.uint8)
-            writer.write(frame)
-        writer.release()
-        path.write_bytes(tmp.read_bytes())
-        tmp.unlink(missing_ok=True)
+        _encode_frames(
+            path,
+            [np.full((64, 64, 3), fill_value=(i * 23) % 256, dtype=np.uint8) for i in range(frames)],
+            fps=10,
+        )
         return path
 
     def test_real_one_frame_video_pads_without_warning(self, tmp_path, caplog):
@@ -233,3 +210,13 @@ class TestRealSingleFrameVideo:
         assert len(frames) == 8
         warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
         assert not warnings
+
+    def test_real_multi_frame_video_samples_across_the_clip(self, tmp_path):
+        from vtscore.media.video._frame_sampling import sample_video_frames
+
+        video_path = self._make_video(30, tmp_path)
+        frames = sample_video_frames({"media_path": str(video_path)}, num_frames=4)
+        assert len(frames) == 4
+        # Distinct fills per source frame, so distinct samples across the clip.
+        means = [float(np.asarray(f).mean()) for f in frames]
+        assert len(set(round(m) for m in means)) > 1

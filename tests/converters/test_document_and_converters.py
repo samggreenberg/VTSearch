@@ -47,29 +47,21 @@ def _make_two_page_pdf() -> bytes:
 
 
 def _make_minimal_video(frames: int = 30, width: int = 64, height: int = 64) -> bytes:
-    """Create a minimal MP4 video using OpenCV.
-
-    Returns the MP4 bytes, or calls pytest.skip() if cv2 is unavailable.
-    """
-    try:
-        import cv2
-    except ImportError:
-        pytest.skip("OpenCV not installed")
+    """Create a minimal 10 fps MP4 with the bundled ffmpeg.  Returns its bytes."""
+    from vtscore.utils.synthetic.video import _encode_frames
 
     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
-        tmp_path = f.name
+        tmp_path = Path(f.name)
 
-    # cv2 stubs miss VideoWriter_fourcc (runtime-only opencv builtin).
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # pyright: ignore[reportAttributeAccessIssue]
-    writer = cv2.VideoWriter(tmp_path, fourcc, 10.0, (width, height))
-    for i in range(frames):
-        frame = np.full((height, width, 3), fill_value=(i * 8) % 256, dtype=np.uint8)
-        writer.write(frame)
-    writer.release()
-
-    video_bytes = Path(tmp_path).read_bytes()
-    Path(tmp_path).unlink(missing_ok=True)
-    return video_bytes
+    try:
+        _encode_frames(
+            tmp_path,
+            [np.full((height, width, 3), fill_value=(i * 8) % 256, dtype=np.uint8) for i in range(frames)],
+            fps=10,
+        )
+        return tmp_path.read_bytes()
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 # ===========================================================================
