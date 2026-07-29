@@ -236,6 +236,10 @@ def export_dataset_to_file(
             "media_bytes": media.get("media_bytes"),
             "media_string": media.get("media_string"),
             "media_path": media.get("media_path"),
+            # A URL-backed media (``recaller``) has no inline bytes and no local
+            # file: the URL *is* its byte source, so it has to ride along or the
+            # item reloads with nothing to serve.
+            "media_url": media.get("media_url"),
             "word_count": media.get("word_count"),
             "character_count": media.get("character_count"),
             "width": media.get("width"),

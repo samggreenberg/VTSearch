@@ -231,6 +231,95 @@ class TestFullModeMediaPathReference:
         assert medias == {}
 
 
+class TestFullModeExternalByteSource:
+    """Full-mode pickle load must keep media whose bytes live outside the pickle.
+
+    An archive-member media (``local_archive_member``: audio/video tiles cut
+    from tar shards we never extract) and a URL-backed media (``recaller``
+    thin mode) both carry no inline bytes and no local file - their bytes
+    re-resolve on demand from the shard / the URL.  Full mode used to drop
+    every such entry, so reopening the dataset from the dashboard registry
+    (which loads the pickle in full mode) produced an *empty* dataset and a
+    "Dataset is empty - nothing to project" failure on Browse.
+    """
+
+    def _write_pickle(self, tmp_path: Path, media: dict[str, Any]) -> Path:
+        from vtscore.datasets.container import write_container
+
+        pkl_path = tmp_path / "external.pkl"
+        write_container(pkl_path, pickle.dumps({"medias": {1: media}}), {"format_version": 1})
+        return pkl_path
+
+    def _base_media(self) -> dict[str, Any]:
+        return {
+            "id": 1,
+            "media_type": "audio",
+            "duration": 0,
+            "file_size": 4096,
+            "md5": "deadbeef",
+            "embeddings": {"clap": np.zeros(512, dtype=np.float32)},
+            "embedder": "clap",
+            "filename": "shard0/clip.m4a",
+            "category": "custom",
+            "media_bytes": None,
+            "media_string": None,
+            "media_path": None,
+        }
+
+    def test_full_mode_keeps_archive_member_media(self, tmp_path):
+        media = self._base_media()
+        media["origin"] = {
+            "importer": "local_archive_member",
+            "params": {
+                "archive_path": str(tmp_path / "shard0.tar"),
+                "member": "clip.m4a",
+                "media_type": "audio",
+                "clip_start": 0.0,
+                "clip_end": 10.0,
+            },
+        }
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(self._write_pickle(tmp_path, media), medias, thin=False)
+        assert len(medias) == 1
+        # Kept lazily: the member is streamed from its shard on demand.
+        assert medias[1]["media_bytes"] is None
+        assert medias[1]["origin"]["importer"] == "local_archive_member"
+        assert isinstance(media_embedding(medias[1]), np.ndarray)
+
+    def test_full_mode_keeps_url_backed_media(self, tmp_path):
+        media = self._base_media()
+        media["origin"] = {"importer": "recaller", "params": {}}
+        media["media_url"] = "https://example.invalid/clip.wav"
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(self._write_pickle(tmp_path, media), medias, thin=False)
+        assert len(medias) == 1
+        assert medias[1]["media_bytes"] is None
+        # The URL is the media's byte source, so it has to survive the reload.
+        assert medias[1]["media_url"] == "https://example.invalid/clip.wav"
+
+    def test_full_mode_still_drops_media_with_no_source(self, tmp_path):
+        """A media with no bytes, no file, no shard and no URL stays dropped."""
+        media = self._base_media()
+        media["origin"] = {"importer": "server_folder", "params": {}}
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(self._write_pickle(tmp_path, media), medias, thin=False)
+        assert medias == {}
+
+    def test_media_url_survives_export_round_trip(self, tmp_path):
+        """``export_dataset_to_file`` must persist ``media_url``."""
+        from vtscore.datasets.loader import export_dataset_to_file
+
+        media = self._base_media()
+        media["origin"] = {"importer": "recaller", "params": {}}
+        media["media_url"] = "https://example.invalid/clip.wav"
+        pkl_path = tmp_path / "roundtrip.pkl"
+        pkl_path.write_bytes(export_dataset_to_file({1: media}, embedder="clap", media_type="audio"))
+
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(pkl_path, medias, thin=False)
+        assert medias[1]["media_url"] == "https://example.invalid/clip.wav"
+
+
 class TestPickleNullEmbedding:
     """Skip-on-None pickle entries (audit M8 / M12).
 
