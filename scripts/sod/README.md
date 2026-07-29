@@ -258,10 +258,10 @@ python scripts/sod/sweep.py --datasets coco --classes "traffic light,stop sign,c
 # seeding: spread, assign: feature, sweep k and beta, resolution
 python scripts/sod/sweep.py --datasets coco --classes "traffic light,stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --iterations 3 --max-labels 50 --leaf-seeding spread --leaf-assign feature --out-dir docs/experiments/sod-sweep/coco-stopsign-trafficlight-dinov3-hac-3-5-beta-8-16-32-k-value-224-448-resolution --hac-k 8 16 32 --leaf-beta 0.3 0.5 --resolution none 448 --viz --min-box-frac 0.05 --labeling-trace --summary
 
-# DINOv3 ViT-B vs ViT-L, seeding: spread, assign: feature, sweep k and reslution
+# DINOv3 ViT-B vs ViT-L, seeding: spread, assign: feature, sweep k and resolution
 python scripts/sod/sweep.py --datasets coco --classes "traffic light,stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --leaf-seeding spread --leaf-assign feature --hac-k 8 16 32 --iterations 3 --resolution none 448 --max-labels 50 --dinov3-model vitb16 vitl16 --out-dir docs/experiments/sod-sweep/coco-stopsign-trafficlight-dinov3-vitb16-vs-vitl16 --viz --summary --min-box-frac 0.05 --labeling-trace
 
-# DINOv3 ViT-B vs ViT-L, seeding: spread, assign: feature, k=32, reslution=448, vitl16, 5 iterations with band=all
+# DINOv3 ViT-B vs ViT-L, seeding: spread, assign: feature, k=32, resolution=448, vitl16, 5 iterations with band=all
 python scripts/sod/sweep.py --datasets coco --classes "traffic light,stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --leaf-seeding spread --leaf-assign feature --hac-k 32 --iterations 5 --resolution 448 --max-labels 50 --dinov3-model vitl16 --out-dir docs/experiments/sod-sweep/coco-stopsign-trafficlight-dinov3-vitl16-5-iterations --viz --viz-band all --summary --min-box-frac 0.05 --labeling-trace --pca-dims none 10 
 
 # SigLIP2 whole interpretability threshold test
