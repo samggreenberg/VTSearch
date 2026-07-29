@@ -25,7 +25,6 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable
 
-from marshmallow import ValidationError
 from vtscore.utils.hashing import content_md5
 
 log = logging.getLogger(__name__)
