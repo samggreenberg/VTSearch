@@ -739,27 +739,36 @@ class VideoMediaType(MediaType):
     # HTTP serving
     # ------------------------------------------------------------------
 
-    def image_response(self, media: dict) -> MediaResponse | None:
-        """Return the video thumbnail as a PNG image, or *None*."""
+    def ensure_thumbnail_bytes(self, media: dict) -> bytes | None:
+        """Return the mid-frame PNG, extracting it from the media's bytes if absent.
+
+        The extraction is the same one the ingest-time path performs, so a
+        thumbnail warmed here (archive members, which had no file to read at
+        import) is indistinguishable from one computed by the loader.  The
+        resolved payload is dropped as soon as the frame is grabbed, keeping a
+        warm-up over multi-GB shards to one member at a time.
+        """
         thumb = media.get("thumbnail_bytes")
         if thumb:
-            return MediaResponse(
-                data=thumb,
-                mimetype="image/png",
-                download_name=f"media_{media['id']}_thumb.png",
-            )
-        # Fallback: generate on the fly from media bytes
+            return thumb
         raw = self._resolve_media_bytes(media)
-        if raw:
-            thumb = generate_video_thumbnail(raw)
-            if thumb:
-                media["thumbnail_bytes"] = thumb
-                return MediaResponse(
-                    data=thumb,
-                    mimetype="image/png",
-                    download_name=f"media_{media['id']}_thumb.png",
-                )
-        return None
+        if not raw:
+            return None
+        thumb = generate_video_thumbnail(raw)
+        if thumb:
+            media["thumbnail_bytes"] = thumb
+        return thumb
+
+    def image_response(self, media: dict) -> MediaResponse | None:
+        """Return the video thumbnail as a PNG image, or *None*."""
+        thumb = self.ensure_thumbnail_bytes(media)
+        if not thumb:
+            return None
+        return MediaResponse(
+            data=thumb,
+            mimetype="image/png",
+            download_name=f"media_{media['id']}_thumb.png",
+        )
 
     def media_response(self, media: dict) -> MediaResponse:
         filename = media.get("filename", "")

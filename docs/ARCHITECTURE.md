@@ -136,6 +136,7 @@ VTSearch/
 │   │   ├── loader_pickle.py        load_dataset_from_pickle + chunked + sidecars
 │   │   ├── loader_demo.py          load_demo_dataset, _stamp_demo_origin
 │   │   ├── load_pipeline.py        Background-task load orchestration (gate handoff, stage sequencing)
+│   │   ├── thumbnail_warm.py       Post-load thumbnail warm-up for archive-member datasets (issue #2738)
 │   │   ├── stages/                 Post-import load stages: clipper fix-up, embed-missing,
 │   │   │                           finalize (drop-none/dedup/coverage), projection, registry save
 │   │   ├── registry.py             Persistent dataset registry (data/dataset_registry.json)
