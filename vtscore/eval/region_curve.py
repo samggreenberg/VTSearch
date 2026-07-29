@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from vtscore.eval.error_metrics import f1_at, min_weighted_cost, weighted_error
+from vtscore.eval.error_metrics import f1_at, max_f1, min_weighted_cost, weighted_error
 from vtscore.eval.scoring_heads import CosineHead, MLPHead, max_pool_over_images, max_pool_with_argmax
 from vtscore.eval.xcal import cross_calibrated_threshold
 
@@ -100,6 +100,20 @@ def _oracle_operating_point(
     if not np.isfinite(thr):
         thr = 0.5
     return float(thr), weighted_error(scores, [float(v) for v in labels], thr, inclusion)
+
+
+def _oracle_extra(scores: Sequence[float] | np.ndarray, labels: Sequence[int]) -> dict[str, float]:
+    """Oracle **ceiling** for F1: the max F1 over all thresholds.
+
+    Companion to ``oracle_cost`` (min cost) for the F1 plot. Unlike cost, F1 has
+    its own optimal threshold — at extreme imbalance it differs sharply from the
+    min-cost threshold (cost is rate-based; F1 is precision/count-based), so this
+    is computed independently as ``max_f1`` rather than "F1 at the min-cost τ".
+    By construction ``oracle_f1 >= f1`` always (a true ceiling). fpr/fnr get no
+    oracle companion — their per-metric optimum is degenerate (min FPR = 0 by
+    predicting all-negative), so only their sum (cost) has a meaningful oracle.
+    """
+    return {"oracle_f1": max_f1(scores, [float(v) for v in labels])}
 
 
 def _iou_metrics(inputs: RegionCurveInputs, argmax: np.ndarray) -> tuple[float, float]:
@@ -287,10 +301,11 @@ def _evaluate_one_rv(
 
     err = weighted_error(scores, [float(v) for v in test_labels], threshold, inclusion)
     oracle = min_weighted_cost(scores, [float(v) for v in test_labels], inclusion)
+    oracle_extra = _oracle_extra(scores, test_labels)
     f1 = f1_at(scores, test_labels, threshold)
     mean_iou, corloc = _iou_metrics(inputs, argmax)
     calib_mode = _calib_mode(k, n_neg, safe_thresholds=safe_thresholds)
-    return _row(inputs, "mlp", k, n_neg, seed, threshold, err, oracle, calib_mode, f1, mean_iou, corloc)
+    return _row(inputs, "mlp", k, n_neg, seed, threshold, err, oracle, calib_mode, f1, mean_iou, corloc, oracle_extra)
 
 
 def _evaluate_one(
@@ -319,7 +334,10 @@ def _evaluate_one(
         thr, err = _oracle_operating_point(scores, test_labels, inclusion)
         f1 = f1_at(scores, test_labels, thr)
         mean_iou, corloc = _iou_metrics(inputs, argmax)
-        return _row(inputs, head_kind, 0, 0, seed, thr, err, err["cost"], "none_k0", f1, mean_iou, corloc)
+        # K=0 reported at the oracle-cost operating point; oracle_f1 is still the
+        # independent max-F1 ceiling (>= the reported f1).
+        oracle_extra = _oracle_extra(scores, test_labels)
+        return _row(inputs, head_kind, 0, 0, seed, thr, err, err["cost"], "none_k0", f1, mean_iou, corloc, oracle_extra)
 
     P = inputs.pos_exemplars.shape[0]
     if k > P:
@@ -362,6 +380,7 @@ def _evaluate_one(
     scores, argmax = max_pool_with_argmax(head.score_rows, inputs.test_region_mats)
     err = weighted_error(scores, [float(v) for v in test_labels], threshold, inclusion)
     oracle = min_weighted_cost(scores, [float(v) for v in test_labels], inclusion)
+    oracle_extra = _oracle_extra(scores, test_labels)
     f1 = f1_at(scores, test_labels, threshold)
     mean_iou, corloc = _iou_metrics(inputs, argmax)
     return _row(
@@ -377,10 +396,14 @@ def _evaluate_one(
         f1,
         mean_iou,
         corloc,
+        oracle_extra,
     )
 
 
-def _row(inputs, head_kind, k, n_neg, seed, threshold, err, oracle, calib_mode, f1, mean_iou, corloc) -> dict:
+def _row(
+    inputs, head_kind, k, n_neg, seed, threshold, err, oracle, calib_mode, f1, mean_iou, corloc, oracle_extra=None
+) -> dict:
+    oe = oracle_extra or {}
     return {
         **inputs.meta,
         "head": head_kind,
@@ -395,6 +418,10 @@ def _row(inputs, head_kind, k, n_neg, seed, threshold, err, oracle, calib_mode, 
         "mean_iou": mean_iou,
         "corloc": corloc,
         "oracle_cost": float(oracle),
+        # Oracle F1 ceiling (max F1 over τ) for the F1 plot; NaN when the caller
+        # didn't supply it (e.g. legacy paths). See ``_oracle_extra``. fpr/fnr have
+        # no oracle companion (their per-metric optimum is degenerate).
+        "oracle_f1": float(oe.get("oracle_f1", float("nan"))),
         "threshold": round(float(threshold), 6),
         "calib_mode": calib_mode,
         "n_test": len(inputs.test_labels),
@@ -734,8 +761,9 @@ def _row_realistic(
     phase,
     select_mode,
     stop_recommended,
+    oracle_extra=None,
 ) -> dict:
-    row = _row(inputs, head_kind, t, n_bad, seed, threshold, err, oracle, calib, f1, mean_iou, corloc)
+    row = _row(inputs, head_kind, t, n_bad, seed, threshold, err, oracle, calib, f1, mean_iou, corloc, oracle_extra)
     row["n_pos"] = int(n_good)  # override: for the realistic loop n_pos is the good count, not t
     row["t"] = int(t)
     row["n_good"] = int(n_good)
@@ -948,6 +976,7 @@ def _realistic_one_seed(
 
         err = weighted_error(test_scores, [float(v) for v in test_labels], threshold, inclusion)
         oracle = min_weighted_cost(test_scores, [float(v) for v in test_labels], inclusion)
+        oracle_extra = _oracle_extra(test_scores, test_labels)
         f1 = f1_at(test_scores, test_labels, threshold)
         mean_iou, corloc = _iou_metrics(inputs, test_argmax)
         cost_history.append(err["cost"])
@@ -978,6 +1007,7 @@ def _realistic_one_seed(
                 phase,
                 select_mode,
                 stop_recommended,
+                oracle_extra=oracle_extra,
             )
         )
         # Per-step labeling record: how the item was surfaced (from pending_meta,

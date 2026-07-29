@@ -63,11 +63,17 @@ python scripts/run_hac_tree_sweep.py --backbone dinov3 --image-dir ./data/hac_te
   
 python scripts/run_hac_tree_sweep.py --backbone dinov3 --image-dir ./data/hac_test --seed 0 --k-values 6 8 12 --alpha-values 0.5 --thumb 96 --leaf-seeding spread --leaf-assign feature --out-dir docs/experiments/hac-leaf-ablation/spread-feature
 
-# spread + feature, sweep k, alpha, pca-dims, resolution
+# spread + feature, sweep k, alpha, pca-dims, resolution 448
 python scripts/run_hac_tree_sweep.py --backbone dinov3 --image-dir ./data/hac_test --seed 0 --k-values 8 16 32 --leaf-beta 0.3 0.5 0.7 --thumb 96 --leaf-seeding spread --leaf-assign feature --resolution 448 --pca-dims none 10 --out-dir docs/experiments/hac-tree/spread-feature-k-alpha-pca-resolution-sweep 
 
 # spread + feature, sweep k, alpha, pca-dims, dinov3-b vs l
 python scripts/run_hac_tree_sweep.py --backbone dinov3 --image-dir ./data/hac_test --seed 0 --k-values 8 16 32 --leaf-beta 0.3 0.5 0.7 --thumb 96 --leaf-seeding spread --leaf-assign feature --resolution 448 --pca-dims none 10 --out-dir docs/experiments/hac-tree/spread-feature-k-alpha-pca-resolution-sweep --dinov3-model vitb16 vitl16
+
+# redo leaf approach test: topk+spatial vs spread + feature, b16 vs l16, 448 resolution, k sweep
+
+python scripts/run_hac_tree_sweep.py --backbone dinov3 --image-dir ./data/hac_test2 --seed 0 --k-values 4 6 8 10 12 16 20 24 28 32 --leaf-beta 0.3 0.5 0.7  --thumb 96 --leaf-seeding topk --leaf-assign spatial --out-dir docs/experiments/hac-leaf-ablation-2/topk-spatial --dinov3-model vitb16 vitl16 --resolution 448
+  
+python scripts/run_hac_tree_sweep.py --backbone dinov3 --image-dir ./data/hac_test2 --seed 0 --k-values 4 6 8 10 12 16 20 24 28 32 --leaf-beta 0.3 0.5 0.7 --thumb 96 --leaf-seeding spread --leaf-assign feature --out-dir docs/experiments/hac-leaf-ablation-2/spread-feature --dinov3-model vitb16 vitl16 --resolution 448
 
 """
 

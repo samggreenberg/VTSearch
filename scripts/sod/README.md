@@ -263,4 +263,10 @@ python scripts/sod/sweep.py --datasets coco --classes "traffic light,stop sign" 
 
 # DINOv3 ViT-B vs ViT-L, seeding: spread, assign: feature, k=32, reslution=448, vitl16, 5 iterations with band=all
 python scripts/sod/sweep.py --datasets coco --classes "traffic light,stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --leaf-seeding spread --leaf-assign feature --hac-k 32 --iterations 5 --resolution 448 --max-labels 50 --dinov3-model vitl16 --out-dir docs/experiments/sod-sweep/coco-stopsign-trafficlight-dinov3-vitl16-5-iterations --viz --viz-band all --summary --min-box-frac 0.05 --labeling-trace --pca-dims none 10 
+
+# SigLIP2 whole interpretability threshold test
+python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders siglip2 --proposals whole --leaf-seeding spread --leaf-assign feature --hac-k 32 --iterations 3 --resolution 448 --max-labels 50 --dinov3-model vitl16 --out-dir docs/experiments/sod-sweep/coco-stopsign-siglip2-whole-3-iterations-oracle --viz --viz-band all --min-box-frac 0.05 --labeling-trace --show-oracle
+
+# DINOv3 HAC interpretability threshold test
+python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --leaf-seeding spread --leaf-assign feature --hac-k 32 --iterations 3 --resolution 448 --max-labels 50 --dinov3-model vitl16 --out-dir docs/experiments/sod-sweep/coco-stopsign-dinov3-hac-3-iterations-oracle --viz --viz-band all --min-box-frac 0.05 --labeling-trace --show-oracle
 ```

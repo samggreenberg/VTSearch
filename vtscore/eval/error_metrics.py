@@ -137,3 +137,34 @@ def min_weighted_cost(
     # this explicitly to cover the high-threshold extreme.
     predict_none_cost = fnr_weight * 1.0
     return float(round(min(float(costs.min()), predict_none_cost), 6))
+
+
+def max_f1(scores: FloatArray, labels: FloatArray) -> float:
+    """Oracle best-case F1: max over all thresholds of ``f1_at`` (peeks at labels).
+
+    Sweeps every candidate threshold (each unique score) and returns the highest
+    achievable F1. Unlike ``min_weighted_cost`` (which optimizes rate-based FPR+FNR),
+    this optimizes F1 directly, so at extreme class imbalance the two pick very
+    different thresholds — the min-cost point can have poor precision (many false
+    positives in count) and thus poor F1. This is the true F1 **ceiling**: the
+    cross-calibrated F1 can never exceed it. NaN when no positives exist. An
+    optimistic reference, never a production metric.
+    """
+    if len(scores) == 0:
+        return float("nan")
+
+    scores_arr = np.asarray(scores, dtype=np.float64)
+    labels_arr = np.asarray(labels, dtype=np.float64)
+    total_positives = int(np.sum(labels_arr == 1.0))
+    if total_positives == 0:
+        return float("nan")
+
+    order = np.argsort(-scores_arr)
+    sorted_labels = labels_arr[order]
+    # At position i (threshold = i-th highest score) items 0..i are predicted
+    # positive: TP = positives seen, FP = negatives seen, FN = positives not yet seen.
+    cum_tp = np.cumsum(sorted_labels == 1.0)
+    cum_fp = np.cumsum(sorted_labels == 0.0)
+    denom = cum_tp + cum_fp + total_positives  # = 2*TP + FP + FN
+    f1 = np.where(denom > 0, 2.0 * cum_tp / denom, 0.0)
+    return float(round(float(f1.max()), 6))
