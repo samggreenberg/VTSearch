@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import io
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +26,8 @@ def _run_paddleocr(media_bytes: bytes, filename: str, language: str) -> list | N
     """Decode image bytes and run PaddleOCR, returning the raw per-region results."""
     try:
         import numpy as np  # noqa: PLC0415
-        from PIL import Image  # noqa: PLC0415
+
+        from vtscore.media.image.decode import decode_bounded_rgb  # noqa: PLC0415
     except ImportError:
         print("Image2TextMediaConverter requires Pillow and numpy")
         return None
@@ -39,7 +39,9 @@ def _run_paddleocr(media_bytes: bytes, filename: str, language: str) -> list | N
         return None
 
     try:
-        image = Image.open(io.BytesIO(media_bytes)).convert("RGB")
+        # Bounded decode: OCR reads a transcript, not pixel coordinates, so a
+        # huge scan can be capped without changing what comes back.
+        image, _scale = decode_bounded_rgb(media_bytes)
     except Exception as e:
         print(f"Image2TextMediaConverter: failed to open {filename}: {e}")
         return None
