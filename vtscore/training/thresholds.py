@@ -300,6 +300,45 @@ def _per_bag_fit_weights(
     return w
 
 
+def _pooled_group_scores(
+    model: Any,
+    cal_groups: list,
+    rows_by_group: dict,
+    X_np: np.ndarray,
+    score_rows_by_group: dict | None,
+) -> list[float]:
+    """Collapse each calibration group to one max-pooled sigmoid score.
+
+    With *score_rows_by_group* each group pools over the rows the scorer will
+    max-pool at **inference**; otherwise it pools over the rows it trained on
+    (the historical behaviour every production caller takes).
+    """
+    import torch  # noqa: PLC0415
+
+    from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: PLC0415
+
+    device = next(model.parameters()).device
+    if score_rows_by_group is not None:
+        blocks = [np.asarray(score_rows_by_group[g], dtype=np.float32) for g in cal_groups]
+        sizes = [b.shape[0] for b in blocks]
+        with torch.no_grad():
+            X_cal = torch.tensor(np.concatenate(blocks, axis=0), dtype=torch.float32).to(device)
+            flat = sigmoid_to_finite_scores(model(X_cal))
+        out: list[float] = []
+        offset = 0
+        for size in sizes:
+            out.append(max(flat[offset : offset + size]))
+            offset += size
+        return out
+
+    cal_idx = [i for g in cal_groups for i in rows_by_group[g]]
+    with torch.no_grad():
+        X_cal = torch.tensor(X_np[cal_idx], dtype=torch.float32).to(device)
+        row_scores = sigmoid_to_finite_scores(model(X_cal))
+    by_row = dict(zip(cal_idx, row_scores, strict=True))
+    return [max(by_row[i] for i in rows_by_group[g]) for g in cal_groups]
+
+
 def _compute_fold_orderings_grouped(
     X_list: list[np.ndarray],
     y_list: list[float],
@@ -309,6 +348,7 @@ def _compute_fold_orderings_grouped(
     calibrate_count: int,
     calibration_fraction: float,
     hidden_dim: int | None,
+    score_rows_by_group: dict | None = None,
 ) -> tuple[list[tuple[list[float], list[float]]], float | None]:
     """Bag-aware variant of :func:`compute_fold_orderings`.
 
@@ -317,11 +357,13 @@ def _compute_fold_orderings_grouped(
     split over votes not rows, weight-balances each fold fit per-bag, and
     collapses every calibration group to a single max-pooled score (an image
     scores by its best region, as at inference).
+
+    *score_rows_by_group* overrides which rows a calibration group collapses
+    over - see :func:`compute_fold_orderings`.
     """
     import torch  # noqa: PLC0415
 
     from vtscore.training.mlp import train_model  # noqa: PLC0415
-    from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: PLC0415
 
     _rng = rng if rng is not None else np.random
     X_np = np.array(X_list)
@@ -374,18 +416,10 @@ def _compute_fold_orderings_grouped(
         fold_w = torch.tensor(_per_bag_fit_weights(y_np[train_idx], [grp[i] for i in train_idx]), dtype=torch.float32)
         model = train_model(X_train, y_train, input_dim, hidden_dim=hidden_dim, sample_weights=fold_w)
 
-        # Score every calibration row, then max-pool per group to one score.
-        cal_idx = [i for g in cal_groups for i in rows_by_group[g]]
-        with torch.no_grad():
-            X_cal = torch.tensor(X_np[cal_idx], dtype=torch.float32).to(next(model.parameters()).device)
-            row_scores = sigmoid_to_finite_scores(model(X_cal))
-        pos_in_cal = {i: s for i, s in zip(cal_idx, row_scores, strict=True)}
-        group_scores: list[float] = []
-        group_labels: list[float] = []
-        for g in cal_groups:
-            rows = rows_by_group[g]
-            group_scores.append(max(pos_in_cal[i] for i in rows))
-            group_labels.append(float(label_by_group[g]))
+        # Collapse each calibration group to one max-pooled score, so a Good
+        # bag and a Bad bag are pooled the same way the scorer pools an image.
+        group_scores = _pooled_group_scores(model, cal_groups, rows_by_group, X_np, score_rows_by_group)
+        group_labels = [float(label_by_group[g]) for g in cal_groups]
         orderings.append((group_scores, group_labels))
 
     return orderings, None
@@ -400,6 +434,7 @@ def compute_fold_orderings(
     calibration_fraction: float = 0.5,
     hidden_dim: int | None = None,
     groups: list | None = None,
+    score_rows_by_group: dict | None = None,
 ) -> tuple[list[tuple[list[float], list[float]]], float | None]:
     """Train the K calibration folds and return their held-out orderings.
 
@@ -424,6 +459,18 @@ def compute_fold_orderings(
     and each calibration group collapses to one max-pooled score - matching how
     inference scores an image by its best region.  When *groups* is ``None``
     (every non-flooded caller) the historical row-wise path runs unchanged.
+
+    *score_rows_by_group* (grouped path only) maps each group id to the row
+    stack that group should be **scored** over, decoupling "what the fold model
+    trains on" from "what a calibration bag collapses to".  It exists because
+    the two are not the same whenever a Good vote contributes fewer rows than a
+    Bad vote floods: the Good bag then collapses to a max over 1 row while the
+    Bad bag - and every image at inference - collapses to a max over N, and
+    ``max`` is an upward-biased order statistic, so the fold's min-cost cut
+    lands systematically high and the threshold over-rejects positives.  Passing
+    each vote's inference rows here puts both classes in the geometry and at the
+    width the scorer will actually use.  ``None`` (every production caller)
+    keeps the historical "collapse over the training rows" behaviour.
     """
     if groups is not None:
         return _compute_fold_orderings_grouped(
@@ -435,6 +482,7 @@ def compute_fold_orderings(
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
             hidden_dim=hidden_dim,
+            score_rows_by_group=score_rows_by_group,
         )
     n = len(X_list)
     if n < 4:
@@ -540,6 +588,7 @@ def calculate_cross_calibration_threshold(
     calibration_fraction: float = 0.5,
     hidden_dim: int | None = None,
     groups: list | None = None,
+    score_rows_by_group: dict | None = None,
 ) -> float:
     """Estimate a decision threshold using k-fold calibration.
 
@@ -585,6 +634,8 @@ def calculate_cross_calibration_threshold(
             When ``None`` (default), each fold model auto-sizes based on its
             own training-set size.  Pass the full-data hidden dim to ensure
             fold models match the final model's architecture.
+        score_rows_by_group: Per-group inference row stacks; see
+            :func:`compute_fold_orderings`.  Grouped path only.
 
     Returns:
         A float threshold. Returns 0.5 when calibration is not possible:
@@ -603,6 +654,7 @@ def calculate_cross_calibration_threshold(
         calibration_fraction=calibration_fraction,
         hidden_dim=hidden_dim,
         groups=groups,
+        score_rows_by_group=score_rows_by_group,
     )
     if fallback is not None:
         return fallback

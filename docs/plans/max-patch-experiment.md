@@ -1,7 +1,10 @@
 # Max-Patch experiment — MaxHAC vs MaxPatch (vs whole-image)
 
-**Status:** Code shipped (styles + harness wiring + GRID runner + tests); the
-open work is running the study on the Grid and acting on its verdict.
+**Status:** Code shipped (styles + harness wiring + GRID runner + tests). A
+first run completed but its Caltech-101 arm measured a harness defect rather
+than MaxPatch (fixed; see #2730 and the correction atop the report), so the
+open work is re-running the study on the Grid and acting on the corrected
+verdict.
 
 ## Question
 
@@ -46,8 +49,21 @@ Implemented; kept here as the running spec.
   (`HF_TOKEN`).
 - **Datasets**: `visual_genome_m` and `openlogo_a` (ground-truth region
   boxes → real region votes; cluttered scenes / small logos are the regime
-  patch scoring exists for) plus `caltech101_m` (boxless centered objects —
-  the control where patch machinery should win nothing).
+  patch scoring exists for) plus `caltech101_m` (boxless centered objects).
+  **`caltech101_m` is the image-level-voting control, not the large-target
+  control** — it has no boxes, so every Good vote on it is image-level
+  regardless of how big the object is. It answers "what happens when the user
+  ignores region voting", which is a real usage mode but *not* evidence about
+  scale. The large-target evidence comes from the top scale bands of the boxed
+  datasets (see below); do not read Caltech as covering that regime.
+- **Category selection = scale bands.** Boxed datasets sample
+  `N_PER_BAND` categories from each of four `SCALE_BANDS` straddling the patch
+  (~0.51 % area) and leaf (~8.3 %) reference scales, so the sample spans the
+  axis the hypothesis is about instead of leaving it to chance. Scale is always
+  the median **voted (union) box** area — what a Good vote actually drags — and
+  categories whose median voted box exceeds `MAX_VOTED_AREA` (default 80 %) are
+  dropped, because at that size a region vote *is* an image-level vote.
+  Boxless datasets have no scale axis and keep the prevalence spread.
 - **Metrics** per step: `average_precision` (ranking), `cost` at the trained
   (cross-calibrated) threshold — the inclusion-weighted FPR/FNR the live
   tool optimises — plus AUROC and train/score wall clocks; prepare records
@@ -82,6 +98,16 @@ even when instances are patch scale; (b) VG spreads enormously per category
 11%, `wall` 17%, `sky` 33%), so the per-category break-down is where the
 scale story will actually show.
 
+**The table above is per *instance*, which is the wrong unit for every
+scale question in this study** — it is kept only as a description of the raw
+annotations. Nuance (a) is not a footnote: the union box is what the detector
+trains and scores against, and the gap is ~2.7× at the median and far worse for
+multi-instance categories (scattered `arm`s give ~1 %-area instances but a
+near-frame union box). Selection and Figure 4 both use
+`vtscore.eval.labels.category_scale_stats`, whose `voted_area` is the union box
+and whose `union_inflation` (`voted_area / instance_area`) flags the categories
+where the two diverge. Anything reasoning about scale must use `voted_area`.
+
 ## Hypotheses (pre-registered, honest priors)
 
 - MaxPatch should have the *better trained-threshold behaviour on Bad-heavy
@@ -113,35 +139,21 @@ scale story will actually show.
 
 <!-- item-sep -->
 
-- **DONE (2026-07-29) — study run + report at
-  [`docs/experiments/max-patch/REPORT.md`](../experiments/max-patch/REPORT.md).**
-  Verdict: **the answer is regime-dependent.** On cluttered, boxed scenes
-  (Visual Genome, 12 cats × 5 seeds) MaxPatch beats production MaxHAC at the
-  final vote budget (ErrorCost 0.387 vs 0.489, paired Holm p < 0.001), winning
-  on both FPR and FNR and on ranking (AP), with the edge concentrated on
-  sub-leaf-scale objects (Spearman ρ = 0.57). Both patch styles crush
-  whole-image scoring — DINOv3's CLS vector is the *worst* arm, below SigLIP. But
-  on boxless, centred data (Caltech-101) MaxPatch's 196-way max-pool
-  *mis-calibrates*: perfect ranking (AP 1.0) yet ErrorCost 0.686 (FNR 0.69 at
-  FPR 0), while MaxHAC ties the whole-image control. **Recommendation:** adopt
-  MaxPatch for region-vote scoring on cluttered/small-object collections (and
-  drop the HAC tree there); do not blanket-replace whole-image scoring —
-  gate raw-patch scoring on a genuine sub-image region vote, or fix the
-  max-pool threshold calibration first. See the report for the hybrid path.
-
-  **Harness fix shipped alongside (was silently broken):** the demo-cache pickle
-  never persisted `patch_grid`/`patch_regions`/`regions`/`categories`, and
-  `load_demo_dataset` never ran the patch back-fill — so every style would have
-  collapsed to whole-image. Fixed via `embed_missing` in prepare + a lossless
-  `_cells_io` serializer (see the report's Reproducibility section).
+- [ ] #2730 — Re-run the study and rewrite the verdict: the Caltech-101 arm
+  measured a harness defect (boxless Good votes trained on a vector the scorer
+  never evaluated; Good/Bad calibration bags of different widths), not a
+  property of raw-patch max-pooling (Opus 4.8). The rerun uses the scale-band
+  category selection, so it also fixes the thin large-target coverage — verify
+  at prepare time that no band logs `** UNDER-POPULATED **`, especially
+  `above_4x`; if VG can't fill the top bands from `visual_genome_m`'s 4 % slice,
+  step up to `visual_genome_l` rather than running a 2-category band.
 
 <!-- item-sep -->
 
-- **Optional follow-up arms, only if the first run is ambiguous** — (a) Good
+- **Optional follow-up arms, only if the rerun is ambiguous** — (a) Good
   vote = *mean of patches inside the box* instead of the single nearest patch
   (the other natural reading of "closest patch", better for multi-patch
-  objects); (b) Bad flood = leaves+patches union; (c) `max_patch` scoring with
-  the CLS row included so whole-image evidence can also win.
+  objects); (b) Bad flood = leaves+patches union.
 
 <!-- item-sep -->
 
@@ -158,3 +170,8 @@ scale story will actually show.
   behaviour of *not* flooding Bad votes on patch datasets (it predates region
   flooding).  The style path is the production-faithful one; the default path
   is left untouched for reproducibility of earlier studies.
+- The style path calibrates in **inference geometry** (each bag collapses over
+  `style.score_rows`), which production does *not* yet do — production still
+  compares a max-over-1 Good bag against a max-over-13 Bad bag (#2731).  So the
+  harness is now *more* faithful to what inference scores than the live vote
+  path is; when #2731 lands the two converge again.

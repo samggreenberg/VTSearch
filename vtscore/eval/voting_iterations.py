@@ -532,6 +532,13 @@ def _style_train_and_calibrate(
     than flooded rows, the calibration folds split by bag, and the final fit
     weights each bag equally.  On a whole-image style every bag is one row, so
     this collapses to the historical single-vector behaviour.
+
+    Calibration additionally runs in **inference geometry**: each bag is handed
+    its ``style.score_rows`` stack so a Good bag collapses the same way a Bad
+    bag (and every held-out image) does.  Without this a Good bag is a max over
+    its 1 training row while a Bad bag is a max over the ~197 rows it flooded,
+    and the fold's min-cost cut lands above the score range production actually
+    produces - see :func:`vtscore.training.thresholds.compute_fold_orderings`.
     """
     import numpy as np  # noqa: PLC0415
     import torch  # noqa: PLC0415
@@ -541,16 +548,19 @@ def _style_train_and_calibrate(
     X_list: list[np.ndarray] = []
     y_list: list[float] = []
     groups: list = []
+    score_rows_by_group: dict = {}
     for vid in good_votes:
         box = region_box_for_category(clips_dict[vid], target_category) if region_voting else None
         X_list.append(np.asarray(style_obj.good_vec(clips_dict[vid], box), dtype=np.float32))
         y_list.append(1.0)
         groups.append(("g", vid))
+        score_rows_by_group[("g", vid)] = style_obj.score_rows(clips_dict[vid])
     for vid in bad_votes:
         for vec in style_obj.bad_vecs(clips_dict[vid]):
             X_list.append(np.asarray(vec, dtype=np.float32))
             y_list.append(0.0)
             groups.append(("b", vid))
+        score_rows_by_group[("b", vid)] = style_obj.score_rows(clips_dict[vid])
 
     X = torch.tensor(np.array(X_list), dtype=torch.float32)
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
@@ -568,6 +578,7 @@ def _style_train_and_calibrate(
         calibration_fraction=calibration_fraction,
         hidden_dim=hidden_dim,
         groups=cal_groups,
+        score_rows_by_group=score_rows_by_group if cal_groups is not None else None,
     )
     xcal_seconds = time.monotonic() - t_xcal
     t_train = time.monotonic()

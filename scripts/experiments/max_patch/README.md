@@ -53,9 +53,36 @@ sbatch --array=0-$((N-1))%24 ... --wrap "... python run_cells.py"
 python summarize.py
 ```
 
-Default grid: 3 datasets × 3 embedders × 6 categories × 4 seeds = **216 array
-cells** (all of an embedder's styles run inside its cell → 504 style-runs),
-150 votes each.
+Default grid on a **boxed** dataset: 4 scale bands × 6 categories = 24
+categories, so 3 embedders × 24 categories × 4 seeds = **288 array cells per
+dataset** (all of an embedder's styles run inside its cell), 150 votes each.
+Boxless datasets keep the old prevalence spread at `MAXPATCH_N_CATEGORIES`.
+
+## Category selection: scale bands, not prevalence
+
+The study's question is about object **scale**, so a boxed dataset's categories
+are sampled to span scale on purpose — `MAXPATCH_N_PER_BAND` from each of the
+four `SCALE_BANDS`, which straddle the two reference scales (one DINOv3 patch,
+~0.51 % of image area; one HAC leaf, ~8.3 %, the smallest candidate the tree can
+propose). Selecting by prevalence instead left scale coverage to chance, which
+is how the first run ended up with only 5 categories above leaf scale — the
+exact regime the hypothesis is about.
+
+Two rules make the sample honest:
+
+- **Scale means the *voted* box.** A category's scale is the median area of
+  `region_box_for_category` — the **union** over every annotated instance,
+  which is what a Good vote actually drags — never the median per-instance
+  area. The two diverge sharply on multi-instance categories.
+- **Near-frame votes are dropped.** A category whose median voted box exceeds
+  `MAXPATCH_MAX_VOTED_AREA` is excluded: at that size a "region vote" is an
+  image-level vote, and the cell would measure what the boxless Caltech-101 arm
+  measured (what happens when the user ignores region voting) rather than what
+  happens when the target is large. Drops are logged by name, never silent.
+
+Within a band, ties break toward the lowest **union inflation**
+(`voted_area / instance_area`) — categories whose vote is typically one clean
+object rather than a union over scattered instances.
 
 ## Sizing knobs (env vars, read by `experiment_config.py`)
 
@@ -64,7 +91,9 @@ cells** (all of an embedder's styles run inside its cell → 504 style-runs),
 | `MAXPATCH_DATASETS` | `visual_genome_m,openlogo_a,caltech101_m` | Demo datasets |
 | `MAXPATCH_EMBEDDERS` | `dinov2_patch,dinov3_patch,siglip` | Embedders |
 | `MAXPATCH_PATCH_STYLES` | `max_hac,max_patch,whole_image` | Styles run on patch embedders |
-| `MAXPATCH_N_CATEGORIES` | `6` | Categories per dataset (spanning common→rare) |
+| `MAXPATCH_N_PER_BAND` | `6` | Categories per scale band (boxed datasets) |
+| `MAXPATCH_MAX_VOTED_AREA` | `0.80` | Drop categories whose median voted box exceeds this |
+| `MAXPATCH_N_CATEGORIES` | `6` | Categories for **boxless** datasets (spanning common→rare) |
 | `MAXPATCH_N_SEEDS` | `4` | Seeds (paired across arms) |
 | `MAXPATCH_MAX_STEPS` | `150` | Vote budget per trajectory |
 | `MAXPATCH_EXEMPLAR_CANDIDATES` | `8` | Cropped exemplars pre-embedded per category |

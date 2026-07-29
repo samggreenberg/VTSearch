@@ -181,13 +181,27 @@ def main(argv: list[str] | None = None) -> int:
                 for c in m.get("categories") or [m.get("category")]:
                     if c:
                         cats[c] = cats.get(c, 0) + 1
-            selected = cfg.select_categories(cats)
+            selected, sel_report = cfg.select_categories(medias, cats)
             dim = int(len(media_embedding(next(iter(medias.values()))))) if medias else None
             n_patch = sum(1 for m in medias.values() if m.get("patch_grid") is not None)
             common.log(
                 f"{ds} x {emb_name}: {len(medias)} medias (patch grids on {n_patch}), dim={dim}, "
-                f"{len(cats)} categories -> selected {selected}"
+                f"{len(cats)} categories -> selected {len(selected)} by {sel_report.get('mode')}"
             )
+            # Report the scale sample explicitly: an under-populated band is the
+            # difference between testing the crossover and merely bracketing it.
+            for band, info_b in (sel_report.get("bands") or {}).items():
+                lo, hi = info_b["range"]
+                common.log(
+                    f"  band {band:14s} [{lo * 100:5.2f}%, {hi * 100:6.2f}%): "
+                    f"{len(info_b['selected'])}/{info_b['target']} from {info_b['n_candidates']} candidates"
+                    f"{'  ** UNDER-POPULATED **' if info_b['under_populated'] else ''} -> {info_b['selected']}"
+                )
+            for cat, area in sel_report.get("dropped_above_max_voted_area") or []:
+                common.log(
+                    f"  dropped {cat!r}: median voted box covers {area * 100:.0f}% of the image "
+                    f"(> {cfg.MAX_VOTED_AREA * 100:.0f}% cap) - its region vote is an image-level vote"
+                )
 
             with common.timed(f"crops:{ds}:{emb_name}", timings):
                 vectors, candidates = _exemplar_crops(medias, selected, embedder)
@@ -200,6 +214,7 @@ def main(argv: list[str] | None = None) -> int:
                 "dim": dim,
                 "category_counts": cats,
                 "selected_categories": selected,
+                "category_selection": sel_report,
                 "load_seconds": timings.get(f"load:{ds}:{emb_name}"),
                 "embed_seconds_per_image": round(timings.get(f"load:{ds}:{emb_name}", 0.0) / max(len(medias), 1), 4),
                 "crops_seconds": timings.get(f"crops:{ds}:{emb_name}"),

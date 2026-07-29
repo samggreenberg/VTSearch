@@ -8,6 +8,8 @@ Covers the pieces added for ``docs/plans/max-patch-experiment.md``: the
 Everything runs on small synthetic patch grids - no model downloads.
 """
 
+from typing import Any
+
 import numpy as np
 import pytest
 import torch
@@ -175,13 +177,17 @@ class TestMaxPatchStyle:
         style = MaxPatchStyle()
         np.testing.assert_allclose(style.good_vec(media, None), media["embeddings"]["emb"])
 
-    def test_bad_vecs_flood_every_patch(self):
+    def test_bad_vecs_flood_whole_image_vector_and_every_patch(self):
         rng = np.random.default_rng(12)
         media = _patch_media(1, "cat1", rng)
         vecs = MaxPatchStyle().bad_vecs(media)
-        assert len(vecs) == GRID * GRID
+        # The full-image row leads, then every raw patch: a Bad vote must
+        # suppress the *entire* scoring pool, exactly as ``max_hac`` floods its
+        # CLS node alongside the HAC leaves.
+        assert len(vecs) == GRID * GRID + 1
+        np.testing.assert_allclose(vecs[0], media["embeddings"]["emb"], rtol=1e-3)
         flat = np.asarray(media["patch_grid"], dtype=np.float32).reshape(-1, DIM)
-        np.testing.assert_allclose(np.stack(vecs), flat, rtol=1e-3)
+        np.testing.assert_allclose(np.stack(vecs[1:]), flat, rtol=1e-3)
 
     def test_gridless_media_falls_back_to_whole_image(self):
         media = {"id": 1, "category": "c", "embeddings": {"emb": _unit(np.ones(DIM))}}
@@ -199,9 +205,10 @@ class TestMaxPatchStyle:
         style = MaxPatchStyle()
         scores = style.score_media(_linear_scorer(target), {1: planted, 2: noise})
         assert scores[1] > scores[2]
-        # The planted image's score equals the sigmoid of its best patch row.
-        flat = np.asarray(planted["patch_grid"], dtype=np.float32).reshape(-1, DIM)
-        expected = float(1.0 / (1.0 + np.exp(-(flat @ (target * 10.0)).max())))
+        # The planted image's score equals the sigmoid of its best scoring row
+        # (the full-image row plus every patch).
+        rows = style.score_rows(planted)
+        expected = float(1.0 / (1.0 + np.exp(-(rows @ (target * 10.0)).max())))
         assert abs(scores[1] - expected) < 1e-3
 
     def test_exemplar_sims_max_over_patches(self):
@@ -212,6 +219,229 @@ class TestMaxPatchStyle:
         sims = MaxPatchStyle().exemplar_sims({1: planted, 2: noise}, target)
         assert sims[1] > sims[2]
         assert sims[1] == pytest.approx(1.0, abs=2e-3)
+
+
+# ---------------------------------------------------------------------------
+# Train/score geometry parity - the invariant that broke MaxPatch on Caltech
+# ---------------------------------------------------------------------------
+
+
+class TestTrainScoreGeometryParity:
+    """Every vector a style can train a vote on must be a row it also scores.
+
+    When it is not, the classifier learns to separate the *training* geometry
+    from the *scoring* geometry (each Bad vote floods scoring-geometry rows as
+    negatives), calibration measures positives in a geometry inference never
+    evaluates, and the threshold lands outside the production score range -
+    perfect ranking, FPR 0, catastrophic FNR.  ``max_hac`` always satisfied
+    this because ``patch_regions[0]`` is the CLS full-image node; ``max_patch``
+    did not until the full-image row was added to its pool.
+    """
+
+    @pytest.mark.parametrize("style_cls", [MaxPatchStyle, MaxHacStyle, WholeImageStyle])
+    def test_boxless_good_vote_trains_on_a_scored_row(self, style_cls):
+        rng = np.random.default_rng(40)
+        media = _patch_media(1, "cat0", rng)
+        style = style_cls()
+        # A boxless Good vote (Caltech-101: no ground-truth regions at all).
+        vote_vec = np.asarray(style.good_vec(media, None), dtype=np.float32)
+        rows = style.score_rows(media)
+        assert any(np.allclose(r, vote_vec, atol=2e-3) for r in rows), (
+            f"{style_cls.__name__}: boxless Good vote trains on a vector that is "
+            f"not among the {len(rows)} rows this style max-pools at inference"
+        )
+
+    @pytest.mark.parametrize("style_cls", [MaxPatchStyle, MaxHacStyle, WholeImageStyle])
+    def test_boxed_good_vote_trains_on_a_scored_row(self, style_cls):
+        rng = np.random.default_rng(41)
+        media = _patch_media(1, "cat0", rng)
+        style = style_cls()
+        vote_vec = np.asarray(style.good_vec(media, _cell_box(2, 1)), dtype=np.float32)
+        rows = style.score_rows(media)
+        assert any(np.allclose(r, vote_vec, atol=2e-3) for r in rows)
+
+    @pytest.mark.parametrize("style_cls", [MaxPatchStyle, WholeImageStyle])
+    def test_bad_vote_suppresses_every_scored_row(self, style_cls):
+        """A Bad vote asserts *no* row of the image should score high, so its
+        flood must cover the whole scoring pool - otherwise an un-suppressed
+        row survives to max-pool the image back up at inference."""
+        rng = np.random.default_rng(42)
+        media = _patch_media(1, "cat1", rng)
+        style = style_cls()
+        flooded = [np.asarray(v, dtype=np.float32) for v in style.bad_vecs(media)]
+        for row in style.score_rows(media):
+            assert any(np.allclose(row, f, atol=2e-3) for f in flooded), (
+                f"{style_cls.__name__}: a scored row is never trained down by a Bad vote"
+            )
+
+    def test_max_hac_floods_every_scored_row_except_hac_internals(self):
+        """``max_hac``'s flood covers the CLS node and the leaves, but not the
+        HAC **internal** nodes - which it nonetheless max-pools at inference.
+
+        That gap is deliberate (``bad_negative_vecs`` drops internals as
+        saliency-weighted pools of leaves it already suppresses, so they would
+        add correlated duplicates without adding coverage), but it means
+        ``max_hac`` scores rows no Bad vote trains down directly.  Pinned here
+        so the exception stays explicit rather than silent.
+        """
+        rng = np.random.default_rng(46)
+        media = _patch_media(1, "cat1", rng)
+        style = MaxHacStyle()
+        flooded = [np.asarray(v, dtype=np.float32) for v in style.bad_vecs(media)]
+        regions = media["patch_regions"]
+        rows = style.score_rows(media)
+        assert len(rows) == len(regions)
+        uncovered = [i for i, row in enumerate(rows) if not any(np.allclose(row, f, atol=2e-3) for f in flooded)]
+        assert uncovered, "expected the HAC internals to be uncovered"
+        # Every uncovered row is an internal node; no leaf and not the CLS node.
+        assert all(regions[i].children is not None for i in uncovered)
+        assert 0 not in uncovered
+
+    @pytest.mark.parametrize("style_cls", [MaxPatchStyle, MaxHacStyle, WholeImageStyle])
+    def test_score_media_is_max_pool_over_score_rows(self, style_cls):
+        rng = np.random.default_rng(43)
+        media = _patch_media(1, "c", rng)
+        direction = _unit(rng.normal(0, 1, DIM))
+        style = style_cls()
+        got = style.score_media(_linear_scorer(direction), {1: media})[1]
+        rows = style.score_rows(media)
+        expected = float(1.0 / (1.0 + np.exp(-(rows @ (direction * 10.0)).max())))
+        assert got == pytest.approx(expected, abs=2e-3)
+
+    def test_max_patch_score_rows_lead_with_whole_image_vector(self):
+        rng = np.random.default_rng(44)
+        media = _patch_media(1, "c", rng)
+        rows = MaxPatchStyle().score_rows(media)
+        assert rows.shape == (GRID * GRID + 1, DIM)
+        np.testing.assert_allclose(rows[0], media["embeddings"]["emb"], rtol=1e-3)
+
+    def test_max_hac_score_rows_include_the_cls_node(self):
+        """The structural reason ``max_hac`` never showed the Caltech failure."""
+        rng = np.random.default_rng(45)
+        media = _patch_media(1, "c", rng)
+        regions = media["patch_regions"]
+        assert regions[0].children is None
+        assert regions[0].box == (0.0, 0.0, 1.0, 1.0)
+        rows = MaxHacStyle().score_rows(media)
+        np.testing.assert_allclose(rows[0], np.asarray(regions[0].vec, dtype=np.float32), rtol=1e-3)
+
+
+# ---------------------------------------------------------------------------
+# Calibration in inference geometry
+# ---------------------------------------------------------------------------
+
+
+class TestCalibrationInInferenceGeometry:
+    """``compute_fold_orderings(score_rows_by_group=...)`` collapses each bag
+    over the rows the *scorer* pools, not the rows the fold model trained on.
+
+    Without it a Good bag is a max over its 1 training row while a Bad bag is a
+    max over the ~197 it flooded; ``max`` is an upward-biased order statistic,
+    so the min-cost cut lands systematically high and over-rejects positives.
+    """
+
+    @staticmethod
+    def _fixed_model_patch(monkeypatch, direction):
+        """Pin every fold fit to one known linear model, so fold scores are exact."""
+        import vtscore.training.mlp as mlp_mod
+
+        model = _linear_scorer(direction)
+        monkeypatch.setattr(mlp_mod, "train_model", lambda *a, **k: model)
+        return model
+
+    @staticmethod
+    def _bags(rng, n_good=3, n_bad=3, bad_rows=5):
+        X, y, groups = [], [], []
+        for g in range(n_good):
+            X.append(_unit(rng.normal(0, 1, DIM)))
+            y.append(1.0)
+            groups.append(("g", g))
+        for b in range(n_bad):
+            for _ in range(bad_rows):
+                X.append(_unit(rng.normal(0, 1, DIM)))
+                y.append(0.0)
+                groups.append(("b", b))
+        return X, y, groups
+
+    def test_group_score_is_max_over_supplied_rows(self, monkeypatch):
+        from vtscore.training.thresholds import compute_fold_orderings
+
+        rng = np.random.default_rng(50)
+        direction = _unit(rng.normal(0, 1, DIM))
+        self._fixed_model_patch(monkeypatch, direction)
+        X, y, groups = self._bags(rng)
+
+        # Give every bag - Good and Bad alike - a 4-row inference stack.
+        score_rows = {g: np.stack([_unit(rng.normal(0, 1, DIM)) for _ in range(4)]) for g in set(groups)}
+        orderings, fallback = compute_fold_orderings(
+            X,
+            y,
+            DIM,
+            rng=np.random.RandomState(42),
+            calibrate_count=1,
+            hidden_dim=8,
+            groups=groups,
+            score_rows_by_group=score_rows,
+        )
+        assert fallback is None
+        scores, labels = orderings[0]
+        assert len(scores) == len(labels)
+        # Every returned score must be the max-pooled sigmoid over that bag's
+        # supplied rows - and must match one of the bags exactly.
+        pooled = {float(1.0 / (1.0 + np.exp(-(rows @ (direction * 10.0)).max()))) for rows in score_rows.values()}
+        for s in scores:
+            assert any(abs(s - p) < 1e-4 for p in pooled)
+
+    def test_override_changes_the_ordering_vs_training_geometry(self, monkeypatch):
+        """The override is not a no-op: pooling over inference rows gives a
+        different calibration ordering than pooling over training rows."""
+        from vtscore.training.thresholds import compute_fold_orderings
+
+        rng = np.random.default_rng(51)
+        direction = _unit(rng.normal(0, 1, DIM))
+        self._fixed_model_patch(monkeypatch, direction)
+        X, y, groups = self._bags(rng)
+
+        # A fresh RandomState per call: it is stateful, so sharing one instance
+        # would give the two calls different fold splits and prove nothing.
+        def _kwargs() -> dict[str, Any]:
+            return dict(rng=np.random.RandomState(42), calibrate_count=1, hidden_dim=8, groups=groups)
+
+        base, _ = compute_fold_orderings(X, y, DIM, **_kwargs())
+        # Give each Good bag the wide stack it would really be scored over:
+        # its single training row plus extra rows that can only raise the max.
+        score_rows = {}
+        for g in set(groups):
+            rows = [X[i] for i, gg in enumerate(groups) if gg == g]
+            if g[0] == "g":
+                rows = rows + [_unit(direction + 0.01 * rng.normal(0, 1, DIM))]
+            score_rows[g] = np.stack(rows)
+        widened, _ = compute_fold_orderings(X, y, DIM, score_rows_by_group=score_rows, **_kwargs())
+
+        base_pos = [s for s, lbl in zip(*base[0], strict=True) if lbl == 1.0]
+        wide_pos = [s for s, lbl in zip(*widened[0], strict=True) if lbl == 1.0]
+        assert base_pos and wide_pos
+        # Max over a superset can only be >=, and here it strictly rises: the
+        # single-row Good bag was understating what production will score.
+        assert all(w >= b - 1e-9 for w, b in zip(wide_pos, base_pos, strict=True))
+        assert any(w > b + 1e-6 for w, b in zip(wide_pos, base_pos, strict=True))
+
+    def test_none_override_leaves_production_path_byte_identical(self):
+        """Every live caller passes ``None``; that path must not shift."""
+        from vtscore.training.thresholds import compute_fold_orderings
+
+        rng = np.random.default_rng(52)
+        X, y, groups = self._bags(rng)
+
+        def _kwargs() -> dict[str, Any]:
+            return dict(rng=np.random.RandomState(42), calibrate_count=2, hidden_dim=8, groups=groups)
+
+        torch.manual_seed(0)
+        a, fa = compute_fold_orderings(X, y, DIM, **_kwargs())
+        torch.manual_seed(0)
+        b, fb = compute_fold_orderings(X, y, DIM, score_rows_by_group=None, **_kwargs())
+        assert fa == fb
+        assert a == b
 
 
 # ---------------------------------------------------------------------------
