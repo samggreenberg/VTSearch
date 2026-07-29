@@ -31,7 +31,6 @@ import argparse
 import io
 import json
 import os
-import shutil
 import tempfile
 from pathlib import Path
 
@@ -123,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
     from vtscore.datasets.loader_demo import load_demo_dataset
     from vtscore.embedding import initialize_models
     from vtscore.embedding.media_vectors import media_embedding
-    from vtscore.media.embedder import get_embedder
+    from vtscore.media import get_embedder
 
     initialize_models()
 
@@ -149,6 +148,15 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 with common.timed(f"load:{ds}:{emb_name}", timings):
                     load_demo_dataset(ds, medias, embedder_name=emb_name)
+                    # load_demo_dataset attaches the CLS vector but not the
+                    # patch-region side-channels; run the same patch back-fill
+                    # the app runs at dataset creation so patch_grid /
+                    # patch_regions exist to persist (embed_missing is a no-op
+                    # for the already-present CLS vectors and only does the
+                    # patch pass for this patch-capable embedder).
+                    from vtscore.datasets.stages.embedding import embed_missing  # noqa: PLC0415
+
+                    embed_missing(medias, emb_name)
             except Exception as e:  # noqa: BLE001 - one bad pair must not lose the others
                 import traceback
 
@@ -158,11 +166,15 @@ def main(argv: list[str] | None = None) -> int:
                 info_path.write_text(json.dumps(info, indent=2))
                 continue
 
-            # The demo cache has one slot per dataset id; copy it to a
-            # per-embedder name so the next embedder's load doesn't evict it.
-            src = _loader.EMBEDDINGS_DIR / f"{ds}.pkl"
+            # Serialize the in-memory medias (which carry patch_grid /
+            # patch_regions / regions / categories) directly.  The demo *cache*
+            # pickle drops those fields (see _cells_io), so a copy would leave
+            # every style scoring on the whole-image vector alone.
+            from _cells_io import dump_medias  # noqa: PLC0415
+
             dst = _loader.EMBEDDINGS_DIR / cfg.pickle_name(ds, emb_name)
-            shutil.copyfile(src, dst)
+            nbytes = dump_medias(medias, dst)
+            common.log(f"  wrote cell pickle {dst.name}: {nbytes / 1e6:.0f} MB")
 
             cats: dict[str, int] = {}
             for m in medias.values():

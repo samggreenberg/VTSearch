@@ -87,15 +87,15 @@ def main(argv: list[str] | None = None) -> int:
 
     import pandas as pd
 
-    from vtscore.datasets.loader_pickle import load_dataset_from_pickle
     from vtscore.eval.patch_styles import resolve_style
     from vtscore.eval.voting_iterations import _VOTING_COLUMNS, simulate_voting_iterations
 
     from vtscore.datasets import loader as _loader  # isort: skip
 
-    medias: dict[int, dict] = {}
+    from _cells_io import load_medias  # noqa: PLC0415
+
     pkl = _loader.EMBEDDINGS_DIR / cfg.pickle_name(ds, emb)
-    load_dataset_from_pickle(pkl, medias)
+    medias: dict[int, dict] = load_medias(pkl)
     common.log(f"loaded {len(medias)} medias from {pkl}")
 
     exemplar_id, crop_vec = _load_exemplar(ds, emb, cat, seed)

@@ -113,11 +113,27 @@ scale story will actually show.
 
 <!-- item-sep -->
 
-- **Run the study on the Grid** — `bash scripts/experiments/max_patch/queue_all.sh`
-  (needs `HF_TOKEN` for DINOv3), then review `results/REPORT.md` and record the
-  verdict here (or in a `docs/reports/` page).  Decide: keep MaxHAC, switch to
-  MaxPatch, or hybridise (e.g. tree for Good-vote snapping, raw patches for
-  Bad flood / scoring).
+- **DONE (2026-07-29) — study run + report at
+  [`docs/experiments/max-patch/REPORT.md`](../experiments/max-patch/REPORT.md).**
+  Verdict: **the answer is regime-dependent.** On cluttered, boxed scenes
+  (Visual Genome, 12 cats × 5 seeds) MaxPatch beats production MaxHAC at the
+  final vote budget (ErrorCost 0.387 vs 0.489, paired Holm p < 0.001), winning
+  on both FPR and FNR and on ranking (AP), with the edge concentrated on
+  sub-leaf-scale objects (Spearman ρ = 0.57). Both patch styles crush
+  whole-image scoring — DINOv3's CLS vector is the *worst* arm, below SigLIP. But
+  on boxless, centred data (Caltech-101) MaxPatch's 196-way max-pool
+  *mis-calibrates*: perfect ranking (AP 1.0) yet ErrorCost 0.686 (FNR 0.69 at
+  FPR 0), while MaxHAC ties the whole-image control. **Recommendation:** adopt
+  MaxPatch for region-vote scoring on cluttered/small-object collections (and
+  drop the HAC tree there); do not blanket-replace whole-image scoring —
+  gate raw-patch scoring on a genuine sub-image region vote, or fix the
+  max-pool threshold calibration first. See the report for the hybrid path.
+
+  **Harness fix shipped alongside (was silently broken):** the demo-cache pickle
+  never persisted `patch_grid`/`patch_regions`/`regions`/`categories`, and
+  `load_demo_dataset` never ran the patch back-fill — so every style would have
+  collapsed to whole-image. Fixed via `embed_missing` in prepare + a lossless
+  `_cells_io` serializer (see the report's Reproducibility section).
 
 <!-- item-sep -->
 

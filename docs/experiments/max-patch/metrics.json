@@ -1,0 +1,856 @@
+{
+  "n_trajectories": 477,
+  "n_categories": {
+    "caltech101_m": 12,
+    "visual_genome_m": 12
+  },
+  "n_seeds": 5,
+  "datasets": [
+    "caltech101_m",
+    "visual_genome_m"
+  ],
+  "arms": [
+    "dinov3_patch/max_hac",
+    "dinov3_patch/max_patch",
+    "dinov3_patch/whole_image",
+    "siglip/whole_image"
+  ],
+  "overall": [
+    {
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "n": 120,
+      "cost": 0.2597318083333333,
+      "fpr": 0.11832364166666667,
+      "fnr": 0.14140820833333334,
+      "AP": 0.7204263416666666,
+      "auroc": 0.9237226416666666,
+      "train_s": 0.30016200833333334,
+      "xcal_s": 0.5094695,
+      "score_s": 0.048340883333333334
+    },
+    {
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "n": 120,
+      "cost": 0.5366435083333333,
+      "fpr": 0.099874425,
+      "fnr": 0.43676906666666665,
+      "AP": 0.7492086166666667,
+      "auroc": 0.9473377333333333,
+      "train_s": 0.23527975833333334,
+      "xcal_s": 0.6364725833333333,
+      "score_s": 0.36597651666666664
+    },
+    {
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "n": 120,
+      "cost": 0.33180716666666665,
+      "fpr": 0.10785170833333332,
+      "fnr": 0.22395548333333334,
+      "AP": 0.6765582583333334,
+      "auroc": 0.8913546833333333,
+      "train_s": 0.31323636666666665,
+      "xcal_s": 0.5131398833333333,
+      "score_s": 0.009684341666666667
+    },
+    {
+      "arm": "SigLIP \u00b7 whole-image",
+      "n": 117,
+      "cost": 0.257917735042735,
+      "fpr": 0.08353950427350428,
+      "fnr": 0.17437822222222224,
+      "AP": 0.7332939487179487,
+      "auroc": 0.9215859572649573,
+      "train_s": 0.32166652991452993,
+      "xcal_s": 0.5774905470085471,
+      "score_s": 0.00808142735042735
+    }
+  ],
+  "per_dataset": [
+    {
+      "dataset": "caltech101_m",
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "n": 60,
+      "cost": 0.030364133333333335,
+      "fpr": 0.0,
+      "fnr": 0.030364133333333335,
+      "AP": 1.0,
+      "auroc": 1.0,
+      "train_s": 0.2901343666666667,
+      "xcal_s": 0.4727571666666667,
+      "score_s": 0.010769333333333332
+    },
+    {
+      "dataset": "caltech101_m",
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "n": 60,
+      "cost": 0.68589505,
+      "fpr": 0.0,
+      "fnr": 0.68589505,
+      "AP": 0.9999975833333333,
+      "auroc": 0.99999905,
+      "train_s": 0.23077403333333332,
+      "xcal_s": 0.6260413333333333,
+      "score_s": 0.11348858333333332
+    },
+    {
+      "dataset": "caltech101_m",
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "n": 60,
+      "cost": 0.047077100000000004,
+      "fpr": 0.0,
+      "fnr": 0.047077100000000004,
+      "AP": 1.0,
+      "auroc": 1.0,
+      "train_s": 0.30288848333333335,
+      "xcal_s": 0.47992236666666666,
+      "score_s": 0.0032489166666666664
+    },
+    {
+      "dataset": "caltech101_m",
+      "arm": "SigLIP \u00b7 whole-image",
+      "n": 60,
+      "cost": 0.030819,
+      "fpr": 0.0,
+      "fnr": 0.030819,
+      "AP": 1.0,
+      "auroc": 1.0,
+      "train_s": 0.293063,
+      "xcal_s": 0.5374205666666666,
+      "score_s": 0.0029560666666666666
+    },
+    {
+      "dataset": "visual_genome_m",
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "n": 60,
+      "cost": 0.48909948333333336,
+      "fpr": 0.23664728333333335,
+      "fnr": 0.25245228333333336,
+      "AP": 0.44085268333333333,
+      "auroc": 0.8474452833333334,
+      "train_s": 0.31018965,
+      "xcal_s": 0.5461818333333334,
+      "score_s": 0.08591243333333334
+    },
+    {
+      "dataset": "visual_genome_m",
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "n": 60,
+      "cost": 0.3873919666666667,
+      "fpr": 0.19974885,
+      "fnr": 0.18764308333333332,
+      "AP": 0.49841965,
+      "auroc": 0.8946764166666666,
+      "train_s": 0.23978548333333333,
+      "xcal_s": 0.6469038333333333,
+      "score_s": 0.6184644499999999
+    },
+    {
+      "dataset": "visual_genome_m",
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "n": 60,
+      "cost": 0.6165372333333333,
+      "fpr": 0.21570341666666665,
+      "fnr": 0.4008338666666667,
+      "AP": 0.35311651666666666,
+      "auroc": 0.7827093666666667,
+      "train_s": 0.32358424999999996,
+      "xcal_s": 0.5463574,
+      "score_s": 0.016119766666666667
+    },
+    {
+      "dataset": "visual_genome_m",
+      "arm": "SigLIP \u00b7 whole-image",
+      "n": 57,
+      "cost": 0.4969690350877193,
+      "fpr": 0.1714758245614035,
+      "fnr": 0.3254931929824561,
+      "AP": 0.4525507368421053,
+      "auroc": 0.8390448596491229,
+      "train_s": 0.3517755087719298,
+      "xcal_s": 0.6196694736842105,
+      "score_s": 0.013476543859649123
+    }
+  ],
+  "budget": [
+    {
+      "dataset": "caltech101_m",
+      "t": 10,
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "cost": 0.18738103333333334,
+      "fnr": 0.17960315000000002,
+      "AP": 0.9945297166666667
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 10,
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "cost": 0.48973011666666666,
+      "fnr": 0.4892632499999999,
+      "AP": 0.9968364833333332
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 10,
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "cost": 0.26997864999999993,
+      "fnr": 0.2599120833333333,
+      "AP": 0.9964380166666668
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 10,
+      "arm": "SigLIP \u00b7 whole-image",
+      "cost": 0.33491498333333336,
+      "fnr": 0.3303825,
+      "AP": 0.9986452166666666
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 25,
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "cost": 0.03300318333333333,
+      "fnr": 0.0292505,
+      "AP": 0.9988377833333334
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 25,
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "cost": 0.20564654999999998,
+      "fnr": 0.20210909999999999,
+      "AP": 0.9997319
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 25,
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "cost": 0.12646971666666668,
+      "fnr": 0.12508868333333334,
+      "AP": 0.9992827666666666
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 25,
+      "arm": "SigLIP \u00b7 whole-image",
+      "cost": 0.0613788,
+      "fnr": 0.0613788,
+      "AP": 1.0
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 50,
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "cost": 0.02197993333333333,
+      "fnr": 0.021820700000000002,
+      "AP": 1.0
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 50,
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "cost": 0.36772105,
+      "fnr": 0.36772105,
+      "AP": 0.9999542333333333
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 50,
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "cost": 0.04433206666666667,
+      "fnr": 0.04429081666666667,
+      "AP": 1.0
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 50,
+      "arm": "SigLIP \u00b7 whole-image",
+      "cost": 0.06832485,
+      "fnr": 0.06832485,
+      "AP": 1.0
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 100,
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "cost": 0.029373983333333336,
+      "fnr": 0.0291735,
+      "AP": 1.0
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 100,
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "cost": 0.7286707499999999,
+      "fnr": 0.7286707499999999,
+      "AP": 1.0
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 100,
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "cost": 0.034045516666666664,
+      "fnr": 0.034045516666666664,
+      "AP": 1.0
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 100,
+      "arm": "SigLIP \u00b7 whole-image",
+      "cost": 0.03067345,
+      "fnr": 0.03067345,
+      "AP": 1.0
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 150,
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "cost": 0.030364133333333335,
+      "fnr": 0.030364133333333335,
+      "AP": 1.0
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 150,
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "cost": 0.68589505,
+      "fnr": 0.68589505,
+      "AP": 0.9999975833333333
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 150,
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "cost": 0.0470771,
+      "fnr": 0.0470771,
+      "AP": 1.0
+    },
+    {
+      "dataset": "caltech101_m",
+      "t": 150,
+      "arm": "SigLIP \u00b7 whole-image",
+      "cost": 0.030819000000000003,
+      "fnr": 0.030819000000000003,
+      "AP": 1.0
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 10,
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "cost": 0.7189884666666665,
+      "fnr": 0.2891589333333334,
+      "AP": 0.3575232666666667
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 10,
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "cost": 0.6879238999999999,
+      "fnr": 0.2066858,
+      "AP": 0.3730813166666667
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 10,
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "cost": 0.8814836833333334,
+      "fnr": 0.5349701,
+      "AP": 0.27120039999999995
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 10,
+      "arm": "SigLIP \u00b7 whole-image",
+      "cost": 0.8207323157894737,
+      "fnr": 0.47895736842105263,
+      "AP": 0.289603649122807
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 25,
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "cost": 0.6541962333333333,
+      "fnr": 0.41168573333333336,
+      "AP": 0.41260538333333324
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 25,
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "cost": 0.6120854999999998,
+      "fnr": 0.2793671833333333,
+      "AP": 0.4292803333333334
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 25,
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "cost": 0.7751145666666667,
+      "fnr": 0.5420969166666666,
+      "AP": 0.3044734499999999
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 25,
+      "arm": "SigLIP \u00b7 whole-image",
+      "cost": 0.7013320526315789,
+      "fnr": 0.5172199298245613,
+      "AP": 0.35345087719298246
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 50,
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "cost": 0.6032471999999999,
+      "fnr": 0.3139932333333333,
+      "AP": 0.4055459333333333
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 50,
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "cost": 0.5633643,
+      "fnr": 0.19821225,
+      "AP": 0.45548638333333336
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 50,
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "cost": 0.7487511833333332,
+      "fnr": 0.5008782166666667,
+      "AP": 0.3218492666666667
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 50,
+      "arm": "SigLIP \u00b7 whole-image",
+      "cost": 0.6279513333333333,
+      "fnr": 0.426330701754386,
+      "AP": 0.4079208596491228
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 100,
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "cost": 0.5448763333333332,
+      "fnr": 0.2582631166666667,
+      "AP": 0.42916538333333326
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 100,
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "cost": 0.4398036,
+      "fnr": 0.17391261666666666,
+      "AP": 0.48587345000000004
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 100,
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "cost": 0.6474945833333335,
+      "fnr": 0.4489089666666667,
+      "AP": 0.33805520000000006
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 100,
+      "arm": "SigLIP \u00b7 whole-image",
+      "cost": 0.5491406315789473,
+      "fnr": 0.3549827192982456,
+      "AP": 0.43369296491228065
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 150,
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "cost": 0.48909948333333325,
+      "fnr": 0.25245228333333336,
+      "AP": 0.4408526833333334
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 150,
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "cost": 0.3873919666666667,
+      "fnr": 0.18764308333333332,
+      "AP": 0.49841964999999994
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 150,
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "cost": 0.6165372333333331,
+      "fnr": 0.40083386666666665,
+      "AP": 0.3531165166666667
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 150,
+      "arm": "SigLIP \u00b7 whole-image",
+      "cost": 0.49696903508771934,
+      "fnr": 0.3254931929824561,
+      "AP": 0.45255073684210534
+    }
+  ],
+  "stats": {
+    "caltech101_m": {
+      "AULC": [
+        {
+          "comparison": "MaxPatch \u2212 MaxHAC",
+          "mean_A": 0.5486062922945205,
+          "mean_B": 0.06245187239539652,
+          "delta": 0.486154419899124,
+          "n_pairs": 60,
+          "holm_p": 8.147778971559672e-11
+        },
+        {
+          "comparison": "MaxHAC \u2212 whole(CLS)",
+          "mean_A": 0.06245187239539652,
+          "mean_B": 0.07578777496749747,
+          "delta": -0.013335902572100954,
+          "n_pairs": 60,
+          "holm_p": 0.06150504493168917
+        },
+        {
+          "comparison": "MaxPatch \u2212 whole(CLS)",
+          "mean_A": 0.5486062922945205,
+          "mean_B": 0.07578777496749747,
+          "delta": 0.47281851732702307,
+          "n_pairs": 60,
+          "holm_p": 6.856597592686466e-11
+        },
+        {
+          "comparison": "MaxHAC \u2212 SigLIP",
+          "mean_A": 0.06245187239539652,
+          "mean_B": 0.09620036227168947,
+          "delta": -0.033748489876292954,
+          "n_pairs": 60,
+          "holm_p": 0.0005524524923664278
+        },
+        {
+          "comparison": "MaxPatch \u2212 SigLIP",
+          "mean_A": 0.5486062922945205,
+          "mean_B": 0.09620036227168947,
+          "delta": 0.452405930022831,
+          "n_pairs": 60,
+          "holm_p": 5.4091158928910063e-11
+        }
+      ],
+      "cost@50": [
+        {
+          "comparison": "MaxPatch \u2212 MaxHAC",
+          "mean_A": 0.36772105,
+          "mean_B": 0.02197993333333333,
+          "delta": 0.3457411166666667,
+          "n_pairs": 60,
+          "holm_p": 3.0348784185208833e-07
+        },
+        {
+          "comparison": "MaxHAC \u2212 whole(CLS)",
+          "mean_A": 0.02197993333333333,
+          "mean_B": 0.04433206666666667,
+          "delta": -0.02235213333333334,
+          "n_pairs": 60,
+          "holm_p": 0.2483533730978138
+        },
+        {
+          "comparison": "MaxPatch \u2212 whole(CLS)",
+          "mean_A": 0.36772105,
+          "mean_B": 0.04433206666666667,
+          "delta": 0.3233889833333333,
+          "n_pairs": 60,
+          "holm_p": 1.5362412426337385e-06
+        },
+        {
+          "comparison": "MaxHAC \u2212 SigLIP",
+          "mean_A": 0.02197993333333333,
+          "mean_B": 0.06832485,
+          "delta": -0.04634491666666668,
+          "n_pairs": 60,
+          "holm_p": 0.05493303430299638
+        },
+        {
+          "comparison": "MaxPatch \u2212 SigLIP",
+          "mean_A": 0.36772105,
+          "mean_B": 0.06832485,
+          "delta": 0.2993962,
+          "n_pairs": 60,
+          "holm_p": 5.260186643232342e-06
+        }
+      ],
+      "cost@150": [
+        {
+          "comparison": "MaxPatch \u2212 MaxHAC",
+          "mean_A": 0.68589505,
+          "mean_B": 0.030364133333333335,
+          "delta": 0.6555309166666666,
+          "n_pairs": 60,
+          "holm_p": 5.733215637596648e-10
+        },
+        {
+          "comparison": "MaxHAC \u2212 whole(CLS)",
+          "mean_A": 0.030364133333333335,
+          "mean_B": 0.047077100000000004,
+          "delta": -0.01671296666666667,
+          "n_pairs": 60,
+          "holm_p": 0.820207862876726
+        },
+        {
+          "comparison": "MaxPatch \u2212 whole(CLS)",
+          "mean_A": 0.68589505,
+          "mean_B": 0.047077100000000004,
+          "delta": 0.63881795,
+          "n_pairs": 60,
+          "holm_p": 1.105466183642435e-09
+        },
+        {
+          "comparison": "MaxHAC \u2212 SigLIP",
+          "mean_A": 0.030364133333333335,
+          "mean_B": 0.030819,
+          "delta": -0.00045486666666666453,
+          "n_pairs": 60,
+          "holm_p": 0.9671704462177915
+        },
+        {
+          "comparison": "MaxPatch \u2212 SigLIP",
+          "mean_A": 0.68589505,
+          "mean_B": 0.030819,
+          "delta": 0.6550760499999999,
+          "n_pairs": 60,
+          "holm_p": 5.176744406295442e-10
+        }
+      ]
+    },
+    "visual_genome_m": {
+      "AULC": [
+        {
+          "comparison": "MaxPatch \u2212 MaxHAC",
+          "mean_A": 0.5095092293655634,
+          "mean_B": 0.579154322236248,
+          "delta": -0.06964509287068454,
+          "n_pairs": 60,
+          "holm_p": 0.0007754743126189478
+        },
+        {
+          "comparison": "MaxHAC \u2212 whole(CLS)",
+          "mean_A": 0.579154322236248,
+          "mean_B": 0.7015461993795731,
+          "delta": -0.12239187714332511,
+          "n_pairs": 60,
+          "holm_p": 4.008120935880033e-10
+        },
+        {
+          "comparison": "MaxPatch \u2212 whole(CLS)",
+          "mean_A": 0.5095092293655634,
+          "mean_B": 0.7015461993795731,
+          "delta": -0.19203697001400966,
+          "n_pairs": 60,
+          "holm_p": 4.5718905077418185e-09
+        },
+        {
+          "comparison": "MaxHAC \u2212 SigLIP",
+          "mean_A": 0.5677302203242116,
+          "mean_B": 0.6057025715586943,
+          "delta": -0.037972351234482726,
+          "n_pairs": 57,
+          "holm_p": 0.008055685966383017
+        },
+        {
+          "comparison": "MaxPatch \u2212 SigLIP",
+          "mean_A": 0.5051852252650091,
+          "mean_B": 0.6057025715586943,
+          "delta": -0.10051734629368525,
+          "n_pairs": 57,
+          "holm_p": 3.662445541889888e-05
+        }
+      ],
+      "cost@50": [
+        {
+          "comparison": "MaxPatch \u2212 MaxHAC",
+          "mean_A": 0.5633643,
+          "mean_B": 0.6032472,
+          "delta": -0.03988289999999994,
+          "n_pairs": 60,
+          "holm_p": 0.31621126246116105
+        },
+        {
+          "comparison": "MaxHAC \u2212 whole(CLS)",
+          "mean_A": 0.6032472,
+          "mean_B": 0.7487511833333332,
+          "delta": -0.14550398333333325,
+          "n_pairs": 60,
+          "holm_p": 1.2663449497028999e-06
+        },
+        {
+          "comparison": "MaxPatch \u2212 whole(CLS)",
+          "mean_A": 0.5633643,
+          "mean_B": 0.7487511833333332,
+          "delta": -0.1853868833333332,
+          "n_pairs": 60,
+          "holm_p": 5.914635947272542e-05
+        },
+        {
+          "comparison": "MaxHAC \u2212 SigLIP",
+          "mean_A": 0.5896643333333333,
+          "mean_B": 0.6279513333333334,
+          "delta": -0.03828700000000007,
+          "n_pairs": 57,
+          "holm_p": 0.23490882177923156
+        },
+        {
+          "comparison": "MaxPatch \u2212 SigLIP",
+          "mean_A": 0.5547304035087719,
+          "mean_B": 0.6279513333333334,
+          "delta": -0.07322092982456152,
+          "n_pairs": 57,
+          "holm_p": 0.17529570898979357
+        }
+      ],
+      "cost@150": [
+        {
+          "comparison": "MaxPatch \u2212 MaxHAC",
+          "mean_A": 0.3873919666666667,
+          "mean_B": 0.4890994833333334,
+          "delta": -0.10170751666666672,
+          "n_pairs": 60,
+          "holm_p": 4.045437149608756e-05
+        },
+        {
+          "comparison": "MaxHAC \u2212 whole(CLS)",
+          "mean_A": 0.4890994833333334,
+          "mean_B": 0.6165372333333331,
+          "delta": -0.12743774999999968,
+          "n_pairs": 60,
+          "holm_p": 4.8522347130601394e-08
+        },
+        {
+          "comparison": "MaxPatch \u2212 whole(CLS)",
+          "mean_A": 0.3873919666666667,
+          "mean_B": 0.6165372333333331,
+          "delta": -0.2291452666666664,
+          "n_pairs": 60,
+          "holm_p": 1.132094286312693e-08
+        },
+        {
+          "comparison": "MaxHAC \u2212 SigLIP",
+          "mean_A": 0.4731743684210526,
+          "mean_B": 0.49696903508771934,
+          "delta": -0.02379466666666674,
+          "n_pairs": 57,
+          "holm_p": 0.2677078712837242
+        },
+        {
+          "comparison": "MaxPatch \u2212 SigLIP",
+          "mean_A": 0.38480570175438594,
+          "mean_B": 0.49696903508771934,
+          "delta": -0.11216333333333339,
+          "n_pairs": 57,
+          "holm_p": 2.3556059690932145e-05
+        }
+      ]
+    }
+  },
+  "category_scale": {
+    "visual_genome_m/building": 0.13273408750000001,
+    "visual_genome_m/shirt": 0.013502621249999996,
+    "visual_genome_m/grass": 0.07719722139999997,
+    "visual_genome_m/floor": 0.200288499,
+    "visual_genome_m/water": 0.11770503645000001,
+    "visual_genome_m/leg": 0.009629225899999993,
+    "visual_genome_m/arm": 0.013969760399999994,
+    "visual_genome_m/girl": 0.06477875,
+    "visual_genome_m/clock": 0.004526266199999998,
+    "visual_genome_m/bed": 0.255305888,
+    "visual_genome_m/bird": 0.011046749999999998,
+    "visual_genome_m/giraffe": 0.1009420673
+  },
+  "spearman_scale_vs_delta": [
+    0.5734265734265735,
+    0.05126558978649151
+  ],
+  "examples_maxpatch_best": [
+    {
+      "dataset": "visual_genome_m",
+      "category": "arm",
+      "scale": 0.013969760399999994,
+      "maxpatch": 0.5453666,
+      "maxhac": 0.8255520000000001,
+      "delta": -0.28018540000000003
+    },
+    {
+      "dataset": "visual_genome_m",
+      "category": "clock",
+      "scale": 0.004526266199999998,
+      "maxpatch": 0.41860379999999997,
+      "maxhac": 0.6587398,
+      "delta": -0.24013600000000002
+    },
+    {
+      "dataset": "visual_genome_m",
+      "category": "girl",
+      "scale": 0.06477875,
+      "maxpatch": 0.41169400000000006,
+      "maxhac": 0.6494268,
+      "delta": -0.2377327999999999
+    },
+    {
+      "dataset": "visual_genome_m",
+      "category": "grass",
+      "scale": 0.07719722139999997,
+      "maxpatch": 0.3033614,
+      "maxhac": 0.5002038000000001,
+      "delta": -0.19684240000000008
+    },
+    {
+      "dataset": "visual_genome_m",
+      "category": "bird",
+      "scale": 0.011046749999999998,
+      "maxpatch": 0.4742284,
+      "maxhac": 0.6288438000000001,
+      "delta": -0.15461540000000007
+    }
+  ],
+  "examples_maxhac_best": [
+    {
+      "dataset": "caltech101_m",
+      "category": "cougar_face",
+      "scale": null,
+      "maxpatch": 0.9777777999999999,
+      "maxhac": 0.0,
+      "delta": 0.9777777999999999
+    },
+    {
+      "dataset": "caltech101_m",
+      "category": "ketch",
+      "scale": null,
+      "maxpatch": 0.9692308000000001,
+      "maxhac": 0.044912400000000005,
+      "delta": 0.9243184000000001
+    },
+    {
+      "dataset": "caltech101_m",
+      "category": "ibis",
+      "scale": null,
+      "maxpatch": 1.0,
+      "maxhac": 0.0872548,
+      "delta": 0.9127452
+    },
+    {
+      "dataset": "caltech101_m",
+      "category": "crab",
+      "scale": null,
+      "maxpatch": 0.8984615999999999,
+      "maxhac": 0.0410714,
+      "delta": 0.8573901999999999
+    },
+    {
+      "dataset": "caltech101_m",
+      "category": "trilobite",
+      "scale": null,
+      "maxpatch": 0.8,
+      "maxhac": 0.0,
+      "delta": 0.8
+    }
+  ]
+}
