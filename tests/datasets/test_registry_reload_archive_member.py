@@ -96,7 +96,9 @@ class TestRegistryReloadArchiveMemberDataset:
             assert ctx is not None
             assert len(ctx.medias) == len(medias)
             # The registry stat must not be overwritten with 0.
-            assert get_dataset(dataset_id)["num_items"] == len(medias)
+            reloaded_entry = get_dataset(dataset_id)
+            assert reloaded_entry is not None
+            assert reloaded_entry["num_items"] == len(medias)
             # Kept lazily: the member is streamed from its shard on demand.
             assert all(m["media_bytes"] is None for m in ctx.medias.values())
         finally:
