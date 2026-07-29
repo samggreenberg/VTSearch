@@ -103,8 +103,15 @@ def make_image_thumbnail(
     """
     from PIL import Image, ImageOps  # noqa: PLC0415
 
+    from vtscore.media.image.decode import decode_bounded  # noqa: PLC0415
+
     try:
-        with Image.open(io.BytesIO(media_bytes)) as src:
+        # Bounded decode: the result is at most ``max_dim`` px on its longest
+        # side, so a gigapixel source has nothing to gain from being decoded at
+        # full resolution first.  Both the crop and the edge-trim below work in
+        # *fractional* coordinates, so they are unaffected by the downsample.
+        decoded, _scale = decode_bounded(media_bytes)
+        with decoded as src:
             img = ImageOps.exif_transpose(src) or src
             if crop is not None:
                 img = _crop_to_region(img, crop)
