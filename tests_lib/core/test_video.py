@@ -373,9 +373,9 @@ class TestVideoLoadMediaData:
         assert data["duration"] == pytest.approx(2.0)
 
     def test_probes_the_path_once(self, install_fake_decoder, tmp_path):
-        """The thumbnail reuses the thin load's probe instead of re-probing."""
+        """The thumbnail reuses the duration's probe instead of re-probing."""
         fake = install_fake_decoder(duration=4.0, fps=25.0)
-        data = self.mt.load_thin_media_data(tmp_path / "x.mp4")
+        data = self.mt.load_media_data(tmp_path / "x.mp4", media_bytes=b"inline")
         assert data["duration"] == pytest.approx(4.0)
         assert data["thumbnail_bytes"][:8] == _PNG_MAGIC
         assert len(fake.probed_paths) == 1
