@@ -522,6 +522,35 @@ class MediaType(ABC):
             {"media_bytes": b"...", "duration": 0, "width": 32, "height": 32}
         """
 
+    def ensure_thumbnail_bytes(self, media: dict) -> bytes | None:
+        """Populate and return *media*'s ``thumbnail_bytes``, generating if absent.
+
+        :meth:`load_media_data` covers media that arrive from a file the loader
+        can read at ingest.  Some media have no file at all: an
+        **archive-member** media (see
+        :mod:`vtscore.datasets.importers.local_archive_member`) carries only
+        ``{archive path, member}`` and re-derives its bytes by streaming a
+        single tar/zip member, so nothing is decodable until something asks.
+        This hook is the type-agnostic way to ask, and it is what the
+        background warm-up pass in
+        :mod:`vtscore.datasets.thumbnail_warm` calls per media.
+
+        The default is a pure read of whatever is already cached: a type with
+        no cheap way to build a thumbnail from its resolvable bytes reports
+        ``None`` and keeps the request-time fallback it already has.  Types
+        whose thumbnail *is* derivable from the bytes override this and
+        generate through the same helper their ``image_response`` fallback
+        uses, so a warmed thumbnail is byte-identical to a lazily generated
+        one.
+
+        Implementations must memoise onto ``media["thumbnail_bytes"]`` and
+        must **not** retain the resolved payload on the media — the whole
+        point of the archive-member importer is that member bytes never stay
+        resident.  In-memory only, like every other ``thumbnail_bytes``: these
+        ride along on an explicit save and are otherwise regenerated.
+        """
+        return media.get("thumbnail_bytes")
+
     # ------------------------------------------------------------------
     # HTTP serving
     # ------------------------------------------------------------------

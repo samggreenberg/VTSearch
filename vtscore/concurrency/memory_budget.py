@@ -21,7 +21,7 @@ _DEFAULT_BUDGET_FRACTION = 0.25
 _FALLBACK_BUDGET_BYTES = 1 * 1024 * 1024 * 1024
 
 
-def _available_memory_bytes() -> int:
+def available_memory_bytes() -> int:
     """Best-effort estimate of currently-available physical memory in bytes."""
     try:
         with open("/proc/meminfo", encoding="ascii") as fh:
@@ -60,5 +60,5 @@ def cap_workers_by_memory(
     per_worker = n_items * embed_dim * bytes_per_element
     if per_worker <= 0:
         return max(1, max_workers)
-    budget = int(_available_memory_bytes() * budget_fraction)
+    budget = int(available_memory_bytes() * budget_fraction)
     return max(1, min(max_workers, budget // per_worker))

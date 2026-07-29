@@ -55,6 +55,7 @@ from vtscore.datasets.stages.finalize import (
 )
 from vtscore.datasets.stages.projection import _build_projection_stage, _maybe_signpost_texts_stage
 from vtscore.datasets.stages.registry import _register_and_migrate
+from vtscore.datasets.thumbnail_warm import start_archive_thumbnail_warm
 
 
 # Two independent gates control how many dataset loads can run concurrently
@@ -550,6 +551,15 @@ def _run_origin_load_in_background(
                     # green immediately.  Text sort waits behind its own progress
                     # bar on first use if the model isn't ready yet.
                     _warmup_embedder_async(ctx.medias)
+                    # Same deal for archive-member thumbnails: the importer reads
+                    # no member bytes by design, so those media land with no
+                    # thumbnail and every browse tile would stream a tar member
+                    # and decode it on the request thread.  Warm them off the
+                    # request path now that the dataset is registered and
+                    # browsable; a no-op for every other import path.  Kicked on
+                    # reload too (this runs for pickle loads as well), since the
+                    # save above necessarily predates the pass.
+                    start_archive_thumbnail_warm(ctx)
 
                     from vtsearch.achievements import record_dataset_load  # noqa: PLC0415
 

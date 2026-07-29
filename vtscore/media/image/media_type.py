@@ -163,6 +163,38 @@ class ImageMediaType(MediaType):
             "thumbnail_bytes": thumb[0] if thumb is not None else None,
         }
 
+    def ensure_thumbnail_bytes(self, media: dict) -> bytes | None:
+        """Build the grid/browse thumbnail from the media's resolvable bytes.
+
+        Mirrors what :meth:`load_media_data` computes at ingest, for media that
+        had no file to read then (archive members).  The source bytes are
+        released as soon as the thumbnail and dimensions are extracted, so a
+        warm-up over a multi-GB shard holds one member at a time.
+        """
+        thumb = media.get("thumbnail_bytes")
+        if thumb:
+            return thumb
+        import io  # noqa: PLC0415
+
+        from PIL import Image  # noqa: PLC0415
+
+        from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
+
+        data = self._resolve_media_bytes(media)
+        if not data:
+            return None
+        if media.get("width") is None or media.get("height") is None:
+            try:
+                with Image.open(io.BytesIO(data)) as img:
+                    media["width"], media["height"] = img.width, img.height
+            except Exception:
+                pass
+        result = make_image_thumbnail(data)
+        if result is None:
+            return None
+        media["thumbnail_bytes"] = result[0]
+        return result[0]
+
     # ------------------------------------------------------------------
     # HTTP serving
     # ------------------------------------------------------------------

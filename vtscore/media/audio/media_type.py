@@ -1057,16 +1057,25 @@ class AudioMediaType(MediaType):
     # HTTP serving
     # ------------------------------------------------------------------
 
+    def ensure_thumbnail_bytes(self, media: dict) -> bytes | None:
+        """Return the waveform PNG, rendering it from the media's bytes if absent.
+
+        Memoises the per-window PNG so repeat fetches of this exact window
+        (each browse-canvas pan/zoom re-requests it) skip the decode, and so
+        the background warm-up pass and the request path share one
+        implementation.  In-memory only; never written to disk.
+        """
+        thumb = media.get("thumbnail_bytes")
+        if thumb:
+            return thumb
+        thumb = self._waveform_for_media(media)
+        if thumb:
+            media["thumbnail_bytes"] = thumb
+        return thumb
+
     def image_response(self, media: dict) -> MediaResponse | None:
         """Return the waveform thumbnail as a PNG image, or *None*."""
-        thumb = media.get("thumbnail_bytes")
-        if not thumb:
-            thumb = self._waveform_for_media(media)
-            if thumb:
-                # Memoise the per-window PNG so repeat fetches of this exact
-                # window (each browse-canvas pan/zoom re-requests it) skip the
-                # decode. In-memory only; never written to disk.
-                media["thumbnail_bytes"] = thumb
+        thumb = self.ensure_thumbnail_bytes(media)
         if not thumb:
             return None
         return MediaResponse(

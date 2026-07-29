@@ -218,6 +218,7 @@ changes to `vtscore/media/__init__.py` are needed.
 | Method                        | Signature                          | Description                        |
 |-------------------------------|------------------------------------|------------------------------------|
 | `display_metadata(media)`     | `(dict) -> dict[str, Any]`         | Metadata for the labeling UI       |
+| `ensure_thumbnail_bytes(media)` | `(dict) -> bytes \| None`        | Generate + memoise `media["thumbnail_bytes"]` from the media's *resolvable* bytes, for media that had no file at ingest. Defaults to a plain read of what's cached (no generation) |
 | `load_models()`               | `() -> None`                       | Load inline embedding models (legacy) |
 | `embed_text(text)`            | `(str) -> Optional[np.ndarray]`    | Inline text embedding (legacy)     |
 | `load_demo_source(...)`       | See docstring                      | Download and embed a demo dataset  |
@@ -231,6 +232,19 @@ changes to `vtscore/media/__init__.py` are needed.
 > per-media signpost text a Browse-prepped dataset already carries (see
 > `vtscore/projection/signpost_texts.py`). A type that returns its own dict
 > without merging silently drops all of them.
+
+> **Override `ensure_thumbnail_bytes` if your type has a browsable thumbnail.**
+> The path-based hooks above only fire for media the loader can read at ingest.
+> An **archive-member** media (`local_archive_member`) has no file at all — only
+> `{archive path, member}` — so it leaves import with no thumbnail, and every
+> browse tile would stream a tar member and decode it on the request thread.
+> `ensure_thumbnail_bytes` is the type-agnostic way to build one from
+> `_resolve_media_bytes(media)`; the background pass in
+> `vtscore/datasets/thumbnail_warm.py` calls it per media after a load, and the
+> serving path calls it too, so a warmed thumbnail is byte-identical to a lazily
+> generated one. Generate through the same helper your `image_response` fallback
+> uses, memoise onto `media["thumbnail_bytes"]`, and never retain the resolved
+> payload on the media.
 
 ### What happens automatically after registration
 
