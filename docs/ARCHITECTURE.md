@@ -76,7 +76,9 @@ VTSearch/
 │   │   │                           FaceLocalizer, OCRExtractor
 │   │   ├── text/                   Text media type, embedders (E5 default, BGE), clippers
 │   │   ├── video/                  Video media type, embedders (X-CLIP default, LanguageBind,
-│   │   │                           VideoMAE), clippers
+│   │   │                           VideoMAE), clippers, decode.py (all frame decoding, via an
+│   │   │                           ffmpeg subprocess — never in-process OpenCV; see DEPLOYMENT.md
+│   │   │                           "FATAL FIPS SELFTEST FAILURE")
 │   │   ├── document/               Document media type — convert-out half type (importable, no
 │   │   │                           embedder; converts_to image/text), clipper, UCSF demo
 │   │   └── face/                   Face media type — convert-in half type (embeddable, not

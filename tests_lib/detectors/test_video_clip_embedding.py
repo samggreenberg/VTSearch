@@ -6,8 +6,8 @@ embedding because:
   1. ``_build_clip_embed_input`` dropped ``clip_start`` / ``clip_end``;
   2. ``_fixup_clip_md5_and_embeddings`` skipped re-embedding for video
      (since video clippers don't slice bytes);
-  3. The video embedders sampled ``np.linspace(0, frame_count - 1, n)``
-     unconditionally; ignoring the clip range.
+  3. The video embedders sampled the whole video unconditionally;
+     ignoring the clip range.
 
 These tests cover all three layers.
 """
@@ -21,136 +21,114 @@ import numpy as np
 import pytest
 
 from vtscore.embedding.media_vectors import media_embedding
+from vtscore.media.video import decode
 from vtscore.utils.hashing import content_md5
 
 
 # ---------------------------------------------------------------------------
-# _frame_index_range: boundary math
+# _frame_time_range: boundary math
 # ---------------------------------------------------------------------------
 
 
-class TestFrameIndexRange:
+def _info(duration: float, fps: float) -> decode.VideoInfo:
+    return decode.VideoInfo(duration=duration, fps=fps, width=1, height=1)
+
+
+class TestFrameTimeRange:
     def test_full_range_when_no_boundaries(self):
-        from vtscore.media.video._frame_sampling import _frame_index_range
+        from vtscore.media.video._frame_sampling import _frame_time_range
 
         media: dict[str, Any] = {}
-        start, end = _frame_index_range(media, frame_count=100, fps=10.0)
-        assert (start, end) == (0, 99)
+        start, end = _frame_time_range(media, _info(10.0, 10.0))
+        # Stops one frame short of the duration, where nothing decodes.
+        assert start == pytest.approx(0.0)
+        assert end == pytest.approx(9.9)
 
-    def test_clip_boundaries_map_to_indices(self):
-        from vtscore.media.video._frame_sampling import _frame_index_range
+    def test_clip_boundaries_map_to_times(self):
+        from vtscore.media.video._frame_sampling import _frame_time_range
 
         media = {"clip_start": 2.0, "clip_end": 5.0}
-        start, end = _frame_index_range(media, frame_count=100, fps=10.0)
-        # 2.0s @ 10fps = frame 20; 5.0s @ 10fps -> last frame = 50 - 1 = 49.
-        assert start == 20
-        assert end == 49
+        start, end = _frame_time_range(media, _info(10.0, 10.0))
+        assert start == pytest.approx(2.0)
+        assert end == pytest.approx(4.9)  # 5.0 minus one 10fps frame
 
     def test_clip_boundaries_clamped_to_video(self):
-        from vtscore.media.video._frame_sampling import _frame_index_range
+        from vtscore.media.video._frame_sampling import _frame_time_range
 
         media = {"clip_start": 99.0, "clip_end": 200.0}
-        start, end = _frame_index_range(media, frame_count=100, fps=10.0)
-        # clip_start far past end: clamp to last frame; end must not precede start.
-        assert start == 99
-        assert end == 99
+        start, end = _frame_time_range(media, _info(10.0, 10.0))
+        # clip_start far past the end: clamp to the last frame; end must not
+        # precede start.
+        assert start == pytest.approx(9.9)
+        assert end == pytest.approx(9.9)
 
-    def test_falls_back_to_full_when_fps_zero(self):
-        from vtscore.media.video._frame_sampling import _frame_index_range
+    def test_boundaries_honoured_when_fps_unknown(self):
+        from vtscore.media.video._frame_sampling import _frame_time_range
 
+        # Seconds don't need a frame rate to be meaningful, so an unknown fps
+        # no longer forces the full range.
         media = {"clip_start": 1.0, "clip_end": 2.0}
-        start, end = _frame_index_range(media, frame_count=50, fps=0.0)
-        assert (start, end) == (0, 49)
+        start, end = _frame_time_range(media, _info(5.0, 0.0))
+        assert start == pytest.approx(1.0)
+        assert end == pytest.approx(1.96)
 
     def test_falls_back_to_full_when_end_le_start(self):
-        from vtscore.media.video._frame_sampling import _frame_index_range
+        from vtscore.media.video._frame_sampling import _frame_time_range
 
         media = {"clip_start": 3.0, "clip_end": 3.0}
-        start, end = _frame_index_range(media, frame_count=50, fps=10.0)
-        assert (start, end) == (0, 49)
+        start, end = _frame_time_range(media, _info(5.0, 10.0))
+        assert start == pytest.approx(0.0)
+        assert end == pytest.approx(4.9)
 
     def test_distinct_tiles_get_distinct_ranges(self):
-        from vtscore.media.video._frame_sampling import _frame_index_range
+        from vtscore.media.video._frame_sampling import _frame_time_range
 
-        # Parent: 10s @ 25fps -> 250 frames.  Tile into 2s segments.
-        tile_a = {"clip_start": 0.0, "clip_end": 2.0}
-        tile_b = {"clip_start": 2.0, "clip_end": 4.0}
-        tile_c = {"clip_start": 8.0, "clip_end": 10.0}
+        # Parent: 10s @ 25fps.  Tile into 2s segments.
+        info = _info(10.0, 25.0)
+        a = _frame_time_range({"clip_start": 0.0, "clip_end": 2.0}, info)
+        b = _frame_time_range({"clip_start": 2.0, "clip_end": 4.0}, info)
+        c = _frame_time_range({"clip_start": 8.0, "clip_end": 10.0}, info)
 
-        a = _frame_index_range(tile_a, frame_count=250, fps=25.0)
-        b = _frame_index_range(tile_b, frame_count=250, fps=25.0)
-        c = _frame_index_range(tile_c, frame_count=250, fps=25.0)
-
-        assert a == (0, 49)
-        assert b == (50, 99)
-        assert c == (200, 249)
+        assert a == pytest.approx((0.0, 1.96))
+        assert b == pytest.approx((2.0, 3.96))
+        assert c == pytest.approx((8.0, 9.96))
 
 
 # ---------------------------------------------------------------------------
-# sample_video_frames: uses clip_start/clip_end to pick frame indices
+# sample_video_frames: uses clip_start/clip_end to pick timestamps
 # ---------------------------------------------------------------------------
 
 
-class _FakeCapture:
-    """Stand-in for ``cv2.VideoCapture`` that records seeks.
+class _FakeDecoder:
+    """Decode-layer stand-in that records every timestamp it was asked for.
 
-    Returns deterministic 1x1 BGR frames so the helper produces a list of
-    PIL Images we can introspect.  ``positions_seen`` exposes every frame
-    index the caller seeked to via ``CAP_PROP_POS_FRAMES``.
+    Returns deterministic 1x1 RGB frames so the helper produces a list of PIL
+    Images we can introspect.
     """
 
     def __init__(self, *, frame_count: int, fps: float):
-        self._frame_count = frame_count
         self._fps = fps
-        self.positions_seen: list[int] = []
-        self._next_pos = 0
+        self._duration = frame_count / fps if fps > 0 else 0.0
+        self.times_seen: list[float] = []
 
-    def isOpened(self) -> bool:  # noqa: N802 (cv2 API)
-        return True
+    def probe(self, _path):
+        return decode.VideoInfo(duration=self._duration, fps=self._fps, width=1, height=1)
 
-    def get(self, prop: int) -> float:
-        import cv2  # noqa: PLC0415
-
-        if prop == cv2.CAP_PROP_FRAME_COUNT:
-            return float(self._frame_count)
-        if prop == cv2.CAP_PROP_FPS:
-            return self._fps
-        return 0.0
-
-    def set(self, prop: int, value: float) -> bool:
-        import cv2  # noqa: PLC0415
-
-        if prop == cv2.CAP_PROP_POS_FRAMES:
-            self._next_pos = int(value)
-            self.positions_seen.append(self._next_pos)
-        return True
-
-    def read(self):
-        # Encode the position into the frame so different seeks produce
-        # different PIL Images; useful as a sanity check.
-        b = max(0, min(255, self._next_pos))
-        frame = np.full((1, 1, 3), b, dtype=np.uint8)
-        return True, frame
-
-    def release(self) -> None:
-        pass
+    def frame_at(self, _path, time_seconds: float):
+        self.times_seen.append(float(time_seconds))
+        value = max(0, min(255, int(round(time_seconds * self._fps))))
+        return np.full((1, 1, 3), value, dtype=np.uint8)
 
 
 @pytest.fixture
 def fake_video(monkeypatch):
-    """Patch cv2.VideoCapture with a captured _FakeCapture instance."""
-    import cv2
+    """Return an installer that swaps the decode layer for a recording fake."""
 
-    captures: list[_FakeCapture] = []
-
-    def _factory(*, frame_count: int, fps: float):
-        def _ctor(_path):
-            cap = _FakeCapture(frame_count=frame_count, fps=fps)
-            captures.append(cap)
-            return cap
-
-        monkeypatch.setattr(cv2, "VideoCapture", _ctor)
-        return captures
+    def _factory(*, frame_count: int, fps: float) -> _FakeDecoder:
+        fake = _FakeDecoder(frame_count=frame_count, fps=fps)
+        monkeypatch.setattr(decode, "probe", fake.probe)
+        monkeypatch.setattr(decode, "frame_at", fake.frame_at)
+        return fake
 
     return _factory
 
@@ -159,22 +137,20 @@ class TestSampleVideoFrames:
     def test_full_range_sampled_without_boundaries(self, fake_video, tmp_path):
         from vtscore.media.video._frame_sampling import sample_video_frames
 
-        captures = fake_video(frame_count=100, fps=10.0)
+        fake = fake_video(frame_count=100, fps=10.0)
         video = tmp_path / "v.mp4"
         video.write_bytes(b"fake")
         frames = sample_video_frames({"media_path": str(video)}, num_frames=8)
 
         assert len(frames) == 8
-        assert len(captures) == 1
-        # 8 frames linspace'd over [0, 99].
-        seen = captures[0].positions_seen
-        assert seen[0] == 0
-        assert seen[-1] == 99
+        # 8 timestamps linspace'd over the whole 10s video.
+        assert fake.times_seen[0] == pytest.approx(0.0)
+        assert fake.times_seen[-1] == pytest.approx(9.9)
 
     def test_clip_boundaries_restrict_sampled_frames(self, fake_video, tmp_path):
         from vtscore.media.video._frame_sampling import sample_video_frames
 
-        captures = fake_video(frame_count=250, fps=25.0)
+        fake = fake_video(frame_count=250, fps=25.0)
         video = tmp_path / "v.mp4"
         video.write_bytes(b"fake")
 
@@ -183,20 +159,19 @@ class TestSampleVideoFrames:
             num_frames=8,
         )
         assert len(frames) == 8
-        seen = captures[0].positions_seen
-        # Range [50, 99] from clip_start=2.0s and clip_end=4.0s @ 25fps.
-        assert min(seen) >= 50
-        assert max(seen) <= 99
-        assert seen[0] == 50
-        assert seen[-1] == 99
+        seen = fake.times_seen
+        assert min(seen) >= 2.0
+        assert max(seen) <= 4.0
+        assert seen[0] == pytest.approx(2.0)
+        assert seen[-1] == pytest.approx(3.96)
 
-    def test_distinct_tiles_produce_distinct_frame_indices(self, fake_video, tmp_path):
+    def test_distinct_tiles_produce_distinct_timestamps(self, fake_video, tmp_path):
         from vtscore.media.video._frame_sampling import sample_video_frames
 
         # Tile A and Tile B share the same media_path/bytes but cover
-        # disjoint time ranges; the frame indices the embedder samples
-        # must therefore be disjoint.
-        captures = fake_video(frame_count=250, fps=25.0)
+        # disjoint time ranges; the timestamps the embedder samples must
+        # therefore be disjoint.
+        fake = fake_video(frame_count=250, fps=25.0)
         video = tmp_path / "v.mp4"
         video.write_bytes(b"fake")
 
@@ -204,21 +179,21 @@ class TestSampleVideoFrames:
             {"media_path": str(video), "clip_start": 0.0, "clip_end": 2.0},
             num_frames=8,
         )
+        a_times = set(fake.times_seen)
+        fake.times_seen.clear()
         sample_video_frames(
             {"media_path": str(video), "clip_start": 8.0, "clip_end": 10.0},
             num_frames=8,
         )
-        a_positions = set(captures[0].positions_seen)
-        b_positions = set(captures[1].positions_seen)
-        assert a_positions.isdisjoint(b_positions)
+        assert a_times.isdisjoint(set(fake.times_seen))
 
     def test_falls_back_to_tempfile_when_no_path(self, fake_video):
         from vtscore.media.video._frame_sampling import sample_video_frames
 
-        captures = fake_video(frame_count=100, fps=10.0)
+        fake = fake_video(frame_count=100, fps=10.0)
         frames = sample_video_frames({"media_bytes": b"\x00\x01\x02"}, num_frames=8)
         assert len(frames) == 8
-        assert len(captures) == 1
+        assert len(fake.times_seen) == 8
 
     def test_returns_empty_without_path_or_bytes(self):
         from vtscore.media.video._frame_sampling import sample_video_frames

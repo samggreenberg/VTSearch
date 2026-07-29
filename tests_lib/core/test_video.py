@@ -6,29 +6,28 @@ seek-to-time, from bytes and from a file), the frame-seek math and its
 byte/format edge cases, the ``VideoMediaType`` display/serving surface, and
 the error paths on every branch.
 
-Frame decoding goes through OpenCV (``cv2``), which cannot decode the tiny
-synthetic clips used in the rest of the suite.  So the happy paths inject a
-**fake ``cv2``** (a real ndarray frame, then the real PIL/PNG pipeline runs)
-via ``sys.modules``; the error paths use genuinely undecodable input and the
-real (or absent) ``cv2`` so the ``return None`` guards are exercised for
-real.  The two together cover every branch without depending on a working
-video codec being present in the container.
+Frame decoding goes through :mod:`vtscore.media.video.decode`, which shells
+out to ffmpeg and so cannot decode the tiny synthetic clips used in the rest
+of the suite.  The happy paths therefore install a **fake decoder** (a real
+ndarray frame, then the real PIL/PNG pipeline runs); the error paths use
+genuinely undecodable input and the real decoder so the ``return None``
+guards are exercised for real.  The two together cover every branch without
+depending on a particular codec being present in the container.
 """
 
 from __future__ import annotations
 
 import io
-import sys
-import types
 
 import numpy as np
 import pytest
 from PIL import Image
 
+from vtscore.media.video import decode
 from vtscore.media.video.media_type import (
     _VIDEO_MIME_TYPES,
     VideoMediaType,
-    _frame_at_time,
+    _seek_time,
     generate_video_thumbnail,
     generate_video_thumbnail_at,
     generate_video_thumbnail_from_file,
@@ -39,89 +38,53 @@ _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
 
 # ---------------------------------------------------------------------------
-# Fake cv2 decoder
+# Fake decoder
 # ---------------------------------------------------------------------------
 
-# Sentinel values for the CAP_PROP_* / COLOR_* constants.  The fake reads them
-# by identity, so their concrete values are irrelevant.
-_PROP_FRAME_COUNT = "cap_prop_frame_count"
-_PROP_FPS = "cap_prop_fps"
-_PROP_POS_FRAMES = "cap_prop_pos_frames"
-_COLOR_BGR2RGB = "color_bgr2rgb"
 
+class _FakeDecoder:
+    """Stand-in for the ffmpeg decode layer with configurable metadata.
 
-class _FakeCapture:
-    """Stand-in for ``cv2.VideoCapture`` with configurable metadata.
-
-    ``read`` returns a solid-colour frame whose fill byte encodes the last
-    frame index requested via ``set(POS_FRAMES, ...)``, so seeking to two
-    different frames yields two visibly different frames (and thus different
-    thumbnail bytes).
+    ``frame_at`` returns a solid-colour frame whose red channel encodes the
+    requested timestamp's frame index, so two different seeks yield two
+    visibly different frames (and thus different thumbnail bytes).  Every
+    requested timestamp is recorded in :attr:`requested_times`.
     """
 
-    def __init__(self, *, opened=True, frame_count=200, fps=30.0, read_ok=True, dim=256):
-        self._opened = opened
-        self._frame_count = frame_count
+    def __init__(self, *, probe_ok=True, duration=6.0, fps=30.0, read_ok=True, dim=256):
+        self._probe_ok = probe_ok
+        self._duration = duration
         self._fps = fps
         self._read_ok = read_ok
         self._dim = dim
-        self.requested_frame: int | None = None
-        self.released = False
+        self.requested_times: list[float] = []
+        self.probed_paths: list[object] = []
 
-    def isOpened(self):  # noqa: N802 - cv2 API name
-        return self._opened
+    def probe(self, path):
+        self.probed_paths.append(path)
+        if not self._probe_ok:
+            return None
+        return decode.VideoInfo(duration=self._duration, fps=self._fps, width=self._dim, height=self._dim)
 
-    def get(self, prop):
-        if prop == _PROP_FRAME_COUNT:
-            return float(self._frame_count)
-        if prop == _PROP_FPS:
-            return float(self._fps)
-        return 0.0
-
-    def set(self, prop, value):
-        if prop == _PROP_POS_FRAMES:
-            self.requested_frame = int(value)
-
-    def read(self):
+    def frame_at(self, _path, time_seconds):
+        self.requested_times.append(float(time_seconds))
         if not self._read_ok:
-            return False, None
-        fill = (self.requested_frame or 0) % 256
-        # A BGR frame (channel 0 carries the fill so BGR->RGB is observable).
+            return None
+        fill = int(round(time_seconds * self._fps)) % 256
         frame = np.zeros((self._dim, self._dim, 3), dtype=np.uint8)
         frame[..., 0] = fill
-        return True, frame
-
-    def release(self):
-        self.released = True
-
-
-def _fake_cv2(**capture_cfg) -> types.SimpleNamespace:
-    """Build a fake ``cv2`` module whose ``VideoCapture`` yields ``_FakeCapture``.
-
-    A ``SimpleNamespace`` stands in for the module object in ``sys.modules``;
-    ``import cv2`` binds to whatever is registered there.
-    """
-
-    def cvt_color(frame, code):
-        assert code == _COLOR_BGR2RGB
-        return frame[..., ::-1].copy()
-
-    return types.SimpleNamespace(
-        CAP_PROP_FRAME_COUNT=_PROP_FRAME_COUNT,
-        CAP_PROP_FPS=_PROP_FPS,
-        CAP_PROP_POS_FRAMES=_PROP_POS_FRAMES,
-        COLOR_BGR2RGB=_COLOR_BGR2RGB,
-        VideoCapture=lambda _path: _FakeCapture(**capture_cfg),
-        cvtColor=cvt_color,
-    )
+        return frame
 
 
 @pytest.fixture
-def install_fake_cv2(monkeypatch):
-    """Return an installer that swaps ``cv2`` for a configured fake in ``sys.modules``."""
+def install_fake_decoder(monkeypatch):
+    """Return an installer that swaps the decode layer for a configured fake."""
 
-    def _install(**capture_cfg):
-        monkeypatch.setitem(sys.modules, "cv2", _fake_cv2(**capture_cfg))
+    def _install(**cfg) -> _FakeDecoder:
+        fake = _FakeDecoder(**cfg)
+        monkeypatch.setattr(decode, "probe", fake.probe)
+        monkeypatch.setattr(decode, "frame_at", fake.frame_at)
+        return fake
 
     return _install
 
@@ -137,137 +100,109 @@ def _thumb_size(png_bytes: bytes) -> tuple[int, int]:
 
 
 class TestMiddleFrameThumbnail:
-    def test_from_bytes_returns_png(self, install_fake_cv2):
-        install_fake_cv2(frame_count=100, fps=30.0)
+    def test_from_bytes_returns_png(self, install_fake_decoder):
+        install_fake_decoder()
         out = generate_video_thumbnail(b"ignored-by-fake")
         assert out is not None
         assert out[:8] == _PNG_MAGIC
 
-    def test_from_bytes_default_thumb_size(self, install_fake_cv2):
-        install_fake_cv2(dim=256)
+    def test_from_bytes_default_thumb_size(self, install_fake_decoder):
+        install_fake_decoder(dim=256)
         out = generate_video_thumbnail(b"x")
         assert out is not None
         assert _thumb_size(out) == (128, 128)
 
-    def test_from_bytes_custom_size(self, install_fake_cv2):
-        install_fake_cv2(dim=256)
+    def test_from_bytes_custom_size(self, install_fake_decoder):
+        install_fake_decoder(dim=256)
         out = generate_video_thumbnail(b"x", size=64)
         assert out is not None
         assert _thumb_size(out) == (64, 64)
 
-    def test_from_bytes_seeks_to_middle_frame(self, install_fake_cv2):
-        # frame_count=100 -> mid index 50; the fill byte encodes the frame.
-        install_fake_cv2(frame_count=100, fps=30.0, dim=8)
+    def test_from_bytes_seeks_to_middle(self, install_fake_decoder):
+        fake = install_fake_decoder(duration=10.0, fps=30.0, dim=8)
         out = generate_video_thumbnail(b"x")
         assert out is not None
+        assert fake.requested_times == [5.0]
         with Image.open(io.BytesIO(out)) as img:
-            # The fill byte encodes the seeked frame index (50); BGR->RGB moves
-            # the fake's channel-0 fill into the blue channel.
+            # The fill encodes the seeked frame index (5.0s * 30fps = 150).
             pixel = img.convert("RGB").getpixel((0, 0))
             assert isinstance(pixel, tuple)
-            assert pixel[2] == 50
+            assert pixel[0] == 150
 
-    def test_from_file_returns_png(self, install_fake_cv2, tmp_path):
-        install_fake_cv2(frame_count=40)
+    def test_from_file_returns_png(self, install_fake_decoder, tmp_path):
+        install_fake_decoder()
         out = generate_video_thumbnail_from_file(tmp_path / "clip.mp4")
         assert out is not None
         assert out[:8] == _PNG_MAGIC
 
-    def test_from_bytes_not_opened_returns_none(self, install_fake_cv2):
-        install_fake_cv2(opened=False)
+    def test_from_bytes_empty_input_returns_none(self, install_fake_decoder):
+        install_fake_decoder()
+        assert generate_video_thumbnail(b"") is None
+
+    def test_from_bytes_probe_failure_returns_none(self, install_fake_decoder):
+        install_fake_decoder(probe_ok=False)
         assert generate_video_thumbnail(b"x") is None
 
-    def test_from_bytes_zero_frames_returns_none(self, install_fake_cv2):
-        install_fake_cv2(frame_count=0)
+    def test_from_bytes_read_failure_returns_none(self, install_fake_decoder):
+        install_fake_decoder(read_ok=False)
         assert generate_video_thumbnail(b"x") is None
 
-    def test_from_bytes_read_failure_returns_none(self, install_fake_cv2):
-        install_fake_cv2(read_ok=False)
-        assert generate_video_thumbnail(b"x") is None
-
-    def test_from_file_not_opened_returns_none(self, install_fake_cv2, tmp_path):
-        install_fake_cv2(opened=False)
+    def test_from_file_probe_failure_returns_none(self, install_fake_decoder, tmp_path):
+        install_fake_decoder(probe_ok=False)
         assert generate_video_thumbnail_from_file(tmp_path / "clip.mp4") is None
 
-    def test_from_file_zero_frames_returns_none(self, install_fake_cv2, tmp_path):
-        install_fake_cv2(frame_count=0)
-        assert generate_video_thumbnail_from_file(tmp_path / "clip.mp4") is None
-
-    def test_from_file_read_failure_returns_none(self, install_fake_cv2, tmp_path):
-        install_fake_cv2(read_ok=False)
+    def test_from_file_read_failure_returns_none(self, install_fake_decoder, tmp_path):
+        install_fake_decoder(read_ok=False)
         assert generate_video_thumbnail_from_file(tmp_path / "clip.mp4") is None
 
 
 # ---------------------------------------------------------------------------
-# Error paths without a working decoder
+# Error paths with the real decoder
 # ---------------------------------------------------------------------------
 
 
 class TestThumbnailErrorPaths:
-    def test_from_bytes_cv2_unavailable_returns_none(self, monkeypatch):
-        # `import cv2` raises when the module object is None -> caught -> None.
-        monkeypatch.setitem(sys.modules, "cv2", None)
-        assert generate_video_thumbnail(b"anything") is None
-        assert generate_video_thumbnail_at(b"anything", 1.0) is None
-
-    def test_from_file_cv2_unavailable_returns_none(self, monkeypatch, tmp_path):
-        monkeypatch.setitem(sys.modules, "cv2", None)
-        assert generate_video_thumbnail_from_file(tmp_path / "x.mp4") is None
-        assert generate_video_thumbnail_from_file_at(tmp_path / "x.mp4", 1.0) is None
-
     def test_from_bytes_undecodable_input_returns_none(self):
-        # Real (or absent) cv2 cannot decode this; every path yields None.
+        # The real decoder cannot decode this; every path yields None.
         assert generate_video_thumbnail(b"not a video at all") is None
+        assert generate_video_thumbnail_at(b"not a video at all", 1.0) is None
 
     def test_from_file_missing_path_returns_none(self, tmp_path):
-        # VideoCapture on a nonexistent file never opens -> None (and the
-        # from-file guard also swallows any decode exception).
+        # Probing a nonexistent file finds no video stream -> None.
         assert generate_video_thumbnail_from_file(tmp_path / "nope.mp4") is None
+        assert generate_video_thumbnail_from_file_at(tmp_path / "nope.mp4", 1.0) is None
 
 
 # ---------------------------------------------------------------------------
-# Seek-to-time frame math (_frame_at_time)
+# Seek-time clamping (_seek_time)
 # ---------------------------------------------------------------------------
 
 
-class TestFrameAtTime:
-    def _cap_with_fake_cv2(self, install_fake_cv2, **cfg):
-        install_fake_cv2()  # only the constants matter here
-        return _FakeCapture(**cfg)
+class TestSeekTime:
+    def _info(self, duration=10.0, fps=30.0):
+        return decode.VideoInfo(duration=duration, fps=fps, width=64, height=64)
 
-    def test_seeks_by_fps(self, install_fake_cv2):
-        cap = self._cap_with_fake_cv2(install_fake_cv2, frame_count=300, fps=30.0)
-        frame = _frame_at_time(cap, 2.0)
-        assert frame is not None
-        assert cap.requested_frame == 60  # round(2.0 * 30)
+    def test_none_seeks_to_middle(self):
+        assert _seek_time(self._info(), None) == pytest.approx(5.0)
 
-    def test_rounds_to_nearest_frame(self, install_fake_cv2):
-        cap = self._cap_with_fake_cv2(install_fake_cv2, frame_count=300, fps=30.0)
-        _frame_at_time(cap, 1.017)  # 30.51 -> 31
-        assert cap.requested_frame == 31
+    def test_passes_through_in_range_time(self):
+        assert _seek_time(self._info(), 2.0) == pytest.approx(2.0)
 
-    def test_clamps_beyond_end_to_last_frame(self, install_fake_cv2):
-        cap = self._cap_with_fake_cv2(install_fake_cv2, frame_count=100, fps=30.0)
-        _frame_at_time(cap, 9999.0)
-        assert cap.requested_frame == 99  # frame_count - 1
+    def test_clamps_beyond_end_to_last_frame(self):
+        # One frame of headroom so the seek still lands on decodable video.
+        assert _seek_time(self._info(), 9999.0) == pytest.approx(10.0 - 1 / 30)
 
-    def test_clamps_negative_time_to_zero(self, install_fake_cv2):
-        cap = self._cap_with_fake_cv2(install_fake_cv2, frame_count=100, fps=30.0)
-        _frame_at_time(cap, -5.0)
-        assert cap.requested_frame == 0
+    def test_clamps_negative_time_to_zero(self):
+        assert _seek_time(self._info(), -5.0) == 0.0
 
-    def test_falls_back_to_middle_when_fps_zero(self, install_fake_cv2):
-        cap = self._cap_with_fake_cv2(install_fake_cv2, frame_count=80, fps=0.0)
-        _frame_at_time(cap, 3.0)
-        assert cap.requested_frame == 40  # frame_count // 2
+    def test_unknown_fps_uses_default_frame_headroom(self):
+        assert _seek_time(self._info(fps=0.0), 9999.0) == pytest.approx(10.0 - 0.04)
 
-    def test_zero_frame_count_returns_none(self, install_fake_cv2):
-        cap = self._cap_with_fake_cv2(install_fake_cv2, frame_count=0, fps=30.0)
-        assert _frame_at_time(cap, 1.0) is None
+    def test_unknown_duration_passes_time_through(self):
+        assert _seek_time(self._info(duration=0.0), 3.0) == pytest.approx(3.0)
 
-    def test_read_failure_returns_none(self, install_fake_cv2):
-        cap = self._cap_with_fake_cv2(install_fake_cv2, frame_count=100, fps=30.0, read_ok=False)
-        assert _frame_at_time(cap, 1.0) is None
+    def test_unknown_duration_seeks_to_start_for_middle(self):
+        assert _seek_time(self._info(duration=0.0), None) == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -276,41 +211,42 @@ class TestFrameAtTime:
 
 
 class TestThumbnailAtTime:
-    def test_from_bytes_returns_png(self, install_fake_cv2):
-        install_fake_cv2(frame_count=300, fps=30.0)
+    def test_from_bytes_returns_png(self, install_fake_decoder):
+        fake = install_fake_decoder(duration=10.0, fps=30.0)
         out = generate_video_thumbnail_at(b"x", 2.0)
         assert out is not None
         assert out[:8] == _PNG_MAGIC
+        assert fake.requested_times == [2.0]
 
-    def test_from_bytes_custom_size(self, install_fake_cv2):
-        install_fake_cv2(dim=256)
+    def test_from_bytes_custom_size(self, install_fake_decoder):
+        install_fake_decoder(dim=256)
         out = generate_video_thumbnail_at(b"x", 1.0, size=32)
         assert out is not None
         assert _thumb_size(out) == (32, 32)
 
-    def test_different_times_produce_different_thumbnails(self, install_fake_cv2):
-        install_fake_cv2(frame_count=300, fps=30.0, dim=8)
-        early = generate_video_thumbnail_at(b"x", 1.0)  # frame 30
-        late = generate_video_thumbnail_at(b"x", 5.0)  # frame 150
+    def test_different_times_produce_different_thumbnails(self, install_fake_decoder):
+        install_fake_decoder(duration=10.0, fps=30.0, dim=8)
+        early = generate_video_thumbnail_at(b"x", 1.0)
+        late = generate_video_thumbnail_at(b"x", 5.0)
         assert early is not None and late is not None
         assert early != late
 
-    def test_from_file_returns_png(self, install_fake_cv2, tmp_path):
-        install_fake_cv2(frame_count=120, fps=24.0)
+    def test_from_file_returns_png(self, install_fake_decoder, tmp_path):
+        install_fake_decoder(duration=5.0, fps=24.0)
         out = generate_video_thumbnail_from_file_at(tmp_path / "clip.mp4", 1.5)
         assert out is not None
         assert out[:8] == _PNG_MAGIC
 
-    def test_from_bytes_not_opened_returns_none(self, install_fake_cv2):
-        install_fake_cv2(opened=False)
+    def test_from_bytes_probe_failure_returns_none(self, install_fake_decoder):
+        install_fake_decoder(probe_ok=False)
         assert generate_video_thumbnail_at(b"x", 1.0) is None
 
-    def test_from_bytes_zero_frames_returns_none(self, install_fake_cv2):
-        install_fake_cv2(frame_count=0)
+    def test_from_bytes_read_failure_returns_none(self, install_fake_decoder):
+        install_fake_decoder(read_ok=False)
         assert generate_video_thumbnail_at(b"x", 1.0) is None
 
-    def test_from_file_read_failure_returns_none(self, install_fake_cv2, tmp_path):
-        install_fake_cv2(read_ok=False)
+    def test_from_file_read_failure_returns_none(self, install_fake_decoder, tmp_path):
+        install_fake_decoder(read_ok=False)
         assert generate_video_thumbnail_from_file_at(tmp_path / "clip.mp4", 1.0) is None
 
 
@@ -421,29 +357,31 @@ class TestVideoLoadMediaData:
     def setup_method(self):
         self.mt = VideoMediaType()
 
-    def test_computes_duration_and_thumbnail(self, install_fake_cv2, tmp_path):
-        install_fake_cv2(frame_count=90, fps=30.0)
+    def test_computes_duration_and_thumbnail(self, install_fake_decoder, tmp_path):
+        install_fake_decoder(duration=3.0, fps=30.0)
         path = tmp_path / "clip.mp4"
         path.write_bytes(b"raw-video-bytes")
         data = self.mt.load_media_data(path)
         assert data["media_bytes"] == b"raw-video-bytes"  # read from disk
-        assert data["duration"] == pytest.approx(3.0)  # 90 / 30
+        assert data["duration"] == pytest.approx(3.0)
         assert data["thumbnail_bytes"][:8] == _PNG_MAGIC
 
-    def test_uses_provided_bytes_without_reading_file(self, install_fake_cv2, tmp_path):
-        install_fake_cv2(frame_count=60, fps=30.0)
+    def test_uses_provided_bytes_without_reading_file(self, install_fake_decoder, tmp_path):
+        install_fake_decoder(duration=2.0, fps=30.0)
         data = self.mt.load_media_data(tmp_path / "does-not-exist.mp4", media_bytes=b"inline")
         assert data["media_bytes"] == b"inline"
         assert data["duration"] == pytest.approx(2.0)
 
-    def test_zero_fps_yields_zero_duration(self, install_fake_cv2, tmp_path):
-        install_fake_cv2(frame_count=90, fps=0.0)
-        data = self.mt.load_media_data(tmp_path / "x.mp4", media_bytes=b"b")
-        assert data["duration"] == 0.0
+    def test_probes_the_path_once(self, install_fake_decoder, tmp_path):
+        """The thumbnail reuses the duration's probe instead of re-probing."""
+        fake = install_fake_decoder(duration=4.0, fps=25.0)
+        data = self.mt.load_media_data(tmp_path / "x.mp4", media_bytes=b"inline")
+        assert data["duration"] == pytest.approx(4.0)
+        assert data["thumbnail_bytes"][:8] == _PNG_MAGIC
+        assert len(fake.probed_paths) == 1
 
-    def test_decode_failure_yields_zero_duration(self, monkeypatch, tmp_path):
-        # cv2 unavailable -> the try/except sets duration 0.0 and thumbnail None.
-        monkeypatch.setitem(sys.modules, "cv2", None)
+    def test_decode_failure_yields_zero_duration(self, install_fake_decoder, tmp_path):
+        install_fake_decoder(probe_ok=False)
         data = self.mt.load_media_data(tmp_path / "x.mp4", media_bytes=b"b")
         assert data["duration"] == 0.0
         assert data["thumbnail_bytes"] is None
@@ -465,8 +403,8 @@ class TestVideoImageResponse:
         assert resp.mimetype == "image/png"
         assert resp.download_name == "media_7_thumb.png"
 
-    def test_generates_and_memoises_from_media_bytes(self, install_fake_cv2):
-        install_fake_cv2(frame_count=50, fps=30.0)
+    def test_generates_and_memoises_from_media_bytes(self, install_fake_decoder):
+        install_fake_decoder()
         media = {"id": 3, "media_bytes": b"raw"}
         resp = self.mt.image_response(media)
         assert resp is not None
@@ -477,8 +415,8 @@ class TestVideoImageResponse:
     def test_returns_none_when_no_bytes_resolvable(self):
         assert self.mt.image_response({"id": 9}) is None
 
-    def test_returns_none_when_generation_fails(self, install_fake_cv2):
-        install_fake_cv2(read_ok=False)
+    def test_returns_none_when_generation_fails(self, install_fake_decoder):
+        install_fake_decoder(read_ok=False)
         media = {"id": 4, "media_bytes": b"undecodable"}
         assert self.mt.image_response(media) is None
         assert "thumbnail_bytes" not in media

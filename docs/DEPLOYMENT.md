@@ -634,12 +634,12 @@ bash scripts/install.sh gpu
 | `sentence-transformers` | latest | E5 text embeddings |
 | `numpy` | latest | Numeric arrays |
 | `flask` | latest | Web server |
-| `opencv-python-headless` | `<4.10` | Video frame extraction |
+| `opencv-python-headless` | latest | Image processing (structural embedder, YOLO). **Not** used for video decoding — see [FIPS](#video-import-crashes-with-fatal-fips-selftest-failure) |
 | `ultralytics` | latest | YOLO-based image processing |
 | `laion_clap` | latest | Audio embedding preprocessing |
 | `librosa` | latest | Audio analysis (spectrograms, silence splitting) |
 | `soundfile` / `soxr` | latest | Audio decoding and resampling (`vtscore.media.audio.decode`) |
-| `imageio-ffmpeg` | latest | Bundled ffmpeg binary; decodes codecs libsndfile can't (AAC/M4A/MP4) |
+| `imageio-ffmpeg` | latest | Bundled ffmpeg binary; audio codecs libsndfile can't read (AAC/M4A/MP4), and all video frame decoding (`vtscore.media.video.decode`) |
 | `PyMuPDF` | latest | Document (PDF/DOC/PPT) rendering and text extraction |
 
 ---
@@ -685,6 +685,44 @@ with `docker volume ls` and verify the `vtsearch-data` volume exists.
 
 **Fix**: Check internet connectivity. For offline use, import data locally
 via the folder or pickle importer instead.
+
+### Video import crashes with `FATAL FIPS SELFTEST FAILURE`
+
+**Symptom**: on a FIPS-enabled host, importing a video kills the process
+outright — no traceback, just a core dump and:
+
+```
+crypto/fips/fips.c:154 OpenSSL internal error: FATAL FIPS SELFTEST FAILURE
+```
+
+**Cause**: the `opencv-python-headless` wheel vendors its own OpenSSL.
+`cv2.abi3.so` needs `libavformat`, which needs the `libssl`/`libcrypto`
+1.1.1 pair shipped inside `opencv_python_headless.libs`, so merely
+importing `cv2` maps a second, non-FIPS OpenSSL into a process that
+already holds the system's FIPS-validated one. The duplicate trips the
+FIPS self-test and OpenSSL responds with `abort()`. Downgrading does not
+help — every wheel from 4.9 through 5.0 vendors the same OpenSSL 1.1.1w.
+
+**Fix**: none needed for video. All video decoding goes through ffmpeg
+(`vtscore.media.video.decode`), which runs out-of-process and so never
+loads OpenSSL into the interpreter. Confirm the host resolved to it:
+
+```bash
+python -c "from vtscore.media.video import decode; print(decode.backend())"
+```
+
+`ffmpeg` is the expected answer. If it prints `opencv`, this install has
+no ffmpeg at all and video decoding will fall back to `cv2` and crash —
+install one (`dnf install ffmpeg`, or `pip install imageio-ffmpeg` for
+the bundled static binary).
+
+**Still applies to image features.** The structural image embedder and
+the YOLO-based image processors import `cv2` directly, so those remain
+unusable on a FIPS host. To use them, replace the wheel with a build
+that links the system OpenSSL instead of vendoring one — a distro
+package (`dnf install python3-opencv`), or `opencv-python` built from
+source. Everything else, including the whole video workflow, works with
+the stock wheel installed.
 
 ### "No module named" errors
 
