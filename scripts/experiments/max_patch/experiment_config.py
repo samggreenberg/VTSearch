@@ -60,6 +60,34 @@ MEDIA_TYPE = "image"
 # --- Minimum positives a category needs to be usable ---
 _MIN_CATEGORY_COUNT = int(os.environ.get("MAXPATCH_MIN_CAT_COUNT", "20"))
 
+# --- Scale bands (the axis the study's hypothesis is actually about) ---
+# Reference scales as fractions of image area: one DINOv3 patch is 1/196, the
+# smallest pooled candidate the HAC tree can propose (a leaf) is ~1/12.
+PATCH_AREA = 1 / 196  # ~0.51 %
+LEAF_AREA = 1 / 12  # ~8.3 %
+
+#: Band edges over the **voted** (union) box area.  The pre-registered
+#: hypothesis says MaxPatch should win below leaf scale and MaxHAC above it, so
+#: the bands straddle ``LEAF_AREA`` with a wide band on each side.
+SCALE_BANDS: list[tuple[str, float, float]] = [
+    ("sub_patch", 0.0, PATCH_AREA),
+    ("patch_to_leaf", PATCH_AREA, LEAF_AREA),
+    ("leaf_to_4x", LEAF_AREA, 4 * LEAF_AREA),
+    ("above_4x", 4 * LEAF_AREA, 1.01),
+]
+
+#: Categories per scale band.  Total grid size is
+#: ``len(SCALE_BANDS) * N_PER_BAND`` categories per dataset, so raising this
+#: multiplies SLURM cells - see the runner's README before bumping it.
+N_PER_BAND = int(os.environ.get("MAXPATCH_N_PER_BAND", "6"))
+
+#: Drop categories whose median voted box covers more than this fraction of the
+#: image.  Above it a "region vote" is indistinguishable from an image-level
+#: vote, which is the exact confound that made the boxless Caltech-101 arm
+#: uninformative about large targets: we would be measuring "what happens when
+#: the user ignores region voting", not "what happens when the target is large".
+MAX_VOTED_AREA = float(os.environ.get("MAXPATCH_MAX_VOTED_AREA", "0.80"))
+
 
 def is_patch_embedder(embedder: str) -> bool:
     """True for embedders that produce a patch grid + HAC tree."""
@@ -90,13 +118,16 @@ def category_rng_seed(category: str) -> int:
     return zlib.crc32(category.encode("utf-8")) & 0x7FFFFFFF
 
 
-def select_categories(category_counts: dict[str, int], n: int = N_CATEGORIES) -> list[str]:
+def select_categories_by_prevalence(category_counts: dict[str, int], n: int = N_CATEGORIES) -> list[str]:
     """Pick *n* categories spanning common->rare, deterministically.
 
     Categories with fewer than ``_MIN_CATEGORY_COUNT`` positives are dropped
     (their held-out test sets would be too small to estimate FNR).  The rest are
     sorted by count and sampled at even rank intervals, so the chosen set spans
     the prevalence range present in the dataset rather than clustering at one end.
+
+    Used for **boxless** datasets, where no scale axis exists.  Boxed datasets
+    take :func:`select_categories_by_scale` instead - see :func:`select_categories`.
     """
     usable = sorted(
         ((c, n_) for c, n_ in category_counts.items() if n_ >= _MIN_CATEGORY_COUNT),
@@ -107,6 +138,103 @@ def select_categories(category_counts: dict[str, int], n: int = N_CATEGORIES) ->
         return [c for c, _ in usable]
     idx = [round(i * (len(usable) - 1) / (n - 1)) for i in range(n)]
     return [usable[i][0] for i in sorted(set(idx))]
+
+
+def band_for_area(area: float) -> str | None:
+    """Name the :data:`SCALE_BANDS` entry *area* falls in, or ``None`` if outside."""
+    for name, lo, hi in SCALE_BANDS:
+        if lo <= area < hi:
+            return name
+    return None
+
+
+def select_categories_by_scale(
+    medias: dict,
+    category_counts: dict[str, int],
+    n_per_band: int = N_PER_BAND,
+) -> tuple[list[str], dict]:
+    """Pick categories **stratified by voted-box scale**, deterministically.
+
+    The study's hypothesis is about object *scale* (does the tree's smallest
+    pooled candidate still match the object?), so the sample has to span scale
+    on purpose.  Selecting by prevalence - the old behaviour - left scale
+    coverage to chance, which is how the first run ended up with 7 of 12
+    categories below leaf scale and only 5 above, mixed in sign, with the
+    crossover the study exists to locate resting on those 5 points.
+
+    Selection, per band:
+
+    1. Drop categories with fewer than ``_MIN_CATEGORY_COUNT`` positives (their
+       held-out test sets are too small to estimate FNR).
+    2. Drop categories with no boxes at all, and those whose median voted box
+       exceeds :data:`MAX_VOTED_AREA` - at that size a "region vote" *is* an
+       image-level vote and the cell measures nothing about scale.
+    3. Bucket the survivors by their **voted** (union) box area, never by
+       per-instance area - see :func:`vtscore.eval.labels.voted_box_area`.
+    4. Within each band keep the ``n_per_band`` categories with the lowest
+       ``union_inflation``, i.e. those whose vote is typically one clean object
+       rather than a union over scattered instances.  Ties break on category
+       name so the pick is reproducible.
+
+    Returns ``(selected, report)``.  *report* records every band's candidates,
+    picks, and the categories dropped by the whole-image cap, so the run can
+    log what it left out instead of silently truncating.
+    """
+    from vtscore.eval.labels import category_scale_stats  # noqa: PLC0415
+
+    stats: dict[str, dict] = {}
+    dropped_large: list[tuple[str, float]] = []
+    for cat, count in category_counts.items():
+        if count < _MIN_CATEGORY_COUNT:
+            continue
+        s = category_scale_stats(medias, cat)
+        if s is None:
+            continue
+        if s["voted_area"] > MAX_VOTED_AREA:
+            dropped_large.append((cat, s["voted_area"]))
+            continue
+        stats[cat] = s
+
+    selected: list[str] = []
+    report: dict = {
+        "dropped_above_max_voted_area": sorted(dropped_large),
+        "max_voted_area": MAX_VOTED_AREA,
+        "bands": {},
+    }
+    for name, lo, hi in SCALE_BANDS:
+        in_band = sorted(
+            (c for c, s in stats.items() if lo <= s["voted_area"] < hi),
+            key=lambda c: (stats[c]["union_inflation"], c),
+        )
+        picks = in_band[:n_per_band]
+        selected.extend(picks)
+        report["bands"][name] = {
+            "range": [lo, hi],
+            "target": n_per_band,
+            "n_candidates": len(in_band),
+            "under_populated": len(picks) < n_per_band,
+            "selected": picks,
+            "not_selected": in_band[n_per_band:],
+            "scales": {c: stats[c] for c in picks},
+        }
+    return sorted(selected), report
+
+
+def select_categories(medias: dict, category_counts: dict[str, int]) -> tuple[list[str], dict]:
+    """Choose this dataset's categories: scale-stratified when boxed, else prevalence.
+
+    A dataset with no ground-truth boxes has no scale axis to stratify - every
+    Good vote on it is image-level regardless of how big the object is - so it
+    falls back to the prevalence spread and its ``report`` says so.
+    """
+    selected, report = select_categories_by_scale(medias, category_counts)
+    if selected:
+        report["mode"] = "scale_bands"
+        return selected, report
+    return select_categories_by_prevalence(category_counts), {
+        "mode": "prevalence",
+        "reason": "dataset carries no ground-truth region boxes; no scale axis to stratify",
+    }
 
 
 def array_cells(categories_by_dataset: dict[str, dict[str, list[str]]]) -> list[dict]:

@@ -4,6 +4,42 @@ _An Autopilot simulation study on the HLTCOE Grid. Tables and figures are
 generated deterministically from the per-cell CSVs by `analyze.py`; the prose is
 written on top of those numbers._
 
+> ## ⚠️ Correction — the Caltech-101 MaxPatch numbers are invalid
+>
+> **The Caltech-101 MaxPatch arm below measured a harness defect, not a property
+> of raw-patch max-pooling.** Everything this report says about MaxPatch
+> "mis-calibrating on easy, boxless content" — the Verdict, the FNR 0.686 at
+> FPR 0.000, and the "calibration, not ranking" take-away — rests on that arm
+> and does not survive. Two defects, both since fixed on the experiment tier:
+>
+> 1. **A boxless Good vote trained on a vector the scorer never evaluated.**
+>    Caltech carries no ground-truth boxes, so `MaxPatchStyle.good_vec` fell back
+>    to the DINOv3 CLS vector — which was not among the 196 raw-patch rows
+>    `MaxPatchStyle` scored. Each Bad vote floods raw patches as negatives, so the
+>    classifier separated "CLS-like" from "patch-like", calibration measured
+>    positives in CLS space against negatives in patch space, and the threshold
+>    landed in a gap the production score distribution never reaches. `max_hac`
+>    was immune because `patch_regions[0]` **is** the CLS full-image node — it is
+>    both flooded and pooled — not because of its "smoothed 24-node pool".
+> 2. **Asymmetric calibration bags.** A Good bag was one row while a Bad bag was
+>    ~196, and each bag collapses with `max`. Calibration compared a max-over-1
+>    positive against a max-over-196 negative while production is max-over-196
+>    for both, biasing the cut high. This one touches **Visual Genome too**, so
+>    those numbers are also unrefreshed rather than confirmed.
+>
+> The tell is in the report's own table: Caltech MaxPatch cost degrades
+> monotonically from t=25 (0.206 → 0.368 → 0.729 → 0.686) while AP stays at
+> 1.000 — a geometry mismatch widening with every Bad vote, not a ranking limit.
+>
+> **Still trustworthy:** the threshold-free ranking results, which no part of
+> this touches — MaxPatch's AP win on Visual Genome (0.498 vs 0.441), the
+> scale story in Figure 4, and DINOv3-CLS being the worst arm on cluttered
+> scenes. **Not trustworthy:** every ErrorCost / FPR / FNR number, the Verdict,
+> and "Plans for moving forward" #2.
+>
+> Tracked in **#2730** (rerun + rewrite). The production-tier echo of defect (2)
+> is **#2731**.
+
 ## BLUF
 
 VTSearch's Autopilot learns a concept from a handful of Good/Bad votes and ranks

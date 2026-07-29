@@ -638,6 +638,77 @@ class TestRegionBoxForCategory:
         assert region_box_for_category(media, "apple") is None
 
 
+class TestVotedBoxScale:
+    """Scale of the region a Good vote actually drags (the union box).
+
+    The distinction from per-instance area is the whole point: a multi-instance
+    category has tiny instances but a near-frame union box, and the union is
+    what the detector trains and scores against.
+    """
+
+    def test_voted_area_is_the_union_not_an_instance(self):
+        from vtscore.eval.labels import voted_box_area
+
+        # Two 1%-area instances at opposite corners -> a ~64% union box.
+        media = {
+            "regions": [
+                {"box": [0.10, 0.10, 0.20, 0.20], "label": "arm"},
+                {"box": [0.80, 0.80, 0.90, 0.90], "label": "arm"},
+            ]
+        }
+        assert voted_box_area(media, "arm") == pytest.approx(0.64)
+
+    def test_voted_area_none_without_a_box(self):
+        from vtscore.eval.labels import voted_box_area
+
+        assert voted_box_area({"category": "apple"}, "apple") is None
+        assert voted_box_area({"regions": [{"box": [0, 0, 1, 1], "label": "man"}]}, "apple") is None
+
+    def test_instance_areas_are_per_box(self):
+        from vtscore.eval.labels import instance_box_areas
+
+        media = {
+            "regions": [
+                {"box": [0.10, 0.10, 0.20, 0.20], "label": "arm"},
+                {"box": [0.80, 0.80, 0.90, 0.90], "label": "arm"},
+                {"box": [0.00, 0.00, 1.00, 1.00], "label": "sky"},
+            ]
+        }
+        assert instance_box_areas(media, "arm") == pytest.approx([0.01, 0.01])
+        assert instance_box_areas(media, "sky") == pytest.approx([1.0])
+
+    def test_union_inflation_separates_scattered_from_single_object(self):
+        from vtscore.eval.labels import category_scale_stats
+
+        scattered = {
+            i: {
+                "regions": [
+                    {"box": [0.10, 0.10, 0.20, 0.20], "label": "arm"},
+                    {"box": [0.80, 0.80, 0.90, 0.90], "label": "arm"},
+                ]
+            }
+            for i in range(5)
+        }
+        single = {i: {"regions": [{"box": [0.30, 0.30, 0.70, 0.70], "label": "bed"}]} for i in range(5)}
+
+        s_arm = category_scale_stats(scattered, "arm")
+        s_bed = category_scale_stats(single, "bed")
+        assert s_arm is not None and s_bed is not None
+        # A single-object category's vote IS its instance: inflation ~1.
+        assert s_bed["union_inflation"] == pytest.approx(1.0)
+        assert s_bed["voted_area"] == pytest.approx(0.16)
+        # The scattered category looks tiny per instance but votes a huge box -
+        # exactly the case that used to plot at the small end of the scale axis.
+        assert s_arm["instance_area"] == pytest.approx(0.01)
+        assert s_arm["voted_area"] == pytest.approx(0.64)
+        assert s_arm["union_inflation"] == pytest.approx(64.0)
+
+    def test_stats_none_when_category_unboxed(self):
+        from vtscore.eval.labels import category_scale_stats
+
+        assert category_scale_stats({1: {"category": "apple"}}, "apple") is None
+
+
 class TestRegionVotingLearnedSort:
     """eval_learned_sort wires ground-truth boxes into train_and_score."""
 

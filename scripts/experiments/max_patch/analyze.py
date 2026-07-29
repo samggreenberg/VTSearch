@@ -32,6 +32,10 @@ from _cells_io import load_medias  # noqa: E402
 RESULTS = common.RESULTS
 FIGS = RESULTS / "figures"
 BUDGETS = [10, 25, 50, 100, 150]
+#: Field order of the ``examples_*`` tuples emitted into ``metrics.json``.
+#: ``voted_area`` is the union box a Good vote drags, never a per-instance area.
+_EXAMPLE_KEYS = ["dataset", "category", "voted_area", "maxpatch", "maxhac", "delta", "union_inflation"]
+
 LEAF_AREA_PCT = 8.3  # mean HAC-leaf area, % of image (from the plan's measurements)
 PATCH_AREA_PCT = 0.51  # one DINOv3 patch, % of image area
 
@@ -131,7 +135,17 @@ def _holm(pairs):
 
 
 def _category_scale(df):
-    """Median instance-box area (fraction of image) per (dataset, category)."""
+    """Median **voted** (union) box area per (dataset, category), fraction of image.
+
+    This is the box a simulated Good vote actually drags, which is the scale the
+    hypothesis is about.  It is deliberately *not* the median per-instance area:
+    the two diverge sharply on multi-instance categories (an image with arms
+    scattered across it has ~1 %-area instances but a near-frame union box), and
+    plotting per-instance area put such categories at the small end of the axis
+    while the detector was really being handed a large region.
+    """
+    from vtscore.eval.labels import category_scale_stats
+
     scale = {}
     for ds in df["dataset"].unique():
         pkl = common.DATADIR / "embeddings" / cfg.pickle_name(ds, "dinov3_patch")
@@ -142,14 +156,9 @@ def _category_scale(df):
         except Exception:
             continue
         for cat in df[df["dataset"] == ds]["category"].unique():
-            areas = []
-            for m in medias.values():
-                for r in m.get("regions") or []:
-                    if r.get("label") == cat and r.get("box"):
-                        x0, y0, x1, y1 = r["box"]
-                        areas.append(abs((x1 - x0) * (y1 - y0)))
-            if areas:
-                scale[(ds, cat)] = float(np.median(areas))
+            stats = category_scale_stats(medias, cat)
+            if stats is not None:
+                scale[(ds, cat)] = stats
     return scale
 
 
@@ -208,7 +217,7 @@ def _fig_scale(final, scale, fname):
     rows = []
     for (ds, cat), r in piv.iterrows():
         if (ds, cat) in scale and not (pd.isna(r.get(MP)) or pd.isna(r.get(MH))):
-            rows.append((ds, cat, scale[(ds, cat)], float(r[MP] - r[MH])))
+            rows.append((ds, cat, scale[(ds, cat)]["voted_area"], float(r[MP] - r[MH])))
     if not rows:
         return None, []
     fig, ax = plt.subplots(figsize=(7.4, 4.9))
@@ -229,8 +238,23 @@ def _fig_scale(final, scale, fname):
         color="#777",
     )
     ax.axvline(PATCH_AREA_PCT, color="#bbb", lw=1, ls=":")
+    # Shade the scale bands the categories were sampled from, so an
+    # under-populated band is visible in the figure rather than only in the log.
+    for i, (name, lo, hi) in enumerate(cfg.SCALE_BANDS):
+        if i % 2 == 0:
+            ax.axvspan(max(lo * 100, 1e-3), min(hi * 100, 100.0), color="#000", alpha=0.035, zorder=0)
+        ax.annotate(
+            name,
+            (max(lo * 100, 1e-3), ax.get_ylim()[0]),
+            fontsize=6,
+            color="#999",
+            va="bottom",
+            ha="left",
+            xytext=(2, 2),
+            textcoords="offset points",
+        )
     ax.set_xscale("log")
-    ax.set_xlabel("median object area (% of image, log scale)")
+    ax.set_xlabel("median VOTED (union) box area (% of image, log scale)")
     ax.set_ylabel("cost(MaxPatch) − cost(MaxHAC)\n(negative = MaxPatch better)")
     ax.set_title("Where raw patches beat the HAC tree, by object scale")
     ax.legend(fontsize=8)
@@ -390,7 +414,18 @@ def main() -> int:
     if MP in fp.columns and MH in fp.columns:
         for (ds, cat), r in fp.iterrows():
             if not (pd.isna(r.get(MP)) or pd.isna(r.get(MH))):
-                ex.append((ds, cat, scale.get((ds, cat)), float(r[MP]), float(r[MH]), float(r[MP] - r[MH])))
+                st = scale.get((ds, cat))
+                ex.append(
+                    (
+                        ds,
+                        cat,
+                        st["voted_area"] if st else None,
+                        float(r[MP]),
+                        float(r[MH]),
+                        float(r[MP] - r[MH]),
+                        st["union_inflation"] if st else None,
+                    )
+                )
     ex_sorted = sorted(ex, key=lambda e: e[5])
 
     # scale correlation
@@ -418,12 +453,8 @@ def main() -> int:
         "stats": stat_tables,
         "category_scale": {f"{k[0]}/{k[1]}": v for k, v in scale.items()},
         "spearman_scale_vs_delta": spearman,
-        "examples_maxpatch_best": [
-            dict(zip(["dataset", "category", "scale", "maxpatch", "maxhac", "delta"], e)) for e in ex_sorted[:5]
-        ],
-        "examples_maxhac_best": [
-            dict(zip(["dataset", "category", "scale", "maxpatch", "maxhac", "delta"], e)) for e in ex_sorted[-5:][::-1]
-        ],
+        "examples_maxpatch_best": [dict(zip(_EXAMPLE_KEYS, e, strict=True)) for e in ex_sorted[:5]],
+        "examples_maxhac_best": [dict(zip(_EXAMPLE_KEYS, e, strict=True)) for e in ex_sorted[-5:][::-1]],
     }
     (RESULTS / "metrics.json").write_text(json.dumps(metrics, indent=2, default=float))
 
@@ -501,7 +532,9 @@ def main() -> int:
         L.append("")
         cap = (
             "**Figure 4. The scale story.** Each point is a Visual Genome category: x = median "
-            "object area (log scale), y = final ErrorCost(MaxPatch) − ErrorCost(MaxHAC). Points below "
+            "**voted (union) box** area — the region a Good vote actually drags, not the area of a "
+            "single annotated instance — (log scale), y = final ErrorCost(MaxPatch) − ErrorCost(MaxHAC). "
+            "Shaded stripes are the scale bands categories were sampled from. Points below "
             "the dashed zero line are categories where the tree-free raw-patch strategy wins; the "
             "dotted line marks the HAC leaf scale (~8.3% area), the smallest candidate the tree can "
             "propose."
@@ -521,7 +554,8 @@ def main() -> int:
                 {
                     "dataset": e[0],
                     "category": e[1],
-                    "obj area %": (e[2] * 100 if e[2] is not None else float("nan")),
+                    "voted area %": (e[2] * 100 if e[2] is not None else float("nan")),
+                    "union infl.": (e[6] if e[6] is not None else float("nan")),
                     "MaxPatch cost": e[3],
                     "MaxHAC cost": e[4],
                     "Δ(MP−MH)": e[5],
@@ -529,7 +563,16 @@ def main() -> int:
                 for e in (ex_sorted[:5] + ex_sorted[-5:][::-1])
             ]
         )
-        L += _md(exdf, {"obj area %": 2, "MaxPatch cost": 3, "MaxHAC cost": 3, "Δ(MP−MH)": 3})
+        L += _md(
+            exdf,
+            {
+                "voted area %": 2,
+                "union infl.": 1,
+                "MaxPatch cost": 3,
+                "MaxHAC cost": 3,
+                "Δ(MP−MH)": 3,
+            },
+        )
         L.append("")
         L.append(
             "Top block: categories where MaxPatch beats MaxHAC most; bottom block: where MaxHAC wins "

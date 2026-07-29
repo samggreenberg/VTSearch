@@ -69,3 +69,76 @@ def region_box_for_category(media: dict[str, Any], category: str) -> Optional[tu
     x1 = max(float(b[2]) for b in boxes)
     y1 = max(float(b[3]) for b in boxes)
     return (x0, y0, x1, y1)
+
+
+def voted_box_area(media: dict[str, Any], category: str) -> Optional[float]:
+    """Area of the box a simulated Good vote actually drags, as a fraction of the image.
+
+    This is the area of :func:`region_box_for_category` - the **union** over
+    every annotated instance - not the area of a single instance.  The two
+    diverge sharply on multi-instance categories: an image with arms scattered
+    across it has ~1 %-area instances but a union box approaching the whole
+    frame, and the union is what the detector trains and scores against.
+
+    Use this, never a per-instance area, whenever the question is about the
+    scale of the *region vote*.  Returns ``None`` when the media carries no box
+    for *category* (the caller's vote would be image-level).
+    """
+    box = region_box_for_category(media, category)
+    if box is None:
+        return None
+    x0, y0, x1, y1 = box
+    return abs((x1 - x0) * (y1 - y0))
+
+
+def instance_box_areas(media: dict[str, Any], category: str) -> list[float]:
+    """Area of each individual annotated instance of *category* on *media*.
+
+    The per-instance counterpart of :func:`voted_box_area`.  Their ratio
+    measures how much a category's votes are inflated by scattered instances -
+    see :func:`category_scale_stats`.
+    """
+    regions = media.get("regions")
+    if not regions:
+        return []
+    out = []
+    for r in regions:
+        if r.get("label") == category and r.get("box"):
+            x0, y0, x1, y1 = r["box"]
+            out.append(abs((float(x1) - float(x0)) * (float(y1) - float(y0))))
+    return out
+
+
+def category_scale_stats(medias: dict[int, dict[str, Any]], category: str) -> Optional[dict[str, float]]:
+    """Scale summary for *category* over *medias*, or ``None`` when unboxed.
+
+    Returns:
+        A dict with
+
+        - ``voted_area`` - median area of the box a Good vote drags (the
+          union box).  **This is the scale the scale hypothesis is about.**
+        - ``instance_area`` - median area of a single annotated instance.
+        - ``union_inflation`` - ``voted_area / instance_area``.  ~1.0 means a
+          category is typically one object per image, so its vote is a clean
+          sub-image region; large values mean scattered instances whose union
+          box is far bigger than anything the user would really drag.
+        - ``n_boxed`` - how many images contributed a box.
+    """
+    import statistics  # noqa: PLC0415
+
+    voted, instances = [], []
+    for media in medias.values():
+        area = voted_box_area(media, category)
+        if area is not None:
+            voted.append(area)
+        instances.extend(instance_box_areas(media, category))
+    if not voted or not instances:
+        return None
+    v = float(statistics.median(voted))
+    i = float(statistics.median(instances))
+    return {
+        "voted_area": v,
+        "instance_area": i,
+        "union_inflation": (v / i) if i > 0 else float("inf"),
+        "n_boxed": float(len(voted)),
+    }
