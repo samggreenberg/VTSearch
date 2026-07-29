@@ -32,7 +32,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, Sequence
+from typing import Generator, Sequence
 
 import numpy as np
 
@@ -250,7 +250,7 @@ def iter_frames(
     *,
     interval: float,
     max_width: int | None = None,
-) -> Iterator[tuple[float, np.ndarray]]:
+) -> Generator[tuple[float, np.ndarray], None, None]:
     """Yield ``(timestamp, frame)`` every *interval* seconds through the video.
 
     One ffmpeg process decodes the file linearly and pipes raw RGB, which is
@@ -380,7 +380,7 @@ def _cv2_iter_frames(
     *,
     interval: float,
     max_width: int | None = None,
-) -> Iterator[tuple[float, np.ndarray]]:
+) -> Generator[tuple[float, np.ndarray], None, None]:
     try:
         import cv2  # noqa: PLC0415
 
