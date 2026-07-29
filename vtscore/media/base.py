@@ -516,6 +516,36 @@ class MediaType(ABC):
             {"media_bytes": b"...", "duration": 0, "width": 32, "height": 32}
         """
 
+    #: Keys that carry a media's full payload.  A thin load stores a
+    #: ``media_path`` reference instead of these, so
+    #: :meth:`load_thin_media_data` strips them from whatever
+    #: :meth:`load_media_data` returns.
+    _PAYLOAD_KEYS = ("media_bytes", "media_string")
+
+    def load_thin_media_data(self, file_path: Path) -> dict:
+        """Return the *display* fields for a thin load: no payload, no re-read later.
+
+        A thin load (the "Reference files in place" importer option, and every
+        CLI ``--thin`` workflow) deliberately keeps a media's bytes out of
+        memory.  It used to skip :meth:`load_media_data` wholesale, which also
+        skipped the ingest-time ``thumbnail_bytes`` — so every grid / VTSBrowse
+        tile fell back to decoding the full-resolution original on each cold
+        request (~200 ms for a 12 MP photo, paid again after any reload).
+
+        This hook produces the same display artifacts the full path does
+        (``thumbnail_bytes``, ``width`` / ``height``, ``duration``) while
+        leaving the payload behind.  The default reads the file once through
+        :meth:`load_media_data` and drops :data:`_PAYLOAD_KEYS`; peak memory is
+        therefore one file at a time rather than the whole dataset.  Override
+        when the artifacts can be derived from the path without reading the
+        bytes at all (see the video type), or return ``{}`` when the type has
+        no ingest-time artifact worth the read.
+
+        Only called for types whose items have a browsable thumbnail
+        (:attr:`has_thumbnail`); everything else keeps the pure-reference load.
+        """
+        return {k: v for k, v in self.load_media_data(file_path).items() if k not in self._PAYLOAD_KEYS}
+
     # ------------------------------------------------------------------
     # HTTP serving
     # ------------------------------------------------------------------

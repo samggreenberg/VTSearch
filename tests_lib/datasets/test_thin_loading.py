@@ -80,12 +80,18 @@ class TestThinLoadFromFolder:
         load_dataset_from_folder(tmp_path, "audio", medias, thin=True)
         assert medias[1]["md5"] == expected_md5
 
-    def test_thin_no_duration(self, tmp_path):
-        """Thin mode skips load_media_data, so duration stays at default 0."""
+    def test_thin_has_duration_and_waveform(self, tmp_path):
+        """Thin mode still builds the ingest-time display fields.
+
+        Audio has a browsable thumbnail (its waveform PNG), so a thin load runs
+        ``load_thin_media_data`` and picks up the decoded duration alongside it.
+        Only the *payload* is withheld — see ``test_thin_clips_have_no_bytes``.
+        """
         _make_wav_file(tmp_path, "test.wav")
         medias: dict[int, dict[str, Any]] = {}
         load_dataset_from_folder(tmp_path, "audio", medias, thin=True)
-        assert medias[1]["duration"] == 0
+        assert medias[1]["duration"] > 0
+        assert medias[1]["thumbnail_bytes"]
 
     def test_full_mode_has_bytes(self, tmp_path):
         """Full mode (thin=False) should still load bytes as before."""

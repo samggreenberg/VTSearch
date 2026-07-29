@@ -808,6 +808,18 @@ class VideoMediaType(MediaType):
         if media_bytes is None:
             with open(file_path, "rb") as f:
                 media_bytes = f.read()
+        return {"media_bytes": media_bytes, **self.load_thin_media_data(file_path)}
+
+    def load_thin_media_data(self, file_path: Path) -> dict:
+        """Duration + mid-frame thumbnail, both read straight from the path.
+
+        Overrides the base default (which routes through
+        :meth:`load_media_data` and strips the payload) because neither
+        artifact needs the file's bytes in memory: OpenCV reads the container
+        headers by path, and the thumbnail grabs a single decoded frame.  A
+        thin video load therefore never buffers a multi-GB file just to get a
+        preview frame.
+        """
         try:
             import cv2  # noqa: PLC0415
 
@@ -820,8 +832,7 @@ class VideoMediaType(MediaType):
                 cap.release()
         except Exception:
             duration = 0.0
-        thumbnail = generate_video_thumbnail_from_file(file_path)
-        return {"media_bytes": media_bytes, "duration": duration, "thumbnail_bytes": thumbnail}
+        return {"duration": duration, "thumbnail_bytes": generate_video_thumbnail_from_file(file_path)}
 
     # ------------------------------------------------------------------
     # HTTP serving
