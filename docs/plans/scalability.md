@@ -398,17 +398,6 @@ embedder. Shares the S11 approach.
   `POST /api/datasets/registry/<id>/coverage-atlas` when a loaded dataset has no
   tree (auto-build is skipped above 50 k). No dataset/tree-status panel hosts it
   today, so it needs a UI home; the endpoint is meanwhile reachable via API/CLI.
-- **Share the coverage atlas with the progress cache instead of rebuilding it:**
-  `labeling_progress._build_coverage_atlas` clones the dataset context's atlas
-  only when the id sets match exactly; otherwise it fits a throwaway private one
-  under `_progress_lock`. On a dataset past the 50 k auto-build cutoff (so the
-  context has no atlas) that fit dominates a cold progress-cache build —
-  measured ~27 s of a 40 s build at 20 k media. It can't write the result back
-  to the context from there because `_progress_lock` is held and the lock
-  ordering forbids taking `_state_lock` under it. Fix direction: build the atlas
-  before acquiring `_progress_lock` and publish it to the context so both paths
-  share one structure. Now off the request thread (the plot modal runs it as a
-  background job), so this is a cost problem, not a latency-hang.
 - **Columnar `medias` storage** (S4 full rewrite): deferred; requires redesign of
   every media-reading call site.
 - **Append-only vote journal** for labelset sources (S12 long-term): deferred

@@ -84,51 +84,12 @@ class TestIndicatorScoreHistoryFailures:
 
     def test_computation_error_returns_500(self, client):
         with unittest.mock.patch(
-            "vtsearch.routes.eval.cached_indicator_history",
+            "vtsearch.routes.eval.calculate_error_cost_over_time",
             side_effect=RuntimeError("boom"),
         ):
             resp = client.get("/api/indicator-score-history?metric=smart")
         assert resp.status_code == 500
         assert "score history" in resp.get_json()["message"].lower()
-
-
-class TestIndicatorScoreHistoryIsReadOnly:
-    """GET /api/indicator-score-history must never advance the per-step cache.
-
-    Advancing it inline is what made the progress-plot modal hang: it retrains
-    an MLP per uncached label step on the request thread, which is precisely the
-    work ``/api/labeling-status`` defers to a background worker (issue #2397).
-    """
-
-    def test_cold_cache_returns_incomplete_and_trains_nothing(self, client):
-        import vtscore.detectors.labeling_progress as lp
-
-        _seed_votes_and_history()
-        lp.clear_progress_cache()
-
-        with unittest.mock.patch.object(lp, "train_model", side_effect=AssertionError("retrained")):
-            resp = client.get("/api/indicator-score-history?metric=smart")
-
-        assert resp.status_code == 200
-        body = resp.get_json()
-        assert body["complete"] is False
-        assert body["history"] == []
-        assert lp._cached_steps == []
-
-    def test_warm_cache_returns_the_series(self, client):
-        import vtscore.detectors.labeling_progress as lp
-
-        _seed_votes_and_history()
-        lp.clear_progress_cache()
-        # The background worker's job, done inline here.
-        client.post("/api/eval/train-and-score", json={"metric": "smart", "wait": True})
-
-        resp = client.get("/api/indicator-score-history?metric=smart")
-
-        assert resp.status_code == 200
-        body = resp.get_json()
-        assert body["complete"] is True
-        assert len(body["history"]) > 0
 
 
 class TestEvalTrainAndScoreStartFailures:

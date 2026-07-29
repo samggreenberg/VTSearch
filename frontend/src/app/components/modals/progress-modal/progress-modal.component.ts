@@ -31,6 +31,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
   private progressEvents = inject(ProgressEventsService);
 
   readonly metric = input<ProgressMetric>('smart');
+  readonly useCachedHistory = input(false);
   readonly closed = output<void>();
 
   // Optional query: the canvas only renders in the results `@else` branch.
@@ -40,9 +41,6 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
   analysisProgress = 0;
   chartData: ErrorCostDataPoint[] | StabilityDataPoint[] | DiversityDataPoint[] = [];
   emptyHistory = false;
-  /** True once we've fallen back to the async train-and-score job, which
-   *  swaps the brief "loading" line for a real progress bar + Cancel. */
-  runningJob = false;
   /** Job id of the in-flight eval train-and-score run. Set once the
    *  backend hands back a job envelope; consumed by ``onCancel``. */
   private currentJobId: string | null = null;
@@ -61,12 +59,11 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    // Always try the cached read first: it never advances the per-step cache,
-    // so it returns immediately whether or not the cache is warm. When the
-    // background `/api/labeling-status` worker has kept up (the common case)
-    // the plot paints instantly; otherwise we fall back to the async job,
-    // which does the retraining off the request thread with a progress bar.
-    this.loadCachedHistory();
+    if (this.useCachedHistory()) {
+      this.loadCachedHistory();
+    } else {
+      this.runAnalysis();
+    }
   }
 
   ngOnDestroy(): void {
@@ -76,35 +73,24 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
 
   private loadCachedHistory(): void {
     this.analyzing = true;
-    this.sortingApi
-      .getIndicatorScoreHistory(this.metric())
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (res) => {
-          // `complete: false` means the per-step cache is behind the label
-          // history. The endpoint deliberately does not advance it (that build
-          // is what used to hang this modal for tens of seconds), so hand off
-          // to the background job instead of rendering a truncated series.
-          if (!res.complete) {
-            this.runAnalysis();
-            return;
-          }
-          this.analyzing = false;
-          this.chartData = (res.history || []) as ErrorCostDataPoint[] | StabilityDataPoint[] | DiversityDataPoint[];
-          this.emptyHistory = this.chartData.length === 0;
-          if (!this.emptyHistory) {
-            setTimeout(() => this.renderChart(), 50);
-          }
-        },
-        // A failed cached read is not fatal: the job path recomputes the
-        // series from scratch, so fall back rather than showing "no history".
-        error: () => this.runAnalysis(),
-      });
+    this.sortingApi.getIndicatorScoreHistory(this.metric()).subscribe({
+      next: (res) => {
+        this.analyzing = false;
+        this.chartData = (res.history || []) as ErrorCostDataPoint[] | StabilityDataPoint[] | DiversityDataPoint[];
+        this.emptyHistory = this.chartData.length === 0;
+        if (!this.emptyHistory) {
+          setTimeout(() => this.renderChart(), 50);
+        }
+      },
+      error: () => {
+        this.analyzing = false;
+        this.emptyHistory = true;
+      },
+    });
   }
 
   private runAnalysis(): void {
     this.analyzing = true;
-    this.runningJob = true;
     this.analysisProgress = 0;
 
     // Progress comes from the `eval` SSE channel on /api/events. Use a
@@ -198,7 +184,6 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
 
   private applyEvalResult(res: EvalTrainAndScoreResponse): void {
     this.analyzing = false;
-    this.runningJob = false;
     if (this.metric() === 'smart') {
       this.chartData = (res.error_cost || []) as ErrorCostDataPoint[];
     } else if (this.metric() === 'stable') {
@@ -206,13 +191,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
     } else {
       this.chartData = (res.diversity || []) as DiversityDataPoint[];
     }
-    // Same empty-state handling as the cached path: a job that legitimately
-    // produces no points (too little history) shows the explanatory message
-    // rather than an empty set of axes.
-    this.emptyHistory = this.chartData.length === 0;
-    if (!this.emptyHistory) {
-      setTimeout(() => this.renderChart(), 50);
-    }
+    setTimeout(() => this.renderChart(), 50);
   }
 
   private renderChart(): void {

@@ -29,21 +29,16 @@ def _load_pil(source: Path | bytes) -> Optional["Image.Image"]:
     *source* may be a filesystem path or an in-memory ``bytes`` blob (used
     by the clip re-embed path so it can hand the bulk surface the
     clipped image bytes directly without a tempfile detour).
-
-    The decode is bounded (see :mod:`vtscore.media.image.decode`): an
-    enormous source is downsampled rather than refused or materialised at
-    full resolution.  Nothing downstream notices — every image model's
-    processor resizes to its own fixed input size, and patch grids /
-    region boxes are expressed in normalised coordinates.
     """
     try:
-        from vtscore.media.image.decode import decode_bounded_rgb  # noqa: PLC0415
+        from PIL import Image  # noqa: PLC0415
+        import io  # noqa: PLC0415
 
-        # Bounded: every image model's processor resizes to a few hundred pixels
-        # anyway, so decoding a gigapixel source at full resolution would only
-        # buy a huge transient bitmap — and a whole batch of them at once.
-        img, _scale = decode_bounded_rgb(source)
-        return img
+        if isinstance(source, (bytes, bytearray)):
+            with Image.open(io.BytesIO(bytes(source))) as img:
+                return img.convert("RGB")
+        with Image.open(source) as img:
+            return img.convert("RGB")
     except Exception:
         _log.exception("Error decoding image %r", source if isinstance(source, Path) else "<bytes>")
         return None

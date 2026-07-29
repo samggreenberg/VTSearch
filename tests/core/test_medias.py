@@ -389,6 +389,80 @@ class TestBatchMedias:
         assert resp.status_code == 422
 
 
+class TestBatchMediasProvenance:
+    """``custom_metadata`` surfaces where a media came from.
+
+    Converter / clipper output records its recipe in ``origin.params``; the
+    batch route renders that as the curated "Source" / "Derived Via" /
+    "Imported Via" lines, so the labeling UI's metadata grid shows the same
+    provenance the enriched label export carries as raw columns.
+    """
+
+    @staticmethod
+    def _set_origin(media_id, origin):
+        media = app_module.medias[media_id]
+        saved = media.get("origin")
+        media["origin"] = origin
+        return saved
+
+    def _metadata_for(self, client, media_id):
+        resp = client.post("/api/medias/batch", json={"ids": [media_id]})
+        assert resp.status_code == 200
+        return resp.get_json()[0]["custom_metadata"]
+
+    def test_converter_output_reports_source_video(self, client):
+        saved = self._set_origin(
+            1,
+            {
+                "importer": "converter",
+                "params": {
+                    "converter": "video2image",
+                    "source_file": "movie.mp4",
+                    "source_path": "/data/videos/movie.mp4",
+                    "converter_param_n_clips": "2",
+                    "parent_importer": "server_files",
+                    "parent_paths_file": "/data/list.txt",
+                    "converter_content_hash": "6ae4b81699fb",
+                },
+            },
+        )
+        try:
+            meta = self._metadata_for(client, 1)
+        finally:
+            app_module.medias[1]["origin"] = saved
+
+        assert meta["Source"] == "/data/videos/movie.mp4"
+        assert meta["Derived Via"] == "Video → Images (n_clips=2)"
+        # The import line names the parent corpus, not the converter.
+        assert meta["Imported Via"] == "Manifest (paths_file=/data/list.txt)"
+        # The machine-only replay recipe never reaches the grid.
+        assert "converter_content_hash" not in meta
+        assert "source_path" not in meta
+
+    def test_plain_import_reports_importer_but_not_derivation(self, client):
+        saved = self._set_origin(1, {"importer": "server_folder", "params": {"path": "/data/sounds"}})
+        try:
+            meta = self._metadata_for(client, 1)
+        finally:
+            app_module.medias[1]["origin"] = saved
+
+        assert meta["Imported Via"] == "Folder (path=/data/sounds)"
+        assert "Source" not in meta
+        assert "Derived Via" not in meta
+
+    def test_importer_custom_metadata_wins_over_display_fields(self, client):
+        media = app_module.medias[1]
+        saved_origin = self._set_origin(1, {"importer": "server_folder", "params": {"path": "/from-origin"}})
+        media["custom_metadata"] = {"Imported Via": "hand-curated"}
+        try:
+            meta = self._metadata_for(client, 1)
+        finally:
+            media["origin"] = saved_origin
+            media.pop("custom_metadata", None)
+
+        assert meta["Imported Via"] == "hand-curated"
+
+
 class TestMediaThumbnailBytes:
     """Test medias have waveform thumbnail_bytes generated at init."""
 

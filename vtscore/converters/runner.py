@@ -78,22 +78,45 @@ def _scan_source_files(folder_path: Path, source_mt, recursive: bool) -> list[Pa
     return source_files
 
 
+#: Parent-importer ``origin.params`` keys that locate the corpus a converted
+#: media came from.  Each is copied onto the converter origin as
+#: ``parent_<key>`` so a converted item still records *which* folder, archive
+#: or manifest it was imported from - not just which file inside it.
+_PARENT_LOCATOR_KEYS = ("path", "url", "paths_file", "manifest")
+
+
 def _build_converter_origin(
     converter_name: str,
     source_rel: str,
+    source_path: Path,
     conv_params: dict[str, Any],
     base_origin: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    params: dict[str, Any] = {"converter": converter_name, "source_file": source_rel}
+    """Build the ``converter`` origin recorded on every output of one source file.
+
+    ``source_file`` is the scan-relative name (what the user sees in the
+    folder they pointed at); ``source_path`` is the *resolved* absolute path
+    of the real source file.  The two differ whenever the scanned folder is a
+    staging area of symlinks - the ``server_files`` (Manifest) importer links
+    every listed path into a temp dir under its basename, disambiguating
+    collisions as ``name__1.ext``, so ``source_file`` alone can name a file
+    that never existed on disk.  ``source_path`` is the authoritative pointer
+    back at the original media (the source video of an extracted frame, the
+    source PDF of a rendered page).
+    """
+    params: dict[str, Any] = {
+        "converter": converter_name,
+        "source_file": source_rel,
+        "source_path": str(source_path.resolve()),
+    }
     for pk, pv in conv_params.items():
         params[f"converter_param_{pk}"] = str(pv)
     if base_origin:
         params["parent_importer"] = base_origin.get("importer", "")
         parent_params = base_origin.get("params", {})
-        if "path" in parent_params:
-            params["parent_path"] = parent_params["path"]
-        if "url" in parent_params:
-            params["parent_url"] = parent_params["url"]
+        for key in _PARENT_LOCATOR_KEYS:
+            if key in parent_params:
+                params[f"parent_{key}"] = parent_params[key]
     return {"importer": "converter", "params": params}
 
 
@@ -344,7 +367,7 @@ def run_converters_on_folder(
             if not outputs:
                 continue
 
-            origin = _build_converter_origin(converter.name, source_rel, conv_params, base_origin)
+            origin = _build_converter_origin(converter.name, source_rel, source_path, conv_params, base_origin)
             media_id = _emit_converted_outputs(
                 outputs=outputs,
                 source_rel=source_rel,
@@ -415,15 +438,18 @@ def apply_converter_to_demo(
         if not outputs:
             continue
 
-        origin = {
-            "importer": "converter",
-            "params": {
-                "converter": converter_name,
-                "source_file": src_media.get("filename", ""),
-                "parent_importer": "demo",
-                "parent_demo": dataset_name,
-            },
+        origin_params: dict[str, Any] = {
+            "converter": converter_name,
+            "source_file": src_media.get("filename", ""),
+            "parent_importer": "demo",
+            "parent_demo": dataset_name,
         }
+        # A demo media held purely in memory has no path; record one only when
+        # the source actually came off disk, so ``Source`` never points at "".
+        source_path = src_media.get("media_path")
+        if source_path:
+            origin_params["source_path"] = str(source_path)
+        origin = {"importer": "converter", "params": origin_params}
         source_name = src_media.get("filename", str(src_media.get("id", "")))
         new_id = _emit_converted_demo_outputs(
             outputs=outputs,
