@@ -453,13 +453,6 @@ def _build_per_file_media(
             file_path.stat().st_size,
             origin,
         )
-        # Thin keeps the *payload* out of memory, not the preview: without an
-        # ingest-time thumbnail every grid / VTSBrowse tile re-decodes the
-        # full-resolution original on each cold request.  Merge in the display
-        # fields only (see ``MediaType.load_thin_media_data``); ``media_bytes``
-        # stays None, so the media is still a path reference.
-        if mt.has_thumbnail:
-            media_data.update(mt.load_thin_media_data(file_path))
     else:
         with open(file_path, "rb") as f:
             file_bytes = f.read()

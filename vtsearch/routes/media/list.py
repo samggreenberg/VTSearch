@@ -474,7 +474,10 @@ def batch_medias(body: dict):
     media IDs exist in the loaded dataset.
 
     Returns a JSON array of media metadata dicts; unknown IDs are silently
-    omitted.
+    omitted.  Each item's ``custom_metadata`` is the media type's
+    ``display_metadata`` - including the curated "Source" / "Derived Via" /
+    "Imported Via" provenance lines distilled from ``origin.params`` - with
+    any importer-supplied ``custom_metadata`` layered on top.
     """
     from vtscore.datasets.archive_stream import archive_member_ref  # noqa: PLC0415
     from vtscore.media import get as get_media_type  # noqa: PLC0415

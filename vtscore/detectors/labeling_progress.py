@@ -54,15 +54,6 @@ _cache_bad_ids: set[int] = set()
 _cache_prev_predictions: Optional[dict[int, int]] = None
 _cache_coverage_atlas: Any = None  # CoverageAtlas | None
 
-# Fixed pool the per-step stability forward pass scores, built once per cache
-# lifetime and reused by every step (see ``_monitored_pool``).  ``_cache_
-# monitored_X`` is a device-resident float tensor of the pool's embeddings;
-# ``_cache_monitored_set`` is the id set for O(labels) unlabeled counting.
-# In-memory only - never serialized (see the "No Persisted Vectors" rule).
-_cache_monitored_ids: Optional[list[int]] = None
-_cache_monitored_X: Any = None  # torch.Tensor | None
-_cache_monitored_set: Optional[set[int]] = None
-
 # Last fully-computed ``/api/labeling-status`` payload (minus the transient
 # ``stale`` flag).  ``compute_labeling_status`` refreshes it on every full
 # compute; the route returns it immediately to pollers while a background
@@ -82,24 +73,18 @@ _live_models: dict[tuple[frozenset[int], frozenset[int]], tuple[Any, float]] = {
 # call clear_progress_cache internally when the inclusion value changes.
 _progress_lock = threading.RLock()
 
-# Upper bound on the number of items the per-step stability forward pass
-# evaluates.  Advancing this cache (from the ``/api/labeling-status``
-# background worker, or the ``/api/eval/train-and-score`` job) runs a forward
-# over the whole monitored pool once per label step - O(dataset) per new vote.
+# Upper bound on the number of unlabeled items the per-step stability
+# forward pass evaluates.  ``/api/labeling-status`` (polled every 2 s during
+# labeling) advances this cache on the request thread, and the stability
+# pass runs a forward over *all* unlabeled media - O(dataset) per new vote.
 # Above this cap we score a deterministic seeded sample of the eligible pool
-# instead, holding the per-step cost flat as datasets grow.  The "stable"
+# instead, holding the per-poll cost flat as datasets grow.  The "stable"
 # indicator keys off the flip *rate* (num_flips / num_unlabeled), for which a
 # fixed random sample is an unbiased estimator; sampling from the *full*
 # eligible pool (not the shrinking unlabeled set) keeps the monitored ids
 # stable across steps so the step-to-step flip comparison stays meaningful.
 # Mirrors ``_GMM_MAX_SAMPLES`` in ``vtscore.training.thresholds``.
 _STABILITY_MAX_SAMPLES = 50_000
-
-# How long :func:`cached_indicator_history` will wait for ``_progress_lock``
-# before declaring the cache unreadable.  Long enough to ride out the brief
-# holds taken by status reads, short enough that a click landing mid-build
-# falls through to the async job instead of hanging on it.
-_CACHE_READ_LOCK_TIMEOUT = 0.25
 
 
 def clear_progress_cache() -> None:
@@ -109,7 +94,6 @@ def clear_progress_cache() -> None:
     is altered so that stale models are not reused.
     """
     global _cache_inclusion, _cache_prev_predictions, _cache_coverage_atlas, _status_snapshot
-    global _cache_monitored_ids, _cache_monitored_X, _cache_monitored_set
     with _progress_lock:
         _cached_steps.clear()
         _cache_good_ids.clear()
@@ -117,11 +101,6 @@ def clear_progress_cache() -> None:
         _cache_prev_predictions = None
         _cache_inclusion = None
         _cache_coverage_atlas = None
-        # The monitored pool is derived from ``clips_dict``; medias may have
-        # changed under us, so drop it alongside everything else.
-        _cache_monitored_ids = None
-        _cache_monitored_X = None
-        _cache_monitored_set = None
         _live_models.clear()
         # Drop the status snapshot too: it belonged to the just-cleared
         # detector/labelset and would otherwise be served (stale) for the next
@@ -249,16 +228,9 @@ def _build_coverage_atlas(clips_dict: dict[int, dict[str, Any]]) -> Any:
     if ctx_atlas is not None and ctx_atlas.vector_to_leaf.keys() == vectors.keys():
         return ctx_atlas.structural_clone()
 
-    from vtscore.state.coverage_atlas import CoverageAtlas, auto_max_depth  # noqa: PLC0415
+    from vtscore.state.coverage_atlas import CoverageAtlas  # noqa: PLC0415
 
-    # Cap the depth exactly as every other build site does
-    # (``build_coverage_atlas`` / ``build_coverage_atlas_for_context``).
-    # Omitting it left this fallback on ``COVERAGE_ATLAS_MAX_DEPTH``, so the
-    # atlas built here was *deeper* - and cost many more k-means fits - than
-    # the context atlas it stands in for.  That is the whole cost of a cold
-    # progress-cache build on a dataset large enough to skip the load-time
-    # atlas build, and it runs under ``_progress_lock``.
-    return CoverageAtlas(vectors, k=3, max_depth=auto_max_depth(len(vectors), k=3))
+    return CoverageAtlas(vectors, k=3)
 
 
 def _apply_label_event(media_id: int, label: str) -> bool:
@@ -316,54 +288,6 @@ def _collect_training_data(
     return X_list, y_list
 
 
-def _monitored_pool(
-    clips_dict: dict[int, dict[str, Any]],
-    all_media_ids: list[int],
-) -> tuple[list[int], Any, set[int]]:
-    """Return the fixed ``(ids, X, id_set)`` pool the stability pass scores.
-
-    The pool is the embeddable subset of *all_media_ids*, bounded to a
-    deterministic seeded sample of ``_STABILITY_MAX_SAMPLES``.  Sampling the
-    full eligible pool (rather than the per-step unlabeled set) keeps the
-    monitored ids stable across steps, so the flip comparison against
-    ``_cache_prev_predictions`` stays over a consistent id set; the resulting
-    flip *rate* is an unbiased estimate of the true rate.
-
-    Built once per cache lifetime and memoised.  It used to be rebuilt inside
-    every step - an O(N x D) numpy materialisation per label-history step,
-    which dominated the cost of advancing the cache.  The pool depends only on
-    *clips_dict*, which cannot change without a ``clear_progress_cache()``,
-    so one build per cache lifetime is sound.
-    """
-    global _cache_monitored_ids, _cache_monitored_X, _cache_monitored_set
-
-    if _cache_monitored_ids is not None:
-        return _cache_monitored_ids, _cache_monitored_X, _cache_monitored_set  # type: ignore[return-value]
-
-    import torch  # noqa: PLC0415
-
-    from vtscore.embedding.loader import ensure_torch_configured, get_torch_device  # noqa: PLC0415
-
-    eligible = [cid for cid in all_media_ids if media_embedding(clips_dict.get(cid, {})) is not None]
-    if len(eligible) > _STABILITY_MAX_SAMPLES:
-        rng = np.random.default_rng(42)
-        sampled = set(rng.choice(np.asarray(eligible), size=_STABILITY_MAX_SAMPLES, replace=False).tolist())
-        eligible = [cid for cid in eligible if cid in sampled]
-
-    if eligible:
-        ensure_torch_configured()
-        embs = np.array([media_embedding(clips_dict[cid]) for cid in eligible])
-        # Park the tensor on the training device once so per-step scoring is a
-        # pure forward pass with no host->device copy.
-        _cache_monitored_X = torch.tensor(embs, dtype=torch.float32).to(get_torch_device())
-    else:
-        _cache_monitored_X = None
-
-    _cache_monitored_ids = eligible
-    _cache_monitored_set = set(eligible)
-    return _cache_monitored_ids, _cache_monitored_X, _cache_monitored_set
-
-
 def _compute_step_stability(
     model: nn.Sequential,
     threshold: float,
@@ -376,27 +300,33 @@ def _compute_step_stability(
     global _cache_prev_predictions
     import torch  # noqa: PLC0415
 
-    monitored_ids, X_monitored, monitored_set = _monitored_pool(clips_dict, all_media_ids)
-
     labeled_ids = _cache_good_ids | _cache_bad_ids
-    # Labels are few relative to the pool, so count the overlap from the
-    # labelset rather than rescanning the pool.
-    num_unlabeled = len(monitored_ids) - sum(1 for cid in labeled_ids if cid in monitored_set)
+    eligible = [cid for cid in all_media_ids if media_embedding(clips_dict.get(cid, {})) is not None]
 
-    if num_unlabeled <= 0 or X_monitored is None:
+    # Bound the forward pass to a deterministic seeded sample of the eligible
+    # pool.  Sampling the full pool (rather than the per-step unlabeled set)
+    # keeps the monitored ids stable across steps, so the flip comparison
+    # against ``_cache_prev_predictions`` below stays over a consistent id set;
+    # the resulting flip *rate* is an unbiased estimate of the true rate.
+    if len(eligible) > _STABILITY_MAX_SAMPLES:
+        rng = np.random.default_rng(42)
+        monitored = set(rng.choice(np.asarray(eligible), size=_STABILITY_MAX_SAMPLES, replace=False).tolist())
+        unlabeled_ids = [cid for cid in eligible if cid not in labeled_ids and cid in monitored]
+    else:
+        unlabeled_ids = [cid for cid in eligible if cid not in labeled_ids]
+
+    if not unlabeled_ids:
         return {"time_index": t, "num_labels": num_labels, "num_flips": 0, "num_unlabeled": 0}
 
-    # Score the whole monitored pool in one pass and drop the currently-labeled
-    # ids afterwards.  Scoring the handful of extra (labeled) rows is far
-    # cheaper than re-materialising a per-step tensor of the unlabeled subset.
+    unlabeled_embs = np.array([media_embedding(clips_dict[cid]) for cid in unlabeled_ids])
+    X_unlabeled = torch.tensor(unlabeled_embs, dtype=torch.float32)
+
     with torch.no_grad():
-        X_in = X_monitored.to(next(model.parameters()).device)
-        scores_unl = torch.sigmoid(model(X_in)).squeeze(1).cpu().tolist()
+        X_unlabeled = X_unlabeled.to(next(model.parameters()).device)
+        scores_unl = torch.sigmoid(model(X_unlabeled)).squeeze(1).cpu().tolist()
 
     predictions: dict[int, int] = {
-        cid: 1 if score >= threshold else 0
-        for cid, score in zip(monitored_ids, scores_unl, strict=True)
-        if cid not in labeled_ids
+        cid: 1 if score >= threshold else 0 for cid, score in zip(unlabeled_ids, scores_unl, strict=True)
     }
 
     stability: Optional[dict[str, Any]] = None
@@ -410,7 +340,7 @@ def _compute_step_stability(
             "time_index": t,
             "num_labels": num_labels,
             "num_flips": num_flips,
-            "num_unlabeled": num_unlabeled,
+            "num_unlabeled": len(unlabeled_ids),
         }
     # else: no prior predictions to compare - leave stability as None.
 
@@ -958,55 +888,6 @@ def compute_labeling_status(
     with _progress_lock:
         _status_snapshot = dict(result)
     return result
-
-
-def cached_indicator_history(
-    metric: str,
-    clips_dict: dict[int, dict[str, Any]],
-    label_history: list[tuple[int, str, float]],
-    current_good_votes: dict[int, None],
-    current_bad_votes: dict[int, None],
-    inclusion_value: int = 0,
-) -> tuple[list[dict[str, Any]], bool]:
-    """Read *metric*'s per-step history **without advancing the cache**.
-
-    Returns ``(history, complete)``.  ``complete`` is ``False`` - with an empty
-    history - whenever the per-step cache does not already cover the whole of
-    *label_history*; the caller is expected to fall back to the async
-    ``/api/eval/train-and-score`` job, which does the same work on a background
-    thread with progress and cancellation.
-
-    This is the counterpart to the ``calculate_*_over_time`` functions, which
-    call :func:`_ensure_cache` and therefore retrain an MLP per uncached step
-    on the calling thread.  Doing that inline is exactly what
-    ``/api/labeling-status`` refuses to do (issue #2397), so the read path that
-    backs the progress-plot modal must not do it either.
-
-    When the cache *is* complete every branch is cheap: ``smart`` runs forward
-    passes of the cached models over the (small) labeled set, and ``stable`` /
-    ``diverse`` are plain reads of values recorded during the cache build.
-    """
-    # Reading the cache needs ``_progress_lock``, but a background worker holds
-    # that lock for the *entire* duration of a cache build - which is exactly
-    # the multi-second work this function exists to avoid waiting on.  Blocking
-    # here would reintroduce the hang whenever the click lands mid-refresh, so
-    # give up quickly and report the cache as unavailable: the caller falls back
-    # to the async job, which is the right answer in that state anyway.
-    if not _progress_lock.acquire(timeout=_CACHE_READ_LOCK_TIMEOUT):
-        return [], False
-    try:
-        if not is_status_cache_fresh(label_history, inclusion_value):
-            return [], False
-
-        if metric == "smart":
-            data = _eval_cached_models(clips_dict, current_good_votes, current_bad_votes, inclusion_value)
-        elif metric == "stable":
-            data = [step["stability"] for step in _cached_steps if step["stability"] is not None]
-        else:
-            data = [step["diversity"] for step in _cached_steps if step.get("diversity") is not None]
-        return data, True
-    finally:
-        _progress_lock.release()
 
 
 def is_status_cache_fresh(label_history: list[tuple[int, str, float]], inclusion_value: int) -> bool:

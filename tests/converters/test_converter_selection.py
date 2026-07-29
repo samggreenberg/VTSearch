@@ -486,6 +486,89 @@ class TestRunConvertersOnFolder:
         # framework embed stage can embed without a tempfile.
         assert media["media_bytes"] is not None
 
+    def test_origin_records_resolved_source_path(self, tmp_path):
+        """``source_path`` pins the real source file, not the scanned name.
+
+        The Manifest (``server_files``) importer scans a staging dir of
+        symlinks, so ``source_file`` alone can name a file that never existed
+        on disk.  ``source_path`` resolves through the link to the original.
+        """
+        from vtscore.converters.runner import run_converters_on_folder
+
+        real = tmp_path / "originals" / "movie.mp4"
+        real.parent.mkdir()
+        real.write_bytes(b"fake-video-data")
+
+        staging = tmp_path / "staging"
+        staging.mkdir()
+        (staging / "movie.mp4").symlink_to(real)
+
+        medias: dict = {}
+        with (
+            patch("vtscore.converters.get_converter", return_value=self._mock_video2image_converter()),
+            patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
+        ):
+            run_converters_on_folder(
+                folder_path=staging,
+                converter_specs=[SourceSpec(source_type="video", converter="video2image")],
+                target_media_type="image",
+                medias=medias,
+                on_progress=lambda *a: None,
+            )
+
+        params = medias[1]["origin"]["params"]
+        assert params["source_file"] == "movie.mp4"
+        assert params["source_path"] == str(real.resolve())
+
+    def test_origin_records_parent_manifest(self, tmp_path):
+        """The Manifest importer's ``paths_file`` rides onto converted media."""
+        from vtscore.converters.runner import run_converters_on_folder
+
+        (tmp_path / "clip.mp4").write_bytes(b"fake-video-data")
+
+        medias: dict = {}
+        with (
+            patch("vtscore.converters.get_converter", return_value=self._mock_video2image_converter()),
+            patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
+        ):
+            run_converters_on_folder(
+                folder_path=tmp_path,
+                converter_specs=[SourceSpec(source_type="video", converter="video2image")],
+                target_media_type="image",
+                medias=medias,
+                on_progress=lambda *a: None,
+                base_origin={"importer": "server_files", "params": {"paths_file": "/data/list.txt"}},
+            )
+
+        params = medias[1]["origin"]["params"]
+        assert params["parent_importer"] == "server_files"
+        assert params["parent_paths_file"] == "/data/list.txt"
+
+    def test_converted_media_reports_source_in_display_metadata(self, tmp_path):
+        """The curated ``Source`` / ``Derived Via`` pair reaches the UI grid."""
+        from vtscore.converters.runner import run_converters_on_folder
+        from vtscore.media import get as get_media_type
+
+        source = tmp_path / "movie.mp4"
+        source.write_bytes(b"fake-video-data")
+
+        medias: dict = {}
+        with (
+            patch("vtscore.converters.get_converter", return_value=self._mock_video2image_converter()),
+            patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
+        ):
+            run_converters_on_folder(
+                folder_path=tmp_path,
+                converter_specs=[SourceSpec(source_type="video", converter="video2image", params={"n_clips": "2"})],
+                target_media_type="image",
+                medias=medias,
+                on_progress=lambda *a: None,
+            )
+
+        meta = get_media_type("image").display_metadata(medias[1])
+        assert meta["Source"] == str(source.resolve())
+        assert meta["Derived Via"] == "Video → Images (n_clips=2)"
+
     def test_converter_with_multiple_outputs(self, tmp_path):
         """A converter that produces multiple outputs per source file."""
         from vtscore.converters.runner import run_converters_on_folder

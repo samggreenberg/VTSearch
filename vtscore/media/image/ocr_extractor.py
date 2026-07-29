@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import io
 from typing import Any, Optional
 
-from vtscore.media.image.decode import decode_bounded_rgb
+from PIL import Image
+
 from vtscore.media.processors import Extractor
 
 
@@ -86,9 +88,7 @@ class OCRExtractor(Extractor):
 
         import numpy as np  # noqa: PLC0415
 
-        # Bounded decode caps the bitmap PaddleOCR is handed; ``scale`` maps the
-        # returned polygons back into the original image's pixel space.
-        image, scale = decode_bounded_rgb(media_bytes)
+        image = Image.open(io.BytesIO(media_bytes)).convert("RGB")
         img_array = np.array(image)
 
         results = self._model.ocr(img_array, cls=True)
@@ -111,7 +111,7 @@ class OCRExtractor(Extractor):
                 hits.append(
                     {
                         "confidence": round(float(conf), 4),
-                        "bbox": [round(c / scale, 2) for c in bbox],
+                        "bbox": [round(c, 2) for c in bbox],
                         "label": text,
                     }
                 )

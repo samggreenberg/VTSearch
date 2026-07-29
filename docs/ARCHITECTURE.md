@@ -735,6 +735,52 @@ Origins are set automatically when data is loaded:
 - **Pickle loads** preserve the per-element origins stored in the file.
   Old pickles without origins fall back to the legacy `creation_info` stored in the pickle (if any).
 
+### Derived media: converter and clipper provenance
+
+Media produced *at ingest* by a converter or a clipper chain — a frame
+extracted from a video, a page rendered from a PDF, a window cut out of a
+recording — records how it was made in `origin.params`, so the derivation is
+recoverable long after the import job ended:
+
+- **Converter output** (`vtscore/converters/runner.py`) gets `converter`,
+  `source_file` (scan-relative name), `source_path` (**resolved absolute path
+  of the real source file**), `converter_param_<key>`, the replay
+  disambiguators `converter_out_index` / `converter_n_out` /
+  `converter_content_hash`, and `parent_importer` plus the parent importer's
+  locator (`parent_path` / `parent_url` / `parent_paths_file` /
+  `parent_manifest`).  `source_file` and `source_path` diverge whenever the
+  scanned folder is a staging area of symlinks — the `server_files`
+  (Manifest) importer links listed paths into a temp dir under their
+  basenames, disambiguating collisions as `name__1.ext` — so `source_path` is
+  the authoritative pointer back at the original media.
+- **Clipper-chain output**
+  (`vtscore/datasets/clipper_chain.py::_stamp_origin`) inherits the parent's
+  `origin` and `origin_name` and adds the full `clipper_chain` JSON trail plus
+  the legacy single-step keys `clipper`, `clipper_<param>`, and
+  `clip_start` / `clip_end` / `clip_box` / `clip_index`.
+
+Both are machine-readable recipes: `vtscore/media/lazy_clip.py` replays them
+to reproduce the bytes on demand, which is what makes reference-mode derived
+media possible (no duplicated clip/page bytes in the dataset).
+
+`vtscore/media/provenance.py` renders the same recipe for humans, as up to
+three curated lines: **Source** (the file the item was derived from),
+**Derived Via** (the chain that derived it, e.g.
+`"Video → Images (n_clips=2) → Object (threshold=0.4)"`), and **Imported
+Via** (the importer that brought the corpus in, e.g.
+`"Manifest (paths_file=/data/list.txt)"` — present on every media, derived or
+not; converter output reports its `parent_importer`, since "imported via
+converter" says nothing about where the corpus came from).
+`MediaType.display_metadata` includes them, so they reach both the labeling
+UI's metadata grid and the enriched label export.  A plainly imported file
+gets no `Source` / `Derived Via` — it is its own source.
+
+Each is deliberately **one line**, not a key per `origin.params` entry:
+flattening the params into a per-item grid reads as if every key were a
+property of *this item*, and a dataset-level import knob (`size=60`) is not.
+The enriched label export still flattens the full params key-by-key, because
+its columns are opt-in and machine-facing.
+
 ### Reference (no-copy) imports and lazy clips
 
 Server-side importers (e.g. `server_folder`, `server_manifest`) can import in
@@ -788,4 +834,9 @@ as JSON.  The format is backward-compatible: old consumers that only
 read `md5` + `label` continue to work.  With `enrich=true`, each entry
 gains `custom_metadata` (merged from media type display metadata, the
 media's `custom_metadata`, and the flattened `origin.params`) and the
-response includes an `available_columns` list.
+response includes an `available_columns` list.  The export flattens the
+*full* `origin.params` key-by-key — including the machine-only replay recipe
+— because an export is a machine-facing artifact with opt-in columns;
+`POST /api/medias/batch` distils the same params into the curated **Source** /
+**Derived Via** / **Imported Via** lines instead (see
+[Derived media](#derived-media-converter-and-clipper-provenance)).

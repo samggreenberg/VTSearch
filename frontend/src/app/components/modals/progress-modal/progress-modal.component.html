@@ -1,7 +1,7 @@
 <vt-modal [title]="title" [open]="true" (closed)="onCancel()">
   @if (analyzing) {
     <div class="analysis-loading">
-      @if (!runningJob) {
+      @if (useCachedHistory()) {
         <p aria-live="polite">Loading indicator history…</p>
       } @else {
         <vt-job-progress

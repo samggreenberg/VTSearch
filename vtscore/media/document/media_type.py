@@ -206,16 +206,6 @@ class DocumentMediaType(MediaType):
                 media_bytes = f.read()
         return {"media_bytes": media_bytes, "duration": 0}
 
-    def load_thin_media_data(self, file_path: Path) -> dict:
-        """No ingest-time artifact: a document's preview is rasterised on request.
-
-        Unlike image / audio / video, this type produces no ``thumbnail_bytes``
-        at ingest — the grid tile comes from :meth:`image_response`, which
-        renders the first PDF page on demand.  So the base default's read would
-        buy nothing but a full file copy; skip it and keep the thin load pure.
-        """
-        return {}
-
     # ------------------------------------------------------------------
     # HTTP serving
     # ------------------------------------------------------------------

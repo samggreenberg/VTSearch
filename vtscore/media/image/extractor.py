@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import io
 from typing import Any, Optional
 
-from vtscore.media.image.decode import decode_bounded_rgb
+from PIL import Image
+
 from vtscore.media.processors import Extractor
 
 
@@ -93,11 +95,7 @@ class ImageClassExtractor(Extractor):
         if media_bytes is None:
             return []
 
-        # Bounded decode keeps an enormous source from materialising as a
-        # multi-gigabyte bitmap (YOLO downsamples to its own input size
-        # regardless); ``scale`` maps the detections back into the original
-        # image's pixel space, which is what this extractor's bboxes promise.
-        image, scale = decode_bounded_rgb(media_bytes)
+        image = Image.open(io.BytesIO(media_bytes)).convert("RGB")
         results = self._model(image, verbose=False)
 
         hits: list[dict[str, Any]] = []
@@ -117,7 +115,7 @@ class ImageClassExtractor(Extractor):
                 hits.append(
                     {
                         "confidence": round(conf, 4),
-                        "bbox": [round(c / scale, 2) for c in bbox],
+                        "bbox": [round(c, 2) for c in bbox],
                         "label": label,
                     }
                 )

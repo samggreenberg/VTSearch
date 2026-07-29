@@ -3608,9 +3608,6 @@
       "IndicatorScoreHistoryResponse": {
         "additionalProperties": false,
         "properties": {
-          "complete": {
-            "type": "boolean"
-          },
           "history": {
             "items": {
               "additionalProperties": {},
@@ -3628,7 +3625,6 @@
           }
         },
         "required": [
-          "complete",
           "history",
           "metric"
         ],
@@ -12813,7 +12809,7 @@
     },
     "/api/indicator-score-history": {
       "get": {
-        "description": "Reads only the per-step cache advanced by the ``/api/labeling-status``\nbackground worker; **no models are retrained and the cache is never\nadvanced here**, so the response is always fast regardless of dataset size\nor label-history length.\n\nWhen the cache does not yet cover the whole ``label_history`` the response\ncarries ``complete: false`` and an empty ``history``.  Clients should then\nfall back to ``POST /api/eval/train-and-score``, which computes the same\nseries on a background thread with live progress and cancellation.\n\nThis route used to call the ``calculate_*_over_time`` helpers directly.\nThose advance the cache via ``_ensure_cache`` - retraining one MLP per\nuncached label step plus a forward pass over the unlabeled pool, and on a\ncold cache a full hierarchical-k-means coverage-atlas build - all inline on\nthe request thread under ``_progress_lock``.  Since ``/api/labeling-status``\ndeliberately defers exactly that work to a background worker (issue #2397),\nthe cache is behind for most of a labeling session, and this endpoint\nabsorbed the entire deferred build: tens of seconds on a mid-size dataset,\ngrowing with both media count and vote count.",
+        "description": "Reads only the per-step cache populated by the labeling-status\npolling; no models are retrained.",
         "operationId": "indicator_score_history",
         "parameters": [
           {
@@ -12852,7 +12848,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Return the cached indicator score history for a given metric.",
+        "summary": "Return cached indicator score history for a given metric.",
         "tags": [
           "eval"
         ]
@@ -13624,7 +13620,7 @@
     },
     "/api/medias/batch": {
       "post": {
-        "description": "Callers request only the IDs they need (e.g. the ones currently visible\nin a virtual-scrolling viewport), keeping payload size bounded.  Use\n:func:`list_media_ids` (``GET /api/medias/ids``) to discover which\nmedia IDs exist in the loaded dataset.\n\nReturns a JSON array of media metadata dicts; unknown IDs are silently\nomitted.",
+        "description": "Callers request only the IDs they need (e.g. the ones currently visible\nin a virtual-scrolling viewport), keeping payload size bounded.  Use\n:func:`list_media_ids` (``GET /api/medias/ids``) to discover which\nmedia IDs exist in the loaded dataset.\n\nReturns a JSON array of media metadata dicts; unknown IDs are silently\nomitted.  Each item's ``custom_metadata`` is the media type's\n``display_metadata`` - including the curated \"Source\" / \"Derived Via\" /\n\"Imported Via\" provenance lines distilled from ``origin.params`` - with\nany importer-supplied ``custom_metadata`` layered on top.",
         "operationId": "batch_medias",
         "requestBody": {
           "content": {

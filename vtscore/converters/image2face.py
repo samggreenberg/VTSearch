@@ -177,8 +177,9 @@ class Image2FaceMediaConverter(MediaConverter):
     # ------------------------------------------------------------------
 
     def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        from PIL import Image  # noqa: PLC0415
+
         from vtscore.media.embedder import media_from_path  # noqa: PLC0415
-        from vtscore.media.image.decode import decode_bounded_rgb  # noqa: PLC0415
 
         threshold, padding, min_size = self._resolve_params(params)
 
@@ -190,10 +191,7 @@ class Image2FaceMediaConverter(MediaConverter):
         if not media_bytes:
             return []
         try:
-            # Bounded decode: detection *and* the face crops below both come off
-            # this one image, so they stay in a single consistent coordinate
-            # space and a gigapixel group photo never has to fit in memory.
-            img, _scale = decode_bounded_rgb(media_bytes)
+            img = Image.open(io.BytesIO(media_bytes)).convert("RGB")
         except Exception:
             return []
         img_w, img_h = img.size
