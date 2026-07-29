@@ -748,21 +748,10 @@ class TestForceReproject:
         assert after.ids == ids
 
 
-class TestBrowseCompactSetting:
-    """The per-media-type ``browse_compact`` preference flows into the UMAP fit.
-
-    ``compact`` controls Stage-1 coordinates, so the build route reads the
-    setting for the dataset's media type and threads it into ``fit_projection``.
-    Defaults to on; the Settings → Browser toggle can turn it off per type.
+class TestBrowseCompactDefault:
+    """``compact`` is not a user-facing setting: every build always threads
+    :data:`~vtscore.config.PROJECTION_COMPACT_DEFAULT` into ``fit_projection``.
     """
-
-    @pytest.fixture(autouse=True)
-    def _audio_media_type(self):
-        """These tests set the compact preference for the fixtures' real media
-        type (audio) and assert the route reads it, so keep the route resolving
-        ``audio`` here — overriding the module-level hex default."""
-        with patch("vtsearch.routes.projection._media_type_for", return_value="audio"):
-            yield
 
     @staticmethod
     def _capturing_fake(captured: dict):
@@ -771,10 +760,6 @@ class TestBrowseCompactSetting:
             return _fake_fit_projection(matrix, ids, **kwargs)
 
         return fake
-
-    def _media_type(self, ctx) -> str:
-        first = next(iter(ctx.medias.values()))
-        return first.get("media_type", "audio")
 
     def test_compact_off_by_default(self, client):
         # Compaction defaults OFF: the empirical sweep found it costs ~2% taxonomy
@@ -786,22 +771,8 @@ class TestBrowseCompactSetting:
             _wait_projection()
         assert captured["compact"] is False
 
-    def test_compact_setting_disables_packing(self, client):
+    def test_compact_off_for_subset_build(self, client):
         ctx = get_active_context()
-        media_type = self._media_type(ctx)
-        resp = client.put("/api/settings", json={"browse_compact": {media_type: False}})
-        assert resp.status_code == 200
-
-        captured: dict = {}
-        with patch("vtscore.projection.fit_projection", side_effect=self._capturing_fake(captured)):
-            client.post("/api/projection/build")
-            _wait_projection()
-        assert captured["compact"] is False
-
-    def test_compact_setting_applies_to_subset_build(self, client):
-        ctx = get_active_context()
-        media_type = self._media_type(ctx)
-        client.put("/api/settings", json={"browse_compact": {media_type: False}})
         ids = sorted(ctx.medias.keys())[:4]
 
         captured: dict = {}

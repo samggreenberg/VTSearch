@@ -240,8 +240,9 @@ PROJECTION_DEFAULTS_BY_EMBEDDER: dict[str, tuple[int, float]] = {
 
 # Compaction (``compact_layout``) default. The sweep found compaction consistently
 # costs ~2% taxonomy separability and ~5-6% neighbourhood structure (trustworthiness
-# / continuity / recall) on every dataset and embedder, so it is off by default;
-# ``browse_compact`` (per media type) can re-enable it where screen-fill is worth it.
+# / continuity / recall) on every dataset and embedder, so it is off and not
+# exposed as a user-facing setting; the ``compact`` param on ``fit_projection``
+# remains for future experimentation.
 PROJECTION_COMPACT_DEFAULT = False
 
 # Model IDs

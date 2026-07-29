@@ -420,24 +420,6 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  /** Whether the projection is compacted for *typeId* (oceans closed),
-   *  defaulting to on when the user hasn't set one for this media type. */
-  getBrowseCompact(typeId: string): boolean {
-    const dict = this.settings().browse_compact as Record<string, boolean> | undefined;
-    const value = dict?.[typeId];
-    return value == null ? true : value;
-  }
-
-  /** Write the per-media-type compaction toggle and persist. Takes effect on
-   *  the next projection build or the Browser's Re-project action, since the
-   *  layout coordinates are computed once and frozen. */
-  onBrowseCompactChange(typeId: string, value: boolean): void {
-    const dict = { ...((this.settings().browse_compact as Record<string, boolean> | undefined) || {}) };
-    dict[typeId] = value;
-    this.settings.update((s) => ({ ...(s as Record<string, unknown>), browse_compact: dict }) as AppSettings);
-    this.save();
-  }
-
   /** Whether the browse canvas draws region signposts (the named "street sign"
    *  labels over the map) for *typeId*, defaulting to on when unset. */
   getBrowseSignposts(typeId: string): boolean {
