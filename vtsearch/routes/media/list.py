@@ -121,7 +121,10 @@ def _transcode_to_mp4(src_bytes: bytes, filename: str) -> bytes | None:  # noqa:
 
     Tries ffmpeg first (preserves audio, H.264 output).  Falls back to OpenCV
     (video-only, MPEG-4 Part 2) so that videos are at least viewable when
-    ffmpeg is not installed.
+    ffmpeg is not installed - but *only* then: importing ``cv2`` pulls a
+    vendored OpenSSL into the process, which aborts the interpreter on
+    FIPS-enabled hosts (see :mod:`vtscore.media.video.decode`), so it is not
+    worth reaching for when ffmpeg is present and simply failed on this file.
 
     Returns the MP4 bytes on success, or ``None`` if transcoding fails.
     """
@@ -159,10 +162,9 @@ def _transcode_to_mp4(src_bytes: bytes, filename: str) -> bytes | None:  # noqa:
         except FileNotFoundError:
             pass  # ffmpeg not installed; fall through to cv2
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            pass
+            return None
         else:
-            if dst_path.exists() and dst_path.stat().st_size > 0:
-                return dst_path.read_bytes()
+            return dst_path.read_bytes() if dst_path.exists() and dst_path.stat().st_size > 0 else None
 
         # --- Attempt 2: OpenCV (video-only, no audio) --------------------
         try:

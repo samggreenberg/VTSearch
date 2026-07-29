@@ -17,7 +17,12 @@ import os
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import TYPE_CHECKING, Any, Iterator, Optional
+
+from vtscore.media.video import decode
+
+if TYPE_CHECKING:
+    from vtscore.media.video.decode import VideoInfo
 
 _logger = logging.getLogger(__name__)
 
@@ -47,22 +52,24 @@ def _resolve_video_path(media: dict) -> Iterator[Optional[Path]]:
             pass
 
 
-def _frame_index_range(media: dict, frame_count: int, fps: float) -> tuple[int, int]:
-    """Map ``clip_start``/``clip_end`` to ``[start_frame, end_frame]`` indices.
+def _frame_time_range(media: dict, info: "VideoInfo") -> tuple[float, float]:
+    """Map ``clip_start``/``clip_end`` to a ``[start, end]`` window in seconds.
 
-    Falls back to the full video range when boundaries are absent or ``fps``
-    is non-positive.  ``end_frame`` is inclusive.
+    Falls back to the full video when boundaries are absent or unusable.  The
+    window stops one frame short of the duration so the end of the range still
+    decodes to a real frame.
     """
+    frame_seconds = info.frame_seconds
+    last = max(0.0, info.duration - frame_seconds)
+
     clip_start = media.get("clip_start")
     clip_end = media.get("clip_end")
-    if clip_start is None or clip_end is None or not fps or fps <= 0 or float(clip_end) <= float(clip_start):
-        return 0, frame_count - 1
+    if clip_start is None or clip_end is None or float(clip_end) <= float(clip_start):
+        return 0.0, last
 
-    start_idx = int(round(float(clip_start) * fps))
-    end_idx = int(round(float(clip_end) * fps)) - 1
-    start_idx = max(0, min(start_idx, frame_count - 1))
-    end_idx = max(start_idx, min(end_idx, frame_count - 1))
-    return start_idx, end_idx
+    start = max(0.0, min(float(clip_start), last))
+    end = max(start, min(float(clip_end) - frame_seconds, last))
+    return start, end
 
 
 def sample_video_frames(media: dict, num_frames: int) -> list[Any]:
@@ -77,54 +84,41 @@ def sample_video_frames(media: dict, num_frames: int) -> list[Any]:
     *num_frames* entries, matching the per-embedder padding loops it
     replaces.  Returns ``[]`` on any decoding failure.
     """
-    import cv2  # noqa: PLC0415
     import numpy as np  # noqa: PLC0415
     from PIL import Image  # noqa: PLC0415
 
     with _resolve_video_path(media) as path:
         if path is None:
             return []
-        cap = cv2.VideoCapture(str(path))
-        if not cap.isOpened():
+        info = decode.probe(path)
+        if info is None or info.duration <= 0:
             return []
-        try:
-            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            if frame_count <= 0:
-                return []
-            fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
-            start_idx, end_idx = _frame_index_range(media, frame_count, fps)
-            n_avail = end_idx - start_idx + 1
-            n_to_sample = min(num_frames, max(1, n_avail))
-            if n_to_sample == 1:
-                indices = np.array([start_idx], dtype=int)
-            else:
-                indices = np.linspace(start_idx, end_idx, n_to_sample, dtype=int)
 
-            frames: list[Any] = []
-            for idx in indices:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, int(idx))
-                ret, frame = cap.read()
-                if ret:
-                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    frames.append(Image.fromarray(frame_rgb))
-        finally:
-            cap.release()
+        start, end = _frame_time_range(media, info)
+        n_avail = max(1, int(round((end - start) * info.fps)) + 1) if info.fps > 0 else num_frames
+        n_to_sample = min(num_frames, n_avail)
+        if n_to_sample <= 1:
+            times = np.array([start], dtype=float)
+        else:
+            times = np.linspace(start, end, n_to_sample, dtype=float)
+
+        decoded = decode.frames_at(path, [float(t) for t in times])
+        frames: list[Any] = [Image.fromarray(frame) for frame in decoded]
 
     if not frames:
         return []
-    # Partial-read failure: cap.read() returned False for some of the
-    # requested indices (corrupted middle frames, VFR videos where
-    # CAP_PROP_POS_FRAMES doesn't actually seek, codec quirks). The
-    # remaining pad step will repeat the last successful frame, which
-    # biases the embedding toward the readable portion of the file -
-    # warn so the failure is visible in logs instead of silent.
-    if len(frames) < len(indices):
+    # Partial-read failure: some requested timestamps didn't decode (corrupted
+    # middle frames, VFR videos whose seeks land oddly, codec quirks).  The
+    # remaining pad step will repeat the last successful frame, which biases
+    # the embedding toward the readable portion of the file - warn so the
+    # failure is visible in logs instead of silent.
+    if len(frames) < len(times):
         _logger.warning(
-            "Partial frame-read failure for %s: %d/%d requested indices succeeded; "
+            "Partial frame-read failure for %s: %d/%d requested timestamps succeeded; "
             "padding with the last readable frame will bias the embedding.",
             path,
             len(frames),
-            len(indices),
+            len(times),
         )
     while len(frames) < num_frames:
         frames.append(frames[-1])
