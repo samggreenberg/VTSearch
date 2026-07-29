@@ -25,6 +25,17 @@ Cross-cutting, still open:
 
 <!-- item-sep -->
 
+- **Saliency-sharpening exponent γ for region pooling (research idea, not scoped).**
+  Region/leaf node vectors are saliency-**weighted means** of their patch vectors
+  (`propose_leaves`, `patch_embed.py`). A monotonic `sal**γ` transform applied once in
+  `build_region_tree` before `propose_leaves`/`build_hac_tree` would tune the pool from
+  mean (γ→0) through the current weighted mean (γ=1) toward max/argmax (γ→∞) — testing the
+  hypothesis that max-pooling the peak (most object-like) patch helps small objects. Monotonic
+  ⇒ leaf seeding order and the additive-merge invariant are unchanged. Would sweep like the
+  other `hac_*` axes in `scripts/sod`. Distinct from EUPE's generation-time softmax `*4.0`.
+
+<!-- item-sep -->
+
 - [ ] #2667 — Combine Datasets per-embedder-type conflict resolution: instead of refusing a mismatched triple, the modal detects each conflicting type (semantic / patch_semantic / structural) and lets the user re-embed every source to one winner or drop that type; the combine route bakes the choice into the load (open question #2, now addressed by resolution rather than refusal)
 
 <!-- item-sep -->

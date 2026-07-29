@@ -741,10 +741,11 @@ def main() -> int:
         "--show-oracle",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="on the cost plots, overlay each MLP curve's oracle cost (best achievable τ on the same "
-        "scores) as a faint dashed companion. The gap to the solid calibrated-cost curve is "
-        "threshold-placement noise vs detector quality — under extreme imbalance the calibrated cost "
-        "can swing 0→1 while oracle stays flat. Off by default.",
+        help="overlay the oracle companion (faint dashed) on the cost and F1 plots: oracle_cost = "
+        "min achievable cost, oracle_f1 = max achievable F1 (both true bounds the calibrated curve "
+        "can't cross). The gap is threshold-placement noise vs detector quality — under extreme "
+        "imbalance the calibrated value swings while the oracle stays flat. fpr/fnr get no oracle. "
+        "Off by default.",
     )
     args = ap.parse_args()
 

@@ -5,11 +5,14 @@ One figure per ``(dataset, class)``; all configs overlaid on shared axes, each
 curve its own color (linestyle = proposal), linear K axis. Two reference overlays
 are OFF by default:
 
-  --show-oracle          add each MLP curve's oracle min-over-τ (dashed companion)
+  --show-oracle          add the oracle companion (dashed) on the cost + F1 plots:
+                         oracle_cost = min achievable cost, oracle_f1 = max achievable
+                         F1 (both true bounds the calibrated curve can't cross)
   --show-text-baseline   add the text-cosine zero-shot baseline (K=0 horizontal ref)
 
-The underlying ``oracle_cost`` column and the cosine K=0 rows are always present in
-``results.jsonl`` regardless of these flags — they only control rendering.
+The underlying ``oracle_cost`` / ``oracle_f1`` columns and the cosine K=0 rows are
+always present in ``results.jsonl`` regardless of these flags — they only control
+rendering. fpr/fnr have no oracle (their per-metric optimum is degenerate).
 """
 
 from __future__ import annotations
@@ -156,6 +159,11 @@ _METRICS = {
     "corloc": "CorLoc@0.5",
 }
 _DEFAULT_METRICS = ("cost", "fpr", "fnr", "f1", "mean_iou")
+# Metrics that have an oracle companion in the rows, and the field it lives under.
+# cost → min achievable cost; f1 → max achievable F1 (both true bounds the calibrated
+# curve can't cross). fpr/fnr have no oracle (their per-metric optimum is degenerate —
+# only their sum, cost, has a meaningful oracle); mean_iou/corloc aren't threshold-based.
+_ORACLE_FIELD = {"cost": "oracle_cost", "f1": "oracle_f1"}
 
 
 def _plot_group(
@@ -210,18 +218,28 @@ def _plot_group(
         if band == "all":
             # One line PER SEED, each its own color + a legend entry naming the
             # config and seed, so every individual iteration is distinct.
+            _ofield = _ORACLE_FIELD.get(field)
+            oracle_series = _series_by_seed(crows, _ofield) if (show_oracle and _ofield) else {}
             for seed, series in sorted(_series_by_seed(crows, field).items()):
                 sks = sorted(k for k in series if k > 0)
                 if not sks:
                     continue
+                seed_color = cmap(color_i % 20)
                 ax.plot(
                     sks,
                     [series[k] for k in sks],
-                    color=cmap(color_i % 20),
+                    color=seed_color,
                     ls=ls,
                     lw=1.4,
                     label=f"{cfg_label} — seed {seed}",
                 )
+                # This seed's oracle floor (best-τ on the same scores), dashed +
+                # faint in the same colour, so each bouncing cost line shows the flat
+                # achievable floor beneath it.
+                oks = sorted(k for k in oracle_series.get(seed, {}) if k > 0)
+                if oks:
+                    ax.plot(oks, [oracle_series[seed][k] for k in oks], color=seed_color, ls="--", lw=1.0, alpha=0.5)
+                    oracle_drawn = True
                 color_i += 1
             continue
 
@@ -242,13 +260,14 @@ def _plot_group(
         # Seed-variance band (min-max or ±std across seeds).
         if band != "none":
             ax.fill_between(ks, [stats[k][1] for k in ks], [stats[k][2] for k in ks], color=color, alpha=0.15, lw=0)
-        # Oracle companion (best achievable τ on the SAME MLP scores): a faint
-        # DASHED line in the curve's colour. The gap between it and the solid
-        # calibrated-cost curve is threshold-placement noise, not detector quality —
-        # under extreme imbalance the calibrated cost can swing 0→1 while oracle
-        # stays flat and low. Only meaningful for the combined cost.
-        if show_oracle and field == "cost":
-            oracle_k = _mean_by_k(crows, "oracle_cost")
+        # Oracle companion (this metric at the best-τ / cost-optimal operating point):
+        # a faint DASHED line in the curve's colour. The gap to the solid calibrated
+        # curve is threshold-placement noise, not detector quality — under extreme
+        # imbalance the calibrated value can swing 0→1 while the oracle stays flat.
+        # Drawn for cost/fpr/fnr/f1 (not the IoU metrics, which aren't threshold-based).
+        _ofield = _ORACLE_FIELD.get(field)
+        if show_oracle and _ofield:
+            oracle_k = _mean_by_k(crows, _ofield)
             oks = sorted(k for k in oracle_k if k > 0)
             if oks:
                 ax.plot(oks, [oracle_k[k] for k in oks], color=color, ls="--", lw=1.2, alpha=0.55)
@@ -258,25 +277,26 @@ def _plot_group(
     ax.set_ylabel(_METRICS.get(field, field))
     ax.set_title(title)
     ax.grid(True, ls=":", alpha=0.4)
-    _legend_with_oracle(ax, oracle_drawn)
+    _legend_with_oracle(ax, _ORACLE_FIELD.get(field) if oracle_drawn else None)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
     fig.savefig(out_path, dpi=130)
     plt.close(fig)
 
 
-def _legend_with_oracle(ax, oracle_drawn: bool) -> None:
-    """Draw the legend, appending a single grey dashed proxy labelling the oracle
-    companion so "dashed = oracle (best τ)" is self-documenting without one entry
-    per curve. Falls back to a plain legend when no oracle line was drawn."""
-    if not oracle_drawn:
+def _legend_with_oracle(ax, oracle_label: str | None) -> None:
+    """Draw the legend, appending a single grey dashed proxy naming the oracle
+    companion (``oracle_label``, e.g. ``"oracle_cost"`` / ``"oracle_f1"``) so
+    "dashed = <that oracle>" is self-documenting without one entry per curve.
+    Falls back to a plain legend when ``oracle_label`` is None (no oracle drawn)."""
+    if not oracle_label:
         ax.legend(fontsize=8, loc="best")
         return
     from matplotlib.lines import Line2D
 
     handles, labels = ax.get_legend_handles_labels()
     handles.append(Line2D([0], [0], color="grey", ls="--", lw=1.2, alpha=0.8))
-    labels.append("oracle (best τ)")
+    labels.append(oracle_label)
     ax.legend(handles, labels, fontsize=8, loc="best")
 
 
@@ -352,18 +372,25 @@ def _plot_summary_group(
 
         if band == "all":
             # One thin line per class (each its own color) so cross-class spread is visible directly.
+            _ofield = _ORACLE_FIELD.get(field)
+            oracle_by_cls = _class_series(crows, _ofield) if (show_oracle and _ofield) else {}
             for cls, series in sorted(_class_series(crows, field).items()):
                 sks = sorted(k for k in series if k > 0)
                 if not sks:
                     continue
+                cls_color = cmap(color_i % 20)
                 ax.plot(
                     sks,
                     [series[k] for k in sks],
-                    color=cmap(color_i % 20),
+                    color=cls_color,
                     ls=ls,
                     lw=1.3,
                     label=f"{cfg_label} — {cls}",
                 )
+                oks = sorted(k for k in oracle_by_cls.get(cls, {}) if k > 0)
+                if oks:
+                    ax.plot(oks, [oracle_by_cls[cls][k] for k in oks], color=cls_color, ls="--", lw=1.0, alpha=0.5)
+                    oracle_drawn = True
                 color_i += 1
             continue
 
@@ -385,8 +412,9 @@ def _plot_summary_group(
         if band != "none":
             ax.fill_between(ks, [stats[k][1] for k in ks], [stats[k][2] for k in ks], color=color, alpha=0.15, lw=0)
         # Oracle companion (best-τ), macro-averaged across classes like the main curve.
-        if show_oracle and field == "cost":
-            ostats = _summary_stats(crows, "oracle_cost", band)
+        _ofield = _ORACLE_FIELD.get(field)
+        if show_oracle and _ofield:
+            ostats = _summary_stats(crows, _ofield, band)
             oks = sorted(k for k in ostats if k > 0)
             if oks:
                 ax.plot(oks, [ostats[k][0] for k in oks], color=color, ls="--", lw=1.2, alpha=0.55)
@@ -396,7 +424,7 @@ def _plot_summary_group(
     ax.set_ylabel(_METRICS.get(field, field))
     ax.set_title(title)
     ax.grid(True, ls=":", alpha=0.4)
-    _legend_with_oracle(ax, oracle_drawn)
+    _legend_with_oracle(ax, _ORACLE_FIELD.get(field) if oracle_drawn else None)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
     fig.savefig(out_path, dpi=130)
