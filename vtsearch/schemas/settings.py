@@ -113,8 +113,6 @@ class AppSettingsSchema(Schema):
     browse_icon_size = _PerMediaTypeStringDict()
     # Pile-thumbnail border width in CSS px, per media type (0 disables).
     browse_thumbnail_border = _PerMediaTypeIntDict()
-    # Whether (re)building the projection compacts the layout, per media type.
-    browse_compact = _PerMediaTypeBooleanDict()
     # Wheel notches / +/- clicks per pyramid level (1..3), per media type.
     browse_mouse_zooms_per_level = _PerMediaTypeIntDict()
     # Whether the canvas draws region signposts (named "street sign" labels
@@ -302,7 +300,6 @@ class SettingsUpdateSchema(Schema):
     browse_colormap = fields.Raw()
     browse_icon_size = fields.Raw()
     browse_thumbnail_border = fields.Raw()
-    browse_compact = fields.Raw()
     browse_mouse_zooms_per_level = fields.Raw()
     browse_signposts = fields.Raw()
     browse_signpost_captioner = fields.Raw()

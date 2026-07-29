@@ -148,7 +148,6 @@ set_browse_panel_width  # noqa: F821
 set_browse_colormap  # noqa: F821
 set_browse_icon_size  # noqa: F821
 set_browse_thumbnail_border  # noqa: F821
-set_browse_compact  # noqa: F821
 get_browse_mouse_zooms_per_level  # noqa: F821
 set_browse_mouse_zooms_per_level  # noqa: F821
 get_browse_signposts  # noqa: F821
