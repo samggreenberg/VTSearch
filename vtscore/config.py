@@ -179,6 +179,19 @@ def resolve_device() -> str:
 # out-of-the-box "no limit" behaviour) for genuinely large-archive uploads.
 MAX_UPLOAD_MB = max(0, int(os.environ.get("VTSEARCH_MAX_UPLOAD_MB", "2048")))
 
+# Pixel budget for a single image *decode*.  Pillow's own decompression-bomb
+# ceiling is lifted at startup (see :mod:`vtscore.media.image.decode`) so a
+# merely-large photo — a gigapixel panorama, a whole-slide scan — is imported
+# rather than refused; this budget replaces it with the protection that
+# actually matters, capping how big a bitmap any one decode may materialise.
+# Sources above it are downsampled (aspect preserved) before the pixels reach
+# a thumbnail, embedder, extractor or converter, all of which resize to a few
+# hundred pixels anyway.  64 MP is ~192 MB as RGB — comfortably above any
+# real photograph, so ordinary media is never touched.  Crop/clip paths
+# deliberately bypass this and decode at native size.  Set
+# ``VTSEARCH_MAX_DECODE_PIXELS=0`` to disable bounding entirely.
+MAX_DECODE_PIXELS = max(0, int(os.environ.get("VTSEARCH_MAX_DECODE_PIXELS", str(64_000_000))))
+
 # Training
 #
 # ``TRAIN_EPOCHS`` is an *upper bound*; :func:`vtscore.training.mlp.train_model`

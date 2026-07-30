@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import io
 from typing import Any, Optional
 
-from PIL import Image
-
+from vtscore.media.image.decode import decode_bounded_rgb
 from vtscore.media.processors import Localizer
 
 
@@ -93,7 +91,9 @@ class FaceLocalizer(Localizer):
         if media_bytes is None:
             return []
 
-        image = Image.open(io.BytesIO(media_bytes)).convert("RGB")
+        # Bounded decode caps the bitmap MTCNN is handed; ``scale`` maps the
+        # detected boxes back into the original image's pixel space.
+        image, scale = decode_bounded_rgb(media_bytes)
 
         det_boxes, det_probs = self._detector.detect(image)
 
@@ -107,7 +107,7 @@ class FaceLocalizer(Localizer):
             conf = float(prob)
             if conf < self._threshold:
                 continue
-            x1, y1, x2, y2 = (float(v) for v in box)
+            x1, y1, x2, y2 = (float(v) / scale for v in box)
             hits.append(
                 {
                     "confidence": round(conf, 4),

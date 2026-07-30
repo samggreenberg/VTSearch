@@ -104,6 +104,7 @@ def load_pdf_images_into(
     provenance points back to the source document.
     """
     from vtscore.media import get_by_folder_name  # noqa: PLC0415
+    from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
     from vtscore.security.path_validation import glob_top_level, rglob_follow_symlinks  # noqa: PLC0415
 
     pdf_files = sorted(rglob_follow_symlinks(folder, "*.pdf") if recursive else glob_top_level(folder, "*.pdf"))
@@ -129,6 +130,12 @@ def load_pdf_images_into(
             else:
                 full_page_name = page_name
 
+            # Downscale to a grid/list thumbnail now, while the rendered page is
+            # already in hand.  A thin load discards ``image_bytes`` entirely and
+            # a full one only keeps them until save, so without this every tile
+            # re-renders the whole PDF page at request time.
+            thumb = make_image_thumbnail(image_bytes)
+
             media_data: dict[str, Any] = {
                 "id": media_id,
                 "media_type": mt.type_id,
@@ -146,6 +153,7 @@ def load_pdf_images_into(
                 "duration": 0,
                 "width": pil_image.width,
                 "height": pil_image.height,
+                "thumbnail_bytes": thumb[0] if thumb is not None else None,
             }
             medias[media_id] = media_data
             media_id += 1
