@@ -1,10 +1,79 @@
 """Progress tracking for long-running operations."""
 
+import math
 import time
 import threading
 from typing import Any, Callable, Optional
 
 _UNSET = object()  # sentinel for "caller did not provide this argument"
+
+
+# ---------------------------------------------------------------------------
+# ETA humility
+# ---------------------------------------------------------------------------
+# A remaining-time estimate is an extrapolation from a rate that is still
+# changing. Reported to the second it is not just wrong, it is *visibly* wrong:
+# "9 min left … 10 min … 9.5 min … 11 min" reads as a system that has no idea,
+# because a number that precise invites you to check it. The same underlying
+# estimate reported as "about 10 min" is right the whole time.
+#
+# So the tracker never publishes its raw estimate. It publishes the nearest rung
+# of a coarse ladder, and it *stays* on that rung until the estimate has moved
+# decisively past a neighbour. Two separate mechanisms, both needed:
+#
+#   - The **ladder** removes false precision. Rungs step by roughly 1.5×, and
+#     every rung is a round number in the unit it will be displayed in (45 s,
+#     7.5 min, 1.5 hr), so no renderer has to round again and re-introduce the
+#     jitter this is here to remove.
+#   - The **hysteresis** removes the flip-flop. Snapping alone still oscillates
+#     when the estimate sits near a boundary, which is exactly where a
+#     converging estimate spends its time. A rung is only abandoned once the raw
+#     value clears the boundary to its neighbour by :data:`_ETA_HYSTERESIS`.
+#
+# The estimate can still *rise*: a job that genuinely slowed down should say so,
+# and pinning the display to a never-increasing value would just move the lie
+# from the number to its trend. What it can't do any more is twitch.
+#
+# The smoothed internal estimate stays raw — only the published value is
+# snapped. Feeding a quantized value back into the EMA would let the ladder
+# capture the estimate and stop it converging at all.
+# fmt: off
+_ETA_LADDER: tuple[float, ...] = (
+    10, 15, 20, 30, 45,                                  # 10 sec – 45 sec
+    60, 90, 120, 180, 300, 450, 600, 900, 1200, 1800, 2700,   # 1 min – 45 min
+    3600, 5400, 7200, 10800, 14400, 21600, 28800, 43200, 86400,  # 1 hr – 24 hr
+)
+# fmt: on
+
+#: How far past the boundary between two rungs the raw estimate must travel
+#: before the displayed rung changes. 0.15 means a 15% overshoot: enough that
+#: ordinary convergence noise never crosses it, small enough that a real
+#: slowdown is reported within a couple of updates.
+_ETA_HYSTERESIS = 0.15
+
+
+def _nearest_rung(seconds: float) -> float:
+    """Return the ladder rung closest to *seconds* in ratio terms.
+
+    Ratio rather than absolute distance, because the ladder is geometric: 400 s
+    is closer to 300 than to 450 on an absolute scale, but proportionally it sits
+    almost exactly between them, and proportional error is what a reader of an
+    ETA actually perceives.
+    """
+    if seconds <= _ETA_LADDER[0]:
+        return _ETA_LADDER[0]
+    if seconds >= _ETA_LADDER[-1]:
+        return _ETA_LADDER[-1]
+    return min(_ETA_LADDER, key=lambda rung: abs(math.log(seconds / rung)))
+
+
+def _adjacent_rung(rung: float, upward: bool) -> float:
+    """The next rung above (or below) *rung*, or *rung* itself at the ends."""
+    index = _ETA_LADDER.index(rung)
+    neighbour = index + 1 if upward else index - 1
+    if 0 <= neighbour < len(_ETA_LADDER):
+        return _ETA_LADDER[neighbour]
+    return rung
 
 
 class CancelledError(Exception):
@@ -60,6 +129,10 @@ class ProgressTracker:
         self._phase_start: float | None = None
         self._phase_current_start: int = 0
         self._smoothed_eta: float | None = None
+        # Ladder rung currently being published as ``eta_seconds``. Held across
+        # updates so the displayed estimate is sticky; see :meth:`_humble_eta`
+        # and the "ETA humility" notes at the top of this module.
+        self._eta_rung: float | None = None
         # Overall (whole-job) progress state, used when the caller reports a
         # ``step``/``total_steps`` structure.  See :meth:`_compute_overall`.
         self._overall_start_time: float | None = None
@@ -104,6 +177,43 @@ class ProgressTracker:
             alpha = self._ETA_SMOOTHING_ALPHA
             self._smoothed_eta = alpha * raw_eta + (1.0 - alpha) * self._smoothed_eta
         return self._smoothed_eta
+
+    def _humble_eta(self, raw: Optional[float]) -> Optional[float]:
+        """Snap *raw* onto the coarse ETA ladder, sticking to the current rung.
+
+        This is the only place a remaining-time estimate becomes user-visible,
+        and it is deliberately the last step: everything upstream — the EMA, the
+        per-phase rate windows, the pacer's re-weighting — keeps working at full
+        precision, and only the published number is coarsened.
+
+        Returns ``None`` (and forgets the held rung) whenever there is no
+        estimate to show, so the next job starts from a clean slate rather than
+        inheriting the last one's rung.
+        """
+        if raw is None or not math.isfinite(raw) or raw <= 0:
+            self._eta_rung = None
+            return None
+
+        target = _nearest_rung(raw)
+        current = self._eta_rung
+        if current is None or current == target:
+            self._eta_rung = target
+            return target
+
+        # Leaving a rung costs an overshoot. The boundary between two rungs is
+        # their geometric mean (the ladder is geometric); the estimate must
+        # clear it by ``_ETA_HYSTERESIS`` in the direction of travel. A large
+        # move jumps straight to ``target`` rather than walking rung by rung, so
+        # a genuinely mistaken estimate is corrected at once while a wobbling
+        # one is not.
+        upward = target > current
+        boundary = math.sqrt(current * _adjacent_rung(current, upward))
+        if upward and raw < boundary * (1.0 + _ETA_HYSTERESIS):
+            return current
+        if not upward and raw > boundary / (1.0 + _ETA_HYSTERESIS):
+            return current
+        self._eta_rung = target
+        return target
 
     def _overall_raw_fraction(self, within: float, s: int, total_steps: int) -> float:
         """Map a within-step fraction to a whole-job fraction in ``[0, 1]``.
@@ -273,9 +383,11 @@ class ProgressTracker:
             if "overall" in self._extra_defaults:
                 self._data["overall"] = overall
             if "eta_seconds" in self._extra_defaults:
-                self._data["eta_seconds"] = (
-                    overall_eta if overall is not None else self._compute_eta(status, current, total)
-                )
+                raw_eta = overall_eta if overall is not None else self._compute_eta(status, current, total)
+                # Published coarse and sticky — see :meth:`_humble_eta`. Every
+                # consumer (SSE, the CLI bars, the frontend chips) reads this
+                # one field, so humility applied here applies everywhere.
+                self._data["eta_seconds"] = self._humble_eta(raw_eta)
             snapshot = dict(self._data)
         self._notify(snapshot)
 

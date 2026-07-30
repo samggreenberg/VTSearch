@@ -22,11 +22,23 @@ the calibration harness (``scripts/profiling/calibrate_load_weights.py``); see
 ``docs/plans/progress-weight-calibration.md`` (Results) for the runs and fit
 diagnostics. Re-run that harness to refresh — do not hand-tune. Cells with no
 measured row fall back to the static per-device/media profiles in ``_common``.
+
+**These are the shipped defaults, not the last word.** They were measured on one
+GPU cluster; a deployment on different hardware, different storage, or a
+different network can be several times faster or slower. An admin who runs
+``scripts/profiling/tune_timing_profile.py`` on their own machines gets a
+``VTSEARCH_TIMING_PROFILE`` JSON whose ``dataset_load`` cells override the table
+below, per cell, without touching this file (see :mod:`vtscore.timing`). The
+lookups here consult that profile first and fall back to these constants.
 """
 
 from __future__ import annotations
 
 from typing import Optional
+
+from vtscore import timing
+from vtscore.timing.profile import cuml_active as _cuml_enabled
+from vtscore.timing.profile import normalize_device as _normalize_device
 
 # key: (device, media_type, embedder) -> affine coefficients (seconds).
 # ``device`` is "cpu", "cuda", or "cuda+cuml"; ``embedder`` is the encoder
@@ -482,14 +494,19 @@ FINALIZE_SLOT_SHARES: dict[tuple[str, str], tuple[tuple[str, float], ...]] = {
 }
 
 
-def finalize_slot_shares(device: str, media_type: str) -> Optional[tuple[tuple[str, float], ...]]:
-    """Return the measured finalize sub-slot ``(slot, share)`` tuples for
-    ``(device, media_type)``, or ``None`` when no calibrated row exists (so the
-    caller falls back to the static ``FinalizeProgress._SLOTS`` ballpark).
+def finalize_slot_shares(device: str, media_type: str, embedder: str = "") -> Optional[tuple[tuple[str, float], ...]]:
+    """Return the measured finalize sub-slot ``(slot, share)`` tuples for this
+    cell, or ``None`` when nothing measured covers it (so the caller falls back
+    to the static ``FinalizeProgress._SLOTS`` ballpark).
 
-    ``device`` is normalized to "cuda" / "cpu"; the shares are returned verbatim
-    (raw weights) — the consumer normalizes them into ordered sub-ranges.
+    An admin ``VTSEARCH_TIMING_PROFILE`` wins over the checked-in table, since
+    it was measured on the hardware actually serving the app. ``device`` is
+    normalized to "cuda" / "cpu"; the shares are returned verbatim (raw
+    weights) — the consumer normalizes them into ordered sub-ranges.
     """
+    tuned = timing.slot_shares("dataset_load", "finalize", device=device, media_type=media_type, embedder=embedder)
+    if tuned:
+        return tuple(tuned.items())
     row = FINALIZE_SLOT_SHARES.get((normalize_device(device), media_type))
     if not row:
         return None
@@ -499,17 +516,12 @@ def finalize_slot_shares(device: str, media_type: str) -> Optional[tuple[tuple[s
 def normalize_device(device: str) -> str:
     """Collapse ``resolve_device()`` output ("cuda:0", "cuda", "cpu", "mps"…) to
     the coarse key used by :data:`LOAD_COST_MODEL` ("cuda" / "cpu")."""
-    return "cuda" if device.startswith("cuda") else "cpu"
+    return _normalize_device(device)
 
 
 def _cuml_active() -> bool:
     """Whether cuML will serve this process's clustering (never raises)."""
-    try:
-        from vtscore.gpu_backends import cuml_enabled  # noqa: PLC0415
-
-        return cuml_enabled()
-    except Exception:
-        return False
+    return _cuml_enabled()
 
 
 def _lookup_row(device: str, media_type: str, embedder: str) -> Optional[dict[str, float]]:
@@ -550,7 +562,30 @@ def cost_model_terms(
     ``download_size_mb`` of 0/``None`` collapses the download **and** extract
     terms — which is exactly right for local-folder imports and cache-backed
     re-adds, where no archive is fetched or unpacked.
+
+    An admin ``VTSEARCH_TIMING_PROFILE`` measured on this deployment's own
+    hardware takes precedence over the checked-in table; only cells the profile
+    does not cover fall through to the constants above.
     """
+    if n > 0:
+        tuned = timing.step_terms(
+            "dataset_load",
+            device=device,
+            media_type=media_type,
+            embedder=embedder,
+            n=n,
+            size_mb=download_size_mb or 0.0,
+        )
+        if tuned is not None:
+            if not download_size_mb:
+                # No archive to fetch or unpack (local folder, warm cache): zero
+                # the byte-scaled phases even if the profile carries a fixed
+                # intercept for them, so a cached re-add doesn't budget a
+                # download slice for work that will never run.
+                tuned = {**tuned, "download": 0.0, "extract": 0.0}
+            if sum(tuned.values()) > 0:
+                return tuned
+
     row = _lookup_row(device, media_type, embedder)
     if row is None or n <= 0:
         return None

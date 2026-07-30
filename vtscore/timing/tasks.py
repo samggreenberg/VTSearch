@@ -1,0 +1,174 @@
+"""Canonical registry of long-running task families and their ordered steps.
+
+Every task that drives a progress bar with a ``step``/``total_steps`` structure
+registers here. The registry is the shared vocabulary between three parties that
+would otherwise drift apart:
+
+- the **task code**, which paces its bar with a weight vector one entry per
+  tracker step;
+- the **recorder** (:mod:`vtscore.timing.recorder`), which needs to label a
+  measured duration with the name of the step it belongs to;
+- the **tuning script**, which fits ``a + b · n`` per step and writes the
+  profile JSON keyed by these same names.
+
+Adding a new long-running task means adding a :class:`TaskSpec` here, then
+calling :func:`vtscore.timing.step_weights` at the task's entry point instead of
+writing a literal vector.
+
+**Phases vs tracker steps.** Usually they are the same thing and
+``step_index`` is just ``(1, 2, 3, …)``. A task may model a step as several
+cost *phases* that scale differently — ``dataset_load``'s step 1 covers both the
+network transfer (scales with archive bytes) and the archive unpack (scales with
+archive bytes at a very different rate) — in which case several phases share one
+tracker step and :func:`vtscore.timing.step_weights` sums their terms back into
+that step's slot.
+
+**Default terms** reproduce the hand-tuned vectors these tasks shipped with
+before the profile existed, so an instance with no ``VTSEARCH_TIMING_PROFILE``
+paces exactly as it did. They are *pseudo-seconds*: only their ratios are
+meaningful, because nobody measured them. A profile replaces them with real
+seconds, which is what makes the ETA stop drifting.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class TaskSpec:
+    """Declares one long-running task family's step structure.
+
+    Attributes:
+        name: Stable identifier used as the profile JSON's task key, in recorded
+            JSONL rows, and in ``--tasks`` selections. Never rename one of these
+            without migrating the profiles admins have already generated.
+        steps: Ordered cost-phase names. Profile coefficients are keyed by these.
+        step_index: 1-based tracker step each phase reports against, parallel to
+            ``steps``. Several phases may share one step (see module docstring).
+        tracker_steps: How many step numbers the task reports — the length of
+            the weight vector ``set_step_weights`` expects.
+        scale: Human description of what the ``n`` scale variable counts, for
+            the tuning script's ``--help`` and the profile's self-documentation.
+        default_terms: Shipped fallback pseudo-seconds, parallel to ``steps``.
+            Empty means "this task has its own richer default model" — only
+            ``dataset_load``, whose calibrated table lives in
+            :mod:`vtscore.datasets.stages._load_cost_model`.
+        byte_scaled: Steps whose cost tracks downloaded **bytes** rather than
+            item count. The tuning script fits these as a per-MB rate instead of
+            regressing them against ``n``, because a 2 GB archive of 500 videos
+            and a 20 MB archive of 500 texts take wildly different times to
+            fetch for reasons ``n`` cannot see.
+    """
+
+    name: str
+    steps: tuple[str, ...]
+    step_index: tuple[int, ...]
+    tracker_steps: int
+    scale: str
+    default_terms: tuple[float, ...] = ()
+    byte_scaled: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if len(self.step_index) != len(self.steps):
+            raise ValueError(f"{self.name}: step_index must be parallel to steps")
+        if self.default_terms and len(self.default_terms) != len(self.steps):
+            raise ValueError(f"{self.name}: default_terms must be parallel to steps")
+
+
+def _linear(name: str, steps: tuple[str, ...], scale: str, terms: tuple[float, ...]) -> TaskSpec:
+    """Build a spec whose phases map 1:1 onto tracker steps (the common case)."""
+    return TaskSpec(
+        name=name,
+        steps=steps,
+        step_index=tuple(range(1, len(steps) + 1)),
+        tracker_steps=len(steps),
+        scale=scale,
+        default_terms=terms,
+    )
+
+
+#: Every registered task family, keyed by :attr:`TaskSpec.name`.
+#:
+#: The default terms below are transcribed from the literal vectors these tasks
+#: carried before the timing profile existed; each site's original reasoning is
+#: preserved in the comments here rather than in six scattered constants.
+TASKS: dict[str, TaskSpec] = {
+    # Importing a dataset: acquire the source, read/convert it into medias,
+    # embed every item, then dedup + coverage-atlas + registry save. Deliberately
+    # carries no default terms — its shipped model is the measured affine table
+    # in ``_load_cost_model``, which is already ``n``-aware per (device, media,
+    # embedder) and far better than any flat vector could be here.
+    "dataset_load": TaskSpec(
+        name="dataset_load",
+        steps=("download", "extract", "load", "embed", "finalize"),
+        step_index=(1, 1, 2, 3, 4),
+        tracker_steps=4,
+        scale="media items embedded",
+        byte_scaled=("download", "extract"),
+    ),
+    # Re-opening an already-imported dataset from its pkl. Step 1 (pickle read +
+    # convert + the near-instant exact-dedup) is seconds at most; step 2 is the
+    # coverage atlas, instant when the cached atlas restores but a minutes-long
+    # hierarchical-k-means rebuild when it does not.
+    "dataset_open": _linear(
+        "dataset_open",
+        ("items", "coverage"),
+        "media items in the pkl",
+        (0.15, 0.85),
+    ),
+    # Promoting a staged subset into a real dataset. The atlas's hierarchical
+    # k-means dominates, then embedding serialization; the registry write is
+    # trivial.
+    "dataset_promote": _linear(
+        "dataset_promote",
+        ("coverage", "serialize", "registry"),
+        "media items in the promoted subset",
+        (6.0, 3.5, 0.5),
+    ),
+    # Loading a saved detector: read its labelset, pull the label examples back
+    # into the active dataset, retrain the MLP. Training dominates; the other
+    # two are quick I/O.
+    "detector_load": _linear(
+        "detector_load",
+        ("restore_labels", "seed_examples", "train"),
+        "labels in the detector's labelset",
+        (0.15, 0.15, 0.70),
+    ),
+    # Text search: load the embedder, embed the one-line query, score every
+    # media by cosine similarity. The model load dominates on a cold start
+    # (seconds to pull CLAP / SigLIP weights); embedding one short query is
+    # trivial; scoring scales with the dataset but is vectorised.
+    "text_sort": _linear(
+        "text_sort",
+        ("load_model", "embed_query", "score"),
+        "medias scored",
+        (0.75, 0.05, 0.20),
+    ),
+    # Running saved detectors across saved datasets. Scoring dominates; loading
+    # datasets from pkl is moderate; preparing detector configs is quick.
+    "find": _linear(
+        "find",
+        ("prepare", "load", "score"),
+        "medias scored across all selected datasets",
+        (0.10, 0.30, 0.60),
+    ),
+    # Train-and-score against the active dataset: resolve the detector, train
+    # its MLP, score every media, apply the resulting labels. Train + score
+    # carry the cost; resolve/apply are quick.
+    "train_and_score": _linear(
+        "train_and_score",
+        ("resolve", "train", "score", "apply"),
+        "medias scored",
+        (0.10, 0.45, 0.40, 0.05),
+    ),
+}
+
+
+def task_spec(task: str) -> TaskSpec | None:
+    """Return the :class:`TaskSpec` for *task*, or ``None`` if unregistered.
+
+    Unregistered is not an error: a caller that passes an unknown task simply
+    gets no profile-derived weights and keeps whatever fallback it supplied.
+    """
+    return TASKS.get(task)

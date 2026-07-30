@@ -211,7 +211,20 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     # as the dominant slice keeps a rebuild advancing the bar across its whole
     # span instead of the old equal split, where the instant dedup drove step 2
     # to ~100% and the bar then sat frozen there through the entire rebuild.
-    tracker.set_step_weights([0.15, 0.85])
+    # That reasoning is the *fallback*; an admin ``VTSEARCH_TIMING_PROFILE``
+    # replaces it with the split this host's disk and clustering backend
+    # actually produce at this dataset's size.
+    from vtscore import timing
+
+    _open_media_type = entry.get("media_type", "")
+    _open_embedder = entry.get("embedder", "") or ""
+    _open_n = int(entry.get("num_items") or 0)
+    tracker.set_step_weights(
+        timing.step_weights("dataset_open", media_type=_open_media_type, embedder=_open_embedder, n=_open_n)
+    )
+    timing_recorder = timing.record_task(tracker, "dataset_open", media_type=_open_media_type, embedder=_open_embedder)
+    timing_recorder.start()
+    timing_recorder.set_scale(n=_open_n)
     tracker.update("loading", "Loading dataset from file...", step=1, total_steps=_LOAD_STEPS)
 
     def _pickle_progress(status, message, current, total):
@@ -344,6 +357,10 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                 error_msg = str(e) or repr(e) or "Unknown error during dataset loading"
                 tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
             finally:
+                # Every branch above parks the tracker at "idle", setting
+                # ``error`` when it failed or was cancelled — which is what says
+                # whether these phase timings describe a real load.
+                timing_recorder.finish(ok=not tracker.get().get("error"))
                 clear_thread_progress()
                 _reg_end_load(dataset_id)
                 _loading_tasks.mark_finished(task_id)

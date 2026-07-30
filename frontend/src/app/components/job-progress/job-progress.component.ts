@@ -36,7 +36,7 @@ export class JobProgressComponent {
   readonly description = input('');
   /** Per-item detail (left of the bar), e.g. "012/345 FileABC.img". */
   readonly detail = input('');
-  /** Right-justified status, e.g. "5.5 min left" or "45%". */
+  /** Right-justified status, e.g. "About 10 min left" or "45%". */
   readonly eta = input('');
   /**
    * The chip shows the backend's whole-job estimate (`eta_seconds`), never a

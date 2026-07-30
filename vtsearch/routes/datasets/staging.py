@@ -216,12 +216,12 @@ def _coverage_atlas_pickle_keys(
 #: pickle serialization + disk write, registry insert.
 _PROMOTE_TOTAL_STEPS = 3
 
-#: Rough wall-clock share of each promote step, tuning how the unified
-#: ``overall`` bar paces (the ETA self-corrects regardless — see
-#: :meth:`ProgressTracker._compute_overall`). The atlas's hierarchical
-#: k-means dominates, then embedding serialization; the registry write
-#: is trivial.
-_PROMOTE_STEP_WEIGHTS = [6.0, 3.5, 0.5]
+#: Timing-profile task name; its step names and shipped fallback weights live in
+#: :data:`vtscore.timing.tasks.TASKS`. An admin ``VTSEARCH_TIMING_PROFILE``
+#: replaces those with measured seconds, which matters most here: whether the
+#: atlas k-means or the pickle write dominates depends entirely on whether the
+#: host has cuML and how fast its disk is.
+_PROMOTE_TASK = "dataset_promote"
 
 
 def _promote_in_background(
@@ -261,14 +261,19 @@ def _promote_in_background(
     """
     from vtsearch.auth import thread_user
 
+    from vtscore import timing
+
     task_id = f"_promote_{uuid4().hex[:8]}"
     tracker = loading_tasks.create_task(
         task_id,
         name,
         media_type=media_type,
         embedder=embedder,
-        step_weights=_PROMOTE_STEP_WEIGHTS,
+        step_weights=timing.step_weights(_PROMOTE_TASK, media_type=media_type, embedder=embedder, n=len(subset)),
     )
+    timing_recorder = timing.record_task(tracker, _PROMOTE_TASK, media_type=media_type, embedder=embedder)
+    timing_recorder.start()
+    timing_recorder.set_scale(n=len(subset))
     tracker.update("loading", "Preparing promoted dataset…", 0, 0, step=1, total_steps=_PROMOTE_TOTAL_STEPS)
 
     def task():
@@ -351,6 +356,10 @@ def _promote_in_background(
                 Path(pkl_path).unlink(missing_ok=True)
             tracker.update("idle", "", 0, 0, error=str(exc) or repr(exc) or "Unknown error during promote")
         finally:
+            # Every branch above parks the tracker at "idle", setting ``error``
+            # when it failed or was cancelled — which is what says whether these
+            # phase timings describe a real promote.
+            timing_recorder.finish(ok=not tracker.get().get("error"))
             gc.collect()
             loading_tasks.mark_finished(task_id)
 
