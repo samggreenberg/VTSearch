@@ -11210,7 +11210,7 @@
     },
     "/api/datasource-import/server_file": {
       "post": {
-        "description": "Plugin-dependent body shape (JSON, or multipart when the importer\ndeclares ``file`` fields).  On success the fetched bytes are saved\ninto the per-user ``example_media/`` directory and the saved\n``filename`` (persistence key) plus the human-readable\n``original_name`` are returned, matching the upload endpoint's\ncontract.",
+        "description": "Plugin-dependent body shape (JSON, or multipart when the importer\ndeclares ``file`` fields).  On success the fetched bytes are saved\ninto the per-user ``example_media/`` directory and the saved\n``filename`` (persistence key) plus the human-readable\n``original_name`` are returned, matching the upload endpoint's\ncontract, along with the item's durable ``origin`` when the importer\nreports one (``null`` otherwise).",
         "operationId": "datasource_import__server_file",
         "requestBody": {
           "content": {
@@ -11238,7 +11238,7 @@
     },
     "/api/datasource-import/url_download": {
       "post": {
-        "description": "Plugin-dependent body shape (JSON, or multipart when the importer\ndeclares ``file`` fields).  On success the fetched bytes are saved\ninto the per-user ``example_media/`` directory and the saved\n``filename`` (persistence key) plus the human-readable\n``original_name`` are returned, matching the upload endpoint's\ncontract.",
+        "description": "Plugin-dependent body shape (JSON, or multipart when the importer\ndeclares ``file`` fields).  On success the fetched bytes are saved\ninto the per-user ``example_media/`` directory and the saved\n``filename`` (persistence key) plus the human-readable\n``original_name`` are returned, matching the upload endpoint's\ncontract, along with the item's durable ``origin`` when the importer\nreports one (``null`` otherwise).",
         "operationId": "datasource_import__url_download",
         "requestBody": {
           "content": {
@@ -11277,7 +11277,7 @@
         }
       ],
       "post": {
-        "description": "Plugin-dependent body shape (JSON, or multipart when the importer\ndeclares ``file`` fields).  On success the fetched bytes are saved\ninto the per-user ``example_media/`` directory and the saved\n``filename`` (persistence key) plus the human-readable\n``original_name`` are returned, matching the upload endpoint's\ncontract.",
+        "description": "Plugin-dependent body shape (JSON, or multipart when the importer\ndeclares ``file`` fields).  On success the fetched bytes are saved\ninto the per-user ``example_media/`` directory and the saved\n``filename`` (persistence key) plus the human-readable\n``original_name`` are returned, matching the upload endpoint's\ncontract, along with the item's durable ``origin`` when the importer\nreports one (``null`` otherwise).",
         "operationId": "run_datasource_import",
         "responses": {
           "default": {
