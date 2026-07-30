@@ -80,17 +80,11 @@ def _auto_register_dataset(
         if isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set"
     )
 
-    # Count file types by extension
-    from collections import Counter
+    # Count file types (filename extension, or the format sniffed from the
+    # bytes when the importer names items after an opaque content id)
+    from vtscore.datasets.file_types import count_file_types
 
-    ext_counter: Counter[str] = Counter()
-    for m in media_dict.values():
-        fn = m.get("filename", "")
-        if fn and "." in fn:
-            ext_counter[fn.rsplit(".", 1)[-1].lower()] += 1
-        else:
-            ext_counter["(no extension)"] += 1
-    file_type_counts = dict(ext_counter.most_common())
+    file_type_counts = count_file_types(media_dict.values())
 
     ds_dir = get_saved_datasets_dir()
     ds_dir.mkdir(parents=True, exist_ok=True)

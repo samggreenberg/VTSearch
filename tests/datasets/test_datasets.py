@@ -2144,3 +2144,43 @@ class TestDatasetRegistryStats:
 
     def test_missing_dataset_is_404(self, client):
         assert client.get("/api/datasets/registry/nope/stats").status_code == 404
+
+    def _register_loaded(self, media_dict, **overrides):
+        """Register a dataset and publish *media_dict* as its loaded context."""
+        from vtsearch.state import DatasetContext, register_context
+
+        entry = self._register(num_items=len(media_dict), **overrides)
+        ctx = DatasetContext(entry["id"])
+        ctx.medias.update(media_dict)
+        register_context(ctx)
+        return entry["id"]
+
+    def test_uninformative_counts_are_recounted_from_the_loaded_dataset(self, client):
+        """An entry stamped by an importer whose items had no filename extension
+        carries one useless bucket; recount from the bytes when we can."""
+        jpeg = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01"
+        media_dict = {i: {"id": i, "filename": f"id{i}", "media_bytes": jpeg} for i in range(1, 4)}
+        dataset_id = self._register_loaded(media_dict, file_type_counts={"(no extension)": 3})
+
+        resp = client.get(f"/api/datasets/registry/{dataset_id}/stats")
+        assert resp.status_code == 200
+        assert resp.get_json()["file_type_counts"] == {"jpg": 3}
+
+        # The repair is written back, so it survives the dataset being unloaded.
+        from vtscore.datasets.registry import get_dataset
+
+        assert get_dataset(dataset_id)["file_type_counts"] == {"jpg": 3}
+
+    def test_real_counts_are_never_recounted(self, client):
+        media_dict = {1: {"id": 1, "filename": "only.flac"}}
+        dataset_id = self._register_loaded(media_dict, file_type_counts={"wav": 30, "mp3": 12})
+
+        resp = client.get(f"/api/datasets/registry/{dataset_id}/stats")
+        assert resp.get_json()["file_type_counts"] == {"wav": 30, "mp3": 12}
+
+    def test_unloaded_dataset_keeps_its_stamped_counts(self, client):
+        """Nothing to recount from when the dataset isn't in memory; the stored
+        histogram is returned as-is rather than blanked."""
+        entry = self._register(file_type_counts={"(no extension)": 437})
+        resp = client.get(f"/api/datasets/registry/{entry['id']}/stats")
+        assert resp.get_json()["file_type_counts"] == {"(no extension)": 437}

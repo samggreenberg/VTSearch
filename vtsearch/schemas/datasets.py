@@ -888,7 +888,19 @@ class DatasetRegistryStatsResponseSchema(Schema):
     media_type = fields.String(required=True)
     num_items = fields.Integer(required=True)
     num_dupes = fields.Integer(required=True)
-    file_type_counts = fields.Dict(keys=fields.String(), values=fields.Integer(), required=True)
+    file_type_counts = fields.Dict(
+        keys=fields.String(),
+        values=fields.Integer(),
+        required=True,
+        metadata={
+            "description": (
+                "File type → item count. The type is the item's filename extension, or the format "
+                "sniffed from its bytes when it has none (a service importer may name items after an "
+                "opaque content id). Items no signal could type land in a parenthesised "
+                '"(unknown)" bucket.'
+            )
+        },
+    )
     created_at = fields.Raw(allow_none=True)
     expires_at = fields.Raw(allow_none=True)
     created_by = fields.String(required=True)
