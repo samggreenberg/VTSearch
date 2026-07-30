@@ -201,6 +201,27 @@ def _restore_media_url(media_data: dict[str, Any], media_info: dict[str, Any]) -
         media_data["media_url"] = url
 
 
+def _restore_clip_window(media_data: dict[str, Any], media_info: dict[str, Any]) -> None:
+    """Carry a pickled clip window onto the media when one is recorded.
+
+    ``clip_start`` / ``clip_end`` / ``clip_index`` / ``clip_box`` are the
+    playback window of a clipped or windowed item: the players seek to
+    ``clip_start`` and loop within ``[clip_start, clip_end]``, the audio
+    waveform is sliced by the same pair, and ``display_metadata`` renders them
+    as the item's "Clip …" rows.  Restoring them is what keeps each window of a
+    shared source distinct after a reload; without it a manifest that windows
+    one tar member N times reloads as N items that all play (and draw) the
+    whole member from 0.  Set only when present, so an unclipped media keeps
+    the shape it had before.
+    """
+    from vtscore.media.provenance import CLIP_WINDOW_FIELDS  # noqa: PLC0415
+
+    for field in CLIP_WINDOW_FIELDS:
+        value = media_info.get(field)
+        if value is not None:
+            media_data[field] = value
+
+
 def _build_pickle_thin_media(
     new_id: int,
     media_info: dict[str, Any],
@@ -234,6 +255,7 @@ def _build_pickle_thin_media(
         media_data["custom_metadata"] = cm
     _restore_signpost_text(media_data, media_info)
     _restore_original_payload(media_data, media_info)
+    _restore_clip_window(media_data, media_info)
     return media_data
 
 
@@ -272,6 +294,7 @@ def _build_pickle_full_media(
         media_data["custom_metadata"] = cm
     _restore_signpost_text(media_data, media_info)
     _restore_original_payload(media_data, media_info)
+    _restore_clip_window(media_data, media_info)
     return media_data
 
 

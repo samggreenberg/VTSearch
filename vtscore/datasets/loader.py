@@ -227,6 +227,7 @@ def export_dataset_to_file(
     # the round-trip.  Build the type→fields map once and merge each media's
     # extra fields into its serialized entry below.
     from vtscore.media import all_types  # noqa: PLC0415
+    from vtscore.media.provenance import CLIP_WINDOW_FIELDS  # noqa: PLC0415
     from vtscore.projection.signpost_texts import PERSISTED_FIELDS as SIGNPOST_FIELDS  # noqa: PLC0415
 
     extra_fields_by_type: dict[str, list[str]] = {mt.type_id: mt.pickle_extra_fields for mt in all_types()}
@@ -271,6 +272,18 @@ def export_dataset_to_file(
         # ran the stage keep the same entry shape.
         for field in SIGNPOST_FIELDS:
             if media.get(field):
+                entry[field] = media[field]
+        # The clip window (``clip_start`` / ``clip_end`` / ``clip_index`` /
+        # ``clip_box``) is what a player seeks to and loops within, what the
+        # audio waveform is sliced by, and what renders the "Clip Start" /
+        # "Clip End" metadata rows -- all off the *top-level* fields.  The same
+        # extents live in ``origin.params``, but only as a re-derivation recipe
+        # in a different shape, so they do not stand in: without these keys
+        # every clipped or windowed media reloads playing its whole source from
+        # 0 (14 windows of one tar member become 14 identical-sounding items).
+        # Written only when present, so unclipped media keep their entry shape.
+        for field in CLIP_WINDOW_FIELDS:
+            if media.get(field) is not None:
                 entry[field] = media[field]
         # Persist a precomputed grid/list thumbnail so reloads stream the bytes
         # instead of decoding the full-resolution original on every cold tile
