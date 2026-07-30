@@ -171,6 +171,54 @@ class TestPartialReadWarning:
         assert warnings, "partial read on a short video should still warn"
 
 
+class TestClipBoxCrop:
+    """A unit's ``clip_box`` frames what the embedder sees.
+
+    Video units are metadata-only, so a letterbox crop is *honoured* here
+    rather than baked into a re-encoded copy (see
+    :class:`~vtscore.media.video.cleaner.VideoLetterboxCropCleaner`).
+    """
+
+    @pytest.fixture
+    def wide_video(self, monkeypatch):
+        """Install a decoder serving 40x20 frames with a 4 px bar top/bottom."""
+        frame = np.full((20, 40, 3), 200, dtype=np.uint8)
+        frame[:4] = 0
+        frame[16:] = 0
+
+        def probe(_path):
+            return decode.VideoInfo(duration=2.0, fps=10.0, width=40, height=20)
+
+        monkeypatch.setattr(decode, "probe", probe)
+        monkeypatch.setattr(decode, "frame_at", lambda _p, _t: frame)
+
+    def test_frames_are_cropped_to_the_box(self, wide_video, tmp_path):
+        from vtscore.media.video._frame_sampling import sample_video_frames
+
+        media = _media(tmp_path)
+        media["clip_box"] = [0, 4, 40, 16]
+        frames = sample_video_frames(media, num_frames=4)
+        assert len(frames) == 4
+        assert all(f.size == (40, 12) for f in frames)
+        # Only the bars were black, so nothing black survives the crop.
+        assert all(np.asarray(f).min() == 200 for f in frames)
+
+    def test_no_box_leaves_the_full_frame(self, wide_video, tmp_path):
+        from vtscore.media.video._frame_sampling import sample_video_frames
+
+        frames = sample_video_frames(_media(tmp_path), num_frames=2)
+        assert all(f.size == (40, 20) for f in frames)
+
+    def test_a_malformed_box_is_ignored_rather_than_fatal(self, wide_video, tmp_path):
+        from vtscore.media.video._frame_sampling import sample_video_frames
+
+        media = _media(tmp_path)
+        for bad in ("nonsense", [1, 2], [0, 0, 0, 0], None):
+            media["clip_box"] = bad
+            frames = sample_video_frames(media, num_frames=2)
+            assert all(f.size == (40, 20) for f in frames)
+
+
 class TestUndecodableSource:
     """Guards on the real decode layer, no fake installed."""
 

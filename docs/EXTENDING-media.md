@@ -753,14 +753,17 @@ otherwise hide it. Do not add a cleaner affordance outside that block.
 | `AudioSilenceTrimCleaner` | `audio_silence_trim` | `audio` | off | Drop the silence at the head and tail of a clip, keeping internal pauses |
 | `TextMarkupStripCleaner` | `text_markup_strip` | `text` | off | Remove HTML tags and Markdown syntax, keeping the text inside |
 | `TextWhitespaceCleaner` | `text_whitespace` | `text` | off | Collapse whitespace runs, drop control characters, rejoin hyphen-broken words |
+| `VideoLetterboxCropCleaner` | `video_letterbox_crop` | `video` | off | Record the letterbox / pillarbox crop every sampled frame agrees on as the unit's `clip_box` |
+| `VideoBlankTrimCleaner` | `video_blank_trim` | `video` | off | Narrow the unit's `clip_start` / `clip_end` past its blank head and tail (black leader, fade-ins, empty tail cards) |
 
-Two of these share their detector with another caller rather than owning a
-second copy of the heuristic: `image_edge_trim` and the grid thumbnail both call
-`vtscore/media/image/edge_trim.py`, and `audio_silence_trim` and
-`SoundSilenceClipper` both call `vtscore/media/audio/silence.py`. When a cleaner
-answers a question something else in the codebase already answers, extract the
-detector; a cleaner that disagrees with the thumbnail about where the content
-starts is worse than no cleaner.
+Three of these share their detector with another caller rather than owning a
+second copy of the heuristic: `image_edge_trim`, `video_letterbox_crop`, and the
+grid thumbnail all call `vtscore/media/image/edge_trim.py`, and
+`audio_silence_trim` and `SoundSilenceClipper` both call
+`vtscore/media/audio/silence.py`. When a cleaner answers a question something
+else in the codebase already answers, extract the detector; a cleaner that
+disagrees with the thumbnail about where the content starts is worse than no
+cleaner.
 
 ### What to implement
 
@@ -834,8 +837,8 @@ CLEANERS = [TextWhitespaceCleaner()]
   conservative by construction — cap how much you are willing to remove.
 - **Never mutate the input in place.** Build the output with `dict(media)` and
   overwrite the payload keys. The runner detects "nothing changed" by comparing
-  the payload before and after, and an in-place mutation leaves it no pre-clean
-  version to keep.
+  the payload (and the window / box keys, see below) before and after, and an
+  in-place mutation leaves it no pre-clean version to keep.
 - **Update the metadata you invalidated** — `file_size`, `width` / `height`,
   `duration`, `character_count`. MD5, embeddings, and thumbnails are redone for
   you (see below).
@@ -868,6 +871,38 @@ payload the first time a cleaner actually changes an item, under
 A cleaned item is flagged for MD5 + embedding + thumbnail recomputation, and its
 trail entry records `changed`, so provenance's "Derived Via" line lists only the
 gates that actually did something to that item.
+
+### Cleaning by metadata instead of payload
+
+A **video** unit is a `(parent bytes, time window)` pair: every clip of a tiled
+video shares the parent's payload and says which slice of it it is via
+`clip_start` / `clip_end`. A video cleaner therefore cleans by *narrowing
+metadata* rather than by rewriting bytes — re-encoding a cleaned copy per unit
+would duplicate the payload once per tile and desync the window, which still
+indexes the parent's timeline.
+
+The runner treats a change to any of `clip_start`, `clip_end`, `clip_box`
+(`CLEANED_METADATA_KEYS` in `vtscore/datasets/clipper_chain.py`) as a real
+change: the item is flagged for MD5 + embedding + thumbnail recomputation, its
+trail entry records `changed` plus the new window / box, and its stale
+thumbnail is dropped. What it does **not** do is snapshot an `original_*`
+payload — there is no second payload, the served file is untouched, and the
+player already loops within `[clip_start, clip_end]`. Two consequences, both
+good: a metadata-cleaned unit costs no extra storage, and a reference (thin)
+import keeps its byte savings on it.
+
+The spatial half of that contract, `clip_box`, is *honoured* rather than baked
+in, by three readers that have to agree (the parsing and the crop live once in
+`vtscore/media/video/crop.py`):
+
+| Reader | Why it needs the box |
+|--------|---------------------|
+| `sample_video_frames` (`vtscore/media/video/_frame_sampling.py`) | what the embedder actually sees |
+| the video thumbnailers (`vtscore/media/video/media_type.py`) | so the grid preview frames the same picture |
+| `_fixup_clip_md5_and_embeddings` (`vtscore/datasets/stages/clipper.py`) | folds the box into the boundary-tag MD5 so two crops of one parent don't collide |
+
+If you add a media type whose units are likewise metadata-only, follow the same
+shape: narrow the keys, let the readers honour them, and snapshot nothing.
 
 ---
 

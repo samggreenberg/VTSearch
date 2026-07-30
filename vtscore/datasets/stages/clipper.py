@@ -271,8 +271,11 @@ def _thumb_for(clip: dict, media_type: str) -> bytes | None:
     For ``audio`` clips, render a waveform thumbnail from the clip's
     ``media_bytes`` (or its ``media_path`` when bytes aren't held).  For
     ``video`` clips, render a frame at the midpoint of
-    ``clip_start``/``clip_end``; a clip missing either boundary yields
-    ``None``.  Other media types yield ``None``.
+    ``clip_start``/``clip_end``, cropped to the clip's ``clip_box`` when it
+    carries one, so a letterbox-cropped unit previews the way it embeds.  A
+    video clip with neither boundaries nor a box yields ``None`` - there is
+    nothing about it the parent's thumbnail gets wrong.  Other media types
+    yield ``None``.
     """
     if media_type == "audio":
         from vtscore.media.audio.media_type import (
@@ -290,21 +293,32 @@ def _thumb_for(clip: dict, media_type: str) -> bytes | None:
 
     if media_type == "video":
         from vtscore.media.video.media_type import (
+            generate_video_thumbnail,
             generate_video_thumbnail_at,
+            generate_video_thumbnail_from_file,
             generate_video_thumbnail_from_file_at,
         )
 
         t0 = clip.get("clip_start")
         t1 = clip.get("clip_end")
+        box = clip.get("clip_box")
         if t0 is None or t1 is None:
-            return None
+            # No window of its own: only a crop can make the parent's
+            # thumbnail wrong, and the middle frame is the right one to show.
+            if box is None:
+                return None
+            video_bytes = clip.get("media_bytes")
+            if video_bytes is not None:
+                return generate_video_thumbnail(video_bytes, crop_box=box)
+            path = clip.get("media_path")
+            return generate_video_thumbnail_from_file(Path(path), crop_box=box) if path else None
         mid = (float(t0) + float(t1)) / 2.0
         video_bytes = clip.get("media_bytes")
         if video_bytes is not None:
-            return generate_video_thumbnail_at(video_bytes, mid)
+            return generate_video_thumbnail_at(video_bytes, mid, crop_box=box)
         path = clip.get("media_path")
         if path:
-            return generate_video_thumbnail_from_file_at(Path(path), mid)
+            return generate_video_thumbnail_from_file_at(Path(path), mid, crop_box=box)
         return None
 
     return None
@@ -389,6 +403,11 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
             # distinct clips.
             parent_bytes = clip.get("media_bytes", b"")
             boundary_tag = f"|clip_start={clip.get('clip_start')}|clip_end={clip.get('clip_end')}"
+            box = clip.get("clip_box")
+            if box is not None:
+                # Only appended when a box exists, so an uncropped video clip's
+                # MD5 is exactly what it was before crops became possible.
+                boundary_tag += "|clip_box=" + ",".join(str(v) for v in box)
             combined = content_md5(parent_bytes) + boundary_tag
             clip["md5"] = content_md5(combined.encode())
         embed_indices.append(clip_idx)
@@ -498,10 +517,11 @@ def _build_clip_embed_input(clip: dict, media_type: str) -> dict:
     ``filename`` so embedders that surface diagnostic paths still log
     something useful.
 
-    Video clips additionally carry ``clip_start`` / ``clip_end`` (and
-    ``media_path`` when available) because the underlying parent bytes
-    are shared across every tile; the embedder uses the boundary
-    metadata to sample distinct frame ranges per tile.
+    Video clips additionally carry ``clip_start`` / ``clip_end`` / ``clip_box``
+    (and ``media_path`` when available) because the underlying parent bytes
+    are shared across every tile; the embedder uses the boundary metadata to
+    sample distinct frame ranges per tile, and the box to crop each sampled
+    frame to the region a cleaner marked as content.
     """
     base: dict = {
         "origin_name": clip.get("origin_name", ""),
@@ -518,6 +538,8 @@ def _build_clip_embed_input(clip: dict, media_type: str) -> dict:
             base["clip_start"] = clip["clip_start"]
         if "clip_end" in clip:
             base["clip_end"] = clip["clip_end"]
+        if clip.get("clip_box") is not None:
+            base["clip_box"] = clip["clip_box"]
     return base
 
 

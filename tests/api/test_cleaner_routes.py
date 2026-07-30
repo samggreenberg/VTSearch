@@ -126,6 +126,15 @@ class TestCleanersApiEndpoint:
         assert [c["name"] for c in cleaners] == ["audio_silence_trim"]
         assert all(c["media_type"] == "audio" for c in cleaners)
 
+    def test_filter_by_video_lists_both_metadata_gates(self, client):
+        resp = client.get("/api/cleaners?media_type=video")
+        assert resp.status_code == 200
+        cleaners = resp.get_json()["cleaners"]
+        # Crop before trim: the blank scan measures the cropped region.
+        assert [c["name"] for c in cleaners] == ["video_letterbox_crop", "video_blank_trim"]
+        assert all(c["media_type"] == "video" for c in cleaners)
+        assert all(c["default_enabled"] is False for c in cleaners)
+
     def test_exif_cleaner_defaults_on(self, client):
         resp = client.get("/api/cleaners?media_type=image")
         exif = next(c for c in resp.get_json()["cleaners"] if c["name"] == "image_exif_orient")

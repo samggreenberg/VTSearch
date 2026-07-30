@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from vtscore.media.base import (
     DemoDataset,
@@ -16,6 +16,7 @@ from vtscore.media.base import (
     demo_slice,
 )
 from vtscore.media.video import decode
+from vtscore.media.video.crop import crop_frame
 from vtscore.utils.hashing import content_md5
 
 if TYPE_CHECKING:
@@ -52,11 +53,14 @@ def _thumbnail_from_path(
     time_seconds: float | None,
     size: int,
     info: decode.VideoInfo | None = None,
+    crop_box: Any = None,
 ) -> bytes | None:
     """Grab one frame from *file_path* and return it as a PNG thumbnail.
 
     *info* lets a caller that already probed the container hand the result in
-    rather than paying for a second probe.
+    rather than paying for a second probe.  *crop_box* is a unit's ``clip_box``
+    (see :mod:`vtscore.media.video.crop`); passing it keeps a cropped unit's
+    preview framed like the frames its embedder sees.
     """
     if info is None:
         info = decode.probe(file_path)
@@ -65,10 +69,12 @@ def _thumbnail_from_path(
     frame = decode.frame_at(file_path, _seek_time(info, time_seconds))
     if frame is None:
         return None
-    return _encode_thumbnail(frame, size)
+    return _encode_thumbnail(crop_frame(frame, crop_box), size)
 
 
-def _thumbnail_from_bytes(video_bytes: bytes, time_seconds: float | None, size: int) -> bytes | None:
+def _thumbnail_from_bytes(
+    video_bytes: bytes, time_seconds: float | None, size: int, crop_box: Any = None
+) -> bytes | None:
     """Spill *video_bytes* to a temp file (decoders need a seekable path) and thumbnail it."""
     if not video_bytes:
         return None
@@ -76,38 +82,42 @@ def _thumbnail_from_bytes(video_bytes: bytes, time_seconds: float | None, size: 
     try:
         tmp.write(video_bytes)
         tmp.close()
-        return _thumbnail_from_path(Path(tmp.name), time_seconds, size)
+        return _thumbnail_from_path(Path(tmp.name), time_seconds, size, crop_box=crop_box)
     finally:
         import os  # noqa: PLC0415
 
         os.unlink(tmp.name)
 
 
-def generate_video_thumbnail(video_bytes: bytes, *, size: int = _THUMB_SIZE) -> bytes | None:
+def generate_video_thumbnail(video_bytes: bytes, *, size: int = _THUMB_SIZE, crop_box: Any = None) -> bytes | None:
     """Extract the middle frame of a video and return it as a PNG thumbnail.
 
     Decoding runs out-of-process through ffmpeg (see
     :mod:`vtscore.media.video.decode`) and PIL produces the PNG.  Returns
     ``None`` if the video cannot be decoded or has no frames.
     """
-    return _thumbnail_from_bytes(video_bytes, None, size)
+    return _thumbnail_from_bytes(video_bytes, None, size, crop_box)
 
 
-def generate_video_thumbnail_from_file(file_path: Path, *, size: int = _THUMB_SIZE) -> bytes | None:
+def generate_video_thumbnail_from_file(
+    file_path: Path, *, size: int = _THUMB_SIZE, crop_box: Any = None
+) -> bytes | None:
     """Extract the middle frame of a video file and return it as a PNG thumbnail."""
-    return _thumbnail_from_path(file_path, None, size)
+    return _thumbnail_from_path(file_path, None, size, crop_box=crop_box)
 
 
-def generate_video_thumbnail_at(video_bytes: bytes, time_seconds: float, *, size: int = _THUMB_SIZE) -> bytes | None:
+def generate_video_thumbnail_at(
+    video_bytes: bytes, time_seconds: float, *, size: int = _THUMB_SIZE, crop_box: Any = None
+) -> bytes | None:
     """Extract a frame at *time_seconds* from *video_bytes* and return it as a PNG thumbnail."""
-    return _thumbnail_from_bytes(video_bytes, time_seconds, size)
+    return _thumbnail_from_bytes(video_bytes, time_seconds, size, crop_box)
 
 
 def generate_video_thumbnail_from_file_at(
-    file_path: Path, time_seconds: float, *, size: int = _THUMB_SIZE
+    file_path: Path, time_seconds: float, *, size: int = _THUMB_SIZE, crop_box: Any = None
 ) -> bytes | None:
     """Extract a frame at *time_seconds* from a video file and return it as a PNG thumbnail."""
-    return _thumbnail_from_path(file_path, time_seconds, size)
+    return _thumbnail_from_path(file_path, time_seconds, size, crop_box=crop_box)
 
 
 _VIDEO_MIME_TYPES: dict[str, str] = {
@@ -759,6 +769,10 @@ class VideoMediaType(MediaType):
         import) is indistinguishable from one computed by the loader.  The
         resolved payload is dropped as soon as the frame is grabbed, keeping a
         warm-up over multi-GB shards to one member at a time.
+
+        A unit carrying a ``clip_box`` (letterbox-cropped by a cleaner) is
+        framed to it, so a preview warmed here matches one the load stage
+        rendered.
         """
         thumb = media.get("thumbnail_bytes")
         if thumb:
@@ -766,7 +780,7 @@ class VideoMediaType(MediaType):
         raw = self._resolve_media_bytes(media)
         if not raw:
             return None
-        thumb = generate_video_thumbnail(raw)
+        thumb = generate_video_thumbnail(raw, crop_box=media.get("clip_box"))
         if thumb:
             media["thumbnail_bytes"] = thumb
         return thumb

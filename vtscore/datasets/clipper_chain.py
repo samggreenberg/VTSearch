@@ -288,6 +288,26 @@ def _payload_changed(before: dict[str, Any], after: dict[str, Any]) -> bool:
     )
 
 
+#: Keys that say *which part* of a payload a unit is: the time window
+#: (``clip_start`` / ``clip_end``) and the pixel region (``clip_box``).  Video
+#: units are metadata-only - every clip of a parent shares its bytes - so a
+#: video cleaner cleans by narrowing these instead of rewriting a payload (see
+#: :mod:`vtscore.media.video.cleaner`).
+CLEANED_METADATA_KEYS = ("clip_start", "clip_end", "clip_box")
+
+
+def _metadata_changed(before: dict[str, Any], after: dict[str, Any]) -> bool:
+    """True iff a cleaner narrowed which part of the payload the unit covers.
+
+    A metadata-only clean is a real change - it changes what gets embedded and
+    what the thumbnail should show - but there is no rewritten payload, so it
+    is deliberately *not* snapshotted under the ``original_*`` keys: the served
+    file is untouched and the player already loops within
+    ``[clip_start, clip_end]``.
+    """
+    return any(before.get(k) != after.get(k) for k in CLEANED_METADATA_KEYS)
+
+
 def _snapshot_original(source: dict[str, Any], cleaned: dict[str, Any]) -> None:
     """Stamp *cleaned* with *source*'s payload under the ``original_*`` keys.
 
@@ -312,11 +332,17 @@ def _run_cleaner_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict
     """Run a cleaner step on one media. Returns (outputs, per-output trail entries).
 
     Always one output.  The runner - not each cleaner - owns the pre-clean
-    snapshot: it compares the payload before and after :meth:`clean` and stamps
-    the ``original_*`` keys only on a real change.  The trail entry records
-    ``changed`` so provenance can render the gates that actually did something
-    without re-deriving it, and ``content_hash`` of the cleaned payload so
-    cross-dataset replay embeds the same bytes.
+    snapshot: it compares the unit before and after :meth:`clean` and stamps the
+    ``original_*`` keys only when the *payload* was rewritten.  A cleaner that
+    cleaned by narrowing metadata instead (:data:`CLEANED_METADATA_KEYS`, the
+    video gates) counts as changed but snapshots nothing - there is no second
+    payload to keep.
+
+    The trail entry records ``changed`` so provenance can render the gates that
+    actually did something without re-deriving it, ``content_hash`` of the
+    cleaned payload so cross-dataset replay embeds the same bytes, and the
+    post-clean window / box of a metadata-only clean so the trail says what the
+    gate did (the legacy origin keys still describe the last *clipper*).
     """
     from vtscore.media import get_cleaner
 
@@ -325,8 +351,10 @@ def _run_cleaner_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict
         cleaner = cleaner.with_params(step["params"])
     effective = _resolved_clipper_params(cleaner)
     cleaned = cleaner.clean(media)
-    changed = _payload_changed(media, cleaned)
-    if changed:
+    payload_changed = _payload_changed(media, cleaned)
+    metadata_changed = _metadata_changed(media, cleaned)
+    changed = payload_changed or metadata_changed
+    if payload_changed:
         if cleaned is media:
             # A cleaner that mutated its input in place leaves us no pre-clean
             # payload to snapshot; treat it as unsnapshottable rather than
@@ -334,11 +362,12 @@ def _run_cleaner_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict
             log.warning("clipper_chain: cleaner %r mutated its input in place; no Original kept", cleaner.name)
         else:
             _snapshot_original(media, cleaned)
+    if changed:
         # Cleaners build their output with ``dict(media)``, which carries the
         # parent's ingest-time thumbnail forward. That thumbnail now describes
-        # the *pre*-clean payload, so drop it and let the thumbnail route (or
-        # the load stage's audio/video regeneration) rebuild it from the
-        # canonical bytes.
+        # the *pre*-clean payload (or the pre-crop framing), so drop it and let
+        # the thumbnail route (or the load stage's audio/video regeneration)
+        # rebuild it from the canonical bytes.
         cleaned.pop("thumbnail_bytes", None)
     entry: ChainStep = {
         "kind": "cleaner",
@@ -348,6 +377,13 @@ def _run_cleaner_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict
         "n_out": 1,
         "changed": changed,
     }
+    if metadata_changed:
+        if cleaned.get("clip_start") is not None:
+            entry["clip_start"] = str(cleaned["clip_start"])
+        if cleaned.get("clip_end") is not None:
+            entry["clip_end"] = str(cleaned["clip_end"])
+        if cleaned.get("clip_box") is not None:
+            entry["clip_box"] = ",".join(str(v) for v in cleaned["clip_box"])
     ch = _content_hash(cleaned)
     if ch is not None:
         entry["content_hash"] = ch

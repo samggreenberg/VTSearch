@@ -83,6 +83,42 @@ class _SuffixTextCleaner(MediaCleaner):
         return cleaned
 
 
+class _WindowTrimVideoCleaner(MediaCleaner):
+    """Third test cleaner: cleans by **metadata**, never by rewriting a payload.
+
+    Stands in for the shipped video gates (``video_blank_trim`` /
+    ``video_letterbox_crop``) without needing a decodable video.  What the
+    runner has to get right for those is that narrowing a unit's window / box
+    counts as a change - it changes what gets embedded - while snapshotting
+    nothing, because there is no second payload to keep.
+
+    A unit that already carries the trimmed window is a no-op, so one dataset
+    exercises both branches.
+    """
+
+    @property
+    def name(self) -> str:
+        return "video_test_window"
+
+    @property
+    def media_type(self) -> str:
+        return "video"
+
+    @property
+    def description(self) -> str:
+        return "Narrow the unit's window and pixel box."
+
+    def clean(self, media: dict[str, Any]) -> dict[str, Any]:
+        if media.get("clip_start") == 0.5:
+            return media
+        cleaned = dict(media)
+        cleaned["clip_start"] = 0.5
+        cleaned["clip_end"] = 1.5
+        cleaned["duration"] = 1.0
+        cleaned["clip_box"] = [0, 10, 100, 90]
+        return cleaned
+
+
 @pytest.fixture
 def registered_cleaners():
     """Register the test cleaners for one test, then restore the registry."""
@@ -91,6 +127,7 @@ def registered_cleaners():
     before = dict(media_registry._cleaner_registry)
     media_registry.register_cleaner(_UpperTextCleaner())
     media_registry.register_cleaner(_SuffixTextCleaner())
+    media_registry.register_cleaner(_WindowTrimVideoCleaner())
     try:
         yield
     finally:
@@ -116,6 +153,26 @@ def _make_text_media(media_id: int, text: str) -> dict:
         "origin": {"importer": "server_folder", "params": {"path": "/data/text", "media_type": "text"}},
         "origin_name": f"doc_{media_id}.txt",
     }
+
+
+def _make_video_media(media_id: int, **extra) -> dict:
+    rng = np.random.default_rng(media_id)
+    media = {
+        "id": media_id,
+        "media_type": "video",
+        "filename": f"clip_{media_id}.mp4",
+        "media_bytes": b"video-payload",
+        "duration": 2.0,
+        "file_size": 13,
+        "md5": content_md5(b"video-payload"),
+        "embeddings": {"xclip": rng.standard_normal(512).astype(np.float32)},
+        "embedder": "xclip",
+        "thumbnail_bytes": b"stale-thumbnail",
+        "origin": {"importer": "server_folder", "params": {"path": "/data/video", "media_type": "video"}},
+        "origin_name": f"clip_{media_id}.mp4",
+    }
+    media.update(extra)
+    return media
 
 
 def _exif_jpeg(orientation: int, size: tuple[int, int] = (40, 20)) -> bytes:
@@ -414,6 +471,97 @@ class TestApplyChainWithCleaner:
             on_progress=lambda cur, total, phase: phases.append(phase),
         )
         assert phases == ["cleaning"]
+
+
+class TestMetadataOnlyClean:
+    """A cleaner may clean by narrowing metadata instead of rewriting a payload.
+
+    Video units are metadata-only - every clip of a parent shares its bytes -
+    so the video gates trim the time window and record a pixel box.  The runner
+    has to count that as a change (it changes what gets embedded and what the
+    thumbnail should show) while snapshotting nothing.
+    """
+
+    def test_counts_as_changed_and_needs_recompute(self, registered_cleaners):
+        from vtscore.datasets.clipper_chain import apply_chain_to_clips
+
+        clips = {1: _make_video_media(1), 2: _make_video_media(2, clip_start=0.5, clip_end=1.5)}
+        result = apply_chain_to_clips(clips, [{"kind": "cleaner", "name": "video_test_window", "params": {}}])
+        assert result is not None
+        assert result[0] == "video"
+        assert clips[1]["clip_start"] == 0.5
+        assert clips[1]["clip_box"] == [0, 10, 100, 90]
+        # The trimmed unit's MD5 / embedding / thumbnail all describe the old
+        # window, so only it needs the fixup.
+        assert result[1] == [True, False]
+
+    def test_snapshots_nothing(self, registered_cleaners):
+        """There is no second payload: the served file is untouched, and the
+        player already loops within ``[clip_start, clip_end]``."""
+        from vtscore.datasets.clipper_chain import ORIGINAL_PAYLOAD_KEYS, apply_chain_to_clips, has_original_payload
+
+        clips = {1: _make_video_media(1)}
+        apply_chain_to_clips(clips, [{"kind": "cleaner", "name": "video_test_window", "params": {}}])
+        assert clips[1]["media_bytes"] == b"video-payload"
+        assert not has_original_payload(clips[1])
+        for key in ORIGINAL_PAYLOAD_KEYS:
+            assert key not in clips[1]
+
+    def test_drops_the_stale_thumbnail(self, registered_cleaners):
+        """The parent's poster frame shows the old window at the old framing."""
+        from vtscore.datasets.clipper_chain import apply_chain_to_clips
+
+        clips = {1: _make_video_media(1), 2: _make_video_media(2, clip_start=0.5, clip_end=1.5)}
+        apply_chain_to_clips(clips, [{"kind": "cleaner", "name": "video_test_window", "params": {}}])
+        assert "thumbnail_bytes" not in clips[1]
+        assert clips[2]["thumbnail_bytes"] == b"stale-thumbnail"
+
+    def test_the_trail_records_the_new_window_and_box(self, registered_cleaners):
+        from vtscore.datasets.clipper_chain import apply_chain_to_clips
+
+        clips = {1: _make_video_media(1), 2: _make_video_media(2, clip_start=0.5, clip_end=1.5)}
+        apply_chain_to_clips(clips, [{"kind": "cleaner", "name": "video_test_window", "params": {}}])
+
+        entry = json.loads(clips[1]["origin"]["params"]["clipper_chain"])[0]
+        assert entry["changed"] is True
+        assert (entry["clip_start"], entry["clip_end"]) == ("0.5", "1.5")
+        assert entry["clip_box"] == "0,10,100,90"
+
+        # A gate that no-opped records no window: there is nothing it did.
+        no_op = json.loads(clips[2]["origin"]["params"]["clipper_chain"])[0]
+        assert no_op["changed"] is False
+        assert "clip_start" not in no_op
+
+    def test_a_metadata_clean_appears_in_derived_via(self, registered_cleaners):
+        from vtscore.datasets.clipper_chain import apply_chain_to_clips
+        from vtscore.media.provenance import _describe_derivation
+
+        clips = {1: _make_video_media(1)}
+        apply_chain_to_clips(clips, [{"kind": "cleaner", "name": "video_test_window", "params": {}}])
+        # Rendered by display name, like every other step in the chain.
+        assert _describe_derivation(clips[1]["origin"]["params"]) == "Test Window"
+
+    def test_a_metadata_cleaned_reference_clip_stays_lazy(self, registered_cleaners):
+        """Unlike a payload clean, this one costs a thin import nothing.
+
+        ``lazy_clip`` reproduces the unit by reading the source file and
+        honouring the window / box, which is exactly what the cleaner recorded -
+        so there is no reason to hold the bytes.
+        """
+        from vtscore.datasets.clipper_chain import apply_chain_to_clips
+        from vtscore.datasets.stages.clipper import _relazify_reference_clips_stage
+        from vtscore.state import DatasetContext
+
+        clips = {1: _make_video_media(1, _lazy_source="/data/video/clip_1.mp4")}
+        apply_chain_to_clips(clips, [{"kind": "cleaner", "name": "video_test_window", "params": {}}])
+        ctx = DatasetContext("metadata-clean-relazify-test")
+        ctx.medias.update(clips)
+
+        _relazify_reference_clips_stage(ctx)
+
+        assert clips[1]["media_bytes"] is None
+        assert clips[1]["media_path"] == "/data/video/clip_1.mp4"
+        assert clips[1]["clip_start"] == 0.5
 
 
 class TestResolvedParamsBaseKeys:

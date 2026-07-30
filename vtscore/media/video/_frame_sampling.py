@@ -28,8 +28,13 @@ _logger = logging.getLogger(__name__)
 
 
 @contextmanager
-def _resolve_video_path(media: dict) -> Iterator[Optional[Path]]:
-    """Yield a usable filesystem path for *media*'s video, tempfile if needed."""
+def resolve_video_path(media: dict) -> Iterator[Optional[Path]]:
+    """Yield a usable filesystem path for *media*'s video, tempfile if needed.
+
+    Public within the ``video`` package: the cleaners
+    (:mod:`vtscore.media.video.cleaner`) need the same two-source resolution
+    before they can probe or sample a unit.
+    """
     path_str = media.get("media_path")
     if path_str:
         yield Path(path_str)
@@ -80,6 +85,11 @@ def sample_video_frames(media: dict, num_frames: int) -> list[Any]:
     produce distinct frame sets (and therefore distinct embeddings).
     Otherwise the whole video is sampled.
 
+    When ``media`` carries a ``clip_box`` (written by
+    :class:`~vtscore.media.video.cleaner.VideoLetterboxCropCleaner`), every
+    sampled frame is cropped to it, so the embedder sees the picture rather
+    than the letterbox bars around it.
+
     The returned list is padded by repeating the last frame to exactly
     *num_frames* entries, matching the per-embedder padding loops it
     replaces.  Returns ``[]`` on any decoding failure.
@@ -87,7 +97,9 @@ def sample_video_frames(media: dict, num_frames: int) -> list[Any]:
     import numpy as np  # noqa: PLC0415
     from PIL import Image  # noqa: PLC0415
 
-    with _resolve_video_path(media) as path:
+    from vtscore.media.video.crop import crop_frame  # noqa: PLC0415
+
+    with resolve_video_path(media) as path:
         if path is None:
             return []
         info = decode.probe(path)
@@ -103,7 +115,8 @@ def sample_video_frames(media: dict, num_frames: int) -> list[Any]:
             times = np.linspace(start, end, n_to_sample, dtype=float)
 
         decoded = decode.frames_at(path, [float(t) for t in times])
-        frames: list[Any] = [Image.fromarray(frame) for frame in decoded]
+        box = media.get("clip_box")
+        frames: list[Any] = [Image.fromarray(crop_frame(frame, box)) for frame in decoded]
 
     if not frames:
         return []
