@@ -100,6 +100,26 @@ def _resolve_thin_media_path(
     return None
 
 
+def _has_external_byte_source(media_info: dict[str, Any]) -> bool:
+    """Return ``True`` when a media's bytes re-derive from outside the pickle.
+
+    A full-mode load resolves bytes up front from the pickle's inline payload
+    or a file on disk, but some media carry neither and are still perfectly
+    serveable: an *archive member* streams its bytes from a byte range inside a
+    tar/zip shard we deliberately never extract (``local_archive_member``, e.g.
+    audio tiles cut from tar shards), and a *URL-backed* media fetches them
+    from ``media_url`` (e.g. the ``recaller`` importer's thin mode).  Both
+    re-resolve on demand in
+    :meth:`~vtscore.media.base.MediaType._resolve_media_bytes`, so such an
+    entry must be kept lazily rather than dropped as unresolvable.
+    """
+    from vtscore.datasets.archive_stream import archive_member_ref  # noqa: PLC0415
+
+    if archive_member_ref(media_info) is not None:
+        return True
+    return bool(media_info.get("media_url"))
+
+
 def _load_pickle_media_payload(
     media_type: str,
     media_info: dict[str, Any],
@@ -150,6 +170,19 @@ def _restore_signpost_text(media_data: dict[str, Any], media_info: dict[str, Any
             media_data[field] = value
 
 
+def _restore_media_url(media_data: dict[str, Any], media_info: dict[str, Any]) -> None:
+    """Carry a pickled ``media_url`` onto the media when one is recorded.
+
+    URL-backed media (the ``recaller`` importer) keep the remote URL as their
+    byte source; it is what lets a reloaded item still serve content when the
+    pickle holds no inline bytes and no local file.  Set only when present, so
+    the far more common file-backed media keep the shape they had before.
+    """
+    url = media_info.get("media_url")
+    if url:
+        media_data["media_url"] = url
+
+
 def _build_pickle_thin_media(
     new_id: int,
     media_info: dict[str, Any],
@@ -177,6 +210,7 @@ def _build_pickle_thin_media(
     }
     for field in extra_fields:
         media_data[field] = media_info.get(field)
+    _restore_media_url(media_data, media_info)
     cm = media_info.get("custom_metadata")
     if cm:
         media_data["custom_metadata"] = cm
@@ -213,6 +247,7 @@ def _build_pickle_full_media(
     }
     for field in extra_fields:
         media_data[field] = media_info.get(field)
+    _restore_media_url(media_data, media_info)
     cm = media_info.get("custom_metadata")
     if cm:
         media_data["custom_metadata"] = cm
@@ -267,6 +302,14 @@ def _convert_one_pickle_media(
         # reads the bytes on demand from ``media_path`` at serve/embed time.
         ref_path = _resolve_thin_media_path(media_type, media_info, data, dir_keys)
         if ref_path and Path(ref_path).exists():
+            return _build_pickle_thin_media(new_id, media_info, media_type, ref_path, extra_fields), False
+        # Bytes that live outside the pickle *and* outside the filesystem - an
+        # archive member inside an unextracted tar/zip shard, or a URL-backed
+        # media - re-resolve on demand at serve time.  Keep the entry lazy too,
+        # so an archive-member/clip dataset (whose items never have a
+        # standalone file) survives the registry save -> full-mode reopen
+        # instead of reloading as an empty dataset.
+        if _has_external_byte_source(media_info):
             return _build_pickle_thin_media(new_id, media_info, media_type, ref_path, extra_fields), False
         # A reference whose file has gone counts as missing so the load-time
         # warning fires, even when there is no companion dir for
