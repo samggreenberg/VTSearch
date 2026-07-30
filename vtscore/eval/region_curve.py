@@ -295,8 +295,14 @@ def _evaluate_one_rv(
 
     scores, argmax = max_pool_with_argmax(predict, inputs.test_region_mats)
     if safe_thresholds:
-        # GMM blend over the scored (test) distribution; ramp counts bags (votes),
-        # matching the app path's calculate_safe_threshold(threshold, scores, n_votes).
+        # GMM blend over the scored distribution; ramp counts bags (votes), matching
+        # the app path's calculate_safe_threshold(threshold, scores, n_votes). This is
+        # the *controlled-grid* cell (evaluate_region_curve): its only scored corpus is
+        # the test set, so it fits the (unsupervised) GMM over the test scores — the
+        # controlled analog of production's all-media fit. The realistic loop
+        # (_realistic_one_seed) instead fits over the labeling pool, which is its
+        # scored corpus. NB: evaluate_region_curve is not wired to any script today
+        # (sweep.py uses evaluate_realistic_curve); this path is kept for controlled runs.
         threshold = calculate_safe_threshold(threshold, list(scores), n_votes)
 
     err = weighted_error(scores, [float(v) for v in test_labels], threshold, inclusion)

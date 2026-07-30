@@ -419,6 +419,11 @@ class _PatchSource:
                 # One positive per image: snap the covering box (union of all
                 # instance boxes) to its best-IoU tree node — the exact candidate
                 # the detector max-pools over — instead of a uniform grid pool.
+                # Modeling choice (not a snap bug): this simulates a user drawing a
+                # single box around the class content of an image. On a multi-instance
+                # image the union covering box spans all instances, so it snaps to a
+                # larger/higher node than a user drawing one tight box per instance
+                # would — an intentional simplification of the good-vote geometry.
                 snapped = snap_box_to_region(tree, _covering_box(gt_boxes))
                 if snapped is None:  # empty tree (shouldn't happen) — grid fallback
                     snapped = box_to_vote_vector(pe.patch_grid, _covering_box(gt_boxes))
