@@ -107,6 +107,23 @@ describe('ExportModalComponent', () => {
     expect(component.columnSelectionState).toBe('all');
   });
 
+  it('copies exactly the checked columns, without the always-export keys', async () => {
+    await flushInit();
+    for (const col of component.columns) col.enabled = col.key === 'md5';
+
+    // The clipboard flattens rows client-side, so `origin` could only ever
+    // reach the paste as `[object Object]`; it stays out entirely (issue #2770).
+    expect(component.clipboardColumns.map((c) => c.key)).toEqual(['md5']);
+    expect(component.clipboardRows[0]).toEqual({ md5: 'a' });
+
+    // Plugin exports still get them appended - there the exporter receives the
+    // real dict and serializes it as JSON.
+    component.startExporter(mockExporters[0] as never);
+    const req = httpMock.expectOne('/api/exporters/export');
+    expect(req.request.body.results.selected_columns).toEqual(['md5', 'origin', 'origin_name']);
+    req.flush({ message: 'ok' });
+  });
+
   it('slices the fetched labels by the active category', async () => {
     await flushInit();
     component.labelFilter = 'good';
