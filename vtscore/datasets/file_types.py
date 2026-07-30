@@ -77,7 +77,7 @@ def _ftyp_file_type(brand: bytes) -> str:
     return "mp4"
 
 
-def sniff_file_type(data: bytes) -> str:  # noqa: C901,PLR0911,PLR0912
+def sniff_file_type(data: bytes | bytearray | memoryview) -> str:  # noqa: C901,PLR0911,PLR0912
     """Return a conventional extension for *data*'s format, or ``""``.
 
     Recognises the container formats VTSearch actually ingests (images, audio,

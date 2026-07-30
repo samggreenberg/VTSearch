@@ -2169,7 +2169,9 @@ class TestDatasetRegistryStats:
         # The repair is written back, so it survives the dataset being unloaded.
         from vtscore.datasets.registry import get_dataset
 
-        assert get_dataset(dataset_id)["file_type_counts"] == {"jpg": 3}
+        stored = get_dataset(dataset_id)
+        assert stored is not None
+        assert stored["file_type_counts"] == {"jpg": 3}
 
     def test_real_counts_are_never_recounted(self, client):
         media_dict = {1: {"id": 1, "filename": "only.flac"}}
