@@ -734,6 +734,16 @@ in their **own registry**, so they never appear in a clipper chooser:
 `GET /api/cleaners` lists them and the import form renders one checkbox per
 entry.
 
+That checkbox list lives **strictly behind the Add Dataset modal's "Advanced ▾"
+toggle** and never escapes it. This is deliberate and differs from the embedder
+and clipper pickers, which stay on screen with Advanced collapsed once the user
+overrides them: cleanup is the most technical knob in the modal, so a
+non-default selection does *not* pull the block back into view — it is surfaced
+only in the Advanced toggle's tooltip (`Cleanup: <enabled gates>`). Because the
+block cannot be reached any other way, registering a cleaner for a media type
+also forces the Advanced toggle itself to render, even in flows that would
+otherwise hide it. Do not add a cleaner affordance outside that block.
+
 ### Built-in cleaners
 
 | Cleaner | Name | Media Type | Default | Description |

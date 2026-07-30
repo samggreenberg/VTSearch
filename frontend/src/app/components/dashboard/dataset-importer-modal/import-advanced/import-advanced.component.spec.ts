@@ -132,6 +132,13 @@ describe('ImportAdvancedComponent', () => {
       await setInputs({ showSourceSpecs: false, embedders, clippers, selectedEmbedder: 'custom', selectedClipper: 'clip_default' });
       expect(component.showAdvancedToggle).toBe(false);
     });
+
+    it('is true whenever cleaners exist, even with a picker overridden', async () => {
+      // Cleanup lives strictly behind the toggle, so hiding the toggle would
+      // strand the gates with no way back to them.
+      await setInputs({ showSourceSpecs: false, embedders, clippers, selectedEmbedder: 'custom', selectedClipper: 'clip_default', cleaners });
+      expect(component.showAdvancedToggle).toBe(true);
+    });
   });
 
   describe('showEmbedderPicker', () => {
@@ -364,10 +371,21 @@ describe('ImportAdvancedComponent', () => {
       expect(component.showCleanupSection).toBe(true);
     });
 
-    it('a non-default selection keeps the block visible with Advanced collapsed', async () => {
+    it('a non-default selection stays hidden with Advanced collapsed', async () => {
+      // Unlike the embedder/clipper pickers, cleanup does NOT escape the
+      // toggle when overridden: it is too technical to show unprompted.
       await setInputs({ cleaners, selectedCleaners: [] });
       expect(component.isDefaultCleanupSelected).toBe(false);
+      expect(component.showCleanupSection).toBe(false);
+      component.advancedOpen = true;
       expect(component.showCleanupSection).toBe(true);
+    });
+
+    it('renders no cleanup markup at all while Advanced is collapsed', async () => {
+      await setInputs({ cleaners, selectedCleaners: [{ name: 'trim', params: { tol: 4 } }] });
+      expect(fixture.nativeElement.querySelectorAll('.cleanup-row').length).toBe(0);
+      expect(fixture.nativeElement.querySelectorAll('.cleanup-param').length).toBe(0);
+      expect(fixture.nativeElement.textContent).not.toContain('Cleanup');
     });
 
     it('a parameter override counts as non-default', async () => {
@@ -375,11 +393,15 @@ describe('ImportAdvancedComponent', () => {
       expect(component.isDefaultCleanupSelected).toBe(false);
     });
 
-    it('a non-default cleanup selection also keeps the Advanced toggle visible', async () => {
-      await setInputs({ cleaners, selectedCleaners: [], embedders, clippers, selectedClipper: 'clip_default' });
-      expect(component.showAdvancedToggle).toBe(false);
-      await setInputs({ selectedCleaners: defaultSelection });
-      expect(component.showAdvancedToggle).toBe(true);
+    it('advancedToggleTitle names the enabled gates only once off the default', async () => {
+      await setInputs({ cleaners, selectedCleaners: defaultSelection });
+      expect(component.advancedToggleTitle).not.toContain('Cleanup:');
+
+      await setInputs({ selectedCleaners: [{ name: 'trim', params: {} }] });
+      expect(component.advancedToggleTitle).toContain('Cleanup: Solid Border Trim');
+
+      await setInputs({ selectedCleaners: [] });
+      expect(component.advancedToggleTitle).toContain('Cleanup: none');
     });
 
     it('isCleanerEnabled reflects the selection', async () => {
