@@ -195,13 +195,16 @@ are provided.
 calibration scores. For `k = inclusion_value` (with
 `CONFORMAL_BASE_BUDGET = 0.25`, `CONFORMAL_QPOS_MAX = 0.75`):
 
-- `k > 0`: a false-negative budget `alpha = 0.25 * 2^-k` - the threshold
-  is the alpha-quantile of the calibration *positive* scores, so an
-  estimated `1 - alpha` of true matches land at or above the cut.
-- `k <= 0`: walks up the positive score distribution
-  (`q_pos = 0.25 + 0.5 * |k| / 10`), guarded by a false-positive budget
-  on the calibration *negative* scores (`max` with their
-  `1 - 0.25 * 2^k` quantile).
+- A false-negative **cap** `alpha = min(1, 0.25 * 2^-k)`: the threshold
+  never exceeds the alpha-quantile of the calibration *positive* scores,
+  so at most an estimated `alpha` of true matches is missed. The cap is
+  an upper bound, not a target - with cleanly separated classes the cut
+  drops to the lowest calibration positive and the budget goes unspent.
+- A false-positive **guard** for `k <= 0`: the threshold stays at or
+  above the `1 - 0.25 * 2^k` quantile of the calibration *negative*
+  scores, and above a walk up the positive score distribution
+  (`q_pos-level = 0.75 * |k| / 10`; at -10 only the top quartile of
+  positives remains).
 
 Monotone non-increasing in `k` by construction, so included sets are
 nested as the knob rises. Returns `0.5` when the input is empty or

@@ -57,13 +57,36 @@ class TestDegenerateInputs:
 
 
 class TestPositiveInclusionSemantics:
-    def test_positive_inclusion_is_fn_budget_quantile(self):
-        """+k is exactly the ``0.25 * 2^-k`` quantile of positive scores."""
+    def test_fn_budget_is_a_cap(self):
+        """The threshold never exceeds the ``0.25 * 2^-k`` quantile of
+        positive scores, so at most ~that fraction of matches is missed."""
         scores, labels = _spread_calibration()
         pos = np.array([s for s, lb in zip(scores, labels) if lb == 1.0])
         for k in (1, 3, 5, 10):
+            cap = float(np.quantile(pos, CONFORMAL_BASE_BUDGET * 2.0**-k))
+            assert conformal_threshold(scores, labels, k) <= cap + 1e-12
+
+    def test_fn_budget_binds_under_overlap(self):
+        """When class overlap forces the false-positive guard above the
+        budget quantile, +k lands exactly on the ``0.25 * 2^-k`` quantile
+        of positive scores - the portable miss-budget semantics."""
+        rng = np.random.default_rng(11)
+        pos = np.clip(rng.normal(0.6, 0.15, 40), 0.0, 1.0)
+        neg = np.clip(rng.normal(0.4, 0.15, 40), 0.0, 1.0)
+        scores = np.concatenate([pos, neg]).tolist()
+        labels = [1.0] * 40 + [0.0] * 40
+        for k in (1, 3, 5):
             expected = float(np.quantile(pos, CONFORMAL_BASE_BUDGET * 2.0**-k))
             assert conformal_threshold(scores, labels, k) == pytest.approx(expected)
+
+    def test_budget_unspent_when_classes_separate(self):
+        """Regression: with a clean margin between the classes, the default
+        cut must NOT sacrifice 25% of matches just because the budget allows
+        it - every calibration positive stays at or above the k=0 cut."""
+        scores, labels = _spread_calibration()
+        pos = [s for s, lb in zip(scores, labels) if lb == 1.0]
+        t = conformal_threshold(scores, labels, 0)
+        assert all(s >= t for s in pos)
 
     def test_high_inclusion_keeps_nearly_all_positives(self):
         """At +10 the budget is ~0.02%: essentially every calibration
@@ -164,8 +187,7 @@ class TestEndToEndAcceptance:
         dim, n_votes = 16, 24
         # Moderately overlapping clusters so pool scores have real spread.
         X_votes = [
-            (rng.standard_normal(dim) + (0.5 if i < n_votes // 2 else -0.5)).astype(np.float32)
-            for i in range(n_votes)
+            (rng.standard_normal(dim) + (0.5 if i < n_votes // 2 else -0.5)).astype(np.float32) for i in range(n_votes)
         ]
         y_votes = [1.0 if i < n_votes // 2 else 0.0 for i in range(n_votes)]
 

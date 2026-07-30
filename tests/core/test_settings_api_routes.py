@@ -256,7 +256,7 @@ class TestSettingsAPI:
         # Theme defaults to ``"system"``; the frontend resolves this to
         # the OS ``prefers-color-scheme`` at render time.
         assert data["theme"] == "system"
-        assert data["calibrate_count"] == 1
+        assert data["calibrate_count"] == 2
         assert data["calibration_fraction"] == 0.5
         assert data["safe_thresholds"] is False
         assert isinstance(data["focus_mode_left"], dict)

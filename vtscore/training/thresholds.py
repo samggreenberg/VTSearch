@@ -23,7 +23,8 @@ NO_GOOD_THRESHOLD = 2.0
 
 # False-negative budget of the conformal inclusion rule at inclusion 0; each
 # +1 step of inclusion halves it (see :func:`conformal_threshold`).  0.25 means
-# the default cutoff aims to keep ~75% of true matches above the line.
+# the default cutoff may sacrifice at most ~25% of true matches to the
+# false-positive guard - a cap, spent only when class overlap forces it.
 CONFORMAL_BASE_BUDGET = 0.25
 
 # Positive-score quantile the inclusion = -10 end of the knob walks to: at -10
@@ -208,27 +209,30 @@ def conformal_threshold(
     inclusion; quantiles move whenever the scores have any spread (see
     docs/experiments/inclusion-knob/REPORT.md and issue #2693).
 
-    The rule, for ``k = inclusion_value``:
+    The rule, for ``k = inclusion_value`` (``BASE = CONFORMAL_BASE_BUDGET``):
 
-    * ``k > 0`` - a **false-negative budget** ``alpha(k) =
-      CONFORMAL_BASE_BUDGET * 2^-k``: the threshold is the ``alpha``-quantile
-      of the calibration *positive* scores, so an estimated ``1 - alpha`` of
-      true matches land at or above the cut.  ``+k`` therefore has a portable,
-      user-facing meaning - "the fraction of true matches I'm willing to
-      miss, halving per step" - independent of the dataset or detector.
-    * ``k <= 0`` - a walk *up* the positive score distribution
-      (``q_pos(k) = BASE + (QPOS_MAX - BASE) * |k|/10``: at -10 only the
-      top-quartile-of-positives region remains), guarded by a
-      **false-positive budget** on the calibration *negative* scores
-      (``max`` with their ``1 - BASE * 2^k`` quantile) so overlap-heavy tasks
-      keep FPR control.
+    * A **false-negative cap** ``alpha(k) = min(1, BASE * 2^-k)``: the
+      threshold never exceeds the ``alpha``-quantile of the calibration
+      *positive* scores, so an estimated ``1 - alpha`` of true matches land
+      at or above the cut.  ``+k`` therefore has a portable, user-facing
+      meaning - "the fraction of true matches I'm willing to miss, halving
+      per step" - independent of the dataset or detector.  The cap is an
+      upper bound, not a target: when the classes separate cleanly the cut
+      drops to the lowest calibration positive and the budget goes unspent
+      (no match is sacrificed that the negatives don't force).
+    * A **false-positive guard** for ``k <= 0``: the threshold stays at or
+      above the ``1 - BASE * 2^k`` quantile of the calibration *negative*
+      scores, so overlap-heavy tasks keep FPR control, and above a walk *up*
+      the positive score distribution (``q_pos(k) = QPOS_MAX * |k|/10``: at
+      -10 only the top-quartile-of-positives region remains - "just the
+      surest matches").
 
-    Both branches are monotone in ``k`` and the ``k = 0`` value dominates the
-    ``k = 1`` value, so the threshold is monotone non-increasing in inclusion
-    **by construction**: raising inclusion can only grow the included set, and
-    the sets are nested (everything included at ``k`` stays included at
-    ``k + 1``) - which is what makes "cut off at Inclusion 1, verify up to
-    Inclusion 4" a well-defined workflow.
+    Every component quantile is monotone non-increasing in ``k``, so their
+    min/max composition is too: the threshold is monotone non-increasing in
+    inclusion **by construction**.  Raising inclusion can only grow the
+    included set, and the sets are nested (everything included at ``k`` stays
+    included at ``k + 1``) - which is what makes "cut off at Inclusion 1,
+    verify up to Inclusion 4" a well-defined workflow.
 
     Args:
         scores: Held-out calibration scores, one per example.  Must come from
@@ -254,12 +258,17 @@ def conformal_threshold(
     if len(pos) == 0 or len(neg) == 0:
         return 0.5
 
-    if inclusion_value > 0:
-        alpha = CONFORMAL_BASE_BUDGET * 2.0 ** (-inclusion_value)
-        return float(np.quantile(pos, alpha))
-    q_pos = CONFORMAL_BASE_BUDGET + (CONFORMAL_QPOS_MAX - CONFORMAL_BASE_BUDGET) * (-inclusion_value) / 10.0
-    beta = CONFORMAL_BASE_BUDGET * 2.0**inclusion_value
-    return float(max(np.quantile(pos, q_pos), np.quantile(neg, 1.0 - beta)))
+    def _threshold_at(k: int) -> float:
+        fn_cap = float(np.quantile(pos, min(1.0, CONFORMAL_BASE_BUDGET * 2.0**-k)))
+        if k > 0:
+            # The k=0 floor keeps the seam monotone: q_pos(alpha) can sit
+            # above the k=0 cut when the budget goes unspent there.
+            return min(fn_cap, _threshold_at(0))
+        fp_guard = float(np.quantile(neg, 1.0 - CONFORMAL_BASE_BUDGET * 2.0**k))
+        walk = float(np.quantile(pos, CONFORMAL_QPOS_MAX * -k / 10.0))
+        return min(fn_cap, max(fp_guard, walk))
+
+    return _threshold_at(inclusion_value)
 
 
 def _per_bag_fit_weights(
