@@ -10,6 +10,8 @@ import { DatasetsCrudApiService } from '../../../../../services/datasets-crud-ap
 import { DatasetsListingsApiService } from '../../../../../services/datasets-listings-api.service';
 import { apiErrorMessage } from '../../../../../utils/api-error';
 import {
+  CleanerInfo,
+  CleanerSelection,
   ClipperInfo,
   ClipperParameter,
   ConverterInfo,
@@ -73,6 +75,10 @@ export class GenericFormPickerComponent {
   private datasetNameDirty = false;
 
   readonly availableClippers = signal<ClipperInfo[]>([]);
+  /** Cleanup gates available for the current media type, and the subset the
+   *  user has enabled (seeded from each cleaner's ``default_enabled``). */
+  readonly cleaners = signal<CleanerInfo[]>([]);
+  readonly selectedCleaners = signal<CleanerSelection[]>([]);
   readonly selectedClipper = signal('');
   readonly clipperParamValues = signal<Record<string, number | string>>({});
 
@@ -163,6 +169,7 @@ export class GenericFormPickerComponent {
     if (mediaTypeField) {
       const defaultType = this.formValues['media_type'] || mediaTypeField.default || '';
       this.loadClippers(defaultType);
+      this.loadCleaners(defaultType);
       this.loadEmbedders(defaultType);
     }
 
@@ -185,6 +192,7 @@ export class GenericFormPickerComponent {
   onMediaTypeChange(mediaType: string): void {
     this.formValues['media_type'] = mediaType;
     this.loadClippers(mediaType);
+    this.loadCleaners(mediaType);
     this.loadEmbedders(mediaType);
     this.resetSourceSpecs();
     this.onFieldChanged('media_type');
@@ -289,6 +297,22 @@ export class GenericFormPickerComponent {
     }
     // Static options are plain strings; render each as its own label.
     return (field.options || []).map((o) => ({ value: o, label: o }));
+  }
+
+  /** Fetch the cleanup gates registered for *mediaType* and seed the
+   *  selection from each cleaner's ``default_enabled`` flag. */
+  private loadCleaners(mediaType: string): void {
+    if (!mediaType) {
+      this.cleaners.set([]);
+      this.selectedCleaners.set([]);
+      return;
+    }
+    this.datasetsListingsApi.getCleaners(mediaType).subscribe({
+      next: (cleaners) => {
+        this.cleaners.set(cleaners);
+        this.selectedCleaners.set(this.importDefaults.defaultCleanerSelection(cleaners));
+      },
+    });
   }
 
   private loadClippers(mediaType: string): void {
@@ -426,6 +450,9 @@ export class GenericFormPickerComponent {
     const embedders = composeEmbedders(this.selectedEmbedder(), this.selectedPatchEmbedder(), this.selectedStructuralEmbedder());
     if (embedders) {
       submitValues['embedders'] = embedders;
+    }
+    if (this.selectedCleaners().length > 0) {
+      submitValues['cleaners'] = this.selectedCleaners();
     }
     if (this.sourceSpecs.length > 0) {
       submitValues['source_specs'] = this.sourceSpecs;

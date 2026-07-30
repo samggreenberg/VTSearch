@@ -38,6 +38,7 @@ describe('GenericFormPickerComponent', () => {
     component.open(importer);
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
   }
 
   it('pre-populates field defaults and requires the required field before submit', () => {

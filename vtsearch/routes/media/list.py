@@ -33,6 +33,7 @@ from vtsearch.schemas.media import (
     MediaBatchResponseSchema,
     MediaIdsListResponseSchema,
     MediaParagraphResponseSchema,
+    MediaVariantQuerySchema,
     MediaVoteBulkRequestSchema,
     MediaVoteBulkResponseSchema,
     MediaVoteRequestSchema,
@@ -204,6 +205,66 @@ def _transcode_to_mp4(src_bytes: bytes, filename: str) -> bytes | None:  # noqa:
             pass
 
     return None
+
+
+def _variant_media(media: dict) -> dict:
+    """Return the payload variant the request's ``variant`` query asks for.
+
+    Media that a :class:`~vtscore.media.cleaner.MediaCleaner` rewrote at load
+    time keep a snapshot of their pre-clean payload under the ``original_*``
+    keys (see ``docs/plans/media-cleaners.md``).  The *canonical* payload is
+    always the cleaned one, so every route serves that by default and *is*
+    returned the very same dict - no copy, so request-time memoisation (the
+    thumbnail route's ``thumbnail_bytes``, the video route's
+    ``_transcoded_mp4``) still lands on the live media.
+
+    ``?variant=original`` instead returns a throwaway view with the snapshot
+    promoted into the canonical keys, so the ordinary resolution chain streams
+    the original bytes without any route having to know cleaners exist.  Every
+    non-inline backing (``media_path`` / ``media_url``) is stripped from the
+    view: those point at the *source* file, which the resolver would otherwise
+    fall through to and serve as if it were the snapshot.  ``md5`` is dropped
+    too, so ETag-emitting routes hash the bytes they actually serve rather than
+    labelling the original with the cleaned item's hash.
+
+    An unknown variant, or ``original`` on a media with no snapshot, falls back
+    to the canonical payload: a stale bookmark should show the item, not 404.
+    """
+    if request.args.get("variant") != "original":
+        return media
+
+    from vtscore.datasets.clipper_chain import has_original_payload  # noqa: PLC0415
+
+    if not has_original_payload(media):
+        return media
+
+    view = dict(media)
+    view["media_bytes"] = media.get("original_media_bytes")
+    view["media_string"] = media.get("original_media_string")
+    if media.get("original_duration") is not None:
+        view["duration"] = media["original_duration"]
+    # Derived metadata (counts, dimensions, hash, thumbnail) all describe the
+    # canonical payload, so drop it and let each route's existing
+    # "recompute when absent" fallback derive it from what is actually served.
+    for key in (
+        "media_path",
+        "media_url",
+        "thumbnail_bytes",
+        "md5",
+        "_transcoded_mp4",
+        "word_count",
+        "character_count",
+    ):
+        view.pop(key, None)
+    return view
+
+
+def _get_media_variant(media_id: int) -> dict | None:
+    """Fetch a loaded media and apply the request's ``variant`` selection."""
+    media = get_media(media_id)
+    if not media:
+        return None
+    return _variant_media(media)
 
 
 def _resolve_bytes(media: dict) -> bytes | None:
@@ -424,6 +485,25 @@ def _flask_response(mr: MediaResponse) -> Response:
     return send_file(io.BytesIO(mr.data), mimetype=mr.mimetype, download_name=mr.download_name)
 
 
+def _attach_optional_fields(out: dict[str, Any], media: dict[str, Any]) -> None:
+    """Copy the sometimes-present per-media fields onto a batch payload *out*.
+
+    ``has_original`` marks an item some
+    :class:`~vtscore.media.cleaner.MediaCleaner` actually rewrote at load time
+    (it kept a pre-clean snapshot), which is what gates the detail viewer's
+    Clean/Original toggle and the byte routes' ``?variant=original``.
+    """
+    from vtscore.datasets.clipper_chain import has_original_payload  # noqa: PLC0415
+
+    if has_original_payload(media):
+        out["has_original"] = True
+    if "origin_name" in media:
+        out["origin_name"] = media["origin_name"]
+    if "description" in media:
+        out["description"] = media["description"]
+    _attach_embedder_fields(out, media)
+
+
 def _attach_embedder_fields(out: dict[str, Any], media: dict[str, Any]) -> None:
     """Copy a media's embedder identity onto a serialized payload *out*.
 
@@ -508,11 +588,7 @@ def batch_medias(body: dict):
         if importer_custom:
             custom.update(importer_custom)
         media_data["custom_metadata"] = custom
-        if "origin_name" in c:
-            media_data["origin_name"] = c["origin_name"]
-        if "description" in c:
-            media_data["description"] = c["description"]
-        _attach_embedder_fields(media_data, c)
+        _attach_optional_fields(media_data, c)
         # ``clip_start`` / ``clip_end`` are a *playback window into the whole
         # served file*: every player (hover previews, bin popup, selection
         # panel, and the center-panel audio/video players) seeks to
@@ -539,14 +615,18 @@ def batch_medias(body: dict):
 
 
 @medias_bp.route("/api/medias/<int:media_id>/audio")
+@medias_bp.arguments(MediaVariantQuerySchema, location="query")
 @medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
-def media_audio(media_id: int):
+def media_audio(query: dict, media_id: int):
     """Stream the WAV audio bytes for a single media item.
 
     Returns an ``audio/wav`` file response on success (HTTP 200), or a 404
     JSON envelope if the media does not exist or its bytes are unavailable.
+
+    Accepts ``?variant=original`` to stream the pre-clean payload of an item a
+    cleaner rewrote at load time (see :func:`_variant_media`).
     """
-    c = get_media(media_id)
+    c = _get_media_variant(media_id)
     if not c:
         abort(404, message="not found")
     filename = c.get("filename", "")
@@ -583,16 +663,18 @@ def media_audio(media_id: int):
 
 
 @medias_bp.route("/api/medias/<int:media_id>/video")
+@medias_bp.arguments(MediaVariantQuerySchema, location="query")
 @medias_bp.alt_response(400, description="Media is not a video.")
 @medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
 @medias_bp.alt_response(415, description="Source format requires ffmpeg/opencv which are unavailable.")
-def media_video(media_id: int):
+def media_video(query: dict, media_id: int):
     """Stream the video bytes for a single video media item.
 
     Determines the MIME type from the media's filename extension, defaulting
-    to ``video/mp4`` for unrecognised extensions.
+    to ``video/mp4`` for unrecognised extensions.  Accepts
+    ``?variant=original`` (see :func:`_variant_media`).
     """
-    c = get_media(media_id)
+    c = _get_media_variant(media_id)
     if not c:
         abort(404, message="not found")
     if c.get("media_type") != "video":
@@ -659,9 +741,10 @@ def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:
     no image is available.  For non-image types it delegates to the media
     type's ``image_response`` hook (audio waveforms, video frames); for image
     types it streams the source bytes with a mimetype derived from the
-    filename extension.  Shared by the full-image and thumbnail routes.
+    filename extension.  Shared by the full-image and thumbnail routes, so
+    ``?variant=original`` reaches both.
     """
-    c = get_media(media_id)
+    c = _get_media_variant(media_id)
     if not c:
         abort(404, message="not found")
 
@@ -696,9 +779,10 @@ def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:
 
 
 @medias_bp.route("/api/medias/<int:media_id>/image")
+@medias_bp.arguments(MediaVariantQuerySchema, location="query")
 @medias_bp.alt_response(400, description="Media is not an image and has no image_response delegate.")
 @medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
-def media_image(media_id: int):
+def media_image(query: dict, media_id: int):
     """Stream the image bytes for a single image media item.
 
     Determines the MIME type from the media's filename extension, defaulting
@@ -711,9 +795,10 @@ def media_image(media_id: int):
 
 
 @medias_bp.route("/api/medias/<int:media_id>/thumbnail")
+@medias_bp.arguments(MediaVariantQuerySchema, location="query")
 @medias_bp.alt_response(400, description="Media is not an image and has no image_response delegate.")
 @medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
-def media_thumbnail(media_id: int):
+def media_thumbnail(query: dict, media_id: int):
     """Stream a downscaled thumbnail of a media item's image.
 
     Grid and list tiles use this instead of ``/image`` so a gallery of many
@@ -734,8 +819,12 @@ def media_thumbnail(media_id: int):
     Good pile shows a region-voted item's crop rather than the whole frame.
     A region request always regenerates from the display image (the
     precomputed full-frame thumbnail can't be cropped after the fact).
+
+    ``?variant=original`` regenerates from the pre-clean payload for the same
+    reason: the stored ``thumbnail_bytes`` describes the canonical (cleaned)
+    item.
     """
-    c = get_media(media_id)
+    c = _get_media_variant(media_id)
     if not c:
         abort(404, message="not found")
     region = _parse_region_query(request.args.get("region"))
@@ -765,12 +854,18 @@ def media_thumbnail(media_id: int):
 
 @medias_bp.route("/api/medias/<int:media_id>/paragraph")
 @medias_bp.route("/api/medias/<int:media_id>/text")
+@medias_bp.arguments(MediaVariantQuerySchema, location="query")
 @medias_bp.response(200, MediaParagraphResponseSchema)
 @medias_bp.alt_response(400, description="Media is not a text item.")
 @medias_bp.alt_response(404, description="Media not found, or media content unavailable.")
-def media_paragraph(media_id: int):
-    """Return the text content and statistics for a single text media item."""
-    c = get_media(media_id)
+def media_paragraph(query: dict, media_id: int):
+    """Return the text content and statistics for a single text media item.
+
+    Accepts ``?variant=original`` (see :func:`_variant_media`).  The word /
+    character counts are recomputed from the served content in that case,
+    since the stored counts describe the canonical (cleaned) text.
+    """
+    c = _get_media_variant(media_id)
     if not c:
         abort(404, message="not found")
     if c.get("media_type") not in ("text", "paragraph"):
@@ -788,9 +883,10 @@ def media_paragraph(media_id: int):
 
 
 @medias_bp.route("/api/medias/<int:media_id>/media")
+@medias_bp.arguments(MediaVariantQuerySchema, location="query")
 @medias_bp.alt_response(400, description="Media has an unsupported media type.")
 @medias_bp.alt_response(404, description="Media not found.")
-def media_generic(media_id: int):
+def media_generic(query: dict, media_id: int):
     """Serve the media content for any type via a single generic endpoint.
 
     Determines the media type from the media item's ``"type"`` field and
@@ -799,9 +895,10 @@ def media_generic(media_id: int):
     endpoint works for all current and future media types without
     modification. Response body is either binary (image/audio/video bytes
     with the appropriate mimetype) or JSON (text content); the spec leaves
-    the success body undescribed.
+    the success body undescribed.  Accepts ``?variant=original`` (see
+    :func:`_variant_media`).
     """
-    c = get_media(media_id)
+    c = _get_media_variant(media_id)
     if not c:
         abort(404, message="not found")
 

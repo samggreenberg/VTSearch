@@ -10,6 +10,7 @@ import type { MediaParagraphResponse } from '../generated/api-client/models/medi
 import type { MediaVoteRequest } from '../generated/api-client/models/media-vote-request';
 import type { MediaVoteResponse } from '../generated/api-client/models/media-vote-response';
 import type { MediaAddToPileResponse } from '../generated/api-client/models/media-add-to-pile-response';
+import type { PayloadVariant } from '../models/api.models';
 import { listMediaIds } from '../generated/api-client/fn/medias/list-media-ids';
 import { batchMedias } from '../generated/api-client/fn/medias/batch-medias';
 import { mediaParagraphGet2 } from '../generated/api-client/fn/medias/media-paragraph-get-2';
@@ -33,8 +34,16 @@ export class MediasApiService {
     return batchMedias(this.http, this.config.rootUrl, { body: { ids } }).pipe(map((r) => r.body));
   }
 
-  getText(id: number): Observable<MediaParagraphResponse> {
-    return mediaParagraphGet2(this.http, this.config.rootUrl, { media_id: id }).pipe(map((r) => r.body));
+  /** Text content of a text media.  `variant: 'original'` returns the
+   *  pre-clean payload of an item a cleaner rewrote at load time. */
+  getText(id: number, variant: PayloadVariant = ''): Observable<MediaParagraphResponse> {
+    // Send the param only when it means something: an empty `variant=` in the
+    // URL is what the server already does by default, and omitting it keeps the
+    // canonical request byte-identical to what it was before cleaners existed.
+    return mediaParagraphGet2(this.http, this.config.rootUrl, {
+      media_id: id,
+      ...(variant ? { variant } : {}),
+    }).pipe(map((r) => r.body));
   }
 
   /**

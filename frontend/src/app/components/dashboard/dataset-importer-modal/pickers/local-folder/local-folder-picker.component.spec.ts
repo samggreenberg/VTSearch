@@ -35,6 +35,7 @@ describe('LocalFolderPickerComponent', () => {
     component.open(importer);
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
   }
 
   it('open() derives pickerKind from the importer name', () => {

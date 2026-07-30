@@ -106,6 +106,37 @@ configurable settings also include `parameters` and
 `creation_questions` arrays, where each parameter has `key`, `label`,
 `type`, `default`, and an optional `description` for hover tooltips.
 
+### Cleaners
+
+```
+GET /api/cleaners
+```
+
+**Query:** `?media_type=image` (optional): filter by `type_id` or
+`folder_import_name`.
+
+→ `{"cleaners": [{"name": "image_exif_orient", "media_type": "image", "display_name": "EXIF Orientation", "default_enabled": true, "description": "Rotate photos to their EXIF display orientation…"}]}`
+
+*Cleaners* are the optional 1-to-1 cleanup gates every imported item of a media
+type can pass through before it is embedded (see
+[EXTENDING-media.md § Adding a Media Cleaner](../EXTENDING-media.md#adding-a-media-cleaner)).
+They are listed separately from clippers because the UI treats them
+differently: a clipper is a radio choice, cleaners are a checkbox list where
+any combination can be enabled.
+
+Each cleaner object carries the same fields as a clipper (`name`,
+`display_name`, `media_type`, optional `description` / `parameters` /
+`creation_questions`) plus `default_enabled`, which tells the import form
+whether to pre-check the box.
+
+To enable cleanup gates for an import, send a `cleaners` field alongside
+`clipper` / `clipper_params` — a JSON array of names or of
+`{"name": ..., "params": {...}}` objects. Order is ignored: cleaners always run
+**last**, after the whole clipper/converter chain, on the units that will
+actually be embedded. The field is accepted by every import entry point
+(`POST /api/dataset/import/<importer>`, `/api/dataset/load-demo`,
+`/api/dataset/import-local-folder`, `/api/dataset/import-local-files`).
+
 ### Converters
 
 ```

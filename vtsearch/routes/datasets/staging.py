@@ -636,8 +636,9 @@ def importer_field_options(body: dict, importer_name: str):
 # ``stage-import``.  Body shape isn't in the OpenAPI spec, but
 # :func:`validate_plugin_args` enforces the per-plugin field types at
 # request time; pass-through keys (``source_specs``, ``clipper``,
-# ``embedder``, ``embedders``, ``clipper_params``, ``dataset_name``) ride
-# along on the body and are preserved via ``Meta.unknown = "include"``.
+# ``cleaners``, ``embedder``, ``embedders``, ``clipper_params``,
+# ``dataset_name``) ride along on the body and are preserved via
+# ``Meta.unknown = "include"``.
 # ---------------------------------------------------------------------------
 
 
@@ -658,6 +659,7 @@ def import_dataset(importer_name: str):
         extra_keys=(
             "source_specs",
             "clipper",
+            "cleaners",
             "embedder",
             "embedders",
             "dataset_name",
@@ -705,6 +707,7 @@ register_plugin_typed_routes(
     extra_keys=(
         "source_specs",
         "clipper",
+        "cleaners",
         "embedder",
         "embedders",
         "dataset_name",

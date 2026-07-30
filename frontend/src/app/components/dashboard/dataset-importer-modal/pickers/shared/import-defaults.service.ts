@@ -3,6 +3,8 @@ import { Injectable, inject } from '@angular/core';
 import { SettingsStateService } from '../../../../../services/settings-state.service';
 import { ToastService } from '../../../../../services/toast.service';
 import {
+  CleanerInfo,
+  CleanerSelection,
   ClipperInfo,
   ClipperParameter,
   ConverterInfo,
@@ -165,6 +167,16 @@ export class ImportDefaultsService {
       name: clippers.length > 0 ? clippers[0].name : '',
       params: null, // signals "use the clipper's own param defaults"
     };
+  }
+
+  /** Cleanup selection for a freshly-fetched cleaner list: every cleaner the
+   *  registry marks ``default_enabled``, with no parameter overrides.
+   *
+   *  Unlike the embedder / clipper / source-spec pickers this does not consult
+   *  the user's saved per-media-type import defaults; cleanup selections are
+   *  not persisted yet (see ``docs/plans/media-cleaners.md``). */
+  defaultCleanerSelection(cleaners: CleanerInfo[]): CleanerSelection[] {
+    return cleaners.filter((c) => c.default_enabled).map((c) => ({ name: c.name, params: {} }));
   }
 
   /** Build a source-specs list for a freshly-opened picker, preferring

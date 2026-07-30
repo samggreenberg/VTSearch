@@ -292,6 +292,32 @@ export interface ClipperInfo {
   [key: string]: unknown;
 }
 
+// --- Cleaners ---
+
+/** One optional 1-to-1 cleanup gate items pass through before embedding.
+ *  Shares the clipper descriptor shape (see `MediaCleaner`, which subclasses
+ *  `MediaClipper`) and adds `default_enabled`: the import form pre-checks a
+ *  cleaner's box when it is true. */
+export interface CleanerInfo extends ClipperInfo {
+  /** Whether the import form checks this cleaner by default.  True only for
+   *  cleaners that fix an outright representation bug (EXIF orientation),
+   *  where leaving it off ships known-wrong vectors. */
+  default_enabled?: boolean;
+}
+
+/** A cleaner the user enabled for an import, with its parameter overrides.
+ *  Serialised as the `cleaners` field of every import request. */
+export interface CleanerSelection {
+  name: string;
+  params: Record<string, number | string>;
+}
+
+/** Which payload of an item a detail viewer should show: the canonical
+ *  (cleaned) one, or the pre-clean snapshot a cleaner left behind.  `''` means
+ *  canonical and is dropped from the request, so an item with no snapshot is
+ *  fetched exactly as it was before cleaners existed. */
+export type PayloadVariant = '' | 'original';
+
 // --- Eval / Progress Charts ---
 
 export interface ErrorCostDataPoint {

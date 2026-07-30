@@ -75,6 +75,10 @@ class ClippersListQuerySchema(_MediaTypeFilterQuerySchema):
     """Query for ``GET /api/clippers``."""
 
 
+class CleanersListQuerySchema(_MediaTypeFilterQuerySchema):
+    """Query for ``GET /api/cleaners``."""
+
+
 class ConvertersListQuerySchema(Schema):
     """Query for ``GET /api/converters``.
 
@@ -259,6 +263,17 @@ class ClippersListResponseSchema(Schema):
     """
 
     clippers = fields.List(fields.Dict(), required=True)
+
+
+class CleanersListResponseSchema(Schema):
+    """Response for ``GET /api/cleaners``.
+
+    Same opaque ``fields.Dict()`` treatment as ``ClippersListResponseSchema``:
+    a cleaner's ``to_dict()`` carries whatever parameters that cleaner declares,
+    plus the cleaner-only ``default_enabled`` flag.
+    """
+
+    cleaners = fields.List(fields.Dict(), required=True)
 
 
 class ConvertersListResponseSchema(Schema):
@@ -533,6 +548,17 @@ class DatasetLoadDemoRequestSchema(Schema):
             "description": (
                 'Optional parameter overrides for `clipper` (e.g. `{"duration": 5.0}`). '
                 "Only applied when `clipper` names a real, non-default clipper."
+            )
+        },
+    )
+    cleaners = fields.List(
+        fields.Dict(),
+        load_default=None,
+        metadata={
+            "description": (
+                "Cleanup gates to run on each finished unit before embedding, as "
+                '`[{"name": "image_exif_orient", "params": {}}]`. Order is ignored; '
+                "cleaners always run last, after the clipper / converter chain."
             )
         },
     )
@@ -904,6 +930,8 @@ __all__ = [
     "BrowseMediaFilesSelectRequestSchema",
     "BrowseMediaFilesSelectResponseSchema",
     "CancelDatasetLoadResponseSchema",
+    "CleanersListQuerySchema",
+    "CleanersListResponseSchema",
     "ClearStagingResponseSchema",
     "ClippersListQuerySchema",
     "ClippersListResponseSchema",

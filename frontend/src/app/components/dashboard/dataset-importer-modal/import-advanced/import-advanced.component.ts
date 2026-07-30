@@ -2,7 +2,15 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 
 import { FormsModule } from '@angular/forms';
 
-import { ClipperInfo, ConverterInfo, EmbedderInfo, SourceSpec } from '../../../../models/api.models';
+import {
+  CleanerInfo,
+  CleanerSelection,
+  ClipperInfo,
+  ClipperParameter,
+  ConverterInfo,
+  EmbedderInfo,
+  SourceSpec,
+} from '../../../../models/api.models';
 import { SourceSpecsPickerComponent } from '../source-specs-picker/source-specs-picker.component';
 
 /** "Advanced ▾" block of the Add Dataset modal: Include media (source
@@ -50,6 +58,11 @@ export class ImportAdvancedComponent {
   /** Clippers available for the current media type.  Same single-option
    *  hide rule as :prop:`embedders`. */
   readonly clippers = input<ClipperInfo[]>([]);
+  /** Cleanup gates registered for the current media type.  Unlike clippers
+   *  these are not mutually exclusive: every enabled one runs, in registry
+   *  order, on each finished unit before it is embedded.  An empty list
+   *  hides the Cleanup block entirely. */
+  readonly cleaners = input<CleanerInfo[]>([]);
   /** Whether the Include-media (source-specs) block should be offered
    *  at all.  True for every importer that participates in the dataset
    *  modal's form / server-folder / local-folder/files flows. */
@@ -103,6 +116,13 @@ export class ImportAdvancedComponent {
    *  shared clipper chooser modal. */
   readonly clipperChooserRequested = output<void>();
 
+  /** Two-way bound cleanup selection: one entry per *enabled* cleaner, with
+   *  that cleaner's parameter overrides.  Seeded by the parent from each
+   *  cleaner's ``default_enabled`` flag, so the checkboxes come up matching
+   *  the registry's recommendation. */
+  readonly selectedCleaners = input<CleanerSelection[]>([]);
+  readonly selectedCleanersChange = output<CleanerSelection[]>();
+
   /** Two-way bound "compute the 2-D Browse projection at ingest" toggle.
    *  Defaults off: building the UMAP layout + hex-tile pyramid up front
    *  costs compute the user may not want to spend (Browse builds it lazily
@@ -154,14 +174,28 @@ export class ImportAdvancedComponent {
     return this.showSourceSpecs() && this.availableConverters().length > 0;
   }
 
+  /** True when the cleanup checkboxes still match the registry's own
+   *  recommendation (each cleaner's ``default_enabled``) with no parameter
+   *  overrides.  A user who changed them keeps the block visible even with
+   *  Advanced collapsed, so their override never hides. */
+  get isDefaultCleanupSelected(): boolean {
+    const wanted = this.cleaners().filter((c) => c.default_enabled);
+    const selected = this.selectedCleaners();
+    if (selected.length !== wanted.length) return false;
+    return wanted.every((c) => {
+      const entry = selected.find((s) => s.name === c.name);
+      return !!entry && Object.keys(entry.params || {}).length === 0;
+    });
+  }
+
   /** The Advanced toggle is shown either when the Include-media block
    *  is available (it lives strictly behind the toggle, so the toggle
-   *  must be reachable) or when neither embedder nor clipper has been
-   *  overridden (otherwise their pickers stay visible anyway and the
+   *  must be reachable) or when no picker in the block has been
+   *  overridden (otherwise those pickers stay visible anyway and the
    *  toggle would be redundant). */
   get showAdvancedToggle(): boolean {
     if (this.showSourceSpecs()) return true;
-    return this.isDefaultEmbedderSelected && this.isDefaultClipperSelected;
+    return this.isDefaultEmbedderSelected && this.isDefaultClipperSelected && this.isDefaultCleanupSelected;
   }
 
   /** Embedder picker is visible when Advanced is open OR when the user
@@ -177,6 +211,66 @@ export class ImportAdvancedComponent {
    *  has picked a non-default clipper. */
   get showClipperPicker(): boolean {
     return this.advancedOpen || !this.isDefaultClipperSelected;
+  }
+
+  /** Cleanup block is visible when Advanced is open OR when the user has
+   *  changed the cleanup selection away from the registry defaults. */
+  get showCleanupSection(): boolean {
+    return this.cleaners().length > 0 && (this.advancedOpen || !this.isDefaultCleanupSelected);
+  }
+
+  /** Human label for a cleaner's checkbox row. */
+  cleanerLabel(cleaner: CleanerInfo): string {
+    return cleaner.display_name || cleaner.name;
+  }
+
+  /** Parameter descriptors to render under a checked cleaner.  Cleaners
+   *  without parameters render the checkbox alone. */
+  cleanerParameters(cleaner: CleanerInfo): ClipperParameter[] {
+    return cleaner.parameters || [];
+  }
+
+  isCleanerEnabled(name: string): boolean {
+    return this.selectedCleaners().some((c) => c.name === name);
+  }
+
+  /** Current value for one parameter of an enabled cleaner, falling back to
+   *  the descriptor's default when the user has not overridden it. */
+  cleanerParamValue(cleaner: CleanerInfo, param: ClipperParameter): number | string {
+    const entry = this.selectedCleaners().find((c) => c.name === cleaner.name);
+    const override = entry?.params?.[param.key];
+    return override === undefined ? param.default : override;
+  }
+
+  /** Add or remove a cleaner from the selection.  The emitted list is kept in
+   *  registry order so the summary reads the same way the gates will run,
+   *  even though the server ignores the order it is sent. */
+  onCleanerToggle(cleaner: CleanerInfo, enabled: boolean): void {
+    const current = this.selectedCleaners();
+    const next = enabled
+      ? [...current, { name: cleaner.name, params: {} }]
+      : current.filter((c) => c.name !== cleaner.name);
+    const order = this.cleaners().map((c) => c.name);
+    next.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
+    this.selectedCleanersChange.emit(next);
+  }
+
+  /** Record a parameter override on an already-enabled cleaner.  A value equal
+   *  to the descriptor's default is dropped rather than stored, so an untouched
+   *  cleaner keeps an empty ``params`` and still counts as default. */
+  onCleanerParamChange(cleaner: CleanerInfo, param: ClipperParameter, value: number | string): void {
+    this.selectedCleanersChange.emit(
+      this.selectedCleaners().map((c) => {
+        if (c.name !== cleaner.name) return c;
+        const params = { ...(c.params || {}) };
+        if (value === param.default || value === '' || value === null || value === undefined) {
+          delete params[param.key];
+        } else {
+          params[param.key] = value;
+        }
+        return { ...c, params };
+      }),
+    );
   }
 
   /** Whether to render the standalone clipper "Details" button below

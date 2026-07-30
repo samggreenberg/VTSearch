@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
 import { NgStyle } from '@angular/common';
-import { Media } from '../../../models/api.models';
+import { Media, PayloadVariant } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 
 export type RegionBox = readonly [number, number, number, number];
@@ -26,6 +26,13 @@ export class ImageViewerComponent implements OnDestroy {
   private activeContext = inject(ActiveContextService);
 
   readonly media = input.required<Media>();
+  /**
+   * Which payload to show: `''` (canonical) or `'original'` (the pre-clean
+   * snapshot of an item a cleaner rewrote at load time).  The parent's
+   * Clean/Original toggle drives it; it only ever leaves `''` for media whose
+   * `has_original` flag is set.
+   */
+  readonly variant = input<PayloadVariant>('');
   /**
    * True while the parent is in the v2 "bad-vote-with-box discard confirm" armed state.
    * The viewer uses it to (a) render the box with a sticky red pulse, and (b) route Esc /
@@ -76,6 +83,9 @@ export class ImageViewerComponent implements OnDestroy {
   // Angular wouldn't re-fire the `<img>` load event, leaving the canvas
   // permanently hidden behind `visibility: hidden`.
   private lastMediaId: number | null = null;
+  // Same guard for the payload variant: flipping Clean/Original keeps the media
+  // id, so the effect has to notice the variant changed to refetch the image.
+  private lastVariant: PayloadVariant = '';
 
   // Region voting state (v2 of the patch-embedder plan, UI only; see docs/plans/patch-embedder.md).
   // These are signals because they are written from un-patched callbacks (window
@@ -131,10 +141,16 @@ export class ImageViewerComponent implements OnDestroy {
     // lastMediaId above); zoom/rotation/marquee state intentionally persists.
     effect(() => {
       const media = this.media();
-      if (media.id === this.lastMediaId) return;
+      const variant = this.variant();
+      if (media.id === this.lastMediaId && variant === this.lastVariant) return;
+      const sameMedia = media.id === this.lastMediaId;
       this.lastMediaId = media.id;
+      this.lastVariant = variant;
       this.imageReady.set(false);
-      this.imageSrc.set(this.activeContext.mediaUrl(`/api/medias/${media.id}/image`));
+      this.imageSrc.set(this.activeContext.mediaUrl(`/api/medias/${media.id}/image`, { variant }));
+      // A variant flip is the same item shown differently: keep the user's
+      // zoom / pan and their voting box instead of resetting as for a new item.
+      if (sameMedia) return;
       untracked(() => {
         this.resetView();
         this.clearRegionBox({ emit: true });

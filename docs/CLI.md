@@ -414,7 +414,7 @@ plugin from picker / listing API responses for this deployment without
 editing plugin code. The format is `family:name` where `family` is one
 of the keys printed by `--list-plugins` (`importers`, `exporters`,
 `label_importers`, `labelset_sources`, `converters`, `media_sources`,
-`media_types`, `embedders`, `clippers`, `settings_importers`,
+`media_types`, `embedders`, `clippers`, `cleaners`, `settings_importers`,
 `settings_exporters`, `settings_sources`) and `name` is the plugin's
 registered name:
 
@@ -513,7 +513,7 @@ explicit `--semantic-only` flag wins over it.
 
 `python app.py --list-plugins` enumerates every auto-discovered plugin;
 dataset importers, exporters, label importers/sources, settings I/O,
-media converters/types/embedders/clippers, and media sources; and
+media converters/types/embedders/clippers/cleaners, and media sources; and
 exits without starting the server. Three output formats:
 
 ```bash
@@ -532,9 +532,10 @@ same `--format` flag:
 python app.py --list-importers                        # dataset importers
 python app.py --list-exporters --format names         # results exporters, bare names
 python app.py --list-embedders --format json          # embedders as JSON
-# Also: --list-converters, --list-clippers, --list-media-types,
-# --list-media-sources, --list-label-importers, --list-labelset-sources,
-# --list-settings-importers, --list-settings-exporters, --list-settings-sources.
+# Also: --list-converters, --list-clippers, --list-cleaners,
+# --list-media-types, --list-media-sources, --list-label-importers,
+# --list-labelset-sources, --list-settings-importers,
+# --list-settings-exporters, --list-settings-sources.
 ```
 
 Use `--format names --plugin-family <family>` (or any `--list-<family>

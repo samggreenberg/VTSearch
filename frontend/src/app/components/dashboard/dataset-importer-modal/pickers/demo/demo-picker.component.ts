@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ClipperChooserComponent, ClipperSelection } from '../../../clipper-chooser/clipper-chooser.component';
 import { ImportAdvancedComponent } from '../../import-advanced/import-advanced.component';
 import { DatasetsListingsApiService } from '../../../../../services/datasets-listings-api.service';
-import { ClipperInfo, EmbedderInfo, ImporterInfo, MediaTypeInfo } from '../../../../../models/api.models';
+import { CleanerInfo, CleanerSelection, ClipperInfo, EmbedderInfo, ImporterInfo, MediaTypeInfo } from '../../../../../models/api.models';
 import { DemoDatasetEntry } from '../../../../../generated/api-client/models/demo-dataset-entry';
 import { ColMeta, ManagedColumns } from '../../../../../utils/managed-columns';
 import { ImportDefaultsService } from '../shared/import-defaults.service';
@@ -62,6 +62,10 @@ export class DemoPickerComponent {
   readonly selectedDemoPatchEmbedder = signal('');
   readonly selectedDemoStructuralEmbedder = signal('');
   readonly demoClippers = signal<ClipperInfo[]>([]);
+  /** Cleanup gates available for the current media type, and the subset the
+   *  user has enabled (seeded from each cleaner's ``default_enabled``). */
+  readonly cleaners = signal<CleanerInfo[]>([]);
+  readonly selectedCleaners = signal<CleanerSelection[]>([]);
   readonly selectedDemoClipper = signal('');
   readonly demoClipperParamValues = signal<Record<string, number | string>>({});
   /** For a *convert-out* half-type tab (e.g. ``document``), the embeddable
@@ -243,6 +247,8 @@ export class DemoPickerComponent {
       this.selectedDemoEmbedder.set('');
       this.demoClippers.set([]);
       this.selectedDemoClipper.set('');
+      this.cleaners.set([]);
+      this.selectedCleaners.set([]);
       this.demoClipperParamValues.set({});
       this.activeTabConvertsTo.set([]);
       this.activeTabConvertsToOptional.set(false);
@@ -298,6 +304,12 @@ export class DemoPickerComponent {
         this.demoClippers.set(clippers);
         this.selectedDemoClipper.set(clippers.length > 0 ? clippers[0].name : '');
         this.demoClipperParamValues.set({});
+      },
+    });
+    this.datasetsListingsApi.getCleaners(embeddableType).subscribe({
+      next: (cleaners) => {
+        this.cleaners.set(cleaners);
+        this.selectedCleaners.set(this.importDefaults.defaultCleanerSelection(cleaners));
       },
     });
   }
@@ -442,6 +454,7 @@ export class DemoPickerComponent {
       embedder: this.selectedDemoEmbedder(),
       ...(embedders ? { embedders } : {}),
       ...(effClipper ? { clipper: effClipper, clipper_params: { ...this.demoClipperParamValues() } } : {}),
+      ...(this.selectedCleaners().length > 0 ? { cleaners: this.selectedCleaners() } : {}),
       ...(converter ? { converter } : {}),
       dataset_name: userName,
       build_projection: this.buildProjection(),

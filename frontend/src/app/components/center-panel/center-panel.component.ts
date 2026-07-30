@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
 import { KeyValuePipe, TitleCasePipe } from '@angular/common';
 import { Subscription } from 'rxjs';
-import { EmbedderInfo, Media } from '../../models/api.models';
+import { EmbedderInfo, Media, PayloadVariant } from '../../models/api.models';
 import { MediasApiService } from '../../services/medias-api.service';
 import { KeyboardService } from '../../services/keyboard.service';
 import { VoteStateService } from '../../services/vote-state.service';
@@ -88,6 +88,13 @@ export class CenterPanelComponent implements OnDestroy {
   currentRegionBox: RegionBox | null = null;
   readonly pendingBadConfirm = signal(false);
 
+  /** Which payload the viewer shows for an item a MediaCleaner rewrote at load
+   *  time (``docs/plans/media-cleaners.md``): the canonical cleaned bytes, or
+   *  the pre-clean snapshot.  Always back to Clean on a media change - the
+   *  cleaned payload is the one the detector actually scored, so it is what the
+   *  user should see by default on every new item. */
+  readonly payloadVariant = signal<PayloadVariant>('');
+
   /** Embedder capability listings, loaded once in init(). Used to decide
    *  whether the active dataset's embedder emits a best-match region overlay
    *  (patch-region or structural), which gates the Highlight toggle, and
@@ -133,6 +140,10 @@ export class CenterPanelComponent implements OnDestroy {
       // resetting eagerly here keeps state coherent across the swap.
       this.pendingBadConfirm.set(false);
       this.currentRegionBox = null;
+      // Back to the canonical payload: "show me the original" is a per-item
+      // question, and leaving it latched would silently show the next item's
+      // pre-clean bytes (or nothing, for an item with no snapshot).
+      this.payloadVariant.set('');
     });
   }
 
@@ -225,6 +236,16 @@ export class CenterPanelComponent implements OnDestroy {
       this.undoToastText.set(null);
       this.undoToastTimer = null;
     }, 2000);
+  }
+
+  /** Whether to offer the Clean/Original toggle: only items some cleaner
+   *  actually rewrote carry a pre-clean snapshot to switch to. */
+  get hasOriginalPayload(): boolean {
+    return this.media()?.has_original === true;
+  }
+
+  setPayloadVariant(variant: PayloadVariant): void {
+    this.payloadVariant.set(variant);
   }
 
   get mediaType(): string {

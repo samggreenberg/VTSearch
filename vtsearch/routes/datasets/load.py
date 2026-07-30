@@ -26,6 +26,7 @@ import json
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from flask import request, send_file
 from flask_smorest import Blueprint, abort
@@ -120,7 +121,7 @@ def _build_local_folder_field_values(form, upload_dir: Path, clipper_params: dic
         "media_type": (form.get("media_type") or "").strip(),
         "recursive": (form.get("recursive") or "true").strip().lower() not in ("false", "0", "no", "off"),
     }
-    for key in ("embedder", "source_specs"):
+    for key in ("embedder", "source_specs", "cleaners"):
         val = (form.get(key) or "").strip()
         if val:
             field_values[key] = val
@@ -135,13 +136,17 @@ def _build_local_folder_field_values(form, upload_dir: Path, clipper_params: dic
 def _extract_clipper_config(field_values: dict) -> tuple[str, dict | None, list[dict] | None]:
     """Pop clipper-related keys; mutate *field_values* in place.
 
-    Returns ``(clipper_name, clipper_params, chain_steps)``.
+    Returns ``(clipper_name, clipper_params, chain_steps)``, where the chain
+    already carries the import's enabled cleanup gates as trailing ``cleaner``
+    steps (they always run last, on the finished units).
     """
+    from vtscore.datasets.clipper_chain import append_cleaner_steps
     from vtscore.datasets.load_pipeline import _parse_chain_field
 
     clipper_name = field_values.pop("clipper", "") or ""
     clipper_params = field_values.pop("clipper_params", None)
     chain_steps = _parse_chain_field(field_values.pop("clipper_chain", None))
+    chain_steps = append_cleaner_steps(chain_steps, field_values.pop("cleaners", None))
     field_values["clipper"] = clipper_name
     return clipper_name, clipper_params, chain_steps
 
@@ -298,7 +303,7 @@ def import_local_files():
         "media_type": media_type,
         "paths_file": str(paths_file),
     }
-    for key in ("embedder", "source_specs"):
+    for key in ("embedder", "source_specs", "cleaners"):
         val = (request.form.get(key) or "").strip()
         if val:
             field_values[key] = val
@@ -339,6 +344,26 @@ def import_local_files():
         merge_near_duplicates=_form_flag(request.form.get("merge_near_duplicates")),
     )
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
+
+
+def _apply_demo_clip_fields(
+    field_values: dict,
+    clipper_name: str,
+    clipper_params: dict | None,
+    cleaners: Any,
+) -> None:
+    """Copy the demo body's clipper / cleanup selection onto *field_values*.
+
+    ``clipper_params`` only rides along with a named clipper (it means nothing
+    on its own), while ``cleaners`` is independent: cleanup gates apply whether
+    or not the user picked a clipper.
+    """
+    if clipper_name:
+        field_values["clipper"] = clipper_name
+        if clipper_params:
+            field_values["clipper_params"] = clipper_params
+    if cleaners:
+        field_values["cleaners"] = cleaners
 
 
 def _apply_demo_media_type_fields(field_values: dict, converter_name: str, demo_info: dict) -> None:
@@ -395,10 +420,7 @@ def load_demo_dataset_route(body: dict):
     # Inject media_type so the loading task exposes it to the frontend,
     # allowing the "guessed type" logic to consider in-progress loads.
     _apply_demo_media_type_fields(field_values, converter_name, demo_info)
-    if clipper_name:
-        field_values["clipper"] = clipper_name
-        if clipper_params:
-            field_values["clipper_params"] = clipper_params
+    _apply_demo_clip_fields(field_values, clipper_name, clipper_params, body.get("cleaners"))
     if embedder_name:
         field_values["embedder"] = embedder_name
     demo_embedders = body.get("embedders")

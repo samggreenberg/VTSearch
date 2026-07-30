@@ -512,9 +512,9 @@ and media sources) share a common `PluginBase` / `PluginField` /
 5. **Graceful degradation**; if a plugin's optional dependency is
    missing, a warning is emitted but the app continues.
 
-### Explicitly registered plugins (media types / embedders / clippers)
+### Explicitly registered plugins (media types / embedders / clippers / cleaners)
 
-Media types, embedders, and clippers use three separate dict-based
+Media types, embedders, clippers, and cleaners use four separate dict-based
 registries in `vtscore/media/__init__.py`:
 
 | Registry | Registration function | Lookup functions |
@@ -522,6 +522,14 @@ registries in `vtscore/media/__init__.py`:
 | Media types | `register(media_type)` | `get(type_id)`, `all_types()`, `get_by_folder_name()`, `get_by_extension()` |
 | Embedders | `register_embedder(embedder)` | `get_embedder(name)`, `all_embedders()`, `embedders_for_type(type_id)` |
 | Clippers | `register_clipper(clipper)` | `get_clipper(name)`, `all_clippers()`, `clippers_for_type(type_id)` |
+| Cleaners | `register_cleaner(cleaner)` | `get_cleaner(name)`, `all_cleaners()`, `cleaners_for_type(type_id)` |
+
+Cleaners (`MediaCleaner`, a `MediaClipper` subclass) get their own registry
+even though they share the clipper descriptor surface, because the UI treats
+them differently: a clipper is a radio choice (one per import), a cleaner is a
+checkbox every item of that type passes through. Keeping them out of
+`_clipper_registry` is what stops them from appearing in a clipper chooser.
+See [EXTENDING-media.md § Adding a Media Cleaner](EXTENDING-media.md#adding-a-media-cleaner).
 
 **`type_id` and `folder_import_name`:** Each media type has a `type_id`
 (e.g. `"audio"`, `"image"`) and a `folder_import_name` which is the
@@ -760,7 +768,11 @@ recoverable long after the import job ended:
   (`vtscore/datasets/clipper_chain.py::_stamp_origin`) inherits the parent's
   `origin` and `origin_name` and adds the full `clipper_chain` JSON trail plus
   the legacy single-step keys `clipper`, `clipper_<param>`, and
-  `clip_start` / `clip_end` / `clip_box` / `clip_index`.
+  `clip_start` / `clip_end` / `clip_box` / `clip_index`.  A chain may also
+  carry `kind: "cleaner"` steps — the 1→1 cleanup gates that run last, on the
+  finished units — whose trail entries record `changed` (did this gate rewrite
+  *this* item?) alongside the usual `content_hash`.  Cleaner steps stamp no
+  legacy keys: with one output there is no sibling to disambiguate.
 
 Both are machine-readable recipes: `vtscore/media/lazy_clip.py` replays them
 to reproduce the bytes on demand, which is what makes reference-mode derived
