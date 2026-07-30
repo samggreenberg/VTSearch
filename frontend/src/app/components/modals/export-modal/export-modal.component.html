@@ -24,7 +24,23 @@
 
   <!-- Column Selection -->
   <div class="export-section">
-    <h3 title="Choose which data fields to include in the exported output">Columns</h3>
+    <div class="export-section-header">
+      <h3 title="Choose which data fields to include in the exported output">Columns</h3>
+      <button
+        type="button"
+        class="column-select-all"
+        role="checkbox"
+        [attr.aria-checked]="columnSelectionState === 'all' ? 'true' : columnSelectionState === 'some' ? 'mixed' : 'false'"
+        [attr.aria-label]="columnSelectionState === 'all' ? 'Deselect all columns' : 'Select all columns'"
+        [title]="columnSelectionState === 'all' ? 'Deselect all columns' : 'Select all columns'"
+        (click)="toggleAllColumns()">
+        @switch (columnSelectionState) {
+          @case ('all') { <vt-icon type="checkbox-checked" [size]="15"></vt-icon> }
+          @case ('some') { <vt-icon type="checkbox-some" [size]="15"></vt-icon> }
+          @default { <vt-icon type="checkbox-blank" [size]="15"></vt-icon> }
+        }
+      </button>
+    </div>
     <div class="column-checkboxes">
       @for (col of columns; track col.key) {
         <label class="column-toggle">

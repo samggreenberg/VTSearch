@@ -252,6 +252,20 @@ export class ExportModalComponent implements OnInit {
     return this.columns.filter((c) => c.enabled);
   }
 
+  /** Tri-state of the column select-all control: how many columns are enabled. */
+  get columnSelectionState(): 'none' | 'some' | 'all' {
+    const enabled = this.enabledColumns.length;
+    if (enabled === 0) return 'none';
+    if (enabled >= this.columns.length) return 'all';
+    return 'some';
+  }
+
+  /** From [x] (all enabled), clear every column; from [ ]/[-], enable them all. */
+  toggleAllColumns(): void {
+    const enable = this.columnSelectionState !== 'all';
+    for (const col of this.columns) col.enabled = enable;
+  }
+
   // --- Preview column resize ---
   //
   // The preview table's columns default to auto layout (`width: 100%`, each

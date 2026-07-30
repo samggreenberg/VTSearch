@@ -88,6 +88,25 @@ describe('ExportModalComponent', () => {
     expect(extraCol?.label).toBe('Extra'); // unknown keys fall back to title-casing
   });
 
+  it('reports the tri-state column selection and toggles all on/off', async () => {
+    await flushInit();
+    expect(component.columnSelectionState).toBe('all'); // every column starts enabled
+
+    component.columns[0].enabled = false;
+    expect(component.columnSelectionState).toBe('some');
+
+    component.toggleAllColumns(); // 'some' -> select all
+    expect(component.columnSelectionState).toBe('all');
+    expect(component.columns.every((c) => c.enabled)).toBe(true);
+
+    component.toggleAllColumns(); // 'all' -> deselect all
+    expect(component.columnSelectionState).toBe('none');
+    expect(component.columns.every((c) => !c.enabled)).toBe(true);
+
+    component.toggleAllColumns(); // 'none' -> select all
+    expect(component.columnSelectionState).toBe('all');
+  });
+
   it('slices the fetched labels by the active category', async () => {
     await flushInit();
     component.labelFilter = 'good';

@@ -17,6 +17,37 @@
 
 // --- Column checkboxes ---
 
+.export-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+
+  h3 { margin-bottom: 0; }
+}
+
+// Tri-state master checkbox (empty / dash / check for none / partial / all),
+// mirroring the dashboard/bin-popup/browse-selection-panel select-all controls.
+.column-select-all {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: var(--space-2xs);
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-base), background var(--transition-base);
+
+  &:hover {
+    background: var(--btn-icon-hover-bg);
+    color: var(--text-primary);
+  }
+}
+
 .column-checkboxes {
   display: flex;
   flex-wrap: wrap;
