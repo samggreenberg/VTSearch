@@ -164,6 +164,12 @@ def _load_importers() -> Iterable[Any]:
     return list_importers()
 
 
+def _load_datasource_importers() -> Iterable[Any]:
+    from vtscore.datasource_importers import list_datasource_importers
+
+    return list_datasource_importers()
+
+
 def _load_exporters() -> Iterable[Any]:
     from vtscore.exporters import list_exporters
 
@@ -223,6 +229,7 @@ def _load_cleaners() -> Iterable[Any]:
 # :func:`vtsearch.shim.register_app_plugin_families`.
 _LIBRARY_FAMILIES: tuple[FamilyProvider, ...] = (
     FamilyProvider("importers", "Dataset importers", _load_importers),
+    FamilyProvider("datasource_importers", "Datasource importers", _load_datasource_importers),
     FamilyProvider("exporters", "Results exporters", _load_exporters),
     FamilyProvider("label_importers", "Label importers", _load_label_importers),
     FamilyProvider("labelset_sources", "Labelset sources", _load_labelset_sources),

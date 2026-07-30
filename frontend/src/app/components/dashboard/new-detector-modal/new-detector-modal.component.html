@@ -438,13 +438,6 @@
         (demoSelected)="selectDemo($event)"
         [demoRowDisabledFn]="demoRowDisabledFn"
         [demoRowTitleFn]="demoRowTitleFn"
-        [sfPathInputValue]="sfTypedPath"
-        (sfPathInputValueChange)="sfTypedPath = $event"
-        (sfPathApplied)="submitSfTypedPath()"
-        [sfApplyOnBlur]="false"
-        [sfPathLabel]="'Path to a media file on the server'"
-        [sfPathPlaceholder]="'/absolute/server/path/to/file'"
-        [sfPathFieldId]="'sf-example-path-input'"
         [lfPickerKind]="lfPickerKind"
         [lfShowFieldLabel]="false"
         [lfShowFileCount]="false"
@@ -455,20 +448,6 @@
         [lfFilesAcceptAttr]="''"
         (lfFilesDropped)="onLocalFileDropped($event)"
       >
-        <ng-container sfAfter>
-          <button
-            type="button"
-            class="btn btn--primary"
-            [disabled]="sfFileSelecting() || !sfTypedPath.trim()"
-            (click)="submitSfTypedPath()"
-          >
-            @if (sfFileSelecting()) { Loading… } @else { Load }
-          </button>
-          @if (sfBrowseError()) {
-            <p class="error-text">{{ sfBrowseError() }}</p>
-          }
-        </ng-container>
-
         <ng-container lfInfo>
           <p class="info-text">
             Pick a media file on <strong>this computer</strong>. It will be uploaded to the server
@@ -485,6 +464,16 @@
           }
         </ng-container>
       </vt-source-picker>
+
+      <!-- Datasource importer form: fetches one media item via the selected
+           importer's declared plugin fields (server file, URL download,
+           third-party datasource importers). -->
+      @if (selectedDatasourceImporter; as dsImporter) {
+        <vt-datasource-import-form
+          [importer]="dsImporter"
+          (imported)="onDatasourceImported($event)"
+        ></vt-datasource-import-form>
+      }
 
       <!-- Demo file picker: appears after picking a demo from the table.
            Source-picker hides its demo view (activePickerView passed as '')

@@ -316,28 +316,86 @@ describe('NewDetectorModalComponent', () => {
   });
 
   it('auto-selects the lone importer when a single-source category is opened', () => {
-    // "Files" has exactly one importer (server_folder), so opening it should
-    // skip the redundant one-button sub-tab bar and land on the path input.
+    // "Files" has exactly one importer (the server_file datasource
+    // importer), so opening it should skip the redundant one-button
+    // sub-tab bar and land on its form.
+    component.datasourceImporters.set([
+      { name: 'server_file', category: 'server' },
+    ]);
     component.mediaImporters.set([
-      { name: 'server_folder', picker_view: 'server_folder', category: 'server' },
       { name: 'demo', picker_view: 'demo', category: 'demo' },
     ]);
 
     component.selectImporterTab('server');
 
-    expect(component.selectedImporter?.name).toBe('server_folder');
-    expect(component.activePickerView).toBe('server_folder');
+    expect(component.selectedImporter?.name).toBe('server_file');
+    expect(component.selectedDatasourceImporter?.name).toBe('server_file');
   });
 
   it('does not auto-select when a category holds more than one importer', () => {
-    component.mediaImporters.set([
-      { name: 'server_folder', picker_view: 'server_folder', category: 'server' },
-      { name: 'server_other', picker_view: 'server_folder', category: 'server' },
+    component.datasourceImporters.set([
+      { name: 'server_file', category: 'server' },
+      { name: 'server_other', category: 'server' },
     ]);
 
     component.selectImporterTab('server');
 
     expect(component.selectedImporter).toBeNull();
+  });
+
+  // --- Datasource importers in the media picker (issue #2767) ---
+
+  it('merges datasource importers into the picker after the dataset browse views', () => {
+    component.mediaImporters.set([
+      { name: 'local_files', picker_view: 'local_files', category: 'local' },
+      { name: 'demo', picker_view: 'demo', category: 'demo' },
+    ]);
+    component.datasourceImporters.set([
+      { name: 'server_file', category: 'server' },
+      { name: 'url_download', category: 'services' },
+      { name: 'my_cloud_thing', category: 'services' },
+    ]);
+
+    expect(component.orderedImporters.map((i) => i.name)).toEqual([
+      'local_files',
+      'server_file',
+      'demo',
+      'url_download',
+      'my_cloud_thing',
+    ]);
+  });
+
+  it('reports an empty picker view for a selected datasource importer', () => {
+    const dsImporter = { name: 'url_download', category: 'services' };
+    component.datasourceImporters.set([dsImporter]);
+
+    component.selectImporter(dsImporter);
+
+    // The source picker renders none of its dedicated widgets; the modal
+    // renders the importer's dynamic form instead.
+    expect(component.activePickerView).toBe('');
+    expect(component.selectedDatasourceImporter).toBe(dsImporter);
+  });
+
+  it('routes a dataset importer that shares a datasource importer name by identity', () => {
+    const datasetDemo = { name: 'demo', picker_view: 'demo', category: 'demo' };
+    component.mediaImporters.set([datasetDemo]);
+    component.datasourceImporters.set([{ name: 'demo', category: 'services' }]);
+
+    expect(component.isDatasourceImporter(datasetDemo)).toBe(false);
+  });
+
+  it('adds the fetched item to the example stack and returns to the form', () => {
+    component.view.set('media-picker');
+    component.mediaType.set('');
+
+    component.onDatasourceImported({ filename: 'abc123.wav', original_name: 'bark.wav' });
+
+    expect(component.mediaExamples().map((e) => e.value)).toEqual(['abc123.wav']);
+    expect(component.mediaExamples()[0].display).toBe('bark.wav');
+    // Media type is inferred from the original filename's extension.
+    expect(component.mediaExamples()[0].mediaType).toBe('audio');
+    expect(component.view()).toBe('main');
   });
 
   // --- Trained tab: label-importer plugin field parity (issue #2597) ---
