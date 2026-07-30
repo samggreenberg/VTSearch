@@ -728,12 +728,24 @@ class VideoMediaType(MediaType):
         if media_bytes is None:
             with open(file_path, "rb") as f:
                 media_bytes = f.read()
+        return {"media_bytes": media_bytes, **self.load_thin_media_data(file_path)}
+
+    def load_thin_media_data(self, file_path: Path) -> dict:
+        """Duration + mid-frame thumbnail, both read straight from the path.
+
+        Overrides the base default (which routes through
+        :meth:`load_media_data` and strips the payload) because neither
+        artifact needs the file's bytes in memory: ffmpeg probes the container
+        by path and the thumbnail grabs a single decoded frame.  A thin video
+        load therefore never buffers a multi-GB file just to get a preview
+        frame.
+        """
         # One probe serves both the duration and the thumbnail's mid-frame
         # seek, so a load costs one container read rather than two.
         info = decode.probe(file_path)
         duration = info.duration if info is not None else 0.0
         thumbnail = _thumbnail_from_path(file_path, None, _THUMB_SIZE, info=info)
-        return {"media_bytes": media_bytes, "duration": duration, "thumbnail_bytes": thumbnail}
+        return {"duration": duration, "thumbnail_bytes": thumbnail}
 
     # ------------------------------------------------------------------
     # HTTP serving

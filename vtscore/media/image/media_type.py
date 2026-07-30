@@ -135,17 +135,18 @@ class ImageMediaType(MediaType):
     # ------------------------------------------------------------------
 
     def load_media_data(self, file_path: Path, media_bytes: bytes | None = None) -> dict:
-        import io  # noqa: PLC0415
-
-        from PIL import Image  # noqa: PLC0415
-
+        from vtscore.media.image.decode import open_image  # noqa: PLC0415
         from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
 
         if media_bytes is None:
             with open(file_path, "rb") as f:
                 media_bytes = f.read()
         try:
-            with Image.open(io.BytesIO(media_bytes)) as img:
+            # Header-only read, and the bomb ceiling is lifted, so an enormous
+            # source reports its true dimensions instead of being refused.
+            # These stay *native* size: the stored bytes are the untouched
+            # original, and crop/clip boxes are expressed against them.
+            with open_image(media_bytes) as img:
                 width, height = img.width, img.height
         except Exception:
             width, height = None, None
@@ -174,10 +175,7 @@ class ImageMediaType(MediaType):
         thumb = media.get("thumbnail_bytes")
         if thumb:
             return thumb
-        import io  # noqa: PLC0415
-
-        from PIL import Image  # noqa: PLC0415
-
+        from vtscore.media.image.decode import open_image  # noqa: PLC0415
         from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
 
         data = self._resolve_media_bytes(media)
@@ -185,7 +183,9 @@ class ImageMediaType(MediaType):
             return None
         if media.get("width") is None or media.get("height") is None:
             try:
-                with Image.open(io.BytesIO(data)) as img:
+                # Header-only read with the bomb ceiling lifted, mirroring
+                # load_media_data: dimensions stay native size.
+                with open_image(data) as img:
                     media["width"], media["height"] = img.width, img.height
             except Exception:
                 pass

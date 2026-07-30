@@ -12,6 +12,7 @@ from flask_smorest import Blueprint, abort
 
 from vtscore.detectors.labeling_progress import (
     analyze_labeling_progress,
+    cached_indicator_history,
     calculate_diversity_level_over_time,
     calculate_error_cost_over_time,
     calculate_prediction_stability_over_time,
@@ -166,10 +167,27 @@ def labeling_status_indicator():
 @eval_bp.response(200, IndicatorScoreHistoryResponseSchema)
 @eval_bp.alt_response(500, description="Score-history computation failed.")
 def indicator_score_history(query: dict):
-    """Return cached indicator score history for a given metric.
+    """Return the cached indicator score history for a given metric.
 
-    Reads only the per-step cache populated by the labeling-status
-    polling; no models are retrained.
+    Reads only the per-step cache advanced by the ``/api/labeling-status``
+    background worker; **no models are retrained and the cache is never
+    advanced here**, so the response is always fast regardless of dataset size
+    or label-history length.
+
+    When the cache does not yet cover the whole ``label_history`` the response
+    carries ``complete: false`` and an empty ``history``.  Clients should then
+    fall back to ``POST /api/eval/train-and-score``, which computes the same
+    series on a background thread with live progress and cancellation.
+
+    This route used to call the ``calculate_*_over_time`` helpers directly.
+    Those advance the cache via ``_ensure_cache`` - retraining one MLP per
+    uncached label step plus a forward pass over the unlabeled pool, and on a
+    cold cache a full hierarchical-k-means coverage-atlas build - all inline on
+    the request thread under ``_progress_lock``.  Since ``/api/labeling-status``
+    deliberately defers exactly that work to a background worker (issue #2397),
+    the cache is behind for most of a labeling session, and this endpoint
+    absorbed the entire deferred build: tens of seconds on a mid-size dataset,
+    growing with both media count and vote count.
     """
     metric = query["metric"]
 
@@ -177,13 +195,8 @@ def indicator_score_history(query: dict):
     inclusion = get_inclusion()
 
     try:
-        if metric == "smart":
-            data = calculate_error_cost_over_time(clips, label_history, good_votes, bad_votes, inclusion)
-        elif metric == "stable":
-            data = calculate_prediction_stability_over_time(clips, label_history, inclusion)
-        else:
-            data = calculate_diversity_level_over_time(clips, label_history, inclusion)
-        return {"metric": metric, "history": data}
+        data, complete = cached_indicator_history(metric, clips, label_history, good_votes, bad_votes, inclusion)
+        return {"metric": metric, "history": data, "complete": complete}
     except Exception:
         import logging
 

@@ -90,10 +90,21 @@ GET /api/indicator-score-history
 
 **Query params:** `metric`: one of `"smart"`, `"stable"`, `"diverse"`.
 
-→ `{"metric": "smart", "history": [...]}`
+→ `{"metric": "smart", "history": [...], "complete": true}`
 
-Returns cached per-step indicator data (computed during labeling-status
-polling).
+Returns per-step indicator data straight from the cache that the
+`labeling-status` background worker advances. This route is **read-only**: it
+never advances the cache and never retrains a model, so it returns promptly
+whatever the dataset size or label-history length.
+
+When the cache does not yet cover the whole label history — the normal state
+while the user is actively labeling, since `labeling-status` defers the advance
+to a background worker — the response is `{"metric": ..., "history": [],
+"complete": false}`. Clients should then fall back to
+`POST /api/eval/train-and-score` (below), which computes the same series on a
+background thread with live progress and cancellation. `complete: false` is
+also returned if the cache is momentarily locked by an in-flight refresh, so
+the read never waits on a build.
 
 ### Evaluate metric (train-and-score)
 
