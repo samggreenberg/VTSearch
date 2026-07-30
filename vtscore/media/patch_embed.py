@@ -850,7 +850,9 @@ def _fit_pca_projector(
     projects any original-space ``(D,)`` vector into the fitted ``k``-dim space
     and L2-normalises it, so it can be dropped into the cosine half of a HAC
     merge affinity to decide the tree topology in a denoised, lower-dimensional
-    space while the stored node vectors stay full-dim.  ``n_components`` is
+    space while the stored node vectors stay full-dim.  The projector accepts
+    either a single ``(D,)`` vector or a ``(N, D)`` batch (projected in one
+    ``pca.transform`` call).  ``n_components`` is
     clamped to ``min(n_components, H*W, D)``; returns ``None`` (caller falls back
     to the full-dim cosine) when a PCA cannot be fit (``k < 1``).
     """
@@ -866,8 +868,15 @@ def _fit_pca_projector(
     pca.fit(matrix)
 
     def project(vec: np.ndarray) -> np.ndarray:
-        reduced = pca.transform(np.asarray(vec, dtype=np.float32)[None, :])[0]
-        return _l2_normalize(reduced)
+        # Accepts a single ``(D,)`` vector or a ``(N, D)`` batch; a batch is
+        # projected in one ``pca.transform`` call rather than N per-vector calls,
+        # which is where the merge-order affinity gets its vectors.
+        arr = np.asarray(vec, dtype=np.float32)
+        if arr.ndim == 1:
+            return _l2_normalize(pca.transform(arr[None, :])[0])
+        reduced = pca.transform(arr)
+        norms = np.linalg.norm(reduced, axis=1, keepdims=True)
+        return reduced / np.where(norms > 1e-12, norms, 1.0)
 
     return project
 

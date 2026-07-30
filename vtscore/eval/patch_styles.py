@@ -337,7 +337,7 @@ def build_patch_hac_tree(
 
             project = _fit_pca_projector(grid, int(pca_dims))
             if project is not None:
-                sim = np.stack([project(patches[i]) for i in range(n)])
+                sim = project(patches)  # one batched transform, not n per-vector calls
         cos_d = np.clip((1.0 - sim @ sim.T) * 0.5, 0.0, 1.0)
         centers = np.stack([(cols + 0.5) / width, (rows + 0.5) / height], axis=1).astype(np.float32)
         spatial = np.sqrt(((centers[:, None, :] - centers[None, :, :]) ** 2).sum(-1)) / np.sqrt(2.0)
