@@ -149,7 +149,19 @@ export class ExportModalComponent implements OnInit {
     { key: 'category', label: 'Category' },
   ];
 
-  /** Columns excluded from checkboxes/preview but always appended to exports. */
+  /**
+   * Columns excluded from checkboxes/preview but always appended to *plugin*
+   * exports (CSV/JSON files, webhooks), where they make the payload
+   * re-importable: the exporter receives the whole `LabeledElement`s, so
+   * `origin` reaches the file as a real dict and is JSON-serialized on the way
+   * out (and JSON-parsed back on re-import).
+   *
+   * They are deliberately **not** appended to the clipboard, which flattens
+   * rows to strings client-side: `origin` would stringify to `[object Object]`,
+   * which no importer can parse back. Two unselectable junk columns that buy
+   * zero matching power is a strictly worse paste, so the clipboard honours the
+   * user's column selection exactly (issue #2770).
+   */
   private static readonly ALWAYS_EXPORT_KEYS = ['origin', 'origin_name'];
 
   constructor() {
@@ -374,7 +386,9 @@ export class ExportModalComponent implements OnInit {
     return String((entry as unknown as Record<string, unknown>)[col.key] ?? '');
   }
 
-  /** Columns to export: user-selected columns plus always-export columns appended at the end. */
+  /** Columns sent to a plugin exporter: user-selected columns plus the
+   *  always-export columns appended at the end. Clipboard copies use
+   *  {@link enabledColumns} instead; see {@link ALWAYS_EXPORT_KEYS}. */
   private get exportColumns(): ColumnDef[] {
     const cols = [...this.enabledColumns];
     for (const key of ExportModalComponent.ALWAYS_EXPORT_KEYS) {
@@ -383,14 +397,15 @@ export class ExportModalComponent implements OnInit {
     return cols;
   }
 
-  /** Columns passed to the shared clipboard control (table mode). */
+  /** Columns passed to the shared clipboard control (table mode): exactly the
+   *  ones the user checked, matching what the preview table shows. */
   get clipboardColumns(): ClipboardColumn[] {
-    return this.exportColumns.map((c) => ({ key: c.key, label: c.label }));
+    return this.enabledColumns.map((c) => ({ key: c.key, label: c.label }));
   }
 
   /** Labels flattened to `{ columnKey: value }` rows for the clipboard control. */
   get clipboardRows(): Record<string, string>[] {
-    const cols = this.exportColumns;
+    const cols = this.enabledColumns;
     return this.filteredLabels.map((entry) => {
       const row: Record<string, string> = {};
       for (const c of cols) row[c.key] = this.getCellValue(entry, c);
