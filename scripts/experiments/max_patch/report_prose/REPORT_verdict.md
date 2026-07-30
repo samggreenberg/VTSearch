@@ -30,6 +30,7 @@ Visual Genome categories × 3 seeds:
   0.16 vs 0.11), netting to a tie; on the mid `patch_to_leaf` band — where a
   single raw patch is already the right candidate — the extra nodes are pure
   cost (worse FPR *and* FNR); on small objects it simply matches MaxPatch.
+- **PCA-denoising the merge order is a no-op.** MaxPatchPcaHAC — MaxPatchHAC with the raw-patch merge *order* decided in a per-image 32-component PCA space (the `pca_dims` option ported from the HAC-tree-improvements branch) — is statistically indistinguishable from MaxPatchHAC (ErrorCost 0.420 vs 0.436, paired Δ = −0.015, Holm p = 1.0; AULC Δ = −0.001, p = 0.48). The tree topology genuinely changes, but an image's score is a max-pool over *every* node, so it is blind to which patches merged in what order. Like MaxPatchHAC, it does not beat plain MaxPatch (AULC Δ = +0.035 vs MaxPatch, p = 0.008).
 - **Why the hybrid doesn't win:** the geometry fix already gave plain MaxPatch a
   whole-image row in its scored pool, so MaxPatch **already spans scales** — a
   single-patch candidate for small objects and the full-image vector for

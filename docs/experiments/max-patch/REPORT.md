@@ -31,6 +31,11 @@ from its patches**. Four strategies are compared:
   merged regions for large ones. The idea: get MaxPatch's sharp small-object
   leaves *and* MaxHAC's multi-scale pooled regions in one tree, at only ~2× the
   node count of the raw patches.
+- **MaxPatchPcaHAC** (a variant of the hybrid) — MaxPatchHAC with the
+  raw-patch merge *order* decided in a per-image PCA-reduced space (the
+  `pca_dims` option ported from the HAC-tree-improvements branch), to test
+  whether denoising the clustering before the merge changes the tree's
+  usefulness. Only the tree topology changes; node vectors stay full-dim.
 - **SigLIP** (the whole-image baseline) — one global vector per image for both
   votes and scores; no region machinery at all.
 
@@ -66,6 +71,7 @@ Visual Genome categories × 3 seeds:
   0.16 vs 0.11), netting to a tie; on the mid `patch_to_leaf` band — where a
   single raw patch is already the right candidate — the extra nodes are pure
   cost (worse FPR *and* FNR); on small objects it simply matches MaxPatch.
+- **PCA-denoising the merge order is a no-op.** MaxPatchPcaHAC — MaxPatchHAC with the raw-patch merge *order* decided in a per-image 32-component PCA space (the `pca_dims` option ported from the HAC-tree-improvements branch) — is statistically indistinguishable from MaxPatchHAC (ErrorCost 0.420 vs 0.436, paired Δ = −0.015, Holm p = 1.0; AULC Δ = −0.001, p = 0.48). The tree topology genuinely changes, but an image's score is a max-pool over *every* node, so it is blind to which patches merged in what order. Like MaxPatchHAC, it does not beat plain MaxPatch (AULC Δ = +0.035 vs MaxPatch, p = 0.008).
 - **Why the hybrid doesn't win:** the geometry fix already gave plain MaxPatch a
   whole-image row in its scored pool, so MaxPatch **already spans scales** — a
   single-patch candidate for small objects and the full-image vector for
@@ -181,8 +187,8 @@ operating point, which the original report mis-attributed to raw-patch
   image-level, so it cannot judge *region* voting (it was the first run's
   invalid arm). OpenLogo (the extreme-small-logo regime) could not be fetched —
   the cluster's shared egress repeatedly failed on the 27k-file HF dataset.
-- **Embedders / arms:** `dinov3_patch` under four styles (`max_hac`,
-  `max_patch`, `max_patch_hac`, `whole_image`) and `siglip` (`whole_image`). The
+- **Embedders / arms:** `dinov3_patch` under five styles (`max_hac`,
+  `max_patch`, `max_patch_hac`, `max_patch_pca_hac`, `whole_image`) and `siglip` (`whole_image`). The
   DINOv3 `whole_image` arm is the CLS-only control ("does *any* region machinery
   beat the plain global vector?"); SigLIP is the standard baseline. `dinov2` is
   omitted (DINOv3 is the production patch embedder; its own `whole_image` arm is
@@ -197,7 +203,7 @@ operating point, which the original report mis-attributed to raw-patch
 
 ## Results
 
-_Trajectories: **344** (dataset × category × seed × arm). Categories/dataset: visual_genome_m 23; seeds: 3._
+_Trajectories: **413** (dataset × category × seed × arm). Categories/dataset: visual_genome_m 23; seeds: 3._
 
 ## Overall (final vote budget)
 
@@ -207,6 +213,7 @@ _Trajectories: **344** (dataset × category × seed × arm). Categories/dataset:
 | DINOv3 · MaxHAC | 69 | 0.463 | 0.092 | 0.371 | 0.448 | 0.866 | 0.3 | 0.6 | 0.1 |
 | DINOv3 · MaxPatch | 69 | 0.399 | 0.087 | 0.312 | 0.486 | 0.905 | 0.2 | 0.7 | 0.6 |
 | DINOv3 · MaxPatchHAC | 69 | 0.436 | 0.102 | 0.334 | 0.492 | 0.908 | 0.1 | 0.5 | 0.8 |
+| DINOv3 · MaxPatchPcaHAC | 69 | 0.420 | 0.114 | 0.306 | 0.492 | 0.909 | 0.1 | 0.5 | 0.8 |
 | DINOv3 · whole-image (CLS) | 69 | 0.608 | 0.134 | 0.474 | 0.356 | 0.794 | 0.3 | 0.6 | 0.0 |
 | SigLIP · whole-image | 68 | 0.489 | 0.155 | 0.335 | 0.428 | 0.860 | 0.3 | 0.5 | 0.0 |
 
@@ -219,6 +226,7 @@ _Trajectories: **344** (dataset × category × seed × arm). Categories/dataset:
 | visual_genome_m | DINOv3 · MaxHAC | 69 | 0.463 | 0.092 | 0.371 | 0.448 | 0.866 | 0.3 | 0.6 | 0.1 |
 | visual_genome_m | DINOv3 · MaxPatch | 69 | 0.399 | 0.087 | 0.312 | 0.486 | 0.905 | 0.2 | 0.7 | 0.6 |
 | visual_genome_m | DINOv3 · MaxPatchHAC | 69 | 0.436 | 0.102 | 0.334 | 0.492 | 0.908 | 0.1 | 0.5 | 0.8 |
+| visual_genome_m | DINOv3 · MaxPatchPcaHAC | 69 | 0.420 | 0.114 | 0.306 | 0.492 | 0.909 | 0.1 | 0.5 | 0.8 |
 | visual_genome_m | DINOv3 · whole-image (CLS) | 69 | 0.608 | 0.134 | 0.474 | 0.356 | 0.794 | 0.3 | 0.6 | 0.0 |
 | visual_genome_m | SigLIP · whole-image | 68 | 0.489 | 0.155 | 0.335 | 0.428 | 0.860 | 0.3 | 0.5 | 0.0 |
 
@@ -231,26 +239,31 @@ Mean over categories × seeds at the step nearest each budget — the table form
 | visual_genome_m | 10 | DINOv3 · MaxHAC | 0.728 | 0.356 | 0.343 |
 | visual_genome_m | 10 | DINOv3 · MaxPatch | 0.699 | 0.433 | 0.373 |
 | visual_genome_m | 10 | DINOv3 · MaxPatchHAC | 0.733 | 0.468 | 0.386 |
+| visual_genome_m | 10 | DINOv3 · MaxPatchPcaHAC | 0.703 | 0.443 | 0.391 |
 | visual_genome_m | 10 | DINOv3 · whole-image (CLS) | 0.813 | 0.521 | 0.264 |
 | visual_genome_m | 10 | SigLIP · whole-image | 0.774 | 0.587 | 0.306 |
 | visual_genome_m | 25 | DINOv3 · MaxHAC | 0.635 | 0.469 | 0.398 |
 | visual_genome_m | 25 | DINOv3 · MaxPatch | 0.590 | 0.452 | 0.417 |
 | visual_genome_m | 25 | DINOv3 · MaxPatchHAC | 0.658 | 0.529 | 0.426 |
+| visual_genome_m | 25 | DINOv3 · MaxPatchPcaHAC | 0.636 | 0.506 | 0.428 |
 | visual_genome_m | 25 | DINOv3 · whole-image (CLS) | 0.732 | 0.526 | 0.312 |
 | visual_genome_m | 25 | SigLIP · whole-image | 0.675 | 0.587 | 0.359 |
 | visual_genome_m | 50 | DINOv3 · MaxHAC | 0.570 | 0.434 | 0.398 |
 | visual_genome_m | 50 | DINOv3 · MaxPatch | 0.532 | 0.394 | 0.436 |
 | visual_genome_m | 50 | DINOv3 · MaxPatchHAC | 0.498 | 0.369 | 0.441 |
+| visual_genome_m | 50 | DINOv3 · MaxPatchPcaHAC | 0.505 | 0.370 | 0.442 |
 | visual_genome_m | 50 | DINOv3 · whole-image (CLS) | 0.736 | 0.524 | 0.314 |
 | visual_genome_m | 50 | SigLIP · whole-image | 0.616 | 0.515 | 0.396 |
 | visual_genome_m | 100 | DINOv3 · MaxHAC | 0.522 | 0.428 | 0.430 |
 | visual_genome_m | 100 | DINOv3 · MaxPatch | 0.443 | 0.370 | 0.471 |
 | visual_genome_m | 100 | DINOv3 · MaxPatchHAC | 0.484 | 0.410 | 0.484 |
+| visual_genome_m | 100 | DINOv3 · MaxPatchPcaHAC | 0.472 | 0.383 | 0.484 |
 | visual_genome_m | 100 | DINOv3 · whole-image (CLS) | 0.647 | 0.483 | 0.335 |
 | visual_genome_m | 100 | SigLIP · whole-image | 0.543 | 0.448 | 0.412 |
 | visual_genome_m | 150 | DINOv3 · MaxHAC | 0.463 | 0.371 | 0.448 |
 | visual_genome_m | 150 | DINOv3 · MaxPatch | 0.399 | 0.312 | 0.486 |
 | visual_genome_m | 150 | DINOv3 · MaxPatchHAC | 0.436 | 0.334 | 0.492 |
+| visual_genome_m | 150 | DINOv3 · MaxPatchPcaHAC | 0.420 | 0.306 | 0.492 |
 | visual_genome_m | 150 | DINOv3 · whole-image (CLS) | 0.608 | 0.474 | 0.356 |
 | visual_genome_m | 150 | SigLIP · whole-image | 0.489 | 0.335 | 0.428 |
 
@@ -264,39 +277,45 @@ Paired over (category, seed); `delta = mean_A − mean_B` (negative ⇒ the firs
 
 | comparison | mean_A | mean_B | delta | n_pairs | holm_p | sig |
 |---|---|---|---|---|---|---|
-| MaxPatchHAC − MaxHAC | 0.541 | 0.564 | -0.023 | 69 | 0.1734 |  |
-| MaxPatchHAC − MaxPatch | 0.541 | 0.505 | 0.036 | 69 | 0.0017 |  ** |
-| MaxPatch − MaxHAC | 0.505 | 0.564 | -0.059 | 69 | 0.0003 |  *** |
+| MaxPatchPcaHAC − MaxPatchHAC | 0.540 | 0.541 | -0.001 | 69 | 0.4786 |  |
+| MaxPatchPcaHAC − MaxPatch | 0.540 | 0.505 | 0.035 | 69 | 0.0079 |  ** |
+| MaxPatchHAC − MaxHAC | 0.541 | 0.564 | -0.023 | 69 | 0.2602 |  |
+| MaxPatchHAC − MaxPatch | 0.541 | 0.505 | 0.036 | 69 | 0.0025 |  ** |
+| MaxPatch − MaxHAC | 0.505 | 0.564 | -0.059 | 69 | 0.0005 |  *** |
 | MaxPatchHAC − whole(CLS) | 0.541 | 0.680 | -0.139 | 69 | 0.0000 |  *** |
 | MaxHAC − whole(CLS) | 0.564 | 0.680 | -0.116 | 69 | 0.0000 |  *** |
 | MaxPatch − whole(CLS) | 0.505 | 0.680 | -0.175 | 69 | 0.0000 |  *** |
-| MaxPatchHAC − SigLIP | 0.541 | 0.594 | -0.053 | 68 | 0.0211 |  * |
-| MaxHAC − SigLIP | 0.562 | 0.594 | -0.032 | 68 | 0.1080 |  |
+| MaxPatchHAC − SigLIP | 0.541 | 0.594 | -0.053 | 68 | 0.0282 |  * |
+| MaxHAC − SigLIP | 0.562 | 0.594 | -0.032 | 68 | 0.2161 |  |
 
 **cost@50**
 
 | comparison | mean_A | mean_B | delta | n_pairs | holm_p | sig |
 |---|---|---|---|---|---|---|
-| MaxPatchHAC − MaxHAC | 0.498 | 0.570 | -0.071 | 69 | 0.0166 |  * |
-| MaxPatchHAC − MaxPatch | 0.498 | 0.532 | -0.034 | 69 | 0.2778 |  |
-| MaxPatch − MaxHAC | 0.532 | 0.570 | -0.038 | 69 | 0.5044 |  |
+| MaxPatchPcaHAC − MaxPatchHAC | 0.505 | 0.498 | 0.006 | 69 | 0.6662 |  |
+| MaxPatchPcaHAC − MaxPatch | 0.505 | 0.532 | -0.027 | 69 | 0.6653 |  |
+| MaxPatchHAC − MaxHAC | 0.498 | 0.570 | -0.071 | 69 | 0.0250 |  * |
+| MaxPatchHAC − MaxPatch | 0.498 | 0.532 | -0.034 | 69 | 0.5557 |  |
+| MaxPatch − MaxHAC | 0.532 | 0.570 | -0.038 | 69 | 0.7567 |  |
 | MaxPatchHAC − whole(CLS) | 0.498 | 0.736 | -0.238 | 69 | 0.0000 |  *** |
 | MaxHAC − whole(CLS) | 0.570 | 0.736 | -0.167 | 69 | 0.0000 |  *** |
 | MaxPatch − whole(CLS) | 0.532 | 0.736 | -0.204 | 69 | 0.0000 |  *** |
-| MaxPatchHAC − SigLIP | 0.498 | 0.616 | -0.118 | 68 | 0.0013 |  ** |
-| MaxHAC − SigLIP | 0.565 | 0.616 | -0.051 | 68 | 0.0137 |  * |
+| MaxPatchHAC − SigLIP | 0.498 | 0.616 | -0.118 | 68 | 0.0018 |  ** |
+| MaxHAC − SigLIP | 0.565 | 0.616 | -0.051 | 68 | 0.0228 |  * |
 
 **cost@150**
 
 | comparison | mean_A | mean_B | delta | n_pairs | holm_p | sig |
 |---|---|---|---|---|---|---|
-| MaxPatchHAC − MaxHAC | 0.436 | 0.463 | -0.027 | 69 | 0.0644 |  |
-| MaxPatchHAC − MaxPatch | 0.436 | 0.399 | 0.037 | 69 | 0.7003 |  |
-| MaxPatch − MaxHAC | 0.399 | 0.463 | -0.064 | 69 | 0.0019 |  ** |
+| MaxPatchPcaHAC − MaxPatchHAC | 0.420 | 0.436 | -0.015 | 69 | 1.0000 |  |
+| MaxPatchPcaHAC − MaxPatch | 0.420 | 0.399 | 0.021 | 69 | 0.7787 |  |
+| MaxPatchHAC − MaxHAC | 0.436 | 0.463 | -0.027 | 69 | 0.0966 |  |
+| MaxPatchHAC − MaxPatch | 0.436 | 0.399 | 0.037 | 69 | 1.0000 |  |
+| MaxPatch − MaxHAC | 0.399 | 0.463 | -0.064 | 69 | 0.0026 |  ** |
 | MaxPatchHAC − whole(CLS) | 0.436 | 0.608 | -0.172 | 69 | 0.0000 |  *** |
 | MaxHAC − whole(CLS) | 0.463 | 0.608 | -0.145 | 69 | 0.0000 |  *** |
 | MaxPatch − whole(CLS) | 0.399 | 0.608 | -0.209 | 69 | 0.0000 |  *** |
-| MaxPatchHAC − SigLIP | 0.434 | 0.489 | -0.056 | 68 | 0.1651 |  |
+| MaxPatchHAC − SigLIP | 0.434 | 0.489 | -0.056 | 68 | 0.2751 |  |
 | MaxHAC − SigLIP | 0.461 | 0.489 | -0.028 | 68 | 1.0000 |  |
 
 
@@ -366,6 +385,7 @@ Top block: categories where MaxPatch beats MaxHAC most; bottom block: where MaxH
   max-over-N score, so it also raises *false positives*. The two cancel on large
   objects and the extra nodes are pure cost on mid-scale ones. Adding scale
   candidates helps recall and hurts precision; pick the pool size deliberately.
+- **The tree's *merge order* barely matters; the candidate *set* does.** Denoising the merge order with per-image PCA (MaxPatchPcaHAC) changes the tree topology but leaves the outcome statistically unchanged — an image's score is a max-pool over *every* node, so it is insensitive to which patches merge in what order. The lever is the candidate set you pool over (raw patches + the whole-image row), not the structure of the tree built on it.
 - **The scale crossover is real but already covered.** Raw patches beat pooled
   regions on small objects and the two converge on large ones (ρ = 0.50 between
   object size and the MaxPatch−MaxHAC gap) — the pre-registered hypothesis. But
