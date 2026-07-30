@@ -18,6 +18,7 @@ import torch.nn as nn
 from vtscore.eval.patch_styles import (
     MaxHacStyle,
     MaxPatchHacStyle,
+    MaxPatchPcaHacStyle,
     MaxPatchStyle,
     WholeImageStyle,
     build_patch_hac_tree,
@@ -245,7 +246,9 @@ class TestTrainScoreGeometryParity:
     did not until the full-image row was added to its pool.
     """
 
-    @pytest.mark.parametrize("style_cls", [MaxPatchStyle, MaxHacStyle, WholeImageStyle, MaxPatchHacStyle])
+    @pytest.mark.parametrize(
+        "style_cls", [MaxPatchStyle, MaxHacStyle, WholeImageStyle, MaxPatchHacStyle, MaxPatchPcaHacStyle]
+    )
     def test_boxless_good_vote_trains_on_a_scored_row(self, style_cls):
         rng = np.random.default_rng(40)
         media = _patch_media(1, "cat0", rng)
@@ -258,7 +261,9 @@ class TestTrainScoreGeometryParity:
             f"not among the {len(rows)} rows this style max-pools at inference"
         )
 
-    @pytest.mark.parametrize("style_cls", [MaxPatchStyle, MaxHacStyle, WholeImageStyle, MaxPatchHacStyle])
+    @pytest.mark.parametrize(
+        "style_cls", [MaxPatchStyle, MaxHacStyle, WholeImageStyle, MaxPatchHacStyle, MaxPatchPcaHacStyle]
+    )
     def test_boxed_good_vote_trains_on_a_scored_row(self, style_cls):
         rng = np.random.default_rng(41)
         media = _patch_media(1, "cat0", rng)
@@ -267,7 +272,7 @@ class TestTrainScoreGeometryParity:
         rows = style.score_rows(media)
         assert any(np.allclose(r, vote_vec, atol=2e-3) for r in rows)
 
-    @pytest.mark.parametrize("style_cls", [MaxPatchStyle, WholeImageStyle, MaxPatchHacStyle])
+    @pytest.mark.parametrize("style_cls", [MaxPatchStyle, WholeImageStyle, MaxPatchHacStyle, MaxPatchPcaHacStyle])
     def test_bad_vote_suppresses_every_scored_row(self, style_cls):
         """A Bad vote asserts *no* row of the image should score high, so its
         flood must cover the whole scoring pool - otherwise an un-suppressed
@@ -304,7 +309,9 @@ class TestTrainScoreGeometryParity:
         assert all(regions[i].children is not None for i in uncovered)
         assert 0 not in uncovered
 
-    @pytest.mark.parametrize("style_cls", [MaxPatchStyle, MaxHacStyle, WholeImageStyle, MaxPatchHacStyle])
+    @pytest.mark.parametrize(
+        "style_cls", [MaxPatchStyle, MaxHacStyle, WholeImageStyle, MaxPatchHacStyle, MaxPatchPcaHacStyle]
+    )
     def test_score_media_is_max_pool_over_score_rows(self, style_cls):
         rng = np.random.default_rng(43)
         media = _patch_media(1, "c", rng)
@@ -397,6 +404,46 @@ class TestMaxPatchHacStyle:
         )
         assert rows
         assert rows[-1]["average_precision"] > 0.7  # all-node flood learns the planted signal
+
+
+class TestMaxPatchPcaHacStyle:
+    """MaxPatchHAC with a PCA-denoised merge order: same scoring, different tree."""
+
+    def test_pca_changes_tree_topology_not_node_count(self):
+        rng = np.random.default_rng(30)
+        media = _patch_media(1, "cat0", rng)
+        grid = np.asarray(media["patch_grid"], dtype=np.float32)
+        cls = media["embeddings"]["emb"]
+        raw = build_patch_hac_tree(grid, cls)
+        pca = build_patch_hac_tree(grid, cls, pca_dims=8)
+        assert len(raw) == len(pca)  # same node count (CLS + n leaves + n-1 merges)
+        # the merge order (internal children) differs under PCA
+        assert [n.children for n in raw] != [n.children for n in pca]
+
+    def test_subclass_reuses_maxpatchhac_scoring_geometry(self):
+        rng = np.random.default_rng(31)
+        media = _patch_media(1, "c", rng)
+        style = MaxPatchPcaHacStyle()
+        rows = style.score_rows(media)
+        assert rows.shape == (2 * GRID * GRID, DIM)
+        np.testing.assert_allclose(rows[0], media["embeddings"]["emb"], atol=3e-3)
+        assert len(style.bad_vecs(media)) == rows.shape[0]  # all-node flood covers every row
+
+    def test_learns_planted_signal(self):
+        medias, target = _planted_dataset(n_per_cat=25, seed=32)
+        seed_scores = resolve_style("max_patch_pca_hac").exemplar_sims(medias, target)
+        rows = simulate_voting_iterations(
+            medias,
+            target_category="cat0",
+            seed=1,
+            dataset_name="synthetic",
+            region_voting=True,
+            max_steps=12,
+            style="max_patch_pca_hac",
+            seed_scores=seed_scores,
+        )
+        assert rows
+        assert rows[-1]["average_precision"] > 0.7
 
 
 # ---------------------------------------------------------------------------
@@ -599,7 +646,7 @@ def _drop_timing(rows):
 
 
 class TestStyleVotingSimulation:
-    @pytest.mark.parametrize("style", ["whole_image", "max_hac", "max_patch", "max_patch_hac"])
+    @pytest.mark.parametrize("style", ["whole_image", "max_hac", "max_patch", "max_patch_hac", "max_patch_pca_hac"])
     def test_style_run_produces_learnable_rows(self, style):
         medias, _target = _planted_dataset(n_per_cat=25, seed=7)
         rows = simulate_voting_iterations(

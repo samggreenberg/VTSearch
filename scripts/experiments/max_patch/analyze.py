@@ -43,6 +43,7 @@ ARM_LABEL = {
     "dinov3_patch/max_hac": "DINOv3 · MaxHAC",
     "dinov3_patch/max_patch": "DINOv3 · MaxPatch",
     "dinov3_patch/max_patch_hac": "DINOv3 · MaxPatchHAC",
+    "dinov3_patch/max_patch_pca_hac": "DINOv3 · MaxPatchPcaHAC",
     "dinov3_patch/whole_image": "DINOv3 · whole-image (CLS)",
     "siglip/whole_image": "SigLIP · whole-image",
 }
@@ -50,6 +51,7 @@ ARM_COLOR = {
     "dinov3_patch/max_hac": "#4C78A8",
     "dinov3_patch/max_patch": "#F58518",
     "dinov3_patch/max_patch_hac": "#E45756",
+    "dinov3_patch/max_patch_pca_hac": "#72B7B2",
     "dinov3_patch/whole_image": "#54A24B",
     "siglip/whole_image": "#B279A2",
 }
@@ -60,10 +62,11 @@ DS_LABEL = {
 }
 ARM_ORDER = list(ARM_LABEL)
 TRAJ = ["dataset", "category", "seed", "arm"]
-MH, MP, MPH, CLS, SIG = (
+MH, MP, MPH, MPPH, CLS, SIG = (
     "dinov3_patch/max_hac",
     "dinov3_patch/max_patch",
     "dinov3_patch/max_patch_hac",
+    "dinov3_patch/max_patch_pca_hac",
     "dinov3_patch/whole_image",
     "siglip/whole_image",
 )
@@ -389,6 +392,8 @@ def main() -> int:
     c50 = _nearest_at(df, 50).pivot_table(index=["dataset", "category", "seed"], columns="arm", values="cost")
     c150 = _nearest_at(df, 150).pivot_table(index=["dataset", "category", "seed"], columns="arm", values="cost")
     comparisons = [
+        ("MaxPatchPcaHAC − MaxPatchHAC", MPPH, MPH),
+        ("MaxPatchPcaHAC − MaxPatch", MPPH, MP),
         ("MaxPatchHAC − MaxHAC", MPH, MH),
         ("MaxPatchHAC − MaxPatch", MPH, MP),
         ("MaxPatch − MaxHAC", MP, MH),

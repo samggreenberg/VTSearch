@@ -54,6 +54,8 @@ this module reuses them directly rather than re-implementing.
 
 from __future__ import annotations
 
+import os
+
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
@@ -286,6 +288,7 @@ def build_patch_hac_tree(
     cls_vec: "Optional[np.ndarray]" = None,
     *,
     alpha: float = 0.5,
+    pca_dims: "Optional[int]" = None,
 ) -> list:
     """Binary HAC tree with the **raw patches as leaves** - the MaxPatchHAC tree.
 
@@ -325,7 +328,17 @@ def build_patch_hac_tree(
     ]
 
     if n > 1:
-        cos_d = np.clip((1.0 - patches @ patches.T) * 0.5, 0.0, 1.0)
+        # Optional PCA on the merge *order* only: decide affinities on cosines
+        # in a per-image PCA-reduced space (denoised); stored node vecs stay
+        # full-dim, so scoring is unchanged. pca_dims=None is the raw path.
+        sim = patches
+        if pca_dims:
+            from vtscore.media.patch_embed import _fit_pca_projector  # noqa: PLC0415
+
+            project = _fit_pca_projector(grid, int(pca_dims))
+            if project is not None:
+                sim = np.stack([project(patches[i]) for i in range(n)])
+        cos_d = np.clip((1.0 - sim @ sim.T) * 0.5, 0.0, 1.0)
         centers = np.stack([(cols + 0.5) / width, (rows + 0.5) / height], axis=1).astype(np.float32)
         spatial = np.sqrt(((centers[:, None, :] - centers[None, :, :]) ** 2).sum(-1)) / np.sqrt(2.0)
         blended = alpha * cos_d + (1.0 - alpha) * spatial
@@ -444,6 +457,47 @@ class MaxPatchHacStyle(_FlattenedStyle):
         return np.stack([np.asarray(node.vec, dtype=np.float16) for node in self._tree(media)])
 
 
+class MaxPatchPcaHacStyle(MaxPatchHacStyle):
+    """MaxPatchHAC with a PCA-denoised merge order.
+
+    Identical to :class:`MaxPatchHacStyle` except the raw-patch HAC tree's merge
+    *order* is decided on cosines in a per-image PCA space (``pca_dims``
+    components) rather than the full 768-dim patch space — the option ported
+    from the HAC-tree-improvements branch.  Only the tree *topology* changes;
+    every stored node vector stays full-dim, so the scoring / vote / flood
+    machinery is exactly :class:`MaxPatchHacStyle`'s.  ``MAXPATCH_PCA_DIMS``
+    (default 32) sets the reduced dimensionality.
+    """
+
+    name = "max_patch_pca_hac"
+    pca_dims = int(os.environ.get("MAXPATCH_PCA_DIMS", "32"))
+
+    def _tree(self, media: dict[str, Any]) -> list:
+        mid = int(media.get("id", id(media)))
+        cached = self._tree_cache.get(mid)
+        if cached is not None:
+            return cached
+        import numpy as np  # noqa: PLC0415
+
+        grid = media.get("patch_grid")
+        if grid is None:
+            from vtscore.media.patch_embed import RegionVector  # noqa: PLC0415
+
+            tree = [
+                RegionVector(
+                    box=(0.0, 0.0, 1.0, 1.0),
+                    vec=_unit(np.asarray(media_embedding(media), dtype=np.float32)),
+                    children=None,
+                    cell_mask=None,
+                    weight=0.0,
+                )
+            ]
+        else:
+            tree = build_patch_hac_tree(np.asarray(grid), media_embedding(media), pca_dims=self.pca_dims)
+        self._tree_cache[mid] = tree
+        return tree
+
+
 #: Style-name registry.  Values are *classes*; :func:`resolve_style` returns a
 #: fresh instance so per-run matrix memoisation never leaks across datasets.
 STYLES: dict[str, type] = {
@@ -451,6 +505,7 @@ STYLES: dict[str, type] = {
     MaxHacStyle.name: MaxHacStyle,
     MaxPatchStyle.name: MaxPatchStyle,
     MaxPatchHacStyle.name: MaxPatchHacStyle,
+    MaxPatchPcaHacStyle.name: MaxPatchPcaHacStyle,
 }
 
 

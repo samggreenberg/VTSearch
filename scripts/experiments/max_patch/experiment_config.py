@@ -34,7 +34,9 @@ DATASETS = os.environ.get("MAXPATCH_DATASETS", "visual_genome_m,openlogo_a,calte
 EMBEDDERS = os.environ.get("MAXPATCH_EMBEDDERS", "dinov2_patch,dinov3_patch,siglip").split(",")
 
 # --- Styles per embedder kind ---
-PATCH_STYLES = os.environ.get("MAXPATCH_PATCH_STYLES", "max_hac,max_patch,max_patch_hac,whole_image").split(",")
+PATCH_STYLES = os.environ.get(
+    "MAXPATCH_PATCH_STYLES", "max_hac,max_patch,max_patch_hac,max_patch_pca_hac,whole_image"
+).split(",")
 SINGLE_STYLES = ["whole_image"]
 
 # --- Sizing knobs (env-overridable) ---
