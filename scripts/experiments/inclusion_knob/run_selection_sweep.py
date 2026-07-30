@@ -1,23 +1,25 @@
-"""Selection-bias sweep: does the conformal budget survive biased vote collection?
+"""Adversarial bound: the conformal budget under purely exploitative labeling.
 
-The original sweep (``run_sweep.py``) sampled votes by stratified *uniform*
-random draws - the exchangeable case the conformal quantile rule assumes.
-Real VTSearch labeling is nothing like that: the user votes on whatever the
-sort surfaces, so labeled Goods are score-biased high (tail matches are never
-shown) and labeled Bads are hard negatives.  This stage measures how far the
-realized false-negative rate drifts from the advertised ``alpha(k)`` budget
-under that biased collection policy.
+**Superseded for production estimates by :mod:`run_autopilot_sweep`.**  This
+stage's ``toplist`` policy is *not* VTSearch's workflow - it greedily votes the
+top of the sort for every vote past the seed phase, whereas real Autopilot votes
+the top only for its first few Goods, takes its Bads from the *bottom*, and then
+alternates Hard (nearest the threshold) and New (atlas diversity).  Margin
+sampling biases the calibration positives in the opposite direction, so this arm
+overstates - and mis-signs - the production effect.  It is retained because it
+is a fair model of a user manually reviewing a learned-sort result list
+top-down, and a useful worst case.  See
+``docs/experiments/inclusion-knob/SELECTION-BIAS.md``.
 
 Grid: arms (AG News categories if cached, plus 3 synthetic separability
 levels) x seeds x vote counts x **vote-selection policies**:
 
 * ``uniform`` - stratified random votes (the exchangeable baseline, as in
   ``run_sweep.py``).
-* ``toplist`` - a simulated production labeling session: a cosine text-query
-  stand-in seeds the first votes from the top of its ranking, then each round
-  trains the production MLP on the votes so far and labels the top
-  ``TOPLIST_BATCH`` unvoted items of its sort, exactly the top-of-sort loop a
-  real user drives.
+* ``toplist`` - purely exploitative labeling: a cosine text-query stand-in seeds
+  the first votes from the top of its ranking, then each round trains the
+  production MLP on the votes so far and labels the top ``TOPLIST_BATCH``
+  unvoted items of its sort.
 
 For every cell the *thresholding* path is bit-for-bit production
 (``compute_fold_orderings`` + ``threshold_from_fold_orderings``); the only
