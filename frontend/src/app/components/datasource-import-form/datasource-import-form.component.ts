@@ -2,21 +2,25 @@ import { ChangeDetectionStrategy, Component, effect, inject, input, output, sign
 
 import { FormsModule } from '@angular/forms';
 
-import { FieldOptions, ImporterField, ImporterInfo } from '../../../../models/api.models';
+import { FieldOptions, ImporterField, ImporterInfo } from '../../models/api.models';
 import {
   DatasourceImportersApiService,
   DatasourceImportResult,
-} from '../../../../services/datasource-importers-api.service';
-import { apiErrorMessage } from '../../../../utils/api-error';
-import { FieldHintIconComponent } from '../../../field-hint-icon/field-hint-icon.component';
-import { FileBrowserComponent } from '../../../file-browser/file-browser.component';
+} from '../../services/datasource-importers-api.service';
+import { apiErrorMessage } from '../../utils/api-error';
+import { FieldHintIconComponent } from '../field-hint-icon/field-hint-icon.component';
+import { FileBrowserComponent } from '../file-browser/file-browser.component';
 
 /** Dynamic form for one datasource importer, rendered from its declared
  *  plugin fields (the single-item sibling of the Add Dataset modal's
  *  generic importer form).  Submitting runs the importer server-side; the
  *  fetched item lands in ``example_media/`` and is emitted as
  *  ``{filename, original_name}`` for the caller to use as a media
- *  example. */
+ *  example.
+ *
+ *  Shared by every flow that picks a single example media item: the New
+ *  Detector modal's example picker and the re-sort prompt modal's
+ *  swap-the-exemplar picker. */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-datasource-import-form',
