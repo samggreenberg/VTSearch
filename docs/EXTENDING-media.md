@@ -18,6 +18,8 @@ extractors).
   embedding model
 - [Adding a Media Clipper](#adding-a-media-clipper): cut clips out of a
   longer source file
+- [Adding a Media Cleaner](#adding-a-media-cleaner): strip content-free
+  regions from each item before it is embedded
 - [Adding a Media Converter](#adding-a-media-converter): transform
   between media types (e.g. document to image)
 - [Adding a Media Source](#adding-a-media-source): resolve media bytes
@@ -27,8 +29,8 @@ extractors).
 
 ## Media System
 
-Media types, embedders, and clippers are **auto-discovered** at import
-time. The `_discover_media_plugins()` function in
+Media types, embedders, clippers, and cleaners are **auto-discovered** at
+import time. The `_discover_media_plugins()` function in
 `vtscore/media/__init__.py` scans sub-packages of `vtscore/media/` for
 module-level sentinel attributes:
 
@@ -36,6 +38,7 @@ module-level sentinel attributes:
 |--------------|----------------------------------|----------------------|--------------------------------------|
 | `MEDIA_TYPE` | media-type package `__init__.py` | `MediaType`          | A single media type instance         |
 | `CLIPPERS`   | media-type package `__init__.py` | `list[MediaClipper]` | Clipper instances (may be empty)     |
+| `CLEANERS`   | media-type package `__init__.py` | `list[MediaCleaner]` | Cleanup-gate instances (may be empty) |
 | `EMBEDDER`   | an `embedder_<name>.py` file inside the media-type package | `MediaEmbedder` | One embedder per module              |
 
 Embedders use **one module per embedder**: any `embedder_<name>.py` file
@@ -46,7 +49,8 @@ VTSearch tree and be wired in by symlinking a single file into the
 appropriate media-type package. No edits to any `__init__.py` are required.
 
 Third-party or project-specific types can still be registered manually
-via `register()`, `register_embedder()`, and `register_clipper()`.
+via `register()`, `register_embedder()`, `register_clipper()`, and
+`register_cleaner()`.
 
 ---
 
@@ -218,6 +222,7 @@ changes to `vtscore/media/__init__.py` are needed.
 | Method                        | Signature                          | Description                        |
 |-------------------------------|------------------------------------|------------------------------------|
 | `display_metadata(media)`     | `(dict) -> dict[str, Any]`         | Metadata for the labeling UI       |
+| `ensure_thumbnail_bytes(media)` | `(dict) -> bytes \| None`        | Generate + memoise `media["thumbnail_bytes"]` from the media's *resolvable* bytes, for media that had no file at ingest. Defaults to a plain read of what's cached (no generation) |
 | `load_models()`               | `() -> None`                       | Load inline embedding models (legacy) |
 | `embed_text(text)`            | `(str) -> Optional[np.ndarray]`    | Inline text embedding (legacy)     |
 | `load_demo_source(...)`       | See docstring                      | Download and embed a demo dataset  |
@@ -231,6 +236,19 @@ changes to `vtscore/media/__init__.py` are needed.
 > per-media signpost text a Browse-prepped dataset already carries (see
 > `vtscore/projection/signpost_texts.py`). A type that returns its own dict
 > without merging silently drops all of them.
+
+> **Override `ensure_thumbnail_bytes` if your type has a browsable thumbnail.**
+> The path-based hooks above only fire for media the loader can read at ingest.
+> An **archive-member** media (`local_archive_member`) has no file at all — only
+> `{archive path, member}` — so it leaves import with no thumbnail, and every
+> browse tile would stream a tar member and decode it on the request thread.
+> `ensure_thumbnail_bytes` is the type-agnostic way to build one from
+> `_resolve_media_bytes(media)`; the background pass in
+> `vtscore/datasets/thumbnail_warm.py` calls it per media after a load, and the
+> serving path calls it too, so a warmed thumbnail is byte-identical to a lazily
+> generated one. Generate through the same helper your `image_response` fallback
+> uses, memoise onto `media["thumbnail_bytes"]`, and never retain the resolved
+> payload on the media.
 
 ### What happens automatically after registration
 
@@ -685,6 +703,206 @@ Each dict in the returned list must:
 - Contain the clipped content (updated `media_bytes`/`media_string`,
   `duration`, and any type-specific fields)
 - Default clippers return `[media]` unchanged
+
+---
+
+## Adding a Media Cleaner
+
+Media cleaners remove **content-free regions** from an item so the embedder
+spends its representational capacity on signal instead of letterbox bars,
+leading silence, or PDF-extraction junk. Like a clipper a cleaner maps type X
+to type X; it differs in **cardinality** and **use**:
+
+|             | Clipper                    | Converter     | Cleaner                                       |
+|-------------|----------------------------|---------------|-----------------------------------------------|
+| Type        | X → X                      | X → Y         | X → X                                         |
+| Cardinality | 1 → N                      | 1 → N         | **1 → 1**                                     |
+| UI          | pick **one** per import    | routing step  | **all optional gates**, independently toggled |
+
+A clipper breaks large media into manageable sub-items; a cleaner tightens each
+item in place. Cleaners therefore run **after the final clipper/converter
+step**, on the units that will actually be embedded, and only the cleaners
+matching the chain's *final* media type apply (a document→text chain gets text
+cleaners, not document cleaners). They run in registration order, with no user
+reordering, so every shipped cleaner should be order-insensitive in practice.
+
+`MediaCleaner` subclasses `MediaClipper`, so the whole descriptor stack
+(`name` / `media_type` / `display_name` / `description` / `parameters` /
+`creation_questions` / `with_params` / `to_dict`) is inherited unchanged, and a
+cleaner rides the existing clipper chain as an `n_out == 1` step. Cleaners live
+in their **own registry**, so they never appear in a clipper chooser:
+`GET /api/cleaners` lists them and the import form renders one checkbox per
+entry.
+
+That checkbox list lives **strictly behind the Add Dataset modal's "Advanced ▾"
+toggle** and never escapes it. This is deliberate and differs from the embedder
+and clipper pickers, which stay on screen with Advanced collapsed once the user
+overrides them: cleanup is the most technical knob in the modal, so a
+non-default selection does *not* pull the block back into view — it is surfaced
+only in the Advanced toggle's tooltip (`Cleanup: <enabled gates>`). Because the
+block cannot be reached any other way, registering a cleaner for a media type
+also forces the Advanced toggle itself to render, even in flows that would
+otherwise hide it. Do not add a cleaner affordance outside that block.
+
+### Built-in cleaners
+
+| Cleaner | Name | Media Type | Default | Description |
+|---------|------|------------|---------|-------------|
+| `ImageExifOrientCleaner` | `image_exif_orient` | `image` | **on** | Bake a photo's EXIF display orientation into its pixels so the embedder sees it upright |
+| `ImageEdgeTrimCleaner` | `image_edge_trim` | `image` | off | Crop near-solid white/black margins (letterbox, pillarbox, whitespace around a logo) |
+| `AudioSilenceTrimCleaner` | `audio_silence_trim` | `audio` | off | Drop the silence at the head and tail of a clip, keeping internal pauses |
+| `TextMarkupStripCleaner` | `text_markup_strip` | `text` | off | Remove HTML tags and Markdown syntax, keeping the text inside |
+| `TextWhitespaceCleaner` | `text_whitespace` | `text` | off | Collapse whitespace runs, drop control characters, rejoin hyphen-broken words |
+| `VideoLetterboxCropCleaner` | `video_letterbox_crop` | `video` | off | Record the letterbox / pillarbox crop every sampled frame agrees on as the unit's `clip_box` |
+| `VideoBlankTrimCleaner` | `video_blank_trim` | `video` | off | Narrow the unit's `clip_start` / `clip_end` past its blank head and tail (black leader, fade-ins, empty tail cards) |
+
+Three of these share their detector with another caller rather than owning a
+second copy of the heuristic: `image_edge_trim`, `video_letterbox_crop`, and the
+grid thumbnail all call `vtscore/media/image/edge_trim.py`, and
+`audio_silence_trim` and `SoundSilenceClipper` both call
+`vtscore/media/audio/silence.py`. When a cleaner answers a question something
+else in the codebase already answers, extract the detector; a cleaner that
+disagrees with the thumbnail about where the content starts is worse than no
+cleaner.
+
+### What to implement
+
+Subclass `MediaCleaner` from `vtscore.media.cleaner` and implement `clean()`;
+the inherited `clip()` wraps it as a single-output chain step.
+
+```python
+# vtscore/media/text/cleaner.py
+
+from typing import Any
+
+from vtscore.media.cleaner import MediaCleaner
+
+
+class TextWhitespaceCleaner(MediaCleaner):
+    """Collapse whitespace runs and strip control characters."""
+
+    @property
+    def name(self) -> str:
+        return "text_whitespace"
+
+    @property
+    def media_type(self) -> str:
+        return "text"
+
+    @property
+    def description(self) -> str:
+        """Shown on hover next to the cleanup checkbox."""
+        return "Collapse whitespace runs and strip control characters."
+
+    @property
+    def default_enabled(self) -> bool:
+        """Whether the import form pre-checks this cleaner's box.
+
+        ``False`` (the default) for anything that makes a judgment call about
+        what counts as wasted content. Return ``True`` only when leaving the
+        gate off means shipping known-wrong vectors.
+        """
+        return False
+
+    def clean(self, media: dict[str, Any]) -> dict[str, Any]:
+        text = media.get("media_string")
+        if not isinstance(text, str):
+            return media
+        collapsed = " ".join(text.split())
+        if collapsed == text:
+            return media          # nothing to clean: return *media* itself
+        cleaned = dict(media)     # copy, never mutate in place
+        cleaned["media_string"] = collapsed
+        cleaned["character_count"] = len(collapsed)
+        return cleaned
+```
+
+### Register the cleaner
+
+Add it to the `CLEANERS` sentinel list in your media type's `__init__.py`:
+
+```python
+# vtscore/media/text/__init__.py
+
+from vtscore.media.text.cleaner import TextWhitespaceCleaner
+# ...
+CLEANERS = [TextWhitespaceCleaner()]
+```
+
+### Clean method contract
+
+- **Return the media unchanged** (the *same* dict, or an equal copy) when there
+  is nothing to clean or the payload can't be decoded. Like a clipper, a cleaner
+  never aborts a load; a degenerate input is a no-op, not an error. Be
+  conservative by construction — cap how much you are willing to remove.
+- **Never mutate the input in place.** Build the output with `dict(media)` and
+  overwrite the payload keys. The runner detects "nothing changed" by comparing
+  the payload (and the window / box keys, see below) before and after, and an
+  in-place mutation leaves it no pre-clean version to keep.
+- **Update the metadata you invalidated** — `file_size`, `width` / `height`,
+  `duration`, `character_count`. MD5, embeddings, and thumbnails are redone for
+  you (see below).
+
+### The dual payload: Clean vs Original
+
+The cleaned payload becomes the **canonical** content: `media_bytes` /
+`media_string`, `duration`, `file_size`, MD5, thumbnail, and the embedding all
+derive from it, so every existing consumer works unchanged.
+
+The chain **runner** — not each cleaner — additionally snapshots the pre-clean
+payload the first time a cleaner actually changes an item, under
+`original_media_bytes` / `original_media_string` / `original_duration`:
+
+- Only a real change stores anything. Most cleaners no-op on most items, which
+  bounds the storage cost well below a blanket 2×.
+- With several cleaners in sequence the snapshot is taken **once**, before the
+  first mutating gate, so "Original" always means the pre-*any*-clean payload.
+- Dataset pickles persist it: it is the only copy of what the user imported, so
+  it is dataset *content*, not a cache (the standing pickle exception to the
+  no-persisted-artifacts rule). Embeddings are still derived only from the
+  canonical payload.
+- The media payload gains a `has_original` flag, the byte / text routes accept
+  `?variant=original`, and the detail viewer shows a Clean/Original toggle when
+  the flag is set.
+- Because a cleaner rewrites the payload rather than slicing it, a cleaned item
+  from a *reference* (thin) import keeps its bytes materialized — `lazy_clip`
+  has no recipe that reproduces a cleaner's output from the source file.
+
+A cleaned item is flagged for MD5 + embedding + thumbnail recomputation, and its
+trail entry records `changed`, so provenance's "Derived Via" line lists only the
+gates that actually did something to that item.
+
+### Cleaning by metadata instead of payload
+
+A **video** unit is a `(parent bytes, time window)` pair: every clip of a tiled
+video shares the parent's payload and says which slice of it it is via
+`clip_start` / `clip_end`. A video cleaner therefore cleans by *narrowing
+metadata* rather than by rewriting bytes — re-encoding a cleaned copy per unit
+would duplicate the payload once per tile and desync the window, which still
+indexes the parent's timeline.
+
+The runner treats a change to any of `clip_start`, `clip_end`, `clip_box`
+(`CLEANED_METADATA_KEYS` in `vtscore/datasets/clipper_chain.py`) as a real
+change: the item is flagged for MD5 + embedding + thumbnail recomputation, its
+trail entry records `changed` plus the new window / box, and its stale
+thumbnail is dropped. What it does **not** do is snapshot an `original_*`
+payload — there is no second payload, the served file is untouched, and the
+player already loops within `[clip_start, clip_end]`. Two consequences, both
+good: a metadata-cleaned unit costs no extra storage, and a reference (thin)
+import keeps its byte savings on it.
+
+The spatial half of that contract, `clip_box`, is *honoured* rather than baked
+in, by three readers that have to agree (the parsing and the crop live once in
+`vtscore/media/video/crop.py`):
+
+| Reader | Why it needs the box |
+|--------|---------------------|
+| `sample_video_frames` (`vtscore/media/video/_frame_sampling.py`) | what the embedder actually sees |
+| the video thumbnailers (`vtscore/media/video/media_type.py`) | so the grid preview frames the same picture |
+| `_fixup_clip_md5_and_embeddings` (`vtscore/datasets/stages/clipper.py`) | folds the box into the boundary-tag MD5 so two crops of one parent don't collide |
+
+If you add a media type whose units are likewise metadata-only, follow the same
+shape: narrow the keys, let the readers honour them, and snapshot nothing.
 
 ---
 

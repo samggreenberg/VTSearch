@@ -81,6 +81,7 @@ _VOTING_COLUMNS: tuple[str, ...] = (
     "category",
     "strategy",
     "trainer",
+    "style",
     "prevalence_arm",
     "realized_prevalence",
     "t",
@@ -201,6 +202,7 @@ def _blend_safe_threshold(
     sim_clips: dict[int, dict[str, Any]] | None,
     X_all_clips: Any,
     n_labels: int,
+    style_obj: Any = None,
 ) -> float:
     """Blend *threshold* with a GMM threshold over the simulation set's scores.
 
@@ -208,9 +210,17 @@ def _blend_safe_threshold(
     region max-pool (matching the test-set scoring); single-vector datasets use
     the pre-computed whole-image matrix *X_all_clips* through the step's
     trainer-agnostic ``predict``.  Kept separate so the per-step loop stays flat.
+
+    With an explicit detection *style_obj* (see :mod:`vtscore.eval.patch_styles`)
+    the sim set is scored through that style - the same scorer the test set
+    uses - so the GMM sees the distribution the threshold will actually cut.
     """
     import numpy as np  # noqa: PLC0415
 
+    if style_obj is not None:
+        assert sim_clips is not None and step.torch_model is not None
+        all_scores = list(style_obj.score_media(step.torch_model, sim_clips).values())
+        return calculate_safe_threshold(threshold, all_scores, n_labels)
     if region_aware:
         from vtscore.detectors.training import score_media_with_model  # noqa: PLC0415
 
@@ -229,6 +239,7 @@ def _evaluate_on_test(
     target_category: str,
     inclusion: int,
     region_aware: bool = False,
+    style_obj: Any = None,
 ) -> dict[str, float]:
     """Score *test_ids* with *step* and return the per-step metrics.
 
@@ -251,7 +262,15 @@ def _evaluate_on_test(
     if not test_ids:
         return {"cost": nan, "fpr": nan, "fnr": nan, "auroc": nan, "average_precision": nan}
 
-    if region_aware:
+    if style_obj is not None:
+        # Explicit detection style (see vtscore.eval.patch_styles): the style
+        # owns the whole image-scoring rule (whole-image / region max-pool /
+        # raw-patch max-pool), replacing both branches below.
+        assert step.torch_model is not None
+        test_clips = {cid: clips_dict[cid] for cid in test_ids}
+        score_map = style_obj.score_media(step.torch_model, test_clips)
+        scores = [score_map[cid] for cid in test_ids]
+    elif region_aware:
         from vtscore.detectors.training import score_media_with_model  # noqa: PLC0415
 
         assert step.torch_model is not None
@@ -353,6 +372,7 @@ def _train_and_calibrate(
     inclusion: int,
     calibrate_count: int,
     calibration_fraction: float,
+    style_obj: Any = None,
 ) -> tuple[_StepModel, float, int, dict[str, float]]:
     """Train the step's ranker and calibrate its threshold from the current votes.
 
@@ -361,7 +381,23 @@ def _train_and_calibrate(
     (see :func:`_svm_train_and_calibrate`).  Returns ``(step, threshold,
     n_labels, timings)`` where *timings* has ``train_seconds`` and
     ``xcal_seconds`` for the fit and threshold-calibration wall clocks.
+
+    With an explicit *style_obj* (MLP only) the vote-to-vector assembly is
+    delegated to the style (see :func:`_style_train_and_calibrate`).
     """
+    if style_obj is not None:
+        return _style_train_and_calibrate(
+            style_obj,
+            good_votes,
+            bad_votes,
+            clips_dict,
+            target_category,
+            region_voting=region_voting,
+            input_dim=input_dim,
+            inclusion=inclusion,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+        )
     if trainer == "mlp":
         return _mlp_train_and_calibrate(
             good_votes,
@@ -469,6 +505,105 @@ def _mlp_train_and_calibrate(
     return step, threshold, n_labels, {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds}
 
 
+def _style_train_and_calibrate(
+    style_obj: Any,
+    good_votes: dict[int, None],
+    bad_votes: dict[int, None],
+    clips_dict: dict[int, dict[str, Any]],
+    target_category: str,
+    *,
+    region_voting: bool,
+    input_dim: int,
+    inclusion: int,
+    calibrate_count: int,
+    calibration_fraction: float,
+) -> tuple[_StepModel, float, int, dict[str, float]]:
+    """Style-driven MLP path (the Max-Patch experiment arms).
+
+    The detection style (see :mod:`vtscore.eval.patch_styles`) supplies the
+    vote-to-vector rules: each Good vote contributes ``style.good_vec`` (given
+    the ground-truth box when *region_voting* and the media has one), each Bad
+    vote floods ``style.bad_vecs`` - one row on a whole-image style, the CLS +
+    HAC leaves on ``max_hac``, every raw patch on ``max_patch``.
+
+    Training and calibration are **bag-aware**, exactly like the production
+    vote path (:func:`vtscore.detectors.training._train_and_score_xy`): the
+    hidden width and the safe-threshold ramp size on distinct *votes* rather
+    than flooded rows, the calibration folds split by bag, and the final fit
+    weights each bag equally.  On a whole-image style every bag is one row, so
+    this collapses to the historical single-vector behaviour.
+
+    Calibration additionally runs in **inference geometry**: each bag is handed
+    its ``style.score_rows`` stack so a Good bag collapses the same way a Bad
+    bag (and every held-out image) does.  Without this a Good bag is a max over
+    its 1 training row while a Bad bag is a max over the ~197 rows it flooded,
+    and the calibrated cut lands above the score range production actually
+    produces - see :func:`vtscore.training.thresholds.compute_fold_orderings`.
+    """
+    import numpy as np  # noqa: PLC0415
+    import torch  # noqa: PLC0415
+
+    from vtscore.detectors.training import _flood_context  # noqa: PLC0415
+
+    X_list: list[np.ndarray] = []
+    y_list: list[float] = []
+    groups: list = []
+    score_rows_by_group: dict = {}
+    for vid in good_votes:
+        box = region_box_for_category(clips_dict[vid], target_category) if region_voting else None
+        X_list.append(np.asarray(style_obj.good_vec(clips_dict[vid], box), dtype=np.float32))
+        y_list.append(1.0)
+        groups.append(("g", vid))
+        score_rows_by_group[("g", vid)] = style_obj.score_rows(clips_dict[vid])
+    for vid in bad_votes:
+        for vec in style_obj.bad_vecs(clips_dict[vid]):
+            X_list.append(np.asarray(vec, dtype=np.float32))
+            y_list.append(0.0)
+            groups.append(("b", vid))
+        score_rows_by_group[("b", vid)] = style_obj.score_rows(clips_dict[vid])
+
+    X = torch.tensor(np.array(X_list), dtype=torch.float32)
+    y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
+    n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
+
+    hidden_dim = _auto_hidden_dim(n_votes)
+    t_xcal = time.monotonic()
+    threshold = calculate_cross_calibration_threshold(
+        X_list,
+        y_list,
+        input_dim,
+        inclusion,
+        rng=np.random.RandomState(42),
+        calibrate_count=calibrate_count,
+        calibration_fraction=calibration_fraction,
+        hidden_dim=hidden_dim,
+        groups=cal_groups,
+        score_rows_by_group=score_rows_by_group if cal_groups is not None else None,
+    )
+    xcal_seconds = time.monotonic() - t_xcal
+    t_train = time.monotonic()
+    if sample_weights is not None:
+        model = train_model(X, y, input_dim, hidden_dim=hidden_dim, sample_weights=sample_weights)
+    else:
+        model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
+    train_seconds = time.monotonic() - t_train
+
+    device = str(next(model.parameters()).device)
+
+    def predict(X_test: Any) -> np.ndarray:
+        with torch.no_grad():
+            t = torch.tensor(np.asarray(X_test), dtype=torch.float32).to(next(model.parameters()).device)
+            return torch.sigmoid(model(t)).squeeze(1).cpu().numpy()
+
+    step = _StepModel(
+        predict=predict,
+        torch_model=model,
+        backend="torch-cuda" if device.startswith("cuda") else "torch-cpu",
+        device=device,
+    )
+    return step, threshold, n_votes, {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds}
+
+
 def _svm_train_and_calibrate(
     trainer: str,
     good_votes: dict[int, None],
@@ -556,6 +691,7 @@ def simulate_voting_iterations(  # noqa: C901
     seed_scores: Optional[dict[int, float]] = None,
     trainer: str = "mlp",
     target_prevalence: Optional[float] = None,
+    style: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -573,6 +709,14 @@ def simulate_voting_iterations(  # noqa: C901
             first retrain even at the same seed — by design (the question is
             which model makes *VTSearch* better, and VTSearch's vote order
             depends on the model).
+        style: Optional detection-style name (see
+            :mod:`vtscore.eval.patch_styles`): ``"whole_image"``, ``"max_hac"``,
+            or ``"max_patch"``.  When set (MLP trainer only), the style owns the
+            vote-to-vector assembly, the test/sim scoring rule, and the
+            bag-aware flooding of Bad votes - the Max-Patch experiment arms.
+            ``None`` (default) keeps the historical behaviour byte-for-byte
+            (including its whole-image Bad votes on patch datasets).  Recorded
+            in the ``style`` result column.
         target_prevalence: When set (e.g. ``0.01`` for the 1%-prevalence rare
             arm), positives across the whole dataset are deterministically
             downsampled — using ``seed`` — to that fraction *before* the
@@ -616,7 +760,7 @@ def simulate_voting_iterations(  # noqa: C901
 
     Returns:
         List of row dicts.  Keys: ``seed, dataset, category, strategy, trainer,
-        prevalence_arm, realized_prevalence, t, n_good, n_bad, cost, fpr, fnr,
+        style, prevalence_arm, realized_prevalence, t, n_good, n_bad, cost, fpr, fnr,
         auroc, average_precision, train_seconds, xcal_seconds,
         pool_score_seconds, test_score_seconds, backend, device,
         elapsed_seconds``.  ``n_good``/``n_bad`` report the vote counts behind
@@ -629,6 +773,14 @@ def simulate_voting_iterations(  # noqa: C901
     # Note: no torch.manual_seed() here - train_model handles its own
     # RNG seeding via fork_rng, keeping it thread-safe.
     start_time = time.monotonic()
+
+    style_obj: Any = None
+    if style is not None:
+        if trainer != "mlp":
+            raise ValueError(f"detection styles only support the MLP trainer; got trainer={trainer!r}")
+        from vtscore.eval.patch_styles import resolve_style  # noqa: PLC0415
+
+        style_obj = resolve_style(style)
 
     prevalence_arm = "natural" if target_prevalence is None else f"rare_{target_prevalence:g}"
     if target_prevalence is not None:
@@ -679,7 +831,7 @@ def simulate_voting_iterations(  # noqa: C901
     # embeddings once.
     sim_clips: dict[int, dict[str, Any]] | None = None
     X_all_clips: Any = None
-    if safe_thresholds and region_aware:
+    if safe_thresholds and (region_aware or style_obj is not None):
         sim_clips = {cid: clips_dict[cid] for cid in sim_ids}
     elif safe_thresholds:
         gmm_clip_embs = np.array([media_embedding(clips_dict[cid]) for cid in sorted(sim_ids)])
@@ -751,16 +903,26 @@ def simulate_voting_iterations(  # noqa: C901
             inclusion=inclusion,
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
+            style_obj=style_obj,
         )
 
         # Apply safe threshold blending if enabled
         if safe_thresholds:
-            threshold = _blend_safe_threshold(threshold, step, region_aware, sim_clips, X_all_clips, n_labels)
+            threshold = _blend_safe_threshold(
+                threshold, step, region_aware, sim_clips, X_all_clips, n_labels, style_obj=style_obj
+            )
 
         # Evaluate on held-out test set
         t_test = time.monotonic()
         metrics = _evaluate_on_test(
-            step, threshold, clips_dict, test_ids, target_category, inclusion, region_aware=region_aware
+            step,
+            threshold,
+            clips_dict,
+            test_ids,
+            target_category,
+            inclusion,
+            region_aware=region_aware,
+            style_obj=style_obj,
         )
         test_score_seconds = time.monotonic() - t_test
 
@@ -777,6 +939,7 @@ def simulate_voting_iterations(  # noqa: C901
                 "category": target_category,
                 "strategy": strategy,
                 "trainer": trainer,
+                "style": style or "",
                 "prevalence_arm": prevalence_arm,
                 "realized_prevalence": realized_prevalence,
                 "t": t,
@@ -817,6 +980,7 @@ def run_voting_iterations_eval(
     seed_scores: Optional[dict[str, dict[str, dict[int, float]]]] = None,
     trainers: Optional[list[str]] = None,
     prevalence_arms: Optional[list[Optional[float]]] = None,
+    styles: Optional[list[Optional[str]]] = None,
 ) -> pd.DataFrame:
     """Run the voting-iterations evaluation over multiple seeds/datasets/categories.
 
@@ -860,6 +1024,11 @@ def run_voting_iterations_eval(
             ``None`` (default) runs ``[None]`` (natural prevalence only); pass
             e.g. ``[None, 0.01]`` to add the 1%-prevalence rare arm.  Recorded
             in the ``prevalence_arm`` / ``realized_prevalence`` columns.
+        styles: Which detection styles to run per cell (see
+            :func:`simulate_voting_iterations`).  ``None`` (default) runs
+            ``[None]`` - the historical style-less behaviour; pass e.g.
+            ``["max_hac", "max_patch"]`` for the Max-Patch experiment arms.
+            Recorded in the ``style`` column (``""`` for the style-less run).
 
     Returns:
         A :class:`~pandas.DataFrame` with the columns listed in
@@ -870,6 +1039,7 @@ def run_voting_iterations_eval(
     strategy_list = strategies if strategies is not None else ["autopilot"]
     trainer_list = trainers if trainers is not None else ["mlp"]
     arm_list = prevalence_arms if prevalence_arms is not None else [None]
+    style_list = styles if styles is not None else [None]
     all_rows: list[dict[str, Any]] = []
 
     for ds_name, clips_dict in dataset_clips.items():
@@ -891,25 +1061,27 @@ def run_voting_iterations_eval(
                 for arm in arm_list:
                     for strategy in strategy_list:
                         for trainer in trainer_list:
-                            rows = simulate_voting_iterations(
-                                clips_dict,
-                                target_category=cat,
-                                seed=seed,
-                                dataset_name=ds_name,
-                                inclusion=inclusion,
-                                sim_fraction=sim_fraction,
-                                safe_thresholds=safe_thresholds,
-                                calibrate_count=calibrate_count,
-                                calibration_fraction=calibration_fraction,
-                                region_voting=region_voting,
-                                strategy=strategy,
-                                max_steps=max_steps,
-                                atlas_min_node_size=atlas_min_node_size,
-                                seed_scores=cat_seed_scores,
-                                trainer=trainer,
-                                target_prevalence=arm,
-                            )
-                            all_rows.extend(rows)
+                            for style in style_list:
+                                rows = simulate_voting_iterations(
+                                    clips_dict,
+                                    target_category=cat,
+                                    seed=seed,
+                                    dataset_name=ds_name,
+                                    inclusion=inclusion,
+                                    sim_fraction=sim_fraction,
+                                    safe_thresholds=safe_thresholds,
+                                    calibrate_count=calibrate_count,
+                                    calibration_fraction=calibration_fraction,
+                                    region_voting=region_voting,
+                                    strategy=strategy,
+                                    max_steps=max_steps,
+                                    atlas_min_node_size=atlas_min_node_size,
+                                    seed_scores=cat_seed_scores,
+                                    trainer=trainer,
+                                    target_prevalence=arm,
+                                    style=style,
+                                )
+                                all_rows.extend(rows)
 
     return pd.DataFrame(all_rows, columns=pd.Index(list(_VOTING_COLUMNS)))
 
@@ -930,6 +1102,7 @@ def run_voting_iterations_eval_from_pickles(
     seed_scores: Optional[dict[str, dict[str, dict[int, float]]]] = None,
     trainers: Optional[list[str]] = None,
     prevalence_arms: Optional[list[Optional[float]]] = None,
+    styles: Optional[list[Optional[str]]] = None,
 ) -> pd.DataFrame:
     """Convenience wrapper that loads datasets from pickle files.
 
@@ -985,4 +1158,5 @@ def run_voting_iterations_eval_from_pickles(
         seed_scores=seed_scores,
         trainers=trainers,
         prevalence_arms=prevalence_arms,
+        styles=styles,
     )

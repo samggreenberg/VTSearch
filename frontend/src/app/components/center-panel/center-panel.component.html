@@ -5,11 +5,12 @@
     <div class="media-swipe-wrapper" [class]="mediaType === 'audio' ? '' : swipeClass()">
       @switch (mediaType) {
         @case ('audio') {
-          <vt-audio-player [media]="media()!" [volume]="volume()" [audioPlaying]="audioPlaying()" [swipeClass]="swipeClass()" (playingChanged)="onPlayingChanged($event)"></vt-audio-player>
+          <vt-audio-player [media]="media()!" [variant]="payloadVariant()" [volume]="volume()" [audioPlaying]="audioPlaying()" [swipeClass]="swipeClass()" (playingChanged)="onPlayingChanged($event)"></vt-audio-player>
         }
         @case ('image') {
           <vt-image-viewer
             [media]="media()!"
+            [variant]="payloadVariant()"
             [pendingBadConfirm]="pendingBadConfirm()"
             [highlightBox]="highlightBox"
             (regionBoxChange)="onRegionBoxChange($event)"
@@ -17,19 +18,45 @@
           ></vt-image-viewer>
         }
         @case ('video') {
-          <vt-video-player [media]="media()!" [volume]="volume()" [audioPlaying]="audioPlaying()" (playingChanged)="onPlayingChanged($event)"></vt-video-player>
+          <vt-video-player [media]="media()!" [variant]="payloadVariant()" [volume]="volume()" [audioPlaying]="audioPlaying()" (playingChanged)="onPlayingChanged($event)"></vt-video-player>
         }
         @case ('text') {
-          <vt-text-viewer [media]="media()!"></vt-text-viewer>
+          <vt-text-viewer [media]="media()!" [variant]="payloadVariant()"></vt-text-viewer>
         }
         @case ('document') {
-          <vt-document-viewer [media]="media()!"></vt-document-viewer>
+          <vt-document-viewer [media]="media()!" [variant]="payloadVariant()"></vt-document-viewer>
         }
         @default {
-          <vt-document-viewer [media]="media()!"></vt-document-viewer>
+          <vt-document-viewer [media]="media()!" [variant]="payloadVariant()"></vt-document-viewer>
         }
       }
     </div>
+
+    @if (hasOriginalPayload) {
+      <div class="variant-toggle" role="group" aria-label="Payload variant">
+        <span class="variant-toggle__label">Showing</span>
+        <button
+          type="button"
+          class="btn btn--toolbar"
+          [class.active]="payloadVariant() === ''"
+          [attr.aria-pressed]="payloadVariant() === ''"
+          (click)="setPayloadVariant('')"
+          title="The cleaned version — the bytes that were actually analyzed and scored."
+        >
+          Clean
+        </button>
+        <button
+          type="button"
+          class="btn btn--toolbar"
+          [class.active]="payloadVariant() === 'original'"
+          [attr.aria-pressed]="payloadVariant() === 'original'"
+          (click)="setPayloadVariant('original')"
+          title="The version as imported, before cleanup ran. Shown for reference; it is not what was analyzed."
+        >
+          Original
+        </button>
+      </div>
+    }
 
     @if (mediaType === 'image' && imageViewer(); as imageViewer) {
       <div class="image-view-controls">

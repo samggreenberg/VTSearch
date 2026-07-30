@@ -30,7 +30,7 @@ and in :mod:`vtscore.training.region_similarity`.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, NamedTuple, Optional
+from typing import TYPE_CHECKING, Callable, NamedTuple, Optional
 
 import numpy as np
 
@@ -255,27 +255,112 @@ def eupe_features_to_patch_output(
     )
 
 
+def _spread_seed_indices(order: np.ndarray, k: int, height: int, width: int) -> np.ndarray:
+    """Greedy saliency peaks with spatial non-max suppression → K seed indices.
+
+    Walks patches high→low saliency (*order* = flat indices), accepting a peak
+    only when it is at least ``radius ≈ min(H, W) / (2·√k)`` grid cells from
+    every seed already chosen, so seeds spread across distinct objects.  If NMS
+    yields fewer than K, back-fills from the remaining top peaks so exactly K
+    seeds emit.
+    """
+    radius = max(1.0, min(height, width) / (2.0 * float(k) ** 0.5))
+    r2 = radius * radius
+    chosen: list[int] = []
+    chosen_rc: list[tuple[int, int]] = []
+    for idx in order:
+        r, c = int(idx // width), int(idx % width)
+        if all((r - pr) ** 2 + (c - pc) ** 2 >= r2 for pr, pc in chosen_rc):
+            chosen.append(int(idx))
+            chosen_rc.append((r, c))
+            if len(chosen) == k:
+                break
+    if len(chosen) < k:  # NMS too aggressive → back-fill from remaining top peaks
+        picked = set(chosen)
+        for idx in order:
+            if int(idx) not in picked:
+                chosen.append(int(idx))
+                if len(chosen) == k:
+                    break
+    return np.asarray(chosen[:k], dtype=np.int64)
+
+
+def _feature_assignments(
+    dist_stack: np.ndarray,
+    patch_grid: np.ndarray,
+    seeds: list[tuple[int, int]],
+    beta: float,
+) -> np.ndarray:
+    """Assign each cell to the seed maximising ``beta·cosine + (1-beta)·spatial``.
+
+    *beta* is the **assignment** blend weight — deliberately distinct from the HAC
+    *merge* ``alpha`` (they control different stages).  ``beta = 0`` reduces to pure
+    spatial (``argmax`` of the spatial similarity = ``argmin`` distance = the Voronoi
+    assignment), so ``assignment="spatial"`` is exactly the ``beta = 0`` corner.
+
+    *dist_stack* is the (k, H, W) per-seed squared spatial distance.  Cosine is
+    computed against each seed's patch vector (``patch_grid`` is L2-normalised,
+    so the dot product is the cosine); the spatial half reuses *dist_stack*,
+    scaled into ``[0, 1]``.  Returns a (H, W) argmax over the K seeds.
+    """
+    height, width, depth = patch_grid.shape
+    grid_vecs = patch_grid.reshape(-1, depth).astype(np.float32, copy=False)  # (H*W, D)
+    seed_vecs = np.stack([patch_grid[sr, sc] for (sr, sc) in seeds]).astype(np.float32)  # (k, D)
+    cosine = (grid_vecs @ seed_vecs.T).reshape(height, width, len(seeds)).transpose(2, 0, 1)  # (k, H, W)
+    max_d = float(((height - 1) ** 2 + (width - 1) ** 2) ** 0.5) or 1.0
+    spatial_sim = 1.0 - np.sqrt(dist_stack) / max_d  # (k, H, W), in [0, 1]
+    score = beta * cosine + (1.0 - beta) * spatial_sim
+    return np.argmax(score, axis=0)
+
+
 def propose_leaves(
     patch_grid: np.ndarray,
     patch_saliency: np.ndarray,
     k: int,
+    *,
+    seeding: str = "spread",
+    assignment: str = "feature",
+    beta: float = 0.5,
 ) -> list[RegionVector]:
     """Cluster a patch grid into K spatially-coherent leaf regions.
 
-    Algorithm: pick the top-K saliency peaks as seeds, then assign every
-    remaining patch cell to its **nearest seed by Euclidean spatial
-    distance** (ties broken by saliency).  Each leaf's box is the tight
-    bounding box around its cells, in normalised image coordinates.  Each
-    leaf's vector is the saliency-weighted mean of its constituent patch
-    vectors, L2-normalised.
+    Algorithm: pick K seeds, then assign every patch cell to a seed.  Each
+    leaf's box is the tight bounding box around its cells, in normalised
+    image coordinates; each leaf's vector is the saliency-weighted mean of
+    its constituent patch vectors, L2-normalised.
 
-    This is a deliberately simple baseline.  It produces spatially-
-    coherent, non-overlapping leaves with complete grid coverage.  The
-    quality of the HAC merges (which the MLP and similarity actually score)
-    depends more on the relative arrangement of leaves than on the exact
-    boundaries; the simple baseline is good enough for v1.  Future work
-    can swap in SLIC superpixels or watershed if the empirical sweep on
-    caltech101_s shows clear leaf-quality wins.
+    Two knobs control the two stages (the defaults are the production
+    behaviour; the alternatives are the original v1 baseline, kept for
+    ablation):
+
+    * *seeding* — how the K seeds are chosen:
+        - ``"spread"`` (default): greedy saliency peaks with **spatial
+          non-max suppression** — walk patches high→low saliency, accept a
+          peak only when it is at least ``radius`` grid cells from every
+          seed already chosen (``radius ≈ min(H, W) / (2·√k)``).  This
+          spreads seeds across distinct objects so a small object can win
+          its own seed instead of being swallowed by the single brightest
+          region.  If NMS yields fewer than K, the remainder is back-filled
+          from the top peaks (dropping the radius constraint) so exactly K
+          seeds emit.
+        - ``"topk"``: the K highest-saliency patches (the v1 baseline,
+          which piles seeds onto the brightest object).
+    * *assignment* — how each cell is bound to a seed:
+        - ``"feature"`` (default): the seed maximising ``beta·cosine(cell,
+          seed) + (1 - beta)·spatial_proximity``, so leaf boundaries follow
+          content instead of pure geometry.  ``beta`` is the **assignment**
+          blend and is independent of the HAC *merge* ``alpha`` (a separate
+          stage).  ``beta = 0`` reproduces ``"spatial"`` exactly.
+        - ``"spatial"``: nearest seed by Euclidean grid distance (the v1
+          baseline — a spatial Voronoi partition).
+
+    *beta* is used only when ``assignment == "feature"``.
+
+    Both settings preserve the v1 partition/coverage contract:
+    spatially-coherent, non-overlapping leaves with complete grid coverage.
+    Farther-reaching options (SLIC superpixels, watershed, overlapping
+    multi-scale proposals) remain future work if the empirical sweep shows
+    clear leaf-quality wins.
 
     Parameters
     ----------
@@ -285,6 +370,15 @@ def propose_leaves(
         Per-patch importance; not required to sum to 1.
     k : int
         Number of leaves to produce.  Must be ``>= 1`` and ``<= H * W``.
+    seeding : {"spread", "topk"}
+        Seed-selection strategy (see Algorithm above).  Default ``"spread"``.
+    assignment : {"feature", "spatial"}
+        Cell-to-seed binding strategy (see Algorithm above).  Default
+        ``"feature"``.
+    beta : float
+        Assignment cosine/spatial blend weight, used only when ``assignment ==
+        "feature"``.  Independent of the HAC merge ``alpha``; ``beta = 0`` ==
+        ``"spatial"``.
 
     Returns
     -------
@@ -298,19 +392,28 @@ def propose_leaves(
     num_cells = height * width
     if not 1 <= k <= num_cells:
         raise ValueError(f"k must be in [1, {num_cells}]; got {k}")
+    if seeding not in ("topk", "spread"):
+        raise ValueError(f"seeding must be 'topk' or 'spread'; got {seeding!r}")
+    if assignment not in ("spatial", "feature"):
+        raise ValueError(f"assignment must be 'spatial' or 'feature'; got {assignment!r}")
 
     flat_sal = patch_saliency.reshape(-1).astype(np.float32, copy=False)
-    seed_indices = np.argsort(-flat_sal, kind="stable")[:k]
+    order = np.argsort(-flat_sal, kind="stable")  # patch indices, high→low saliency
+    seed_indices = order[:k] if seeding == "topk" else _spread_seed_indices(order, k, height, width)
     seeds = [(int(idx // width), int(idx % width)) for idx in seed_indices]
 
     rows = np.arange(height, dtype=np.float32)[:, None]
     cols = np.arange(width, dtype=np.float32)[None, :]
 
-    # For each cell, distance² to each seed: shape (k, H, W). Pick argmin.
+    # Per-cell squared spatial distance to each seed: shape (k, H, W).
     dist_stack = np.empty((k, height, width), dtype=np.float32)
     for i, (sr, sc) in enumerate(seeds):
         dist_stack[i] = (rows - sr) ** 2 + (cols - sc) ** 2
-    assignments = np.argmin(dist_stack, axis=0)
+
+    if assignment == "spatial":
+        assignments = np.argmin(dist_stack, axis=0)
+    else:  # "feature"
+        assignments = _feature_assignments(dist_stack, patch_grid, seeds, beta)
 
     leaves: list[RegionVector] = []
     for i, (sr, sc) in enumerate(seeds):
@@ -580,6 +683,66 @@ def box_to_vote_vector(
     return _l2_normalize(pooled)
 
 
+def nearest_patch_to_box(
+    patch_grid: np.ndarray,
+    box: tuple[float, float, float, float],
+) -> np.ndarray:
+    """Return the single patch vector spatially closest to a voted *box*.
+
+    The Max-Patch detection style (``vtscore.eval.patch_styles``) trains a Good
+    region-vote on **one raw patch vector** - the patch whose cell best stands
+    in for the voted region - rather than a pooled or HAC-snapped vector.  The
+    pick is purely spatial:
+
+    * among patches whose centers fall inside the (clamped) box, the one whose
+      center is nearest the box center wins;
+    * when no patch center falls inside (a box thinner than one cell), the
+      patch whose center is nearest the box center wins outright.
+
+    Both rules collapse to "the patch nearest the box center, preferring
+    in-box patches", so a whole-image box picks the central patch and a tight
+    box picks the patch under it.
+
+    Parameters
+    ----------
+    patch_grid : ndarray, shape (H, W, D)
+        Per-patch vectors as stored in ``media["patch_grid"]`` (float16 pickle
+        dtype or float32; already L2-normalised).
+    box : (x0, y0, x1, y1)
+        Normalised image coordinates in ``[0, 1]``; swapped corners tolerated,
+        out-of-range coordinates clamped (same conventions as
+        :func:`box_to_vote_vector`).
+
+    Returns
+    -------
+    ndarray, shape (D,), float32, L2-normalised.
+    """
+    if patch_grid.ndim != 3:
+        raise ValueError(f"patch_grid must be (H, W, D); got shape {patch_grid.shape}")
+    if len(box) != 4:
+        raise ValueError(f"box must be a 4-tuple; got {box!r}")
+
+    height, width, _ = patch_grid.shape
+    x0, y0, x1, y1 = (float(v) for v in box)
+    x_lo, x_hi = max(0.0, min(x0, x1)), min(1.0, max(x0, x1))
+    y_lo, y_hi = max(0.0, min(y0, y1)), min(1.0, max(y0, y1))
+    cx = 0.5 * (x_lo + x_hi)
+    cy = 0.5 * (y_lo + y_hi)
+
+    col_centers = (np.arange(width, dtype=np.float32) + 0.5) / float(width)
+    row_centers = (np.arange(height, dtype=np.float32) + 0.5) / float(height)
+    inside_x = (col_centers >= x_lo) & (col_centers <= x_hi)
+    inside_y = (row_centers >= y_lo) & (row_centers <= y_hi)
+    inside = inside_y[:, None] & inside_x[None, :]
+
+    dist2 = (col_centers[None, :] - cx) ** 2 + (row_centers[:, None] - cy) ** 2
+    if inside.any():
+        dist2 = np.where(inside, dist2, np.inf)
+    flat_idx = int(np.argmin(dist2))
+    row, col = divmod(flat_idx, width)
+    return _l2_normalize(patch_grid[row, col].astype(np.float32, copy=False))
+
+
 def snap_box_to_region(
     regions: list[RegionVector],
     box: tuple[float, float, float, float],
@@ -675,13 +838,57 @@ def to_fp16(regions: list[RegionVector]) -> list[RegionVector]:
     ]
 
 
+def _fit_pca_projector(
+    patch_grid: np.ndarray,
+    n_components: int,
+) -> Optional[Callable[[np.ndarray], np.ndarray]]:
+    """Fit a per-image PCA on the patch grid and return a vec→reduced-vec projector.
+
+    Ported from the HAC-tree-improvements branch (the ``pca_dims`` option): fits
+    :class:`sklearn.decomposition.PCA` on *this image's* flattened patch vectors
+    ``(H*W, D)`` (all of them, not just the leaves).  The returned callable
+    projects any original-space ``(D,)`` vector into the fitted ``k``-dim space
+    and L2-normalises it, so it can be dropped into the cosine half of a HAC
+    merge affinity to decide the tree topology in a denoised, lower-dimensional
+    space while the stored node vectors stay full-dim.  ``n_components`` is
+    clamped to ``min(n_components, H*W, D)``; returns ``None`` (caller falls back
+    to the full-dim cosine) when a PCA cannot be fit (``k < 1``).
+    """
+    height, width, dim = patch_grid.shape
+    n_samples = height * width
+    k = min(int(n_components), n_samples, dim)
+    if k < 1:
+        return None
+    from sklearn.decomposition import PCA  # noqa: PLC0415
+
+    matrix = patch_grid.reshape(n_samples, dim).astype(np.float32, copy=False)
+    pca = PCA(n_components=k)
+    pca.fit(matrix)
+
+    def project(vec: np.ndarray) -> np.ndarray:
+        reduced = pca.transform(np.asarray(vec, dtype=np.float32)[None, :])[0]
+        return _l2_normalize(reduced)
+
+    return project
+
+
 def build_region_tree(
     output: PatchEmbedOutput,
     *,
     k: int = 12,
     alpha: float = 0.5,
+    seeding: str = "spread",
+    leaf_assign: str = "feature",
+    leaf_beta: Optional[float] = None,
 ) -> list[RegionVector]:
     """Build the full ``media["patch_regions"]`` list from one embedder output.
+
+    ``alpha`` blends cosine/spatial for the HAC **merge** order.  ``leaf_beta``
+    is the independent blend for the ``leaf_assign="feature"`` patch→seed
+    **assignment**; ``None`` (default) reuses ``alpha``, any float decouples
+    it.  ``leaf_beta = 0`` == spatial assignment.  ``seeding``/``leaf_assign``
+    are threaded to :func:`propose_leaves`; the defaults (``spread`` +
+    ``feature``) are the production behaviour.
 
     Layout of the returned list:
 
@@ -700,7 +907,14 @@ def build_region_tree(
         cell_mask=None,
         weight=0.0,
     )
-    leaves = propose_leaves(output.patch_grid, output.patch_saliency, k=k)
+    leaves = propose_leaves(
+        output.patch_grid,
+        output.patch_saliency,
+        k=k,
+        seeding=seeding,
+        assignment=leaf_assign,
+        beta=alpha if leaf_beta is None else leaf_beta,
+    )
     hac = build_hac_tree(
         leaves,
         alpha=alpha,

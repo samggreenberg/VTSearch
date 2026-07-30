@@ -31,6 +31,7 @@ from vtscore.concurrency.progress import (
     set_thread_progress,
 )
 from vtscore.datasets import export_dataset_to_file
+from vtscore.datasets.clipper_chain import append_cleaner_steps
 from vtscore.datasets.loader import apply_custom_metadata_md5
 from vtscore.datasets.registry import unregister_dataset as _reg_unregister
 from vtscore.state import DatasetContext, clear_all, register_context
@@ -55,6 +56,7 @@ from vtscore.datasets.stages.finalize import (
 )
 from vtscore.datasets.stages.projection import _build_projection_stage, _maybe_signpost_texts_stage
 from vtscore.datasets.stages.registry import _register_and_migrate
+from vtscore.datasets.thumbnail_warm import start_archive_thumbnail_warm
 
 
 # Two independent gates control how many dataset loads can run concurrently
@@ -550,6 +552,15 @@ def _run_origin_load_in_background(
                     # green immediately.  Text sort waits behind its own progress
                     # bar on first use if the model isn't ready yet.
                     _warmup_embedder_async(ctx.medias)
+                    # Same deal for archive-member thumbnails: the importer reads
+                    # no member bytes by design, so those media land with no
+                    # thumbnail and every browse tile would stream a tar member
+                    # and decode it on the request thread.  Warm them off the
+                    # request path now that the dataset is registered and
+                    # browsable; a no-op for every other import path.  Kicked on
+                    # reload too (this runs for pickle loads as well), since the
+                    # save above necessarily predates the pass.
+                    start_archive_thumbnail_warm(ctx)
 
                     from vtsearch.achievements import record_dataset_load  # noqa: PLC0415
 
@@ -640,6 +651,9 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     clipper_name = field_values.pop("clipper", "") or ""
     clipper_params = field_values.pop("clipper_params", None)
     chain_steps = _parse_chain_field(field_values.pop("clipper_chain", None))
+    # Enabled cleanup gates always run last, on the finished units, so they are
+    # appended to the chain here rather than positioned by the client.
+    chain_steps = append_cleaner_steps(chain_steps, field_values.pop("cleaners", None))
     # Keep clipper in field_values for importers that need it (e.g. demo
     # importer stores it in the container metadata for readiness tracking).
     field_values["clipper"] = clipper_name

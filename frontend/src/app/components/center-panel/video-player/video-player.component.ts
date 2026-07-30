@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
 
-import { Media } from '../../../models/api.models';
+import { Media, PayloadVariant } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 
 @Component({
@@ -15,6 +15,12 @@ export class VideoPlayerComponent implements OnDestroy {
   private activeContext = inject(ActiveContextService);
 
   readonly media = input.required<Media>();
+  /**
+   * Which payload to show: `''` (canonical) or `'original'` (the pre-clean
+   * snapshot of an item a cleaner rewrote at load time).  Driven by the
+   * parent's Clean/Original toggle.
+   */
+  readonly variant = input<PayloadVariant>('');
   readonly volume = input(1);
   readonly audioPlaying = input(true);
   readonly playingChanged = output<boolean>();
@@ -36,6 +42,9 @@ export class VideoPlayerComponent implements OnDestroy {
   // effect cycles rebuilding videoSrc (and yanking playback) for the
   // same id.
   private lastMediaId: number | null = null;
+  // Same guard for the payload variant: a Clean/Original flip keeps the media
+  // id, so the effect has to notice the variant changed to reload the source.
+  private lastVariant: PayloadVariant = '';
   // Whether (loadedmetadata) has fired for the current videoSrc. Clip bounds
   // (clip_start/clip_end) often arrive via batch hydration *after* the video
   // has already loaded, on a later media change with the same media id; in that
@@ -48,12 +57,14 @@ export class VideoPlayerComponent implements OnDestroy {
     // binding, so no view-query dependency is needed here.
     effect(() => {
       const media = this.media();
-      if (media.id !== this.lastMediaId) {
+      const variant = this.variant();
+      if (media.id !== this.lastMediaId || variant !== this.lastVariant) {
         this.lastMediaId = media.id;
+        this.lastVariant = variant;
         this.videoError.set(false);
         this.metadataLoaded = false;
         this.stopClipEnforcement();
-        this.videoSrc.set(this.activeContext.mediaUrl(`/api/medias/${media.id}/video`));
+        this.videoSrc.set(this.activeContext.mediaUrl(`/api/medias/${media.id}/video`, { variant }));
       } else if (this.metadataLoaded) {
         // Same media id, but metadata (e.g. clip_start/clip_end) may have just
         // arrived via batch hydration. The video already loaded, so

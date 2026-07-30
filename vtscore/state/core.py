@@ -790,7 +790,7 @@ class DetectorContext:
         # labels, calibrate_count, calibration_fraction, hidden_dim) and
         # *orderings* are the per-fold held-out ``(scores, labels)``.  Because
         # inclusion is deliberately absent from *key*, an Inclusion change hits
-        # the cache and only re-runs the cheap min-cost search (no fold refit);
+        # the cache and only re-runs the cheap quantile rule (no fold refit);
         # a label/embedder change rotates *key* and falls through to a fresh
         # calibration.  See docs/plans/find-verification-workflow.md.
         "calibration_cache",  # tuple[Any, tuple[list, float | None]] | None

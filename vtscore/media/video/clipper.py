@@ -3,9 +3,20 @@
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from vtscore.media.clipper import MediaClipper
+from vtscore.media.video import decode
+
+if TYPE_CHECKING:
+    import numpy as np
+
+#: Width the scene detector downscales sampled frames to.  Colour histograms
+#: are scale-insensitive, so full-resolution frames only cost decode time.
+_SCENE_SAMPLE_WIDTH = 320
+
+#: Hue x saturation bin counts for the scene-change histogram.
+_SCENE_HIST_BINS = (50, 60)
 
 
 class VideoDefaultClipper(MediaClipper):
@@ -251,6 +262,39 @@ class VideoAutoClipper(MediaClipper):
         return d
 
 
+def _hue_saturation_histogram(frame_rgb: "np.ndarray") -> "np.ndarray":
+    """Return an L2-normalised hue x saturation histogram of an RGB frame."""
+    import numpy as np  # noqa: PLC0415
+    from PIL import Image  # noqa: PLC0415
+
+    hsv = np.asarray(Image.fromarray(frame_rgb).convert("HSV"))
+    hist, _, _ = np.histogram2d(
+        hsv[..., 0].ravel(),
+        hsv[..., 1].ravel(),
+        bins=_SCENE_HIST_BINS,
+        range=[[0, 256], [0, 256]],
+    )
+    norm = float(np.linalg.norm(hist))
+    return hist / norm if norm > 0 else hist
+
+
+def _histogram_correlation(a: "np.ndarray", b: "np.ndarray") -> float:
+    """Pearson correlation between two histograms (OpenCV's ``HISTCMP_CORREL``).
+
+    Returns 1.0 ("no change") when a histogram is perfectly flat and the
+    correlation is undefined, so a degenerate frame can't manufacture a scene
+    boundary.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    da = a.ravel() - a.mean()
+    db = b.ravel() - b.mean()
+    denom = float(np.sqrt(np.dot(da, da) * np.dot(db, db)))
+    if denom == 0.0:
+        return 1.0
+    return float(np.dot(da, db) / denom)
+
+
 def _detect_scene_boundaries(
     video_path: str,
     threshold: float,
@@ -265,65 +309,38 @@ def _detect_scene_boundaries(
     since the previous boundary.
 
     The function samples one frame per second to keep the cost manageable
-    for long videos.
+    for long videos, and works on downscaled frames because a colour
+    histogram doesn't need full resolution.
 
     Returns a sorted list of boundary timestamps **not** including 0 or
     the video end.  An empty list means no scene changes were detected.
     """
-    import cv2  # noqa: PLC0415
-
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
+    info = decode.probe(video_path)
+    if info is None or info.duration <= 0:
         return []
+    total_duration = info.duration
 
-    try:
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        if fps <= 0:
-            return []
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        if frame_count <= 0:
-            return []
-        total_duration = frame_count / fps
+    prev_hist = None
+    boundaries: list[float] = []
+    last_boundary_time = 0.0
 
-        # Sample roughly one frame per second.
-        sample_interval = max(1, int(round(fps)))
+    for current_time, frame in decode.iter_frames(video_path, interval=1.0, max_width=_SCENE_SAMPLE_WIDTH):
+        hist = _hue_saturation_histogram(frame)
 
-        prev_hist = None
-        boundaries: list[float] = []
-        last_boundary_time = 0.0
+        if prev_hist is not None:
+            corr = _histogram_correlation(prev_hist, hist)
+            if corr < threshold and (current_time - last_boundary_time) >= min_scene_duration:
+                boundaries.append(round(current_time, 6))
+                last_boundary_time = current_time
 
-        frame_idx = 0
-        while True:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-            ret, frame = cap.read()
-            if not ret:
-                break
+        prev_hist = hist
 
-            # Convert to HSV and compute a normalised hue-saturation histogram.
-            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-            hist = cv2.calcHist([hsv], [0, 1], None, [50, 60], [0, 180, 0, 256])
-            cv2.normalize(hist, hist)
+    # Drop any boundary that would create a trailing scene shorter than
+    # min_scene_duration.
+    if boundaries and (total_duration - boundaries[-1]) < min_scene_duration:
+        boundaries.pop()
 
-            if prev_hist is not None:
-                corr = cv2.compareHist(prev_hist, hist, cv2.HISTCMP_CORREL)
-                current_time = frame_idx / fps
-                if corr < threshold and (current_time - last_boundary_time) >= min_scene_duration:
-                    boundaries.append(round(current_time, 6))
-                    last_boundary_time = current_time
-
-            prev_hist = hist
-            frame_idx += sample_interval
-            if frame_idx >= frame_count:
-                break
-
-        # Drop any boundary that would create a trailing scene shorter than
-        # min_scene_duration.
-        if boundaries and (total_duration - boundaries[-1]) < min_scene_duration:
-            boundaries.pop()
-
-        return boundaries
-    finally:
-        cap.release()
+    return boundaries
 
 
 class VideoSceneClipper(MediaClipper):

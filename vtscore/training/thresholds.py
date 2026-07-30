@@ -21,6 +21,17 @@ import numpy as np
 # stored on ``DetectorContext.threshold`` and break every comparison.
 NO_GOOD_THRESHOLD = 2.0
 
+# False-negative budget of the conformal inclusion rule at inclusion 0; each
+# +1 step of inclusion halves it (see :func:`conformal_threshold`).  0.25 means
+# the default cutoff may sacrifice at most ~25% of true matches to the
+# false-positive guard - a cap, spent only when class overlap forces it.
+CONFORMAL_BASE_BUDGET = 0.25
+
+# Positive-score quantile the inclusion = -10 end of the knob walks to: at -10
+# only the region scoring above the 75th percentile of held-out positives is
+# included - "just the most confident matches".
+CONFORMAL_QPOS_MAX = 0.75
+
 # Above this many scores, fit the GMM on a random subsample instead of the full
 # set. A 2-component, 1-D GMM only needs to recover the two clusters' means and
 # variances, which 50k samples estimate as accurately as the full population -
@@ -102,7 +113,7 @@ def _calibration_cache_key(
     function of these inputs (RNG seeded with 42 at every cached call site)
     and are **inclusion-independent** - ``inclusion`` is deliberately *not* in
     the key, so an Inclusion change hits the cache and only re-runs the cheap
-    min-cost search.  The key encodes a hash of the raw training vectors (not
+    conformal quantile rule.  The key encodes a hash of the raw training vectors (not
     just label IDs) so a labelset re-resolved to different embeddings - e.g.
     after the embedder changes - invalidates the cache automatically.  See
     docs/plans/find-verification-workflow.md.
@@ -148,8 +159,8 @@ def cross_calibration_threshold_cached(
     fallback))`` and reuses them whenever the (labels, calibrate settings)
     key matches.  This is the common case during interactive sorting: the
     user toggles ``inclusion`` or loads a new media item, the labels stay the
-    same, and the only work left is re-running the cheap min-cost search over
-    the cached orderings - no ~200-epoch fold fits.
+    same, and the only work left is re-running the cheap conformal quantile
+    rule over the cached orderings - no ~200-epoch fold fits.
 
     A real label change produces a different cache key and falls through to a
     fresh calibration - no explicit invalidation needed.
@@ -183,95 +194,81 @@ def cross_calibration_threshold_cached(
     return threshold_from_fold_orderings(orderings, inclusion_value)
 
 
-def find_optimal_threshold(
+def conformal_threshold(
     scores: list[float],
     labels: list[float],
     inclusion_value: int = 0,
 ) -> float:
-    """Find the score threshold that best separates good (1) from bad (0) examples.
+    """Split-conformal quantile threshold over held-out calibration scores.
 
-    Iterates over all candidate thresholds (each unique score value) and picks the
-    one that minimises a weighted combination of false-positive rate (FPR) and
-    false-negative rate (FNR). The relative weight of FPR vs. FNR is governed by
-    ``inclusion_value``.
+    Maps ``inclusion_value`` to a decision threshold via quantiles of the
+    calibration score distributions rather than a min-cost search over
+    observed cuts.  The min-cost argmin this replaced had exactly as many
+    distinct optima as the calibration set had ranking errors, so on
+    well-separated votes (the common case) the threshold never moved with
+    inclusion; quantiles move whenever the scores have any spread (see
+    docs/experiments/inclusion-knob/REPORT.md and issue #2693).
+
+    The rule, for ``k = inclusion_value`` (``BASE = CONFORMAL_BASE_BUDGET``):
+
+    * A **false-negative cap** ``alpha(k) = min(1, BASE * 2^-k)``: the
+      threshold never exceeds the ``alpha``-quantile of the calibration
+      *positive* scores, so an estimated ``1 - alpha`` of true matches land
+      at or above the cut.  ``+k`` therefore has a portable, user-facing
+      meaning - "the fraction of true matches I'm willing to miss, halving
+      per step" - independent of the dataset or detector.  The cap is an
+      upper bound, not a target: when the classes separate cleanly the cut
+      drops to the lowest calibration positive and the budget goes unspent
+      (no match is sacrificed that the negatives don't force).
+    * A **false-positive guard** for ``k <= 0``: the threshold stays at or
+      above the ``1 - BASE * 2^k`` quantile of the calibration *negative*
+      scores, so overlap-heavy tasks keep FPR control, and above a walk *up*
+      the positive score distribution (``q_pos(k) = QPOS_MAX * |k|/10``: at
+      -10 only the top-quartile-of-positives region remains - "just the
+      surest matches").
+
+    Every component quantile is monotone non-increasing in ``k``, so their
+    min/max composition is too: the threshold is monotone non-increasing in
+    inclusion **by construction**.  Raising inclusion can only grow the
+    included set, and the sets are nested (everything included at ``k`` stays
+    included at ``k + 1``) - which is what makes "cut off at Inclusion 1,
+    verify up to Inclusion 4" a well-defined workflow.
 
     Args:
-        scores: List of model output scores, one per example.
-        labels: List of true binary labels (1.0 for good, 0.0 for bad),
+        scores: Held-out calibration scores, one per example.  Must come from
+            data the scoring model did *not* train on; scores on the training
+            votes themselves are optimistically separated and yield a
+            too-tight band.
+        labels: True binary labels (1.0 for good, 0.0 for bad),
             corresponding to ``scores``.
-        inclusion_value: Integer in ``[-10, 10]`` controlling the FPR/FNR trade-off.
-            - 0: minimise ``fpr + fnr`` (equal weight).
-            - Positive: minimise ``fpr + 2^inclusion_value * fnr`` (prefer recall,
-              i.e., include more items).
-            - Negative: minimise ``2^(-inclusion_value) * fpr + fnr`` (prefer
-              precision, i.e., exclude more items).
+        inclusion_value: Integer in ``[-10, 10]``; higher includes more.
 
     Returns:
-        The float threshold that achieves the lowest weighted cost, or
-        :data:`NO_GOOD_THRESHOLD` when predicting nothing positive is
-        strictly cheaper than every realizable cut (e.g. a top-scored
-        negative under a precision-biased inclusion).
-        Defaults to 0.5 if the score list is empty.
+        A float threshold, always realizable within the calibration score
+        range (the rule never abstains).  Defaults to 0.5 when the score
+        list is empty or single-class (no quantiles to take).
     """
     if not scores:
         return 0.5
 
-    # Vectorized O(n log n) threshold search using cumulative sums
-    scores_arr = np.array(scores)
-    labels_arr = np.array(labels)
-
-    # Sort by score descending
-    order = np.argsort(-scores_arr)
-    sorted_scores = scores_arr[order]
-    sorted_labels = labels_arr[order]
-
-    total_positives = int(np.sum(sorted_labels == 1))
-    total_negatives = len(sorted_labels) - total_positives
-
-    if total_positives == 0 or total_negatives == 0:
+    scores_arr = np.asarray(scores, dtype=np.float64)
+    labels_arr = np.asarray(labels, dtype=np.float64)
+    pos = scores_arr[labels_arr == 1.0]
+    neg = scores_arr[labels_arr != 1.0]
+    if len(pos) == 0 or len(neg) == 0:
         return 0.5
 
-    # Calculate weights based on inclusion
-    if inclusion_value >= 0:
-        fpr_weight = 1.0
-        fnr_weight = 2.0**inclusion_value
-    else:
-        fpr_weight = 2.0 ** (-inclusion_value)
-        fnr_weight = 1.0
+    def _threshold_at(k: int) -> float:
+        fn_cap = float(np.quantile(pos, min(1.0, CONFORMAL_BASE_BUDGET * 2.0**-k)))
+        if k > 0:
+            # The k=0 floor keeps the seam monotone: q_pos(alpha) can sit
+            # above the k=0 cut when the budget goes unspent there.
+            return min(fn_cap, _threshold_at(0))
+        fp_guard = float(np.quantile(neg, 1.0 - CONFORMAL_BASE_BUDGET * 2.0**k))
+        walk = float(np.quantile(pos, CONFORMAL_QPOS_MAX * -k / 10.0))
+        return min(fn_cap, max(fp_guard, walk))
 
-    # Cumulative counts as we move the threshold down the sorted list.
-    # At position i, threshold = sorted_scores[i], so items 0..i are predicted positive.
-    cum_positives = np.cumsum(sorted_labels == 1)  # TP at each threshold
-    cum_negatives = np.cumsum(sorted_labels == 0)  # FP at each threshold
-
-    # FP = cum_negatives, FN = total_positives - cum_positives
-    fp = cum_negatives
-    fn = total_positives - cum_positives
-
-    fpr = fp / total_negatives
-    fnr = fn / total_positives
-
-    costs = fpr_weight * fpr + fnr_weight * fnr
-
-    # Only positions where the score strictly drops afterwards are feasible
-    # cut points: ``score >= threshold`` includes *every* item tied with the
-    # threshold, so a mid-tie position advertises a TP/FP split the returned
-    # threshold cannot realize (common with a saturated MLP emitting exact
-    # 1.0/0.0 sigmoids).  The last position is always a feasible cut.
-    feasible = np.append(sorted_scores[:-1] > sorted_scores[1:], True)
-    costs = np.where(feasible, costs, np.inf)
-
-    best_idx = int(np.argmin(costs))
-    best_cost = float(costs[best_idx])
-
-    # "Predict nothing positive" (a threshold above every observed score) is
-    # a legitimate candidate the observed scores can't express: FP=0, FN=all
-    # positives, so its cost is exactly ``fnr_weight``.  Observed thresholds
-    # win ties so behaviour only changes when abstaining is strictly better.
-    if fnr_weight < best_cost:
-        return NO_GOOD_THRESHOLD
-
-    return float(sorted_scores[best_idx])
+    return _threshold_at(inclusion_value)
 
 
 def _per_bag_fit_weights(
@@ -300,6 +297,45 @@ def _per_bag_fit_weights(
     return w
 
 
+def _pooled_group_scores(
+    model: Any,
+    cal_groups: list,
+    rows_by_group: dict,
+    X_np: np.ndarray,
+    score_rows_by_group: dict | None,
+) -> list[float]:
+    """Collapse each calibration group to one max-pooled sigmoid score.
+
+    With *score_rows_by_group* each group pools over the rows the scorer will
+    max-pool at **inference**; otherwise it pools over the rows it trained on
+    (the historical behaviour every production caller takes).
+    """
+    import torch  # noqa: PLC0415
+
+    from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: PLC0415
+
+    device = next(model.parameters()).device
+    if score_rows_by_group is not None:
+        blocks = [np.asarray(score_rows_by_group[g], dtype=np.float32) for g in cal_groups]
+        sizes = [b.shape[0] for b in blocks]
+        with torch.no_grad():
+            X_cal = torch.tensor(np.concatenate(blocks, axis=0), dtype=torch.float32).to(device)
+            flat = sigmoid_to_finite_scores(model(X_cal))
+        out: list[float] = []
+        offset = 0
+        for size in sizes:
+            out.append(max(flat[offset : offset + size]))
+            offset += size
+        return out
+
+    cal_idx = [i for g in cal_groups for i in rows_by_group[g]]
+    with torch.no_grad():
+        X_cal = torch.tensor(X_np[cal_idx], dtype=torch.float32).to(device)
+        row_scores = sigmoid_to_finite_scores(model(X_cal))
+    by_row = dict(zip(cal_idx, row_scores, strict=True))
+    return [max(by_row[i] for i in rows_by_group[g]) for g in cal_groups]
+
+
 def _compute_fold_orderings_grouped(
     X_list: list[np.ndarray],
     y_list: list[float],
@@ -309,6 +345,7 @@ def _compute_fold_orderings_grouped(
     calibrate_count: int,
     calibration_fraction: float,
     hidden_dim: int | None,
+    score_rows_by_group: dict | None = None,
 ) -> tuple[list[tuple[list[float], list[float]]], float | None]:
     """Bag-aware variant of :func:`compute_fold_orderings`.
 
@@ -317,11 +354,13 @@ def _compute_fold_orderings_grouped(
     split over votes not rows, weight-balances each fold fit per-bag, and
     collapses every calibration group to a single max-pooled score (an image
     scores by its best region, as at inference).
+
+    *score_rows_by_group* overrides which rows a calibration group collapses
+    over - see :func:`compute_fold_orderings`.
     """
     import torch  # noqa: PLC0415
 
     from vtscore.training.mlp import train_model  # noqa: PLC0415
-    from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: PLC0415
 
     _rng = rng if rng is not None else np.random
     X_np = np.array(X_list)
@@ -374,18 +413,10 @@ def _compute_fold_orderings_grouped(
         fold_w = torch.tensor(_per_bag_fit_weights(y_np[train_idx], [grp[i] for i in train_idx]), dtype=torch.float32)
         model = train_model(X_train, y_train, input_dim, hidden_dim=hidden_dim, sample_weights=fold_w)
 
-        # Score every calibration row, then max-pool per group to one score.
-        cal_idx = [i for g in cal_groups for i in rows_by_group[g]]
-        with torch.no_grad():
-            X_cal = torch.tensor(X_np[cal_idx], dtype=torch.float32).to(next(model.parameters()).device)
-            row_scores = sigmoid_to_finite_scores(model(X_cal))
-        pos_in_cal = {i: s for i, s in zip(cal_idx, row_scores, strict=True)}
-        group_scores: list[float] = []
-        group_labels: list[float] = []
-        for g in cal_groups:
-            rows = rows_by_group[g]
-            group_scores.append(max(pos_in_cal[i] for i in rows))
-            group_labels.append(float(label_by_group[g]))
+        # Collapse each calibration group to one max-pooled score, so a Good
+        # bag and a Bad bag are pooled the same way the scorer pools an image.
+        group_scores = _pooled_group_scores(model, cal_groups, rows_by_group, X_np, score_rows_by_group)
+        group_labels = [float(label_by_group[g]) for g in cal_groups]
         orderings.append((group_scores, group_labels))
 
     return orderings, None
@@ -400,6 +431,7 @@ def compute_fold_orderings(
     calibration_fraction: float = 0.5,
     hidden_dim: int | None = None,
     groups: list | None = None,
+    score_rows_by_group: dict | None = None,
 ) -> tuple[list[tuple[list[float], list[float]]], float | None]:
     """Train the K calibration folds and return their held-out orderings.
 
@@ -424,6 +456,18 @@ def compute_fold_orderings(
     and each calibration group collapses to one max-pooled score - matching how
     inference scores an image by its best region.  When *groups* is ``None``
     (every non-flooded caller) the historical row-wise path runs unchanged.
+
+    *score_rows_by_group* (grouped path only) maps each group id to the row
+    stack that group should be **scored** over, decoupling "what the fold model
+    trains on" from "what a calibration bag collapses to".  It exists because
+    the two are not the same whenever a Good vote contributes fewer rows than a
+    Bad vote floods: the Good bag then collapses to a max over 1 row while the
+    Bad bag - and every image at inference - collapses to a max over N, and
+    ``max`` is an upward-biased order statistic, so the calibrated cut
+    lands systematically high and the threshold over-rejects positives.  Passing
+    each vote's inference rows here puts both classes in the geometry and at the
+    width the scorer will actually use.  ``None`` (every production caller)
+    keeps the historical "collapse over the training rows" behaviour.
     """
     if groups is not None:
         return _compute_fold_orderings_grouped(
@@ -435,6 +479,7 @@ def compute_fold_orderings(
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
             hidden_dim=hidden_dim,
+            score_rows_by_group=score_rows_by_group,
         )
     n = len(X_list)
     if n < 4:
@@ -499,35 +544,25 @@ def threshold_from_fold_orderings(
     fold_orderings: list[tuple[list[float], list[float]]],
     inclusion_value: int,
 ) -> float:
-    """Aggregate the per-fold min-cost thresholds at *inclusion_value*.
+    """Apply the conformal inclusion rule to the pooled fold orderings.
 
-    Cheap: just re-runs :func:`find_optimal_threshold` over each fold's cached
-    ``(scores, labels)``.  Callers must pass a non-empty ``fold_orderings``
-    (the empty case is handled via the ``fallback`` from
-    :func:`compute_fold_orderings`).
+    Cheap: pools every fold's cached held-out ``(scores, labels)`` and runs
+    :func:`conformal_threshold` once - no fold refits.  Pooling (rather than
+    averaging per-fold thresholds) is deliberate: the knob's resolution is
+    bounded by the number of calibration scores the quantiles are taken over,
+    and per-fold quantiles on a handful of votes each would waste the other
+    folds' scores.  All folds' scores live on the same sigmoid scale, so the
+    pool is exchangeable enough for the quantile rule.
 
-    A fold whose min-cost cut is "predict nothing" returns
-    :data:`NO_GOOD_THRESHOLD` (2.0), which is a *vote to abstain*, not a
-    number to average.  Numerically averaging it dragged the mean above the
-    sigmoid range whenever a single fold abstained (with the default
-    ``calibrate_count=2`` any lone abstain forced the whole ensemble to
-    abstain, while at 3+ folds the same lone abstain often did not - a
-    fold-count-dependent artifact that also stored an ill-defined ~1.3 as the
-    "threshold").  Instead the sentinel is tallied as a vote: the ensemble
-    abstains only when a **strict majority** of folds abstain; otherwise the
-    threshold is the mean of just the folds that produced a real cut.
+    Callers must pass a non-empty ``fold_orderings`` (the empty case is
+    handled via the ``fallback`` from :func:`compute_fold_orderings`);
+    an empty list returns :data:`NO_GOOD_THRESHOLD` defensively.
     """
-    per_fold = [find_optimal_threshold(s, lbls, inclusion_value) for s, lbls in fold_orderings]
-    if not per_fold:
+    if not fold_orderings:
         return NO_GOOD_THRESHOLD
-    finite = [t for t in per_fold if t != NO_GOOD_THRESHOLD]
-    n_abstain = len(per_fold) - len(finite)
-    # Strict majority abstains -> abstain overall.  ``not finite`` (every fold
-    # abstained) is a strict majority for any non-empty ensemble, so it is
-    # subsumed here and the ``sum(finite)`` below never divides by zero.
-    if n_abstain * 2 > len(per_fold):
-        return NO_GOOD_THRESHOLD
-    return sum(finite) / len(finite)
+    pooled_scores = [s for scores, _ in fold_orderings for s in scores]
+    pooled_labels = [lb for _, labels in fold_orderings for lb in labels]
+    return conformal_threshold(pooled_scores, pooled_labels, inclusion_value)
 
 
 def calculate_cross_calibration_threshold(
@@ -540,14 +575,14 @@ def calculate_cross_calibration_threshold(
     calibration_fraction: float = 0.5,
     hidden_dim: int | None = None,
     groups: list | None = None,
+    score_rows_by_group: dict | None = None,
 ) -> float:
     """Estimate a decision threshold using k-fold calibration.
 
     Performs ``calibrate_count`` independent random Train/Calibrate splits.
-    For each split, trains a model on the Train portion and finds the
-    optimal threshold on the Calibrate portion. Aggregates the per-fold
-    thresholds via :func:`threshold_from_fold_orderings` (mean of the folds
-    that produced a real cut; abstain overall when a strict majority abstain).
+    For each split, trains a model on the Train portion and scores the
+    held-out Calibrate portion.  The pooled held-out scores then feed the
+    conformal inclusion rule via :func:`threshold_from_fold_orderings`.
 
     Algorithm:
         For each of *k* = ``calibrate_count`` rounds:
@@ -556,11 +591,9 @@ def calculate_cross_calibration_threshold(
            the Train side has at least one of each class, so the per-fold MLP
            fit always has both-class supervision.
         2. Train a model on Train.
-        3. Find optimal threshold on Calibrate.
-        Aggregate the *k* thresholds: a fold voting to abstain
-        (:data:`NO_GOOD_THRESHOLD`) counts as a vote, not a value; the
-        ensemble abstains only under a strict majority, otherwise it returns
-        the mean of the non-abstaining folds.
+        3. Score the Calibrate portion.
+        Pool the *k* rounds' held-out (score, label) pairs and apply
+        :func:`conformal_threshold` at *inclusion_value*.
 
     Args:
         X_list: List of embedding arrays (one per labelled example).
@@ -568,10 +601,11 @@ def calculate_cross_calibration_threshold(
             aligned with ``X_list``.
         input_dim: Dimensionality of the embeddings.
         inclusion_value: Integer in ``[-10, 10]`` passed to
-            :func:`find_optimal_threshold` to control the FPR/FNR trade-off.
-            It does **not** enter model training (the fold models are
-            inclusion-independent), so the same fold scores can be re-thresholded
-            at any inclusion - see docs/plans/find-verification-workflow.md.
+            :func:`conformal_threshold` to control the miss/false-alarm
+            trade-off.  It does **not** enter model training (the fold models
+            are inclusion-independent), so the same fold scores can be
+            re-thresholded at any inclusion - see
+            docs/plans/find-verification-workflow.md.
         rng: Optional seeded RandomState for reproducible splits. Falls back
             to the global ``np.random`` state when ``None``.
         calibrate_count: Number of random Train/Calibrate splits (default 2).
@@ -585,6 +619,8 @@ def calculate_cross_calibration_threshold(
             When ``None`` (default), each fold model auto-sizes based on its
             own training-set size.  Pass the full-data hidden dim to ensure
             fold models match the final model's architecture.
+        score_rows_by_group: Per-group inference row stacks; see
+            :func:`compute_fold_orderings`.  Grouped path only.
 
     Returns:
         A float threshold. Returns 0.5 when calibration is not possible:
@@ -603,6 +639,7 @@ def calculate_cross_calibration_threshold(
         calibration_fraction=calibration_fraction,
         hidden_dim=hidden_dim,
         groups=groups,
+        score_rows_by_group=score_rows_by_group,
     )
     if fallback is not None:
         return fallback

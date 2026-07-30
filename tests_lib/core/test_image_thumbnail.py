@@ -11,9 +11,9 @@ import io
 
 from PIL import Image
 
+from vtscore.media.image.edge_trim import trim_solid_edges
 from vtscore.media.image.thumbnail import (
     DEFAULT_MAX_DIM,
-    _trim_solid_edges,
     make_image_thumbnail,
     normalize_region_crop,
 )
@@ -106,45 +106,45 @@ class TestTrimSolidEdges:
     def test_trims_black_letterbox_top_and_bottom(self):
         # 100px black bars top & bottom, red content in the middle 200px.
         img = self._content_box(400, 400, (0, 100, 400, 300), (0, 0, 0), (200, 30, 30))
-        out = _trim_solid_edges(img)
+        out = trim_solid_edges(img)
         assert out.size[0] == 400  # full width kept (no side bars)
         assert abs(out.size[1] - 200) <= 6  # ~top/bottom bars removed
 
     def test_trims_white_pillarbox_left_and_right(self):
         # 100px white bars left & right, content in the middle 200px column.
         img = self._content_box(400, 400, (100, 0, 300, 400), (255, 255, 255), (40, 90, 160))
-        out = _trim_solid_edges(img)
+        out = trim_solid_edges(img)
         assert out.size[1] == 400  # full height kept (no top/bottom bars)
         assert abs(out.size[0] - 200) <= 6
 
     def test_trims_a_single_padded_edge_independently(self):
         # White margin only on the left; the other three edges are content.
         img = self._content_box(400, 200, (120, 0, 400, 200), (255, 255, 255), (10, 120, 40))
-        out = _trim_solid_edges(img)
+        out = trim_solid_edges(img)
         assert out.size[1] == 200  # top/bottom untouched
         assert abs(out.size[0] - 280) <= 6  # only the ~120px left bar removed
 
     def test_leaves_a_content_filled_frame_unchanged(self):
         img = Image.new("RGB", (300, 200), color=(120, 60, 180))
-        out = _trim_solid_edges(img)
+        out = trim_solid_edges(img)
         assert out.size == (300, 200)
 
     def test_leaves_a_wholly_solid_frame_unchanged(self):
         # Nothing but solid tone — no content to pull the box toward.
-        assert _trim_solid_edges(Image.new("RGB", (300, 200), (255, 255, 255))).size == (300, 200)
-        assert _trim_solid_edges(Image.new("RGB", (300, 200), (0, 0, 0))).size == (300, 200)
+        assert trim_solid_edges(Image.new("RGB", (300, 200), (255, 255, 255))).size == (300, 200)
+        assert trim_solid_edges(Image.new("RGB", (300, 200), (0, 0, 0))).size == (300, 200)
 
     def test_caps_trim_so_a_tiny_subject_does_not_explode(self):
         # A 10px dot centred in a 400px white field: an uncapped trim would crop
         # to ~10px, but the per-edge cap keeps the middle 10% each way (40px).
         img = self._content_box(400, 400, (195, 195, 205, 205), (255, 255, 255), (200, 0, 0))
-        out = _trim_solid_edges(img)
+        out = trim_solid_edges(img)
         assert out.size == (40, 40)
 
     def test_does_not_trim_a_solid_coloured_border(self):
         # A saturated (non white/black) border is content, not padding.
         img = self._content_box(400, 200, (100, 0, 300, 200), (0, 200, 0), (0, 0, 200))
-        assert _trim_solid_edges(img).size == (400, 200)
+        assert trim_solid_edges(img).size == (400, 200)
 
 
 class TestMakeImageThumbnailTrim:

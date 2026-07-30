@@ -16,8 +16,8 @@ from vtscore.training.thresholds import (
     calculate_cross_calibration_threshold,
     calculate_gmm_threshold,
     calculate_safe_threshold,
+    conformal_threshold,
     cross_calibration_threshold_cached,
-    find_optimal_threshold,
 )
 
 __all__ = [
@@ -25,7 +25,7 @@ __all__ = [
     "build_model_from_weights",
     "train_model",
     "calculate_gmm_threshold",
-    "find_optimal_threshold",
+    "conformal_threshold",
     "calculate_cross_calibration_threshold",
     "cross_calibration_threshold_cached",
     "calculate_safe_threshold",

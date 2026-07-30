@@ -163,6 +163,41 @@ def _embeddings_dict_for_pickle(embeddings: Any) -> dict[str, np.ndarray] | None
     return out or None
 
 
+def _copy_original_payload(entry: dict[str, Any], media: dict[str, Any]) -> None:
+    """Copy a cleaned item's pre-clean payload snapshot into its pickle entry.
+
+    The snapshot (``docs/plans/media-cleaners.md``) is dataset *content*, not a
+    cache: it is the only copy of what the user imported, so it has to ride the
+    round-trip alongside the canonical (cleaned) payload.  Written only when
+    present, so an uncleaned dataset keeps the same entry shape.
+    """
+    from vtscore.datasets.clipper_chain import ORIGINAL_PAYLOAD_KEYS  # noqa: PLC0415
+
+    for field in ORIGINAL_PAYLOAD_KEYS:
+        if media.get(field) is not None:
+            entry[field] = media[field]
+
+
+def _copy_clip_window(entry: dict[str, Any], media: dict[str, Any]) -> None:
+    """Copy a clipped / windowed item's playback window into its pickle entry.
+
+    The clip window (``clip_start`` / ``clip_end`` / ``clip_index`` /
+    ``clip_box``) is what a player seeks to and loops within, what the audio
+    waveform is sliced by, and what renders the "Clip …" metadata rows -- all
+    off the *top-level* fields.  The same extents live in ``origin.params``, but
+    only as a re-derivation recipe in a different shape, so they do not stand
+    in: without these keys every clipped or windowed media reloads playing its
+    whole source from 0 (14 windows of one tar member become 14
+    identical-sounding items).  Written only when present, so an unclipped
+    dataset keeps the same entry shape.
+    """
+    from vtscore.media.provenance import CLIP_WINDOW_FIELDS  # noqa: PLC0415
+
+    for field in CLIP_WINDOW_FIELDS:
+        if media.get(field) is not None:
+            entry[field] = media[field]
+
+
 def export_dataset_to_file(
     medias: dict[int, dict[str, Any]],
     *,
@@ -236,6 +271,10 @@ def export_dataset_to_file(
             "media_bytes": media.get("media_bytes"),
             "media_string": media.get("media_string"),
             "media_path": media.get("media_path"),
+            # A URL-backed media (``recaller``) has no inline bytes and no local
+            # file: the URL *is* its byte source, so it has to ride along or the
+            # item reloads with nothing to serve.
+            "media_url": media.get("media_url"),
             "word_count": media.get("word_count"),
             "character_count": media.get("character_count"),
             "width": media.get("width"),
@@ -244,6 +283,7 @@ def export_dataset_to_file(
         }
         for field in extra_fields_by_type.get(media.get("media_type", ""), ()):
             entry[field] = media.get(field)
+        _copy_original_payload(entry, media)
         # The signpost text (the caption / tag list that letters the Browse map
         # and titles the item's "AI …" metadata row) is the sign pipeline's only
         # full-corpus model cost, computed at ingest *before* this save precisely
@@ -252,6 +292,7 @@ def export_dataset_to_file(
         for field in SIGNPOST_FIELDS:
             if media.get(field):
                 entry[field] = media[field]
+        _copy_clip_window(entry, media)
         # Persist a precomputed grid/list thumbnail so reloads stream the bytes
         # instead of decoding the full-resolution original on every cold tile
         # fetch (the browse first-paint delay).  Image *demos* never generate

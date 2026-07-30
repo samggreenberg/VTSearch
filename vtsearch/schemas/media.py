@@ -49,6 +49,39 @@ from marshmallow import Schema, fields, validate
 
 
 # ---------------------------------------------------------------------------
+# Shared payload-variant query
+# ---------------------------------------------------------------------------
+
+
+class MediaVariantQuerySchema(Schema):
+    """Query shared by every per-media payload route.
+
+    ``variant=original`` streams the pre-clean payload of an item a
+    :class:`~vtscore.media.cleaner.MediaCleaner` rewrote at load time (see
+    ``docs/plans/media-cleaners.md``); the default streams the canonical
+    (cleaned) payload.  An item with no snapshot ignores the parameter, so a
+    stale link keeps working.
+    """
+
+    variant = fields.String(
+        load_default="",
+        validate=validate.OneOf(["", "original"]),
+        metadata={
+            "description": (
+                "``original`` to stream the pre-clean payload of a cleaned item; "
+                "omitted or empty for the canonical (cleaned) payload."
+            )
+        },
+    )
+
+    class Meta:
+        # Tolerate the request-context params (``dataset_id`` / ``detector_id``)
+        # that browser-native requests smuggle in as query args, plus the
+        # thumbnail route's ``region``, matching SortPageQuerySchema.
+        unknown = "exclude"
+
+
+# ---------------------------------------------------------------------------
 # /api/medias/ids and /api/medias/batch
 # ---------------------------------------------------------------------------
 
@@ -112,6 +145,16 @@ class _MediaBatchEntrySchema(Schema):
     clip_end = fields.Float()
     clip_index = fields.Integer()
     clip_box = fields.List(fields.Float())
+    has_original = fields.Boolean(
+        metadata={
+            "description": (
+                "Present and ``true`` when a MediaCleaner rewrote this item at "
+                "load time and its pre-clean payload was kept. The byte routes "
+                "then accept ``?variant=original`` and the detail viewer offers "
+                "a Clean/Original toggle. Absent otherwise."
+            )
+        },
+    )
 
     class Meta:
         unknown = "include"
@@ -406,6 +449,7 @@ __all__ = [
     "MediaBatchResponseSchema",
     "MediaIdsListResponseSchema",
     "MediaParagraphResponseSchema",
+    "MediaVariantQuerySchema",
     "MediaVoteRequestSchema",
     "MediaVoteResponseSchema",
     "ServerMediaFromMediaIdRequestSchema",

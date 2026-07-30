@@ -256,7 +256,7 @@ class TestSettingsAPI:
         # Theme defaults to ``"system"``; the frontend resolves this to
         # the OS ``prefers-color-scheme`` at render time.
         assert data["theme"] == "system"
-        assert data["calibrate_count"] == 1
+        assert data["calibrate_count"] == 2
         assert data["calibration_fraction"] == 0.5
         assert data["safe_thresholds"] is False
         assert isinstance(data["focus_mode_left"], dict)
@@ -758,15 +758,6 @@ class TestBrowserSettings:
         assert data["browse_thumbnail_border"]["image"] == 8
         assert data["browse_thumbnail_border"]["video"] == 0
 
-    def test_update_browse_compact_per_type(self, client):
-        res = client.put("/api/settings", json={"browse_compact": {"audio": False, "image": True}})
-        assert res.status_code == 200
-        data = res.get_json()
-        assert data["browse_compact"]["audio"] is False
-        assert data["browse_compact"]["image"] is True
-        # Persists across a fresh read.
-        assert client.get("/api/settings").get_json()["browse_compact"]["audio"] is False
-
     def test_update_browse_signpost_captioner_per_type(self, client):
         res = client.put("/api/settings", json={"browse_signpost_captioner": {"image": True, "audio": False}})
         assert res.status_code == 200
@@ -853,7 +844,6 @@ class TestBrowserSettings:
             "browse_colormap",
             "browse_icon_size",
             "browse_thumbnail_border",
-            "browse_compact",
             "browse_mouse_zooms_per_level",
             "browse_signposts",
             "bin_details_docked",
@@ -867,7 +857,6 @@ class TestBrowserSettings:
             "browse_colormap",
             "browse_icon_size",
             "browse_thumbnail_border",
-            "browse_compact",
             "browse_mouse_zooms_per_level",
             "browse_signposts",
             "bin_details_docked",

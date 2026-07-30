@@ -3,7 +3,15 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ImportAdvancedComponent } from './import-advanced.component';
 import { provideZoneless } from '../../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../../testing/settle-resource';
-import { ClipperInfo, ConverterInfo, EmbedderInfo, SourceSpec } from '../../../../models/api.models';
+import {
+  CleanerInfo,
+  CleanerSelection,
+  ClipperInfo,
+  ClipperParameter,
+  ConverterInfo,
+  EmbedderInfo,
+  SourceSpec,
+} from '../../../../models/api.models';
 
 describe('ImportAdvancedComponent', () => {
   let component: ImportAdvancedComponent;
@@ -20,6 +28,21 @@ describe('ImportAdvancedComponent', () => {
     { name: 'clip_default', display_name: 'Default clipper' } as ClipperInfo,
     { name: 'sliding', display_name: 'Sliding window' } as ClipperInfo,
   ];
+
+  const tolParam: ClipperParameter = { key: 'tol', label: 'Tolerance', type: 'number', default: 16 };
+
+  const cleaners: CleanerInfo[] = [
+    { name: 'exif', display_name: 'EXIF Orientation', media_type: 'image', default_enabled: true } as CleanerInfo,
+    {
+      name: 'trim',
+      display_name: 'Solid Border Trim',
+      media_type: 'image',
+      default_enabled: false,
+      parameters: [tolParam],
+    } as CleanerInfo,
+  ];
+
+  const defaultSelection: CleanerSelection[] = [{ name: 'exif', params: {} }];
 
   const converters: ConverterInfo[] = [
     { name: 'video2image', source_type: 'video', target_type: 'image', fields: [] } as ConverterInfo,
@@ -108,6 +131,13 @@ describe('ImportAdvancedComponent', () => {
     it('is false when an override keeps a picker visible anyway', async () => {
       await setInputs({ showSourceSpecs: false, embedders, clippers, selectedEmbedder: 'custom', selectedClipper: 'clip_default' });
       expect(component.showAdvancedToggle).toBe(false);
+    });
+
+    it('is true whenever cleaners exist, even with a picker overridden', async () => {
+      // Cleanup lives strictly behind the toggle, so hiding the toggle would
+      // strand the gates with no way back to them.
+      await setInputs({ showSourceSpecs: false, embedders, clippers, selectedEmbedder: 'custom', selectedClipper: 'clip_default', cleaners });
+      expect(component.showAdvancedToggle).toBe(true);
     });
   });
 
@@ -324,6 +354,114 @@ describe('ImportAdvancedComponent', () => {
       component.mergeNearDuplicatesChange.subscribe((v: boolean) => (emitted = v));
       component.onMergeNearDuplicatesChange(true);
       expect(emitted).toBe(true);
+    });
+  });
+  describe('cleanup gates', () => {
+    it('showCleanupSection stays hidden when no cleaners are registered', async () => {
+      await setInputs({ cleaners: [], selectedCleaners: [] });
+      component.advancedOpen = true;
+      expect(component.showCleanupSection).toBe(false);
+    });
+
+    it('showCleanupSection follows the Advanced toggle at the registry default', async () => {
+      await setInputs({ cleaners, selectedCleaners: defaultSelection });
+      expect(component.isDefaultCleanupSelected).toBe(true);
+      expect(component.showCleanupSection).toBe(false);
+      component.advancedOpen = true;
+      expect(component.showCleanupSection).toBe(true);
+    });
+
+    it('a non-default selection stays hidden with Advanced collapsed', async () => {
+      // Unlike the embedder/clipper pickers, cleanup does NOT escape the
+      // toggle when overridden: it is too technical to show unprompted.
+      await setInputs({ cleaners, selectedCleaners: [] });
+      expect(component.isDefaultCleanupSelected).toBe(false);
+      expect(component.showCleanupSection).toBe(false);
+      component.advancedOpen = true;
+      expect(component.showCleanupSection).toBe(true);
+    });
+
+    it('renders no cleanup markup at all while Advanced is collapsed', async () => {
+      await setInputs({ cleaners, selectedCleaners: [{ name: 'trim', params: { tol: 4 } }] });
+      expect(fixture.nativeElement.querySelectorAll('.cleanup-row').length).toBe(0);
+      expect(fixture.nativeElement.querySelectorAll('.cleanup-param').length).toBe(0);
+      expect(fixture.nativeElement.textContent).not.toContain('Cleanup');
+    });
+
+    it('a parameter override counts as non-default', async () => {
+      await setInputs({ cleaners, selectedCleaners: [{ name: 'exif', params: { tol: 8 } }] });
+      expect(component.isDefaultCleanupSelected).toBe(false);
+    });
+
+    it('advancedToggleTitle names the enabled gates only once off the default', async () => {
+      await setInputs({ cleaners, selectedCleaners: defaultSelection });
+      expect(component.advancedToggleTitle).not.toContain('Cleanup:');
+
+      await setInputs({ selectedCleaners: [{ name: 'trim', params: {} }] });
+      expect(component.advancedToggleTitle).toContain('Cleanup: Solid Border Trim');
+
+      await setInputs({ selectedCleaners: [] });
+      expect(component.advancedToggleTitle).toContain('Cleanup: none');
+    });
+
+    it('isCleanerEnabled reflects the selection', async () => {
+      await setInputs({ cleaners, selectedCleaners: defaultSelection });
+      expect(component.isCleanerEnabled('exif')).toBe(true);
+      expect(component.isCleanerEnabled('trim')).toBe(false);
+    });
+
+    it('onCleanerToggle adds a cleaner in registry order', async () => {
+      await setInputs({ cleaners, selectedCleaners: [{ name: 'trim', params: {} }] });
+      let emitted: CleanerSelection[] = [];
+      component.selectedCleanersChange.subscribe((v: CleanerSelection[]) => (emitted = v));
+      component.onCleanerToggle(cleaners[0], true);
+      expect(emitted.map((c) => c.name)).toEqual(['exif', 'trim']);
+    });
+
+    it('onCleanerToggle removes a cleaner', async () => {
+      await setInputs({ cleaners, selectedCleaners: defaultSelection });
+      let emitted: CleanerSelection[] | null = null;
+      component.selectedCleanersChange.subscribe((v: CleanerSelection[]) => (emitted = v));
+      component.onCleanerToggle(cleaners[0], false);
+      expect(emitted).toEqual([]);
+    });
+
+    it('cleanerParamValue falls back to the descriptor default', async () => {
+      await setInputs({ cleaners, selectedCleaners: [{ name: 'trim', params: {} }] });
+      expect(component.cleanerParamValue(cleaners[1], tolParam)).toBe(16);
+      await setInputs({ selectedCleaners: [{ name: 'trim', params: { tol: 4 } }] });
+      expect(component.cleanerParamValue(cleaners[1], tolParam)).toBe(4);
+    });
+
+    it('onCleanerParamChange records an override and drops a default-valued one', async () => {
+      await setInputs({ cleaners, selectedCleaners: [{ name: 'trim', params: {} }] });
+      let emitted: CleanerSelection[] = [];
+      component.selectedCleanersChange.subscribe((v: CleanerSelection[]) => (emitted = v));
+
+      component.onCleanerParamChange(cleaners[1], tolParam, 4);
+      expect(emitted[0].params).toEqual({ tol: 4 });
+
+      await setInputs({ selectedCleaners: [{ name: 'trim', params: { tol: 4 } }] });
+      component.onCleanerParamChange(cleaners[1], tolParam, 16);
+      expect(emitted[0].params).toEqual({});
+    });
+
+    it('renders one checkbox per cleaner, checked per the selection', async () => {
+      component.advancedOpen = true;
+      await setInputs({ cleaners, selectedCleaners: defaultSelection });
+      const boxes = fixture.nativeElement.querySelectorAll('.cleanup-row input[type="checkbox"]');
+      expect(boxes.length).toBe(2);
+      expect((boxes[0] as HTMLInputElement).checked).toBe(true);
+      expect((boxes[1] as HTMLInputElement).checked).toBe(false);
+    });
+
+    it('renders parameter inputs only for a checked cleaner that declares them', async () => {
+      component.advancedOpen = true;
+      await setInputs({ cleaners, selectedCleaners: defaultSelection });
+      expect(fixture.nativeElement.querySelectorAll('.cleanup-param').length).toBe(0);
+
+      await setInputs({ selectedCleaners: [{ name: 'trim', params: {} }] });
+      expect(fixture.nativeElement.querySelectorAll('.cleanup-param').length).toBe(1);
     });
   });
 });

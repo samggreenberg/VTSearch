@@ -120,6 +120,11 @@ class IndicatorScoreHistoryResponseSchema(Schema):
 
     metric = fields.String(required=True, validate=_METRIC_VALIDATOR)
     history = fields.List(fields.Dict(), required=True)
+    # ``false`` when the per-step cache does not yet cover the whole label
+    # history, in which case ``history`` is empty and the client should fall
+    # back to the async ``POST /api/eval/train-and-score`` job.  The route
+    # never advances the cache itself; see its docstring.
+    complete = fields.Boolean(required=True)
 
 
 # ---------------------------------------------------------------------------

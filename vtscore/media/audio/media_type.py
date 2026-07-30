@@ -1057,16 +1057,25 @@ class AudioMediaType(MediaType):
     # HTTP serving
     # ------------------------------------------------------------------
 
+    def ensure_thumbnail_bytes(self, media: dict) -> bytes | None:
+        """Return the waveform PNG, rendering it from the media's bytes if absent.
+
+        Memoises the per-window PNG so repeat fetches of this exact window
+        (each browse-canvas pan/zoom re-requests it) skip the decode, and so
+        the background warm-up pass and the request path share one
+        implementation.  In-memory only; never written to disk.
+        """
+        thumb = media.get("thumbnail_bytes")
+        if thumb:
+            return thumb
+        thumb = self._waveform_for_media(media)
+        if thumb:
+            media["thumbnail_bytes"] = thumb
+        return thumb
+
     def image_response(self, media: dict) -> MediaResponse | None:
         """Return the waveform thumbnail as a PNG image, or *None*."""
-        thumb = media.get("thumbnail_bytes")
-        if not thumb:
-            thumb = self._waveform_for_media(media)
-            if thumb:
-                # Memoise the per-window PNG so repeat fetches of this exact
-                # window (each browse-canvas pan/zoom re-requests it) skip the
-                # decode. In-memory only; never written to disk.
-                media["thumbnail_bytes"] = thumb
+        thumb = self.ensure_thumbnail_bytes(media)
         if not thumb:
             return None
         return MediaResponse(
@@ -1084,14 +1093,30 @@ class AudioMediaType(MediaType):
         (AAC/M4A/MP4) included), slice to the clip window so each of a member's
         windows shows its own waveform, and cache the decoded member so its
         windows don't each re-stream and re-decode it.
+
+        The window is applied **only** when the resolved bytes are the whole
+        source.  Bytes that already *are* this clip - a clipper's materialized
+        slice, a cleaner's trimmed payload, or a lazy clip the resolver cuts
+        from the source on demand - carry their own 0-based timeline, so
+        re-applying the source-relative ``clip_start`` / ``clip_end`` would
+        slice a second time and render the wrong stretch of audio.
         """
+        from vtscore.media.lazy_clip import clip_recipe  # noqa: PLC0415
+
         ref = media.get("archive_member")
         member = ref.get("member", "") if isinstance(ref, dict) else ""
-        cache_key = (ref["path"], member) if isinstance(ref, dict) and ref.get("path") else None
+        serves_clip_bytes = media.get("media_bytes") is not None or clip_recipe(media) is not None
+        cache_key = (
+            None
+            if serves_clip_bytes  # a per-clip payload must not be cached under a per-member key
+            else (ref["path"], member)
+            if isinstance(ref, dict) and ref.get("path")
+            else None
+        )
         return generate_waveform_thumbnail_window(
             lambda: self._resolve_media_bytes(media),
-            clip_start=media.get("clip_start"),
-            clip_end=media.get("clip_end"),
+            clip_start=None if serves_clip_bytes else media.get("clip_start"),
+            clip_end=None if serves_clip_bytes else media.get("clip_end"),
             cache_key=cache_key,
         )
 

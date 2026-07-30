@@ -195,7 +195,7 @@ class TestInclusionWeights:
     layer; the calibrator maps decision scores back to the true base
     rate of the training data.  Inclusion bias only shows up if the
     caller picks a non-default threshold (analogous to the MLP path
-    where ``find_optimal_threshold`` consumes the same inclusion value).
+    where ``conformal_threshold`` consumes the same inclusion value).
     So here we verify the trainer accepts and applies the bias, without
     asserting a post-calibration probability shift that's intentionally
     flattened by the calibrator.

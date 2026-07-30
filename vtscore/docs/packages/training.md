@@ -27,7 +27,7 @@ and region-similarity helpers are imported from their submodules.
 ```python
 from vtscore.training import (
     build_model, build_model_from_weights, train_model,
-    calculate_gmm_threshold, find_optimal_threshold,
+    calculate_gmm_threshold, conformal_threshold,
     calculate_cross_calibration_threshold,
     cross_calibration_threshold_cached, calculate_safe_threshold,
 )
@@ -170,7 +170,7 @@ lists from votes, caching on `DetectorContext`) sits one layer up.
 | Function                                  | When it fires                                                 |
 |-------------------------------------------|---------------------------------------------------------------|
 | `calculate_gmm_threshold`                 | All-media score distribution - used by the safe blend         |
-| `find_optimal_threshold`                  | F1 maximiser on (scores, labels) for one model                |
+| `conformal_threshold`                     | Conformal inclusion rule on one (scores, labels) set          |
 | `calculate_cross_calibration_threshold`   | Production threshold - k-fold cross-calibration               |
 | `cross_calibration_threshold_cached`      | Memoised wrapper around the cross-cal trainer                 |
 | `calculate_safe_threshold`                | Blends cross-cal with GMM when label counts are low           |
@@ -188,41 +188,46 @@ Falls back to `np.median(scores)` when GMM fitting raises (e.g.
 degenerate score distributions), and to `0.5` when fewer than 2 scores
 are provided.
 
-### `find_optimal_threshold(scores, labels, inclusion_value=0)`
+### `conformal_threshold(scores, labels, inclusion_value=0)`
 
-`vtscore/training/thresholds.py:149`. Vectorised O(n log n) sweep: sorts
-by score descending, builds cumulative TP/FP/FN counts, and picks the
-threshold minimising `fpr_weight * FPR + fnr_weight * FNR`. The
-weights come from `inclusion_value` the same way as in `train_model`:
+`vtscore/training/thresholds.py`. Split-conformal quantile rule mapping
+`inclusion_value` (integer in [-10, 10]) to a threshold over held-out
+calibration scores. For `k = inclusion_value` (with
+`CONFORMAL_BASE_BUDGET = 0.25`, `CONFORMAL_QPOS_MAX = 0.75`):
 
-```python
-if inclusion_value >= 0:
-    fpr_weight, fnr_weight = 1.0, 2.0 ** inclusion_value
-else:
-    fpr_weight, fnr_weight = 2.0 ** (-inclusion_value), 1.0
-```
+- A false-negative **cap** `alpha = min(1, 0.25 * 2^-k)`: the threshold
+  never exceeds the alpha-quantile of the calibration *positive* scores,
+  so at most an estimated `alpha` of true matches is missed. The cap is
+  an upper bound, not a target - with cleanly separated classes the cut
+  drops to the lowest calibration positive and the budget goes unspent.
+- A false-positive **guard** for `k <= 0`: the threshold stays at or
+  above the `1 - 0.25 * 2^k` quantile of the calibration *negative*
+  scores, and above a walk up the positive score distribution
+  (`q_pos-level = 0.75 * |k| / 10`; at -10 only the top quartile of
+  positives remains).
 
-Returns `0.5` when the input is empty or single-class.
+Monotone non-increasing in `k` by construction, so included sets are
+nested as the knob rises. Returns `0.5` when the input is empty or
+single-class. (Replaced the old min-cost `find_optimal_threshold`
+argmin, which provably could not move with inclusion on well-separated
+calibration folds - see `docs/experiments/inclusion-knob/REPORT.md`.)
 
 ### `calculate_cross_calibration_threshold(...)`
 
-`vtscore/training/thresholds.py:220`. The production threshold trainer.
+`vtscore/training/thresholds.py`. The production threshold trainer.
 For each of `calibrate_count` rounds:
 
 1. Randomly split `(X_list, y_list)` into Train (`1 - calibration_fraction`)
    and Calibrate (`calibration_fraction`).
 2. Train an MLP on Train via `train_model`.
-3. Score Calibrate, find the optimal threshold via
-   `find_optimal_threshold`.
+3. Score the held-out Calibrate portion.
 
-Aggregates the per-round thresholds via `threshold_from_fold_orderings`:
-a round whose optimal cut is "predict nothing" returns the abstain
-sentinel `NO_GOOD_THRESHOLD` (2.0), counted as a *vote* rather than
-averaged, so the ensemble abstains only under a strict majority and
-otherwise means the non-abstaining rounds. Defaults to 0.5 when `n < 4`
-or fewer than 2 of either class; returns `NO_GOOD_THRESHOLD` when the
-split would leave fewer than 2 training examples or 1 calibration
-example.
+Pools every round's held-out (score, label) pairs and applies
+`conformal_threshold` once via `threshold_from_fold_orderings` (pooling
+rather than per-fold averaging maximises the quantile rule's
+resolution). Defaults to 0.5 when `n < 4` or fewer than 2 of either
+class; returns `NO_GOOD_THRESHOLD` when the split would leave fewer
+than 2 training examples or 1 calibration example.
 
 ```python
 from vtscore.training import calculate_cross_calibration_threshold

@@ -35,7 +35,7 @@
   </div>
 }
 
-@if (demoEmbedders().length > 1 || demoClippers().length > 1) {
+@if (demoEmbedders().length > 1 || demoClippers().length > 1 || cleaners().length > 0) {
   <div class="form-group form-group--section">
     <vt-import-advanced
       [availableConverters]="[]"
@@ -43,6 +43,9 @@
       [typeLabels]="mediaTypeLabels"
       [embedders]="demoEmbedders()"
       [clippers]="demoClippers()"
+      [cleaners]="cleaners()"
+      [selectedCleaners]="selectedCleaners()"
+      (selectedCleanersChange)="selectedCleaners.set($event)"
       [showSourceSpecs]="false"
       [sourceSpecs]="[]"
       [selectedEmbedder]="selectedDemoEmbedder()"

@@ -15,10 +15,10 @@ from vtscore.concurrency.memory_budget import cap_workers_by_memory
 
 @pytest.fixture
 def fixed_memory(monkeypatch):
-    """Pin ``_available_memory_bytes`` to a known value for deterministic math."""
+    """Pin ``available_memory_bytes`` to a known value for deterministic math."""
 
     def _set(bytes_available: int) -> None:
-        monkeypatch.setattr(memory_budget, "_available_memory_bytes", lambda: bytes_available)
+        monkeypatch.setattr(memory_budget, "available_memory_bytes", lambda: bytes_available)
 
     return _set
 
@@ -100,7 +100,7 @@ class TestRealMemoryProbe:
     """Sanity-check the real (un-monkeypatched) probe returns a sane value."""
 
     def test_returns_positive_int(self):
-        avail = memory_budget._available_memory_bytes()
+        avail = memory_budget.available_memory_bytes()
         assert isinstance(avail, int)
         assert avail > 0
 

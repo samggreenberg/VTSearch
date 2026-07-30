@@ -41,6 +41,7 @@ from vtscore.media.base import (
     MediaType,
     ProgressCallback,
 )
+from vtscore.media.cleaner import MediaCleaner
 from vtscore.media.clipper import MediaClipper
 from vtscore.media.embedder import MediaEmbedder
 from vtscore.media.processors import (
@@ -210,6 +211,48 @@ def all_clippers_dict() -> list[dict]:
 
 
 # ------------------------------------------------------------------
+# Cleaner registry
+# ------------------------------------------------------------------
+
+#: Cleaners live in their own registry so they never surface in a clipper
+#: chooser: a clipper is a radio choice (pick one per import), a cleaner is a
+#: checkbox every item of that type passes through.  Registration order is
+#: also *run* order (the chain runner appends enabled cleaners in this order);
+#: shipped cleaners are expected to be order-insensitive in practice.
+_cleaner_registry: dict[str, "MediaCleaner"] = {}
+
+
+def register_cleaner(cleaner: "MediaCleaner") -> None:
+    """Add *cleaner* to the registry, keyed by :attr:`~MediaCleaner.name`."""
+    _cleaner_registry[cleaner.name] = cleaner
+
+
+def get_cleaner(name: str) -> "MediaCleaner":
+    """Return the :class:`MediaCleaner` registered under *name*.
+
+    Raises :class:`KeyError` if *name* is not registered.
+    """
+    if name not in _cleaner_registry:
+        raise KeyError(f"Unknown cleaner: {name!r}")
+    return _cleaner_registry[name]
+
+
+def cleaners_for_type(type_id: str) -> list["MediaCleaner"]:
+    """Return all cleaners registered for a given media type, in run order."""
+    return [c for c in _cleaner_registry.values() if c.media_type == type_id]
+
+
+def all_cleaners() -> list["MediaCleaner"]:
+    """Return all registered :class:`MediaCleaner` instances."""
+    return list(_cleaner_registry.values())
+
+
+def all_cleaners_dict() -> list[dict]:
+    """Return a list of JSON-serialisable dicts describing all registered cleaners."""
+    return [c.to_dict() for c in _cleaner_registry.values()]
+
+
+# ------------------------------------------------------------------
 # Embedder registry
 # ------------------------------------------------------------------
 
@@ -324,6 +367,7 @@ def _discover_media_plugins() -> None:
 
     - ``MEDIA_TYPE`` - a single :class:`MediaType` instance.
     - ``CLIPPERS``  - a list of :class:`MediaClipper` instances.
+    - ``CLEANERS``  - a list of :class:`MediaCleaner` instances.
 
     Embedders are auto-discovered per module: every ``embedder*.py`` file
     inside a media-type sub-package is scanned for an ``EMBEDDER`` sentinel
@@ -354,6 +398,8 @@ def _discover_media_plugins() -> None:
             register(mt)
         for clip in getattr(mod, "CLIPPERS", []):
             register_clipper(clip)
+        for cleaner in getattr(mod, "CLEANERS", []):
+            register_cleaner(cleaner)
         _discover_embedders_in(entry, package_name)
 
 
@@ -376,6 +422,7 @@ __all__ = [
     "MediaType",
     "MediaEmbedder",
     "MediaClipper",
+    "MediaCleaner",
     "MediaResponse",
     "DemoDataset",
     "Processor",
@@ -386,9 +433,11 @@ __all__ = [
     "register",
     "register_embedder",
     "register_clipper",
+    "register_cleaner",
     "get",
     "get_embedder",
     "get_clipper",
+    "get_cleaner",
     "get_by_folder_name",
     "get_by_extension",
     "all_types",
@@ -400,8 +449,11 @@ __all__ = [
     "all_embedders_dict",
     "all_clippers",
     "all_clippers_dict",
+    "all_cleaners",
+    "all_cleaners_dict",
     "embedders_for_type",
     "clippers_for_type",
+    "cleaners_for_type",
     "normalize_type_id",
     "set_progress_callback",
 ]

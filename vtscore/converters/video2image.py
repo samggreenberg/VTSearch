@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from vtscore.converters.base import MediaConverter
+from vtscore.media.video import decode
 from vtscore.plugins import PluginField
 
 
@@ -30,7 +31,8 @@ class Video2ImageMediaConverter(MediaConverter):
     """Cut a video into evenly-spaced segments and extract the middle frame
     from each segment as a PNG image.
 
-    Uses OpenCV (``cv2``) to read the video and sample frames.
+    Frames are decoded out-of-process by ffmpeg (see
+    :mod:`vtscore.media.video.decode`).
 
     The number of frames is driven by one of two mutually-exclusive,
     user-configurable parameters — supply one *or* the other, never both:
@@ -123,13 +125,12 @@ class Video2ImageMediaConverter(MediaConverter):
         stem = Path(filename).stem
 
         try:
-            import cv2  # noqa: PLC0415
             from PIL import Image  # noqa: PLC0415
         except ImportError:
-            print("Video2ImageMediaConverter requires opencv-python and Pillow")
+            print("Video2ImageMediaConverter requires Pillow")
             return []
 
-        # We need a file path for cv2.VideoCapture
+        # The decoder needs a seekable file path, not a buffer.
         tmp_file = None
         if media_path and Path(media_path).exists():
             video_path = str(media_path)
@@ -151,49 +152,38 @@ class Video2ImageMediaConverter(MediaConverter):
 
         results: list[dict[str, Any]] = []
         try:
-            cap = cv2.VideoCapture(video_path)
-            try:
-                if not cap.isOpened():
-                    return []
-                frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                if frame_count <= 0:
-                    return []
+            info = decode.probe(video_path)
+            if info is None or info.duration <= 0:
+                return []
 
-                # "Seconds per frame" wins when supplied: derive the frame
-                # count from the video's duration so longer videos yield more
-                # frames.  Otherwise fall back to the fixed "frames per video".
-                fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0) if seconds_per_frame > 0 else 0.0
-                n = _compute_n_frames(frame_count, fps, n_clips, seconds_per_frame)
-                # Divide video into n equal segments, pick middle frame of each
-                segment_size = frame_count / n
-                mid_indices = [int((i + 0.5) * segment_size) for i in range(n)]
-                # Clamp to valid range
-                mid_indices = [min(idx, frame_count - 1) for idx in mid_indices]
+            # "Seconds per frame" wins when supplied: derive the frame count
+            # from the video's duration so longer videos yield more frames.
+            # Otherwise fall back to the fixed "frames per video".
+            frame_count = max(1, info.frame_count or 1)
+            fps = info.fps if seconds_per_frame > 0 else 0.0
+            n = _compute_n_frames(frame_count, fps, n_clips, seconds_per_frame)
+            # Divide the video into n equal segments and take the middle of each,
+            # stopping a frame short of the end where nothing decodes.
+            last = max(0.0, info.duration - info.frame_seconds)
+            segment = info.duration / n
+            mid_times = [min((i + 0.5) * segment, last) for i in range(n)]
 
-                for clip_num, frame_idx in enumerate(mid_indices):
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-                    ret, frame = cap.read()
-                    if not ret:
-                        continue
+            for clip_num, frame_rgb in enumerate(decode.frames_at(video_path, mid_times)):
+                img = Image.fromarray(frame_rgb)
 
-                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    img = Image.fromarray(frame_rgb)
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                png_bytes = buf.getvalue()
 
-                    buf = io.BytesIO()
-                    img.save(buf, format="PNG")
-                    png_bytes = buf.getvalue()
-
-                    results.append(
-                        {
-                            "filename": f"{stem}_clip_{clip_num + 1}.png",
-                            "media_bytes": png_bytes,
-                            "duration": 0,
-                            "width": img.width,
-                            "height": img.height,
-                        }
-                    )
-            finally:
-                cap.release()
+                results.append(
+                    {
+                        "filename": f"{stem}_clip_{clip_num + 1}.png",
+                        "media_bytes": png_bytes,
+                        "duration": 0,
+                        "width": img.width,
+                        "height": img.height,
+                    }
+                )
         finally:
             if tmp_file is not None:
                 import os  # noqa: PLC0415

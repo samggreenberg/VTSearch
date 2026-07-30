@@ -38,6 +38,15 @@ describe('ProgressModalComponent', () => {
     httpMock.verify();
   });
 
+  const isHistory = (req: HttpRequest<unknown>) => req.url === '/api/indicator-score-history';
+  const isResult = (req: HttpRequest<unknown>) => req.url === '/api/eval/train-and-score/result';
+
+  /** Flush the cached-history GET that `ngOnInit` always issues first, with a
+   *  cache miss so the component falls through to the async job. */
+  const missCachedHistory = (metric = 'smart') => {
+    httpMock.expectOne(isHistory).flush({ metric, history: [], complete: false });
+  };
+
   it('should create', () => {
     expect(component).toBeTruthy();
   });
@@ -57,14 +66,15 @@ describe('ProgressModalComponent', () => {
     vi.useFakeTimers();
     try {
       fixture.componentRef.setInput('metric', 'smart');
-      // TestBed.tick() runs ngOnInit (kicks off the train POST) under zoneless.
+      // TestBed.tick() runs ngOnInit (the cached read) under zoneless.
       TestBed.tick();
       expect(component.analyzing).toBe(true);
+      missCachedHistory('smart');
 
       // Progress now arrives over the `eval` SSE channel, not via HTTP polling.
-      // The only HTTP call is the train-and-score POST, which returns a job
-      // envelope; on a cache hit (status=done) the component applies the data
-      // inline without polling.
+      // The only other HTTP call is the train-and-score POST, which returns a
+      // job envelope; on a cache hit (status=done) the component applies the
+      // data inline without polling.
       const trainReq = httpMock.expectOne('/api/eval/train-and-score');
       trainReq.flush({
         job_id: 'abc',
@@ -95,6 +105,7 @@ describe('ProgressModalComponent', () => {
     try {
       fixture.componentRef.setInput('metric', 'smart');
       TestBed.tick();
+      missCachedHistory('smart');
 
       // Job started, not a cache hit -> the component polls for the result.
       httpMock.expectOne('/api/eval/train-and-score').flush({
@@ -108,9 +119,6 @@ describe('ProgressModalComponent', () => {
       // SSE says done *before* the result endpoint flips. This used to kill
       // the poller; it must only stop the progress watcher now.
       votingIterations$.next({ progress: 5, total: 5, done: true });
-
-      const isResult = (req: HttpRequest<unknown>) =>
-        req.url === '/api/eval/train-and-score/result';
 
       // First poll still sees `running`.
       await vi.advanceTimersByTimeAsync(200);
@@ -142,6 +150,7 @@ describe('ProgressModalComponent', () => {
     try {
       fixture.componentRef.setInput('metric', 'stable');
       TestBed.tick();
+      missCachedHistory('stable');
 
       httpMock.expectOne('/api/eval/train-and-score').flush({
         job_id: 'j2',
@@ -168,6 +177,7 @@ describe('ProgressModalComponent', () => {
     try {
       fixture.componentRef.setInput('metric', 'diverse');
       TestBed.tick();
+      missCachedHistory('diverse');
 
       const trainReq = httpMock.expectOne('/api/eval/train-and-score');
       component.ngOnDestroy();
@@ -180,6 +190,112 @@ describe('ProgressModalComponent', () => {
       httpMock.expectNone((req: HttpRequest<unknown>) =>
         req.url === '/api/eval/train-and-score/result',
       );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('renders a complete cached history without starting a job', async () => {
+    // The warm-cache fast path: the per-step cache already covers the label
+    // history, so the plot paints straight from the cheap GET and no MLP
+    // retraining is triggered at all.
+    vi.useFakeTimers();
+    try {
+      fixture.componentRef.setInput('metric', 'smart');
+      TestBed.tick();
+
+      httpMock.expectOne(isHistory).flush({
+        metric: 'smart',
+        history: [{ num_labels: 5, error_cost: 0.5 }],
+        complete: true,
+      });
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(component.analyzing).toBe(false);
+      expect(component.runningJob).toBe(false);
+      expect(component.chartData.length).toBe(1);
+      httpMock.expectNone('/api/eval/train-and-score');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('falls back to the async job when the cached history is incomplete', async () => {
+    // Regression for the hang: the GET must never block on a cache advance, so
+    // an incomplete cache reports `complete: false` and the modal hands off to
+    // the background job — which is what surfaces the progress bar + Cancel.
+    vi.useFakeTimers();
+    try {
+      fixture.componentRef.setInput('metric', 'stable');
+      TestBed.tick();
+
+      expect(component.runningJob).toBe(false);
+      missCachedHistory('stable');
+      expect(component.runningJob).toBe(true);
+      expect(component.analyzing).toBe(true);
+
+      httpMock.expectOne('/api/eval/train-and-score').flush({
+        job_id: 'j3',
+        status: 'done',
+        metric: 'stable',
+        stability: [{ num_labels: 5, num_flips: 1 }],
+      });
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(component.analyzing).toBe(false);
+      expect(component.chartData.length).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('falls back to the async job when the cached read fails', async () => {
+    // A failed cached read is recoverable: the job recomputes the series from
+    // scratch, so the modal must not settle on the "no history" empty state.
+    vi.useFakeTimers();
+    try {
+      fixture.componentRef.setInput('metric', 'diverse');
+      TestBed.tick();
+
+      httpMock.expectOne(isHistory).flush(
+        { message: 'Score history computation failed' },
+        { status: 500, statusText: 'Server Error' },
+      );
+      expect(component.runningJob).toBe(true);
+      expect(component.emptyHistory).toBe(false);
+
+      httpMock.expectOne('/api/eval/train-and-score').flush({
+        job_id: 'j4',
+        status: 'done',
+        metric: 'diverse',
+        diversity: [{ num_labels: 5, diversity_level: 2 }],
+      });
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(component.analyzing).toBe(false);
+      expect(component.chartData.length).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows the empty state when a finished job yields no points', async () => {
+    vi.useFakeTimers();
+    try {
+      fixture.componentRef.setInput('metric', 'smart');
+      TestBed.tick();
+      missCachedHistory('smart');
+
+      httpMock.expectOne('/api/eval/train-and-score').flush({
+        job_id: 'j5',
+        status: 'done',
+        metric: 'smart',
+        error_cost: [],
+      });
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(component.analyzing).toBe(false);
+      expect(component.emptyHistory).toBe(true);
     } finally {
       vi.useRealTimers();
     }

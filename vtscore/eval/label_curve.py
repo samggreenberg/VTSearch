@@ -12,7 +12,7 @@ threshold via :func:`vtscore.training.thresholds.calculate_cross_calibration_thr
 and then applies it at inference.  So the relevant comparison is "how
 good is the ranking" (AUROC, AP, best-F1) plus "what F1 does the
 production cross-calibration path actually achieve" (``f1_at_xcal``,
-which uses :func:`vtscore.training.thresholds.find_optimal_threshold` on a
+which uses :func:`vtscore.training.thresholds.conformal_threshold` on a
 held-out cal slice of the training labels).  Brier score and F1@0.5 are
 kept on every row as diagnostics but excluded from the default
 summary.

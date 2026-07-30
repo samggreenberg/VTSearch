@@ -323,11 +323,32 @@ The runner builds each output media dict via
 ```
 
 `origin` is the canonical persisted form (CLAUDE.md "No Persisted
-Vectors"). The recorded `params` include the converter name, the
-source filename (relative to the import root), every
-user-supplied param (prefixed `converter_param_`), and the parent
-importer + parent path/url so the full provenance chain is
-recoverable.
+Vectors"). The recorded `params` are:
+
+| Key | Meaning |
+|-----|---------|
+| `converter` | The converter's name (`video2image`, …) |
+| `source_file` | The source filename **relative to the import root** |
+| `source_path` | The **resolved absolute path** of the source file |
+| `converter_param_<key>` | Every user-supplied converter param |
+| `converter_out_index` / `converter_n_out` | This output's position in the converter's returned list, and the list's length at import time |
+| `converter_content_hash` | Short md5 of the output bytes - the authoritative replay disambiguator |
+| `parent_importer` | The importer that supplied the source corpus |
+| `parent_path` / `parent_url` / `parent_paths_file` / `parent_manifest` | That importer's locator, so the corpus itself is recoverable, not just the file inside it |
+
+`source_file` and `source_path` differ whenever the scanned folder is a
+staging area of symlinks: the `server_files` (Manifest) importer links every
+listed path into a temp dir under its basename, disambiguating collisions as
+`name__1.ext`, so `source_file` alone can name a file that never existed on
+disk. `source_path` is the authoritative pointer back at the original media -
+the source video an extracted frame came from, the source PDF behind a
+rendered page.
+
+`vtscore.media.provenance` renders these keys as the human-readable
+**Source** / **Derived Via** / **Imported Via** lines that
+`MediaType.display_metadata` surfaces in the labeling UI's metadata grid, so
+a user looking at an extracted frame can see which video it came from without
+reading raw origin params.
 
 ---
 

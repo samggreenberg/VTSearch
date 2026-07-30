@@ -288,10 +288,6 @@
               </div>
             }
             <div class="view-tab-content browser-tab-content">
-              <label class="checkbox-row" title="Slide clusters together to close the empty space between them when the map is built">
-                <input type="checkbox" [ngModel]="getBrowseCompact(activeBrowseTab())" (ngModelChange)="onBrowseCompactChange(activeBrowseTab(), $event)" aria-label="Compaction" />
-                <span>Compaction<vt-field-hint-icon hint="Slides clusters together to close the empty gaps between them. Applies next time the map is built."></vt-field-hint-icon></span>
-              </label>
               <label class="checkbox-row" title="Letter named region signposts over the map when the dataset has them">
                 <input type="checkbox" [ngModel]="getBrowseSignposts(activeBrowseTab())" (ngModelChange)="onBrowseSignpostsChange(activeBrowseTab(), $event)" aria-label="Signposts" />
                 <span>Signposts<vt-field-hint-icon hint="Names the map's regions like street signs: broad names when zoomed out, finer names as you zoom in. Only shows when the dataset's map has computed labels."></vt-field-hint-icon></span>

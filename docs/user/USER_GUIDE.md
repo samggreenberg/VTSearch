@@ -380,11 +380,20 @@ but in Manual mode you choose directly.
 A numeric stepper from **-10** (strict) to **+10** (lenient),
 default 0.
 
-Nudges the detector's good/bad cutoff. Negative values mean "only
+Moves the detector's good/bad cutoff. Negative values mean "only
 call it good if you're very sure" - fewer matches, but the ones you
 get are more likely right. Positive values mean "include borderline
 items" - more matches, but more of them may be wrong. Changing it
 **re-runs the ranking** so the new cutoff takes effect.
+
+Each step **up** roughly halves the share of real matches the cutoff
+is allowed to miss, and the steps *nest*: everything included at
+Inclusion 1 is still included at Inclusion 4, plus a band of extra
+borderline items. That makes a two-pass workflow natural: work at a
+strict setting first, then raise inclusion a few steps and review just
+the newly admitted band to be confident you've seen "all the potential
+items". The same knob position means the same miss-tolerance on any
+detector or dataset.
 
 Leave at 0 unless you want to deliberately lean toward catching
 everything or toward only the surest matches.

@@ -1,0 +1,788 @@
+{
+  "n_trajectories": 344,
+  "n_categories": {
+    "visual_genome_m": 23
+  },
+  "n_seeds": 3,
+  "datasets": [
+    "visual_genome_m"
+  ],
+  "arms": [
+    "dinov3_patch/max_hac",
+    "dinov3_patch/max_patch",
+    "dinov3_patch/max_patch_hac",
+    "dinov3_patch/whole_image",
+    "siglip/whole_image"
+  ],
+  "overall": [
+    {
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "n": 69,
+      "cost": 0.463018347826087,
+      "fpr": 0.09157937681159421,
+      "fnr": 0.37143894202898553,
+      "AP": 0.44791031884057975,
+      "auroc": 0.8660578695652174,
+      "train_s": 0.34325698550724637,
+      "xcal_s": 0.5812547391304348,
+      "score_s": 0.08276750724637681
+    },
+    {
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "n": 69,
+      "cost": 0.39861765217391304,
+      "fpr": 0.08710323188405797,
+      "fnr": 0.3115145507246377,
+      "AP": 0.48611273913043473,
+      "auroc": 0.9046679565217391,
+      "train_s": 0.2424623913043478,
+      "xcal_s": 0.6996905507246376,
+      "score_s": 0.6103454782608696
+    },
+    {
+      "arm": "DINOv3 \u00b7 MaxPatchHAC",
+      "n": 69,
+      "cost": 0.4356010144927536,
+      "fpr": 0.10155459420289854,
+      "fnr": 0.33404633333333333,
+      "AP": 0.492464115942029,
+      "auroc": 0.908247,
+      "train_s": 0.1313645652173913,
+      "xcal_s": 0.5330023913043479,
+      "score_s": 0.8343402173913043
+    },
+    {
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "n": 69,
+      "cost": 0.6078741739130434,
+      "fpr": 0.13353526086956524,
+      "fnr": 0.4743389855072464,
+      "AP": 0.35637102898550727,
+      "auroc": 0.7937329275362319,
+      "train_s": 0.3461280144927536,
+      "xcal_s": 0.5558934057971014,
+      "score_s": 0.01644744927536232
+    },
+    {
+      "arm": "SigLIP \u00b7 whole-image",
+      "n": 68,
+      "cost": 0.4893881323529412,
+      "fpr": 0.15466819117647057,
+      "fnr": 0.3347198382352941,
+      "AP": 0.42767195588235296,
+      "auroc": 0.859632411764706,
+      "train_s": 0.3029808382352941,
+      "xcal_s": 0.5036257205882353,
+      "score_s": 0.013753470588235294
+    }
+  ],
+  "per_dataset": [
+    {
+      "dataset": "visual_genome_m",
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "n": 69,
+      "cost": 0.463018347826087,
+      "fpr": 0.09157937681159421,
+      "fnr": 0.37143894202898553,
+      "AP": 0.44791031884057975,
+      "auroc": 0.8660578695652174,
+      "train_s": 0.34325698550724637,
+      "xcal_s": 0.5812547391304348,
+      "score_s": 0.08276750724637681
+    },
+    {
+      "dataset": "visual_genome_m",
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "n": 69,
+      "cost": 0.39861765217391304,
+      "fpr": 0.08710323188405797,
+      "fnr": 0.3115145507246377,
+      "AP": 0.48611273913043473,
+      "auroc": 0.9046679565217391,
+      "train_s": 0.2424623913043478,
+      "xcal_s": 0.6996905507246376,
+      "score_s": 0.6103454782608696
+    },
+    {
+      "dataset": "visual_genome_m",
+      "arm": "DINOv3 \u00b7 MaxPatchHAC",
+      "n": 69,
+      "cost": 0.4356010144927536,
+      "fpr": 0.10155459420289854,
+      "fnr": 0.33404633333333333,
+      "AP": 0.492464115942029,
+      "auroc": 0.908247,
+      "train_s": 0.1313645652173913,
+      "xcal_s": 0.5330023913043479,
+      "score_s": 0.8343402173913043
+    },
+    {
+      "dataset": "visual_genome_m",
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "n": 69,
+      "cost": 0.6078741739130434,
+      "fpr": 0.13353526086956524,
+      "fnr": 0.4743389855072464,
+      "AP": 0.35637102898550727,
+      "auroc": 0.7937329275362319,
+      "train_s": 0.3461280144927536,
+      "xcal_s": 0.5558934057971014,
+      "score_s": 0.01644744927536232
+    },
+    {
+      "dataset": "visual_genome_m",
+      "arm": "SigLIP \u00b7 whole-image",
+      "n": 68,
+      "cost": 0.4893881323529412,
+      "fpr": 0.15466819117647057,
+      "fnr": 0.3347198382352941,
+      "AP": 0.42767195588235296,
+      "auroc": 0.859632411764706,
+      "train_s": 0.3029808382352941,
+      "xcal_s": 0.5036257205882353,
+      "score_s": 0.013753470588235294
+    }
+  ],
+  "budget": [
+    {
+      "dataset": "visual_genome_m",
+      "t": 10,
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "cost": 0.7281237826086957,
+      "fnr": 0.35624227536231884,
+      "AP": 0.34287050724637685
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 10,
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "cost": 0.6987988840579711,
+      "fnr": 0.4332456376811594,
+      "AP": 0.3728731304347826
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 10,
+      "arm": "DINOv3 \u00b7 MaxPatchHAC",
+      "cost": 0.7332523623188406,
+      "fnr": 0.46833339130434787,
+      "AP": 0.38614697101449275
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 10,
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "cost": 0.8131838115942029,
+      "fnr": 0.5208370579710145,
+      "AP": 0.2644777971014493
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 10,
+      "arm": "SigLIP \u00b7 whole-image",
+      "cost": 0.7739747647058824,
+      "fnr": 0.5865278382352941,
+      "AP": 0.305963205882353
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 25,
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "cost": 0.634801304347826,
+      "fnr": 0.46885489855072465,
+      "AP": 0.3982545362318841
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 25,
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "cost": 0.5904807536231885,
+      "fnr": 0.4516197971014493,
+      "AP": 0.4167465797101449
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 25,
+      "arm": "DINOv3 \u00b7 MaxPatchHAC",
+      "cost": 0.658359347826087,
+      "fnr": 0.5291900144927536,
+      "AP": 0.42563839130434783
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 25,
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "cost": 0.732071391304348,
+      "fnr": 0.5255290869565217,
+      "AP": 0.31234382608695654
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 25,
+      "arm": "SigLIP \u00b7 whole-image",
+      "cost": 0.6752582352941177,
+      "fnr": 0.5869235,
+      "AP": 0.35890894117647065
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 50,
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "cost": 0.5696557391304347,
+      "fnr": 0.4335626666666667,
+      "AP": 0.39845130434782605
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 50,
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "cost": 0.5321517391304348,
+      "fnr": 0.39427840579710144,
+      "AP": 0.43572024637681156
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 50,
+      "arm": "DINOv3 \u00b7 MaxPatchHAC",
+      "cost": 0.4984215217391305,
+      "fnr": 0.369413420289855,
+      "AP": 0.44062149275362317
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 50,
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "cost": 0.7362621739130435,
+      "fnr": 0.5240232898550723,
+      "AP": 0.31363857971014497
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 50,
+      "arm": "SigLIP \u00b7 whole-image",
+      "cost": 0.61598675,
+      "fnr": 0.5145946470588235,
+      "AP": 0.3963931029411765
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 100,
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "cost": 0.5216685797101449,
+      "fnr": 0.42773473913043486,
+      "AP": 0.4304942463768115
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 100,
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "cost": 0.44262636231884067,
+      "fnr": 0.3695793913043478,
+      "AP": 0.47085217391304346
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 100,
+      "arm": "DINOv3 \u00b7 MaxPatchHAC",
+      "cost": 0.4841187101449275,
+      "fnr": 0.41039104347826083,
+      "AP": 0.4836092898550724
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 100,
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "cost": 0.6467706666666667,
+      "fnr": 0.48277439130434785,
+      "AP": 0.3350190579710146
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 100,
+      "arm": "SigLIP \u00b7 whole-image",
+      "cost": 0.5434956029411765,
+      "fnr": 0.4484968382352942,
+      "AP": 0.41184755882352947
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 150,
+      "arm": "DINOv3 \u00b7 MaxHAC",
+      "cost": 0.463018347826087,
+      "fnr": 0.37143894202898553,
+      "AP": 0.44791031884057975
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 150,
+      "arm": "DINOv3 \u00b7 MaxPatch",
+      "cost": 0.39861765217391304,
+      "fnr": 0.31151455072463774,
+      "AP": 0.48611273913043485
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 150,
+      "arm": "DINOv3 \u00b7 MaxPatchHAC",
+      "cost": 0.43560101449275357,
+      "fnr": 0.3340463333333333,
+      "AP": 0.492464115942029
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 150,
+      "arm": "DINOv3 \u00b7 whole-image (CLS)",
+      "cost": 0.6078741739130435,
+      "fnr": 0.4743389855072463,
+      "AP": 0.3563710289855072
+    },
+    {
+      "dataset": "visual_genome_m",
+      "t": 150,
+      "arm": "SigLIP \u00b7 whole-image",
+      "cost": 0.4893881323529412,
+      "fnr": 0.3347198382352941,
+      "AP": 0.42767195588235296
+    }
+  ],
+  "stats": {
+    "visual_genome_m": {
+      "AULC": [
+        {
+          "comparison": "MaxPatchHAC \u2212 MaxHAC",
+          "mean_A": 0.5410206789937761,
+          "mean_B": 0.5640462060622026,
+          "delta": -0.02302552706842642,
+          "n_pairs": 69,
+          "holm_p": 0.1734368076861728
+        },
+        {
+          "comparison": "MaxPatchHAC \u2212 MaxPatch",
+          "mean_A": 0.5410206789937761,
+          "mean_B": 0.5050289968083211,
+          "delta": 0.03599168218545501,
+          "n_pairs": 69,
+          "holm_p": 0.0016586748258661725
+        },
+        {
+          "comparison": "MaxPatch \u2212 MaxHAC",
+          "mean_A": 0.5050289968083211,
+          "mean_B": 0.5640462060622026,
+          "delta": -0.05901720925388143,
+          "n_pairs": 69,
+          "holm_p": 0.000346045024536908
+        },
+        {
+          "comparison": "MaxPatchHAC \u2212 whole(CLS)",
+          "mean_A": 0.5410206789937761,
+          "mean_B": 0.6796777609989224,
+          "delta": -0.13865708200514626,
+          "n_pairs": 69,
+          "holm_p": 1.1726138873724917e-09
+        },
+        {
+          "comparison": "MaxHAC \u2212 whole(CLS)",
+          "mean_A": 0.5640462060622026,
+          "mean_B": 0.6796777609989224,
+          "delta": -0.11563155493671984,
+          "n_pairs": 69,
+          "holm_p": 4.668176225524414e-09
+        },
+        {
+          "comparison": "MaxPatch \u2212 whole(CLS)",
+          "mean_A": 0.5050289968083211,
+          "mean_B": 0.6796777609989224,
+          "delta": -0.17464876419060127,
+          "n_pairs": 69,
+          "holm_p": 2.3197400746643367e-10
+        },
+        {
+          "comparison": "MaxPatchHAC \u2212 SigLIP",
+          "mean_A": 0.5407109769360535,
+          "mean_B": 0.5937044295637907,
+          "delta": -0.052993452627737136,
+          "n_pairs": 68,
+          "holm_p": 0.02113777292006504
+        },
+        {
+          "comparison": "MaxHAC \u2212 SigLIP",
+          "mean_A": 0.561631154939111,
+          "mean_B": 0.5937044295637907,
+          "delta": -0.03207327462467968,
+          "n_pairs": 68,
+          "holm_p": 0.10804932966260887
+        }
+      ],
+      "cost@50": [
+        {
+          "comparison": "MaxPatchHAC \u2212 MaxHAC",
+          "mean_A": 0.4984215217391305,
+          "mean_B": 0.5696557391304347,
+          "delta": -0.07123421739130414,
+          "n_pairs": 69,
+          "holm_p": 0.016640601424333684
+        },
+        {
+          "comparison": "MaxPatchHAC \u2212 MaxPatch",
+          "mean_A": 0.4984215217391305,
+          "mean_B": 0.5321517391304348,
+          "delta": -0.033730217391304274,
+          "n_pairs": 69,
+          "holm_p": 0.27784248964684877
+        },
+        {
+          "comparison": "MaxPatch \u2212 MaxHAC",
+          "mean_A": 0.5321517391304348,
+          "mean_B": 0.5696557391304347,
+          "delta": -0.03750399999999987,
+          "n_pairs": 69,
+          "holm_p": 0.5044446418780213
+        },
+        {
+          "comparison": "MaxPatchHAC \u2212 whole(CLS)",
+          "mean_A": 0.4984215217391305,
+          "mean_B": 0.7362621739130435,
+          "delta": -0.23784065217391298,
+          "n_pairs": 69,
+          "holm_p": 2.007234196400084e-07
+        },
+        {
+          "comparison": "MaxHAC \u2212 whole(CLS)",
+          "mean_A": 0.5696557391304347,
+          "mean_B": 0.7362621739130435,
+          "delta": -0.16660643478260884,
+          "n_pairs": 69,
+          "holm_p": 5.298333775718626e-07
+        },
+        {
+          "comparison": "MaxPatch \u2212 whole(CLS)",
+          "mean_A": 0.5321517391304348,
+          "mean_B": 0.7362621739130435,
+          "delta": -0.2041104347826087,
+          "n_pairs": 69,
+          "holm_p": 1.0837768596132693e-06
+        },
+        {
+          "comparison": "MaxPatchHAC \u2212 SigLIP",
+          "mean_A": 0.49840674999999995,
+          "mean_B": 0.61598675,
+          "delta": -0.11758000000000007,
+          "n_pairs": 68,
+          "holm_p": 0.0013212367214076562
+        },
+        {
+          "comparison": "MaxHAC \u2212 SigLIP",
+          "mean_A": 0.5645631764705882,
+          "mean_B": 0.61598675,
+          "delta": -0.05142357352941185,
+          "n_pairs": 68,
+          "holm_p": 0.013705713110623985
+        }
+      ],
+      "cost@150": [
+        {
+          "comparison": "MaxPatchHAC \u2212 MaxHAC",
+          "mean_A": 0.43560101449275357,
+          "mean_B": 0.463018347826087,
+          "delta": -0.027417333333333405,
+          "n_pairs": 69,
+          "holm_p": 0.06442024804816367
+        },
+        {
+          "comparison": "MaxPatchHAC \u2212 MaxPatch",
+          "mean_A": 0.43560101449275357,
+          "mean_B": 0.39861765217391304,
+          "delta": 0.03698336231884053,
+          "n_pairs": 69,
+          "holm_p": 0.7002727784603591
+        },
+        {
+          "comparison": "MaxPatch \u2212 MaxHAC",
+          "mean_A": 0.39861765217391304,
+          "mean_B": 0.463018347826087,
+          "delta": -0.06440069565217393,
+          "n_pairs": 69,
+          "holm_p": 0.0018811042565449845
+        },
+        {
+          "comparison": "MaxPatchHAC \u2212 whole(CLS)",
+          "mean_A": 0.43560101449275357,
+          "mean_B": 0.6078741739130435,
+          "delta": -0.17227315942028998,
+          "n_pairs": 69,
+          "holm_p": 2.400681247692165e-07
+        },
+        {
+          "comparison": "MaxHAC \u2212 whole(CLS)",
+          "mean_A": 0.463018347826087,
+          "mean_B": 0.6078741739130435,
+          "delta": -0.14485582608695657,
+          "n_pairs": 69,
+          "holm_p": 4.041999204290544e-08
+        },
+        {
+          "comparison": "MaxPatch \u2212 whole(CLS)",
+          "mean_A": 0.39861765217391304,
+          "mean_B": 0.6078741739130435,
+          "delta": -0.2092565217391305,
+          "n_pairs": 69,
+          "holm_p": 3.3391660777816094e-10
+        },
+        {
+          "comparison": "MaxPatchHAC \u2212 SigLIP",
+          "mean_A": 0.43363244117647054,
+          "mean_B": 0.4893881323529412,
+          "delta": -0.05575569117647067,
+          "n_pairs": 68,
+          "holm_p": 0.165085551060754
+        },
+        {
+          "comparison": "MaxHAC \u2212 SigLIP",
+          "mean_A": 0.4610380882352942,
+          "mean_B": 0.4893881323529412,
+          "delta": -0.028350044117647022,
+          "n_pairs": 68,
+          "holm_p": 1.0
+        }
+      ]
+    }
+  },
+  "category_scale": {
+    "visual_genome_m/bag": {
+      "voted_area": 0.008287515599999998,
+      "instance_area": 0.006416300000000005,
+      "union_inflation": 1.2916346804232957,
+      "n_boxed": 237.0
+    },
+    "visual_genome_m/ball": {
+      "voted_area": 0.0019044123000000028,
+      "instance_area": 0.0019151213500000009,
+      "union_inflation": 0.9944081611329757,
+      "n_boxed": 51.0
+    },
+    "visual_genome_m/bed": {
+      "voted_area": 0.37331836599999996,
+      "instance_area": 0.255305888,
+      "union_inflation": 1.4622395469390819,
+      "n_boxed": 85.0
+    },
+    "visual_genome_m/building": {
+      "voted_area": 0.41462499999999997,
+      "instance_area": 0.13273408750000001,
+      "union_inflation": 3.123726601126481,
+      "n_boxed": 1645.0
+    },
+    "visual_genome_m/bus": {
+      "voted_area": 0.12997343085000002,
+      "instance_area": 0.11124569039999999,
+      "union_inflation": 1.1683457613743213,
+      "n_boxed": 136.0
+    },
+    "visual_genome_m/cap": {
+      "voted_area": 0.0027559133999999997,
+      "instance_area": 0.002357160000000004,
+      "union_inflation": 1.169166878786334,
+      "n_boxed": 92.0
+    },
+    "visual_genome_m/cat": {
+      "voted_area": 0.14834978924999997,
+      "instance_area": 0.13717641600000005,
+      "union_inflation": 1.0814525818344745,
+      "n_boxed": 30.0
+    },
+    "visual_genome_m/eye": {
+      "voted_area": 0.0024476298000000074,
+      "instance_area": 0.0015724043500000007,
+      "union_inflation": 1.5566160192828304,
+      "n_boxed": 155.0
+    },
+    "visual_genome_m/field": {
+      "voted_area": 0.4,
+      "instance_area": 0.258075,
+      "union_inflation": 1.5499370338080016,
+      "n_boxed": 180.0
+    },
+    "visual_genome_m/floor": {
+      "voted_area": 0.24320446329999995,
+      "instance_area": 0.200288499,
+      "union_inflation": 1.2142707370331831,
+      "n_boxed": 344.0
+    },
+    "visual_genome_m/giraffe": {
+      "voted_area": 0.4397631795,
+      "instance_area": 0.1009420673,
+      "union_inflation": 4.356589787219466,
+      "n_boxed": 24.0
+    },
+    "visual_genome_m/hand": {
+      "voted_area": 0.005470839000000002,
+      "instance_area": 0.004408960000000002,
+      "union_inflation": 1.2408456869647262,
+      "n_boxed": 267.0
+    },
+    "visual_genome_m/hat": {
+      "voted_area": 0.0037853256000000006,
+      "instance_area": 0.0028510375999999983,
+      "union_inflation": 1.3277010447003585,
+      "n_boxed": 203.0
+    },
+    "visual_genome_m/laptop": {
+      "voted_area": 0.05719660060000001,
+      "instance_area": 0.052460777999999986,
+      "union_inflation": 1.0902735868690323,
+      "n_boxed": 58.0
+    },
+    "visual_genome_m/neck": {
+      "voted_area": 0.01506516955,
+      "instance_area": 0.012078256599999997,
+      "union_inflation": 1.2472966959486524,
+      "n_boxed": 56.0
+    },
+    "visual_genome_m/nose": {
+      "voted_area": 0.0029721743500000005,
+      "instance_area": 0.002664608400000001,
+      "union_inflation": 1.1154263230574515,
+      "n_boxed": 146.0
+    },
+    "visual_genome_m/road": {
+      "voted_area": 0.2702060499999999,
+      "instance_area": 0.22643581875000002,
+      "union_inflation": 1.193300827985722,
+      "n_boxed": 551.0
+    },
+    "visual_genome_m/sink": {
+      "voted_area": 0.026589793199999996,
+      "instance_area": 0.02289595380000001,
+      "union_inflation": 1.1613315362297763,
+      "n_boxed": 60.0
+    },
+    "visual_genome_m/sky": {
+      "voted_area": 0.365753325,
+      "instance_area": 0.3359041625,
+      "union_inflation": 1.0888621393609554,
+      "n_boxed": 793.0
+    },
+    "visual_genome_m/snow": {
+      "voted_area": 0.40590792514999996,
+      "instance_area": 0.04889508750000001,
+      "union_inflation": 8.30160954615328,
+      "n_boxed": 132.0
+    },
+    "visual_genome_m/street": {
+      "voted_area": 0.2716322926,
+      "instance_area": 0.22194167500000003,
+      "union_inflation": 1.2238904324751083,
+      "n_boxed": 392.0
+    },
+    "visual_genome_m/tail": {
+      "voted_area": 0.019143424199999995,
+      "instance_area": 0.016431378600000004,
+      "union_inflation": 1.165052833728753,
+      "n_boxed": 102.0
+    },
+    "visual_genome_m/train": {
+      "voted_area": 0.31087720649999995,
+      "instance_area": 0.259034188,
+      "union_inflation": 1.2001396761573417,
+      "n_boxed": 76.0
+    }
+  },
+  "spearman_scale_vs_delta": [
+    0.4950592885375494,
+    0.01631558870803789
+  ],
+  "examples_maxpatch_best": [
+    {
+      "dataset": "visual_genome_m",
+      "category": "tail",
+      "voted_area": 0.019143424199999995,
+      "maxpatch": 0.19322800000000004,
+      "maxhac": 0.391151,
+      "delta": -0.197923,
+      "union_inflation": 1.165052833728753
+    },
+    {
+      "dataset": "visual_genome_m",
+      "category": "cap",
+      "voted_area": 0.0027559133999999997,
+      "maxpatch": 0.6239303333333334,
+      "maxhac": 0.8178226666666667,
+      "delta": -0.19389233333333333,
+      "union_inflation": 1.169166878786334
+    },
+    {
+      "dataset": "visual_genome_m",
+      "category": "hat",
+      "voted_area": 0.0037853256000000006,
+      "maxpatch": 0.361931,
+      "maxhac": 0.552784,
+      "delta": -0.19085300000000005,
+      "union_inflation": 1.3277010447003585
+    },
+    {
+      "dataset": "visual_genome_m",
+      "category": "nose",
+      "voted_area": 0.0029721743500000005,
+      "maxpatch": 0.4834723333333333,
+      "maxhac": 0.6671563333333334,
+      "delta": -0.18368400000000007,
+      "union_inflation": 1.1154263230574515
+    },
+    {
+      "dataset": "visual_genome_m",
+      "category": "bag",
+      "voted_area": 0.008287515599999998,
+      "maxpatch": 0.58732,
+      "maxhac": 0.7685873333333334,
+      "delta": -0.18126733333333345,
+      "union_inflation": 1.2916346804232957
+    }
+  ],
+  "examples_maxhac_best": [
+    {
+      "dataset": "visual_genome_m",
+      "category": "building",
+      "voted_area": 0.41462499999999997,
+      "maxpatch": 0.592664,
+      "maxhac": 0.42835700000000004,
+      "delta": 0.16430699999999993,
+      "union_inflation": 3.123726601126481
+    },
+    {
+      "dataset": "visual_genome_m",
+      "category": "sink",
+      "voted_area": 0.026589793199999996,
+      "maxpatch": 0.4096766666666667,
+      "maxhac": 0.25262566666666664,
+      "delta": 0.15705100000000005,
+      "union_inflation": 1.1613315362297763
+    },
+    {
+      "dataset": "visual_genome_m",
+      "category": "laptop",
+      "voted_area": 0.05719660060000001,
+      "maxpatch": 0.161214,
+      "maxhac": 0.12436966666666667,
+      "delta": 0.036844333333333326,
+      "union_inflation": 1.0902735868690323
+    },
+    {
+      "dataset": "visual_genome_m",
+      "category": "bus",
+      "voted_area": 0.12997343085000002,
+      "maxpatch": 0.29077733333333333,
+      "maxhac": 0.255114,
+      "delta": 0.035663333333333325,
+      "union_inflation": 1.1683457613743213
+    },
+    {
+      "dataset": "visual_genome_m",
+      "category": "giraffe",
+      "voted_area": 0.4397631795,
+      "maxpatch": 0.009110333333333333,
+      "maxhac": 0.0011186666666666667,
+      "delta": 0.007991666666666666,
+      "union_inflation": 4.356589787219466
+    }
+  ]
+}

@@ -38,6 +38,7 @@ describe('ServerFolderPickerComponent', () => {
     component.open(serverFolderImporter);
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
   }
 
   it('open() resets the form to the default media type', () => {
@@ -60,6 +61,7 @@ describe('ServerFolderPickerComponent', () => {
     expect(component.mediaType()).toBe('image');
     httpMock.expectOne(req => req.url === '/api/embedders' && req.params.get('media_type') === 'image').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers' && req.params.get('media_type') === 'image').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners' && req.params.get('media_type') === 'image').flush({ cleaners: [] });
   });
 
   it('submit() posts to runImporter with the current path and media type', () => {

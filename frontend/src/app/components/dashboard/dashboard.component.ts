@@ -22,7 +22,7 @@ import { DashboardModalsService } from '../../services/dashboard-modals.service'
 import { DashboardLoadingTasksService } from '../../services/dashboard-loading-tasks.service';
 import { BrowsePrepService } from '../../services/browse-prep.service';
 import { SettingsStateService } from '../../services/settings-state.service';
-import { DatasetRegistryEntry, ImporterInfo, LoadingTask, ProgressEvent } from '../../models/api.models';
+import { CleanerSelection, DatasetRegistryEntry, ImporterInfo, LoadingTask, ProgressEvent } from '../../models/api.models';
 import { DemoDatasetEntry } from '../../generated/api-client/models/demo-dataset-entry';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { ProgressEventsService } from '../../services/progress-events.service';
@@ -1157,12 +1157,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
       embedders?: string[];
       clipper?: string;
       clipper_params?: Record<string, number | string>;
+      cleaners?: CleanerSelection[];
       converter?: string;
       dataset_name?: string;
       build_projection?: boolean;
       merge_near_duplicates?: boolean;
     };
-    const params: Record<string, string | string[] | Record<string, number | string>> = {};
+    const params: Record<string, string | string[] | Record<string, number | string> | CleanerSelection[]> = {};
     if (extras.embedder) params['embedder'] = extras.embedder;
     if (extras.embedders && extras.embedders.length > 0) params['embedders'] = extras.embedders;
     if (extras.clipper) {
@@ -1171,6 +1172,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         params['clipper_params'] = extras.clipper_params;
       }
     }
+    if (extras.cleaners && extras.cleaners.length > 0) params['cleaners'] = extras.cleaners;
     // Convert-on-load step (e.g. document2image for the Document demo tab):
     // the resulting dataset has the converter's target type.
     if (extras.converter) params['converter'] = extras.converter;

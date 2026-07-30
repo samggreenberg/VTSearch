@@ -184,6 +184,9 @@ describe('DatasetImporterModalComponent', () => {
     httpMock.expectOne(req =>
       req.url === '/api/clippers' && req.params.get('media_type') === tab,
     ).flush({ clippers: [] });
+    httpMock.expectOne(req =>
+      req.url === '/api/cleaners' && req.params.get('media_type') === tab,
+    ).flush({ cleaners: [] });
     if (embedders.length > 0) {
       httpMock.expectOne(req =>
         req.url === '/api/dataset/demo-list' && req.params.get('embedder') === embedders[0].name,
@@ -269,6 +272,7 @@ describe('DatasetImporterModalComponent', () => {
     component.selectImporter(genericForm());
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
     await settleZoneless(fixture);
     const el = fixture.nativeElement as HTMLElement;
     const formPicker = el.querySelector('vt-generic-form-picker') as HTMLElement;
@@ -387,6 +391,7 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.selectedImporter()?.name).toBe('local_folder');
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
   });
 
   it('should set activePickerView=server_folder when the Server Folder sub-tab is clicked', () => {
@@ -397,6 +402,7 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.selectedImporter()?.name).toBe('server_folder');
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
     // The server-filesystem folder browser is now opened lazily by the
     // user (no /api/browse-media-files fires on importer selection).
   });
@@ -410,6 +416,7 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.selectedImporter()?.name).toBe('local_files');
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
   });
 
   it('should set activePickerView=demo when the Demo sub-tab is clicked', () => {
@@ -434,6 +441,7 @@ describe('DatasetImporterModalComponent', () => {
     component.selectImporter(localFolder);
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
 
     const file = new File(['contents'], 'a.wav');
     Object.defineProperty(file, 'webkitRelativePath', { value: 'mydir/a.wav' });
@@ -460,6 +468,7 @@ describe('DatasetImporterModalComponent', () => {
     component.selectImporter(localFiles);
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
 
     const pathsFile = new File(['/a.wav\n/b.wav\n'], 'list.txt');
     component.localFolderPicker().files.set([pathsFile]);
@@ -487,6 +496,7 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.selectedImporter()).toBe(imp);
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
   });
 
   it('should pre-populate default values', () => {
@@ -495,6 +505,7 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.genericFormPicker().formValues['media_type']).toBe('audio');
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
   });
 
   it('should clear the selected importer when the active top-level tab changes', () => {
@@ -503,6 +514,7 @@ describe('DatasetImporterModalComponent', () => {
     component.selectImporter(genericForm());
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
     expect(component.selectedImporter()).not.toBeNull();
     // Switch to a multi-importer tab so the tab change clears the prior
     // selection without auto-selecting a lone importer (the 'demo' tab has
@@ -519,6 +531,7 @@ describe('DatasetImporterModalComponent', () => {
     component.selectImporter(genericForm());
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
     component.genericFormPicker().formValues['path'] = '/data/sounds';
     component.genericFormPicker().submit();
 
@@ -536,6 +549,7 @@ describe('DatasetImporterModalComponent', () => {
     component.selectImporter(genericForm());
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
     component.genericFormPicker().submit();
 
     httpMock.expectOne('/api/dataset/import/generic_form').flush(
@@ -946,6 +960,9 @@ describe('DatasetImporterModalComponent', () => {
     httpMock.expectOne(req =>
       req.url === '/api/clippers' && req.params.get('media_type') === 'audio',
     ).flush({ clippers: [] });
+    httpMock.expectOne(req =>
+      req.url === '/api/cleaners' && req.params.get('media_type') === 'audio',
+    ).flush({ cleaners: [] });
 
     const refetchReq = httpMock.expectOne(req =>
       req.url === '/api/dataset/demo-list' && req.params.get('embedder') === 'clap',

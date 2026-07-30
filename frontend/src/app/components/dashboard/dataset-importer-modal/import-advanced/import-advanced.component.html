@@ -4,7 +4,7 @@
     class="advanced-toggle"
     (click)="toggleAdvanced()"
     [attr.aria-expanded]="advancedOpen"
-    title="Show advanced options: included media types, embedder, and pre-processing clipper"
+    [title]="advancedToggleTitle"
   >
     Advanced {{ advancedOpen ? '▴' : '▾' }}
   </button>
@@ -98,6 +98,37 @@
   >
     Details: {{ clipperDisplayName }}
   </button>
+}
+
+@if (showCleanupSection) {
+  <label class="form-label" title="Optional cleanup passes applied to every item just before it's analyzed, so the analysis isn't spent on content-free regions. Each one is independent — tick any combination.">Cleanup</label>
+  @for (cleaner of cleaners(); track cleaner.name) {
+    <label class="form-label cleanup-row" [title]="cleaner.description || ''">
+      <input
+        type="checkbox"
+        [checked]="isCleanerEnabled(cleaner.name)"
+        (change)="onCleanerToggle(cleaner, $any($event.target).checked)"
+      />
+      {{ cleanerLabel(cleaner) }}
+    </label>
+    @if (isCleanerEnabled(cleaner.name)) {
+      @for (param of cleanerParameters(cleaner); track param.key) {
+        <label class="form-label cleanup-param" [title]="param.description || ''">
+          {{ param.label }}
+          <input
+            class="form-input"
+            [type]="param.type === 'number' ? 'number' : 'text'"
+            [attr.min]="param.min"
+            [attr.max]="param.max"
+            [attr.step]="param.step"
+            [ngModel]="cleanerParamValue(cleaner, param)"
+            [name]="'cleanup-' + cleaner.name + '-' + param.key"
+            (ngModelChange)="onCleanerParamChange(cleaner, param, $event)"
+          />
+        </label>
+      }
+    }
+  }
 }
 
 @if (advancedOpen) {

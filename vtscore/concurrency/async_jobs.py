@@ -482,6 +482,18 @@ projection_jobs = JobManager("projection")
 #: ``JOB_MANAGERS`` below (no ``/api/jobs/active`` spinner).
 signpost_relabel_jobs = JobManager("signpost-relabel")
 
+#: Background runner for the archive-member thumbnail warm-up (issue #2738).
+#: An archive-member import reads no member bytes by design, so its media leave
+#: the load with no ``thumbnail_bytes`` and every browse tile would otherwise
+#: stream a tar member and decode it on the request thread.  See
+#: :mod:`vtscore.datasets.thumbnail_warm`, whose job target sweeps **every**
+#: loaded dataset precisely because this manager's single slot supersedes a
+#: parked pending job.  Like the two managers above it is an internal warm-up,
+#: not a user-visible training job, so it is intentionally absent from
+#: ``JOB_MANAGERS`` below (no ``/api/jobs/active`` spinner): browse is fully
+#: functional while it runs, just colder.
+archive_thumbnail_jobs = JobManager("archive-thumbnail-warm")
+
 #: Logical name → :class:`JobManager` lookup used by ``/api/jobs/active`` to
 #: enumerate which (dataset_id, detector_id) pairs currently have background
 #: work in flight. The string keys are the public job-type names exposed in
@@ -524,3 +536,4 @@ def reset_all_async_jobs_for_tests() -> None:
     # ``/api/jobs/active``), so reset them explicitly for test isolation.
     labeling_status_jobs.reset_for_tests()
     signpost_relabel_jobs.reset_for_tests()
+    archive_thumbnail_jobs.reset_for_tests()

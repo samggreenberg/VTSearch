@@ -135,17 +135,18 @@ class ImageMediaType(MediaType):
     # ------------------------------------------------------------------
 
     def load_media_data(self, file_path: Path, media_bytes: bytes | None = None) -> dict:
-        import io  # noqa: PLC0415
-
-        from PIL import Image  # noqa: PLC0415
-
+        from vtscore.media.image.decode import open_image  # noqa: PLC0415
         from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
 
         if media_bytes is None:
             with open(file_path, "rb") as f:
                 media_bytes = f.read()
         try:
-            with Image.open(io.BytesIO(media_bytes)) as img:
+            # Header-only read, and the bomb ceiling is lifted, so an enormous
+            # source reports its true dimensions instead of being refused.
+            # These stay *native* size: the stored bytes are the untouched
+            # original, and crop/clip boxes are expressed against them.
+            with open_image(media_bytes) as img:
                 width, height = img.width, img.height
         except Exception:
             width, height = None, None
@@ -162,6 +163,37 @@ class ImageMediaType(MediaType):
             "height": height,
             "thumbnail_bytes": thumb[0] if thumb is not None else None,
         }
+
+    def ensure_thumbnail_bytes(self, media: dict) -> bytes | None:
+        """Build the grid/browse thumbnail from the media's resolvable bytes.
+
+        Mirrors what :meth:`load_media_data` computes at ingest, for media that
+        had no file to read then (archive members).  The source bytes are
+        released as soon as the thumbnail and dimensions are extracted, so a
+        warm-up over a multi-GB shard holds one member at a time.
+        """
+        thumb = media.get("thumbnail_bytes")
+        if thumb:
+            return thumb
+        from vtscore.media.image.decode import open_image  # noqa: PLC0415
+        from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
+
+        data = self._resolve_media_bytes(media)
+        if not data:
+            return None
+        if media.get("width") is None or media.get("height") is None:
+            try:
+                # Header-only read with the bomb ceiling lifted, mirroring
+                # load_media_data: dimensions stay native size.
+                with open_image(data) as img:
+                    media["width"], media["height"] = img.width, img.height
+            except Exception:
+                pass
+        result = make_image_thumbnail(data)
+        if result is None:
+            return None
+        media["thumbnail_bytes"] = result[0]
+        return result[0]
 
     # ------------------------------------------------------------------
     # HTTP serving

@@ -66,11 +66,61 @@ are silently omitted):
 ```
 
 Every returned item contains `id`, `media_type`, `filename`, `md5`, and
-`custom_metadata`.  The `custom_metadata` dict holds media-type-specific
-display fields (e.g.  `duration`/`frequency` for audio, `width`/`height`
-for images, `word_count` for text).  `origin_name`, `description`,
-`embedder`, `embedders` (plural array, when present), and `clip_*` keys are
-included when present.
+`custom_metadata`.  `origin_name`, `description`, `embedder`, `embedders`
+(plural array, when present), `has_original`, and `clip_*` keys are included
+when present.
+
+`has_original: true` marks an item a
+[MediaCleaner](../EXTENDING-media.md#adding-a-media-cleaner) rewrote at load
+time, whose pre-clean payload was kept alongside the canonical (cleaned) one.
+Those items accept `?variant=original` on every payload route below, and the
+detail viewer offers a Clean/Original toggle. The key is absent otherwise.
+
+The `custom_metadata` dict is the media type's display fields — e.g.
+`duration`/`frequency` for audio, `width`/`height` for images, `word_count`
+for text — with any importer-supplied `custom_metadata` layered on top.
+
+It also carries up to three curated **provenance** lines distilled from the
+media's `origin.params`:
+
+| Field | Present on | Example |
+|-------|-----------|---------|
+| `Source` | Converter / clipper output | `/data/videos/movie.mp4` |
+| `Derived Via` | Converter / clipper output | `Video → Images (n_clips=2)` |
+| `Imported Via` | Any media whose origin names an importer | `Manifest (paths_file=/data/list.txt)` |
+
+`Source` is the original file the item came from — the video an extracted
+frame was cut from, the recording an audio clip was sliced out of.  A plainly
+imported file gets neither `Source` nor `Derived Via`; it is its own source.
+
+Each is one line rather than a key-per-`origin.params`-entry, because a
+dataset-level import knob (`size=60`) is not a fact about one item and reads
+wrong in a per-item grid.  The machine-only replay recipe
+(`converter_content_hash`, `converter_out_index`, `clipper_chain`,
+`converter_param_*`, …) is folded into these lines rather than listed raw.
+The enriched label export (`GET /api/labels/export?enrich=true`) does
+flatten the *full* `origin.params` key-by-key — an export is a machine-facing
+artifact with opt-in columns, where the raw recipe is the point.
+
+### Payload variants (`?variant=original`)
+
+Every per-media payload route below — `/audio`, `/video`, `/image`,
+`/thumbnail`, `/text`, `/paragraph`, `/media` — accepts an optional
+`variant` query:
+
+| `variant` | Serves |
+|-----------|--------|
+| omitted / `""` | The **canonical** payload: the cleaned bytes that were actually hashed, embedded, and scored. |
+| `original` | The pre-clean payload of an item a cleaner rewrote at load time. |
+
+`?variant=original` on an item with no snapshot (`has_original` absent) falls
+back to the canonical payload rather than 404ing, so a stale link still shows
+the item. Any other value is rejected with `422`.
+
+Derived metadata is recomputed from what is actually served rather than reused
+from the canonical item: the `original` variant regenerates the thumbnail
+(the stored one describes the cleaned bytes), recounts `word_count` /
+`character_count` for text, and hashes the served bytes for its `ETag`.
 
 ### Stream audio
 

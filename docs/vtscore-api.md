@@ -82,6 +82,14 @@ def resolve_device() -> str:
 MAX_UPLOAD_MB: int
 """HTTP request size cap in MB; default 2048 (2 GiB), 0 = unlimited. Honours $VTSEARCH_MAX_UPLOAD_MB."""
 
+MAX_DECODE_PIXELS: int
+"""Per-image decode budget in pixels; default 64_000_000, 0 = unbounded.
+
+Pillow's own decompression-bomb ceiling is lifted at startup (see
+``vtscore.media.image.decode``) so a merely-large image is imported rather
+than refused; this budget caps how big a bitmap any one decode materialises.
+Honours $VTSEARCH_MAX_DECODE_PIXELS."""
+
 TRAIN_EPOCHS: int
 """Upper bound on MLP training epochs. Honours $VTSEARCH_TRAIN_EPOCHS; default 200."""
 
@@ -530,8 +538,8 @@ def train_model(
 def calculate_gmm_threshold(scores: np.ndarray) -> float:
     """Fit a 2-component GMM to scores; return the midpoint between component means."""
 
-def find_optimal_threshold(scores: np.ndarray, y: np.ndarray) -> float:
-    """Grid-search the score axis for the threshold maximising F1 on (scores, y)."""
+def conformal_threshold(scores: np.ndarray, y: np.ndarray) -> float:
+    """Split-conformal quantile rule mapping inclusion to a threshold over held-out (scores, y)."""
 
 def calculate_cross_calibration_threshold(
     X: np.ndarray,

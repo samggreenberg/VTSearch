@@ -76,7 +76,9 @@ VTSearch/
 │   │   │                           FaceLocalizer, OCRExtractor
 │   │   ├── text/                   Text media type, embedders (E5 default, BGE), clippers
 │   │   ├── video/                  Video media type, embedders (X-CLIP default, LanguageBind,
-│   │   │                           VideoMAE), clippers
+│   │   │                           VideoMAE), clippers, decode.py (all frame decoding, via an
+│   │   │                           ffmpeg subprocess — never in-process OpenCV; see DEPLOYMENT.md
+│   │   │                           "FATAL FIPS SELFTEST FAILURE")
 │   │   ├── document/               Document media type — convert-out half type (importable, no
 │   │   │                           embedder; converts_to image/text), clipper, UCSF demo
 │   │   └── face/                   Face media type — convert-in half type (embeddable, not
@@ -134,6 +136,7 @@ VTSearch/
 │   │   ├── loader_pickle.py        load_dataset_from_pickle + chunked + sidecars
 │   │   ├── loader_demo.py          load_demo_dataset, _stamp_demo_origin
 │   │   ├── load_pipeline.py        Background-task load orchestration (gate handoff, stage sequencing)
+│   │   ├── thumbnail_warm.py       Post-load thumbnail warm-up for archive-member datasets (issue #2738)
 │   │   ├── stages/                 Post-import load stages: clipper fix-up, embed-missing,
 │   │   │                           finalize (drop-none/dedup/coverage), projection, registry save
 │   │   ├── registry.py             Persistent dataset registry (data/dataset_registry.json)
@@ -384,18 +387,18 @@ modules on the right.
 **Dependencies:** `torch`, `sklearn`, `numpy`
 
 **What you get:** `train_model()` trains a 2-layer MLP classifier on
-embeddings + binary labels.  `find_optimal_threshold()` iterates over
-candidate thresholds to minimize weighted FPR+FNR with configurable
-trade-off via an `inclusion` parameter.  A separate
+embeddings + binary labels.  `conformal_threshold()` maps an
+`inclusion` value to a decision threshold via a split-conformal
+quantile rule over held-out calibration scores.  A separate
 `calculate_gmm_threshold()` fits a 2-component GMM for semantic sort
 thresholds.
 
 ```python
 from vtscore.training.mlp import train_model
-from vtscore.training.thresholds import find_optimal_threshold
+from vtscore.training.thresholds import conformal_threshold
 
 model = train_model(X_train, y_train, input_dim=512, seed=42, hidden_dim=None)
-threshold = find_optimal_threshold(scores, labels, inclusion_value=0)
+threshold = conformal_threshold(scores, labels, inclusion_value=0)
 ```
 
 ### Embedding models (CLAP, SigLIP, E5, X-CLIP, and more)
@@ -509,9 +512,9 @@ and media sources) share a common `PluginBase` / `PluginField` /
 5. **Graceful degradation**; if a plugin's optional dependency is
    missing, a warning is emitted but the app continues.
 
-### Explicitly registered plugins (media types / embedders / clippers)
+### Explicitly registered plugins (media types / embedders / clippers / cleaners)
 
-Media types, embedders, and clippers use three separate dict-based
+Media types, embedders, clippers, and cleaners use four separate dict-based
 registries in `vtscore/media/__init__.py`:
 
 | Registry | Registration function | Lookup functions |
@@ -519,6 +522,14 @@ registries in `vtscore/media/__init__.py`:
 | Media types | `register(media_type)` | `get(type_id)`, `all_types()`, `get_by_folder_name()`, `get_by_extension()` |
 | Embedders | `register_embedder(embedder)` | `get_embedder(name)`, `all_embedders()`, `embedders_for_type(type_id)` |
 | Clippers | `register_clipper(clipper)` | `get_clipper(name)`, `all_clippers()`, `clippers_for_type(type_id)` |
+| Cleaners | `register_cleaner(cleaner)` | `get_cleaner(name)`, `all_cleaners()`, `cleaners_for_type(type_id)` |
+
+Cleaners (`MediaCleaner`, a `MediaClipper` subclass) get their own registry
+even though they share the clipper descriptor surface, because the UI treats
+them differently: a clipper is a radio choice (one per import), a cleaner is a
+checkbox every item of that type passes through. Keeping them out of
+`_clipper_registry` is what stops them from appearing in a clipper chooser.
+See [EXTENDING-media.md § Adding a Media Cleaner](EXTENDING-media.md#adding-a-media-cleaner).
 
 **`type_id` and `folder_import_name`:** Each media type has a `type_id`
 (e.g. `"audio"`, `"image"`) and a `folder_import_name` which is the
@@ -735,6 +746,60 @@ Origins are set automatically when data is loaded:
 - **Pickle loads** preserve the per-element origins stored in the file.
   Old pickles without origins fall back to the legacy `creation_info` stored in the pickle (if any).
 
+### Derived media: converter and clipper provenance
+
+Media produced *at ingest* by a converter or a clipper chain — a frame
+extracted from a video, a page rendered from a PDF, a window cut out of a
+recording — records how it was made in `origin.params`, so the derivation is
+recoverable long after the import job ended:
+
+- **Converter output** (`vtscore/converters/runner.py`) gets `converter`,
+  `source_file` (scan-relative name), `source_path` (**resolved absolute path
+  of the real source file**), `converter_param_<key>`, the replay
+  disambiguators `converter_out_index` / `converter_n_out` /
+  `converter_content_hash`, and `parent_importer` plus the parent importer's
+  locator (`parent_path` / `parent_url` / `parent_paths_file` /
+  `parent_manifest`).  `source_file` and `source_path` diverge whenever the
+  scanned folder is a staging area of symlinks — the `server_files`
+  (Manifest) importer links listed paths into a temp dir under their
+  basenames, disambiguating collisions as `name__1.ext` — so `source_path` is
+  the authoritative pointer back at the original media.
+- **Clipper-chain output**
+  (`vtscore/datasets/clipper_chain.py::_stamp_origin`) inherits the parent's
+  `origin` and `origin_name` and adds the full `clipper_chain` JSON trail plus
+  the legacy single-step keys `clipper`, `clipper_<param>`, and
+  `clip_start` / `clip_end` / `clip_box` / `clip_index`.  A chain may also
+  carry `kind: "cleaner"` steps — the 1→1 cleanup gates that run last, on the
+  finished units — whose trail entries record `changed` (did this gate rewrite
+  *this* item?) alongside the usual `content_hash`.  A gate that cleaned by
+  *narrowing metadata* rather than rewriting a payload (the video gates: they
+  trim `clip_start` / `clip_end` and record a `clip_box`, because every clip of
+  a video shares the parent's bytes) additionally records the new window / box
+  on its entry.  Cleaner steps stamp no legacy keys: with one output there is
+  no sibling to disambiguate.
+
+Both are machine-readable recipes: `vtscore/media/lazy_clip.py` replays them
+to reproduce the bytes on demand, which is what makes reference-mode derived
+media possible (no duplicated clip/page bytes in the dataset).
+
+`vtscore/media/provenance.py` renders the same recipe for humans, as up to
+three curated lines: **Source** (the file the item was derived from),
+**Derived Via** (the chain that derived it, e.g.
+`"Video → Images (n_clips=2) → Object (threshold=0.4)"`), and **Imported
+Via** (the importer that brought the corpus in, e.g.
+`"Manifest (paths_file=/data/list.txt)"` — present on every media, derived or
+not; converter output reports its `parent_importer`, since "imported via
+converter" says nothing about where the corpus came from).
+`MediaType.display_metadata` includes them, so they reach both the labeling
+UI's metadata grid and the enriched label export.  A plainly imported file
+gets no `Source` / `Derived Via` — it is its own source.
+
+Each is deliberately **one line**, not a key per `origin.params` entry:
+flattening the params into a per-item grid reads as if every key were a
+property of *this item*, and a dataset-level import knob (`size=60`) is not.
+The enriched label export still flattens the full params key-by-key, because
+its columns are opt-in and machine-facing.
+
 ### Reference (no-copy) imports and lazy clips
 
 Server-side importers (e.g. `server_folder`, `server_manifest`) can import in
@@ -788,4 +853,9 @@ as JSON.  The format is backward-compatible: old consumers that only
 read `md5` + `label` continue to work.  With `enrich=true`, each entry
 gains `custom_metadata` (merged from media type display metadata, the
 media's `custom_metadata`, and the flattened `origin.params`) and the
-response includes an `available_columns` list.
+response includes an `available_columns` list.  The export flattens the
+*full* `origin.params` key-by-key — including the machine-only replay recipe
+— because an export is a machine-facing artifact with opt-in columns;
+`POST /api/medias/batch` distils the same params into the curated **Source** /
+**Derived Via** / **Imported Via** lines instead (see
+[Derived media](#derived-media-converter-and-clipper-provenance)).

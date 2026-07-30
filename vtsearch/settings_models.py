@@ -453,12 +453,6 @@ class UserSettings(BaseModel):
     #   the density colour for the pile's item count, so its hue/brightness reads
     #   as the stack height under the tile. Only affects media types that paint
     #   thumbnails (image, video); ``0`` disables it. Clamped to 0..8 px.
-    # - ``browse_compact``: whether the UMAP layout is compacted — clusters slid
-    #   together as rigid bodies to close the empty "oceans" between islands —
-    #   when the projection is (re)built. Unlike the others this affects the
-    #   Stage-1 coordinates, which are computed once and frozen, so a change
-    #   takes effect on the next fresh build or the Browser's Re-project action,
-    #   not retroactively on an already-built layout. Defaults to on per type.
     # - ``browse_mouse_zooms_per_level``: how many wheel notches / +/- button
     #   clicks cross one pyramid level (a full 2x). The per-step width factor is
     #   ``2 ** (1 / n)``, so 1 ⇒ 2x, 2 ⇒ √2 (default), 3 ⇒ ∛2. Clamped to 1..3;
@@ -473,7 +467,6 @@ class UserSettings(BaseModel):
     browse_thumbnail_border: dict[str, Annotated[int, _clamp(*BROWSE_THUMBNAIL_BORDER_PX)]] = Field(
         default_factory=dict
     )
-    browse_compact: dict[str, bool] = Field(default_factory=dict)
     browse_mouse_zooms_per_level: dict[str, Annotated[int, _clamp(*BROWSE_MOUSE_ZOOMS_PER_LEVEL)]] = Field(
         default_factory=dict
     )

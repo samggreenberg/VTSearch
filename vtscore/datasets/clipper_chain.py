@@ -1,4 +1,4 @@
-"""Clipper chain: ordered list of converter/clipper steps applied at load time.
+"""Clipper chain: ordered converter/clipper/cleaner steps applied at load time.
 
 See ``docs/plans/clipper-chain.md`` for the design. A chain is a list of
 dicts of the form::
@@ -6,6 +6,7 @@ dicts of the form::
     [
       {"kind": "converter", "name": "document2text", "params": {}},
       {"kind": "clipper",   "name": "text_token_window", "params": {"window": 512}},
+      {"kind": "cleaner",   "name": "text_whitespace",   "params": {}},
     ]
 
 Each step's input media type must match the previous step's output media
@@ -14,6 +15,13 @@ output type becomes the dataset's media type.
 
 Single-clipper loads are normalised to a length-1 chain so the runner has
 one code path.
+
+``cleaner`` steps are the ``n_out == 1`` special case (see
+``docs/plans/media-cleaners.md``): they rewrite one unit's payload in place
+rather than splitting it, always run last (appended by
+:func:`append_cleaner_steps`), and are the only step kind the runner
+snapshots a *pre*-step payload for, under the ``original_*`` keys, so the UI
+can offer a Clean/Original toggle.
 """
 
 from __future__ import annotations
@@ -31,6 +39,9 @@ from vtscore.utils.hashing import content_md5
 log = logging.getLogger(__name__)
 
 ChainStep = dict[str, Any]
+
+#: Every step kind a chain may contain.
+CHAIN_KINDS = ("clipper", "converter", "cleaner")
 
 
 def _content_hash(clip: dict[str, Any]) -> str | None:
@@ -69,8 +80,8 @@ def normalise_chain(steps: list[ChainStep] | None) -> list[ChainStep]:
             raise ValueError(f"chain step {i} is not a dict: {raw!r}")
         kind = raw.get("kind")
         name = raw.get("name")
-        if kind not in ("clipper", "converter"):
-            raise ValueError(f"chain step {i}: kind must be 'clipper' or 'converter', got {kind!r}")
+        if kind not in CHAIN_KINDS:
+            raise ValueError(f"chain step {i}: kind must be one of {CHAIN_KINDS}, got {kind!r}")
         if not name:
             raise ValueError(f"chain step {i}: missing 'name'")
         params = raw.get("params") or {}
@@ -84,6 +95,66 @@ def normalise_chain(steps: list[ChainStep] | None) -> list[ChainStep]:
     return out
 
 
+def parse_cleaner_field(raw: Any) -> list[ChainStep]:
+    """Decode a ``cleaners`` importer field value into ``cleaner`` chain steps.
+
+    Accepts the shapes a client can plausibly send:
+
+    * a JSON string of either of the list forms below (the wire encoding),
+    * a list of names (``["image_exif_orient"]``),
+    * a list of ``{"name": ..., "params": {...}}`` dicts.
+
+    Unknown / malformed values yield an empty list rather than raising: an
+    unusable cleanup selection must not fail a whole import, and the step
+    list is validated against the registry by :func:`validate_chain`
+    afterwards anyway.
+    """
+    if raw is None or raw == "":
+        return []
+    items: Any = raw
+    if isinstance(raw, str):
+        try:
+            items = json.loads(raw)
+        except (TypeError, ValueError):
+            return []
+    if isinstance(items, dict):
+        items = [items]
+    if not isinstance(items, (list, tuple)):
+        return []
+    out: list[ChainStep] = []
+    seen: set[str] = set()
+    for item in items:
+        if isinstance(item, str):
+            name, params = item.strip(), {}
+        elif isinstance(item, dict):
+            name = str(item.get("name") or "").strip()
+            raw_params = item.get("params") or {}
+            params = dict(raw_params) if isinstance(raw_params, dict) else {}
+        else:
+            continue
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        out.append({"kind": "cleaner", "name": name, "params": params})
+    return out
+
+
+def append_cleaner_steps(steps: list[ChainStep] | None, cleaners: Any) -> list[ChainStep] | None:
+    """Return *steps* with *cleaners* appended as ``cleaner`` steps.
+
+    Cleaners always run **last**, on the finished units that will actually be
+    embedded, so every import entry point funnels its ``cleaners`` field
+    through here instead of letting a client choose the placement. Returns
+    *steps* unchanged when *cleaners* decodes to nothing, so a cleaner-free
+    import keeps its existing (possibly ``None``) chain and the legacy
+    single-clipper path stays in effect.
+    """
+    extra = parse_cleaner_field(cleaners)
+    if not extra:
+        return steps
+    return [*(steps or []), *extra]
+
+
 def validate_chain(steps: list[ChainStep], source_media_type: str) -> str:
     """Validate a chain and return its final output media type.
 
@@ -92,7 +163,7 @@ def validate_chain(steps: list[ChainStep], source_media_type: str) -> str:
     Accepts the empty chain (returns *source_media_type* unchanged).
     """
     from vtscore.converters import get_converter
-    from vtscore.media import get_clipper
+    from vtscore.media import get_cleaner, get_clipper
 
     current = source_media_type
     for i, step in enumerate(steps):
@@ -105,6 +176,13 @@ def validate_chain(steps: list[ChainStep], source_media_type: str) -> str:
                 raise ValueError(f"chain step {i}: unknown clipper {name!r}") from e
             in_type = clipper.media_type
             out_type = clipper.media_type
+        elif kind == "cleaner":
+            try:
+                cleaner = get_cleaner(name)
+            except KeyError as e:
+                raise ValueError(f"chain step {i}: unknown cleaner {name!r}") from e
+            in_type = cleaner.media_type
+            out_type = cleaner.media_type
         else:
             conv = get_converter(name)
             if conv is None:
@@ -129,14 +207,23 @@ def validate_chain(steps: list[ChainStep], source_media_type: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-_CLIPPER_BASE_KEYS = {
-    "name",
-    "display_name",
-    "media_type",
-    "parameters",
-    "description",
-    "creation_questions",
-}
+#: Keys a clipper / cleaner ``to_dict()`` emits that are *descriptor metadata*,
+#: not tunable parameters.  Everything else in the dict is an effective
+#: parameter value, so anything added to ``to_dict()`` must be listed here or it
+#: leaks into the origin as a bogus ``clipper_<key>`` and into the chain trail
+#: as a step parameter.
+CLIPPER_BASE_KEYS = frozenset(
+    {
+        "name",
+        "display_name",
+        "media_type",
+        "parameters",
+        "description",
+        "creation_questions",
+        "summary_template",
+        "default_enabled",
+    }
+)
 
 
 def _resolved_clipper_params(clipper) -> dict[str, Any]:
@@ -146,7 +233,7 @@ def _resolved_clipper_params(clipper) -> dict[str, Any]:
     convention already used by ``_apply_clipper`` in ``load_pipeline.py``.
     """
     d = clipper.to_dict()
-    return {k: v for k, v in d.items() if k not in _CLIPPER_BASE_KEYS}
+    return {k: v for k, v in d.items() if k not in CLIPPER_BASE_KEYS}
 
 
 def _run_clipper_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict[str, Any]], list[ChainStep]]:
@@ -182,6 +269,125 @@ def _run_clipper_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict
             entry["content_hash"] = ch
         trail_entries.append(entry)
     return outputs, trail_entries
+
+
+#: Keys holding the pre-clean snapshot of a cleaned unit's payload.  The
+#: *canonical* payload is always the cleaned one (``media_bytes`` /
+#: ``media_string`` / ``duration``), so every existing consumer - embedding,
+#: MD5, thumbnail, serving - works unchanged; these parallel keys only exist so
+#: the detail viewer can offer a Clean/Original toggle.  They ride into dataset
+#: pickles as dataset *content* (the pickle exception to the
+#: no-persisted-artifacts rule), never as a cache.
+ORIGINAL_PAYLOAD_KEYS = ("original_media_bytes", "original_media_string", "original_duration")
+
+
+def _payload_changed(before: dict[str, Any], after: dict[str, Any]) -> bool:
+    """True iff a cleaner actually rewrote the unit's embeddable payload."""
+    return before.get("media_bytes") != after.get("media_bytes") or before.get("media_string") != after.get(
+        "media_string"
+    )
+
+
+#: Keys that say *which part* of a payload a unit is: the time window
+#: (``clip_start`` / ``clip_end``) and the pixel region (``clip_box``).  Video
+#: units are metadata-only - every clip of a parent shares its bytes - so a
+#: video cleaner cleans by narrowing these instead of rewriting a payload (see
+#: :mod:`vtscore.media.video.cleaner`).
+CLEANED_METADATA_KEYS = ("clip_start", "clip_end", "clip_box")
+
+
+def _metadata_changed(before: dict[str, Any], after: dict[str, Any]) -> bool:
+    """True iff a cleaner narrowed which part of the payload the unit covers.
+
+    A metadata-only clean is a real change - it changes what gets embedded and
+    what the thumbnail should show - but there is no rewritten payload, so it
+    is deliberately *not* snapshotted under the ``original_*`` keys: the served
+    file is untouched and the player already loops within
+    ``[clip_start, clip_end]``.
+    """
+    return any(before.get(k) != after.get(k) for k in CLEANED_METADATA_KEYS)
+
+
+def _snapshot_original(source: dict[str, Any], cleaned: dict[str, Any]) -> None:
+    """Stamp *cleaned* with *source*'s payload under the ``original_*`` keys.
+
+    A no-op when *cleaned* already carries a snapshot: with several cleaners in
+    sequence the snapshot is taken once, before the *first* mutating cleaner, so
+    "Original" always means the pre-*any*-clean payload of that unit rather
+    than the output of the previous gate.  Most cleaners no-op on most items and
+    an unchanged item stores nothing, which keeps the storage cost well below a
+    blanket 2x.
+    """
+    if any(cleaned.get(k) is not None for k in ORIGINAL_PAYLOAD_KEYS):
+        return
+    if source.get("media_bytes") is not None:
+        cleaned["original_media_bytes"] = source["media_bytes"]
+    if source.get("media_string") is not None:
+        cleaned["original_media_string"] = source["media_string"]
+    if source.get("duration") is not None:
+        cleaned["original_duration"] = source["duration"]
+
+
+def _run_cleaner_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict[str, Any]], list[ChainStep]]:
+    """Run a cleaner step on one media. Returns (outputs, per-output trail entries).
+
+    Always one output.  The runner - not each cleaner - owns the pre-clean
+    snapshot: it compares the unit before and after :meth:`clean` and stamps the
+    ``original_*`` keys only when the *payload* was rewritten.  A cleaner that
+    cleaned by narrowing metadata instead (:data:`CLEANED_METADATA_KEYS`, the
+    video gates) counts as changed but snapshots nothing - there is no second
+    payload to keep.
+
+    The trail entry records ``changed`` so provenance can render the gates that
+    actually did something without re-deriving it, ``content_hash`` of the
+    cleaned payload so cross-dataset replay embeds the same bytes, and the
+    post-clean window / box of a metadata-only clean so the trail says what the
+    gate did (the legacy origin keys still describe the last *clipper*).
+    """
+    from vtscore.media import get_cleaner
+
+    cleaner = get_cleaner(step["name"])
+    if step.get("params"):
+        cleaner = cleaner.with_params(step["params"])
+    effective = _resolved_clipper_params(cleaner)
+    cleaned = cleaner.clean(media)
+    payload_changed = _payload_changed(media, cleaned)
+    metadata_changed = _metadata_changed(media, cleaned)
+    changed = payload_changed or metadata_changed
+    if payload_changed:
+        if cleaned is media:
+            # A cleaner that mutated its input in place leaves us no pre-clean
+            # payload to snapshot; treat it as unsnapshottable rather than
+            # storing the cleaned bytes twice under both key sets.
+            log.warning("clipper_chain: cleaner %r mutated its input in place; no Original kept", cleaner.name)
+        else:
+            _snapshot_original(media, cleaned)
+    if changed:
+        # Cleaners build their output with ``dict(media)``, which carries the
+        # parent's ingest-time thumbnail forward. That thumbnail now describes
+        # the *pre*-clean payload (or the pre-crop framing), so drop it and let
+        # the thumbnail route (or the load stage's audio/video regeneration)
+        # rebuild it from the canonical bytes.
+        cleaned.pop("thumbnail_bytes", None)
+    entry: ChainStep = {
+        "kind": "cleaner",
+        "name": cleaner.name,
+        "params": dict(effective),
+        "out_index": 0,
+        "n_out": 1,
+        "changed": changed,
+    }
+    if metadata_changed:
+        if cleaned.get("clip_start") is not None:
+            entry["clip_start"] = str(cleaned["clip_start"])
+        if cleaned.get("clip_end") is not None:
+            entry["clip_end"] = str(cleaned["clip_end"])
+        if cleaned.get("clip_box") is not None:
+            entry["clip_box"] = ",".join(str(v) for v in cleaned["clip_box"])
+    ch = _content_hash(cleaned)
+    if ch is not None:
+        entry["content_hash"] = ch
+    return [cleaned], [entry]
 
 
 def _run_converter_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict[str, Any]], list[ChainStep]]:
@@ -226,6 +432,10 @@ def _stamp_origin(  # noqa: C901
     the parent produced more than one final clip (or any clip whose chain
     crosses media types). Controls whether the legacy ``clip_index`` field
     is stamped.
+
+    ``cleaner`` steps ride in the chain trail but stamp no legacy keys: they
+    produce exactly one output, so there is no sibling to disambiguate, and the
+    legacy readers only ever described the last *clipper*.
     """
     if isinstance(parent_origin, dict):
         clip["origin"] = dict(parent_origin)
@@ -263,6 +473,28 @@ def _stamp_origin(  # noqa: C901
         params["clip_index"] = str(last_clipper["out_index"])
 
 
+#: Progress phase reported while running each step kind. The load-pipeline
+#: wrapper maps these onto user-facing messages.
+_PHASE_BY_KIND = {"clipper": "clipping", "converter": "converting", "cleaner": "cleaning"}
+
+
+def _trail_cleaned(trail: list[ChainStep]) -> bool:
+    """True iff some ``cleaner`` step in *trail* actually rewrote the payload."""
+    return any(e["kind"] == "cleaner" and e.get("changed") for e in trail)
+
+
+def has_original_payload(media: dict[str, Any]) -> bool:
+    """True iff *media* carries a pre-clean snapshot of its payload.
+
+    Drives the media payload's ``has_original`` flag and the detail viewer's
+    Clean/Original toggle: only a unit some cleaner actually changed has an
+    "Original" worth offering.  Keyed on the payload keys alone -
+    ``original_duration`` is metadata *about* the original, not something the
+    variant routes can stream on its own.
+    """
+    return media.get("original_media_bytes") is not None or media.get("original_media_string") is not None
+
+
 def apply_chain_to_clips(  # noqa: C901
     clips_dict: dict[int, dict[str, Any]],
     steps: list[ChainStep],
@@ -273,10 +505,12 @@ def apply_chain_to_clips(  # noqa: C901
 
     Returns ``(final_media_type, needs_recompute)`` where ``needs_recompute``
     is a per-clip boolean (parallel to ``clips_dict.values()``) marking
-    clips whose MD5/embedding/thumbnail should be recomputed (any clip
-    descended from a parent that produced more than one final output, or
-    any clip whose chain crosses media types). Returns ``None`` if
-    *steps* is empty (in which case ``clips_dict`` is left untouched).
+    clips whose MD5/embedding/thumbnail should be recomputed: any clip
+    descended from a parent that produced more than one final output, any
+    clip whose chain crosses media types, and any clip a ``cleaner`` step
+    actually rewrote (its payload is no longer what the importer hashed and
+    embedded). Returns ``None`` if *steps* is empty (in which case
+    ``clips_dict`` is left untouched).
 
     Each clip carries a trail of ``ChainStep`` entries (one per chain step)
     in its origin under ``params['clipper_chain']`` as a JSON string. The
@@ -316,12 +550,14 @@ def apply_chain_to_clips(  # noqa: C901
         # ("clipping" for clipper steps, "converting" for converter steps)
         # so the load-pipeline progress wrapper can keep its existing
         # phase-to-message mapping unchanged.
-        phase = "clipping" if kind == "clipper" else "converting"
+        phase = _PHASE_BY_KIND[kind]
         for c_idx, (media, trail, parent_origin, parent_name, parent_idx) in enumerate(carriers):
             if on_progress is not None:
                 on_progress(c_idx, n_in, phase)
             if kind == "clipper":
                 outputs, trail_entries = _run_clipper_step(media, step)
+            elif kind == "cleaner":
+                outputs, trail_entries = _run_cleaner_step(media, step)
             else:
                 outputs, trail_entries = _run_converter_step(media, step)
             for out_media, entry in zip(outputs, trail_entries):
@@ -337,6 +573,10 @@ def apply_chain_to_clips(  # noqa: C901
         from vtscore.media import get_clipper
 
         final_type = get_clipper(last_step["name"]).media_type
+    elif last_step["kind"] == "cleaner":
+        from vtscore.media import get_cleaner
+
+        final_type = get_cleaner(last_step["name"]).media_type
     else:
         from vtscore.converters import get_converter
 
@@ -364,7 +604,10 @@ def apply_chain_to_clips(  # noqa: C901
         media.setdefault("media_type", final_type)
         _stamp_origin(media, parent_origin, parent_name, trail, is_sub_item=is_sub_item)
         clips_dict[new_id] = media
-        needs_recompute.append(is_sub_item)
+        # A cleaned unit is not a sub-item - it is still one-for-one with its
+        # parent - but its payload is no longer the bytes the importer hashed
+        # and embedded, so it needs the same MD5 + embedding + thumbnail fixup.
+        needs_recompute.append(is_sub_item or _trail_cleaned(trail))
 
     return final_type, needs_recompute
 
@@ -533,7 +776,7 @@ def replay_chain_on_file(  # noqa: C901
     """
     from vtscore.converters import get_converter
     from vtscore.detectors.resolver import embed_file
-    from vtscore.media import get_clipper
+    from vtscore.media import get_cleaner, get_clipper
 
     if not steps:
         return None
@@ -542,6 +785,8 @@ def replay_chain_on_file(  # noqa: C901
     first = steps[0]
     if first["kind"] == "clipper":
         source_type = get_clipper(first["name"]).media_type
+    elif first["kind"] == "cleaner":
+        source_type = get_cleaner(first["name"]).media_type
     else:
         conv = get_converter(first["name"])
         if conv is None:
@@ -559,6 +804,22 @@ def replay_chain_on_file(  # noqa: C901
                 clipper = clipper.with_params(params)
             outputs = clipper.clip(media)
             current_type = clipper.media_type
+        elif entry["kind"] == "cleaner":
+            cleaner = get_cleaner(entry["name"])
+            params = entry.get("params") or {}
+            if params:
+                cleaner = cleaner.with_params(params)
+            # A cleaner has exactly one output, so there is no sibling to
+            # confuse it with and nothing for `_select_chain_output`'s
+            # refuse-to-guess logic to protect against. Take the output even
+            # when its content hash differs from the recording: re-running the
+            # same gate on the same source is the best available reproduction,
+            # and it beats falling back to embedding the *uncleaned* file
+            # (which would put the label's vector in a different distribution
+            # from the dataset's).
+            media = cleaner.clean(media)
+            current_type = cleaner.media_type
+            continue
         else:
             conv = get_converter(entry["name"])
             if conv is None:
@@ -628,7 +889,7 @@ def parse_trail(raw: Any) -> list[ChainStep] | None:
     for entry in data:
         if not isinstance(entry, dict):
             return None
-        if entry.get("kind") not in ("clipper", "converter"):
+        if entry.get("kind") not in CHAIN_KINDS:
             return None
         if not entry.get("name"):
             return None

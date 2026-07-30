@@ -8,6 +8,8 @@ import { DatasetsListingsApiService } from '../../../../../services/datasets-lis
 import { apiErrorMessage } from '../../../../../utils/api-error';
 import type { DatasetLoadStartedResponse } from '../../../../../generated/api-client/models/dataset-load-started-response';
 import {
+  CleanerInfo,
+  CleanerSelection,
   ClipperInfo,
   ClipperParameter,
   ConverterInfo,
@@ -97,6 +99,10 @@ export class LocalFolderPickerComponent {
   readonly selectedPatchEmbedder = signal('');
   readonly selectedStructuralEmbedder = signal('');
   readonly clippers = signal<ClipperInfo[]>([]);
+  /** Cleanup gates available for the current media type, and the subset the
+   *  user has enabled (seeded from each cleaner's ``default_enabled``). */
+  readonly cleaners = signal<CleanerInfo[]>([]);
+  readonly selectedCleaners = signal<CleanerSelection[]>([]);
   readonly selectedClipper = signal('');
   clipperParams: ClipperParameter[] = [];
   readonly clipperParamValues = signal<Record<string, number | string>>({});
@@ -172,6 +178,7 @@ export class LocalFolderPickerComponent {
 
     this.loadEmbedders(this.mediaType);
     this.loadClippers(this.mediaType);
+    this.loadCleaners(this.mediaType);
     this.resetSourceSpecs();
 
     // `open()` is invoked imperatively from the parent's importer-selection
@@ -233,6 +240,7 @@ export class LocalFolderPickerComponent {
       this.mediaType = mediaType;
       this.loadEmbedders(this.mediaType);
       this.loadClippers(this.mediaType);
+      this.loadCleaners(this.mediaType);
     }
     if (sourceSpecs) {
       this.sourceSpecs = sourceSpecs;
@@ -261,6 +269,7 @@ export class LocalFolderPickerComponent {
     this.mediaType = mediaType;
     this.loadEmbedders(mediaType);
     this.loadClippers(mediaType);
+    this.loadCleaners(mediaType);
     this.resetSourceSpecs();
   }
 
@@ -278,6 +287,22 @@ export class LocalFolderPickerComponent {
         this.selectedEmbedder.set(
           this.importDefaults.chooseEmbedderForType(embedders, mediaType, this.mediaTypes(), this.guessedMediaEmbedder()),
         );
+      },
+    });
+  }
+
+  /** Fetch the cleanup gates registered for *mediaType* and seed the
+   *  selection from each cleaner's ``default_enabled`` flag. */
+  private loadCleaners(mediaType: string): void {
+    if (!mediaType) {
+      this.cleaners.set([]);
+      this.selectedCleaners.set([]);
+      return;
+    }
+    this.datasetsListingsApi.getCleaners(mediaType).subscribe({
+      next: (cleaners) => {
+        this.cleaners.set(cleaners);
+        this.selectedCleaners.set(this.importDefaults.defaultCleanerSelection(cleaners));
       },
     });
   }
@@ -443,6 +468,9 @@ export class LocalFolderPickerComponent {
       if (this.clipperParams.length > 0 && Object.keys(this.clipperParamValues()).length > 0) {
         formData.append('clipper_params', JSON.stringify(this.clipperParamValues()));
       }
+    }
+    if (this.selectedCleaners().length > 0) {
+      formData.append('cleaners', JSON.stringify(this.selectedCleaners()));
     }
     formData.append('build_projection', this.buildProjection() ? 'true' : 'false');
     formData.append('merge_near_duplicates', this.mergeNearDuplicates() ? 'true' : 'false');

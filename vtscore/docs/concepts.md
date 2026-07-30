@@ -202,9 +202,9 @@ input  (D,)
 
 Training (`vtscore.training.train_model`):
 
-- Class-weighted BCE-with-logits - weight controlled by
-  `inclusion_value ∈ [-10, +10]` (positive biases toward more recalled
-  positives, negative biases toward fewer false positives).
+- Class-weighted BCE-with-logits with inverse-frequency balancing and
+  label-smoothed targets (`MLP_LABEL_SMOOTHING`).  Inclusion does *not*
+  enter training - it is applied later as a pure threshold knob.
 - Local `torch.Generator` seeded with the caller-supplied seed
   (default 42) for deterministic weight init.
 - `torch.random.fork_rng()` around `nn.Dropout` so concurrent training
@@ -213,7 +213,11 @@ Training (`vtscore.training.train_model`):
 Thresholding (`vtscore/training/thresholds.py`):
 
 - `calculate_cross_calibration_threshold` runs k-fold cross-cal (k =
-  `calibrate_count`) and returns the median optimal threshold.
+  `calibrate_count`), pools the held-out fold scores, and applies the
+  conformal inclusion rule (`conformal_threshold`): `inclusion_value ∈
+  [-10, +10]` maps to quantiles of the calibration score distributions
+  (positive values buy a smaller false-negative budget, halving per
+  step; negative values walk toward only the surest matches).
 - `calculate_safe_threshold` blends in a conservative fallback when the
   user has `safe_thresholds=True`.
 - `calculate_gmm_threshold` is a 2-component GMM midpoint, used as the

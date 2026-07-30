@@ -1,4 +1,4 @@
-"""Read-only listing endpoints for media types, embedders, clippers,
+"""Read-only listing endpoints for media types, embedders, clippers, cleaners,
 converters, and dataset importers.
 
 Migrated to ``flask_smorest`` so these routes appear in
@@ -20,6 +20,8 @@ from vtsearch.settings import (
     filter_visible_plugins,
 )
 from vtsearch.schemas.datasets import (
+    CleanersListQuerySchema,
+    CleanersListResponseSchema,
     ClippersListQuerySchema,
     ClippersListResponseSchema,
     ConvertersListQuerySchema,
@@ -34,7 +36,7 @@ from vtsearch.schemas.datasets import (
 datasets_listings_bp = Blueprint(
     "datasets_listings",
     __name__,
-    description="Read-only listings: media types, embedders, clippers, converters, importers.",
+    description="Read-only listings: media types, embedders, clippers, cleaners, converters, importers.",
 )
 
 
@@ -94,6 +96,35 @@ def clippers_list(query: dict):
         clippers = filter_visible_plugin_dicts("clippers", all_clippers_dict())
 
     return {"clippers": clippers}
+
+
+@datasets_listings_bp.route("/api/cleaners")
+@datasets_listings_bp.arguments(CleanersListQuerySchema, location="query")
+@datasets_listings_bp.response(200, CleanersListResponseSchema)
+def cleaners_list(query: dict):
+    """Return all cleaners, optionally filtered by media type.
+
+    Cleaners are the optional 1-to-1 cleanup gates every imported item of a
+    media type can pass through before embedding (see
+    ``docs/plans/media-cleaners.md``).  They are listed separately from
+    clippers because the UI treats them differently: a clipper is a radio
+    choice, cleaners are a checkbox list.  Each entry carries
+    ``default_enabled`` so the import form knows which boxes to pre-check.
+
+    Query parameters:
+        media_type: A ``type_id`` (e.g. ``"image"``) or ``folder_import_name``
+            (e.g. ``"images"``).  When provided, only cleaners whose
+            ``media_type`` matches are returned.
+    """
+    from vtscore.media import all_cleaners_dict, cleaners_for_type
+
+    media_type = _normalize_media_type_param(query.get("media_type", ""))
+    if media_type:
+        cleaners = [c.to_dict() for c in filter_visible_plugins("cleaners", cleaners_for_type(media_type))]
+    else:
+        cleaners = filter_visible_plugin_dicts("cleaners", all_cleaners_dict())
+
+    return {"cleaners": cleaners}
 
 
 @datasets_listings_bp.route("/api/converters")

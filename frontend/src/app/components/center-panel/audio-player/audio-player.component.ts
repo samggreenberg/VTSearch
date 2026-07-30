@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, linkedSignal, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
-import { Media } from '../../../models/api.models';
+import { Media, PayloadVariant } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { decodeAudioBuffer } from '../../../utils/decode-audio';
 
@@ -72,6 +72,12 @@ export class AudioPlayerComponent implements OnDestroy {
   private activeContext = inject(ActiveContextService);
 
   readonly media = input.required<Media>();
+  /**
+   * Which payload to play: `''` (canonical) or `'original'` (the pre-clean
+   * snapshot of an item a cleaner rewrote at load time).  Driven by the
+   * parent's Clean/Original toggle.
+   */
+  readonly variant = input<PayloadVariant>('');
   readonly volume = input(1);
   readonly audioPlaying = input(true);
   readonly swipeClass = input('');
@@ -114,6 +120,9 @@ export class AudioPlayerComponent implements OnDestroy {
   // whenever the metadata cache hydrates; without this guard, every cache
   // refresh would re-`loadAudio()` and snap playback back to t=0.
   private lastMediaId: number | null = null;
+  // Same guard for the payload variant: a Clean/Original flip keeps the media
+  // id, so the effect has to notice the variant changed to refetch the audio.
+  private lastVariant: PayloadVariant = '';
   // Active clip window bounds while enforcement is on, else null. Enforcement is
   // driven by the <audio> element's (timeupdate) event rather than a polling
   // timer, so it only runs while the clip is actually playing and progressing.
@@ -133,12 +142,14 @@ export class AudioPlayerComponent implements OnDestroy {
     // `lastMediaId` stays null, so the pending media loads on resolution.
     effect(() => {
       const media = this.media();
+      const variant = this.variant();
       if (!this.audioRef()) return;
-      if (media.id !== this.lastMediaId) {
+      if (media.id !== this.lastMediaId || variant !== this.lastVariant) {
         this.lastMediaId = media.id;
+        this.lastVariant = variant;
         this.metadataLoaded = false;
         this.stopClipEnforcement();
-        untracked(() => void this.loadAudio(media));
+        untracked(() => void this.loadAudio(media, variant));
       } else if (this.metadataLoaded) {
         // Same media id, but metadata (e.g. clip_start/clip_end) may have just
         // arrived via batch hydration. The audio already loaded, so
@@ -387,7 +398,7 @@ export class AudioPlayerComponent implements OnDestroy {
   // (via an object URL) and the waveform renderer. Previously the <audio>
   // element streamed /audio while drawWaveform() fetched the identical URL a
   // second time and decoded it -- two downloads of the same bytes per selection.
-  private async loadAudio(media: Media): Promise<void> {
+  private async loadAudio(media: Media, variant: PayloadVariant = ''): Promise<void> {
     const mediaId = media.id;
     const datasetId = this.activeContext.datasetId;
 
@@ -406,7 +417,7 @@ export class AudioPlayerComponent implements OnDestroy {
 
     let blob: Blob;
     try {
-      const response = await fetch(this.activeContext.mediaUrl(`/api/medias/${mediaId}/audio`), {
+      const response = await fetch(this.activeContext.mediaUrl(`/api/medias/${mediaId}/audio`, { variant }), {
         signal: abort.signal,
       });
       if (!response.ok) {

@@ -1676,21 +1676,11 @@ class TestVideoSceneClipper:
         assert d["threshold"] == 0.4
         assert d["min_scene_duration"] == 1.5
 
-    def test_detect_scene_boundaries_no_cv2(self, monkeypatch):
-        """When OpenCV is not available, clip returns the media unchanged."""
-        import builtins
-
+    def test_detect_scene_boundaries_undecodable(self):
+        """When the bytes can't be decoded, clip returns the media unchanged."""
         from vtscore.media.video.clipper import VideoSceneClipper
 
-        real_import = builtins.__import__
-
-        def mock_import(name, *args, **kwargs):
-            if name == "cv2":
-                raise ImportError("no cv2")
-            return real_import(name, *args, **kwargs)
-
         media = {"id": 1, "media_type": "video", "media_bytes": b"fake", "duration": 10.0}
-        monkeypatch.setattr(builtins, "__import__", mock_import)
         result = VideoSceneClipper().clip(media)
         assert result == [media]
 

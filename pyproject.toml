@@ -169,6 +169,7 @@ max-complexity = 10
 "vtsearch/__init__.py" = ["S603", "S607"]
 "vtscore/converters/video2audio.py" = ["S603"]
 "vtscore/media/audio/decode.py" = ["S603"]
+"vtscore/media/video/decode.py" = ["S603"]
 "vtsearch/routes/media/list.py" = ["S603"]
 # Atom feed parsing for the arXiv text-dataset downloader.
 "vtscore/datasets/downloader/text.py" = ["S314"]
