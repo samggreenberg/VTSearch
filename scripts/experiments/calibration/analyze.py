@@ -35,6 +35,14 @@ import experiment_config as cfg  # noqa: E402
 FINAL_T = cfg.MAX_STEPS
 
 
+def _md(df: pd.DataFrame) -> str:
+    """Markdown table when ``tabulate`` is available, else a plain fixed-width dump."""
+    try:
+        return df.to_markdown(index=False, floatfmt=".4f")
+    except Exception:  # noqa: BLE001 - tabulate not installed
+        return "```\n" + df.to_string(index=False) + "\n```"
+
+
 def _arm(row) -> str:
     base = f"{row['dataset']}/{row['embedder']}/{row['style']}"
     return base if row["pool_variant"] == "max" else f"{base}::{row['pool_variant']}"
@@ -247,7 +255,7 @@ def write_report(summary: dict, tables: dict, report_path: Path) -> None:
     lines.append("")
     lines.append("## Final-step cost by arm")
     lines.append("")
-    lines.append(tables["final_cost"].to_markdown(index=False, floatfmt=".4f"))
+    lines.append(_md(tables["final_cost"]))
     lines.append("")
     lines.append("## Tree verdict (max_patch_pca_hac vs max_patch)")
     lines.append("")
@@ -264,7 +272,7 @@ def write_report(summary: dict, tables: dict, report_path: Path) -> None:
     lines.append("## Inclusion-budget compliance (t >= 100)")
     lines.append("")
     if not tables["budget"].empty:
-        lines.append(tables["budget"].to_markdown(index=False, floatfmt=".4f"))
+        lines.append(_md(tables["budget"]))
     lines.append("")
     report_path.write_text("\n".join(lines))
     common.log(f"wrote {report_path}")
