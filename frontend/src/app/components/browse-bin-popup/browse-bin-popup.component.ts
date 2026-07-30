@@ -539,7 +539,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  popup when the detail-canvas size actually changed. */
   private lastPreviewOverride: number | null = null;
   /** Per-media-type memory of whether the metadata column is shown, mirrored
-   *  from the ``popup_metadata_shown`` setting. Absent entries default to shown
+   *  from the ``popup_metadata_shown`` setting. Absent entries default to hidden
    *  (mirroring the Train/Find center panel's metadata default). */
   private metadataShownDict: Record<string, boolean> = {};
   /** Last applied column visibility, so the settings effect only re-clamps the
@@ -581,12 +581,13 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   }
 
   /** Whether the user has the metadata column shown for the active media type.
-   *  Absent entries default to shown, mirroring the center panel's metadata
-   *  tray, which is expanded by default. */
+   *  Absent entries default to hidden, mirroring the center panel's metadata
+   *  tray, which is collapsed by default so users judge the item itself
+   *  rather than its notes. */
   get metadataShown(): boolean {
     const mediaType = this.mediaType();
     const value = mediaType ? this.metadataShownDict[mediaType] : undefined;
-    return value !== false;
+    return value === true;
   }
 
   /** Whether the metadata column actually renders: the metadata feature is
