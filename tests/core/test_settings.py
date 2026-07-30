@@ -192,7 +192,7 @@ class TestSettingsModule:
         assert raw["show_metadata"] is False
 
     def test_show_metadata_default(self):
-        assert settings_mod.get_show_metadata() is True
+        assert settings_mod.get_show_metadata() is False
 
     def test_show_metadata_persists_across_reset(self, isolated_settings):
         settings_mod.set_show_metadata(False)
@@ -455,7 +455,7 @@ class TestSettingsModule:
         assert defaults["calibrate_count"] == 2
         assert defaults["calibration_fraction"] == 0.5
         assert defaults["safe_thresholds"] is False
-        assert defaults["show_metadata"] is True
+        assert defaults["show_metadata"] is False
         assert isinstance(defaults["grid_icon_size_left"], dict)
         for v in defaults["grid_icon_size_left"].values():
             assert v == "M"

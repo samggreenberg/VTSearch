@@ -65,7 +65,7 @@ export class CenterPanelComponent implements OnDestroy {
   readonly volume = signal(1);
   readonly audioPlaying = signal(true);
   readonly showAnimations = signal(true);
-  readonly showMetadata = signal(true);
+  readonly showMetadata = signal(false);
   readonly swipeClass = signal('');
   readonly spinningVote = signal<'good' | 'bad' | null>(null);
 
@@ -113,7 +113,7 @@ export class CenterPanelComponent implements OnDestroy {
       this.volume.set(settings.volume ?? 1);
       this.audioPlaying.set(settings.audio_playing !== false);
       this.showAnimations.set(settings.show_animations !== 'hide');
-      this.showMetadata.set(settings.show_metadata !== false);
+      this.showMetadata.set(settings.show_metadata === true);
       this.labelHintDismissed.set(settings.label_hint_dismissed === true);
     });
 
