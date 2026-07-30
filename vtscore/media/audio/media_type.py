@@ -1094,26 +1094,29 @@ class AudioMediaType(MediaType):
         windows shows its own waveform, and cache the decoded member so its
         windows don't each re-stream and re-decode it.
 
-        The window is applied **only** when the bytes have to be resolved from
-        the source.  Materialized ``media_bytes`` already *are* this clip - a
-        clipper's slice, or a cleaner's trimmed payload - so re-applying the
-        source-relative ``clip_start`` / ``clip_end`` would slice a second time
-        and render the wrong stretch of audio.
+        The window is applied **only** when the resolved bytes are the whole
+        source.  Bytes that already *are* this clip - a clipper's materialized
+        slice, a cleaner's trimmed payload, or a lazy clip the resolver cuts
+        from the source on demand - carry their own 0-based timeline, so
+        re-applying the source-relative ``clip_start`` / ``clip_end`` would
+        slice a second time and render the wrong stretch of audio.
         """
+        from vtscore.media.lazy_clip import clip_recipe  # noqa: PLC0415
+
         ref = media.get("archive_member")
         member = ref.get("member", "") if isinstance(ref, dict) else ""
-        materialized = media.get("media_bytes") is not None
+        serves_clip_bytes = media.get("media_bytes") is not None or clip_recipe(media) is not None
         cache_key = (
             None
-            if materialized  # a per-clip payload must not be cached under a per-member key
+            if serves_clip_bytes  # a per-clip payload must not be cached under a per-member key
             else (ref["path"], member)
             if isinstance(ref, dict) and ref.get("path")
             else None
         )
         return generate_waveform_thumbnail_window(
             lambda: self._resolve_media_bytes(media),
-            clip_start=None if materialized else media.get("clip_start"),
-            clip_end=None if materialized else media.get("clip_end"),
+            clip_start=None if serves_clip_bytes else media.get("clip_start"),
+            clip_end=None if serves_clip_bytes else media.get("clip_end"),
             cache_key=cache_key,
         )
 

@@ -53,6 +53,18 @@ DERIVED_VIA_LABEL = "Derived Via"
 #: Display label for the importer that brought the corpus in.
 IMPORTED_VIA_LABEL = "Imported Via"
 
+#: Top-level media keys describing a clipped / windowed item's playback window.
+#: Every reader of a clip window reads these *top-level* fields, not
+#: ``origin.params``: the players seek to ``clip_start`` and loop within
+#: ``[clip_start, clip_end]``, the audio waveform is windowed by them, and
+#: ``MediaType.display_metadata`` renders them as the "Clip Start" / "Clip End" /
+#: "Clip Index" / "Clip Box" rows.  ``origin.params`` records the same extents,
+#: but only as a re-derivation *recipe* and in a different shape (``clip_box``
+#: is comma-joined there), so the two are not interchangeable — which is why
+#: :func:`vtscore.datasets.loader.export_dataset_to_file` has to persist these
+#: fields in their own right.
+CLIP_WINDOW_FIELDS = ("clip_start", "clip_end", "clip_index", "clip_box")
+
 #: ``origin.params`` keys left out of the ``Imported Via`` line.  These are
 #: either represented by the curated fields above, duplicated by a dedicated
 #: ``display_metadata`` entry (``clip_start`` → "Clip Start"), a machine-only
@@ -64,10 +76,7 @@ HIDDEN_ORIGIN_PARAMS = frozenset(
         "converter_content_hash",
         "converter_n_out",
         "converter_out_index",
-        "clip_box",
-        "clip_end",
-        "clip_index",
-        "clip_start",
+        *CLIP_WINDOW_FIELDS,
         "clipper",
         "media_type",
         "source_file",
