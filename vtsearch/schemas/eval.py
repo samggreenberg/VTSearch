@@ -12,10 +12,18 @@ Covers four routes in ``vtsearch/routes/eval.py``:
                                                     -> :class:`EvalTrainAndScoreResponseSchema`
 
 The per-step ``error_cost`` / ``stability`` / ``diversity`` lists are
-declared as ``fields.List(fields.Dict())`` rather than fully nested
-schemas; the inner shapes are computed by
-``vtscore.detectors.labeling_progress`` and round-trip cleanly as
-plain dicts.
+enumerated as nested schemas (:class:`ErrorCostPointSchema`,
+:class:`StabilityPointSchema`, :class:`DiversityPointSchema`).  Each shape is
+built in exactly one place inside ``vtscore.detectors.labeling_progress``, so
+the key sets are fixed and the frontend charts can consume the generated
+models instead of a hand-written mirror.
+
+``GET /api/indicator-score-history`` is the one exception: its ``history``
+array holds *whichever* of the three point shapes matches the requested
+``metric``, so it stays an opaque list of dicts rather than committing to one
+of them.  Expressing that as an OpenAPI ``oneOf`` would mean hand-writing
+component ``$ref`` strings in field metadata, which silently rots the moment
+a schema class is renamed; the single client-side cast is the cheaper trade.
 
 The two train-and-score endpoints share a single response schema with
 ``unknown = "include"``: the metric-specific data key
@@ -36,12 +44,58 @@ _METRIC_VALIDATOR = validate.OneOf(["smart", "stable", "diverse"])
 # ---------------------------------------------------------------------------
 
 
+class ErrorCostPointSchema(Schema):
+    """One step of the error-cost series (``_eval_cached_models``)."""
+
+    num_labels = fields.Integer(required=True)
+    error_cost = fields.Float(
+        required=True,
+        metadata={"description": "``fpr_weight * fpr + fnr_weight * fnr`` for the model trained at this step."},
+    )
+    time_index = fields.Integer(metadata={"description": "Zero-based index of this step in the label history."})
+    fpr = fields.Float(metadata={"description": "False-positive rate on the held-out eval set."})
+    fnr = fields.Float(metadata={"description": "False-negative rate on the held-out eval set."})
+
+
+class StabilityPointSchema(Schema):
+    """One step of the prediction-stability series.
+
+    Absent for the first step, which has no prior predictions to compare
+    against.
+    """
+
+    num_labels = fields.Integer(required=True)
+    num_flips = fields.Integer(
+        required=True,
+        metadata={
+            "description": (
+                "How many still-unlabeled items changed predicted class between the previous step's model and "
+                "this one."
+            )
+        },
+    )
+    time_index = fields.Integer(metadata={"description": "Zero-based index of this step in the label history."})
+    num_unlabeled = fields.Integer(
+        metadata={"description": "Size of the monitored pool the flip count was measured over."}
+    )
+
+
+class DiversityPointSchema(Schema):
+    """One step of the coverage-diversity series (from the coverage atlas)."""
+
+    num_labels = fields.Integer(required=True)
+    diversity_level = fields.Float(
+        required=True, metadata={"description": "Coverage level reached by the labels so far."}
+    )
+    depth = fields.Integer(required=True, metadata={"description": "Total nodes in the coverage atlas."})
+
+
 class LabelingProgressResponseSchema(Schema):
     """Response for ``POST /api/labeling-progress``."""
 
-    error_cost_over_time = fields.List(fields.Dict(), required=True)
-    stability_over_time = fields.List(fields.Dict(), required=True)
-    diversity_level_over_time = fields.List(fields.Dict(), required=True)
+    error_cost_over_time = fields.List(fields.Nested(ErrorCostPointSchema), required=True)
+    stability_over_time = fields.List(fields.Nested(StabilityPointSchema), required=True)
+    diversity_level_over_time = fields.List(fields.Nested(DiversityPointSchema), required=True)
     total_labels = fields.Integer(required=True)
     total_medias = fields.Integer(required=True)
 
@@ -119,6 +173,8 @@ class IndicatorScoreHistoryResponseSchema(Schema):
     """Response for ``GET /api/indicator-score-history``."""
 
     metric = fields.String(required=True, validate=_METRIC_VALIDATOR)
+    #: Whichever of ``ErrorCostPoint`` / ``StabilityPoint`` / ``DiversityPoint``
+    #: matches ``metric``; kept opaque here (see the module docstring).
     history = fields.List(fields.Dict(), required=True)
     # ``false`` when the per-step cache does not yet cover the whole label
     # history, in which case ``history`` is empty and the client should fall
@@ -173,9 +229,9 @@ class EvalTrainAndScoreResponseSchema(Schema):
     metric = fields.String()
     current = fields.Integer()
     total = fields.Integer()
-    error_cost = fields.List(fields.Dict())
-    stability = fields.List(fields.Dict())
-    diversity = fields.List(fields.Dict())
+    error_cost = fields.List(fields.Nested(ErrorCostPointSchema))
+    stability = fields.List(fields.Nested(StabilityPointSchema))
+    diversity = fields.List(fields.Nested(DiversityPointSchema))
     error = fields.String()
 
     class Meta:

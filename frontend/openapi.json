@@ -896,13 +896,55 @@
         ],
         "type": "object"
       },
+      "CleanerInfo": {
+        "additionalProperties": true,
+        "properties": {
+          "creation_questions": {
+            "description": "Parameters to ask about when the user first picks this clipper. Defaults to ``parameters``.",
+            "items": {
+              "$ref": "#/components/schemas/ClipperParameter"
+            },
+            "type": "array"
+          },
+          "default_enabled": {
+            "description": "Whether the import form checks this cleaner by default. True only for cleaners that fix an outright representation bug (EXIF orientation), where leaving it off ships known-wrong vectors.",
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parameters": {
+            "items": {
+              "$ref": "#/components/schemas/ClipperParameter"
+            },
+            "type": "array"
+          },
+          "summary_template": {
+            "description": "One-line preview with ``{key}`` placeholders for each parameter. The native row of the importer source-specs picker substitutes the current parameter values, so the user sees a live summary of what the clipper will do. Falls back to ``description`` when empty.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "media_type",
+          "name"
+        ],
+        "type": "object"
+      },
       "CleanersListResponse": {
         "additionalProperties": false,
         "properties": {
           "cleaners": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/CleanerInfo"
             },
             "type": "array"
           }
@@ -924,13 +966,98 @@
         ],
         "type": "object"
       },
+      "ClipperInfo": {
+        "additionalProperties": true,
+        "properties": {
+          "creation_questions": {
+            "description": "Parameters to ask about when the user first picks this clipper. Defaults to ``parameters``.",
+            "items": {
+              "$ref": "#/components/schemas/ClipperParameter"
+            },
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parameters": {
+            "items": {
+              "$ref": "#/components/schemas/ClipperParameter"
+            },
+            "type": "array"
+          },
+          "summary_template": {
+            "description": "One-line preview with ``{key}`` placeholders for each parameter. The native row of the importer source-specs picker substitutes the current parameter values, so the user sees a live summary of what the clipper will do. Falls back to ``description`` when empty.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "media_type",
+          "name"
+        ],
+        "type": "object"
+      },
+      "ClipperParameter": {
+        "additionalProperties": false,
+        "properties": {
+          "default": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "max": {
+            "type": "number"
+          },
+          "min": {
+            "type": "number"
+          },
+          "step": {
+            "type": "number"
+          },
+          "type": {
+            "enum": [
+              "number",
+              "string"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "default",
+          "key",
+          "label",
+          "type"
+        ],
+        "type": "object"
+      },
       "ClippersListResponse": {
         "additionalProperties": false,
         "properties": {
           "clippers": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/ClipperInfo"
             },
             "type": "array"
           }
@@ -951,8 +1078,7 @@
           },
           "fields": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/ImporterField"
             },
             "type": "array"
           },
@@ -1126,15 +1252,13 @@
         "properties": {
           "importers": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/ImporterInfo"
             },
             "type": "array"
           },
           "tabs": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/ImporterPickerTab"
             },
             "type": "array"
           }
@@ -1265,8 +1389,7 @@
         "properties": {
           "importers": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/ImporterInfo"
             },
             "type": "array"
           }
@@ -1427,6 +1550,115 @@
         },
         "required": [
           "duplicate_sets"
+        ],
+        "type": "object"
+      },
+      "DatasetRegistryEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "bound_embedders": {
+            "description": "Every concrete embedder this dataset binds (primary first).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "clipper": {
+            "description": "Resolved clipper display name, or ``\"-\"`` when the dataset used its media type's default clipper.",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "Unix timestamp (seconds) at which the dataset was registered.",
+            "type": "number"
+          },
+          "created_by": {
+            "type": "string"
+          },
+          "embedder": {
+            "description": "Name of the embedder this dataset's media were vectorised with.",
+            "type": "string"
+          },
+          "embedder_types": {
+            "description": "The embedder *types* this dataset supplies (``semantic`` / ``patch_semantic`` / ``structural``); a v3 trio dataset can supply several. Drives the detector/dataset compatibility gate.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "embedders_by_type": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "One concrete embedder per type it binds, e.g. ``{\"semantic\": \"siglip\", \"patch_semantic\": \"dinov3_patch\"}``. Drives the Combine-Datasets conflict detector.",
+            "type": "object"
+          },
+          "expires_at": {
+            "description": "Unix timestamp (seconds) at which this dataset ages off and is automatically removed; ``null``/absent means it never expires.",
+            "nullable": true,
+            "type": "number"
+          },
+          "file_type_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Per-extension file counts observed during ingest.",
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "ingest_finished_at": {
+            "nullable": true,
+            "type": "number"
+          },
+          "ingest_started_at": {
+            "nullable": true,
+            "type": "number"
+          },
+          "loaded": {
+            "description": "Whether this dataset is currently resident in memory.",
+            "type": "boolean"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "num_dupes": {
+            "description": "How many items were collapsed as near-duplicates.",
+            "type": "integer"
+          },
+          "num_items": {
+            "description": "Item count after near-duplicate collapsing.",
+            "type": "integer"
+          },
+          "origin": {
+            "description": "Name of the importer that produced this dataset.",
+            "type": "string"
+          },
+          "pkl_path": {
+            "description": "Server-side path of the dataset pickle.",
+            "type": "string"
+          },
+          "readers": {
+            "description": "Usernames granted read access. Empty means creator-only; ``[\"*\"]`` means visible to everyone.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "source": {
+            "additionalProperties": {},
+            "description": "The importer's origin dict for this dataset (importer name plus its field values). Inner keys are importer-specific, so this stays an opaque map.",
+            "nullable": true,
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "media_type",
+          "name"
         ],
         "type": "object"
       },
@@ -1714,8 +1946,7 @@
         "properties": {
           "datasets": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/DatasetRegistryEntry"
             },
             "type": "array"
           }
@@ -2664,6 +2895,28 @@
         ],
         "type": "object"
       },
+      "DiversityPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "depth": {
+            "description": "Total nodes in the coverage atlas.",
+            "type": "integer"
+          },
+          "diversity_level": {
+            "description": "Coverage level reached by the labels so far.",
+            "type": "number"
+          },
+          "num_labels": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "depth",
+          "diversity_level",
+          "num_labels"
+        ],
+        "type": "object"
+      },
       "DuplicateSet": {
         "additionalProperties": false,
         "properties": {
@@ -2795,6 +3048,35 @@
         },
         "type": "object"
       },
+      "ErrorCostPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "error_cost": {
+            "description": "``fpr_weight * fpr + fnr_weight * fnr`` for the model trained at this step.",
+            "type": "number"
+          },
+          "fnr": {
+            "description": "False-negative rate on the held-out eval set.",
+            "type": "number"
+          },
+          "fpr": {
+            "description": "False-positive rate on the held-out eval set.",
+            "type": "number"
+          },
+          "num_labels": {
+            "type": "integer"
+          },
+          "time_index": {
+            "description": "Zero-based index of this step in the label history.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "error_cost",
+          "num_labels"
+        ],
+        "type": "object"
+      },
       "EvalTrainAndScoreCancelResponse": {
         "additionalProperties": false,
         "properties": {
@@ -2837,8 +3119,7 @@
           },
           "diversity": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/DiversityPoint"
             },
             "type": "array"
           },
@@ -2847,8 +3128,7 @@
           },
           "error_cost": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/ErrorCostPoint"
             },
             "type": "array"
           },
@@ -2860,8 +3140,7 @@
           },
           "stability": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/StabilityPoint"
             },
             "type": "array"
           },
@@ -3567,6 +3846,106 @@
         ],
         "type": "object"
       },
+      "ImporterField": {
+        "additionalProperties": false,
+        "properties": {
+          "accept": {
+            "description": "For ``file`` fields: comma-separated extensions, e.g. ``\".pkl\"``.",
+            "type": "string"
+          },
+          "allow_free_text": {
+            "description": "For ``select`` fields: when true, render as a combobox the user can type an arbitrary value into. When the options refresh, a typed value absent from the new list is kept; a strict select clears it.",
+            "type": "boolean"
+          },
+          "clears": {
+            "description": "Field keys this field is mutually exclusive with. Entering a non-empty value here blanks each listed field (and they list this one back), so only one of the set is ever active at a time.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "default": {
+            "type": "string"
+          },
+          "depends_on": {
+            "description": "Field keys whose values this field's options depend on.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          },
+          "dynamic_options": {
+            "description": "When true, ``options`` is computed at runtime by calling ``POST /api/dataset/import/<importer>/options`` with the current field values. The frontend re-fetches whenever any field listed in ``depends_on`` changes.",
+            "type": "boolean"
+          },
+          "field_type": {
+            "enum": [
+              "file",
+              "folder",
+              "url",
+              "text",
+              "password",
+              "email",
+              "number",
+              "select",
+              "server_path",
+              "checkbox"
+            ],
+            "type": "string"
+          },
+          "hint": {
+            "description": "Inline format-hint text rendered as a visible chip below the input. Distinct from ``description`` (which feeds the placeholder): the hint stays visible after the user starts typing, so it is the right place for accepted extensions or a short sample file layout.",
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "max": {
+            "description": "For ``number`` fields: maximum allowed value (empty = no max).",
+            "type": "string"
+          },
+          "min": {
+            "description": "For ``number`` fields: minimum allowed value (empty = no min).",
+            "type": "string"
+          },
+          "options": {
+            "description": "For ``select`` fields: the statically-declared allowed values. Runtime-computed options come from ``POST /api/dataset/import/<importer>/options`` instead and carry their own ``(value, label)`` shape; see ``ImporterFieldOptionsResponseSchema``.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "placeholder": {
+            "description": "Hint shown as placeholder text inside the input widget.",
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "step": {
+            "description": "For ``number`` fields: step increment (empty / ``\"any\"`` = unconstrained).",
+            "type": "string"
+          },
+          "template_vars": {
+            "description": "Framework-substituted template variable names (e.g. ``detector_name``, ``YYYYMMDD``) replaced in this field's value before the plugin runs. Advisory for clients; substitution is server-side.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "field_type",
+          "key"
+        ],
+        "type": "object"
+      },
       "ImporterFieldOptionsRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3596,6 +3975,85 @@
         },
         "required": [
           "options"
+        ],
+        "type": "object"
+      },
+      "ImporterInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "available_converters_by_media_type": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/ConverterInfo"
+              },
+              "type": "array"
+            },
+            "description": "Map of output media-type id -> converters whose ``target_type`` matches that id. Drives the \"Include rows\" UI without an extra round-trip to ``/api/converters``.",
+            "type": "object"
+          },
+          "category": {
+            "description": "Picker tab this importer belongs to. One of ``services``, ``server``, ``local``, ``demo``, or ``\"\"`` (uncategorised).",
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "enabled": {
+            "description": "Only set on ``combine_datasets`` by ``GET /api/dataset/all-importers``: false when fewer than two saved datasets share a media type, so there is nothing to combine.",
+            "type": "boolean"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ImporterField"
+            },
+            "type": "array"
+          },
+          "hidden_from_picker": {
+            "type": "boolean"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "picker_view": {
+            "description": "Which view the dataset-importer modal opens for this card: ``form`` (default), ``demo``, ``server_folder``, ``local_folder``, or ``local_files``.",
+            "type": "string"
+          },
+          "ui_mode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "ImporterPickerTab": {
+        "additionalProperties": false,
+        "properties": {
+          "icon": {
+            "description": "``vt-icon`` type name.",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "order": {
+            "description": "Lower values render first.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "label"
         ],
         "type": "object"
       },
@@ -3842,22 +4300,19 @@
         "properties": {
           "diversity_level_over_time": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/DiversityPoint"
             },
             "type": "array"
           },
           "error_cost_over_time": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/ErrorCostPoint"
             },
             "type": "array"
           },
           "stability_over_time": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/StabilityPoint"
             },
             "type": "array"
           },
@@ -5306,6 +5761,31 @@
         ],
         "type": "object"
       },
+      "StabilityPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "num_flips": {
+            "description": "How many still-unlabeled items changed predicted class between the previous step's model and this one.",
+            "type": "integer"
+          },
+          "num_labels": {
+            "type": "integer"
+          },
+          "num_unlabeled": {
+            "description": "Size of the monitored pool the flip count was measured over.",
+            "type": "integer"
+          },
+          "time_index": {
+            "description": "Zero-based index of this step in the label history.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "num_flips",
+          "num_labels"
+        ],
+        "type": "object"
+      },
       "StatusIndicator": {
         "additionalProperties": true,
         "properties": {
@@ -5772,8 +6252,7 @@
         "properties": {
           "available_converters": {
             "items": {
-              "additionalProperties": {},
-              "type": "object"
+              "$ref": "#/components/schemas/ConverterInfo"
             },
             "type": "array"
           },
