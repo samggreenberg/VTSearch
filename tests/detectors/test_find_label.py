@@ -247,6 +247,59 @@ class TestAutoDetect:
         assert "negative_hits" in result
         assert len(result["hits"]) + len(result["negative_hits"]) == app_module.NUM_MEDIAS
 
+    def test_autofind_hits_carry_the_media_fields_the_table_renders(self, client):
+        """Hits must carry the media fields the Auto-Find results table shows.
+
+        ``_HitSchema`` used to declare only ``id``/``score``, and a declared
+        marshmallow schema drops every undeclared key on dump (``unknown =
+        "include"`` is load-only), so the table's Origin / Name / MD5 /
+        Filename columns came back blank.
+        """
+        from vtsearch.settings import add_autofind_detector
+
+        snap = snapshot_medias()
+        setup_trainable_model_in_registry(
+            "auto-detect-fields",
+            good_ids=[1, 2, 3],
+            bad_ids=[18, 19, 20],
+            snap=snap,
+        )
+        add_autofind_detector("auto-detect-fields")
+
+        resp = client.post("/api/auto-detect", json={})
+        assert resp.status_code == 200, resp.get_json()
+        result = resp.get_json()["results"]["auto-detect-fields"]
+        hits = result["hits"] + result["negative_hits"]
+        assert hits, "expected at least one scored hit"
+        for hit in hits:
+            assert hit["md5"] == snap[hit["id"]]["md5"]
+            assert hit["filename"] == snap[hit["id"]]["filename"]
+
+    def test_autofind_hits_never_carry_vectors_or_bytes(self, client):
+        """The hit allowlist is what keeps embeddings off the wire.
+
+        Two independent layers have to hold: ``_media_info_for_response``
+        strips the heavyweight keys from the media dict, and ``_HitSchema``
+        serves only its declared fields.  Assert the observable outcome so
+        neither can regress into leaking a vector.
+        """
+        from vtsearch.settings import add_autofind_detector
+
+        setup_trainable_model_in_registry(
+            "auto-detect-no-vectors",
+            good_ids=[1, 2, 3],
+            bad_ids=[18, 19, 20],
+            snap=snapshot_medias(),
+        )
+        add_autofind_detector("auto-detect-no-vectors")
+
+        resp = client.post("/api/auto-detect", json={})
+        assert resp.status_code == 200, resp.get_json()
+        result = resp.get_json()["results"]["auto-detect-no-vectors"]
+        for hit in result["hits"] + result["negative_hits"]:
+            for banned in ("embeddings", "embedding", "media_bytes", "media_string", "thumbnail_bytes"):
+                assert banned not in hit, f"{banned} leaked into an auto-detect hit"
+
     def test_autofind_filters_by_media_type(self, client):
         from vtsearch.settings import add_autofind_detector
 

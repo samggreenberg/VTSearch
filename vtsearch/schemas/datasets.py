@@ -242,7 +242,9 @@ class ImporterFieldSchema(Schema):
     )
     label = fields.String()
     description = fields.String()
-    accept = fields.String(metadata={"description": 'For ``file`` fields: comma-separated extensions, e.g. ``".pkl"``.'})
+    accept = fields.String(
+        metadata={"description": 'For ``file`` fields: comma-separated extensions, e.g. ``".pkl"``.'}
+    )
     options = fields.List(
         fields.String(),
         metadata={
@@ -255,9 +257,7 @@ class ImporterFieldSchema(Schema):
     )
     default = fields.String()
     required = fields.Boolean()
-    placeholder = fields.String(
-        metadata={"description": "Hint shown as placeholder text inside the input widget."}
-    )
+    placeholder = fields.String(metadata={"description": "Hint shown as placeholder text inside the input widget."})
     hint = fields.String(
         metadata={
             "description": (
@@ -449,7 +449,7 @@ class ImporterInfoSchema(Schema):
     category = fields.String(
         metadata={
             "description": (
-                'Picker tab this importer belongs to. One of ``services``, ``server``, ``local``, ``demo``, '
+                "Picker tab this importer belongs to. One of ``services``, ``server``, ``local``, ``demo``, "
                 'or ``""`` (uncategorised).'
             )
         }
@@ -1045,12 +1045,14 @@ class DatasetRegistryEntrySchema(Schema):
             )
         }
     )
-    embedder = fields.String(metadata={"description": "Name of the embedder this dataset's media were vectorised with."})
+    embedder = fields.String(
+        metadata={"description": "Name of the embedder this dataset's media were vectorised with."}
+    )
     embedder_types = fields.List(
         fields.String(),
         metadata={
             "description": (
-                'The embedder *types* this dataset supplies (``semantic`` / ``patch_semantic`` / ``structural``); '
+                "The embedder *types* this dataset supplies (``semantic`` / ``patch_semantic`` / ``structural``); "
                 "a v3 trio dataset can supply several. Drives the detector/dataset compatibility gate."
             )
         },

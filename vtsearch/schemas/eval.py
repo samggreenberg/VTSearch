@@ -69,8 +69,7 @@ class StabilityPointSchema(Schema):
         required=True,
         metadata={
             "description": (
-                "How many still-unlabeled items changed predicted class between the previous step's model and "
-                "this one."
+                "How many still-unlabeled items changed predicted class between the previous step's model and this one."
             )
         },
     )

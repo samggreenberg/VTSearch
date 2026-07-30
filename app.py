@@ -149,6 +149,7 @@ from flask_smorest import Api  # noqa: E402
 
 from vtsearch.openapi_postprocess import (  # noqa: E402
     assign_operation_ids,
+    collapse_nullable_refs,
     normalize_unprocessable_response,
 )
 
@@ -169,6 +170,7 @@ def _to_dict_with_operation_ids() -> dict:
     spec = _apispec_to_dict()
     assign_operation_ids(app, spec)
     normalize_unprocessable_response(spec)
+    collapse_nullable_refs(spec)
     return spec
 
 

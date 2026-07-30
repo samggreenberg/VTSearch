@@ -471,8 +471,7 @@
         "additionalProperties": false,
         "properties": {
           "auto_export": {
-            "additionalProperties": {},
-            "type": "object"
+            "$ref": "#/components/schemas/_AutoFindExportStatus"
           },
           "detectors_run": {
             "type": "integer"
@@ -2704,16 +2703,9 @@
             "type": "boolean"
           },
           "pending_labelset_move": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PendingLabelsetMove"
-              },
-              {
-                "nullable": true,
-                "type": "object"
-              }
-            ],
-            "default": null
+            "$ref": "#/components/schemas/PendingLabelsetMove",
+            "default": null,
+            "nullable": true
           }
         },
         "required": [
@@ -2838,16 +2830,9 @@
             "type": "string"
           },
           "pending_labelset_move": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PendingLabelsetMove"
-              },
-              {
-                "nullable": true,
-                "type": "object"
-              }
-            ],
-            "default": null
+            "$ref": "#/components/schemas/PendingLabelsetMove",
+            "default": null,
+            "nullable": true
           },
           "success": {
             "type": "boolean"
@@ -4271,9 +4256,8 @@
             "type": "object"
           },
           "origin": {
-            "additionalProperties": {},
-            "nullable": true,
-            "type": "object"
+            "$ref": "#/components/schemas/Origin",
+            "nullable": true
           },
           "origin_name": {
             "type": "string"
@@ -4613,7 +4597,6 @@
         "type": "object"
       },
       "MediaBatchResponse": {
-        "additionalProperties": true,
         "properties": {
           "clip_box": {
             "items": {
@@ -4915,6 +4898,23 @@
         },
         "required": [
           "ok"
+        ],
+        "type": "object"
+      },
+      "Origin": {
+        "additionalProperties": false,
+        "properties": {
+          "importer": {
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {},
+            "description": "Identifying import parameters; the key set is importer-specific.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "importer"
         ],
         "type": "object"
       },
@@ -6146,6 +6146,30 @@
         ],
         "type": "object"
       },
+      "_AutoFindExportStatus": {
+        "additionalProperties": true,
+        "properties": {
+          "error": {
+            "description": "Failure reason; present instead of ``message`` on failure.",
+            "type": "string"
+          },
+          "exporter": {
+            "type": "string"
+          },
+          "message": {
+            "description": "Human-readable outcome; present on success.",
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "exporter",
+          "success"
+        ],
+        "type": "object"
+      },
       "_AutoLocalizePerProcessor": {
         "additionalProperties": false,
         "properties": {
@@ -6504,9 +6528,8 @@
             "type": "string"
           },
           "origin": {
-            "additionalProperties": {},
-            "nullable": true,
-            "type": "object"
+            "$ref": "#/components/schemas/Origin",
+            "nullable": true
           },
           "origin_name": {
             "type": "string"
@@ -6545,17 +6568,72 @@
         "type": "object"
       },
       "_Hit": {
-        "additionalProperties": true,
         "properties": {
+          "clip_box": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "clip_end": {
+            "type": "number"
+          },
+          "clip_index": {
+            "type": "integer"
+          },
+          "clip_start": {
+            "type": "number"
+          },
+          "custom_metadata": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "description": {
+            "type": "string"
+          },
+          "embedder": {
+            "type": "string"
+          },
+          "embedders": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "has_original": {
+            "description": "Present and ``true`` when a MediaCleaner rewrote this item at load time and its pre-clean payload was kept. The byte routes then accept ``?variant=original`` and the detail viewer offers a Clean/Original toggle. Absent otherwise.",
+            "type": "boolean"
+          },
           "id": {
             "type": "integer"
+          },
+          "md5": {
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/Origin",
+            "description": "Where this item was ingested from; rendered as the results table's Origin column.",
+            "nullable": true
+          },
+          "origin_name": {
+            "type": "string"
           },
           "score": {
             "type": "number"
           }
         },
         "required": [
+          "custom_metadata",
+          "filename",
           "id",
+          "md5",
+          "media_type",
           "score"
         ],
         "type": "object"

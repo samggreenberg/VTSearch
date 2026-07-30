@@ -16,6 +16,10 @@
 
 import type { MediaIdsListResponse } from '../generated/api-client/models/media-ids-list-response';
 import type { MediaBatchResponse } from '../generated/api-client/models/media-batch-response';
+import type { AutoDetectResult } from '../generated/api-client/models/auto-detect-result';
+import type { AutoFindExportStatus } from '../generated/api-client/models/auto-find-export-status';
+import type { FindResultRow } from '../generated/api-client/models/find-result-row';
+import type { Hit } from '../generated/api-client/models/hit';
 
 // Plugin-metadata and listing payloads, all described by nested Marshmallow
 // schemas in `vtsearch/schemas/datasets.py` and `vtsearch/schemas/eval.py`.
@@ -38,16 +42,6 @@ export type { DiversityPoint } from '../generated/api-client/models/diversity-po
 // --- Medias ---
 
 /**
- * Strip a type's catch-all index signature (``[key: string]: any``) so
- * intersecting it with another type doesn't force every property access
- * to go through the bracket form (TS4111 under
- * ``noPropertyAccessFromIndexSignature``).
- */
-type RemoveIndex<T> = {
-  [K in keyof T as string extends K ? never : number extends K ? never : K]: T[K];
-};
-
-/**
  * The renderable media shape: a stub from ``GET /api/medias/ids``
  * (``id``, ``type``, optional ``embedder``) optionally augmented with the
  * full per-item metadata returned by ``POST /api/medias/batch``
@@ -59,7 +53,7 @@ type RemoveIndex<T> = {
  * cache miss) or a hydrated batch entry.
  */
 export type Media = MediaIdsListResponse &
-  Partial<Omit<RemoveIndex<MediaBatchResponse>, keyof MediaIdsListResponse>>;
+  Partial<Omit<MediaBatchResponse, keyof MediaIdsListResponse>>;
 
 // --- Progress ---
 
@@ -184,35 +178,40 @@ export interface VotingIterationsResponse {
 
 // --- Auto-detect Results ---
 
-export interface AutoDetectHit {
-  md5: string;
-  filename?: string;
-  origin_name?: string;
-  origin?: {
-    importer?: string;
-    params?: Record<string, string>;
-  };
-  label?: string;
-  [key: string]: unknown;
-}
+export type { AutoFindExportStatus } from '../generated/api-client/models/auto-find-export-status';
 
-export interface AutoDetectDetectorResult {
+/**
+ * One row of the Auto-Find results table.
+ *
+ * The table is fed from two endpoints with different guarantees: `Hit` from
+ * `POST /api/auto-detect`, and `FindResultRow` from `POST /api/find` (adapted
+ * into this shape by `dashboard.component.ts`). Every field is therefore
+ * optional — but the *names and types* still come from the generated models,
+ * so a backend rename breaks the template that renders the column.
+ *
+ * `label` is the exception: the modal stamps it client-side when showing the
+ * good and bad sides in one list.
+ */
+export type AutoDetectHit = Partial<Hit> &
+  Partial<Pick<FindResultRow, 'dataset_name' | 'detector_verdicts'>> & {
+    /** `'good'` / `'bad'`, set by the modal when both sides share one list. */
+    label?: string;
+  };
+
+/** One detector's column of results, from either source (see `AutoDetectHit`). */
+export type AutoDetectDetectorResult = Partial<
+  Omit<AutoDetectResult, 'hits' | 'negative_hits'>
+> & {
   hits: AutoDetectHit[];
   negative_hits?: AutoDetectHit[];
-  total_hits?: number;
-  [key: string]: unknown;
-}
+};
 
-/** Outcome of auto-exporting Auto-Find results, present on the auto-detect
- *  response only when a results exporter is configured in settings. */
-export interface AutoFindExportStatus {
-  exporter: string;
-  success: boolean;
-  message?: string;
-  error?: string;
-  [key: string]: unknown;
-}
-
+/**
+ * What the Auto-Find results modal renders: the `POST /api/auto-detect`
+ * response, or the `POST /api/find` response adapted to look like one. Find
+ * mode contributes the four `detectors`/`datasets` fields, which no endpoint
+ * returns under these names.
+ */
 export interface AutoDetectResultsData {
   media_type?: string;
   detectors_run?: string | number;
@@ -226,7 +225,5 @@ export interface AutoDetectResultsData {
   datasets?: string[];
   multiple_datasets?: boolean;
   multiple_detectors?: boolean;
-  [key: string]: unknown;
 }
-
 
