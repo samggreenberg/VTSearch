@@ -1,3 +1,4 @@
+from vtscore.media.audio.cleaner import AudioSilenceTrimCleaner
 from vtscore.media.audio.clipper import (
     SoundDefaultClipper,
     SoundSilenceClipper,
@@ -13,3 +14,4 @@ CLIPPERS = [
     SoundSilenceClipper(),
     SoundSpeechActivityClipper(),
 ]
+CLEANERS = [AudioSilenceTrimCleaner()]

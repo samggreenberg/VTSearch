@@ -1,4 +1,4 @@
-from vtscore.media.image.cleaner import ImageExifOrientCleaner
+from vtscore.media.image.cleaner import ImageEdgeTrimCleaner, ImageExifOrientCleaner
 from vtscore.media.image.clipper import (
     ImageDefaultClipper,
     ImageObjectClipper,
@@ -12,4 +12,6 @@ CLIPPERS = [
     ImageTilingClipper(),
     ImageObjectClipper(),
 ]
-CLEANERS = [ImageExifOrientCleaner()]
+# Registration order is run order: bake the display rotation in *before*
+# looking for solid margins, so the edge box is measured on the upright frame.
+CLEANERS = [ImageExifOrientCleaner(), ImageEdgeTrimCleaner()]

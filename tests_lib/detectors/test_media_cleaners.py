@@ -154,8 +154,13 @@ class TestCleanerRegistry:
     def test_cleaners_for_type_filters(self, registered_cleaners):
         from vtscore.media import cleaners_for_type
 
-        assert [c.name for c in cleaners_for_type("image")] == ["image_exif_orient"]
-        assert [c.name for c in cleaners_for_type("text")] == ["text_test_upper", "text_test_suffix"]
+        assert [c.name for c in cleaners_for_type("image")] == ["image_exif_orient", "image_edge_trim"]
+        assert [c.name for c in cleaners_for_type("text")] == [
+            "text_markup_strip",
+            "text_whitespace",
+            "text_test_upper",
+            "text_test_suffix",
+        ]
 
     def test_to_dict_carries_default_enabled(self, registered_cleaners):
         from vtscore.media import get_cleaner

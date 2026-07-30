@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import io
 
+from vtscore.media.image.edge_trim import trim_solid_edges
+
 #: Longest-side length (px) of a generated thumbnail.  Comfortably covers the
 #: largest grid tile (XL ≈ 200 px CSS, ≈ 400 px on a 2× display) while keeping
 #: the decoded bitmap small (≈ ``MAX_DIM`` × ``MAX_DIM`` × 4 bytes).  The same
@@ -28,26 +30,6 @@ DEFAULT_MAX_DIM = 384
 #: skipping.  Mirrors the frontend's near-full-image guard in
 #: ``media-item.component.ts`` (``bestRegionStyle``).
 _FULL_BOX_THRESHOLD = 0.99
-
-#: Per-channel distance from pure white (255) or pure black (0) that a pixel may
-#: still fall within and count as part of a "solid" edge margin.  Wide enough to
-#: absorb JPEG ringing and video-level black (~16) without swallowing genuine
-#: near-white/near-black content.
-_EDGE_TOL = 16
-
-#: Never trim more than this fraction off any single side.  A tiny subject
-#: floating in a vast blank margin would otherwise blow up into a full-frame
-#: crop; this caps how tight the content box may pull each edge.
-_MAX_EDGE_TRIM = 0.45
-
-#: Ignore a candidate trim smaller than this fraction on every side — not worth
-#: the re-crop, and it keeps a frame that's merely *near* solid-free untouched.
-_MIN_EDGE_TRIM = 0.02
-
-#: Detect edges on a copy no larger than this (longest side, px).  The trim box
-#: is fractional and applied to the full-resolution image, so the scan cost
-#: stays fixed and tiny no matter how large the source is.
-_EDGE_ANALYSIS_DIM = 256
 
 
 def normalize_region_crop(
@@ -114,7 +96,7 @@ def make_image_thumbnail(
                 # aspect ratio of its content rather than its padding.  Only the
                 # thumbnail is affected — the full-resolution route still streams
                 # the untouched original for the detail viewer / main canvas.
-                img = _trim_solid_edges(img)
+                img = trim_solid_edges(img)
             has_alpha = img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info)
             img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
             out = io.BytesIO()
@@ -127,67 +109,6 @@ def make_image_thumbnail(
             return out.getvalue(), mimetype
     except Exception:
         return None
-
-
-def _trim_solid_edges(img):
-    """Crop away near-solid white/black border margins from a PIL image.
-
-    Many sources ship already padded — letterbox bars top/bottom, a pillarbox
-    on one side, whitespace around a centred logo — which makes the image's
-    stored aspect ratio a poor guide for a preview tile (the browse canvas'
-    "half-crop, half-pad" fit then pads the padding).  This finds the tight
-    bounding box of *content* (any pixel that is neither near-white nor
-    near-black within :data:`_EDGE_TOL`) and crops to it, so each of the four
-    edges is trimmed independently: a frame padded only on top, or only on the
-    left, loses just that margin.
-
-    Detection runs on a copy downscaled to at most :data:`_EDGE_ANALYSIS_DIM`
-    px, so the added cost is a single small resample regardless of the source
-    resolution; the resulting box is fractional and applied to the full image.
-    Returns ``img`` unchanged when there is nothing worth trimming: a frame
-    that's entirely one solid tone (no content to pull toward), or whose
-    margins are all thinner than :data:`_MIN_EDGE_TRIM`.  No single side is ever
-    trimmed by more than :data:`_MAX_EDGE_TRIM`, so a small subject in a large
-    blank field can't explode into a full-frame crop.
-    """
-    import numpy as np  # noqa: PLC0415
-    from PIL import Image  # noqa: PLC0415
-
-    w, h = img.size
-    if w < 4 or h < 4:
-        return img
-
-    scale = min(1.0, _EDGE_ANALYSIS_DIM / max(w, h))
-    if scale < 1.0:
-        aw, ah = max(1, round(w * scale)), max(1, round(h * scale))
-        analysis = img.resize((aw, ah), Image.Resampling.BILINEAR)
-    else:
-        analysis = img
-
-    arr = np.asarray(analysis.convert("RGB"), dtype=np.int16)
-    near_white = np.all(arr >= 255 - _EDGE_TOL, axis=2)
-    near_black = np.all(arr <= _EDGE_TOL, axis=2)
-    content = ~(near_white | near_black)
-    if not content.any():
-        return img  # nothing but solid tone — no content to pull the box toward
-
-    rows = np.flatnonzero(content.any(axis=1))
-    cols = np.flatnonzero(content.any(axis=0))
-    ch, cw = content.shape
-    fx0, fx1 = cols[0] / cw, (cols[-1] + 1) / cw
-    fy0, fy1 = rows[0] / ch, (rows[-1] + 1) / ch
-
-    # Cap how far each edge may pull in so a tiny subject can't blow up.
-    fx0, fy0 = min(fx0, _MAX_EDGE_TRIM), min(fy0, _MAX_EDGE_TRIM)
-    fx1, fy1 = max(fx1, 1.0 - _MAX_EDGE_TRIM), max(fy1, 1.0 - _MAX_EDGE_TRIM)
-
-    if fx0 < _MIN_EDGE_TRIM and fy0 < _MIN_EDGE_TRIM and (1.0 - fx1) < _MIN_EDGE_TRIM and (1.0 - fy1) < _MIN_EDGE_TRIM:
-        return img  # margins negligible on every side; leave the frame as-is
-
-    px0, px1 = int(round(fx0 * w)), int(round(fx1 * w))
-    py0, py1 = int(round(fy0 * h)), int(round(fy1 * h))
-    px1, py1 = max(px1, px0 + 1), max(py1, py0 + 1)
-    return img.crop((px0, py0, px1, py1))
 
 
 def _crop_to_region(img, crop: tuple[float, float, float, float]):

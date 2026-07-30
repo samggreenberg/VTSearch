@@ -111,9 +111,20 @@ class TestCleanersApiEndpoint:
         assert all(c["media_type"] == "image" for c in cleaners)
 
     def test_filter_with_no_registered_cleaners_is_empty(self, client):
-        resp = client.get("/api/cleaners?media_type=audio")
+        # A type nobody has written a cleaner for filters down to nothing rather
+        # than falling back to the unfiltered list.  Deliberately not a real
+        # media type: the roster in ``docs/plans/media-cleaners.md`` eventually
+        # gives every shipped type at least one gate.
+        resp = client.get("/api/cleaners?media_type=no_such_media_type")
         assert resp.status_code == 200
         assert resp.get_json()["cleaners"] == []
+
+    def test_filter_by_audio_lists_the_silence_trim_gate(self, client):
+        resp = client.get("/api/cleaners?media_type=audio")
+        assert resp.status_code == 200
+        cleaners = resp.get_json()["cleaners"]
+        assert [c["name"] for c in cleaners] == ["audio_silence_trim"]
+        assert all(c["media_type"] == "audio" for c in cleaners)
 
     def test_exif_cleaner_defaults_on(self, client):
         resp = client.get("/api/cleaners?media_type=image")

@@ -26,33 +26,6 @@ still bear on the open work:
 
 <!-- item-sep -->
 
-- **Image: solid-border trim** — crop near-solid white/black margins
-  (letterbox, pillarbox, whitespace around logos). Promote
-  `_trim_solid_edges` out of `thumbnail.py` into shared code with one
-  implementation and two callers; the tuned caps (`_EDGE_TOL`,
-  `_MAX_EDGE_TRIM`, `_MIN_EDGE_TRIM`) carry over as parameters.
-
-<!-- item-sep -->
-
-- **Audio: leading/trailing silence trim** — keep
-  `[first_start, last_end]` of the non-silent intervals detected by the
-  `SoundSilenceClipper._detect_segments` machinery (share it, don't copy).
-  Same `top_db` / `pad` parameters. Redundant-but-harmless when combined
-  with the silence clipper itself.
-
-<!-- item-sep -->
-
-- **Text: whitespace + de-hyphenation cleanup** — collapse whitespace
-  runs, strip control characters, re-join words hyphen-broken across line
-  breaks. Highest value on `document2text` output (PDF extraction junk).
-
-<!-- item-sep -->
-
-- **Text: markup strip** — remove HTML tags / markdown syntax so the
-  embedder sees prose, not angle brackets.
-
-<!-- item-sep -->
-
 - **Video: letterbox bar crop** — run the edge-trim analysis on a few
   sampled frames and crop the consensus box from all frames.
 
