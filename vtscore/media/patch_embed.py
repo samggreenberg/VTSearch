@@ -30,7 +30,7 @@ and in :mod:`vtscore.training.region_similarity`.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, NamedTuple, Optional
+from typing import TYPE_CHECKING, Callable, NamedTuple, Optional
 
 import numpy as np
 
@@ -836,6 +836,40 @@ def to_fp16(regions: list[RegionVector]) -> list[RegionVector]:
         )
         for r in regions
     ]
+
+
+def _fit_pca_projector(
+    patch_grid: np.ndarray,
+    n_components: int,
+) -> Optional[Callable[[np.ndarray], np.ndarray]]:
+    """Fit a per-image PCA on the patch grid and return a vec→reduced-vec projector.
+
+    Ported from the HAC-tree-improvements branch (the ``pca_dims`` option): fits
+    :class:`sklearn.decomposition.PCA` on *this image's* flattened patch vectors
+    ``(H*W, D)`` (all of them, not just the leaves).  The returned callable
+    projects any original-space ``(D,)`` vector into the fitted ``k``-dim space
+    and L2-normalises it, so it can be dropped into the cosine half of a HAC
+    merge affinity to decide the tree topology in a denoised, lower-dimensional
+    space while the stored node vectors stay full-dim.  ``n_components`` is
+    clamped to ``min(n_components, H*W, D)``; returns ``None`` (caller falls back
+    to the full-dim cosine) when a PCA cannot be fit (``k < 1``).
+    """
+    height, width, dim = patch_grid.shape
+    n_samples = height * width
+    k = min(int(n_components), n_samples, dim)
+    if k < 1:
+        return None
+    from sklearn.decomposition import PCA  # noqa: PLC0415
+
+    matrix = patch_grid.reshape(n_samples, dim).astype(np.float32, copy=False)
+    pca = PCA(n_components=k)
+    pca.fit(matrix)
+
+    def project(vec: np.ndarray) -> np.ndarray:
+        reduced = pca.transform(np.asarray(vec, dtype=np.float32)[None, :])[0]
+        return _l2_normalize(reduced)
+
+    return project
 
 
 def build_region_tree(

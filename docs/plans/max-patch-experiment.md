@@ -139,14 +139,26 @@ where the two diverge. Anything reasoning about scale must use `voted_area`.
 
 <!-- item-sep -->
 
-- [ ] #2730 — Re-run the study and rewrite the verdict: the Caltech-101 arm
-  measured a harness defect (boxless Good votes trained on a vector the scorer
-  never evaluated; Good/Bad calibration bags of different widths), not a
-  property of raw-patch max-pooling (Opus 4.8). The rerun uses the scale-band
-  category selection, so it also fixes the thin large-target coverage — verify
-  at prepare time that no band logs `** UNDER-POPULATED **`, especially
-  `above_4x`; if VG can't fill the top bands from `visual_genome_m`'s 4 % slice,
-  step up to `visual_genome_l` rather than running a 2-category band.
+- [x] #2730 — **Re-run done (2026-07-29) on the corrected harness, plus a new
+  `max_patch_hac` arm; report at
+  [`docs/experiments/max-patch/REPORT.md`](../experiments/max-patch/REPORT.md).**
+  Verdict: **ship tree-free MaxPatch; drop the HAC tree from ingest.** Over 23
+  scale-band Visual Genome categories × 3 seeds, MaxPatch is the best arm
+  (ErrorCost 0.40 @ t=150), beating production MaxHAC (0.46, Holm p=0.002) at
+  every scale — edge largest on small objects, shrinking as they grow (Spearman
+  ρ=0.50, p=0.016). **MaxPatchHAC** (the new hybrid — a HAC tree whose leaves are
+  the raw patches, so leaves win small targets and merged nodes win large ones)
+  lands between the two: it *ranks* best of any arm (AP 0.49) and recovers real
+  large-object recall, but its ~392-node max-pool over-fires (highest FPR), so it
+  only numerically edges MaxHAC (Δ−0.027, p=0.06 n.s.) and does **not** beat
+  MaxPatch (Δ+0.037 n.s.). All region styles crush whole-image scoring (DINOv3
+  CLS is the worst arm, below SigLIP), so the win is region scoring itself.
+  Caltech-101 was dropped (boxless → cannot judge *region* voting; it was the
+  first run's invalid arm); OpenLogo was unfetchable (cluster HF egress). The
+  scale-band selection filled all four bands (`above_4x` included), so
+  `visual_genome_m` sufficed. If the large-object recall MaxPatchHAC showed is
+  worth chasing, keep the raw-patch tree but pair it with a max-pool-aware
+  threshold / softer pool to tame the false-positive tail.
 
 <!-- item-sep -->
 

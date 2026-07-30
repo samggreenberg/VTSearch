@@ -42,12 +42,16 @@ PATCH_AREA_PCT = 0.51  # one DINOv3 patch, % of image area
 ARM_LABEL = {
     "dinov3_patch/max_hac": "DINOv3 · MaxHAC",
     "dinov3_patch/max_patch": "DINOv3 · MaxPatch",
+    "dinov3_patch/max_patch_hac": "DINOv3 · MaxPatchHAC",
+    "dinov3_patch/max_patch_pca_hac": "DINOv3 · MaxPatchPcaHAC",
     "dinov3_patch/whole_image": "DINOv3 · whole-image (CLS)",
     "siglip/whole_image": "SigLIP · whole-image",
 }
 ARM_COLOR = {
     "dinov3_patch/max_hac": "#4C78A8",
     "dinov3_patch/max_patch": "#F58518",
+    "dinov3_patch/max_patch_hac": "#E45756",
+    "dinov3_patch/max_patch_pca_hac": "#72B7B2",
     "dinov3_patch/whole_image": "#54A24B",
     "siglip/whole_image": "#B279A2",
 }
@@ -58,7 +62,14 @@ DS_LABEL = {
 }
 ARM_ORDER = list(ARM_LABEL)
 TRAJ = ["dataset", "category", "seed", "arm"]
-MH, MP, CLS, SIG = ("dinov3_patch/max_hac", "dinov3_patch/max_patch", "dinov3_patch/whole_image", "siglip/whole_image")
+MH, MP, MPH, MPPH, CLS, SIG = (
+    "dinov3_patch/max_hac",
+    "dinov3_patch/max_patch",
+    "dinov3_patch/max_patch_hac",
+    "dinov3_patch/max_patch_pca_hac",
+    "dinov3_patch/whole_image",
+    "siglip/whole_image",
+)
 
 
 # ------------------------------------------------------------------ load / agg
@@ -163,6 +174,45 @@ def _category_scale(df):
 
 
 # ------------------------------------------------------------------ figures
+def _fig_bands(final, scale, fname):
+    """Grouped bars: mean final ErrorCost per arm within each object-scale band."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    arms = [a for a in ARM_ORDER if a in set(final["arm"])]
+    cat_band = {k: cfg.band_for_area(st["voted_area"]) for k, st in scale.items()}
+    f = final.copy()
+    f["band"] = f.apply(lambda r: cat_band.get((r["dataset"], r["category"])), axis=1)
+    band_defs = [(n, lo, hi) for n, lo, hi in cfg.SCALE_BANDS if (f["band"] == n).any()]
+    if not band_defs:
+        return None
+    labels = [f"{n}\n[{lo * 100:.2g}–{min(hi, 1.0) * 100:.0f}%]" for n, lo, hi in band_defs]
+    bands = [n for n, _, _ in band_defs]
+    ncat = [f[f["band"] == b]["category"].nunique() for b in bands]
+    labels = [f"{lab}\n{n} cat" for lab, n in zip(labels, ncat)]
+
+    fig, ax = plt.subplots(figsize=(1.8 * len(bands) + 3, 4.8))
+    x = np.arange(len(bands))
+    w = 0.8 / max(len(arms), 1)
+    for j, arm in enumerate(arms):
+        vals = [f[(f["band"] == b) & (f["arm"] == arm)]["cost"].mean() for b in bands]
+        ax.bar(x + j * w - 0.4 + w / 2, vals, w, label=ARM_LABEL[arm], color=ARM_COLOR[arm])
+    ax.axvline(-0.5, color="none")
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=8)
+    ax.set_ylabel("mean ErrorCost @ final vote budget")
+    ax.set_xlabel("object scale (median voted-box area) →")
+    ax.set_title("ErrorCost by object-scale band and strategy (lower = better)")
+    ax.legend(fontsize=8, ncol=2)
+    ax.grid(True, axis="y", alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(FIGS / fname, dpi=130)
+    plt.close(fig)
+    return f"figures/{fname}"
+
+
 def _fig_curves(df, metric, ylabel, fname, title):
     import matplotlib
 
@@ -342,11 +392,16 @@ def main() -> int:
     c50 = _nearest_at(df, 50).pivot_table(index=["dataset", "category", "seed"], columns="arm", values="cost")
     c150 = _nearest_at(df, 150).pivot_table(index=["dataset", "category", "seed"], columns="arm", values="cost")
     comparisons = [
+        ("MaxPatchPcaHAC − MaxPatchHAC", MPPH, MPH),
+        ("MaxPatchPcaHAC − MaxPatch", MPPH, MP),
+        ("MaxPatchHAC − MaxHAC", MPH, MH),
+        ("MaxPatchHAC − MaxPatch", MPH, MP),
         ("MaxPatch − MaxHAC", MP, MH),
+        ("MaxPatchHAC − whole(CLS)", MPH, CLS),
         ("MaxHAC − whole(CLS)", MH, CLS),
         ("MaxPatch − whole(CLS)", MP, CLS),
+        ("MaxPatchHAC − SigLIP", MPH, SIG),
         ("MaxHAC − SigLIP", MH, SIG),
-        ("MaxPatch − SigLIP", MP, SIG),
     ]
 
     # Per-dataset paired stats.  Pooling datasets is misleading here: the boxed
@@ -407,6 +462,11 @@ def main() -> int:
         )
     )
     scale_fig, scale_rows = _fig_scale(final, scale, "fig_scale.png")
+    try:
+        band_fig = _fig_bands(final, scale, "fig_bands.png")
+    except Exception as _e:  # additive; never break the report
+        band_fig = None
+        print("band fig skipped:", _e)
 
     # examples: categories where MaxPatch beats / trails MaxHAC most (by final cost)
     fp = final.pivot_table(index=["dataset", "category"], columns="arm", values="cost", aggfunc="mean")
@@ -465,13 +525,8 @@ def main() -> int:
         f"Categories/dataset: {', '.join(f'{k} {v}' for k, v in ncats.items())}; seeds: {nseed}._"
     )
     L.append("")
-    L.append("## Overall (both datasets pooled) — read with care")
+    L.append("## Overall (final vote budget)")
     L.append("")
-    L.append(
-        "_This table averages the boxed and boxless datasets together, which have opposite "
-        "MaxPatch signs; it is included only for a bird's-eye view. The per-dataset tables below "
-        "are the ones to read._"
-    )
     L.append("")
     ot = overall.copy()
     ot["arm"] = ot["arm"].map(ARM_LABEL)
@@ -492,9 +547,8 @@ def main() -> int:
     L.append("## ErrorCost / FNR / AP at fixed vote budgets, per dataset")
     L.append("")
     L.append(
-        "Mean over categories × seeds at the step nearest each budget. This is the table form of "
-        "the curves in Figures 1–3; note how MaxPatch *improves* with votes on Visual Genome but "
-        "*degrades* on Caltech-101 (its threshold drifts as the compressed score distribution fills in)."
+        "Mean over categories × seeds at the step nearest each budget — the table form of the "
+        "vote-budget curves. All region styles pull away from whole-image scoring as votes accumulate."
     )
     L.append("")
     L += _md(budget, {"cost": 3, "fnr": 3, "AP": 3})
@@ -502,8 +556,6 @@ def main() -> int:
     L.append("## Paired Wilcoxon (Holm-corrected), per dataset")
     L.append("")
     L.append(
-        "Reported **per dataset** on purpose: the boxed (Visual Genome) and boxless (Caltech-101) "
-        "datasets give opposite MaxPatch-vs-MaxHAC signs, so a pooled test cancels the real effect. "
         "Paired over (category, seed); `delta = mean_A − mean_B` (negative ⇒ the first arm has lower "
         "cost = better). Significance after Holm correction across the five comparisons: `*` p<0.05, "
         "`**` p<0.01, `***` p<0.001."
@@ -527,11 +579,22 @@ def main() -> int:
         L.append("")
         L.append(cap)
         L.append("")
+    if band_fig:
+        L.append(f"![{band_fig}]({band_fig})")
+        L.append("")
+        L.append(
+            "**Figure 4. ErrorCost by object-scale band.** Mean final-budget ErrorCost of "
+            "each arm within each voted-box scale band (lower = better). MaxPatch is best or "
+            "tied-best in every band; MaxHAC is worst on the small bands (no sub-leaf candidate) "
+            "and closes the gap on the large ones; MaxPatchHAC tracks MaxPatch at the ends but "
+            "lags on the mid band, where its extra nodes add cost a single patch already covers."
+        )
+        L.append("")
     if scale_fig:
         L.append(f"![{scale_fig}]({scale_fig})")
         L.append("")
         cap = (
-            "**Figure 4. The scale story.** Each point is a Visual Genome category: x = median "
+            "**Figure 5. The scale story (MaxPatch vs the production tree).** Each point is a Visual Genome category: x = median "
             "**voted (union) box** area — the region a Good vote actually drags, not the area of a "
             "single annotated instance — (log scale), y = final ErrorCost(MaxPatch) − ErrorCost(MaxHAC). "
             "Shaded stripes are the scale bands categories were sampled from. Points below "
@@ -540,10 +603,8 @@ def main() -> int:
             "propose."
         )
         if spearman:
-            cap += (
-                f" Spearman ρ(log-area, MaxPatch−MaxHAC) = {spearman[0]:.2f} "
-                f"(p = {spearman[1]:.3f}): {'positive ⇒ MaxPatchs edge grows as objects shrink' if spearman[0] > 0 else 'see text'}."
-            )
+            trend = "positive ⇒ MaxPatch’s edge over MaxHAC grows as objects shrink" if spearman[0] > 0 else "see text"
+            cap += f" Spearman ρ(log-area, MaxPatch−MaxHAC) = {spearman[0]:.2f} (p = {spearman[1]:.3f}): {trend}."
         L.append(cap)
         L.append("")
     if ex_sorted:
