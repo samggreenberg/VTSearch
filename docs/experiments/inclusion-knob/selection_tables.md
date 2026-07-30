@@ -1,4 +1,4 @@
-# Selection-bias sweep: summary tables
+# Adversarial-bound sweep (toplist): summary tables
 
 224 cells (arm x seed x votes x policy); budget violation rate at inclusion >= 0: uniform 0.619, toplist 0.796.
 
