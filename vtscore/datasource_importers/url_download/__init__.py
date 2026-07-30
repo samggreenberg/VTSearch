@@ -53,7 +53,14 @@ class UrlDownloadDataSourceImporter(DataSourceImporter):
             data = dest.read_bytes()
         if not data:
             raise ValueError(f"The URL returned no data: {url}")
-        return FetchedMediaItem(data=data, filename=_filename_from_url(url))
+        return FetchedMediaItem(
+            data=data,
+            filename=_filename_from_url(url),
+            # The URL is the item's durable identity: stored on the example /
+            # seeded media so the file can be re-fetched on demand (resolved
+            # by the url_download MediaSource).
+            origin={"importer": self.name, "params": {"url": url}},
+        )
 
 
 DATASOURCE_IMPORTER = UrlDownloadDataSourceImporter()

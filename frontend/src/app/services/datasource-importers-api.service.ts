@@ -10,11 +10,16 @@ export interface DatasourceImportersResponse {
   tabs: ImporterPickerTab[];
 }
 
-/** Response of ``POST /api/datasource-import/<name>`` (same contract as
- *  the example-media upload endpoint). */
+/** Response of ``POST /api/datasource-import/<name>`` (the example-media
+ *  upload contract plus the fetched item's durable origin). */
 export interface DatasourceImportResult {
   filename: string;
   original_name: string;
+  /** Durable origin dict (`{importer, params}`) when the importer's items
+   *  have a re-fetchable identity (a URL, a server path); persisted on the
+   *  detector example so the seed survives the example_media/ cache file.
+   *  `null` for items with no re-derivable source. */
+  origin?: Record<string, unknown> | null;
 }
 
 /** API client for datasource importers: plugins that fetch a *single*

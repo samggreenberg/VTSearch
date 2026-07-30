@@ -816,6 +816,21 @@ input (surfaced as a 400); any other exception is reported as an upstream
 failure (502). The returned `FetchedMediaItem.filename` should keep the
 source's real extension — it drives media-type inference downstream.
 
+When the fetched item has a durable external identity (a URL, a server
+path, a service item id), also set `FetchedMediaItem.origin` to a
+`{"importer": <name>, "params": {...}}` dict. The origin is stored on the
+detector example and stamped onto the seeded media, so the item can be
+re-fetched on demand (cross-dataset label resolution, re-deriving a
+deleted `example_media/` cache file) instead of the byte snapshot being
+the only record. A param named `path` resolves with no extra code (the
+resolver's generic path fallback); any other param shape needs a matching
+`MediaSource` factory registered under the importer's name — see
+`vtscore/datasets/sources/url_download.py` for the pattern (it re-runs
+`validate_url` at fetch time, since the stored URL was originally
+user-supplied). Leave `origin` unset when the bytes have no re-derivable
+source (uploads): the example then keeps the `example_media` sentinel
+origin, by design.
+
 Dynamic select options work exactly as for dataset importers: declare a
 field with `dynamic_options=True` and implement
 `get_field_options(field_key, current_values)`
@@ -828,9 +843,10 @@ field with `dynamic_options=True` and implement
 - `POST /api/datasource-import/<name>` validates the body against the
   importer's fields, calls `fetch()`, saves the returned bytes into the
   per-user `example_media/` directory, and returns `{filename,
-  original_name}` — the same contract as the example-media upload
-  endpoint, so the fetched item plugs into the detector-example model
-  (`{type: "media", value: <filename>}`) unchanged.
+  original_name, origin}` — the example-media upload contract plus the
+  item's durable origin (`null` when the importer reports none), so the
+  fetched item plugs into the detector-example model
+  (`{type: "media", value: <filename>, origin: {...}}`).
 - `POST /api/datasource-import/<name>/options` serves dynamic field
   options.
 

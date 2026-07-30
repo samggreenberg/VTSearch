@@ -52,9 +52,24 @@ class TestDatasourceImportRun:
         data = resp.get_json()
         assert data["original_name"] == "bark.wav"
         assert data["filename"].endswith(".wav")
+        # The durable origin is returned so the client can persist it on
+        # the detector example (issue #2774).
+        assert data["origin"]["importer"] == "server_file"
+        assert data["origin"]["params"]["path"] == str(src.resolve())
 
         saved = SERVER_MEDIA_DIR / data["filename"]
         assert saved.read_bytes() == b"RIFFxxxxWAVE"
+
+    def test_origin_null_when_importer_reports_none(self, client, monkeypatch, example_media_cleanup):
+        """Importers whose items have no re-derivable source return origin: null."""
+
+        def _fetch(field_values):
+            return FetchedMediaItem(data=b"\x01", filename="pick.png")
+
+        monkeypatch.setattr(get_datasource_importer("server_file"), "fetch", _fetch)
+        resp = client.post("/api/datasource-import/server_file", json={"path": "/ignored"})
+        assert resp.status_code == 201
+        assert resp.get_json()["origin"] is None
 
     def test_unknown_importer_404_lists_available(self, client):
         resp = client.post("/api/datasource-import/nope", json={})

@@ -1959,6 +1959,170 @@ class TestSeedVotesFromExamples:
         assert example_labels[0]["label"] == "good"
         assert example_labels[0]["origin"]["params"]["filename"] == fname
 
+    # ---- Durable example origins (issue #2774) ----
+
+    def test_seed_with_origin_stamps_real_origin(self, client, tmp_path):
+        """An example carrying a datasource origin seeds a media that points
+        back at its real source instead of the example_media sentinel."""
+        from vtsearch.state import good_votes, medias
+
+        src = tmp_path / "novel_src.wav"
+        src.write_bytes(b"origin-novel-bytes")
+        fname = self._create_example_file(src.read_bytes(), "origin_novel.wav")
+        origin = {"importer": "server_file", "params": {"path": str(src)}}
+
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname, "origin": origin}]},
+        )
+        assert res.status_code == 200
+        assert res.get_json()["seeded"] == 1
+
+        new_id = max(medias.keys())
+        assert new_id in good_votes
+        new_media = medias[new_id]
+        assert new_media["origin"] == origin
+        assert new_media["origin_name"] == str(src)
+        # The example_media filename stays the local byte-cache key.
+        assert new_media["filename"] == fname
+
+    def test_seed_stamped_origin_resolves_without_cache_file(self, client, tmp_path):
+        """The stamped origin must resolve after the example_media/ file is gone."""
+        from vtscore.config import DATA_DIR
+        from vtscore.detectors.resolver import resolve_file_from_origin
+        from vtsearch.state import medias
+
+        src = tmp_path / "resolvable.wav"
+        src.write_bytes(b"resolvable-bytes")
+        fname = self._create_example_file(src.read_bytes(), "resolvable_cache.wav")
+        origin = {"importer": "server_file", "params": {"path": str(src)}}
+
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname, "origin": origin}]},
+        )
+        assert res.get_json()["seeded"] == 1
+
+        (DATA_DIR / "example_media" / fname).unlink()
+        new_media = medias[max(medias.keys())]
+        resolved = resolve_file_from_origin(new_media["origin"], new_media["origin_name"], new_media["filename"])
+        assert resolved == src
+
+    def test_seed_rederives_missing_cache_file_from_origin(self, client, tmp_path):
+        """With the cache file gone entirely, seeding re-fetches from the origin."""
+        from vtscore.utils.hashing import content_md5
+        from vtsearch.state import good_votes, medias
+
+        src = tmp_path / "rederive.wav"
+        src.write_bytes(b"rederive-bytes")
+        fname = "never_cached.wav"  # deliberately not written to example_media/
+        origin = {"importer": "server_file", "params": {"path": str(src)}}
+
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname, "origin": origin}]},
+        )
+        assert res.status_code == 200
+        assert res.get_json()["seeded"] == 1
+
+        new_id = max(medias.keys())
+        assert new_id in good_votes
+        new_media = medias[new_id]
+        assert new_media["md5"] == content_md5(b"rederive-bytes")
+        assert new_media["origin"] == origin
+
+    def test_seed_url_origin_stamped(self, client):
+        """A url_download origin is stored verbatim; origin_name is the URL."""
+        from vtsearch.state import medias
+
+        fname = self._create_example_file(b"url-novel-bytes", "url_novel.wav")
+        origin = {"importer": "url_download", "params": {"url": "https://x.test/bark.wav"}}
+
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname, "origin": origin}]},
+        )
+        assert res.get_json()["seeded"] == 1
+        new_media = medias[max(medias.keys())]
+        assert new_media["origin"] == origin
+        assert new_media["origin_name"] == "https://x.test/bark.wav"
+
+    def test_seed_origin_escaping_confinement_falls_back_to_sentinel(self, client, monkeypatch, tmp_path):
+        """In multi-user mode an origin whose path escapes the user's dir is
+        discarded: the media seeds via the example_media sentinel instead."""
+        import vtscore.security.path_validation as paths_mod
+        from vtsearch.state import medias
+
+        monkeypatch.setattr(paths_mod, "get_file_access_base_dir", lambda: tmp_path)
+
+        fname = self._create_example_file(b"confined-novel-bytes", "confined_novel.wav")
+        origin = {"importer": "server_file", "params": {"path": "/etc/passwd"}}
+
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname, "origin": origin}]},
+        )
+        assert res.get_json()["seeded"] == 1
+        new_media = medias[max(medias.keys())]
+        assert new_media["origin"] == {"importer": "example_media", "params": {"filename": fname}}
+
+    def test_registry_create_persists_example_origin(self, client):
+        """The origin key on an example survives the registry-create round trip."""
+        origin = {"importer": "url_download", "params": {"url": "https://x.test/persist.wav"}}
+        res = client.post(
+            "/api/detectors/registry",
+            json={
+                "name": "PersistOrigin",
+                "media_type": "audio",
+                "text_query": "",
+                "media_example": "persist.wav",
+                "examples": [{"type": "media", "value": "persist.wav", "origin": origin}],
+            },
+        )
+        assert res.status_code == 201
+
+        data = client.get("/api/detectors/PersistOrigin").get_json()
+        assert data["examples"] == [{"type": "media", "value": "persist.wav", "origin": origin}]
+
+    def test_load_detector_reseeds_url_example_after_cache_loss(self, client, monkeypatch):
+        """Round trip (issue #2774): a url_download exemplar whose
+        example_media/ cache file is gone is re-fetched from its URL when
+        the detector loads, and the seeded media carries the URL origin."""
+        import vtscore.datasets.downloader as downloader_mod
+        import vtscore.security.url_validation as url_mod
+        from vtsearch.state import good_votes, medias
+
+        url = "https://x.test/roundtrip/bark.wav"
+
+        def _download(u, dest_path, expected_size=0, on_progress=None):
+            dest_path.write_bytes(b"url-roundtrip-bytes")
+
+        monkeypatch.setattr(downloader_mod, "download_file_with_progress", _download)
+        monkeypatch.setattr(url_mod, "validate_url", lambda u: u)
+
+        origin = {"importer": "url_download", "params": {"url": url}}
+        fname = "url_roundtrip_never_cached.wav"  # deliberately absent from example_media/
+
+        res = client.post(
+            "/api/detectors/registry",
+            json={
+                "name": "UrlRoundtrip",
+                "media_type": "audio",
+                "text_query": "",
+                "media_example": fname,
+                "examples": [{"type": "media", "value": fname, "origin": origin}],
+            },
+        )
+        detector_id = res.get_json()["detector"]["id"]
+        client.post("/api/votes/clear")
+
+        _load_detector_and_wait(client, detector_id)
+
+        seeded = [m for m in medias.values() if m.get("origin") == origin]
+        assert len(seeded) == 1
+        assert seeded[0]["origin_name"] == url
+        assert seeded[0]["id"] in good_votes
+
     def test_new_example_usable_in_training(self, client):
         """Inserted examples should have embeddings usable by learned-sort."""
         from vtsearch.state import (
