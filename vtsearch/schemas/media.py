@@ -507,7 +507,21 @@ class DatasourceImportersListResponseSchema(Schema):
     tabs = fields.List(fields.Nested(ImporterPickerTabSchema), required=True)
 
 
+class DatasourceImportResponseSchema(ServerMediaUploadResponseSchema):
+    """Response for ``POST /api/datasource-import/<name>``.
+
+    Extends the upload contract with the fetched item's durable ``origin``
+    (``{"importer": ..., "params": {...}}``) when the datasource importer
+    reports one, so the client can persist it on the detector example and
+    the item stays re-fetchable after the ``example_media/`` cache file is
+    gone.  ``None`` for importers whose items have no re-derivable source.
+    """
+
+    origin = fields.Dict(dump_default=None, allow_none=True)
+
+
 __all__ = [
+    "DatasourceImportResponseSchema",
     "DatasourceImporterEntrySchema",
     "DatasourceImportersListResponseSchema",
     "ExampleSortByIdRequestSchema",

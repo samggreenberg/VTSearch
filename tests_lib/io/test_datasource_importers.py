@@ -79,6 +79,15 @@ class TestServerFileFetch:
         assert item.data == b"RIFFxxxxWAVE"
         assert item.filename == "clip.wav"
 
+    def test_fetch_reports_path_origin(self, tmp_path):
+        """The validated server path is the item's durable origin (issue #2774)."""
+        f = tmp_path / "clip.wav"
+        f.write_bytes(b"RIFFxxxxWAVE")
+        item = get_datasource_importer("server_file").fetch({"path": str(f)})
+        assert item.origin is not None
+        assert item.origin["importer"] == "server_file"
+        assert item.origin["params"]["path"] == str(f.resolve())
+
     def test_fetch_missing_file_raises_value_error(self, tmp_path):
         with pytest.raises(ValueError, match="File not found"):
             get_datasource_importer("server_file").fetch({"path": str(tmp_path / "nope.wav")})
@@ -102,6 +111,23 @@ class TestUrlDownloadFetch:
 
         assert _filename_from_url("https://x.test/a/b/dog%20bark.wav?tok=1") == "dog bark.wav"
         assert _filename_from_url("https://x.test/") == "download.bin"
+
+    def test_fetch_reports_url_origin(self, monkeypatch, tmp_path):
+        """The URL is the item's durable origin (issue #2774)."""
+        import vtscore.datasets.downloader as downloader_mod
+        import vtscore.datasource_importers.url_download as url_mod
+
+        url = "https://x.test/a/bark.wav"
+
+        def _download(u, dest_path, expected_size=0, on_progress=None):
+            dest_path.write_bytes(b"RIFFxxxxWAVE")
+
+        monkeypatch.setattr(downloader_mod, "download_file_with_progress", _download)
+        monkeypatch.setattr(url_mod, "validate_url", lambda u: u)
+
+        item = get_datasource_importer("url_download").fetch({"url": url})
+        assert item.data == b"RIFFxxxxWAVE"
+        assert item.origin == {"importer": "url_download", "params": {"url": url}}
 
 
 class TestDatasourceImporterFields:

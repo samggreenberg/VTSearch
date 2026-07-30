@@ -57,10 +57,23 @@ class FetchedMediaItem:
         A human-meaningful filename for the item.  Its suffix matters: it
         drives media-type inference and how downstream code decodes the
         saved file, so keep the source's real extension.
+    origin:
+        Optional durable origin dict (``{"importer": <name>, "params":
+        {...}}``) describing where the item came from, so it can be
+        re-fetched on demand later (cross-dataset label resolution,
+        re-deriving a deleted ``example_media/`` cache file).  Importers
+        whose items have a stable external identity (a URL, a server path)
+        should set this; leave it ``None`` when the bytes have no
+        re-derivable source and the saved byte snapshot is the only record.
+        Params named ``path`` are resolvable with no extra code (the
+        resolver's generic path fallback); other param shapes need a
+        matching :class:`~vtscore.datasets.sources.base.MediaSource`
+        factory registered under the importer's name.
     """
 
     data: bytes
     filename: str
+    origin: dict[str, Any] | None = None
 
 
 class DataSourceImporter(PluginBase):

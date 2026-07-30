@@ -40,7 +40,14 @@ class ServerFileDataSourceImporter(DataSourceImporter):
         path = validate_server_filepath(raw, base_dir=get_file_access_base_dir())
         if not path.is_file():
             raise ValueError(f"File not found: {raw}")
-        return FetchedMediaItem(data=path.read_bytes(), filename=path.name)
+        return FetchedMediaItem(
+            data=path.read_bytes(),
+            filename=path.name,
+            # The validated server path is the item's durable identity; the
+            # ``path`` param name makes the resolver's generic path fallback
+            # resolve it with no dedicated source.
+            origin={"importer": self.name, "params": {"path": str(path)}},
+        )
 
 
 DATASOURCE_IMPORTER = ServerFileDataSourceImporter()

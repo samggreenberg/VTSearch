@@ -60,6 +60,10 @@ interface MediaExampleItem {
   mediaType: string;
   /** True once the thumbnail endpoint failed; falls back to the icon. */
   thumbFailed: boolean;
+  /** Durable origin dict reported by a datasource importer (URL, server
+   *  path); sent with the example so the seeded media points back at its
+   *  real source. Absent for uploads and other non-re-derivable picks. */
+  origin?: Record<string, unknown> | null;
 }
 
 @Component({
@@ -334,10 +338,15 @@ export class NewDetectorModalComponent implements OnInit {
   /** Append a picked media example to the stack. Clears any pending text
    *  (text and media examples are mutually exclusive), switches to the
    *  media tab, and auto-fills the name from the first example. */
-  private addMediaExample(value: string, display: string, mediaType: string): void {
+  private addMediaExample(
+    value: string,
+    display: string,
+    mediaType: string,
+    origin?: Record<string, unknown> | null,
+  ): void {
     this.mediaExamples.update((list) => [
       ...list,
-      { value, display, mediaType, thumbFailed: false },
+      { value, display, mediaType, thumbFailed: false, origin: origin ?? null },
     ]);
     this.pendingText.set('');
     this.exampleTab.set('media');
@@ -711,13 +720,15 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   /** A datasource importer fetched an item into ``example_media/``: add
-   *  it to the example stack and land back on the main form. */
+   *  it to the example stack (carrying its durable origin, if any) and
+   *  land back on the main form. */
   onDatasourceImported(result: DatasourceImportResult): void {
     const display = result.original_name || result.filename;
     this.addMediaExample(
       result.filename,
       display,
       this.mediaType() || this.mediaTypeFromFilename(display),
+      result.origin,
     );
     this.view.set('main');
   }
@@ -1202,7 +1213,11 @@ export class NewDetectorModalComponent implements OnInit {
     const mediaExample = mediaExamples[0]?.value || '';
     const examplesPayload = textQuery
       ? [{ type: 'text', value: textQuery }]
-      : mediaExamples.map((ex) => ({ type: 'media', value: ex.value }));
+      : mediaExamples.map((ex) =>
+          // The origin key is additive: examples without one keep the
+          // legacy {type, value} shape and seed via the sentinel path.
+          ex.origin ? { type: 'media', value: ex.value, origin: ex.origin } : { type: 'media', value: ex.value },
+        );
 
     this.detectorsRegistryApi
       .registerDetector({

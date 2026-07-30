@@ -10,7 +10,7 @@ endpoints:
 * ``GET  /api/datasource-importers`` ->
         :class:`~vtsearch.schemas.media.DatasourceImportersListResponseSchema`
 * ``POST /api/datasource-import/<importer_name>`` ->
-        :class:`~vtsearch.schemas.media.ServerMediaUploadResponseSchema`
+        :class:`~vtsearch.schemas.media.DatasourceImportResponseSchema`
         (plugin-dependent body; per-plugin typed routes are registered for
         the OpenAPI spec, file-field plugins use multipart)
 * ``POST /api/datasource-import/<importer_name>/options`` -> dynamic
@@ -20,7 +20,9 @@ The run endpoint saves the fetched bytes into the per-user
 ``example_media/`` directory and returns the same ``{filename,
 original_name}`` contract as ``POST /api/server-media-files/upload``, so a
 fetched item plugs into the existing ``{type: "media", value: <filename>}``
-detector-example model unchanged.
+detector-example model unchanged.  It additionally returns the item's
+durable ``origin`` (when the importer reports one) for the client to store
+on the example, keeping the item re-fetchable after the cache file is gone.
 """
 
 from __future__ import annotations
@@ -43,7 +45,7 @@ from vtsearch.schemas.datasets import (
 )
 from vtsearch.schemas.media import (
     DatasourceImportersListResponseSchema,
-    ServerMediaUploadResponseSchema,
+    DatasourceImportResponseSchema,
 )
 from vtsearch.settings import filter_visible_plugins
 
@@ -78,7 +80,8 @@ def run_datasource_import(importer_name: str):
     into the per-user ``example_media/`` directory and the saved
     ``filename`` (persistence key) plus the human-readable
     ``original_name`` are returned, matching the upload endpoint's
-    contract.
+    contract, along with the item's durable ``origin`` when the importer
+    reports one (``null`` otherwise).
     """
     from vtsearch.routes.media.server import _get_server_media_dir
 
@@ -109,7 +112,12 @@ def run_datasource_import(importer_name: str):
     media_dir.mkdir(parents=True, exist_ok=True)
     (media_dir / safe_name).write_bytes(item.data)
 
-    return ServerMediaUploadResponseSchema().dump({"filename": safe_name, "original_name": item.filename}), 201
+    return (
+        DatasourceImportResponseSchema().dump(
+            {"filename": safe_name, "original_name": item.filename, "origin": item.origin}
+        ),
+        201,
+    )
 
 
 @datasource_importers_bp.route("/api/datasource-import/<importer_name>/options", methods=["POST"])

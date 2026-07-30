@@ -108,11 +108,14 @@ describe('DatasourceImportFormComponent', () => {
     const req = httpMock.expectOne('/api/datasource-import/url_download');
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({ url: 'https://example.com/a.wav' });
-    req.flush({ filename: 'abc.wav', original_name: 'a.wav' });
+    const origin = { importer: 'url_download', params: { url: 'https://example.com/a.wav' } };
+    req.flush({ filename: 'abc.wav', original_name: 'a.wav', origin });
 
+    // The durable origin passes through untouched (issue #2774).
     expect(component.imported.emit).toHaveBeenCalledWith({
       filename: 'abc.wav',
       original_name: 'a.wav',
+      origin,
     });
     expect(component.submitting()).toBe(false);
   });

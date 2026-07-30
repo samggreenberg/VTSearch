@@ -395,7 +395,28 @@ describe('NewDetectorModalComponent', () => {
     expect(component.mediaExamples()[0].display).toBe('bark.wav');
     // Media type is inferred from the original filename's extension.
     expect(component.mediaExamples()[0].mediaType).toBe('audio');
+    // No origin reported → none stored (the example seeds via the sentinel).
+    expect(component.mediaExamples()[0].origin).toBeNull();
     expect(component.view()).toBe('main');
+  });
+
+  // --- Durable example origins (issue #2774) ---
+
+  it('keeps the datasource item origin and sends it with the examples payload', () => {
+    const origin = { importer: 'url_download', params: { url: 'https://x.test/bark.wav' } };
+    component.view.set('media-picker');
+    component.mediaType.set('audio');
+
+    component.onDatasourceImported({ filename: 'abc123.wav', original_name: 'bark.wav', origin });
+
+    expect(component.mediaExamples()[0].origin).toEqual(origin);
+
+    component.name.set('Barks');
+    component.submit();
+
+    const req = httpMock.expectOne('/api/detectors/registry');
+    expect(req.request.body.examples).toEqual([{ type: 'media', value: 'abc123.wav', origin }]);
+    req.flush({ ok: true, detector: { id: '789', name: 'Barks' } });
   });
 
   // --- Trained tab: label-importer plugin field parity (issue #2597) ---
