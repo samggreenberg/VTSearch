@@ -176,8 +176,8 @@ export class ImportAdvancedComponent {
 
   /** True when the cleanup checkboxes still match the registry's own
    *  recommendation (each cleaner's ``default_enabled``) with no parameter
-   *  overrides.  A user who changed them keeps the block visible even with
-   *  Advanced collapsed, so their override never hides. */
+   *  overrides.  Only feeds :prop:`advancedToggleTitle`; the block's own
+   *  visibility no longer depends on it. */
   get isDefaultCleanupSelected(): boolean {
     const wanted = this.cleaners().filter((c) => c.default_enabled);
     const selected = this.selectedCleaners();
@@ -188,14 +188,29 @@ export class ImportAdvancedComponent {
     });
   }
 
-  /** The Advanced toggle is shown either when the Include-media block
-   *  is available (it lives strictly behind the toggle, so the toggle
-   *  must be reachable) or when no picker in the block has been
+  /** Tooltip for the Advanced toggle.  Gains a trailing cleanup line only
+   *  once the user has moved the gates off the registry default, so the
+   *  override stays discoverable while Advanced is collapsed without
+   *  putting any of it on screen for the default user. */
+  get advancedToggleTitle(): string {
+    const base = 'Show advanced options: included media types, embedder, pre-processing clipper, and cleanup gates';
+    if (this.cleaners().length === 0 || this.isDefaultCleanupSelected) return base;
+    const enabled = this.cleaners()
+      .filter((c) => this.isCleanerEnabled(c.name))
+      .map((c) => this.cleanerLabel(c));
+    return `${base}\nCleanup: ${enabled.length > 0 ? enabled.join(', ') : 'none'}`;
+  }
+
+  /** The Advanced toggle is shown either when a block that lives
+   *  *strictly* behind it is available - Include media, or the Cleanup
+   *  gates - in which case the toggle must stay reachable or that block
+   *  becomes unreachable; or when no picker in the block has been
    *  overridden (otherwise those pickers stay visible anyway and the
    *  toggle would be redundant). */
   get showAdvancedToggle(): boolean {
     if (this.showSourceSpecs()) return true;
-    return this.isDefaultEmbedderSelected && this.isDefaultClipperSelected && this.isDefaultCleanupSelected;
+    if (this.cleaners().length > 0) return true;
+    return this.isDefaultEmbedderSelected && this.isDefaultClipperSelected;
   }
 
   /** Embedder picker is visible when Advanced is open OR when the user
@@ -213,10 +228,14 @@ export class ImportAdvancedComponent {
     return this.advancedOpen || !this.isDefaultClipperSelected;
   }
 
-  /** Cleanup block is visible when Advanced is open OR when the user has
-   *  changed the cleanup selection away from the registry defaults. */
+  /** Cleanup block is visible only while Advanced is open.  Unlike the
+   *  embedder and clipper pickers, a non-default selection does *not* keep
+   *  it on screen with Advanced collapsed: cleanup is the most technical
+   *  knob in the modal and the default user should never meet it, so it
+   *  stays behind the toggle even for a user who has changed it.  What the
+   *  selection is instead surfaces in :prop:`advancedToggleTitle`. */
   get showCleanupSection(): boolean {
-    return this.cleaners().length > 0 && (this.advancedOpen || !this.isDefaultCleanupSelected);
+    return this.cleaners().length > 0 && this.advancedOpen;
   }
 
   /** Human label for a cleaner's checkbox row. */

@@ -4,7 +4,7 @@
     class="advanced-toggle"
     (click)="toggleAdvanced()"
     [attr.aria-expanded]="advancedOpen"
-    title="Show advanced options: included media types, embedder, and pre-processing clipper"
+    [title]="advancedToggleTitle"
   >
     Advanced {{ advancedOpen ? '▴' : '▾' }}
   </button>
