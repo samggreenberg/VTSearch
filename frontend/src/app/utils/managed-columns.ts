@@ -358,3 +358,27 @@ export class ManagedColumns<TCol extends string = string> {
     return this.dragCol === col;
   }
 }
+
+/**
+ * Sort *rows* by the value of the column named `column`.
+ *
+ * A table column id is not necessarily a field on the row objects: purely
+ * presentational columns (`actions`, `select`) have no value, and rows typed
+ * against a generated OpenAPI model expose only the fields the backend
+ * declares.  So the lookup is deliberately widened to a `Record` here rather
+ * than each caller's row type carrying a catch-all index signature — the
+ * index signature is what used to hide backend/frontend schema drift.
+ *
+ * Numbers compare numerically; everything else compares as a locale string,
+ * with a missing value sorting as `''`.
+ */
+export function sortRowsByColumn<T>(rows: readonly T[], column: string, asc: boolean): T[] {
+  const dir = asc ? 1 : -1;
+  const valueAt = (row: T): unknown => (row as Record<string, unknown>)[column];
+  return [...rows].sort((a, b) => {
+    const va = valueAt(a) ?? '';
+    const vb = valueAt(b) ?? '';
+    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+    return String(va).localeCompare(String(vb)) * dir;
+  });
+}

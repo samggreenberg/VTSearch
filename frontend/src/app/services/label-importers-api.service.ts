@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
-import type { FieldOption } from '../models/api.models';
+import type { FieldOptions } from '../models/api.models';
 import type { LabelImporterEntry } from '../generated/api-client/models/label-importer-entry';
 import type { IngestMissingResponse } from '../generated/api-client/models/ingest-missing-response';
 import { getLabelImporters } from '../generated/api-client/fn/label-importers/get-label-importers';
@@ -60,8 +60,8 @@ export class LabelImportersApiService {
     return this.http.post(url, params);
   }
 
-  getFieldOptions(importerName: string, fieldKey: string, values: Record<string, string>): Observable<{ options: FieldOption[] }> {
-    return this.http.post<{ options: FieldOption[] }>(
+  getFieldOptions(importerName: string, fieldKey: string, values: Record<string, string>): Observable<{ options: FieldOptions[] }> {
+    return this.http.post<{ options: FieldOptions[] }>(
       `/api/label-importers/field-options/${encodeURIComponent(importerName)}`,
       { field_key: fieldKey, values },
     );

@@ -31,6 +31,8 @@ from __future__ import annotations
 
 from marshmallow import Schema, fields, validate
 
+from vtsearch.schemas.media import OriginSchema
+
 
 class LabeledElementSchema(Schema):
     """A single entry in an exported :class:`~vtscore.datasets.labelset.LabelSet`.
@@ -45,7 +47,7 @@ class LabeledElementSchema(Schema):
 
     md5 = fields.String(required=True)
     label = fields.String(required=True, metadata={"description": "``good`` or ``bad``."})
-    origin = fields.Dict(allow_none=True)
+    origin = fields.Nested(OriginSchema, allow_none=True)
     origin_name = fields.String()
     filename = fields.String()
     category = fields.String()

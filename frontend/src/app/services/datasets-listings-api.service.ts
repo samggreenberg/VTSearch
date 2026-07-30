@@ -21,25 +21,23 @@ import { demoDatasetList } from '../generated/api-client/fn/datasets-ui/demo-dat
 import { embeddersList } from '../generated/api-client/fn/datasets-listings/embedders-list';
 import { mediaTypesList } from '../generated/api-client/fn/datasets-listings/media-types-list';
 
-/** Plugin / media-type listings used by import-config widgets,
- *  settings panels, and the demo dataset picker.  Each listing returns
- *  plugin ``to_dict()`` payloads cast at the boundary to the richer
- *  ``ClipperInfo`` / ``EmbedderInfo`` / ``ConverterInfo`` /
- *  ``MediaTypeInfo`` interfaces in ``frontend/src/app/models/api.models.ts``. */
+/** Plugin / media-type listings used by import-config widgets, settings
+ *  panels, and the demo dataset picker.  Every payload here is described by a
+ *  nested Marshmallow schema in ``vtsearch/schemas/datasets.py``, so the
+ *  generated models are the real types and nothing is cast at the boundary:
+ *  a backend field rename fails this build. */
 @Injectable({ providedIn: 'root' })
 export class DatasetsListingsApiService {
   private http = inject(HttpClient);
   private config = inject(ApiConfiguration);
 
   getMediaTypes(): Observable<{ media_types: MediaTypeInfo[] }> {
-    return mediaTypesList(this.http, this.config.rootUrl).pipe(
-      map((r) => r.body as unknown as { media_types: MediaTypeInfo[] }),
-    );
+    return mediaTypesList(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   getClippers(mediaType?: string): Observable<ClipperInfo[]> {
     return clippersList(this.http, this.config.rootUrl, { media_type: mediaType }).pipe(
-      map((r) => r.body.clippers as unknown as ClipperInfo[]),
+      map((r) => r.body.clippers),
     );
   }
 
@@ -48,25 +46,25 @@ export class DatasetsListingsApiService {
    *  one checkbox per entry, pre-checked when `default_enabled` is set. */
   getCleaners(mediaType?: string): Observable<CleanerInfo[]> {
     return cleanersList(this.http, this.config.rootUrl, { media_type: mediaType }).pipe(
-      map((r) => r.body.cleaners as unknown as CleanerInfo[]),
+      map((r) => r.body.cleaners),
     );
   }
 
   getEmbedders(mediaType?: string): Observable<EmbedderInfo[]> {
     return embeddersList(this.http, this.config.rootUrl, { media_type: mediaType }).pipe(
-      map((r) => r.body.embedders as unknown as EmbedderInfo[]),
+      map((r) => r.body.embedders),
     );
   }
 
   getConverters(target?: string): Observable<ConverterInfo[]> {
     return convertersList(this.http, this.config.rootUrl, { target }).pipe(
-      map((r) => r.body.converters as unknown as ConverterInfo[]),
+      map((r) => r.body.converters),
     );
   }
 
   getConvertersForSource(source: string): Observable<ConverterInfo[]> {
     return convertersList(this.http, this.config.rootUrl, { source }).pipe(
-      map((r) => r.body.converters as unknown as ConverterInfo[]),
+      map((r) => r.body.converters),
     );
   }
 

@@ -48,6 +48,22 @@ from __future__ import annotations
 from marshmallow import Schema, fields, validate
 
 
+class OriginSchema(Schema):
+    """A serialised :class:`~vtscore.datasets.origin.Origin`.
+
+    ``Origin.to_dict`` is the single writer and always emits exactly these two
+    keys, so the *envelope* is fixed even though the ``params`` map inside it
+    is importer-specific.  Enumerating the envelope is what lets clients read
+    ``origin.importer`` directly instead of indexing into an opaque dict.
+    """
+
+    importer = fields.String(required=True)
+    params = fields.Dict(
+        keys=fields.String(),
+        metadata={"description": "Identifying import parameters; the key set is importer-specific."},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Shared payload-variant query
 # ---------------------------------------------------------------------------
@@ -124,12 +140,18 @@ class MediaBatchRequestSchema(Schema):
     )
 
 
-class _MediaBatchEntrySchema(Schema):
-    """One entry in the ``POST /api/medias/batch`` response array.
+class MediaEntrySchema(Schema):
+    """The per-media metadata block the API serves for one item.
 
-    Importers populate different keys, so unknown fields flow through
-    on dump. ``custom_metadata`` is a free-form dict whose inner keys
-    vary per importer / media type.
+    Used directly by ``POST /api/medias/batch`` (via
+    :class:`MediaBatchResponseSchema`) and as the base of the auto-detect hit
+    schema (``vtsearch.schemas.detectors._HitSchema``), which adds a score.
+
+    The field list is an **allowlist**, and deliberately so: a declared
+    marshmallow schema drops every undeclared key on dump, which is what keeps
+    a media's embedding vectors and raw bytes out of the response even if a
+    caller forgets to strip them first.  ``custom_metadata`` is the sanctioned
+    escape hatch for importer-specific display fields.
     """
 
     id = fields.Integer(required=True)
@@ -157,10 +179,15 @@ class _MediaBatchEntrySchema(Schema):
     )
 
     class Meta:
-        unknown = "include"
+        # Response-only schema, so this governs nothing at runtime — dump is an
+        # allowlist either way.  ``exclude`` rather than ``include`` so the
+        # generated OpenAPI model says what the server actually sends: no
+        # ``additionalProperties``, hence no index signature for a frontend
+        # typo to hide behind.
+        unknown = "exclude"
 
 
-class MediaBatchResponseSchema(_MediaBatchEntrySchema):
+class MediaBatchResponseSchema(MediaEntrySchema):
     """Response wrapper for ``POST /api/medias/batch``.
 
     Used with ``many=True`` at the decorator call site so the OpenAPI

@@ -20,7 +20,7 @@ import {
 } from '../../../services/embedder-capability.service';
 import { MediaStateService } from '../../../services/media-state.service';
 import {
-  FieldOption,
+  FieldOptions,
   ImporterField,
   ImporterInfo,
   ImporterPickerTab,
@@ -232,7 +232,7 @@ export class NewDetectorModalComponent implements OnInit {
   // depends_on / allow_free_text render with full parity here too. Keyed by
   // field key; signalized so the unpatched HTTP callbacks schedule CD under
   // zoneless. See docs/plans/zoneless-migration.md.
-  readonly labelImporterDynamicOptions = signal<Record<string, FieldOption[]>>({});
+  readonly labelImporterDynamicOptions = signal<Record<string, FieldOptions[]>>({});
   readonly labelImporterDynamicLoading = signal<Record<string, boolean>>({});
   readonly labelImporterDynamicError = signal<Record<string, string>>({});
 
@@ -1023,7 +1023,7 @@ export class NewDetectorModalComponent implements OnInit {
   /** Options to render for a label-importer field: the dynamically-fetched
    *  list for a ``dynamic_options`` field, else the static strings coerced
    *  into ``{value,label}`` pairs. */
-  labelImporterOptionsFor(field: ImporterField): FieldOption[] {
+  labelImporterOptionsFor(field: ImporterField): FieldOptions[] {
     if (field.dynamic_options) {
       return this.labelImporterDynamicOptions()[field.key] || [];
     }
@@ -1040,7 +1040,7 @@ export class NewDetectorModalComponent implements OnInit {
       .getFieldOptions(importer.name, key, { ...this.labelImporterValues })
       .subscribe({
         next: (res) => {
-          const options: FieldOption[] = res.options || [];
+          const options: FieldOptions[] = res.options || [];
           this.labelImporterDynamicOptions.update((m) => ({ ...m, [key]: options }));
           this.labelImporterDynamicLoading.update((m) => ({ ...m, [key]: false }));
           const current = this.labelImporterValues[key];

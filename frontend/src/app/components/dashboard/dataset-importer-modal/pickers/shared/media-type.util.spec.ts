@@ -68,7 +68,7 @@ describe('media-type.util', () => {
   });
 
   it('detectionHint describes a single-type detection', () => {
-    const hint = detectionHint(mediaTypes, { sample_size: 2, counts_by_type: { audio: 2 }, extensions: {}, dominant: 'audio' });
+    const hint = detectionHint(mediaTypes, { sample_size: 2, counts_by_type: { audio: 2 }, extensions: {}, dominant: 'audio', truncated: false });
     expect(hint).toBe('Detected: Audio (2 of 2 files)');
   });
 
@@ -78,13 +78,14 @@ describe('media-type.util', () => {
       counts_by_type: { audio: 2, image: 1 },
       extensions: {},
       dominant: 'audio',
+      truncated: false,
     });
     expect(hint).toBe('Detected: Audio (2) + Image (1) of 3 files');
   });
 
   it('detectionHint is empty for a null or empty detection', () => {
     expect(detectionHint(mediaTypes, null)).toBe('');
-    expect(detectionHint(mediaTypes, { sample_size: 0, counts_by_type: {}, extensions: {}, dominant: null })).toBe('');
+    expect(detectionHint(mediaTypes, { sample_size: 0, counts_by_type: {}, extensions: {}, dominant: null, truncated: false })).toBe('');
   });
 
   it('availableConvertersFor reads the importer registry map', () => {
