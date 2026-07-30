@@ -167,7 +167,7 @@ class TestSettingsModule:
         assert settings_mod.get_calibrate_count() == 1
 
     def test_calibrate_count_default(self):
-        assert settings_mod.get_calibrate_count() == 1
+        assert settings_mod.get_calibrate_count() == 2
 
     def test_calibrate_count_persists_across_reset(self, isolated_settings):
         settings_mod.set_calibrate_count(10)
@@ -452,7 +452,7 @@ class TestSettingsModule:
         # Theme defaults to ``"system"``; the frontend resolves this to
         # the OS ``prefers-color-scheme`` at render time.
         assert defaults["theme"] == "system"
-        assert defaults["calibrate_count"] == 1
+        assert defaults["calibrate_count"] == 2
         assert defaults["calibration_fraction"] == 0.5
         assert defaults["safe_thresholds"] is False
         assert defaults["show_metadata"] is True

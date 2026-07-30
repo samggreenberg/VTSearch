@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from vtscore import config
 
 from vtscore.concurrency.async_jobs import check_job_cancelled
-from vtscore.config import MLP_DROPOUT, MLP_HIDDEN_MAX, MLP_HIDDEN_MIN
+from vtscore.config import MLP_DROPOUT, MLP_HIDDEN_MAX, MLP_HIDDEN_MIN, MLP_LABEL_SMOOTHING
 
 # ``TRAIN_EPOCHS`` and ``TRAIN_PATIENCE`` are read off ``config`` at call time
 # (not import time) so env-var / monkey-patched overrides take effect.
@@ -132,9 +132,16 @@ def train_model(
     correlated region negatives share one image's worth of weight, so they
     don't count as many independent negatives.  Inclusion does **not** enter
     training: it is a pure threshold/cutoff knob applied later in
-    :func:`find_optimal_threshold`, so the trained model (and therefore every
-    item's score) is independent of inclusion.  See
+    :func:`vtscore.training.thresholds.conformal_threshold`, so the trained
+    model (and therefore every item's score) is independent of inclusion.  See
     docs/plans/find-verification-workflow.md.
+
+    Targets are label-smoothed by ``MLP_LABEL_SMOOTHING`` (Good trains toward
+    ``1 - eps``, Bad toward ``eps``) after class weights are derived from the
+    hard labels.  This bounds the optimal logit so a strongly-fit model can't
+    saturate every score to exact 0.0/1.0 sigmoids - which would collapse the
+    conformal threshold rule's quantiles (and any score-based ranking) into a
+    single tie.  It does not change which side of 0.5 an example is pushed to.
 
     A local ``torch.Generator`` seeded with *seed* is used for model-weight
     initialisation, and ``torch.random.fork_rng`` isolates the global RNG
@@ -213,6 +220,9 @@ def train_model(
         weight_true = num_false / num_true
         weight_false = 1.0
         weights = torch.where(y_train == 1, weight_true, weight_false).squeeze().to(device)
+    # Smooth the targets only after the hard labels have been counted and
+    # weighted above; BCE-with-logits accepts soft targets natively.
+    y_train = y_train * (1.0 - 2.0 * MLP_LABEL_SMOOTHING) + MLP_LABEL_SMOOTHING
     loss_fn = nn.BCEWithLogitsLoss(reduction="none")
 
     # Fork the global RNG so the Dropout seed is isolated per call -

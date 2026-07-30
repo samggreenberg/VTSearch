@@ -537,7 +537,7 @@ def _style_train_and_calibrate(
     its ``style.score_rows`` stack so a Good bag collapses the same way a Bad
     bag (and every held-out image) does.  Without this a Good bag is a max over
     its 1 training row while a Bad bag is a max over the ~197 rows it flooded,
-    and the fold's min-cost cut lands above the score range production actually
+    and the calibrated cut lands above the score range production actually
     produces - see :func:`vtscore.training.thresholds.compute_fold_orderings`.
     """
     import numpy as np  # noqa: PLC0415

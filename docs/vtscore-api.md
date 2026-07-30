@@ -538,8 +538,8 @@ def train_model(
 def calculate_gmm_threshold(scores: np.ndarray) -> float:
     """Fit a 2-component GMM to scores; return the midpoint between component means."""
 
-def find_optimal_threshold(scores: np.ndarray, y: np.ndarray) -> float:
-    """Grid-search the score axis for the threshold maximising F1 on (scores, y)."""
+def conformal_threshold(scores: np.ndarray, y: np.ndarray) -> float:
+    """Split-conformal quantile rule mapping inclusion to a threshold over held-out (scores, y)."""
 
 def calculate_cross_calibration_threshold(
     X: np.ndarray,

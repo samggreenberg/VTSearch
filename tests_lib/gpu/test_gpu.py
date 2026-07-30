@@ -247,7 +247,7 @@ class TestTrainModelGPU:
     def test_inclusion_lowers_threshold_not_model(self, device):
         """Inclusion is a pure threshold knob: it leaves the trained model
         (and its scores) untouched, but a higher inclusion yields a lower
-        (more inclusive) decision threshold via ``find_optimal_threshold``.
+        (more inclusive) decision threshold via ``conformal_threshold``.
         See docs/plans/find-verification-workflow.md."""
         import vtscore.config as config
 
@@ -255,7 +255,7 @@ class TestTrainModelGPU:
         config.TRAIN_EPOCHS = 100
         try:
             from vtscore.training.mlp import train_model
-            from vtscore.training.thresholds import find_optimal_threshold
+            from vtscore.training.thresholds import conformal_threshold
 
             dim = 32
             rng = np.random.RandomState(1)
@@ -275,8 +275,8 @@ class TestTrainModelGPU:
 
             labels = y.squeeze(1).cpu().tolist()
             scores = scores_a.tolist()
-            t_neutral = find_optimal_threshold(scores, labels, 0)
-            t_inclusive = find_optimal_threshold(scores, labels, 5)
+            t_neutral = conformal_threshold(scores, labels, 0)
+            t_inclusive = conformal_threshold(scores, labels, 5)
             # Higher inclusion => prefer recall => lower (more inclusive) threshold.
             assert t_inclusive <= t_neutral
         finally:

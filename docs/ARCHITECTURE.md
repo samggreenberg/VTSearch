@@ -387,18 +387,18 @@ modules on the right.
 **Dependencies:** `torch`, `sklearn`, `numpy`
 
 **What you get:** `train_model()` trains a 2-layer MLP classifier on
-embeddings + binary labels.  `find_optimal_threshold()` iterates over
-candidate thresholds to minimize weighted FPR+FNR with configurable
-trade-off via an `inclusion` parameter.  A separate
+embeddings + binary labels.  `conformal_threshold()` maps an
+`inclusion` value to a decision threshold via a split-conformal
+quantile rule over held-out calibration scores.  A separate
 `calculate_gmm_threshold()` fits a 2-component GMM for semantic sort
 thresholds.
 
 ```python
 from vtscore.training.mlp import train_model
-from vtscore.training.thresholds import find_optimal_threshold
+from vtscore.training.thresholds import conformal_threshold
 
 model = train_model(X_train, y_train, input_dim=512, seed=42, hidden_dim=None)
-threshold = find_optimal_threshold(scores, labels, inclusion_value=0)
+threshold = conformal_threshold(scores, labels, inclusion_value=0)
 ```
 
 ### Embedding models (CLAP, SigLIP, E5, X-CLIP, and more)
