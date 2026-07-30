@@ -31,6 +31,7 @@ from vtscore.concurrency.progress import (
     set_thread_progress,
 )
 from vtscore.datasets import export_dataset_to_file
+from vtscore.datasets.clipper_chain import append_cleaner_steps
 from vtscore.datasets.loader import apply_custom_metadata_md5
 from vtscore.datasets.registry import unregister_dataset as _reg_unregister
 from vtscore.state import DatasetContext, clear_all, register_context
@@ -650,6 +651,9 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     clipper_name = field_values.pop("clipper", "") or ""
     clipper_params = field_values.pop("clipper_params", None)
     chain_steps = _parse_chain_field(field_values.pop("clipper_chain", None))
+    # Enabled cleanup gates always run last, on the finished units, so they are
+    # appended to the chain here rather than positioned by the client.
+    chain_steps = append_cleaner_steps(chain_steps, field_values.pop("cleaners", None))
     # Keep clipper in field_values for importers that need it (e.g. demo
     # importer stores it in the container metadata for readiness tracking).
     field_values["clipper"] = clipper_name

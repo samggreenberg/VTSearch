@@ -170,6 +170,24 @@ def _restore_signpost_text(media_data: dict[str, Any], media_info: dict[str, Any
             media_data[field] = value
 
 
+def _restore_original_payload(media_data: dict[str, Any], media_info: dict[str, Any]) -> None:
+    """Carry a pickled pre-clean payload snapshot onto the media.
+
+    Written by the chain runner when a :class:`~vtscore.media.cleaner.MediaCleaner`
+    rewrote the item at load time (``docs/plans/media-cleaners.md``); it is the
+    only copy of what the user imported, so it has to survive the round-trip or
+    the item silently loses its Clean/Original toggle.  Absent fields are left
+    off entirely rather than set to ``None``, so an uncleaned dataset's medias
+    keep the shape they had before.
+    """
+    from vtscore.datasets.clipper_chain import ORIGINAL_PAYLOAD_KEYS  # noqa: PLC0415
+
+    for field in ORIGINAL_PAYLOAD_KEYS:
+        value = media_info.get(field)
+        if value is not None:
+            media_data[field] = value
+
+
 def _restore_media_url(media_data: dict[str, Any], media_info: dict[str, Any]) -> None:
     """Carry a pickled ``media_url`` onto the media when one is recorded.
 
@@ -215,6 +233,7 @@ def _build_pickle_thin_media(
     if cm:
         media_data["custom_metadata"] = cm
     _restore_signpost_text(media_data, media_info)
+    _restore_original_payload(media_data, media_info)
     return media_data
 
 
@@ -252,6 +271,7 @@ def _build_pickle_full_media(
     if cm:
         media_data["custom_metadata"] = cm
     _restore_signpost_text(media_data, media_info)
+    _restore_original_payload(media_data, media_info)
     return media_data
 
 

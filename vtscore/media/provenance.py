@@ -17,9 +17,10 @@ This module turns the recipe into three curated display fields:
     extracted from, or the recording an audio clip was cut out of.
 
 ``Derived Via``
-    The converter / clipper chain that produced it, rendered with each step's
-    display name and effective parameters
-    (``"Video → Images (n_clips=2) → Object Crop"``).
+    The converter / clipper / cleaner chain that produced it, rendered with
+    each step's display name and effective parameters
+    (``"Video → Images (n_clips=2) → Object Crop"``).  Cleaner steps that
+    no-opped on this item are left out (see :func:`_step_is_visible`).
 
 ``Imported Via``
     The importer that brought the corpus in, with its locator params
@@ -97,6 +98,10 @@ def _plugin_display_name(kind: str, name: str) -> str:
             from vtscore.datasets.importers import get_importer  # noqa: PLC0415
 
             plugin = get_importer(name)
+        elif kind == "cleaner":
+            from vtscore.media import get_cleaner  # noqa: PLC0415
+
+            plugin = get_cleaner(name)
         else:
             from vtscore.media import get_clipper  # noqa: PLC0415
 
@@ -137,13 +142,28 @@ def _legacy_clipper_name(params: dict[str, Any]) -> str:
     return name
 
 
+def _step_is_visible(step: dict[str, Any]) -> bool:
+    """Whether a chain step belongs in the ``Derived Via`` line.
+
+    Every clipper / converter step did something by definition.  A *cleaner*
+    step, by contrast, runs on every item of its media type and no-ops on most
+    of them (that is the point - a cleaner is a gate, not a transform), so a
+    cleaner that left this item untouched is not part of how the item was
+    made.  The runner records that verdict as ``changed`` on the trail entry.
+    """
+    if step["kind"] != "cleaner":
+        return True
+    return bool(step.get("changed"))
+
+
 def _describe_derivation(params: dict[str, Any]) -> str:
-    """Render the full converter / clipper chain that produced a media."""
+    """Render the full converter / clipper / cleaner chain that produced a media."""
     from vtscore.datasets.clipper_chain import parse_trail  # noqa: PLC0415
 
     trail = parse_trail(params.get("clipper_chain"))
     if trail:
-        return " → ".join(_describe_step(s["kind"], s["name"], dict(s.get("params") or {})) for s in trail)
+        visible = [s for s in trail if _step_is_visible(s)]
+        return " → ".join(_describe_step(s["kind"], s["name"], dict(s.get("params") or {})) for s in visible)
 
     # No chain field: fall back to the flat single-step encodings.  A converter
     # output that was later stamped by a single clipper carries both, in that

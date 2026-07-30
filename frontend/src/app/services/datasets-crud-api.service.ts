@@ -19,6 +19,7 @@ import type { DatasetStagingStartedResponse } from '../generated/api-client/mode
 import type { DetectMediaTypeResponse } from '../generated/api-client/models/detect-media-type-response';
 import type { ImporterFieldOptionsResponse } from '../generated/api-client/models/importer-field-options-response';
 import type {
+  CleanerSelection,
   ImporterInfo,
   ImporterPickerTab,
 } from '../models/api.models';
@@ -128,7 +129,7 @@ export class DatasetsCrudApiService {
 
   loadDemo(
     name: string,
-    params?: Record<string, string | string[] | Record<string, number | string>>,
+    params?: Record<string, string | string[] | Record<string, number | string> | CleanerSelection[]>,
   ): Observable<DatasetLoadStartedResponse> {
     const body: DatasetLoadDemoRequest = { name, ...params };
     return loadDemoDatasetRoute(this.http, this.config.rootUrl, { body }).pipe(map((r) => r.body));

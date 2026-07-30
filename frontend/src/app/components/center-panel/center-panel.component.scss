@@ -113,6 +113,39 @@
   }
 }
 
+// Clean/Original switch for an item a MediaCleaner rewrote at load time.
+// Shares the image toolbar's surface treatment so the two read as one family,
+// but it is media-type-agnostic (audio, text, video and documents get it too).
+.variant-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-2xs) var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  opacity: 0.7;
+  transition: opacity var(--transition-base);
+  flex-shrink: 0;
+  align-self: center;
+
+  &:hover {
+    opacity: 1;
+  }
+
+  .btn--toolbar.active,
+  .btn--toolbar.active:hover {
+    color: var(--btn-filled-text);
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+}
+
+.variant-toggle__label {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
 .ivc-sep {
   width: 1px;
   height: 18px;

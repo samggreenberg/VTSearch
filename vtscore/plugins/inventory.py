@@ -143,6 +143,7 @@ def _embedder_entry(emb: Any) -> PluginEntry:
 
 
 def _clipper_entry(clip: Any) -> PluginEntry:
+    """Build an entry for a clipper *or* cleaner (same descriptor surface)."""
     return PluginEntry(
         name=getattr(clip, "name", ""),
         display_name=getattr(clip, "display_name", "") or getattr(clip, "name", ""),
@@ -211,6 +212,12 @@ def _load_clippers() -> Iterable[Any]:
     return all_clippers()
 
 
+def _load_cleaners() -> Iterable[Any]:
+    from vtscore.media import all_cleaners
+
+    return all_cleaners()
+
+
 # App-only families (settings importers/exporters/sources) are NOT
 # registered here; the app installs them at startup via
 # :func:`vtsearch.shim.register_app_plugin_families`.
@@ -224,6 +231,7 @@ _LIBRARY_FAMILIES: tuple[FamilyProvider, ...] = (
     FamilyProvider("media_types", "Media types", _load_media_types, _media_type_entry),
     FamilyProvider("embedders", "Media embedders", _load_embedders, _embedder_entry),
     FamilyProvider("clippers", "Media clippers", _load_clippers, _clipper_entry),
+    FamilyProvider("cleaners", "Media cleaners", _load_cleaners, _clipper_entry),
 )
 
 

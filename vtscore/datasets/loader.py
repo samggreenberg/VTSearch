@@ -163,6 +163,21 @@ def _embeddings_dict_for_pickle(embeddings: Any) -> dict[str, np.ndarray] | None
     return out or None
 
 
+def _copy_original_payload(entry: dict[str, Any], media: dict[str, Any]) -> None:
+    """Copy a cleaned item's pre-clean payload snapshot into its pickle entry.
+
+    The snapshot (``docs/plans/media-cleaners.md``) is dataset *content*, not a
+    cache: it is the only copy of what the user imported, so it has to ride the
+    round-trip alongside the canonical (cleaned) payload.  Written only when
+    present, so an uncleaned dataset keeps the same entry shape.
+    """
+    from vtscore.datasets.clipper_chain import ORIGINAL_PAYLOAD_KEYS  # noqa: PLC0415
+
+    for field in ORIGINAL_PAYLOAD_KEYS:
+        if media.get(field) is not None:
+            entry[field] = media[field]
+
+
 def export_dataset_to_file(
     medias: dict[int, dict[str, Any]],
     *,
@@ -248,6 +263,7 @@ def export_dataset_to_file(
         }
         for field in extra_fields_by_type.get(media.get("media_type", ""), ()):
             entry[field] = media.get(field)
+        _copy_original_payload(entry, media)
         # The signpost text (the caption / tag list that letters the Browse map
         # and titles the item's "AI …" metadata row) is the sign pipeline's only
         # full-corpus model cost, computed at ingest *before* this save precisely

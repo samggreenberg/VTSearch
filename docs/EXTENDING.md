@@ -10,7 +10,7 @@ matches what you want to build.
 | Guide | What you build |
 |-------|----------------|
 | [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, results exporters, label importers, settings importers/exporters, settings sources, labelset sources, media converters, media sources: nine auto-discovered plugin families that share a common registry-based architecture. |
-| [EXTENDING-media.md](EXTENDING-media.md) | Media types, embedders, clippers, converters, and media sources (anything in `vtscore/media/` or `vtscore/converters/`). |
+| [EXTENDING-media.md](EXTENDING-media.md) | Media types, embedders, clippers, cleaners, converters, and media sources (anything in `vtscore/media/` or `vtscore/converters/`). |
 | [EXTENDING-processors.md](EXTENDING-processors.md) | Detectors, localizers, and extractors: the three kinds of `Processor`. |
 
 Each guide explains the interface contract, where files go, how
@@ -242,6 +242,20 @@ See [EXTENDING-media.md § Adding a Media Clipper](EXTENDING-media.md#adding-a-m
 - [ ] If adding `parameters`, include a `description` key in each param dict
 - [ ] Add to the `CLIPPERS` list in the media type's `__init__.py`
 - [ ] Test: verify `clip()` returns valid media dicts
+
+### New Media Cleaner Checklist
+
+See [EXTENDING-media.md § Adding a Media Cleaner](EXTENDING-media.md#adding-a-media-cleaner).
+
+- [ ] Create or add to `vtscore/media/<type>/cleaner.py`
+- [ ] Subclass `MediaCleaner`, implement `name`, `media_type`, `clean()`
+- [ ] Return the media **unchanged** when there is nothing to clean or the payload can't be decoded (never abort a load)
+- [ ] Build the output with `dict(media)`; never mutate the input in place (the runner needs a pre-clean payload to snapshot)
+- [ ] Update the metadata the rewrite invalidated (`file_size`, `width`/`height`, `duration`, `character_count`)
+- [ ] Override `description` with a short tooltip string for the cleanup checkbox
+- [ ] Override `default_enabled` to `True` only if leaving the gate off ships known-wrong vectors
+- [ ] Add to the `CLEANERS` list in the media type's `__init__.py`
+- [ ] Test: verify `clean()` no-ops on a clean item and on undecodable bytes, and that it rewrites the payload otherwise
 
 ### New Media Converter Checklist
 

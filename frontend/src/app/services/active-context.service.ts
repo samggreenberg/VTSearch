@@ -177,13 +177,20 @@ export class ActiveContextService {
    *
    * Angular HttpClient requests use the interceptor to send headers, but
    * native element `src` attributes bypass it entirely.
+   *
+   * `extra` adds route-specific query params (e.g. `{ variant: 'original' }`
+   * for the pre-clean payload of a cleaned item). Entries with an empty value
+   * are skipped, so callers can pass a signal's value without branching.
    */
-  mediaUrl(path: string): string {
+  mediaUrl(path: string, extra?: Record<string, string>): string {
     const params: string[] = [];
     const ds = this.datasetIdSubject.value;
     if (ds) params.push(`dataset_id=${encodeURIComponent(ds)}`);
     const model = this.modelIdSubject.value;
     if (model) params.push(`detector_id=${encodeURIComponent(model)}`);
+    for (const [key, value] of Object.entries(extra || {})) {
+      if (value) params.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
+    }
     return params.length ? `${path}?${params.join('&')}` : path;
   }
 }

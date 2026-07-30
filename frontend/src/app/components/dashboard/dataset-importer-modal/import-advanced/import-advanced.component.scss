@@ -24,6 +24,21 @@
   white-space: nowrap;
 }
 
+// Cleanup gate checkboxes sit tighter than the block's other labels: they read
+// as one list under the single "Cleanup" heading rather than as separate
+// questions. A checked cleaner's parameter rows indent under it.
+.cleanup-row {
+  margin: 0;
+  font-weight: normal;
+}
+
+.cleanup-param {
+  margin: 0 0 0 var(--space-lg);
+  font-weight: normal;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
 .license-warning {
   margin-top: var(--space-sm);
   padding: var(--space-sm) var(--space-md);

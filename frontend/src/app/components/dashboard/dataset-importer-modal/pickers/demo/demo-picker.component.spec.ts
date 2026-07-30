@@ -38,6 +38,7 @@ describe('DemoPickerComponent', () => {
     httpMock.expectOne(req => req.url === '/api/dataset/demo-list' && !req.params.get('embedder')).flush({ datasets: mockDemos });
     httpMock.expectOne(req => req.url === '/api/embedders' && req.params.get('media_type') === 'audio').flush({ embedders: [{ name: 'clap' }] });
     httpMock.expectOne(req => req.url === '/api/clippers' && req.params.get('media_type') === 'audio').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners' && req.params.get('media_type') === 'audio').flush({ cleaners: [] });
     httpMock.expectOne(req => req.url === '/api/dataset/demo-list' && req.params.get('embedder') === 'clap').flush({ datasets: mockDemos });
     httpMock.expectOne(req => req.url === '/api/converters' && req.params.get('source') === 'audio').flush({ converters: [] });
   }
@@ -87,6 +88,7 @@ describe('DemoPickerComponent', () => {
     component.selectDemoTabWithEmbedder('image');
     httpMock.expectOne(req => req.url === '/api/embedders' && req.params.get('media_type') === 'image').flush({ embedders: [{ name: 'siglip' }] });
     httpMock.expectOne(req => req.url === '/api/clippers' && req.params.get('media_type') === 'image').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners' && req.params.get('media_type') === 'image').flush({ cleaners: [] });
     httpMock.expectOne(req => req.url === '/api/dataset/demo-list' && req.params.get('embedder') === 'siglip').flush({ datasets: mockDemos });
     httpMock.expectOne(req => req.url === '/api/converters' && req.params.get('source') === 'image')
       .flush({ converters: [{ name: 'image2face', source_type: 'image', target_type: 'face' }] });
@@ -98,6 +100,7 @@ describe('DemoPickerComponent', () => {
     component.onConverterTargetChange('face');
     httpMock.expectOne(req => req.url === '/api/embedders' && req.params.get('media_type') === 'face').flush({ embedders: [{ name: 'face' }] });
     httpMock.expectOne(req => req.url === '/api/clippers' && req.params.get('media_type') === 'face').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners' && req.params.get('media_type') === 'face').flush({ cleaners: [] });
     httpMock.expectOne(req => req.url === '/api/dataset/demo-list' && req.params.get('embedder') === 'face').flush({ datasets: mockDemos });
 
     expect(component.selectedConverterTarget()).toBe('face');

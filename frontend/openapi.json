@@ -896,6 +896,22 @@
         ],
         "type": "object"
       },
+      "CleanersListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "cleaners": {
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "cleaners"
+        ],
+        "type": "object"
+      },
       "ClearStagingResponse": {
         "additionalProperties": false,
         "properties": {
@@ -1267,6 +1283,16 @@
             "default": "false",
             "description": "When 'true', compute + persist the 2-D Browse projection at ingest.",
             "type": "string"
+          },
+          "cleaners": {
+            "default": null,
+            "description": "Cleanup gates to run on each finished unit before embedding, as `[{\"name\": \"image_exif_orient\", \"params\": {}}]`. Order is ignored; cleaners always run last, after the clipper / converter chain.",
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "nullable": true,
+            "type": "array"
           },
           "clipper": {
             "default": "",
@@ -4164,6 +4190,10 @@
           "filename": {
             "type": "string"
           },
+          "has_original": {
+            "description": "Present and ``true`` when a MediaCleaner rewrote this item at load time and its pre-clean payload was kept. The byte routes then accept ``?variant=original`` and the detail viewer offers a Clean/Original toggle. Absent otherwise.",
+            "type": "boolean"
+          },
           "id": {
             "type": "integer"
           },
@@ -6243,6 +6273,10 @@
             "default": null,
             "nullable": true
           },
+          "cleaners": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -6288,6 +6322,10 @@
         "additionalProperties": true,
         "properties": {
           "build_projection": {
+            "default": null,
+            "nullable": true
+          },
+          "cleaners": {
             "default": null,
             "nullable": true
           },
@@ -6449,6 +6487,10 @@
             "default": null,
             "nullable": true
           },
+          "cleaners": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -6503,6 +6545,10 @@
         "additionalProperties": true,
         "properties": {
           "build_projection": {
+            "default": null,
+            "nullable": true
+          },
+          "cleaners": {
             "default": null,
             "nullable": true
           },
@@ -6563,6 +6609,10 @@
             "default": null,
             "nullable": true
           },
+          "cleaners": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -6598,6 +6648,10 @@
         "additionalProperties": true,
         "properties": {
           "build_projection": {
+            "default": null,
+            "nullable": true
+          },
+          "cleaners": {
             "default": null,
             "nullable": true
           },
@@ -6639,6 +6693,10 @@
         "additionalProperties": true,
         "properties": {
           "build_projection": {
+            "default": null,
+            "nullable": true
+          },
+          "cleaners": {
             "default": null,
             "nullable": true
           },
@@ -6699,6 +6757,10 @@
             "default": null,
             "nullable": true
           },
+          "cleaners": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -6756,6 +6818,10 @@
         "additionalProperties": true,
         "properties": {
           "build_projection": {
+            "default": null,
+            "nullable": true
+          },
+          "cleaners": {
             "default": null,
             "nullable": true
           },
@@ -6822,6 +6888,10 @@
         "additionalProperties": true,
         "properties": {
           "build_projection": {
+            "default": null,
+            "nullable": true
+          },
+          "cleaners": {
             "default": null,
             "nullable": true
           },
@@ -8257,6 +8327,46 @@
         "summary": "Copy a file from a browse source into ``data/example_media/``.",
         "tags": [
           "datasets_ui"
+        ]
+      }
+    },
+    "/api/cleaners": {
+      "get": {
+        "description": "Cleaners are the optional 1-to-1 cleanup gates every imported item of a\nmedia type can pass through before embedding (see\n``docs/plans/media-cleaners.md``).  They are listed separately from\nclippers because the UI treats them differently: a clipper is a radio\nchoice, cleaners are a checkbox list.  Each entry carries\n``default_enabled`` so the import form knows which boxes to pre-check.\n\nQuery parameters:\n    media_type: A ``type_id`` (e.g. ``\"image\"``) or ``folder_import_name``\n        (e.g. ``\"images\"``).  When provided, only cleaners whose\n        ``media_type`` matches are returned.",
+        "operationId": "cleaners_list",
+        "parameters": [
+          {
+            "description": "Optional ``type_id`` (e.g. ``image``) or ``folder_import_name`` (e.g. ``images``). When provided, only matching entries are returned.",
+            "in": "query",
+            "name": "media_type",
+            "required": false,
+            "schema": {
+              "default": "",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanersListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return all cleaners, optionally filtered by media type.",
+        "tags": [
+          "datasets_listings"
         ]
       }
     },
@@ -13723,11 +13833,30 @@
     },
     "/api/medias/{media_id}/audio": {
       "get": {
-        "description": "Returns an ``audio/wav`` file response on success (HTTP 200), or a 404\nJSON envelope if the media does not exist or its bytes are unavailable.",
+        "description": "Returns an ``audio/wav`` file response on success (HTTP 200), or a 404\nJSON envelope if the media does not exist or its bytes are unavailable.\n\nAccepts ``?variant=original`` to stream the pre-clean payload of an item a\ncleaner rewrote at load time (see :func:`_variant_media`).",
         "operationId": "media_audio",
+        "parameters": [
+          {
+            "description": "``original`` to stream the pre-clean payload of a cleaned item; omitted or empty for the canonical (cleaned) payload.",
+            "in": "query",
+            "name": "variant",
+            "required": false,
+            "schema": {
+              "default": "",
+              "enum": [
+                "",
+                "original"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "404": {
             "description": "Media not found, or media bytes unavailable."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -13754,12 +13883,31 @@
       "get": {
         "description": "Determines the MIME type from the media's filename extension, defaulting\nto ``image/jpeg`` for unrecognised extensions. For non-image media types\nthat declare an ``image_response`` hook (audio waveforms, video frames),\nthe route delegates to that hook.",
         "operationId": "media_image",
+        "parameters": [
+          {
+            "description": "``original`` to stream the pre-clean payload of a cleaned item; omitted or empty for the canonical (cleaned) payload.",
+            "in": "query",
+            "name": "variant",
+            "required": false,
+            "schema": {
+              "default": "",
+              "enum": [
+                "",
+                "original"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "400": {
             "description": "Media is not an image and has no image_response delegate."
           },
           "404": {
             "description": "Media not found, or media bytes unavailable."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -13784,14 +13932,33 @@
     },
     "/api/medias/{media_id}/media": {
       "get": {
-        "description": "Determines the media type from the media item's ``\"type\"`` field and\ndelegates to the registered :class:`~vtscore.media.base.MediaType`'s\n:meth:`~vtscore.media.base.MediaType.media_response` method. This\nendpoint works for all current and future media types without\nmodification. Response body is either binary (image/audio/video bytes\nwith the appropriate mimetype) or JSON (text content); the spec leaves\nthe success body undescribed.",
+        "description": "Determines the media type from the media item's ``\"type\"`` field and\ndelegates to the registered :class:`~vtscore.media.base.MediaType`'s\n:meth:`~vtscore.media.base.MediaType.media_response` method. This\nendpoint works for all current and future media types without\nmodification. Response body is either binary (image/audio/video bytes\nwith the appropriate mimetype) or JSON (text content); the spec leaves\nthe success body undescribed.  Accepts ``?variant=original`` (see\n:func:`_variant_media`).",
         "operationId": "media_generic",
+        "parameters": [
+          {
+            "description": "``original`` to stream the pre-clean payload of a cleaned item; omitted or empty for the canonical (cleaned) payload.",
+            "in": "query",
+            "name": "variant",
+            "required": false,
+            "schema": {
+              "default": "",
+              "enum": [
+                "",
+                "original"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "400": {
             "description": "Media has an unsupported media type."
           },
           "404": {
             "description": "Media not found."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -13816,7 +13983,24 @@
     },
     "/api/medias/{media_id}/paragraph": {
       "get": {
+        "description": "Accepts ``?variant=original`` (see :func:`_variant_media`).  The word /\ncharacter counts are recomputed from the served content in that case,\nsince the stored counts describe the canonical (cleaned) text.",
         "operationId": "media_paragraph_get_1",
+        "parameters": [
+          {
+            "description": "``original`` to stream the pre-clean payload of a cleaned item; omitted or empty for the canonical (cleaned) payload.",
+            "in": "query",
+            "name": "variant",
+            "required": false,
+            "schema": {
+              "default": "",
+              "enum": [
+                "",
+                "original"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -13833,6 +14017,9 @@
           },
           "404": {
             "description": "Media not found, or media content unavailable."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -13857,7 +14044,24 @@
     },
     "/api/medias/{media_id}/text": {
       "get": {
+        "description": "Accepts ``?variant=original`` (see :func:`_variant_media`).  The word /\ncharacter counts are recomputed from the served content in that case,\nsince the stored counts describe the canonical (cleaned) text.",
         "operationId": "media_paragraph_get_2",
+        "parameters": [
+          {
+            "description": "``original`` to stream the pre-clean payload of a cleaned item; omitted or empty for the canonical (cleaned) payload.",
+            "in": "query",
+            "name": "variant",
+            "required": false,
+            "schema": {
+              "default": "",
+              "enum": [
+                "",
+                "original"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -13874,6 +14078,9 @@
           },
           "404": {
             "description": "Media not found, or media content unavailable."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -13898,14 +14105,33 @@
     },
     "/api/medias/{media_id}/thumbnail": {
       "get": {
-        "description": "Grid and list tiles use this instead of ``/image`` so a gallery of many\nhigh-resolution items doesn't force the browser to decode every full-size\nbitmap at once.  The thumbnail is bounded to a fixed longest-side length\n(see :data:`vtscore.media.image.thumbnail.DEFAULT_MAX_DIM`) and is the\nsame regardless of zoom level, so an ``ETag`` lets the browser reuse it\nacross scrolls and zoom changes.\n\nWhen the media carries a precomputed ``thumbnail_bytes`` (generated at\ningest for image/audio/video), the bytes are streamed directly with no\nrequest-time decode/resize -- the path that keeps a fresh browse-canvas\nzoom responsive.  Media without one (old pickles, thin loads, undecodable\nSVGs) fall back to generating the thumbnail from the display image.\n\nAn optional ``region=x0,y0,x1,y1`` query (normalised fractions in\n``[0, 1]``) crops the thumbnail to a sub-region of the image -- used so the\nGood pile shows a region-voted item's crop rather than the whole frame.\nA region request always regenerates from the display image (the\nprecomputed full-frame thumbnail can't be cropped after the fact).",
+        "description": "Grid and list tiles use this instead of ``/image`` so a gallery of many\nhigh-resolution items doesn't force the browser to decode every full-size\nbitmap at once.  The thumbnail is bounded to a fixed longest-side length\n(see :data:`vtscore.media.image.thumbnail.DEFAULT_MAX_DIM`) and is the\nsame regardless of zoom level, so an ``ETag`` lets the browser reuse it\nacross scrolls and zoom changes.\n\nWhen the media carries a precomputed ``thumbnail_bytes`` (generated at\ningest for image/audio/video), the bytes are streamed directly with no\nrequest-time decode/resize -- the path that keeps a fresh browse-canvas\nzoom responsive.  Media without one (old pickles, thin loads, undecodable\nSVGs) fall back to generating the thumbnail from the display image.\n\nAn optional ``region=x0,y0,x1,y1`` query (normalised fractions in\n``[0, 1]``) crops the thumbnail to a sub-region of the image -- used so the\nGood pile shows a region-voted item's crop rather than the whole frame.\nA region request always regenerates from the display image (the\nprecomputed full-frame thumbnail can't be cropped after the fact).\n\n``?variant=original`` regenerates from the pre-clean payload for the same\nreason: the stored ``thumbnail_bytes`` describes the canonical (cleaned)\nitem.",
         "operationId": "media_thumbnail",
+        "parameters": [
+          {
+            "description": "``original`` to stream the pre-clean payload of a cleaned item; omitted or empty for the canonical (cleaned) payload.",
+            "in": "query",
+            "name": "variant",
+            "required": false,
+            "schema": {
+              "default": "",
+              "enum": [
+                "",
+                "original"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "400": {
             "description": "Media is not an image and has no image_response delegate."
           },
           "404": {
             "description": "Media not found, or media bytes unavailable."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -13930,8 +14156,24 @@
     },
     "/api/medias/{media_id}/video": {
       "get": {
-        "description": "Determines the MIME type from the media's filename extension, defaulting\nto ``video/mp4`` for unrecognised extensions.",
+        "description": "Determines the MIME type from the media's filename extension, defaulting\nto ``video/mp4`` for unrecognised extensions.  Accepts\n``?variant=original`` (see :func:`_variant_media`).",
         "operationId": "media_video",
+        "parameters": [
+          {
+            "description": "``original`` to stream the pre-clean payload of a cleaned item; omitted or empty for the canonical (cleaned) payload.",
+            "in": "query",
+            "name": "variant",
+            "required": false,
+            "schema": {
+              "default": "",
+              "enum": [
+                "",
+                "original"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "400": {
             "description": "Media is not a video."
@@ -13941,6 +14183,9 @@
           },
           "415": {
             "description": "Source format requires ffmpeg/opencv which are unavailable."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -15355,7 +15600,7 @@
       "name": "processors_scoring"
     },
     {
-      "description": "Read-only listings: media types, embedders, clippers, converters, importers.",
+      "description": "Read-only listings: media types, embedders, clippers, cleaners, converters, importers.",
       "name": "datasets_listings"
     },
     {

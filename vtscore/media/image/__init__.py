@@ -1,3 +1,4 @@
+from vtscore.media.image.cleaner import ImageExifOrientCleaner
 from vtscore.media.image.clipper import (
     ImageDefaultClipper,
     ImageObjectClipper,
@@ -11,3 +12,4 @@ CLIPPERS = [
     ImageTilingClipper(),
     ImageObjectClipper(),
 ]
+CLEANERS = [ImageExifOrientCleaner()]

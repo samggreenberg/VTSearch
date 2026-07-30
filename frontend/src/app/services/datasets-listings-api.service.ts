@@ -7,11 +7,13 @@ import { ApiConfiguration } from '../generated/api-client/api-configuration';
 import type { DemoCategoriesResponse } from '../generated/api-client/models/demo-categories-response';
 import type { DemoDatasetListResponse } from '../generated/api-client/models/demo-dataset-list-response';
 import type {
+  CleanerInfo,
   ClipperInfo,
   ConverterInfo,
   EmbedderInfo,
   MediaTypeInfo,
 } from '../models/api.models';
+import { cleanersList } from '../generated/api-client/fn/datasets-listings/cleaners-list';
 import { clippersList } from '../generated/api-client/fn/datasets-listings/clippers-list';
 import { convertersList } from '../generated/api-client/fn/datasets-listings/converters-list';
 import { demoDatasetCategories } from '../generated/api-client/fn/datasets-ui/demo-dataset-categories';
@@ -38,6 +40,15 @@ export class DatasetsListingsApiService {
   getClippers(mediaType?: string): Observable<ClipperInfo[]> {
     return clippersList(this.http, this.config.rootUrl, { media_type: mediaType }).pipe(
       map((r) => r.body.clippers as unknown as ClipperInfo[]),
+    );
+  }
+
+  /** Cleanup gates registered for `mediaType` (all of them when omitted).
+   *  Unlike clippers these are not a radio choice: the import form renders
+   *  one checkbox per entry, pre-checked when `default_enabled` is set. */
+  getCleaners(mediaType?: string): Observable<CleanerInfo[]> {
+    return cleanersList(this.http, this.config.rootUrl, { media_type: mediaType }).pipe(
+      map((r) => r.body.cleaners as unknown as CleanerInfo[]),
     );
   }
 
