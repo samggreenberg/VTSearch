@@ -24,6 +24,7 @@
   max-over-N score, so it also raises *false positives*. The two cancel on large
   objects and the extra nodes are pure cost on mid-scale ones. Adding scale
   candidates helps recall and hurts precision; pick the pool size deliberately.
+- **The tree's *merge order* barely matters; the candidate *set* does.** Denoising the merge order with per-image PCA (MaxPatchPcaHAC) changes the tree topology but leaves the outcome statistically unchanged — an image's score is a max-pool over *every* node, so it is insensitive to which patches merge in what order. The lever is the candidate set you pool over (raw patches + the whole-image row), not the structure of the tree built on it.
 - **The scale crossover is real but already covered.** Raw patches beat pooled
   regions on small objects and the two converge on large ones (ρ = 0.50 between
   object size and the MaxPatch−MaxHAC gap) — the pre-registered hypothesis. But

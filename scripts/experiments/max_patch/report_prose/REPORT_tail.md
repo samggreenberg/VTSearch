@@ -58,4 +58,15 @@ region-vote to the node whose box best matches (multi-scale), and floods **every
 node** on a Bad vote (symmetric with inference). Because the tree carries the CLS
 node and the flood covers every scored row, it satisfies the train/score
 geometry parity the corrected harness enforces — verified by the shared parity
-tests plus a dedicated `TestMaxPatchHacStyle` (56 tests pass).
+tests plus a dedicated `TestMaxPatchHacStyle`.
+
+**MaxPatchPcaHAC** is the same tree with its merge *order* decided in a
+per-image `pca_dims`-component PCA space (`_fit_pca_projector` in
+`vtscore/media/patch_embed.py`, the option ported from the
+HAC-tree-improvements branch). The whole patch grid is projected in **one
+batched `pca.transform`** call rather than one call per patch, keeping the
+PCA variant's tree-build cost close to MaxPatchHAC's; the batched projection
+is numerically identical to the per-vector form, so it changes only the tree
+topology, not the scored vectors — which is why it comes out statistically
+indistinguishable from MaxPatchHAC. (64 tests pass, incl.
+`TestMaxPatchPcaHacStyle`.)
