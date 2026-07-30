@@ -20,69 +20,36 @@ export function formatProgressFraction(current: number, total: number): string {
   return `${current.toLocaleString()}/${total.toLocaleString()}`;
 }
 
-/**
- * The fraction of an estimate we allow ourselves to claim as precision. An ETA
- * is snapped to a "nice" step roughly this size relative to its own magnitude,
- * so the bigger the estimate the coarser it reads: a ~5.5 min job rounds to the
- * half-minute, a ~2 hr job to the half-hour. Keeping every chip deliberately
- * approximate is the point — an under-specified ETA can't be held to a
- * precision the backend never actually had.
- */
-const ETA_ROUND_RATIO = 0.1;
-
-/** Nice rounding steps, expressed in the chosen display unit (sec/min/hr). */
-const ETA_NICE_STEPS = [0.5, 1, 2, 5, 10, 15, 30];
-
-/**
- * Snap ``value`` to the nearest "nice" step whose size is about
- * ``ETA_ROUND_RATIO`` of the value itself (never smaller than ``minStep``).
- */
-function snapEta(value: number, minStep: number): number {
-  const target = value * ETA_ROUND_RATIO;
-  let step = minStep;
-  for (const candidate of ETA_NICE_STEPS) {
-    if (candidate >= minStep && candidate <= target) step = candidate;
-  }
-  return Math.round(value / step) * step;
-}
-
-/** Render a snapped magnitude with at most one decimal and no trailing ``.0``. */
+/** Render a magnitude with at most one decimal and no trailing ``.0``. */
 function etaUnit(value: number, unit: string): string {
   const text = Number.isInteger(value) ? String(value) : value.toFixed(1);
-  return `${text} ${unit} left?`;
+  return `About ${text} ${unit} left`;
 }
 
 /**
  * Format a remaining-seconds estimate into a deliberately humble, single-unit
- * chip: ``35 sec left`` / ``5.5 min left`` / ``2 hr left``. The value is
- * rounded to a nice step that scales with its magnitude (see
- * ``ETA_ROUND_RATIO``), so we never claim more precision than a noisy estimate
- * deserves and never show an over-precise ``5 min 34 sec``-style breakdown.
- * Returns an empty string for ``null``, non-positive, or non-finite values so
- * the caller can drop it from concatenation unconditionally.
+ * chip: ``About 45 sec left`` / ``About 10 min left`` / ``About 2 hr left``.
+ *
+ * The vagueness is not this function's doing — it is the backend's. Every
+ * ``eta_seconds`` on the wire has already been snapped to a coarse ladder and
+ * held there by hysteresis (see ``ProgressTracker._humble_eta``), so a job whose
+ * true estimate wanders between 8 and 11 minutes reports a steady ``600`` the
+ * whole time instead of walking the user through every revision. That is
+ * deliberate: an estimate reported to the half-minute invites you to check it,
+ * and checking it is how you notice it going *up*.
+ *
+ * All this does is pick the unit and say "About". Ladder rungs are chosen to be
+ * round in whichever unit they land in, so nothing is rounded a second time
+ * here; a value that somehow arrives off-ladder still renders sanely at one
+ * decimal. Returns an empty string for ``null``, non-positive, or non-finite
+ * values so the caller can drop it from concatenation unconditionally.
  */
 export function formatEta(seconds: number | null | undefined): string {
   if (seconds == null || !isFinite(seconds) || seconds <= 0) return '';
-  // Sub-minute: round to a nice multiple of seconds. We are deliberately
-  // imprecise about ETAs, so the granularity floor is 10s — never finer.
-  // Showing "< 5 sec" for what can be 10+ seconds of work reads as
-  // over-confident; "< 10 sec" is the honest floor.
-  if (seconds < 60) {
-    const s = snapEta(seconds, 10);
-    // A few seconds left snaps down to 0; claiming "~0 sec" reads as "done"
-    // even though work remains. Show "< 10 sec left" instead.
-    if (s <= 0) return '< 10 sec left?';
-    if (s < 60) return etaUnit(s, 'sec');
-  }
-  // Minutes: round to the nice fraction of a minute (minimum half-minute).
+  if (seconds < 60) return etaUnit(Math.round(seconds), 'sec');
   const minutes = seconds / 60;
-  if (minutes < 60) {
-    const m = snapEta(minutes, 0.5);
-    if (m < 60) return etaUnit(m, 'min');
-  }
-  // Hours: round to the nice fraction of an hour (minimum half-hour).
-  const h = snapEta(seconds / 3600, 0.5);
-  return etaUnit(h, 'hr');
+  if (minutes < 60) return etaUnit(Math.round(minutes * 10) / 10, 'min');
+  return etaUnit(Math.round((seconds / 3600) * 10) / 10, 'hr');
 }
 
 /**
@@ -92,7 +59,7 @@ export function formatEta(seconds: number | null | undefined): string {
  * Each piece is optional:
  *   - The ``[Step S/T]`` prefix appears only when ``total_steps > 1``.
  *   - The ``(C/T)`` fraction appears only when ``total > 0``.
- *   - The ``· 5.5 min left`` tail appears only when ``eta_seconds > 0``; the
+ *   - The ``· About 10 min left`` tail appears only when ``eta_seconds > 0``; the
  *     backend gates this on at least 5s of elapsed work, so it stays hidden
  *     for short bars.
  *   - When none are present, returns the bare ``message`` (or
@@ -209,7 +176,7 @@ export function isProgressIndeterminate(
  *     is omitted here; it is returned separately as ``eta`` so the UI can pin it
  *     to the right of the progress bar where it stays visible even when a long
  *     file path ellipsizes the detail.
- *   - ``eta``: the bare ``5.5 min left`` chip, or empty when no estimate is available.
+ *   - ``eta``: the bare ``About 10 min left`` chip, or empty when no estimate is available.
  */
 export interface ProgressHeader {
   header: string;

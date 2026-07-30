@@ -44,10 +44,11 @@ detector_find_bp = Blueprint(
 
 # Number of high-level Find steps: prepare detectors, load data, score.
 _FIND_STEPS = 3
-# Scoring dominates; loading datasets from pkl is moderate; preparing detector
-# configs is quick. Paces the unified whole-job bar (ETA self-corrects).
-#                  prepare  load  score
-_FIND_STEP_WEIGHTS = [0.10, 0.30, 0.60]
+#: Timing-profile task name; its step names and shipped fallback weights live in
+#: :data:`vtscore.timing.tasks.TASKS`. An admin ``VTSEARCH_TIMING_PROFILE``
+#: replaces those with seconds measured on this deployment's own storage, which
+#: is what the "load datasets from pkl" step actually varies with.
+_FIND_TASK = "find"
 
 
 def _load_pkl_for_check(pkl_path: str) -> dict | None:
@@ -616,7 +617,6 @@ def multi_find(body: dict):
     # Clear a leftover cancel flag from a previously-cancelled run so
     # the new operation doesn't trip on it immediately.
     find_progress.reset_cancel()
-    find_progress.set_step_weights(_FIND_STEP_WEIGHTS)
 
     update_find_progress(
         "running",
@@ -628,6 +628,27 @@ def multi_find(body: dict):
     )
 
     datasets = _resolve_find_datasets(dataset_ids)
+
+    # Pace against the actual size of this Find: the scoring step scales with
+    # every media in every selected dataset, and the pkl-load step with the same
+    # count on this host's storage. Both are known now that the registry entries
+    # are resolved, so the weights need not fall back to a size-blind guess.
+    from vtscore import timing  # noqa: PLC0415
+
+    n_scored = sum(int(ds.get("num_items") or 0) for ds in datasets)
+    find_media_type = next((ds.get("media_type", "") for ds in datasets if ds.get("media_type")), "")
+    find_embedder = next((ds.get("embedder", "") for ds in datasets if ds.get("embedder")), "")
+    find_progress.set_step_weights(
+        timing.step_weights(_FIND_TASK, media_type=find_media_type, embedder=find_embedder, n=n_scored)
+    )
+    # Every exit below — success, cancel, and abort alike — parks the tracker at
+    # "idle", which is what closes the recorder.
+    recorder = timing.record_task(
+        find_progress, _FIND_TASK, media_type=find_media_type, embedder=find_embedder, auto_finish=True
+    )
+    recorder.start()
+    recorder.set_scale(n=n_scored)
+
     detectors = _resolve_find_detectors(detector_ids)
     detector_configs = _build_detector_configs(detectors)
     detector_names = [dc["name"] for dc in detector_configs]
@@ -663,7 +684,13 @@ def multi_find(body: dict):
             if not detected_media_type and ds_media_type:
                 detected_media_type = ds_media_type
     except CancelledError:
+        # A cancelled run's phase timings describe a partial job, so they are
+        # recorded as not-ok and the fit drops them.
+        recorder.finish(ok=False)
         _abort_find(409, "Find cancelled")
+    except Exception:
+        recorder.finish(ok=False)
+        raise
 
     update_find_progress("idle", "", step=None, total_steps=None)
 

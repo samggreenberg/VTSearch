@@ -93,12 +93,11 @@ sorting_bp = Blueprint(
 # the unified whole-job bar and an overall ETA, with the model load surfaced as
 # real sub-progress within step 1.
 _SORT_STEPS = 3
-# The model load dominates wall-clock on a cold start (seconds to pull CLAP /
-# SigLIP weights); embedding one short query is trivial; scoring scales with the
-# dataset but is vectorised.  Paces the unified bar; the overall ETA
-# self-corrects from measured elapsed-vs-fraction regardless of these weights.
-#                     load  embed  score
-_SORT_STEP_WEIGHTS = [0.75, 0.05, 0.20]
+#: Timing-profile task name; its step names and shipped fallback weights live in
+#: :data:`vtscore.timing.tasks.TASKS`. An admin ``VTSEARCH_TIMING_PROFILE``
+#: measured on this deployment replaces those weights with real seconds, which
+#: is what keeps the sort ETA from drifting on a cold model load.
+_SORT_TASK = "text_sort"
 
 
 def _sort_idle() -> None:
@@ -254,7 +253,18 @@ def sort_clips(body: dict):
             ),
         )
 
-    sort_progress.set_step_weights(_SORT_STEP_WEIGHTS)
+    from vtscore import timing  # noqa: PLC0415
+
+    sort_progress.set_step_weights(
+        timing.step_weights(_SORT_TASK, media_type=media_type, embedder=embedder_name, n=len(snap))
+    )
+    # Every exit below — success and abort alike — parks the tracker at "idle"
+    # via ``_sort_idle()``, which is what closes the recorder.
+    recorder = timing.record_task(
+        sort_progress, _SORT_TASK, media_type=media_type, embedder=embedder_name, auto_finish=True
+    )
+    recorder.start()
+    recorder.set_scale(n=len(snap))
     try:
         _load_embedder_with_progress(snap)
         update_sort_progress("sorting", "Embedding text query…", 0, 0, step=2, total_steps=_SORT_STEPS)
@@ -272,6 +282,7 @@ def sort_clips(body: dict):
         _sort_idle()
         return windowed_sort_response(results, threshold)
     except Exception as exc:
+        recorder.finish(ok=False)
         from werkzeug.exceptions import HTTPException
 
         if isinstance(exc, HTTPException):

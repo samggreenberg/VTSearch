@@ -415,8 +415,11 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
 
 
 _LOAD_STEPS = 3  # restore labels, seed examples, train MLP
-# MLP training dominates; label restore + example seeding are quick I/O.
-_LOAD_STEP_WEIGHTS = [0.15, 0.15, 0.70]
+#: Timing-profile task name; its step names and shipped fallback weights live in
+#: :data:`vtscore.timing.tasks.TASKS`. An admin ``VTSEARCH_TIMING_PROFILE``
+#: replaces those with seconds measured here, so a detector with 40 labels and
+#: one with 4000 no longer get the same three-way split of the bar.
+_DETECTOR_LOAD_TASK = "detector_load"
 
 
 def _run_detector_load_task(
@@ -670,14 +673,25 @@ def load_detector_route(body: dict):
         media_type=entry.get("media_type", ""),
     )
 
+    from vtscore import timing
+
+    det_media_type = entry.get("media_type", "")
+    det_embedder = entry.get("embedder", "") or ""
+    n_labels = int(entry.get("num_training") or 0)
+
     task_id = f"_detload_{detector_id}"
     tracker = detector_loading_tasks.create_task(
         task_id,
         entry.get("name", detector_id),
         detector_id=detector_id,
-        media_type=entry.get("media_type", ""),
-        step_weights=_LOAD_STEP_WEIGHTS,
+        media_type=det_media_type,
+        step_weights=timing.step_weights(
+            _DETECTOR_LOAD_TASK, media_type=det_media_type, embedder=det_embedder, n=n_labels
+        ),
     )
+    timing_recorder = timing.record_task(tracker, _DETECTOR_LOAD_TASK, media_type=det_media_type, embedder=det_embedder)
+    timing_recorder.start()
+    timing_recorder.set_scale(n=n_labels)
     tracker.update("loading", "Preparing…", 0, 0, step=1, total_steps=_LOAD_STEPS)
 
     det_name = entry.get("name", "")
@@ -687,14 +701,20 @@ def load_detector_route(body: dict):
     _thread_ds_ctx = get_active_context()
 
     def load_task():
-        _run_detector_load_task(
-            detector_id=detector_id,
-            det_ctx=det_ctx,
-            thread_ds_ctx=_thread_ds_ctx,
-            det_name=det_name,
-            tracker=tracker,
-            task_id=task_id,
-        )
+        try:
+            _run_detector_load_task(
+                detector_id=detector_id,
+                det_ctx=det_ctx,
+                thread_ds_ctx=_thread_ds_ctx,
+                det_name=det_name,
+                tracker=tracker,
+                task_id=task_id,
+            )
+        finally:
+            # The worker reports failures on the tracker rather than raising,
+            # so the tracker — not an exception — is what says whether these
+            # timings describe a real load or an aborted one.
+            timing_recorder.finish(ok=not tracker.get().get("error"))
 
     from vtsearch.threading import spawn
 

@@ -11,9 +11,10 @@ installation and getting started, see [SETUP.md](SETUP.md).
 3. [Network dependencies](#network-dependencies)
 4. [Offline deployment](#offline-deployment)
 5. [Data directory layout](#data-directory-layout)
-6. [Docker production notes](#docker-production-notes)
-7. [Dependency structure](#dependency-structure)
-8. [Troubleshooting](#troubleshooting)
+6. [Progress-bar timing profile](#progress-bar-timing-profile)
+7. [Docker production notes](#docker-production-notes)
+8. [Dependency structure](#dependency-structure)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -27,6 +28,13 @@ installation and getting started, see [SETUP.md](SETUP.md).
 | `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). `INFO`/`DEBUG` also turn on the per-request access log. |
 | `VTSEARCH_MODELS_DIR` | `data/models` | Directory for HuggingFace model cache |
 | `VTSEARCH_SUPPORT_EMAIL` | built-in project address | Recipient for the Help modal's "Email us" link. Overrides the persisted `support_email` setting for the process lifetime (all users; not editable via the API). Equivalent to the `--support-email` CLI flag, for the gunicorn images that never parse `argv`; an explicit flag wins. |
+
+### Progress-bar timing
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VTSEARCH_TIMING_PROFILE` | unset | Path to a timing-profile JSON measured on this environment's hardware. Tells every instance how long each step of each long-running task takes here, so progress bars pace and predict against reality instead of the shipped defaults. See [Progress-bar timing profile](#progress-bar-timing-profile). |
+| `VTSEARCH_TIMING_RECORD` | unset | Path to a JSONL sink. When set, every long-running task appends one row per step as it finishes. This is how you gather the measurements the profile is fit from; leave it unset in steady state. |
 
 ### Dataset-ingest concurrency
 
@@ -481,6 +489,130 @@ Notable fields:
 - `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*`:
   per-media-type UI layout preferences (keyed by media type ID)
 - `autopilot_enabled`: whether the autopilot feature is active
+
+---
+
+## Progress-bar timing profile
+
+Every long-running operation — importing a dataset, opening one, loading a
+detector, a text search, a Find, a train-and-score, a promote — shows one
+progress bar that fills across several steps and reports a remaining-time
+estimate. To pace that bar the server needs a prior for what each step *costs*,
+and to keep the estimate from drifting it needs that prior to be roughly right.
+
+VTSearch ships defaults for those costs, measured on one GPU cluster. Your
+hardware is not that cluster. A profile replaces the shipped numbers with ones
+measured here.
+
+### What a profile changes (and what it can't)
+
+A profile only affects **pacing and prediction**. A wrong or missing profile
+makes a bar race one phase and crawl the next, and makes its ETA converge slowly;
+it never affects correctness, results, or what gets stored. Deploying without one
+is entirely supported — that is what the shipped defaults are for.
+
+What it buys you is worth having, though. The cost of each step is affine in the
+job's size:
+
+```
+seconds ≈ a + b·n + per_mb·archive_mb
+```
+
+The fixed part `a` matters enormously at small `n` (an 8-second encoder load *is*
+a 1000-item text search) and not at all at large `n`. A single fixed weight
+vector cannot be right at both ends, which is exactly the failure that makes a
+bar's estimate climb: the job is paced as if the expensive phase were nearly
+over.
+
+### Gathering the measurements
+
+**Recommended: observe real usage.** Point the recorder at a file and run
+normally:
+
+```bash
+VTSEARCH_TIMING_RECORD=/var/lib/vtsearch/timings.jsonl \
+VTSEARCH_SERVER_INIT=1 gunicorn ...
+```
+
+Each task appends one row per step as it completes. This has no side effects and
+no performance cost worth measuring (a file append per task), and it captures the
+datasets your users actually load at the sizes they actually are — a mix no
+synthetic sweep reproduces. Let it run for a day or a week, then fit:
+
+```bash
+python scripts/profiling/tune_timing_profile.py --fit-only \
+    --out /etc/vtsearch/timing-profile.json \
+    /var/lib/vtsearch/timings.jsonl
+```
+
+**Alternative: drive the workloads.** When you want numbers immediately —
+commissioning a node, or after a hardware change — the script can exercise the
+tasks itself against datasets and detectors you name:
+
+```bash
+python scripts/profiling/tune_timing_profile.py --drive \
+    --out timing-profile.json --datasets ds-a,ds-b,ds-c --reps 3
+```
+
+By default `--drive` runs only the read-only families (opening a dataset, text
+search, Find). The others mutate state — loading a detector seeds example votes,
+**train-and-score overwrites the active dataset's labels**, promote creates a
+dataset, an import writes one — so they require `--allow-mutating` and should be
+pointed at a scratch `--data-dir`, never at live user data.
+
+Either way the script ends by printing a coverage report naming which task
+families got measured and which fell back to the defaults, so a thin sweep is
+visible rather than silently half-effective.
+
+### Deploying it
+
+```bash
+VTSEARCH_TIMING_PROFILE=/etc/vtsearch/timing-profile.json
+```
+
+The file is read once per process at startup. It is plain JSON and safe to
+hand-edit; a malformed one logs a warning and falls back to the defaults rather
+than failing the server. Coefficients are keyed by a *cell* —
+`device|media_type|embedder` — with `*` or an empty component as a wildcard, and
+lookup walks from the most specific key to the least:
+
+```json
+{
+  "schema": "vtsearch-timing-profile",
+  "version": 1,
+  "host": "prod-gpu-01",
+  "tasks": {
+    "text_sort": {
+      "cells": {
+        "cuda+cuml|image|siglip": {
+          "samples": 12,
+          "steps": {
+            "load_model":  {"a": 8.2},
+            "embed_query": {"a": 0.04},
+            "score":       {"a": 0.1, "b": 0.00012}
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+The fit emits rollup cells (`cuda||`) alongside precise ones, so measuring three
+exemplar datasets still improves pacing for every dataset that host will see.
+
+Re-run the tuning whenever the hardware, storage, or GPU stack changes. Nothing
+expires a profile automatically; a stale one costs accuracy, never correctness.
+
+### A note on the ETA itself
+
+Even a perfectly tuned profile cannot make a remaining-time estimate exact — it
+is an extrapolation from a rate that is still changing. So the server never
+publishes its raw estimate: it snaps to a coarse ladder and holds each rung until
+the underlying estimate moves decisively, which is why the UI says
+"About 10 min left" and keeps saying it rather than counting through every
+revision. A genuinely slowing job still reports the increase; what it no longer
+does is twitch.
 
 ---
 

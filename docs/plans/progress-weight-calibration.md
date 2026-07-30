@@ -1,5 +1,14 @@
 # Progress-weight calibration
 
+**Background:** the checked-in coefficients this plan produced are now the
+*shipped defaults* for `dataset_load`, not the last word. A deployment can
+measure its own hardware with `scripts/profiling/tune_timing_profile.py` and
+override any cell (plus every non-dataset task) through a
+`VTSEARCH_TIMING_PROFILE` JSON — see `vtscore/timing/` and
+`docs/DEPLOYMENT.md` § *Progress-bar timing profile*. The remaining work below
+is about widening the checked-in defaults' coverage; it is not a prerequisite
+for a tuned deployment.
+
 **Status:** Load-progress weights are calibrated for every demo-backed media
 type (image/audio/video/text/document) × every loadable registered embedder ×
 {cpu, cuda, cuda+cuml} (issue #2623; HLTCOE Grid rack8n06 v100, 2026-07-18/19
