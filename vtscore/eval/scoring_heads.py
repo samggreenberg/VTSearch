@@ -23,8 +23,25 @@ from collections.abc import Callable, Sequence
 
 import numpy as np
 
+from vtscore.utils.scores import NON_FINITE_SCORE_SENTINEL
+
 PredictFn = Callable[[np.ndarray], np.ndarray]
 TrainerFn = Callable[[np.ndarray, np.ndarray, int], PredictFn]
+
+
+def _finite_scores(scores: np.ndarray) -> np.ndarray:
+    """Replace non-finite row scores with ``NON_FINITE_SCORE_SENTINEL`` (-1.0).
+
+    Mirrors the production scoring path: :func:`vtscore.detectors.training._score_all_media`
+    runs the MLP output through :func:`vtscore.utils.scores.sigmoid_to_finite_array`
+    before :func:`vtscore.embedding.matrix.segmented_max_pool`, so a NaN/±Inf row
+    score (a destabilised MLP) is dropped to a sentinel *below* the ``[0, 1]``
+    sigmoid range rather than propagating through the per-image max. Without this
+    a single NaN row would poison its image's pooled score. The sentinel is
+    ``< 0`` so a genuine region always wins the max, and an all-sentinel image
+    resolves to region 0 — identical to production.
+    """
+    return np.where(np.isfinite(scores), scores, NON_FINITE_SCORE_SENTINEL)
 
 
 def max_pool_over_images(score_fn: PredictFn, region_mats: Sequence[np.ndarray]) -> np.ndarray:
@@ -41,7 +58,7 @@ def max_pool_over_images(score_fn: PredictFn, region_mats: Sequence[np.ndarray])
     if not nonempty:
         return out
     big = np.concatenate(nonempty, axis=0)
-    scores = np.asarray(score_fn(big), dtype=np.float64).reshape(-1)
+    scores = _finite_scores(np.asarray(score_fn(big), dtype=np.float64).reshape(-1))
     i = 0
     for j, c in enumerate(counts):
         if c > 0:
@@ -64,7 +81,7 @@ def max_pool_with_argmax(score_fn: PredictFn, region_mats: Sequence[np.ndarray])
     if not nonempty:
         return scores, argmax
     big = np.concatenate(nonempty, axis=0)
-    flat = np.asarray(score_fn(big), dtype=np.float64).reshape(-1)
+    flat = _finite_scores(np.asarray(score_fn(big), dtype=np.float64).reshape(-1))
     i = 0
     for j, c in enumerate(counts):
         if c > 0:
