@@ -639,7 +639,7 @@ def find_evidence_coverage():
     # already populated from its saved labelset — cross-user by construction,
     # nothing persisted.  Good rows are y == 1, Bad (incl. patch-flood
     # negatives) are y == 0.
-    x_list, y_list, _groups = build_xy_from_labelset(det_ctx, labelset)
+    x_list, y_list, _groups, _score_rows = build_xy_from_labelset(det_ctx, labelset)
     if not x_list:
         return _empty_evidence_coverage()
     x = np.asarray(x_list, dtype=np.float32)

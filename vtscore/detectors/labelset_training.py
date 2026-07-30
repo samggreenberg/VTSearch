@@ -143,6 +143,24 @@ def _leaves_from_regions(regions) -> list[np.ndarray] | None:
     return leaves or None
 
 
+def _embedder_supports_patch_regions(embedder_name: str) -> bool:
+    """Whether *embedder_name* produces a ``patch_regions`` tree at all.
+
+    Gates the region-stack resolution below: on a legacy single-vector detector
+    there is no tree to rebuild, so probing every element's origin file would be
+    pure I/O for a guaranteed ``None``.
+    """
+    if not embedder_name:
+        return False
+    from vtscore.media import get_embedder
+
+    try:
+        embedder = get_embedder(embedder_name)
+    except (KeyError, ValueError):
+        return False
+    return bool(getattr(embedder, "supports_patch_regions", False))
+
+
 def _patch_pooled_from_file(
     file_path: Path,
     *,
@@ -238,8 +256,10 @@ def _maybe_clear_cache_on_embedder_switch(det_ctx, embedder_name: str) -> None:
     if det_ctx.embedder and embedder_name and det_ctx.embedder != embedder_name:
         det_ctx.label_embeddings.clear()
         det_ctx.label_embedding_regions.clear()
-        # Flooded leaf negatives live in the old embedder's space too.
+        # Flooded leaf negatives and the region scoring stacks live in the old
+        # embedder's space too.
         det_ctx.label_negative_regions.clear()
+        det_ctx.label_score_regions.clear()
         # Local features are descriptor sets in the old embedder's feature space;
         # a switch invalidates them too (a SIFT template can't verify against a
         # learned-feature candidate, nor vice versa).
@@ -291,22 +311,34 @@ def _resolve_uncached_embedding(
     return np.asarray(emb) if emb is not None else None
 
 
-def _resolve_negative_leaves(
+def _all_region_vecs(regions) -> list[np.ndarray] | None:
+    """Every node's vector from a ``patch_regions`` list - the scoring stack.
+
+    The rows :func:`vtscore.detectors.training._score_all_media` max-pools an
+    image over: CLS, HAC internals, and HAC leaves alike (a superset of the
+    leaf set a Bad vote floods).  Returns ``None`` for an empty/absent list.
+    """
+    if not regions:
+        return None
+    return [np.asarray(r.vec, dtype=np.float32) for r in regions]
+
+
+def _resolve_region_nodes(
     elem: LabeledElement,
     snap: dict[int, dict[str, Any]] | None,
     *,
     media_type: str,
     embedder_name: str,
     lookups: tuple[dict[str, list[int]], dict[str, list[int]], dict[str, list[int]]] | None = None,
-) -> list[np.ndarray] | None:
-    """Leaf negatives (CLS + HAC leaves) for a Bad *elem* on a patch dataset.
+):
+    """The ``patch_regions`` tree behind *elem*, or ``None``.
 
-    In-dataset: read the resolved media's ``patch_regions`` leaves (no I/O).
-    Cross-dataset: rebuild the region tree from the origin file via
-    :func:`_region_tree_from_file` and take its leaves.  Returns ``None`` for
-    non-patch datasets/elements (and clipper-bearing origins, whose patch grid
-    we can't reconstruct) so the caller falls back to a single image-level
-    negative - i.e. no flooding, the pre-change behaviour.
+    In-dataset: read the resolved media's stored tree (no I/O).
+    Cross-dataset: rebuild it from the origin file via
+    :func:`_region_tree_from_file`.  Returns ``None`` for non-patch
+    datasets/elements (and clipper-bearing origins, whose patch grid we can't
+    reconstruct) so the callers fall back to their image-level behaviour - a
+    single negative for a Bad element, the training row as the scoring row.
 
     *lookups* is the pre-built ``build_media_lookup`` triple for *snap*; loop
     callers pass it so the cid resolution doesn't rebuild the tables per element.
@@ -317,7 +349,7 @@ def _resolve_negative_leaves(
     if snap:
         cid = resolve_current_dataset_cid(elem, lookups)
         if cid is not None and cid in snap:
-            return _leaves_from_regions(snap[cid].get("patch_regions"))
+            return snap[cid].get("patch_regions") or None
 
     origin = elem.origin or {}
     params = origin.get("params", {}) if isinstance(origin, dict) else {}
@@ -327,8 +359,47 @@ def _resolve_negative_leaves(
     with resolve_file_context(elem.origin, elem.origin_name, elem.filename) as file_path:
         if file_path is None:
             return None
-        regions = _region_tree_from_file(file_path, media_type=media_type, embedder_name=embedder_name)
-    return _leaves_from_regions(regions)
+        return _region_tree_from_file(file_path, media_type=media_type, embedder_name=embedder_name)
+
+
+def _cache_region_vectors(
+    elem: LabeledElement,
+    eid: str,
+    snap: dict[int, dict[str, Any]] | None,
+    *,
+    media_type: str,
+    embedder_name: str,
+    lookups: tuple[dict[str, list[int]], dict[str, list[int]], dict[str, list[int]]] | None,
+    neg_cache: dict[str, list[np.ndarray]],
+    score_cache: dict[str, list[np.ndarray]],
+    patch_capable: bool,
+) -> None:
+    """Top up *elem*'s two region caches from a single tree resolution.
+
+    A patch element's ``patch_regions`` tree feeds both: the CLS + leaf
+    negatives a Bad element floods (the cross-dataset counterpart of
+    :func:`~vtscore.detectors.training.bad_negative_vecs`), and the full node
+    stack the *scorer* max-pools that image over - which threshold calibration
+    collapses every bag, Good and Bad alike, over.  Resolved once per element
+    and cached so re-sorts don't re-resolve.
+
+    The scoring stack is skipped entirely on a legacy single-vector detector
+    (*patch_capable* is ``False``, where the resolution would return ``None``
+    anyway), so no origin file is probed for a tree that cannot exist.
+    """
+    wants_negatives = elem.label == "bad" and eid not in neg_cache
+    wants_score_rows = patch_capable and elem.label in ("good", "bad") and eid not in score_cache
+    if not (wants_negatives or wants_score_rows):
+        return
+    regions = _resolve_region_nodes(elem, snap, media_type=media_type, embedder_name=embedder_name, lookups=lookups)
+    if wants_negatives:
+        leaves = _leaves_from_regions(regions)
+        if leaves is not None:
+            neg_cache[eid] = leaves
+    if wants_score_rows:
+        rows = _all_region_vecs(regions)
+        if rows is not None:
+            score_cache[eid] = rows
 
 
 def populate_label_embeddings(
@@ -364,6 +435,8 @@ def populate_label_embeddings(
     cached = 0
 
     neg_cache: dict[str, list[np.ndarray]] = det_ctx.label_negative_regions
+    score_cache: dict[str, list[np.ndarray]] = det_ctx.label_score_regions
+    patch_capable = _embedder_supports_patch_regions(embedder_name)
 
     # Build the origin/md5/name lookup tables once from *snap* and thread them
     # through every element's cid resolution, so the pass is O(N + labels)
@@ -372,17 +445,17 @@ def populate_label_embeddings(
 
     for idx, elem in enumerate(labelset.elements):
         eid = stable_element_id(elem)
-        # Bad elements on a patch dataset flood their CLS + leaf negatives (the
-        # cross-dataset counterpart of ``bad_negative_vecs``); cache the leaf
-        # set once so re-sorts don't re-resolve.  A no-op on non-patch datasets
-        # (``_resolve_negative_leaves`` returns None), leaving the Bad element
-        # to contribute its single image-level vector below.
-        if elem.label == "bad" and eid not in neg_cache:
-            leaves = _resolve_negative_leaves(
-                elem, snap, media_type=media_type, embedder_name=embedder_name, lookups=lookups
-            )
-            if leaves is not None:
-                neg_cache[eid] = leaves
+        _cache_region_vectors(
+            elem,
+            eid,
+            snap,
+            media_type=media_type,
+            embedder_name=embedder_name,
+            lookups=lookups,
+            neg_cache=neg_cache,
+            score_cache=score_cache,
+            patch_capable=patch_capable,
+        )
 
         # Cache hit only when the cached vector was built against the same
         # ``region_box`` the element currently carries.  Region-voted
@@ -422,8 +495,8 @@ def populate_label_embeddings(
 def build_xy_from_labelset(
     det_ctx,
     labelset: LabelSet,
-) -> tuple[list[np.ndarray], list[float], list]:
-    """Build ``(X_list, y_list, groups)`` from the cached embeddings on *det_ctx*.
+) -> tuple[list[np.ndarray], list[float], list, dict]:
+    """Build ``(X_list, y_list, groups, score_rows)`` from *det_ctx*'s caches.
 
     A Good element contributes its single cached vector.  A Bad element on a
     patch dataset contributes its flooded CLS + leaf negatives (cached in
@@ -433,14 +506,29 @@ def build_xy_from_labelset(
     trainer/calibrator balance and split by element (image), not by row.  When
     nothing floods, every bag holds one row and the downstream path is
     byte-for-byte the pre-flood behaviour.
+
+    ``score_rows`` maps each bag id to the full region-node stack that element's
+    media is *scored* over at inference (``label_score_regions``), so threshold
+    calibration collapses a Good bag exactly the way it collapses a Bad bag and
+    the way the scorer collapses any image - see
+    :func:`vtscore.detectors.training._calibration_score_rows`.  Empty on a
+    legacy dataset, where there is nothing to correct.
     """
     from vtscore.detectors.labelset_elements import stable_element_id
 
     cache: dict[str, np.ndarray] = det_ctx.label_embeddings
     neg_cache: dict[str, list[np.ndarray]] = det_ctx.label_negative_regions
+    score_cache: dict[str, list[np.ndarray]] = det_ctx.label_score_regions
     X_list: list[np.ndarray] = []
     y_list: list[float] = []
     groups: list = []
+    score_rows: dict = {}
+
+    def _record(group: tuple, eid: str) -> None:
+        rows = score_cache.get(eid)
+        if rows:
+            score_rows[group] = np.stack(rows)
+
     for elem in labelset.elements:
         if elem.label not in ("good", "bad"):
             continue
@@ -452,14 +540,17 @@ def build_xy_from_labelset(
                     X_list.append(vec)
                     y_list.append(0.0)
                     groups.append(("b", eid))
+                _record(("b", eid), eid)
                 continue
         emb = cache.get(eid)
         if emb is None:
             continue
         X_list.append(emb)
         y_list.append(1.0 if elem.label == "good" else 0.0)
-        groups.append(("g" if elem.label == "good" else "b", eid))
-    return X_list, y_list, groups
+        group = ("g" if elem.label == "good" else "b", eid)
+        groups.append(group)
+        _record(group, eid)
+    return X_list, y_list, groups, score_rows
 
 
 # ---------------------------------------------------------------------------
@@ -661,7 +752,7 @@ def train_from_labelset(
         snap=snap,
         on_progress=on_progress,
     )
-    X_list, y_list, groups = build_xy_from_labelset(det_ctx, labelset)
+    X_list, y_list, groups, score_rows = build_xy_from_labelset(det_ctx, labelset)
     if len(X_list) < 2:
         return False
     if not any(y == 1.0 for y in y_list) or not any(y == 0.0 for y in y_list):
@@ -674,7 +765,13 @@ def train_from_labelset(
     # Pass det_ctx so the fold orderings are cached for a no-retrain Inclusion
     # slide (otherwise the slide can't move the cutoff — see train_and_threshold).
     mlp, threshold = train_and_threshold(
-        X_list, y_list, snap=snap, embedder_name=det_ctx.embedder or None, det_ctx=det_ctx, groups=groups
+        X_list,
+        y_list,
+        snap=snap,
+        embedder_name=det_ctx.embedder or None,
+        det_ctx=det_ctx,
+        groups=groups,
+        score_rows=score_rows,
     )
     det_ctx.model = mlp
     det_ctx.threshold = threshold
@@ -706,7 +803,7 @@ def labelset_train_and_score(
     from vtscore.detectors.training import _train_and_score_xy
 
     populate_label_embeddings(det_ctx, labelset, media_type=media_type, snap=clips_dict)
-    X_list, y_list, groups = build_xy_from_labelset(det_ctx, labelset)
+    X_list, y_list, groups, score_rows = build_xy_from_labelset(det_ctx, labelset)
     results, threshold, model = _train_and_score_xy(
         X_list,
         y_list,
@@ -717,6 +814,7 @@ def labelset_train_and_score(
         calibration_fraction=calibration_fraction,
         det_ctx=det_ctx,
         groups=groups,
+        score_rows=score_rows,
     )
 
     # Stage-2 structural re-rank for a saved structural detector reloaded
