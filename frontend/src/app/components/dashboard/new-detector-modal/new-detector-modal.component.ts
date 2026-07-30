@@ -38,7 +38,7 @@ import {
 } from '../../modals/media-crop-modal/media-crop-modal.component';
 import { DropZoneComponent } from '../../drop-zone/drop-zone.component';
 import { SourcePickerComponent } from '../dataset-importer-modal/source-picker/source-picker.component';
-import { DatasourceImportFormComponent } from './datasource-import-form/datasource-import-form.component';
+import { DatasourceImportFormComponent } from '../../datasource-import-form/datasource-import-form.component';
 import {
   DatasourceImportersApiService,
   DatasourceImportResult,

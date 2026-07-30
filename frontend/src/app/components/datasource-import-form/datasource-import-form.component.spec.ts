@@ -2,8 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { HttpTestingController } from '@angular/common/http/testing';
 import { DatasourceImportFormComponent } from './datasource-import-form.component';
-import { provideZoneless } from '../../../../testing/zoneless-testbed';
-import { provideHttpTesting } from '../../../../testing/test-providers';
+import { provideZoneless } from '../../testing/zoneless-testbed';
+import { provideHttpTesting } from '../../testing/test-providers';
 
 describe('DatasourceImportFormComponent', () => {
   let component: DatasourceImportFormComponent;
