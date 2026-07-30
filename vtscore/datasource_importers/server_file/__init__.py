@@ -6,7 +6,6 @@ from typing import Any
 
 from vtscore.datasource_importers.base import DataSourceImporter, FetchedMediaItem
 from vtscore.plugins import PluginField
-from vtscore.security.path_validation import get_file_access_base_dir, validate_server_filepath
 
 
 class ServerFileDataSourceImporter(DataSourceImporter):
@@ -28,6 +27,10 @@ class ServerFileDataSourceImporter(DataSourceImporter):
     ]
 
     def fetch(self, field_values: dict[str, Any]) -> FetchedMediaItem:
+        # Call-time import so monkeypatched validators (e.g. the tests_lib
+        # tmp-path widening) are honoured, mirroring plugins/normalize.py.
+        from vtscore.security.path_validation import get_file_access_base_dir, validate_server_filepath
+
         raw = str(field_values.get("path") or "").strip()
         if not raw:
             raise ValueError("Media file path is required.")

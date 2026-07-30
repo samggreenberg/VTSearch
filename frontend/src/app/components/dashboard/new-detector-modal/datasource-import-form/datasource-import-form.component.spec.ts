@@ -131,7 +131,8 @@ describe('DatasourceImportFormComponent', () => {
 
     const req = httpMock.expectOne('/api/datasource-import/uploader');
     expect(req.request.body instanceof FormData).toBe(true);
-    expect((req.request.body as FormData).get('file')).toBe(file);
+    // FormData.append clones the File under jsdom, so compare by name.
+    expect(((req.request.body as FormData).get('file') as File).name).toBe('clip.wav');
     req.flush({ filename: 'x.wav', original_name: 'clip.wav' });
   });
 
