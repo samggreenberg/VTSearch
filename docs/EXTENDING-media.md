@@ -739,6 +739,18 @@ entry.
 | Cleaner | Name | Media Type | Default | Description |
 |---------|------|------------|---------|-------------|
 | `ImageExifOrientCleaner` | `image_exif_orient` | `image` | **on** | Bake a photo's EXIF display orientation into its pixels so the embedder sees it upright |
+| `ImageEdgeTrimCleaner` | `image_edge_trim` | `image` | off | Crop near-solid white/black margins (letterbox, pillarbox, whitespace around a logo) |
+| `AudioSilenceTrimCleaner` | `audio_silence_trim` | `audio` | off | Drop the silence at the head and tail of a clip, keeping internal pauses |
+| `TextMarkupStripCleaner` | `text_markup_strip` | `text` | off | Remove HTML tags and Markdown syntax, keeping the text inside |
+| `TextWhitespaceCleaner` | `text_whitespace` | `text` | off | Collapse whitespace runs, drop control characters, rejoin hyphen-broken words |
+
+Two of these share their detector with another caller rather than owning a
+second copy of the heuristic: `image_edge_trim` and the grid thumbnail both call
+`vtscore/media/image/edge_trim.py`, and `audio_silence_trim` and
+`SoundSilenceClipper` both call `vtscore/media/audio/silence.py`. When a cleaner
+answers a question something else in the codebase already answers, extract the
+detector; a cleaner that disagrees with the thumbnail about where the content
+starts is worse than no cleaner.
 
 ### What to implement
 

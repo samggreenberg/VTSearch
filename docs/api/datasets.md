@@ -122,7 +122,10 @@ type can pass through before it is embedded (see
 [EXTENDING-media.md § Adding a Media Cleaner](../EXTENDING-media.md#adding-a-media-cleaner)).
 They are listed separately from clippers because the UI treats them
 differently: a clipper is a radio choice, cleaners are a checkbox list where
-any combination can be enabled.
+any combination can be enabled. An entry may also carry `parameters` (same
+descriptor shape as a clipper's); the import form renders those inputs beneath
+the cleaner's checkbox once it is ticked, and the chosen values ride along in
+the `cleaners` field's per-entry `params`.
 
 Each cleaner object carries the same fields as a clipper (`name`,
 `display_name`, `media_type`, optional `description` / `parameters` /
