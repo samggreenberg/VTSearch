@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         default=0,
         metavar="V",
-        help="Inclusion bias passed to find_optimal_threshold (default: 0).",
+        help="Inclusion bias passed to conformal_threshold (default: 0).",
     )
     parser.add_argument(
         "--calibrate-count",

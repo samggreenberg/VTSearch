@@ -276,7 +276,7 @@ class TestTrainingSettingsInvalidateLoadedDetector:
 
     def test_set_inclusion_rethresholds_from_fold_cache(self):
         """With cached fold orderings, an inclusion change re-derives the
-        threshold (cheap min-cost over the cache) without touching the model."""
+        threshold (cheap quantile rule over the cache) without touching the model."""
         from vtsearch.state import get_inclusion, set_inclusion
         from vtscore.training.thresholds import threshold_from_fold_orderings
 

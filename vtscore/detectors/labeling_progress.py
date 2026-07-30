@@ -34,7 +34,7 @@ import numpy as np
 from vtscore.concurrency.async_jobs import check_job_cancelled
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.training.mlp import train_model
-from vtscore.training.thresholds import find_optimal_threshold
+from vtscore.training.thresholds import conformal_threshold
 
 if TYPE_CHECKING:
     import torch.nn as nn
@@ -382,7 +382,10 @@ def _train_step(
     with torch.no_grad():
         X_dev = X.to(next(model.parameters()).device)
         scores = torch.sigmoid(model(X_dev)).squeeze(1).cpu().tolist()
-    threshold = find_optimal_threshold(scores, y_list, inclusion_value)
+    # Training-set scores, not held-out ones: this cache only needs a rough
+    # per-step cutoff for the stability curve, so the optimistic (tighter)
+    # band from in-sample quantiles is acceptable here.
+    threshold = conformal_threshold(scores, y_list, inclusion_value)
 
     stability = _compute_step_stability(model, threshold, clips_dict, all_media_ids, t, num_labels)
     return model, threshold, stability

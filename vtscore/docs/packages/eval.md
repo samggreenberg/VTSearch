@@ -323,7 +323,7 @@ The headline metrics are rank-based on purpose: VTSearch never trusts
 the raw score as a probability - it derives the operating threshold
 via cross-calibration. So `AUROC`, `AP`, and the production-path
 `f1_at_xcal` (which uses
-`find_optimal_threshold` on a held-out calibration slice) are what
+`conformal_threshold` on a held-out calibration slice) are what
 matter; Brier and F1@0.5 are kept as diagnostics. See
 `TRAINERS` for the plug-in registry of trainer functions.
 

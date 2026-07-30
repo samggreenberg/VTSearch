@@ -228,16 +228,16 @@ def _cross_calibrated_threshold(
     """Trainer-agnostic port of ``calculate_cross_calibration_threshold``.
 
     Mirrors what production does at vote time: split the labels k ways
-    into train/cal halves, retrain on each half, find the
-    inclusion-weighted optimal threshold on the cal half, average the
-    thresholds.  This is the threshold ``f1_at_xcal`` is measured at, so
-    a trainer that ranks well but doesn't admit a stable cross-validated
-    threshold pays the price here.
+    into train/cal halves, retrain on each half, score the held-out cal
+    half, then pool every fold's (score, label) pairs and apply the
+    conformal inclusion rule once.  This is the threshold ``f1_at_xcal``
+    is measured at, so a trainer that ranks well but doesn't admit a
+    stable cross-validated threshold pays the price here.
 
     Returns ``0.5`` when the label budget is too small to form valid
     splits (mirrors the production fallback).
     """
-    from vtscore.training.thresholds import find_optimal_threshold
+    from vtscore.training.thresholds import conformal_threshold
 
     n = int(y_train.size)
     if n < 4:
@@ -248,13 +248,14 @@ def _cross_calibrated_threshold(
         return 0.5
 
     rng = np.random.default_rng(seed)
-    thresholds: list[float] = []
+    pooled_scores: list[float] = []
+    pooled_labels: list[float] = []
     for k in range(max(1, calibrate_count)):
         order = rng.permutation(n)
         tr_idx = order[:n_tr]
         cal_idx = order[n_tr:]
         # Single-class splits would crash the trainer or short-circuit
-        # the threshold finder; just skip this fold.
+        # the threshold rule; just skip this fold.
         if len({int(v) for v in y_train[tr_idx]}) < 2:
             continue
         if len({int(v) for v in y_train[cal_idx]}) < 2:
@@ -263,14 +264,9 @@ def _cross_calibrated_threshold(
             predict = trainer_fn(X_train[tr_idx], y_train[tr_idx], seed + k)
         except ValueError:
             continue
-        cal_scores = _as_scores(predict(X_train[cal_idx])).tolist()
-        cal_labels = [float(v) for v in y_train[cal_idx]]
-        t = find_optimal_threshold(cal_scores, cal_labels, inclusion_value)
-        # ``find_optimal_threshold`` can return +/-inf on degenerate
-        # splits; only count finite thresholds toward the mean.
-        if np.isfinite(t):
-            thresholds.append(float(t))
+        pooled_scores.extend(_as_scores(predict(X_train[cal_idx])).tolist())
+        pooled_labels.extend(float(v) for v in y_train[cal_idx])
 
-    if not thresholds:
+    if not pooled_scores:
         return 0.5
-    return float(np.mean(thresholds))
+    return conformal_threshold(pooled_scores, pooled_labels, inclusion_value)

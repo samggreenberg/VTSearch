@@ -34,11 +34,15 @@ The model outputs raw logits (not probabilities) during training. This allows th
 
 ### Class Weighting
 
-Training balances classes by **inverse-frequency weighting** by default (`mlp.py`). The one exception is region flooding on patch datasets, where the caller supplies explicit per-bag `sample_weights` instead (see [Region-aware training](#region-aware-training-on-patch-region-datasets) below). Either way, inclusion does **not** enter training — the trained model, and therefore every item's score, is independent of inclusion. Inclusion is applied later as a pure threshold knob in `find_optimal_threshold` (see [Threshold Calibration](#threshold-calibration) below).
+Training balances classes by **inverse-frequency weighting** by default (`mlp.py`). The one exception is region flooding on patch datasets, where the caller supplies explicit per-bag `sample_weights` instead (see [Region-aware training](#region-aware-training-on-patch-region-datasets) below). Either way, inclusion does **not** enter training — the trained model, and therefore every item's score, is independent of inclusion. Inclusion is applied later as a pure threshold knob in `conformal_threshold` (see [Threshold Calibration](#threshold-calibration) below).
 
 - **Weights**: `weight_true = num_false / num_true`, `weight_false = 1.0`
 
-Keeping the model inclusion-independent is what lets the calibration cache reuse fold scores across cutoff slides: when the user changes inclusion, the labels are unchanged, the fold models are unchanged, and only the cheap min-cost threshold search re-runs.
+Keeping the model inclusion-independent is what lets the calibration cache reuse fold scores across cutoff slides: when the user changes inclusion, the labels are unchanged, the fold models are unchanged, and only the cheap quantile rule re-runs.
+
+### Label Smoothing
+
+Targets are label-smoothed with ε = 0.05 (`MLP_LABEL_SMOOTHING` in `vtscore/config.py`): Good examples train toward 0.95, Bad toward 0.05, with class weights still derived from the hard labels. This is **not** a knob-mover — it exists as tie insurance for the conformal threshold rule below, which takes quantiles of the calibration scores and therefore needs distinct score values. Smoothing bounds the optimal logit (≈ ±2.9 at ε = 0.05), so a strongly-fit model cannot saturate every score to exact 0.0/1.0 sigmoids, where all quantiles would collapse to the same cut.
 
 ### Threshold Calibration
 
@@ -46,23 +50,24 @@ A decision threshold separating "good" from "bad" predictions is computed via **
 
 1. Compute `hidden_dim` once from the **full** label count.
 2. Split labeled data into Train (1 − `calibration_fraction`) and Calibrate (`calibration_fraction`).
-3. Train a fold model on Train **using the full-data `hidden_dim`**, find the optimal threshold by evaluating on Calibrate.
+3. Train a fold model on Train **using the full-data `hidden_dim`**, score the held-out Calibrate portion.
 4. Repeat for `calibrate_count` independent random splits.
-5. Aggregate the per-fold thresholds. A fold whose optimal cut is "predict nothing" returns the abstain sentinel (`NO_GOOD_THRESHOLD`), which is counted as a *vote to abstain* rather than averaged as a number: the ensemble abstains only when a **strict majority** of folds abstain, and otherwise returns the mean of the folds that produced a real cut. (Numerically averaging the 2.0 sentinel used to drag the mean above the sigmoid range whenever a single fold abstained — a fold-count-dependent artifact.)
+5. Pool every fold's held-out (score, label) pairs and apply the **conformal inclusion rule** (`conformal_threshold`) once. Pooling — rather than averaging per-fold thresholds — is deliberate: the knob's resolution is bounded by how many calibration scores the quantiles are taken over.
 
-The `calibrate_count` setting defaults to `1` (`DEFAULT_CALIBRATE_COUNT` in `vtscore/config.py`) and can be raised or lowered (`VTSEARCH_CALIBRATE_COUNT`) to trade calibration quality for latency. (The eval runner uses its own default of `2` for a separate, non-interactive path — see [`docs/EVAL.md`](EVAL.md).) When `safe_thresholds` is enabled and fewer than 6 labels exist, the cross-calibration step is skipped entirely; the `calculate_safe_threshold` blender weights the calibrated value at 0 in that regime, so paying for the fold trainings would be pure waste. With `safe_thresholds` **off**, the cross-calibrated value is the cutoff the detector actually uses, so it is computed at every label count — every training entry point (vote-driven Train, labelset re-derivation, Find, and detector-load-from-origins) cross-calibrates below 6 labels rather than falling back to 0.5.
+The `calibrate_count` setting defaults to `2` (`DEFAULT_CALIBRATE_COUNT` in `vtscore/config.py`) and can be raised or lowered (`VTSEARCH_CALIBRATE_COUNT`) to trade calibration quality (and Inclusion-knob resolution — more folds means more pooled calibration scores) for latency. (The eval runner uses its own default of `2` for a separate, non-interactive path — see [`docs/EVAL.md`](EVAL.md).) When `safe_thresholds` is enabled and fewer than 6 labels exist, the cross-calibration step is skipped entirely; the `calculate_safe_threshold` blender weights the calibrated value at 0 in that regime, so paying for the fold trainings would be pure waste. With `safe_thresholds` **off**, the cross-calibrated value is the cutoff the detector actually uses, so it is computed at every label count — every training entry point (vote-driven Train, labelset re-derivation, Find, and detector-load-from-origins) cross-calibrates below 6 labels rather than falling back to 0.5.
 
 **Why fold models use the full-data hidden_dim:** The hidden-layer width is normally auto-sized from the training-set size (`n_train // 3`, clamped to 4–32). Without intervention, each fold model would train on fewer examples and therefore get a smaller hidden layer than the final model. A smaller architecture produces a different score distribution, so thresholds found on fold models would not transfer faithfully to the final model. By forcing fold models to use the same `hidden_dim` as the final model, the architectures match: same capacity, same score distribution shape. The only difference is the fold models see less data, which is the whole point (you want held-out calibration data). Existing regularization (dropout 0.5, weight decay 1e-4) and the small max width (32) prevent the slightly "oversized" fold models from overfitting meaningfully.
 
 The **Calibration Fraction** setting (0–1, default 0.5) controls how much data is reserved for threshold calibration vs. model training in each split. For example, a value of 0.2 means 80% Train / 20% Calibrate. If the fraction is so extreme that a valid Train/Calibrate split cannot be formed (fewer than 2 training examples or fewer than 1 calibration example), the system returns a maximum threshold so that nothing is predicted as Good.
 
-The optimal threshold at each split minimizes a weighted combination of false-positive rate (FPR) and false-negative rate (FNR), governed by the `inclusion_value` parameter (integer in range [-10, +10]). This is where inclusion biases the result toward recall or precision — at calibration/threshold time, **not** at training time:
+The threshold is a **split-conformal quantile rule** over the pooled held-out scores, governed by the `inclusion_value` parameter (integer in range [-10, +10]). This is where inclusion biases the result toward recall or precision — at calibration/threshold time, **not** at training time. For `k = inclusion_value` (with `BASE = 0.25`, `QPOS_MAX = 0.75` — `CONFORMAL_BASE_BUDGET` / `CONFORMAL_QPOS_MAX` in `vtscore/training/thresholds.py`):
 
-- **Inclusion = 0**: minimize `fpr + fnr` (equal weight).
-- **Inclusion > 0**: minimize `fpr + 2^inclusion_value * fnr` (prefer recall — include more items).
-- **Inclusion < 0**: minimize `2^(-inclusion_value) * fpr + fnr` (prefer precision — exclude more items).
+- **Inclusion > 0** buys a **false-negative budget** `α(k) = BASE·2⁻ᵏ`: the threshold is the α-quantile of the held-out *positive* scores, so an estimated `1 − α` of true matches land at or above the cut. `+k` therefore has a portable meaning — "the fraction of true matches I'm willing to miss, halving per step" — independent of dataset or detector (e.g. `+3` ≈ miss at most ~3%, `+10` ≈ miss at most ~0.02%).
+- **Inclusion ≤ 0** walks *up* the positive score distribution (`q_pos(k) = BASE + (QPOS_MAX − BASE)·|k|/10`: at −10 only the top-quartile-of-positives region remains), guarded by a **false-positive budget** on the held-out *negative* scores (`max` with their `1 − BASE·2ᵏ` quantile) so overlap-heavy tasks keep FPR control.
 
-Because the fold models are inclusion-independent, the per-fold held-out scores can be cached once and re-thresholded at any inclusion (this powers the Find Stats sweep across all inclusion values).
+The rule is **monotone in `k` by construction**: raising inclusion can only lower the threshold, so included sets are *nested* — everything included at Inclusion 1 stays included at Inclusion 4. That makes "cut off at Inclusion 1, then verify the extra band up to Inclusion 4" a well-defined workflow. (The previous min-cost argmin over observed cuts had exactly as many distinct optima as the calibration folds had ranking errors, so on well-separated votes the knob provably never moved; see `docs/experiments/inclusion-knob/REPORT.md` and issue #2693.)
+
+Because the fold models are inclusion-independent, the pooled held-out scores can be cached once and re-thresholded at any inclusion (this powers the Find Stats sweep across all inclusion values).
 
 For semantic (text/example) sorts, a **GMM-based threshold** is used instead: a 2-component Gaussian Mixture Model is fitted to the score distribution and the midpoint between component means serves as the threshold.
 
@@ -269,7 +274,7 @@ Build is the same order as the embedding-matrix work a dataset load already does
 - `vtscore/training/mlp.py`: `build_model`, `train_model`, `build_model_from_weights`
 - `vtscore/state/coverage_atlas.py`: `CoverageAtlas`, `domain_shift_report`
 - `vtscore/state/coverage.py`: atlas build/restore/resync helpers, vote wiring
-- `vtscore/training/thresholds.py`: `calculate_cross_calibration_threshold`, `calculate_safe_threshold`, `calculate_gmm_threshold`, `find_optimal_threshold`
+- `vtscore/training/thresholds.py`: `calculate_cross_calibration_threshold`, `calculate_safe_threshold`, `calculate_gmm_threshold`, `conformal_threshold`
 - `vtscore/detectors/training.py`: `train_and_score`, `train_and_threshold`, origin-based detector training
 - `vtscore/detectors/labeling_progress.py`: Cached per-step training and stability analysis
 - `vtscore/embedding/loader.py`: Model initialization and thread configuration

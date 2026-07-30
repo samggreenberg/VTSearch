@@ -192,14 +192,23 @@ TRAIN_PATIENCE = int(os.environ.get("VTSEARCH_TRAIN_PATIENCE", "10"))
 # Default ``calibrate_count`` baked into ``data/settings.json`` on first run.
 # Each unit adds one full fold-training pass per learned-sort; lower it to
 # trade calibration quality for latency.  Min 1 (clamped in
-# :mod:`vtsearch.settings`).  The default is 1: with
-# ``calibration_fraction=0.5`` a single fold already trains on half the
-# labels, and a second fold mostly averages out per-split noise; bumping
-# back up is a one-setting change when the noise actually matters.
-DEFAULT_CALIBRATE_COUNT = max(1, int(os.environ.get("VTSEARCH_CALIBRATE_COUNT", "1")))
+# :mod:`vtsearch.settings`).  The default is 2: the Inclusion knob is a
+# quantile rule over the *pooled* held-out fold scores (see
+# ``vtscore.training.thresholds.conformal_threshold``), so its resolution is
+# bounded by how many calibration scores the pool holds - at ~12 votes a
+# single fold yields only ~4 positive scores, i.e. ~4 usable knob positions;
+# a second fold doubles that for one extra fold fit.
+DEFAULT_CALIBRATE_COUNT = max(1, int(os.environ.get("VTSEARCH_CALIBRATE_COUNT", "2")))
 MLP_HIDDEN_MIN = 8
 MLP_HIDDEN_MAX = 32
 MLP_DROPOUT = 0.5
+# Label-smoothing epsilon for MLP training targets (Good trains toward
+# ``1 - eps``, Bad toward ``eps``).  Not a knob-mover: it exists as tie
+# insurance for the conformal inclusion rule, which needs distinct calibration
+# score values - smoothing bounds the optimal logit (~ +/-2.9 at 0.05), so a
+# strongly-fit fold model can't collapse every score to exact 0.0/1.0 sigmoids
+# where all quantiles degenerate to the same cut.
+MLP_LABEL_SMOOTHING = 0.05
 
 # --- Browse projection (UMAP Stage 1) ---------------------------------------
 # Default UMAP knobs for the VTSBrowse 2-D projection.  Overridable per

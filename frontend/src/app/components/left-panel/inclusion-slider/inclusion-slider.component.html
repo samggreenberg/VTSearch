@@ -1,5 +1,5 @@
 <div class="inclusion-selector">
-  <label class="inclusion-label" for="inclusion-input" title="Adjust how many items to include. Higher values include more items to catch everything, at the risk of some wrong matches. Lower values include fewer, keeping only the surest matches. Retrains the learned sort.">
+  <label class="inclusion-label" for="inclusion-input" title="Adjust how many items to include. Each step up roughly halves the share of real matches the cutoff may miss, and only ever adds items - everything included at a lower setting stays included. Lower values keep only the surest matches.">
     Inclusion
   </label>
   <input
@@ -10,7 +10,7 @@
     step="1"
     [value]="value()"
     (input)="onInput($event)"
-    title="Higher includes more items (catch everything, some may be wrong); lower includes fewer (only the surest matches)."
+    title="Higher includes more items (each step up halves the share of real matches the cutoff may miss); lower includes fewer (only the surest matches)."
     aria-label="Inclusion"
   />
 </div>

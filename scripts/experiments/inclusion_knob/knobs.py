@@ -6,9 +6,10 @@ trained (and therefore what the score distribution looks like), a *knob design*
 maps ``inclusion in [-10, 10]`` plus the held-out fold orderings to a decision
 threshold in raw score space.  The four designs:
 
-* ``argmin``      - production today: min-weighted-cost search over observed
-                    held-out score cuts (:func:`find_optimal_threshold` per fold,
-                    aggregated by :func:`threshold_from_fold_orderings`).
+* ``argmin``      - production before #2693: min-weighted-cost search over
+                    observed held-out score cuts, per fold, aggregated by an
+                    abstain-voted mean (inlined here verbatim now that
+                    production has moved to the conformal rule).
 * ``bayes``       - the Bayes-optimal cut for the inclusion cost ratio applied
                     directly in probability space: ``p* = fpr_w / (fpr_w + fnr_w)``.
                     Moves by construction, but only *means* anything if scores
@@ -203,11 +204,51 @@ def fit_temperature(orderings: list[tuple[list[float], list[float]]]) -> float:
 # ---------------------------------------------------------------------------
 
 
-def threshold_argmin(orderings, inclusion: int) -> float:
-    """Production behavior (min-weighted-cost over observed cuts)."""
-    from vtscore.training.thresholds import threshold_from_fold_orderings
+#: Sentinel matching ``vtscore.training.thresholds.NO_GOOD_THRESHOLD``.
+_NO_GOOD = 2.0
 
-    return threshold_from_fold_orderings(orderings, inclusion)
+
+def _find_optimal_threshold_legacy(scores: list[float], labels: list[float], inclusion: int) -> float:
+    """The pre-#2693 production rule: min-weighted-cost over observed cuts.
+
+    Inlined verbatim (production now uses the conformal rule this experiment
+    recommended) so the ``argmin`` arm keeps measuring the historical
+    behavior the report describes.
+    """
+    if not scores:
+        return 0.5
+    scores_arr = np.array(scores)
+    labels_arr = np.array(labels)
+    order = np.argsort(-scores_arr)
+    sorted_scores = scores_arr[order]
+    sorted_labels = labels_arr[order]
+    total_positives = int(np.sum(sorted_labels == 1))
+    total_negatives = len(sorted_labels) - total_positives
+    if total_positives == 0 or total_negatives == 0:
+        return 0.5
+    fpr_weight, fnr_weight = inclusion_weights(inclusion)
+    cum_positives = np.cumsum(sorted_labels == 1)
+    cum_negatives = np.cumsum(sorted_labels == 0)
+    fpr = cum_negatives / total_negatives
+    fnr = (total_positives - cum_positives) / total_positives
+    costs = fpr_weight * fpr + fnr_weight * fnr
+    feasible = np.append(sorted_scores[:-1] > sorted_scores[1:], True)
+    costs = np.where(feasible, costs, np.inf)
+    best_idx = int(np.argmin(costs))
+    if fnr_weight < float(costs[best_idx]):
+        return _NO_GOOD
+    return float(sorted_scores[best_idx])
+
+
+def threshold_argmin(orderings, inclusion: int) -> float:
+    """Pre-#2693 production behavior: per-fold min-cost cuts, abstain-voted mean."""
+    per_fold = [_find_optimal_threshold_legacy(s, lbls, inclusion) for s, lbls in orderings]
+    if not per_fold:
+        return _NO_GOOD
+    finite = [t for t in per_fold if t != _NO_GOOD]
+    if (len(per_fold) - len(finite)) * 2 > len(per_fold):
+        return _NO_GOOD
+    return sum(finite) / len(finite)
 
 
 def threshold_bayes(inclusion: int, temperature: float = 1.0) -> float:
