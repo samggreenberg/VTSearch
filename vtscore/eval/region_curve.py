@@ -93,13 +93,23 @@ def _calib_mode(k: int, n_neg: int, *, safe_thresholds: bool) -> str:
 def _oracle_operating_point(
     scores: Sequence[float] | np.ndarray, labels: Sequence[int], inclusion: int
 ) -> tuple[float, dict]:
-    """Best-case: threshold that minimizes weighted error on the test set itself."""
-    from vtscore.training.thresholds import find_optimal_threshold
+    """Best-case: the threshold that minimizes weighted error on the test set itself.
 
-    thr = find_optimal_threshold(list(scores), [float(v) for v in labels], inclusion)
-    if not np.isfinite(thr):
-        thr = 0.5
-    return float(thr), weighted_error(scores, [float(v) for v in labels], thr, inclusion)
+    Inlines the legacy min-cost argmin (the old
+    ``vtscore.training.thresholds.find_optimal_threshold``, which dev replaced with
+    the conformal quantile rule): this is the achievable-floor *oracle*, so it must
+    keep peeking at the labels for the min-cost cut rather than pick a calibration
+    quantile. Sweeps each candidate score cut (``score >= thr``) plus the
+    predict-all-negative endpoint and argmins the inclusion-weighted cost, matching
+    :func:`vtscore.eval.error_metrics.min_weighted_cost`.
+    """
+    lbls = [float(v) for v in labels]
+    arr = np.asarray(list(scores), dtype=np.float64)
+    if arr.size == 0:
+        return 0.5, weighted_error(arr, lbls, 0.5, inclusion)
+    candidates = [*np.unique(arr).tolist(), float(np.nanmax(arr)) + 1.0]
+    thr = float(min(candidates, key=lambda t: weighted_error(arr, lbls, t, inclusion)["cost"]))
+    return thr, weighted_error(arr, lbls, thr, inclusion)
 
 
 def _oracle_extra(scores: Sequence[float] | np.ndarray, labels: Sequence[int]) -> dict[str, float]:

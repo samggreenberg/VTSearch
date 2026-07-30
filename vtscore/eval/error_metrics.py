@@ -1,12 +1,14 @@
 """Inclusion-weighted FPR/FNR error metrics, shared across the eval subsystem.
 
-These are the exact quantities the detector's threshold search
-(:func:`vtscore.training.thresholds.find_optimal_threshold`) and the
-voting-iterations evaluator already use, factored out so the region-curve
-sweep (:mod:`vtscore.eval.region_curve`) reports the *same* metric and so
-there is one implementation of the FP/FN → weighted-cost computation.
+These are the inclusion-weighted FP/FN quantities the region-curve sweep
+(:mod:`vtscore.eval.region_curve`) and the oracle (:func:`min_weighted_cost`)
+report, factored out so there is one implementation of the FP/FN →
+weighted-cost computation. (Production's threshold *search* is the
+split-conformal :func:`vtscore.training.thresholds.conformal_threshold`, which
+picks a quantile rather than minimizing this cost; these metrics score whatever
+operating point it lands on.)
 
-Convention (matches ``find_optimal_threshold`` / ``_inclusion_weights``):
+Convention (matches :func:`inclusion_weights`):
 
     cost = fpr_weight * FPR + fnr_weight * FNR
     FPR  = FP / N_negatives      FNR = FN / N_positives      (RATES, not counts)
@@ -106,7 +108,7 @@ def min_weighted_cost(
     "peeks" at the labels to place the threshold, so it is an optimistic
     upper-bound reference for the cross-calibrated (realistic) cost, never a
     production metric. Returns NaN when either class is absent (both rates
-    undefined). Vectorised, mirroring ``find_optimal_threshold``.
+    undefined). Vectorised.
     """
     if len(scores) == 0:
         return float("nan")
