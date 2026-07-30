@@ -112,10 +112,7 @@ export class AutopilotPanelComponent implements OnInit, OnDestroy {
       const phase = this.autopilotState.state.phase;
       if (prevPhase !== phase && !this.completionAlerted) {
         if (phase === 'done') {
-          this.announceCompletion(
-            'Done! Your detector is trained.',
-            'All quality indicators are green.',
-          );
+          this.announceCompletion('Done! Your detector is trained.');
         } else if (phase === 'exhausted') {
           this.announceCompletion(
             'Done! Nothing left to label.',
@@ -204,7 +201,7 @@ export class AutopilotPanelComponent implements OnInit, OnDestroy {
    * a "Stay here" button for the user who wants to keep labeling instead.
    * Dismissing the toast by any means cancels the return.
    */
-  private announceCompletion(message: string, detail: string): void {
+  private announceCompletion(message: string, detail?: string): void {
     this.completionAlerted = true;
     this.completionToastId = this.toastService.success({
       message,
