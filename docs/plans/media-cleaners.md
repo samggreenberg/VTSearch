@@ -209,10 +209,18 @@ chain runner resolves `kind: "cleaner"` steps against this registry.
 
 <!-- item-sep -->
 
+- **Text: boilerplate removal** *(future idea — good, but deferred)* —
+  strip structured boilerplate that drowns out content: email headers
+  (`Received:` / `From:` / `Subject:` blocks, quoted-reply chains,
+  signatures), page headers/footers, navigation chrome. Worth doing once
+  the core lands and there's a corpus to tune against; needs per-domain
+  heuristics, so it shouldn't gate the initial roster.
+
+<!-- item-sep -->
+
 Deliberately deferred (revisit only with evidence): saliency-based image
 cropping (can eat context the detector needs), audio noise reduction
-(artifact risk), text boilerplate/header-footer removal (needs domain
-heuristics).
+(artifact risk).
 
 ## Open questions
 
