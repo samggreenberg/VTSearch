@@ -35,16 +35,18 @@ def cross_calibrated_threshold(
     calibrate_count: int = 2,
     cal_fraction: float = 0.5,
 ) -> float:
-    """Average of per-fold inclusion-weighted optimal thresholds on held-out cal splits.
+    """Average of per-fold split-conformal quantile thresholds on held-out cal splits.
 
     Splits the labels ``calibrate_count`` ways into train/cal halves, retrains
-    on each train half via ``trainer_fn``, and finds the optimal threshold
-    (:func:`vtscore.training.thresholds.find_optimal_threshold`) on the cal
+    on each train half via ``trainer_fn``, and finds the split-conformal quantile
+    threshold (:func:`vtscore.training.thresholds.conformal_threshold`) on the cal
     half. Returns ``0.5`` when the label budget is too small to form valid
     splits (mirrors the production fallback), and skips single-class or
-    trainer-refused folds.
+    trainer-refused folds. (Production replaced the old min-cost argmin
+    ``find_optimal_threshold`` with this conformal rule; the box-pool sweep path
+    follows suit here so its threshold matches the app's.)
     """
-    from vtscore.training.thresholds import find_optimal_threshold
+    from vtscore.training.thresholds import conformal_threshold
 
     n = int(y_train.size)
     if n < 4:
@@ -72,9 +74,9 @@ def cross_calibrated_threshold(
             continue
         cal_scores = np.asarray(predict(X_train[cal_idx]), dtype=np.float64).tolist()
         cal_labels = [float(v) for v in y_train[cal_idx]]
-        t = find_optimal_threshold(cal_scores, cal_labels, inclusion_value)
-        # find_optimal_threshold can return +/-inf on degenerate splits; only
-        # count finite thresholds toward the mean.
+        t = conformal_threshold(cal_scores, cal_labels, inclusion_value)
+        # conformal_threshold can return a non-finite value on degenerate splits;
+        # only count finite thresholds toward the mean.
         if np.isfinite(t):
             thresholds.append(float(t))
 
