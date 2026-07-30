@@ -1,35 +1,39 @@
 ## Take-aways
 
-- **The answer is regime-dependent, and that is the finding.** On cluttered,
-  boxed scenes (Visual Genome) MaxPatch is the best strategy; on easy, centred,
-  boxless images (Caltech-101) it is the worst. Pooling the two into one number
-  hides the effect — the strategy choice has to be made against the *content*,
-  not in the abstract.
-- **On cluttered scenes, *where* the object is beats *what* global vector you
-  have.** The largest gap in the study is region-scoring vs whole-image scoring,
-  not MaxPatch vs MaxHAC. A DINOv3 whole-image (CLS) detector is the *worst* arm
-  on Visual Genome — below SigLIP — while the same embedder with region votes is
-  the *best*. When the target is a small part of a busy image, a representation
-  that can point at the object wins decisively.
-- **MaxPatch's win is a recall win, and it is scale-driven.** Against MaxHAC it
-  lowers the miss rate (FNR) more than the false-alarm rate, and the advantage
-  concentrates on sub-leaf-scale objects (Figure 4): below the ~8 %-area leaf
-  scale the tree's smallest pooled candidate already blends the object with its
-  surroundings, while a raw patch stays a near-pure object sample. For search,
-  missing real matches is the expensive failure, so the recall win is the one
-  that matters.
-- **MaxPatch's failure is calibration, not ranking.** On easy data it still
-  ranks perfectly (AP = 1.0) but its 196-way max-pool compresses scores so the
-  trained threshold under-recalls (FNR 0.69 at FPR 0). This is important for
-  productisation: MaxPatch does not need a better *representation* on easy
-  content, it needs a max-pool-aware *threshold*. MaxHAC's smoothed pool avoids
-  the problem entirely, which is why it is the safer generalist.
-- **Effort changes the answer.** MaxPatch and MaxHAC are statistically tied for
-  the first ~50 votes and only diverge as the session goes on — so the strategy
-  choice matters most for the Autopilot power-user who keeps refining, and
-  barely at all for a few-vote drive-by.
-- **The tree is deletable exactly where MaxPatch wins.** MaxHAC beats
-  whole-image on clutter, so its pooled regions do carry signal — but they carry
-  *less* than the raw patches they are pooled from on the small-and-medium
-  objects that dominate cluttered images. Where region votes are the workflow,
-  the HAC build is a cost that is not paid back.
+- **Region scoring is the big win; the tree is not.** The largest gap in the
+  study is region-vote scoring vs whole-image scoring — DINOv3's global CLS
+  vector is the *worst* arm, below even SigLIP, while the same embedder scored
+  over its patches is the best. Once you score over patches, *how* you organise
+  them (raw, k-means-pooled tree, or raw-patch tree) matters far less than the
+  fact that you do.
+- **Tree-free MaxPatch is the sweet spot.** With the geometry fix, MaxPatch
+  scores over the whole-image vector *plus* every raw patch — so it already has
+  a candidate at both ends of the scale range (a single patch for a small
+  object, the full-image vector for a whole-scene one). That span is enough to
+  make it the best arm at every scale, and it means the multi-scale *middle* a
+  tree adds is not where the value is.
+- **Neither tree beats tree-free scoring.** The production k-means tree (MaxHAC)
+  loses to plain MaxPatch, and the raw-patch-leaf tree (MaxPatchHAC) only
+  *numerically* edges MaxHAC (a trend, not significant) while still costing more
+  than MaxPatch. A raw-patch-leaf tree does *rank* better than everything — so
+  if a tree must exist, leaf it with raw patches, not k-means pools — but on the
+  operating point the cleaner move is to delete the tree from ingest entirely.
+- **More candidates is not free.** MaxPatchHAC's ~392-node pool does what it was
+  designed to on large objects — its merged nodes improve large-object *recall*
+  over pure raw patches — but the larger the pool, the heavier the tail of the
+  max-over-N score, so it also raises *false positives*. The two cancel on large
+  objects and the extra nodes are pure cost on mid-scale ones. Adding scale
+  candidates helps recall and hurts precision; pick the pool size deliberately.
+- **The scale crossover is real but already covered.** Raw patches beat pooled
+  regions on small objects and the two converge on large ones (ρ = 0.50 between
+  object size and the MaxPatch−MaxHAC gap) — the pre-registered hypothesis. But
+  the whole-image row now inside MaxPatch covers the large end without a tree, so
+  the crossover is a reason MaxPatch wins, not a reason to build multi-scale
+  nodes.
+- **Harness hygiene changed the answer.** The first run concluded MaxPatch
+  "mis-calibrates on easy content"; that was a defect — a boxless Good vote
+  trained on a vector the scorer never evaluated, and calibration bags collapsed
+  in a geometry inference never used. With train/score geometry parity and
+  calibration in inference geometry, MaxPatch is simply the best region-vote
+  strategy. Worth remembering before trusting an operating-point result: check
+  that every vector a vote trains on is a vector the scorer also scores.

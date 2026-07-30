@@ -1,107 +1,5 @@
 {
   "datasets": {
-    "caltech101_m": {
-      "dinov3_patch": {
-        "n_medias": 838,
-        "n_patch_grids": 838,
-        "dim": 768,
-        "category_counts": {
-          "airplanes": 228,
-          "bonsai": 36,
-          "car_side": 35,
-          "chandelier": 30,
-          "cougar_face": 20,
-          "crab": 21,
-          "dalmatian": 19,
-          "dolphin": 18,
-          "elephant": 18,
-          "ferry": 19,
-          "flamingo": 19,
-          "grand_piano": 28,
-          "hawksbill": 28,
-          "helicopter": 25,
-          "ibis": 23,
-          "kangaroo": 24,
-          "ketch": 32,
-          "lamp": 18,
-          "laptop": 23,
-          "nautilus": 16,
-          "starfish": 24,
-          "stop_sign": 18,
-          "sunflower": 24,
-          "trilobite": 24,
-          "watch": 68
-        },
-        "selected_categories": [
-          "airplanes",
-          "watch",
-          "car_side",
-          "ketch",
-          "grand_piano",
-          "hawksbill",
-          "kangaroo",
-          "starfish",
-          "trilobite",
-          "ibis",
-          "crab",
-          "cougar_face"
-        ],
-        "load_seconds": 55.29,
-        "embed_seconds_per_image": 0.066,
-        "crops_seconds": 0.04,
-        "pickle": "caltech101_m__dinov3_patch.pkl"
-      },
-      "siglip": {
-        "n_medias": 838,
-        "n_patch_grids": 0,
-        "dim": 768,
-        "category_counts": {
-          "airplanes": 228,
-          "bonsai": 36,
-          "car_side": 35,
-          "chandelier": 30,
-          "cougar_face": 20,
-          "crab": 21,
-          "dalmatian": 19,
-          "dolphin": 18,
-          "elephant": 18,
-          "ferry": 19,
-          "flamingo": 19,
-          "grand_piano": 28,
-          "hawksbill": 28,
-          "helicopter": 25,
-          "ibis": 23,
-          "kangaroo": 24,
-          "ketch": 32,
-          "lamp": 18,
-          "laptop": 23,
-          "nautilus": 16,
-          "starfish": 24,
-          "stop_sign": 18,
-          "sunflower": 24,
-          "trilobite": 24,
-          "watch": 68
-        },
-        "selected_categories": [
-          "airplanes",
-          "watch",
-          "car_side",
-          "ketch",
-          "grand_piano",
-          "hawksbill",
-          "kangaroo",
-          "starfish",
-          "trilobite",
-          "ibis",
-          "crab",
-          "cougar_face"
-        ],
-        "load_seconds": 26.02,
-        "embed_seconds_per_image": 0.0311,
-        "crops_seconds": 0.01,
-        "pickle": "caltech101_m__siglip.pkl"
-      }
-    },
     "visual_genome_m": {
       "dinov3_patch": {
         "n_medias": 4193,
@@ -210,22 +108,330 @@
           "skis": 26
         },
         "selected_categories": [
-          "building",
-          "shirt",
-          "grass",
-          "floor",
-          "water",
-          "leg",
-          "arm",
-          "girl",
-          "clock",
+          "bag",
+          "ball",
           "bed",
-          "bird",
-          "giraffe"
+          "building",
+          "bus",
+          "cap",
+          "cat",
+          "eye",
+          "field",
+          "floor",
+          "giraffe",
+          "hand",
+          "hat",
+          "laptop",
+          "neck",
+          "nose",
+          "road",
+          "sink",
+          "sky",
+          "snow",
+          "street",
+          "tail",
+          "train"
         ],
-        "load_seconds": 362.1,
-        "embed_seconds_per_image": 0.0864,
-        "crops_seconds": 7.98,
+        "category_selection": {
+          "dropped_above_max_voted_area": [],
+          "max_voted_area": 0.8,
+          "bands": {
+            "sub_patch": {
+              "range": [
+                0.0,
+                0.00510204081632653
+              ],
+              "target": 6,
+              "n_candidates": 5,
+              "under_populated": true,
+              "selected": [
+                "ball",
+                "nose",
+                "cap",
+                "hat",
+                "eye"
+              ],
+              "not_selected": [],
+              "scales": {
+                "ball": {
+                  "voted_area": 0.0019044123000000028,
+                  "instance_area": 0.0019151213500000009,
+                  "union_inflation": 0.9944081611329757,
+                  "n_boxed": 51.0
+                },
+                "nose": {
+                  "voted_area": 0.0029721743500000005,
+                  "instance_area": 0.002664608400000001,
+                  "union_inflation": 1.1154263230574515,
+                  "n_boxed": 146.0
+                },
+                "cap": {
+                  "voted_area": 0.0027559133999999997,
+                  "instance_area": 0.002357160000000004,
+                  "union_inflation": 1.169166878786334,
+                  "n_boxed": 92.0
+                },
+                "hat": {
+                  "voted_area": 0.0037853256000000006,
+                  "instance_area": 0.0028510375999999983,
+                  "union_inflation": 1.3277010447003585,
+                  "n_boxed": 203.0
+                },
+                "eye": {
+                  "voted_area": 0.0024476298000000074,
+                  "instance_area": 0.0015724043500000007,
+                  "union_inflation": 1.5566160192828304,
+                  "n_boxed": 155.0
+                }
+              }
+            },
+            "patch_to_leaf": {
+              "range": [
+                0.00510204081632653,
+                0.08333333333333333
+              ],
+              "target": 6,
+              "n_candidates": 58,
+              "under_populated": false,
+              "selected": [
+                "laptop",
+                "sink",
+                "tail",
+                "hand",
+                "neck",
+                "bag"
+              ],
+              "not_selected": [
+                "face",
+                "shadow",
+                "head",
+                "tower",
+                "clock",
+                "bike",
+                "skateboard",
+                "arm",
+                "dog",
+                "pants",
+                "truck",
+                "cup",
+                "trunk",
+                "door",
+                "hair",
+                "roof",
+                "ear",
+                "bowl",
+                "box",
+                "foot",
+                "skis",
+                "shoe",
+                "pole",
+                "plate",
+                "bench",
+                "jacket",
+                "bottle",
+                "glass",
+                "woman",
+                "leg",
+                "sign",
+                "line",
+                "chair",
+                "book",
+                "bush",
+                "people",
+                "umbrella",
+                "tire",
+                "shirt",
+                "wheel",
+                "car",
+                "person",
+                "light",
+                "branch",
+                "bird",
+                "letter",
+                "flower",
+                "tile",
+                "rock",
+                "banana",
+                "leaf",
+                "window"
+              ],
+              "scales": {
+                "laptop": {
+                  "voted_area": 0.05719660060000001,
+                  "instance_area": 0.052460777999999986,
+                  "union_inflation": 1.0902735868690323,
+                  "n_boxed": 58.0
+                },
+                "sink": {
+                  "voted_area": 0.026589793199999996,
+                  "instance_area": 0.02289595380000001,
+                  "union_inflation": 1.1613315362297763,
+                  "n_boxed": 60.0
+                },
+                "tail": {
+                  "voted_area": 0.019143424199999995,
+                  "instance_area": 0.016431378600000004,
+                  "union_inflation": 1.165052833728753,
+                  "n_boxed": 102.0
+                },
+                "hand": {
+                  "voted_area": 0.005470839000000002,
+                  "instance_area": 0.004408960000000002,
+                  "union_inflation": 1.2408456869647262,
+                  "n_boxed": 267.0
+                },
+                "neck": {
+                  "voted_area": 0.01506516955,
+                  "instance_area": 0.012078256599999997,
+                  "union_inflation": 1.2472966959486524,
+                  "n_boxed": 56.0
+                },
+                "bag": {
+                  "voted_area": 0.008287515599999998,
+                  "instance_area": 0.006416300000000005,
+                  "union_inflation": 1.2916346804232957,
+                  "n_boxed": 237.0
+                }
+              }
+            },
+            "leaf_to_4x": {
+              "range": [
+                0.08333333333333333,
+                0.3333333333333333
+              ],
+              "target": 6,
+              "n_candidates": 23,
+              "under_populated": false,
+              "selected": [
+                "cat",
+                "bus",
+                "road",
+                "train",
+                "floor",
+                "street"
+              ],
+              "not_selected": [
+                "fence",
+                "mountain",
+                "sidewalk",
+                "boy",
+                "wall",
+                "water",
+                "girl",
+                "grass",
+                "horse",
+                "table",
+                "track",
+                "man",
+                "plane",
+                "clouds",
+                "tree",
+                "cloud",
+                "boat"
+              ],
+              "scales": {
+                "cat": {
+                  "voted_area": 0.14834978924999997,
+                  "instance_area": 0.13717641600000005,
+                  "union_inflation": 1.0814525818344745,
+                  "n_boxed": 30.0
+                },
+                "bus": {
+                  "voted_area": 0.12997343085000002,
+                  "instance_area": 0.11124569039999999,
+                  "union_inflation": 1.1683457613743213,
+                  "n_boxed": 136.0
+                },
+                "road": {
+                  "voted_area": 0.2702060499999999,
+                  "instance_area": 0.22643581875000002,
+                  "union_inflation": 1.193300827985722,
+                  "n_boxed": 551.0
+                },
+                "train": {
+                  "voted_area": 0.31087720649999995,
+                  "instance_area": 0.259034188,
+                  "union_inflation": 1.2001396761573417,
+                  "n_boxed": 76.0
+                },
+                "floor": {
+                  "voted_area": 0.24320446329999995,
+                  "instance_area": 0.200288499,
+                  "union_inflation": 1.2142707370331831,
+                  "n_boxed": 344.0
+                },
+                "street": {
+                  "voted_area": 0.2716322926,
+                  "instance_area": 0.22194167500000003,
+                  "union_inflation": 1.2238904324751083,
+                  "n_boxed": 392.0
+                }
+              }
+            },
+            "above_4x": {
+              "range": [
+                0.3333333333333333,
+                1.01
+              ],
+              "target": 6,
+              "n_candidates": 7,
+              "under_populated": false,
+              "selected": [
+                "sky",
+                "bed",
+                "field",
+                "building",
+                "giraffe",
+                "snow"
+              ],
+              "not_selected": [
+                "elephant"
+              ],
+              "scales": {
+                "sky": {
+                  "voted_area": 0.365753325,
+                  "instance_area": 0.3359041625,
+                  "union_inflation": 1.0888621393609554,
+                  "n_boxed": 793.0
+                },
+                "bed": {
+                  "voted_area": 0.37331836599999996,
+                  "instance_area": 0.255305888,
+                  "union_inflation": 1.4622395469390819,
+                  "n_boxed": 85.0
+                },
+                "field": {
+                  "voted_area": 0.4,
+                  "instance_area": 0.258075,
+                  "union_inflation": 1.5499370338080016,
+                  "n_boxed": 180.0
+                },
+                "building": {
+                  "voted_area": 0.41462499999999997,
+                  "instance_area": 0.13273408750000001,
+                  "union_inflation": 3.123726601126481,
+                  "n_boxed": 1645.0
+                },
+                "giraffe": {
+                  "voted_area": 0.4397631795,
+                  "instance_area": 0.1009420673,
+                  "union_inflation": 4.356589787219466,
+                  "n_boxed": 24.0
+                },
+                "snow": {
+                  "voted_area": 0.40590792514999996,
+                  "instance_area": 0.04889508750000001,
+                  "union_inflation": 8.30160954615328,
+                  "n_boxed": 132.0
+                }
+              }
+            }
+          },
+          "mode": "scale_bands"
+        },
+        "load_seconds": 307.58,
+        "embed_seconds_per_image": 0.0734,
+        "crops_seconds": 12.98,
         "pickle": "visual_genome_m__dinov3_patch.pkl"
       },
       "siglip": {
@@ -335,22 +541,330 @@
           "skis": 26
         },
         "selected_categories": [
-          "building",
-          "shirt",
-          "grass",
-          "floor",
-          "water",
-          "leg",
-          "arm",
-          "girl",
-          "clock",
+          "bag",
+          "ball",
           "bed",
-          "bird",
-          "giraffe"
+          "building",
+          "bus",
+          "cap",
+          "cat",
+          "eye",
+          "field",
+          "floor",
+          "giraffe",
+          "hand",
+          "hat",
+          "laptop",
+          "neck",
+          "nose",
+          "road",
+          "sink",
+          "sky",
+          "snow",
+          "street",
+          "tail",
+          "train"
         ],
-        "load_seconds": 157.24,
-        "embed_seconds_per_image": 0.0375,
-        "crops_seconds": 7.2,
+        "category_selection": {
+          "dropped_above_max_voted_area": [],
+          "max_voted_area": 0.8,
+          "bands": {
+            "sub_patch": {
+              "range": [
+                0.0,
+                0.00510204081632653
+              ],
+              "target": 6,
+              "n_candidates": 5,
+              "under_populated": true,
+              "selected": [
+                "ball",
+                "nose",
+                "cap",
+                "hat",
+                "eye"
+              ],
+              "not_selected": [],
+              "scales": {
+                "ball": {
+                  "voted_area": 0.0019044123000000028,
+                  "instance_area": 0.0019151213500000009,
+                  "union_inflation": 0.9944081611329757,
+                  "n_boxed": 51.0
+                },
+                "nose": {
+                  "voted_area": 0.0029721743500000005,
+                  "instance_area": 0.002664608400000001,
+                  "union_inflation": 1.1154263230574515,
+                  "n_boxed": 146.0
+                },
+                "cap": {
+                  "voted_area": 0.0027559133999999997,
+                  "instance_area": 0.002357160000000004,
+                  "union_inflation": 1.169166878786334,
+                  "n_boxed": 92.0
+                },
+                "hat": {
+                  "voted_area": 0.0037853256000000006,
+                  "instance_area": 0.0028510375999999983,
+                  "union_inflation": 1.3277010447003585,
+                  "n_boxed": 203.0
+                },
+                "eye": {
+                  "voted_area": 0.0024476298000000074,
+                  "instance_area": 0.0015724043500000007,
+                  "union_inflation": 1.5566160192828304,
+                  "n_boxed": 155.0
+                }
+              }
+            },
+            "patch_to_leaf": {
+              "range": [
+                0.00510204081632653,
+                0.08333333333333333
+              ],
+              "target": 6,
+              "n_candidates": 58,
+              "under_populated": false,
+              "selected": [
+                "laptop",
+                "sink",
+                "tail",
+                "hand",
+                "neck",
+                "bag"
+              ],
+              "not_selected": [
+                "face",
+                "shadow",
+                "head",
+                "tower",
+                "clock",
+                "bike",
+                "skateboard",
+                "arm",
+                "dog",
+                "pants",
+                "truck",
+                "cup",
+                "trunk",
+                "door",
+                "hair",
+                "roof",
+                "ear",
+                "bowl",
+                "box",
+                "foot",
+                "skis",
+                "shoe",
+                "pole",
+                "plate",
+                "bench",
+                "jacket",
+                "bottle",
+                "glass",
+                "woman",
+                "leg",
+                "sign",
+                "line",
+                "chair",
+                "book",
+                "bush",
+                "people",
+                "umbrella",
+                "tire",
+                "shirt",
+                "wheel",
+                "car",
+                "person",
+                "light",
+                "branch",
+                "bird",
+                "letter",
+                "flower",
+                "tile",
+                "rock",
+                "banana",
+                "leaf",
+                "window"
+              ],
+              "scales": {
+                "laptop": {
+                  "voted_area": 0.05719660060000001,
+                  "instance_area": 0.052460777999999986,
+                  "union_inflation": 1.0902735868690323,
+                  "n_boxed": 58.0
+                },
+                "sink": {
+                  "voted_area": 0.026589793199999996,
+                  "instance_area": 0.02289595380000001,
+                  "union_inflation": 1.1613315362297763,
+                  "n_boxed": 60.0
+                },
+                "tail": {
+                  "voted_area": 0.019143424199999995,
+                  "instance_area": 0.016431378600000004,
+                  "union_inflation": 1.165052833728753,
+                  "n_boxed": 102.0
+                },
+                "hand": {
+                  "voted_area": 0.005470839000000002,
+                  "instance_area": 0.004408960000000002,
+                  "union_inflation": 1.2408456869647262,
+                  "n_boxed": 267.0
+                },
+                "neck": {
+                  "voted_area": 0.01506516955,
+                  "instance_area": 0.012078256599999997,
+                  "union_inflation": 1.2472966959486524,
+                  "n_boxed": 56.0
+                },
+                "bag": {
+                  "voted_area": 0.008287515599999998,
+                  "instance_area": 0.006416300000000005,
+                  "union_inflation": 1.2916346804232957,
+                  "n_boxed": 237.0
+                }
+              }
+            },
+            "leaf_to_4x": {
+              "range": [
+                0.08333333333333333,
+                0.3333333333333333
+              ],
+              "target": 6,
+              "n_candidates": 23,
+              "under_populated": false,
+              "selected": [
+                "cat",
+                "bus",
+                "road",
+                "train",
+                "floor",
+                "street"
+              ],
+              "not_selected": [
+                "fence",
+                "mountain",
+                "sidewalk",
+                "boy",
+                "wall",
+                "water",
+                "girl",
+                "grass",
+                "horse",
+                "table",
+                "track",
+                "man",
+                "plane",
+                "clouds",
+                "tree",
+                "cloud",
+                "boat"
+              ],
+              "scales": {
+                "cat": {
+                  "voted_area": 0.14834978924999997,
+                  "instance_area": 0.13717641600000005,
+                  "union_inflation": 1.0814525818344745,
+                  "n_boxed": 30.0
+                },
+                "bus": {
+                  "voted_area": 0.12997343085000002,
+                  "instance_area": 0.11124569039999999,
+                  "union_inflation": 1.1683457613743213,
+                  "n_boxed": 136.0
+                },
+                "road": {
+                  "voted_area": 0.2702060499999999,
+                  "instance_area": 0.22643581875000002,
+                  "union_inflation": 1.193300827985722,
+                  "n_boxed": 551.0
+                },
+                "train": {
+                  "voted_area": 0.31087720649999995,
+                  "instance_area": 0.259034188,
+                  "union_inflation": 1.2001396761573417,
+                  "n_boxed": 76.0
+                },
+                "floor": {
+                  "voted_area": 0.24320446329999995,
+                  "instance_area": 0.200288499,
+                  "union_inflation": 1.2142707370331831,
+                  "n_boxed": 344.0
+                },
+                "street": {
+                  "voted_area": 0.2716322926,
+                  "instance_area": 0.22194167500000003,
+                  "union_inflation": 1.2238904324751083,
+                  "n_boxed": 392.0
+                }
+              }
+            },
+            "above_4x": {
+              "range": [
+                0.3333333333333333,
+                1.01
+              ],
+              "target": 6,
+              "n_candidates": 7,
+              "under_populated": false,
+              "selected": [
+                "sky",
+                "bed",
+                "field",
+                "building",
+                "giraffe",
+                "snow"
+              ],
+              "not_selected": [
+                "elephant"
+              ],
+              "scales": {
+                "sky": {
+                  "voted_area": 0.365753325,
+                  "instance_area": 0.3359041625,
+                  "union_inflation": 1.0888621393609554,
+                  "n_boxed": 793.0
+                },
+                "bed": {
+                  "voted_area": 0.37331836599999996,
+                  "instance_area": 0.255305888,
+                  "union_inflation": 1.4622395469390819,
+                  "n_boxed": 85.0
+                },
+                "field": {
+                  "voted_area": 0.4,
+                  "instance_area": 0.258075,
+                  "union_inflation": 1.5499370338080016,
+                  "n_boxed": 180.0
+                },
+                "building": {
+                  "voted_area": 0.41462499999999997,
+                  "instance_area": 0.13273408750000001,
+                  "union_inflation": 3.123726601126481,
+                  "n_boxed": 1645.0
+                },
+                "giraffe": {
+                  "voted_area": 0.4397631795,
+                  "instance_area": 0.1009420673,
+                  "union_inflation": 4.356589787219466,
+                  "n_boxed": 24.0
+                },
+                "snow": {
+                  "voted_area": 0.40590792514999996,
+                  "instance_area": 0.04889508750000001,
+                  "union_inflation": 8.30160954615328,
+                  "n_boxed": 132.0
+                }
+              }
+            }
+          },
+          "mode": "scale_bands"
+        },
+        "load_seconds": 146.78,
+        "embed_seconds_per_image": 0.035,
+        "crops_seconds": 11.91,
         "pickle": "visual_genome_m__siglip.pkl"
       }
     }

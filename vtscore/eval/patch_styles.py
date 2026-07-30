@@ -281,12 +281,176 @@ class MaxPatchStyle(_FlattenedStyle):
         return np.concatenate([cls_row, arr.reshape(-1, arr.shape[-1])], axis=0)
 
 
+def build_patch_hac_tree(
+    patch_grid: "np.ndarray",
+    cls_vec: "Optional[np.ndarray]" = None,
+    *,
+    alpha: float = 0.5,
+) -> list:
+    """Binary HAC tree with the **raw patches as leaves** - the MaxPatchHAC tree.
+
+    Where the production tree (:func:`vtscore.media.patch_embed.build_region_tree`)
+    K-means-pools patches into ~12 leaves *before* merging, this keeps every one
+    of the ``H*W`` raw patches as its own leaf and agglomeratively merges them
+    (blended cosine + spatial distance, average linkage) into progressively
+    larger region nodes.  The tree therefore carries candidates at every scale
+    from a single patch (which wins on small targets, like ``max_patch``) up to
+    the whole image (which wins on large targets, like ``max_hac``) at only ~2x
+    the node count of the raw patches (``2*H*W - 1`` tree nodes + the CLS node).
+
+    Returns a :class:`~vtscore.media.patch_embed.RegionVector` list in the same
+    layout convention as ``build_region_tree``: index 0 is the CLS whole-image
+    node (when *cls_vec* is given), then the raw-patch leaves, then the internal
+    merge nodes whose ``children`` index earlier entries in the list.  Internal
+    node vectors are the L2-normalised **uniform** mean of their member patches
+    (the experiment carries no per-patch saliency, so - unlike production -
+    every patch counts equally).
+    """
+    import numpy as np  # noqa: PLC0415
+    from scipy.cluster.hierarchy import linkage  # noqa: PLC0415
+    from scipy.spatial.distance import squareform  # noqa: PLC0415
+
+    from vtscore.media.patch_embed import RegionVector  # noqa: PLC0415
+
+    grid = np.asarray(patch_grid, dtype=np.float32)
+    height, width, dim = grid.shape
+    n = height * width
+    patches = grid.reshape(n, dim)
+    norms = np.linalg.norm(patches, axis=1, keepdims=True)
+    patches = patches / np.where(norms > 1e-12, norms, 1.0)
+
+    rows, cols = np.divmod(np.arange(n), width)
+    leaf_boxes = [
+        (c / width, r / height, (c + 1) / width, (r + 1) / height) for r, c in zip(rows.tolist(), cols.tolist())
+    ]
+
+    if n > 1:
+        cos_d = np.clip((1.0 - patches @ patches.T) * 0.5, 0.0, 1.0)
+        centers = np.stack([(cols + 0.5) / width, (rows + 0.5) / height], axis=1).astype(np.float32)
+        spatial = np.sqrt(((centers[:, None, :] - centers[None, :, :]) ** 2).sum(-1)) / np.sqrt(2.0)
+        blended = alpha * cos_d + (1.0 - alpha) * spatial
+        np.fill_diagonal(blended, 0.0)
+        linkage_matrix = linkage(squareform(blended, checks=False), method="average")
+    else:
+        linkage_matrix = np.empty((0, 4))
+
+    sums = [patches[i].copy() for i in range(n)]
+    boxes = list(leaf_boxes)
+    nodes = [
+        RegionVector(box=leaf_boxes[i], vec=patches[i], children=None, cell_mask=None, weight=1.0) for i in range(n)
+    ]
+    for merge in linkage_matrix:
+        a, b = int(merge[0]), int(merge[1])
+        total = sums[a] + sums[b]
+        sums.append(total)
+        vec = total / max(float(np.linalg.norm(total)), 1e-12)
+        ax0, ay0, ax1, ay1 = boxes[a]
+        bx0, by0, bx1, by1 = boxes[b]
+        box = (min(ax0, bx0), min(ay0, by0), max(ax1, bx1), max(ay1, by1))
+        boxes.append(box)
+        nodes.append(
+            RegionVector(
+                box=box,
+                vec=vec.astype(np.float32),
+                children=(a, b),
+                cell_mask=None,
+                weight=nodes[a].weight + nodes[b].weight,
+            )
+        )
+
+    if cls_vec is None:
+        return nodes
+    full = RegionVector(
+        box=(0.0, 0.0, 1.0, 1.0),
+        vec=_unit(np.asarray(cls_vec, dtype=np.float32)),
+        children=None,
+        cell_mask=None,
+        weight=0.0,
+    )
+    out = [full]
+    for node in nodes:
+        if node.children is None:
+            out.append(node)
+        else:
+            ci, cj = node.children
+            out.append(
+                RegionVector(box=node.box, vec=node.vec, children=(ci + 1, cj + 1), cell_mask=None, weight=node.weight)
+            )
+    return out
+
+
+class MaxPatchHacStyle(_FlattenedStyle):
+    """Raw-patch-leaf HAC tree: multi-scale snap / all-node flood / all-node max-pool.
+
+    The hybrid under test.  It builds a HAC tree whose leaves are the raw
+    patches and merges them up a binary tree (:func:`build_patch_hac_tree`), so
+    the tree carries candidates at every scale.  A Good region-vote **snaps to
+    the tree node whose box best matches** the drawn box (multi-scale, like
+    ``max_hac`` but over a raw-patch-leaved tree); a Bad vote floods **every
+    tree node** as a negative - symmetric with inference, which max-pools the
+    MLP over every node; an image scores by max-pooling over all nodes.  The
+    per-image tree is memoised per media id (it depends only on the frozen
+    ``patch_grid``), so the 150-step trajectory builds each tree once.
+    """
+
+    name = "max_patch_hac"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._tree_cache: "dict[int, list]" = {}
+
+    def _tree(self, media: dict[str, Any]) -> list:
+        mid = int(media.get("id", id(media)))
+        cached = self._tree_cache.get(mid)
+        if cached is not None:
+            return cached
+        import numpy as np  # noqa: PLC0415
+
+        grid = media.get("patch_grid")
+        if grid is None:
+            from vtscore.media.patch_embed import RegionVector  # noqa: PLC0415
+
+            tree = [
+                RegionVector(
+                    box=(0.0, 0.0, 1.0, 1.0),
+                    vec=_unit(np.asarray(media_embedding(media), dtype=np.float32)),
+                    children=None,
+                    cell_mask=None,
+                    weight=0.0,
+                )
+            ]
+        else:
+            tree = build_patch_hac_tree(np.asarray(grid), media_embedding(media))
+        self._tree_cache[mid] = tree
+        return tree
+
+    def good_vec(self, media: dict[str, Any], box: Optional[tuple[float, float, float, float]]) -> "np.ndarray":
+        if box is not None and media.get("patch_grid") is not None:
+            from vtscore.media.patch_embed import snap_box_to_region  # noqa: PLC0415
+
+            snapped = snap_box_to_region(self._tree(media), box)
+            if snapped is not None:
+                return snapped
+        return media_embedding(media)
+
+    def bad_vecs(self, media: dict[str, Any]) -> list["np.ndarray"]:
+        import numpy as np  # noqa: PLC0415
+
+        return [np.asarray(node.vec, dtype=np.float32) for node in self._tree(media)]
+
+    def _rows_for_media(self, media: dict[str, Any]) -> "np.ndarray":
+        import numpy as np  # noqa: PLC0415
+
+        return np.stack([np.asarray(node.vec, dtype=np.float16) for node in self._tree(media)])
+
+
 #: Style-name registry.  Values are *classes*; :func:`resolve_style` returns a
 #: fresh instance so per-run matrix memoisation never leaks across datasets.
 STYLES: dict[str, type] = {
     WholeImageStyle.name: WholeImageStyle,
     MaxHacStyle.name: MaxHacStyle,
     MaxPatchStyle.name: MaxPatchStyle,
+    MaxPatchHacStyle.name: MaxPatchHacStyle,
 }
 
 
