@@ -488,12 +488,14 @@ def _calibration_metric_rows(
     from vtscore.eval import calibration_metrics as cm  # noqa: PLC0415
     from vtscore.eval.patch_styles import _forward_sigmoid_chunked  # noqa: PLC0415
 
+    assert step.torch_model is not None  # the calibration study only runs the MLP style path
+    model = step.torch_model
     provenance = details.get("provenance", "conformal")
     fold_orderings = details.get("fold_orderings") or []
     fold_node_data = details.get("fold_node_data")
 
     test_clips = {cid: clips_dict[cid] for cid in test_ids}
-    ids, flat, seg = style_obj.node_scores(step.torch_model, test_clips)
+    ids, flat, seg = style_obj.node_scores(model, test_clips)
     labels = np.array([1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0 for cid in ids])
     n_pool_rows = float(cm.segment_counts(seg, flat.shape[0]).mean()) if len(ids) else float("nan")
 
@@ -524,7 +526,7 @@ def _calibration_metric_rows(
         neg_rows = details.get("neg_score_rows") or []
         if neg_rows:
             null_concat = np.concatenate([np.asarray(r, dtype=np.float32) for r in neg_rows], axis=0)
-            test_null = np.sort(np.asarray(_forward_sigmoid_chunked(step.torch_model, null_concat), dtype=np.float64))
+            test_null = np.sort(np.asarray(_forward_sigmoid_chunked(model, null_concat), dtype=np.float64))
         else:
             test_null = np.empty(0, dtype=np.float64)
 
