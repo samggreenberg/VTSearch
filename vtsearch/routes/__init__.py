@@ -26,7 +26,7 @@ from vtsearch.routes.health import health_bp
 from vtsearch.routes.jobs import jobs_bp
 from vtsearch.routes.labels import exporters_bp, label_importers_bp, labels_bp
 from vtsearch.routes.main import main_bp
-from vtsearch.routes.media import embed_bp, media_server_bp, medias_bp
+from vtsearch.routes.media import datasource_importers_bp, embed_bp, media_server_bp, medias_bp
 from vtsearch.routes.processors import processors_crud_bp, processors_scoring_bp
 from vtsearch.routes.projection import projection_bp
 from vtsearch.routes.sessions import sessions_bp
@@ -49,6 +49,7 @@ __all__ = [
     "detectors_export_bp",
     "detectors_labels_bp",
     "detectors_registry_bp",
+    "datasource_importers_bp",
     "embed_bp",
     "eval_bp",
     "events_bp",

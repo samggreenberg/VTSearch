@@ -1,0 +1,9 @@
+.datasource-import-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+
+  .load-btn {
+    align-self: flex-start;
+  }
+}

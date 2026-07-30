@@ -252,6 +252,7 @@ class PluginField:
 #: suffixes come first so ``HolderLabelsetExporter`` strips
 #: ``LabelsetExporter`` rather than just ``Exporter``.
 _PLUGIN_NAME_SUFFIXES: tuple[str, ...] = (
+    "DataSourceImporter",
     "DatasetImporter",
     "LabelsetExporter",
     "LabelImporter",
@@ -279,6 +280,7 @@ _PLUGIN_NAME_SUFFIXES: tuple[str, ...] = (
 _PLUGIN_FAMILY_BASE_NAMES: frozenset[str] = frozenset(
     {
         "ImporterBase",
+        "DataSourceImporter",
         "DatasetImporter",
         "LabelsetExporter",
         "LabelImporter",
@@ -301,6 +303,7 @@ _PLUGIN_FAMILY_BASE_NAMES: frozenset[str] = frozenset(
 _FAMILY_STOCK_ICONS: frozenset[str] = frozenset(
     {
         "\U0001f50c",  # dataset importer (plug)
+        "\U0001f4e5",  # datasource importer (inbox tray)
         "\U0001f4e4",  # labelset / settings exporter (outbox tray)
         "\U0001f3f7️",  # label importer (label)
         "\U0001f504",  # sync source (counterclockwise arrows)

@@ -1956,6 +1956,72 @@
         ],
         "type": "object"
       },
+      "DatasourceImporterEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "fields": {
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "hidden_from_picker": {
+            "type": "boolean"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ui_mode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "description",
+          "display_name",
+          "fields",
+          "hidden_from_picker",
+          "icon",
+          "name",
+          "ui_mode"
+        ],
+        "type": "object"
+      },
+      "DatasourceImportersListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "importers": {
+            "items": {
+              "$ref": "#/components/schemas/DatasourceImporterEntry"
+            },
+            "type": "array"
+          },
+          "tabs": {
+            "items": {
+              "$ref": "#/components/schemas/ImporterPickerTab"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "importers",
+          "tabs"
+        ],
+        "type": "object"
+      },
       "DemoCategoriesResponse": {
         "additionalProperties": false,
         "properties": {
@@ -6828,6 +6894,30 @@
         ],
         "type": "object"
       },
+      "datasource_import_ServerFileDataSourceImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "datasource_import_UrlDownloadDataSourceImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
       "import_dataset_CombineDatasetsImporter_Args": {
         "additionalProperties": true,
         "properties": {
@@ -11115,6 +11205,177 @@
         "summary": "Unload a specific dataset from memory.",
         "tags": [
           "datasets_registry"
+        ]
+      }
+    },
+    "/api/datasource-import/server_file": {
+      "post": {
+        "description": "Plugin-dependent body shape (JSON, or multipart when the importer\ndeclares ``file`` fields).  On success the fetched bytes are saved\ninto the per-user ``example_media/`` directory and the saved\n``filename`` (persistence key) plus the human-readable\n``original_name`` are returned, matching the upload endpoint's\ncontract.",
+        "operationId": "datasource_import__server_file",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/datasource_import_ServerFileDataSourceImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Fetch one media item via the named datasource importer.",
+        "tags": [
+          "datasource_importers"
+        ]
+      }
+    },
+    "/api/datasource-import/url_download": {
+      "post": {
+        "description": "Plugin-dependent body shape (JSON, or multipart when the importer\ndeclares ``file`` fields).  On success the fetched bytes are saved\ninto the per-user ``example_media/`` directory and the saved\n``filename`` (persistence key) plus the human-readable\n``original_name`` are returned, matching the upload endpoint's\ncontract.",
+        "operationId": "datasource_import__url_download",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/datasource_import_UrlDownloadDataSourceImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Fetch one media item via the named datasource importer.",
+        "tags": [
+          "datasource_importers"
+        ]
+      }
+    },
+    "/api/datasource-import/{importer_name}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "importer_name",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Plugin-dependent body shape (JSON, or multipart when the importer\ndeclares ``file`` fields).  On success the fetched bytes are saved\ninto the per-user ``example_media/`` directory and the saved\n``filename`` (persistence key) plus the human-readable\n``original_name`` are returned, matching the upload endpoint's\ncontract.",
+        "operationId": "run_datasource_import",
+        "responses": {
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Fetch one media item via the named datasource importer.",
+        "tags": [
+          "datasource_importers"
+        ]
+      }
+    },
+    "/api/datasource-import/{importer_name}/options": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "importer_name",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Same contract as ``POST /api/dataset/import/<name>/options``: the\nimporter's ``get_field_options(field_key, current_values)`` is called\nwith the supplied snapshot of current form values, and plugin errors\n(network failure, auth error, etc.) surface as a 502 with the\noriginal message so the frontend can display them inline.",
+        "operationId": "datasource_importer_field_options",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImporterFieldOptionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImporterFieldOptionsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Unknown or non-dynamic field key."
+          },
+          "404": {
+            "description": "Unknown datasource importer name."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "500": {
+            "description": "get_field_options did not return a list."
+          },
+          "501": {
+            "description": "Importer does not implement get_field_options."
+          },
+          "502": {
+            "description": "Remote service backing dynamic options raised an error."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return dropdown options for a dynamic-options field.",
+        "tags": [
+          "datasource_importers"
+        ]
+      }
+    },
+    "/api/datasource-importers": {
+      "get": {
+        "description": "``tabs`` are the dataset-importer picker-tab declarations; datasource\nimporters use the same category ids so both families share one tab\nbar in the example-media picker.",
+        "operationId": "list_datasource_importers_route",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasourceImportersListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "List available datasource importers and the shared picker tabs.",
+        "tags": [
+          "datasource_importers"
         ]
       }
     },
@@ -16136,6 +16397,10 @@
     {
       "description": "Server-side example media files and example-sort routes.",
       "name": "media_server"
+    },
+    {
+      "description": "Datasource importers: fetch a single media item into example_media/.",
+      "name": "datasource_importers"
     },
     {
       "description": "App version and SPA / static-file serving.",

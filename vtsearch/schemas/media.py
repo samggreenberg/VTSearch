@@ -47,6 +47,8 @@ from __future__ import annotations
 
 from marshmallow import Schema, fields, validate
 
+from vtsearch.schemas.datasets import ImporterPickerTabSchema
+
 
 class OriginSchema(Schema):
     """A serialised :class:`~vtscore.datasets.origin.Origin`.
@@ -466,7 +468,48 @@ class ExampleSortResponseSchema(Schema):
     threshold = fields.Float(required=True)
 
 
+class DatasourceImporterEntrySchema(Schema):
+    """One entry in ``GET /api/datasource-importers``.
+
+    Mirrors :meth:`vtscore.datasource_importers.base.DataSourceImporter.to_dict`;
+    the ``fields`` array's inner shape mirrors
+    :meth:`vtscore.plugins.PluginField.to_dict` but is declared as
+    ``fields.Dict()`` to avoid duplicating the source of truth across
+    schema and dataclass (same convention as the other plugin-listing
+    schemas).
+    """
+
+    name = fields.String(required=True)
+    display_name = fields.String(required=True)
+    description = fields.String(required=True)
+    icon = fields.String(required=True)
+    ui_mode = fields.String(required=True)
+    hidden_from_picker = fields.Boolean(required=True)
+    category = fields.String(required=True)
+    # Renamed to avoid shadowing :attr:`marshmallow.Schema.fields`;
+    # ``data_key`` / ``attribute`` keep the wire name as ``"fields"``.
+    plugin_fields = fields.List(
+        fields.Dict(),
+        required=True,
+        data_key="fields",
+        attribute="fields",
+    )
+
+
+class DatasourceImportersListResponseSchema(Schema):
+    """Response for ``GET /api/datasource-importers``.
+
+    ``tabs`` reuses the dataset-importer picker-tab declarations so both
+    families share one category tab bar in the example-media picker.
+    """
+
+    importers = fields.List(fields.Nested(DatasourceImporterEntrySchema), required=True)
+    tabs = fields.List(fields.Nested(ImporterPickerTabSchema), required=True)
+
+
 __all__ = [
+    "DatasourceImporterEntrySchema",
+    "DatasourceImportersListResponseSchema",
     "ExampleSortByIdRequestSchema",
     "ExampleSortOriginRequestSchema",
     "ExampleSortResponseSchema",

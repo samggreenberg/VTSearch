@@ -38,6 +38,11 @@ import {
 } from '../../modals/media-crop-modal/media-crop-modal.component';
 import { DropZoneComponent } from '../../drop-zone/drop-zone.component';
 import { SourcePickerComponent } from '../dataset-importer-modal/source-picker/source-picker.component';
+import { DatasourceImportFormComponent } from './datasource-import-form/datasource-import-form.component';
+import {
+  DatasourceImportersApiService,
+  DatasourceImportResult,
+} from '../../../services/datasource-importers-api.service';
 import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 import { apiErrorMessage } from '../../../utils/api-error';
 
@@ -61,7 +66,7 @@ interface MediaExampleItem {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, FieldHintIconComponent, ProgressBarComponent],
+  imports: [FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, DatasourceImportFormComponent, FieldHintIconComponent, ProgressBarComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })
@@ -72,6 +77,7 @@ export class NewDetectorModalComponent implements OnInit {
   private datasetsRegistryApi = inject(DatasetsRegistryApiService);
   private datasetsUiApi = inject(DatasetsUiApiService);
   private sortingApi = inject(SortingApiService);
+  private datasourceImportersApi = inject(DatasourceImportersApiService);
   private labelImportersApi = inject(LabelImportersApiService);
   private progressEvents = inject(ProgressEventsService);
   private settingsState = inject(SettingsStateService);
@@ -147,10 +153,14 @@ export class NewDetectorModalComponent implements OnInit {
 
   // --- Media picker state (shares structure with the Add Dataset modal) ---
 
-  /** All importers discovered from the backend, filtered to picker_views we
-   *  can use to select a single example file (demo, server_folder,
-   *  local_folder, local_files). */
+  /** Dataset importers discovered from the backend, filtered to picker_views
+   *  we can use to browse for a single example file (demo, local_folder,
+   *  local_files). */
   readonly mediaImporters = signal<ImporterInfo[]>([]);
+  /** Datasource importers (single-item fetchers: server file, URL,
+   *  third-party services).  Each renders as a dynamic form built from its
+   *  declared plugin fields, like the Add Dataset generic importer form. */
+  readonly datasourceImporters = signal<ImporterInfo[]>([]);
   /** Tab declarations (categories) returned by the backend. */
   readonly declaredImporterTabs = signal<ImporterPickerTab[]>([]);
   /** Currently selected category tab (e.g. ``"demo"``, ``"server"``). */
@@ -163,17 +173,17 @@ export class NewDetectorModalComponent implements OnInit {
   private static readonly PICKER_ORDER = [
     'local_folder',
     'local_files',
-    'server_folder',
-    'server_files',
+    'server_file',
     'demo',
+    'url_download',
   ];
 
-  /** Picker views supported by the single-file example picker.  Importers
-   *  whose ``picker_view`` is anything else (e.g. ``"form"``) are hidden
-   *  here; the user can still use them via the Add Dataset modal. */
+  /** Dataset-importer picker views supported by the single-file example
+   *  picker (dedicated browse/upload widgets).  Server files and every
+   *  other source go through datasource importers instead, which render
+   *  as dynamic forms. */
   private static readonly SUPPORTED_PICKER_VIEWS = new Set([
     'demo',
-    'server_folder',
     'local_folder',
     'local_files',
   ]);
@@ -209,11 +219,6 @@ export class NewDetectorModalComponent implements OnInit {
   readonly demoFileLoading = signal(false);
   demoTypedPath = '';
   readonly demoTypedPathError = signal('');
-
-  // --- Server example-media picker. Path is validated when submitted. ---
-  readonly sfBrowseError = signal('');
-  readonly sfFileSelecting = signal(false);
-  sfTypedPath = '';
 
   // Pending crop confirmation state.
   pendingFile: File | null = null;
@@ -570,7 +575,6 @@ export class NewDetectorModalComponent implements OnInit {
     this.activeImporterTab = '';
     this.selectedImporter = null;
     this.resetDemoPickerState();
-    this.resetServerFolderState();
     this.loadMediaImporters();
   }
 
@@ -585,18 +589,35 @@ export class NewDetectorModalComponent implements OnInit {
         this.declaredImporterTabs.set(res.tabs || []);
       },
     });
+    this.datasourceImportersApi.list().subscribe({
+      next: (res) => {
+        this.datasourceImporters.set(
+          (res.importers || []).filter((imp) => !imp['hidden_from_picker']),
+        );
+      },
+    });
   }
 
-  /** Importers ordered like the Add Dataset modal: known picker_views
-   *  first, then any extras in registry order. */
+  /** True when *importer* is a datasource importer (single-item fetcher
+   *  rendered as a dynamic form) rather than a dataset-importer browse
+   *  view.  Identity check against the datasource list, so a name shared
+   *  across the two families can't misroute. */
+  isDatasourceImporter(importer: ImporterInfo | null): boolean {
+    return importer != null && this.datasourceImporters().includes(importer);
+  }
+
+  /** Importers ordered like the Add Dataset modal: known names first,
+   *  then any extras (e.g. third-party datasource importers) in registry
+   *  order. */
   get orderedImporters(): ImporterInfo[] {
+    const all = [...this.mediaImporters(), ...this.datasourceImporters()];
     const order = NewDetectorModalComponent.PICKER_ORDER;
     const result: ImporterInfo[] = [];
     for (const name of order) {
-      const imp = this.mediaImporters().find((i) => i.name === name);
+      const imp = all.find((i) => i.name === name);
       if (imp) result.push(imp);
     }
-    for (const imp of this.mediaImporters()) {
+    for (const imp of all) {
       if (!order.includes(imp.name)) result.push(imp);
     }
     return result;
@@ -652,7 +673,6 @@ export class NewDetectorModalComponent implements OnInit {
     this.activeImporterTab = tabId;
     this.selectedImporter = null;
     this.resetDemoPickerState();
-    this.resetServerFolderState();
     // A category with a single source has no meaningful sub-tab choice, so
     // skip straight to that source's input (e.g. opening "Files" lands the
     // user on the server-path entry instead of a one-button sub-tab bar).
@@ -665,23 +685,41 @@ export class NewDetectorModalComponent implements OnInit {
   selectImporter(importer: ImporterInfo): void {
     this.selectedImporter = importer;
     this.error.set('');
-    const view = importer.picker_view || '';
-    if (view === 'demo') {
+    if (!this.isDatasourceImporter(importer) && (importer.picker_view || '') === 'demo') {
       this.openDemoPicker();
-    } else if (view === 'server_folder') {
-      this.openServerFolderBrowser();
     } else {
-      // local_folder / local_files: just reveal the upload input below.
+      // Datasource importers render their dynamic form below the sub-tab
+      // row; local_folder / local_files just reveal the upload input.
       this.resetDemoPickerState();
-      this.resetServerFolderState();
     }
   }
 
   /** Picker view of the currently selected importer, or empty when nothing
    *  is selected.  Drives which inline widget set is rendered below the
-   *  inner sub-tab row. */
+   *  inner sub-tab row.  Datasource importers report empty so the source
+   *  picker renders none of its dedicated widgets; their dynamic form is
+   *  rendered by this modal instead. */
   get activePickerView(): string {
+    if (this.isDatasourceImporter(this.selectedImporter)) return '';
     return this.selectedImporter?.picker_view || '';
+  }
+
+  /** The selected importer when it is a datasource importer, else null.
+   *  Template convenience for rendering the dynamic form view. */
+  get selectedDatasourceImporter(): ImporterInfo | null {
+    return this.isDatasourceImporter(this.selectedImporter) ? this.selectedImporter : null;
+  }
+
+  /** A datasource importer fetched an item into ``example_media/``: add
+   *  it to the example stack and land back on the main form. */
+  onDatasourceImported(result: DatasourceImportResult): void {
+    const display = result.original_name || result.filename;
+    this.addMediaExample(
+      result.filename,
+      display,
+      this.mediaType() || this.mediaTypeFromFilename(display),
+    );
+    this.view.set('main');
   }
 
   // --- Demo picker ---
@@ -818,42 +856,6 @@ export class NewDetectorModalComponent implements OnInit {
     this.demoFileBrowseLabel = '';
     this.demoTypedPath = '';
     this.demoTypedPathError.set('');
-  }
-
-  // --- Server example-media (typed path) ---
-
-  private resetServerFolderState(): void {
-    this.sfBrowseError.set('');
-    this.sfFileSelecting.set(false);
-    this.sfTypedPath = '';
-  }
-
-  private openServerFolderBrowser(): void {
-    this.resetServerFolderState();
-  }
-
-  /** Submit the typed absolute server path. Server validates and returns
-   *  the materialised filename for the example sort. */
-  submitSfTypedPath(): void {
-    const raw = (this.sfTypedPath || '').trim();
-    if (!raw) return;
-    this.sfFileSelecting.set(true);
-    this.sfBrowseError.set('');
-    this.datasetsUiApi.selectBrowsedFile('server_fs', raw).subscribe({
-      next: (res) => {
-        this.addMediaExample(
-          res.filename,
-          res.original_name || raw,
-          this.mediaType() || this.mediaTypeFromFilename(raw),
-        );
-        this.sfFileSelecting.set(false);
-        this.view.set('main');
-      },
-      error: (err) => {
-        this.sfBrowseError.set(err?.error?.message || 'Path not found on the server.');
-        this.sfFileSelecting.set(false);
-      },
-    });
   }
 
   // --- Local file upload (single file for the example) ---
