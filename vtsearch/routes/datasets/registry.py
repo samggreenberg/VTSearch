@@ -625,6 +625,32 @@ def update_dataset_readers(body: dict, dataset_id: str):
     return {"ok": True, "readers": readers}
 
 
+def _repaired_file_type_counts(dataset_id: str, stored: dict) -> dict:
+    """Return usable file-type counts for *dataset_id*, recounting if needed.
+
+    An entry stamped by an older build — or by an importer whose items had no
+    filename extension to go on — carries a histogram with everything in one
+    unknown bucket, which tells the user nothing.  When the dataset happens to
+    be loaded we can do better: recount from the in-memory medias, where
+    :func:`~vtscore.datasets.file_types.media_file_type` can sniff the actual
+    bytes.  A recount that improves on the stored counts is written back, so
+    the repair sticks for later opens (and for when the dataset is unloaded).
+    """
+    from vtscore.datasets.file_types import count_file_types, counts_are_uninformative
+    from vtsearch.state import get_context
+
+    if not counts_are_uninformative(stored):
+        return stored
+    ctx = get_context(dataset_id)
+    if ctx is None:
+        return stored
+    recounted = count_file_types(ctx.medias.values())
+    if counts_are_uninformative(recounted):
+        return stored
+    _reg_update(dataset_id, file_type_counts=recounted)
+    return recounted
+
+
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/stats")
 @datasets_registry_bp.response(200, DatasetRegistryStatsResponseSchema)
 @datasets_registry_bp.alt_response(404, description="Dataset not found.")
@@ -656,7 +682,7 @@ def get_dataset_stats(dataset_id: str):
         "created_by": entry.get("created_by", ""),
         "readers": entry.get("readers") or [],
         "num_dupes": entry.get("num_dupes", 0),
-        "file_type_counts": entry.get("file_type_counts", {}),
+        "file_type_counts": _repaired_file_type_counts(dataset_id, entry.get("file_type_counts") or {}),
         "ingest_started_at": entry.get("ingest_started_at"),
         "ingest_finished_at": entry.get("ingest_finished_at"),
         "origin": entry.get("origin", ""),

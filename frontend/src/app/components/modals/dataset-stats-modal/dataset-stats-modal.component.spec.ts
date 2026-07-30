@@ -149,6 +149,19 @@ describe('DatasetStatsModalComponent', () => {
     expect(text).not.toContain('Never');
   });
 
+  it('dots real file types but passes the unknown sentinel through verbatim', async () => {
+    await fixture.whenStable();
+    httpMock
+      .expectOne('/api/datasets/registry/ds1/stats')
+      .flush({ ...mockStats, file_type_counts: { jpg: 400, '(unknown)': 37 } });
+    await settleZoneless(fixture);
+
+    expect(component.fileTypes.map((ft) => ft.label)).toEqual(['.jpg', '(unknown)']);
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('.jpg');
+    expect(text).not.toContain('.(unknown)');
+  });
+
   it('repaints the error text on a failed load (zoneless canary)', async () => {
     await fixture.whenStable();
     httpMock.expectOne('/api/datasets/registry/ds1/stats').flush(

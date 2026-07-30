@@ -105,14 +105,14 @@
       <table class="data-table stats-table">
         <thead>
           <tr>
-            <th title="File extension of media items">Extension</th>
-            <th title="Number of items with this file extension">Count</th>
+            <th title="File extension of each media item, or the format detected from its contents when it has no extension">Type</th>
+            <th title="Number of items of this file type">Count</th>
           </tr>
         </thead>
         <tbody>
           @for (ft of fileTypes; track ft.ext) {
             <tr>
-              <td>.{{ ft.ext }}</td>
+              <td>{{ ft.label }}</td>
               <td>{{ ft.count | number }}</td>
             </tr>
           }

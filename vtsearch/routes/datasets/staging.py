@@ -20,7 +20,6 @@ import gc
 import threading
 import time
 import traceback
-from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 from uuid import uuid4
@@ -32,6 +31,7 @@ import vtscore.security.path_validation as _paths
 from vtscore.concurrency.progress import CancelledError, loading_tasks
 from vtscore.config import EMBEDDINGS_DIR
 from vtscore.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
+from vtscore.datasets.file_types import count_file_types
 from vtscore.datasets.load_pipeline import (
     STAGING_DIR,
     _run_importer_in_background,
@@ -419,14 +419,6 @@ def promote_to_dataset(body: dict):
     clipper = (src_entry or {}).get("clipper", "") if src_entry else ""
     expires_at = (src_entry or {}).get("expires_at") if src_entry else None
 
-    ext_counter: Counter[str] = Counter()
-    for m in subset.values():
-        fn = m.get("filename", "")
-        if fn and "." in fn:
-            ext_counter[fn.rsplit(".", 1)[-1].lower()] += 1
-        else:
-            ext_counter["(no extension)"] += 1
-
     source = {
         "importer": "promote",
         "params": {
@@ -442,7 +434,7 @@ def promote_to_dataset(body: dict):
         clipper=clipper,
         expires_at=expires_at,
         source=source,
-        file_type_counts=dict(ext_counter.most_common()),
+        file_type_counts=count_file_types(subset.values()),
         created_by=get_current_user(),
     )
     return {"ok": True, "message": "Promoting to dataset...", "task_id": task_id}

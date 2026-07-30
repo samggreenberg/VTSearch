@@ -1796,6 +1796,7 @@
             "additionalProperties": {
               "type": "integer"
             },
+            "description": "File type \u2192 item count. The type is the item's filename extension, or the format sniffed from its bytes when it has none (a service importer may name items after an opaque content id). Items no signal could type land in a parenthesised \"(unknown)\" bucket.",
             "type": "object"
           },
           "ingest_finished_at": {
