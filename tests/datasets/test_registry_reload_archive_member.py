@@ -20,7 +20,13 @@ import numpy as np
 
 
 def _archive_member_media(media_id: int, tmp_path: Path) -> dict[str, Any]:
-    """One archive-member audio media: bytes exist only inside a tar shard."""
+    """One archive-member audio media: bytes exist only inside a tar shard.
+
+    Carries a top-level playback window too (each item is one window of its
+    member): the whole member is served, so the player seeks to ``clip_start``
+    and loops within ``[clip_start, clip_end]``, and losing the window on
+    reload would collapse every window of a member into the same item.
+    """
     return {
         "id": media_id,
         "media_type": "audio",
@@ -37,11 +43,13 @@ def _archive_member_media(media_id: int, tmp_path: Path) -> dict[str, Any]:
                 "archive_path": str(tmp_path / "shard0.tar"),
                 "member": f"clip{media_id}.m4a",
                 "media_type": "audio",
-                "clip_start": 0.0,
-                "clip_end": 10.0,
+                "clip_start": float(media_id * 10),
+                "clip_end": float(media_id * 10 + 10),
             },
         },
         "origin_name": f"shard0.tar::clip{media_id}.m4a",
+        "clip_start": float(media_id * 10),
+        "clip_end": float(media_id * 10 + 10),
         "media_bytes": None,
         "media_string": None,
         "media_path": None,
@@ -101,6 +109,13 @@ class TestRegistryReloadArchiveMemberDataset:
             assert reloaded_entry["num_items"] == len(medias)
             # Kept lazily: the member is streamed from its shard on demand.
             assert all(m["media_bytes"] is None for m in ctx.medias.values())
+            # Each item's playback window survives, so the windows of a shared
+            # member still sound (and draw) like different stretches of audio.
+            assert sorted((m["clip_start"], m["clip_end"]) for m in ctx.medias.values()) == [
+                (10.0, 20.0),
+                (20.0, 30.0),
+                (30.0, 40.0),
+            ]
         finally:
             client.post(f"/api/datasets/registry/{dataset_id}/unload")
             unregister_dataset(dataset_id)
