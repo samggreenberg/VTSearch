@@ -50,6 +50,10 @@ from vtscore.training.mlp import _auto_hidden_dim, train_model
 from vtscore.training.thresholds import (
     calculate_cross_calibration_threshold,
     calculate_safe_threshold,
+    classify_threshold_provenance,
+    compute_fold_orderings,
+    compute_grouped_fold_node_scores,
+    threshold_from_fold_orderings,
 )
 
 
@@ -99,6 +103,66 @@ _VOTING_COLUMNS: tuple[str, ...] = (
     "backend",
     "device",
     "elapsed_seconds",
+)
+
+#: Identifying columns every emitted row (main or sweep) leads with.
+_IDENT_COLUMNS: tuple[str, ...] = (
+    "seed",
+    "dataset",
+    "category",
+    "strategy",
+    "trainer",
+    "style",
+    "prevalence_arm",
+    "realized_prevalence",
+    "t",
+    "n_good",
+    "n_bad",
+)
+
+#: Column order for the calibration study's main per-step frame (issue #2781),
+#: emitted only when ``emit_calibration_metrics``.  One row per ``pool_variant``.
+_CALIBRATION_COLUMNS: tuple[str, ...] = (
+    *_IDENT_COLUMNS,
+    "pool_variant",
+    "threshold",
+    "threshold_provenance",
+    "degenerate",
+    "threshold_percentile",
+    "cost",
+    "fpr",
+    "fnr",
+    "auroc",
+    "average_precision",
+    "oracle_threshold",
+    "oracle_cost",
+    "oracle_fpr",
+    "oracle_fnr",
+    "regret",
+    "cal_oracle_threshold",
+    "cal_oracle_cost",
+    "rule_inefficiency",
+    "calibration_shift",
+    "n_pool_rows",
+    "train_seconds",
+    "xcal_seconds",
+    "pool_score_seconds",
+    "test_score_seconds",
+    "backend",
+    "device",
+    "elapsed_seconds",
+)
+
+#: Column order for the inclusion-budget sweep side frame (long format, one row
+#: per (step, inclusion k)); written to a separate CSV by the runner.
+_INCLUSION_SWEEP_COLUMNS: tuple[str, ...] = (
+    *_IDENT_COLUMNS,
+    "inclusion_k",
+    "alpha",
+    "sweep_threshold",
+    "sweep_fpr",
+    "sweep_fnr",
+    "excess_fnr",
 )
 
 
@@ -311,6 +375,239 @@ def _evaluate_on_test(
     }
 
 
+def _r(x: float) -> float:
+    """Round to 6 dp when finite, else pass NaN/inf through unchanged."""
+    import math  # noqa: PLC0415
+
+    return round(x, 6) if math.isfinite(x) else x
+
+
+def _operating_metrics(
+    scores: "np.ndarray",
+    labels: "np.ndarray",
+    threshold: float,
+    inclusion: int,
+    cal_scores: "np.ndarray | None",
+    cal_labels: "np.ndarray | None",
+    *,
+    pool_variant: str,
+    provenance: str,
+    n_pool_rows: float,
+) -> dict[str, Any]:
+    """Full per-step calibration metrics for one pooling (issue #2781).
+
+    ``scores``/``labels`` are the held-out test scores+labels under *pool_variant*
+    at the trained *threshold*.  Computes the trained cost, the oracle cost (best
+    cut on the test scores) and the resulting **regret**, plus the
+    calibration-set oracle that splits regret into *rule inefficiency*
+    (trained-vs-best-use-of-calibration) and *calibration→test shift* (best cut
+    on calibration vs. best cut on test).  ``cal_scores``/``cal_labels`` are the
+    pooled calibration fold orderings under the same pooling; ``None`` skips the
+    decomposition (leaves those columns NaN).
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.eval.calibration_metrics import (  # noqa: PLC0415
+        inclusion_weights,
+        is_degenerate,
+        operating_cost,
+        oracle_cut,
+        threshold_percentile,
+    )
+    from vtscore.eval.label_curve import _auroc, _average_precision  # noqa: PLC0415
+
+    wf, wn = inclusion_weights(inclusion)
+    scores = np.asarray(scores, dtype=np.float64)
+    labels = np.asarray(labels, dtype=np.float64)
+
+    cost, fpr, fnr = operating_cost(scores, labels, threshold, wf, wn)
+    o_thr, o_cost, o_fpr, o_fnr = oracle_cut(scores, labels, wf, wn)
+    regret = cost - o_cost
+
+    nan = float("nan")
+    if cal_scores is not None and np.asarray(cal_scores).size > 0:
+        cal_scores = np.asarray(cal_scores, dtype=np.float64)
+        cal_labels = np.asarray(cal_labels, dtype=np.float64)
+        c_thr, _, _, _ = oracle_cut(cal_scores, cal_labels, wf, wn)
+        cal_oracle_cost, _, _ = operating_cost(scores, labels, c_thr, wf, wn)
+        rule_inefficiency = cost - cal_oracle_cost
+        calibration_shift = cal_oracle_cost - o_cost
+    else:
+        c_thr = nan
+        cal_oracle_cost = nan
+        rule_inefficiency = nan
+        calibration_shift = nan
+
+    return {
+        "pool_variant": pool_variant,
+        "threshold": _r(float(threshold)),
+        "threshold_provenance": provenance,
+        "degenerate": 1 if is_degenerate(scores, threshold) else 0,
+        "threshold_percentile": _r(threshold_percentile(scores, threshold)),
+        "cost": _r(cost),
+        "fpr": _r(fpr),
+        "fnr": _r(fnr),
+        "auroc": _r(float(_auroc(scores, labels))),
+        "average_precision": _r(float(_average_precision(scores, labels))),
+        "oracle_threshold": _r(float(o_thr)),
+        "oracle_cost": _r(o_cost),
+        "oracle_fpr": _r(o_fpr),
+        "oracle_fnr": _r(o_fnr),
+        "regret": _r(regret),
+        "cal_oracle_threshold": _r(float(c_thr)),
+        "cal_oracle_cost": _r(cal_oracle_cost),
+        "rule_inefficiency": _r(rule_inefficiency),
+        "calibration_shift": _r(calibration_shift),
+        "n_pool_rows": _r(float(n_pool_rows)),
+    }
+
+
+def _calibration_metric_rows(
+    step: _StepModel,
+    threshold: float,
+    details: dict[str, Any],
+    clips_dict: dict[int, dict[str, Any]],
+    test_ids: list[int],
+    target_category: str,
+    inclusion: int,
+    style_obj: Any,
+    repool_variants: list[str],
+    topk: int,
+) -> tuple[list[dict[str, Any]], "np.ndarray", "np.ndarray"]:
+    """Per-step metric rows for the base pooling plus each remedial re-pool.
+
+    Scores the test set's per-node sigmoids once through *style_obj*, then pools
+    them ``max`` (base) and — for the raw-patch tree arm, which carries
+    ``fold_node_data`` — ``topk`` / ``pnorm``.  Each remedial variant recalibrates
+    its own threshold by re-pooling the same fold models' held-out node scores,
+    so every arm has a genuine *trained* cost and an *oracle* cost.  Returns one
+    row dict per pooling, each tagged with ``pool_variant``.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.eval import calibration_metrics as cm  # noqa: PLC0415
+    from vtscore.eval.patch_styles import _forward_sigmoid_chunked  # noqa: PLC0415
+
+    provenance = details.get("provenance", "conformal")
+    fold_orderings = details.get("fold_orderings") or []
+    fold_node_data = details.get("fold_node_data")
+
+    test_clips = {cid: clips_dict[cid] for cid in test_ids}
+    ids, flat, seg = style_obj.node_scores(step.torch_model, test_clips)
+    labels = np.array([1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0 for cid in ids])
+    n_pool_rows = float(cm.segment_counts(seg, flat.shape[0]).mean()) if len(ids) else float("nan")
+
+    rows: list[dict[str, Any]] = []
+
+    # --- Base pooling (max): the arm's real operating point. ---
+    base_scores = cm.segment_max_pool(flat, seg)
+    base_cal_scores = np.array([s for scores, _ in fold_orderings for s in scores]) if fold_orderings else None
+    base_cal_labels = np.array([lb for _, labels_ in fold_orderings for lb in labels_]) if fold_orderings else None
+    rows.append(
+        _operating_metrics(
+            base_scores,
+            labels,
+            threshold,
+            inclusion,
+            base_cal_scores,
+            base_cal_labels,
+            pool_variant="max",
+            provenance=provenance,
+            n_pool_rows=n_pool_rows,
+        )
+    )
+
+    # --- Remedial re-pools: only where the same fold models exposed node data
+    # (the raw-patch tree arm) and the base threshold was a real conformal cut. ---
+    if fold_node_data and repool_variants:
+        # Final-model node scores over the bad-voted bags -> the pnorm test null.
+        neg_rows = details.get("neg_score_rows") or []
+        if neg_rows:
+            null_concat = np.concatenate([np.asarray(r, dtype=np.float32) for r in neg_rows], axis=0)
+            test_null = np.sort(np.asarray(_forward_sigmoid_chunked(step.torch_model, null_concat), dtype=np.float64))
+        else:
+            test_null = np.empty(0, dtype=np.float64)
+
+        for variant in repool_variants:
+            # Recalibrate the threshold: re-pool each fold's held-out calibration
+            # groups under this variant, then run the conformal rule on the pool.
+            v_orderings: list[tuple[list[float], list[float]]] = []
+            for blocks, blk_labels in fold_node_data:
+                if variant == "pnorm":
+                    fold_null = cm.negative_block_null(blocks, blk_labels)
+                    pooled = cm.pool_blocks(blocks, "pnorm", null_sorted=fold_null)
+                else:
+                    pooled = cm.pool_blocks(blocks, variant, topk=topk)
+                v_orderings.append((pooled, list(blk_labels)))
+            v_threshold = threshold_from_fold_orderings(v_orderings, inclusion)
+
+            # Re-pool the test node scores under this variant.
+            if variant == "pnorm":
+                v_scores = cm.segment_pnorm_pool(flat, seg, test_null)
+            else:
+                v_scores = cm.segment_topk_mean_pool(flat, seg, topk)
+            v_cal_scores = np.array([s for scores, _ in v_orderings for s in scores])
+            v_cal_labels = np.array([lb for _, labels_ in v_orderings for lb in labels_])
+            rows.append(
+                _operating_metrics(
+                    v_scores,
+                    labels,
+                    v_threshold,
+                    inclusion,
+                    v_cal_scores,
+                    v_cal_labels,
+                    pool_variant=variant,
+                    provenance="conformal",
+                    n_pool_rows=n_pool_rows,
+                )
+            )
+
+    return rows, base_scores, labels
+
+
+def _inclusion_sweep_rows(
+    details: dict[str, Any],
+    base_scores: "np.ndarray",
+    base_labels: "np.ndarray",
+    inclusion_sweep_ks: list[int],
+) -> list[dict[str, Any]]:
+    """Re-threshold the base fold orderings at each inclusion *k* and measure test FNR.
+
+    Near-free (no refits): pools the cached fold orderings once and applies the
+    conformal rule at each ``k``, then measures the realised test FPR/FNR at that
+    cut.  Checks the Inclusion budget ``alpha(k) = 0.25 * 2^-k`` against the
+    measured FNR under the **grouped** calibration path (issue #2781 / the
+    grouped-arm follow-up in inclusion-calibration-bias.md).  Returns ``[]`` when
+    the base threshold was a fallback (no real orderings to sweep).
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.eval.calibration_metrics import inclusion_weights, operating_cost  # noqa: PLC0415
+
+    fold_orderings = details.get("fold_orderings") or []
+    if not fold_orderings:
+        return []
+    base_scores = np.asarray(base_scores, dtype=np.float64)
+    base_labels = np.asarray(base_labels, dtype=np.float64)
+    out: list[dict[str, Any]] = []
+    for k in inclusion_sweep_ks:
+        thr_k = threshold_from_fold_orderings(fold_orderings, k)
+        wf, wn = inclusion_weights(k)
+        cost_k, fpr_k, fnr_k = operating_cost(base_scores, base_labels, thr_k, wf, wn)
+        alpha_k = 0.25 * 2.0 ** (-k)
+        out.append(
+            {
+                "inclusion_k": k,
+                "alpha": _r(alpha_k),
+                "sweep_threshold": _r(float(thr_k)),
+                "sweep_fpr": _r(fpr_k),
+                "sweep_fnr": _r(fnr_k),
+                "excess_fnr": _r(fnr_k - alpha_k),
+            }
+        )
+    return out
+
+
 # ------------------------------------------------------------------
 # Active-learning acquisition helpers
 # ------------------------------------------------------------------
@@ -373,14 +670,18 @@ def _train_and_calibrate(
     calibrate_count: int,
     calibration_fraction: float,
     style_obj: Any = None,
-) -> tuple[_StepModel, float, int, dict[str, float]]:
+    emit_calibration_metrics: bool = False,
+) -> tuple[_StepModel, float, int, dict[str, float], dict[str, Any]]:
     """Train the step's ranker and calibrate its threshold from the current votes.
 
     Dispatches on *trainer*: ``"mlp"`` runs the production MLP path unchanged
     (see :func:`_mlp_train_and_calibrate`); any ``svm_*`` name runs the SVM path
     (see :func:`_svm_train_and_calibrate`).  Returns ``(step, threshold,
-    n_labels, timings)`` where *timings* has ``train_seconds`` and
-    ``xcal_seconds`` for the fit and threshold-calibration wall clocks.
+    n_labels, timings, details)`` where *timings* has ``train_seconds`` and
+    ``xcal_seconds`` for the fit and threshold-calibration wall clocks, and
+    *details* is empty unless *emit_calibration_metrics* (the #2781 study),
+    carrying the fold orderings, node scores, and threshold provenance the
+    calibration metrics need.
 
     With an explicit *style_obj* (MLP only) the vote-to-vector assembly is
     delegated to the style (see :func:`_style_train_and_calibrate`).
@@ -397,6 +698,7 @@ def _train_and_calibrate(
             inclusion=inclusion,
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
+            emit_calibration_metrics=emit_calibration_metrics,
         )
     if trainer == "mlp":
         return _mlp_train_and_calibrate(
@@ -433,7 +735,7 @@ def _mlp_train_and_calibrate(
     inclusion: int,
     calibrate_count: int,
     calibration_fraction: float,
-) -> tuple[_StepModel, float, int, dict[str, float]]:
+) -> tuple[_StepModel, float, int, dict[str, float], dict[str, Any]]:
     """Production MLP path — numerically identical to the pre-trainer harness.
 
     Good votes region-pool their ground-truth box when *region_voting* is on
@@ -502,7 +804,7 @@ def _mlp_train_and_calibrate(
         backend="torch-cuda" if device.startswith("cuda") else "torch-cpu",
         device=device,
     )
-    return step, threshold, n_labels, {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds}
+    return step, threshold, n_labels, {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds}, {}
 
 
 def _style_train_and_calibrate(
@@ -517,7 +819,8 @@ def _style_train_and_calibrate(
     inclusion: int,
     calibrate_count: int,
     calibration_fraction: float,
-) -> tuple[_StepModel, float, int, dict[str, float]]:
+    emit_calibration_metrics: bool = False,
+) -> tuple[_StepModel, float, int, dict[str, float], dict[str, Any]]:
     """Style-driven MLP path (the Max-Patch experiment arms).
 
     The detection style (see :mod:`vtscore.eval.patch_styles`) supplies the
@@ -568,18 +871,35 @@ def _style_train_and_calibrate(
 
     hidden_dim = _auto_hidden_dim(n_votes)
     t_xcal = time.monotonic()
-    threshold = calculate_cross_calibration_threshold(
-        X_list,
-        y_list,
-        input_dim,
-        inclusion,
-        rng=np.random.RandomState(42),
-        calibrate_count=calibrate_count,
-        calibration_fraction=calibration_fraction,
-        hidden_dim=hidden_dim,
-        groups=cal_groups,
-        score_rows_by_group=score_rows_by_group if cal_groups is not None else None,
-    )
+    details: dict[str, Any] = {}
+    if emit_calibration_metrics:
+        threshold, details = _calibrate_with_details(
+            X_list,
+            y_list,
+            input_dim,
+            inclusion,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+            hidden_dim=hidden_dim,
+            cal_groups=cal_groups,
+            score_rows_by_group=score_rows_by_group if cal_groups is not None else None,
+        )
+        # Bad-voted bags' inference row stacks: the final model scores these to
+        # form the pnorm null (F_neg) at test time (see _calibration_metric_rows).
+        details["neg_score_rows"] = [score_rows_by_group[("b", vid)] for vid in bad_votes]
+    else:
+        threshold = calculate_cross_calibration_threshold(
+            X_list,
+            y_list,
+            input_dim,
+            inclusion,
+            rng=np.random.RandomState(42),
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+            hidden_dim=hidden_dim,
+            groups=cal_groups,
+            score_rows_by_group=score_rows_by_group if cal_groups is not None else None,
+        )
     xcal_seconds = time.monotonic() - t_xcal
     t_train = time.monotonic()
     if sample_weights is not None:
@@ -601,7 +921,93 @@ def _style_train_and_calibrate(
         backend="torch-cuda" if device.startswith("cuda") else "torch-cpu",
         device=device,
     )
-    return step, threshold, n_votes, {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds}
+    return step, threshold, n_votes, {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds}, details
+
+
+def _calibrate_with_details(
+    X_list: list[np.ndarray],
+    y_list: list[float],
+    input_dim: int,
+    inclusion: int,
+    *,
+    calibrate_count: int,
+    calibration_fraction: float,
+    hidden_dim: int | None,
+    cal_groups: list | None,
+    score_rows_by_group: dict | None,
+) -> tuple[float, dict[str, Any]]:
+    """Compute the trained threshold **and** the calibration study's provenance.
+
+    Replaces the plain :func:`calculate_cross_calibration_threshold` call on the
+    style path when the #2781 metrics are requested.  Trains the calibration
+    folds exactly once and returns ``(threshold, details)`` where *details* holds:
+
+    * ``provenance`` — which code path set the threshold (``conformal`` /
+      ``no_good_sentinel`` / ``too_few_default``), via
+      :func:`~vtscore.training.thresholds.classify_threshold_provenance`.
+    * ``fold_orderings`` — the pooled ``(scores, labels)`` per fold under the
+      base (max) pooling, for the calibration-set oracle and the inclusion sweep.
+    * ``fold_node_data`` — per-fold, per-group **node** scores (grouped path
+      only), so a remedial pooling variant can recalibrate off the same fold
+      models without retraining; ``None`` on the row-wise (whole-image) path.
+
+    On the grouped path the fold models are trained once via
+    :func:`~vtscore.training.thresholds.compute_grouped_fold_node_scores` and the
+    base orderings are the max-pool of the node data, so the threshold is
+    identical to what production's grouped calibration produces for this arm.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    if cal_groups is not None:
+        fold_node_data, fallback = compute_grouped_fold_node_scores(
+            X_list,
+            y_list,
+            input_dim,
+            groups=cal_groups,
+            rng=np.random.RandomState(42),
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+            hidden_dim=hidden_dim,
+            score_rows_by_group=score_rows_by_group,
+        )
+        if fallback is not None:
+            return fallback, {
+                "provenance": classify_threshold_provenance(fallback),
+                "fold_orderings": [],
+                "fold_node_data": None,
+            }
+        # Base (max) orderings from the same fold node data -> identical to
+        # production's grouped calibration for this arm.
+        fold_orderings = [([float(np.max(b)) for b in blocks], labels) for blocks, labels in fold_node_data]
+        threshold = threshold_from_fold_orderings(fold_orderings, inclusion)
+        return threshold, {
+            "provenance": classify_threshold_provenance(None),
+            "fold_orderings": fold_orderings,
+            "fold_node_data": fold_node_data,
+        }
+
+    # Row-wise path (whole-image styles): no bag flooding, no node re-pooling.
+    fold_orderings, fallback = compute_fold_orderings(
+        X_list,
+        y_list,
+        input_dim,
+        rng=np.random.RandomState(42),
+        calibrate_count=calibrate_count,
+        calibration_fraction=calibration_fraction,
+        hidden_dim=hidden_dim,
+    )
+    if fallback is not None:
+        return fallback, {
+            "provenance": classify_threshold_provenance(fallback),
+            "fold_orderings": [],
+            "fold_node_data": None,
+        }
+    threshold = threshold_from_fold_orderings(fold_orderings, inclusion)
+    return threshold, {
+        "provenance": classify_threshold_provenance(None),
+        "fold_orderings": fold_orderings,
+        "fold_node_data": None,
+    }
 
 
 def _svm_train_and_calibrate(
@@ -614,7 +1020,7 @@ def _svm_train_and_calibrate(
     inclusion: int,
     calibrate_count: int,
     calibration_fraction: float,
-) -> tuple[_StepModel, float, int, dict[str, float]]:
+) -> tuple[_StepModel, float, int, dict[str, float], dict[str, Any]]:
     """SVM path — single-vector only (the experiment never region-votes an SVM).
 
     Threshold uses the trainer-agnostic cross-calibration port
@@ -666,7 +1072,7 @@ def _svm_train_and_calibrate(
         backend=clf.backend,
         device="cuda" if clf.backend == "cuml" else "cpu",
     )
-    return step, threshold, n_labels, {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds}
+    return step, threshold, n_labels, {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds}, {}
 
 
 # ------------------------------------------------------------------
@@ -692,6 +1098,11 @@ def simulate_voting_iterations(  # noqa: C901
     trainer: str = "mlp",
     target_prevalence: Optional[float] = None,
     style: Optional[str] = None,
+    emit_calibration_metrics: bool = False,
+    repool_variants: Optional[list[str]] = None,
+    repool_topk: int = 4,
+    inclusion_sweep_ks: Optional[list[int]] = None,
+    sweep_sink: Optional[list[dict[str, Any]]] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -892,7 +1303,7 @@ def simulate_voting_iterations(  # noqa: C901
             step = None
             continue
 
-        step, threshold, n_labels, timings = _train_and_calibrate(
+        step, threshold, n_labels, timings, details = _train_and_calibrate(
             trainer,
             good_votes,
             bad_votes,
@@ -904,6 +1315,7 @@ def simulate_voting_iterations(  # noqa: C901
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
             style_obj=style_obj,
+            emit_calibration_metrics=emit_calibration_metrics,
         )
 
         # Apply safe threshold blending if enabled
@@ -911,6 +1323,65 @@ def simulate_voting_iterations(  # noqa: C901
             threshold = _blend_safe_threshold(
                 threshold, step, region_aware, sim_clips, X_all_clips, n_labels, style_obj=style_obj
             )
+            if emit_calibration_metrics:
+                details["provenance"] = "gmm_blend"
+
+        # Identifying columns shared by every row this step emits.
+        base_row = {
+            "seed": seed,
+            "dataset": dataset_name,
+            "category": target_category,
+            "strategy": strategy,
+            "trainer": trainer,
+            "style": style or "",
+            "prevalence_arm": prevalence_arm,
+            "realized_prevalence": realized_prevalence,
+            "t": t,
+            "n_good": len(good_votes),
+            "n_bad": len(bad_votes),
+        }
+
+        if emit_calibration_metrics and style_obj is not None:
+            # Calibration study (#2781): one row per pooling (base + remedial),
+            # plus the near-free inclusion-budget sweep into the side sink.
+            t_test = time.monotonic()
+            metric_rows, base_scores, base_labels = _calibration_metric_rows(
+                step,
+                threshold,
+                details,
+                clips_dict,
+                test_ids,
+                target_category,
+                inclusion,
+                style_obj,
+                repool_variants or [],
+                repool_topk,
+            )
+            test_score_seconds = time.monotonic() - t_test
+
+            t_pool = time.monotonic()
+            pool_scores = _score_pool(step, pool, clips_dict)
+            pool_score_seconds = time.monotonic() - t_pool
+
+            for mr in metric_rows:
+                rows.append(
+                    {
+                        **base_row,
+                        **mr,
+                        "train_seconds": round(timings["train_seconds"], 6),
+                        "xcal_seconds": round(timings["xcal_seconds"], 6),
+                        "pool_score_seconds": round(pool_score_seconds, 6),
+                        "test_score_seconds": round(test_score_seconds, 6),
+                        "backend": step.backend,
+                        "device": step.device,
+                        "elapsed_seconds": round(time.monotonic() - start_time, 3),
+                    }
+                )
+
+            if inclusion_sweep_ks and sweep_sink is not None:
+                for sr in _inclusion_sweep_rows(details, base_scores, base_labels, inclusion_sweep_ks):
+                    sweep_sink.append({**base_row, **sr})
+            continue
 
         # Evaluate on held-out test set
         t_test = time.monotonic()
@@ -934,17 +1405,7 @@ def simulate_voting_iterations(  # noqa: C901
 
         rows.append(
             {
-                "seed": seed,
-                "dataset": dataset_name,
-                "category": target_category,
-                "strategy": strategy,
-                "trainer": trainer,
-                "style": style or "",
-                "prevalence_arm": prevalence_arm,
-                "realized_prevalence": realized_prevalence,
-                "t": t,
-                "n_good": len(good_votes),
-                "n_bad": len(bad_votes),
+                **base_row,
                 **metrics,
                 "train_seconds": round(timings["train_seconds"], 6),
                 "xcal_seconds": round(timings["xcal_seconds"], 6),
