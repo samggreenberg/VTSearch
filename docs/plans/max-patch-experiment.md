@@ -183,7 +183,6 @@ where the two diverge. Anything reasoning about scale must use `voted_area`.
   flooding).  The style path is the production-faithful one; the default path
   is left untouched for reproducibility of earlier studies.
 - The style path calibrates in **inference geometry** (each bag collapses over
-  `style.score_rows`), which production does *not* yet do — production still
-  compares a max-over-1 Good bag against a max-over-13 Bad bag (#2731).  So the
-  harness is now *more* faithful to what inference scores than the live vote
-  path is; when #2731 lands the two converge again.
+  `style.score_rows`), which the production vote / labelset paths now do too
+  (each bag collapses over its full `patch_regions` node stack), so the harness
+  and the live path agree on what a calibration bag scores.

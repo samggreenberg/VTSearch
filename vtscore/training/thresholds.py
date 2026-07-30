@@ -99,6 +99,23 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
         return float(np.median(arr))
 
 
+def _score_rows_digest(score_rows_by_group: dict | None) -> bytes | None:
+    """Digest of the per-bag **inference** row stacks, for the calibration key.
+
+    ``None`` when no override is in play, so a call that pools each bag over
+    its training rows keeps a distinct cache key from one that pools over the
+    scorer's rows - otherwise a cached ordering computed under the old geometry
+    would be served after the wiring changed.
+    """
+    if score_rows_by_group is None:
+        return None
+    h = hashlib.blake2b()
+    for g in sorted(score_rows_by_group, key=repr):
+        h.update(repr(g).encode())
+        h.update(np.asarray(score_rows_by_group[g], dtype=np.float32).tobytes())
+    return h.digest()
+
+
 def _calibration_cache_key(
     X_list: list,
     y_list: list[float],
@@ -106,6 +123,7 @@ def _calibration_cache_key(
     calibration_fraction: float,
     hidden_dim: int,
     groups: list | None = None,
+    score_rows_by_group: dict | None = None,
 ) -> tuple:
     """Build a deterministic cache key for the calibration **fold orderings**.
 
@@ -137,6 +155,7 @@ def _calibration_cache_key(
         float(calibration_fraction),
         int(hidden_dim),
         groups_key,
+        _score_rows_digest(score_rows_by_group),
     )
 
 
@@ -151,6 +170,7 @@ def cross_calibration_threshold_cached(
     hidden_dim: int,
     det_ctx: Any = None,
     groups: list | None = None,
+    score_rows_by_group: dict | None = None,
 ) -> float:
     """Memoized wrapper around :func:`calculate_cross_calibration_threshold`.
 
@@ -163,12 +183,22 @@ def cross_calibration_threshold_cached(
     rule over the cached orderings - no ~200-epoch fold fits.
 
     A real label change produces a different cache key and falls through to a
-    fresh calibration - no explicit invalidation needed.
+    fresh calibration - no explicit invalidation needed.  *score_rows_by_group*
+    (see :func:`compute_fold_orderings`) enters the key too, so a change in the
+    rows a bag is scored over can never be served from a stale ordering.
     """
     payload: tuple[list[tuple[list[float], list[float]]], float | None] | None = None
     key = None
     if det_ctx is not None:
-        key = _calibration_cache_key(X_list, y_list, calibrate_count, calibration_fraction, hidden_dim, groups)
+        key = _calibration_cache_key(
+            X_list,
+            y_list,
+            calibrate_count,
+            calibration_fraction,
+            hidden_dim,
+            groups,
+            score_rows_by_group,
+        )
         cached = getattr(det_ctx, "calibration_cache", None)
         if cached is not None and cached[0] == key:
             payload = cached[1]
@@ -184,6 +214,7 @@ def cross_calibration_threshold_cached(
             calibration_fraction=calibration_fraction,
             hidden_dim=hidden_dim,
             groups=groups,
+            score_rows_by_group=score_rows_by_group,
         )
         if det_ctx is not None and key is not None:
             det_ctx.calibration_cache = (key, payload)
@@ -466,8 +497,11 @@ def compute_fold_orderings(
     ``max`` is an upward-biased order statistic, so the calibrated cut
     lands systematically high and the threshold over-rejects positives.  Passing
     each vote's inference rows here puts both classes in the geometry and at the
-    width the scorer will actually use.  ``None`` (every production caller)
-    keeps the historical "collapse over the training rows" behaviour.
+    width the scorer will actually use.  The production vote / labelset paths
+    supply each voted image's full region-node stack
+    (:func:`vtscore.detectors.training.inference_score_rows`); ``None`` keeps
+    the "collapse over the training rows" behaviour for callers that have no
+    inference geometry to offer.
     """
     if groups is not None:
         return _compute_fold_orderings_grouped(

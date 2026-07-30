@@ -2145,11 +2145,17 @@ class TestBadVoteRegionFlooding:
         bad_media, _ = self._patch_media(2)
         clips = {1: good_media, 2: bad_media}
 
-        X, y, groups = _build_vote_xy(clips, {1: None}, {2: None}, {}, "dinov3_patch")
+        X, y, groups, score_rows = _build_vote_xy(clips, {1: None}, {2: None}, {}, "dinov3_patch")
         # 1 good row + 3 flooded bad rows.
         assert y == [1.0, 0.0, 0.0, 0.0]
         assert groups == [("g", 1), ("b", 2), ("b", 2), ("b", 2)]
         assert len(X) == 4
+        # Both bags carry the *scoring* stack (all 4 region nodes, internals
+        # included) so calibration collapses them the way inference does -
+        # not 1 row against 3.
+        assert set(score_rows) == {("g", 1), ("b", 2)}
+        assert score_rows[("g", 1)].shape == (4, 8)
+        assert score_rows[("b", 2)].shape == (4, 8)
 
     def test_per_bag_weights_balance_bag_not_rows(self):
         from vtscore.training.thresholds import _per_bag_fit_weights
@@ -2189,7 +2195,7 @@ class TestBadVoteRegionFlooding:
         leaves = [np.array([0, 0, 1, 0], dtype=np.float32), np.array([0, 0, 0, 1], dtype=np.float32)]
         det.label_negative_regions[bid] = leaves
 
-        X, y, groups = build_xy_from_labelset(det, LabelSet([good, bad]))
+        X, y, groups, _score_rows = build_xy_from_labelset(det, LabelSet([good, bad]))
         assert y == [1.0, 0.0, 0.0]
         assert groups == [("g", gid), ("b", bid), ("b", bid)]
         np.testing.assert_array_equal(X[1], leaves[0])
