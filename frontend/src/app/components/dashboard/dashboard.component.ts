@@ -33,6 +33,7 @@ import {
   formatProgressMessage,
   progressBarState,
 } from '../../utils/format-progress';
+import { sortRowsByColumn } from '../../utils/managed-columns';
 import {
   DashboardColumnsService,
   DatasetColumn,
@@ -1260,14 +1261,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Sorting ---
 
   get sortedDatasets(): DatasetRegistryEntry[] {
-    const col = this.datasetCols.sortColumn;
-    const asc = this.datasetCols.sortAsc ? 1 : -1;
-    return [...this.datasets].sort((a, b) => {
-      const va = a[col] ?? '';
-      const vb = b[col] ?? '';
-      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * asc;
-      return String(va).localeCompare(String(vb)) * asc;
-    });
+    return sortRowsByColumn(this.datasets, this.datasetCols.sortColumn, this.datasetCols.sortAsc);
   }
 
   get sortedDetectors(): DetectorRegistryEntry[] {

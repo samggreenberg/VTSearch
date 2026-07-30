@@ -6,13 +6,14 @@ import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../../testing/settle-resource';
 import { getTabLabel } from './pickers/shared/media-type.util';
 import { provideHttpTesting } from '../../../testing/test-providers';
+import type { ImporterInfo } from '../../../models/api.models';
 
 describe('DatasetImporterModalComponent', () => {
   let component: DatasetImporterModalComponent;
   let fixture: ComponentFixture<DatasetImporterModalComponent>;
   let httpMock: HttpTestingController;
 
-  const mockImporters = [
+  const mockImporters: ImporterInfo[] = [
     {
       name: 'local_folder',
       display_name: 'Folder',

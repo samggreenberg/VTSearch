@@ -36,14 +36,8 @@ import { loadDatasetFromSource } from '../generated/api-client/fn/datasets-load/
 import { loadDemoDatasetRoute } from '../generated/api-client/fn/datasets-load/load-demo-dataset-route';
 import { stageDemo } from '../generated/api-client/fn/datasets-staging/stage-demo';
 
-/** The importer/clipper/embedder/converter listings return plugin
- *  ``to_dict()`` payloads; the generated types describe them as
- *  ``Array<{[key: string]: any}>`` because the inner shapes are
- *  plugin-dependent.  The richer ``ImporterInfo`` / ``ClipperInfo`` /
- *  ``EmbedderInfo`` / ``ConverterInfo`` interfaces in
- *  ``frontend/src/app/models/api.models.ts`` describe the actual fields
- *  consumers read off these payloads; this service casts at the boundary
- *  so callers don't have to. */
+/** ``GET /api/dataset/importers`` omits ``tabs``; ``/all-importers`` includes
+ *  it.  One union type lets both callers share the picker code. */
 type ImportersResponse = { importers: ImporterInfo[]; tabs?: ImporterPickerTab[] };
 
 /** Dataset CRUD: importer listings, import, stage, clear, export,
@@ -55,15 +49,11 @@ export class DatasetsCrudApiService {
   private config = inject(ApiConfiguration);
 
   getImporters(): Observable<ImportersResponse> {
-    return datasetImporters(this.http, this.config.rootUrl).pipe(
-      map((r) => r.body as unknown as ImportersResponse),
-    );
+    return datasetImporters(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   getAllImporters(): Observable<ImportersResponse> {
-    return datasetAllImporters(this.http, this.config.rootUrl).pipe(
-      map((r) => r.body as unknown as ImportersResponse),
-    );
+    return datasetAllImporters(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   /** Best-effort media-type hint for a picked folder. A 404 here is an

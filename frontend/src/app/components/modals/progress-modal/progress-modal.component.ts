@@ -8,9 +8,9 @@ import { ChartsService } from '../../../services/charts.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { ProgressEventsService } from '../../../services/progress-events.service';
 import {
-  ErrorCostDataPoint,
-  StabilityDataPoint,
-  DiversityDataPoint,
+  ErrorCostPoint,
+  StabilityPoint,
+  DiversityPoint,
 } from '../../../models/api.models';
 import type { EvalTrainAndScoreResponse } from '../../../generated/api-client/models/eval-train-and-score-response';
 
@@ -38,7 +38,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
 
   analyzing = true;
   analysisProgress = 0;
-  chartData: ErrorCostDataPoint[] | StabilityDataPoint[] | DiversityDataPoint[] = [];
+  chartData: ErrorCostPoint[] | StabilityPoint[] | DiversityPoint[] = [];
   emptyHistory = false;
   /** True once we've fallen back to the async train-and-score job, which
    *  swaps the brief "loading" line for a real progress bar + Cancel. */
@@ -90,7 +90,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
             return;
           }
           this.analyzing = false;
-          this.chartData = (res.history || []) as ErrorCostDataPoint[] | StabilityDataPoint[] | DiversityDataPoint[];
+          this.chartData = (res.history || []) as ErrorCostPoint[] | StabilityPoint[] | DiversityPoint[];
           this.emptyHistory = this.chartData.length === 0;
           if (!this.emptyHistory) {
             setTimeout(() => this.renderChart(), 50);
@@ -200,11 +200,11 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
     this.analyzing = false;
     this.runningJob = false;
     if (this.metric() === 'smart') {
-      this.chartData = (res.error_cost || []) as ErrorCostDataPoint[];
+      this.chartData = (res.error_cost || []) as ErrorCostPoint[];
     } else if (this.metric() === 'stable') {
-      this.chartData = (res.stability || []) as StabilityDataPoint[];
+      this.chartData = (res.stability || []) as StabilityPoint[];
     } else {
-      this.chartData = (res.diversity || []) as DiversityDataPoint[];
+      this.chartData = (res.diversity || []) as DiversityPoint[];
     }
     // Same empty-state handling as the cached path: a job that legitimately
     // produces no points (too little history) shows the explanatory message
@@ -221,15 +221,15 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
     const canvas = chartCanvas.nativeElement;
     switch (this.metric()) {
       case 'smart':
-        this.chartsService.renderErrorCostChart(canvas, this.chartData as ErrorCostDataPoint[]);
+        this.chartsService.renderErrorCostChart(canvas, this.chartData as ErrorCostPoint[]);
         break;
       case 'stable':
-        this.chartsService.renderStabilityChart(canvas, this.chartData as StabilityDataPoint[]);
+        this.chartsService.renderStabilityChart(canvas, this.chartData as StabilityPoint[]);
         break;
       case 'diverse':
         this.chartsService.renderDiversityChart(
           canvas,
-          this.chartData as DiversityDataPoint[],
+          this.chartData as DiversityPoint[],
           this.settingsState.settingsSignal()?.autopilot_goal_diversity ?? 40,
         );
         break;

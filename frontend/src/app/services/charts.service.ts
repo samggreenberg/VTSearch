@@ -1,8 +1,8 @@
 import { Injectable } from '@angular/core';
 import {
-  ErrorCostDataPoint,
-  StabilityDataPoint,
-  DiversityDataPoint,
+  ErrorCostPoint,
+  StabilityPoint,
+  DiversityPoint,
 } from '../models/api.models';
 
 interface ChartPadding {
@@ -117,7 +117,7 @@ export class ChartsService {
     ctx.fillText('No data available', 20, height / 2);
   }
 
-  renderErrorCostChart(canvas: HTMLCanvasElement, data: ErrorCostDataPoint[]): void {
+  renderErrorCostChart(canvas: HTMLCanvasElement, data: ErrorCostPoint[]): void {
     const ctx = canvas.getContext('2d')!;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const palette = this.resolvePalette();
@@ -167,7 +167,7 @@ export class ChartsService {
     ctx.fillText(minCost.toFixed(2), left - 5, top + chartHeight + 5);
   }
 
-  renderStabilityChart(canvas: HTMLCanvasElement, data: StabilityDataPoint[]): void {
+  renderStabilityChart(canvas: HTMLCanvasElement, data: StabilityPoint[]): void {
     const ctx = canvas.getContext('2d')!;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const palette = this.resolvePalette();
@@ -215,7 +215,7 @@ export class ChartsService {
     ctx.fillText('0', left - 5, top + chartHeight + 5);
   }
 
-  renderDiversityChart(canvas: HTMLCanvasElement, data: DiversityDataPoint[], goalDiversity = 40): void {
+  renderDiversityChart(canvas: HTMLCanvasElement, data: DiversityPoint[], goalDiversity = 40): void {
     const ctx = canvas.getContext('2d')!;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const palette = this.resolvePalette();

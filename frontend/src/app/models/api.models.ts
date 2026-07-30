@@ -1,15 +1,39 @@
-/* TypeScript interfaces matching the Flask API response shapes. */
+/* TypeScript interfaces matching the Flask API response shapes.
+ *
+ * Everything the backend describes in its OpenAPI schemas is re-exported
+ * from `../generated/api-client` rather than mirrored by hand, so a backend
+ * field rename breaks this build instead of silently reaching runtime.  What
+ * remains hand-written below is exactly what the spec cannot describe:
+ *
+ * - **SSE payloads** (`ProgressEvent`, `LoadingTask`,
+ *   `VotingIterationsResponse`) arrive over `/api/events`, a raw streaming
+ *   `Response` that flask-smorest does not model.
+ * - **Client-side shapes** (`PayloadVariant`, `AutoDetectResultsData`'s
+ *   Find-mode fields) that no endpoint returns.
+ * - **Request-side settings shapes** (`SourceSpec`, `ImportDefaults*`,
+ *   `CleanerSelection`) the frontend builds and posts.
+ */
 
 import type { MediaIdsListResponse } from '../generated/api-client/models/media-ids-list-response';
 import type { MediaBatchResponse } from '../generated/api-client/models/media-batch-response';
-import type { ConverterInfo as GeneratedConverterInfo } from '../generated/api-client/models/converter-info';
 
-// These three plugin-metadata shapes now have generated OpenAPI models
-// (their `to_dict()` payloads are fixed across plugins), so re-export the
-// generated types instead of hand-maintaining a mirror. See
-// `vtsearch/schemas/datasets.py`.
+// Plugin-metadata and listing payloads, all described by nested Marshmallow
+// schemas in `vtsearch/schemas/datasets.py` and `vtsearch/schemas/eval.py`.
 export type { EmbedderInfo } from '../generated/api-client/models/embedder-info';
 export type { MediaTypeInfo } from '../generated/api-client/models/media-type-info';
+export type { ConverterInfo } from '../generated/api-client/models/converter-info';
+export type { ImporterInfo } from '../generated/api-client/models/importer-info';
+export type { ImporterField } from '../generated/api-client/models/importer-field';
+export type { ImporterPickerTab } from '../generated/api-client/models/importer-picker-tab';
+export type { ClipperInfo } from '../generated/api-client/models/clipper-info';
+export type { ClipperParameter } from '../generated/api-client/models/clipper-parameter';
+export type { CleanerInfo } from '../generated/api-client/models/cleaner-info';
+export type { DatasetRegistryEntry } from '../generated/api-client/models/dataset-registry-entry';
+export type { DetectMediaTypeResponse } from '../generated/api-client/models/detect-media-type-response';
+export type { FieldOptions } from '../generated/api-client/models/field-options';
+export type { ErrorCostPoint } from '../generated/api-client/models/error-cost-point';
+export type { StabilityPoint } from '../generated/api-client/models/stability-point';
+export type { DiversityPoint } from '../generated/api-client/models/diversity-point';
 
 // --- Medias ---
 
@@ -109,44 +133,6 @@ export interface LoadingTask extends ProgressEvent {
   embedder?: string;
 }
 
-export interface ImporterInfo {
-  name: string;
-  display_name?: string;
-  description?: string;
-  icon?: string;
-  fields?: ImporterField[];
-  ui_mode?: string;
-  /** Which view the dataset-importer modal opens for this card.
-   *  ``"form"`` (default), ``"demo"``, ``"server_folder"``, ``"local_folder"``,
-   *  or ``"local_files"``. */
-  picker_view?: string;
-  hidden_from_picker?: boolean;
-  /** Picker tab this importer belongs to.  One of ``"services"``,
-   *  ``"server"``, ``"local"``, ``"demo"``, or ``""`` (uncategorised). */
-  category?: string;
-  /** Map of output media-type id → converters whose ``target_type``
-   *  matches that id.  Drives the "Include rows" UI without an extra
-   *  round-trip to ``/api/converters``. */
-  available_converters_by_media_type?: Record<string, ConverterInfo[]>;
-  [key: string]: unknown;
-}
-
-/**
- * A converter's ``to_dict()`` payload. Derived from the generated OpenAPI
- * model, overriding only ``fields`` to carry the richer ``ImporterField[]``
- * type (the backend schema keeps that list opaque; the ``ImporterField``
- * shape is out of the generated model's scope).
- *
- * The generated model's ``summary_template`` is a one-line preview with
- * ``{key}`` placeholders for each field: the importer modal renders it next
- * to the source-spec row, substituting the current field values, so the user
- * sees a live summary of what the converter will do. Falls back to
- * ``description`` when empty.
- */
-export type ConverterInfo = Omit<GeneratedConverterInfo, 'fields'> & {
-  fields?: ImporterField[];
-};
-
 /** One row of a multi-media import specification.  See
  *  ``docs/EXTENDING-media.md``. */
 export interface SourceSpec {
@@ -172,138 +158,7 @@ export interface ImportDefaultsForMediaType {
 }
 export type ImportDefaultsByMediaType = Record<string, ImportDefaultsForMediaType>;
 
-/** A single dropdown option for a dynamic-options field.  ``value`` is
- *  what the form submits; ``label`` is the friendly text shown in the
- *  dropdown.  They coincide for plain-string options and differ for
- *  ``(value, label)`` tuple options (submit an opaque id, show a name). */
-export interface FieldOption {
-  value: string;
-  label: string;
-}
-
-export interface ImporterField {
-  key: string;
-  field_type: string;
-  label?: string;
-  description?: string;
-  accept?: string;
-  options?: string[];
-  default?: string;
-  required?: boolean;
-  placeholder?: string;
-  /** Inline format-hint text rendered as a visible chip below the input.
-   *  Distinct from ``description`` (which feeds the placeholder): the hint
-   *  stays visible after the user starts typing, so it's the right place
-   *  for accepted file extensions, expected schemas, or a short sample of
-   *  the file layout. */
-  hint?: string;
-  /** When true, ``options`` is computed at runtime by calling
-   *  ``POST /api/dataset/import/<importer>/options`` with the current
-   *  field values.  The frontend re-fetches whenever any field listed in
-   *  ``depends_on`` changes. */
-  dynamic_options?: boolean;
-  /** Field keys whose values this field's options depend on. */
-  depends_on?: string[];
-  /** For ``select`` fields: when true, render as a combobox the user can
-   *  type an arbitrary value into (even one the option list omits).  When
-   *  the options refresh, a typed value absent from the new list is kept;
-   *  a strict select clears it. */
-  allow_free_text?: boolean;
-  /** For ``number`` fields: minimum allowed value (empty = no min). */
-  min?: string;
-  /** For ``number`` fields: maximum allowed value (empty = no max). */
-  max?: string;
-  /** For ``number`` fields: step increment (empty / ``"any"`` = unconstrained). */
-  step?: string;
-  /** Field keys this field is mutually exclusive with.  Entering a
-   *  non-empty value here blanks each listed field (and they list this
-   *  one back), so only one of the set is ever active at a time. */
-  clears?: string[];
-}
-
-export interface ImporterPickerTab {
-  id: string;
-  label: string;
-  icon?: string;
-  order?: number;
-}
-
-export interface MediaTypeDetectionResponse {
-  sample_size: number;
-  counts_by_type: Record<string, number>;
-  extensions: Record<string, number>;
-  dominant: string | null;
-  /** ``true`` when the backend stopped walking before reaching the file
-   *  cap because the directory-count cap or wall-clock budget fired.  The
-   *  rest of the response is still meaningful; it's just a less complete
-   *  sample than usual. */
-  truncated?: boolean;
-}
-
-export interface DatasetRegistryEntry {
-  id: string;
-  name: string;
-  media_type: string;
-  loaded?: boolean;
-  readers?: string[];
-  /** Name of the embedder this dataset's media were vectorised with. */
-  embedder?: string;
-  /** The embedder *types* this dataset supplies ("semantic" / "patch_semantic"
-   *  / "structural"); a v3 trio dataset can supply several. Drives the
-   *  detector/dataset compatibility gate. */
-  embedder_types?: string[];
-  /** Every concrete embedder this dataset binds (primary first). */
-  bound_embedders?: string[];
-  /** One concrete embedder per type it binds, e.g.
-   *  `{ semantic: "siglip", patch_semantic: "dinov3_patch" }`. Drives the
-   *  Combine-Datasets conflict detector. */
-  embedders_by_type?: Record<string, string>;
-  /** Unix timestamp (seconds) at which this dataset ages off and is
-   *  automatically removed; `null`/absent means it never expires. */
-  expires_at?: number | null;
-  [key: string]: unknown;
-}
-
-// --- Clippers ---
-
-export interface ClipperParameter {
-  key: string;
-  label: string;
-  description?: string;
-  type: 'number' | 'string';
-  default: number | string;
-  min?: number;
-  max?: number;
-  step?: number;
-}
-
-export interface ClipperInfo {
-  name: string;
-  display_name?: string;
-  description?: string;
-  /** One-line preview with ``{key}`` placeholders for each parameter.  The
-   *  native row of the importer source-specs picker substitutes the current
-   *  parameter values, so the user sees a live summary of what the clipper
-   *  will do.  Falls back to ``description`` when empty. */
-  summary_template?: string;
-  media_type: string;
-  parameters?: ClipperParameter[];
-  creation_questions?: ClipperParameter[];
-  [key: string]: unknown;
-}
-
 // --- Cleaners ---
-
-/** One optional 1-to-1 cleanup gate items pass through before embedding.
- *  Shares the clipper descriptor shape (see `MediaCleaner`, which subclasses
- *  `MediaClipper`) and adds `default_enabled`: the import form pre-checks a
- *  cleaner's box when it is true. */
-export interface CleanerInfo extends ClipperInfo {
-  /** Whether the import form checks this cleaner by default.  True only for
-   *  cleaners that fix an outright representation bug (EXIF orientation),
-   *  where leaving it off ships known-wrong vectors. */
-  default_enabled?: boolean;
-}
 
 /** A cleaner the user enabled for an import, with its parameter overrides.
  *  Serialised as the `cleaners` field of every import request. */
@@ -319,22 +174,6 @@ export interface CleanerSelection {
 export type PayloadVariant = '' | 'original';
 
 // --- Eval / Progress Charts ---
-
-export interface ErrorCostDataPoint {
-  num_labels: number;
-  error_cost: number;
-}
-
-export interface StabilityDataPoint {
-  num_labels: number;
-  num_flips: number;
-}
-
-export interface DiversityDataPoint {
-  num_labels: number;
-  diversity_level: number;
-  depth: number;
-}
 
 export interface VotingIterationsResponse {
   progress: number;

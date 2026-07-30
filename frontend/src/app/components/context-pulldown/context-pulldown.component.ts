@@ -12,7 +12,7 @@ import { PulldownControlService } from '../../services/pulldown-control.service'
 import { DashboardColumnsService } from '../../services/dashboard-columns.service';
 import { DashboardSelectionService } from '../../services/dashboard-selection.service';
 import { RunningJobsService, pairKey } from '../../services/running-jobs.service';
-import { SortState } from '../../utils/managed-columns';
+import { SortState, sortRowsByColumn } from '../../utils/managed-columns';
 import { DatasetRegistryEntry } from '../../models/api.models';
 import { IconComponent } from '../icon/icon.component';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
@@ -450,15 +450,9 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
    *  (column + direction read from `DashboardColumnsService`). Mirrors
    *  the comparator in `DashboardComponent.sortedDatasets` /
    *  `sortedDetectors`. */
-  private applySort<T extends { name: string; [k: string]: unknown }>(arr: T[]): T[] {
+  private applySort<T>(arr: T[]): T[] {
     const { column, asc } = this.sortState;
-    const dir = asc ? 1 : -1;
-    return [...arr].sort((a, b) => {
-      const va = a[column] ?? '';
-      const vb = b[column] ?? '';
-      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
-      return String(va).localeCompare(String(vb)) * dir;
-    });
+    return sortRowsByColumn(arr, column, asc);
   }
 
   private findActiveIndex(): number {

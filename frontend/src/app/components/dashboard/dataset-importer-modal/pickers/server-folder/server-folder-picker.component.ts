@@ -17,7 +17,7 @@ import {
   ConverterInfo,
   EmbedderInfo,
   ImporterInfo,
-  MediaTypeDetectionResponse,
+  DetectMediaTypeResponse,
   MediaTypeInfo,
   SourceSpec,
 } from '../../../../../models/api.models';
@@ -108,7 +108,7 @@ export class ServerFolderPickerComponent {
   datasetName = '';
   private datasetNameDirty = false;
   readonly sourceSpecs = signal<SourceSpec[]>([]);
-  readonly detection = signal<MediaTypeDetectionResponse | null>(null);
+  readonly detection = signal<DetectMediaTypeResponse | null>(null);
 
   /** Whether the inline server-filesystem folder browser is expanded. */
   browserOpen = false;
