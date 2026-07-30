@@ -771,8 +771,12 @@ recoverable long after the import job ended:
   `clip_start` / `clip_end` / `clip_box` / `clip_index`.  A chain may also
   carry `kind: "cleaner"` steps — the 1→1 cleanup gates that run last, on the
   finished units — whose trail entries record `changed` (did this gate rewrite
-  *this* item?) alongside the usual `content_hash`.  Cleaner steps stamp no
-  legacy keys: with one output there is no sibling to disambiguate.
+  *this* item?) alongside the usual `content_hash`.  A gate that cleaned by
+  *narrowing metadata* rather than rewriting a payload (the video gates: they
+  trim `clip_start` / `clip_end` and record a `clip_box`, because every clip of
+  a video shares the parent's bytes) additionally records the new window / box
+  on its entry.  Cleaner steps stamp no legacy keys: with one output there is
+  no sibling to disambiguate.
 
 Both are machine-readable recipes: `vtscore/media/lazy_clip.py` replays them
 to reproduce the bytes on demand, which is what makes reference-mode derived

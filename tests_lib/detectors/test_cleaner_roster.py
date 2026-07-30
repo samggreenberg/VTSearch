@@ -10,18 +10,25 @@ class below checks the same three things:
   identity is what tells the chain runner to skip the ``original_*`` snapshot),
 - a degenerate or undecodable payload is a no-op, never an error.
 
+The two *video* gates add a fourth thing to check: they clean by narrowing
+metadata (the unit's time window and pixel box) rather than by rewriting a
+payload, so every test also asserts the payload came through untouched.
+
 Covered: ``image_edge_trim``, ``audio_silence_trim``, ``text_whitespace``,
-``text_markup_strip``.
+``text_markup_strip``, ``video_letterbox_crop``, ``video_blank_trim``.
 """
 
 from __future__ import annotations
 
 import io
 import wave
+from pathlib import Path
 
+import numpy as np
 import pytest
 from PIL import Image
 from vtscore.media import get_cleaner
+from vtscore.media.video import decode
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -473,3 +480,416 @@ class TestTextMarkupStripCleaner:
 
         order = [c.name for c in cleaners_for_type("text")]
         assert order.index("text_markup_strip") < order.index("text_whitespace")
+
+
+# ---------------------------------------------------------------------------
+# Video helpers
+# ---------------------------------------------------------------------------
+
+#: Frame rate of every fabricated video below, so a frame index and a timestamp
+#: convert cleanly (frame 6 of a 12fps clip is at 0.5s).
+_VIDEO_FPS = 12.0
+
+
+def _solid_frame(width: int, height: int, color: tuple[int, int, int]) -> np.ndarray:
+    return np.full((height, width, 3), color, dtype=np.uint8)
+
+
+def _barred_frame(width: int, height: int, bar: int, color: tuple[int, int, int]) -> np.ndarray:
+    """A *color* frame with black bars *bar* px deep along the top and bottom."""
+    frame = _solid_frame(width, height, color)
+    frame[:bar] = 0
+    frame[height - bar :] = 0
+    return frame
+
+
+class _FakeVideo:
+    """Decode-layer stand-in serving a fixed frame list, recording every seek."""
+
+    def __init__(self, frames: list[np.ndarray]) -> None:
+        self.frames = frames
+        self.times: list[float] = []
+
+    def probe(self, _path):
+        height, width, _ = self.frames[0].shape
+        return decode.VideoInfo(
+            duration=len(self.frames) / _VIDEO_FPS,
+            fps=_VIDEO_FPS,
+            width=width,
+            height=height,
+        )
+
+    def frame_at(self, _path, time_seconds: float):
+        self.times.append(round(float(time_seconds), 6))
+        index = int(round(float(time_seconds) * _VIDEO_FPS))
+        if index < 0 or index >= len(self.frames):
+            return None
+        return self.frames[index]
+
+    def frames_at(self, path, times):
+        got = [self.frame_at(path, t) for t in times]
+        return [f for f in got if f is not None]
+
+
+@pytest.fixture
+def fake_video(monkeypatch):
+    """Return an installer swapping the video decode layer for a frame list."""
+
+    def _install(frames: list[np.ndarray]) -> _FakeVideo:
+        fake = _FakeVideo(frames)
+        monkeypatch.setattr(decode, "probe", fake.probe)
+        monkeypatch.setattr(decode, "frame_at", fake.frame_at)
+        monkeypatch.setattr(decode, "frames_at", fake.frames_at)
+        return fake
+
+    return _install
+
+
+def _video_media(tmp_path: Path, **extra) -> dict:
+    """A video media dict backed by a real (if bogus) file the cleaners can open."""
+    path = tmp_path / "clip.mp4"
+    if not path.exists():
+        path.write_bytes(b"not really a video; the decode layer is faked")
+    media = {
+        "id": 1,
+        "media_type": "video",
+        "filename": "clip.mp4",
+        "media_path": str(path),
+        "thumbnail_bytes": b"stale-thumb",
+    }
+    media.update(extra)
+    return media
+
+
+def _assert_payload_untouched(before: dict, after: dict) -> None:
+    """A video gate must clean by metadata alone, never by rewriting bytes."""
+    assert after.get("media_bytes") == before.get("media_bytes")
+    assert after.get("media_string") == before.get("media_string")
+    assert "original_media_bytes" not in after
+    assert "original_media_string" not in after
+
+
+# ---------------------------------------------------------------------------
+# video_letterbox_crop
+# ---------------------------------------------------------------------------
+
+
+class TestVideoLetterboxCropCleaner:
+    def test_identity(self):
+        from vtscore.media.video.cleaner import VideoLetterboxCropCleaner
+
+        cleaner = get_cleaner("video_letterbox_crop")
+        assert isinstance(cleaner, VideoLetterboxCropCleaner)
+        assert cleaner.media_type == "video"
+        assert cleaner.display_name == "Letterbox Crop"
+        # Cropping is a judgment call about what counts as padding.
+        assert cleaner.default_enabled is False
+
+    def test_records_the_bars_as_a_clip_box(self, fake_video, tmp_path):
+        fake_video([_barred_frame(200, 100, 25, (200, 40, 40)) for _ in range(24)])
+        media = _video_media(tmp_path)
+        out = get_cleaner("video_letterbox_crop").clean(media)
+
+        assert out is not media
+        assert out["clip_box"] == [0, 25, 200, 75]
+        _assert_payload_untouched(media, out)
+
+    def test_the_stale_parent_thumbnail_is_not_carried_forward_by_the_runner(self, fake_video, tmp_path):
+        """The gate itself copies the dict; the chain runner drops the thumbnail.
+
+        Asserted here so the pair stays honest: a cropped unit whose preview
+        still showed the bars would contradict the crop.
+        """
+        from vtscore.datasets.clipper_chain import _run_cleaner_step
+
+        fake_video([_barred_frame(200, 100, 25, (200, 40, 40)) for _ in range(24)])
+        media = _video_media(tmp_path)
+        (out,), (entry,) = _run_cleaner_step(media, {"kind": "cleaner", "name": "video_letterbox_crop", "params": {}})
+        assert entry["changed"] is True
+        assert "thumbnail_bytes" not in out
+
+    def test_the_union_of_the_sampled_frames_wins(self, fake_video, tmp_path):
+        """A margin is cropped only where *every* sampled frame agrees it is bar.
+
+        The subject drifts into the upper bar half way through the clip; the
+        union keeps that room, an intersection would have cut it off.
+        """
+        deep = [_barred_frame(200, 100, 25, (200, 40, 40)) for _ in range(12)]
+        shallow = [_barred_frame(200, 100, 10, (200, 40, 40)) for _ in range(12)]
+        fake_video(deep + shallow)
+        out = get_cleaner("video_letterbox_crop").clean(_video_media(tmp_path))
+        assert out["clip_box"] == [0, 10, 200, 90]
+
+    def test_content_to_the_edges_is_a_no_op(self, fake_video, tmp_path):
+        fake_video([_solid_frame(200, 100, (90, 140, 60)) for _ in range(24)])
+        media = _video_media(tmp_path)
+        assert get_cleaner("video_letterbox_crop").clean(media) is media
+
+    def test_one_unpadded_frame_vetoes_the_crop(self, fake_video, tmp_path):
+        """Bars for most of the clip, but one frame fills the frame: no crop."""
+        frames = [_barred_frame(200, 100, 25, (200, 40, 40)) for _ in range(24)]
+        frames[12] = _solid_frame(200, 100, (90, 140, 60))
+        fake_video(frames)
+        media = _video_media(tmp_path)
+        assert get_cleaner("video_letterbox_crop").clean(media) is media
+
+    def test_a_wholly_blank_frame_does_not_veto_the_crop(self, fake_video, tmp_path):
+        """A fade-to-black frame says nothing about where the bars are."""
+        frames = [_barred_frame(200, 100, 25, (200, 40, 40)) for _ in range(24)]
+        frames[12] = _solid_frame(200, 100, (0, 0, 0))
+        fake_video(frames)
+        out = get_cleaner("video_letterbox_crop").clean(_video_media(tmp_path))
+        assert out["clip_box"] == [0, 25, 200, 75]
+
+    def test_an_all_blank_clip_is_a_no_op(self, fake_video, tmp_path):
+        fake_video([_solid_frame(200, 100, (0, 0, 0)) for _ in range(24)])
+        media = _video_media(tmp_path)
+        assert get_cleaner("video_letterbox_crop").clean(media) is media
+
+    def test_a_margin_thinner_than_min_edge_trim_is_left_alone(self, fake_video, tmp_path):
+        # A 1 px bar on a 100 px frame is 1%, under the 2% floor.
+        fake_video([_barred_frame(200, 100, 1, (200, 40, 40)) for _ in range(24)])
+        media = _video_media(tmp_path)
+        assert get_cleaner("video_letterbox_crop").clean(media) is media
+
+    def test_only_the_units_own_window_is_sampled(self, fake_video, tmp_path):
+        """A tile must measure its own frames, not the whole parent video's."""
+        fake = fake_video([_barred_frame(200, 100, 25, (200, 40, 40)) for _ in range(24)])
+        media = _video_media(tmp_path, clip_start=1.0, clip_end=1.5)
+        get_cleaner("video_letterbox_crop").clean(media)
+        assert fake.times
+        assert all(1.0 <= t <= 1.5 for t in fake.times)
+
+    def test_composes_with_an_earlier_crop(self, fake_video, tmp_path):
+        """The box is stored in source-frame coordinates, so crops compose.
+
+        The unit already covers rows 10-90; inside *that* region the bars are
+        another 15 px deep, which lands back at the true content box.
+        """
+        fake_video([_barred_frame(200, 100, 25, (200, 40, 40)) for _ in range(24)])
+        out = get_cleaner("video_letterbox_crop").clean(_video_media(tmp_path, clip_box=[0, 10, 200, 90]))
+        assert out["clip_box"] == [0, 25, 200, 75]
+
+    def test_an_already_cropped_unit_is_a_no_op(self, fake_video, tmp_path):
+        fake_video([_barred_frame(200, 100, 25, (200, 40, 40)) for _ in range(24)])
+        media = _video_media(tmp_path, clip_box=[0, 25, 200, 75])
+        assert get_cleaner("video_letterbox_crop").clean(media) is media
+
+    def test_undecodable_and_pathless_payloads_are_no_ops(self, tmp_path):
+        cleaner = get_cleaner("video_letterbox_crop")
+        for media in (
+            {"media_type": "video", "media_path": str(tmp_path / "nope.mp4")},
+            {"media_type": "video", "media_bytes": b"not a video at all"},
+            {"media_type": "video"},
+        ):
+            assert cleaner.clean(media) is media
+
+    def test_params_override_the_thresholds(self, fake_video, tmp_path):
+        from vtscore.media.video.cleaner import VideoLetterboxCropCleaner
+
+        cleaner = get_cleaner("video_letterbox_crop")
+        assert [p["key"] for p in cleaner.parameters] == [
+            "samples",
+            "edge_tol",
+            "max_edge_trim",
+            "min_edge_trim",
+        ]
+
+        looser = cleaner.with_params({"min_edge_trim": 0.005, "samples": 2})
+        assert isinstance(cleaner, VideoLetterboxCropCleaner)
+        assert isinstance(looser, VideoLetterboxCropCleaner)
+        assert looser is not cleaner
+        assert looser.samples == 2
+        assert looser.edge_tol == cleaner.edge_tol  # unnamed params carry over
+
+        # The 1 px bar the default floor ignores is now worth cropping.
+        fake = fake_video([_barred_frame(200, 100, 1, (200, 40, 40)) for _ in range(24)])
+        out = looser.clean(_video_media(tmp_path))
+        assert out["clip_box"] == [0, 1, 200, 99]
+        assert len(fake.times) == 2
+
+    def test_the_crop_is_capped_per_side(self, fake_video, tmp_path):
+        # A 10 px dot in a 200x200 black field: uncapped this would crop to the
+        # dot; the 0.45 cap keeps the middle 10% of each axis.
+        frame = _solid_frame(200, 200, (0, 0, 0))
+        frame[95:105, 95:105] = (220, 30, 30)
+        fake_video([frame for _ in range(24)])
+        out = get_cleaner("video_letterbox_crop").clean(_video_media(tmp_path))
+        assert out["clip_box"] == [90, 90, 110, 110]
+
+
+# ---------------------------------------------------------------------------
+# video_blank_trim
+# ---------------------------------------------------------------------------
+
+
+def _blank_led_frames(lead: int, content: int, tail: int) -> list[np.ndarray]:
+    """``lead`` black frames, ``content`` coloured ones, ``tail`` black ones."""
+    black = _solid_frame(160, 90, (0, 0, 0))
+    lit = _solid_frame(160, 90, (180, 90, 40))
+    return [black] * lead + [lit] * content + [black] * tail
+
+
+class TestVideoBlankTrimCleaner:
+    def test_identity(self):
+        from vtscore.media.video.cleaner import VideoBlankTrimCleaner
+
+        cleaner = get_cleaner("video_blank_trim")
+        assert isinstance(cleaner, VideoBlankTrimCleaner)
+        assert cleaner.media_type == "video"
+        assert cleaner.display_name == "Blank Frame Trim"
+        assert cleaner.default_enabled is False
+
+    def test_narrows_the_window_past_the_blank_head_and_tail(self, fake_video, tmp_path):
+        # 24 frames at 12fps: 6 black, 12 lit, 6 black.
+        fake_video(_blank_led_frames(6, 12, 6))
+        media = _video_media(tmp_path)
+        out = get_cleaner("video_blank_trim").clean(media)
+
+        assert out is not media
+        # The cut lands on a scan step and never crosses the first frame with
+        # content in it, so one 0.25s step of black survives at each end.
+        assert (out["clip_start"], out["clip_end"]) == (0.25, 1.75)
+        assert out["duration"] == 1.5
+        _assert_payload_untouched(media, out)
+
+    def test_the_cut_never_crosses_into_content(self, fake_video, tmp_path):
+        """Trimming to the first content probe would eat up to a step of picture."""
+        fake_video(_blank_led_frames(6, 12, 6))
+        out = get_cleaner("video_blank_trim").clean(_video_media(tmp_path))
+        first_content = 6 / _VIDEO_FPS
+        last_content = 18 / _VIDEO_FPS
+        assert out["clip_start"] <= first_content
+        assert out["clip_end"] >= last_content
+
+    def test_content_at_both_ends_costs_two_probes(self, fake_video, tmp_path):
+        fake = fake_video(_blank_led_frames(0, 24, 0))
+        media = _video_media(tmp_path)
+        assert get_cleaner("video_blank_trim").clean(media) is media
+        assert len(fake.times) == 2
+
+    def test_blank_frames_inside_the_clip_are_kept(self, fake_video, tmp_path):
+        """A mid-clip cut to black is content rhythm, not waste."""
+        frames = _blank_led_frames(0, 24, 0)
+        frames[10:14] = [_solid_frame(160, 90, (0, 0, 0))] * 4
+        fake_video(frames)
+        media = _video_media(tmp_path)
+        assert get_cleaner("video_blank_trim").clean(media) is media
+
+    def test_a_white_card_counts_as_blank(self, fake_video, tmp_path):
+        frames = [_solid_frame(160, 90, (255, 255, 255))] * 6 + [_solid_frame(160, 90, (180, 90, 40))] * 18
+        fake_video(frames)
+        out = get_cleaner("video_blank_trim").clean(_video_media(tmp_path))
+        assert out["clip_start"] == 0.25
+
+    def test_a_trim_shorter_than_the_floor_is_a_no_op(self, fake_video, tmp_path):
+        # One black frame (~0.083s) at the head, under the 0.1s floor.
+        fake_video(_blank_led_frames(1, 23, 0))
+        media = _video_media(tmp_path)
+        assert get_cleaner("video_blank_trim").clean(media) is media
+
+    def test_the_trim_is_capped_per_end(self, fake_video, tmp_path):
+        """An almost entirely blank clip loses at most max_trim off each end."""
+        fake_video(_blank_led_frames(11, 2, 11))
+        out = get_cleaner("video_blank_trim").clean(_video_media(tmp_path))
+        # 2s clip, 0.25 cap: 0.5s off each end and no more.
+        assert (out["clip_start"], out["clip_end"]) == (0.5, 1.5)
+
+    def test_trims_within_a_tiles_own_window(self, fake_video, tmp_path):
+        """A tile's blank head is trimmed relative to the tile, not the parent."""
+        fake_video(_blank_led_frames(12, 12, 0))
+        media = _video_media(tmp_path, clip_start=0.5, clip_end=1.5, duration=1.0)
+        out = get_cleaner("video_blank_trim").clean(media)
+        assert (out["clip_start"], out["clip_end"]) == (0.75, 1.5)
+        assert out["duration"] == 0.75
+
+    def test_high_contrast_content_is_not_blank(self, fake_video, tmp_path):
+        """Black-on-white content is two flat tones, but neither dominates."""
+        frame = _solid_frame(160, 90, (255, 255, 255))
+        frame[:, :80] = 0
+        fake_video([frame] * 24)
+        media = _video_media(tmp_path)
+        assert get_cleaner("video_blank_trim").clean(media) is media
+
+    def test_undecodable_and_pathless_payloads_are_no_ops(self, tmp_path):
+        cleaner = get_cleaner("video_blank_trim")
+        for media in (
+            {"media_type": "video", "media_path": str(tmp_path / "nope.mp4")},
+            {"media_type": "video", "media_bytes": b"not a video at all"},
+            {"media_type": "video"},
+        ):
+            assert cleaner.clean(media) is media
+
+    def test_params_override_the_thresholds(self, fake_video, tmp_path):
+        from vtscore.media.video.cleaner import VideoBlankTrimCleaner
+
+        cleaner = get_cleaner("video_blank_trim")
+        assert [p["key"] for p in cleaner.parameters] == ["blank_ratio", "max_trim", "step"]
+
+        tighter = cleaner.with_params({"max_trim": 0.1})
+        assert isinstance(cleaner, VideoBlankTrimCleaner)
+        assert isinstance(tighter, VideoBlankTrimCleaner)
+        assert tighter is not cleaner
+        assert tighter.max_trim == 0.1
+        assert tighter.step == cleaner.step  # unnamed params carry over
+
+        fake_video(_blank_led_frames(6, 12, 6))
+        out = tighter.clean(_video_media(tmp_path))
+        assert (out["clip_start"], out["clip_end"]) == (0.2, 1.8)
+
+    def test_the_probe_count_stays_bounded_on_a_long_clip(self, fake_video, tmp_path):
+        """The scan step coarsens with duration instead of probing every 0.25s."""
+        from vtscore.media.video.cleaner import _MAX_PROBES_PER_END
+
+        # 20 minutes of black: a fixed 0.25s step would be 1200 probes per end.
+        fake = fake_video([_solid_frame(64, 36, (0, 0, 0))] * int(_VIDEO_FPS * 1200))
+        get_cleaner("video_blank_trim").clean(_video_media(tmp_path))
+        assert len(fake.times) <= 2 * (_MAX_PROBES_PER_END + 1)
+
+    def test_the_pair_runs_crop_first(self):
+        """Cropping before the blank scan keeps the two gates order-insensitive.
+
+        Bars are near-black, so an uncropped frame reads as far blanker than
+        the picture inside it does.
+        """
+        from vtscore.media import cleaners_for_type
+
+        order = [c.name for c in cleaners_for_type("video")]
+        assert order.index("video_letterbox_crop") < order.index("video_blank_trim")
+
+
+class TestVideoGatesOnRealVideo:
+    """End-to-end over ffmpeg-encoded files, no faked decode layer."""
+
+    def _encode(self, frames: list[np.ndarray], tmp_path: Path, name: str) -> Path:
+        from vtscore.utils.synthetic.video import _encode_frames
+
+        path = tmp_path / name
+        _encode_frames(path, frames, fps=int(_VIDEO_FPS))
+        return path
+
+    def test_real_letterboxed_video_is_cropped_to_its_content(self, tmp_path):
+        path = self._encode([_barred_frame(160, 96, 24, (210, 40, 40)) for _ in range(24)], tmp_path, "bars.mp4")
+        out = get_cleaner("video_letterbox_crop").clean({"media_type": "video", "media_path": str(path)})
+        x0, y0, x1, y1 = out["clip_box"]
+        assert (x0, x1) == (0, 160)  # no side bars to lose
+        assert abs(y0 - 24) <= 3
+        assert abs(y1 - 72) <= 3
+
+    def test_real_unpadded_video_is_a_no_op(self, tmp_path):
+        frames = []
+        rng = np.random.default_rng(0)
+        for _ in range(24):
+            frames.append(rng.integers(40, 210, size=(96, 160, 3), dtype=np.uint8))
+        path = self._encode(frames, tmp_path, "noise.mp4")
+        media = {"media_type": "video", "media_path": str(path)}
+        assert get_cleaner("video_letterbox_crop").clean(media) is media
+
+    def test_real_black_led_video_is_trimmed(self, tmp_path):
+        path = self._encode(_blank_led_frames(6, 12, 6), tmp_path, "leader.mp4")
+        media = {"media_type": "video", "media_path": str(path)}
+        out = get_cleaner("video_blank_trim").clean(media)
+        assert out is not media
+        assert out["clip_start"] >= 0.25
+        assert out["clip_end"] <= 1.75
+        assert out["duration"] == round(out["clip_end"] - out["clip_start"], 6)

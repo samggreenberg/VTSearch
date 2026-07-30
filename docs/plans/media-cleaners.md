@@ -5,14 +5,17 @@
 The core is shipped: `MediaCleaner` (a `MediaClipper` subclass whose `clean()`
 is 1→1), its own registry, `kind: "cleaner"` chain steps, the Clean/Original
 dual payload, `GET /api/cleaners`, the import-flow Cleanup checkbox list, and
-the detail-viewer toggle. The permanent documentation lives in
-**`docs/EXTENDING-media.md` § Adding a Media Cleaner** (what to implement, the
-`clean()` contract, the dual payload) and `docs/api/datasets.md` /
-`docs/api/medias.md` (the `cleaners` field and `?variant=original`).
+the detail-viewer toggle. Metadata-only cleaning is shipped too: a gate may
+clean by narrowing `clip_start` / `clip_end` / `clip_box` instead of rewriting
+a payload, which is how the video gates work. The permanent documentation lives
+in **`docs/EXTENDING-media.md` § Adding a Media Cleaner** (what to implement,
+the `clean()` contract, the dual payload, cleaning by metadata) and
+`docs/api/datasets.md` / `docs/api/medias.md` (the `cleaners` field and
+`?variant=original`).
 
-What remains is the **roster**: each entry below is a new `MediaCleaner`
-subclass plus its `CLEANERS` registration and tests. Two design points that
-still bear on the open work:
+What remains is the rest of the **roster**: each entry below is a new
+`MediaCleaner` subclass plus its `CLEANERS` registration and tests. Two design
+points that still bear on the open work:
 
 - **Cleaners run last, on the finished units.** Only cleaners matching the
   chain's *final* media type apply. Known cost: a letterboxed image fed to
@@ -26,23 +29,19 @@ still bear on the open work:
 
 <!-- item-sep -->
 
-- **Video: letterbox bar crop** — run the edge-trim analysis on a few
-  sampled frames and crop the consensus box from all frames.
-
-<!-- item-sep -->
-
-- **Video: leading/trailing black-frame trim** — the silence-trim analog
-  (fade-ins, slates, tail cards).
-
-<!-- item-sep -->
-
 - **Audio: loudness normalization** — peak or RMS normalize; quiet
   recordings embed worse with CLAP. Moderate value, low risk.
 
 <!-- item-sep -->
 
-- **Document: blank-page drop** — still 1→1 (document in, thinner
-  document out); helps everything downstream of `document2*`.
+- **Document: blank-page drop** — *blocked on a pre-convert stage.* The
+  cleaner itself is easy (document in, thinner document out, via PyMuPDF),
+  but it can never run as written: cleaners run last, on the chain's final
+  media type, and a `document` dataset is not embeddable (`converts_to =
+  ["image", "text"]`), so a document-typed gate behind a `document2*`
+  converter fails `validate_chain`'s type check. It needs the `stage`
+  property from Open questions — a `"pre_convert"` gate running on the
+  document *before* the converter — so ship that first or drop the item.
 
 <!-- item-sep -->
 
@@ -83,7 +82,30 @@ cropping (can eat context the detector needs), audio noise reduction
   by teaching `lazy_clip` a cleaner recipe (replay the chain's cleaner steps on
   the source, keyed off the trail) — at which point a cleaned reference item
   can go back to storing only a recipe, and its "Original" is just the source
-  file.
+  file. (Metadata-only cleans are already exempt: they snapshot nothing, so a
+  video-cleaned reference item stays lazy.)
+
+<!-- item-sep -->
+
+- **A video unit's crop box is invisible in the player** — `clip_box` reaches
+  the frontend on the media payload and the server-rendered grid thumbnail is
+  cropped to it, but `<video>` plays the uncropped file, so a letterbox-cropped
+  item previews cropped and plays padded. Either crop the player's viewport
+  with a CSS transform keyed off `clip_box`, or accept the divergence and say
+  so in the UI (the trim half already shows up for free, since the player loops
+  within `[clip_start, clip_end]`).
+
+<!-- item-sep -->
+
+- **Video labeled-example replay ignores the unit's window and box** —
+  `replay_chain_on_file` writes the final unit to a tempfile and calls
+  `embed_file`, which for video embeds the *whole* container: `clip_start` /
+  `clip_end` / `clip_box` are dropped, so a re-embedded video label lands in a
+  slightly different distribution from the dataset item it was taken from.
+  This predates the cleaners (video tiles already replayed as whole files), but
+  the metadata gates widen it from "the wrong slice" to "the wrong slice at the
+  wrong framing". Fix by threading the media dict — not a bare path — into the
+  video embed path so the sampler sees the window and the box.
 
 <!-- item-sep -->
 
@@ -98,6 +120,10 @@ cropping (can eat context the detector needs), audio noise reduction
 - **Storage controls** — `original_*` retention doubles per-item storage
   when a cleaner mutates. Is a per-import "keep originals" toggle (default
   on) worth it, or is the mutating-items-only bound enough in practice?
-- **Pre-clip stage** — whether tiling-vs-edge-trim ordering hurts enough
-  to justify a per-cleaner `stage` property (see Background above), and
-  what "Original" means for a pre-clip-cleaned sub-clip if so.
+  (Metadata-only gates sidestep this entirely — they store nothing.)
+- **Pre-clip / pre-convert stage** — a per-cleaner `stage` property is now
+  wanted by two items: tiling-vs-edge-trim ordering (does a tiled letterbox
+  hurt enough to justify it?) and the document blank-page gate, which is
+  blocked without a `"pre_convert"` placement. Open sub-questions: what
+  "Original" means for a pre-clip-cleaned sub-clip, and whether pre-convert
+  and pre-clip are one stage or two.
