@@ -101,6 +101,20 @@
   word-wrap: break-word;
 }
 
+// Live "this is about to happen" line, e.g. "Taking you back to the Dashboard
+// in 3…". Ticks once a second, so the seconds sit in a tabular-numeral span to
+// stop the trailing ellipsis jittering as the digit changes.
+.toast__countdown {
+  margin-top: var(--space-2xs);
+  color: var(--text-primary);
+  font-size: var(--font-xs);
+}
+
+.toast__countdown-seconds {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semibold);
+}
+
 .toast__actions {
   flex: 0 0 auto;
   display: flex;

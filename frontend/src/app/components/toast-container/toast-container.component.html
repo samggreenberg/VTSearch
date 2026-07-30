@@ -32,6 +32,13 @@
           @if (t.detail) {
             <div class="toast__detail">{{ t.detail }}</div>
           }
+          @if (t.countdown; as cd) {
+            <!-- aria-live="off" so the per-second tick isn't re-announced by a
+                 screen reader; the toast's role="alert" already read the line once. -->
+            <div class="toast__countdown" aria-live="off">
+              {{ cd.label }} <span class="toast__countdown-seconds">{{ cd.remaining }}</span>&hellip;
+            </div>
+          }
         </div>
         <div class="toast__actions">
           @if (t.action) {

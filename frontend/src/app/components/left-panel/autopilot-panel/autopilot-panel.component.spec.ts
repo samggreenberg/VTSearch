@@ -1,29 +1,58 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter, Router } from '@angular/router';
 import { AutopilotPanelComponent } from './autopilot-panel.component';
 import { AutopilotStateService } from '../../../services/autopilot-state.service';
+import { ToastService } from '../../../services/toast.service';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
+
+/** Green-across-the-board status payload: drives the phase machine to 'done'. */
+const ALL_GREEN = {
+  good_count: 0,
+  bad_count: 0,
+  total_count: 0,
+  smart: { status: 'green' },
+  stable: { status: 'green' },
+  span: { status: 'green' },
+};
 
 describe('AutopilotPanelComponent', () => {
   let component: AutopilotPanelComponent;
   let fixture: ComponentFixture<AutopilotPanelComponent>;
   let autopilotState: AutopilotStateService;
+  let toasts: ToastService;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [AutopilotPanelComponent],
-      providers: [...provideZoneless()],
+      providers: [...provideZoneless(), provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(AutopilotPanelComponent);
     component = fixture.componentInstance;
     autopilotState = TestBed.inject(AutopilotStateService);
+    toasts = TestBed.inject(ToastService);
     await settleZoneless(fixture);
   });
 
   afterEach(() => {
     autopilotState.clear();
+    toasts.dismissAll();
+    vi.useRealTimers();
   });
+
+  /**
+   * Drive the phase machine to 'done' (every indicator green, votes past the
+   * initial targets) — the state that fires the completion toast. Uses
+   * `TestBed.tick()` rather than `settleZoneless` so it also works under
+   * `vi.useFakeTimers()`, where a real `setTimeout` would never resolve.
+   */
+  function reachDone(): void {
+    fixture.componentRef.setInput('goodVotes', new Set([1, 2, 3, 4, 5]));
+    fixture.componentRef.setInput('badVotes', new Set([11, 12, 13, 14, 15]));
+    fixture.componentRef.setInput('labelingStatus', ALL_GREEN);
+    TestBed.tick();
+  }
 
   it('should create', () => {
     expect(component).toBeTruthy();
@@ -311,6 +340,90 @@ describe('AutopilotPanelComponent', () => {
     expect(note.textContent).toContain('Nothing left to label');
     // The five-step list is replaced by the terminal note.
     expect(fixture.nativeElement.querySelectorAll('.ap-step').length).toBe(0);
+  });
+
+  describe('completion hand-off', () => {
+    it('announces where the user is being taken, with a countdown and an escape', () => {
+      vi.useFakeTimers();
+      reachDone();
+      expect(component.state.phase).toBe('done');
+
+      const [t] = toasts.toasts;
+      expect(t.message).toContain('Done!');
+      expect(t.countdown).toBeTruthy();
+      expect(t.countdown!.label).toContain('Dashboard');
+      expect(t.countdown!.remaining).toBe(5);
+      expect(t.action!.label).toBe('Stay here');
+    });
+
+    it('ticks the countdown down each second', async () => {
+      vi.useFakeTimers();
+      reachDone();
+
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(toasts.toasts[0].countdown!.remaining).toBe(3);
+    });
+
+    it('navigates to the Dashboard when the countdown runs out', async () => {
+      vi.useFakeTimers();
+      const router = TestBed.inject(Router);
+      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+      reachDone();
+
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(navigate).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(navigate).toHaveBeenCalledWith(['/dashboard']);
+      // The toast is gone by the time the view changes.
+      expect(toasts.toasts.length).toBe(0);
+    });
+
+    it('stays in the Train window when the escape button is used', async () => {
+      vi.useFakeTimers();
+      const router = TestBed.inject(Router);
+      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+      reachDone();
+
+      // What the toast's action button does: run the handler, drop the toast.
+      const t = toasts.toasts[0];
+      t.action!.onClick();
+      toasts.dismiss(t.id);
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('cancels the pending return when the panel is torn down', async () => {
+      vi.useFakeTimers();
+      const router = TestBed.inject(Router);
+      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+      reachDone();
+      expect(toasts.toasts.length).toBe(1);
+
+      // Leaving the Train window (tab switch / view change) destroys the panel.
+      fixture.destroy();
+      expect(toasts.toasts.length).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('counts down from the exhausted state too', async () => {
+      vi.useFakeTimers();
+      const router = TestBed.inject(Router);
+      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+      fixture.componentRef.setInput('datasetSize', 1);
+      fixture.componentRef.setInput('goodVotes', new Set([1]));
+      TestBed.tick();
+      expect(component.state.phase).toBe('exhausted');
+      expect(toasts.toasts[0].message).toContain('Done!');
+      expect(toasts.toasts[0].countdown!.remaining).toBe(5);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(navigate).toHaveBeenCalledWith(['/dashboard']);
+    });
   });
 
   it('does not exhaust while the dataset size is unknown (datasetSize 0)', async () => {

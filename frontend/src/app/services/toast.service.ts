@@ -37,6 +37,27 @@ export interface ToastAction {
   onClick: () => void;
 }
 
+/**
+ * A visible "this is about to happen" timer on a toast. The toast renders
+ * ``<label> <remaining>…`` and ticks once a second; on reaching zero it
+ * dismisses itself and runs ``onExpire``.
+ *
+ * Dismissing the toast first — via its action button, its close button, or
+ * ``dismiss``/``dismissAll`` — cancels the countdown, and ``onExpire`` never
+ * runs. That is what makes the countdown escapable: every way of getting rid
+ * of the toast is also a way of calling off the pending action.
+ */
+export interface ToastCountdown {
+  /** Lead-in text, e.g. ``'Taking you back to the Dashboard in'``. */
+  label: string;
+  /** Seconds left. Ticks down to zero. */
+  remaining: number;
+  /** Seconds the countdown started from (for progress rendering). */
+  total: number;
+  /** Ran once when the countdown reaches zero. */
+  onExpire: () => void;
+}
+
 export interface Toast {
   id: number;
   level: ToastLevel;
@@ -46,6 +67,8 @@ export interface Toast {
   errorContext?: ErrorContext;
   /** Optional follow-up action button (see :class:`ToastAction`). */
   action?: ToastAction;
+  /** Optional escapable countdown (see :class:`ToastCountdown`). */
+  countdown?: ToastCountdown;
   /**
    * Optional dedup key. Pushing a new toast with the same key replaces
    * the existing one (resetting its auto-dismiss timer). Used to avoid
@@ -60,6 +83,12 @@ interface ShowOptions {
   detail?: string;
   errorContext?: ErrorContext;
   action?: ToastAction;
+  /**
+   * Attach an escapable countdown. Supplying this suppresses the plain
+   * auto-dismiss timer — the countdown owns the toast's lifetime instead, so
+   * the seconds the user sees are the seconds they actually have.
+   */
+  countdown?: { label: string; seconds: number; onExpire: () => void };
   dedupKey?: string;
 }
 
@@ -87,6 +116,7 @@ export class ToastService {
   readonly toasts$ = this.toastsSubject.asObservable();
   private readonly seenTaskKeys = new Set<string>();
   private readonly autoDismissTimers = new Map<number, ReturnType<typeof setTimeout>>();
+  private readonly countdownTimers = new Map<number, ReturnType<typeof setInterval>>();
 
   constructor() {
     const progressEvents = inject(ProgressEventsService);
@@ -123,10 +153,11 @@ export class ToastService {
    * through a modal for "X is done" style messages.
    */
   success(opts: ShowOptions): number {
-    return this.push('success', opts, SUCCESS_AUTO_DISMISS_MS);
+    return this.push('success', opts, opts.countdown ? 0 : SUCCESS_AUTO_DISMISS_MS);
   }
 
   private push(level: ToastLevel, opts: ShowOptions, autoDismissMs = 0): number {
+    const cd = opts.countdown;
     const toast: Toast = {
       id: this.nextId++,
       level,
@@ -134,6 +165,9 @@ export class ToastService {
       detail: opts.detail,
       errorContext: opts.errorContext,
       action: opts.action,
+      countdown: cd
+        ? { label: cd.label, remaining: cd.seconds, total: cd.seconds, onExpire: cd.onExpire }
+        : undefined,
       dedupKey: opts.dedupKey,
       timestamp: new Date().toISOString(),
     };
@@ -160,6 +194,12 @@ export class ToastService {
         setTimeout(() => this.dismiss(toast.id), autoDismissMs),
       );
     }
+    if (toast.countdown) {
+      this.countdownTimers.set(
+        toast.id,
+        setInterval(() => this.tickCountdown(toast.id), 1000),
+      );
+    }
     return toast.id;
   }
 
@@ -173,7 +213,37 @@ export class ToastService {
 
   dismissAll(): void {
     for (const id of this.autoDismissTimers.keys()) this.clearTimer(id);
+    for (const id of this.countdownTimers.keys()) this.clearTimer(id);
     this.toastsSubject.next([]);
+  }
+
+  /**
+   * Advance one countdown by a second. Emits a replacement toast object each
+   * tick so ``OnPush`` renderers repaint the remaining seconds. At zero the
+   * toast is dismissed *before* ``onExpire`` runs, so a handler that navigates
+   * away never leaves a stale countdown on screen.
+   */
+  private tickCountdown(id: number): void {
+    const list = this.toastsSubject.value;
+    const idx = list.findIndex((t) => t.id === id);
+    const countdown = idx >= 0 ? list[idx].countdown : undefined;
+    if (!countdown) {
+      // Toast already gone (dismissed by the user, or evicted by MAX_TOASTS):
+      // the pending action is cancelled along with it.
+      this.clearTimer(id);
+      return;
+    }
+
+    const remaining = countdown.remaining - 1;
+    if (remaining > 0) {
+      const next = list.slice();
+      next[idx] = { ...list[idx], countdown: { ...countdown, remaining } };
+      this.toastsSubject.next(next);
+      return;
+    }
+
+    this.dismiss(id);
+    countdown.onExpire();
   }
 
   private clearTimer(id: number): void {
@@ -181,6 +251,11 @@ export class ToastService {
     if (t !== undefined) {
       clearTimeout(t);
       this.autoDismissTimers.delete(id);
+    }
+    const c = this.countdownTimers.get(id);
+    if (c !== undefined) {
+      clearInterval(c);
+      this.countdownTimers.delete(id);
     }
   }
 
