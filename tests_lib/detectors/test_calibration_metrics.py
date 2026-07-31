@@ -131,13 +131,13 @@ def test_pnorm_pool_math_and_monotonicity():
     null = np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])  # 10 values
     flat = np.array([0.55, 0.55])  # one image, 2 nodes, max 0.55
     seg = np.array([0])
-    # F_neg(0.55) = 6/10 (values <= 0.55 are 0.0..0.5); score = 1 - 0.6^2 = 0.64
+    # F_neg(0.55) = 6/10 (values <= 0.55 are 0.0..0.5); score = F^N = 0.6^2 = 0.36
     out = segment_pnorm_pool(flat, seg, null)
-    assert out[0] == pytest.approx(1.0 - 0.6**2)
-    # More nodes at the same max -> higher pnorm score (bigger N penalty removed
-    # only by a rarer max): 1 - F^N grows with N for F in (0,1).
+    assert out[0] == pytest.approx(0.6**2)
+    # The N-penalty: more nodes at the same max -> LOWER score (a max over more
+    # nodes is less surprising), F^N shrinking with N for F in (0, 1).
     flat2 = np.array([0.55, 0.55, 0.55, 0.55])
-    assert segment_pnorm_pool(flat2, np.array([0]), null)[0] > out[0]
+    assert segment_pnorm_pool(flat2, np.array([0]), null)[0] < out[0]
     # pool_segment dispatch parity
     assert pool_segment(flat, seg, "pnorm", null_sorted=null)[0] == pytest.approx(out[0])
     assert pool_segment(flat, seg, "max").tolist() == segment_max_pool(flat, seg).tolist()

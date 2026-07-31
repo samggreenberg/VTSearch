@@ -199,14 +199,22 @@ def segment_pnorm_pool(
     seg_starts: np.ndarray,
     null_sorted: np.ndarray,
 ) -> np.ndarray:
-    """Extreme-value normalisation: ``1 - F_neg(max)^N`` per segment.
+    """Extreme-value normalisation: ``F_neg(max)^N`` per segment.
 
     *null_sorted* is the ascending-sorted empirical distribution of node scores
     over the calibration **negative** bags.  For an image whose ``N`` nodes have
     best score ``m``, ``F_neg(m)`` is the fraction of null node scores ``<= m``,
-    and ``1 - F_neg(m)^N`` is the probability a null image with ``N`` nodes would
-    reach a max at least ``m`` — so an image with twice the nodes no longer earns
-    an inflated max for free.  Score is a p-value-like quantity in ``[0, 1]``.
+    and ``F_neg(m)^N`` is the probability that *all* ``N`` nodes of a null image
+    with ``N`` nodes fall at or below ``m`` — i.e. the CDF of a null image's max,
+    evaluated at ``m``.  It is **high** exactly when ``m`` is surprisingly large
+    for an image of this node count, so an image with twice the nodes no longer
+    earns an inflated max for free.
+
+    Note the orientation: this is the score, in ``[0, 1]``, on the harness's
+    "higher = more positive, predict iff ``>= threshold``" convention.  The
+    plan's ``1 - F_neg(max)^N`` is its complementary *p-value* (small = positive),
+    which is monotone-decreasing in the evidence and so inverts the ranking under
+    that convention — using ``F_neg(max)^N`` keeps the score positively oriented.
     """
     flat = np.asarray(flat, dtype=np.float64)
     seg_starts = np.asarray(seg_starts, dtype=np.int64)
@@ -224,11 +232,11 @@ def segment_pnorm_pool(
         mx = float(seg.max())
         n_nodes = seg.size
         if m == 0:
-            out[i] = 0.0  # no null mass -> cannot exceed; treat as fully un-surprising
+            out[i] = 0.0  # no null mass -> undefined; treat as no evidence
             continue
         # fraction of null <= mx
         cdf = float(np.searchsorted(null_sorted, mx, side="right")) / m
-        out[i] = 1.0 - cdf**n_nodes
+        out[i] = cdf**n_nodes
     return out
 
 
@@ -265,7 +273,7 @@ def pool_blocks(
             b = np.asarray(b, dtype=np.float64)
             mx = float(b.max())
             cdf = (float(np.searchsorted(null_sorted, mx, side="right")) / m) if m else 1.0
-            out.append(1.0 - cdf**b.size)
+            out.append(cdf**b.size)
         return out
     raise ValueError(f"unknown pooling variant {variant!r}")
 
