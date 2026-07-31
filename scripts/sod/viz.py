@@ -232,6 +232,97 @@ def render_confidence_gallery(
         )
 
 
+def render_training_nodes(
+    ds: SodDataset,
+    split,
+    trace: list[dict],
+    *,
+    cache_dir: Path,
+    out_dir: Path,
+    dataset: str,
+    cls: str,
+    embedder: str,
+    proposal: str,
+    alpha: float,
+    slug: str | None,
+    seed: int,
+) -> None:
+    """Dump the HAC nodes that went into TRAINING at the final vote set (after the loop
+    consumed all its annotations), in labeling order, as individual captioned cell-crops under
+    ``training_nodes/<config>/seed{seed}/``. Positives = the snapped covering-box node per good
+    vote (one row); negatives = the flooded childless nodes (CLS + HAC leaves) per bad vote (a
+    bag). Each crop is captioned id / POS|NEG / bag / weight, where weight is the per-row loss
+    weight the trainer applies (:func:`vtscore.training.thresholds._per_bag_fit_weights`: every
+    good row = ``n_bad_bags/n_good``, every bad row = ``1/bag_size``). HAC only (the node/flood
+    construction is the region-voting path)."""
+    if proposal != "hac":
+        print(f"  [train-nodes] skip {embedder}/{proposal}: HAC region-voting only", flush=True)
+        return
+    reg = _EMBEDDER_ALIASES.get(embedder, embedder)
+    regions_root = cache_dir / "regions" / dataset / reg
+    slug = _resolve_slug(regions_root, proposal, alpha, slug)
+    if slug is None:
+        print(f"  [train-nodes] skip {embedder}/{proposal}: no cache under {regions_root}", flush=True)
+        return
+    regions_dir = regions_root / slug
+    good_ids = [int(e["image_id"]) for e in trace if e["gt_label"] == "good"]
+    bad_ids = [int(e["image_id"]) for e in trace if e["gt_label"] == "bad"]
+    n_good, n_bad_bags = len(good_ids), len(bad_ids)
+    if n_good == 0 or n_bad_bags == 0:
+        print(
+            f"  [train-nodes] skip {embedder}/{proposal} seed{seed}: single-class ({n_good} pos / {n_bad_bags} neg)",
+            flush=True,
+        )
+        return
+    good_w = n_bad_bags / n_good  # _per_bag_fit_weights: every good row weighs n_bad_bags / n_good
+    gdir = out_dir / "training_nodes" / f"{dataset}_{slugify(cls)}_{embedder}_{proposal}_a{alpha}" / f"seed{seed}"
+    rank = 0
+    n_neg_nodes = 0
+    for e in trace:  # labeling order
+        iid = int(e["image_id"])
+        viz = _load_region_viz(regions_dir, iid)
+        if viz is None:
+            continue
+        boxes, children, cell_masks, _sal = viz
+        try:
+            full = np.asarray(ds.load_image(iid).convert("RGB"), dtype=np.uint8)
+        except Exception:
+            continue
+        if e["gt_label"] == "good":
+            gt = split.gt_boxes.get(iid, [])
+            j = _snapped_index(gt, [tuple(float(v) for v in b) for b in boxes])
+            if j is None:
+                continue
+            mask = cell_masks[j] if cell_masks is not None else None
+            thumb = _cell_thumb(full, mask, boxes[j], (384, 384))
+            _save_caption_pil(
+                thumb,
+                gdir / f"{rank:04d}_t{int(e['t']):03d}_id{iid}_POS_w{good_w:.3f}.png",
+                f"id={iid} POS  bag=g:{iid}  node={j}  weight={good_w:.3f}  (t{int(e['t'])})",
+            )
+            rank += 1
+        else:
+            childless = [i for i in range(len(children)) if int(children[i][0]) < 0]
+            bag_size = len(childless)
+            bad_w = 1.0 / bag_size if bag_size else 0.0  # _per_bag_fit_weights: every bad row weighs 1/bag_size
+            for node_i, j in enumerate(childless):
+                mask = cell_masks[j] if cell_masks is not None else None
+                thumb = _cell_thumb(full, mask, boxes[j], (384, 384))
+                node_kind = "CLS" if j == 0 else f"leaf{j}"
+                _save_caption_pil(
+                    thumb,
+                    gdir / f"{rank:04d}_t{int(e['t']):03d}_id{iid}_NEG_node{node_i:02d}_w{bad_w:.3f}.png",
+                    f"id={iid} NEG  bag=b:{iid} ({bag_size} nodes)  {node_kind}  weight={bad_w:.3f}  (t{int(e['t'])})",
+                )
+                rank += 1
+                n_neg_nodes += 1
+    print(
+        f"  [train-nodes] {embedder}/{proposal} seed{seed}: {n_good} pos (w={good_w:.3f}) + "
+        f"{n_bad_bags} neg bags = {n_neg_nodes} neg nodes -> {rank} crops in {gdir.parent.name}/{gdir.name}",
+        flush=True,
+    )
+
+
 # ---------------------------------------------------------------------------
 # HAC region-tree interpretability (labeling trace)
 # ---------------------------------------------------------------------------
