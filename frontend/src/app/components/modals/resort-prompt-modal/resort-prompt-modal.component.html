@@ -48,12 +48,12 @@
 
   @if (view === 'media-picker') {
     <div class="media-picker">
-      <button class="btn btn--secondary btn--sm back-btn" (click)="backToPrompt()" title="Return to the example prompt">&larr; Back</button>
+      <button class="btn btn--secondary btn--sm back-btn" (click)="back()" [title]="backLabel">&larr; {{ backLabel }}</button>
 
       @if (!selectedSource) {
-        <p class="picker-instructions">Choose a source to browse media from:</p>
+        <p class="picker-instructions">Choose where to get the new example from:</p>
         <div class="source-list">
-          @for (src of mediaSources(); track src.name) {
+          @for (src of allSources; track src) {
             <button class="picker-card" (click)="selectSource(src)">
               <span class="picker-card__title">@if (src.icon) {<span class="picker-card__icon"><vt-icon [icon]="src.icon"></vt-icon></span> }{{ src.display_name || src.name }}</span>
               @if (src.description) {
@@ -64,7 +64,18 @@
         </div>
       }
 
-      @if (selectedSource && !fileBrowsing && !browseLoading() && browseItems().length > 0) {
+      <!-- Datasource importer form: fetches one media item via the selected
+           importer's declared plugin fields (server file, URL download,
+           third-party datasource importers). -->
+      @if (selectedDatasourceImporter; as dsImporter) {
+        <p class="picker-instructions">Fetch a media example with <strong>{{ dsImporter.display_name || dsImporter.name }}</strong>:</p>
+        <vt-datasource-import-form
+          [importer]="dsImporter"
+          (imported)="onDatasourceImported($event)"
+        ></vt-datasource-import-form>
+      }
+
+      @if (!selectedDatasourceImporter && selectedSource && !fileBrowsing && !browseLoading() && browseItems().length > 0) {
         <p class="picker-instructions">Select an item from <strong>{{ selectedSource.display_name || selectedSource.name }}</strong>:</p>
         <div class="browse-list">
           @for (item of browseItems(); track item.key) {
@@ -103,7 +114,7 @@
         <p class="empty-state">Loading items…</p>
       }
 
-      @if (selectedSource && !fileBrowsing && !browseLoading() && browseItems().length === 0) {
+      @if (!selectedDatasourceImporter && selectedSource && !fileBrowsing && !browseLoading() && browseItems().length === 0) {
         <p class="empty-state">No items found in this source.</p>
       }
     </div>

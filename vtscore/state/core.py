@@ -753,6 +753,15 @@ class DetectorContext:
         # In-memory only, re-derived from origins, never persisted; cleared on
         # embedder switch alongside ``label_embeddings``.
         "label_negative_regions",
+        # Full region-node stacks for the labelset's elements on patch datasets:
+        # str → list[np.ndarray], keyed by stable_element_id, holding *every*
+        # ``patch_regions`` vector (CLS + HAC internals + leaves) - the rows the
+        # scorer max-pools that element's media over.  Lets threshold
+        # calibration collapse a Good bag and a Bad bag the same way inference
+        # collapses any image, instead of comparing a max-over-1 against a
+        # max-over-13.  In-memory only, re-derived from origins, never
+        # persisted; cleared on embedder switch alongside ``label_embeddings``.
+        "label_score_regions",
         "model",  # nn.Sequential | None (current trained MLP)
         # Structural (SIFT/VLAD) detectors carry a *second* learned object next
         # to the retrieval MLP: the match-statistic verification classifier
@@ -845,6 +854,7 @@ class DetectorContext:
         self.label_embedding_regions: dict[str, tuple[float, float, float, float] | None] = {}
         self.label_local_features: dict[str, Any] = {}
         self.label_negative_regions: dict[str, list[Any]] = {}
+        self.label_score_regions: dict[str, list[Any]] = {}
         self.model: Any = None  # nn.Sequential | None
         # Match-statistic verification classifier for structural detectors;
         # None for non-structural detectors and until first trained.
@@ -1091,6 +1101,7 @@ class _RequestMissingDetectorContext(DetectorContext):
         object.__setattr__(self, "label_embedding_regions", _FrozenDict("detector"))
         object.__setattr__(self, "label_local_features", _FrozenDict("detector"))
         object.__setattr__(self, "label_negative_regions", _FrozenDict("detector"))
+        object.__setattr__(self, "label_score_regions", _FrozenDict("detector"))
         object.__setattr__(self, "model", None)
         object.__setattr__(self, "verification_classifier", None)
         object.__setattr__(self, "threshold", 0.5)

@@ -221,8 +221,9 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     // Text is a non-thumbnailed type: no magnified preview pane on the canvas or
     // in the popup. (Audio now tiles as waveform thumbnails, so it is no longer
     // this branch.) The metadata panel is media-agnostic, though, so the Info
-    // button and the (default-shown) metadata column must still be offered, so
+    // button and the metadata column (once shown) must still be offered, so
     // hovering a bin member surfaces its metadata just like it does for images.
+    settings.set({ popup_metadata_shown: { text: true } });
     const fixture = makeFixture();
     fixture.componentRef.setInput('mediaType', 'text');
     fixture.componentRef.setInput('memberIds', [1, 2]);
@@ -531,6 +532,7 @@ describe('BrowseBinPopupComponent (docked presentation)', () => {
   });
 
   it('fills the large item with whatever width the metadata column leaves', async () => {
+    settings.set({ popup_metadata_shown: { image: true } });
     const fixture = makeDockedFixture([1, 2, 3]);
     await settlePasses(fixture);
 
@@ -560,6 +562,7 @@ describe('BrowseBinPopupComponent (docked presentation)', () => {
   });
 
   it('re-apportions the row as the metadata divider drags, and persists the width', async () => {
+    settings.set({ popup_metadata_shown: { image: true } });
     const fixture = makeDockedFixture([1, 2, 3]);
     await settlePasses(fixture);
 

@@ -13,6 +13,9 @@ properties pinned here are the ones the replacement was chosen for:
   same knob position means the same miss-tolerance on every detector.
 * **Resolution**: distinct knob positions produce distinct thresholds
   whenever the calibration scores have spread (the argmin's failure mode).
+* **Not pinned to the lowest calibration positive** (issue #2781): when the
+  classes leave a clean gap the cut sits in the *middle* of it, not at its
+  top edge.  See :class:`TestGapMidpoint`.
 """
 
 from __future__ import annotations
@@ -154,6 +157,93 @@ class TestMonotonicity:
         thresholds = [conformal_threshold(scores, labels, k) for k in range(-10, 11)]
         for lo, hi in zip(thresholds, thresholds[1:]):
             assert hi <= lo
+
+
+class TestGapMidpoint:
+    """Issue #2781: the cut must not pin to the lowest calibration positive.
+
+    That value is an extreme order statistic over a handful of held-out votes
+    (so it lurches from one vote to the next) *and* it lives on the fold
+    models' score scale while being applied to the final model's scores - the
+    combination that produced "threshold jumps above every item, then it's
+    normal again one click later".
+    """
+
+    @staticmethod
+    def _clean_gap(seed: int = 5) -> tuple[list[float], list[float]]:
+        """Positives and negatives separated by a wide empty band."""
+        rng = np.random.default_rng(seed)
+        pos = np.clip(rng.normal(0.90, 0.03, 30), 0.0, 1.0)
+        neg = np.clip(rng.normal(0.10, 0.03, 30), 0.0, 1.0)
+        return np.concatenate([pos, neg]).tolist(), [1.0] * 30 + [0.0] * 30
+
+    def test_cut_sits_strictly_below_lowest_positive(self):
+        scores, labels = self._clean_gap()
+        pos = [s for s, lb in zip(scores, labels) if lb == 1.0]
+        assert conformal_threshold(scores, labels, 0) < min(pos)
+
+    def test_cut_lands_inside_the_class_gap(self):
+        """Between the false-positive guard and the lowest positive - the
+        band in which every cut has identical calibration-set error."""
+        scores, labels = self._clean_gap()
+        pos = [s for s, lb in zip(scores, labels) if lb == 1.0]
+        neg = np.array([s for s, lb in zip(scores, labels) if lb != 1.0])
+        guard = float(np.quantile(neg, 1.0 - CONFORMAL_BASE_BUDGET))
+        t = conformal_threshold(scores, labels, 0)
+        assert guard <= t <= min(pos)
+
+    def test_overlap_regime_is_untouched(self):
+        """With no gap (guard already above the lowest positive) the rule
+        must return exactly what it always did: min(fn_cap, fp_guard)."""
+        rng = np.random.default_rng(11)
+        pos = np.clip(rng.normal(0.6, 0.15, 40), 0.0, 1.0)
+        neg = np.clip(rng.normal(0.4, 0.15, 40), 0.0, 1.0)
+        scores = np.concatenate([pos, neg]).tolist()
+        labels = [1.0] * 40 + [0.0] * 40
+        guard = float(np.quantile(neg, 1.0 - CONFORMAL_BASE_BUDGET))
+        assert guard > pos.min(), "fixture must have no clean gap"
+        expected = min(float(np.quantile(pos, CONFORMAL_BASE_BUDGET)), guard)
+        assert conformal_threshold(scores, labels, 0) == pytest.approx(expected)
+
+    def test_saturated_fold_scores_still_admit_items(self):
+        """The reported failure, end to end.
+
+        Fold models that separate a handful of votes perfectly saturate: every
+        held-out positive scores ~0.999.  The final model - trained on all the
+        votes and scoring unseen media - tops out lower.  Pinning the cut to
+        the lowest calibration positive rejected the entire collection.
+        """
+        cal_scores = [0.999, 0.998, 0.997, 0.996] + [0.002, 0.003, 0.004, 0.005]
+        cal_labels = [1.0] * 4 + [0.0] * 4
+        best_final_model_score = 0.85
+        assert conformal_threshold(cal_scores, cal_labels, 0) < best_final_model_score
+
+    def test_budget_still_unspent_on_a_clean_gap(self):
+        """Lowering the cut into the gap must not cost any false negatives:
+        every calibration positive still clears it, at every inclusion >= 0."""
+        scores, labels = self._clean_gap()
+        pos = [s for s, lb in zip(scores, labels) if lb == 1.0]
+        for k in range(0, 11):
+            t = conformal_threshold(scores, labels, k)
+            assert all(s >= t for s in pos)
+
+    def test_cut_is_stabler_across_resampled_calibration_sets(self):
+        """The point of the change: swapping which votes land in the
+        calibration half must not swing the cut nearly as far."""
+
+        cuts = []
+        lowest_positives = []
+        for seed in range(20):
+            scores, labels = self._clean_gap(seed)
+            cuts.append(conformal_threshold(scores, labels, 0))
+            lowest_positives.append(min(s for s, lb in zip(scores, labels) if lb == 1.0))
+
+        def spread(values: list[float]) -> float:
+            return max(values) - min(values)
+
+        # The old rule returned `min(positives)` outright, so its spread across
+        # these resamplings is exactly the spread of `lowest_positives`.
+        assert spread(cuts) < spread(lowest_positives)
 
 
 class TestFoldPooling:

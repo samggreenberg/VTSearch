@@ -21,7 +21,7 @@ import { LabelImportersApiService } from '../../../services/label-importers-api.
 import { MediasApiService } from '../../../services/medias-api.service';
 import { ProgressEventsService } from '../../../services/progress-events.service';
 import { VoteStateService } from '../../../services/vote-state.service';
-import { FieldOption, ImporterField, LoadingTask } from '../../../models/api.models';
+import { FieldOptions, ImporterField, LoadingTask } from '../../../models/api.models';
 import type { LabelImporterEntry } from '../../../generated/api-client/models/label-importer-entry';
 import { apiErrorMessage } from '../../../utils/api-error';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
@@ -95,7 +95,7 @@ export class LabelImporterModalComponent implements OnDestroy {
       (this.importersResource.error() ? 'Failed to load label importers' : ''),
   );
   readonly successMessage = signal('');
-  readonly dynamicFieldOptions = signal<Record<string, FieldOption[]>>({});
+  readonly dynamicFieldOptions = signal<Record<string, FieldOptions[]>>({});
   readonly dynamicFieldLoading = signal<Record<string, boolean>>({});
   readonly dynamicFieldError = signal<Record<string, string>>({});
   readonly addingGood = signal(false);
@@ -164,7 +164,7 @@ export class LabelImporterModalComponent implements OnDestroy {
     }
   }
 
-  optionsFor(field: ImporterField): FieldOption[] {
+  optionsFor(field: ImporterField): FieldOptions[] {
     if (field.dynamic_options) {
       return this.dynamicFieldOptions()[field.key] || [];
     }
@@ -182,7 +182,7 @@ export class LabelImporterModalComponent implements OnDestroy {
       .getFieldOptions(importer.name, key, { ...this.formValues })
       .subscribe({
         next: (res) => {
-          const options: FieldOption[] = res.options || [];
+          const options: FieldOptions[] = res.options || [];
           this.dynamicFieldOptions.update((m) => ({ ...m, [key]: options }));
           this.dynamicFieldLoading.update((m) => ({ ...m, [key]: false }));
           const current = this.formValues[key];

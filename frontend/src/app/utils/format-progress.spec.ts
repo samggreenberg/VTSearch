@@ -164,18 +164,28 @@ describe('formatEta', () => {
     expect(formatEta(Infinity)).toBe('');
   });
 
-  it('never claims finer than 10-second granularity sub-minute', () => {
-    // A few seconds left snaps below the 10s floor → "< 10 sec", never "< 5 sec".
-    expect(formatEta(3)).toBe('< 10 sec left?');
-    expect(formatEta(4)).toBe('< 10 sec left?');
-    // Just over the floor rounds to the nearest 10s, not 5s.
-    expect(formatEta(12)).toBe('10 sec left?');
-    expect(formatEta(18)).toBe('20 sec left?');
-    expect(formatEta(34)).toBe('30 sec left?');
+  it('hedges every estimate with "About"', () => {
+    // The backend already snapped this to a coarse rung and will hold it there
+    // (ProgressTracker._humble_eta); the wording has to match that promise
+    // rather than implying a number anyone should check.
+    expect(formatEta(15)).toBe('About 15 sec left');
+    expect(formatEta(600)).toBe('About 10 min left');
+    expect(formatEta(7200)).toBe('About 2 hr left');
   });
 
-  it('switches to minutes and hours for larger estimates', () => {
-    expect(formatEta(330)).toBe('5.5 min left?');
-    expect(formatEta(7200)).toBe('2 hr left?');
+  it('picks the largest unit that keeps the value readable', () => {
+    expect(formatEta(45)).toBe('About 45 sec left');
+    expect(formatEta(90)).toBe('About 1.5 min left');
+    expect(formatEta(2700)).toBe('About 45 min left');
+    expect(formatEta(3600)).toBe('About 1 hr left');
+    expect(formatEta(5400)).toBe('About 1.5 hr left');
+    expect(formatEta(86400)).toBe('About 24 hr left');
+  });
+
+  it('renders an off-ladder value sanely instead of pretending to precision', () => {
+    // Nothing on the wire should be off-ladder, but a caller passing a raw
+    // estimate must not produce "About 5.516666666666667 min left".
+    expect(formatEta(331)).toBe('About 5.5 min left');
+    expect(formatEta(12.4)).toBe('About 12 sec left');
   });
 });

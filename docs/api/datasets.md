@@ -623,6 +623,16 @@ Stats window can show everything the grid does while it covers the grid up.
 
 `expires_at` is `null` when the dataset never ages off.
 
+`file_type_counts` keys are file types, not necessarily filename extensions:
+each item is typed by its filename extension when it has one, and otherwise by
+the format sniffed from its bytes, so a service importer that names items after
+an opaque content id still reports `{"jpg": 437}` instead of one useless bucket.
+Items that no signal could type land in a parenthesised `"(unknown)"` key (the
+parenthesis is what tells a sentinel from a real extension). When the stored
+histogram is uninformative — every item unknown — and the dataset happens to be
+loaded, the endpoint recounts it from the in-memory medias and writes the repair
+back to the registry.
+
 404 if the dataset does not exist.
 
 ### Dataset duplicates

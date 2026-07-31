@@ -208,7 +208,12 @@ describe('AutoFindSettingsComponent', () => {
     expect(component.inputType({ field_type: 'email' } as ImporterField)).toBe('email');
     expect(component.inputType({ field_type: 'url' } as ImporterField)).toBe('url');
     expect(component.inputType({ field_type: 'text' } as ImporterField)).toBe('text');
-    expect(component.inputType({ field_type: 'anything-else' } as ImporterField)).toBe('text');
+    // Double cast on purpose: `field_type` is a closed union in the generated
+    // model, so this stands in for a *future* backend field type the frontend
+    // doesn't map yet — which must still fall back to a plain text input.
+    expect(component.inputType({ field_type: 'anything-else' } as unknown as ImporterField)).toBe(
+      'text',
+    );
   });
 
   it('emits a cloned field-value map so the parent cannot mutate the working copy', async () => {

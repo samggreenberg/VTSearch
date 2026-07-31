@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from flask_smorest import Blueprint, abort
 
 from vtscore.concurrency.memory_budget import cap_workers_by_memory
-from vtscore.embedding.media_vectors import media_embedding
+from vtscore.embedding.media_vectors import EMBEDDINGS_KEY, media_embedding
 from vtsearch.routes.processors.crud import _build_extractor, _build_localizer
 from vtsearch.schemas.processors import (
     AutoExtractResponseSchema,
@@ -33,8 +33,17 @@ processors_scoring_bp = Blueprint(
     description="Run extractors / localizers against the active dataset, either one-off or via autorun.",
 )
 
-# Keys excluded from API responses (large binary/vector data).
-_HEAVYWEIGHT_KEYS = ("embedding", "media_bytes", "media_string", "thumbnail_bytes")
+# Keys excluded from API responses (large binary/vector data).  ``embeddings``
+# is the v3 dict-keyed vector store (``vtscore/embedding/media_vectors.py``);
+# ``embedding`` is its dropped legacy singular form, kept here so a media dict
+# rehydrated from an old pickle can't leak one either.
+_HEAVYWEIGHT_KEYS = (
+    EMBEDDINGS_KEY,
+    "embedding",
+    "media_bytes",
+    "media_string",
+    "thumbnail_bytes",
+)
 
 
 def _media_info_for_response(media: dict) -> dict:

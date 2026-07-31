@@ -213,6 +213,7 @@ describe('CenterPanelComponent', () => {
 
   it('should display metadata', () => {
     fixture.componentRef.setInput('media', mockMedia);
+    component.showMetadata.set(true);
     TestBed.tick();
     const text = fixture.nativeElement.textContent;
     expect(text).toContain('test.wav');

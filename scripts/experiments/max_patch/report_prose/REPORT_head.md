@@ -31,6 +31,11 @@ from its patches**. Four strategies are compared:
   merged regions for large ones. The idea: get MaxPatch's sharp small-object
   leaves *and* MaxHAC's multi-scale pooled regions in one tree, at only ~2× the
   node count of the raw patches.
+- **MaxPatchPcaHAC** (a variant of the hybrid) — MaxPatchHAC with the
+  raw-patch merge *order* decided in a per-image PCA-reduced space (the
+  `pca_dims` option ported from the HAC-tree-improvements branch), to test
+  whether denoising the clustering before the merge changes the tree's
+  usefulness. Only the tree topology changes; node vectors stay full-dim.
 - **SigLIP** (the whole-image baseline) — one global vector per image for both
   votes and scores; no region machinery at all.
 
@@ -118,8 +123,8 @@ operating point, which the original report mis-attributed to raw-patch
   image-level, so it cannot judge *region* voting (it was the first run's
   invalid arm). OpenLogo (the extreme-small-logo regime) could not be fetched —
   the cluster's shared egress repeatedly failed on the 27k-file HF dataset.
-- **Embedders / arms:** `dinov3_patch` under four styles (`max_hac`,
-  `max_patch`, `max_patch_hac`, `whole_image`) and `siglip` (`whole_image`). The
+- **Embedders / arms:** `dinov3_patch` under five styles (`max_hac`,
+  `max_patch`, `max_patch_hac`, `max_patch_pca_hac`, `whole_image`) and `siglip` (`whole_image`). The
   DINOv3 `whole_image` arm is the CLS-only control ("does *any* region machinery
   beat the plain global vector?"); SigLIP is the standard baseline. `dinov2` is
   omitted (DINOv3 is the production patch embedder; its own `whole_image` arm is

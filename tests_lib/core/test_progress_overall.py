@@ -10,11 +10,18 @@ import time
 
 import pytest
 
-from vtscore.concurrency.progress import ProgressTracker, _PROGRESS_COMMON_EXTRAS
+from vtscore.concurrency.progress import _ETA_LADDER, ProgressTracker, _PROGRESS_COMMON_EXTRAS
 
 
 def _tracker() -> ProgressTracker:
     return ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
+
+
+def _shown(tracker: ProgressTracker, raw: float) -> float:
+    """The rung ``tracker`` would publish for *raw*, narrowed to non-``None``."""
+    rung = tracker._humble_eta(float(raw))
+    assert rung is not None, f"expected a rung for {raw}"
+    return rung
 
 
 class TestOverallFraction:
@@ -235,6 +242,94 @@ class TestOverallEta:
         # remaining 0.679 reads as minutes — not the tens of seconds the
         # banked warm spans used to suggest.
         assert eta > 100.0
+
+
+class TestHumbleEta:
+    """The published ``eta_seconds`` is coarse and sticky.
+
+    A raw estimate reported to the second reads as a system that has no idea:
+    "9 min left … 10 min … 9.5 min … 11 min". The tracker therefore publishes the
+    nearest rung of a coarse ladder and holds it until the estimate moves
+    decisively. These tests pin both halves — the coarseness and the stickiness —
+    plus the cases where the display *must* still move.
+    """
+
+    def test_published_values_are_always_ladder_rungs(self):
+        t = _tracker()
+        for raw in (3, 12, 47, 121, 400, 1000, 5000, 40_000, 10**7):
+            t._eta_rung = None  # each value judged fresh
+            assert t._humble_eta(float(raw)) in _ETA_LADDER
+
+    def test_a_wobbling_estimate_never_moves_the_display(self):
+        # The exact complaint this exists to fix: an estimate oscillating around
+        # ten minutes must read "about 10 min" the entire time.
+        t = _tracker()
+        shown = [t._humble_eta(float(raw)) for raw in (540, 600, 570, 660, 620, 700, 520, 480)]
+        assert set(shown) == {600.0}
+
+    def test_a_sustained_slowdown_is_still_reported(self):
+        # Humility is not silence. A job that really is taking longer must say
+        # so; clamping the display to never rise would move the lie from the
+        # number to its trend.
+        t = _tracker()
+        shown = [_shown(t, raw) for raw in (600, 900, 1300, 2000, 3000)]
+        assert shown[-1] > shown[0]
+        assert shown == sorted(shown)
+
+    def test_a_large_correction_jumps_straight_to_the_new_rung(self):
+        # One rung per update would lag badly on a slow-updating job; a decisive
+        # move should be believed at once.
+        t = _tracker()
+        assert t._humble_eta(600.0) == 600.0
+        assert t._humble_eta(30.0) == 30.0
+
+    def test_small_moves_toward_a_neighbour_do_not_cross_it(self):
+        t = _tracker()
+        assert t._humble_eta(600.0) == 600.0
+        # 450 and 900 are the neighbours; their boundaries with 600 sit at
+        # ~520 and ~735, and the hysteresis margin pushes those further out.
+        assert t._humble_eta(530.0) == 600.0
+        assert t._humble_eta(720.0) == 600.0
+
+    def test_below_and_above_the_ladder_clamp_to_its_ends(self):
+        t = _tracker()
+        assert t._humble_eta(0.4) == _ETA_LADDER[0]
+        t2 = _tracker()
+        assert t2._humble_eta(10**9) == _ETA_LADDER[-1]
+
+    @pytest.mark.parametrize("bad", [None, 0.0, -5.0, float("inf"), float("nan")])
+    def test_no_estimate_clears_the_held_rung(self, bad):
+        t = _tracker()
+        t._humble_eta(600.0)
+        assert t._humble_eta(bad) is None
+        assert t._eta_rung is None
+
+    def test_a_new_job_does_not_inherit_the_previous_rung(self, monkeypatch):
+        t = _tracker()
+        clock = {"now": 0.0}
+        monkeypatch.setattr(time, "monotonic", lambda: clock["now"])
+        t.update("downloading", "x", current=0, total=100, step=1, total_steps=2)
+        clock["now"] = 20.0
+        t.update("downloading", "x", current=10, total=100, step=1, total_steps=2)
+        assert t.get()["eta_seconds"] is not None
+        # A different step structure reads as a brand-new job.
+        t.update("running", "y", current=0, total=10, step=1, total_steps=3)
+        assert t.get()["eta_seconds"] is None
+        assert t._eta_rung is None
+
+    def test_the_internal_estimate_stays_unquantized(self, monkeypatch):
+        # Feeding the snapped value back into the EMA would let the ladder
+        # capture the estimate and stop it converging at all, so only the
+        # published field is coarsened.
+        t = _tracker()
+        clock = {"now": 0.0}
+        monkeypatch.setattr(time, "monotonic", lambda: clock["now"])
+        t.update("embedding", "x", current=0, total=1000)
+        clock["now"] = 10.0
+        t.update("embedding", "x", current=70, total=1000)
+        # 10s bought 70 of 1000 items, so 930 remain at 7/s ≈ 132.9s.
+        assert t._smoothed_eta == pytest.approx(132.857, rel=1e-3)
+        assert t.get()["eta_seconds"] == 120.0  # the nearest rung
 
 
 class TestFinalizeProgress:

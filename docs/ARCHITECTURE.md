@@ -188,6 +188,12 @@ VTSearch/
 │   │   ├── near_dupes.py           Near-duplicate detection / grouping
 │   │   └── media_lookup.py         Origin-keyed lookup, collapse_duplicates
 │   │
+│   ├── timing/                     Per-environment cost model for progress-bar pacing + ETAs
+│   │   ├── tasks.py                TaskSpec registry: each long-running task's ordered steps
+│   │   ├── profile.py              VTSEARCH_TIMING_PROFILE loader + (device, media, embedder) lookup
+│   │   ├── recorder.py             VTSEARCH_TIMING_RECORD step-boundary recorder (off by default)
+│   │   └── fit.py                  Fits recorded rows into a profile document
+│   │
 │   ├── plugins/                    PluginBase, PluginField, PluginRegistry (shared plugin infra)
 │   ├── security/                   Path/URL/pickle safety (path_validation, url_validation, pickle)
 │   ├── sync/                       SyncSource[LoadT, SaveT] generic base class
@@ -480,11 +486,27 @@ load_dataset_from_folder(
 
 ### Progress tracking
 
-**Files:** `vtscore/concurrency/progress.py`
+**Files:** `vtscore/concurrency/progress.py`, `vtscore/timing/`
 
 A thread-safe progress tracker with no framework dependencies.  Uses
 `threading.Lock` and module-level dicts.  Can be dropped into any
 application as-is.
+
+A task that reports `step` / `total_steps` gets a single whole-job `overall`
+fraction and an `eta_seconds`, both derived from a per-step **weight vector**.
+Those weights come from `vtscore/timing/`, which models each step's cost as
+`a + b·n + per_mb·archive_mb` per `(device, media_type, embedder)` cell. Each
+long-running task is registered in `vtscore/timing/tasks.py` and asks for its
+weights at its entry point rather than carrying a literal vector; an admin
+profile at `VTSEARCH_TIMING_PROFILE` (measured by
+`scripts/profiling/tune_timing_profile.py`) overrides the shipped defaults per
+cell. See [DEPLOYMENT.md](DEPLOYMENT.md#progress-bar-timing-profile).
+
+`eta_seconds` is published **coarse and sticky**: the tracker snaps its
+internally-smoothed estimate onto a geometric ladder and holds each rung until
+the estimate clears a neighbour by a hysteresis margin, so a converging estimate
+reads as a steady "About 10 min left" instead of walking the user through every
+revision. Only the published field is quantized; the EMA keeps full precision.
 
 ---
 

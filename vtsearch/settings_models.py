@@ -352,7 +352,7 @@ class UserSettings(BaseModel):
     # platform ``prefers-reduced-motion`` preference. See the "Show Animations"
     # pulldown in the appearance settings.
     show_animations: Annotated[AnimationMode, BeforeValidator(coerce_animation_mode)] = "show"
-    show_metadata: bool = True
+    show_metadata: bool = False
     # Set to True once the user dismisses the zero-votes "Use ← / → or click"
     # hint that overlays the Good/Bad buttons when a fresh labeling session
     # has no votes yet. Persisting it keeps the hint from re-appearing every

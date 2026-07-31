@@ -56,12 +56,20 @@ export class DatasetStatsModalComponent implements OnInit {
     this.closed.emit();
   }
 
-  get fileTypes(): { ext: string; count: number }[] {
+  get fileTypes(): { ext: string; label: string; count: number }[] {
     const counts = this.stats()?.file_type_counts;
     if (!counts) return [];
     return Object.entries(counts)
       .sort(([, a], [, b]) => b - a)
-      .map(([ext, count]) => ({ ext, count }));
+      .map(([ext, count]) => ({ ext, label: this.fileTypeLabel(ext), count }));
+  }
+
+  /** Render a file-type bucket. Real types get the leading dot users expect
+   *  (`jpg` → `.jpg`); the server's parenthesised sentinel for items whose
+   *  type nothing could establish is passed through as-is, so the row reads
+   *  "(unknown)" and not ".(unknown)". */
+  private fileTypeLabel(ext: string): string {
+    return ext.startsWith('(') ? ext : `.${ext}`;
   }
 
   /** Media type as the grid renders it: capitalized, `-` when unset. */

@@ -16,7 +16,7 @@ import {
   ClipperParameter,
   ConverterInfo,
   EmbedderInfo,
-  FieldOption,
+  FieldOptions,
   ImporterField,
   ImporterInfo,
   MediaTypeInfo,
@@ -89,7 +89,7 @@ export class GenericFormPickerComponent {
 
   sourceSpecs: SourceSpec[] = [];
 
-  readonly dynamicFieldOptions = signal<Record<string, FieldOption[]>>({});
+  readonly dynamicFieldOptions = signal<Record<string, FieldOptions[]>>({});
   readonly dynamicFieldLoading = signal<Record<string, boolean>>({});
   readonly dynamicFieldError = signal<Record<string, string>>({});
 
@@ -269,7 +269,7 @@ export class GenericFormPickerComponent {
     this.dynamicFieldError.update((m) => ({ ...m, [key]: '' }));
     this.datasetsCrudApi.getImporterFieldOptions(importer.name, key, { ...this.formValues }).subscribe({
       next: (res) => {
-        const options: FieldOption[] = res.options || [];
+        const options: FieldOptions[] = res.options || [];
         this.dynamicFieldOptions.update((m) => ({ ...m, [key]: options }));
         this.dynamicFieldLoading.update((m) => ({ ...m, [key]: false }));
         const current = this.formValues[key];
@@ -291,7 +291,7 @@ export class GenericFormPickerComponent {
     });
   }
 
-  optionsFor(field: ImporterField): FieldOption[] {
+  optionsFor(field: ImporterField): FieldOptions[] {
     if (field.dynamic_options) {
       return this.dynamicFieldOptions()[field.key] || [];
     }

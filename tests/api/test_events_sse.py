@@ -123,15 +123,18 @@ class TestProgressTrackerEta:
         tracker.update("loading", "", 0, 100)
         now[0] += 10.0
         tracker.update("loading", "", 10, 100)
-        first = tracker.get()["eta_seconds"]
+        first = tracker._smoothed_eta
         assert first is not None
 
         # Pretend the rate suddenly doubles: 10 more units in just 1s.
         now[0] += 1.0
         tracker.update("loading", "", 20, 100)
-        smoothed = tracker.get()["eta_seconds"]
+        smoothed = tracker._smoothed_eta
         # Raw new ETA = (11 / 20) * 80 = 44s. Smoothed with alpha=0.3 against
         # the previous ~90s sample sits well above 44 and below the old 90.
+        # Asserted on the *internal* estimate: what gets published is snapped to
+        # the coarse ETA ladder (see TestHumbleEta), and a step this small is
+        # precisely what the ladder exists to absorb.
         assert smoothed is not None
         assert 44.0 < smoothed < first
 

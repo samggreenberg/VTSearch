@@ -99,6 +99,23 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
         return float(np.median(arr))
 
 
+def _score_rows_digest(score_rows_by_group: dict | None) -> bytes | None:
+    """Digest of the per-bag **inference** row stacks, for the calibration key.
+
+    ``None`` when no override is in play, so a call that pools each bag over
+    its training rows keeps a distinct cache key from one that pools over the
+    scorer's rows - otherwise a cached ordering computed under the old geometry
+    would be served after the wiring changed.
+    """
+    if score_rows_by_group is None:
+        return None
+    h = hashlib.blake2b()
+    for g in sorted(score_rows_by_group, key=repr):
+        h.update(repr(g).encode())
+        h.update(np.asarray(score_rows_by_group[g], dtype=np.float32).tobytes())
+    return h.digest()
+
+
 def _calibration_cache_key(
     X_list: list,
     y_list: list[float],
@@ -106,6 +123,7 @@ def _calibration_cache_key(
     calibration_fraction: float,
     hidden_dim: int,
     groups: list | None = None,
+    score_rows_by_group: dict | None = None,
 ) -> tuple:
     """Build a deterministic cache key for the calibration **fold orderings**.
 
@@ -137,6 +155,7 @@ def _calibration_cache_key(
         float(calibration_fraction),
         int(hidden_dim),
         groups_key,
+        _score_rows_digest(score_rows_by_group),
     )
 
 
@@ -151,6 +170,7 @@ def cross_calibration_threshold_cached(
     hidden_dim: int,
     det_ctx: Any = None,
     groups: list | None = None,
+    score_rows_by_group: dict | None = None,
 ) -> float:
     """Memoized wrapper around :func:`calculate_cross_calibration_threshold`.
 
@@ -163,12 +183,22 @@ def cross_calibration_threshold_cached(
     rule over the cached orderings - no ~200-epoch fold fits.
 
     A real label change produces a different cache key and falls through to a
-    fresh calibration - no explicit invalidation needed.
+    fresh calibration - no explicit invalidation needed.  *score_rows_by_group*
+    (see :func:`compute_fold_orderings`) enters the key too, so a change in the
+    rows a bag is scored over can never be served from a stale ordering.
     """
     payload: tuple[list[tuple[list[float], list[float]]], float | None] | None = None
     key = None
     if det_ctx is not None:
-        key = _calibration_cache_key(X_list, y_list, calibrate_count, calibration_fraction, hidden_dim, groups)
+        key = _calibration_cache_key(
+            X_list,
+            y_list,
+            calibrate_count,
+            calibration_fraction,
+            hidden_dim,
+            groups,
+            score_rows_by_group,
+        )
         cached = getattr(det_ctx, "calibration_cache", None)
         if cached is not None and cached[0] == key:
             payload = cached[1]
@@ -184,6 +214,7 @@ def cross_calibration_threshold_cached(
             calibration_fraction=calibration_fraction,
             hidden_dim=hidden_dim,
             groups=groups,
+            score_rows_by_group=score_rows_by_group,
         )
         if det_ctx is not None and key is not None:
             det_ctx.calibration_cache = (key, payload)
@@ -223,12 +254,34 @@ def conformal_threshold(
     * A **false-positive guard** for ``k <= 0``: the threshold stays at or
       above the ``1 - BASE * 2^k`` quantile of the calibration *negative*
       scores, so overlap-heavy tasks keep FPR control, and above a walk *up*
-      the positive score distribution (``q_pos(k) = QPOS_MAX * |k|/10``: at
-      -10 only the top-quartile-of-positives region remains - "just the
-      surest matches").
+      toward the positive score distribution.  The walk interpolates linearly
+      in score space from the **gap midpoint** at ``k = 0`` to the
+      ``QPOS_MAX`` quantile of positives at ``k = -10`` (at -10 only the
+      top-quartile-of-positives region remains - "just the surest matches").
 
-    Every component quantile is monotone non-increasing in ``k``, so their
-    min/max composition is too: the threshold is monotone non-increasing in
+    The **gap midpoint** is what keeps the default cut usable.  When the
+    classes separate cleanly there is an empty band between the top of the
+    negatives (``fp_guard``) and the bottom of the positives; *every* cut
+    inside that band has identical empirical error on the calibration set, so
+    the band's top edge - the single lowest calibration positive - is an
+    arbitrary choice among equals, and it is the worst one available:
+
+    * It is an **extreme order statistic** over a handful of held-out votes,
+      so it moves violently from one vote to the next (issue #2781's "the
+      threshold jumps to the top, then it's normal again one click later").
+    * It is measured on the **fold models'** score scale but applied to the
+      **final** model's scores.  The fold models train on half the votes and
+      saturate, so their lowest held-out positive routinely lands above every
+      score the final model produces - a cut that admits nothing at all, not
+      even the items the user personally voted Good.
+
+    Sitting in the middle of the band is the max-margin choice among cuts the
+    calibration data cannot distinguish, and it costs nothing in FN budget:
+    the midpoint is strictly below every calibration positive, so a cleanly
+    separated task still spends none of its miss budget.
+
+    Every component is monotone non-increasing in ``k``, so their min/max
+    composition is too: the threshold is monotone non-increasing in
     inclusion **by construction**.  Raising inclusion can only grow the
     included set, and the sets are nested (everything included at ``k`` stays
     included at ``k + 1``) - which is what makes "cut off at Inclusion 1,
@@ -265,7 +318,18 @@ def conformal_threshold(
             # above the k=0 cut when the budget goes unspent there.
             return min(fn_cap, _threshold_at(0))
         fp_guard = float(np.quantile(neg, 1.0 - CONFORMAL_BASE_BUDGET * 2.0**k))
-        walk = float(np.quantile(pos, CONFORMAL_QPOS_MAX * -k / 10.0))
+        # Midpoint of the band the calibration data cannot resolve: from the
+        # top of the negatives up to the lowest positive.  Collapses to
+        # ``fp_guard`` under class overlap (no band), so the FPR-controlled
+        # regime is untouched - only the cleanly-separated case moves.
+        gap_mid = (fp_guard + max(fp_guard, float(np.min(pos)))) / 2.0
+        # Walk from that midpoint at k=0 up to the QPOS_MAX positive quantile
+        # at k=-10, linearly in score space.  Interpolating on values rather
+        # than on quantile positions keeps the knob's stops evenly spaced even
+        # when only a handful of calibration positives exist (a quantile walk
+        # over 4 points has 4 stops; this one always has 11).
+        top = float(np.quantile(pos, CONFORMAL_QPOS_MAX))
+        walk = gap_mid + (-k / 10.0) * max(0.0, top - gap_mid)
         return min(fn_cap, max(fp_guard, walk))
 
     return _threshold_at(inclusion_value)
@@ -466,8 +530,11 @@ def compute_fold_orderings(
     ``max`` is an upward-biased order statistic, so the calibrated cut
     lands systematically high and the threshold over-rejects positives.  Passing
     each vote's inference rows here puts both classes in the geometry and at the
-    width the scorer will actually use.  ``None`` (every production caller)
-    keeps the historical "collapse over the training rows" behaviour.
+    width the scorer will actually use.  The production vote / labelset paths
+    supply each voted image's full region-node stack
+    (:func:`vtscore.detectors.training.inference_score_rows`); ``None`` keeps
+    the "collapse over the training rows" behaviour for callers that have no
+    inference geometry to offer.
     """
     if groups is not None:
         return _compute_fold_orderings_grouped(

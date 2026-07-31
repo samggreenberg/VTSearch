@@ -74,7 +74,7 @@ MH, MP, MPH, MPPH, CLS, SIG = (
 
 # ------------------------------------------------------------------ load / agg
 def _load():
-    files = sorted((RESULTS / "cells").glob("task_*.csv"))
+    files = sorted(RESULTS.glob("cells*/task_*.csv"))  # cells/ + any cells_pca/ incremental dir
     frames = [pd.read_csv(f) for f in files if f.stat().st_size > 0]
     frames = [f for f in frames if len(f)]
     if not frames:

@@ -21,7 +21,7 @@ GET /api/settings
   "calibration_fraction": 0.5,
   "audio_playing": true,
   "show_animations": "show",
-  "show_metadata": true,
+  "show_metadata": false,
   "focus_mode_left": {},
   "focus_mode_right": {},
   "grid_icon_size_left": {},

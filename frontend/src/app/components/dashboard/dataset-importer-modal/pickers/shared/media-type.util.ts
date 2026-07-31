@@ -1,4 +1,4 @@
-import { ConverterInfo, ImporterInfo, MediaTypeDetectionResponse, MediaTypeInfo, SourceSpec } from '../../../../../models/api.models';
+import { ConverterInfo, ImporterInfo, DetectMediaTypeResponse, MediaTypeInfo, SourceSpec } from '../../../../../models/api.models';
 
 /** Pure helpers for translating between the media-type registry's two
  *  addressing schemes - ``type_id`` (canonical, e.g. ``"image"``) and
@@ -80,7 +80,7 @@ function extensionToTypeId(mediaTypes: MediaTypeInfo[]): Map<string, string> {
 }
 
 /** Count media types in a browser-side ``File[]`` and shape the result
- *  like :type:`MediaTypeDetectionResponse` so the rest of the modal can
+ *  like :type:`DetectMediaTypeResponse` so the rest of the modal can
  *  treat local- and server-side detections identically.
  *
  *  When ``recursive`` is ``false`` files whose ``webkitRelativePath``
@@ -91,7 +91,7 @@ export function detectFromFiles(
   files: File[],
   recursive: boolean,
   limit = 50,
-): MediaTypeDetectionResponse {
+): DetectMediaTypeResponse {
   const extMap = extensionToTypeId(mediaTypes);
   const countsByType: Record<string, number> = {};
   const extensions: Record<string, number> = {};
@@ -120,14 +120,17 @@ export function detectFromFiles(
       dominant = typeId;
     }
   }
-  return { sample_size: examined, counts_by_type: countsByType, extensions, dominant };
+  // ``truncated`` reports the server walk giving up on its directory-count or
+  // wall-clock budget *before* reaching the file cap. Stopping at ``limit`` is
+  // the cap doing its job, not a truncated sample, so this is always false.
+  return { sample_size: examined, counts_by_type: countsByType, extensions, dominant, truncated: false };
 }
 
 /** Human-readable description of a detection result, suitable for a hint
  *  chip next to the media-type dropdown. */
 export function detectionHint(
   mediaTypes: MediaTypeInfo[],
-  detection: MediaTypeDetectionResponse | null,
+  detection: DetectMediaTypeResponse | null,
 ): string {
   if (!detection || detection.sample_size === 0) return '';
   const entries = Object.entries(detection.counts_by_type)
@@ -158,7 +161,7 @@ export function detectionHint(
  *  the caller decides which view's state to update. */
 export function autofillFromDetection(
   mediaTypes: MediaTypeInfo[],
-  detection: MediaTypeDetectionResponse,
+  detection: DetectMediaTypeResponse,
   availableOptions: string[],
   convertersForType: (outputTypeId: string) => ConverterInfo[],
 ): { mediaType: string | null; sourceSpecs: SourceSpec[] | null } {

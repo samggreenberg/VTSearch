@@ -9,7 +9,6 @@ This review asked: where have design decisions that were right at small scale be
 Concrete, independently-shippable findings now live as issues (bodies there, not here):
 
 - [ ] #2654 — Split the `DetectorContext` god-object into `VoteState` / `TrainingState` / `FindSessionState`, opportunistically (Theme B; Opus 4.8)
-- [ ] #2655 — Converge hand-written frontend `api.models.ts` onto generated OpenAPI types, backend-schema-first (Theme D; Sonnet 5)
 
 ---
 

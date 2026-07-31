@@ -68,9 +68,10 @@ The labelset-element shape is shared with :mod:`vtsearch.schemas.labels`.
 
 from __future__ import annotations
 
-from marshmallow import Schema, ValidationError, fields, validate
+from marshmallow import INCLUDE, Schema, ValidationError, fields, post_dump, validate
 
 from vtsearch.schemas.labels import LabeledElementSchema
+from vtsearch.schemas.media import MediaEntrySchema, OriginSchema
 
 #: Upper bound on user-supplied detector names.  A name this long is already
 #: past any reasonable display use, and capping it here keeps the derived
@@ -644,20 +645,27 @@ class FindBoundaryNextResponseSchema(Schema):
     side = fields.String(required=True, allow_none=True, validate=validate.OneOf(["above", "below"]))
 
 
-class _HitSchema(Schema):
-    """One scored media entry inside an auto-detect / find ``hits`` list.
+class _HitSchema(MediaEntrySchema):
+    """One scored media entry inside an auto-detect ``hits`` list.
 
-    The shape is a media dict (filename, type, md5, origin, ...) augmented
-    with a ``score`` (and, for ``/api/find``, a ``verdict``). The set of
-    media-dict fields is intentionally open; different importers
-    populate different keys.
+    A media dict augmented with a ``score``.  It reuses
+    :class:`~vtsearch.schemas.media.MediaEntrySchema` so the media half
+    is enumerated exactly once, in the place that already vetted which media
+    fields are safe to serve.
+
+    That enumeration is load-bearing, not cosmetic: a declared schema **drops**
+    undeclared keys on dump (``unknown = "include"`` is load-only), and that is
+    the last line of defence keeping a media's embedding vectors out of the
+    response.  Do not add a ``post_dump`` passthrough here — it would serve the
+    whole media dict, vectors included.
     """
 
-    id = fields.Integer(required=True)
     score = fields.Float(required=True)
-
-    class Meta:
-        unknown = "include"
+    origin = fields.Nested(
+        OriginSchema,
+        allow_none=True,
+        metadata={"description": "Where this item was ingested from; rendered as the results table's Origin column."},
+    )
 
 
 class _AutoDetectResultSchema(Schema):
@@ -668,6 +676,38 @@ class _AutoDetectResultSchema(Schema):
     total_hits = fields.Integer(required=True)
     hits = fields.List(fields.Nested(_HitSchema), required=True)
     negative_hits = fields.List(fields.Nested(_HitSchema), required=True)
+
+
+class _AutoFindExportStatusSchema(Schema):
+    """Outcome of auto-exporting an Auto-Find run's results.
+
+    Built by ``_run_autofind_export``: a fixed ``{exporter, success}`` base
+    plus ``message`` on success / ``error`` on failure, and then whatever extra
+    keys the chosen exporter's outcome dict carried (``filepath`` for
+    file-based exporters, and so on).  Those extras are exporter-specific, so
+    the base is enumerated and the rest passed through, same as the clipper
+    descriptors in :mod:`vtsearch.schemas.datasets`.
+    """
+
+    exporter = fields.String(required=True)
+    success = fields.Boolean(required=True)
+    message = fields.String(metadata={"description": "Human-readable outcome; present on success."})
+    error = fields.String(metadata={"description": "Failure reason; present instead of ``message`` on failure."})
+
+    class Meta:
+        unknown = INCLUDE
+
+    @post_dump(pass_original=True)
+    def _include_exporter_extras(self, data: dict, original: dict, **_: object) -> dict:
+        # ``unknown = INCLUDE`` only affects ``load``; a declared schema drops
+        # undeclared keys on ``dump``.  Safe to re-merge here: the values come
+        # from an exporter's own JSON-serialisable outcome dict, not a media
+        # dict, so there are no vectors or raw bytes to leak.
+        if isinstance(original, dict):
+            for k, v in original.items():
+                if k not in data:
+                    data[k] = v
+        return data
 
 
 class AutoDetectRequestSchema(Schema):
@@ -702,10 +742,8 @@ class AutoDetectResponseSchema(Schema):
     # never silently drops a detector the user thinks is still active.
     missing_detectors = fields.List(fields.String(), required=True)
     # Present only when an Auto-Find results exporter is configured: the
-    # outcome of auto-exporting these results. ``{exporter, success,
-    # message?, error?, ...}`` (extra keys like ``filepath`` may appear for
-    # file-based exporters). See ``docs/plans/auto-find-settings-tab.md``.
-    auto_export = fields.Dict(keys=fields.String(), values=fields.Raw(), required=False)
+    # outcome of auto-exporting these results.
+    auto_export = fields.Nested(_AutoFindExportStatusSchema)
 
 
 # ---------------------------------------------------------------------------
@@ -769,7 +807,7 @@ class _FindResultRowSchema(Schema):
     filename = fields.String(required=True)
     md5 = fields.String(required=True)
     origin_name = fields.String(required=True)
-    origin = fields.Dict(allow_none=True)
+    origin = fields.Nested(OriginSchema, allow_none=True)
     dataset_name = fields.String(required=True)
     detector_verdicts = fields.Dict(
         keys=fields.String(),

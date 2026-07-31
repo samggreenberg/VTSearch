@@ -16,6 +16,7 @@ extractors).
 - [Shared Plugin Architecture](#shared-plugin-architecture): PluginField,
   PluginRegistry, discovery, route generation
 - [Adding a Data Importer](#adding-a-data-importer)
+- [Adding a Datasource Importer](#adding-a-datasource-importer)
 - [Adding a Media Converter](#adding-a-media-converter)
 - [Adding a Results Exporter](#adding-a-results-exporter)
 - [Adding a Label Importer](#adding-a-label-importer)
@@ -752,6 +753,105 @@ behavioural change.
 See [`EXTENDING-media.md` § Adding a Media Converter](EXTENDING-media.md#adding-a-media-converter)
 for how converters compose with importers. (The original `multi-media-import`
 design plan was removed once the feature shipped; its history is in git.)
+
+---
+
+## Adding a Datasource Importer
+
+A datasource importer is the **single-item sibling of a dataset importer**:
+it fetches exactly one media item's bytes from some source (a URL, a server
+path, a third-party service) so users can supply exemplar media — e.g. the
+seed examples of a new detector — from the same kinds of places a whole
+dataset can come from. The New Detector modal's example-media picker lists
+every registered datasource importer and renders its declared fields as a
+dynamic form, exactly like the Add Dataset modal does for dataset importers
+(GitHub issue #2767).
+
+### File structure
+
+```
+vtscore/datasource_importers/<your_importer>/
+└── __init__.py       # Importer class + DATASOURCE_IMPORTER instance (required)
+```
+
+Third-party packages can instead register through the
+`vtscore.datasource_importers` entry-point group (same mechanism as the
+other families; see
+[Third-party plugins](#third-party-plugins-via-importlibmetadata-entry-points)).
+
+### What to implement
+
+Subclass `DataSourceImporter` from `vtscore.datasource_importers`, declare
+`fields`, pick a `category` (the picker tab: `"services"`, `"server"`,
+`"local"`, or `"demo"`), and implement `fetch()`. Expose a module-level
+`DATASOURCE_IMPORTER` instance.
+
+```python
+# vtscore/datasource_importers/pastebin/__init__.py
+from vtscore.datasource_importers import DataSourceImporter, FetchedMediaItem
+from vtscore.plugins import PluginField
+
+
+class PastebinDataSourceImporter(DataSourceImporter):
+    """Fetch a text snippet from a pastebin service."""
+
+    category = "services"
+    fields = [
+        PluginField(key="paste_id", label="Paste id", field_type="text", required=True),
+    ]
+
+    def fetch(self, field_values):
+        data = ...  # download the snippet's bytes
+        return FetchedMediaItem(data=data, filename=f"{field_values['paste_id']}.txt")
+
+
+DATASOURCE_IMPORTER = PastebinDataSourceImporter()
+```
+
+`fetch()` receives the validated + normalized form values (text stripped;
+`url` / `server_path` fields already passed the shared SSRF /
+path-traversal validators — see `vtscore/plugins/normalize.py`). `file`
+fields arrive as `UploadedFile` objects. Raise `ValueError` for bad user
+input (surfaced as a 400); any other exception is reported as an upstream
+failure (502). The returned `FetchedMediaItem.filename` should keep the
+source's real extension — it drives media-type inference downstream.
+
+When the fetched item has a durable external identity (a URL, a server
+path, a service item id), also set `FetchedMediaItem.origin` to a
+`{"importer": <name>, "params": {...}}` dict. The origin is stored on the
+detector example and stamped onto the seeded media, so the item can be
+re-fetched on demand (cross-dataset label resolution, re-deriving a
+deleted `example_media/` cache file) instead of the byte snapshot being
+the only record. A param named `path` resolves with no extra code (the
+resolver's generic path fallback); any other param shape needs a matching
+`MediaSource` factory registered under the importer's name — see
+`vtscore/datasets/sources/url_download.py` for the pattern (it re-runs
+`validate_url` at fetch time, since the stored URL was originally
+user-supplied). Leave `origin` unset when the bytes have no re-derivable
+source (uploads): the example then keeps the `example_media` sentinel
+origin, by design.
+
+Dynamic select options work exactly as for dataset importers: declare a
+field with `dynamic_options=True` and implement
+`get_field_options(field_key, current_values)`
+(see [Dynamic field options](#dynamic-field-options)).
+
+### How it gets invoked
+
+- `GET /api/datasource-importers` lists every importer (with its fields
+  and category) plus the shared picker-tab declarations.
+- `POST /api/datasource-import/<name>` validates the body against the
+  importer's fields, calls `fetch()`, saves the returned bytes into the
+  per-user `example_media/` directory, and returns `{filename,
+  original_name, origin}` — the example-media upload contract plus the
+  item's durable origin (`null` when the importer reports none), so the
+  fetched item plugs into the detector-example model
+  (`{type: "media", value: <filename>, origin: {...}}`).
+- `POST /api/datasource-import/<name>/options` serves dynamic field
+  options.
+
+Built-in examples: `server_file` (a `server_path` field with the inline
+file browser) and `url_download` (an SSRF-guarded single-file download).
 
 ---
 

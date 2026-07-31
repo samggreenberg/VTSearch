@@ -19,6 +19,7 @@ from flask_smorest import Blueprint, abort
 from vtscore.concurrency.memory_budget import cap_workers_by_memory
 from vtscore.concurrency.progress import CancelledError, find_progress, update_find_progress
 from vtscore.detectors.model_loading import resolve_or_train_detector
+from vtscore.embedding.media_vectors import EMBEDDINGS_KEY
 from vtsearch.routes._shared import require_dataset_header, require_detector_header
 from vtsearch.schemas.detectors import (
     AutoDetectRequestSchema,
@@ -41,8 +42,17 @@ detector_scoring_bp = Blueprint(
     "or run every Auto-Find detector at once (auto-detect).",
 )
 
-# Keys excluded from API responses (large binary/vector data).
-_HEAVYWEIGHT_KEYS = ("embedding", "media_bytes", "media_string", "thumbnail_bytes")
+# Keys excluded from API responses (large binary/vector data).  ``embeddings``
+# is the v3 dict-keyed vector store (``vtscore/embedding/media_vectors.py``);
+# ``embedding`` is its dropped legacy singular form, kept here so a media dict
+# rehydrated from an old pickle can't leak one either.
+_HEAVYWEIGHT_KEYS = (
+    EMBEDDINGS_KEY,
+    "embedding",
+    "media_bytes",
+    "media_string",
+    "thumbnail_bytes",
+)
 
 
 def _detector_type(det_data: dict | None) -> str:
@@ -146,17 +156,17 @@ def find_label(body: dict):
 
     # Total high-level steps: resolve(1) + optional train(2) + score(3) + apply(4)
     _FIND_LABEL_STEPS = 4
-    # Train + score carry the cost; resolve/apply are quick. Paces the unified
-    # whole-job bar (ETA self-corrects from the real rate).
-    #                       resolve  train  score  apply
-    _FIND_LABEL_STEP_WEIGHTS = [0.10, 0.45, 0.40, 0.05]
+    #: Timing-profile task name; its step names and shipped fallback weights
+    #: live in :data:`vtscore.timing.tasks.TASKS`. An admin
+    #: ``VTSEARCH_TIMING_PROFILE`` replaces them with the seconds this
+    #: deployment's GPU actually spends training and scoring.
+    _TRAIN_SCORE_TASK = "train_and_score"
 
     detector_id = body["detector_id"]
 
     # Clear a leftover cancel flag from a previously-cancelled run so
     # the new operation doesn't trip on it immediately.
     find_progress.reset_cancel()
-    find_progress.set_step_weights(_FIND_LABEL_STEP_WEIGHTS)
 
     update_find_progress(
         "running",
@@ -178,6 +188,26 @@ def find_label(body: dict):
         abort(400, message="No medias loaded")
 
     media_type = d.get("media_type", "") or next(iter(snap.values())).get("media_type", "image")
+
+    # Both the train and score steps scale with the active dataset, so the bar
+    # can be paced against its real size instead of a fixed guess. Every exit
+    # below — success and abort alike — parks the tracker at "idle", which is
+    # what closes the recorder.
+    from vtscore import timing  # noqa: PLC0415
+
+    score_embedder = next(iter(snap.values())).get("embedder", "")
+    find_progress.set_step_weights(
+        timing.step_weights(_TRAIN_SCORE_TASK, media_type=media_type, embedder=score_embedder, n=len(snap))
+    )
+    recorder = timing.record_task(
+        find_progress,
+        _TRAIN_SCORE_TASK,
+        media_type=media_type,
+        embedder=score_embedder,
+        auto_finish=True,
+    )
+    recorder.start()
+    recorder.set_scale(n=len(snap))
     det_path = _detector_path(d["name"])
     det_data = _read_detector(det_path)
 
@@ -639,7 +669,7 @@ def find_evidence_coverage():
     # already populated from its saved labelset — cross-user by construction,
     # nothing persisted.  Good rows are y == 1, Bad (incl. patch-flood
     # negatives) are y == 0.
-    x_list, y_list, _groups = build_xy_from_labelset(det_ctx, labelset)
+    x_list, y_list, _groups, _score_rows = build_xy_from_labelset(det_ctx, labelset)
     if not x_list:
         return _empty_evidence_coverage()
     x = np.asarray(x_list, dtype=np.float32)

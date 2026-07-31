@@ -73,4 +73,70 @@ describe('ToastContainerComponent', () => {
     await settleZoneless(fixture);
     expect(fixture.nativeElement.querySelectorAll('.toast').length).toBe(0);
   });
+
+  describe('countdown toasts', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('renders the remaining seconds and repaints each tick', async () => {
+      vi.useFakeTimers();
+      toast.success({
+        message: 'Done!',
+        countdown: { label: 'Taking you back to the Dashboard in', seconds: 5, onExpire: () => {} },
+      });
+      TestBed.tick();
+
+      const line = () => fixture.nativeElement.querySelector('.toast__countdown');
+      expect(line().textContent).toContain('Taking you back to the Dashboard in');
+      expect(line().textContent).toContain('5');
+
+      await vi.advanceTimersByTimeAsync(1000);
+      TestBed.tick();
+      expect(line().textContent).toContain('4');
+    });
+
+    it('runs the expiry handler once the countdown empties, then drops the toast', async () => {
+      vi.useFakeTimers();
+      const onExpire = vi.fn();
+      toast.success({ message: 'Done!', countdown: { label: 'Leaving in', seconds: 2, onExpire } });
+      TestBed.tick();
+
+      await vi.advanceTimersByTimeAsync(2000);
+      TestBed.tick();
+      expect(onExpire).toHaveBeenCalledTimes(1);
+      expect(fixture.nativeElement.querySelector('.toast')).toBeNull();
+    });
+
+    it('cancels the expiry handler when the toast is dismissed first', async () => {
+      vi.useFakeTimers();
+      const onExpire = vi.fn();
+      const id = toast.success({
+        message: 'Done!',
+        countdown: { label: 'Leaving in', seconds: 3, onExpire },
+      });
+      TestBed.tick();
+
+      toast.dismiss(id);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(onExpire).not.toHaveBeenCalled();
+    });
+
+    it('does not auto-dismiss a countdown toast out from under its own timer', async () => {
+      vi.useFakeTimers();
+      const onExpire = vi.fn();
+      // Plain success toasts auto-dismiss at 5s; a 10s countdown must outlive
+      // that, or the user watches the message vanish mid-count.
+      toast.success({ message: 'Done!', countdown: { label: 'Leaving in', seconds: 10, onExpire } });
+      TestBed.tick();
+
+      await vi.advanceTimersByTimeAsync(6000);
+      TestBed.tick();
+      expect(fixture.nativeElement.querySelector('.toast')).toBeTruthy();
+      expect(onExpire).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(onExpire).toHaveBeenCalledTimes(1);
+    });
+  });
 });

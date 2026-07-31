@@ -82,6 +82,7 @@ from vtsearch.routes import (  # noqa: E402
     health_bp,
     jobs_bp,
     labels_bp,
+    datasource_importers_bp,
     media_server_bp,
     medias_bp,
     datasets_listings_bp,
@@ -149,6 +150,7 @@ from flask_smorest import Api  # noqa: E402
 
 from vtsearch.openapi_postprocess import (  # noqa: E402
     assign_operation_ids,
+    collapse_nullable_refs,
     normalize_unprocessable_response,
 )
 
@@ -169,6 +171,7 @@ def _to_dict_with_operation_ids() -> dict:
     spec = _apispec_to_dict()
     assign_operation_ids(app, spec)
     normalize_unprocessable_response(spec)
+    collapse_nullable_refs(spec)
     return spec
 
 
@@ -231,6 +234,7 @@ api.register_blueprint(health_bp)
 api.register_blueprint(jobs_bp)
 api.register_blueprint(labels_bp)
 api.register_blueprint(media_server_bp)
+api.register_blueprint(datasource_importers_bp)
 api.register_blueprint(main_bp)
 api.register_blueprint(medias_bp)
 api.register_blueprint(sorting_bp)

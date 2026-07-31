@@ -153,3 +153,46 @@ def assign_operation_ids(app: Flask, spec: dict[str, Any]) -> None:
     for name, op_keys in by_view.items():
         for (op_path, op_method), op_id in _operation_ids_for_view(name, op_keys).items():
             paths[op_path][op_method]["operationId"] = op_id
+
+
+def _is_apispec_null_branch(branch: Any) -> bool:
+    """True for the placeholder apispec adds to express "nullable $ref"."""
+    return branch == {"type": "object", "nullable": True}
+
+
+def collapse_nullable_refs(node: Any) -> None:
+    """Rewrite apispec's ``anyOf`` nullable-``$ref`` idiom into a plain ref.
+
+    OpenAPI 3.0 has no way to say "this ``$ref``, or null", so apispec renders
+    ``fields.Nested(X, allow_none=True)`` as::
+
+        {"anyOf": [{"type": "object", "nullable": true},
+                   {"$ref": "#/components/schemas/X"}]}
+
+    That untyped ``{"type": "object"}`` branch is pure noise, but ng-openapi-gen
+    takes it literally and emits ``X | {} | null``. The empty-object arm then
+    swallows every property access on the union, so consumers of a nullable
+    nested model lose exactly the typing the nested schema was added to give
+    them. Collapse the pair back to the ref (keeping ``nullable``), which is
+    what every generator reads as "X or null".
+
+    Only the exact two-branch shape apispec produces is touched; a genuine
+    hand-written ``anyOf`` is left alone.
+    """
+    if isinstance(node, dict):
+        branches = node.get("anyOf")
+        if (
+            isinstance(branches, list)
+            and len(branches) == 2
+            and sum(1 for b in branches if _is_apispec_null_branch(b)) == 1
+            and sum(1 for b in branches if isinstance(b, dict) and set(b) == {"$ref"}) == 1
+        ):
+            ref = next(b for b in branches if isinstance(b, dict) and set(b) == {"$ref"})
+            node.pop("anyOf")
+            node["nullable"] = True
+            node.update(ref)
+        for value in node.values():
+            collapse_nullable_refs(value)
+    elif isinstance(node, list):
+        for item in node:
+            collapse_nullable_refs(item)

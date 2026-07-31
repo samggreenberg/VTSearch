@@ -25,19 +25,19 @@ describe('JobProgressComponent', () => {
   it('renders the header, detail and eta', async () => {
     fixture.componentRef.setInput('header', 'Loading dataset · Step 2 of 4 · Downloading source');
     fixture.componentRef.setInput('detail', '012/345 FileABC.img');
-    fixture.componentRef.setInput('eta', '5.5 min left');
+    fixture.componentRef.setInput('eta', 'About 10 min left');
     await settleZoneless(fixture);
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('Downloading source');
     expect(text).toContain('FileABC.img');
-    expect(text).toContain('5.5 min left');
+    expect(text).toContain('About 10 min left');
   });
 
   it('labels the eta chip as a whole-job estimate on hover', async () => {
     const el = fixture.nativeElement as HTMLElement;
     // No eta -> no tooltip (an empty chip should not invite hovering).
     expect(el.querySelector('.jp__eta')?.getAttribute('title')).toBeFalsy();
-    fixture.componentRef.setInput('eta', '5.5 min left?');
+    fixture.componentRef.setInput('eta', 'About 10 min left');
     await settleZoneless(fixture);
     expect(el.querySelector('.jp__eta')?.getAttribute('title')).toContain('whole job');
   });

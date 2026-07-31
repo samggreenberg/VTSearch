@@ -15,7 +15,7 @@ import {
   ConverterInfo,
   EmbedderInfo,
   ImporterInfo,
-  MediaTypeDetectionResponse,
+  DetectMediaTypeResponse,
   MediaTypeInfo,
   SourceSpec,
 } from '../../../../../models/api.models';
@@ -85,7 +85,7 @@ export class LocalFolderPickerComponent {
    *  the sibling `<vt-source-picker>` in the parent's template - a
    *  signal so this component's own `detectionHint()` read notifies
    *  correctly regardless of ancestor-marking. */
-  readonly detection = signal<MediaTypeDetectionResponse | null>(null);
+  readonly detection = signal<DetectMediaTypeResponse | null>(null);
   readonly submitting = signal(false);
   readonly error = signal('');
   recursive = true;

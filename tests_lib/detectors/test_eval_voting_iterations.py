@@ -196,7 +196,12 @@ class TestSimulateVotingIterations:
             assert r1_cmp == r2_cmp
 
     def test_different_seeds_differ(self):
-        medias = _make_separable_clips(n_per_cat=10)
+        # Overlapping (not separable) categories on purpose: the cost sequence
+        # only reflects the seed while the task is hard enough for the vote
+        # ordering to matter.  On separable clips every seed converges to a
+        # perfect cut (cost 0 at every t), so the sequences coincide and the
+        # assertion below would be measuring nothing.
+        medias = _make_overlapping_clips(n_per_cat=10)
         rows1 = simulate_voting_iterations(medias, "alpha", seed=42, calibrate_count=1)
         rows2 = simulate_voting_iterations(medias, "alpha", seed=99, calibrate_count=1)
         # Different seeds should produce different vote orderings / splits,
@@ -205,6 +210,24 @@ class TestSimulateVotingIterations:
         costs1 = [r["cost"] for r in rows1]
         costs2 = [r["cost"] for r in rows2]
         assert costs1 != costs2
+
+    def test_separable_clips_converge_to_a_usable_cut(self):
+        """Issue #2781: on separable categories the threshold must not land
+        above every score once enough votes exist.
+
+        The old rule pinned the cut to the lowest held-out calibration
+        positive - a fold-model-scale value applied to final-model scores -
+        which on saturating folds rejected the whole collection (FNR 1.0 /
+        FPR 0.0) at scattered vote counts, recovering on the next vote.
+        """
+        medias = _make_separable_clips(n_per_cat=10)
+        for seed in (42, 99):
+            rows = simulate_voting_iterations(medias, "alpha", seed=seed, calibrate_count=1)
+            # Row 0 is the 1-good/1-bad cold start, below the calibration
+            # floor (fewer than 4 votes returns the 0.5 default), so it is not
+            # governed by the conformal rule.
+            for row in rows[1:]:
+                assert row["fnr"] < 1.0, f"seed {seed}, t={row['t']}: cut rejected every positive"
 
     def test_t_values_monotonically_increase(self):
         medias = _make_separable_clips(n_per_cat=6)

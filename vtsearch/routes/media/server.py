@@ -294,20 +294,17 @@ def _validate_origin_param_confinement(origin: dict) -> None:
     param must pass the same confinement check ``_load_from_origin`` applies
     before it can point a filesystem-backed source (server_folder,
     server_files) outside the user's allowed directory.  A no-op in
-    single-user mode, where the base dir is unrestricted.
+    single-user mode, where the base dir is unrestricted.  URL params are
+    exempt from the path check: the URL-backed sources re-run
+    ``validate_url`` at fetch time (see
+    :mod:`vtscore.security.origin_validation`).
     """
-    from vtscore.security.path_validation import get_file_access_base_dir, validate_server_filepath
+    from vtscore.security.origin_validation import check_origin_param_confinement
 
-    params = origin.get("params") if isinstance(origin, dict) else None
-    if not isinstance(params, dict):
-        return
-    base = get_file_access_base_dir()
-    for val in params.values():
-        if isinstance(val, str) and ("/" in val or "\\" in val):
-            try:
-                validate_server_filepath(val, base_dir=base)
-            except ValueError as exc:
-                abort(400, message=str(exc))
+    try:
+        check_origin_param_confinement(origin)
+    except ValueError as exc:
+        abort(400, message=str(exc))
 
 
 @media_server_bp.route("/api/example-sort-origin", methods=["POST"])
