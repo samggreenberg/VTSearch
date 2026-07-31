@@ -44,7 +44,10 @@ it rather than re-simulating the vote order.
   `calibrate_count` when votes are scarce so the pooled calibration set grows,
   or simply suppressing the confident framing of the Inclusion budget in the UI
   until enough votes exist. Measure with the existing harness before changing
-  production; the 12-vote cell is the one that matters.
+  production; the 12-vote cell is the one that matters. The pre-registered
+  measurement spec for these options is
+  [`coldstart-threshold-experiment.md`](coldstart-threshold-experiment.md)
+  (issue #2788).
 
 <!-- item-sep -->
 
