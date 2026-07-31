@@ -254,12 +254,34 @@ def conformal_threshold(
     * A **false-positive guard** for ``k <= 0``: the threshold stays at or
       above the ``1 - BASE * 2^k`` quantile of the calibration *negative*
       scores, so overlap-heavy tasks keep FPR control, and above a walk *up*
-      the positive score distribution (``q_pos(k) = QPOS_MAX * |k|/10``: at
-      -10 only the top-quartile-of-positives region remains - "just the
-      surest matches").
+      toward the positive score distribution.  The walk interpolates linearly
+      in score space from the **gap midpoint** at ``k = 0`` to the
+      ``QPOS_MAX`` quantile of positives at ``k = -10`` (at -10 only the
+      top-quartile-of-positives region remains - "just the surest matches").
 
-    Every component quantile is monotone non-increasing in ``k``, so their
-    min/max composition is too: the threshold is monotone non-increasing in
+    The **gap midpoint** is what keeps the default cut usable.  When the
+    classes separate cleanly there is an empty band between the top of the
+    negatives (``fp_guard``) and the bottom of the positives; *every* cut
+    inside that band has identical empirical error on the calibration set, so
+    the band's top edge - the single lowest calibration positive - is an
+    arbitrary choice among equals, and it is the worst one available:
+
+    * It is an **extreme order statistic** over a handful of held-out votes,
+      so it moves violently from one vote to the next (issue #2781's "the
+      threshold jumps to the top, then it's normal again one click later").
+    * It is measured on the **fold models'** score scale but applied to the
+      **final** model's scores.  The fold models train on half the votes and
+      saturate, so their lowest held-out positive routinely lands above every
+      score the final model produces - a cut that admits nothing at all, not
+      even the items the user personally voted Good.
+
+    Sitting in the middle of the band is the max-margin choice among cuts the
+    calibration data cannot distinguish, and it costs nothing in FN budget:
+    the midpoint is strictly below every calibration positive, so a cleanly
+    separated task still spends none of its miss budget.
+
+    Every component is monotone non-increasing in ``k``, so their min/max
+    composition is too: the threshold is monotone non-increasing in
     inclusion **by construction**.  Raising inclusion can only grow the
     included set, and the sets are nested (everything included at ``k`` stays
     included at ``k + 1``) - which is what makes "cut off at Inclusion 1,
@@ -296,7 +318,18 @@ def conformal_threshold(
             # above the k=0 cut when the budget goes unspent there.
             return min(fn_cap, _threshold_at(0))
         fp_guard = float(np.quantile(neg, 1.0 - CONFORMAL_BASE_BUDGET * 2.0**k))
-        walk = float(np.quantile(pos, CONFORMAL_QPOS_MAX * -k / 10.0))
+        # Midpoint of the band the calibration data cannot resolve: from the
+        # top of the negatives up to the lowest positive.  Collapses to
+        # ``fp_guard`` under class overlap (no band), so the FPR-controlled
+        # regime is untouched - only the cleanly-separated case moves.
+        gap_mid = (fp_guard + max(fp_guard, float(np.min(pos)))) / 2.0
+        # Walk from that midpoint at k=0 up to the QPOS_MAX positive quantile
+        # at k=-10, linearly in score space.  Interpolating on values rather
+        # than on quantile positions keeps the knob's stops evenly spaced even
+        # when only a handful of calibration positives exist (a quantile walk
+        # over 4 points has 4 stops; this one always has 11).
+        top = float(np.quantile(pos, CONFORMAL_QPOS_MAX))
+        walk = gap_mid + (-k / 10.0) * max(0.0, top - gap_mid)
         return min(fn_cap, max(fp_guard, walk))
 
     return _threshold_at(inclusion_value)
