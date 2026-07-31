@@ -27,16 +27,12 @@ is significantly larger, calibration is the bottleneck and a max-pool-aware fix
 can save the tree; if it loses at the oracle too, no threshold rule can save it
 and the line of inquiry closes.
 
-Secondary question, same instrumentation: the runaway-threshold bug. The
-issue reports a learned threshold landing far above *all* positives and
-negatives (FNR 1.0 / FPR 0, cost 1.0), self-healing one vote later. The prime
-suspect is the `NO_GOOD_THRESHOLD = 2.0` sentinel (above every sigmoid score
-by construction) leaking out of an early-return in
-`compute_fold_orderings` / `threshold_from_fold_orderings`. The harness runs
-thousands of independent train-and-calibrate steps, so it can measure the
-incidence, the vote counts at which it fires, which code path produced it, and
-whether the next step recovers — matching or refuting the "jumps back one
-click later" observation.
+Background: the runaway-threshold bug this issue also reported (a cut landing
+above *all* positives and negatives, FNR 1.0 / FPR 0, self-healing one vote
+later) is fixed — it was the conformal rule pinning the cut to the lowest
+held-out calibration positive, not the `NO_GOOD_THRESHOLD` sentinel, which is
+unreachable at the default `calibration_fraction`. The `degenerate` metric
+below is retained as a regression watch, not as an open question.
 
 ## Arms
 
@@ -151,10 +147,9 @@ votes per trajectory.
   datasets; SigLIP-L matches SigLIP's regret (calibration quality should not
   depend on embedding dimensionality). Caltech (binary voting, clean classes)
   shows the least regret of all cells.
-- **The bug is the sentinel.** Degenerate thresholds occur at low vote counts,
-  carry `no_good_sentinel` provenance, and vanish on the next step. If instead
-  degenerate steps show `conformal` provenance, the bug is in the quantile
-  rule itself and the study's per-step orderings will localize it.
+- **Degenerate thresholds stay gone.** With the gap-midpoint cut in place,
+  `degenerate` should be ~0 across every arm and vote count. Any recurrence is
+  a regression, not a new discovery.
 
 ## Decision rules (pre-registered)
 
@@ -167,9 +162,10 @@ votes per trajectory.
 2. If `max_patch_pca_hac` loses at the oracle too: the tree's extra nodes
    genuinely rank worse at the operating region; close the multi-scale-tree
    line and record the verdict in the Max-Patch report's follow-ups.
-3. Any degenerate-threshold steps observed → file a bug issue with the
-   provenance histogram and the smallest reproducing (n_good, n_bad, grouped?)
-   configuration; a fix is its own PR, not part of this study.
+3. Any degenerate-threshold steps observed → regression in the gap-midpoint
+   cut; file a bug issue with the provenance histogram and the smallest
+   reproducing (n_good, n_bad, grouped?) configuration; a fix is its own PR,
+   not part of this study.
 4. Inclusion-budget violations under the grouped path materially worse than
    the single-vector study's (excess FNR > 0.05 at t ≥ 100 for k ≥ 1) →
    reopen the cold-start item in `inclusion-calibration-bias.md` with the
