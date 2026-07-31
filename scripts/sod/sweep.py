@@ -660,7 +660,7 @@ def main() -> int:
         "--leaf-seeding",
         nargs="+",
         choices=("topk", "spread"),
-        default=["topk"],
+        default=["spread"],
         help="hac proposal only; SWEEP AXIS (pass multiple → one row each). How leaf seeds are placed. "
         "'topk' (default) = the K highest-saliency patches; 'spread' = greedy peaks with spatial non-max "
         "suppression so seeds spread across objects (small objects can win a seed). Non-default gets its "
@@ -670,7 +670,7 @@ def main() -> int:
         "--leaf-assign",
         nargs="+",
         choices=("spatial", "feature"),
-        default=["spatial"],
+        default=["feature"],
         help="hac proposal only; SWEEP AXIS (pass multiple → one row each). How patch cells bind to seeds. "
         "'spatial' (default) = nearest seed by grid distance (Voronoi); 'feature' = argmax of beta*cosine "
         "+ (1-beta)*spatial (see --leaf-beta), so leaves follow content. Non-default gets its own cache slug.",

@@ -269,4 +269,10 @@ python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir do
 
 # DINOv3 HAC interpretability threshold test
 python scripts/sod/sweep.py --datasets coco --classes "stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --leaf-seeding spread --leaf-assign feature --hac-k 32 --iterations 3 --resolution 448 --max-labels 50 --dinov3-model vitl16 --out-dir docs/experiments/sod-sweep/coco-stopsign-dinov3-hac-3-iterations-oracle --viz --viz-band all --min-box-frac 0.05 --labeling-trace --show-oracle
+
+# DINOv3 HAC alpha = 0.5 beta = 0.5 vs SigLIP2 whole
+python scripts/sod/sweep.py --datasets coco --classes "stop sign,fire hydrant,traffic light,cat,dog,car,train" --cache-dir docs/experiments/sod-sweep/cache --embedders siglip2,dinov3 --proposals whole,hac --hac-k 32 --dinov3-model vitl16 --resolution 448 --iterations 5 --max-labels 50 --min-box-frac 0.03 --viz --summary --out-dir docs/experiments/sod-sweep/cmp1-siglip-whole-vs-dino-hac-p2
+
+# Leaf sweep test
+python scripts/sod/sweep.py --datasets coco --classes "stop sign,fire hydrant,traffic light,cat,dog,car,train" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --leaf-seeding topk spread --leaf-assign spatial feature --hac-k 32 --dinov3-model vitl16 --resolution 448 --iterations 5 --max-labels 60 --min-box-frac 0.03 --viz --summary --out-dir docs/experiments/sod-sweep/cmp2-leaf-topk-spatial-vs-spread-feature-p2
 ```
