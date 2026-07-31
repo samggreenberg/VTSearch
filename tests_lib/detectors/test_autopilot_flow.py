@@ -28,6 +28,7 @@ from vtscore.eval.autopilot_flow import (
     STABLE_MAX_THRESHOLD,
     STABLE_RATE_THRESHOLD,
     AutopilotFlow,
+    Status,
     app_has_detector,
     next_phase,
     smart_status,
@@ -73,10 +74,16 @@ def rows():
     return _fidelity_rows()
 
 
-def _phase(good, bad, *, smart="red", stable="red", span="red", remaining=1000):
-    return next_phase(
-        good, bad, remaining_unlabeled=remaining, smart=smart, stable=stable, span=span
-    )
+def _phase(
+    good: int,
+    bad: int,
+    *,
+    smart: Status = "red",
+    stable: Status = "red",
+    span: Status = "red",
+    remaining: float = 1000,
+) -> str:
+    return next_phase(good, bad, remaining_unlabeled=remaining, smart=smart, stable=stable, span=span)
 
 
 class TestPortedConstants:
@@ -290,9 +297,7 @@ class TestSelectorPhaseParity:
         seed = {i: float(i) for i in range(1, 11)}
         # A model that would rank id 10 lowest; the faithful pick must not use it.
         scores = {i: (0.0 if i == 10 else 1.0) for i in range(1, 11)}
-        ctx = self._ctx(
-            list(range(1, 11)), phase="bad", seed_scores=seed, scores=scores, model=object()
-        )
+        ctx = self._ctx(list(range(1, 11)), phase="bad", seed_scores=seed, scores=scores, model=object())
         assert select_next("autopilot", ctx) != 10
 
     def test_bad_phase_picks_the_middle_of_the_text_sort_not_the_bottom(self):
@@ -344,7 +349,6 @@ class TestSelectorPhaseParity:
 
 class TestHarnessIntegration:
     """End-to-end: the simulated trajectory visits the app's trained states."""
-
 
     def test_no_user_visible_threshold_before_quorum(self, rows):
         for r in rows:
