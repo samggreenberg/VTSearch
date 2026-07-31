@@ -13,14 +13,37 @@ every score) are dominated by the `too_few_default` = 0.5 fallback in
 `vtscore/training/thresholds.py::compute_fold_orderings` (the `n < 4` /
 <2-per-class early returns), concentrated at a modal total of **4 votes**
 (measured: 750 steps across the #2781 study, unchanged by #2784, ~39%
-self-healing). The mechanism is structural: Autopilot's vote order is 3 Goods
-then 4 Bads, so the first trainable step is always exactly 3G+1B — one
-negative, so no stratified fold split can form, so the threshold is a flat 0.5
-against a saturated 4-vote model's scores.
+self-healing).
 
-Which cold-start rule removes the degenerates without making the cut *worse*
-(a non-degenerate but mid-mass threshold that admits half the dataset is not a
-win)?
+**The measured incidence does not describe the app's Autopilot flow.** The
+harness trains and thresholds on every step from the first `(≥1 good, ≥1 bad)`
+pair (`voting_iterations.py`: `if not good_votes or not bad_votes: continue`),
+so with Autopilot's goods-first vote order its first trained step is always
+3G+1B — one negative, no stratified split, flat 0.5. The **app** does not train
+there. Autopilot's `bad` phase stays on the *text/media* sort
+(`label-view.component.ts`: `phase === 'bad'` → `setSortMode(earlySortMode)`,
+`setSelectMode('hard')`, where `hard` picks the unlabeled item nearest the
+current sort's threshold index — the middle of the text ranking). The first
+learned sort fires at the `hard` phase, i.e. at quorum: 3 good + 4 bad, which
+always clears the ≥2-per-class guard and takes the conformal path.
+
+So the study asks two questions:
+
+1. **How much cold-start degeneracy survives a production-faithful train
+   cadence?** Re-baseline with the harness deferring its first train to
+   Autopilot's quorum, matching the app. If the `too_few_default` bar
+   collapses, the headline number was a harness artifact and the remaining
+   work is scoped to the doors below.
+2. **For the doors that genuinely reach `too_few`, which rule wins?** Those
+   are: manual **Sort → Learned**, enabled at `good > 0 && bad > 0`
+   (`VoteStateService.learnedSortAvailable`) so a user can train at 1G+1B;
+   Autopilot **`retrainMode`**, which *does* run learned sort during the
+   good/bad phases against an existing (possibly tiny) labelset; the
+   **Find/labelset** path (`train_and_threshold`); and
+   **`train_detector_from_origins`** at detector load. All are small-labelset
+   states, where extra calibration work is cheap. The bar is removing the
+   degenerates without making the cut *worse* — a non-degenerate but mid-mass
+   threshold that admits half the dataset is not a win.
 
 ## Arms
 
@@ -32,7 +55,14 @@ each cell prices one trajectory's training and scores all arms' thresholds on
 it.
 
 - **`baseline`** — dev + #2784 as-is: `too_few_default` 0.5, `calibrate_count`
-  2.
+  2, harness train-every-step cadence. Reproduces the #2781 study's numbers;
+  the reference the others are read against.
+- **`app_cadence`** — `baseline`'s rule, but the harness defers its first
+  train to Autopilot's quorum (3 good **and** 4 bad) and trains every step
+  after, matching what the app does. Not a production change — it is the
+  correction that tells us how much of the measured `too_few_default` bar any
+  user ever sees on the Autopilot path. If this arm zeroes the bar, arms
+  below are scoped to the manual / retrain / labelset doors only.
 - **`gmm_fallback`** — when the fold split cannot form (the `too_few` early
   returns), threshold with `calculate_gmm_threshold(all_scores)` over the full
   population score distribution instead of 0.5. Non-degenerate by construction
@@ -51,20 +81,30 @@ it.
 - **`combined`** — `gmm_fallback` + `fold_boost` together (they target
   disjoint steps: votes ≤ 4-with-degenerate-class-counts vs votes 5–15).
 
+`gmm_fallback` has a continuity argument beyond the mechanics: during the
+`good`/`bad` phases the user is *already* looking at a cutoff drawn by
+`calculate_gmm_threshold` over the text-sort score distribution, and the
+safe-threshold ramp below 6 labels is pure GMM as well. Falling back to GMM on
+the learned scores keeps a manual early Learned sort on the same rule the
+surrounding UI is already using, rather than a flat 0.5 that means nothing
+against the model's actual score range.
+
 **Pre-registered non-arms** (parked; revisit only if the arms above fail their
 decision rules):
 
 - *Population-interpolated cold-start cut* (LOO-held-out positives blended
   against population score quantiles) — design-heavy; `gmm_fallback` is the
   cheap version of the same idea.
-- *Autopilot interleave* (G,G,B,B order so a 2-per-class split exists at 4
-  votes) — every path from 0 votes to quorum still passes through 1-of-a-class
-  trained states (now at 2–3 votes), so it only pays off combined with a
-  fallback rule anyway, and it changes the selector and the UX, not just the
-  threshold.
-- *Requiring extra negatives or positives before quorum* (raising
-  `goodToStart` / `badToStart`) — moves the modal step without removing it;
-  the <2-per-class window is unavoidable under any goods-first order.
+- *Raising `goodToStart` / `badToStart`, or interleaving the vote order* —
+  Autopilot already defers its first train past both phase targets, so these
+  change which items get voted, not whether a degenerate threshold is
+  computed. They are not levers on this bug.
+- *Gating the manual Sort → Learned control on ≥2 votes per class* — closes
+  the largest remaining door by making the app's manual path do what Autopilot
+  already does. It is a UX change with no threshold-rule content, so it is not
+  an arm here; if `app_cadence` shows the residual exposure is dominated by
+  the manual door, this becomes the cheapest fix and belongs with the
+  UI-suppression work below.
 
 ## Datasets and cells
 
@@ -87,7 +127,9 @@ from trajectory count, not trajectory length. Cells (one SLURM task each):
 calibration-study cell. Vote trajectories are identical across threshold arms
 through at least vote 7 (the Good/Bad phases select by scores, not by
 threshold; the threshold first enters selection at the Hard phase), so the
-early-step comparisons are tightly paired where it matters.
+early-step comparisons are tightly paired where it matters — and `app_cadence`
+shares its trajectory with `baseline` exactly, differing only in which steps
+get a threshold at all.
 
 ## Metrics (per step t, on the held-out test split)
 
@@ -96,7 +138,14 @@ Existing harness columns (`threshold`, `threshold_provenance`, `degenerate`,
 derived in the summary stage:
 
 - **Degenerate incidence by provenance per step**, t ∈ [4, 30] — the headline
-  plot; `gmm_fallback` should zero the `too_few_default` bar.
+  plot; `gmm_fallback` should zero the `too_few_default` bar, and
+  `app_cadence` should show how much of that bar exists on the Autopilot path
+  in the first place.
+- **Autopilot-reachable share** — fraction of `too_few_default` steps that
+  survive the `app_cadence` restriction. This is the number that sizes the
+  whole issue: if it is ~0, the production fix is scoped to the manual /
+  retrain / labelset doors and the correct first deliverable is the harness
+  cadence fix, not a threshold-rule change.
 - **Time-to-first-non-degenerate** and time-to-first-`conformal`-provenance
   step, per trajectory.
 - **Cold-start regret** — mean `cost − oracle_cost` over t ≤ 20, and the
@@ -114,6 +163,11 @@ derived in the summary stage:
 
 ## Hypotheses (pre-registered, honest priors)
 
+- **`app_cadence` removes nearly all of the `too_few_default` steps.** Under
+  Autopilot's quorum the first trained step is 3G+4B, which always has ≥2 per
+  class; the only survivors should come from trajectories where the vote
+  sequence cannot supply 4 negatives early (tiny or highly imbalanced
+  categories). Predicted survival < 10% of the 750.
 - `gmm_fallback` zeroes the `too_few_default` degenerates and does not worsen
   cold-start regret in any (dataset, regime) cell. Risk: mid-mass cuts on
   unimodal score distributions show up as `threshold_percentile` near 50 with
@@ -128,17 +182,26 @@ derived in the summary stage:
 
 ## Decision rules (pre-registered)
 
-1. Adopt `gmm_fallback` in production iff `too_few_default` degenerates → ~0
+1. **Scope first.** If `app_cadence` leaves < 10% of the `too_few_default`
+   steps, record that the headline incidence was a harness artifact: correct
+   the harness's train cadence (its own change — every study built on it
+   over-weights the pre-quorum steps), restate #2788's severity against the
+   surviving doors, and judge the arms below on the manual / retrain /
+   labelset regime rather than on the raw count.
+2. Adopt `gmm_fallback` in production iff `too_few_default` degenerates → ~0
    **and** cold-start regret (t ≤ 20) is not worse than baseline by more than
-   0.02 in any (dataset, regime) cell.
-2. Adopt `fold_boost` iff it cuts conformal-provenance degenerate steps at
+   0.02 in any (dataset, regime) cell. This holds regardless of rule 1: the
+   surviving doors are real, and the fix is cheap and rule-consistent with the
+   text-sort cutoff the user is already looking at.
+3. Adopt `fold_boost` iff it cuts conformal-provenance degenerate steps at
    t ∈ [5, 15] by ≥ 50% **or** shrinks the t = 12 budget excess, without
-   failing late-window non-inferiority.
-3. If `gmm_fallback` fails on mid-mass cuts (rule-1 regret margin breached
+   failing late-window non-inferiority. Note this window is *post-quorum*, so
+   unlike the `too_few` bar it is fully Autopilot-reachable.
+4. If `gmm_fallback` fails on mid-mass cuts (rule-2 regret margin breached
    with `threshold_percentile` mid-range at t = 4), fall back to evaluating
    the parked population-interpolation cut — as a new pre-registered arm, not
    a post-hoc tweak.
-4. Either adoption is its own production PR against issue #2788, with the
+5. Each adoption is its own production PR against issue #2788, with the
    plan-file item below pruned when it ships.
 
 ## Dependencies
@@ -154,11 +217,17 @@ mirroring how the remedial re-pools shared fold models).
 
 ## Independent of this study
 
-Suppressing the confident Inclusion framing in the UI until a valid
-calibration exists (the third option issue #2788 lists) is a presentation
-change, not a threshold-rule change: it needs a "provisional threshold" flag
-in the training response and a frontend gate, no measurement. It is
-deliberately out of this study's scope and can ship on its own.
+Two changes need no measurement and can ship on their own:
+
+- **Suppress the confident Inclusion framing** until a valid calibration
+  exists (the third option issue #2788 lists) — a "provisional threshold" flag
+  on the training response plus a frontend gate.
+- **Gate the manual Sort → Learned control** on ≥2 votes per class, so the
+  app's manual path defers the way Autopilot's phases already do
+  (`learnedSortAvailable` currently only requires one of each). Whether this
+  is the *main* fix depends on rule 1's Autopilot-reachable share, but it is
+  independently defensible: a threshold computed from a 1-vs-1 fit is not
+  something to show a user with confidence.
 
 ## Open work
 
@@ -168,6 +237,15 @@ deliberately out of this study's scope and can ship on its own.
   evaluated on the shared per-step trajectory (fold orderings + population
   scores), emitting one row per (step, arm); `baseline` must stay
   byte-for-byte the calibration study's behaviour.
+
+<!-- item-sep -->
+
+- **Add the `app_cadence` train gate to the harness** — an opt-in mode that
+  defers the first train to Autopilot's quorum (3 good and 4 bad) instead of
+  the first `(≥1 good, ≥1 bad)` pair, so a simulated trajectory visits the
+  same trained states the app does. Default-off for byte-for-byte
+  reproducibility of the existing studies; if rule 1 fires, promoting it to
+  the default is its own change with its own re-baselining.
 
 <!-- item-sep -->
 
