@@ -5,6 +5,10 @@ Throwaway experiment script supporting the patch-embedder design
 ``α ∈ {0.3, 0.5, 0.7}`` over a sample of Places365 validation images,
 renders the leaf + HAC-internal bounding-box overlays as PNGs, and
 writes a markdown report under ``docs/experiments/hac-tree-sweep/``.
+Also writes a large standalone attention-saliency overlay per image
+(``<out_dir>/saliency/<stem>_saliency.jpg``; on by default, disable with
+``--no-saliency-image``) - the full source-resolution version of the small
+per-node thumbnail heatmap, for eyeballing where the model attends.
 
 Places365 is closer to the application's actual imagery (varied
 real-world scenes - indoor rooms, outdoor natural + man-made
@@ -492,6 +496,17 @@ def _saliency_full_rgb(image: Image.Image, saliency: np.ndarray) -> np.ndarray:
     a = 0.6
     blended = base * (1.0 - a) + heat.astype(np.float32) * a
     return np.clip(blended, 0, 255).astype(np.uint8)
+
+
+def _save_saliency_image(attn_rgb: np.ndarray, path: Path) -> None:
+    """Save a full-image-resolution attention-saliency overlay as a standalone JPG.
+
+    *attn_rgb* is the ``(H, W, 3)`` uint8 overlay from :func:`_saliency_full_rgb`
+    (the same heatmap the tiny node thumbnails draw against, but at the source
+    image's own resolution — a big, standalone view of where the model attends).
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(np.ascontiguousarray(attn_rgb, dtype=np.uint8), mode="RGB").save(path, quality=90, optimize=True)
 
 
 def _layout_tree(regions: list[RegionVector], k: int) -> tuple[list[float], list[int], int]:
@@ -1126,6 +1141,9 @@ def _render_source_pca(
         # K/α/pca-independent, so it's reused across every composite for this image.
         attn = _saliency_full_rgb(image, np.asarray(out.patch_saliency))
         attn_corner = _draw_gt_boxes(attn, gt) if gt else attn
+        if args.saliency_image:
+            sal_stem = f"{pos:02d}_{label}".replace("/", "__")
+            _save_saliency_image(attn, args.out_dir / "saliency" / f"{sal_stem}_saliency.jpg")
         n_comp = 0
         for k in k_values:
             for alpha in alpha_values:
@@ -1377,6 +1395,16 @@ def main() -> None:
         ),
     )
     ap.add_argument(
+        "--saliency-image",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Also write a large, standalone attention-saliency overlay per image (the full "
+            "source-resolution version of the small node-thumbnail heatmap) to "
+            "<out_dir>/saliency/<stem>_saliency.jpg. On by default; pass --no-saliency-image to skip."
+        ),
+    )
+    ap.add_argument(
         "--image-dir",
         type=Path,
         default=None,
@@ -1563,6 +1591,11 @@ def _run_backbone_pass(
         )
         tree_path = args.out_dir / "trees" / f"{idx:02d}_{category}_{path.stem}.jpg"
         tree.save(tree_path, quality=88, optimize=True)
+        if args.saliency_image:
+            _save_saliency_image(
+                _saliency_full_rgb(image, np.asarray(out.patch_saliency)),
+                args.out_dir / "saliency" / f"{idx:02d}_{category}_{path.stem}_saliency.jpg",
+            )
         print(
             f"  [{idx}] {image_label}: {'cache' if cached else 'forward'} {timings[-1]:.2f}s, tree -> {tree_path.name}"
         )
