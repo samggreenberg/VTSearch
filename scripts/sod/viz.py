@@ -116,6 +116,123 @@ def _save_captioned(img: Image.Image, out_path: Path, caption: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Confidence-sorted prediction gallery (--confidence-gallery)
+# ---------------------------------------------------------------------------
+
+
+def _hstack2(left: Image.Image, right: Image.Image) -> Image.Image:
+    """Two RGB images side by side; the right is scaled to the left's height."""
+    left = left.convert("RGB")
+    right = right.convert("RGB")
+    if right.height != left.height:
+        rw = max(1, round(right.width * left.height / right.height))
+        right = right.resize((rw, left.height))
+    out = Image.new("RGB", (left.width + right.width, left.height), (255, 255, 255))
+    out.paste(left, (0, 0))
+    out.paste(right, (left.width, 0))
+    return out
+
+
+def _save_caption_pil(img: Image.Image, out_path: Path, caption: str) -> None:
+    """Fast (matplotlib-free) captioned save: a dark bar with *caption* above *img*.
+
+    The confidence gallery renders every test image (thousands per class), so it can't
+    afford a matplotlib figure per image the way :func:`_save_captioned` does."""
+    im = img.convert("RGB")
+    bar_h = 20
+    canvas = Image.new("RGB", (im.width, im.height + bar_h), (18, 18, 18))
+    canvas.paste(im, (0, bar_h))
+    ImageDraw.Draw(canvas).text((4, 5), caption, fill=(240, 240, 240))
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    canvas.save(out_path, quality=88)
+
+
+def _confidence_panel(img: Image.Image, *, good: bool, best_box: Box, saliency: "np.ndarray | None") -> Image.Image:
+    """One test image's composite for the confidence gallery.
+
+    HAC cells (``saliency`` given): a predicted-good (score >= thr) shows the original with a
+    blue box on the top-scoring region + an attention-saliency-over-grayscale panel on the
+    right; a predicted-bad shows the plain original + a grayscale panel with the top-scoring
+    region in a red box. Non-HAC cells (``saliency is None``): just the plain image."""
+    if saliency is None:
+        return img.convert("RGB")
+    if good:
+        left = _draw(img, [], None, None, snap=best_box)  # blue box on the argmax region
+        right = Image.fromarray(_saliency_overlay(img, saliency))
+    else:
+        left = img.convert("RGB")  # no box on a predicted-bad
+        right = _draw(img.convert("L").convert("RGB"), [], best_box, None)  # red argmax box over grayscale
+    return _hstack2(left, right)
+
+
+def render_confidence_gallery(
+    ds: SodDataset,
+    split,
+    *,
+    cache_dir: Path,
+    out_dir: Path,
+    dataset: str,
+    cls: str,
+    embedder: str,
+    proposal: str,
+    alpha: float,
+    slug: str | None,
+    predict,
+    thr: float,
+    t: int,
+    seed: int,
+) -> None:
+    """Every test image, sorted by descending detector confidence, one captioned composite
+    each (see :func:`_confidence_panel`). Additional to the TP/FP/FN/TN split gallery; one
+    call per *seed*'s final head (output namespaced under ``seed{seed}/``). Files are named
+    ``{rank:04d}_conf{score}_id{iid}_{good|bad}.png`` so they sort by confidence."""
+    reg = _EMBEDDER_ALIASES.get(embedder, embedder)
+    regions_root = cache_dir / "regions" / dataset / reg
+    slug = _resolve_slug(regions_root, proposal, alpha, slug)
+    if slug is None:
+        print(f"  [conf-gallery] skip {embedder}/{proposal}: no cache under {regions_root}", flush=True)
+        return
+    regions_dir = regions_root / slug
+    is_hac = proposal == "hac"
+
+    scored: list[tuple[int, float, Box, "np.ndarray | None"]] = []
+    for iid, _is_pos in [(i, True) for i in split.test_pos] + [(i, False) for i in split.test_neg]:
+        p = regions_dir / f"{iid}.npz"
+        if not p.exists():
+            continue
+        with np.load(p) as z:
+            vecs, boxes = z["vecs"], z["boxes"]
+            saliency = z["saliency"] if ("saliency" in z and is_hac) else None
+        if vecs.shape[0] == 0:
+            continue
+        s = np.asarray(predict(vecs))
+        best = int(s.argmax())
+        scored.append((iid, float(s[best]), tuple(float(b) for b in boxes[best]), saliency))
+
+    scored.sort(key=lambda r: r[1], reverse=True)
+    alpha_tag = f"_a{alpha}" if proposal == "hac" else ""
+    gdir = out_dir / "confidence_gallery" / f"{dataset}_{slugify(cls)}_{embedder}_{proposal}{alpha_tag}" / f"seed{seed}"
+    n_good = sum(1 for r in scored if r[1] >= thr)
+    print(
+        f"  [conf-gallery] {embedder}/{proposal} seed{seed} (t={t}) thr={thr:.3f}: {len(scored)} test imgs "
+        f"({n_good} good / {len(scored) - n_good} bad) -> {gdir.parent.name}/{gdir.name}",
+        flush=True,
+    )
+    for rank, (iid, score, best_box, saliency) in enumerate(scored):
+        try:
+            img = ds.load_image(iid)
+        except Exception:
+            continue
+        good = score >= thr
+        panel = _confidence_panel(img, good=good, best_box=best_box, saliency=saliency)
+        _save_caption_pil(
+            panel,
+            gdir / f"{rank:04d}_conf{score:.3f}_id{iid}_{'good' if good else 'bad'}.png",
+            f"id={iid} conf={score:.2f} thr={thr:.2f}",
+        )
+
+
+# ---------------------------------------------------------------------------
 # HAC region-tree interpretability (labeling trace)
 # ---------------------------------------------------------------------------
 
