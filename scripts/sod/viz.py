@@ -147,21 +147,23 @@ def _save_caption_pil(img: Image.Image, out_path: Path, caption: str) -> None:
     canvas.save(out_path, quality=88)
 
 
-def _confidence_panel(img: Image.Image, *, good: bool, best_box: Box, saliency: "np.ndarray | None") -> Image.Image:
+def _confidence_panel(
+    img: Image.Image, *, good: bool, best_box: Box, best_mask: "np.ndarray | None", is_hac: bool, gt=()
+) -> Image.Image:
     """One test image's composite for the confidence gallery.
 
-    HAC cells (``saliency`` given): a predicted-good (score >= thr) shows the original with a
-    blue box on the top-scoring region + an attention-saliency-over-grayscale panel on the
-    right; a predicted-bad shows the plain original + a grayscale panel with the top-scoring
-    region in a red box. Non-HAC cells (``saliency is None``): just the plain image."""
-    if saliency is None:
+    HAC cells: the right panel is always the top-scoring (highest-MLP) node's **own patches**
+    (a colour cell-crop, like the training nodes). On the left: a predicted-good (score >= thr)
+    draws a blue box on that node plus the green ground-truth box(es) when the image is a *true*
+    positive; a predicted-bad draws a red box on that node. Non-HAC cells: just the plain image."""
+    if not is_hac:
         return img.convert("RGB")
+    full = np.asarray(img.convert("RGB"), dtype=np.uint8)
+    right = _cell_thumb(full, best_mask, best_box, (img.height, img.height))  # highest-MLP node's patches (colour)
     if good:
-        left = _draw(img, [], None, None, snap=best_box)  # blue box on the argmax region
-        right = Image.fromarray(_saliency_overlay(img, saliency))
+        left = _draw(img, list(gt), None, None, snap=best_box)  # green GT (true positives) + blue box on the node
     else:
-        left = img.convert("RGB")  # no box on a predicted-bad
-        right = _draw(img.convert("L").convert("RGB"), [], best_box, None)  # red argmax box over grayscale
+        left = _draw(img, [], best_box, None)  # red box on the node
     return _hstack2(left, right)
 
 
@@ -195,19 +197,21 @@ def render_confidence_gallery(
     regions_dir = regions_root / slug
     is_hac = proposal == "hac"
 
-    scored: list[tuple[int, float, Box, "np.ndarray | None"]] = []
-    for iid, _is_pos in [(i, True) for i in split.test_pos] + [(i, False) for i in split.test_neg]:
+    scored: list[tuple] = []
+    for iid, is_pos in [(i, True) for i in split.test_pos] + [(i, False) for i in split.test_neg]:
         p = regions_dir / f"{iid}.npz"
         if not p.exists():
             continue
         with np.load(p) as z:
             vecs, boxes = z["vecs"], z["boxes"]
-            saliency = z["saliency"] if ("saliency" in z and is_hac) else None
+            cell_masks = z["cell_masks"] if ("cell_masks" in z and is_hac) else None
         if vecs.shape[0] == 0:
             continue
         s = np.asarray(predict(vecs))
         best = int(s.argmax())
-        scored.append((iid, float(s[best]), tuple(float(b) for b in boxes[best]), saliency))
+        best_mask = cell_masks[best] if cell_masks is not None else None
+        gt = split.gt_boxes.get(iid, []) if is_pos else []  # green GT box only for true positives
+        scored.append((iid, float(s[best]), tuple(float(b) for b in boxes[best]), best_mask, gt))
 
     scored.sort(key=lambda r: r[1], reverse=True)
     alpha_tag = f"_a{alpha}" if proposal == "hac" else ""
@@ -218,13 +222,13 @@ def render_confidence_gallery(
         f"({n_good} good / {len(scored) - n_good} bad) -> {gdir.parent.name}/{gdir.name}",
         flush=True,
     )
-    for rank, (iid, score, best_box, saliency) in enumerate(scored):
+    for rank, (iid, score, best_box, best_mask, gt) in enumerate(scored):
         try:
             img = ds.load_image(iid)
         except Exception:
             continue
         good = score >= thr
-        panel = _confidence_panel(img, good=good, best_box=best_box, saliency=saliency)
+        panel = _confidence_panel(img, good=good, best_box=best_box, best_mask=best_mask, is_hac=is_hac, gt=gt)
         _save_caption_pil(
             panel,
             gdir / f"{rank:04d}_conf{score:.3f}_id{iid}_{'good' if good else 'bad'}.png",
@@ -980,7 +984,9 @@ def render_labeling_trace(
     labeled them, plus ``trace.csv`` / ``trace.json``. Per step, two images (named
     ``{t:03d}_{iid}_{good|bad}_*`` so they sort in labeling order):
 
-    * ``…_pred.png`` — GT green + the detector's surfacing box/score red.
+    * ``…_pred.png`` — GT green + the detector's surfacing box/score red (+ good-vote snapped
+      region blue). For a **good** vote it also appends, on the right, the snapped node's own
+      patches (a colour cell-crop) — the exact sub-image that becomes the next MLP's training positive.
     * ``…_hac.png``  — the reference-style HAC composite (see :func:`_render_hac_composite`):
       the region tree drawn twice — masked-cell pixel thumbnails on the left, the same tree
       over the inferno attention overlay on the right — with each node's MLP score and the
@@ -1040,7 +1046,16 @@ def render_labeling_trace(
                 snap_box = tuple(float(v) for v in boxes[snapped])
         snapped_by_t[e["t"]] = snapped
         # 1. Single-pred overlay: GT green + surfacing region red + snapped (next-MLP) region blue.
-        _save_captioned(_draw(img, gt, pred, e.get("surface_score"), snap=snap_box), d / f"{stem}_pred.png", caption)
+        #    For a GOOD vote, append the snapped node's own patches (colour cell-crop) on the right,
+        #    so you see exactly the sub-image that becomes the training positive.
+        pred_img = _draw(img, gt, pred, e.get("surface_score"), snap=snap_box)
+        if snapped is not None and viz is not None:
+            mask = cell_masks[snapped] if cell_masks is not None else None
+            node = _cell_thumb(
+                np.asarray(img.convert("RGB"), dtype=np.uint8), mask, boxes[snapped], (img.height, img.height)
+            )
+            pred_img = _hstack2(pred_img, node)
+        _save_captioned(pred_img, d / f"{stem}_pred.png", caption)
         # 2. The reference-style HAC composite (needs the region npz for this image).
         if viz is None:
             continue

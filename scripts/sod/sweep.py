@@ -773,8 +773,9 @@ def main() -> int:
         help="per class: in ADDITION to the TP/FP/FN/TN split gallery, emit "
         "predictions/<config>/confidence_gallery/ — EVERY test image sorted by descending "
         "detector confidence, one composite each captioned id/confidence/threshold. For hac, a "
-        "predicted-good (score>=thr) shows a blue box on the top region + attention-saliency-over-"
-        "grayscale on the right; a predicted-bad shows the top region in a red box over grayscale. "
+        "the right panel is always the top-scoring (highest-MLP) node's own patches (colour cell-crop); "
+        "on the left a predicted-good (score>=thr) draws a blue box on that node + green GT box(es) for a "
+        "true positive, a predicted-bad draws a red box on that node. "
         "Emitted per seed (seed{N}/ subdir). Renders all test images (can be thousands/class/seed).",
     )
     ap.add_argument(
