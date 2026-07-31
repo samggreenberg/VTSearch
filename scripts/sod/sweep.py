@@ -454,10 +454,10 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
         bad_to_start=args.bad_to_start,
         retrain_cadence=args.retrain_cadence,
         stop_at_done=args.stop_at_done,
-        return_finals=args.viz or args.labeling_trace,
+        return_finals=args.viz or args.labeling_trace or args.confidence_gallery,
     )
     rows: list[dict] = []
-    if args.viz or args.labeling_trace:
+    if args.viz or args.labeling_trace or args.confidence_gallery:
         cell_rows, finals = result
         rows.extend(cell_rows)
         # Prediction overlays (viz-seed, --viz) + per-iteration labeling trace
@@ -480,7 +480,7 @@ def _render_realistic_viz(args, cell, cache_root: Path, buckets, slug: str, fina
     Reopens + primes the dataset once (the loop ran after the cell's ``SodDataset`` block,
     and a fresh ``SodDataset`` has no ``load_image`` locator until ``class_split``).
     """
-    from viz import render_labeling_trace, render_predictions_realistic
+    from viz import render_confidence_gallery, render_labeling_trace, render_predictions_realistic
 
     viz_seed = args.viz_seed if args.viz_seed is not None else 0
     try:
@@ -488,7 +488,7 @@ def _render_realistic_viz(args, cell, cache_root: Path, buckets, slug: str, fina
             ds.class_split(
                 cell["class"], neg_multiple=args.neg_multiple, seed=args.split_seed, min_box_frac=args.min_box_frac
             )
-            if args.viz:
+            if args.viz or args.confidence_gallery:
                 fin = finals.get(viz_seed)
                 if fin is not None:
                     render_predictions_realistic(
@@ -512,6 +512,26 @@ def _render_realistic_viz(args, cell, cache_root: Path, buckets, slug: str, fina
                     )
                 else:
                     print(f"  [predict] skip {cell}: no final head for seed {viz_seed}", flush=True)
+            if args.confidence_gallery:
+                if not finals:
+                    print(f"  [conf-gallery] skip {cell}: no final heads", flush=True)
+                for s, f in sorted(finals.items()):
+                    render_confidence_gallery(
+                        ds,
+                        buckets,
+                        cache_dir=cache_root,
+                        out_dir=args.out_dir / "predictions" / slug,
+                        dataset=cell["dataset"],
+                        cls=cell["class"],
+                        embedder=cell["embedder"],
+                        proposal=cell["proposal"],
+                        alpha=cell["alpha"],
+                        slug=slug,
+                        predict=f["predict"],
+                        thr=f["threshold"],
+                        t=f["t"],
+                        seed=s,
+                    )
             if args.labeling_trace:
                 for s, f in sorted(finals.items()):
                     render_labeling_trace(
@@ -723,6 +743,17 @@ def main() -> int:
         "--viz-seed", type=int, default=None, help="iteration to render prediction overlays for (default: 0)"
     )
     ap.add_argument("--viz-n", type=int, default=12, help="max images per montage")
+    ap.add_argument(
+        "--confidence-gallery",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="per class: in ADDITION to the TP/FP/FN/TN split gallery, emit "
+        "predictions/<config>/confidence_gallery/ — EVERY test image sorted by descending "
+        "detector confidence, one composite each captioned id/confidence/threshold. For hac, a "
+        "predicted-good (score>=thr) shows a blue box on the top region + attention-saliency-over-"
+        "grayscale on the right; a predicted-bad shows the top region in a red box over grayscale. "
+        "Emitted per seed (seed{N}/ subdir). Renders all test images (can be thousands/class/seed).",
+    )
     ap.add_argument(
         "--viz-band",
         choices=("minmax", "std", "none", "all"),
