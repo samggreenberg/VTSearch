@@ -259,6 +259,14 @@ stub_extractor_factory  # noqa: F821
 stub_localizer_factory  # noqa: F821
 stubbed_resolver  # noqa: F821
 reset_state  # noqa: F821
+example_media_cleanup  # noqa: F821 - tests/io/test_datasource_importer_routes.py cleans SERVER_MEDIA_DIR via yield
+
+# ---------------------------------------------------------------------------
+# Mock function signatures that must match a real API but whose body
+# ignores certain kwargs. Callers pass the kwarg by name, so the parameter
+# must exist in the mock's signature even though the mock discards it.
+# ---------------------------------------------------------------------------
+expected_size  # noqa: F821 - test_detectors.py monkeypatches download_file_with_progress(url, dest_path, expected_size=..., on_progress=...)
 
 # ---------------------------------------------------------------------------
 # Test-local names that exist only to document the shape of an unpacked
