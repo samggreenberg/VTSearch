@@ -2,8 +2,8 @@
 """Plot error-vs-K curves from an SOD sweep's ``results.jsonl``.
 
 One figure per ``(dataset, class)``; all configs overlaid on shared axes, each
-curve its own color (linestyle = proposal), linear K axis. Two reference overlays
-are OFF by default:
+curve its own color; solid = the calibrated (actual) value, dashed = the oracle
+companion (with --show-oracle). Linear K axis. Two reference overlays are OFF by default:
 
   --show-oracle          add the oracle companion (dashed) on the cost + F1 plots:
                          oracle_cost = min achievable cost, oracle_f1 = max achievable
@@ -23,8 +23,6 @@ import statistics as st
 import sys
 from collections import defaultdict
 from pathlib import Path
-
-_PROPOSAL_STYLES = {"whole": ":", "sliding": "-", "dino": "--", "hac": "-."}
 
 
 def _load(path: Path) -> list[dict]:
@@ -187,14 +185,14 @@ def _plot_group(
         by_cfg[_config_key(r)].append(r)
 
     fig, ax = plt.subplots(figsize=(9, 6))
-    # One distinct color per curve (tab20 cycles through 20 well-separated hues,
-    # so adjacent curves change color frequently).
-    cmap = plt.get_cmap("tab20")
+    # One distinct color per curve. tab10 = 10 well-separated hues; unlike tab20 it
+    # doesn't pair each hue with a light/dark twin, so adjacent curves read as clearly
+    # different colours instead of dark-blue-then-light-blue shades.
+    cmap = plt.get_cmap("tab10")
     color_i = 0
     oracle_drawn = False
     for key, crows in sorted(by_cfg.items(), key=lambda kv: tuple(str(x) for x in kv[0])):
         embedder, proposal, head = key[0], key[1], key[3]
-        ls = _PROPOSAL_STYLES.get(proposal, "-")
 
         if head == "cosine":
             # Baseline: only rendered with --show-text-baseline (as a K=0 horiz ref).
@@ -204,7 +202,7 @@ def _plot_group(
             if 0 in val_k:
                 ax.axhline(
                     val_k[0],
-                    color=cmap(color_i % 20),
+                    color=cmap(color_i % 10),
                     ls=":",
                     lw=1.0,
                     alpha=0.8,
@@ -224,12 +222,12 @@ def _plot_group(
                 sks = sorted(k for k in series if k > 0)
                 if not sks:
                     continue
-                seed_color = cmap(color_i % 20)
+                seed_color = cmap(color_i % 10)
                 ax.plot(
                     sks,
                     [series[k] for k in sks],
                     color=seed_color,
-                    ls=ls,
+                    ls="-",
                     lw=1.4,
                     label=f"{cfg_label} — seed {seed}",
                 )
@@ -247,13 +245,13 @@ def _plot_group(
         ks = sorted(k for k in stats if k > 0)
         if not ks:
             continue
-        color = cmap(color_i % 20)
+        color = cmap(color_i % 10)
         color_i += 1
         ax.plot(
             ks,
             [stats[k][0] for k in ks],
             color=color,
-            ls=ls,
+            ls="-",
             lw=1.8,
             label=cfg_label,
         )
@@ -360,14 +358,13 @@ def _plot_summary_group(
         by_cfg[_config_key(r)].append(r)
 
     fig, ax = plt.subplots(figsize=(9, 6))
-    cmap = plt.get_cmap("tab20")
+    cmap = plt.get_cmap("tab10")
     color_i = 0
     oracle_drawn = False
     for key, crows in sorted(by_cfg.items(), key=lambda kv: tuple(str(x) for x in kv[0])):
-        proposal, head = key[1], key[3]
+        head = key[3]
         if head == "cosine":
             continue  # zero-shot baseline isn't a per-t curve; omit from the cross-class summary
-        ls = _PROPOSAL_STYLES.get(proposal, "-")
         cfg_label = _config_label(key)
 
         if band == "all":
@@ -378,12 +375,12 @@ def _plot_summary_group(
                 sks = sorted(k for k in series if k > 0)
                 if not sks:
                     continue
-                cls_color = cmap(color_i % 20)
+                cls_color = cmap(color_i % 10)
                 ax.plot(
                     sks,
                     [series[k] for k in sks],
                     color=cls_color,
-                    ls=ls,
+                    ls="-",
                     lw=1.3,
                     label=f"{cfg_label} — {cls}",
                 )
@@ -398,13 +395,13 @@ def _plot_summary_group(
         ks = sorted(k for k in stats if k > 0)
         if not ks:
             continue
-        color = cmap(color_i % 20)
+        color = cmap(color_i % 10)
         color_i += 1
         ax.plot(
             ks,
             [stats[k][0] for k in ks],
             color=color,
-            ls=ls,
+            ls="-",
             lw=1.8,
             label=cfg_label,
         )
