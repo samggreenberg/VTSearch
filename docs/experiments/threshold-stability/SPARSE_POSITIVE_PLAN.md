@@ -63,3 +63,39 @@ instability is accepted as the price of fast labeling.
   votes-in-good-phase; if a cell spends > ~25 votes before its first bad, record it.
 - `defer` must not simply reproduce the GMM safe-threshold ramp (already active t<20);
   it forces cold-start (not blended) until `n_good ≥ K`.
+
+---
+
+## Results (5 classes × 10 seeds, conformal k2)
+
+| arm | spike_rate | cost_sd | sparse% | runaway% | cost_auc | final_cost | votes_in_good | regret |
+|---|---|---|---|---|---|---|---|---|
+| `gts3` (base) | 0.161 | 0.134 | 87% | 22% | 0.357 | 0.304 | 2.0 | 0.153 |
+| `gts6` | 0.104 | 0.094 | 54% | 27% | 0.320 | 0.282 | 5.0 | 0.156 |
+| `gts9` | 0.083 | 0.082 | 0% | 18% | 0.302 | 0.285 | 8.1 | 0.141 |
+| `gts12` | 0.106 | 0.078 | 0% | 21% | 0.324 | 0.288 | 19.5 | 0.157 |
+| **`defer6`** | **0.017** | **0.053** | 96% | **7%** | **0.264** | **0.236** | **2.0** | **0.051** |
+| `goods6-defer6` | 0.104 | 0.094 | 54% | 27% | 0.320 | 0.282 | 5.0 | 0.156 |
+
+**Verdict: `defer6` wins — a Pareto improvement (H2 ≫ H1).** Holding a distribution-based
+GMM cut while `n_good < 6` (instead of trusting the sparse conformal cut) cuts the
+spike rate **~10×** (0.161→0.017), the runaways **3×** (22%→7%), the cross-seed cost sd
+**2.5×**, and regret **3×** (0.153→0.051) — while *also* lowering `cost_auc` and
+`final_cost` (better, faster convergence) at **zero** extra annotation budget
+(`votes_in_good` = 2, same as base). The better early cut feeds better boundary
+selection, so the whole trajectory improves, not just the sparse window.
+
+- **H1 (raise `good_to_start`, the "more goods" idea) works but is dominated.** It
+  reduces spikes (0.161→0.083 at `gts9`) and moves them out of the sparse regime
+  (sparse% → 0 by `gts9`), but spends annotation budget doing so — `gts9` burns ~8 of
+  60 votes in the `good` phase, `gts12` ~20 (a third of the budget) and starts
+  regressing. `defer6` beats every `gts*` arm at no budget cost.
+- **H3 (tradeoff): `defer6` has none** — it improves instability *and* convergence.
+- **The two levers are redundant** (`goods6-defer6` ≡ `gts6`): once `good_to_start ≥
+  defer_cut_goods`, the loop is still in cold-start while positives are sparse, so
+  there is no trained cut for `defer` to override. Combining them adds nothing.
+
+**Recommendation:** adopt `--defer-cut-goods ≈ 6` (hold a GMM cut until ~6 positives) —
+it is the sparse-positive fix, and unlike raising `good_to_start` it costs the user
+nothing. Confirm on the region-voting/hac path and at other prevalences before
+shipping to the app.
