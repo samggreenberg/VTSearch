@@ -529,6 +529,7 @@ def _render_realistic_viz(args, cell, cache_root: Path, buckets, slug: str, fina
                         proposal=cell["proposal"],
                         alpha=cell["alpha"],
                         seed=s,
+                        images=args.trace_images,
                     )
     except Exception:
         print(f"  viz realistic error {cell}:\n{traceback.format_exc()}", flush=True)
@@ -623,6 +624,14 @@ def main() -> int:
         help="realistic: emit labeling_trace/<config>/seed{N}/ — the images labeled in order (per iteration) "
         "+ trace.csv/json (phase/head/calib/threshold/score per step). Off by default (heavy: one image per "
         "labeled item × every iteration). Independent of --viz.",
+    )
+    ap.add_argument(
+        "--trace-images",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="with --labeling-trace, also render the per-step PNGs (default on). "
+        "--no-trace-images writes only trace.json/trace.csv — KB-sized, for the vote/threshold "
+        "record without the multi-GB image dump (spike analysis, Stage-A replay).",
     )
     ap.add_argument("--test-fraction", type=float, default=0.5)
     ap.add_argument("--inclusion", type=int, default=0, help="0=FPR+FNR; >0 favors recall; <0 favors precision")

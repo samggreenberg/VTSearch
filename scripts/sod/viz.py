@@ -767,9 +767,17 @@ def render_labeling_trace(
     proposal: str,
     alpha: float,
     seed: int,
+    images: bool = True,
 ) -> None:
     """Write one seed's labeling trace: numbered images in the order the realistic loop
-    labeled them, plus ``trace.csv`` / ``trace.json``. Per step, two images (named
+    labeled them, plus ``trace.csv`` / ``trace.json``.
+
+    With ``images=False`` only ``trace.json`` / ``trace.csv`` are written (the per-step
+    PNGs — the bulk of the output, ~2 files/step — are skipped). Use this when you only
+    need the per-step vote/threshold/cost record, e.g. the threshold-stability spike
+    analysis or Stage-A replay, and can't afford tens of thousands of images on a
+    space-tight volume. ``snapped_region`` is left blank in that mode (it is computed
+    during image rendering). Per step (``images=True``), two images (named
     ``{t:03d}_{iid}_{good|bad}_*`` so they sort in labeling order):
 
     * ``…_pred.png`` — GT green + the detector's surfacing box/score red.
@@ -797,7 +805,7 @@ def render_labeling_trace(
     (d / "trace.json").write_text(json.dumps(trace, indent=2))
     snapped_by_t: dict[int, int | None] = {}
 
-    for e in trace:
+    for e in trace if images else []:
         iid = e["image_id"]
         try:
             img = ds.load_image(iid)
