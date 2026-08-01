@@ -48,9 +48,11 @@ ARMS: list[tuple[str, str, str, int]] = [
 #: The baseline arm whose recorded --labeling-trace Stage A replays (frozen votes).
 BASELINE_ARM = "argmin-k2"
 
-#: Stage A replay depth (fold-split seeds × trainer seeds), per the plan.
-REPLAY_FOLD_SEEDS = int(os.environ.get("THRSTAB_REPLAY_FOLD_SEEDS", "10"))
-REPLAY_TRAINER_SEEDS = int(os.environ.get("THRSTAB_REPLAY_TRAINER_SEEDS", "10"))
+#: Stage A replay depth (fold-split seeds × trainer seeds). The plan's 10×10 is
+#: 100 refits per (step, rule); default to a lighter 5×3 that still resolves the
+#: split-vs-fit variance split and finishes overnight (override up for the final).
+REPLAY_FOLD_SEEDS = int(os.environ.get("THRSTAB_REPLAY_FOLD_SEEDS", "5"))
+REPLAY_TRAINER_SEEDS = int(os.environ.get("THRSTAB_REPLAY_TRAINER_SEEDS", "3"))
 
 
 def class_slug(cls: str) -> str:
@@ -65,5 +67,10 @@ def class_slug(cls: str) -> str:
 
 
 def array_cells() -> list[dict]:
-    """Enumerate ``(class, seed)`` cells for the SLURM array (stable order)."""
-    return [{"cls": cls, "seed": seed} for cls in CLASSES for seed in SEEDS]
+    """Enumerate SLURM-array cells — **one per class**.
+
+    Each cell runs every arm once with ``--iterations len(SEEDS)`` (so all seeds
+    for an arm come from a single sweep, sharing the cache) and replays each
+    seed's baseline trace. One-per-class (not per (class, seed)) avoids re-running
+    the low seeds that ``--iterations N`` = seeds ``0..N-1`` would duplicate."""
+    return [{"cls": cls} for cls in CLASSES]
