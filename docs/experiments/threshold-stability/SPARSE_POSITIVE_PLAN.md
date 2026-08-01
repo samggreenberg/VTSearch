@@ -146,3 +146,27 @@ Attributing every conformal-path up-spike to the vote that caused it
   disagrees with the vote — candidate mislabels.
 - **Recognizable at click-time:** the trigger is "a boundary-score item voted Bad
   before ~6 positives exist" — exactly the condition `--defer-cut-goods 6` guards.
+
+---
+
+## Broadened per-item run: 79 COCO categories × 20 seeds
+
+Scaled the spike-item analysis for confidence + variety (CPU array — the whole path
+is GPU-cap-free there). **1,580 traces, 6,729 spikes, 5,225 distinct culprit items.**
+
+- **The recurring-offender pattern is near-universal:** **73 of 79 categories** have an
+  image that stresses the cut in ≥5 seeds; **~15 categories have one that spikes in all
+  20/20** (incl. `stop-sign 562818` and `traffic-light 47769` from the first run —
+  stable across the broader run). 64 items spiked in ≥10/20 — so "spiky" is now
+  statistically solid, not a 2-of-10 fluke. Repeat offenders (≥2) = 29% of all spikes.
+- **Stronger hard-negative signal:** 15% are Bad votes scored >0.5, and several top
+  offenders score **>1.0** (potted-plant, sink, chair, couch, backpack, remote) — the
+  model is *confident* they contain the class. These are the highest-value look-alikes
+  / candidate mislabels.
+- **Reframe (owner):** these items are **valuable training signal**, not problems — a
+  foreign-language stop sign is exactly what multilingual recognition needs; a bulb
+  lamp that reads "trafficy" is the traffic-light-vs-livingroom-light boundary we want.
+  The spike is a *valuable example landing while the cut is fragile*; `--defer-cut-goods`
+  keeps the example and drops the instability.
+- Visual catalog: published Artifact (1 high-confidence offender per category, ≥12/20).
+  Tools: `spike_items.py` (per-item + confidence tiers), `render_spike_items.py`.
