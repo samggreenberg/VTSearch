@@ -18,6 +18,7 @@ import pytest
 
 from vtscore.training.thresholds import (
     NO_GOOD_THRESHOLD,
+    conformal_threshold,
     find_optimal_threshold,
     threshold_from_fold_orderings,
 )
@@ -111,47 +112,46 @@ class TestTiedScores:
         assert t == 1.0
 
 
-class TestFoldAggregationAbstain:
-    """``threshold_from_fold_orderings`` treats an abstaining fold as a *vote*,
-    not a numeric 2.0 to average.  The ensemble abstains only under a strict
-    majority; otherwise it averages the folds that produced a real cut.
+class TestFoldOrderingsPooledConformal:
+    """``threshold_from_fold_orderings`` pools every fold's held-out
+    ``(scores, labels)`` and runs the conformal inclusion rule once (#2784,
+    backported). No per-fold min-cost argmin, no abstain-as-vote averaging — the
+    fold-count-dependent aggregation artifacts that used to require special-casing
+    are gone because the raw scores are pooled before a single cut is taken.
     """
 
-    # At inclusion=-3, a lone top-scored negative makes the fold abstain, while
-    # a perfectly separable fold yields a concrete cut (0.9).
-    ABSTAIN = ([0.9, 0.1], [0.0, 1.0])
-    FINITE = ([0.9, 0.1], [1.0, 0.0])
-    INCL = -3
+    # Two cleanly separated folds (negatives low, positives high).
+    F1 = ([0.1, 0.9], [0.0, 1.0])
+    F2 = ([0.2, 0.8], [0.0, 1.0])
 
-    def test_single_fold_abstains(self):
-        assert threshold_from_fold_orderings([self.ABSTAIN], self.INCL) == NO_GOOD_THRESHOLD
+    def test_empty_orderings_abstain_sentinel(self):
+        # The only remaining sentinel path (the empty case is handled upstream via
+        # compute_fold_orderings' fallback; guarded defensively here).
+        assert threshold_from_fold_orderings([], 0) == NO_GOOD_THRESHOLD
 
-    def test_lone_abstain_of_two_is_ignored(self):
-        """1 of 2 abstaining is not a strict majority: use the finite fold."""
-        t = threshold_from_fold_orderings([self.ABSTAIN, self.FINITE], self.INCL)
-        assert t == 0.9
+    def test_pooled_cut_lands_in_the_gap(self):
+        # Pooled negs {0.1,0.2}, pos {0.8,0.9}: the k=0 conformal cut is the
+        # gap midpoint — strictly above every negative and below every positive.
+        t = threshold_from_fold_orderings([self.F1, self.F2], 0)
+        assert 0.2 < t < 0.8
 
-    def test_lone_abstain_never_exceeds_sigmoid_range(self):
-        """Regression: the old numeric mean pushed a lone abstain to
-        (0.9 + 2.0)/2 = 1.45, i.e. an out-of-range 'threshold' that abstained
-        by accident and depended on the other fold's magnitude."""
-        t = threshold_from_fold_orderings([self.ABSTAIN, self.FINITE], self.INCL)
-        assert t <= 1.0
+    def test_monotone_non_increasing_in_inclusion(self):
+        ts = [threshold_from_fold_orderings([self.F1, self.F2], k) for k in range(-4, 5)]
+        for a, b in zip(ts, ts[1:], strict=False):
+            assert b <= a + 1e-9
 
-    def test_both_of_two_abstain(self):
-        assert threshold_from_fold_orderings([self.ABSTAIN, self.ABSTAIN], self.INCL) == NO_GOOD_THRESHOLD
+    def test_overlapping_fold_no_longer_forces_abstain(self):
+        # Old behaviour: an overlapping fold's argmin could vote abstain and drag
+        # the whole ensemble to NO_GOOD_THRESHOLD. Pooled conformal just folds its
+        # scores into the quantiles and always returns an in-range cut.
+        overlap = ([0.5, 0.5], [1.0, 0.0])
+        t = threshold_from_fold_orderings([self.F1, self.F2, overlap], 0)
+        assert t != NO_GOOD_THRESHOLD
+        assert 0.0 <= t <= 1.0
 
-    def test_minority_abstain_of_three_averages_finite(self):
-        """1 of 3 abstaining: average the two folds that produced a cut."""
-        t = threshold_from_fold_orderings([self.ABSTAIN, self.FINITE, self.FINITE], self.INCL)
-        assert t == 0.9
-
-    def test_majority_abstain_of_three(self):
-        t = threshold_from_fold_orderings([self.ABSTAIN, self.ABSTAIN, self.FINITE], self.INCL)
-        assert t == NO_GOOD_THRESHOLD
-
-    def test_all_finite_folds_are_meaned(self):
-        a = ([0.9, 0.1], [1.0, 0.0])  # -> 0.9
-        b = ([0.8, 0.2], [1.0, 0.0])  # -> 0.8
-        t = threshold_from_fold_orderings([a, b], self.INCL)
-        assert t == pytest.approx(0.85)
+    def test_pooling_beats_per_fold_on_tiny_folds(self):
+        # A pool of 4 scores gives the quantile rule real resolution; the result is
+        # a single conformal cut over the union, not an average of per-fold cuts.
+        t = threshold_from_fold_orderings([self.F1, self.F2], 0)
+        pooled = conformal_threshold([0.1, 0.9, 0.2, 0.8], [0.0, 1.0, 0.0, 1.0], 0)
+        assert t == pytest.approx(pooled)
