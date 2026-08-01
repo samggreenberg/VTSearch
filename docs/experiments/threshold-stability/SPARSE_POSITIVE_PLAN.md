@@ -123,3 +123,26 @@ hac vs 235 whole; 93% Bad, ~70%+ sparse), so the phenomenon is not path-specific
 **Takeaway:** ship `--defer-cut-goods ≈ 6`; it helps everywhere. The region-voting
 path needs follow-up (a bag-aware deferred cut, not a plain pool GMM) to close the
 gap. Prevalence robustness (below 1/100) still needs LVIS/VG — COCO val2017 caps it.
+
+---
+
+## Per-item: which media items cause the spikes (not random!)
+
+Attributing every conformal-path up-spike to the vote that caused it
+(`spike_items.py`, `render_spike_items.py`; visual report published as an Artifact):
+
+- **Spikes are not sporadic — there are repeat offenders.** Each class has ~1 negative
+  that spikes almost every time it is voted: `stop-sign 562818` and `traffic-light
+  47769` spiked in **all 10 seeds** (rate 1.0); parking-meter/bus/fire-hydrant each
+  have one at 0.7–0.9. **14 images cause 66/235 (28%) of all spikes**; the top 5 (one
+  per class) cause ~19%.
+- **What they are:** true COCO negatives the cold-start ranker surfaces at the decision
+  boundary (model score ~0.1–0.4), voted Bad while only ~3 positives exist (median
+  `n_good` = 3 at these items).
+- **The false-negative signal (as suspected):** ~12% of spikes are Bad votes the model
+  scored **>0.5** (hard/false negatives — it thinks they contain the class). A few top
+  offenders are **Good** votes (a genuine positive whose late arrival reshuffles the
+  sparse calibration). Where COCO draws a GT box on a "Bad" card, the annotation
+  disagrees with the vote — candidate mislabels.
+- **Recognizable at click-time:** the trigger is "a boundary-score item voted Bad
+  before ~6 positives exist" — exactly the condition `--defer-cut-goods 6` guards.
