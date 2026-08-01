@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.al_strategies import ALContext, select_next
+from vtscore.eval.autopilot_flow import AutopilotFlow, app_has_detector
 from vtscore.eval.labels import media_is_positive, region_box_for_category
 from vtscore.eval.trainers import _cross_calibrated_threshold, _parse_trainer_spec
 from vtscore.training.mlp import _auto_hidden_dim, train_model
@@ -77,35 +78,10 @@ class _StepModel:
     device: str
 
 
-#: Canonical column order for the voting-iterations result frame.  Kept in one
-#: place so :func:`run_voting_iterations_eval` and downstream tooling agree.
-_VOTING_COLUMNS: tuple[str, ...] = (
-    "seed",
-    "dataset",
-    "category",
-    "strategy",
-    "trainer",
-    "style",
-    "prevalence_arm",
-    "realized_prevalence",
-    "t",
-    "n_good",
-    "n_bad",
-    "cost",
-    "fpr",
-    "fnr",
-    "auroc",
-    "average_precision",
-    "train_seconds",
-    "xcal_seconds",
-    "pool_score_seconds",
-    "test_score_seconds",
-    "backend",
-    "device",
-    "elapsed_seconds",
-)
-
-#: Identifying columns every emitted row (main or sweep) leads with.
+#: Identifying columns every emitted row (main or sweep) leads with.  ``phase``
+#: and ``app_trained`` ride along so any downstream analysis - including the
+#: calibration study's threshold rows - can filter to the steps at which the app
+#: would actually have had a trained detector on screen.
 _IDENT_COLUMNS: tuple[str, ...] = (
     "seed",
     "dataset",
@@ -118,6 +94,26 @@ _IDENT_COLUMNS: tuple[str, ...] = (
     "t",
     "n_good",
     "n_bad",
+    "phase",
+    "app_trained",
+)
+
+#: Canonical column order for the voting-iterations result frame.  Kept in one
+#: place so :func:`run_voting_iterations_eval` and downstream tooling agree.
+_VOTING_COLUMNS: tuple[str, ...] = (
+    *_IDENT_COLUMNS,
+    "cost",
+    "fpr",
+    "fnr",
+    "auroc",
+    "average_precision",
+    "train_seconds",
+    "xcal_seconds",
+    "pool_score_seconds",
+    "test_score_seconds",
+    "backend",
+    "device",
+    "elapsed_seconds",
 )
 
 #: Column order for the calibration study's main per-step frame (issue #2781),
@@ -638,6 +634,46 @@ def _score_pool(
     return dict(zip(pool_ids, scores, strict=True))
 
 
+def _labelset_error_cost(
+    model_steps: list[tuple[Any, float]],
+    good_votes: dict[int, None],
+    bad_votes: dict[int, None],
+    clips_dict: dict[int, dict[str, Any]],
+    inclusion: int,
+) -> Optional[float]:
+    """Weighted FPR/FNR of the most recent model on the **labelled** set.
+
+    Feeds the Smart indicator.  Mirrors ``labeling_progress._score_step``: each
+    cached step's model is scored against the current labelset — the only
+    ground truth the app has — so the trend the simulated user reacts to is the
+    one a real user's status panel would show.  Deliberately *not* the held-out
+    test split: those labels must never reach the vote order.
+    """
+    if not model_steps:
+        return None
+    step, threshold = model_steps[-1]
+    fpr_weight, fnr_weight = _inclusion_weights(inclusion)
+
+    ids = list(good_votes) + list(bad_votes)
+    labels = [1.0] * len(good_votes) + [0.0] * len(bad_votes)
+    total_pos = len(good_votes)
+    total_neg = len(bad_votes)
+    if not ids or total_pos == 0 or total_neg == 0:
+        return None
+
+    scores = _score_pool(step, ids, clips_dict)
+    fp = fn = 0
+    for cid, true_label in zip(ids, labels, strict=True):
+        predicted = 1 if scores.get(cid, 0.0) >= threshold else 0
+        if predicted == 1 and true_label == 0.0:
+            fp += 1
+        elif predicted == 0 and true_label == 1.0:
+            fn += 1
+    fpr = fp / total_neg if total_neg > 0 else 0.0
+    fnr = fn / total_pos if total_pos > 0 else 0.0
+    return fpr_weight * fpr + fnr_weight * fnr
+
+
 def _build_eval_atlas(embeddings: dict[int, np.ndarray], min_node_size: int) -> Any:
     """Build a coverage atlas over *embeddings* for the autopilot New phase.
 
@@ -1105,6 +1141,7 @@ def simulate_voting_iterations(  # noqa: C901
     repool_topk: int = 4,
     inclusion_sweep_ks: Optional[list[int]] = None,
     sweep_sink: Optional[list[dict[str, Any]]] = None,
+    autopilot_fidelity: bool = True,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -1167,18 +1204,31 @@ def simulate_voting_iterations(  # noqa: C901
             it for small simulation sets so diversity cells actually resolve.
         seed_scores: Optional ``{media_id: similarity}`` text-sort ranking (each
             item's cosine to the typed query).  When provided the autopilot seed
-            follows the text sort (top items for the initial goods, bottom items
-            for the initial bads); ``None`` (default) means the dataset has no
-            text sort, so autopilot seeds from random known-good examples.
+            follows the text sort (top items for the initial goods, the sort's
+            cutoff for the initial bads); ``None`` (default) means the dataset
+            has no text sort, so autopilot seeds from random known-good examples.
+        autopilot_fidelity: When ``True`` (default) the simulated user follows
+            the app's own phase machine
+            (:class:`vtscore.eval.autopilot_flow.AutopilotFlow`): no detector is
+            consulted before the Good/Bad quorum, Bad votes come from the text
+            sort's cutoff, Hard picks are nearest-by-rank, and Hard → New → Done
+            are driven by the smart/stable/span indicators rather than step
+            parity.  ``False`` restores the older approximation so previously
+            published studies reproduce byte-for-byte; see ``docs/EVAL.md``.
+            Metrics are recorded at every trainable step in both modes — only
+            the *vote order* and the ``app_trained`` flag differ.
 
     Returns:
         List of row dicts.  Keys: ``seed, dataset, category, strategy, trainer,
-        style, prevalence_arm, realized_prevalence, t, n_good, n_bad, cost, fpr, fnr,
-        auroc, average_precision, train_seconds, xcal_seconds,
-        pool_score_seconds, test_score_seconds, backend, device,
+        style, prevalence_arm, realized_prevalence, t, n_good, n_bad, phase,
+        app_trained, cost, fpr, fnr, auroc, average_precision, train_seconds,
+        xcal_seconds, pool_score_seconds, test_score_seconds, backend, device,
         elapsed_seconds``.  ``n_good``/``n_bad`` report the vote counts behind
         each row so callers can tell apart metrics learned from a 1-vs-1 model
-        and a many-vs-many one.
+        and a many-vs-many one.  ``app_trained`` is 1 exactly when the app would
+        have had a trained detector on screen at that step: a threshold recorded
+        where it is 0 is one no user would ever see, which is what issue #2788's
+        cold-start degenerates turned out to be.
     """
     import numpy as np  # noqa: PLC0415
 
@@ -1271,9 +1321,21 @@ def simulate_voting_iterations(  # noqa: C901
     pool_scores: dict[int, float] = {}
     n_steps = len(pool) if max_steps is None else min(max_steps, len(pool))
 
+    # The app's phase machine, driving the vote order the way Autopilot does.
+    # Disabled (``None``) under ``autopilot_fidelity=False``, which leaves the
+    # selector on its legacy parity interleave.
+    flow: Any = None
+    if autopilot_fidelity and strategy == "autopilot":
+        flow = AutopilotFlow()
+    # Recent per-step models, kept so the Smart indicator can re-score the last
+    # window of them against the *current* labelset - exactly what the app's
+    # ``_eval_cached_models`` does over its per-step cache.
+    recent_steps: list[tuple[Any, float]] = []
+
     for t in range(1, n_steps + 1):
         if not pool:
             break
+        phase = flow.phase if flow is not None else None
         ctx = ALContext(
             pool_ids=pool,
             embeddings=sim_embeddings,
@@ -1285,6 +1347,7 @@ def simulate_voting_iterations(  # noqa: C901
             rng=rng,
             pool_labels=pool_labels,
             seed_scores=seed_scores,
+            phase=phase,
         )
         cid = select_next(strategy, ctx)
         pool.remove(cid)
@@ -1303,6 +1366,17 @@ def simulate_voting_iterations(  # noqa: C901
         # Need at least 1 good and 1 bad to train
         if not good_votes or not bad_votes:
             step = None
+            # The phase still advances - the app's Good phase ends on its third
+            # positive whether or not a detector could be trained, and without
+            # this the flow would never leave ``good`` and the run would vote
+            # positives forever.
+            if flow is not None:
+                flow.update(
+                    len(good_votes),
+                    len(bad_votes),
+                    remaining_unlabeled=len(pool),
+                    span=atlas.span_info() if atlas is not None else None,
+                )
             continue
 
         step, threshold, n_labels, timings, details = _train_and_calibrate(
@@ -1328,6 +1402,61 @@ def simulate_voting_iterations(  # noqa: C901
             if emit_calibration_metrics:
                 details["provenance"] = "gmm_blend"
 
+        # Evaluate on the held-out test set.  The calibration study (#2781)
+        # emits one row per pooling (base + remedial) instead of the single
+        # metrics row, but both paths score the same test set here.
+        calibration: tuple[list[dict[str, Any]], np.ndarray, np.ndarray] | None = None
+        metrics: dict[str, float] = {}
+        t_test = time.monotonic()
+        if emit_calibration_metrics and style_obj is not None:
+            calibration = _calibration_metric_rows(
+                step,
+                threshold,
+                details,
+                clips_dict,
+                test_ids,
+                target_category,
+                inclusion,
+                style_obj,
+                repool_variants or [],
+                repool_topk,
+            )
+        else:
+            metrics = _evaluate_on_test(
+                step,
+                threshold,
+                clips_dict,
+                test_ids,
+                target_category,
+                inclusion,
+                region_aware=region_aware,
+                style_obj=style_obj,
+            )
+        test_score_seconds = time.monotonic() - t_test
+
+        # Score the remaining pool with the fresh model so the next step's
+        # autopilot Hard pick can rank it.
+        t_pool = time.monotonic()
+        pool_scores = _score_pool(step, pool, clips_dict)
+        pool_score_seconds = time.monotonic() - t_pool
+
+        # Advance the app's phase machine on this step's model: the Smart
+        # indicator needs the labelset error cost, Stable the prediction flips
+        # over the still-unlabeled pool, Span the atlas's coverage.
+        if flow is not None:
+            recent_steps.append((step, threshold))
+            del recent_steps[:-10]  # the app regresses over the last 10 steps
+            flow.record_step(
+                _labelset_error_cost(recent_steps, good_votes, bad_votes, clips_dict, inclusion),
+                {cid: (1 if s >= threshold else 0) for cid, s in pool_scores.items()},
+            )
+            flow.update(
+                len(good_votes),
+                len(bad_votes),
+                remaining_unlabeled=len(pool),
+                span=atlas.span_info() if atlas is not None else None,
+            )
+
         # Identifying columns shared by every row this step emits.
         base_row = {
             "seed": seed,
@@ -1341,83 +1470,29 @@ def simulate_voting_iterations(  # noqa: C901
             "t": t,
             "n_good": len(good_votes),
             "n_bad": len(bad_votes),
+            "phase": flow.phase if flow is not None else "",
+            "app_trained": 1 if (flow is None or app_has_detector(flow.phase)) else 0,
+        }
+        timing_cols = {
+            "train_seconds": round(timings["train_seconds"], 6),
+            "xcal_seconds": round(timings["xcal_seconds"], 6),
+            "pool_score_seconds": round(pool_score_seconds, 6),
+            "test_score_seconds": round(test_score_seconds, 6),
+            "backend": step.backend,
+            "device": step.device,
+            "elapsed_seconds": round(time.monotonic() - start_time, 3),
         }
 
-        if emit_calibration_metrics and style_obj is not None:
-            # Calibration study (#2781): one row per pooling (base + remedial),
-            # plus the near-free inclusion-budget sweep into the side sink.
-            t_test = time.monotonic()
-            metric_rows, base_scores, base_labels = _calibration_metric_rows(
-                step,
-                threshold,
-                details,
-                clips_dict,
-                test_ids,
-                target_category,
-                inclusion,
-                style_obj,
-                repool_variants or [],
-                repool_topk,
-            )
-            test_score_seconds = time.monotonic() - t_test
-
-            t_pool = time.monotonic()
-            pool_scores = _score_pool(step, pool, clips_dict)
-            pool_score_seconds = time.monotonic() - t_pool
-
+        if calibration is not None:
+            metric_rows, base_scores, base_labels = calibration
             for mr in metric_rows:
-                rows.append(
-                    {
-                        **base_row,
-                        **mr,
-                        "train_seconds": round(timings["train_seconds"], 6),
-                        "xcal_seconds": round(timings["xcal_seconds"], 6),
-                        "pool_score_seconds": round(pool_score_seconds, 6),
-                        "test_score_seconds": round(test_score_seconds, 6),
-                        "backend": step.backend,
-                        "device": step.device,
-                        "elapsed_seconds": round(time.monotonic() - start_time, 3),
-                    }
-                )
-
+                rows.append({**base_row, **mr, **timing_cols})
+            # The near-free inclusion-budget sweep, into the side sink.
             if inclusion_sweep_ks and sweep_sink is not None:
                 for sr in _inclusion_sweep_rows(details, base_scores, base_labels, inclusion_sweep_ks):
                     sweep_sink.append({**base_row, **sr})
-            continue
-
-        # Evaluate on held-out test set
-        t_test = time.monotonic()
-        metrics = _evaluate_on_test(
-            step,
-            threshold,
-            clips_dict,
-            test_ids,
-            target_category,
-            inclusion,
-            region_aware=region_aware,
-            style_obj=style_obj,
-        )
-        test_score_seconds = time.monotonic() - t_test
-
-        # Score the remaining pool with the fresh model so the next step's
-        # autopilot Bad / Hard picks rank it.
-        t_pool = time.monotonic()
-        pool_scores = _score_pool(step, pool, clips_dict)
-        pool_score_seconds = time.monotonic() - t_pool
-
-        rows.append(
-            {
-                **base_row,
-                **metrics,
-                "train_seconds": round(timings["train_seconds"], 6),
-                "xcal_seconds": round(timings["xcal_seconds"], 6),
-                "pool_score_seconds": round(pool_score_seconds, 6),
-                "test_score_seconds": round(test_score_seconds, 6),
-                "backend": step.backend,
-                "device": step.device,
-                "elapsed_seconds": round(time.monotonic() - start_time, 3),
-            }
-        )
+        else:
+            rows.append({**base_row, **metrics, **timing_cols})
 
     return rows
 
@@ -1444,6 +1519,7 @@ def run_voting_iterations_eval(
     trainers: Optional[list[str]] = None,
     prevalence_arms: Optional[list[Optional[float]]] = None,
     styles: Optional[list[Optional[str]]] = None,
+    autopilot_fidelity: bool = True,
 ) -> pd.DataFrame:
     """Run the voting-iterations evaluation over multiple seeds/datasets/categories.
 
@@ -1492,6 +1568,10 @@ def run_voting_iterations_eval(
             ``[None]`` - the historical style-less behaviour; pass e.g.
             ``["max_hac", "max_patch"]`` for the Max-Patch experiment arms.
             Recorded in the ``style`` column (``""`` for the style-less run).
+        autopilot_fidelity: Follow the app's own Autopilot phase machine
+            (default ``True``); see :func:`simulate_voting_iterations`.  Pass
+            ``False`` to reproduce studies published before the flow was
+            aligned.
 
     Returns:
         A :class:`~pandas.DataFrame` with the columns listed in
@@ -1543,6 +1623,7 @@ def run_voting_iterations_eval(
                                     trainer=trainer,
                                     target_prevalence=arm,
                                     style=style,
+                                    autopilot_fidelity=autopilot_fidelity,
                                 )
                                 all_rows.extend(rows)
 
@@ -1566,6 +1647,7 @@ def run_voting_iterations_eval_from_pickles(
     trainers: Optional[list[str]] = None,
     prevalence_arms: Optional[list[Optional[float]]] = None,
     styles: Optional[list[Optional[str]]] = None,
+    autopilot_fidelity: bool = True,
 ) -> pd.DataFrame:
     """Convenience wrapper that loads datasets from pickle files.
 
@@ -1622,4 +1704,5 @@ def run_voting_iterations_eval_from_pickles(
         trainers=trainers,
         prevalence_arms=prevalence_arms,
         styles=styles,
+        autopilot_fidelity=autopilot_fidelity,
     )
