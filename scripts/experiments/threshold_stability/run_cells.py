@@ -65,36 +65,11 @@ def _sweep_cmd(cls: str, arm: tuple[str, str, str, int], out_dir: Path) -> list[
         str(common.CACHE_DIR),
         "--out-dir",
         str(out_dir),
-        "--labeling-trace",
-    ]
-
-
-def _replay_cmd(cls: str, trace_dir: Path, out_csv: Path) -> list[str]:
-    return [
-        sys.executable,
-        str(SOD / "replay_thresholds.py"),
-        "--trace-dir",
-        str(trace_dir),
-        "--cache-dir",
-        str(common.CACHE_DIR),
-        "--dataset",
-        cfg.DATASET,
-        "--embedder",
-        cfg.EMBEDDER,
-        "--class-slug",
-        cfg.class_slug(cls),
-        "--proposal-slug",
-        cfg.PROPOSAL,
-        "--rules",
-        "argmin,conformal,rank-transfer",
-        "--fold-seeds",
-        str(cfg.REPLAY_FOLD_SEEDS),
-        "--trainer-seeds",
-        str(cfg.REPLAY_TRAINER_SEEDS),
-        "--inclusion",
-        str(cfg.INCLUSION),
-        "--out",
-        str(out_csv),
+        # No --labeling-trace: it renders ~2 PNGs/step (tens of thousands of files,
+        # multiple GB) and Stage B needs none of it — results.jsonl already carries
+        # per-(seed, t) threshold/cost/oracle_cost, which is everything the analyzer
+        # needs. (Stage A replay, which needs the frozen-vote trace.json, is a
+        # separate PNG-free follow-up; see THRESHOLD_STABILITY_STATUS.)
     ]
 
 
@@ -108,25 +83,12 @@ def run_cell(cell: dict) -> None:
     cell_dir = common.RESULTS / "cells" / cfg.class_slug(cls)
     cell_dir.mkdir(parents=True, exist_ok=True)
 
-    # Stage B: every arm, all seeds in one sweep each.
-    baseline_dir: Path | None = None
+    # Stage B: every arm, all seeds in one sweep each. results.jsonl per arm carries
+    # per-(seed, t) threshold/cost/oracle_cost — analyze.py derives the full
+    # threshold-stability comparison from it (no trace files, no PNGs, no replay).
     for arm in cfg.ARMS:
-        name = arm[0]
-        out_dir = cell_dir / f"arm_{name}"
+        out_dir = cell_dir / f"arm_{arm[0]}"
         _run(_sweep_cmd(cls, arm, out_dir))
-        if name == cfg.BASELINE_ARM:
-            baseline_dir = out_dir
-
-    # Stage A: replay each seed's frozen baseline trace.
-    if baseline_dir is None:
-        common.log(f"WARN: no baseline arm dir for {cls}; Stage A skipped")
-        return
-    for seed in cfg.SEEDS:
-        traces = sorted(baseline_dir.glob(f"labeling_trace/*/*/seed{seed}"))
-        if not traces:
-            common.log(f"WARN: no baseline trace for {cls} seed{seed}; replay skipped")
-            continue
-        _run(_replay_cmd(cls, traces[0], cell_dir / f"replay_seed{seed}.csv"))
 
 
 def main(argv: list[str] | None = None) -> int:
