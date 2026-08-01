@@ -38,41 +38,31 @@ it rather than re-simulating the vote order.
   random and Autopilot voting overshoot the budget badly (excess 0.208 and 0.298
   respectively) — the calibration set is too small for a 25th-percentile read,
   and Autopilot is at its least exchangeable before the New phase has
-  diversified anything. The 12-vote cell is the one that matters.
-
-  Scope this to the **post-quorum** window, t ∈ [5, 15] measured in votes. That
-  window is fully Autopilot-reachable: the app's first learned sort fires at the
-  Hard phase, 3 good + 4 bad, so vote 7 lands in the middle of it. (The *pre*-
-  quorum `too_few_default` = 0.5 path is not reachable on the Autopilot flow at
-  all — the Bad phase stays on the text sort and trains nothing — so it is not
-  part of this item; see `docs/EVAL.md` on harness fidelity and the `app_trained`
-  column.)
-
-  The concrete lever worth measuring is a **low-vote `calibrate_count` boost**:
-  8 folds when the vote count is below 10, else the current 2. At 5–15 votes two
-  folds pool only ~4–6 held-out scores, which is where both the residual
-  conformal-provenance degenerate cuts and the budget overshoot live; fold fits
-  at n ≤ 10 are milliseconds, so it is nearly free. Adopt iff it cuts
-  conformal-provenance degenerate steps at t ∈ [5, 15] by ≥ 50% **or** shrinks
-  the t = 12 budget excess, without regressing regret over t ∈ [20, 30]
-  (late-window non-inferiority). Check `threshold_percentile` at t ∈ {5, 6} too:
-  a non-degenerate but mid-mass cut that admits half the dataset is not a win.
-  Measure with the existing harness before changing production — run it with
-  `autopilot_fidelity=True` and filter on `app_trained`, or the pre-quorum steps
-  will dominate the counts again.
-
-  Independently defensible with no measurement: suppressing the confident
-  framing of the Inclusion budget in the UI until enough votes exist.
+  diversified anything. Options worth measuring: widening the quantile's
+  effective support at low counts (e.g. interpolating against the population
+  score distribution rather than the current hard GMM blend), raising
+  `calibrate_count` when votes are scarce so the pooled calibration set grows,
+  or simply suppressing the confident framing of the Inclusion budget in the UI
+  until enough votes exist. Measure with the existing harness before changing
+  production; the 12-vote cell is the one that matters. The pre-registered
+  measurement spec for these options is
+  [`coldstart-threshold-experiment.md`](coldstart-threshold-experiment.md)
+  (issue #2788).
 
 <!-- item-sep -->
 
-- **Region-bag (grouped) calibration arm.** The study's arms are all
-  single-vector. The grouped path (`_compute_fold_orderings_grouped`) max-pools
-  each voted image's region rows to one calibration score, and region voting
-  floods a Bad vote with every region of the image. Both reshape the calibration
-  score distribution, so the measured drift may differ. Reuse the harness with a
-  patch dataset and `region_voting=True` semantics if region detectors become a
-  primary workflow.
+- **Region-bag (grouped) calibration arm — measured; bias present at high k.**
+  The calibration study (#2781, `docs/experiments/calibration/REPORT.md`) ran the
+  grouped path (`_compute_fold_orderings_grouped`) on Visual Genome region voting
+  and compared its Inclusion-budget compliance to the ungrouped single-vector
+  path. The grouped path **overshoots the FNR cap materially at k ≥ 1** (measured
+  excess FNR +0.09 to +0.13 at t ≥ 100, vs ~+0.00 to +0.05 ungrouped), and the
+  #2784 fix barely moves it (the high-k tail is governed by the FN-budget cap,
+  not the k=0 anchor). So on a grouped/region detector the halving-per-step
+  Inclusion semantics should not be read literally at high k. Remaining work: if
+  region detectors become a primary workflow, either widen the effective
+  calibration support at high k or scope the guarantee down for grouped
+  calibration in `docs/ML.md`.
 
 <!-- item-sep -->
 
