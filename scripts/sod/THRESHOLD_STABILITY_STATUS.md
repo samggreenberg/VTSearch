@@ -1,5 +1,11 @@
 # Threshold-stability study (#2790) — build status & handoff
 
+**Stage B is RUN. Verdict + numbers: [`docs/experiments/threshold-stability/REPORT.md`](../../docs/experiments/threshold-stability/REPORT.md).**
+Headline: the variance is threshold placement (cost sd ≈ 4× oracle floor); fold
+count (`k8`) is the dominant stability lever, conformal's win is regret (−37%), best
+practical arm `conformal-k8`; no arm clears the strict bar → S3 follow-up indicated.
+Stage A replay + region-voting-path conformal remain (see below).
+
 Branch `claude/threshold-stability-2790` off `evaluation-framework`. This is the
 harness half of the pre-registered study in `docs/plans/threshold-stability-experiment.md`
 (on `dev`). Real runs are Grid-gated (no GPU/COCO/SigLIP cache on the laptop), so
