@@ -17,6 +17,7 @@ the embeddings come from the #2790 cache, and the MLPs are tiny.
 from __future__ import annotations
 
 import os
+import re
 
 # --- Fixed #2790 repro config (pre-registered) ---
 DATASET = os.environ.get("THRSTAB_DATASET", "coco")
@@ -53,8 +54,14 @@ REPLAY_TRAINER_SEEDS = int(os.environ.get("THRSTAB_REPLAY_TRAINER_SEEDS", "10"))
 
 
 def class_slug(cls: str) -> str:
-    """Filesystem-safe class slug matching the sweep's own slugging."""
-    return cls.strip().replace(" ", "_").replace("/", "-")
+    """Filesystem-safe class slug **identical to** ``scripts/sod/features.slugify``.
+
+    The exemplar cache dir and the labeling-trace path are keyed on this exact
+    slug (e.g. ``stop sign`` -> ``stop-sign``); a mismatch means the replay tool
+    can't find a class's exemplars. Replicated here (rather than imported) so the
+    config stays importable without the sod package on the path.
+    """
+    return re.sub(r"[^a-z0-9]+", "-", cls.strip().lower()).strip("-")
 
 
 def array_cells() -> list[dict]:
