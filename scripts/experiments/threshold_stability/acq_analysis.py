@@ -42,7 +42,9 @@ def _spike_rate_and_costs(rows: list[dict]) -> dict:
     # Group per (class, seed) trajectory.
     traj: dict[tuple, list[dict]] = {}
     for r in rows:
-        traj.setdefault((r.get("dataset", ""), r.get("category", r.get("cls", "")), r["seed"]), []).append(r)
+        traj.setdefault(
+            (r.get("dataset", ""), r.get("class", r.get("category", r.get("cls", ""))), r["seed"]), []
+        ).append(r)
     spikes = tot = 0
     cost_auc: list[float] = []
     final_cost: list[float] = []
@@ -64,7 +66,7 @@ def _spike_rate_and_costs(rows: list[dict]) -> dict:
     by_ct: dict[tuple, list[float]] = {}
     for r in rows:
         if r["t"] >= 20:
-            by_ct.setdefault((r.get("category", r.get("cls", "")), r["t"]), []).append(float(r["cost"]))
+            by_ct.setdefault((r.get("class", r.get("category", r.get("cls", ""))), r["t"]), []).append(float(r["cost"]))
     cost_sds = [statistics.pstdev(v) for v in by_ct.values() if len(v) > 1]
     return {
         "spike_rate": spikes / tot if tot else float("nan"),
