@@ -125,26 +125,6 @@ class WholeImageStyle:
         scores = _forward_sigmoid_chunked(model, matrix)
         return {cid: float(s) for cid, s in zip(ids, scores, strict=True)}
 
-    def node_scores(
-        self, model: "nn.Sequential", clips_dict: dict[int, dict[str, Any]]
-    ) -> tuple[list[int], "np.ndarray", "np.ndarray"]:
-        """``(ids, flat, seg_starts)`` — one node per image (the whole-image vector).
-
-        The single-vector analogue of :meth:`_FlattenedStyle.node_scores`, so the
-        calibration study can pool every style uniformly.  Each segment holds
-        exactly one node, so ``seg_starts`` is ``0..N-1`` and ``flat`` is the
-        per-image sigmoid.
-        """
-        import numpy as np  # noqa: PLC0415
-
-        ids = sorted(clips_dict)
-        if not ids:
-            return [], np.empty(0, dtype=np.float64), np.empty(0, dtype=np.int64)
-        matrix = np.stack([np.asarray(media_embedding(clips_dict[cid]), dtype=np.float32) for cid in ids])
-        flat = _forward_sigmoid_chunked(model, matrix)
-        seg_starts = np.arange(len(ids), dtype=np.int64)
-        return ids, flat, seg_starts
-
     def exemplar_sims(self, clips_dict: dict[int, dict[str, Any]], query_vec: "np.ndarray") -> dict[int, float]:
         import numpy as np  # noqa: PLC0415
 
@@ -213,25 +193,6 @@ class _FlattenedStyle:
         flat = _forward_sigmoid_chunked(model, matrix)
         pooled = _segment_max(flat, seg_starts)
         return {cid: float(s) for cid, s in zip(ids, pooled, strict=True)}
-
-    def node_scores(
-        self, model: "nn.Sequential", clips_dict: dict[int, dict[str, Any]]
-    ) -> tuple[list[int], "np.ndarray", "np.ndarray"]:
-        """``(ids, flat, seg_starts)`` — the per-node sigmoid scores before pooling.
-
-        Exposes the raw ``flat`` vector and per-image segment boundaries that
-        :meth:`score_media` collapses with a segment max, so the calibration
-        study (issue #2781) can re-pool the same model's node scores under
-        alternative rules (top-k mean, extreme-value ``pnorm``) from one forward
-        pass.  ``ids[i]``'s nodes are ``flat[seg_starts[i]:seg_starts[i+1]]``.
-        """
-        import numpy as np  # noqa: PLC0415
-
-        if not clips_dict:
-            return [], np.empty(0, dtype=np.float64), np.empty(0, dtype=np.int64)
-        ids, matrix, seg_starts = self._flattened(clips_dict)
-        flat = np.asarray(_forward_sigmoid_chunked(model, matrix), dtype=np.float64)
-        return ids, flat, seg_starts
 
     def exemplar_sims(self, clips_dict: dict[int, dict[str, Any]], query_vec: "np.ndarray") -> dict[int, float]:
         import numpy as np  # noqa: PLC0415

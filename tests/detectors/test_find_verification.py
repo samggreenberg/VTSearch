@@ -5,6 +5,7 @@ Covers:
 - the ``verified`` array on ``GET /api/votes``
 - ``label_filter=unverified`` / ``verified`` export partitioning
 - ``GET /api/find/stats`` (2x2 confusion + FP/FN inclusion sweep)
+- a live Find session surviving a detector-file write (issue #2786)
 
 See docs/plans/find-verification-workflow.md.
 """
@@ -14,7 +15,8 @@ from __future__ import annotations
 import app as app_module
 from helpers import setup_trainable_model_in_registry
 from tests import load_detector_and_wait
-from vtscore.detectors.store import _detector_path, _read_detector
+from vtscore.detectors.dataset_sync import reset_mtime_cache_for_tests
+from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
 from vtscore.state.core import get_active_detector_context
 from vtscore.state.votes import rethreshold_unverified_find_items
 from vtsearch.state import set_find_initial_labels, set_find_scores, set_vote, snapshot_medias
@@ -344,3 +346,126 @@ class TestCorrectionsToDetector:
         assert resp.status_code == 200, resp.get_json()
         assert get_active_detector_context().find_eval_stale is False
         assert client.get("/api/find/stats").get_json()["stale"] is False
+
+
+class TestFindSessionSurvivesDetectorFileWrite:
+    """A detector-file write must not discard a live Find session (#2786).
+
+    ``ensure_votes_match_active_dataset`` (the ``before_request`` rehydrate)
+    re-derives the cid-keyed votes from the on-disk labelset whenever the
+    detector file's mtime moves.  For a Find session that is wrong: the votes
+    are the detector's per-item calls over the active dataset, not training
+    labels, and ``find_scores`` / ``find_initial_labels`` / ``verified_ids``
+    live only in memory.  Rehydrating replaced the scoring output with the
+    detector's *training* labels and un-verified everything the human had
+    confirmed, while the client's ranking and cutoff - which nothing refreshes -
+    kept showing the run that produced them.  The user-visible symptom was the
+    right panel reporting N presumed-good against a left panel showing a
+    completely different number above the cutoff.
+    """
+
+    DETECTOR = "find-session-write"
+
+    def _setup_find(self, client):
+        detector_id = setup_trainable_model_in_registry(
+            self.DETECTOR,
+            good_ids=[1, 2, 3],
+            bad_ids=[18, 19, 20],
+            snap=snapshot_medias(),
+        )
+        load_detector_and_wait(client, detector_id)
+        resp = client.post("/api/find-label", json={"detector_id": detector_id})
+        assert resp.status_code == 200, resp.get_json()
+        return detector_id, resp.get_json()
+
+    def _touch_detector_file(self):
+        """Rewrite the detector file byte-identically, so only its mtime moves.
+
+        Stands in for every real writer that can fire mid-session: a
+        labelset-source pull, a second tab, an external edit.
+        """
+        path = _detector_path(self.DETECTOR)
+        data = _read_detector(path)
+        assert data is not None
+        _write_detector(path, data)
+        reset_mtime_cache_for_tests()
+
+    def test_write_does_not_wipe_find_session(self, client):
+        _, data = self._setup_find(client)
+        above = [r["id"] for r in data["results"] if r["score"] >= data["threshold"]]
+        assert above, "detector labelled nothing good; the fixture can't exercise this"
+
+        # The human verifies one item, as a vote in the Find view does.
+        assert client.post(f"/api/medias/{above[0]}/vote", json={"target": "good"}).status_code == 200
+
+        before = client.get("/api/votes").get_json()
+        # Baseline: the right panel's pile and the left panel's above-cutoff
+        # ranking are the same set.
+        assert set(before["good"]) == set(above)
+        assert before["verified"] == [above[0]]
+
+        self._touch_detector_file()
+
+        after = client.get("/api/votes").get_json()
+        assert set(after["good"]) == set(above), (
+            "the Find session was rehydrated away: the right panel now reports the "
+            "detector's training labels while the left panel still draws the Find cutoff"
+        )
+        assert after["verified"] == [above[0]], "the human's verification was forgotten"
+
+        ctx = get_active_detector_context()
+        assert ctx.find_mode is True
+        assert len(ctx.find_scores) == len(data["results"])
+        assert len(ctx.find_initial_labels) == len(data["results"])
+
+    def test_write_still_refreshes_the_cached_labelset(self, client):
+        """Preserving the session must not mean going blind to the file.
+
+        The labelset cache is re-pointed at the new bytes, so the next reader
+        sees them and the rehydrate pre-check stops re-firing.
+        """
+        self._setup_find(client)
+        path = _detector_path(self.DETECTOR)
+
+        data = _read_detector(path)
+        assert data is not None
+        data["labelset"]["labels"] = data["labelset"]["labels"][:2]
+        _write_detector(path, data)
+        reset_mtime_cache_for_tests()
+
+        assert client.get("/api/votes").status_code == 200
+        ctx = get_active_detector_context()
+        assert len(ctx.cached_labelset) == 2
+        assert ctx.cached_labelset_mtime == path.stat().st_mtime
+        assert ctx.labelset_good_count + ctx.labelset_bad_count == 2
+
+    def test_dataset_switch_still_rehydrates(self, client):
+        """The guard is narrow: only an *unchanged* dataset protects the session.
+
+        Across a dataset switch the cids really are meaningless, so the
+        rehydrate must still run and the Find session must still go.
+        """
+        _, data = self._setup_find(client)
+        ctx = get_active_detector_context()
+        assert ctx.find_mode is True
+
+        ctx.votes_dataset_id = "a-different-dataset"
+        self._touch_detector_file()
+
+        assert client.get("/api/votes").status_code == 200
+        ctx = get_active_detector_context()
+        assert ctx.find_mode is False
+        assert len(ctx.find_scores) == 0
+        assert len(ctx.good_votes) < len(data["results"])
+
+    def test_clear_votes_clears_find_mode(self, client):
+        """``/api/votes/clear`` ends the session, so the flag must clear too.
+
+        Otherwise a stale ``find_mode`` would keep the rehydrate guard engaged
+        (and labelset write-back suppressed) for votes that are now ordinary
+        training labels.
+        """
+        self._setup_find(client)
+        assert get_active_detector_context().find_mode is True
+        assert client.post("/api/votes/clear").status_code == 200
+        assert get_active_detector_context().find_mode is False
