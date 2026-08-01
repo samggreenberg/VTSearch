@@ -57,7 +57,10 @@ def main(argv: list[str] | None = None) -> int:
         name_for = {c: c.replace("-", " ") for c in classes}
         for c in classes:
             try:
-                split = ds.class_split(name_for[c], min_box_frac=args.min_box_frac)
+                # neg_multiple/seed are required but irrelevant here — we only use
+                # gt_boxes (the class's positive boxes) and the id->file locator, both
+                # independent of the negative sampling.
+                split = ds.class_split(name_for[c], min_box_frac=args.min_box_frac, neg_multiple=1, seed=0)
                 gt[c] = dict(split.gt_boxes)
             except Exception as e:  # noqa: BLE001
                 print(f"warn: class_split {c}: {e}", file=sys.stderr)
