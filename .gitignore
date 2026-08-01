@@ -58,4 +58,7 @@ model_cache/*
 # Spike / experiment scratch (codebook fits, ROxford caches, logs)
 scratch/
 
-docs/experiments/*
+# Generated sweep output (results.jsonl, viz PNGs, npz caches) — but keep hand-written *.md writeups
+docs/experiments/**
+!docs/experiments/**/
+!docs/experiments/**/*.md
