@@ -42,26 +42,6 @@ CONFORMAL_QPOS_MAX = 0.75
 _GMM_MAX_SAMPLES = 50_000
 
 
-def classify_threshold_provenance(fallback: float | None) -> str:
-    """Name the code path a trained threshold came from, from its *fallback*.
-
-    :func:`compute_fold_orderings` returns a ``fallback`` that fully discriminates
-    which branch produced the threshold: ``None`` means the conformal quantile
-    rule ran on real fold orderings; :data:`NO_GOOD_THRESHOLD` (2.0) means the
-    "no valid Train/Calibrate split" sentinel; ``0.5`` means a too-few-labels
-    early return.  Used by the calibration study (issue #2781) to attribute the
-    runaway-threshold bug; the safe-threshold GMM blend is a separate caller and
-    is tagged ``"gmm_blend"`` at that site, not here.
-    """
-    if fallback is None:
-        return "conformal"
-    if fallback == NO_GOOD_THRESHOLD:
-        return "no_good_sentinel"
-    if fallback == 0.5:
-        return "too_few_default"
-    return "unknown"
-
-
 def calculate_gmm_threshold(scores: list[float]) -> float:
     """Use a Gaussian Mixture Model to find a threshold between two score distributions.
 
@@ -420,48 +400,7 @@ def _pooled_group_scores(
     return [max(by_row[i] for i in rows_by_group[g]) for g in cal_groups]
 
 
-def _group_node_blocks(
-    model: Any,
-    cal_groups: list,
-    rows_by_group: dict,
-    X_np: np.ndarray,
-    score_rows_by_group: dict | None,
-) -> list[np.ndarray]:
-    """Per calibration group, the array of that group's per-node sigmoid scores.
-
-    The un-pooled counterpart of :func:`_pooled_group_scores`: it returns each
-    group's full node-score vector rather than its max, so a caller can re-pool
-    the bag under an alternative rule (top-k, extreme-value) while reusing the
-    exact fold model and node scores.  ``max`` over each returned block
-    reproduces :func:`_pooled_group_scores` value-for-value.
-    """
-    import torch  # noqa: PLC0415
-
-    from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: PLC0415
-
-    device = next(model.parameters()).device
-    if score_rows_by_group is not None:
-        blocks = [np.asarray(score_rows_by_group[g], dtype=np.float32) for g in cal_groups]
-        sizes = [b.shape[0] for b in blocks]
-        with torch.no_grad():
-            X_cal = torch.tensor(np.concatenate(blocks, axis=0), dtype=torch.float32).to(device)
-            flat = sigmoid_to_finite_scores(model(X_cal))
-        out: list[np.ndarray] = []
-        offset = 0
-        for size in sizes:
-            out.append(np.asarray(flat[offset : offset + size], dtype=np.float64))
-            offset += size
-        return out
-
-    cal_idx = [i for g in cal_groups for i in rows_by_group[g]]
-    with torch.no_grad():
-        X_cal = torch.tensor(X_np[cal_idx], dtype=torch.float32).to(device)
-        row_scores = sigmoid_to_finite_scores(model(X_cal))
-    by_row = dict(zip(cal_idx, row_scores, strict=True))
-    return [np.asarray([by_row[i] for i in rows_by_group[g]], dtype=np.float64) for g in cal_groups]
-
-
-def _grouped_folds(
+def _compute_fold_orderings_grouped(
     X_list: list[np.ndarray],
     y_list: list[float],
     input_dim: int,
@@ -470,16 +409,18 @@ def _grouped_folds(
     calibrate_count: int,
     calibration_fraction: float,
     hidden_dim: int | None,
-) -> tuple[list[tuple[Any, list]], float | None, np.ndarray, dict, dict]:
-    """Train the bag-aware calibration folds; return the trained fold models.
+    score_rows_by_group: dict | None = None,
+) -> tuple[list[tuple[list[float], list[float]]], float | None]:
+    """Bag-aware variant of :func:`compute_fold_orderings`.
 
-    The shared core of :func:`_compute_fold_orderings_grouped` and
-    :func:`compute_grouped_fold_node_scores`: both need identical fold splits and
-    fold models, differing only in how they collapse each calibration group
-    (max-pool vs. keep every node).  Returns
-    ``(folds, fallback, X_np, rows_by_group, label_by_group)`` where *folds* is a
-    list of ``(model, cal_groups)`` and *fallback* is a sentinel threshold when
-    calibration is impossible (empty *folds* then).
+    Splits by *group* (a voted image) instead of by row so a Bad bag's flooded
+    region negatives never straddle the Train/Calibrate boundary, sizes the
+    split over votes not rows, weight-balances each fold fit per-bag, and
+    collapses every calibration group to a single max-pooled score (an image
+    scores by its best region, as at inference).
+
+    *score_rows_by_group* overrides which rows a calibration group collapses
+    over - see :func:`compute_fold_orderings`.
     """
     import torch  # noqa: PLC0415
 
@@ -505,14 +446,14 @@ def _grouped_folds(
     neg_groups = [g for g in order_groups if label_by_group[g] == 0.0]
     n = len(order_groups)
     if n < 4:
-        return [], 0.5, X_np, rows_by_group, label_by_group
+        return [], 0.5
     if len(pos_groups) < 2 or len(neg_groups) < 2:
-        return [], 0.5, X_np, rows_by_group, label_by_group
+        return [], 0.5
 
     n_cal = max(1, round(n * calibration_fraction))
     n_train = n - n_cal
     if n_train < 2 or n_cal < 1:
-        return [], NO_GOOD_THRESHOLD, X_np, rows_by_group, label_by_group
+        return [], NO_GOOD_THRESHOLD
 
     def _per_class_n_train(class_total: int) -> int:
         target = round(class_total * n_train / n)
@@ -523,7 +464,7 @@ def _grouped_folds(
 
     # Index the plain group lists by position - group ids are tuples, and
     # ``np.array(list_of_tuples)`` would build a 2-D array and mangle them.
-    folds: list[tuple[Any, list]] = []
+    orderings: list[tuple[list[float], list[float]]] = []
     for _ in range(max(1, calibrate_count)):
         pos_perm = _rng.permutation(len(pos_groups))
         neg_perm = _rng.permutation(len(neg_groups))
@@ -535,41 +476,7 @@ def _grouped_folds(
         y_train = torch.tensor(y_np[train_idx], dtype=torch.float32).unsqueeze(1)
         fold_w = torch.tensor(_per_bag_fit_weights(y_np[train_idx], [grp[i] for i in train_idx]), dtype=torch.float32)
         model = train_model(X_train, y_train, input_dim, hidden_dim=hidden_dim, sample_weights=fold_w)
-        folds.append((model, cal_groups))
 
-    return folds, None, X_np, rows_by_group, label_by_group
-
-
-def _compute_fold_orderings_grouped(
-    X_list: list[np.ndarray],
-    y_list: list[float],
-    input_dim: int,
-    groups: list,
-    rng: np.random.RandomState | None,
-    calibrate_count: int,
-    calibration_fraction: float,
-    hidden_dim: int | None,
-    score_rows_by_group: dict | None = None,
-) -> tuple[list[tuple[list[float], list[float]]], float | None]:
-    """Bag-aware variant of :func:`compute_fold_orderings`.
-
-    Splits by *group* (a voted image) instead of by row so a Bad bag's flooded
-    region negatives never straddle the Train/Calibrate boundary, sizes the
-    split over votes not rows, weight-balances each fold fit per-bag, and
-    collapses every calibration group to a single max-pooled score (an image
-    scores by its best region, as at inference).
-
-    *score_rows_by_group* overrides which rows a calibration group collapses
-    over - see :func:`compute_fold_orderings`.
-    """
-    folds, fallback, X_np, rows_by_group, label_by_group = _grouped_folds(
-        X_list, y_list, input_dim, groups, rng, calibrate_count, calibration_fraction, hidden_dim
-    )
-    if fallback is not None:
-        return [], fallback
-
-    orderings: list[tuple[list[float], list[float]]] = []
-    for model, cal_groups in folds:
         # Collapse each calibration group to one max-pooled score, so a Good
         # bag and a Bad bag are pooled the same way the scorer pools an image.
         group_scores = _pooled_group_scores(model, cal_groups, rows_by_group, X_np, score_rows_by_group)
@@ -577,44 +484,6 @@ def _compute_fold_orderings_grouped(
         orderings.append((group_scores, group_labels))
 
     return orderings, None
-
-
-def compute_grouped_fold_node_scores(
-    X_list: list[np.ndarray],
-    y_list: list[float],
-    input_dim: int,
-    groups: list,
-    rng: np.random.RandomState | None = None,
-    calibrate_count: int = 2,
-    calibration_fraction: float = 0.5,
-    hidden_dim: int | None = None,
-    score_rows_by_group: dict | None = None,
-) -> tuple[list[tuple[list[np.ndarray], list[float]]], float | None]:
-    """Bag-aware calibration folds, returning each held-out group's node scores.
-
-    Like :func:`_compute_fold_orderings_grouped` but instead of max-pooling every
-    calibration group it returns the group's **full node-score vector**, so a
-    caller (the #2781 calibration study) can re-pool the same fold models' scores
-    under alternative rules (top-k mean, extreme-value ``pnorm``) to recalibrate
-    a threshold for a pooling variant without retraining.  ``max`` over each
-    returned block reproduces this arm's production threshold exactly.
-
-    Returns ``(fold_node_data, fallback)`` where *fold_node_data* is a list, one
-    entry per fold, of ``(group_node_scores, group_labels)`` - *group_node_scores*
-    being a list of 1-D float arrays (one per held-out calibration group).
-    """
-    folds, fallback, X_np, rows_by_group, label_by_group = _grouped_folds(
-        X_list, y_list, input_dim, groups, rng, calibrate_count, calibration_fraction, hidden_dim
-    )
-    if fallback is not None:
-        return [], fallback
-
-    fold_node_data: list[tuple[list[np.ndarray], list[float]]] = []
-    for model, cal_groups in folds:
-        blocks = _group_node_blocks(model, cal_groups, rows_by_group, X_np, score_rows_by_group)
-        group_labels = [float(label_by_group[g]) for g in cal_groups]
-        fold_node_data.append((blocks, group_labels))
-    return fold_node_data, None
 
 
 def compute_fold_orderings(

@@ -51,6 +51,13 @@ def clear_votes() -> None:
         ctx.verified_ids.clear()
         ctx.find_scores.clear()
         ctx.find_eval_stale = False
+        # Everything that *made* this a Find session is gone, so the flag that
+        # says "these votes are scoring output" must go too.  Leaving it set
+        # would keep suppressing labelset write-back
+        # (``label_sync.is_find_mode``) and keep the vote rehydrate's
+        # find-session guard engaged (``dataset_sync``) for votes that are now
+        # ordinary training labels.
+        ctx.find_mode = False
         ds_atlas = get_active_context().coverage_atlas
         if ds_atlas is not None:
             ds_atlas.reset_labeled()

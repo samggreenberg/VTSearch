@@ -250,7 +250,7 @@ Two columns make this visible in the output:
 
 Metrics are still recorded at every trainable step in both modes — fidelity changes the *vote order* and the `app_trained` flag, not measurement coverage.
 
-Pass `autopilot_fidelity=False` to reproduce studies published before the flow was aligned (the Max-Patch, MLP-vs-SVM, Inclusion-knob, and Calibration reports); that path is byte-for-byte the old behaviour. New studies should leave it on.
+Pass `autopilot_fidelity=False` to reproduce studies published before the flow was aligned (the Max-Patch, MLP-vs-SVM, and Inclusion-knob reports); that path is byte-for-byte the old behaviour. New studies should leave it on.
 
 ```python
 #!/usr/bin/env python

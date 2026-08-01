@@ -138,6 +138,27 @@ def ensure_votes_match_active_dataset() -> None:
     ):
         return
 
+    # A live Find session is NOT re-derivable from the labelset.  Its votes are
+    # the detector's per-item calls over the active dataset, and ``find_scores``
+    # / ``find_initial_labels`` / ``verified_ids`` exist only in memory.  So
+    # long as the dataset under the detector hasn't moved, the cids stay valid
+    # and a detector-file write (a labelset-source pull, a second tab, an
+    # external edit) is no reason to throw the session away: re-deriving here
+    # would silently replace the scoring output with the detector's *training*
+    # labels, un-verify everything the human confirmed, and clear ``find_mode``
+    # so subsequent votes stop verifying at all - while the client's ranking and
+    # cutoff, which nothing refreshes, keep showing the run that produced them
+    # (issue #2786).  Re-point the cached labelset + mtime at the file instead,
+    # exactly as ``add_corrections_to_detector`` does after its own write, so
+    # this pre-check stops re-firing and the session survives.
+    #
+    # A dataset switch still rehydrates (the guard requires an unchanged
+    # ``votes_dataset_id``): there the cids really are meaningless and the Find
+    # session must go.
+    if det_ctx.find_mode and det_ctx.votes_dataset_id == ds_ctx.dataset_id:
+        _repoint_labelset_cache(det_ctx, path)
+        return
+
     data = _read_detector(path)
     if data is None:
         # Detector file missing. Still mark the dataset transition so we
@@ -209,6 +230,40 @@ def ensure_votes_match_active_dataset() -> None:
         # ``label_restoration.py``) and therefore skip the per-vote atlas
         # update; this is where the equivalent bulk update lands.
         resync_coverage_atlas_to_detector(ds_ctx, det_ctx)
+
+
+def _repoint_labelset_cache(det_ctx, path) -> None:
+    """Re-point *det_ctx*'s cached labelset at the on-disk file, votes untouched.
+
+    The freshness half of :func:`ensure_votes_match_active_dataset` without the
+    rehydrate: refreshes ``cached_labelset`` / ``cached_labelset_mtime`` /
+    ``cached_labelset_media_type`` and the labelset counters so a detector-file
+    write is picked up for everything that reads the labelset, while leaving the
+    cid-keyed vote state (and any live Find session) exactly as it was.  Mirrors
+    :func:`vtscore.detectors.label_sync._refresh_detector_caches`, which does the
+    same after its own write.
+
+    A missing / unreadable file parks the cache empty; the next call re-reads.
+    """
+    from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.store import _read_detector
+    from vtscore.state.core import _state_lock
+
+    data = _read_detector(path)
+    with _state_lock:
+        if data is None:
+            det_ctx.cached_labelset = None
+            det_ctx.cached_labelset_mtime = 0.0
+            return
+        labelset = LabelSet.from_dict(data.get("labelset") or {})
+        det_ctx.cached_labelset = labelset
+        # Stamp the mtime of the content we just cached (a raw stat, not the
+        # TTL-cached pre-check value), so the stamp always describes the bytes
+        # in ``cached_labelset``.
+        det_ctx.cached_labelset_mtime = _detector_file_mtime(path)
+        det_ctx.cached_labelset_media_type = data.get("media_type", "") or det_ctx.cached_labelset_media_type
+        det_ctx.labelset_good_count = sum(1 for el in labelset.elements if el.label == "good")
+        det_ctx.labelset_bad_count = sum(1 for el in labelset.elements if el.label == "bad")
 
 
 def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -> bool:

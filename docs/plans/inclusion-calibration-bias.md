@@ -51,18 +51,13 @@ it rather than re-simulating the vote order.
 
 <!-- item-sep -->
 
-- **Region-bag (grouped) calibration arm — measured; bias present at high k.**
-  The calibration study (#2781, `docs/experiments/calibration/REPORT.md`) ran the
-  grouped path (`_compute_fold_orderings_grouped`) on Visual Genome region voting
-  and compared its Inclusion-budget compliance to the ungrouped single-vector
-  path. The grouped path **overshoots the FNR cap materially at k ≥ 1** (measured
-  excess FNR +0.09 to +0.13 at t ≥ 100, vs ~+0.00 to +0.05 ungrouped), and the
-  #2784 fix barely moves it (the high-k tail is governed by the FN-budget cap,
-  not the k=0 anchor). So on a grouped/region detector the halving-per-step
-  Inclusion semantics should not be read literally at high k. Remaining work: if
-  region detectors become a primary workflow, either widen the effective
-  calibration support at high k or scope the guarantee down for grouped
-  calibration in `docs/ML.md`.
+- **Region-bag (grouped) calibration arm.** The study's arms are all
+  single-vector. The grouped path (`_compute_fold_orderings_grouped`) max-pools
+  each voted image's region rows to one calibration score, and region voting
+  floods a Bad vote with every region of the image. Both reshape the calibration
+  score distribution, so the measured drift may differ. Reuse the harness with a
+  patch dataset and `region_voting=True` semantics if region detectors become a
+  primary workflow.
 
 <!-- item-sep -->
 
