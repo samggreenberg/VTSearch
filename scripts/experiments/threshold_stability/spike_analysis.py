@@ -104,6 +104,10 @@ def summarize(rows: list[dict], n_traces: int, thresh: float) -> str:
     rec = Counter(("never>5" if r["recover_steps"] is None else r["recover_steps"]) for r in rows)
     early = pct(lambda r: (r["t"] or 0) < 20)
     bad_hard = pct(lambda r: r["culprit_label"] == "bad" and r["select_mode"] == "hard")
+    sparse_pos = pct(lambda r: (r["n_good"] or 0) <= 6)
+    runaway = pct(lambda r: _f(r.get("d_fnr")) > 0.2)  # cut jumped over a big chunk of positives
+    goods = sorted(r["n_good"] for r in rows if r["n_good"] is not None)
+    med_good = goods[len(goods) // 2] if goods else "-"
     by_phase = Counter(r["phase"] for r in rows)
     by_calib = Counter(r["calib_mode"] for r in rows)
     by_select = Counter(r["select_mode"] for r in rows)
@@ -119,6 +123,8 @@ def summarize(rows: list[dict], n_traces: int, thresh: float) -> str:
         f"Threshold moved UP:   {thr_up}   (up = cut rejects more -> FNR)",
         f"FNR-driven (Δfnr>Δfpr): {fnr_driven}",
         f"Early (t<20): {early}",
+        f"Sparse positives at spike (n_good<=6): {sparse_pos}   (median n_good at spike = {med_good})",
+        f"Runaway (Δfnr>0.2 — cut vaulted over many positives): {runaway}",
         f"Narrow (recovers to pre-spike within 2 steps): {narrow}",
         f"Recovery-steps distribution: {dict(sorted(rec.items(), key=lambda kv: str(kv[0])))}",
         "",
