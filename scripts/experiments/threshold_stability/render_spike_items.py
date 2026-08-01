@@ -44,11 +44,25 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dataset", default="coco")
     ap.add_argument("--min-box-frac", type=float, default=0.03)
     ap.add_argument("--top", type=int, default=18)
+    ap.add_argument(
+        "--min-spikes", type=int, default=1, help="only items that spiked in >= this many seeds (confidence)"
+    )
+    ap.add_argument("--per-class", type=int, default=0, help="if >0, cap items per class (breadth over depth)")
     ap.add_argument("--out", required=True)
     args = ap.parse_args(argv)
 
     data = json.loads(Path(args.items).read_text())
-    top = data["items"][: args.top]
+    pool = [it for it in data["items"] if it["n_spikes"] >= args.min_spikes]
+    if args.per_class:
+        seen: dict[str, int] = {}
+        capped = []
+        for it in pool:  # pool is already sorted by n_spikes desc
+            k = seen.get(it["cls"], 0)
+            if k < args.per_class:
+                capped.append(it)
+                seen[it["cls"]] = k + 1
+        pool = capped
+    top = pool[: args.top]
     # One class_split per class → gt_boxes for that class's positives.
     classes = sorted({it["cls"] for it in top})
     gt: dict[str, dict[int, list]] = {}
