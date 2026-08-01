@@ -21,6 +21,14 @@ import numpy as np
 # stored on ``DetectorContext.threshold`` and break every comparison.
 NO_GOOD_THRESHOLD = 2.0
 
+# Split-conformal inclusion rule (issue #2784), backported from ``dev`` so this
+# branch's calibration matches the shipped app. ``BASE`` is the ``k=0`` budget:
+# the FN cap is the 0.25-quantile of calibration positives, the FP guard the
+# 0.75-quantile of negatives.
+CONFORMAL_BASE_BUDGET = 0.25
+#: Positive-score quantile the ``k=-10`` end of the inclusion walk reaches.
+CONFORMAL_QPOS_MAX = 0.75
+
 # Above this many scores, fit the GMM on a random subsample instead of the full
 # set. A 2-component, 1-D GMM only needs to recover the two clusters' means and
 # variances, which 50k samples estimate as accurately as the full population -
@@ -543,39 +551,73 @@ def compute_fold_orderings(
     return orderings, None
 
 
+def conformal_threshold(
+    scores: list[float],
+    labels: list[float],
+    inclusion_value: int = 0,
+) -> float:
+    """Split-conformal quantile threshold over held-out calibration scores (#2784).
+
+    Backported verbatim from ``dev`` so this branch calibrates like the shipped
+    app. Maps ``inclusion_value`` (``k``) to a cut via quantiles of the calibration
+    score distributions rather than a min-cost search over observed cuts:
+
+    * a **false-negative cap** ``alpha(k) = min(1, BASE * 2^-k)`` — the cut never
+      exceeds the ``alpha``-quantile of the calibration *positives*;
+    * a **false-positive guard** for ``k <= 0`` at the ``1 - BASE * 2^k`` quantile
+      of the *negatives*, walking up toward the positives as ``k`` drops;
+    * the **gap midpoint** at ``k=0`` — the midpoint of the band between the top of
+      the negatives and the lowest positive. Every cut in that band has identical
+      empirical error, so its top edge (the lowest calibration positive) is an
+      arbitrary, high-variance choice; the midpoint is the max-margin one and is
+      what stops a single boundary vote vaulting the cut over the positives.
+
+    Monotone non-increasing in ``k`` by construction. Returns ``0.5`` when the
+    score list is empty or single-class; never abstains otherwise.
+    """
+    if not scores:
+        return 0.5
+
+    scores_arr = np.asarray(scores, dtype=np.float64)
+    labels_arr = np.asarray(labels, dtype=np.float64)
+    pos = scores_arr[labels_arr == 1.0]
+    neg = scores_arr[labels_arr != 1.0]
+    if len(pos) == 0 or len(neg) == 0:
+        return 0.5
+
+    def _threshold_at(k: int) -> float:
+        fn_cap = float(np.quantile(pos, min(1.0, CONFORMAL_BASE_BUDGET * 2.0**-k)))
+        if k > 0:
+            return min(fn_cap, _threshold_at(0))
+        fp_guard = float(np.quantile(neg, 1.0 - CONFORMAL_BASE_BUDGET * 2.0**k))
+        gap_mid = (fp_guard + max(fp_guard, float(np.min(pos)))) / 2.0
+        top = float(np.quantile(pos, CONFORMAL_QPOS_MAX))
+        walk = gap_mid + (-k / 10.0) * max(0.0, top - gap_mid)
+        return min(fn_cap, max(fp_guard, walk))
+
+    return _threshold_at(inclusion_value)
+
+
 def threshold_from_fold_orderings(
     fold_orderings: list[tuple[list[float], list[float]]],
     inclusion_value: int,
 ) -> float:
-    """Aggregate the per-fold min-cost thresholds at *inclusion_value*.
+    """Apply the conformal inclusion rule to the pooled fold orderings (#2784).
 
-    Cheap: just re-runs :func:`find_optimal_threshold` over each fold's cached
-    ``(scores, labels)``.  Callers must pass a non-empty ``fold_orderings``
-    (the empty case is handled via the ``fallback`` from
-    :func:`compute_fold_orderings`).
-
-    A fold whose min-cost cut is "predict nothing" returns
-    :data:`NO_GOOD_THRESHOLD` (2.0), which is a *vote to abstain*, not a
-    number to average.  Numerically averaging it dragged the mean above the
-    sigmoid range whenever a single fold abstained (with the default
-    ``calibrate_count=2`` any lone abstain forced the whole ensemble to
-    abstain, while at 3+ folds the same lone abstain often did not - a
-    fold-count-dependent artifact that also stored an ill-defined ~1.3 as the
-    "threshold").  Instead the sentinel is tallied as a vote: the ensemble
-    abstains only when a **strict majority** of folds abstain; otherwise the
-    threshold is the mean of just the folds that produced a real cut.
+    Pools every fold's cached held-out ``(scores, labels)`` and runs
+    :func:`conformal_threshold` once — no per-fold argmin (that was the pre-#2784
+    behaviour whose lowest-positive anchor made a single boundary vote vault the
+    cut over the calibration positives). Pooling (vs. averaging per-fold
+    quantiles) is deliberate: the knob's resolution is bounded by how many
+    calibration scores the quantile sees. Empty ``fold_orderings`` (handled via the
+    ``fallback`` from :func:`compute_fold_orderings`) returns
+    :data:`NO_GOOD_THRESHOLD` defensively.
     """
-    per_fold = [find_optimal_threshold(s, lbls, inclusion_value) for s, lbls in fold_orderings]
-    if not per_fold:
+    if not fold_orderings:
         return NO_GOOD_THRESHOLD
-    finite = [t for t in per_fold if t != NO_GOOD_THRESHOLD]
-    n_abstain = len(per_fold) - len(finite)
-    # Strict majority abstains -> abstain overall.  ``not finite`` (every fold
-    # abstained) is a strict majority for any non-empty ensemble, so it is
-    # subsumed here and the ``sum(finite)`` below never divides by zero.
-    if n_abstain * 2 > len(per_fold):
-        return NO_GOOD_THRESHOLD
-    return sum(finite) / len(finite)
+    pooled_scores = [s for scores, _ in fold_orderings for s in scores]
+    pooled_labels = [lb for _, labels in fold_orderings for lb in labels]
+    return conformal_threshold(pooled_scores, pooled_labels, inclusion_value)
 
 
 def calculate_cross_calibration_threshold(

@@ -47,71 +47,15 @@ import numpy as np
 
 from vtscore.eval.xcal import PredictFn, TrainerFn, cross_calibrated_threshold
 
-#: The inclusion knob's base budget: at ``k = 0`` the false-negative cap and the
-#: false-positive guard are the 0.25 / 0.75 quantiles respectively. Kept in sync
-#: with ``vtscore.training.thresholds`` on ``dev`` (the value the app ships).
-CONFORMAL_BASE_BUDGET = 0.25
-#: Positive-score quantile the ``k = -10`` end of the inclusion walk reaches.
-CONFORMAL_QPOS_MAX = 0.75
+# The conformal inclusion rule lives in ``vtscore.training.thresholds`` (its dev
+# home, #2784) so the whole-image path here and the grouped detector-training path
+# there share one implementation. Re-exported for callers/tests that import it
+# from this module.
+from vtscore.training.thresholds import conformal_threshold
 
-RULES = ("argmin", "conformal", "rank-transfer")
-
-
-def conformal_threshold(
-    scores: Sequence[float],
-    labels: Sequence[float],
-    inclusion_value: int = 0,
-) -> float:
-    """Split-conformal quantile threshold over held-out calibration scores.
-
-    Ported verbatim from ``vtscore.training.thresholds.conformal_threshold`` on
-    ``dev`` (issue #2784) so the ``conformal`` arm matches production Autopilot
-    exactly. Maps ``inclusion_value`` (``k``) to a decision threshold via
-    quantiles of the calibration score distributions rather than a min-cost
-    search over observed cuts:
-
-    * a **false-negative cap** ``alpha(k) = min(1, BASE * 2^-k)`` — the cut never
-      exceeds the ``alpha``-quantile of the calibration *positives*;
-    * a **false-positive guard** for ``k <= 0`` at the ``1 - BASE * 2^k`` quantile
-      of the *negatives*, with a walk *up* toward the positives as ``k`` drops;
-    * the **gap midpoint** at ``k = 0`` — the midpoint of the band between the top
-      of the negatives and the lowest positive. Every cut in that band has
-      identical empirical error, so its top edge (the single lowest calibration
-      positive) is an arbitrary, high-variance choice; the midpoint is the
-      max-margin one and is what stops the threshold jumping vote-to-vote.
-
-    Every component is monotone non-increasing in ``k``, so the cut is monotone in
-    inclusion by construction. Returns ``0.5`` when the score list is empty or
-    single-class (no quantiles to take); never abstains otherwise.
-    """
-    if len(scores) == 0:
-        return 0.5
-
-    scores_arr = np.asarray(scores, dtype=np.float64)
-    labels_arr = np.asarray(labels, dtype=np.float64)
-    pos = scores_arr[labels_arr == 1.0]
-    neg = scores_arr[labels_arr != 1.0]
-    if len(pos) == 0 or len(neg) == 0:
-        return 0.5
-
-    def _threshold_at(k: int) -> float:
-        fn_cap = float(np.quantile(pos, min(1.0, CONFORMAL_BASE_BUDGET * 2.0**-k)))
-        if k > 0:
-            # The k=0 floor keeps the seam monotone: q_pos(alpha) can sit above
-            # the k=0 cut when the budget goes unspent there.
-            return min(fn_cap, _threshold_at(0))
-        fp_guard = float(np.quantile(neg, 1.0 - CONFORMAL_BASE_BUDGET * 2.0**k))
-        # Midpoint of the band the calibration data cannot resolve: the top of the
-        # negatives up to the lowest positive. Collapses to ``fp_guard`` under
-        # class overlap (no band), so the FPR-controlled regime is untouched.
-        gap_mid = (fp_guard + max(fp_guard, float(np.min(pos)))) / 2.0
-        # Walk from that midpoint at k=0 up to the QPOS_MAX positive quantile at
-        # k=-10, linearly in score space (evenly spaced stops even on few points).
-        top = float(np.quantile(pos, CONFORMAL_QPOS_MAX))
-        walk = gap_mid + (-k / 10.0) * max(0.0, top - gap_mid)
-        return min(fn_cap, max(fp_guard, walk))
-
-    return _threshold_at(inclusion_value)
+#: The eval's calibration rules. ``argmin`` (the pre-#2784 min-cost cut) is retained
+#: only for explicitly reproducing old runs; it is never a default or a study arm.
+RULES = ("conformal", "rank-transfer", "argmin")
 
 
 def stratified_fold_orderings(
@@ -294,8 +238,6 @@ def median_smooth(threshold_history: Sequence[float], window: int = 3) -> float:
 
 # Re-exported for callers that build a trainer_fn and want the type names local.
 __all__ = [
-    "CONFORMAL_BASE_BUDGET",
-    "CONFORMAL_QPOS_MAX",
     "RULES",
     "PredictFn",
     "TrainerFn",

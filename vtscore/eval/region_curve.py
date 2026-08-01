@@ -665,19 +665,19 @@ def _train_pool_head(
     safe_thresholds: bool,
     calibrate_count: int,
     cal_fraction: float,
-    threshold_rule: str = "argmin",
+    threshold_rule: str = "conformal",
 ):
     """Train a head on the current good/bad votes; returns
     ``(predict_fn, raw_threshold, n_votes, calib_mode)`` or ``None`` on a
     single-class / empty budget. Region-voting reuses :func:`train_rv_head`
     (snapped positives + leaf-flood bags); otherwise a box-pool/whole MLP.
 
-    *threshold_rule* selects the whole/box-pool path's calibration rule (#2790):
-    ``"argmin"`` (default) is byte-identical to the historical ``xcal`` behaviour;
-    ``"conformal"`` / ``"rank-transfer"`` run production Autopilot's split-conformal
-    rule via :func:`vtscore.eval.threshold_rules.calibrated_threshold`. (The
-    region-voting branch still calibrates through :func:`train_rv_head`; wiring the
-    rule into that grouped path is tracked separately — see THRESHOLD_STABILITY_STATUS.)"""
+    *threshold_rule* selects the whole/box-pool path's calibration rule: the
+    default ``"conformal"`` runs the shipped app's split-conformal inclusion rule
+    (#2784) via :func:`vtscore.eval.threshold_rules.calibrated_threshold`;
+    ``"argmin"`` (the pre-#2784 min-cost cut) is retained only for reproducing old
+    runs. The region-voting branch (:func:`train_rv_head`) calibrates via the same
+    conformal rule through ``cross_calibration_threshold_cached``."""
     good = sorted(good_ids)
     bad = sorted(bad_ids)
     if not good or not bad:
@@ -800,7 +800,7 @@ def _resolve_step_head(
     safe_thresholds,
     calibrate_count,
     cal_fraction,
-    threshold_rule="argmin",
+    threshold_rule="conformal",
 ):
     """Return ``(cached, steps_since_train)`` for one step.
 
@@ -913,7 +913,7 @@ def _realistic_one_seed(
     bad_to_start: int,
     retrain_cadence: int,
     stop_at_done: bool,
-    threshold_rule: str = "argmin",
+    threshold_rule: str = "conformal",
     threshold_smooth: str = "none",
 ) -> tuple[list[dict], dict | None]:
     """Run one seed's labeling loop. Returns ``(rows, final)`` where ``final`` is a dict
@@ -1106,7 +1106,7 @@ def evaluate_realistic_curve(
     retrain_cadence: int = 1,
     stop_at_done: bool = False,
     return_finals: bool = False,
-    threshold_rule: str = "argmin",
+    threshold_rule: str = "conformal",
     threshold_smooth: str = "none",
 ) -> list[dict] | tuple[list[dict], dict[int, dict]]:
     """Realistic active-learning labeling curve: cost/fpr/fnr/F1/IoU vs ``t`` (total
