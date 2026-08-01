@@ -295,23 +295,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", required=True, help="Output CSV path for the decomposition.")
     args = ap.parse_args(argv)
 
-    from vtscore.training.mlp import train_model  # noqa: PLC0415
+    from vtscore.eval.scoring_heads import MLPHead  # noqa: PLC0415
 
     def trainer_fn_factory():
-        def trainer_fn(X, y, seed):  # noqa: ARG001 - signature fixed by TrainerFn
-            import torch  # noqa: PLC0415
-
-            model = train_model(
-                torch.tensor(np.asarray(X), dtype=torch.float32),
-                torch.tensor(np.asarray(y), dtype=torch.float32).unsqueeze(1),
-                X.shape[1],
-            )
-
-            def predict(Xc):
-                with torch.no_grad():
-                    return model(torch.tensor(np.asarray(Xc), dtype=torch.float32)).squeeze(-1).numpy()
-
-            return predict
+        # Reuse the sweep's exact head so replayed thresholds are on the same
+        # (sigmoid [0,1]) score scale the live loop calibrates on — a hand-rolled
+        # trainer that skipped the sigmoid would calibrate on raw logits and be
+        # incomparable to the sweep. MLPHead builds per fold-fit with the right
+        # input_dim and trains via ``train_model(..., seed=seed)`` identically.
+        def trainer_fn(X, y, seed):
+            return MLPHead(int(X.shape[1])).trainer_fn()(X, y, seed)
 
         return trainer_fn
 
