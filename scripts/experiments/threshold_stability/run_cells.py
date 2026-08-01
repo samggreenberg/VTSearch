@@ -144,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
         common.log(f"index {idx} >= {len(cells)} cells; nothing to do")
         return 0
     cell = cells[idx]
-    common.log(f"cell {idx}/{len(cells)}: class={cell['cls']!r} seed={cell['seed']} arms={[a[0] for a in cfg.ARMS]}")
+    common.log(f"cell {idx}/{len(cells)}: class={cell['cls']!r} arms={[a[0] for a in cfg.ARMS]}")
     run_cell(cell)
     return 0
 
