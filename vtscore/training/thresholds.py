@@ -10,6 +10,8 @@ from votes, caching on ``DetectorContext``) lives in
 from __future__ import annotations
 
 import hashlib
+import math
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -39,12 +41,185 @@ CONFORMAL_QPOS_MAX = 0.75
 _GMM_MAX_SAMPLES = 50_000
 
 
+def _quadratic_roots(a: float, b: float, c: float) -> list[float]:
+    """Real roots of ``a*x^2 + b*x + c``, degenerating gracefully to the linear case.
+
+    Uses the cancellation-free ("citardauq") pairing ``q = -(b + sign(b)*sqrt(D))/2``,
+    ``x = {q/a, c/q}`` rather than the textbook formula.  That matters here because
+    the near-equal-variance case drives ``a`` toward 0, where ``(-b + sqrt(D)) /
+    (2a)`` is catastrophic cancellation over a vanishing denominator while ``c/q``
+    stays accurate and converges smoothly to the linear root ``-c/b``.
+    """
+    if a == 0.0:
+        return [] if b == 0.0 else [-c / b]
+    disc = b * b - 4.0 * a * c
+    if disc < 0.0:
+        return []
+    q = -0.5 * (b + math.copysign(math.sqrt(disc), b))
+    if q == 0.0:
+        # Only reachable with b == 0 and disc == 0, i.e. ``a*x^2 = 0``.
+        return [0.0]
+    return [q / a, c / q]
+
+
+def _weighted_gaussian_crossing(
+    w_lo: float,
+    mu_lo: float,
+    var_lo: float,
+    w_hi: float,
+    mu_hi: float,
+    var_hi: float,
+) -> float | None:
+    """Score between the two means where the weighted component densities cross.
+
+    Solves ``w_lo * N(x; mu_lo, var_lo) == w_hi * N(x; mu_hi, var_hi)``.  Taking
+    logs makes the difference a quadratic ``f(x) = a x^2 + b x + c`` (``f > 0``
+    means the Bad component owns that score), so the crossing is a root of that
+    quadratic - the Bayes decision boundary between the two fitted components.
+
+    This is the cut the midpoint-between-means rule only approximates, and the
+    two agree **exactly** when the components are equal-weight and equal-variance.
+    They diverge precisely where region voting lives: a media's score is the max
+    over ~24 region nodes, so the Bad mode is an extreme-value statistic - wider,
+    right-skewed, and far heavier than the Good mode.  A wider/heavier low
+    component pushes the crossing *above* the midpoint (with equal variances the
+    offset is ``var * ln(w_lo/w_hi) / (mu_hi - mu_lo)``), so the midpoint sits
+    inside Bad mass and over-includes.
+
+    Returns ``None`` - meaning "the caller should fall back to the midpoint" -
+    whenever the crossing is not a well-defined boundary: non-positive weights or
+    variances, non-ordered/degenerate means, a complex-root fit, no root strictly
+    between the means (near-equal variances with an extreme weight ratio push the
+    linear root outside the interval), or a fit in which the Bad component still
+    out-densities the Good one at the Good mean.  When two roots land inside the
+    interval the larger one is taken: above it the Good component dominates all
+    the way to its own mean, which is the boundary a threshold wants.
+    """
+    if not (w_lo > 0.0 and w_hi > 0.0 and var_lo > 0.0 and var_hi > 0.0):
+        return None
+    if not (mu_hi > mu_lo):
+        return None
+
+    # Solve in ``u = x - mu_lo`` so the interval is ``(0, d)``.  Shifting keeps
+    # the roots exact while dropping the ``mu^2 / var`` terms that would dominate
+    # the coefficients (and their cancellation) for score scales far from zero.
+    d = mu_hi - mu_lo
+    offset = math.log(w_lo / w_hi) + 0.5 * math.log(var_hi / var_lo)
+    a = 0.5 / var_hi - 0.5 / var_lo
+    b = -d / var_hi
+    c = 0.5 * d * d / var_hi + offset
+
+    # The Good mode must actually be Good-dominated, else "the score above which
+    # Good wins" is not something this fit expresses.  Evaluated in closed form
+    # rather than as ``a d^2 + b d + c`` (the same value, without the cancellation).
+    if offset - 0.5 * d * d / var_lo >= 0.0:
+        return None
+
+    inside = [u for u in _quadratic_roots(a, b, c) if math.isfinite(u) and 0.0 < u < d]
+    if not inside:
+        return None
+    return mu_lo + max(inside)
+
+
+@dataclass(frozen=True)
+class GmmFit1D:
+    """The two components of a fitted 1-D, 2-component GMM, ordered by mean.
+
+    Carries exactly the parameters the two candidate cut rules need, so one EM
+    fit can be re-cut under both rules (the safe-threshold measurement study,
+    issue #2799) instead of re-fitting per rule.  ``lo`` is the Bad (low-mean)
+    component, ``hi`` the Good one.
+    """
+
+    w_lo: float
+    mu_lo: float
+    var_lo: float
+    w_hi: float
+    mu_hi: float
+    var_hi: float
+
+    def midpoint(self) -> float:
+        """The historical cut: the midpoint between the two component means."""
+        return (self.mu_lo + self.mu_hi) / 2.0
+
+    def crossing_or_midpoint(self) -> float:
+        """The production cut: equal-density crossing, midpoint when none exists."""
+        crossing = _weighted_gaussian_crossing(self.w_lo, self.mu_lo, self.var_lo, self.w_hi, self.mu_hi, self.var_hi)
+        return self.midpoint() if crossing is None else crossing
+
+
+def gmm_fit_array(scores: "list[float] | np.ndarray") -> np.ndarray:
+    """The (possibly subsampled) float64 array a score-GMM is fitted on.
+
+    Above :data:`_GMM_MAX_SAMPLES` scores, takes a deterministic (seed-42)
+    random subsample; below, returns the scores unchanged.  Exposed separately
+    from :func:`fit_score_gmm` so a caller that needs the fit's *input* too
+    (e.g. for the median fallback, or to transform the same sample into logit
+    space) subsamples exactly once.
+    """
+    arr = np.asarray(scores, dtype=np.float64)
+    if arr.shape[0] > _GMM_MAX_SAMPLES:
+        rng = np.random.default_rng(42)
+        arr = rng.choice(arr, size=_GMM_MAX_SAMPLES, replace=False)
+    return arr
+
+
+def fit_score_gmm(arr: np.ndarray) -> GmmFit1D | None:
+    """Fit a deterministic 2-component GMM to a 1-D score array.
+
+    Returns ``None`` when the fit fails (fewer than 2 scores, or an EM
+    failure), leaving the fallback policy to the caller -
+    :func:`calculate_gmm_threshold` falls back to the median.
+    """
+    if arr.shape[0] < 2:
+        return None
+
+    from sklearn.mixture import GaussianMixture  # noqa: PLC0415
+
+    try:
+        gmm: GaussianMixture = GaussianMixture(n_components=2, random_state=42)
+        gmm.fit(arr.reshape(-1, 1))
+
+        # The stubs type these ``np.ndarray | None``; all are set after ``fit``.
+        assert gmm.means_ is not None
+        assert gmm.covariances_ is not None
+        assert gmm.weights_ is not None
+        means = np.ravel(gmm.means_)
+        # ``covariances_`` is (n_components, 1, 1) under the default "full"
+        # covariance type; ravel gives the two scalar variances.
+        variances = np.ravel(gmm.covariances_)
+        weights = np.ravel(gmm.weights_)
+
+        low_idx = 0 if means[0] < means[1] else 1
+        high_idx = 1 - low_idx
+        return GmmFit1D(
+            w_lo=float(weights[low_idx]),
+            mu_lo=float(means[low_idx]),
+            var_lo=float(variances[low_idx]),
+            w_hi=float(weights[high_idx]),
+            mu_hi=float(means[high_idx]),
+            var_hi=float(variances[high_idx]),
+        )
+    except Exception:
+        return None
+
+
 def calculate_gmm_threshold(scores: list[float]) -> float:
     """Use a Gaussian Mixture Model to find a threshold between two score distributions.
 
     Fits a 2-component GMM to the provided scores, assuming a bimodal distribution
-    representing Bad (low) and Good (high) classes. Returns the midpoint between the
-    two component means as the decision threshold.
+    representing Bad (low) and Good (high) classes.  Returns the **equal-density
+    crossing** of the two fitted components (see :func:`_weighted_gaussian_crossing`)
+    - the score at which a media stops being better explained by the Bad component
+    than by the Good one - falling back to the midpoint between the component means
+    when no crossing exists strictly between them.
+
+    The crossing and the midpoint coincide for equal-weight, equal-variance
+    components; they separate when the low component is wider or heavier, which is
+    the standing shape of a region-voted score distribution (every media's score is
+    a max over ~24 region nodes, so even a thoroughly Bad image gets ~24 draws at a
+    false positive).  Cutting at the midpoint there lands inside Bad mass and
+    over-includes.
 
     For score sets larger than :data:`_GMM_MAX_SAMPLES`, fits on a deterministic
     (seed-42) random subsample - the two-Gaussian fit is unchanged in practice
@@ -61,39 +236,13 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
     if len(scores) < 2:
         return 0.5
 
-    from sklearn.mixture import GaussianMixture  # noqa: PLC0415
-
-    arr = np.asarray(scores, dtype=np.float64)
-    if arr.shape[0] > _GMM_MAX_SAMPLES:
-        rng = np.random.default_rng(42)
-        arr = rng.choice(arr, size=_GMM_MAX_SAMPLES, replace=False)
-
-    # Reshape for sklearn
-    X = arr.reshape(-1, 1)
-
-    try:
-        # Fit a 2-component GMM
-        gmm: GaussianMixture = GaussianMixture(n_components=2, random_state=42)
-        gmm.fit(X)
-
-        # Get the means of the two components.  The stub types `means_`
-        # as `np.ndarray | None`; after `fit` it's always set.
-        assert gmm.means_ is not None
-        means = np.ravel(gmm.means_)
-
-        # Identify which component is "low" (Bad) and which is "high" (Good)
-        low_idx = 0 if means[0] < means[1] else 1
-        high_idx = 1 - low_idx
-
-        # Threshold is at the intersection of the two Gaussians
-        # For simplicity, use the midpoint between means
-        threshold = (means[low_idx] + means[high_idx]) / 2.0
-
-        return float(threshold)
-    except Exception:
+    arr = gmm_fit_array(scores)
+    fit = fit_score_gmm(arr)
+    if fit is None:
         # If GMM fails, return median (of the subsample when one was taken -
         # representative of the full distribution and keeps this path bounded).
         return float(np.median(arr))
+    return fit.crossing_or_midpoint()
 
 
 def _calibration_cache_key(
