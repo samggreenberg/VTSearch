@@ -197,3 +197,30 @@ hard examples" are found **per embedder** — the SigLIP 2 mislabels/look-alikes
 DINO ones are different sets, both worth harvesting. (The sparse-positive fix
 `--defer-cut-goods` is embedder-agnostic — it stabilizes the cut regardless of which
 images are at the boundary.)
+
+---
+
+## New GMM (equal-density crossing, dev #2801) on the region-voting path
+
+Ported dev's crossing-based `calculate_gmm_threshold` (cuts at the components'
+equal-density crossing, not the midpoint of means — engineered for the region-voted
+max-over-~24-nodes score distribution, whose Bad mode is a wide right-skewed
+extreme-value statistic). Re-ran base vs defer6 (DINOv3/hac, 5 classes × 10 seeds).
+
+| GMM | arm | spike_rate | cost_sd | runaway% | cost_auc | final_cost | regret |
+|---|---|---|---|---|---|---|---|
+| old (midpoint) | base | 0.181 | 0.306 | 35% | 0.446 | 0.294 | 0.184 |
+| old (midpoint) | defer6 | 0.128 | 0.201 | 16% | 0.390 | 0.267 | 0.133 |
+| new (crossing) | base | 0.180 | 0.234 | 29% | 0.356 | 0.248 | **0.120** |
+| new (crossing) | defer6 | 0.180 | **0.190** | **15%** | **0.337** | **0.215** | 0.147 |
+
+- **The crossing GMM is a clear win for region voting** — it lowers the cost *level*
+  substantially on the base arm (regret 0.184→0.120, cost_auc 0.446→0.356, final_cost
+  0.294→0.248, runaways 35→29%) by cutting the skewed distribution correctly.
+- **It largely subsumes defer's benefit here:** new-GMM *base* already beats old-GMM
+  *defer6* on regret/cost_auc/final_cost. defer was a workaround for a bad GMM; a good
+  GMM does most of the job in the safe-threshold blend directly.
+- **Neither reduces the spike *rate*** (~0.18 across all four) — the step-to-step jumps
+  persist; the win is in the cost *level*, not jumpiness.
+- **Best combo = new-GMM + defer6** (lowest cost_sd/cost_auc/final_cost, runaways 15%),
+  though regret ticks up vs new-GMM base. Worth updating to the new GMM regardless.
