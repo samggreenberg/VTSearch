@@ -457,6 +457,7 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
         return_finals=args.viz or args.labeling_trace or args.confidence_gallery or args.training_nodes,
         threshold_rule=args.threshold_rule,
         threshold_smooth=args.threshold_smooth,
+        defer_cut_goods=args.defer_cut_goods,
     )
     rows: list[dict] = []
     if args.viz or args.labeling_trace or args.confidence_gallery or args.training_nodes:
@@ -685,6 +686,13 @@ def main() -> int:
     # pre-#2784 min-cost cut) is selectable only to reproduce old runs.
     ap.add_argument("--threshold-rule", choices=["conformal", "rank-transfer", "argmin"], default="conformal")
     ap.add_argument("--threshold-smooth", choices=["none", "med3"], default="none")
+    ap.add_argument(
+        "--defer-cut-goods",
+        type=int,
+        default=0,
+        help="sparse-positive fix (#2790): while n_good < this, don't trust the trained "
+        "conformal cut — use a GMM cut on the model's pool scores. 0 = off.",
+    )
     ap.add_argument("--cal-fraction", type=float, default=0.5)
     ap.add_argument("--scales", type=_floats, default=(1.0, 0.75, 0.5, 0.3))
     ap.add_argument("--overlap", type=float, default=0.5)

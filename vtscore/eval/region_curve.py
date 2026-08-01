@@ -931,11 +931,12 @@ def _realistic_one_seed(
     stop_at_done: bool,
     threshold_rule: str = "conformal",
     threshold_smooth: str = "none",
+    defer_cut_goods: int = 0,
 ) -> tuple[list[dict], dict | None]:
     """Run one seed's labeling loop. Returns ``(rows, final)`` where ``final`` is a dict
     ``{predict, threshold, n_good, n_bad, t, trace}`` for the last step (head + blended
     threshold the final row measured, plus the per-step trace), or ``None`` when no step ran."""
-    from vtscore.training.thresholds import calculate_safe_threshold  # noqa: PLC0415
+    from vtscore.training.thresholds import calculate_gmm_threshold, calculate_safe_threshold  # noqa: PLC0415
 
     setup = _realistic_setup(inputs, seed, query_vec)
     if setup is None:
@@ -1011,6 +1012,16 @@ def _realistic_one_seed(
         raw_threshold_history.append(float(threshold))
         if threshold_smooth == "med3":
             threshold = median_smooth(raw_threshold_history)
+        # Defer-the-cut (#2790 sparse-positive fix): while positives are too few to
+        # pin the conformal cut, don't trust it — use a distribution-based GMM cut on
+        # the model's pool scores instead (independent of the sparse calibration
+        # positives). Off when ``defer_cut_goods == 0``; skips the cosine cold-start
+        # step, which already has no trained cut.
+        if defer_cut_goods and len(good_ids) < defer_cut_goods and calib != "cosine_coldstart":
+            finite = [float(s) for s in pool_scores if np.isfinite(s)]
+            if finite:
+                threshold = calculate_gmm_threshold(finite)
+                calib = "defer_gmm"
 
         err = weighted_error(test_scores, [float(v) for v in test_labels], threshold, inclusion)
         oracle = min_weighted_cost(test_scores, [float(v) for v in test_labels], inclusion)
@@ -1124,6 +1135,7 @@ def evaluate_realistic_curve(
     return_finals: bool = False,
     threshold_rule: str = "conformal",
     threshold_smooth: str = "none",
+    defer_cut_goods: int = 0,
 ) -> list[dict] | tuple[list[dict], dict[int, dict]]:
     """Realistic active-learning labeling curve: cost/fpr/fnr/F1/IoU vs ``t`` (total
     annotations), one row per ``(seed, t)``.
@@ -1166,6 +1178,7 @@ def evaluate_realistic_curve(
             stop_at_done=stop_at_done,
             threshold_rule=threshold_rule,
             threshold_smooth=threshold_smooth,
+            defer_cut_goods=defer_cut_goods,
         )
         # Amortize the seed's wall-clock over its rows (per-step retrain dominates).
         per = round((time.perf_counter() - t0) * 1000.0 / max(len(seed_rows), 1), 3)
