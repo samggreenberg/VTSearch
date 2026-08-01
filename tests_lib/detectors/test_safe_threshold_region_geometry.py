@@ -27,6 +27,10 @@ from vtscore.media.patch_embed import RegionVector
 
 DIM = 8
 N_MEDIA = 20
+# Media ids well clear of the active context's own ids: the embedding- and
+# region-matrix caches key on the sorted id list, so a snap that coincidentally
+# reuses the context's ids would be served the context's cached matrix.
+ID_BASE = 5000
 
 
 def _unit(vec: np.ndarray) -> np.ndarray:
@@ -77,7 +81,7 @@ class TestRegionDatasetFitsPooledScores:
         one-sided bias the old fit suffered from.
         """
         snap: dict[int, dict] = {}
-        for cid in range(1, N_MEDIA + 1):
+        for cid in range(ID_BASE + 1, ID_BASE + N_MEDIA + 1):
             image_vec = _unit(rng.standard_normal(DIM))
             hot_vec = _unit(good_proto + 0.4 * rng.standard_normal(DIM))
             snap[cid] = {
@@ -133,7 +137,7 @@ class TestPlainDatasetUnchanged:
                 "embedder": "test",
                 "embeddings": {"test": _unit(rng.standard_normal(DIM))},
             }
-            for cid in range(1, N_MEDIA + 1)
+            for cid in range(ID_BASE + 1, ID_BASE + N_MEDIA + 1)
         }
         X_list, y_list = _labels(rng, good_proto, bad_proto)
 
