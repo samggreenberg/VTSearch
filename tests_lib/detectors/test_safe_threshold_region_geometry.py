@@ -99,9 +99,7 @@ class TestRegionDatasetFitsPooledScores:
         snap = self._snap(rng, good_proto)
         X_list, y_list = _labels(rng, good_proto, bad_proto)
 
-        model, _threshold = train_and_threshold(
-            X_list, y_list, snap=snap, embedder_name="dinov3_patch"
-        )
+        model, _threshold = train_and_threshold(X_list, y_list, snap=snap, embedder_name="dinov3_patch")
 
         assert len(captured_gmm_scores) == 1
         fitted = np.asarray(captured_gmm_scores[0], dtype=np.float64)
