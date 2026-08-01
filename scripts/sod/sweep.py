@@ -455,6 +455,8 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
         retrain_cadence=args.retrain_cadence,
         stop_at_done=args.stop_at_done,
         return_finals=args.viz or args.labeling_trace,
+        threshold_rule=args.threshold_rule,
+        threshold_smooth=args.threshold_smooth,
     )
     rows: list[dict] = []
     if args.viz or args.labeling_trace:
@@ -626,6 +628,11 @@ def main() -> int:
     ap.add_argument("--inclusion", type=int, default=0, help="0=FPR+FNR; >0 favors recall; <0 favors precision")
     ap.add_argument("--safe-thresholds", action=argparse.BooleanOptionalAction, default=True)
     ap.add_argument("--calibrate-count", type=int, default=2)
+    # Threshold-stability arms (#2790): the whole/box-pool path's calibration rule
+    # and an optional temporal smoother. Defaults reproduce the historical sweep
+    # (min-cost argmin, no smoothing) byte-for-byte.
+    ap.add_argument("--threshold-rule", choices=["argmin", "conformal", "rank-transfer"], default="argmin")
+    ap.add_argument("--threshold-smooth", choices=["none", "med3"], default="none")
     ap.add_argument("--cal-fraction", type=float, default=0.5)
     ap.add_argument("--scales", type=_floats, default=(1.0, 0.75, 0.5, 0.3))
     ap.add_argument("--overlap", type=float, default=0.5)
