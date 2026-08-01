@@ -2002,6 +2002,53 @@ def compute_fold_orderings(
     return orderings, None
 
 
+def conformal_threshold(
+    scores: list[float],
+    labels: list[float],
+    inclusion_value: int = 0,
+) -> float:
+    """Split-conformal quantile threshold over held-out calibration scores (#2784).
+
+    Backported verbatim from ``dev`` so this branch calibrates like the shipped
+    app. Maps ``inclusion_value`` (``k``) to a cut via quantiles of the calibration
+    score distributions rather than a min-cost search over observed cuts:
+
+    * a **false-negative cap** ``alpha(k) = min(1, BASE * 2^-k)`` — the cut never
+      exceeds the ``alpha``-quantile of the calibration *positives*;
+    * a **false-positive guard** for ``k <= 0`` at the ``1 - BASE * 2^k`` quantile
+      of the *negatives*, walking up toward the positives as ``k`` drops;
+    * the **gap midpoint** at ``k=0`` — the midpoint of the band between the top of
+      the negatives and the lowest positive. Every cut in that band has identical
+      empirical error, so its top edge (the lowest calibration positive) is an
+      arbitrary, high-variance choice; the midpoint is the max-margin one and is
+      what stops a single boundary vote vaulting the cut over the positives.
+
+    Monotone non-increasing in ``k`` by construction. Returns ``0.5`` when the
+    score list is empty or single-class; never abstains otherwise.
+    """
+    if not scores:
+        return 0.5
+
+    scores_arr = np.asarray(scores, dtype=np.float64)
+    labels_arr = np.asarray(labels, dtype=np.float64)
+    pos = scores_arr[labels_arr == 1.0]
+    neg = scores_arr[labels_arr != 1.0]
+    if len(pos) == 0 or len(neg) == 0:
+        return 0.5
+
+    def _threshold_at(k: int) -> float:
+        fn_cap = float(np.quantile(pos, min(1.0, CONFORMAL_BASE_BUDGET * 2.0**-k)))
+        if k > 0:
+            return min(fn_cap, _threshold_at(0))
+        fp_guard = float(np.quantile(neg, 1.0 - CONFORMAL_BASE_BUDGET * 2.0**k))
+        gap_mid = (fp_guard + max(fp_guard, float(np.min(pos)))) / 2.0
+        top = float(np.quantile(pos, CONFORMAL_QPOS_MAX))
+        walk = gap_mid + (-k / 10.0) * max(0.0, top - gap_mid)
+        return min(fn_cap, max(fp_guard, walk))
+
+    return _threshold_at(inclusion_value)
+
+
 def threshold_from_fold_orderings(
     fold_orderings: list[tuple[list[float], list[float]]],
     inclusion_value: int,

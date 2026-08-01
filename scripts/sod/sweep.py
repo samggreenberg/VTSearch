@@ -680,10 +680,10 @@ def main() -> int:
     ap.add_argument("--inclusion", type=int, default=0, help="0=FPR+FNR; >0 favors recall; <0 favors precision")
     ap.add_argument("--safe-thresholds", action=argparse.BooleanOptionalAction, default=True)
     ap.add_argument("--calibrate-count", type=int, default=2)
-    # Threshold-stability arms (#2790): the whole/box-pool path's calibration rule
-    # and an optional temporal smoother. Defaults reproduce the historical sweep
-    # (min-cost argmin, no smoothing) byte-for-byte.
-    ap.add_argument("--threshold-rule", choices=["argmin", "conformal", "rank-transfer"], default="argmin")
+    # Calibration rule for the whole/box-pool path + an optional temporal smoother.
+    # Default is the shipped app's conformal inclusion rule (#2784); ``argmin`` (the
+    # pre-#2784 min-cost cut) is selectable only to reproduce old runs.
+    ap.add_argument("--threshold-rule", choices=["conformal", "rank-transfer", "argmin"], default="conformal")
     ap.add_argument("--threshold-smooth", choices=["none", "med3"], default="none")
     ap.add_argument("--cal-fraction", type=float, default=0.5)
     ap.add_argument("--scales", type=_floats, default=(1.0, 0.75, 0.5, 0.3))
