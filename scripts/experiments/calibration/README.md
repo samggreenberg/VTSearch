@@ -1,4 +1,4 @@
-# Calibration study runner (issue #2781)
+# Calibration study runner (issues #2781, #2799)
 
 Measures **calibration regret** — the extra `FPR + FNR` cost the trained
 (cross-calibrated conformal) threshold pays versus the *oracle* threshold for the
@@ -50,3 +50,18 @@ alongside them harmlessly), and writes all study output under
 `inclusion=0` (cost = FPR + FNR), `sim_fraction=0.5`, `calibrate_count=2`,
 `calibration_fraction=0.5`, `safe_thresholds=False`, MLP trainer, 150 votes,
 4 seeds. Env knobs mirror the `MAXPATCH_*` set under the `CALIB_*` prefix.
+
+## Safe-threshold GMM study (issue #2799)
+
+```bash
+cd /exp/$USER/projects/vts-calib/scripts/experiments/calibration
+bash launch_safe.sh      # safe_thresholds ON, VG only, 30 votes, 8 seeds
+```
+
+`launch_safe.sh` re-drives the same pipeline with `CALIB_SAFE_THRESHOLDS=1`:
+every step then emits one extra row per safe-threshold GMM variant
+(`gmm_variant` column — fit geometry x cut rule x fit space, plus an
+`xcal_only` control), and the analyze stage runs `analyze_safe.py` instead of
+`analyze.py`. Results land under `/exp/$USER/calibration-safe`, reusing the
+shared Max-Patch pickles/crops in place. Design and pre-registered decision
+rules: `docs/plans/safe-threshold-gmm-experiment.md`.

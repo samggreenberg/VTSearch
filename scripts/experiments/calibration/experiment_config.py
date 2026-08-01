@@ -59,7 +59,10 @@ INCLUSION = 0
 SIM_FRACTION = 0.5
 CALIBRATE_COUNT = 2
 CALIBRATION_FRACTION = 0.5
-SAFE_THRESHOLDS = False
+#: The #2781 study pre-registered safe_thresholds OFF (conformal path only);
+#: the #2799 safe-threshold GMM study flips this on via CALIB_SAFE_THRESHOLDS=1
+#: (see docs/plans/safe-threshold-gmm-experiment.md).
+SAFE_THRESHOLDS = os.environ.get("CALIB_SAFE_THRESHOLDS", "0") == "1"
 MEDIA_TYPE = "image"
 
 # --- Category-selection parameters (copied from the Max-Patch runner) ---

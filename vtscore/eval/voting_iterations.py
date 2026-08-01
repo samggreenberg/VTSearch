@@ -117,14 +117,20 @@ _VOTING_COLUMNS: tuple[str, ...] = (
 )
 
 #: Column order for the calibration study's main per-step frame (issue #2781),
-#: emitted only when ``emit_calibration_metrics``.  One row per ``pool_variant``.
+#: emitted only when ``emit_calibration_metrics``.  One row per ``pool_variant``;
+#: under ``safe_thresholds`` additionally one row per safe-threshold GMM variant
+#: (issue #2799), tagged in ``gmm_variant`` (``""`` on every other row).
 _CALIBRATION_COLUMNS: tuple[str, ...] = (
     *_IDENT_COLUMNS,
     "pool_variant",
+    "gmm_variant",
     "threshold",
     "threshold_provenance",
     "degenerate",
     "threshold_percentile",
+    "xcal_threshold",
+    "gmm_cut",
+    "blend_weight",
     "cost",
     "fpr",
     "fnr",
@@ -263,7 +269,7 @@ def _blend_safe_threshold(
     X_all_clips: Any,
     n_labels: int,
     style_obj: Any = None,
-) -> float:
+) -> tuple[float, list[float]]:
     """Blend *threshold* with a GMM threshold over the simulation set's scores.
 
     Region-aware datasets (MLP + patch embedder only) score the sim set via
@@ -274,21 +280,24 @@ def _blend_safe_threshold(
     With an explicit detection *style_obj* (see :mod:`vtscore.eval.patch_styles`)
     the sim set is scored through that style - the same scorer the test set
     uses - so the GMM sees the distribution the threshold will actually cut.
+
+    Returns ``(blended_threshold, sim_scores)`` - the scores the GMM was fitted
+    on ride along so the #2799 safe-threshold variant rows can re-cut the same
+    distribution without a second scoring pass.
     """
     import numpy as np  # noqa: PLC0415
 
     if style_obj is not None:
         assert sim_clips is not None and step.torch_model is not None
         all_scores = list(style_obj.score_media(step.torch_model, sim_clips).values())
-        return calculate_safe_threshold(threshold, all_scores, n_labels)
-    if region_aware:
+    elif region_aware:
         from vtscore.detectors.training import score_media_with_model  # noqa: PLC0415
 
         assert sim_clips is not None and step.torch_model is not None
         all_scores = [r["score"] for r in score_media_with_model(step.torch_model, sim_clips)]
     else:
         all_scores = np.asarray(step.predict(np.asarray(X_all_clips))).ravel().tolist()
-    return calculate_safe_threshold(threshold, all_scores, n_labels)
+    return calculate_safe_threshold(threshold, all_scores, n_labels), all_scores
 
 
 def _evaluate_on_test(
@@ -436,6 +445,12 @@ def _operating_metrics(
 
     return {
         "pool_variant": pool_variant,
+        # Safe-threshold study columns (issue #2799): defaults here; the base
+        # row and the per-variant rows overwrite them where they apply.
+        "gmm_variant": "",
+        "xcal_threshold": _r(float(threshold)),
+        "gmm_cut": nan,
+        "blend_weight": nan,
         "threshold": _r(float(threshold)),
         "threshold_provenance": provenance,
         "degenerate": 1 if is_degenerate(scores, threshold) else 0,
@@ -456,6 +471,127 @@ def _operating_metrics(
         "calibration_shift": _r(calibration_shift),
         "n_pool_rows": _r(float(n_pool_rows)),
     }
+
+
+#: Safe-threshold GMM variants (issue #2799): ``(name, fit_scores, cut, space)``.
+#: ``fit_scores`` picks which sim-set score distribution the GMM is fitted on
+#: ("pooled" = the style's inference max-pool, what production fits post-#2797;
+#: "image" = the whole-image vector scores, the historical pre-#2797 geometry).
+#: ``cut`` picks the rule ("cross" = equal-density crossing, production
+#: post-#2798; "mid" = midpoint-of-means, historical).  ``space`` fits the GMM
+#: on sigmoid scores ("sig") or their logits ("logit", the #2798 open idea).
+#: ``xcal_only`` is the no-blend control: the raw conformal threshold at the
+#: same step.  ``pooled_cross`` must reproduce the production blend exactly.
+_SAFE_GMM_VARIANTS: tuple[tuple[str, str, str, str], ...] = (
+    ("xcal_only", "", "", ""),
+    ("image_mid", "image", "mid", "sig"),
+    ("image_cross", "image", "cross", "sig"),
+    ("pooled_mid", "pooled", "mid", "sig"),
+    ("pooled_cross", "pooled", "cross", "sig"),
+    ("pooled_mid_logit", "pooled", "mid", "logit"),
+    ("pooled_cross_logit", "pooled", "cross", "logit"),
+)
+
+#: Sigmoid scores are clipped into ``[eps, 1-eps]`` before the logit transform
+#: so saturated scores stay finite.
+_LOGIT_EPS = 1e-6
+
+
+def _gmm_cuts(scores: list[float], space: str) -> dict[str, float]:
+    """Both GMM cut rules from one fit of *scores*, in sigmoid score space.
+
+    Mirrors :func:`vtscore.training.thresholds.calculate_gmm_threshold`'s
+    semantics per fallback (0.5 below 2 scores, median on fit failure) so the
+    ``("cross", "sig")`` cut blended on the pooled scores reproduces the
+    production safe threshold bit-for-bit.  With ``space="logit"`` the GMM is
+    fitted on the logit-transformed sample and the cut mapped back through the
+    sigmoid; the median fallback stays in the original space (the sigmoid is
+    monotone, so the two medians agree).
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.training.thresholds import fit_score_gmm, gmm_fit_array  # noqa: PLC0415
+
+    if len(scores) < 2:
+        return {"mid": 0.5, "cross": 0.5}
+    arr = gmm_fit_array(scores)
+    fit_arr = arr
+    if space == "logit":
+        p = np.clip(arr, _LOGIT_EPS, 1.0 - _LOGIT_EPS)
+        fit_arr = np.log(p) - np.log1p(-p)
+    fit = fit_score_gmm(fit_arr)
+    if fit is None:
+        med = float(np.median(arr))
+        return {"mid": med, "cross": med}
+    cuts = {"mid": fit.midpoint(), "cross": fit.crossing_or_midpoint()}
+    if space == "logit":
+        cuts = {name: float(1.0 / (1.0 + np.exp(-v))) for name, v in cuts.items()}
+    return cuts
+
+
+def _safe_gmm_variant_rows(
+    details: dict[str, Any],
+    base_scores: "np.ndarray",
+    base_labels: "np.ndarray",
+    sim_pooled_scores: list[float],
+    sim_image_scores: list[float],
+    inclusion: int,
+    n_pool_rows: float,
+) -> list[dict[str, Any]]:
+    """One metric row per safe-threshold GMM variant (issue #2799).
+
+    Every variant re-cuts the *same* per-step model: the two candidate sim-set
+    score distributions are fitted once per (fit, space) pair, each fit yields
+    both cut rules, and each cut is blended with the step's conformal threshold on
+    the production label ramp.  All variants are evaluated against the same
+    held-out test scores (*base_scores*, the inference max-pool), so the rows
+    are paired within a step by construction.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.training.thresholds import blend_gmm_threshold, safe_blend_weight  # noqa: PLC0415
+
+    xcal = float(details["xcal_threshold"])
+    n_votes = int(details["n_votes"])
+    pre_blend_provenance = str(details.get("pre_blend_provenance", "conformal"))
+    fold_orderings = details.get("fold_orderings") or []
+    cal_scores = np.array([s for scores, _ in fold_orderings for s in scores]) if fold_orderings else None
+    cal_labels = np.array([lb for _, labels_ in fold_orderings for lb in labels_]) if fold_orderings else None
+
+    fit_scores = {"pooled": sim_pooled_scores, "image": sim_image_scores}
+    cuts: dict[tuple[str, str], dict[str, float]] = {}
+    for name, _fit, _cut, _space in _SAFE_GMM_VARIANTS:
+        if _fit and (_fit, _space) not in cuts:
+            cuts[(_fit, _space)] = _gmm_cuts(fit_scores[_fit], _space)
+
+    weight = safe_blend_weight(n_votes)
+    rows: list[dict[str, Any]] = []
+    for name, _fit, _cut, _space in _SAFE_GMM_VARIANTS:
+        if name == "xcal_only":
+            threshold = xcal
+            gmm_cut = float("nan")
+            provenance = pre_blend_provenance
+        else:
+            gmm_cut = cuts[(_fit, _space)][_cut]
+            threshold = blend_gmm_threshold(xcal, gmm_cut, n_votes)
+            provenance = "gmm_blend"
+        row = _operating_metrics(
+            base_scores,
+            base_labels,
+            threshold,
+            inclusion,
+            cal_scores,
+            cal_labels,
+            pool_variant="max",
+            provenance=provenance,
+            n_pool_rows=n_pool_rows,
+        )
+        row["gmm_variant"] = name
+        row["xcal_threshold"] = _r(xcal)
+        row["gmm_cut"] = _r(gmm_cut)
+        row["blend_weight"] = _r(weight)
+        rows.append(row)
+    return rows
 
 
 def _calibration_metric_rows(
@@ -501,19 +637,22 @@ def _calibration_metric_rows(
     base_scores = cm.segment_max_pool(flat, seg)
     base_cal_scores = np.array([s for scores, _ in fold_orderings for s in scores]) if fold_orderings else None
     base_cal_labels = np.array([lb for _, labels_ in fold_orderings for lb in labels_]) if fold_orderings else None
-    rows.append(
-        _operating_metrics(
-            base_scores,
-            labels,
-            threshold,
-            inclusion,
-            base_cal_scores,
-            base_cal_labels,
-            pool_variant="max",
-            provenance=provenance,
-            n_pool_rows=n_pool_rows,
-        )
+    base = _operating_metrics(
+        base_scores,
+        labels,
+        threshold,
+        inclusion,
+        base_cal_scores,
+        base_cal_labels,
+        pool_variant="max",
+        provenance=provenance,
+        n_pool_rows=n_pool_rows,
     )
+    if "xcal_threshold" in details:
+        # Under safe_thresholds the base row's threshold is the blended one;
+        # record the pre-blend conformal cut alongside it (issue #2799).
+        base["xcal_threshold"] = _r(float(details["xcal_threshold"]))
+    rows.append(base)
 
     # --- Remedial re-pools: only where the same fold models exposed node data
     # (the raw-patch tree arm) and the base threshold was a real conformal cut. ---
@@ -1179,6 +1318,10 @@ def simulate_voting_iterations(  # noqa: C901
         sim_fraction: Fraction of medias used for simulated voting.
         safe_thresholds: When ``True``, blend the cross-calibration threshold
             with a GMM-based threshold for robustness with small label counts.
+            Under ``emit_calibration_metrics`` with a *style*, each step
+            additionally emits one metric row per safe-threshold GMM variant
+            (:data:`_SAFE_GMM_VARIANTS`, tagged in the ``gmm_variant`` column) -
+            the #2799 measurement arms.
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for
@@ -1300,6 +1443,13 @@ def simulate_voting_iterations(  # noqa: C901
         gmm_clip_embs = np.array([media_embedding(clips_dict[cid]) for cid in sorted(sim_ids)])
         X_all_clips = torch.tensor(gmm_clip_embs, dtype=torch.float32)
 
+    # The #2799 safe-threshold variant rows additionally fit a GMM on the sim
+    # set's *whole-image* scores (the historical pre-#2797 fit geometry), so
+    # the whole-image matrix is pre-stacked once here.
+    X_sim_image: "np.ndarray | None" = None
+    if safe_thresholds and emit_calibration_metrics and style_obj is not None:
+        X_sim_image = np.stack([sim_embeddings[cid] for cid in sorted(sim_ids)])
+
     good_votes: dict[int, None] = {}
     bad_votes: dict[int, None] = {}
     labeled: dict[int, float] = {}
@@ -1395,12 +1545,17 @@ def simulate_voting_iterations(  # noqa: C901
         )
 
         # Apply safe threshold blending if enabled
+        sim_pooled_scores: list[float] | None = None
         if safe_thresholds:
-            threshold = _blend_safe_threshold(
+            xcal_threshold = threshold
+            threshold, sim_pooled_scores = _blend_safe_threshold(
                 threshold, step, region_aware, sim_clips, X_all_clips, n_labels, style_obj=style_obj
             )
             if emit_calibration_metrics:
+                details["pre_blend_provenance"] = details.get("provenance", "conformal")
                 details["provenance"] = "gmm_blend"
+                details["xcal_threshold"] = xcal_threshold
+                details["n_votes"] = n_labels
 
         # Evaluate on the held-out test set.  The calibration study (#2781)
         # emits one row per pooling (base + remedial) instead of the single
@@ -1485,6 +1640,21 @@ def simulate_voting_iterations(  # noqa: C901
 
         if calibration is not None:
             metric_rows, base_scores, base_labels = calibration
+            # One extra row per safe-threshold GMM variant (issue #2799), all
+            # evaluated against the same held-out max-pooled test scores.
+            if X_sim_image is not None and sim_pooled_scores is not None:
+                sim_image_scores = np.asarray(step.predict(X_sim_image)).ravel().tolist()
+                metric_rows.extend(
+                    _safe_gmm_variant_rows(
+                        details,
+                        base_scores,
+                        base_labels,
+                        sim_pooled_scores,
+                        sim_image_scores,
+                        inclusion,
+                        n_pool_rows=metric_rows[0]["n_pool_rows"],
+                    )
+                )
             for mr in metric_rows:
                 rows.append({**base_row, **mr, **timing_cols})
             # The near-free inclusion-budget sweep, into the side sink.
